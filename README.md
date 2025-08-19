@@ -1,1 +1,1 @@
-# Curation AI Assistant (cur-ai-us ... curious!)
+# Curation AI Assistant (cur-ai-ss ... curious!)
