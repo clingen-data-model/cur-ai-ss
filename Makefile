@@ -29,16 +29,16 @@ lint: lint-flake8 type
 
 .PHONY: test
 test:
-	@pytest $(PY_DIRS_TEST) --cov=$(PY_DIRS_MAIN) --cov-report=term-missing --cov-report=xml
+	@uv run pytest $(PY_DIRS_TEST) --cov=$(PY_DIRS_MAIN) --cov-report=term-missing --cov-report=xml
 
 .PHONY: lint-flake8
 lint-flake8:
-	@flake8 $(PY_DIRS_MAIN)
+	@uv run flake8 $(PY_DIRS_MAIN)
 
 .PHONY: type
 type:
-	@mypy $(PY_DIRS_MAIN)
+	@uv run mypy $(PY_DIRS_MAIN)
 
 .PHONY: sec
 sec:
-	@bandit -c pyproject.toml -r $(PY_DIRS_TEST) $(PY_DIRS_MAIN)
+	@uv run bandit -c pyproject.toml -r $(PY_DIRS_TEST) $(PY_DIRS_MAIN)

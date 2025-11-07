@@ -7,18 +7,6 @@ Evidence Aggregator runs at the Linux command line and depends on access to mult
 ## Install software prerequisites
 
 - **Python** 3.12 or above
-- **miniconda** with libmamba solver
-
-    ```bash
-    curl https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh > miniconda.sh
-    sh ./miniconda.sh # close and reopen shell.
-    /home/azureuser/miniconda3/bin/conda init $SHELL # if you didn't init conda for your shell during setup.
-    conda update -n base -c defaults conda -y
-    conda config --add channels conda-forge
-    conda install -n base conda-libmamba-solver -y
-    conda config --set solver libmamba
-    ```
-
 - **git**
 - **make** [optional] only for [development tasks](README.md#pre-pr-checks)
 - **jq** [optional] only for [development tasks](README.md#pre-pr-checks)
@@ -35,27 +23,17 @@ git clone https://github.com/microsoft/healthfutures-evagg
 cd healthfutures-evagg
 ```
 
-## Build a conda environment
-
-Create a conda environment. All shell commands in this section should be executed from the repository's root directory.
-
+## Install `uv` and dependencies
+Follow the instructions [here](https://docs.astral.sh/uv/getting-started/installation/) then:
 ```bash
-conda env create -f environment.yml
-conda activate evagg
-```
-
-## Install poetry dependencies
-
-Use poetry to install the local library and register the pipeline run command:
-
-```bash
-poetry install
+uv sync
+uv pip install -e .
 ```
 
 Test installation by running the following. You should see a help message displayed providing usage for the `run_evagg_app` command.
 
 ```bash
-run_evagg_app -h
+uv run run_evagg_app -h
 ```
 
 ## Deploy external resources
