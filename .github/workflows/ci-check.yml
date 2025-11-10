@@ -17,6 +17,17 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        enable-cache: true
+        cache-dependency-glob: |
+          **/uv.lock
+          **/pyproject.toml
+
+    - name: Sync dependencies
+      run: uv sync --locked 
+
     - name: Install make
       run: sudo apt-get update && sudo apt-get install -y make
 
