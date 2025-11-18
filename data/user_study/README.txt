@@ -1,1 +1,0 @@
-Do not edit these files directly, the source files are stored in the Biomedical Computing SharePoint site, all edits should be made there and updates ported over to blob storage and/or code repositories.
