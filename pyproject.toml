@@ -2,7 +2,7 @@
 name = "evagg"
 version = "0.1.0"
 description = "evagg"
-requires-python = ">=3.12.4"
+requires-python = "==3.12"
 authors = [
     {name = "Microsoft Biomedical Computing Group", email = "BiomedComp@microsoft.com"},
 ]
