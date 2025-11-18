@@ -15,7 +15,7 @@ queries:
 library: 
   di_factory: lib.evagg.SimpleFileLibrary
   collections: 
-    - data/sample
+    - test/resources/sample
 extractor:
   di_factory: lib.evagg.SampleContentExtractor
   fields:
