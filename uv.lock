@@ -571,7 +571,6 @@ dependencies = [
     { name = "biopython" },
     { name = "defusedxml" },
     { name = "ghapi" },
-    { name = "hpo3" },
     { name = "httpx" },
     { name = "ipykernel" },
     { name = "ipywidgets" },
@@ -621,7 +620,6 @@ requires-dist = [
     { name = "biopython", specifier = "==1.84" },
     { name = "defusedxml", specifier = "==0.7.1" },
     { name = "ghapi", specifier = "==1.0.3" },
-    { name = "hpo3", specifier = "==1.3.1" },
     { name = "httpx", specifier = "==0.27.0" },
     { name = "ipykernel", specifier = "==6.29.5" },
     { name = "ipywidgets", specifier = "==8.1.3" },
@@ -852,23 +850,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/01/ee/02a2c011bdab74c6fb3c75474d40b3052059d95df7e73351460c8588d963/h11-0.16.0.tar.gz", hash = "sha256:4e35b956cf45792e4caa5885e69fba00bdbc6ffafbfa020300e549b208ee5ff1", size = 101250, upload-time = "2025-04-24T03:35:25.427Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl", hash = "sha256:63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86", size = 37515, upload-time = "2025-04-24T03:35:24.344Z" },
-]
-
-[[package]]
-name = "hpo3"
-version = "1.3.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/56/73/6728a5fabfca991df635d68a24d94f010348ed6c3c48adc26c0743809d50/hpo3-1.3.1.tar.gz", hash = "sha256:a6747bfd9c8e2cfb2b2ced8a35622f36508383cd29fb60b756c642f530e4d37c", size = 1715341, upload-time = "2024-06-25T14:49:28.551Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/d8/01/26403b0add79185ff8f6098b97c56cb16450561f4d6addd2568d8eb198b4/hpo3-1.3.1-cp312-cp312-macosx_10_12_x86_64.whl", hash = "sha256:efc483132febfdab7cb2980751c6af65a89a9951f3d52db6dd3cd1d99177db27", size = 2221107, upload-time = "2024-06-25T14:47:19.966Z" },
-    { url = "https://files.pythonhosted.org/packages/ed/ee/ee2977f3dcdba197430c07e1289545455d6ead991070fc87737465d095fa/hpo3-1.3.1-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:02c20e1af7df37955292736a9aab3d482fe88442ab93922057ccc89f9ea0acdc", size = 2240822, upload-time = "2024-06-25T14:47:23.114Z" },
-    { url = "https://files.pythonhosted.org/packages/b2/10/09b3ef30776cfd5f3bda5566d57ccb4d72e495d7828313b062f0918cb4d4/hpo3-1.3.1-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:7da1274cb35684b526d32016d7c6dc9b5785fda947b50ea7e0f7f7c13e52ac2f", size = 2292149, upload-time = "2024-06-25T14:47:24.956Z" },
-    { url = "https://files.pythonhosted.org/packages/86/4c/19881ac89d116640bcdbbccde8704f98e222783307af9c5c491a774ee36b/hpo3-1.3.1-cp312-cp312-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:eb051d52f66a2d243c97d501205b5647cae48fac52cdba7cae0ca7aae7d9172a", size = 2313710, upload-time = "2024-06-25T14:47:27.103Z" },
-    { url = "https://files.pythonhosted.org/packages/0f/9f/58562862d553727fd366e12ae14d79e876af30491866a0e253f5b58ef9ac/hpo3-1.3.1-cp312-cp312-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:05e7431d09576300c4ce52e5b88f837d005d0267f778f62eba12841ec94ca251", size = 2332602, upload-time = "2024-06-25T14:47:29.563Z" },
-    { url = "https://files.pythonhosted.org/packages/a1/d0/aca7581800a0d7a0509d87f38e9da7870d81a932a740675395c26c76af49/hpo3-1.3.1-cp312-cp312-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:2a1baa71d594a1a020ea60cdac886f02b61bf4351a90c2f94623b9385b69e7c8", size = 2393198, upload-time = "2024-06-25T14:47:32.078Z" },
-    { url = "https://files.pythonhosted.org/packages/bc/e3/43e38d065d90c88edfbf90c8182d01dcee38ad2dca3b1f0e903769320324/hpo3-1.3.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:029594bd67e22a9b3238314cff8af45c88a66f023fef8bcd5c9fc6ff13827603", size = 2287485, upload-time = "2024-06-25T14:47:36.952Z" },
-    { url = "https://files.pythonhosted.org/packages/c3/1f/cabdebacfdcbf1981a7350fd9b0fdebee59474fd61a32fea477822e3e772/hpo3-1.3.1-cp312-none-win32.whl", hash = "sha256:b22622ea1f38ededcc6835886ee4969c869573f501350d60009c8b108154797d", size = 2056116, upload-time = "2024-06-25T14:47:39.457Z" },
-    { url = "https://files.pythonhosted.org/packages/b8/bb/53c50763f80f397d2f732627f3a5d3de20ba7b51a5174eea10a18f2feb96/hpo3-1.3.1-cp312-none-win_amd64.whl", hash = "sha256:3775e90e2b8153482fa3309edfa4cd082de20bc2fe72a116780987e04be56026", size = 2094406, upload-time = "2024-06-25T14:47:41.542Z" },
 ]
 
 [[package]]
