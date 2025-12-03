@@ -26,7 +26,9 @@ class DiContainer:
                 d[k] = v
         return d
 
-    def _instance_from_yaml(self, factory: str, parameters: Dict[str, object], resources: Dict[str, object]) -> Any:
+    def _instance_from_yaml(
+        self, factory: str, parameters: Dict[str, object], resources: Dict[str, object]
+    ) -> Any:
         """Create an instance from a yaml file sub-spec."""
         if not Path(factory).exists():
             # Check if prefixing path with lib/config exists.
@@ -56,12 +58,16 @@ class DiContainer:
         try:
             instance_factory = getattr(module, factory_name)
         except AttributeError:
-            raise TypeError(f"Module {module_name} does not define a {factory_name} entry point.")
+            raise TypeError(
+                f"Module {module_name} does not define a {factory_name} entry point."
+            )
         # Instantiate the instance with parameters.
         instance = instance_factory(**parameters)
         return instance
 
-    def create_instance(self, spec: Dict[str, Any], resources: Dict[str, object]) -> Any:
+    def create_instance(
+        self, spec: Dict[str, Any], resources: Dict[str, object]
+    ) -> Any:
         """Parse a dictionary for instantiable objects at the top level or recursively within sub-dictionaries."""
         # If this is instantiable, items before the factory definition are resources and the spec defines
         # a parameterized object. Otherwise it's a simple dictionary (potentially with objects inside it).
@@ -85,7 +91,11 @@ class DiContainer:
             if isinstance(value, dict):
                 values[key] = self.create_instance(value, resources.copy())
             # Look for parameters that are resources and replace them with the resource instance.
-            elif isinstance(value, str) and value.startswith("{{") and value.endswith("}}"):
+            elif (
+                isinstance(value, str)
+                and value.startswith("{{")
+                and value.endswith("}}")
+            ):
                 resource_name = value[2:-2]
                 if resource_name not in resources:
                     raise ValueError(f"Resource '{resource_name}' not defined.")

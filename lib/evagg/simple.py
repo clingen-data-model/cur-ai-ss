@@ -23,13 +23,23 @@ class PropertyContentExtractor(IExtractFields):
 
     def get_evidence(self, paper: Paper, gene_symbol: str) -> Sequence[Dict[str, str]]:
         # Default implementation just returns a single set with the gene and the mapped paper properties.
-        return [{"gene": gene_symbol, **{self.PAPER_TO_EVIDENCE_KEYS.get(k, k): v for k, v in paper.props.items()}}]
+        return [
+            {
+                "gene": gene_symbol,
+                **{
+                    self.PAPER_TO_EVIDENCE_KEYS.get(k, k): v
+                    for k, v in paper.props.items()
+                },
+            }
+        ]
 
     def extract(self, paper: Paper, gene_symbol: str) -> Sequence[Dict[str, str]]:
         evidence = self.get_evidence(paper, gene_symbol)
         if missing_fields := set(self.fields) - set(evidence[0].keys()):
             raise ValueError(f"Unsupported extraction fields: {missing_fields}")
-        logger.debug(f"Extracting fields from paper {paper.id} for gene {gene_symbol}: {len(evidence)} instances.")
+        logger.debug(
+            f"Extracting fields from paper {paper.id} for gene {gene_symbol}: {len(evidence)} instances."
+        )
         return [{f: ev[f] for f in self.fields} for ev in evidence]
 
 
@@ -41,8 +51,13 @@ class SimpleFileLibrary(IGetPapers):
     def _load_collections(self) -> List[Paper]:
         papers = []
         # Read in each json file in each collection as a Paper object.
-        for file in [os.path.join(c, f) for c in self._collections for f in os.listdir(c) if f.endswith(".json")]:
-            papers.append(Paper(**json.load(open(file, "r"))))
+        for json_file in [
+            os.path.join(c, f)
+            for c in self._collections
+            for f in os.listdir(c)
+            if f.endswith(".json")
+        ]:
+            papers.append(Paper(**json.load(open(json_file, "r"))))
         return papers
 
     def get_papers(self, query: Dict[str, Any]) -> Sequence[Paper]:

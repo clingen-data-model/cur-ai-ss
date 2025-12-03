@@ -77,14 +77,15 @@ def run_evagg_app() -> None:
         if not os.path.exists(config_yaml):
             config_yaml = os.path.join("lib", "config", config_yaml)
             if not os.path.exists(config_yaml):
-                raise FileNotFoundError(f"EvAgg app config file not found: {args.config}")
+                raise FileNotFoundError(
+                    f"EvAgg app config file not found: {args.config}"
+                )
 
     # Make a spec dictionary out of the factory yaml and the override args and instantiate it.
     spec = {"di_factory": config_yaml, **_parse_override_args(args.override)}
     app: IEvAggApp = DiContainer().create_instance(spec, {})
 
     while True:
-
         try:
             app.execute()
             break
@@ -97,7 +98,9 @@ def run_evagg_app() -> None:
                     tb = tb.tb_next
 
                 # Print only the stack frame immediately before the site-packages level.
-                file_ref = f"{tb.tb_frame.f_code.co_filename}::{tb.tb_frame.f_code.co_name}"
+                file_ref = (
+                    f"{tb.tb_frame.f_code.co_filename}::{tb.tb_frame.f_code.co_name}"
+                )
                 print(f" KeyboardInterrupt in {file_ref} at line {tb.tb_lineno}")
                 # And then the innermost traceback.
                 traceback.print_tb(tb, limit=-1)

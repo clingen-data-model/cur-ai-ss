@@ -7,7 +7,7 @@ import re
 from typing import Any, Dict, List, Sequence
 
 from lib.evagg.interfaces import IGetPapers
-from lib.evagg.llm import IPromptClient
+from lib.evagg.llm import OpenAIClient
 from lib.evagg.ref import IPaperLookupClient
 from lib.evagg.types import Paper
 
@@ -34,7 +34,7 @@ class RareDiseaseFileLibrary(IGetPapers):
     def __init__(
         self,
         paper_client: IPaperLookupClient,
-        llm_client: IPromptClient,
+        llm_client: OpenAIClient,
         allowed_categories: Sequence[str] | None = None,
         include_negative_examples: bool = True,
         allow_abstracts: bool = False,
@@ -43,14 +43,16 @@ class RareDiseaseFileLibrary(IGetPapers):
 
         Args:
             paper_client (IPaperLookupClient): A class for searching and fetching papers.
-            llm_client (IPromptClient): A class to leverage LLMs to filter to the right papers.
+            llm_client (OpenAIClient): A class to leverage LLMs to filter to the right papers.
             allowed_categories (Sequence[str], optional): The categories of papers to allow. Defaults to "rare disease".
             include_negative_examples (bool, optional): Whether to include negative examples in the LLM prompt.
             allow_abstracts (bool): Whether to return abstracts if full-text is not available.
         """
         self._paper_client = paper_client
         self._llm_client = llm_client
-        self._allowed_categories = allowed_categories if allowed_categories else ["genetic disease"]
+        self._allowed_categories = (
+            allowed_categories if allowed_categories else ["genetic disease"]
+        )
         self.include_negative_examples = include_negative_examples
         # Allowed categories must be a subset of or equal to possible CATEGORIES.
         if not set(self._allowed_categories).issubset(set(self.CATEGORIES)):
@@ -80,7 +82,9 @@ class RareDiseaseFileLibrary(IGetPapers):
             return False
 
         # Check if the paper should be included in the genetic disease category.
-        if _has_keywords(title, INCLUSION_KEYWORDS) or _has_keywords(abstract, INCLUSION_KEYWORDS):
+        if _has_keywords(title, INCLUSION_KEYWORDS) or _has_keywords(
+            abstract, INCLUSION_KEYWORDS
+        ):
             return "genetic disease"
         # If the paper doesn't fit in the other categories, add it to the other category.
         return "other"
@@ -90,23 +94,33 @@ class RareDiseaseFileLibrary(IGetPapers):
         positive_examples = [POSITIVE_EXAMPLES_INTRO]
         negative_examples = [NEGATIVE_EXAMPLES_INTRO]
         # Build a list of examples using the text of whichever example in each pair doesn't match the current gene.
-        positive_examples += [e[0].text if e[0].gene != gene else e[1].text for e in POSITIVE_EXAMPLES]
-        negative_examples += [e[0].text if e[0].gene != gene else e[1].text for e in NEGATIVE_EXAMPLES]
+        positive_examples += [
+            e[0].text if e[0].gene != gene else e[1].text for e in POSITIVE_EXAMPLES
+        ]
+        negative_examples += [
+            e[0].text if e[0].gene != gene else e[1].text for e in NEGATIVE_EXAMPLES
+        ]
 
         parameters = {
             "abstract": paper.props.get("abstract") or "no abstract",
             "title": paper.props.get("title") or "no title",
             "positive_examples": "".join(positive_examples),
-            "negative_examples": "".join(negative_examples) if self.include_negative_examples else "",
+            "negative_examples": "".join(negative_examples)
+            if self.include_negative_examples
+            else "",
         }
 
         # Few shot examples embedded into paper finding classification prompt
         prompt_metadata = {"gene_symbol": gene, "paper_id": paper.id}
         response = await self._llm_client.prompt_file(
-            user_prompt_file=_get_prompt_file_path("paper_category"),
-            system_prompt="Extract field",
+            prompt_filepath=_get_prompt_file_path("paper_category"),
             params=parameters,
-            prompt_settings={"prompt_tag": "paper_category", "prompt_metadata": prompt_metadata, "temperature": 0.8},
+            prompt_settings={
+                "prompt_tag": "paper_category",
+                "prompt_metadata": prompt_metadata,
+                "temperature": 0.8,
+                "response_format": {"type": "text"},
+            },
         )
 
         result = response.strip('"')
@@ -114,7 +128,9 @@ class RareDiseaseFileLibrary(IGetPapers):
         if result in self.CATEGORIES:
             return result
 
-        logger.warning(f"LLM returned an invalid categorization for {paper.id}: {result}")
+        logger.warning(
+            f"LLM returned an invalid categorization for {paper.id}: {result}"
+        )
         return "other"
 
     async def _get_paper_categorizations(self, paper: Paper, gene: str) -> str:
@@ -131,7 +147,9 @@ class RareDiseaseFileLibrary(IGetPapers):
 
         counts: Dict[str, int] = {}
         # Otherwise it's conflicting - run the LLM prompt two more times and accumulate all the results.
-        tiebreakers = await asyncio.gather(self._get_llm_category(paper, gene), self._get_llm_category(paper, gene))
+        tiebreakers = await asyncio.gather(
+            self._get_llm_category(paper, gene), self._get_llm_category(paper, gene)
+        )
         for category in [keyword_cat, llm_cat, *tiebreakers]:
             counts[category] = counts.get(category, 0) + 1
         assert len(counts) > 1 and sum(counts.values()) == 4
@@ -169,11 +187,15 @@ class RareDiseaseFileLibrary(IGetPapers):
 
         # Rationalize the optional parameters.
         if ("max_date" in query or "date_type" in query) and "min_date" not in query:
-            raise ValueError("A min_date is required when max_date or date_type is provided.")
+            raise ValueError(
+                "A min_date is required when max_date or date_type is provided."
+            )
         if "min_date" in query:
             params["mindate"] = query["min_date"]
             params["date_type"] = query.get("date_type", "pdat")
-            params["maxdate"] = query.get("max_date", datetime.datetime.now().strftime("%Y/%m/%d"))
+            params["maxdate"] = query.get(
+                "max_date", datetime.datetime.now().strftime("%Y/%m/%d")
+            )
         if "retmax" in query:
             params["retmax"] = query["retmax"]
 
@@ -191,14 +213,20 @@ class RareDiseaseFileLibrary(IGetPapers):
         papers = [
             paper
             for paper_id in paper_ids
-            if (paper := self._paper_client.fetch(paper_id, include_fulltext=True)) is not None
+            if (paper := self._paper_client.fetch(paper_id, include_fulltext=True))
+            is not None
         ]
         if not self._allow_abstracts:
             papers = [p for p in papers if p.props["can_access"]]
 
         logger.info(f"Categorizing {len(papers)} papers for {query['gene_symbol']}.")
 
-        await asyncio.gather(*[self._get_paper_categorizations(paper, query["gene_symbol"]) for paper in papers])
+        await asyncio.gather(
+            *[
+                self._get_paper_categorizations(paper, query["gene_symbol"])
+                for paper in papers
+            ]
+        )
         return papers
 
     def get_papers(self, query: Dict[str, Any]) -> Sequence[Paper]:
@@ -211,4 +239,9 @@ class RareDiseaseFileLibrary(IGetPapers):
             Sequence[Paper]: The set of rare disease papers that match the query.
         """
         all_papers = asyncio.run(self._get_all_papers(query))
-        return list(filter(lambda p: p.props["disease_category"] in self._allowed_categories, all_papers))
+        return list(
+            filter(
+                lambda p: p.props["disease_category"] in self._allowed_categories,
+                all_papers,
+            )
+        )

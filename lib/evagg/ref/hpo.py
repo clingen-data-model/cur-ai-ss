@@ -1,6 +1,5 @@
 import logging
 import re
-import urllib.parse
 from functools import cache
 from typing import Dict, Sequence, Tuple
 
@@ -38,7 +37,9 @@ class PyHPOClient(ICompareHPO, IFetchHPO):
 
         for sub in subject_objs:
             comparisons = [(sub, obj) for obj in object_objs]
-            batch_result = helper.batch_similarity(comparisons, kind="omim", method=method)
+            batch_result = helper.batch_similarity(
+                comparisons, kind="omim", method=method
+            )
             if batch_result:
                 argmax = np.argmax(batch_result)
                 result[sub.id] = (batch_result[argmax], objects[argmax])  # type: ignore
@@ -65,19 +66,32 @@ class PyHPOClient(ICompareHPO, IFetchHPO):
 
 
 class WebHPOClient(ISearchHPO):
+    _URL = "https://ontology.jax.org/api/hp/search"
+    _QUERY_ALLOWED_CHARS = r"[^a-zA-Z0-9\s\-':,]"
+
     def __init__(self, web_client: RequestsWebContentClient) -> None:
         self._web_client = web_client
 
+    def _sanitize_query(self, query: str) -> str:
+        # NB urlencode handles quoting
+        return re.sub(self._QUERY_ALLOWED_CHARS, " ", query).strip()
+
     def search(self, query: str, retmax: int = 1) -> Sequence[Dict[str, str]]:
-        # Restrict the query to valid chars (derived from API error message: "must match "^[a-zA-Z0-9\s\-':,]+$"".
-        query = urllib.parse.quote(re.sub(r"[^a-zA-Z0-9\s\-':,]", " ", query).strip())
-        url = f"https://ontology.jax.org/api/hp/search?q={query}&limit={retmax}"
-        response = self._web_client.get(url, content_type="json")
-
-        if not response["terms"]:
-            return []
-
+        response = self._web_client.get(
+            self._URL,
+            params={
+                "q": self._sanitize_query(query),
+                "limit": retmax,
+            },
+            content_type="json",
+        )
+        terms = response.get("terms") or []
         return [
-            {"id": term["id"], "name": term["name"], "definition": term["definition"], "synonyms": term["synonyms"]}
-            for term in response["terms"]
+            {
+                "id": t["id"],
+                "name": t["name"],
+                "definition": t["definition"],
+                "synonyms": t["synonyms"],
+            }
+            for t in terms
         ]

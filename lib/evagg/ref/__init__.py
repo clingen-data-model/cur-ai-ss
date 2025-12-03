@@ -3,15 +3,12 @@
 from .hpo import PyHPOClient, WebHPOClient
 from .interfaces import (
     IAnnotateEntities,
-    IBackTranslateVariants,
     ICompareHPO,
     IFetchHPO,
     IGeneLookupClient,
-    INormalizeVariants,
     IPaperLookupClient,
     IRefSeqLookupClient,
     ISearchHPO,
-    IValidateVariants,
     IVariantLookupClient,
 )
 from .mutalyzer import MutalyzerClient
@@ -25,9 +22,6 @@ __all__ = [
     "IPaperLookupClient",
     "IVariantLookupClient",
     "IRefSeqLookupClient",
-    "INormalizeVariants",
-    "IBackTranslateVariants",
-    "IValidateVariants",
     "ICompareHPO",
     "IFetchHPO",
     "ISearchHPO",

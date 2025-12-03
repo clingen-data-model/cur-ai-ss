@@ -15,7 +15,10 @@ class ICompareVariants(Protocol):
         ...  # pragma: no cover
 
     def compare(
-        self, variant1: HGVSVariant, variant2: HGVSVariant, disregard_refseq: bool = False
+        self,
+        variant1: HGVSVariant,
+        variant2: HGVSVariant,
+        disregard_refseq: bool = False,
     ) -> HGVSVariant | None:
         """Compare two variants to determine if they are biologically equivalent.
 
@@ -44,7 +47,9 @@ class Observation:
 
 
 class IFindObservations(Protocol):
-    async def find_observations(self, gene_symbol: str, paper: Paper) -> Sequence[Observation]:
+    async def find_observations(
+        self, gene_symbol: str, paper: Paper
+    ) -> Sequence[Observation]:
         """Identify all observations relevant to `gene_sybmol` in `paper`.
 
         `paper` is the paper to search for relevant observations. Paper must be in the PMC-OA dataset and have

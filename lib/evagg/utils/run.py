@@ -39,7 +39,9 @@ _output_root = ".out"
 # Initialize the current run record from the command-line arguments.
 repo = RepoStatus()
 _current_run = RunRecord(
-    name=os.path.splitext(os.path.basename(sys.argv[1]))[0] if len(sys.argv) > 1 else os.path.basename(sys.argv[0]),
+    name=os.path.splitext(os.path.basename(sys.argv[1]))[0]
+    if len(sys.argv) > 1
+    else os.path.basename(sys.argv[0]),
     args=sys.argv[1:],
     timestamp=datetime.now().strftime(DATE_FORMAT),
     git={
@@ -78,19 +80,29 @@ def set_run_complete(output_file: Optional[str]) -> None:
         raise ValueError("Cannot set output file without a persisted run path.")
 
     # Write out the final updated RunRecord to "run.json" if the run path is set.
-    _current_run.elapsed_secs = round(datetime.now().timestamp() - _current_run.start_datetime.timestamp(), 1)
-    _current_run.output_file = os.path.relpath(output_file, _current_run.path) if output_file else None
+    _current_run.elapsed_secs = round(
+        datetime.now().timestamp() - _current_run.start_datetime.timestamp(), 1
+    )
+    _current_run.output_file = (
+        os.path.relpath(output_file, _current_run.path) if output_file else None
+    )
     if _current_run.path:
         with open(os.path.join(_current_run.path, "run.json"), "w") as f:
             f.write(_current_run.json(indent=4))
 
     if files := len([f for f in repo.all_modified_files if f.name.startswith("lib/")]):
-        logger.warning(f"{files} modified {'file' if files == 1 else 'files'} in 'lib'.")
-    logger.info(f"Run complete in {_current_run.elapsed_secs} secs on branch {repo.branch} ({repo.commit[:7]})")
+        logger.warning(
+            f"{files} modified {'file' if files == 1 else 'files'} in 'lib'."
+        )
+    logger.info(
+        f"Run complete in {_current_run.elapsed_secs} secs on branch {repo.branch} ({repo.commit[:7]})"
+    )
 
 
 def get_previous_run(
-    name: Optional[str] = None, sub_path: Optional[str] = None, name_includes: Optional[str] = None
+    name: Optional[str] = None,
+    sub_path: Optional[str] = None,
+    name_includes: Optional[str] = None,
 ) -> Optional[RunRecord]:
     global _current_run, _output_root
 
@@ -105,12 +117,20 @@ def get_previous_run(
             dir != _current_run.dir_name
             and (dir_run_name is None or dir_run_name == (name or _current_run.name))
             and os.path.exists(os.path.join(_output_root, dir, "run.json"))
-            and (sub_path is None or os.path.exists(os.path.join(_output_root, dir, sub_path)))
+            and (
+                sub_path is None
+                or os.path.exists(os.path.join(_output_root, dir, sub_path))
+            )
             and (name_includes is None or name_includes in dir)
         )
 
     # Find the most recent matching prior run, if any.
-    if not (run_name := next((d for d in sorted(os.listdir(_output_root), reverse=True) if _is_match(d)), None)):
+    if not (
+        run_name := next(
+            (d for d in sorted(os.listdir(_output_root), reverse=True) if _is_match(d)),
+            None,
+        )
+    ):
         return None
 
     # Read in the most recent matching run record.

@@ -31,7 +31,15 @@ def test_missing_file_execute():
     with patch("sys.argv", ["test", "config.yaml", "--override", "a.b:1", "c:2"]):
         with pytest.raises(FileNotFoundError):
             run_evagg_app()
-    with patch("sys.argv", ["test", "test/resources/di.yaml", "--override", "test_value.di_factory:missing.yaml"]):
+    with patch(
+        "sys.argv",
+        [
+            "test",
+            "test/resources/di.yaml",
+            "--override",
+            "test_value.di_factory:missing.yaml",
+        ],
+    ):
         with pytest.raises(FileNotFoundError):
             run_evagg_app()
 
@@ -39,7 +47,12 @@ def test_missing_file_execute():
 def test_default_path():
     with patch(
         "sys.argv",
-        ["test", "test/resources/di.yaml", "--override", "test_value.di_factory:queries/example_subset.yaml"],
+        [
+            "test",
+            "test/resources/di.yaml",
+            "--override",
+            "test_value.di_factory:queries/example_subset.yaml",
+        ],
     ):
         run_evagg_app()
     # Undo run completion to avoid polluting other tests
@@ -47,13 +60,24 @@ def test_default_path():
 
 
 def test_missing_entrypoint():
-    with patch("sys.argv", ["test", "test/resources/di.yaml", "--override", "di_factory:lib.evagg.app.missing"]):
+    with patch(
+        "sys.argv",
+        [
+            "test",
+            "test/resources/di.yaml",
+            "--override",
+            "di_factory:lib.evagg.app.missing",
+        ],
+    ):
         with pytest.raises(TypeError):
             run_evagg_app()
 
 
 def test_missing_resource():
-    with patch("sys.argv", ["test", "test/resources/di.yaml", "--override", "test_value:{{missing}}"]):
+    with patch(
+        "sys.argv",
+        ["test", "test/resources/di.yaml", "--override", "test_value:{{missing}}"],
+    ):
         with pytest.raises(ValueError):
             run_evagg_app()
 
@@ -75,7 +99,10 @@ def test_run_evagg_app(caplog):
 
 def test_run_evagg_app_override(caplog):
     caplog.set_level(logging.INFO)
-    with patch("sys.argv", ["test", "test/resources/di.yaml", "--override", "test_value:overridden_arg"]):
+    with patch(
+        "sys.argv",
+        ["test", "test/resources/di.yaml", "--override", "test_value:overridden_arg"],
+    ):
         run_evagg_app()
     assert "Test app executed with value: overridden_arg" in caplog.text
     # Undo run completion to avoid polluting other tests
@@ -84,7 +111,9 @@ def test_run_evagg_app_override(caplog):
 
 def test_run_evagg_app_override_true(caplog):
     caplog.set_level(logging.INFO)
-    with patch("sys.argv", ["test", "test/resources/di.yaml", "--override", "test_value:true"]):
+    with patch(
+        "sys.argv", ["test", "test/resources/di.yaml", "--override", "test_value:true"]
+    ):
         run_evagg_app()
     assert "Test app executed with value: True" in caplog.text
     # Undo run completion to avoid polluting other tests
@@ -93,7 +122,9 @@ def test_run_evagg_app_override_true(caplog):
 
 def test_run_evagg_app_override_false(caplog):
     caplog.set_level(logging.INFO)
-    with patch("sys.argv", ["test", "test/resources/di.yaml", "--override", "test_value:false"]):
+    with patch(
+        "sys.argv", ["test", "test/resources/di.yaml", "--override", "test_value:false"]
+    ):
         run_evagg_app()
     assert "Test app executed with value: False" in caplog.text
     # Undo run completion to avoid polluting other tests
@@ -101,14 +132,32 @@ def test_run_evagg_app_override_false(caplog):
 
 
 def test_run_evagg_app_interrupt(capfd):
-    with patch("sys.argv", ["test", "test/resources/di.yaml", "--override", "test_value:KeyboardInterrupt"]):
+    with patch(
+        "sys.argv",
+        [
+            "test",
+            "test/resources/di.yaml",
+            "--override",
+            "test_value:KeyboardInterrupt",
+        ],
+    ):
         run_evagg_app()
     out, err = capfd.readouterr()
     assert "KeyboardInterrupt in" in out
 
 
 def test_run_evagg_app_exception(caplog):
-    with patch("sys.argv", ["test", "test/resources/di.yaml", "--override", "test_value:Exception", "--retries", "1"]):
+    with patch(
+        "sys.argv",
+        [
+            "test",
+            "test/resources/di.yaml",
+            "--override",
+            "test_value:Exception",
+            "--retries",
+            "1",
+        ],
+    ):
         with pytest.raises(SystemExit):
             run_evagg_app()
     assert "Error executing app: " in caplog.text
@@ -129,7 +178,9 @@ def mock_writer(mock_client: type) -> IWriteOutput:
     return mock_client(IWriteOutput)
 
 
-def test_evagg_paper_query_app(json_load, mock_library: Any, mock_extractor: Any, mock_writer: Any):
+def test_evagg_paper_query_app(
+    json_load, mock_library: Any, mock_extractor: Any, mock_writer: Any
+):
     spec = {
         "di_factory": "lib.evagg.app.PaperQueryApp",
         "queries": [{"gene_symbol": "test"}],
@@ -143,7 +194,9 @@ def test_evagg_paper_query_app(json_load, mock_library: Any, mock_extractor: Any
         "mock_extractor": mock_extractor([{"evidence": "value"}]),
         "mock_writer": mock_writer(None),
     }
-    _current_run.elapsed_secs = None  # Reset elapsed_secs to avoid error on multiple runs in the same test.
+    _current_run.elapsed_secs = (
+        None  # Reset elapsed_secs to avoid error on multiple runs in the same test.
+    )
     DiContainer().create_instance(spec, resources).execute()
     # Undo run completion to avoid polluting other tests
     _current_run.elapsed_secs = None

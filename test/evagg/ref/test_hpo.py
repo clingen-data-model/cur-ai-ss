@@ -18,8 +18,12 @@ def test_compare() -> None:
 
     reference = PyHPOClient()
 
-    assert reference.compare(term_near1, term_near2) > reference.compare(term_near1, term_far)
-    assert reference.compare(term_near1, term_near2) > reference.compare(term_near1, term_far)
+    assert reference.compare(term_near1, term_near2) > reference.compare(
+        term_near1, term_far
+    )
+    assert reference.compare(term_near1, term_near2) > reference.compare(
+        term_near1, term_far
+    )
 
 
 def test_compare_set() -> None:
@@ -57,7 +61,6 @@ def test_search(mock_web_client: Any) -> None:
     web_client = mock_web_client("hpo_search_cardiomegaly.json")
     reference = WebHPOClient(web_client)
     result = reference.search("cardiomegaly")
-    print(result)
     assert result == [
         {
             "id": "HP:0001640",

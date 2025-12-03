@@ -7,7 +7,6 @@ from typing import Any, Dict, Iterable, List, Optional
 
 import openai
 from openai import AsyncAzureOpenAI, AsyncOpenAI
-from openai.types import CreateEmbeddingResponse
 from openai.types.chat import (
     ChatCompletionMessageParam,
     ChatCompletionSystemMessageParam,
@@ -15,12 +14,21 @@ from openai.types.chat import (
 )
 from pydantic import BaseModel
 
+from lib.evagg.prompts import PROMPT_REGISTRY
 from lib.evagg.utils.cache import ObjectCache
 from lib.evagg.utils.logging import PROMPT
 
-from .interfaces import IPromptClient
-
 logger = logging.getLogger(__name__)
+
+DEFAULT_PROMPT_SETTINGS = {
+    "max_tokens": 1024,
+    "prompt_tag": "observation",
+    "temperature": 0.7,
+    "top_p": 0.95,
+    "response_format": {"type": "json_object"},
+    "frequency_penalty": 0,
+    "presence_penalty": 0,
+}
 
 
 class ChatMessages:
@@ -56,7 +64,7 @@ class AzureOpenAIConfig(OpenAIConfig):
     token_provider: Any = None
 
 
-class OpenAIClient(IPromptClient):
+class OpenAIClient:
     _config: OpenAIConfig
     _use_azure: bool
 
@@ -95,7 +103,10 @@ class OpenAIClient(IPromptClient):
                 api_version=self._config.api_version,
                 timeout=self._config.timeout,
             )
-        logger.info("Using AsyncOpenAI" + f" (max_parallel={self._config.max_parallel_requests}).")
+        logger.info(
+            "Using AsyncOpenAI"
+            + f" (max_parallel={self._config.max_parallel_requests})."
+        )
         return AsyncOpenAI(
             api_key=self._config.api_key,
             timeout=self._config.timeout,
@@ -106,12 +117,18 @@ class OpenAIClient(IPromptClient):
         with open(prompt_file, "r") as f:
             return f.read()
 
-    def _create_completion_task(self, messages: ChatMessages, settings: Dict[str, Any]) -> asyncio.Task:
+    def _create_completion_task(
+        self, messages: ChatMessages, settings: Dict[str, Any]
+    ) -> asyncio.Task:
         """Schedule a completion task to the event loop and return the awaitable."""
-        chat_completion = self._client.chat.completions.create(messages=messages.to_list(), **settings)
+        chat_completion = self._client.chat.completions.create(
+            messages=messages.to_list(), **settings
+        )
         return asyncio.create_task(chat_completion, name="chat")
 
-    async def _generate_completion(self, messages: ChatMessages, settings: Dict[str, Any]) -> str:
+    async def _generate_completion(
+        self, messages: ChatMessages, settings: Dict[str, Any]
+    ) -> str:
         prompt_tag = settings.pop("prompt_tag", "prompt")
         prompt_metadata = settings.pop("prompt_metadata", {})
         connection_errors = 0
@@ -121,7 +138,10 @@ class OpenAIClient(IPromptClient):
             try:
                 # Pause 1 second if the number of pending chat completions is at the limit.
                 if (max_requests := self._config.max_parallel_requests) > 0:
-                    while sum(1 for t in asyncio.all_tasks() if t.get_name() == "chat") > max_requests:
+                    while (
+                        sum(1 for t in asyncio.all_tasks() if t.get_name() == "chat")
+                        > max_requests
+                    ):
                         await asyncio.sleep(1)
 
                 start_ts = time.time()
@@ -131,14 +151,21 @@ class OpenAIClient(IPromptClient):
                 break
             except (openai.RateLimitError, openai.InternalServerError) as e:
                 # Only report the first rate limit error not from a proxy unless it's constant.
-                if rate_limit_errors > 10 or (rate_limit_errors == 0 and not e.message.startswith("No good endpoints")):
+                if rate_limit_errors > 10 or (
+                    rate_limit_errors == 0
+                    and not e.message.startswith("No good endpoints")
+                ):
                     logger.warning(f"Rate limit error on {prompt_tag}: {e}")
                 rate_limit_errors += 1
                 await asyncio.sleep(1)
             except (openai.APIConnectionError, openai.APITimeoutError) as e:
                 if connection_errors > 2:
-                    if hasattr(self._config, "endpoint") and self._config.endpoint.startswith("http://localhost"):
-                        logger.error("Azure OpenAI API unreachable - have failed to start a local proxy?")
+                    if hasattr(
+                        self._config, "endpoint"
+                    ) and self._config.endpoint.startswith("http://localhost"):
+                        logger.error(
+                            "Azure OpenAI API unreachable - have failed to start a local proxy?"
+                        )
                     raise
                 if connection_errors == 0:
                     logger.warning(f"Connectivity error on {prompt_tag}: {e.message}")
@@ -152,101 +179,107 @@ class OpenAIClient(IPromptClient):
             "prompt_tag": prompt_tag,
             "prompt_metadata": prompt_metadata,
             "prompt_settings": settings,
-            "prompt_text": "\n".join([str(m.get("content")) for m in messages.to_list()]),
+            "prompt_text": "\n".join(
+                [str(m.get("content")) for m in messages.to_list()]
+            ),
             "prompt_response": response,
             "prompt_response_metadata": {
                 "prompt_tokens": completion.usage.prompt_tokens,
                 "completion_tokens": completion.usage.completion_tokens,
                 "cached_tokens": (
-                    getattr(getattr(completion.usage, "prompt_tokens_details", None), "cached_tokens", -1)
+                    getattr(
+                        getattr(completion.usage, "prompt_tokens_details", None),
+                        "cached_tokens",
+                        -1,
+                    )
                     if (completion and hasattr(completion, "usage"))
                     else -1
                 ),
             },
         }
 
-        logger.log(PROMPT, f"Chat '{prompt_tag}' complete in {elapsed:.1f} seconds.", extra=prompt_log)
+        logger.log(
+            PROMPT,
+            f"Chat '{prompt_tag}' complete in {elapsed:.1f} seconds.",
+            extra=prompt_log,
+        )
         return response
 
     async def prompt(
         self,
         user_prompt: str,
-        system_prompt: Optional[str] = None,
         params: Optional[Dict[str, str]] = None,
         prompt_settings: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Get the response from a prompt."""
         # Replace any '{{${key}}}' instances with values from the params dictionary.
-        user_prompt = reduce(lambda x, kv: x.replace(f"{{{{${kv[0]}}}}}", kv[1]), (params or {}).items(), user_prompt)
+        user_prompt = reduce(
+            lambda x, kv: x.replace(f"{{{{${kv[0]}}}}}", kv[1]),
+            (params or {}).items(),
+            user_prompt,
+        )
 
-        messages: ChatMessages = ChatMessages([ChatCompletionUserMessageParam(role="user", content=user_prompt)])
-        if system_prompt:
-            messages.insert(0, ChatCompletionSystemMessageParam(role="system", content=system_prompt))
+        messages: ChatMessages = ChatMessages(
+            [ChatCompletionUserMessageParam(role="user", content=user_prompt)]
+        )
+        messages.insert(
+            0,
+            ChatCompletionSystemMessageParam(
+                role="system", content=PROMPT_REGISTRY["system"].render_template()
+            ),
+        )
 
         settings = {
-            "max_tokens": 1024,
-            "frequency_penalty": 0,
-            "presence_penalty": 0,
-            "temperature": 0.7,
+            **DEFAULT_PROMPT_SETTINGS,
             "model": self._config.deployment,
             **(prompt_settings or {}),
         }
-
         return await self._generate_completion(messages, settings)
 
     async def prompt_file(
         self,
-        user_prompt_file: str,
-        system_prompt: Optional[str] = None,
+        prompt_filepath: str,
         params: Optional[Dict[str, str]] = None,
         prompt_settings: Optional[Dict[str, Any]] = None,
     ) -> str:
-        user_prompt = self._load_prompt_file(user_prompt_file)
-        return await self.prompt(user_prompt, system_prompt, params, prompt_settings)
+        return await self.prompt(
+            self._load_prompt_file(prompt_filepath),
+            params,
+            prompt_settings,
+        )
 
-    async def embeddings(
-        self, inputs: List[str], embedding_settings: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, List[float]]:
-        settings = {"model": "text-embedding-ada-002-v2", **(embedding_settings or {})}
-
-        embeddings = {}
-
-        async def _run_single_embedding(input: str) -> int:
-            connection_errors = 0
-            while True:
-                try:
-                    result: CreateEmbeddingResponse = await self._client.embeddings.create(
-                        input=[input], encoding_format="float", **settings
-                    )
-                    embeddings[input] = result.data[0].embedding
-                    return result.usage.prompt_tokens
-                except (openai.RateLimitError, openai.InternalServerError) as e:
-                    logger.warning(f"Rate limit error on embeddings: {e}")
-                    await asyncio.sleep(1)
-                except (openai.APIConnectionError, openai.APITimeoutError):
-                    if connection_errors > 2:
-                        if hasattr(self._config, "endpoint") and self._config.endpoint.startswith("http://localhost"):
-                            logger.error("Azure OpenAI API unreachable - have failed to start a local proxy?")
-                        raise
-                    logger.warning("Connectivity error on embeddings, retrying...")
-                    connection_errors += 1
-                    await asyncio.sleep(1)
-
-        start_overall = time.time()
-        tokens = await asyncio.gather(*[_run_single_embedding(input) for input in inputs])
-        elapsed = time.time() - start_overall
-
-        logger.info(f"{len(inputs)} embeddings produced in {elapsed:.1f} seconds using {sum(tokens)} tokens.")
-        return embeddings
+    async def prompt_json(
+        self,
+        prompt_filepath: str,
+        params: Optional[Dict[str, str]] = None,
+        prompt_settings: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        response = await self.prompt_file(
+            prompt_filepath=prompt_filepath,
+            params=params,
+            prompt_settings=prompt_settings,
+        )
+        try:
+            result = json.loads(response)
+        except json.decoder.JSONDecodeError:
+            logger.error(
+                f"Failed to parse response from LLM to {prompt_filepath}: {response}"
+            )
+            return {}
+        return result
 
 
 class OpenAICacheClient(OpenAIClient):
     def __init__(self, client_class: str, config: Dict[str, Any]) -> None:
         # Don't cache tasks that have errored out.
-        self.task_cache = ObjectCache[asyncio.Task](lambda t: not t.done() or t.exception() is None)
+        self.task_cache = ObjectCache[asyncio.Task](
+            lambda t: not t.done() or t.exception() is None
+        )
         super().__init__(client_class, config)
 
-    def _create_completion_task(self, messages: ChatMessages, settings: Dict[str, Any]) -> asyncio.Task:
+    def _create_completion_task(
+        self, messages: ChatMessages, settings: Dict[str, Any]
+    ) -> asyncio.Task:
         """Create a new task only if no identical non-errored one was already cached."""
         cache_key = hash((messages.content, json.dumps(settings)))
         if task := self.task_cache.get(cache_key):

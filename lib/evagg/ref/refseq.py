@@ -82,7 +82,9 @@ class RefSeqLookupClient(BaseLookupClient):
     _RAW_FILENAME = "GCF_000001405.39_GRCh38.p13_genomic.gff.gz"
     _PROCESSED_FILEPATH = "refseq_processed.json"
 
-    def _download_binary_reference(self, url: str, target: str) -> None:  # pragma: no cover
+    def _download_binary_reference(
+        self, url: str, target: str
+    ) -> None:  # pragma: no cover
         response = requests.get(url, timeout=60)
         response.raise_for_status()
 
@@ -118,12 +120,19 @@ class RefSeqLookupClient(BaseLookupClient):
         for line in protein_lines:
             tokens = line.split("\t")
             assert len(tokens) == 9, "Wrong number of tokens in line"
-            attributes = {kv.split("=")[0]: kv.split("=")[1] for kv in tokens[8].split(";")}
+            attributes = {
+                kv.split("=")[0]: kv.split("=")[1] for kv in tokens[8].split(";")
+            }
             assert "gene" in attributes, "gene not found in attributes"
-            assert "tag" in attributes and "Select" in attributes["tag"], "Not tagged as select"
+            assert "tag" in attributes and "Select" in attributes["tag"], (
+                "Not tagged as select"
+            )
             assert "protein_id" in attributes, "protein_id not found in attributes"
             assert "Dbxref" in attributes, "Dbxref not found in attributes"
-            xref = {kv.split(":")[0]: kv.split(":")[1] for kv in attributes["Dbxref"].split(",")}
+            xref = {
+                kv.split(":")[0]: kv.split(":")[1]
+                for kv in attributes["Dbxref"].split(",")
+            }
             assert "GeneID" in xref, "GeneID not found in DBxref"
 
             if attributes["gene"] in refseqs:
@@ -142,10 +151,16 @@ class RefSeqLookupClient(BaseLookupClient):
         for line in transcript_lines:
             tokens = line.split("\t")
             assert len(tokens) == 9, "Wrong number of tokens in line"
-            attributes = {kv.split("=")[0]: kv.split("=")[1] for kv in tokens[8].split(";")}
+            attributes = {
+                kv.split("=")[0]: kv.split("=")[1] for kv in tokens[8].split(";")
+            }
             assert "gene" in attributes, "gene not found in attributes"
-            assert "tag" in attributes and "Select" in attributes["tag"], "Not tagged as Select"
-            assert "transcript_id" in attributes, "transcript_id not found in attributes"
+            assert "tag" in attributes and "Select" in attributes["tag"], (
+                "Not tagged as Select"
+            )
+            assert "transcript_id" in attributes, (
+                "transcript_id not found in attributes"
+            )
 
             if attributes["gene"] not in refseqs:
                 # This is uncommon, so log a warning.
@@ -157,9 +172,14 @@ class RefSeqLookupClient(BaseLookupClient):
                 logger.debug(f"{attributes['gene']} already has an RNA")
                 continue
 
-            if "MANE Select" in attributes["tag"] and not refseqs[attributes["gene"]]["MANE"]:
+            if (
+                "MANE Select" in attributes["tag"]
+                and not refseqs[attributes["gene"]]["MANE"]
+            ):
                 # No observed instances of this in the current reference data, but it's possible, so log a warning.
-                logger.warning(f"{attributes['gene']} has a non-MANE protein, but a MANE RNA.")  # pragma: no cover
+                logger.warning(
+                    f"{attributes['gene']} has a non-MANE protein, but a MANE RNA."
+                )  # pragma: no cover
 
             refseqs[attributes["gene"]]["RNA"] = attributes["transcript_id"].strip()
 
@@ -187,7 +207,9 @@ class RefSeqLookupClient(BaseLookupClient):
 class RefSeqGeneLookupClient(BaseLookupClient):
     """Determine RefSeq 'Reference Standard' accessions for genes using the NCBI RefSeqGene database."""
 
-    _NCBI_REFSEQGENE_URL = "https://ftp.ncbi.nlm.nih.gov/refseq/H_sapiens/RefSeqGene/LRG_RefSeqGene"
+    _NCBI_REFSEQGENE_URL = (
+        "https://ftp.ncbi.nlm.nih.gov/refseq/H_sapiens/RefSeqGene/LRG_RefSeqGene"
+    )
 
     _MANUAL_ADDITIONS = {
         "DNAJC7": {  # No RefSeqGene accession, thus not in reference table. Using chromosomal genomic reference.
@@ -313,10 +335,14 @@ class RefSeqGeneLookupClient(BaseLookupClient):
                 continue
             gene_symbol = fields[2]
             if gene_symbol in reference_dict:
-                logging.debug(f"Multiple reference standard entries for gene {gene_symbol}. Keeping the first one.")
+                logging.debug(
+                    f"Multiple reference standard entries for gene {gene_symbol}. Keeping the first one."
+                )
                 continue
             reference_dict[gene_symbol] = {
-                field_mapping.get(k, k): v for k, v in zip(header, fields) if k in kept_fields
+                field_mapping.get(k, k): v
+                for k, v in zip(header, fields)
+                if k in kept_fields
             }
 
         return reference_dict

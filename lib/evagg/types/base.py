@@ -16,7 +16,12 @@ class Paper:
         return self.id == o.id
 
     def __repr__(self) -> str:
-        text = self.props.get("title") or self.props.get("citation") or self.props.get("abstract") or "unknown"
+        text = (
+            self.props.get("title")
+            or self.props.get("citation")
+            or self.props.get("abstract")
+            or "unknown"
+        )
         return f'id: {self.id} - "{text[:15]}{"..." if len(text) > 15 else ""}"'
 
 

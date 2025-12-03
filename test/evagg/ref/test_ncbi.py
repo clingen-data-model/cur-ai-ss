@@ -23,7 +23,9 @@ def test_single_gene_indirect(mock_web_client):
     result = NcbiLookupClient(web_client).gene_id_for_symbol("FEB11")
     assert result == {}
 
-    result = NcbiLookupClient(web_client).gene_id_for_symbol("FEB11", allow_synonyms=True)
+    result = NcbiLookupClient(web_client).gene_id_for_symbol(
+        "FEB11", allow_synonyms=True
+    )
     assert result == {"FEB11": 57094}
 
     # Verify that this would also work for the direct match.
@@ -47,10 +49,14 @@ def test_multi_gene(mock_web_client):
     result = NcbiLookupClient(web_client).gene_id_for_symbol("FAM111B", "FEB11")
     assert result == {"FAM111B": 374393}
 
-    result = NcbiLookupClient(web_client).gene_id_for_symbol("FAM111B", "FEB11", allow_synonyms=True)
+    result = NcbiLookupClient(web_client).gene_id_for_symbol(
+        "FAM111B", "FEB11", allow_synonyms=True
+    )
     assert result == {"FAM111B": 374393, "FEB11": 57094}
 
-    result = NcbiLookupClient(web_client).gene_id_for_symbol("FAM111B", "FEB11", "not a gene", allow_synonyms=True)
+    result = NcbiLookupClient(web_client).gene_id_for_symbol(
+        "FAM111B", "FEB11", "not a gene", allow_synonyms=True
+    )
     assert result == {"FAM111B": 374393, "FEB11": 57094}
 
 
@@ -119,14 +125,18 @@ def test_pubmed_fetch(mock_web_client, json_load):
 
 
 def test_pubmed_pmc_oa_fetch(mock_web_client):
-    web_client = mock_web_client("efetch_pubmed_paper_31427284.xml", "ncbi_pmc_is_oa_PMC6824399.xml")
+    web_client = mock_web_client(
+        "efetch_pubmed_paper_31427284.xml", "ncbi_pmc_is_oa_PMC6824399.xml"
+    )
     result = NcbiLookupClient(web_client).fetch("31427284")
     assert result and result.props["can_access"] is False
 
 
 def test_pubmed_pmc_full_text(mock_web_client):
     web_client = mock_web_client(
-        "efetch_pubmed_paper_33688625.xml", "ncbi_pmc_is_oa_PMC7933980.xml", "ncbi_bioc_full_text_PMC7933980.xml"
+        "efetch_pubmed_paper_33688625.xml",
+        "ncbi_pmc_is_oa_PMC7933980.xml",
+        "ncbi_bioc_full_text_PMC7933980.xml",
     )
     result = NcbiLookupClient(web_client).fetch("33688625", include_fulltext=True)
     assert result and result.props["can_access"] is True

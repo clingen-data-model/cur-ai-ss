@@ -27,7 +27,9 @@ def test_run_record():
     )
     assert run_record.dir_name == f"run_test_{ts}"
     assert run_record.start_datetime == datetime.strptime(ts, "%Y%m%d_%H%M%S")
-    assert run_record.start == datetime.strptime(ts, "%Y%m%d_%H%M%S").strftime("%Y-%m-%d %H:%M:%S")
+    assert run_record.start == datetime.strptime(ts, "%Y%m%d_%H%M%S").strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
 
 
 def test_output_path(tmpdir):

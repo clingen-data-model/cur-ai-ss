@@ -21,7 +21,9 @@ class PromptBasedContentExtractorCached(PromptBasedContentExtractor):
     def extract(self, paper: Paper, gene_symbol: str) -> Sequence[Dict[str, str]]:
         cache_key = f"extract_{paper.props['pmid']}_{gene_symbol}"
         if (obs := self._cache.get(cache_key)) is not None:
-            logger.info(f"Retrieved {len(obs)} field extractions from cache for {paper.id}/{gene_symbol}.")
+            logger.info(
+                f"Retrieved {len(obs)} field extractions from cache for {paper.id}/{gene_symbol}."
+            )
             return obs
         obs = super().extract(paper, gene_symbol)
         self._cache.set(cache_key, obs)

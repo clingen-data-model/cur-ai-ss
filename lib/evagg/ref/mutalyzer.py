@@ -9,12 +9,10 @@ from requests.exceptions import HTTPError, RetryError
 
 from lib.evagg.utils import RequestsWebContentClient
 
-from .interfaces import IBackTranslateVariants, INormalizeVariants, IValidateVariants
-
 logger = logging.getLogger(__name__)
 
 
-class MutalyzerClient(INormalizeVariants, IBackTranslateVariants, IValidateVariants):
+class MutalyzerClient:
     _web_client: RequestsWebContentClient
 
     def __init__(self, web_client: RequestsWebContentClient) -> None:
@@ -69,11 +67,15 @@ class MutalyzerClient(INormalizeVariants, IBackTranslateVariants, IValidateVaria
             else:
                 raise e
 
-        if "errors" in response or ("custom" in response and "errors" in response["custom"]):
+        if "errors" in response or (
+            "custom" in response and "errors" in response["custom"]
+        ):
             error_dict = response.get("errors") or response["custom"]["errors"]
             error_message = error_dict[0].get("code", "Unknown error")
 
-            logger.debug(f"Unable to normalize variant. Mutalyzer returned an error for {hgvs}: {error_message}")
+            logger.debug(
+                f"Unable to normalize variant. Mutalyzer returned an error for {hgvs}: {error_message}"
+            )
             return {"error_message": error_message}
 
         # Only return a subset of the fields in the response.
@@ -81,9 +83,13 @@ class MutalyzerClient(INormalizeVariants, IBackTranslateVariants, IValidateVaria
         if "normalized_description" in response:
             response_dict["normalized_description"] = response["normalized_description"]
         if "protein" in response and "description" in response["protein"]:
-            response_dict["protein"] = {"description": response["protein"]["description"]}
+            response_dict["protein"] = {
+                "description": response["protein"]["description"]
+            }
         if "equivalent_descriptions" in response:
-            response_dict["equivalent_descriptions"] = response["equivalent_descriptions"]
+            response_dict["equivalent_descriptions"] = response[
+                "equivalent_descriptions"
+            ]
 
         return response_dict
 
@@ -108,11 +114,17 @@ class MutalyzerClient(INormalizeVariants, IBackTranslateVariants, IValidateVaria
         refseq, hgvs_desc = hgvs.split(":")
 
         # Drop anything past NNN and replace with fs.
-        hgvs_desc = re.sub(r"(\(?)([A-Za-z]+[0-9]+)[A-Za-z0-9\*]+(\)?)", r"\1\2fs\3", hgvs_desc)
+        hgvs_desc = re.sub(
+            r"(\(?)([A-Za-z]+[0-9]+)[A-Za-z0-9\*]+(\)?)", r"\1\2fs\3", hgvs_desc
+        )
 
         # Now replace the single letter code with the three letter code, if that's what was used.
         if matched := re.match(r"(p.\(?)([A-Z])([0-9]+fs\)?)", hgvs_desc):
-            hgvs_desc = matched.group(1) + IUPACData.protein_letters_1to3[matched.group(2)] + matched.group(3)
+            hgvs_desc = (
+                matched.group(1)
+                + IUPACData.protein_letters_1to3[matched.group(2)]
+                + matched.group(3)
+            )
 
         return {"normalized_description": f"{refseq}:{hgvs_desc}"}
 

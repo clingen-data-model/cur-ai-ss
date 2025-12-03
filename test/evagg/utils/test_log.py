@@ -8,7 +8,16 @@ from lib.execute import run_evagg_app
 
 def test_log(capfd, tmpdir, test_file_contents):
     # sample_config triggers log setup and exercises SimpleFileLibrary.
-    with patch("sys.argv", ["test", "sample_config", "--override", "log.level:DEBUG", f"log.root:{tmpdir}"]):
+    with patch(
+        "sys.argv",
+        [
+            "test",
+            "sample_config",
+            "--override",
+            "log.level:DEBUG",
+            f"log.root:{tmpdir}",
+        ],
+    ):
         run_evagg_app()
 
     logger = logging.getLogger(__name__)
@@ -40,7 +49,9 @@ def test_log(capfd, tmpdir, test_file_contents):
     assert len(log_dir.listdir()) == 3
     assert log_dir.join("test.log").read() in out
     assert test_file_contents("test_prompt_log.txt") == log_dir.join("test.log").read()
-    assert str(log_dir.join("console.log").read()).startswith("ARGS:test sample_config --override log.level:DEBUG")
+    assert str(log_dir.join("console.log").read()).startswith(
+        "ARGS:test sample_config --override log.level:DEBUG"
+    )
 
     # Undo run completion to avoid polluting other tests
     _current_run.elapsed_secs = None

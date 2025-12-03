@@ -26,7 +26,9 @@ class PaperQueryApp(IEvAggApp):
 
         for query in self._queries:
             if not query.get("gene_symbol"):
-                raise ValueError("Minimum requirement to search is to input a gene symbol.")
+                raise ValueError(
+                    "Minimum requirement to search is to input a gene symbol."
+                )
             term = query["gene_symbol"]
             # Get the papers that match this query.
             papers = self._library.get_papers(query)
@@ -45,7 +47,6 @@ class PaperQueryApp(IEvAggApp):
 
 
 class SinglePMIDApp(IEvAggApp):
-
     def __init__(
         self,
         pmid: str,
@@ -65,7 +66,9 @@ class SinglePMIDApp(IEvAggApp):
         papers = self._library.get_papers({"pmid": self._pmid})
         assert len(papers) == 1
         logger.info(f"Found {len(papers)} papers for pmid: {self._pmid}")
-        output_file = self._writer.write(self._extractor.extract(papers[0], self._gene_symbol))
+        output_file = self._writer.write(
+            self._extractor.extract(papers[0], self._gene_symbol)
+        )
         set_run_complete(output_file)
 
 

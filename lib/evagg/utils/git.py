@@ -143,13 +143,17 @@ class RepoStatus:
             while not os.path.isdir(os.path.join(repo_root_path, ".git")):
                 repo_root_path = os.path.dirname(repo_root_path)
                 if repo_root_path == "/":
-                    raise GitError("No git repo found in the current directory or any parent directory")
+                    raise GitError(
+                        "No git repo found in the current directory or any parent directory"
+                    )
         self._repo_root = repo_root_path
 
         # Run git status on the repo.
         try:
             status = subprocess.check_output(
-                ["git", "status", "--porcelain=2", "--branch"], stderr=subprocess.STDOUT, cwd=self._repo_root
+                ["git", "status", "--porcelain=2", "--branch"],
+                stderr=subprocess.STDOUT,
+                cwd=self._repo_root,
             )  # nosec B603, B607 # no untrusted input/partial path
             self.status_str = status.decode()
         except Exception:

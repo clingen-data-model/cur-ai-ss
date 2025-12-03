@@ -39,10 +39,16 @@ DEFAULT_EXCLUSIONS = [
 ]
 
 
-def init_module_filter(exclude_modules: Set[str], include_modules: Set[str]) -> LogFilter:
+def init_module_filter(
+    exclude_modules: Set[str], include_modules: Set[str]
+) -> LogFilter:
     def filter(record: logging.LogRecord) -> bool:
         def match_module(record: logging.LogRecord, module: str) -> bool:
-            return record.name.startswith(module[:-1]) if module.endswith("*") else record.name == module
+            return (
+                record.name.startswith(module[:-1])
+                if module.endswith("*")
+                else record.name == module
+            )
 
         # Don't filter out warnings and above.
         if record.levelno >= logging.WARNING:
@@ -157,7 +163,9 @@ def init_logger(
     global _log_initialized
     if _log_initialized:
         logger = logging.getLogger(__name__)
-        logger.warning("Logging service already initialized - ignoring new initialization.")
+        logger.warning(
+            "Logging service already initialized - ignoring new initialization."
+        )
         return
 
     if root:
@@ -174,11 +182,17 @@ def init_logger(
 
     # Set up the file handler logging arguments.
     LOGGING_CONFIG["handlers"]["file_handler"]["logs_enabled"] = to_file or False
-    LOGGING_CONFIG["handlers"]["file_handler"]["prompt_msgs_enabled"] = level_number <= logging.INFO
+    LOGGING_CONFIG["handlers"]["file_handler"]["prompt_msgs_enabled"] = (
+        level_number <= logging.INFO
+    )
 
     # Set up the console handler logging arguments.
-    LOGGING_CONFIG["handlers"]["console_handler"]["prompts_enabled"] = prompts_to_console or False
-    LOGGING_CONFIG["handlers"]["console_handler"]["prompt_msgs_enabled"] = level_number <= logging.INFO
+    LOGGING_CONFIG["handlers"]["console_handler"]["prompts_enabled"] = (
+        prompts_to_console or False
+    )
+    LOGGING_CONFIG["handlers"]["console_handler"]["prompt_msgs_enabled"] = (
+        level_number <= logging.INFO
+    )
 
     # Set up the module filter.
     exclusions = set(DEFAULT_EXCLUSIONS if exclude_defaults else [])

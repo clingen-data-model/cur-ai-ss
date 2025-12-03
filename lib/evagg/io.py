@@ -16,7 +16,9 @@ logger = logging.getLogger(__name__)
 class TableOutputWriter(IWriteOutput):
     def __init__(self, tsv_name: Optional[str] = None) -> None:
         self._generated = datetime.now().astimezone()
-        self._path = os.path.join(get_run_path(), f"{tsv_name}.tsv") if tsv_name else None
+        self._path = (
+            os.path.join(get_run_path(), f"{tsv_name}.tsv") if tsv_name else None
+        )
         if self._path and os.path.exists(self._path):
             logger.warning(f"Overwriting existing output file: {self._path}")
 
@@ -32,7 +34,9 @@ class TableOutputWriter(IWriteOutput):
 
         output_stream = open(self._path, "w") if self._path else sys.stdout
         writer = csv.writer(output_stream, delimiter="\t", lineterminator="\n")
-        writer.writerow([f"# Generated {self._generated.strftime('%Y-%m-%d %H:%M:%S %Z')}"])
+        writer.writerow(
+            [f"# Generated {self._generated.strftime('%Y-%m-%d %H:%M:%S %Z')}"]
+        )
 
         field_names = output[0].keys()
         writer.writerow(field_names)
@@ -49,7 +53,9 @@ class TableOutputWriter(IWriteOutput):
 class JSONOutputWriter(IWriteOutput):
     def __init__(self, json_name: Optional[str] = None) -> None:
         self._generated = datetime.now().astimezone()
-        self._path = os.path.join(get_run_path(), f"{json_name}.json") if json_name else None
+        self._path = (
+            os.path.join(get_run_path(), f"{json_name}.json") if json_name else None
+        )
 
         if self._path and os.path.exists(self._path):
             logger.warning(f"Overwriting existing output file: {self._path}")

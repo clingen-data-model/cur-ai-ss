@@ -78,11 +78,15 @@ def mock_client(arg_loader):
 
                     def create_method(name, is_coroutine):
                         def method(*args, **kwargs):
-                            arg_list = list(map(str, args)) + ["=".join(map(str, item)) for item in kwargs.items()]
+                            arg_list = list(map(str, args)) + [
+                                "=".join(map(str, item)) for item in kwargs.items()
+                            ]
                             call_string = f"{name}(\n\t{',\n\t'.join(arg_list)}\n)"
                             print(call_string)
 
-                            self._calls.append((name, *args, *[{k: v} for k, v in kwargs.items()]))
+                            self._calls.append(
+                                (name, *args, *[{k: v} for k, v in kwargs.items()])
+                            )
                             return next(self._responses)
 
                         async def async_method(*args, **kwargs):
@@ -96,11 +100,19 @@ def mock_client(arg_loader):
                 return (
                     self._calls[-1]
                     if method_name is None
-                    else next(call for call in reversed(self._calls) if call[0] == method_name)[1:]
+                    else next(
+                        call for call in reversed(self._calls) if call[0] == method_name
+                    )[1:]
                 )
 
             def call_count(self, method_name: Optional[str] = None):
-                return len([call for call in self._calls if method_name is None or call[0] == method_name])
+                return len(
+                    [
+                        call
+                        for call in self._calls
+                        if method_name is None or call[0] == method_name
+                    ]
+                )
 
         return MockClient
 

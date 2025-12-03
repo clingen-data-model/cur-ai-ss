@@ -10,7 +10,9 @@ class IVariantLookupClient(Protocol):
 
 
 class IGeneLookupClient(Protocol):
-    def gene_id_for_symbol(self, *symbols: str, allow_synonyms: bool = False) -> Dict[str, int]:
+    def gene_id_for_symbol(
+        self, *symbols: str, allow_synonyms: bool = False
+    ) -> Dict[str, int]:
         """Get gene ids for the given gene symbols."""
         ...  # pragma: no cover
 
@@ -49,27 +51,6 @@ class IRefSeqLookupClient(Protocol):
         ...  # pragma: no cover
 
 
-class INormalizeVariants(Protocol):
-    def normalize(self, hgvs: str) -> Dict[str, Any]:
-        """Perform normalization on the provided variant."""
-        ...  # pragma: no cover
-
-
-class IBackTranslateVariants(Protocol):
-    def back_translate(self, hgvsp: str) -> Sequence[str]:
-        """Back translate the provided protein variant.
-
-        Returns all possible coding transcript variants that could give rise to the provided protein variant.
-        """
-        ...  # pragma: no cover
-
-
-class IValidateVariants(Protocol):
-    def validate(self, hgvs: str) -> Tuple[bool, str | None]:
-        """Validate the provided variant."""
-        ...  # pragma: no cover
-
-
 class ICompareHPO(Protocol):
     def compare(self, subject: str, object: str, method: str) -> float:
         """Compare two HPO terms using the specified method.
@@ -78,7 +59,9 @@ class ICompareHPO(Protocol):
         """
         ...  # pragma: no cover
 
-    def compare_set(self, subjects: Sequence[str], objects: Sequence[str], method: str) -> Dict[str, Tuple[float, str]]:
+    def compare_set(
+        self, subjects: Sequence[str], objects: Sequence[str], method: str
+    ) -> Dict[str, Tuple[float, str]]:
         """Compare two sets of HPO terms using the specified method.
 
         HPO terms should be provided as a sequence of strings, e.g. ["HP:0012469", "HP:0007270"]

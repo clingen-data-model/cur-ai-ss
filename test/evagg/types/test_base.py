@@ -1,34 +1,13 @@
-from lib.evagg.types import HGVSVariant, ICreateVariants, Paper
-
-
-def test_i_create_variants() -> None:
-    class TestCreateVariants(ICreateVariants):
-        def parse_rsid(self, rsid: str) -> HGVSVariant:
-            return HGVSVariant("c.123A>C", None, None, False, True, None, None, [])
-
-        def parse(
-            self,
-            text_desc: str,
-            gene_symbol: str | None,
-            refseq: str | None = None,
-            protein_consequence: HGVSVariant | None = None,
-        ) -> HGVSVariant:
-            return HGVSVariant(text_desc, gene_symbol, refseq, False, True, None, protein_consequence, [])
-
-    test_create_variants = TestCreateVariants()
-    variant = test_create_variants.parse("var", "gene", "ref")
-    assert variant.hgvs_desc == "var"
-    assert variant.gene_symbol == "gene"
-    assert variant.refseq == "ref"
-    assert variant.refseq_predicted is False
-    assert variant.valid is True
-    assert variant.protein_consequence is None
-    assert variant.coding_equivalents == []
-    assert variant.get_unique_id("pre fix", "suf:f/ix") == "prefix_var_suf-f-ix"
+from lib.evagg.types import HGVSVariant, Paper
 
 
 def test_paper_from_dict() -> None:
-    paper_dict = {"id": "123", "citation": "Test Citation", "abstract": "Test Abstract", "pmcid": "PMC123"}
+    paper_dict = {
+        "id": "123",
+        "citation": "Test Citation",
+        "abstract": "Test Abstract",
+        "pmcid": "PMC123",
+    }
     paper = Paper(**paper_dict)
     assert paper.id == "123"
     assert paper.props["citation"] == "Test Citation"
@@ -37,7 +16,12 @@ def test_paper_from_dict() -> None:
 
 
 def test_paper_equality() -> None:
-    paper_dict = {"id": "123", "citation": "Test Citation", "abstract": "Test Abstract", "pmcid": "PMC123"}
+    paper_dict = {
+        "id": "123",
+        "citation": "Test Citation",
+        "abstract": "Test Abstract",
+        "pmcid": "PMC123",
+    }
     same_paper_dict = paper_dict.copy()
     different_paper_dict = paper_dict.copy()
     different_paper_dict["id"] = "456"
@@ -54,7 +38,12 @@ def test_paper_equality() -> None:
 
 
 def test_paper_repr() -> None:
-    paper_dict = {"id": "123", "citation": "Test Citation", "abstract": "Test Abstract", "pmcid": "PMC123"}
+    paper_dict = {
+        "id": "123",
+        "citation": "Test Citation",
+        "abstract": "Test Abstract",
+        "pmcid": "PMC123",
+    }
     str_paper = 'id: 123 - "Test Citation"'
 
     paper = Paper(**paper_dict)

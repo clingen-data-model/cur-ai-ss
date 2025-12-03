@@ -5,7 +5,11 @@ import pytest
 from lib.evagg.utils import get_azure_credential, get_dotenv_settings, get_env_settings
 
 
-@patch.dict("os.environ", {"PREFIX1_SETTING1": "testval1", "PREFIX1_SETTING2": "testval2"}, clear=True)
+@patch.dict(
+    "os.environ",
+    {"PREFIX1_SETTING1": "testval1", "PREFIX1_SETTING2": "testval2"},
+    clear=True,
+)
 def test_env_settings():
     settings = get_env_settings("PREFIX1_")
     assert settings == {"setting1": "testval1", "setting2": "testval2"}
