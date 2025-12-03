@@ -3,18 +3,15 @@ import os
 import re
 import sys
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from pydantic import BaseModel
-
-from .git import RepoStatus
 
 
 class RunRecord(BaseModel):
     name: str
     timestamp: str
     args: List[str]
-    git: Dict[str, Any]
     path: Optional[str] = None
     output_file: Optional[str] = None
     elapsed_secs: Optional[float] = None
@@ -37,18 +34,12 @@ logger = logging.getLogger(__name__)
 _output_root = ".out"
 
 # Initialize the current run record from the command-line arguments.
-repo = RepoStatus()
 _current_run = RunRecord(
     name=os.path.splitext(os.path.basename(sys.argv[1]))[0]
     if len(sys.argv) > 1
     else os.path.basename(sys.argv[0]),
     args=sys.argv[1:],
     timestamp=datetime.now().strftime(DATE_FORMAT),
-    git={
-        "branch": repo.branch,
-        "commit": repo.commit,
-        "modified_files": [f.name for f in repo.all_modified_files],
-    },
 )
 
 
@@ -89,14 +80,7 @@ def set_run_complete(output_file: Optional[str]) -> None:
     if _current_run.path:
         with open(os.path.join(_current_run.path, "run.json"), "w") as f:
             f.write(_current_run.json(indent=4))
-
-    if files := len([f for f in repo.all_modified_files if f.name.startswith("lib/")]):
-        logger.warning(
-            f"{files} modified {'file' if files == 1 else 'files'} in 'lib'."
-        )
-    logger.info(
-        f"Run complete in {_current_run.elapsed_secs} secs on branch {repo.branch} ({repo.commit[:7]})"
-    )
+    logger.info(f"Run complete in {_current_run.elapsed_secs} secs on branch")
 
 
 def get_previous_run(
