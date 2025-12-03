@@ -4,7 +4,7 @@ import pytest
 
 from lib.evagg import PromptBasedContentExtractor
 from lib.evagg.content import (
-    IFindObservations,
+    ObservationFinder,
     Observation,
     TextSection,
 )
@@ -20,8 +20,8 @@ def mock_prompt(mock_client: type) -> OpenAIClient:
 
 
 @pytest.fixture
-def mock_observation(mock_client: type) -> IFindObservations:
-    return mock_client(IFindObservations)
+def mock_observation(mock_client: type) -> ObservationFinder:
+    return mock_client(ObservationFinder)
 
 
 @pytest.fixture

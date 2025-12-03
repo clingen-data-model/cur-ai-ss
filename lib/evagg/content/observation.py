@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import dataclass
 import logging
 import os
 import re
@@ -9,8 +10,8 @@ from lib.evagg.content.variant import HGVSVariantFactory
 from lib.evagg.llm import OpenAIClient
 from lib.evagg.types import HGVSVariant, Paper
 
-from .fulltext import get_fulltext, get_sections
-from .interfaces import ICompareVariants, IFindObservations, Observation, TextSection
+from .fulltext import get_fulltext, get_sections, TextSection
+from .variant import HGVSVariantComparator
 
 PatientVariant = Tuple[HGVSVariant, str]
 
@@ -27,12 +28,22 @@ def _get_content_prompt_file_path(name: str) -> str:
     return os.path.join(os.path.dirname(__file__), "prompts", f"{name}.txt")
 
 
-class ObservationFinder(IFindObservations):
+@dataclass(frozen=True)
+class Observation:
+    variant: HGVSVariant
+    individual: str
+    variant_descriptions: List[str]
+    patient_descriptions: List[str]
+    texts: List[TextSection]
+    paper_id: str
+
+
+class ObservationFinder:
     def __init__(
         self,
         llm_client: OpenAIClient,
         variant_factory: HGVSVariantFactory,
-        variant_comparator: ICompareVariants,
+        variant_comparator: HGVSVariantComparator,
     ) -> None:
         self._llm_client = llm_client
         self._variant_factory = variant_factory

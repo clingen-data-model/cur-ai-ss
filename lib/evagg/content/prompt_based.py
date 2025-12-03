@@ -10,7 +10,7 @@ from lib.evagg.ref import IFetchHPO, ISearchHPO
 from lib.evagg.types import Paper
 
 from ..interfaces import IExtractFields
-from .interfaces import IFindObservations, Observation
+from .observation import Observation, ObservationFinder
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ class PromptBasedContentExtractor(IExtractFields):
         self,
         fields: Sequence[str],
         llm_client: OpenAIClient,
-        observation_finder: IFindObservations,
+        observation_finder: ObservationFinder,
         phenotype_searcher: ISearchHPO,
         phenotype_fetcher: IFetchHPO,
     ) -> None:
