@@ -1,6 +1,5 @@
 from unittest.mock import patch
 
-import pytest
 
 from lib.evagg.utils import get_dotenv_settings, get_env_settings
 
@@ -20,4 +19,3 @@ def test_dotenv_settings(tmpdir):
     dotenv.write("PREFIX1_SETTING1=testval1\nPREFIX1_SETTING2=testval2\n")
     settings = get_dotenv_settings(str(dotenv), "PREFIX1_")
     assert settings == {"setting1": "testval1", "setting2": "testval2"}
-

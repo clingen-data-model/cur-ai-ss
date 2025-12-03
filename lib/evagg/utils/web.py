@@ -1,7 +1,5 @@
-import hashlib
 import json
 import logging
-import urllib.parse
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import requests
@@ -123,4 +121,3 @@ class RequestsWebContentClient:
         code, content = self._get_content(url, params, data)
         self._raise_for_status(code)
         return self._transform_content(content, content_type)
-
