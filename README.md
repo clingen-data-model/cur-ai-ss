@@ -39,7 +39,7 @@ uv run pytest test/evagg/test_io.py::test_csv_output_warning
 ## Running with a single PMID
 ```bash
 OPENAI_API_KEY=API_KEY
-OPENAI_DEPLOYMENT=gpt-5-mini
+OPENAI_DEPLOYMENT=gpt-5-nano
 uv run run_evagg_app lib/config/caa.yaml  -o pmid:36704923 gene_symbol:FICD
 ```
 
