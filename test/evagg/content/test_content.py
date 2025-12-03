@@ -1,4 +1,7 @@
+import os
+import tempfile
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -6,6 +9,7 @@ from lib.evagg import PromptBasedContentExtractor
 from lib.evagg.content import (
     IFindObservations,
     Observation,
+    PromptBasedContentExtractorCached,
     TextSection,
 )
 from lib.evagg.content.fulltext import get_fulltext
@@ -1032,6 +1036,85 @@ def test_prompt_based_content_extractor_no_observations(
     )
     content = content_extractor.extract(paper, "CHI3L1")
     assert content == []
+
+
+def test_caching(
+    paper: Paper,
+    mock_prompt: Any,
+    mock_observation: Any,
+    mock_phenotype_searcher: Any,
+    mock_phenotype_fetcher: Any,
+) -> None:
+    study_type = "case study"
+    gene = "CHI3L1"
+
+    observation = Observation(
+        variant=HGVSVariant(
+            hgvs_desc="c.1234A>G",
+            gene_symbol=gene,
+            refseq="transcript",
+            refseq_predicted=True,
+            valid=True,
+            validation_error="",
+            protein_consequence=None,
+            coding_equivalents=[],
+        ),
+        individual="I-1",
+        texts=[
+            TextSection("TEST", "test", 0, "Here is the observation text.", "unknown")
+        ],
+        variant_descriptions=["c.1234A>G"],
+        patient_descriptions=["I-1"],
+        paper_id=paper.id,
+    )
+
+    prompts = mock_prompt(
+        {"study_type": study_type},
+    )
+    observation_finder = mock_observation([observation])
+    pheno_searcher = mock_phenotype_searcher()
+    pheno_fetcher = mock_phenotype_fetcher()
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Mock get_run_path to return the temporary directory.
+        with patch("lib.evagg.utils.cache.get_run_path", return_value=tmpdir):
+            # verify no cache exists.
+            assert not os.path.exists(
+                os.path.join(
+                    tmpdir,
+                    "results_cache",
+                    "PromptBasedContentExtractor",
+                    f"extract_{paper.props['pmid']}_{gene}.json",
+                )
+            )
+            content_extractor = PromptBasedContentExtractorCached(
+                ["study_type"],
+                prompts,
+                observation_finder,
+                pheno_searcher,
+                pheno_fetcher,
+                use_previous_cache=False,
+            )
+            content = content_extractor.extract(paper, gene)
+
+            assert len(content) == 1
+            assert content[0]["study_type"] == study_type
+
+            # verify cache was created.
+            assert os.path.exists(
+                os.path.join(
+                    tmpdir,
+                    "results_cache",
+                    "PromptBasedContentExtractor",
+                    f"extract_{paper.props['pmid']}_{gene}.json",
+                )
+            )
+
+            # The injected dependencies will be exhausted, so if we don't use the cache, we'll get an error.
+            content = content_extractor.extract(paper, gene)
+
+            assert len(content) == 1
+            assert content[0]["study_type"] == study_type
 
 
 xmldoc = """

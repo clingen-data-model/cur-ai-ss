@@ -1,8 +1,13 @@
-from typing import Any
+import json
+import os
+import tempfile
+from typing import Any, Dict
+from unittest.mock import patch
 
 import pytest
 
 from lib.evagg.library import SinglePaperLibrary
+from lib.evagg.llm import OpenAIClient
 from lib.evagg.ref import IPaperLookupClient
 from lib.evagg.types import Paper
 

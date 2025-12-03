@@ -1,7 +1,7 @@
 """The evagg core library."""
 
 from .app import PaperQueryApp, SinglePMIDApp
-from .content import PromptBasedContentExtractor
+from .content import PromptBasedContentExtractor, PromptBasedContentExtractorCached
 from .interfaces import IEvAggApp, IExtractFields, IGetPapers, IWriteOutput
 from .io import JSONOutputWriter, TableOutputWriter
 from .library import (
@@ -26,6 +26,7 @@ __all__ = [
     "SinglePaperLibrary",
     # Content.
     "PromptBasedContentExtractor",
+    "PromptBasedContentExtractorCached",
     "PropertyContentExtractor",
     "SampleContentExtractor",
 ]
