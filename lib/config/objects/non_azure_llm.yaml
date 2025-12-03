@@ -1,0 +1,5 @@
+di_factory: lib.evagg.llm.OpenAIClient
+client_class: AsyncOpenAI
+config:
+  di_factory: lib.evagg.utils.get_env_settings
+  filter_prefix: "OPENAI_"

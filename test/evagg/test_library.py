@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from lib.evagg import RareDiseaseFileLibrary, SimpleFileLibrary
-from lib.evagg.library import ListLibrary, RareDiseaseLibraryCached
+from lib.evagg.library import RareDiseaseLibraryCached, SinglePaperLibrary
 from lib.evagg.llm import IPromptClient
 from lib.evagg.ref import IPaperLookupClient
 from lib.evagg.types import Paper
@@ -42,7 +42,6 @@ def test_rare_disease_single_paper(mock_paper_client: Any, mock_llm_client: Any,
     query = {"gene_symbol": "gene"}
     allowed_categories = ["genetic disease", "other"]
     result = RareDiseaseFileLibrary(paper_client, llm_client, allowed_categories).get_papers(query)
-    print("result", result)
     assert len(result) == 1
     assert result[0] == rare_disease_paper
 
@@ -273,31 +272,21 @@ def test_caching(mock_paper_client: Any, mock_llm_client: Any, json_load: Any) -
             assert result[0] == rare_disease_paper
 
 
-def test_list_library(mock_paper_client: Any):
-    gene1 = "gene1"
-    gene2 = "gene2"
-    gene3 = "gene3"
-
+def test_single_paper_library(mock_paper_client: Any):
+    # NB: mocking should be improved to map queries to results.
+    # a results iterable is likely insufficient!
     paper1 = Paper(id="1", citation="Paper 1", abstract="Abstract 1", pmid="pmid1")
     paper2a = Paper(id="2a", citation="Paper 2a", abstract="Abstract 2a", pmid="pmid2a")
     paper2b = Paper(id="2b", citation="Paper 2b", abstract="Abstract 2b", pmid="pmid2b")
 
-    library = ListLibrary(
+    library = SinglePaperLibrary(
         mock_paper_client(paper1, paper2a, paper2b),
-        pmid_dict={gene1: [paper1.props["pmid"]], gene2: [paper2a.props["pmid"], paper2b.props["pmid"]]},
     )
-
-    query1 = {"gene_symbol": gene1}
-    results1 = library.get_papers(query1)
+    results1 = library.get_papers({"pmid": "pmid1"})
     assert len(results1) == 1
     assert paper1 in results1
 
-    query2 = {"gene_symbol": gene2}
-    results2 = library.get_papers(query2)
-    assert len(results2) == 2
+    results2 = library.get_papers({"pmid": "pmid2a"})
+    assert len(results2) == 1
     assert paper2a in results2
-    assert paper2b in results2
-
-    query3 = {"gene_symbol": gene3}
-    results3 = library.get_papers(query3)
-    assert len(results3) == 0
+    assert paper2b not in results2

@@ -38,6 +38,7 @@ class NcbiClientBase:
     EUTILS_HOST = "https://eutils.ncbi.nlm.nih.gov"
     EUTILS_SEARCH_SITE = "/entrez/eutils/esearch.fcgi"
     EUTILS_FETCH_SITE = "/entrez/eutils/efetch.fcgi"
+    # NB: this can likely be improved with urllib.parse.urlencode
     EUTILS_SEARCH_URL = EUTILS_SEARCH_SITE + "?db={db}&term={term}&sort={sort}&tool=biopython"
     EUTILS_FETCH_URL = EUTILS_FETCH_SITE + "?db={db}&id={id}&retmode={retmode}&rettype={rettype}&tool=biopython"
 
@@ -54,6 +55,7 @@ class NcbiClientBase:
     def _efetch(self, db: str, id: str, retmode: str | None = None, rettype: str | None = None) -> Any:
         key_string = self._config.get_key_string()
         url = self.EUTILS_FETCH_URL.format(db=db, id=id, retmode=retmode, rettype=rettype)
+        # NB: improve logging here, we want better visibility into http requests and responses
         return self._web_client.get(f"{self.EUTILS_HOST}{url}", content_type=retmode, url_extra=key_string)
 
 

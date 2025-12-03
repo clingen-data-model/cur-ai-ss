@@ -16,6 +16,7 @@ di_factory: lib.evagg.RareDiseaseFileLibrary
 paper_client: "{{ncbi_client}}"
 llm_client:
   di_factory: lib.evagg.llm.OpenAIClient
+  client_class: AsyncAzureOpenAI
   config:
     di_factory: lib.evagg.utils.get_dotenv_settings
     filter_prefix: "AZURE_OPENAI_"

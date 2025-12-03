@@ -1,0 +1,37 @@
+log:
+  di_factory: lib.evagg.utils.init_logger
+  level: INFO
+  to_file: true
+
+# Imported objects.
+llm_client:
+  di_factory: lib/config/objects/non_azure_llm.yaml
+
+# Application.
+di_factory: lib.evagg.SinglePMIDApp
+library:
+  di_factory: lib.evagg.SinglePaperLibrary
+  paper_client:
+    di_factory: lib/config/objects/ncbi.yaml
+extractor:
+  di_factory: lib.evagg.PromptBasedContentExtractor
+  fields:
+    di_factory: lib/config/fields/evidence_all.yaml
+  llm_client: "{{llm_client}}"
+  phenotype_searcher:
+    di_factory: lib.evagg.ref.WebHPOClient
+    web_client:
+      di_factory: lib/config/objects/web.yaml
+      # di_factory: lib/config/objects/web_cache.yaml
+  phenotype_fetcher:
+    di_factory: lib.evagg.ref.PyHPOClient    
+  observation_finder:
+    di_factory: lib.evagg.content.ObservationFinder
+    llm_client: "{{llm_client}}"
+    variant_factory: 
+      di_factory: lib/config/objects/variant_factory.yaml
+    variant_comparator: 
+      di_factory: lib.evagg.content.HGVSVariantComparator
+writer:
+  di_factory: lib.evagg.JSONOutputWriter
+  json_name: ben_test_output

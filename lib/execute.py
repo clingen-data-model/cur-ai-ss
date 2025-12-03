@@ -43,18 +43,14 @@ def _parse_override_args(overrides: Sequence[str] | None) -> Dict[str, Any]:
         return {}
 
     def _parse_override_value(val: str) -> Any:
-        if val.lower() == "true":
-            return True
-        if val.lower() == "false":
-            return False
-        try:
-            return int(val)
-        except ValueError:
-            pass
-        try:
-            return float(val)
-        except ValueError:
-            pass
+        v = val.lower()
+        if v in ("true", "false"):
+            return v == "true"
+        for cast in (int, float):
+            try:
+                return cast(val)
+            except ValueError:
+                pass
         return val
 
     override_dict: Dict[str, Any] = {}
