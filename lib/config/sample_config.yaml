@@ -1,0 +1,31 @@
+# This YAML file is a simple example config used for basic testing scenarios.
+
+# Logging.
+log:
+  di_factory: lib.evagg.utils.init_logger
+  prompts_to_console: True
+  to_file: true
+  include_modules:
+    - test_log
+
+# Application.
+di_factory: lib.evagg.PaperQueryApp
+queries:
+  - "gene_symbol": "TUBB3"
+library: 
+  di_factory: lib.evagg.SimpleFileLibrary
+  collections: 
+    - test/resources/sample
+extractor:
+  di_factory: lib.evagg.SampleContentExtractor
+  fields:
+    - paper_id
+    - pub_year
+    - first_author
+    - gene
+    - hgvs_c
+    - individual_id
+    - zygosity
+    - phenotype
+writer:
+  di_factory: lib.evagg.TableOutputWriter

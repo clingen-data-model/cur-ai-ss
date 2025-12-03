@@ -1,7 +1,6 @@
-from .aoai import OpenAICacheClient, OpenAIClient
+from .aoai import OpenAIClient
 
 __all__ = [
     # Client.
     "OpenAIClient",
-    "OpenAICacheClient",
 ]

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 from lib.evagg.llm import OpenAIClient
 
 
-@patch("lib.evagg.llm.aoai.AsyncAzureOpenAI", return_value=AsyncMock())
+@patch("lib.evagg.llm.aoai.AsyncOpenAI", return_value=AsyncMock())
 async def test_openai_client_prompt(
     mock_openai, test_file_contents, test_resources_path
 ) -> None:
@@ -19,12 +19,9 @@ async def test_openai_client_prompt(
     )
     mock_openai.return_value.responses.create.return_value.output_text = "response"
     client = OpenAIClient(
-        "AsyncAzureOpenAI",
         {
             "deployment": "gpt-8",
-            "endpoint": "https://ai",
             "api_key": "test",
-            "api_version": "test",
             "timeout": 60,
         },
     )
@@ -34,9 +31,7 @@ async def test_openai_client_prompt(
         prompt_settings={"prompt_tag": "phenotype"},
     )
     assert response == "response"
-    mock_openai.assert_called_once_with(
-        azure_endpoint="https://ai", api_key="test", api_version="test", timeout=60
-    )
+    mock_openai.assert_called_once_with(api_key="test", timeout=60)
     mock_openai.return_value.responses.create.assert_called_once_with(
         input=[
             {

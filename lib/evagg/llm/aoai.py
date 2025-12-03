@@ -6,14 +6,13 @@ from functools import lru_cache, reduce
 from typing import Any, Dict, Iterable, List, Optional
 
 import openai
-from openai import AsyncAzureOpenAI, AsyncOpenAI
+from openai import AsyncOpenAI
 from openai.types.responses import (
     EasyInputMessageParam,
 )
 from pydantic import BaseModel
 
 from lib.evagg.prompts import PROMPT_REGISTRY
-from lib.evagg.utils.cache import ObjectCache
 from lib.evagg.utils.logging import PROMPT
 
 logger = logging.getLogger(__name__)
@@ -51,25 +50,11 @@ class OpenAIConfig(BaseModel):
     max_parallel_requests: int = 0
 
 
-class AzureOpenAIConfig(OpenAIConfig):
-    api_version: str
-    endpoint: str
-    token_provider: Any = None
-
-
 class OpenAIClient:
     _config: OpenAIConfig
-    _use_azure: bool
 
-    def __init__(self, client_class: str, config: Dict[str, Any]) -> None:
-        if client_class == "AsyncOpenAI":
-            self._use_azure = False
-            self._config = OpenAIConfig(**config)
-        elif client_class == "AsyncAzureOpenAI":
-            self._use_azure = True
-            self._config = AzureOpenAIConfig(**config)
-        else:
-            raise ValueError(f"Unknown client class: {client_class}")
+    def __init__(self, config: Dict[str, Any]) -> None:
+        self._config = OpenAIConfig(**config)
 
     @property
     def _client(self) -> AsyncOpenAI:
@@ -77,25 +62,6 @@ class OpenAIClient:
 
     @lru_cache
     def _get_client_instance(self) -> AsyncOpenAI:
-        if self._use_azure:
-            assert isinstance(self._config, AzureOpenAIConfig)
-            logger.info(
-                f"Using AOAI API {self._config.api_version} at {self._config.endpoint}"
-                + f" (max_parallel={self._config.max_parallel_requests})."
-            )
-            if self._config.token_provider:
-                return AsyncAzureOpenAI(
-                    azure_endpoint=self._config.endpoint,
-                    azure_ad_token_provider=self._config.token_provider,
-                    api_version=self._config.api_version,
-                    timeout=self._config.timeout,
-                )
-            return AsyncAzureOpenAI(
-                azure_endpoint=self._config.endpoint,
-                api_key=self._config.api_key,
-                api_version=self._config.api_version,
-                timeout=self._config.timeout,
-            )
         logger.info(
             "Using AsyncOpenAI"
             + f" (max_parallel={self._config.max_parallel_requests})."
@@ -249,23 +215,3 @@ class OpenAIClient:
             )
             return {}
         return result
-
-
-class OpenAICacheClient(OpenAIClient):
-    def __init__(self, client_class: str, config: Dict[str, Any]) -> None:
-        # Don't cache tasks that have errored out.
-        self.task_cache = ObjectCache[asyncio.Task](
-            lambda t: not t.done() or t.exception() is None
-        )
-        super().__init__(client_class, config)
-
-    def _create_response(
-        self, messages: ChatMessages, settings: Dict[str, Any]
-    ) -> asyncio.Task:
-        """Create a new task only if no identical non-errored one was already cached."""
-        cache_key = hash((messages.content, json.dumps(settings)))
-        if task := self.task_cache.get(cache_key):
-            return task
-        task = super()._create_response(messages, settings)
-        self.task_cache.set(cache_key, task)
-        return task
