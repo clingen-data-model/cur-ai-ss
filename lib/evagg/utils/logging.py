@@ -32,7 +32,6 @@ LOGGING_CONFIG: Dict = {
 
 
 DEFAULT_EXCLUSIONS = [
-    "azure.core.pipeline.policies.*",
     "openai._base_client",
     "httpcore.*",
     "httpx",
