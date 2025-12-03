@@ -178,7 +178,7 @@ class PromptBasedContentExtractor(IExtractFields):
             {"passage": text},
             {
                 "prompt_tag": "phenotypes_all",
-                "max_tokens": 4096,
+                "max_output_tokens": 4096,
                 "prompt_metadata": metadata,
             },
         )

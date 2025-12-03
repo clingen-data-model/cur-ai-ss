@@ -7,10 +7,8 @@ from typing import Any, Dict, Iterable, List, Optional
 
 import openai
 from openai import AsyncAzureOpenAI, AsyncOpenAI
-from openai.types.chat import (
-    ChatCompletionMessageParam,
-    ChatCompletionSystemMessageParam,
-    ChatCompletionUserMessageParam,
+from openai.types.responses import (
+    EasyInputMessageParam,
 )
 from pydantic import BaseModel
 
@@ -21,33 +19,30 @@ from lib.evagg.utils.logging import PROMPT
 logger = logging.getLogger(__name__)
 
 DEFAULT_PROMPT_SETTINGS = {
-    "max_tokens": 1024,
+    "max_output_tokens": 1024,
     "prompt_tag": "observation",
     "temperature": 0.7,
     "top_p": 0.95,
-    "response_format": {"type": "json_object"},
-    "frequency_penalty": 0,
-    "presence_penalty": 0,
 }
 
 
 class ChatMessages:
-    _messages: List[ChatCompletionMessageParam]
+    _messages: List[EasyInputMessageParam]
 
     @property
     def content(self) -> str:
         return "".join([json.dumps(message) for message in self._messages])
 
-    def __init__(self, messages: Iterable[ChatCompletionMessageParam]) -> None:
+    def __init__(self, messages: Iterable[EasyInputMessageParam]) -> None:
         self._messages = list(messages)
 
     def __hash__(self) -> int:
         return hash(self.content)
 
-    def insert(self, index: int, message: ChatCompletionMessageParam) -> None:
+    def insert(self, index: int, message: EasyInputMessageParam) -> None:
         self._messages.insert(index, message)
 
-    def to_list(self) -> List[ChatCompletionMessageParam]:
+    def to_list(self) -> List[EasyInputMessageParam]:
         return self._messages.copy()
 
 
@@ -117,14 +112,14 @@ class OpenAIClient:
         with open(prompt_file, "r") as f:
             return f.read()
 
-    def _create_completion_task(
+    def _create_response(
         self, messages: ChatMessages, settings: Dict[str, Any]
     ) -> asyncio.Task:
         """Schedule a completion task to the event loop and return the awaitable."""
-        chat_completion = self._client.chat.completions.create(
-            messages=messages.to_list(), **settings
+        response = self._client.responses.create(
+            input=[EasyInputMessageParam(**x) for x in messages.to_list()], **settings
         )
-        return asyncio.create_task(chat_completion, name="chat")
+        return asyncio.create_task(response, name="chat")
 
     async def _generate_completion(
         self, messages: ChatMessages, settings: Dict[str, Any]
@@ -145,8 +140,7 @@ class OpenAIClient:
                         await asyncio.sleep(1)
 
                 start_ts = time.time()
-                completion = await self._create_completion_task(messages, settings)
-                response = completion.choices[0].message.content or ""
+                response = await self._create_response(messages, settings)
                 elapsed = time.time() - start_ts
                 break
             except (openai.RateLimitError, openai.InternalServerError) as e:
@@ -182,28 +176,18 @@ class OpenAIClient:
             "prompt_text": "\n".join(
                 [str(m.get("content")) for m in messages.to_list()]
             ),
-            "prompt_response": response,
+            "prompt_response": response.output_text or "",
             "prompt_response_metadata": {
-                "prompt_tokens": completion.usage.prompt_tokens,
-                "completion_tokens": completion.usage.completion_tokens,
-                "cached_tokens": (
-                    getattr(
-                        getattr(completion.usage, "prompt_tokens_details", None),
-                        "cached_tokens",
-                        -1,
-                    )
-                    if (completion and hasattr(completion, "usage"))
-                    else -1
-                ),
+                "prompt_tokens": response.usage.input_tokens,
+                "completion_tokens": response.usage.output_tokens,
             },
         }
-
         logger.log(
             PROMPT,
             f"Chat '{prompt_tag}' complete in {elapsed:.1f} seconds.",
             extra=prompt_log,
         )
-        return response
+        return response.output_text or ""
 
     async def prompt(
         self,
@@ -220,11 +204,11 @@ class OpenAIClient:
         )
 
         messages: ChatMessages = ChatMessages(
-            [ChatCompletionUserMessageParam(role="user", content=user_prompt)]
+            [EasyInputMessageParam(role="user", content=user_prompt)]
         )
         messages.insert(
             0,
-            ChatCompletionSystemMessageParam(
+            EasyInputMessageParam(
                 role="system", content=PROMPT_REGISTRY["system"].render_template()
             ),
         )
@@ -277,13 +261,13 @@ class OpenAICacheClient(OpenAIClient):
         )
         super().__init__(client_class, config)
 
-    def _create_completion_task(
+    def _create_response(
         self, messages: ChatMessages, settings: Dict[str, Any]
     ) -> asyncio.Task:
         """Create a new task only if no identical non-errored one was already cached."""
         cache_key = hash((messages.content, json.dumps(settings)))
         if task := self.task_cache.get(cache_key):
             return task
-        task = super()._create_completion_task(messages, settings)
+        task = super()._create_response(messages, settings)
         self.task_cache.set(cache_key, task)
         return task

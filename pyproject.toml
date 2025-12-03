@@ -15,7 +15,7 @@ dependencies = [
     "urllib3==2.2.2",
     "requests>=2.32.5",
     # AI/ML
-    "openai==1.35.10",
+    "openai==2.8.1",
     "httpx==0.27.0",
     "scikit-learn==1.5.1",
     # Asure
