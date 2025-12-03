@@ -5,8 +5,6 @@ from .content import PromptBasedContentExtractor, PromptBasedContentExtractorCac
 from .interfaces import IEvAggApp, IExtractFields, IGetPapers, IWriteOutput
 from .io import JSONOutputWriter, TableOutputWriter
 from .library import (
-    RareDiseaseFileLibrary,
-    RareDiseaseLibraryCached,
     SinglePaperLibrary,
 )
 from .simple import PropertyContentExtractor, SampleContentExtractor, SimpleFileLibrary
@@ -25,8 +23,6 @@ __all__ = [
     "JSONOutputWriter",
     # Library.
     "SimpleFileLibrary",
-    "RareDiseaseFileLibrary",
-    "RareDiseaseLibraryCached",
     "SinglePaperLibrary",
     # Content.
     "PromptBasedContentExtractor",
