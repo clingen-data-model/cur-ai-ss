@@ -1,7 +1,3 @@
-# Setup
-
-Evidence Aggregator runs at the Linux command line and depends on access to multiple required and optional external resources. The following document walks you through how to configure your local software and external cloud environment to perform a full-featured execution of an EvAgg [pipeline app](README.md#pipeline-apps).
-
 ## Install software prerequisites
 
 - **Python** 3.12 or above
