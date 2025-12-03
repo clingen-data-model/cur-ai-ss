@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
-from lib.evagg.utils import get_azure_credential, get_dotenv_settings, get_env_settings
+from lib.evagg.utils import get_dotenv_settings, get_env_settings
 
 
 @patch.dict(
@@ -21,19 +21,3 @@ def test_dotenv_settings(tmpdir):
     settings = get_dotenv_settings(str(dotenv), "PREFIX1_")
     assert settings == {"setting1": "testval1", "setting2": "testval2"}
 
-
-@patch("lib.evagg.utils.settings.DefaultAzureCredential")
-def test_azure_credential_default(mock_credential):
-    get_azure_credential()
-    mock_credential.assert_called_once_with()
-
-
-@patch("lib.evagg.utils.settings.AzureCliCredential")
-def test_azure_credential_cli(mock_credential):
-    get_azure_credential("AzureCli")
-    mock_credential.assert_called_once_with()
-
-
-def test_azure_credential_invalid():
-    with pytest.raises(ValueError):
-        get_azure_credential("Invalid")

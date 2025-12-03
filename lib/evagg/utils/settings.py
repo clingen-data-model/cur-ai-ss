@@ -1,11 +1,6 @@
 import os
 from typing import Any, Dict, Mapping, Optional
 
-from azure.identity import (
-    AzureCliCredential,
-    DefaultAzureCredential,
-    get_bearer_token_provider,
-)
 from dotenv import dotenv_values
 
 
@@ -39,17 +34,3 @@ def get_env_settings(
     settings = get_settings(os.environ, filter_prefix)
     settings.update(additional_settings)
     return settings
-
-
-def get_azure_credential(
-    cred_type: Optional[str] = "Default", bearer_scope: Optional[str] = None
-) -> Any:
-    """Return an Azure credential of the given type with an optional bearer scope."""
-    cred: Any
-    if cred_type == "Default":
-        cred = DefaultAzureCredential()
-    elif cred_type == "AzureCli":
-        cred = AzureCliCredential()
-    else:
-        raise ValueError(f"Unsupported credential type: {cred_type}")
-    return get_bearer_token_provider(cred, bearer_scope) if bearer_scope else cred
