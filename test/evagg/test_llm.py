@@ -31,7 +31,7 @@ async def test_openai_client_prompt(
     response = await client.prompt_file(
         prompt_filepath=os.path.join(test_resources_path, "phenotype.txt"),
         params=prompt_params,
-        prompt_settings={"temperature": 1.5, "prompt_tag": "phenotype"},
+        prompt_settings={"prompt_tag": "phenotype"},
     )
     assert response == "response"
     mock_openai.assert_called_once_with(
@@ -46,7 +46,5 @@ async def test_openai_client_prompt(
             {"role": "user", "content": prompt_text},
         ],
         max_output_tokens=1024,
-        temperature=1.5,
-        top_p=0.95,
         model="gpt-8",
     )

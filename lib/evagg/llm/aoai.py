@@ -21,8 +21,6 @@ logger = logging.getLogger(__name__)
 DEFAULT_PROMPT_SETTINGS = {
     "max_output_tokens": 1024,
     "prompt_tag": "observation",
-    "temperature": 0.7,
-    "top_p": 0.95,
 }
 
 

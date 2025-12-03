@@ -491,7 +491,6 @@ class ObservationFinder(IFindObservations):
                 params={"text": paper_text, "gene": gene_symbol},
                 prompt_settings={
                     "prompt_tag": "observation__sanity_check",
-                    "temperature": 0.5,
                     "prompt_metadata": metadata,
                 },
             )
