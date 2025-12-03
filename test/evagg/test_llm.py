@@ -36,7 +36,7 @@ async def test_openai_client_prompt(
         input=[
             {
                 "role": "system",
-                "content": "You are an intelligent assistant to a genetic analyst. Their task is to identify the genetic variant or variants that\nare causing a patient's disease. One approach they use to solve this problem is to seek out evidence from the academic\nliterature that supports (or refutes) the potential causal role that a given variant is playing in a patient's disease.\n\nAs part of that process, you will assist the analyst in collecting specific details about genetic variants that have\nbeen observed in the literature.\n\nAll of your responses should be provided in the form of a JSON object. These responses should never include long,\nuninterrupted sequences of whitespace characters.",
+                "content": "You are an intelligent assistant to a genetic analyst. Their task is to identify the genetic variant or variants that\nare causing a patient's disease. One approach they use to solve this problem is to seek out evidence from the academic\nliterature that supports (or refutes) the potential causal role that a given variant is playing in a patient's disease.\n\nAs part of that process, you will assist the analyst in collecting specific details about genetic variants that have\nbeen observed in the literature.\n\nAll of your responses should be provided in the form of a JSON object. These responses should never include long,\nuninterrupted sequences of whitespace characters.  Do not return the JSON with MarkDown fences (e.g., ```json ... ```).",
             },
             {"role": "user", "content": prompt_text},
         ],
