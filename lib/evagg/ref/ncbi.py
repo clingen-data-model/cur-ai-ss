@@ -7,7 +7,7 @@ from pydantic import BaseModel, Extra, root_validator
 from requests.exceptions import HTTPError, RetryError
 
 from lib.evagg.types import Paper
-from lib.evagg.utils import IWebContentClient
+from lib.evagg.utils import RequestsWebContentClient
 
 from .interfaces import IAnnotateEntities, IGeneLookupClient, IPaperLookupClient, IVariantLookupClient
 
@@ -42,7 +42,7 @@ class NcbiClientBase:
     EUTILS_SEARCH_URL = EUTILS_SEARCH_SITE + "?db={db}&term={term}&sort={sort}&tool=biopython"
     EUTILS_FETCH_URL = EUTILS_FETCH_SITE + "?db={db}&id={id}&retmode={retmode}&rettype={rettype}&tool=biopython"
 
-    def __init__(self, web_client: IWebContentClient, settings: Optional[Dict[str, str]] = None) -> None:
+    def __init__(self, web_client: RequestsWebContentClient, settings: Optional[Dict[str, str]] = None) -> None:
         self._config = NcbiApiSettings(**settings) if settings else NcbiApiSettings()
         self._web_client = web_client
 
@@ -92,7 +92,7 @@ class NcbiLookupClient(NcbiClientBase, IPaperLookupClient, IGeneLookupClient, IV
     )
     BIOC_GET_URL = "https://www.ncbi.nlm.nih.gov/research/bionlp/RESTful/pmcoa.cgi/BioC_xml/{pmcid}/ascii"
 
-    def __init__(self, web_client: IWebContentClient, settings: Optional[Dict[str, str]] = None) -> None:
+    def __init__(self, web_client: RequestsWebContentClient, settings: Optional[Dict[str, str]] = None) -> None:
         super().__init__(web_client, settings)
 
     def _get_xml_props(self, article: Any) -> Dict[str, str]:

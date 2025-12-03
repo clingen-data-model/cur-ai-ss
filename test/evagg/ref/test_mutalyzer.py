@@ -4,12 +4,12 @@ import pytest
 import requests
 
 from lib.evagg.ref import MutalyzerClient
-from lib.evagg.utils import IWebContentClient
+from lib.evagg.utils import RequestsWebContentClient
 
 
 @pytest.fixture
 def mock_web_client(mock_client: Any) -> Any:
-    return mock_client(IWebContentClient)
+    return mock_client(RequestsWebContentClient)
 
 
 def test_back_translate_success(mock_web_client: Any) -> None:
@@ -72,7 +72,7 @@ def test_normalize_caching(mock_web_client: Any) -> None:
 
 def test_normalize_service_error() -> None:
 
-    class ThrowingWebClient(IWebContentClient):
+    class ThrowingWebClient:
         def __init__(self, error: Exception) -> None:
             self._error = error
 

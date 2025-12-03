@@ -3,12 +3,12 @@ import pytest
 from lib.evagg.content.fulltext import get_fulltext
 from lib.evagg.ref import NcbiLookupClient
 from lib.evagg.types import Paper
-from lib.evagg.utils import IWebContentClient
+from lib.evagg.utils import RequestsWebContentClient
 
 
 @pytest.fixture
 def mock_web_client(mock_client):
-    return mock_client(IWebContentClient)
+    return mock_client(RequestsWebContentClient)
 
 
 def test_single_gene_direct(mock_web_client):

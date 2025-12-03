@@ -7,7 +7,7 @@ from typing import Dict, Sequence, Tuple
 import numpy as np
 from pyhpo import HPOTerm, Ontology, helper
 
-from lib.evagg.utils import IWebContentClient
+from lib.evagg.utils import RequestsWebContentClient
 
 from .interfaces import ICompareHPO, IFetchHPO, ISearchHPO
 
@@ -65,7 +65,7 @@ class PyHPOClient(ICompareHPO, IFetchHPO):
 
 
 class WebHPOClient(ISearchHPO):
-    def __init__(self, web_client: IWebContentClient) -> None:
+    def __init__(self, web_client: RequestsWebContentClient) -> None:
         self._web_client = web_client
 
     def search(self, query: str, retmax: int = 1) -> Sequence[Dict[str, str]]:

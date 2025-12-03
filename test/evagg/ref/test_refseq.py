@@ -6,12 +6,12 @@ from unittest.mock import patch
 import pytest
 
 from lib.evagg.ref import IRefSeqLookupClient, RefSeqGeneLookupClient, RefSeqLookupClient
-from lib.evagg.utils import IWebContentClient
+from lib.evagg.utils import RequestsWebContentClient
 
 
 @pytest.fixture
 def mock_web_client(mock_client: Any) -> Any:
-    return mock_client(IWebContentClient)
+    return mock_client(RequestsWebContentClient)
 
 
 @pytest.fixture

@@ -3,12 +3,12 @@ from typing import Any
 import pytest
 
 from lib.evagg.ref import PyHPOClient, WebHPOClient
-from lib.evagg.utils import IWebContentClient
+from lib.evagg.utils import RequestsWebContentClient
 
 
 @pytest.fixture
 def mock_web_client(mock_client: Any) -> Any:
-    return mock_client(IWebContentClient)
+    return mock_client(RequestsWebContentClient)
 
 
 def test_compare() -> None:

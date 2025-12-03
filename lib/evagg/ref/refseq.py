@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional
 
 import requests
 
-from lib.evagg.utils import IWebContentClient
+from lib.evagg.utils import RequestsWebContentClient
 
 from .interfaces import IRefSeqLookupClient
 from .ncbi import NcbiClientBase
@@ -22,7 +22,7 @@ class BaseLookupClient(NcbiClientBase, IRefSeqLookupClient):
 
     def __init__(
         self,
-        web_client: IWebContentClient,
+        web_client: RequestsWebContentClient,
         settings: Optional[Dict[str, str]] = None,
         reference_dir: str = _DEFAULT_REFERENCE_DIR,
     ) -> None:

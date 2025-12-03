@@ -11,8 +11,6 @@ from defusedxml import ElementTree
 from pydantic import BaseModel, Extra, validator
 from requests.adapters import HTTPAdapter, Retry
 
-from .interfaces import IWebContentClient
-
 logger = logging.getLogger(__name__)
 
 CONTENT_TYPES = ["text", "json", "xml"]
@@ -35,7 +33,7 @@ class WebClientSettings(BaseModel, extra=Extra.forbid):
         return value
 
 
-class RequestsWebContentClient(IWebContentClient):
+class RequestsWebContentClient:
     """A web content client that uses the requests/urllib3 libraries."""
 
     def __init__(self, settings: Optional[Dict[str, Any]] = None) -> None:

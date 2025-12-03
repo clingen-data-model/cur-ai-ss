@@ -7,7 +7,7 @@ from typing import Any, Dict, Sequence, Tuple
 from Bio.SeqUtils import IUPACData
 from requests.exceptions import HTTPError, RetryError
 
-from lib.evagg.utils import IWebContentClient
+from lib.evagg.utils import RequestsWebContentClient
 
 from .interfaces import IBackTranslateVariants, INormalizeVariants, IValidateVariants
 
@@ -15,9 +15,9 @@ logger = logging.getLogger(__name__)
 
 
 class MutalyzerClient(INormalizeVariants, IBackTranslateVariants, IValidateVariants):
-    _web_client: IWebContentClient
+    _web_client: RequestsWebContentClient
 
-    def __init__(self, web_client: IWebContentClient) -> None:
+    def __init__(self, web_client: RequestsWebContentClient) -> None:
         self._web_client = web_client
 
     @cache

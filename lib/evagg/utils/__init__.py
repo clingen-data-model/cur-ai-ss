@@ -2,7 +2,7 @@
 
 from .logging import init_logger
 from .settings import get_azure_credential, get_dotenv_settings, get_env_settings
-from .web import CosmosCachingWebClient, IWebContentClient, RequestsWebContentClient
+from .web import CosmosCachingWebClient, RequestsWebContentClient
 
 __all__ = [
     # Settings.
@@ -13,6 +13,5 @@ __all__ = [
     "init_logger",
     # Web.
     "CosmosCachingWebClient",
-    "IWebContentClient",
     "RequestsWebContentClient",
 ]
