@@ -118,7 +118,6 @@ class RareDiseaseFileLibrary(IGetPapers):
             prompt_settings={
                 "prompt_tag": "paper_category",
                 "prompt_metadata": prompt_metadata,
-                "temperature": 0.8,
             },
         )
 

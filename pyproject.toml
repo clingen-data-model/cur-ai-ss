@@ -18,9 +18,6 @@ dependencies = [
     "openai==2.8.1",
     "httpx==0.27.0",
     "scikit-learn==1.5.1",
-    # Asure
-    "azure-cosmos==4.6.0",
-    "azure-identity==1.17.1",
     # Bioinformatics
     "biopython==1.84",
     "hpo3==1.3.1",

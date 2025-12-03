@@ -1,11 +1,9 @@
 from unittest.mock import MagicMock, patch
 
-import pytest
 import requests
-from azure.cosmos.exceptions import CosmosResourceNotFoundError
 from pytest import raises
 
-from lib.evagg.utils import CosmosCachingWebClient, RequestsWebContentClient
+from lib.evagg.utils import RequestsWebContentClient
 
 
 def test_settings():
@@ -88,123 +86,3 @@ def test_retry_failed(mock_get_conn):
     web_client = RequestsWebContentClient(settings)
     with raises(requests.exceptions.RetryError):
         web_client.get("https://any.url/testing")
-
-
-@pytest.fixture
-def mock_container(json_load):
-    class Container:
-        def __init__(self, cache):
-            self.cache = cache
-            self.hits = []
-            self.misses = []
-            self.writes = []
-
-        def read_item(self, item, partition_key):
-            assert item == partition_key
-            if item in self.cache:
-                self.hits.append(item)
-                return self.cache[item]
-            self.misses.append(item)
-            raise CosmosResourceNotFoundError()
-
-        def upsert_item(self, item):
-            assert item["id"] not in self.cache
-            self.cache[item["id"]] = item
-            self.writes.append(item)
-            return item
-
-    return Container(json_load("cosmos_cache.json"))
-
-
-@patch("lib.evagg.utils.web.CosmosClient")
-def test_cosmos_cache_hit(mock_client, mock_container):
-    mock_client.return_value.get_database_client.return_value.get_container_client.return_value = mock_container
-
-    url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=CPA6&sort=relevance&retmax=1&tool=biopython"  # noqa
-    web_client = CosmosCachingWebClient(
-        cache_settings={"endpoint": "http://localhost", "credential": "test"}
-    )
-    assert (
-        web_client.get(url, content_type="xml", params={"this doesn't matter": ""}).tag
-        == "eSearchResult"
-    )
-    assert web_client.get(url, content_type="xml").tag == "eSearchResult"
-
-    url = "https://api.ncbi.nlm.nih.gov/datasets/v2alpha/gene/symbol/CPA6/taxon/Human"
-    assert (
-        web_client.get(url, content_type="json", params={"extra": ""})["reports"][0][
-            "query"
-        ][0]
-        == "CPA6"
-    )
-    assert web_client.get(url, content_type="json")["reports"][0]["query"][0] == "CPA6"
-
-    assert len(mock_container.misses) == 0
-    assert len(mock_container.hits) == 4
-    assert len(mock_container.writes) == 0
-
-
-@patch("requests.sessions.Session.request")
-@patch("lib.evagg.utils.web.CosmosClient")
-def test_cosmos_cache_miss(mock_client, mock_request, mock_container):
-    mock_client.return_value.get_database_client.return_value.get_container_client.return_value = mock_container
-    mock_request.side_effect = [
-        MagicMock(
-            status_code=200,
-            text='<?xml version="1.0" encoding="UTF-8" ?><eSearchResult>GGG6</eSearchResult>',
-        ),
-        MagicMock(status_code=200, text='{"reports": [{"query": ["GGG6"]}]}'),
-        MagicMock(status_code=422, text='{"error": "invalid query, no throw"}'),
-        MagicMock(status_code=500, text="throws, doesn't cache"),
-        MagicMock(status_code=400, text="throws, caches"),
-        MagicMock(status_code=400, text="throws, doesn't cache"),
-        MagicMock(status_code=400, text="throws, doesn't cache"),
-    ]
-
-    url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=GGG6&sort=relevance&retmax=1&tool=biopython"  # noqa
-    web_client = CosmosCachingWebClient(
-        cache_settings={"endpoint": "http://localhost", "credential": "test"}
-    )
-    web_client.update_settings(retry_codes=[500], no_raise_codes=[422])
-    assert (
-        web_client.get(url, content_type="xml", params={"this doesn't matter": ""}).tag
-        == "eSearchResult"
-    )
-    assert web_client.get(url, content_type="xml").tag == "eSearchResult"
-
-    url = "https://api.ncbi.nlm.nih.gov/datasets/v2alpha/gene/symbol/GGG6/taxon/Human"
-    assert (
-        web_client.get(url, content_type="json", params={"extra": ""})["reports"][0][
-            "query"
-        ][0]
-        == "GGG6"
-    )
-    assert web_client.get(url, content_type="json")["reports"][0]["query"][0] == "GGG6"
-
-    url = "https://testing.invalid/invalid/422"
-    assert (
-        web_client.get(url, content_type="json", params={"extra": ""})["error"]
-        == "invalid query, no throw"
-    )
-    assert (
-        web_client.get(url, content_type="json", params={"extra": ""})["error"]
-        == "invalid query, no throw"
-    )
-    url = "https://testing.invalid/invalid/500"
-    with raises(requests.exceptions.HTTPError):
-        web_client.get(url, content_type="json")
-    url = "https://testing.invalid/invalid/400-cache"
-    with raises(requests.exceptions.HTTPError):
-        web_client.get(url, content_type="json")
-    with raises(requests.exceptions.HTTPError):
-        web_client.get(url, content_type="json")
-    url = "https://testing.invalid/invalid/400-no-cache"
-    web_client._cache_settings.no_cache_codes = [400]
-    with raises(requests.exceptions.HTTPError):
-        web_client.get(url, content_type="json")
-    with raises(requests.exceptions.HTTPError):
-        web_client.get(url, content_type="json")
-
-    assert len(mock_container.misses) == 7
-    assert len(mock_container.writes) == 4
-    assert len(mock_container.hits) == 4
