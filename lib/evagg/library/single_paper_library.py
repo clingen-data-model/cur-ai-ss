@@ -1,14 +1,13 @@
 import logging
 from typing import Any, Dict, Sequence
 
-from lib.evagg.interfaces import IGetPapers
 from lib.evagg.ref import NcbiLookupClient
 from lib.evagg.types import Paper
 
 logger = logging.getLogger(__name__)
 
 
-class SinglePaperLibrary(IGetPapers):
+class SinglePaperLibrary:
     """A class for fetching a specific set of papers from pubmed."""
 
     def __init__(

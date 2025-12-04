@@ -8,25 +8,90 @@ di_factory: lib.evagg.SinglePMIDApp
 library:
   di_factory: lib.evagg.SinglePaperLibrary
   ncbi_lookup_client:
-    di_factory: lib/config/objects/ncbi.yaml
+    di_factory: lib.evagg.ref.NcbiLookupClient
+    web_client:
+      di_factory: lib.evagg.utils.RequestsWebContentClient
+      settings:
+        max_retries: 10
+        status_code_translator:
+          di_factory: lib.evagg.ref.ncbi.get_ncbi_response_translator
+    settings:
+      di_factory: lib.evagg.utils.get_dotenv_settings
+      filter_prefix: "NCBI_EUTILS_"
 extractor:
   di_factory: lib.evagg.PromptBasedContentExtractor
   fields:
-    di_factory: lib/config/fields/evidence_all.yaml
+    - evidence_id
+    - gene
+    - paper_id
+    - hgvs_c
+    - hgvs_p
+    - paper_variant
+    - transcript
+    - validation_error
+    - gnomad_frequency
+    - individual_id
+    - phenotype
+    - zygosity
+    - variant_inheritance
+    - variant_type
+    - study_type
+    - source_type
+    - engineered_cells
+    - patient_cells_tissues
+    - animal_model
+    - citation
+    - link
+    - paper_title
   llm_client:
-    di_factory: lib/config/objects/non_azure_llm.yaml
+    di_factory: lib.evagg.llm.OpenAIClient
+    config:
+      di_factory: lib.evagg.utils.get_env_settings
+      filter_prefix: "OPENAI_"
   phenotype_searcher:
     di_factory: lib.evagg.ref.WebHPOClient
     web_client:
-      di_factory: lib/config/objects/web.yaml
+      di_factory: lib.evagg.utils.RequestsWebContentClient
+      settings:
+        max_retries: 10 
   phenotype_fetcher:
     di_factory: lib.evagg.ref.PyHPOClient    
   observation_finder:
     di_factory: lib.evagg.content.ObservationFinder
     llm_client:
-      di_factory: lib/config/objects/non_azure_llm.yaml
+      di_factory: lib.evagg.llm.OpenAIClient
+      config:
+        di_factory: lib.evagg.utils.get_env_settings
+        filter_prefix: "OPENAI_"
     variant_factory: 
-      di_factory: lib/config/objects/variant_factory.yaml
+      di_factory: lib.evagg.content.HGVSVariantFactory
+      mutalyzer_client:
+        di_factory: lib.evagg.ref.MutalyzerClient
+        # Dedicated web-client that doesn't raise on 422 because of mutalyzer's behavior.
+        web_client:
+          di_factory: lib.evagg.utils.RequestsWebContentClient
+          settings:
+            # Mutalyzer response code of 422 signifies an unprocessable entity.
+            no_raise_codes: [422]
+      ncbi_lookup_client:
+        di_factory: lib.evagg.ref.NcbiLookupClient
+        web_client:
+          di_factory: lib.evagg.utils.RequestsWebContentClient
+          settings:
+            max_retries: 10
+            status_code_translator:
+              di_factory: lib.evagg.ref.ncbi.get_ncbi_response_translator
+        settings:
+          di_factory: lib.evagg.utils.get_dotenv_settings
+          filter_prefix: "NCBI_EUTILS_"
+      refseq_client:
+        di_factory: lib.evagg.ref.RefSeqLookupClient
+        web_client:
+          di_factory: lib.evagg.utils.RequestsWebContentClient
+          settings:
+            max_retries: 10
+            status_code_translator:
+              di_factory: lib.evagg.ref.ncbi.get_ncbi_response_translator
     variant_comparator: 
       di_factory: lib.evagg.content.HGVSVariantComparator
 writer:
