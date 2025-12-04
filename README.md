@@ -5,6 +5,18 @@
 - **uv**.  Follow the instructions [here](https://docs.astral.sh/uv/getting-started/installation/) 
 - **make** [optional] only for [development tasks](README.md#pre-pr-checks)
 
+## Generate an OPENAPI api key
+- Go to the OpenAI Dashboard:
+https://platform.openai.com/account/api-keys
+- Log in to your OpenAI account (or create one if needed).
+- Click “Create new secret key”.
+- Give it a name (optional, but helpful if you use multiple keys).
+- Copy the generated key and store it somewhere secure. You will not be able to view it again after closing the dialog. If you lose it, you must generate a new one.
+- We recommend setting an environment variable:
+```bash
+export OPENAI_API_KEY="your_key_here"
+```
+
 ## Clone the repository
 
 Create and enter a local clone of this repository in your runtime environment:
