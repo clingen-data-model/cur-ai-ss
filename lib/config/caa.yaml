@@ -12,7 +12,28 @@ library:
 extractor:
   di_factory: lib.evagg.PromptBasedContentExtractor
   fields:
-    di_factory: lib/config/fields/evidence_all.yaml
+    - evidence_id
+    - gene
+    - paper_id
+    - hgvs_c
+    - hgvs_p
+    - paper_variant
+    - transcript
+    - validation_error
+    - gnomad_frequency
+    - individual_id
+    - phenotype
+    - zygosity
+    - variant_inheritance
+    - variant_type
+    - study_type
+    - source_type
+    - engineered_cells
+    - patient_cells_tissues
+    - animal_model
+    - citation
+    - link
+    - paper_title
   llm_client:
     di_factory: lib/config/objects/non_azure_llm.yaml
   phenotype_searcher:
