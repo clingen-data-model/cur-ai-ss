@@ -1,7 +1,7 @@
 di_factory: lib.evagg.content.HGVSVariantFactory
 mutalyzer_client:
   di_factory: lib/config/objects/mutalyzer.yaml 
-variant_lookup_client:
+ncbi_lookup_client:
   di_factory: lib/config/objects/ncbi.yaml
 refseq_client:
   di_factory: lib/config/objects/refseq.yaml

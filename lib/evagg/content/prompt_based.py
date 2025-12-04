@@ -6,8 +6,8 @@ import re
 from typing import Any, Dict, List, Sequence, Tuple
 
 from lib.evagg.llm import OpenAIClient
-from lib.evagg.ref import IFetchHPO, ISearchHPO
 from lib.evagg.types import Paper
+from lib.evagg.ref import PyHPOClient, WebHPOClient
 
 from ..interfaces import IExtractFields
 from .observation import Observation, ObservationFinder
@@ -40,8 +40,8 @@ class PromptBasedContentExtractor(IExtractFields):
         fields: Sequence[str],
         llm_client: OpenAIClient,
         observation_finder: ObservationFinder,
-        phenotype_searcher: ISearchHPO,
-        phenotype_fetcher: IFetchHPO,
+        phenotype_searcher: WebHPOClient,
+        phenotype_fetcher: PyHPOClient,
     ) -> None:
         self._fields = fields
         self._llm_client = llm_client

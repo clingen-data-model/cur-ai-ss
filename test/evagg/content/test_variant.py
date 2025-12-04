@@ -4,7 +4,7 @@ from unittest.mock import Mock
 import pytest
 
 from lib.evagg.content.variant import HGVSVariantComparator, HGVSVariantFactory
-from lib.evagg.ref import IRefSeqLookupClient, IVariantLookupClient, MutalyzerClient
+from lib.evagg.ref import IRefSeqLookupClient, NcbiLookupClient, MutalyzerClient
 from lib.evagg.types import HGVSVariant
 
 
@@ -131,7 +131,7 @@ def test_consolidate() -> None:
 
 @pytest.fixture
 def mock_lookup_client(mock_client: Any) -> Any:
-    return mock_client(IVariantLookupClient)
+    return mock_client(NcbiLookupClient)
 
 
 @pytest.fixture
