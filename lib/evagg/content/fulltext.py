@@ -1,10 +1,18 @@
+from dataclasses import dataclass
 from typing import Generator, List, Optional
 
 from defusedxml import ElementTree
 
-from .interfaces import TextSection
-
 SectionFilter = Optional[List[str]]
+
+
+@dataclass(frozen=True)
+class TextSection:
+    section_type: str
+    text_type: str
+    offset: int
+    text: str
+    id: str
 
 
 def get_sections(

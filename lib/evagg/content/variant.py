@@ -6,8 +6,6 @@ from typing import Dict, List, Sequence, Set, Tuple
 from lib.evagg.ref import IRefSeqLookupClient, IVariantLookupClient, MutalyzerClient
 from lib.evagg.types import HGVSVariant
 
-from .interfaces import ICompareVariants
-
 logger = logging.getLogger(__name__)
 
 
@@ -230,7 +228,7 @@ class HGVSVariantFactory:
             )
 
 
-class HGVSVariantComparator(ICompareVariants):
+class HGVSVariantComparator:
     def _score_refseq_completeness(self, v: HGVSVariant) -> int:
         """Return a score for the completeness refseq for a variant."""
         # Scores are assigned as follows:

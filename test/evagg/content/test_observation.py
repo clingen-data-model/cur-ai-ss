@@ -3,7 +3,7 @@ from typing import Any
 
 import pytest
 
-from lib.evagg.content import ICompareVariants, ObservationFinder
+from lib.evagg.content import HGVSVariantComparator, ObservationFinder
 from lib.evagg.content.variant import HGVSVariantFactory
 from lib.evagg.llm import OpenAIClient
 from lib.evagg.types import HGVSVariant, Paper
@@ -27,7 +27,7 @@ def mock_factory(mock_client: Any) -> Any:
 
 @pytest.fixture
 def mock_comparator(mock_client: Any) -> Any:
-    return mock_client(ICompareVariants)
+    return mock_client(HGVSVariantComparator)
 
 
 def test_sanity_check_failure(
