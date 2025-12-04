@@ -7,7 +7,7 @@ log:
 di_factory: lib.evagg.SinglePMIDApp
 library:
   di_factory: lib.evagg.SinglePaperLibrary
-  paper_client:
+  ncbi_lookup_client:
     di_factory: lib/config/objects/ncbi.yaml
 extractor:
   di_factory: lib.evagg.PromptBasedContentExtractor

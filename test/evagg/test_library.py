@@ -4,13 +4,13 @@ import pytest
 
 
 from lib.evagg.library import SinglePaperLibrary
-from lib.evagg.ref import IPaperLookupClient
+from lib.evagg.ref import NcbiLookupClient
 from lib.evagg.types import Paper
 
 
 @pytest.fixture
-def mock_paper_client(mock_client: type) -> IPaperLookupClient:
-    return mock_client(IPaperLookupClient)
+def mock_paper_client(mock_client: type) -> NcbiLookupClient:
+    return mock_client(NcbiLookupClient)
 
 
 def test_single_paper_library(mock_paper_client: Any):

@@ -2,7 +2,6 @@ import pytest
 
 from lib.evagg.content.fulltext import get_fulltext
 from lib.evagg.ref import NcbiLookupClient
-from lib.evagg.types import Paper
 from lib.evagg.utils import RequestsWebContentClient
 
 
@@ -153,34 +152,3 @@ def test_pubmed_fetch_missing(mock_web_client, xml_parse):
     web_client = mock_web_client(xml_parse("<PubmedArticleSet></PubmedArticleSet>"))
     result = NcbiLookupClient(web_client).fetch("7777777777777777")
     assert result is None
-
-
-def test_annotation(mock_web_client):
-    web_client = mock_web_client({"foo": "bar"})
-    paper = Paper(id="123", pmcid="PMC1234567", can_access=True)
-    annotations = NcbiLookupClient(web_client).annotate(paper)
-    assert isinstance(annotations, dict)
-    assert annotations.get("foo") == "bar"
-    assert web_client.call_count() == 1
-    assert web_client.last_call("get") == (
-        NcbiLookupClient.PUBTATOR_GET_URL.format(fmt="json", id="PMC1234567"),
-        {"content_type": "json"},
-    )
-
-
-def test_no_annotation(mock_web_client):
-    web_client = mock_web_client()
-
-    paper = Paper(id="123", pmcid="PMC7654321")
-    annotations = NcbiLookupClient(web_client).annotate(paper)
-    assert annotations == {}
-
-    paper_no_pmcid = Paper(id="123")
-    annotations = NcbiLookupClient(web_client).annotate(paper_no_pmcid)
-    assert annotations == {}
-
-    paper_no_oa = Paper(id="123", pmcid="PMC1234567", can_access=False)
-    annotations = NcbiLookupClient(web_client).annotate(paper_no_oa)
-    assert annotations == {}
-
-    assert web_client.call_count() == 0

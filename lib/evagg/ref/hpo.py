@@ -8,12 +8,10 @@ from pyhpo import HPOTerm, Ontology, helper
 
 from lib.evagg.utils import RequestsWebContentClient
 
-from .interfaces import ICompareHPO, IFetchHPO, ISearchHPO
-
 logger = logging.getLogger(__name__)
 
 
-class PyHPOClient(ICompareHPO, IFetchHPO):
+class PyHPOClient:
     def __init__(self) -> None:
         # Instantiate the Ontology
         Ontology()
@@ -65,7 +63,7 @@ class PyHPOClient(ICompareHPO, IFetchHPO):
         return bool(self.fetch(query))
 
 
-class WebHPOClient(ISearchHPO):
+class WebHPOClient:
     _URL = "https://ontology.jax.org/api/hp/search"
     _QUERY_ALLOWED_CHARS = r"[^a-zA-Z0-9\s\-':,]"
 

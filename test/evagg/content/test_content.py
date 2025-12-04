@@ -10,7 +10,7 @@ from lib.evagg.content import (
 )
 from lib.evagg.content.fulltext import get_fulltext
 from lib.evagg.llm import OpenAIClient
-from lib.evagg.ref import IFetchHPO, ISearchHPO
+from lib.evagg.ref import PyHPOClient, WebHPOClient
 from lib.evagg.types import HGVSVariant, Paper
 
 
@@ -25,13 +25,13 @@ def mock_observation(mock_client: type) -> ObservationFinder:
 
 
 @pytest.fixture
-def mock_phenotype_fetcher(mock_client: type) -> IFetchHPO:
-    return mock_client(IFetchHPO)
+def mock_phenotype_fetcher(mock_client: type) -> PyHPOClient:
+    return mock_client(PyHPOClient)
 
 
 @pytest.fixture
-def mock_phenotype_searcher(mock_client: type) -> ISearchHPO:
-    return mock_client(ISearchHPO)
+def mock_phenotype_searcher(mock_client: type) -> WebHPOClient:
+    return mock_client(WebHPOClient)
 
 
 @pytest.fixture

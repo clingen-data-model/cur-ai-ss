@@ -3,7 +3,7 @@ import re
 from collections import defaultdict
 from typing import Dict, List, Sequence, Set, Tuple
 
-from lib.evagg.ref import IRefSeqLookupClient, IVariantLookupClient, MutalyzerClient
+from lib.evagg.ref import IRefSeqLookupClient, NcbiLookupClient, MutalyzerClient
 from lib.evagg.types import HGVSVariant
 
 logger = logging.getLogger(__name__)
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class HGVSVariantFactory:
     _mutalyzer_client: MutalyzerClient
-    _variant_lookup_client: IVariantLookupClient
+    _ncbi_lookup_client: NcbiLookupClient
     _refseq_client: IRefSeqLookupClient
 
     MITO_REFSEQ = "NC_012920.1"
@@ -19,11 +19,11 @@ class HGVSVariantFactory:
     def __init__(
         self,
         mutalyzer_client: MutalyzerClient,
-        variant_lookup_client: IVariantLookupClient,
+        ncbi_lookup_client: NcbiLookupClient,
         refseq_client: IRefSeqLookupClient,
     ) -> None:
         self._mutalyzer_client = mutalyzer_client
-        self._variant_lookup_client = variant_lookup_client
+        self._ncbi_lookup_client = ncbi_lookup_client
         self._refseq_client = refseq_client
 
     def _predict_refseq(self, text_desc: str, gene_symbol: str | None) -> str | None:
@@ -96,7 +96,7 @@ class HGVSVariantFactory:
 
     def parse_rsid(self, rsid: str) -> HGVSVariant:
         """Parse a variant based on an rsid."""
-        hgvs_lookup = self._variant_lookup_client.hgvs_from_rsid(rsid)
+        hgvs_lookup = self._ncbi_lookup_client.hgvs_from_rsid(rsid)
         full_hgvs = None
         gene_symbol = None
 
