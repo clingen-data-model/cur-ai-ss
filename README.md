@@ -1,7 +1,3 @@
-# Setup
-
-Evidence Aggregator runs at the Linux command line and depends on access to multiple required and optional external resources. The following document walks you through how to configure your local software and external cloud environment to perform a full-featured execution of an EvAgg [pipeline app](README.md#pipeline-apps).
-
 ## Install software prerequisites
 
 - **Python** 3.12 or above
@@ -43,7 +39,7 @@ uv run pytest test/evagg/test_io.py::test_csv_output_warning
 ## Running with a single PMID
 ```bash
 OPENAI_API_KEY=API_KEY
-OPENAI_DEPLOYMENT=gpt-5-mini
+OPENAI_DEPLOYMENT=gpt-5-nano
 uv run run_evagg_app lib/config/caa.yaml  -o pmid:36704923 gene_symbol:FICD
 ```
 
