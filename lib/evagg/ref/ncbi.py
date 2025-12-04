@@ -9,13 +9,6 @@ from requests.exceptions import HTTPError, RetryError
 from lib.evagg.types import Paper
 from lib.evagg.utils import RequestsWebContentClient
 
-from .interfaces import (
-    IAnnotateEntities,
-    IGeneLookupClient,
-    IPaperLookupClient,
-    IVariantLookupClient,
-)
-
 logger = logging.getLogger(__name__)
 
 
@@ -109,10 +102,6 @@ PAPER_FULL_TEXT_PROPS = {
 
 class NcbiLookupClient(
     NcbiClientBase,
-    IPaperLookupClient,
-    IGeneLookupClient,
-    IVariantLookupClient,
-    IAnnotateEntities,
 ):
     """A client for querying the various services in the NCBI API."""
 
@@ -120,7 +109,6 @@ class NcbiLookupClient(
     # RPS for NCBI API endpoints is 3 without an API key, and 10 with an API key.
     SYMBOL_GET_URL = "https://api.ncbi.nlm.nih.gov/datasets/v2alpha/gene/symbol/{symbols}/taxon/Human"
     PMCOA_GET_URL = "https://www.ncbi.nlm.nih.gov/pmc/utils/oa/oa.fcgi?id={pmcid}"
-    PUBTATOR_GET_URL = "https://www.ncbi.nlm.nih.gov/research/pubtator3-api/publications/pmc_export/bioc{fmt}?pmcids={id}"
     BIOC_GET_URL = "https://www.ncbi.nlm.nih.gov/research/bionlp/RESTful/pmcoa.cgi/BioC_xml/{pmcid}/ascii"
 
     def __init__(
@@ -230,7 +218,6 @@ class NcbiLookupClient(
                 return ""
         return ElementTree.tostring(doc, encoding="unicode")
 
-    # IPaperLookupClient
     def search(self, query: str, **extra_params: Dict[str, Any]) -> Sequence[str]:
         root = self._esearch(db="pubmed", term=query, sort="relevance", **extra_params)
         pmids = [
@@ -270,7 +257,6 @@ class NcbiLookupClient(
 
         return Paper(**props)
 
-    # IGeneLookupClient
     def gene_id_for_symbol(
         self, *symbols: str, allow_synonyms: bool = False
     ) -> Dict[str, int]:
@@ -284,7 +270,6 @@ class NcbiLookupClient(
         root = self._web_client.get(url, content_type="json")
         return _extract_gene_symbols(root.get("reports", []), symbols, allow_synonyms)
 
-    # IVariantLookupClient
     def hgvs_from_rsid(self, *rsids: str) -> Dict[str, Dict[str, str]]:
         # Provided rsids should be numeric strings prefixed with `rs`.
         if not rsids or not all(
@@ -306,18 +291,6 @@ class NcbiLookupClient(
             return {}
 
         return {"rs" + uid: _extract_hgvs_from_xml(root, uid) for uid in uids}
-
-    # IAnnotateEntities
-    def annotate(self, paper: Paper) -> Dict[str, Any]:
-        """Annotate the paper with entities from PubTator."""
-        if not paper.props.get("can_access", False):
-            logger.warning(
-                f"Cannot annotate, paper '{paper}' is not licensed for access."
-            )
-            return {}
-
-        url = self.PUBTATOR_GET_URL.format(fmt="json", id=paper.props["pmcid"])
-        return self._web_client.get(url, content_type="json")
 
 
 def _extract_hgvs_from_xml(root: Any, uid: str) -> Dict[str, str]:
