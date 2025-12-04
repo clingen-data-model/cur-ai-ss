@@ -4,7 +4,7 @@ import traceback
 from argparse import ArgumentParser, Namespace
 from typing import Any, Dict, Sequence
 
-from lib.evagg import IEvAggApp
+from lib.evagg import SinglePMIDApp
 
 from .di import DiContainer
 
@@ -15,7 +15,9 @@ def _parse_args(args: Sequence[str] | None = None) -> Namespace:
     parser = ArgumentParser()
 
     # Accept a path to a config file (required).
-    parser.add_argument("config", help="Path to config file for an IEvAggApp object.")
+    parser.add_argument(
+        "config", help="Path to config file for an SinglePMIDApp object."
+    )
 
     # Accept an optional count of how many times to retry the app if it fails. Default is 0.
     parser.add_argument(
@@ -83,7 +85,7 @@ def run_evagg_app() -> None:
 
     # Make a spec dictionary out of the factory yaml and the override args and instantiate it.
     spec = {"di_factory": config_yaml, **_parse_override_args(args.override)}
-    app: IEvAggApp = DiContainer().create_instance(spec, {})
+    app: SinglePMIDApp = DiContainer().create_instance(spec, {})
 
     while True:
         try:

@@ -9,7 +9,6 @@ from lib.evagg.llm import OpenAIClient
 from lib.evagg.ref import IFetchHPO, ISearchHPO
 from lib.evagg.types import Paper
 
-from ..interfaces import IExtractFields
 from .observation import Observation, ObservationFinder
 
 logger = logging.getLogger(__name__)
@@ -19,7 +18,7 @@ def _get_prompt_file_path(name: str) -> str:
     return os.path.join(os.path.dirname(__file__), "prompts", f"{name}.txt")
 
 
-class PromptBasedContentExtractor(IExtractFields):
+class PromptBasedContentExtractor:
     _PROMPT_FIELDS = {
         "phenotype": _get_prompt_file_path("phenotypes_all"),
         "zygosity": _get_prompt_file_path("zygosity"),
