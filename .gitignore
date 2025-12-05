@@ -169,3 +169,6 @@ cython_debug/
 .ref
 .tmp
 .bin
+
+# Track env.test
+!.env.test

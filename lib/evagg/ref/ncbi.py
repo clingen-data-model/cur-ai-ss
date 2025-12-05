@@ -1,37 +1,15 @@
 import logging
-import urllib.parse as urlparse
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from defusedxml import ElementTree
-from pydantic import BaseModel, Extra, root_validator
 from requests.exceptions import HTTPError, RetryError
 
 from lib.evagg.types import Paper
+from lib.evagg.utils.environment import env
 from lib.evagg.utils import RequestsWebContentClient
 
+
 logger = logging.getLogger(__name__)
-
-
-class NcbiApiSettings(BaseModel, extra=Extra.forbid):
-    api_key: Optional[str] = None
-    email: str = "biomedcomp@microsoft.com"
-
-    def get_key_params(self) -> dict[str, str]:
-        params: dict[str, str] = {}
-        if self.email:
-            params["email"] = urlparse.quote(self.email)
-        if self.api_key:
-            params["api_key"] = self.api_key
-        return params
-
-    @root_validator(pre=True)
-    @classmethod
-    def _validate_settings(cls, values: Dict[str, Any]) -> Dict[str, Any]:
-        if values.get("api_key") and not values.get("email"):
-            raise ValueError(
-                "If NCBI_EUTILS_API_KEY is specified NCBI_EUTILS_EMAIL is required."
-            )
-        return values
 
 
 class NcbiClientBase:
@@ -42,10 +20,16 @@ class NcbiClientBase:
     def __init__(
         self,
         web_client: RequestsWebContentClient,
-        settings: Optional[Dict[str, str]] = None,
     ) -> None:
-        self._config = NcbiApiSettings(**settings) if settings else NcbiApiSettings()
         self._web_client = web_client
+
+    @property
+    def credential_params(self) -> dict[str, str]:
+        return (
+            {"email": env.NCBI_EUTILS_EMAIL, "api_key": env.NCBI_EUTILS_API_KEY}
+            if env.NCBI_EUTILS_EMAIL and env.NCBI_EUTILS_API_KEY
+            else {}
+        )
 
     def _esearch(
         self, db: str, term: str, sort: str, **extra_params: Dict[str, Any]
@@ -54,7 +38,7 @@ class NcbiClientBase:
         return self._web_client.get(
             f"{self.EUTILS_HOST}{self.EUTILS_SEARCH_SITE}",
             params={
-                **self._config.get_key_params(),
+                **self.credential_params,
                 **params,
                 **extra_params,
             },
@@ -72,7 +56,7 @@ class NcbiClientBase:
         return self._web_client.get(
             f"{self.EUTILS_HOST}{self.EUTILS_FETCH_SITE}",
             params={
-                **self._config.get_key_params(),
+                **self.credential_params,
                 **params,
             },
             content_type=retmode,
@@ -114,9 +98,8 @@ class NcbiLookupClient(
     def __init__(
         self,
         web_client: RequestsWebContentClient,
-        settings: Optional[Dict[str, str]] = None,
     ) -> None:
-        super().__init__(web_client, settings)
+        super().__init__(web_client)
 
     def _get_xml_props(self, article: Any) -> Dict[str, str]:
         """Extracts paper properties from an XML root element."""

@@ -4,7 +4,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import requests
 from defusedxml import ElementTree
-from pydantic import BaseModel, Extra, validator
+from pydantic import BaseModel, field_validator
 from requests.adapters import HTTPAdapter, Retry
 
 logger = logging.getLogger(__name__)
@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 CONTENT_TYPES = ["text", "json", "xml"]
 
 
-class WebClientSettings(BaseModel, extra=Extra.forbid):
-    max_retries: int = 0  # no retries by default
+class WebClientSettings(BaseModel, extra="forbid"):
+    max_retries: int = 5
     retry_backoff: float = 0.5  # indicates progression of 0.5, 1, 2, 4, 8, etc. seconds
     retry_codes: List[int] = [
         429,
@@ -27,7 +27,7 @@ class WebClientSettings(BaseModel, extra=Extra.forbid):
     timeout: float = 15.0  # seconds
     status_code_translator: Optional[Callable[[str, int, str], Tuple[int, str]]] = None
 
-    @validator("content_type")
+    @field_validator("content_type")
     @classmethod
     def _validate_content_type(cls, value: str) -> str:
         if value not in CONTENT_TYPES:
@@ -106,7 +106,7 @@ class RequestsWebContentClient:
 
     def update_settings(self, **kwargs: Any) -> None:
         """Update the default values for the session."""
-        updated_settings = {**self._settings.dict(), **kwargs}
+        updated_settings = {**self._settings.model_dump(), **kwargs}
         self._settings = WebClientSettings(**updated_settings)
         self._session = None  # reset the session to apply the new settings
 

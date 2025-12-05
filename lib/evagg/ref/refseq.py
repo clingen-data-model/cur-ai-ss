@@ -31,7 +31,7 @@ class BaseLookupClient(NcbiClientBase, IRefSeqLookupClient):
         self._lazy_initialized = False
         self._ref = {}
 
-        super().__init__(web_client, settings)
+        super().__init__(web_client)
 
     def _lazy_init(self) -> None:
         self._ref = {}  # pragma: no cover
