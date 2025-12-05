@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import requests
 from pytest import raises
 
-from lib.evagg.utils import RequestsWebContentClient
+from lib.evagg.utils.web import RequestsWebContentClient, WebClientSettings
 
 
 def test_settings():
@@ -41,7 +41,7 @@ def test_get_content_types(mock_request):
     ]
 
     with raises(ValueError):
-        RequestsWebContentClient(settings={"content_type": "binary"})
+        RequestsWebContentClient(settings=WebClientSettings(content_type="binary"))
 
     web_client = RequestsWebContentClient()
     assert (
@@ -66,7 +66,9 @@ def test_retry_succeeded(mock_get_conn):
         MagicMock(status=200, headers={}, iter_content=lambda _: [b""]),
     ]
 
-    settings = {"max_retries": 2, "retry_backoff": 0, "retry_codes": [500, 429]}
+    settings = WebClientSettings(
+        **{"max_retries": 2, "retry_backoff": 0, "retry_codes": [500, 429]}
+    )
     web_client = RequestsWebContentClient(settings)
     web_client.get("https://any.url/testing")
 
@@ -82,7 +84,9 @@ def test_retry_failed(mock_get_conn):
         MagicMock(status=500, headers={}, iter_content=lambda _: [b""]),
     ]
 
-    settings = {"max_retries": 1, "retry_backoff": 0, "retry_codes": [500, 429]}
+    settings = WebClientSettings(
+        **{"max_retries": 1, "retry_backoff": 0, "retry_codes": [500, 429]}
+    )
     web_client = RequestsWebContentClient(settings)
     with raises(requests.exceptions.RetryError):
         web_client.get("https://any.url/testing")

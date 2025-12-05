@@ -40,10 +40,8 @@ class WebClientSettings(BaseModel, extra="forbid"):
 class RequestsWebContentClient:
     """A web content client that uses the requests/urllib3 libraries."""
 
-    def __init__(self, settings: Optional[Dict[str, Any]] = None) -> None:
-        self._settings = (
-            WebClientSettings(**settings) if settings else WebClientSettings()
-        )
+    def __init__(self, settings: WebClientSettings | None = None) -> None:
+        self._settings = settings if settings else WebClientSettings()
         self._session: Optional[requests.Session] = None
         self._get_status_code = self._settings.status_code_translator or (
             lambda _, c, s: (c, s)
