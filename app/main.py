@@ -27,7 +27,6 @@ if st.button("Submit"):
             )
             papers = app._library.get_papers({"pmid": pmid})
             assert len(papers) == 1
-            logger.info(f"Found {len(papers)} papers for pmid: {pmid}")
             st.session_state.curation_data = app._extractor.extract(papers[0], gene_symbol)
 
 # Display JSON in an expander with a spinner
