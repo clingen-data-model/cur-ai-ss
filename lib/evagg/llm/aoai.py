@@ -22,7 +22,7 @@ DEFAULT_PROMPT_SETTINGS = {
     "prompt_tag": "observation",
 }
 
-MAX_PARALLEL_REQUESTS = 0
+MAX_PARALLEL_REQUESTS = 5
 TIMEOUT_S = 60
 
 
