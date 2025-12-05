@@ -7,7 +7,7 @@ st.set_page_config(page_title="cur-ai-ious", layout="wide")
 st.title("cur-ai-ious")
 
 # Initialize session state
-if 'curation_data' not in st.session_state:
+if "curation_data" not in st.session_state:
     st.session_state.curation_data = []
 
 # Input fields
@@ -27,7 +27,9 @@ if st.button("Submit"):
             )
             papers = app._library.get_papers({"pmid": pmid})
             assert len(papers) == 1
-            st.session_state.curation_data = app._extractor.extract(papers[0], gene_symbol)
+            st.session_state.curation_data = app._extractor.extract(
+                papers[0], gene_symbol
+            )
 
 # Display JSON in an expander with a spinner
 if st.session_state.curation_data:

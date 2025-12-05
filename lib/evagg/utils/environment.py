@@ -24,6 +24,7 @@ class Env(BaseSettings):
     OPENAI_API_DEPLOYMENT: str = Field(...)
     OPENAI_API_KEY: str = Field(...)
     LOG_LEVEL: LogLevel = LogLevel.INFO
+    LOG_OUT_DIR: str = ".out"
 
     @model_validator(mode="after")
     def validate_ncbi_settings(self) -> "Env":
