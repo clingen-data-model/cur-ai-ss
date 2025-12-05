@@ -59,7 +59,7 @@ def get_run_path() -> str:
         os.makedirs(_current_run.path)
         # Write out the RunRecord in json format to "run.json"
         with open(os.path.join(_current_run.path, "run.json"), "w") as f:
-            f.write(_current_run.json(indent=4))
+            f.write(_current_run.model_dump_json(indent=4))
     return _current_run.path
 
 
@@ -79,7 +79,7 @@ def set_run_complete(output_file: Optional[str]) -> None:
     )
     if _current_run.path:
         with open(os.path.join(_current_run.path, "run.json"), "w") as f:
-            f.write(_current_run.json(indent=4))
+            f.write(_current_run.model_dump_json(indent=4))
     logger.info(f"Run complete in {_current_run.elapsed_secs} secs on branch")
 
 
@@ -119,4 +119,4 @@ def get_previous_run(
 
     # Read in the most recent matching run record.
     with open(os.path.join(_output_root, run_name, "run.json"), "r") as f:
-        return RunRecord.parse_raw(f.read())
+        return RunRecord.model_validate_json(f.read())

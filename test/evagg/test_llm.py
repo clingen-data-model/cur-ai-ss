@@ -18,20 +18,14 @@ async def test_openai_client_prompt(
         prompt_template,
     )
     mock_openai.return_value.responses.create.return_value.output_text = "response"
-    client = OpenAIClient(
-        {
-            "deployment": "gpt-8",
-            "api_key": "test",
-            "timeout": 60,
-        },
-    )
+    client = OpenAIClient()
     response = await client.prompt_file(
         prompt_filepath=os.path.join(test_resources_path, "phenotype.txt"),
         params=prompt_params,
         prompt_settings={"prompt_tag": "phenotype"},
     )
     assert response == "response"
-    mock_openai.assert_called_once_with(api_key="test", timeout=60)
+    mock_openai.assert_called_once_with(api_key="test_api_key", timeout=60)
     mock_openai.return_value.responses.create.assert_called_once_with(
         input=[
             {
