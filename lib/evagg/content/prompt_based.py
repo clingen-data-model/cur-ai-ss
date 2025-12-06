@@ -6,7 +6,7 @@ import re
 from typing import Any, Dict, List, Sequence, Tuple
 
 from lib.evagg.llm import OpenAIClient
-from lib.evagg.types import Paper
+from lib.evagg.types import Paper, PromptTag
 from lib.evagg.ref import PyHPOClient, WebHPOClient
 
 from .observation import Observation, ObservationFinder
@@ -132,7 +132,7 @@ class PromptBasedContentExtractor:
                 response = await self._llm_client.prompt_json(
                     prompt_filepath=_get_prompt_file_path("phenotypes_candidates"),
                     params={"term": term, "candidates": "\n".join(candidates)},
-                    prompt_settings={"prompt_tag": "phenotypes_candidates"},
+                    prompt_settings={"prompt_tag": PromptTag.PHENOTYPES_CANDIDATES},
                 )
                 return response.get("match")
 
@@ -151,7 +151,7 @@ class PromptBasedContentExtractor:
             response = await self._llm_client.prompt_json(
                 prompt_filepath=_get_prompt_file_path("phenotypes_simplify"),
                 params={"term": term},
-                prompt_settings={"prompt_tag": "phenotypes_simplify"},
+                prompt_settings={"prompt_tag": PromptTag.PHENOTYPES_SIMPLIFY},
             )
 
             if simplified := response.get("simplified"):
@@ -176,7 +176,7 @@ class PromptBasedContentExtractor:
             self._PROMPT_FIELDS["phenotype"],
             {"passage": text},
             {
-                "prompt_tag": "phenotypes_all",
+                "prompt_tag": PromptTag.PHENOTYPES_ALL,
                 "max_output_tokens": 4096,
                 "prompt_metadata": metadata,
             },
@@ -194,7 +194,10 @@ class PromptBasedContentExtractor:
         observation_phenotypes_result = await self._llm_client.prompt_json(
             _get_prompt_file_path("phenotypes_observation"),
             observation_phenotypes_params,
-            {"prompt_tag": "phenotypes_observation", "prompt_metadata": metadata},
+            {
+                "prompt_tag": PromptTag.PHENOTYPES_OBSERVATION,
+                "prompt_metadata": metadata,
+            },
         )
         if (
             observation_phenotypes := observation_phenotypes_result.get(
@@ -206,7 +209,7 @@ class PromptBasedContentExtractor:
         observation_acronymns_result = await self._llm_client.prompt_json(
             _get_prompt_file_path("phenotypes_acronyms"),
             {"passage": text, "phenotypes": ", ".join(observation_phenotypes)},
-            {"prompt_tag": "phenotypes_acronyms", "prompt_metadata": metadata},
+            {"prompt_tag": PromptTag.PHENOTYPES_ACRONYMS, "prompt_metadata": metadata},
         )
 
         return observation_acronymns_result.get("phenotypes", [])
@@ -263,7 +266,7 @@ class PromptBasedContentExtractor:
             "gene": gene_symbol,
         }
         prompt_settings = {
-            "prompt_tag": field,
+            "prompt_tag": PromptTag(field),
             "prompt_metadata": {
                 "gene_symbol": gene_symbol,
                 "paper_id": observation.paper_id,

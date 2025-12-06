@@ -4,6 +4,7 @@ import os
 import sys
 from typing import Callable, Dict, List, Optional, Set
 
+from lib.evagg.types import PromptTag
 from lib.evagg.utils.environment import env
 
 LogFilter = Callable[[logging.LogRecord], bool]
@@ -61,6 +62,8 @@ def init_module_filter(
 
 def _format_prompt(record: logging.LogRecord) -> str:
     prompt_tag = record.__dict__.get("prompt_tag", "(no tag)")
+    # Convert PromptTag enum to string if necessary (it should already be a string since it inherits from str)
+    prompt_tag = str(prompt_tag) if prompt_tag else "(no tag)"
     metadata = record.__dict__.get("prompt_metadata", {})
     settings = record.__dict__.get("prompt_settings", {})
     prompt = record.__dict__.get("prompt_text", "")
@@ -106,7 +109,7 @@ class FileHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         if record.levelno == PROMPT:
-            file_name = record.__dict__.get("prompt_tag", "prompt")
+            file_name = str(record.__dict__.get("prompt_tag", PromptTag.PROMPT))
             with open(
                 os.path.join(env.LOG_OUT_DIR, _current_run, f"{file_name}.log"), "a"
             ) as f:
