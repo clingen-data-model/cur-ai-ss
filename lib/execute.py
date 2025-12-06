@@ -1,11 +1,11 @@
 import argparse
+import datetime
 import logging
 import traceback
 
 from lib.evagg import SinglePMIDApp
 from lib.evagg.utils import init_logger
 
-init_logger()
 logger = logging.getLogger(__name__)
 
 
@@ -24,6 +24,9 @@ def parse_args() -> argparse.Namespace:
 
 def run_evagg_app() -> None:
     args = parse_args()
+    init_logger(
+        current_run=f"{args.pmid}_{args.gene_symbol}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+    )
     app = SinglePMIDApp(
         args.pmid,
         args.gene_symbol,
