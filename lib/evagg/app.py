@@ -1,15 +1,12 @@
 import logging
 
 from lib.evagg.llm import OpenAIClient
-from lib.evagg.utils.run import set_run_complete
 from lib.evagg.content import (
     PromptBasedContentExtractor,
     HGVSVariantComparator,
     HGVSVariantFactory,
     ObservationFinder,
 )
-from lib.evagg.library import SinglePaperLibrary
-from lib.evagg.io import JSONOutputWriter
 from lib.evagg.ref import (
     MutalyzerClient,
     NcbiLookupClient,
@@ -19,6 +16,7 @@ from lib.evagg.ref import (
 )
 from lib.evagg.utils.web import RequestsWebContentClient, WebClientSettings
 from lib.evagg.ref.ncbi import get_ncbi_response_translator
+from typing import Dict, Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -31,13 +29,9 @@ class SinglePMIDApp:
     ) -> None:
         self._pmid = pmid
         self._gene_symbol = gene_symbol
-        self._library = SinglePaperLibrary(
-            ncbi_lookup_client=NcbiLookupClient(
-                web_client=RequestsWebContentClient(
-                    WebClientSettings(
-                        status_code_translator=get_ncbi_response_translator()
-                    )
-                )
+        self._ncbi_lookup_client = NcbiLookupClient(
+            web_client=RequestsWebContentClient(
+                WebClientSettings(status_code_translator=get_ncbi_response_translator())
             )
         )
         self._extractor = PromptBasedContentExtractor(
@@ -80,13 +74,7 @@ class SinglePMIDApp:
                             )
                         )
                     ),
-                    ncbi_lookup_client=NcbiLookupClient(
-                        web_client=RequestsWebContentClient(
-                            WebClientSettings(
-                                status_code_translator=get_ncbi_response_translator()
-                            )
-                        )
-                    ),
+                    ncbi_lookup_client=self._ncbi_lookup_client,
                     refseq_client=RefSeqLookupClient(
                         web_client=RequestsWebContentClient(
                             WebClientSettings(
@@ -98,14 +86,9 @@ class SinglePMIDApp:
                 variant_comparator=HGVSVariantComparator(),
             ),
         )
-        self._writer = JSONOutputWriter()
 
-    def execute(self) -> None:
-        # Get the papers that match this query.
-        papers = self._library.get_papers({"pmid": self._pmid})
-        assert len(papers) == 1
-        logger.info(f"Found {len(papers)} papers for pmid: {self._pmid}")
-        output_file = self._writer.write(
-            self._extractor.extract(papers[0], self._gene_symbol)
-        )
-        set_run_complete(output_file)
+    def execute(self) -> Sequence[Dict[str, str]]:
+        paper = self._ncbi_lookup_client.fetch(self._pmid, include_fulltext=True)
+        if not paper:
+            raise RuntimeError(f"pmid {self._pmid} not found")
+        return self._extractor.extract(paper, self._gene_symbol)
