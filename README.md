@@ -5,7 +5,7 @@
 - **uv**.  Follow the instructions [here](https://docs.astral.sh/uv/getting-started/installation/) 
 - **make** [optional] only for [development tasks](README.md#pre-pr-checks)
 
-## Generate an OPENAPI api key
+## Generate an OpenAI api key
 - Go to the OpenAI Dashboard:
 https://platform.openai.com/account/api-keys
 - Log in to your OpenAI account (or create one if needed).
