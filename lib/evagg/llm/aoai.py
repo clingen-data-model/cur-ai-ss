@@ -78,7 +78,6 @@ class OpenAIClient:
         self, messages: ChatMessages, settings: Dict[str, Any]
     ) -> str:
         prompt_tag = settings.pop("prompt_tag", PromptTag.PROMPT)
-        prompt_metadata = settings.pop("prompt_metadata", {})
         rate_limit_errors = 0
 
         while True:
@@ -107,12 +106,12 @@ class OpenAIClient:
             except (openai.APIConnectionError, openai.APITimeoutError):
                 await asyncio.sleep(1)
 
-        prompt_metadata["returned_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
-        prompt_metadata["elapsed_time"] = f"{elapsed:.1f} seconds"
-
         prompt_log = {
             "prompt_tag": prompt_tag,
-            "prompt_metadata": prompt_metadata,
+            "prompt_metadata": {
+                "returned_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "elapsed_time": f"{elapsed:.1f} seconds",
+            },
             "prompt_settings": settings,
             "prompt_text": "\n".join(
                 [str(m.get("content")) for m in messages.to_list()]
