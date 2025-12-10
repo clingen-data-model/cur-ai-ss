@@ -14,6 +14,6 @@ class VepClient:
         self._web_client = web_client
 
     def enrich(
-        extracted_fields: Sequence[Dict[str, str]],
+        extracted_observations: Sequence[Dict[str, str]],
     ) -> Sequence[Dict[str, str]]:
-        return extracted_fields
+        return extracted_observations

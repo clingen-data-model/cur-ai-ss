@@ -93,7 +93,7 @@ class SinglePMIDApp:
             ),
         )
 
-    def execute(self, override_cache: False) -> Sequence[Dict[str, str]]:
+    def execute(self) -> Sequence[Dict[str, str]]:
         paper = self._ncbi_lookup_client.fetch(self._pmid, include_fulltext=True)
         if not paper:
             raise RuntimeError(f"pmid {self._pmid} not found")
