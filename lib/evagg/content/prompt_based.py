@@ -128,7 +128,7 @@ class PromptBasedContentExtractor:
                 response = await self._llm_client.prompt_json(
                     prompt_filepath=_get_prompt_file_path("phenotypes_candidates"),
                     params={"term": term, "candidates": "\n".join(candidates)},
-                    prompt_settings={"prompt_tag": PromptTag.PHENOTYPES_CANDIDATES},
+                    prompt_tag=PromptTag.PHENOTYPES_CANDIDATES,
                 )
                 return response.get("match")
 
@@ -147,7 +147,7 @@ class PromptBasedContentExtractor:
             response = await self._llm_client.prompt_json(
                 prompt_filepath=_get_prompt_file_path("phenotypes_simplify"),
                 params={"term": term},
-                prompt_settings={"prompt_tag": PromptTag.PHENOTYPES_SIMPLIFY},
+                prompt_tag=PromptTag.PHENOTYPES_SIMPLIFY,
             )
 
             if simplified := response.get("simplified"):
@@ -166,23 +166,23 @@ class PromptBasedContentExtractor:
         return list(set(all_values))
 
     async def _observation_phenotypes_for_text(
-        self, text: str, description: str, metadata: Dict[str, str]
+        self,
+        text: str,
+        description: str,
+        gene_symbol: str,
     ) -> List[str]:
         all_phenotypes_result = await self._llm_client.prompt_json(
             self._PROMPT_FIELDS["phenotype"],
             {"passage": text},
-            {
-                "prompt_tag": PromptTag.PHENOTYPES_ALL,
-                "max_output_tokens": 4096,
-                "prompt_metadata": metadata,
-            },
+            PromptTag.PHENOTYPES_ALL,
+            # "max_output_tokens": 4096,
         )
         if (all_phenotypes := all_phenotypes_result.get("phenotypes", [])) == []:
             return []
 
         # Potentially consider linked observations like comp-hets?
         observation_phenotypes_params = {
-            "gene": metadata["gene_symbol"],
+            "gene": gene_symbol,
             "passage": text,
             "observation": description,
             "candidates": ", ".join(all_phenotypes),
@@ -190,10 +190,7 @@ class PromptBasedContentExtractor:
         observation_phenotypes_result = await self._llm_client.prompt_json(
             _get_prompt_file_path("phenotypes_observation"),
             observation_phenotypes_params,
-            {
-                "prompt_tag": PromptTag.PHENOTYPES_OBSERVATION,
-                "prompt_metadata": metadata,
-            },
+            PromptTag.PHENOTYPES_OBSERVATION,
         )
         if (
             observation_phenotypes := observation_phenotypes_result.get(
@@ -205,7 +202,7 @@ class PromptBasedContentExtractor:
         observation_acronymns_result = await self._llm_client.prompt_json(
             _get_prompt_file_path("phenotypes_acronyms"),
             {"passage": text, "phenotypes": ", ".join(observation_phenotypes)},
-            {"prompt_tag": PromptTag.PHENOTYPES_ACRONYMS, "prompt_metadata": metadata},
+            PromptTag.PHENOTYPES_ACRONYMS,
         )
 
         return observation_acronymns_result.get("phenotypes", [])
@@ -232,10 +229,9 @@ class PromptBasedContentExtractor:
         texts = [fulltext]
         if table_texts != "":
             texts.append(table_texts)
-        metadata = {"gene_symbol": gene_symbol, "paper_id": observation.paper_id}
         result = await asyncio.gather(
             *[
-                self._observation_phenotypes_for_text(t, obs_desc, metadata)
+                self._observation_phenotypes_for_text(t, obs_desc, gene_symbol)
                 for t in texts
             ]
         )
@@ -261,15 +257,10 @@ class PromptBasedContentExtractor:
             "patient_descriptions": ", ".join(observation.patient_descriptions),
             "gene": gene_symbol,
         }
-        prompt_settings = {
-            "prompt_tag": PromptTag(field),
-            "prompt_metadata": {
-                "gene_symbol": gene_symbol,
-                "paper_id": observation.paper_id,
-            },
-        }
         return await self._llm_client.prompt_json(
-            self._PROMPT_FIELDS[field], params, prompt_settings
+            prompt_filepath=self._PROMPT_FIELDS[field],
+            params=params,
+            prompt_tag=PromptTag(field),
         )
 
     async def _generate_basic_field(

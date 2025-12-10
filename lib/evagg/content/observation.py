@@ -59,9 +59,7 @@ class ObservationFinder:
                 validation_response = await self._llm_client.prompt_json(
                     prompt_filepath=_get_observation_prompt_file_path("check_patients"),
                     params={"text": text, "patient": patient},
-                    prompt_settings={
-                        "prompt_tag": PromptTag.OBSERVATION_CHECK_PATIENTS
-                    },
+                    prompt_tag=PromptTag.OBSERVATION_CHECK_PATIENTS,
                 )
                 if validation_response.get("is_patient", False) is True:
                     checked_patients.append(patient)
@@ -80,18 +78,13 @@ class ObservationFinder:
         self,
         paper_text: str,
         focus_texts: Sequence[str] | None,
-        metadata: Dict[str, str],
     ) -> Sequence[str]:
         """Identify the individuals (human subjects) described in the full text of the paper."""
         full_text_response = await self._llm_client.prompt_json(
             prompt_filepath=_get_observation_prompt_file_path("find_patients"),
             params={"text": paper_text},
-            prompt_settings={
-                "prompt_tag": PromptTag.OBSERVATION_FIND_PATIENTS,
-                "prompt_metadata": metadata,
-            },
+            prompt_tag=PromptTag.OBSERVATION_FIND_PATIENTS,
         )
-
         unique_patients = set(full_text_response.get("patients", []))
 
         # TODO, logically deduplicate patients here, e.g., if a patient is referred to as both "proband" and "IV-1",
@@ -101,10 +94,7 @@ class ObservationFinder:
             focus_response = await self._llm_client.prompt_json(
                 prompt_filepath=_get_observation_prompt_file_path("find_patients"),
                 params={"text": focus_text},
-                prompt_settings={
-                    "prompt_tag": PromptTag.OBSERVATION_FIND_PATIENTS,
-                    "prompt_metadata": metadata,
-                },
+                prompt_tag=PromptTag.OBSERVATION_FIND_PATIENTS,
             )
             unique_patients.update(focus_response.get("patients", []))
 
@@ -127,10 +117,7 @@ class ObservationFinder:
                     params={
                         "patient_list": f'"{patient}"'
                     },  # Encase in double-quotes in prep for bulk calling.
-                    prompt_settings={
-                        "prompt_tag": PromptTag.OBSERVATION_SPLIT_PATIENTS,
-                        "prompt_metadata": metadata,
-                    },
+                    prompt_tag=PromptTag.OBSERVATION_SPLIT_PATIENTS,
                 )
                 patients_after_splitting.extend(split_response.get("patients", []))
             else:
@@ -185,7 +172,6 @@ class ObservationFinder:
         paper_text: str,
         focus_texts: Sequence[str] | None,
         gene_symbol: str,
-        metadata: Dict[str, str],
     ) -> Sequence[str]:
         """Identify the genetic variants relevant to the gene_symbol described in the full text of the paper.
 
@@ -197,10 +183,7 @@ class ObservationFinder:
             self._llm_client.prompt_json(
                 prompt_filepath=_get_observation_prompt_file_path("find_variants"),
                 params={"text": text, "gene_symbol": gene_symbol},
-                prompt_settings={
-                    "prompt_tag": PromptTag.OBSERVATION_FIND_VARIANTS,
-                    "prompt_metadata": metadata,
-                },
+                prompt_tag=PromptTag.OBSERVATION_FIND_VARIANTS,
             )
             for text in ([paper_text] if paper_text else []) + list(focus_texts or [])
         ]
@@ -263,10 +246,7 @@ class ObservationFinder:
                         params={
                             "variant_list": f'"{candidates[i]}"'
                         },  # Encase in double-quotes for bulk calling.
-                        prompt_settings={
-                            "prompt_tag": PromptTag.OBSERVATION_SPLIT_VARIANTS,
-                            "prompt_metadata": metadata,
-                        },
+                        prompt_tag=PromptTag.OBSERVATION_SPLIT_VARIANTS,
                     )
                 )
                 del candidates[i]
@@ -278,16 +258,14 @@ class ObservationFinder:
         return candidates
 
     async def _find_genome_build(
-        self, paper_text: str, metadata: Dict[str, str]
+        self,
+        paper_text: str,
     ) -> str | None:
         """Identify the genome build used in the paper."""
         response = await self._llm_client.prompt_json(
             prompt_filepath=_get_observation_prompt_file_path("find_genome_build"),
             params={"text": paper_text},
-            prompt_settings={
-                "prompt_tag": PromptTag.OBSERVATION_FIND_GENOME_BUILD,
-                "prompt_metadata": metadata,
-            },
+            prompt_tag=PromptTag.OBSERVATION_FIND_GENOME_BUILD,
         )
 
         return response.get("genome_build", "unknown")
@@ -295,23 +273,20 @@ class ObservationFinder:
     async def _link_entities(
         self,
         paper_text: str,
+        gene_symbol: str,
         patients: Sequence[str],
         variants: Sequence[str],
-        metadata: Dict[str, str],
     ) -> Dict[str, List[str]]:
         params = {
             "text": paper_text,
             "patients": ", ".join(patients),
             "variants": ", ".join(variants),
-            "gene_symbol": metadata["gene_symbol"],
+            "gene_symbol": gene_symbol,
         }
         response = await self._llm_client.prompt_json(
             prompt_filepath=_get_observation_prompt_file_path("link_entities"),
             params=params,
-            prompt_settings={
-                "prompt_tag": PromptTag.OBSERVATION_LINK_ENTITIES,
-                "prompt_metadata": metadata,
-            },
+            prompt_tag=PromptTag.OBSERVATION_LINK_ENTITIES,
         )
 
         return response
@@ -496,16 +471,16 @@ class ObservationFinder:
             return None
 
     async def _sanity_check_paper(
-        self, paper_text: str, gene_symbol: str, metadata: Dict[str, str]
+        self,
+        paper_text: str,
+        gene_symbol: str,
+        paper: Paper,
     ) -> bool:
         try:
             result = await self._llm_client.prompt_json(
                 prompt_filepath=_get_observation_prompt_file_path("sanity_check"),
                 params={"text": paper_text, "gene": gene_symbol},
-                prompt_settings={
-                    "prompt_tag": PromptTag.OBSERVATION_SANITY_CHECK,
-                    "prompt_metadata": metadata,
-                },
+                prompt_tag=PromptTag.OBSERVATION_SANITY_CHECK,
             )
         except Exception as e:  # pragma: no cover
             # This is not ideal, but better handling of content length errors would be a more invasive change that
@@ -517,9 +492,7 @@ class ObservationFinder:
                 and isinstance(e.body, dict)
                 and e.body.get("code", "") == "context_length_exceeded"
             ):
-                logger.warning(
-                    f"Context length exceeded for {metadata['paper_id']}. Skipping."
-                )
+                logger.warning(f"Context length exceeded for {paper.id}. Skipping.")
                 return False
             raise e
         return result.get("relevant", True)  # Default to including the paper.
@@ -538,10 +511,9 @@ class ObservationFinder:
         """
         # Get the full text of the paper and any focus texts (e.g., tables).
         paper_text, table_texts = self._get_text_sections(paper)
-        metadata = {"gene_symbol": gene_symbol, "paper_id": paper.id}
 
         # First, sanity check the paper for mention of genetic variants of interest.
-        if not await self._sanity_check_paper(paper_text, gene_symbol, metadata):
+        if not await self._sanity_check_paper(paper_text, gene_symbol, paper):
             logger.info(
                 f"Skipping {paper.id} as it doesn't pass initial check for relevance."
             )
@@ -552,7 +524,6 @@ class ObservationFinder:
             paper_text=paper_text,
             focus_texts=table_texts,
             gene_symbol=gene_symbol,
-            metadata=metadata,
         )
         logger.debug(
             f"Found the following variants described for {gene_symbol} in {paper}: {variant_descriptions}"
@@ -560,7 +531,7 @@ class ObservationFinder:
 
         if any("chr" in v or "g." in v for v in variant_descriptions):
             genome_build = await self._find_genome_build(
-                paper_text=paper_text, metadata=metadata
+                paper_text=paper_text,
             )
             logger.info(f"Found the following genome build in {paper}: {genome_build}")
         else:
@@ -609,10 +580,7 @@ variant isn't actually associated with the gene. But the possibility of previous
                         "text": mentioning_text,
                         "warning": "" if consolidated_variant.valid else warning_text,
                     },
-                    prompt_settings={
-                        "prompt_tag": PromptTag.OBSERVATION_CHECK_VARIANT_GENE_RELATIONSHIP,
-                        "prompt_metadata": metadata,
-                    },
+                    prompt_tag=PromptTag.OBSERVATION_CHECK_VARIANT_GENE_RELATIONSHIP,
                 )
                 if response.get("related", False) is False:
                     for description in descriptions:
@@ -643,14 +611,18 @@ variant isn't actually associated with the gene. But the possibility of previous
         if variants_by_description:
             # Determine all of the patients specifically referred to in the paper, if any.
             patients = await self._find_patients(
-                paper_text=paper_text, focus_texts=table_texts, metadata=metadata
+                paper_text=paper_text,
+                focus_texts=table_texts,
             )
             logger.debug(f"Found the following patients in {paper}: {patients}")
             variant_descriptions = list(variants_by_description.keys())
 
             if patients:
                 descriptions_by_patient = await self._link_entities(
-                    paper_text, patients, variant_descriptions, metadata
+                    paper_text,
+                    gene_symbol,
+                    patients,
+                    variant_descriptions,
                 )
                 # TODO, consider validating returned patients.
             else:
@@ -661,9 +633,7 @@ variant isn't actually associated with the gene. But the possibility of previous
 
         individuals = list(descriptions_by_patient.keys())
         # Ensure "unmatched_variants" is always last in the list.
-        if "unmatched_variants" in individuals:
-            individuals.remove("unmatched_variants")
-            individuals.append("unmatched_variants")
+        individuals.sort(key=lambda x: x == "unmatched_variants")
 
         for individual in individuals:
             variant_descriptions = descriptions_by_patient[individual]
