@@ -19,7 +19,7 @@ def run_app(pmid: str, gene_symbol: str, cache_bust: int):
             return res
         except Exception as e:
             if attempt == max_attempts:
-                st.error('EvAGG failed despite multiple retries')
+                st.exception(e)
 
 st.set_page_config(page_title='cur-ai-ious', layout='wide')
 st.title('cur-ai-ious')
