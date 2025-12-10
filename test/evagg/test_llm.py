@@ -4,11 +4,12 @@ from unittest.mock import AsyncMock, patch
 
 
 from lib.evagg.llm import OpenAIClient
+from lib.evagg.types import PromptTag
 
 
 @patch("lib.evagg.llm.aoai.AsyncOpenAI", return_value=AsyncMock())
 async def test_openai_client_prompt(
-    mock_openai, test_file_contents, test_resources_path
+    mock_openai, test_file_contents, test_resources_path, caplog
 ) -> None:
     prompt_template = test_file_contents("phenotype.txt")
     prompt_params = {"gene": "GENE", "variant": "VARIANT", "passage": "PASSAGE"}
@@ -22,7 +23,7 @@ async def test_openai_client_prompt(
     response = await client.prompt_file(
         prompt_filepath=os.path.join(test_resources_path, "phenotype.txt"),
         params=prompt_params,
-        prompt_settings={"prompt_tag": "phenotype"},
+        prompt_tag=PromptTag.PHENOTYPES_ALL,
     )
     assert response == "response"
     mock_openai.assert_called_once_with(api_key="test_api_key", timeout=60)
@@ -36,4 +37,8 @@ async def test_openai_client_prompt(
         ],
         max_output_tokens=1024,
         model="gpt-8",
+    )
+    assert (
+        "Level 55 lib.evagg.llm.aoai:aoai.py:125 Chat 'PromptTag.PHENOTYPES_ALL' complete in 0.0 seconds."
+        in caplog.text
     )

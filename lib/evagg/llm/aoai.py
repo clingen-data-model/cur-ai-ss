@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_PROMPT_SETTINGS = {
     "max_output_tokens": 1024,
-    "prompt_tag": PromptTag.OBSERVATION,
 }
 
 MAX_PARALLEL_REQUESTS = 5
@@ -75,11 +74,12 @@ class OpenAIClient:
         return asyncio.create_task(response, name="chat")
 
     async def _generate_completion(
-        self, messages: ChatMessages, settings: Dict[str, Any]
+        self,
+        messages: ChatMessages,
+        prompt_tag: PromptTag,
+        settings: Dict[str, Any],
     ) -> str:
-        prompt_tag = settings.pop("prompt_tag", PromptTag.PROMPT)
         rate_limit_errors = 0
-
         while True:
             try:
                 # Pause 1 second if the number of pending chat completions is at the limit.
@@ -133,7 +133,8 @@ class OpenAIClient:
         self,
         user_prompt: str,
         params: Optional[Dict[str, str]] = None,
-        prompt_settings: Optional[Dict[str, Any]] = None,
+        prompt_tag: PromptTag = PromptTag.PROMPT,
+        settings: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Get the response from a prompt."""
         # Replace any '{{${key}}}' instances with values from the params dictionary.
@@ -156,32 +157,36 @@ class OpenAIClient:
         settings = {
             **DEFAULT_PROMPT_SETTINGS,
             "model": env.OPENAI_API_DEPLOYMENT,
-            **(prompt_settings or {}),
+            **(settings or {}),
         }
-        return await self._generate_completion(messages, settings)
+        return await self._generate_completion(messages, prompt_tag, settings)
 
     async def prompt_file(
         self,
         prompt_filepath: str,
         params: Optional[Dict[str, str]] = None,
-        prompt_settings: Optional[Dict[str, Any]] = None,
+        prompt_tag: PromptTag = PromptTag.PROMPT,
+        settings: Optional[Dict[str, Any]] = None,
     ) -> str:
         return await self.prompt(
             self._load_prompt_file(prompt_filepath),
             params,
-            prompt_settings,
+            prompt_tag,
+            settings,
         )
 
     async def prompt_json(
         self,
         prompt_filepath: str,
         params: Optional[Dict[str, str]] = None,
-        prompt_settings: Optional[Dict[str, Any]] = None,
+        prompt_tag: PromptTag = PromptTag.PROMPT,
+        settings: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         response = await self.prompt_file(
             prompt_filepath=prompt_filepath,
             params=params,
-            prompt_settings=prompt_settings,
+            prompt_tag=prompt_tag,
+            settings=settings,
         )
         try:
             result = json.loads(response)
