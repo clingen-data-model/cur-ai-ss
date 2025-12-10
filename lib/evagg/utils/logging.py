@@ -4,11 +4,11 @@ import os
 import sys
 from typing import Callable, Dict, List, Optional, Set
 
-from .run import get_run_path, set_output_root
+from lib.evagg.utils.environment import env
 
 LogFilter = Callable[[logging.LogRecord], bool]
 PROMPT = logging.CRITICAL + 5
-_log_initialized = False
+_current_run: str = ""
 
 
 LOGGING_CONFIG: Dict = {
@@ -100,14 +100,16 @@ class FileHandler(logging.Handler):
 
         # If console output is enabled, write to file the
         # command-line arguments used to start the program.
-        self._console_log = os.path.join(get_run_path(), "console.log")
+        self._console_log = os.path.join(env.LOG_OUT_DIR, _current_run, "console.log")
         with open(self._console_log, "a") as f:
             f.write("ARGS:" + " ".join(sys.argv) + "\n")
 
     def emit(self, record: logging.LogRecord) -> None:
         if record.levelno == PROMPT:
             file_name = record.__dict__.get("prompt_tag", "prompt")
-            with open(os.path.join(get_run_path(), f"{file_name}.log"), "a") as f:
+            with open(
+                os.path.join(env.LOG_OUT_DIR, _current_run, f"{file_name}.log"), "a"
+            ) as f:
                 f.write(_format_prompt(record) + "\n")
         if record.levelno != PROMPT or self._prompt_msgs_enabled:
             with open(self._console_log, "a") as f:
@@ -151,28 +153,23 @@ class ConsoleHandler(logging.StreamHandler):
 
 
 def init_logger(
+    current_run: str,
     level: Optional[str] = None,
     exclude_modules: Optional[List[str]] = None,
     include_modules: Optional[List[str]] = None,
     exclude_defaults: Optional[bool] = True,
     prompts_to_console: Optional[bool] = False,
-    to_file: Optional[bool] = False,
-    root: Optional[str] = ".out",
+    to_file: Optional[bool] = True,
 ) -> None:
-    global _log_initialized
-    if _log_initialized:
-        logger = logging.getLogger(__name__)
-        logger.warning(
-            "Logging service already initialized - ignoring new initialization."
-        )
-        return
+    global _current_run
+    _current_run = current_run
+    os.makedirs(
+        os.path.join(env.LOG_OUT_DIR, _current_run),
+        exist_ok=True,
+    )
 
-    if root:
-        set_output_root(root)
-
-    _log_initialized = True
-    # Set up the base log level (defaults to WARNING).
-    level_number = getattr(logging, level or "WARNING", None)
+    # Set up the base log level (defaults to INFO).
+    level_number = getattr(logging, level or env.LOG_LEVEL, None)
     if not isinstance(level_number, int):
         raise ValueError(f"Invalid log level: {level}")
     LOGGING_CONFIG["root"]["level"] = level_number
