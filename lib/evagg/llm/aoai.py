@@ -12,6 +12,7 @@ from openai.types.responses import (
 )
 
 from lib.evagg.prompts import PROMPT_REGISTRY
+from lib.evagg.types import PromptTag
 from lib.evagg.utils.logging import PROMPT
 from lib.evagg.utils.environment import env
 
@@ -19,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_PROMPT_SETTINGS = {
     "max_output_tokens": 1024,
-    "prompt_tag": "observation",
+    "prompt_tag": PromptTag.OBSERVATION,
 }
 
 MAX_PARALLEL_REQUESTS = 5
@@ -76,7 +77,7 @@ class OpenAIClient:
     async def _generate_completion(
         self, messages: ChatMessages, settings: Dict[str, Any]
     ) -> str:
-        prompt_tag = settings.pop("prompt_tag", "prompt")
+        prompt_tag = settings.pop("prompt_tag", PromptTag.PROMPT)
         prompt_metadata = settings.pop("prompt_metadata", {})
         rate_limit_errors = 0
 
