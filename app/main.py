@@ -14,7 +14,6 @@ def run_app(pmid: str, gene_symbol: str, cache_bust: int):
     max_attempts = 3
     for attempt in range(1, max_attempts + 1):
         try:
-            logger.info(f'Attempt {attempt}/{max_attempts}')
             res = app.execute()
             st.success('Ran EvAGG from scratch.')
             return res
