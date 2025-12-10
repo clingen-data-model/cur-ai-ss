@@ -8,7 +8,7 @@ from typing import Dict, List, Sequence, Tuple
 
 from lib.evagg.content.variant import HGVSVariantFactory
 from lib.evagg.llm import OpenAIClient
-from lib.evagg.types import HGVSVariant, Paper
+from lib.evagg.types import HGVSVariant, Paper, PromptTag
 
 from .fulltext import get_fulltext, get_sections, TextSection
 from .variant import HGVSVariantComparator
@@ -59,7 +59,9 @@ class ObservationFinder:
                 validation_response = await self._llm_client.prompt_json(
                     prompt_filepath=_get_observation_prompt_file_path("check_patients"),
                     params={"text": text, "patient": patient},
-                    prompt_settings={"prompt_tag": "observation__check_patients"},
+                    prompt_settings={
+                        "prompt_tag": PromptTag.OBSERVATION_CHECK_PATIENTS
+                    },
                 )
                 if validation_response.get("is_patient", False) is True:
                     checked_patients.append(patient)
@@ -85,7 +87,7 @@ class ObservationFinder:
             prompt_filepath=_get_observation_prompt_file_path("find_patients"),
             params={"text": paper_text},
             prompt_settings={
-                "prompt_tag": "observation__find_patients",
+                "prompt_tag": PromptTag.OBSERVATION_FIND_PATIENTS,
                 "prompt_metadata": metadata,
             },
         )
@@ -100,7 +102,7 @@ class ObservationFinder:
                 prompt_filepath=_get_observation_prompt_file_path("find_patients"),
                 params={"text": focus_text},
                 prompt_settings={
-                    "prompt_tag": "observation__find_patients",
+                    "prompt_tag": PromptTag.OBSERVATION_FIND_PATIENTS,
                     "prompt_metadata": metadata,
                 },
             )
@@ -126,7 +128,7 @@ class ObservationFinder:
                         "patient_list": f'"{patient}"'
                     },  # Encase in double-quotes in prep for bulk calling.
                     prompt_settings={
-                        "prompt_tag": "observation__split_patients",
+                        "prompt_tag": PromptTag.OBSERVATION_SPLIT_PATIENTS,
                         "prompt_metadata": metadata,
                     },
                 )
@@ -196,7 +198,7 @@ class ObservationFinder:
                 prompt_filepath=_get_observation_prompt_file_path("find_variants"),
                 params={"text": text, "gene_symbol": gene_symbol},
                 prompt_settings={
-                    "prompt_tag": "observation__find_variants",
+                    "prompt_tag": PromptTag.OBSERVATION_FIND_VARIANTS,
                     "prompt_metadata": metadata,
                 },
             )
@@ -262,7 +264,7 @@ class ObservationFinder:
                             "variant_list": f'"{candidates[i]}"'
                         },  # Encase in double-quotes for bulk calling.
                         prompt_settings={
-                            "prompt_tag": "observation__split_variants",
+                            "prompt_tag": PromptTag.OBSERVATION_SPLIT_VARIANTS,
                             "prompt_metadata": metadata,
                         },
                     )
@@ -283,7 +285,7 @@ class ObservationFinder:
             prompt_filepath=_get_observation_prompt_file_path("find_genome_build"),
             params={"text": paper_text},
             prompt_settings={
-                "prompt_tag": "observation__find_genome_build",
+                "prompt_tag": PromptTag.OBSERVATION_FIND_GENOME_BUILD,
                 "prompt_metadata": metadata,
             },
         )
@@ -307,7 +309,7 @@ class ObservationFinder:
             prompt_filepath=_get_observation_prompt_file_path("link_entities"),
             params=params,
             prompt_settings={
-                "prompt_tag": "observation__link_entities",
+                "prompt_tag": PromptTag.OBSERVATION_LINK_ENTITIES,
                 "prompt_metadata": metadata,
             },
         )
@@ -501,7 +503,7 @@ class ObservationFinder:
                 prompt_filepath=_get_observation_prompt_file_path("sanity_check"),
                 params={"text": paper_text, "gene": gene_symbol},
                 prompt_settings={
-                    "prompt_tag": "observation__sanity_check",
+                    "prompt_tag": PromptTag.OBSERVATION_SANITY_CHECK,
                     "prompt_metadata": metadata,
                 },
             )
@@ -608,7 +610,7 @@ variant isn't actually associated with the gene. But the possibility of previous
                         "warning": "" if consolidated_variant.valid else warning_text,
                     },
                     prompt_settings={
-                        "prompt_tag": "observation__check_variant_gene_relationship",
+                        "prompt_tag": PromptTag.OBSERVATION_CHECK_VARIANT_GENE_RELATIONSHIP,
                         "prompt_metadata": metadata,
                     },
                 )

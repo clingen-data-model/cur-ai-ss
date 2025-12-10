@@ -36,3 +36,4 @@ if st.session_state.curation_data:
             data=json.dumps(st.session_state.curation_data, indent=2),
             file_name="curation_data.json",
             mime="application/json",
+        )
