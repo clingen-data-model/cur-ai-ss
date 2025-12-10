@@ -1,9 +1,17 @@
+from enum import Enum
 import os
 from urllib.parse import quote
 from typing import Optional
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class LogLevel(str, Enum):
+    DEBUG = "DEBUG"
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
 
 
 class Env(BaseSettings):
@@ -15,6 +23,7 @@ class Env(BaseSettings):
     # Required fields
     OPENAI_API_DEPLOYMENT: str = Field(...)
     OPENAI_API_KEY: str = Field(...)
+    LOG_LEVEL: LogLevel = LogLevel.INFO
 
     @model_validator(mode="after")
     def validate_ncbi_settings(self) -> "Env":

@@ -6,6 +6,8 @@ from typing import Callable, Dict, List, Optional, Set
 
 from .run import get_run_path, set_output_root
 
+from lib.evagg.utils.environment import env
+
 LogFilter = Callable[[logging.LogRecord], bool]
 PROMPT = logging.CRITICAL + 5
 _log_initialized = False
@@ -171,8 +173,8 @@ def init_logger(
         set_output_root(root)
 
     _log_initialized = True
-    # Set up the base log level (defaults to WARNING).
-    level_number = getattr(logging, level or "WARNING", None)
+    # Set up the base log level (defaults to INFO).
+    level_number = getattr(logging, level or env.LOG_LEVEL, None)
     if not isinstance(level_number, int):
         raise ValueError(f"Invalid log level: {level}")
     LOGGING_CONFIG["root"]["level"] = level_number

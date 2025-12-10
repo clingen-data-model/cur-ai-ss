@@ -1,9 +1,24 @@
 import logging
 
+from lib.evagg.llm import OpenAIClient
 from lib.evagg.utils.run import set_run_complete
-from lib.evagg.content import PromptBasedContentExtractor
+from lib.evagg.content import (
+    PromptBasedContentExtractor,
+    HGVSVariantComparator,
+    HGVSVariantFactory,
+    ObservationFinder,
+)
 from lib.evagg.library import SinglePaperLibrary
 from lib.evagg.io import JSONOutputWriter
+from lib.evagg.ref import (
+    MutalyzerClient,
+    NcbiLookupClient,
+    WebHPOClient,
+    PyHPOClient,
+    RefSeqLookupClient,
+)
+from lib.evagg.utils.web import RequestsWebContentClient, WebClientSettings
+from lib.evagg.ref.ncbi import get_ncbi_response_translator
 
 logger = logging.getLogger(__name__)
 
@@ -13,15 +28,77 @@ class SinglePMIDApp:
         self,
         pmid: str,
         gene_symbol: str,
-        library: SinglePaperLibrary,
-        extractor: PromptBasedContentExtractor,
-        writer: JSONOutputWriter,
     ) -> None:
         self._pmid = pmid
         self._gene_symbol = gene_symbol
-        self._library = library
-        self._extractor = extractor
-        self._writer = writer
+        self._library = SinglePaperLibrary(
+            ncbi_lookup_client=NcbiLookupClient(
+                web_client=RequestsWebContentClient(
+                    WebClientSettings(
+                        status_code_translator=get_ncbi_response_translator()
+                    )
+                )
+            )
+        )
+        self._extractor = PromptBasedContentExtractor(
+            fields=[
+                "evidence_id",
+                "gene",
+                "paper_id",
+                "hgvs_c",
+                "hgvs_p",
+                "paper_variant",
+                "transcript",
+                "validation_error",
+                "gnomad_frequency",
+                "individual_id",
+                "phenotype",
+                "zygosity",
+                "variant_inheritance",
+                "variant_type",
+                "study_type",
+                "source_type",
+                "engineered_cells",
+                "patient_cells_tissues",
+                "animal_model",
+                "citation",
+                "link",
+                "paper_title",
+            ],
+            llm_client=OpenAIClient(),
+            phenotype_searcher=WebHPOClient(
+                web_client=RequestsWebContentClient(),
+            ),
+            phenotype_fetcher=PyHPOClient(),
+            observation_finder=ObservationFinder(
+                llm_client=OpenAIClient(),
+                variant_factory=HGVSVariantFactory(
+                    mutalyzer_client=MutalyzerClient(
+                        web_client=RequestsWebContentClient(
+                            WebClientSettings(
+                                no_raise_codes=[422],
+                            )
+                        )
+                    ),
+                    ncbi_lookup_client=NcbiLookupClient(
+                        web_client=RequestsWebContentClient(
+                            WebClientSettings(
+                                status_code_translator=get_ncbi_response_translator()
+                            )
+                        )
+                    ),
+                    refseq_client=RefSeqLookupClient(
+                        web_client=RequestsWebContentClient(
+                            WebClientSettings(
+                                status_code_translator=get_ncbi_response_translator()
+                            )
+                        )
+                    ),
+                ),
+                variant_comparator=HGVSVariantComparator(),
+            ),
+        )
+        self._writer = JSONOutputWriter()
 
     def execute(self) -> None:
         # Get the papers that match this query.
