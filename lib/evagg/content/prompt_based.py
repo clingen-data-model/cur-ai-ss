@@ -51,21 +51,21 @@ class PromptBasedContentExtractor:
     def _get_lookup_field(
         self, gene_symbol: str, paper: Paper, ob: Observation, field: str
     ) -> Tuple[str, str]:
-        def get_link():
+        def get_link() -> str:
             return (
                 f"https://www.ncbi.nlm.nih.gov/pmc/articles/{paper.props['pmcid']}"
                 if paper.props.get("pmcid")
                 else paper.props.get("link", "")
             )
 
-        def get_hgvs_c():
+        def get_hgvs_c() -> str:
             return (
                 ob.variant.hgvs_desc
                 if not ob.variant.hgvs_desc.startswith("p.")
                 else "NA"
             )
 
-        def get_hgvs_p():
+        def get_hgvs_p() -> str:
             if ob.variant.protein_consequence:
                 return ob.variant.protein_consequence.hgvs_desc
             return (
