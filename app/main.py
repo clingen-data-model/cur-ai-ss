@@ -27,7 +27,9 @@ if st.button("Submit"):
             )
             papers = app._library.get_papers({"pmid": pmid})
             assert len(papers) == 1
-            st.session_state.curation_data = app._extractor.extract(papers[0], gene_symbol)
+            st.session_state.curation_data = app._extractor.extract(
+                papers[0], gene_symbol
+            )
 
 # Display JSON in an expander with a spinner
 if st.session_state.curation_data:
@@ -38,4 +40,3 @@ if st.session_state.curation_data:
             data=json.dumps(st.session_state.curation_data, indent=2),
             file_name="curation_data.json",
             mime="application/json",
-        )
