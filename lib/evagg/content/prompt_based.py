@@ -51,55 +51,51 @@ class PromptBasedContentExtractor:
     def _get_lookup_field(
         self, gene_symbol: str, paper: Paper, ob: Observation, field: str
     ) -> Tuple[str, str]:
-        if field == "evidence_id":
-            # Create a unique identifier for this combination of paper, variant, and individual ID.
-            value = ob.variant.get_unique_id(paper.id, ob.individual)
-        elif field == "gene":
-            value = gene_symbol
-        elif field == "paper_id":
-            value = paper.id
-        elif field == "citation":
-            value = paper.props["citation"]
-        elif field == "source_type":
-            value = "fulltext" if paper.props.get("fulltext_xml") else "abstract"
-        elif field == "link":
-            value = (
-                "https://www.ncbi.nlm.nih.gov/pmc/articles/" + paper.props["pmcid"]
+        def get_link() -> str:
+            return (
+                f"https://www.ncbi.nlm.nih.gov/pmc/articles/{paper.props['pmcid']}"
                 if paper.props.get("pmcid")
-                else paper.props["link"]
+                else paper.props.get("link", "")
             )
-        elif field == "paper_title":
-            value = paper.props["title"]
-        elif field == "hgvs_c":
-            value = (
+
+        def get_hgvs_c() -> str:
+            return (
                 ob.variant.hgvs_desc
                 if not ob.variant.hgvs_desc.startswith("p.")
                 else "NA"
             )
-        elif field == "hgvs_p":
+
+        def get_hgvs_p() -> str:
             if ob.variant.protein_consequence:
-                value = ob.variant.protein_consequence.hgvs_desc
-            else:
-                value = (
-                    ob.variant.hgvs_desc
-                    if ob.variant.hgvs_desc.startswith("p.")
-                    else "NA"
-                )
-        elif field == "paper_variant":
-            value = ", ".join(ob.variant_descriptions)
-        elif field == "transcript":
-            value = ob.variant.refseq if ob.variant.refseq else "unknown"
-        elif field == "valid":
-            value = str(ob.variant.valid)
-        elif field == "validation_error":
-            value = ob.variant.validation_error or ""
-        elif field == "individual_id":
-            value = ob.individual
-        elif field == "gnomad_frequency":
-            value = "unknown"
-        else:
+                return ob.variant.protein_consequence.hgvs_desc
+            return (
+                ob.variant.hgvs_desc if ob.variant.hgvs_desc.startswith("p.") else "NA"
+            )
+
+        field_map = {
+            "evidence_id": lambda: ob.variant.get_unique_id(paper.id, ob.individual),
+            "gene": lambda: gene_symbol,
+            "paper_id": lambda: paper.id,
+            "citation": lambda: paper.props.get("citation", ""),
+            "source_type": lambda: "fulltext"
+            if paper.props.get("fulltext_xml")
+            else "abstract",
+            "link": get_link,
+            "paper_title": lambda: paper.props.get("title", ""),
+            "hgvs_c": get_hgvs_c,
+            "hgvs_p": get_hgvs_p,
+            "paper_variant": lambda: ", ".join(ob.variant_descriptions),
+            "transcript": lambda: ob.variant.refseq or "unknown",
+            "valid": lambda: str(ob.variant.valid),
+            "validation_error": lambda: ob.variant.validation_error or "",
+            "individual_id": lambda: ob.individual,
+            "gnomad_frequency": lambda: "unknown",
+        }
+
+        if field not in field_map:
             raise ValueError(f"Unsupported field: {field}")
-        return field, value
+
+        return field, field_map[field]()
 
     async def _convert_phenotype_to_hpo(self, phenotype: List[str]) -> List[str]:
         """Convert a list of unstructured phenotype descriptions to HPO/OMIM terms."""
