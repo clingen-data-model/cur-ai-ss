@@ -37,9 +37,10 @@ if submitted:
     if not pmid or not gene_symbol:
         st.error('Please enter both a PMID and a gene symbol.')
     else:
-        if st.session_state.curation_data := run_app(
+        if res := run_app(
             pmid, gene_symbol, random.randint(0, int(1e9)) if override_cache else 0
-        ):
+        ):  
+            st.session_state.curation_data = res
             st.success("Successfully executed EvAGG")
 
 # Display JSON in an expander with a spinner
