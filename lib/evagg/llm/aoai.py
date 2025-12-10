@@ -10,10 +10,10 @@ from openai import AsyncOpenAI
 from openai.types.responses import (
     EasyInputMessageParam,
 )
-from pydantic import BaseModel
 
 from lib.evagg.prompts import PROMPT_REGISTRY
 from lib.evagg.utils.logging import PROMPT
+from lib.evagg.utils.environment import env
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +21,9 @@ DEFAULT_PROMPT_SETTINGS = {
     "max_output_tokens": 1024,
     "prompt_tag": "observation",
 }
+
+MAX_PARALLEL_REQUESTS = 0
+TIMEOUT_S = 60
 
 
 class ChatMessages:
@@ -43,32 +46,17 @@ class ChatMessages:
         return self._messages.copy()
 
 
-class OpenAIConfig(BaseModel):
-    api_key: str
-    deployment: str
-    timeout: int = 60
-    max_parallel_requests: int = 0
-
-
 class OpenAIClient:
-    _config: OpenAIConfig
-
-    def __init__(self, config: Dict[str, Any]) -> None:
-        self._config = OpenAIConfig(**config)
-
     @property
     def _client(self) -> AsyncOpenAI:
         return self._get_client_instance()
 
     @lru_cache
     def _get_client_instance(self) -> AsyncOpenAI:
-        logger.info(
-            "Using AsyncOpenAI"
-            + f" (max_parallel={self._config.max_parallel_requests})."
-        )
+        logger.info("Using AsyncOpenAI" + f" (max_parallel={MAX_PARALLEL_REQUESTS}).")
         return AsyncOpenAI(
-            api_key=self._config.api_key,
-            timeout=self._config.timeout,
+            api_key=env.OPENAI_API_KEY,
+            timeout=TIMEOUT_S,
         )
 
     @lru_cache
@@ -90,13 +78,12 @@ class OpenAIClient:
     ) -> str:
         prompt_tag = settings.pop("prompt_tag", "prompt")
         prompt_metadata = settings.pop("prompt_metadata", {})
-        connection_errors = 0
         rate_limit_errors = 0
 
         while True:
             try:
                 # Pause 1 second if the number of pending chat completions is at the limit.
-                if (max_requests := self._config.max_parallel_requests) > 0:
+                if (max_requests := MAX_PARALLEL_REQUESTS) > 0:
                     while (
                         sum(1 for t in asyncio.all_tasks() if t.get_name() == "chat")
                         > max_requests
@@ -116,18 +103,7 @@ class OpenAIClient:
                     logger.warning(f"Rate limit error on {prompt_tag}: {e}")
                 rate_limit_errors += 1
                 await asyncio.sleep(1)
-            except (openai.APIConnectionError, openai.APITimeoutError) as e:
-                if connection_errors > 2:
-                    if hasattr(
-                        self._config, "endpoint"
-                    ) and self._config.endpoint.startswith("http://localhost"):
-                        logger.error(
-                            "Azure OpenAI API unreachable - have failed to start a local proxy?"
-                        )
-                    raise
-                if connection_errors == 0:
-                    logger.warning(f"Connectivity error on {prompt_tag}: {e.message}")
-                connection_errors += 1
+            except (openai.APIConnectionError, openai.APITimeoutError):
                 await asyncio.sleep(1)
 
         prompt_metadata["returned_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -179,7 +155,7 @@ class OpenAIClient:
 
         settings = {
             **DEFAULT_PROMPT_SETTINGS,
-            "model": self._config.deployment,
+            "model": env.OPENAI_API_DEPLOYMENT,
             **(prompt_settings or {}),
         }
         return await self._generate_completion(messages, settings)

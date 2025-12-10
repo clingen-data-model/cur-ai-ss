@@ -2,14 +2,14 @@ from pathlib import Path
 from typing import Any, NamedTuple, Type
 
 from jinja2 import Environment, FileSystemLoader
-from pydantic import BaseModel, Extra
+from pydantic import BaseModel
 
 # Templates relative to this __init__.py
 template_dir = Path(__file__).parent / "templates"
 env = Environment(loader=FileSystemLoader(str(template_dir)), autoescape=True)
 
 
-class EmptyModel(BaseModel, extra=Extra.forbid):
+class EmptyModel(BaseModel, extra="forbid"):
     pass
 
 
@@ -21,7 +21,7 @@ class PromptSpec(NamedTuple):
     def render_template(self, **kwargs: Any) -> str:
         validated = self.input_model(**kwargs)
         template = env.get_template(self.template_name)
-        return template.render(**validated.dict())
+        return template.render(**validated.model_dump())
 
 
 PROMPT_REGISTRY = {

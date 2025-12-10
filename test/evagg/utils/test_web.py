@@ -15,7 +15,7 @@ def test_settings():
         no_raise_codes=[422],
         content_type="json",
     )
-    settings = web_client._settings.dict()
+    settings = web_client._settings.model_dump()
     assert settings["max_retries"] == 1
     assert settings["retry_backoff"] == 2
     assert settings["retry_codes"] == [500, 429]
@@ -23,7 +23,7 @@ def test_settings():
     assert settings["content_type"] == "json"
 
     web_client.update_settings(max_retries=10)
-    settings = web_client._settings.dict()
+    settings = web_client._settings.model_dump()
     assert settings["max_retries"] == 10
     assert settings["retry_backoff"] == 2
 
