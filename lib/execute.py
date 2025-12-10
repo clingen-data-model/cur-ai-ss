@@ -11,14 +11,14 @@ logger = logging.getLogger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Process a PMID and gene symbol.")
-    parser.add_argument("--pmid", help="PubMed ID", required=True, type=str)
-    parser.add_argument("--gene-symbol", help="Gene symbol", required=True, type=str)
+    parser = argparse.ArgumentParser(description='Process a PMID and gene symbol.')
+    parser.add_argument('--pmid', help='PubMed ID', required=True, type=str)
+    parser.add_argument('--gene-symbol', help='Gene symbol', required=True, type=str)
     parser.add_argument(
-        "--retries",
+        '--retries',
         type=int,
         default=0,
-        help="Number of times to retry on error (default: 0)",
+        help='Number of times to retry on error (default: 0)',
     )
     return parser.parse_args()
 
@@ -26,7 +26,7 @@ def parse_args() -> argparse.Namespace:
 def run_evagg_app() -> None:
     args = parse_args()
     init_logger(
-        current_run=f"{args.pmid}_{args.gene_symbol}_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+        current_run=f'{args.pmid}_{args.gene_symbol}_{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'
     )
     app = SinglePMIDApp(
         args.pmid,
@@ -35,18 +35,18 @@ def run_evagg_app() -> None:
     max_attempts = args.retries + 1
     for attempt in range(1, max_attempts + 1):
         try:
-            logger.info(f"Attempt {attempt}/{max_attempts}")
+            logger.info(f'Attempt {attempt}/{max_attempts}')
             app.execute()
             return
         except KeyboardInterrupt:
-            logger.info(f"Interrupted on attempt {attempt}")
+            logger.info(f'Interrupted on attempt {attempt}')
         except Exception as e:
-            logger.error(f"Error executing app on attempt {attempt}: {e}")
+            logger.error(f'Error executing app on attempt {attempt}: {e}')
             logger.error(traceback.format_exc())
             if attempt == max_attempts:
-                logger.error("All retries exhausted. Exiting.")
+                logger.error('All retries exhausted. Exiting.')
                 raise
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     run_evagg_app()

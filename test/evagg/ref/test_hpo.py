@@ -12,9 +12,9 @@ def mock_web_client(mock_client: Any) -> Any:
 
 
 def test_compare() -> None:
-    term_near1 = "HP:0000123"  # Nephritis
-    term_near2 = "HP:0000124"  # Renal tubular dysfunction
-    term_far = "HP:0001166"  # Arachnodactyly
+    term_near1 = 'HP:0000123'  # Nephritis
+    term_near2 = 'HP:0000124'  # Renal tubular dysfunction
+    term_far = 'HP:0001166'  # Arachnodactyly
 
     reference = PyHPOClient()
 
@@ -27,9 +27,9 @@ def test_compare() -> None:
 
 
 def test_compare_set() -> None:
-    term_near1 = "HP:0000123"  # Nephritis
-    term_near2 = "HP:0000124"  # Renal tubular dysfunction
-    term_far = "HP:0001166"  # Arachnodactyly
+    term_near1 = 'HP:0000123'  # Nephritis
+    term_near2 = 'HP:0000124'  # Renal tubular dysfunction
+    term_far = 'HP:0001166'  # Arachnodactyly
 
     reference = PyHPOClient()
 
@@ -41,41 +41,41 @@ def test_compare_set() -> None:
     assert term_near1 in result and result[term_near1][1] == term_near2
 
     result = reference.compare_set([term_near1], [])
-    assert term_near1 in result and result[term_near1][1] == ""
+    assert term_near1 in result and result[term_near1][1] == ''
 
 
 def test_fetch() -> None:
     reference = PyHPOClient()
 
-    assert reference.fetch("Nephritis") == {"id": "HP:0000123", "name": "Nephritis"}
+    assert reference.fetch('Nephritis') == {'id': 'HP:0000123', 'name': 'Nephritis'}
 
 
 def test_exists() -> None:
     reference = PyHPOClient()
 
-    assert reference.exists("HP:0000123")
-    assert not reference.exists("HP:9999999")
+    assert reference.exists('HP:0000123')
+    assert not reference.exists('HP:9999999')
 
 
 def test_search(mock_web_client: Any) -> None:
-    web_client = mock_web_client("hpo_search_cardiomegaly.json")
+    web_client = mock_web_client('hpo_search_cardiomegaly.json')
     reference = WebHPOClient(web_client)
-    result = reference.search("cardiomegaly")
+    result = reference.search('cardiomegaly')
     assert result == [
         {
-            "id": "HP:0001640",
-            "name": "Cardiomegaly",
-            "definition": (
-                "Increased size of the heart, clinically defined as an increased transverse diameter of the cardiac "
-                "silhouette that is greater than or equal to 50% of the transverse diameter of the chest (increased "
-                "cardiothoracic ratio) on a posterior-anterior projection of a chest radiograph or a computed "
-                "tomography."
+            'id': 'HP:0001640',
+            'name': 'Cardiomegaly',
+            'definition': (
+                'Increased size of the heart, clinically defined as an increased transverse diameter of the cardiac '
+                'silhouette that is greater than or equal to 50% of the transverse diameter of the chest (increased '
+                'cardiothoracic ratio) on a posterior-anterior projection of a chest radiograph or a computed '
+                'tomography.'
             ),
-            "synonyms": ["Enlarged heart", "Increased heart size"],
+            'synonyms': ['Enlarged heart', 'Increased heart size'],
         }
     ]
 
-    web_client = mock_web_client("hpo_search_asdf.json")
+    web_client = mock_web_client('hpo_search_asdf.json')
     reference = WebHPOClient(web_client)
-    result = reference.search("asdf")
+    result = reference.search('asdf')
     assert not result

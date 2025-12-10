@@ -9,13 +9,13 @@ from defusedxml import ElementTree
 
 @pytest.fixture
 def test_resources_path():
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), "resources"))
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), 'resources'))
 
 
 @pytest.fixture
 def test_file_contents(test_resources_path):
     def _loader(file_name):
-        with open(os.path.join(test_resources_path, file_name), "r") as file:
+        with open(os.path.join(test_resources_path, file_name), 'r') as file:
             return file.read()
 
     return _loader
@@ -48,9 +48,9 @@ def xml_load(test_file_contents, xml_parse):
 @pytest.fixture
 def arg_loader(json_load, xml_load):
     def _loader(arg):
-        if isinstance(arg, str) and arg.endswith(".xml"):
+        if isinstance(arg, str) and arg.endswith('.xml'):
             return xml_load(arg)
-        if isinstance(arg, str) and arg.endswith(".json"):
+        if isinstance(arg, str) and arg.endswith('.json'):
             return json_load(arg)
         return arg
 
@@ -70,7 +70,7 @@ def mock_client(arg_loader):
                     (name, asyncio.iscoroutinefunction(fn))
                     for interface in interfaces
                     for name, fn in vars(interface).items()
-                    if callable(fn) and not name.startswith("_")
+                    if callable(fn) and not name.startswith('_')
                 ]
 
                 # For each method name, create a method that returns the next response.
@@ -79,9 +79,9 @@ def mock_client(arg_loader):
                     def create_method(name, is_coroutine):
                         def method(*args, **kwargs):
                             arg_list = list(map(str, args)) + [
-                                "=".join(map(str, item)) for item in kwargs.items()
+                                '='.join(map(str, item)) for item in kwargs.items()
                             ]
-                            call_string = f"{name}(\n\t{',\n\t'.join(arg_list)}\n)"
+                            call_string = f'{name}(\n\t{",\n\t".join(arg_list)}\n)'
                             print(call_string)
 
                             self._calls.append(

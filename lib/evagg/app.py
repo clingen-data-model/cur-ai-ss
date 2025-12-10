@@ -38,28 +38,28 @@ class SinglePMIDApp:
         self._vep_client = VepClient(web_client=RequestsWebContentClient())
         self._extractor = PromptBasedContentExtractor(
             fields=[
-                "evidence_id",
-                "gene",
-                "paper_id",
-                "hgvs_c",
-                "hgvs_p",
-                "paper_variant",
-                "transcript",
-                "validation_error",
-                "gnomad_frequency",
-                "individual_id",
-                "phenotype",
-                "zygosity",
-                "variant_inheritance",
-                "variant_type",
-                "study_type",
-                "source_type",
-                "engineered_cells",
-                "patient_cells_tissues",
-                "animal_model",
-                "citation",
-                "link",
-                "paper_title",
+                'evidence_id',
+                'gene',
+                'paper_id',
+                'hgvs_c',
+                'hgvs_p',
+                'paper_variant',
+                'transcript',
+                'validation_error',
+                'gnomad_frequency',
+                'individual_id',
+                'phenotype',
+                'zygosity',
+                'variant_inheritance',
+                'variant_type',
+                'study_type',
+                'source_type',
+                'engineered_cells',
+                'patient_cells_tissues',
+                'animal_model',
+                'citation',
+                'link',
+                'paper_title',
             ],
             llm_client=OpenAIClient(),
             phenotype_searcher=WebHPOClient(
@@ -92,6 +92,6 @@ class SinglePMIDApp:
     def execute(self) -> Sequence[Dict[str, str]]:
         paper = self._ncbi_lookup_client.fetch(self._pmid, include_fulltext=True)
         if not paper:
-            raise RuntimeError(f"pmid {self._pmid} not found")
+            raise RuntimeError(f'pmid {self._pmid} not found')
         extracted_fields = self._extractor.extract(paper, self._gene_symbol)
         return self._vep_client.enrich(extracted_fields)

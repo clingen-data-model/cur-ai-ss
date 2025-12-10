@@ -4,10 +4,10 @@ from .prompt_based import PromptBasedContentExtractor
 from .variant import HGVSVariantComparator, HGVSVariantFactory
 
 __all__ = [
-    "PromptBasedContentExtractor",
-    "TextSection",
-    "HGVSVariantFactory",
-    "HGVSVariantComparator",
-    "Observation",
-    "ObservationFinder",
+    'PromptBasedContentExtractor',
+    'TextSection',
+    'HGVSVariantFactory',
+    'HGVSVariantComparator',
+    'Observation',
+    'ObservationFinder',
 ]

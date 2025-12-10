@@ -5,7 +5,7 @@ from .prompt_tag import PromptTag
 
 __all__ = [
     # Base.
-    "Paper",
-    "HGVSVariant",
-    "PromptTag",
+    'Paper',
+    'HGVSVariant',
+    'PromptTag',
 ]

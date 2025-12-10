@@ -11,84 +11,84 @@ def mock_web_client(mock_client):
 
 
 def test_single_gene_direct(mock_web_client):
-    web_client = mock_web_client("ncbi_symbol_single.json")
-    result = NcbiLookupClient(web_client).gene_id_for_symbol("FAM111B")
-    assert result == {"FAM111B": 374393}
+    web_client = mock_web_client('ncbi_symbol_single.json')
+    result = NcbiLookupClient(web_client).gene_id_for_symbol('FAM111B')
+    assert result == {'FAM111B': 374393}
 
 
 def test_single_gene_indirect(mock_web_client):
-    web_client = mock_web_client(*(["ncbi_symbol_synonym.json"] * 3))
+    web_client = mock_web_client(*(['ncbi_symbol_synonym.json'] * 3))
 
-    result = NcbiLookupClient(web_client).gene_id_for_symbol("FEB11")
+    result = NcbiLookupClient(web_client).gene_id_for_symbol('FEB11')
     assert result == {}
 
     result = NcbiLookupClient(web_client).gene_id_for_symbol(
-        "FEB11", allow_synonyms=True
+        'FEB11', allow_synonyms=True
     )
-    assert result == {"FEB11": 57094}
+    assert result == {'FEB11': 57094}
 
     # Verify that this would also work for the direct match.
-    result = NcbiLookupClient(web_client).gene_id_for_symbol("CPA6")
-    assert result == {"CPA6": 57094}
+    result = NcbiLookupClient(web_client).gene_id_for_symbol('CPA6')
+    assert result == {'CPA6': 57094}
 
 
 def test_single_gene_miss(mock_web_client):
     web_client = mock_web_client({})
-    result = NcbiLookupClient(web_client).gene_id_for_symbol("FAM11B")
+    result = NcbiLookupClient(web_client).gene_id_for_symbol('FAM11B')
     assert result == {}
 
-    web_client = mock_web_client("ncbi_symbol_single.json")
-    result = NcbiLookupClient(web_client).gene_id_for_symbol("not a gene")
+    web_client = mock_web_client('ncbi_symbol_single.json')
+    result = NcbiLookupClient(web_client).gene_id_for_symbol('not a gene')
     assert result == {}
 
 
 def test_multi_gene(mock_web_client):
-    web_client = mock_web_client(*(["ncbi_symbol_multi.json"] * 3))
+    web_client = mock_web_client(*(['ncbi_symbol_multi.json'] * 3))
 
-    result = NcbiLookupClient(web_client).gene_id_for_symbol("FAM111B", "FEB11")
-    assert result == {"FAM111B": 374393}
-
-    result = NcbiLookupClient(web_client).gene_id_for_symbol(
-        "FAM111B", "FEB11", allow_synonyms=True
-    )
-    assert result == {"FAM111B": 374393, "FEB11": 57094}
+    result = NcbiLookupClient(web_client).gene_id_for_symbol('FAM111B', 'FEB11')
+    assert result == {'FAM111B': 374393}
 
     result = NcbiLookupClient(web_client).gene_id_for_symbol(
-        "FAM111B", "FEB11", "not a gene", allow_synonyms=True
+        'FAM111B', 'FEB11', allow_synonyms=True
     )
-    assert result == {"FAM111B": 374393, "FEB11": 57094}
+    assert result == {'FAM111B': 374393, 'FEB11': 57094}
+
+    result = NcbiLookupClient(web_client).gene_id_for_symbol(
+        'FAM111B', 'FEB11', 'not a gene', allow_synonyms=True
+    )
+    assert result == {'FAM111B': 374393, 'FEB11': 57094}
 
 
 def test_variant(mock_web_client):
-    web_client = mock_web_client(*(["efetch_snp_single_variant.xml"] * 3))
+    web_client = mock_web_client(*(['efetch_snp_single_variant.xml'] * 3))
 
-    result = NcbiLookupClient(web_client).hgvs_from_rsid("rs146010120")
+    result = NcbiLookupClient(web_client).hgvs_from_rsid('rs146010120')
     assert result == {
-        "rs146010120": {
-            "hgvs_c": "NM_001276.4:c.104G>A",
-            "hgvs_p": "NP_001267.2:p.Arg35Gln",
-            "hgvs_g": "NC_000001.11:g.203185337C>T",
-            "gene": "CHI3L1",
+        'rs146010120': {
+            'hgvs_c': 'NM_001276.4:c.104G>A',
+            'hgvs_p': 'NP_001267.2:p.Arg35Gln',
+            'hgvs_g': 'NC_000001.11:g.203185337C>T',
+            'gene': 'CHI3L1',
         }
     }
 
 
 def test_multi_variant(mock_web_client):
-    web_client = mock_web_client("efetch_snp_multi_variant.xml")
+    web_client = mock_web_client('efetch_snp_multi_variant.xml')
 
-    result = NcbiLookupClient(web_client).hgvs_from_rsid("rs146010120", "rs113488022")
+    result = NcbiLookupClient(web_client).hgvs_from_rsid('rs146010120', 'rs113488022')
     assert result == {
-        "rs113488022": {
-            "hgvs_p": "NP_004324.2:p.Val600Gly",
-            "hgvs_c": "NM_004333.6:c.1799T>G",
-            "hgvs_g": "NC_000007.14:g.140753336A>C",
-            "gene": "BRAF",
+        'rs113488022': {
+            'hgvs_p': 'NP_004324.2:p.Val600Gly',
+            'hgvs_c': 'NM_004333.6:c.1799T>G',
+            'hgvs_g': 'NC_000007.14:g.140753336A>C',
+            'gene': 'BRAF',
         },
-        "rs146010120": {
-            "hgvs_p": "NP_001267.2:p.Arg35Gln",
-            "hgvs_c": "NM_001276.4:c.104G>A",
-            "hgvs_g": "NC_000001.11:g.203185337C>T",
-            "gene": "CHI3L1",
+        'rs146010120': {
+            'hgvs_p': 'NP_001267.2:p.Arg35Gln',
+            'hgvs_c': 'NM_001276.4:c.104G>A',
+            'hgvs_g': 'NC_000001.11:g.203185337C>T',
+            'gene': 'CHI3L1',
         },
     }
 
@@ -96,59 +96,59 @@ def test_multi_variant(mock_web_client):
 def test_missing_variant(mock_web_client):
     web_client = mock_web_client(None)
 
-    result = NcbiLookupClient(web_client).hgvs_from_rsid("rs123456789")
-    assert result == {"rs123456789": {}}
+    result = NcbiLookupClient(web_client).hgvs_from_rsid('rs123456789')
+    assert result == {'rs123456789': {}}
 
 
 def test_non_rsid(mock_web_client):
-    web_client = mock_web_client("")
+    web_client = mock_web_client('')
 
     with pytest.raises(ValueError):
-        NcbiLookupClient(web_client).hgvs_from_rsid("not a rsid")
+        NcbiLookupClient(web_client).hgvs_from_rsid('not a rsid')
     with pytest.raises(ValueError):
-        NcbiLookupClient(web_client).hgvs_from_rsid("rs1a2b")
+        NcbiLookupClient(web_client).hgvs_from_rsid('rs1a2b')
     with pytest.raises(ValueError):
-        NcbiLookupClient(web_client).hgvs_from_rsid("12345")
+        NcbiLookupClient(web_client).hgvs_from_rsid('12345')
 
 
 def test_pubmed_search(mock_web_client):
-    web_client = mock_web_client("esearch_pubmed_gene_CPA6.xml")
-    result = NcbiLookupClient(web_client).search("CPA6")
-    assert result == ["24290490"]
+    web_client = mock_web_client('esearch_pubmed_gene_CPA6.xml')
+    result = NcbiLookupClient(web_client).search('CPA6')
+    assert result == ['24290490']
 
 
 def test_pubmed_fetch(mock_web_client, json_load):
-    web_client = mock_web_client("efetch_pubmed_paper_24290490.xml")
-    result = NcbiLookupClient(web_client).fetch("24290490")
-    assert result and result.props == json_load("efetch_paper_24290490.json")
+    web_client = mock_web_client('efetch_pubmed_paper_24290490.xml')
+    result = NcbiLookupClient(web_client).fetch('24290490')
+    assert result and result.props == json_load('efetch_paper_24290490.json')
 
 
 def test_pubmed_pmc_oa_fetch(mock_web_client):
     web_client = mock_web_client(
-        "efetch_pubmed_paper_31427284.xml", "ncbi_pmc_is_oa_PMC6824399.xml"
+        'efetch_pubmed_paper_31427284.xml', 'ncbi_pmc_is_oa_PMC6824399.xml'
     )
-    result = NcbiLookupClient(web_client).fetch("31427284")
-    assert result and result.props["can_access"] is False
+    result = NcbiLookupClient(web_client).fetch('31427284')
+    assert result and result.props['can_access'] is False
 
 
 def test_pubmed_pmc_full_text(mock_web_client):
     web_client = mock_web_client(
-        "efetch_pubmed_paper_33688625.xml",
-        "ncbi_pmc_is_oa_PMC7933980.xml",
-        "ncbi_bioc_full_text_PMC7933980.xml",
+        'efetch_pubmed_paper_33688625.xml',
+        'ncbi_pmc_is_oa_PMC7933980.xml',
+        'ncbi_bioc_full_text_PMC7933980.xml',
     )
-    result = NcbiLookupClient(web_client).fetch("33688625", include_fulltext=True)
-    assert result and result.props["can_access"] is True
+    result = NcbiLookupClient(web_client).fetch('33688625', include_fulltext=True)
+    assert result and result.props['can_access'] is True
     assert (
-        get_fulltext(result.props["fulltext_xml"], include=["TITLE"])
-        == "Saul-Wilson Syndrome Missense Allele Does Not Show Obvious Golgi Defects in a C. elegans Model"
+        get_fulltext(result.props['fulltext_xml'], include=['TITLE'])
+        == 'Saul-Wilson Syndrome Missense Allele Does Not Show Obvious Golgi Defects in a C. elegans Model'
     )
 
 
 def test_pubmed_fetch_missing(mock_web_client, xml_parse):
     web_client = mock_web_client(None)
-    result = NcbiLookupClient(web_client).fetch("7777777777777777")
+    result = NcbiLookupClient(web_client).fetch('7777777777777777')
     assert result is None
-    web_client = mock_web_client(xml_parse("<PubmedArticleSet></PubmedArticleSet>"))
-    result = NcbiLookupClient(web_client).fetch("7777777777777777")
+    web_client = mock_web_client(xml_parse('<PubmedArticleSet></PubmedArticleSet>'))
+    result = NcbiLookupClient(web_client).fetch('7777777777777777')
     assert result is None

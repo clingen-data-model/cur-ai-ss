@@ -5,7 +5,7 @@ from .web import RequestsWebContentClient
 
 __all__ = [
     # Logging.
-    "init_logger",
+    'init_logger',
     # Web.
-    "RequestsWebContentClient",
+    'RequestsWebContentClient',
 ]

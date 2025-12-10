@@ -5,11 +5,11 @@ from jinja2 import Environment, FileSystemLoader
 from pydantic import BaseModel
 
 # Templates relative to this __init__.py
-template_dir = Path(__file__).parent / "templates"
+template_dir = Path(__file__).parent / 'templates'
 env = Environment(loader=FileSystemLoader(str(template_dir)), autoescape=True)
 
 
-class EmptyModel(BaseModel, extra="forbid"):
+class EmptyModel(BaseModel, extra='forbid'):
     pass
 
 
@@ -25,11 +25,11 @@ class PromptSpec(NamedTuple):
 
 
 PROMPT_REGISTRY = {
-    "system": PromptSpec(
-        template_name="system.jinja2",
+    'system': PromptSpec(
+        template_name='system.jinja2',
         input_model=EmptyModel,
         output_model=EmptyModel,
     ),
 }
 
-__all__ = ["PROMPT_REGISTRY"]
+__all__ = ['PROMPT_REGISTRY']

@@ -11,16 +11,16 @@ from .vep import VepClient
 
 __all__ = [
     # Interfaces.
-    "IRefSeqLookupClient",
+    'IRefSeqLookupClient',
     # NCBI.
-    "NcbiLookupClient",
-    "RefSeqGeneLookupClient",
-    "RefSeqLookupClient",
+    'NcbiLookupClient',
+    'RefSeqGeneLookupClient',
+    'RefSeqLookupClient',
     # Mutalyzer.
-    "MutalyzerClient",
+    'MutalyzerClient',
     # HPO.
-    "PyHPOClient",
-    "WebHPOClient",
+    'PyHPOClient',
+    'WebHPOClient',
     # VEP
-    "VepClient",
+    'VepClient',
 ]

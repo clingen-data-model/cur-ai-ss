@@ -12,67 +12,67 @@ def test_compare() -> None:
     comparator = HGVSVariantComparator()
 
     # Test two equivalent variants
-    v1 = HGVSVariant("c.123A>G", "COQ2", None, True, True, None, None, [])
+    v1 = HGVSVariant('c.123A>G', 'COQ2', None, True, True, None, None, [])
     assert comparator.compare(v1, v1) is v1
     v1 = HGVSVariant(
-        "c.123A>G", "COQ2", "NP_123456.1(NM_123456.7)", True, True, None, None, []
+        'c.123A>G', 'COQ2', 'NP_123456.1(NM_123456.7)', True, True, None, None, []
     )
     assert comparator.compare(v1, v1) is v1
 
     # Test different variants
-    v1 = HGVSVariant("c.123A>G", "COQ2", None, True, True, None, None, [])
-    v2 = HGVSVariant("c.321A>G", "COQ2", None, True, True, None, None, [])
+    v1 = HGVSVariant('c.123A>G', 'COQ2', None, True, True, None, None, [])
+    v2 = HGVSVariant('c.321A>G', 'COQ2', None, True, True, None, None, [])
     assert comparator.compare(v1, v2) is None
     v1 = HGVSVariant(
-        "c.123A>G", "COQ2", "NP_123456.1(NM_123456.7)", True, True, None, None, []
+        'c.123A>G', 'COQ2', 'NP_123456.1(NM_123456.7)', True, True, None, None, []
     )
     v2 = HGVSVariant(
-        "c.321A>G", "COQ2", "NP_123456.1(NM_123456.7)", True, True, None, None, []
+        'c.321A>G', 'COQ2', 'NP_123456.1(NM_123456.7)', True, True, None, None, []
     )
     assert comparator.compare(v1, v2) is None
 
     # Test two variants with different refseqs.
     v1 = HGVSVariant(
-        "c.123A>G", "COQ2", "NP_123456.1(NM_123456.7)", True, True, None, None, []
+        'c.123A>G', 'COQ2', 'NP_123456.1(NM_123456.7)', True, True, None, None, []
     )
-    v2 = HGVSVariant("c.123A>G", "COQ2", "NM_123456.8", True, True, None, None, [])
+    v2 = HGVSVariant('c.123A>G', 'COQ2', 'NM_123456.8', True, True, None, None, [])
     assert comparator.compare(v1, v2) is v1
-    v2 = HGVSVariant("c.123A>G", "COQ2", "NM_654321.8", True, True, None, None, [])
+    v2 = HGVSVariant('c.123A>G', 'COQ2', 'NM_654321.8', True, True, None, None, [])
     assert comparator.compare(v1, v2) is None
     assert comparator.compare(v1, v2, True) is v1
 
     # Test variants with different completeness.
     v1 = HGVSVariant(
-        "c.123A>G", "COQ2", "NP_123456.1(NM_123456.7)", True, True, None, None, []
+        'c.123A>G', 'COQ2', 'NP_123456.1(NM_123456.7)', True, True, None, None, []
     )
     v2 = HGVSVariant(
-        "c.123A>G", "COQ2", "NP_123456.1(NM_123456.7)", False, True, None, None, []
+        'c.123A>G', 'COQ2', 'NP_123456.1(NM_123456.7)', False, True, None, None, []
     )
     assert comparator.compare(v1, v2) is v1
-    v3 = HGVSVariant("c.123A>G", "COQ2", "NM_123456.7", False, True, None, None, [])
+    v3 = HGVSVariant('c.123A>G', 'COQ2', 'NM_123456.7', False, True, None, None, [])
     assert comparator.compare(v2, v3) is v2
     assert comparator.compare(v1, v3) is v3
-    v4 = HGVSVariant("c.123A>G", "COQ2", None, False, True, None, None, [])
+    v4 = HGVSVariant('c.123A>G', 'COQ2', None, False, True, None, None, [])
     assert comparator.compare(v1, v4) is None
     # v4 has no refseq, so comparison will fail unless we disregard refseqs.
     assert comparator.compare(v1, v4, True) is v1
 
     # Test variants with equal completeness but different refseq version numbers.
-    v1 = HGVSVariant("c.123A>G", "COQ2", "NP_123456.1", True, True, None, None, [])
-    v2 = HGVSVariant("c.123A>G", "COQ2", "NP_123456.2", True, True, None, None, [])
+    v1 = HGVSVariant('c.123A>G', 'COQ2', 'NP_123456.1', True, True, None, None, [])
+    v2 = HGVSVariant('c.123A>G', 'COQ2', 'NP_123456.2', True, True, None, None, [])
     assert comparator.compare(v1, v2) is v2
-    v2 = HGVSVariant("c.123A>G", "COQ2", "NP_123456.0", True, True, None, None, [])
+    v2 = HGVSVariant('c.123A>G', 'COQ2', 'NP_123456.0', True, True, None, None, [])
     assert comparator.compare(v1, v2) is v1
 
     v1 = HGVSVariant(
-        "c.123A>G", "COQ2", "NP_123456.1(NM_123456.7)", True, True, None, None, []
+        'c.123A>G', 'COQ2', 'NP_123456.1(NM_123456.7)', True, True, None, None, []
     )
     v2 = HGVSVariant(
-        "c.123A>G", "COQ2", "NP_123456.1(NM_123456.6)", True, True, None, None, []
+        'c.123A>G', 'COQ2', 'NP_123456.1(NM_123456.6)', True, True, None, None, []
     )
     assert comparator.compare(v1, v2) is v1
     v2 = HGVSVariant(
-        "c.123A>G", "COQ2", "NP_123456.1(NM_123456.8)", True, True, None, None, []
+        'c.123A>G', 'COQ2', 'NP_123456.1(NM_123456.8)', True, True, None, None, []
     )
     assert comparator.compare(v1, v2) is v2
 
@@ -80,14 +80,14 @@ def test_compare() -> None:
     # V1 as a fallback because at least one refseq is shared, but there are not different
     # version numbers for the shared refseqs
     v2 = HGVSVariant(
-        "c.123A>G", "COQ2", "NP_123456.1(NM_654321.8)", True, True, None, None, []
+        'c.123A>G', 'COQ2', 'NP_123456.1(NM_654321.8)', True, True, None, None, []
     )
     assert comparator.compare(v1, v2) is v1
 
 
 def test_compare_via_protein_consequence() -> None:
-    v2 = HGVSVariant("p.Ala123Gly", "COQ2", "NP_123456.1", True, True, None, None, [])
-    v1 = HGVSVariant("c.123A>G", "COQ2", "NM_123456.7", True, True, None, v2, [])
+    v2 = HGVSVariant('p.Ala123Gly', 'COQ2', 'NP_123456.1', True, True, None, None, [])
+    v1 = HGVSVariant('c.123A>G', 'COQ2', 'NM_123456.7', True, True, None, v2, [])
     comparator = HGVSVariantComparator()
     assert comparator.compare(v1, v2) is v1
     assert comparator.compare(v2, v1) is v1
@@ -95,11 +95,11 @@ def test_compare_via_protein_consequence() -> None:
 
 def test_compare_via_coding_equivalent() -> None:
     pvar = HGVSVariant(
-        "p.Arg437Ter", "EXOC2", "NP_060773.3", True, True, None, None, []
+        'p.Arg437Ter', 'EXOC2', 'NP_060773.3', True, True, None, None, []
     )
-    cvar = HGVSVariant("c.1309C>T", "EXOC2", "NM_018303.6", True, True, None, pvar, [])
+    cvar = HGVSVariant('c.1309C>T', 'EXOC2', 'NM_018303.6', True, True, None, pvar, [])
     gvar = HGVSVariant(
-        "g.576766G>A", "EXOC2", "NC_000006.11", True, True, None, None, [cvar]
+        'g.576766G>A', 'EXOC2', 'NC_000006.11', True, True, None, None, [cvar]
     )
     comparator = HGVSVariantComparator()
     assert comparator.compare(cvar, pvar) is cvar
@@ -112,11 +112,11 @@ def test_compare_via_coding_equivalent() -> None:
 
 def test_consolidate() -> None:
     pvar = HGVSVariant(
-        "p.Arg437Ter", "EXOC2", "NP_060773.3", True, True, None, None, []
+        'p.Arg437Ter', 'EXOC2', 'NP_060773.3', True, True, None, None, []
     )
-    cvar = HGVSVariant("c.1309C>T", "EXOC2", "NM_018303.6", True, True, None, pvar, [])
+    cvar = HGVSVariant('c.1309C>T', 'EXOC2', 'NM_018303.6', True, True, None, pvar, [])
     gvar = HGVSVariant(
-        "g.576766G>A", "EXOC2", "NC_000006.11", True, True, None, None, [cvar]
+        'g.576766G>A', 'EXOC2', 'NC_000006.11', True, True, None, None, [cvar]
     )
 
     comparator = HGVSVariantComparator()
@@ -145,28 +145,28 @@ def test_factory_parse_c_dot(mock_lookup_client: Any, mock_refseq_client: Any) -
     mutalyzer.validate.return_value = (True, None)
     mutalyzer.normalize.side_effect = [
         {
-            "normalized_description": "NM_000059.4:c.1114A>C",
-            "protein": {"description": "NM_000059.4(NP_000050.3):p.(Asn372His)"},
+            'normalized_description': 'NM_000059.4:c.1114A>C',
+            'protein': {'description': 'NM_000059.4(NP_000050.3):p.(Asn372His)'},
         },
         {
-            "normalized_description": "NP_000050.3:p.Asn372His",
-            "equivalent_descriptions": {"p": [{"description": "NP_000050.3:p.N372H"}]},
+            'normalized_description': 'NP_000050.3:p.Asn372His',
+            'equivalent_descriptions': {'p': [{'description': 'NP_000050.3:p.N372H'}]},
         },
     ]
     factory = HGVSVariantFactory(
         mutalyzer, mock_lookup_client({}), mock_refseq_client(None)
     )
-    result = factory.parse("c.1114A>C", "BRCA2", "NM_000059.4")
+    result = factory.parse('c.1114A>C', 'BRCA2', 'NM_000059.4')
 
-    assert result.hgvs_desc == "c.1114A>C"
-    assert result.gene_symbol == "BRCA2"
-    assert result.refseq == "NM_000059.4"
+    assert result.hgvs_desc == 'c.1114A>C'
+    assert result.gene_symbol == 'BRCA2'
+    assert result.refseq == 'NM_000059.4'
     assert result.refseq_predicted is False
     assert result.valid is True
     assert result.validation_error is None
     assert result.protein_consequence is not None
-    assert result.protein_consequence.hgvs_desc == "p.Asn372His"
-    assert result.protein_consequence.refseq == "NP_000050.3"
+    assert result.protein_consequence.hgvs_desc == 'p.Asn372His'
+    assert result.protein_consequence.refseq == 'NP_000050.3'
     assert result.protein_consequence.refseq_predicted is False
     assert result.protein_consequence.valid is True
     assert result.protein_consequence.validation_error is None
@@ -179,27 +179,27 @@ def test_factory_parse_c_dot(mock_lookup_client: Any, mock_refseq_client: Any) -
     mutalyzer.validate.return_value = (True, None)
     mutalyzer.normalize.side_effect = [
         {
-            "normalized_description": "NM_000059.4:c.1114A>C",
-            "protein": {"description": "NM_000059.4(NP_000050.3):p.(Asn372His)"},
+            'normalized_description': 'NM_000059.4:c.1114A>C',
+            'protein': {'description': 'NM_000059.4(NP_000050.3):p.(Asn372His)'},
         },
         {
-            "normalized_description": "NP_000050.3:p.Asn372His",
-            "equivalent_descriptions": {"p": [{"description": "NP_000050.3:p.N372H"}]},
+            'normalized_description': 'NP_000050.3:p.Asn372His',
+            'equivalent_descriptions': {'p': [{'description': 'NP_000050.3:p.N372H'}]},
         },
     ]
-    refseq_client = mock_refseq_client("NM_000059.4")
+    refseq_client = mock_refseq_client('NM_000059.4')
     factory = HGVSVariantFactory(mutalyzer, mock_lookup_client({}), refseq_client)
-    result = factory.parse("c.1114A>C", "BRCA2", "NM_000059")
+    result = factory.parse('c.1114A>C', 'BRCA2', 'NM_000059')
 
-    assert result.hgvs_desc == "c.1114A>C"
-    assert result.gene_symbol == "BRCA2"
-    assert result.refseq == "NM_000059.4"
+    assert result.hgvs_desc == 'c.1114A>C'
+    assert result.gene_symbol == 'BRCA2'
+    assert result.refseq == 'NM_000059.4'
     assert result.refseq_predicted is True
     assert result.valid is True
     assert result.validation_error is None
     assert result.protein_consequence is not None
-    assert result.protein_consequence.hgvs_desc == "p.Asn372His"
-    assert result.protein_consequence.refseq == "NP_000050.3"
+    assert result.protein_consequence.hgvs_desc == 'p.Asn372His'
+    assert result.protein_consequence.refseq == 'NP_000050.3'
     assert result.protein_consequence.refseq_predicted is True
     assert result.protein_consequence.valid is True
     assert result.protein_consequence.validation_error is None
@@ -212,11 +212,11 @@ def test_factory_parse_c_dot(mock_lookup_client: Any, mock_refseq_client: Any) -
     mutalyzer.validate.return_value = (False, None)
     refseq_client = mock_refseq_client(None)
     factory = HGVSVariantFactory(mutalyzer, mock_lookup_client({}), refseq_client)
-    result = factory.parse("c.1114A>C", "BRCA2", "NM_BOGUS")
+    result = factory.parse('c.1114A>C', 'BRCA2', 'NM_BOGUS')
 
-    assert result.hgvs_desc == "c.1114A>C"
-    assert result.gene_symbol == "BRCA2"
-    assert result.refseq == "NM_BOGUS"
+    assert result.hgvs_desc == 'c.1114A>C'
+    assert result.gene_symbol == 'BRCA2'
+    assert result.refseq == 'NM_BOGUS'
     assert result.refseq_predicted is False
     assert result.valid is False
     assert result.validation_error is None
@@ -228,27 +228,27 @@ def test_factory_parse_c_dot(mock_lookup_client: Any, mock_refseq_client: Any) -
     mutalyzer.validate.return_value = (True, None)
     mutalyzer.normalize.side_effect = [
         {
-            "normalized_description": "NM_000059.4:c.1114A>C",
-            "protein": {"description": "NM_000059.4(NP_000050.3):p.(Asn372His)"},
+            'normalized_description': 'NM_000059.4:c.1114A>C',
+            'protein': {'description': 'NM_000059.4(NP_000050.3):p.(Asn372His)'},
         },
         {
-            "normalized_description": "NP_000050.3:p.Asn372His",
-            "equivalent_descriptions": {"p": [{"description": "NP_000050.3:p.N372H"}]},
+            'normalized_description': 'NP_000050.3:p.Asn372His',
+            'equivalent_descriptions': {'p': [{'description': 'NP_000050.3:p.N372H'}]},
         },
     ]
-    refseq_client = mock_refseq_client("NM_000059.4")
+    refseq_client = mock_refseq_client('NM_000059.4')
     factory = HGVSVariantFactory(mutalyzer, mock_lookup_client({}), refseq_client)
-    result = factory.parse("c.1114A>C", "BRCA2", refseq=None)
+    result = factory.parse('c.1114A>C', 'BRCA2', refseq=None)
 
-    assert result.hgvs_desc == "c.1114A>C"
-    assert result.gene_symbol == "BRCA2"
-    assert result.refseq == "NM_000059.4"
+    assert result.hgvs_desc == 'c.1114A>C'
+    assert result.gene_symbol == 'BRCA2'
+    assert result.refseq == 'NM_000059.4'
     assert result.refseq_predicted is True
     assert result.valid is True
     assert result.validation_error is None
     assert result.protein_consequence is not None
-    assert result.protein_consequence.hgvs_desc == "p.Asn372His"
-    assert result.protein_consequence.refseq == "NP_000050.3"
+    assert result.protein_consequence.hgvs_desc == 'p.Asn372His'
+    assert result.protein_consequence.refseq == 'NP_000050.3'
     assert result.protein_consequence.refseq_predicted is True
     assert result.protein_consequence.valid is True
     assert result.protein_consequence.validation_error is None
@@ -262,80 +262,80 @@ def test_factory_parse_c_dot(mock_lookup_client: Any, mock_refseq_client: Any) -
         factory = HGVSVariantFactory(
             mutalyzer, mock_lookup_client({}), mock_refseq_client(None)
         )
-        factory.parse("c.1114A>C", None, "NM_000059.4")
+        factory.parse('c.1114A>C', None, 'NM_000059.4')
 
     # Parse with failed validation
     mutalyzer = Mock(spec=MutalyzerClient)
-    mutalyzer.validate.return_value = (False, "ESEQUENCEMISMATCH")
+    mutalyzer.validate.return_value = (False, 'ESEQUENCEMISMATCH')
     factory = HGVSVariantFactory(
         mutalyzer, mock_lookup_client({}), mock_refseq_client(None)
     )
     result = factory.parse(
-        "c.1114G>C", "BRCA2", "NM_000059.4"
+        'c.1114G>C', 'BRCA2', 'NM_000059.4'
     )  # Incorrect reference base
 
-    assert result.hgvs_desc == "c.1114G>C"
-    assert result.gene_symbol == "BRCA2"
-    assert result.refseq == "NM_000059.4"
+    assert result.hgvs_desc == 'c.1114G>C'
+    assert result.gene_symbol == 'BRCA2'
+    assert result.refseq == 'NM_000059.4'
     assert result.refseq_predicted is False
     assert result.valid is False
-    assert result.validation_error == "ESEQUENCEMISMATCH"
+    assert result.validation_error == 'ESEQUENCEMISMATCH'
     assert result.protein_consequence is None
     assert result.coding_equivalents == []
 
     # Parse with intronic variant (no protein consequence)
     mutalyzer = Mock(spec=MutalyzerClient)
-    mutalyzer.validate.return_value = (False, "EINTRONIC")
+    mutalyzer.validate.return_value = (False, 'EINTRONIC')
     factory = HGVSVariantFactory(
         mutalyzer, mock_lookup_client({}), mock_refseq_client(None)
     )
-    result = factory.parse("c.8332-1591T>G", "BRCA2", "NC_000013.11(NM_000059.4)")
+    result = factory.parse('c.8332-1591T>G', 'BRCA2', 'NC_000013.11(NM_000059.4)')
 
-    assert result.hgvs_desc == "c.8332-1591T>G"
-    assert result.gene_symbol == "BRCA2"
-    assert result.refseq == "NC_000013.11(NM_000059.4)"
+    assert result.hgvs_desc == 'c.8332-1591T>G'
+    assert result.gene_symbol == 'BRCA2'
+    assert result.refseq == 'NC_000013.11(NM_000059.4)'
     assert result.refseq_predicted is False
     assert result.valid is False
-    assert result.validation_error == "EINTRONIC"
+    assert result.validation_error == 'EINTRONIC'
     assert result.protein_consequence is None
     assert result.coding_equivalents == []
 
     # Parse intronic variant with incomplete refseq (missing genomic)
     mutalyzer = Mock(spec=MutalyzerClient)
-    mutalyzer.validate.return_value = (False, "EINTRONIC")
-    refseq_client = mock_refseq_client("NC_000013.11")
+    mutalyzer.validate.return_value = (False, 'EINTRONIC')
+    refseq_client = mock_refseq_client('NC_000013.11')
     factory = HGVSVariantFactory(mutalyzer, mock_lookup_client({}), refseq_client)
-    result = factory.parse("c.8332-1591T>G", "BRCA2", "NM_000059.4")
+    result = factory.parse('c.8332-1591T>G', 'BRCA2', 'NM_000059.4')
 
-    assert result.hgvs_desc == "c.8332-1591T>G"
-    assert result.gene_symbol == "BRCA2"
-    assert result.refseq == "NC_000013.11(NM_000059.4)"
+    assert result.hgvs_desc == 'c.8332-1591T>G'
+    assert result.gene_symbol == 'BRCA2'
+    assert result.refseq == 'NC_000013.11(NM_000059.4)'
     assert result.refseq_predicted is False
     assert result.valid is False
-    assert result.validation_error == "EINTRONIC"
+    assert result.validation_error == 'EINTRONIC'
     assert result.protein_consequence is None
     assert result.coding_equivalents == []
 
     # Parse unsupported variant with valid refseq
     mutalyzer = Mock(spec=MutalyzerClient)
-    mutalyzer.validate.return_value = (False, "ESYNTAXUC")
+    mutalyzer.validate.return_value = (False, 'ESYNTAXUC')
     factory = HGVSVariantFactory(
         mutalyzer, mock_lookup_client({}), mock_refseq_client(None)
     )
-    result = factory.parse("BOGUS", "BRCA2", "NM_000059.4")
+    result = factory.parse('BOGUS', 'BRCA2', 'NM_000059.4')
 
-    assert result.hgvs_desc == "BOGUS"
-    assert result.gene_symbol == "BRCA2"
-    assert result.refseq == "NM_000059.4"
+    assert result.hgvs_desc == 'BOGUS'
+    assert result.gene_symbol == 'BRCA2'
+    assert result.refseq == 'NM_000059.4'
     assert result.refseq_predicted is False
     assert result.valid is False
-    assert result.validation_error == "ESYNTAXUC"
+    assert result.validation_error == 'ESYNTAXUC'
     assert result.protein_consequence is None
     assert result.coding_equivalents == []
 
     # Parse unsupported variant with missing refseq
     with pytest.raises(ValueError):
-        factory.parse("BOGUS", "BRCA2", refseq=None)
+        factory.parse('BOGUS', 'BRCA2', refseq=None)
 
 
 def test_factory_parse_p_dot(mock_lookup_client: Any, mock_refseq_client: Any) -> None:
@@ -343,17 +343,17 @@ def test_factory_parse_p_dot(mock_lookup_client: Any, mock_refseq_client: Any) -
     mutalyzer = Mock(spec=MutalyzerClient)
     mutalyzer.validate.return_value = (True, None)
     mutalyzer.normalize.return_value = {
-        "normalized_description": "NP_000050.3:p.Asn372His",
-        "equivalent_descriptions": {"p": [{"description": "NP_000050.3:p.N372H"}]},
+        'normalized_description': 'NP_000050.3:p.Asn372His',
+        'equivalent_descriptions': {'p': [{'description': 'NP_000050.3:p.N372H'}]},
     }
     factory = HGVSVariantFactory(
         mutalyzer, mock_lookup_client({}), mock_refseq_client(None)
     )
-    result = factory.parse("p.Asn372His", "BRCA2", "NP_000050.3")
+    result = factory.parse('p.Asn372His', 'BRCA2', 'NP_000050.3')
 
-    assert result.hgvs_desc == "p.Asn372His"
-    assert result.gene_symbol == "BRCA2"
-    assert result.refseq == "NP_000050.3"
+    assert result.hgvs_desc == 'p.Asn372His'
+    assert result.gene_symbol == 'BRCA2'
+    assert result.refseq == 'NP_000050.3'
     assert result.refseq_predicted is False
     assert result.valid is True
     assert result.validation_error is None
@@ -364,17 +364,17 @@ def test_factory_parse_p_dot(mock_lookup_client: Any, mock_refseq_client: Any) -
     mutalyzer = Mock(spec=MutalyzerClient)
     mutalyzer.validate.return_value = (True, None)
     mutalyzer.normalize.return_value = {
-        "normalized_description": "NP_000050.3:p.Asn372Ala",
-        "equivalent_descriptions": {"p": [{"description": "NP_000050.3:p.N372A"}]},
+        'normalized_description': 'NP_000050.3:p.Asn372Ala',
+        'equivalent_descriptions': {'p': [{'description': 'NP_000050.3:p.N372A'}]},
     }
     factory = HGVSVariantFactory(
         mutalyzer, mock_lookup_client({}), mock_refseq_client(None)
     )
-    result = factory.parse("p.N372A", "BRCA2", "NP_000050.3")
+    result = factory.parse('p.N372A', 'BRCA2', 'NP_000050.3')
 
-    assert result.hgvs_desc == "p.Asn372Ala"
-    assert result.gene_symbol == "BRCA2"
-    assert result.refseq == "NP_000050.3"
+    assert result.hgvs_desc == 'p.Asn372Ala'
+    assert result.gene_symbol == 'BRCA2'
+    assert result.refseq == 'NP_000050.3'
     assert result.refseq_predicted is False
     assert result.valid is True
     assert result.validation_error is None
@@ -385,17 +385,17 @@ def test_factory_parse_p_dot(mock_lookup_client: Any, mock_refseq_client: Any) -
     mutalyzer = Mock(spec=MutalyzerClient)
     mutalyzer.validate.return_value = (True, None)
     mutalyzer.normalize.return_value = {
-        "normalized_description": "NP_000050.3:p.(Asn372Ala)",
-        "equivalent_descriptions": {"p": [{"description": "NP_000050.3:p.(N372A)"}]},
+        'normalized_description': 'NP_000050.3:p.(Asn372Ala)',
+        'equivalent_descriptions': {'p': [{'description': 'NP_000050.3:p.(N372A)'}]},
     }
     factory = HGVSVariantFactory(
         mutalyzer, mock_lookup_client({}), mock_refseq_client(None)
     )
-    result = factory.parse("p.(N372A)", "BRCA2", "NP_000050.3")
+    result = factory.parse('p.(N372A)', 'BRCA2', 'NP_000050.3')
 
-    assert result.hgvs_desc == "p.Asn372Ala"
-    assert result.gene_symbol == "BRCA2"
-    assert result.refseq == "NP_000050.3"
+    assert result.hgvs_desc == 'p.Asn372Ala'
+    assert result.gene_symbol == 'BRCA2'
+    assert result.refseq == 'NP_000050.3'
     assert result.refseq_predicted is False
     assert result.valid is True
     assert result.validation_error is None
@@ -406,15 +406,15 @@ def test_factory_parse_p_dot(mock_lookup_client: Any, mock_refseq_client: Any) -
     mutalyzer = Mock(spec=MutalyzerClient)
     mutalyzer.validate.return_value = (True, None)
     mutalyzer.normalize.return_value = {
-        "normalized_description": "NP_000050.3:p.Asn372His"
+        'normalized_description': 'NP_000050.3:p.Asn372His'
     }
-    refseq_client = mock_refseq_client("NP_000050.3", "NM_000059.4")
+    refseq_client = mock_refseq_client('NP_000050.3', 'NM_000059.4')
     factory = HGVSVariantFactory(mutalyzer, mock_lookup_client({}), refseq_client)
-    result = factory.parse("p.Asn372His", "BRCA2", refseq=None)
+    result = factory.parse('p.Asn372His', 'BRCA2', refseq=None)
 
-    assert result.hgvs_desc == "p.Asn372His"
-    assert result.gene_symbol == "BRCA2"
-    assert result.refseq == "NP_000050.3"
+    assert result.hgvs_desc == 'p.Asn372His'
+    assert result.gene_symbol == 'BRCA2'
+    assert result.refseq == 'NP_000050.3'
     assert result.refseq_predicted is True
     assert result.valid is True
     assert result.validation_error is None
@@ -425,15 +425,15 @@ def test_factory_parse_p_dot(mock_lookup_client: Any, mock_refseq_client: Any) -
     mutalyzer = Mock(spec=MutalyzerClient)
     mutalyzer.validate.return_value = (True, None)
     mutalyzer.normalize.return_value = {
-        "normalized_description": "NP_000050.3:p.Asn372His"
+        'normalized_description': 'NP_000050.3:p.Asn372His'
     }
-    refseq_client = mock_refseq_client("NP_000050.3", None)
+    refseq_client = mock_refseq_client('NP_000050.3', None)
     factory = HGVSVariantFactory(mutalyzer, mock_lookup_client({}), refseq_client)
-    result = factory.parse("p.Asn372His", "BRCA2", refseq=None)
+    result = factory.parse('p.Asn372His', 'BRCA2', refseq=None)
 
-    assert result.hgvs_desc == "p.Asn372His"
-    assert result.gene_symbol == "BRCA2"
-    assert result.refseq == "NP_000050.3"
+    assert result.hgvs_desc == 'p.Asn372His'
+    assert result.gene_symbol == 'BRCA2'
+    assert result.refseq == 'NP_000050.3'
     assert result.refseq_predicted is True
     assert result.valid is True
     assert result.validation_error is None
@@ -442,35 +442,35 @@ def test_factory_parse_p_dot(mock_lookup_client: Any, mock_refseq_client: Any) -
 
     # Parse with failed validation
     mutalyzer = Mock(spec=MutalyzerClient)
-    mutalyzer.validate.return_value = (False, "EAMINOACIDMISMATCH")
+    mutalyzer.validate.return_value = (False, 'EAMINOACIDMISMATCH')
     factory = HGVSVariantFactory(
         mutalyzer, mock_lookup_client({}), mock_refseq_client(None)
     )
-    result = factory.parse("p.His372His", "BRCA2", "NP_000050.3")
+    result = factory.parse('p.His372His', 'BRCA2', 'NP_000050.3')
 
-    assert result.hgvs_desc == "p.His372His"
-    assert result.gene_symbol == "BRCA2"
-    assert result.refseq == "NP_000050.3"
+    assert result.hgvs_desc == 'p.His372His'
+    assert result.gene_symbol == 'BRCA2'
+    assert result.refseq == 'NP_000050.3'
     assert result.refseq_predicted is False
     assert result.valid is False
-    assert result.validation_error == "EAMINOACIDMISMATCH"
+    assert result.validation_error == 'EAMINOACIDMISMATCH'
     assert result.protein_consequence is None
     assert result.coding_equivalents == []
 
     # Parse a frameshift variant
     mutalyzer = Mock(spec=MutalyzerClient)
-    mutalyzer.validate.return_value = (False, "Frameshift validation not supported")
+    mutalyzer.validate.return_value = (False, 'Frameshift validation not supported')
     mutalyzer.normalize.return_value = {
-        "normalized_description": "NP_000050.3:p.His372fs"
+        'normalized_description': 'NP_000050.3:p.His372fs'
     }
     factory = HGVSVariantFactory(
         mutalyzer, mock_lookup_client({}), mock_refseq_client(None)
     )
-    result = factory.parse("p.His372fs", "BRCA2", "NP_000050.3")
+    result = factory.parse('p.His372fs', 'BRCA2', 'NP_000050.3')
 
-    assert result.hgvs_desc == "p.His372fs"
-    assert result.gene_symbol == "BRCA2"
-    assert result.refseq == "NP_000050.3"
+    assert result.hgvs_desc == 'p.His372fs'
+    assert result.gene_symbol == 'BRCA2'
+    assert result.refseq == 'NP_000050.3'
     assert result.refseq_predicted is False
     assert result.valid is True
     assert result.validation_error is None
@@ -484,49 +484,49 @@ def test_factory_parse_g_dot(mock_lookup_client: Any, mock_refseq_client: Any) -
     mutalyzer.validate.return_value = (True, None)
     mutalyzer.normalize.side_effect = [
         {
-            "normalized_description": "NC_000013.11:g.32332592A>C",
-            "equivalent_descriptions": {
-                "c": [
+            'normalized_description': 'NC_000013.11:g.32332592A>C',
+            'equivalent_descriptions': {
+                'c': [
                     {
-                        "description": "NC_000013.11(NM_000059.4):c.1114A>C",
-                        "protein_prediction": "NC_000013.11(NP_000050.3):p.(Asn372His)",
-                        "selector": {"id": "NM_000059.4"},
-                        "tag": {"id": "NM_000059.4", "details": "MANE Select"},
+                        'description': 'NC_000013.11(NM_000059.4):c.1114A>C',
+                        'protein_prediction': 'NC_000013.11(NP_000050.3):p.(Asn372His)',
+                        'selector': {'id': 'NM_000059.4'},
+                        'tag': {'id': 'NM_000059.4', 'details': 'MANE Select'},
                     }
                 ]
             },
         },
         {
-            "normalized_description": "NM_000059.4:c.1114A>C",
-            "protein": {"description": "NM_000059.4(NP_000050.3):p.(Asn372His)"},
+            'normalized_description': 'NM_000059.4:c.1114A>C',
+            'protein': {'description': 'NM_000059.4(NP_000050.3):p.(Asn372His)'},
         },
         {
-            "normalized_description": "NP_000050.3:p.Asn372His",
-            "equivalent_descriptions": {"p": [{"description": "NP_000050.3:p.N372H"}]},
+            'normalized_description': 'NP_000050.3:p.Asn372His',
+            'equivalent_descriptions': {'p': [{'description': 'NP_000050.3:p.N372H'}]},
         },
     ]
     factory = HGVSVariantFactory(
         mutalyzer, mock_lookup_client({}), mock_refseq_client(None)
     )
-    result = factory.parse("g.32332592A>C", "BRCA2", "NC_000013.11")
+    result = factory.parse('g.32332592A>C', 'BRCA2', 'NC_000013.11')
 
-    assert result.hgvs_desc == "g.32332592A>C"
-    assert result.gene_symbol == "BRCA2"
-    assert result.refseq == "NC_000013.11"
+    assert result.hgvs_desc == 'g.32332592A>C'
+    assert result.gene_symbol == 'BRCA2'
+    assert result.refseq == 'NC_000013.11'
     assert result.refseq_predicted is False
     assert result.valid is True
     assert result.validation_error is None
     assert result.protein_consequence is None
     assert result.coding_equivalents is not None
-    assert result.coding_equivalents[0].hgvs_desc == "c.1114A>C"
-    assert result.coding_equivalents[0].gene_symbol == "BRCA2"
-    assert result.coding_equivalents[0].refseq == "NM_000059.4"
+    assert result.coding_equivalents[0].hgvs_desc == 'c.1114A>C'
+    assert result.coding_equivalents[0].gene_symbol == 'BRCA2'
+    assert result.coding_equivalents[0].refseq == 'NM_000059.4'
     assert result.coding_equivalents[0].refseq_predicted is False
     assert result.coding_equivalents[0].valid is True
     assert result.coding_equivalents[0].validation_error is None
     assert result.coding_equivalents[0].protein_consequence is not None
-    assert result.coding_equivalents[0].protein_consequence.hgvs_desc == "p.Asn372His"
-    assert result.coding_equivalents[0].protein_consequence.refseq == "NP_000050.3"
+    assert result.coding_equivalents[0].protein_consequence.hgvs_desc == 'p.Asn372His'
+    assert result.coding_equivalents[0].protein_consequence.refseq == 'NP_000050.3'
     assert result.coding_equivalents[0].protein_consequence.refseq_predicted is False
     assert result.coding_equivalents[0].protein_consequence.valid is True
     assert result.coding_equivalents[0].protein_consequence.validation_error is None
@@ -535,7 +535,7 @@ def test_factory_parse_g_dot(mock_lookup_client: Any, mock_refseq_client: Any) -
 
     # Parse a g. description without a refseq
     with pytest.raises(ValueError):
-        factory.parse("g.32332592A>C", "BRCA2", refseq=None)
+        factory.parse('g.32332592A>C', 'BRCA2', refseq=None)
 
 
 def test_factory_parse_m_dot(mock_lookup_client: Any, mock_refseq_client: Any) -> None:
@@ -543,16 +543,16 @@ def test_factory_parse_m_dot(mock_lookup_client: Any, mock_refseq_client: Any) -
     mutalyzer = Mock(spec=MutalyzerClient)
     mutalyzer.validate.return_value = (True, None)
     mutalyzer.normalize.return_value = {
-        "normalized_description": "NC_012920.1:m.123A>G"
+        'normalized_description': 'NC_012920.1:m.123A>G'
     }
     factory = HGVSVariantFactory(
         mutalyzer, mock_lookup_client({}), mock_refseq_client(None)
     )
-    result = factory.parse("m.123A>G", None, "NC_012920.1")
+    result = factory.parse('m.123A>G', None, 'NC_012920.1')
 
-    assert result.hgvs_desc == "m.123A>G"
+    assert result.hgvs_desc == 'm.123A>G'
     assert result.gene_symbol is None
-    assert result.refseq == "NC_012920.1"
+    assert result.refseq == 'NC_012920.1'
     assert result.refseq_predicted is False
     assert result.valid is True
     assert result.validation_error is None
@@ -563,16 +563,16 @@ def test_factory_parse_m_dot(mock_lookup_client: Any, mock_refseq_client: Any) -
     mutalyzer = Mock(spec=MutalyzerClient)
     mutalyzer.validate.return_value = (True, None)
     mutalyzer.normalize.return_value = {
-        "normalized_description": "NC_012920.1:m.123A>G"
+        'normalized_description': 'NC_012920.1:m.123A>G'
     }
     factory = HGVSVariantFactory(
         mutalyzer, mock_lookup_client({}), mock_refseq_client(None)
     )
-    result = factory.parse("m.123A>G", None, refseq=None)
+    result = factory.parse('m.123A>G', None, refseq=None)
 
-    assert result.hgvs_desc == "m.123A>G"
+    assert result.hgvs_desc == 'm.123A>G'
     assert result.gene_symbol is None
-    assert result.refseq == "NC_012920.1"
+    assert result.refseq == 'NC_012920.1'
     assert result.refseq_predicted is True
     assert result.valid is True
     assert result.validation_error is None
@@ -587,11 +587,11 @@ def test_factory_parse_rsid(mock_lookup_client: Any, mock_refseq_client: Any) ->
     # Test a valid rsid that results in a non-frameshift variant.
     lookup_client = mock_lookup_client(
         {
-            "rs144848": {
-                "hgvs_p": "NP_000050.3:p.Asn372His",
-                "hgvs_c": "NM_000059.4:c.1114A>C",
-                "hgvs_g": "NC_000013.11:g.32332592A>C",
-                "gene": "BRCA2",
+            'rs144848': {
+                'hgvs_p': 'NP_000050.3:p.Asn372His',
+                'hgvs_c': 'NM_000059.4:c.1114A>C',
+                'hgvs_g': 'NC_000013.11:g.32332592A>C',
+                'gene': 'BRCA2',
             }
         }
     )
@@ -599,27 +599,27 @@ def test_factory_parse_rsid(mock_lookup_client: Any, mock_refseq_client: Any) ->
     mutalyzer.validate.return_value = (True, None)
     mutalyzer.normalize.side_effect = [
         {
-            "normalized_description": "NM_000059.4:c.1114A>C",
-            "protein": {"description": "NM_000059.4(NP_000050.3):p.(Asn372His)"},
+            'normalized_description': 'NM_000059.4:c.1114A>C',
+            'protein': {'description': 'NM_000059.4(NP_000050.3):p.(Asn372His)'},
         },
         {
-            "normalized_description": "NP_000050.3:p.Asn372His",
-            "equivalent_descriptions": {"p": [{"description": "NP_000050.3:p.N372H"}]},
+            'normalized_description': 'NP_000050.3:p.Asn372His',
+            'equivalent_descriptions': {'p': [{'description': 'NP_000050.3:p.N372H'}]},
         },
     ]
 
     factory = HGVSVariantFactory(mutalyzer, lookup_client, mock_refseq_client(None))
-    result = factory.parse_rsid("rs144848")
+    result = factory.parse_rsid('rs144848')
 
-    assert result.hgvs_desc == "c.1114A>C"
-    assert result.gene_symbol == "BRCA2"
-    assert result.refseq == "NM_000059.4"
+    assert result.hgvs_desc == 'c.1114A>C'
+    assert result.gene_symbol == 'BRCA2'
+    assert result.refseq == 'NM_000059.4'
     assert result.refseq_predicted is False
     assert result.valid is True
     assert result.validation_error is None
     assert result.protein_consequence is not None
-    assert result.protein_consequence.hgvs_desc == "p.Asn372His"
-    assert result.protein_consequence.refseq == "NP_000050.3"
+    assert result.protein_consequence.hgvs_desc == 'p.Asn372His'
+    assert result.protein_consequence.refseq == 'NP_000050.3'
     assert result.protein_consequence.refseq_predicted is False
     assert result.protein_consequence.valid is True
     assert result.protein_consequence.validation_error is None
@@ -630,11 +630,11 @@ def test_factory_parse_rsid(mock_lookup_client: Any, mock_refseq_client: Any) ->
     # Test a valid rsid that results in a frameshift variant.
     lookup_client = mock_lookup_client(
         {
-            "rs11571658": {
-                "hgvs_p": "NP_000050.3:p.Leu2092fs",
-                "hgvs_c": "NM_000059.4:c.6275_6276del",
-                "hgvs_g": "NC_000013.11:g.32340630_32340631del",
-                "gene": "BRCA2",
+            'rs11571658': {
+                'hgvs_p': 'NP_000050.3:p.Leu2092fs',
+                'hgvs_c': 'NM_000059.4:c.6275_6276del',
+                'hgvs_g': 'NC_000013.11:g.32340630_32340631del',
+                'gene': 'BRCA2',
             }
         }
     )
@@ -642,24 +642,24 @@ def test_factory_parse_rsid(mock_lookup_client: Any, mock_refseq_client: Any) ->
     mutalyzer.validate.return_value = (True, None)
     mutalyzer.normalize.side_effect = [
         {
-            "normalized_description": "NM_000059.4:c.6275_6276del",
-            "protein": {"description": "NM_000059.4(NP_000050.3):p.(Leu2092Profs*7)"},
+            'normalized_description': 'NM_000059.4:c.6275_6276del',
+            'protein': {'description': 'NM_000059.4(NP_000050.3):p.(Leu2092Profs*7)'},
         },
-        {"normalized_description": "NP_000050.3:p.Leu2092fs"},
+        {'normalized_description': 'NP_000050.3:p.Leu2092fs'},
     ]
 
     factory = HGVSVariantFactory(mutalyzer, lookup_client, mock_refseq_client(None))
-    result = factory.parse_rsid("rs11571658")
+    result = factory.parse_rsid('rs11571658')
 
-    assert result.hgvs_desc == "c.6275_6276del"
-    assert result.gene_symbol == "BRCA2"
-    assert result.refseq == "NM_000059.4"
+    assert result.hgvs_desc == 'c.6275_6276del'
+    assert result.gene_symbol == 'BRCA2'
+    assert result.refseq == 'NM_000059.4'
     assert result.refseq_predicted is False
     assert result.valid is True
     assert result.validation_error is None
     assert result.protein_consequence is not None
-    assert result.protein_consequence.hgvs_desc == "p.Leu2092fs"
-    assert result.protein_consequence.refseq == "NP_000050.3"
+    assert result.protein_consequence.hgvs_desc == 'p.Leu2092fs'
+    assert result.protein_consequence.refseq == 'NP_000050.3'
     assert result.protein_consequence.refseq_predicted is False
     assert result.protein_consequence.valid is True
     assert result.protein_consequence.validation_error is None
@@ -670,26 +670,26 @@ def test_factory_parse_rsid(mock_lookup_client: Any, mock_refseq_client: Any) ->
     # Test a valid rsid that only results in p.variant (unsure if this is a real case from dbSNP)
     lookup_client = mock_lookup_client(
         {
-            "rs144848": {
-                "hgvs_p": "NP_000050.3:p.Asn372His",
-                "hgvs_g": "NC_000013.11:g.32332592A>C",
-                "gene": "BRCA2",
+            'rs144848': {
+                'hgvs_p': 'NP_000050.3:p.Asn372His',
+                'hgvs_g': 'NC_000013.11:g.32332592A>C',
+                'gene': 'BRCA2',
             }
         }
     )
     mutalyzer = Mock(spec=MutalyzerClient)
     mutalyzer.validate.return_value = (True, None)
     mutalyzer.normalize.return_value = {
-        "normalized_description": "NP_000050.3:p.Asn372His",
-        "equivalent_descriptions": {"p": [{"description": "NP_000050.3:p.N372H"}]},
+        'normalized_description': 'NP_000050.3:p.Asn372His',
+        'equivalent_descriptions': {'p': [{'description': 'NP_000050.3:p.N372H'}]},
     }
 
     factory = HGVSVariantFactory(mutalyzer, lookup_client, mock_refseq_client(None))
-    result = factory.parse_rsid("rs144848")
+    result = factory.parse_rsid('rs144848')
 
-    assert result.hgvs_desc == "p.Asn372His"
-    assert result.gene_symbol == "BRCA2"
-    assert result.refseq == "NP_000050.3"
+    assert result.hgvs_desc == 'p.Asn372His'
+    assert result.gene_symbol == 'BRCA2'
+    assert result.refseq == 'NP_000050.3'
     assert result.refseq_predicted is False
     assert result.valid is True
     assert result.validation_error is None
@@ -699,9 +699,9 @@ def test_factory_parse_rsid(mock_lookup_client: Any, mock_refseq_client: Any) ->
     # Test a valid rsid that only results in a g.variant (unsure if this is a real case from dbSNP)
     lookup_client = mock_lookup_client(
         {
-            "rs144848": {
-                "hgvs_g": "NC_000013.11:g.32332592A>C",
-                "gene": "BRCA2",
+            'rs144848': {
+                'hgvs_g': 'NC_000013.11:g.32332592A>C',
+                'gene': 'BRCA2',
             }
         }
     )
@@ -709,48 +709,48 @@ def test_factory_parse_rsid(mock_lookup_client: Any, mock_refseq_client: Any) ->
     mutalyzer.validate.return_value = (True, None)
     mutalyzer.normalize.side_effect = [
         {
-            "normalized_description": "NC_000013.11:g.32332592A>C",
-            "equivalent_descriptions": {
-                "c": [
+            'normalized_description': 'NC_000013.11:g.32332592A>C',
+            'equivalent_descriptions': {
+                'c': [
                     {
-                        "description": "NC_000013.11(NM_000059.4):c.1114A>C",
-                        "protein_prediction": "NC_000013.11(NP_000050.3):p.(Asn372His)",
-                        "selector": {"id": "NM_000059.4"},
-                        "tag": {"id": "NM_000059.4", "details": "MANE Select"},
+                        'description': 'NC_000013.11(NM_000059.4):c.1114A>C',
+                        'protein_prediction': 'NC_000013.11(NP_000050.3):p.(Asn372His)',
+                        'selector': {'id': 'NM_000059.4'},
+                        'tag': {'id': 'NM_000059.4', 'details': 'MANE Select'},
                     }
                 ]
             },
         },
         {
-            "normalized_description": "NM_000059.4:c.1114A>C",
-            "protein": {"description": "NM_000059.4(NP_000050.3):p.(Asn372His)"},
+            'normalized_description': 'NM_000059.4:c.1114A>C',
+            'protein': {'description': 'NM_000059.4(NP_000050.3):p.(Asn372His)'},
         },
         {
-            "normalized_description": "NP_000050.3:p.Asn372His",
-            "equivalent_descriptions": {"p": [{"description": "NP_000050.3:p.N372H"}]},
+            'normalized_description': 'NP_000050.3:p.Asn372His',
+            'equivalent_descriptions': {'p': [{'description': 'NP_000050.3:p.N372H'}]},
         },
     ]
 
     factory = HGVSVariantFactory(mutalyzer, lookup_client, mock_refseq_client(None))
-    result = factory.parse_rsid("rs144848")
+    result = factory.parse_rsid('rs144848')
 
-    assert result.hgvs_desc == "g.32332592A>C"
-    assert result.gene_symbol == "BRCA2"
-    assert result.refseq == "NC_000013.11"
+    assert result.hgvs_desc == 'g.32332592A>C'
+    assert result.gene_symbol == 'BRCA2'
+    assert result.refseq == 'NC_000013.11'
     assert result.refseq_predicted is False
     assert result.valid is True
     assert result.validation_error is None
     assert result.protein_consequence is None
     assert result.coding_equivalents is not None
-    assert result.coding_equivalents[0].hgvs_desc == "c.1114A>C"
-    assert result.coding_equivalents[0].gene_symbol == "BRCA2"
-    assert result.coding_equivalents[0].refseq == "NM_000059.4"
+    assert result.coding_equivalents[0].hgvs_desc == 'c.1114A>C'
+    assert result.coding_equivalents[0].gene_symbol == 'BRCA2'
+    assert result.coding_equivalents[0].refseq == 'NM_000059.4'
     assert result.coding_equivalents[0].refseq_predicted is False
     assert result.coding_equivalents[0].valid is True
     assert result.coding_equivalents[0].validation_error is None
     assert result.coding_equivalents[0].protein_consequence is not None
-    assert result.coding_equivalents[0].protein_consequence.hgvs_desc == "p.Asn372His"
-    assert result.coding_equivalents[0].protein_consequence.refseq == "NP_000050.3"
+    assert result.coding_equivalents[0].protein_consequence.hgvs_desc == 'p.Asn372His'
+    assert result.coding_equivalents[0].protein_consequence.refseq == 'NP_000050.3'
     assert result.coding_equivalents[0].protein_consequence.refseq_predicted is False
     assert result.coding_equivalents[0].protein_consequence.valid is True
     assert result.coding_equivalents[0].protein_consequence.validation_error is None
@@ -763,4 +763,4 @@ def test_factory_parse_rsid(mock_lookup_client: Any, mock_refseq_client: Any) ->
         factory = HGVSVariantFactory(
             mutalyzer, mock_lookup_client({}), mock_refseq_client(None)
         )
-        factory.parse_rsid("bogus")
+        factory.parse_rsid('bogus')

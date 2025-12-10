@@ -32,9 +32,9 @@ def get_sections(
 
     # Parse the XML document.
     root = ElementTree.fromstring(doc)
-    doc_id = root.findtext("id") or "unknown"
+    doc_id = root.findtext('id') or 'unknown'
     # Generate all "passage" elements.
-    for passage in root.iterfind("./passage"):
+    for passage in root.iterfind('./passage'):
         if not (section_type := passage.findtext("infon[@key='section_type']")):
             raise ValueError(
                 f"Missing 'section_type' infon element in passage for document {doc_id}"
@@ -45,14 +45,14 @@ def get_sections(
             raise ValueError(
                 f"Missing 'type' infon element in passage for document {doc_id}"
             )
-        if not (offset := passage.findtext("offset")):
+        if not (offset := passage.findtext('offset')):
             raise ValueError(
                 f"Missing 'offset' infon element in {section_type} passage for document {doc_id}"
             )
         if not (section_id := passage.findtext("infon[@key='id']")):
-            section_id = "none"
+            section_id = 'none'
         # Eliminate linebreaks and strip leading/trailing whitespace from each line.
-        text = " ".join(s.strip() for s in (passage.findtext("text") or "").split("\n"))
+        text = ' '.join(s.strip() for s in (passage.findtext('text') or '').split('\n'))
         yield TextSection(section_type, text_type, int(offset), text, section_id)
 
 
@@ -68,4 +68,4 @@ def get_fulltext(
     doc: Optional[str], include: SectionFilter = None, exclude: SectionFilter = None
 ) -> str:
     """Extract and join the text with newlines from the given sections in the XML full-text document."""
-    return "\n".join(get_section_texts(doc, include, exclude))
+    return '\n'.join(get_section_texts(doc, include, exclude))

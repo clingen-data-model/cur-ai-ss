@@ -9,10 +9,10 @@ from requests.adapters import HTTPAdapter, Retry
 
 logger = logging.getLogger(__name__)
 
-CONTENT_TYPES = ["text", "json", "xml"]
+CONTENT_TYPES = ['text', 'json', 'xml']
 
 
-class WebClientSettings(BaseModel, extra="forbid"):
+class WebClientSettings(BaseModel, extra='forbid'):
     max_retries: int = 5
     retry_backoff: float = 0.5  # indicates progression of 0.5, 1, 2, 4, 8, etc. seconds
     retry_codes: List[int] = [
@@ -23,11 +23,11 @@ class WebClientSettings(BaseModel, extra="forbid"):
         504,
     ]  # rate-limit exceeded, server errors
     no_raise_codes: List[int] = []  # don't raise exceptions for these codes
-    content_type: str = "text"
+    content_type: str = 'text'
     timeout: float = 15.0  # seconds
     status_code_translator: Optional[Callable[[str, int, str], Tuple[int, str]]] = None
 
-    @field_validator("content_type")
+    @field_validator('content_type')
     @classmethod
     def _validate_content_type(cls, value: str) -> str:
         if value not in CONTENT_TYPES:
@@ -56,8 +56,8 @@ class RequestsWebContentClient:
                 backoff_factor=self._settings.retry_backoff,
                 status_forcelist=self._settings.retry_codes,
             )
-            self._session.mount("https://", HTTPAdapter(max_retries=retries))
-            self._session.mount("http://", HTTPAdapter(max_retries=retries))
+            self._session.mount('https://', HTTPAdapter(max_retries=retries))
+            self._session.mount('http://', HTTPAdapter(max_retries=retries))
         return self._session
 
     def _raise_for_status(self, code: int) -> None:
@@ -66,20 +66,20 @@ class RequestsWebContentClient:
             response = requests.Response()
             response.status_code = code
             raise requests.HTTPError(
-                f"Request failed with status code {code}", response=response
+                f'Request failed with status code {code}', response=response
             )
 
     def _transform_content(self, text: str, content_type: Optional[str]) -> Any:
         """Get the content from the response based on the provided content type."""
         content_type = content_type or self._settings.content_type
-        if content_type == "text":
+        if content_type == 'text':
             return text
-        elif content_type == "json":
+        elif content_type == 'json':
             return json.loads(text) if text else {}
-        elif content_type == "xml":
+        elif content_type == 'xml':
             return ElementTree.fromstring(text) if text else None
         else:
-            raise ValueError(f"Invalid content type: {content_type}")
+            raise ValueError(f'Invalid content type: {content_type}')
 
     def _get_content(
         self,
@@ -92,7 +92,7 @@ class RequestsWebContentClient:
         if data is not None:
             if params:
                 raise ValueError(
-                    "POST requests must not include query parameters. Pass all data in the body."
+                    'POST requests must not include query parameters. Pass all data in the body.'
                 )
             response = self._get_session().post(
                 url,

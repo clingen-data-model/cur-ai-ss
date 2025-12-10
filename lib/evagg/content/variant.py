@@ -14,7 +14,7 @@ class HGVSVariantFactory:
     _ncbi_lookup_client: NcbiLookupClient
     _refseq_client: IRefSeqLookupClient
 
-    MITO_REFSEQ = "NC_012920.1"
+    MITO_REFSEQ = 'NC_012920.1'
 
     def __init__(
         self,
@@ -28,7 +28,7 @@ class HGVSVariantFactory:
 
     def _predict_refseq(self, text_desc: str, gene_symbol: str | None) -> str | None:
         """Predict the RefSeq for a variant based on its description and gene symbol."""
-        if text_desc.startswith("p.") and gene_symbol:
+        if text_desc.startswith('p.') and gene_symbol:
             protein_accession = self._refseq_client.protein_accession_for_symbol(
                 gene_symbol
             )
@@ -36,20 +36,20 @@ class HGVSVariantFactory:
                 transcript_accession
                 := self._refseq_client.transcript_accession_for_symbol(gene_symbol)
             ):
-                return f"{transcript_accession}({protein_accession})"
+                return f'{transcript_accession}({protein_accession})'
             return protein_accession
-        elif text_desc.startswith("c.") and gene_symbol:
+        elif text_desc.startswith('c.') and gene_symbol:
             return self._refseq_client.transcript_accession_for_symbol(gene_symbol)
-        elif text_desc.startswith("m."):
+        elif text_desc.startswith('m.'):
             return self.MITO_REFSEQ
-        elif text_desc.startswith("g."):
+        elif text_desc.startswith('g.'):
             raise ValueError(
-                f"Genomic (g. prefixed) variants must have a RefSeq. None was provided for {text_desc}"
+                f'Genomic (g. prefixed) variants must have a RefSeq. None was provided for {text_desc}'
             )
         else:
             logger.warning(
-                "Unable to predict refseq for variant with unknown HGVS "
-                f"type: {text_desc} with gene symbol {gene_symbol}."
+                'Unable to predict refseq for variant with unknown HGVS '
+                f'type: {text_desc} with gene symbol {gene_symbol}.'
             )
             return None
 
@@ -61,7 +61,7 @@ class HGVSVariantFactory:
         if not refseq:
             refseq = self._predict_refseq(text_desc, gene_symbol)
             refseq_predicted = True
-        elif refseq.find(".") < 0:
+        elif refseq.find('.') < 0:
             refseq_replacement = self._refseq_client.accession_autocomplete(refseq)
             if refseq_replacement:
                 refseq = refseq_replacement
@@ -73,24 +73,24 @@ class HGVSVariantFactory:
 
         if not refseq:
             raise ValueError(
-                f"No RefSeq provided or predicted for {text_desc, gene_symbol}"
+                f'No RefSeq provided or predicted for {text_desc, gene_symbol}'
             )
 
         # If the variant is intronic, the refseq should be either a transcript with an included genomic reference, or
         # should be a standalone genomic reference.
         #   see https://hgvs-nomenclature.org/stable/background/refseq/
-        if text_desc.find("+") >= 0 or text_desc.find("-") >= 0:
+        if text_desc.find('+') >= 0 or text_desc.find('-') >= 0:
             # Intronic sequence variant, ensure that we've got an NG_ or NC_ refseq to start
-            if refseq.startswith("NM_"):
+            if refseq.startswith('NM_'):
                 # Find the associated genomic reference sequence.
                 logger.debug(
-                    f"Intronic variant without genomic reference, attempting to fix: {text_desc} {gene_symbol}"
+                    f'Intronic variant without genomic reference, attempting to fix: {text_desc} {gene_symbol}'
                 )
                 if gene_symbol:
                     chrom_refseq = self._refseq_client.genomic_accession_for_symbol(
                         gene_symbol
                     )
-                    refseq = f"{chrom_refseq}({refseq})" if chrom_refseq else refseq
+                    refseq = f'{chrom_refseq}({refseq})' if chrom_refseq else refseq
 
         return refseq, refseq_predicted
 
@@ -101,19 +101,19 @@ class HGVSVariantFactory:
         gene_symbol = None
 
         if rsid in hgvs_lookup:
-            if "hgvs_c" in hgvs_lookup[rsid]:
-                full_hgvs = hgvs_lookup[rsid]["hgvs_c"]
-            elif "hgvs_p" in hgvs_lookup[rsid]:
-                full_hgvs = hgvs_lookup[rsid]["hgvs_p"]
-            elif "hgvs_g" in hgvs_lookup[rsid]:
-                full_hgvs = hgvs_lookup[rsid]["hgvs_g"]
-            gene_symbol = hgvs_lookup[rsid].get("gene")
+            if 'hgvs_c' in hgvs_lookup[rsid]:
+                full_hgvs = hgvs_lookup[rsid]['hgvs_c']
+            elif 'hgvs_p' in hgvs_lookup[rsid]:
+                full_hgvs = hgvs_lookup[rsid]['hgvs_p']
+            elif 'hgvs_g' in hgvs_lookup[rsid]:
+                full_hgvs = hgvs_lookup[rsid]['hgvs_g']
+            gene_symbol = hgvs_lookup[rsid].get('gene')
 
         if not full_hgvs:
-            raise ValueError(f"Could not find HGVS for info rsid {rsid}")
+            raise ValueError(f'Could not find HGVS for info rsid {rsid}')
 
-        refseq = full_hgvs.split(":")[0]
-        text_desc = full_hgvs.split(":")[1]
+        refseq = full_hgvs.split(':')[0]
+        text_desc = full_hgvs.split(':')[1]
 
         return self.parse(text_desc, gene_symbol, refseq)
 
@@ -124,33 +124,33 @@ class HGVSVariantFactory:
         refseq: str,
         refseq_predicted: bool,
     ) -> HGVSVariant:
-        normalized = self._mutalyzer_client.normalize(f"{refseq}:{text_desc}")
+        normalized = self._mutalyzer_client.normalize(f'{refseq}:{text_desc}')
 
         # Normalize the variant description.
-        if "normalized_description" in normalized:
-            normalized_hgvs = normalized["normalized_description"]
-            refseq = normalized_hgvs.split(":")[0]
-            new_text_desc = normalized_hgvs.split(":")[1]
-            if new_text_desc.find("(") >= 0 and new_text_desc.find(")") >= 0:
-                text_desc = new_text_desc.replace("(", "").replace(")", "")
+        if 'normalized_description' in normalized:
+            normalized_hgvs = normalized['normalized_description']
+            refseq = normalized_hgvs.split(':')[0]
+            new_text_desc = normalized_hgvs.split(':')[1]
+            if new_text_desc.find('(') >= 0 and new_text_desc.find(')') >= 0:
+                text_desc = new_text_desc.replace('(', '').replace(')', '')
             else:
                 text_desc = new_text_desc
             # If this is a protein variant, we only want the NP_ portion of the refseq.
-            if text_desc.startswith("p."):
-                match = re.search(r"NP_\d+\.\d+", refseq)
+            if text_desc.startswith('p.'):
+                match = re.search(r'NP_\d+\.\d+', refseq)
                 refseq = match.group(0) if match else refseq
 
         # If this is a genomic variant and there are coding equivalents, make them.
         coding_equivalents: List[HGVSVariant] = []
         if (
-            text_desc.startswith("g.")
-            and "equivalent_descriptions" in normalized
-            and "c" in normalized["equivalent_descriptions"]
+            text_desc.startswith('g.')
+            and 'equivalent_descriptions' in normalized
+            and 'c' in normalized['equivalent_descriptions']
         ):
-            for coding_description in normalized["equivalent_descriptions"]["c"]:
+            for coding_description in normalized['equivalent_descriptions']['c']:
                 coding_refseq, coding_text_desc = coding_description[
-                    "description"
-                ].split(":")
+                    'description'
+                ].split(':')
                 coding_equivalents.append(
                     self._normalize_and_create(
                         coding_text_desc, gene_symbol, coding_refseq, refseq_predicted
@@ -158,10 +158,10 @@ class HGVSVariantFactory:
                 )
 
         # If there's a protein consequence, make it
-        if "protein" in normalized:
-            protein_refseq, protein_text_desc = normalized["protein"][
-                "description"
-            ].split(":")
+        if 'protein' in normalized:
+            protein_refseq, protein_text_desc = normalized['protein'][
+                'description'
+            ].split(':')
             protein_consequence = self._normalize_and_create(
                 protein_text_desc, gene_symbol, protein_refseq, refseq_predicted
             )
@@ -174,8 +174,8 @@ class HGVSVariantFactory:
             gene_symbol=gene_symbol,
             refseq=refseq,
             refseq_predicted=refseq_predicted,
-            valid=normalized.get("error_message", None) is None,
-            validation_error=normalized.get("error_message", None),
+            valid=normalized.get('error_message', None) is None,
+            validation_error=normalized.get('error_message', None),
             protein_consequence=protein_consequence,
             coding_equivalents=coding_equivalents,
         )
@@ -196,21 +196,21 @@ class HGVSVariantFactory:
         possible, an invalid, non-normalized representation of the variant description will be returned.
         """
         if (
-            text_desc.startswith("p.") or text_desc.startswith("c.")
+            text_desc.startswith('p.') or text_desc.startswith('c.')
         ) and not gene_symbol:
             raise ValueError(
-                f"Gene symbol required for protein and coding variants: {text_desc}"
+                f'Gene symbol required for protein and coding variants: {text_desc}'
             )
 
         refseq, refseq_predicted = self._clean_refseq(refseq, text_desc, gene_symbol)
         (is_valid, validation_error) = self._mutalyzer_client.validate(
-            f"{refseq}:{text_desc}"
+            f'{refseq}:{text_desc}'
         )
 
         # From here, if the variant is valid (or if it's a frameshift) we make a normalized variant (recursing as
         # necessary). Otherwise we make a non-normalized variant.
         if (
-            is_valid or text_desc.find("fs") >= 0
+            is_valid or text_desc.find('fs') >= 0
         ):  # frame shift variants are not validated by mutalyzer, but they can be normalized.
             return self._normalize_and_create(
                 text_desc, gene_symbol, refseq, refseq_predicted
@@ -240,7 +240,7 @@ class HGVSVariantComparator:
             return 0
         if not v.refseq_predicted:
             return 3
-        elif v.refseq.find("(") >= 0:
+        elif v.refseq.find('(') >= 0:
             return 2
         # At least we have a refseq.
         return 1
@@ -248,10 +248,10 @@ class HGVSVariantComparator:
     def _parse_refseq_parts(self, refseq: str) -> Dict[str, int]:
         """Parse a refseq accession string into a dictionary of accessions and versions."""
         return {
-            tok.rstrip(")").split(".")[0]: (
-                int(tok.rstrip(")").split(".")[1]) if "." in tok else -1
+            tok.rstrip(')').split('.')[0]: (
+                int(tok.rstrip(')').split('.')[1]) if '.' in tok else -1
             )
-            for tok in refseq.split("(")
+            for tok in refseq.split('(')
         }
 
     def _more_complete_by_refseq(
@@ -281,7 +281,7 @@ class HGVSVariantComparator:
 
         # If none of the above conditions are met, keep the first one but log.
         logger.info(
-            f"Unable to determine more complete variant based on refseq completeness: {variant1}, {variant2}"
+            f'Unable to determine more complete variant based on refseq completeness: {variant1}, {variant2}'
         )
         return variant1
 
@@ -321,9 +321,9 @@ class HGVSVariantComparator:
         self, variant1: HGVSVariant, variant2: HGVSVariant, disregard_refseq: bool
     ) -> bool:
         """Compare a variant to a protein consequence."""
-        desc_match = variant1.hgvs_desc.replace("(", "").replace(
-            ")", ""
-        ) == variant2.hgvs_desc.replace("(", "").replace(")", "")
+        desc_match = variant1.hgvs_desc.replace('(', '').replace(
+            ')', ''
+        ) == variant2.hgvs_desc.replace('(', '').replace(')', '')
 
         if not desc_match:
             return False
@@ -335,16 +335,16 @@ class HGVSVariantComparator:
                 # determined to be equivalent.
                 v1accessions = (
                     {
-                        tok.rstrip(")").split(".")[0]
-                        for tok in variant1.refseq.split("(")
+                        tok.rstrip(')').split('.')[0]
+                        for tok in variant1.refseq.split('(')
                     }
                     if variant1.refseq
                     else set()
                 )
                 v2accessions = (
                     {
-                        tok.rstrip(")").split(".")[0]
-                        for tok in variant2.refseq.split("(")
+                        tok.rstrip(')').split('.')[0]
+                        for tok in variant2.refseq.split('(')
                     }
                     if variant2.refseq
                     else set()
@@ -402,7 +402,7 @@ class HGVSVariantComparator:
             # Variant1 is DNA, so more complete.
             return variant1
 
-        if variant2.hgvs_desc.startswith("g.") and any(
+        if variant2.hgvs_desc.startswith('g.') and any(
             self._fuzzy_compare(variant1, v, disregard_refseq)
             or (
                 v.protein_consequence
@@ -415,7 +415,7 @@ class HGVSVariantComparator:
             # Variant1 is the coding or protein variant, either of which is more common than the genomic variant.
             return variant1
 
-        if variant1.hgvs_desc.startswith("g.") and any(
+        if variant1.hgvs_desc.startswith('g.') and any(
             self._fuzzy_compare(variant2, v, disregard_refseq)
             or (
                 v.protein_consequence

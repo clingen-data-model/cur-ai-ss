@@ -4,7 +4,7 @@ from typing import Any, List
 
 class Paper:
     def __init__(self, **kwargs: Any) -> None:
-        self.id = kwargs["id"]  # id is required
+        self.id = kwargs['id']  # id is required
         self.props = kwargs
 
     def __hash__(self) -> int:
@@ -17,10 +17,10 @@ class Paper:
 
     def __repr__(self) -> str:
         text = (
-            self.props.get("title")
-            or self.props.get("citation")
-            or self.props.get("abstract")
-            or "unknown"
+            self.props.get('title')
+            or self.props.get('citation')
+            or self.props.get('abstract')
+            or 'unknown'
         )
         return f'id: {self.id} - "{text[:15]}{"..." if len(text) > 15 else ""}"'
 
@@ -36,12 +36,12 @@ class HGVSVariant:
     valid: bool
     validation_error: str | None
     # TODO, consider subclasses for different variant types.
-    protein_consequence: "HGVSVariant | None"
-    coding_equivalents: "List[HGVSVariant]"
+    protein_consequence: 'HGVSVariant | None'
+    coding_equivalents: 'List[HGVSVariant]'
 
     def __str__(self) -> str:
         """Obtain a string representation of the variant."""
-        return f"{self.refseq}:{self.hgvs_desc}"
+        return f'{self.refseq}:{self.hgvs_desc}'
 
     def __repr__(self) -> str:
         return self.__str__()
@@ -68,9 +68,9 @@ class HGVSVariant:
         For example: p.(Arg123Ter) -> p.Arg123*
         """
         # TODO, consider normalization via mutalyzer
-        return self.hgvs_desc.replace("(", "").replace(")", "").replace("Ter", "*")
+        return self.hgvs_desc.replace('(', '').replace(')', '').replace('Ter', '*')
 
     def get_unique_id(self, prefix: str, suffix: str) -> str:
         # Build a unique id and make it URL-safe.
-        id = f"{prefix}_{self.hgvs_desc}_{suffix}".replace(" ", "")
-        return id.replace(":", "-").replace("/", "-").replace(">", "-")
+        id = f'{prefix}_{self.hgvs_desc}_{suffix}'.replace(' ', '')
+        return id.replace(':', '-').replace('/', '-').replace('>', '-')

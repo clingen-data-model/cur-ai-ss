@@ -20,12 +20,12 @@ logger = logging.getLogger(__name__)
 
 def _get_observation_prompt_file_path(name: str) -> str:
     return os.path.join(
-        os.path.dirname(__file__), "prompts", "observation", f"{name}.txt"
+        os.path.dirname(__file__), 'prompts', 'observation', f'{name}.txt'
     )
 
 
 def _get_content_prompt_file_path(name: str) -> str:
-    return os.path.join(os.path.dirname(__file__), "prompts", f"{name}.txt")
+    return os.path.join(os.path.dirname(__file__), 'prompts', f'{name}.txt')
 
 
 @dataclass(frozen=True)
@@ -57,11 +57,11 @@ class ObservationFinder:
         async def check_patient(patient: str) -> None:
             for text in texts_to_check:
                 validation_response = await self._llm_client.prompt_json(
-                    prompt_filepath=_get_observation_prompt_file_path("check_patients"),
-                    params={"text": text, "patient": patient},
+                    prompt_filepath=_get_observation_prompt_file_path('check_patients'),
+                    params={'text': text, 'patient': patient},
                     prompt_tag=PromptTag.OBSERVATION_CHECK_PATIENTS,
                 )
-                if validation_response.get("is_patient", False) is True:
+                if validation_response.get('is_patient', False) is True:
                     checked_patients.append(patient)
                     break
             if patient not in checked_patients:
@@ -81,22 +81,22 @@ class ObservationFinder:
     ) -> Sequence[str]:
         """Identify the individuals (human subjects) described in the full text of the paper."""
         full_text_response = await self._llm_client.prompt_json(
-            prompt_filepath=_get_observation_prompt_file_path("find_patients"),
-            params={"text": paper_text},
+            prompt_filepath=_get_observation_prompt_file_path('find_patients'),
+            params={'text': paper_text},
             prompt_tag=PromptTag.OBSERVATION_FIND_PATIENTS,
         )
-        unique_patients = set(full_text_response.get("patients", []))
+        unique_patients = set(full_text_response.get('patients', []))
 
         # TODO, logically deduplicate patients here, e.g., if a patient is referred to as both "proband" and "IV-1",
         # we should ask the LLM to determine if these are the same individual.
 
         async def check_focus_text(focus_text: str) -> None:
             focus_response = await self._llm_client.prompt_json(
-                prompt_filepath=_get_observation_prompt_file_path("find_patients"),
-                params={"text": focus_text},
+                prompt_filepath=_get_observation_prompt_file_path('find_patients'),
+                params={'text': focus_text},
                 prompt_tag=PromptTag.OBSERVATION_FIND_PATIENTS,
             )
-            unique_patients.update(focus_response.get("patients", []))
+            unique_patients.update(focus_response.get('patients', []))
 
         if focus_texts:
             await asyncio.gather(
@@ -104,22 +104,22 @@ class ObservationFinder:
             )
 
         patient_candidates = list(unique_patients)
-        if "unknown" in patient_candidates:
-            patient_candidates.remove("unknown")
+        if 'unknown' in patient_candidates:
+            patient_candidates.remove('unknown')
 
         # Occassionally, multiple patients are referred to in a single string, e.g. "patients 9 and 10" split these out.
         patients_after_splitting: List[str] = []
 
         async def split_patient(patient: str) -> None:
-            if any(term in patient for term in [" and ", " or "]):
+            if any(term in patient for term in [' and ', ' or ']):
                 split_response = await self._llm_client.prompt_json(
-                    prompt_filepath=_get_observation_prompt_file_path("split_patients"),
+                    prompt_filepath=_get_observation_prompt_file_path('split_patients'),
                     params={
-                        "patient_list": f'"{patient}"'
+                        'patient_list': f'"{patient}"'
                     },  # Encase in double-quotes in prep for bulk calling.
                     prompt_tag=PromptTag.OBSERVATION_SPLIT_PATIENTS,
                 )
-                patients_after_splitting.extend(split_response.get("patients", []))
+                patients_after_splitting.extend(split_response.get('patients', []))
             else:
                 patients_after_splitting.append(patient)
 
@@ -139,7 +139,7 @@ class ObservationFinder:
                 for non_numeric_patient in non_numeric_patients
             ):
                 logger.info(
-                    f"Removing {numeric_patient} from list of patients as it is a substring of another."
+                    f'Removing {numeric_patient} from list of patients as it is a substring of another.'
                 )
                 patients_after_splitting.remove(numeric_patient)
 
@@ -181,8 +181,8 @@ class ObservationFinder:
         # Create prompts to find all the unique variants mentioned in the full text and focus texts.
         prompt_runs = [
             self._llm_client.prompt_json(
-                prompt_filepath=_get_observation_prompt_file_path("find_variants"),
-                params={"text": text, "gene_symbol": gene_symbol},
+                prompt_filepath=_get_observation_prompt_file_path('find_variants'),
+                params={'text': text, 'gene_symbol': gene_symbol},
                 prompt_tag=PromptTag.OBSERVATION_FIND_VARIANTS,
             )
             for text in ([paper_text] if paper_text else []) + list(focus_texts or [])
@@ -196,32 +196,32 @@ class ObservationFinder:
         def _strip_gene_symbol(x: str) -> str:
             # If x starts with gene_symbol, remove that and any subsequent colon.
             if x.startswith(gene_symbol):
-                return x[len(gene_symbol) :].lstrip(":")
+                return x[len(gene_symbol) :].lstrip(':')
             return x
 
         candidates = list(
             {
                 _strip_gene_symbol(v)
                 for r in responses
-                for v in r.get("variants", [])
-                if v != "unknown"
+                for v in r.get('variants', [])
+                if v != 'unknown'
             }
         )
 
         # Seems like this should be unnecessary, but remove the example variants from the list of candidates.
         example_variant_subs = [
-            "1234A>T",
-            "2345del",
-            "K34T",
-            "rs123456789",
-            "A55T",
-            "Ala55Lys",
-            "K412T",
-            "Ser195Gly",
-            "T65I",
-            "1234G>T",
-            "4321A>G",
-            "1234567A>T",
+            '1234A>T',
+            '2345del',
+            'K34T',
+            'rs123456789',
+            'A55T',
+            'Ala55Lys',
+            'K412T',
+            'Ser195Gly',
+            'T65I',
+            '1234G>T',
+            '4321A>G',
+            '1234567A>T',
         ]
 
         if any(ex in ca for ex in example_variant_subs for ca in candidates):
@@ -229,7 +229,7 @@ class ObservationFinder:
                 ca for ca in candidates if any(ex in ca for ex in example_variant_subs)
             ]
             logger.warning(
-                f"Removing example variants found in candidates for {gene_symbol}: {candidates_from_examples}"
+                f'Removing example variants found in candidates for {gene_symbol}: {candidates_from_examples}'
             )
             candidates = [ca for ca in candidates if ca not in candidates_from_examples]
 
@@ -237,14 +237,14 @@ class ObservationFinder:
         # descriptions, split these into two with another prompt.
         split_prompt_runs = []
         for i in reversed(range(len(candidates))):
-            if "p." in candidates[i] and "c." in candidates[i]:
+            if 'p.' in candidates[i] and 'c.' in candidates[i]:
                 split_prompt_runs.append(
                     self._llm_client.prompt_json(
                         prompt_filepath=_get_observation_prompt_file_path(
-                            "split_variants"
+                            'split_variants'
                         ),
                         params={
-                            "variant_list": f'"{candidates[i]}"'
+                            'variant_list': f'"{candidates[i]}"'
                         },  # Encase in double-quotes for bulk calling.
                         prompt_tag=PromptTag.OBSERVATION_SPLIT_VARIANTS,
                     )
@@ -253,7 +253,7 @@ class ObservationFinder:
         # Run split prompts in parallel.
         split_responses = await asyncio.gather(*split_prompt_runs)
         # Add the split variants back in to the candidates list.
-        candidates.extend(v for r in split_responses for v in r.get("variants", []))
+        candidates.extend(v for r in split_responses for v in r.get('variants', []))
 
         return candidates
 
@@ -263,12 +263,12 @@ class ObservationFinder:
     ) -> str | None:
         """Identify the genome build used in the paper."""
         response = await self._llm_client.prompt_json(
-            prompt_filepath=_get_observation_prompt_file_path("find_genome_build"),
-            params={"text": paper_text},
+            prompt_filepath=_get_observation_prompt_file_path('find_genome_build'),
+            params={'text': paper_text},
             prompt_tag=PromptTag.OBSERVATION_FIND_GENOME_BUILD,
         )
 
-        return response.get("genome_build", "unknown")
+        return response.get('genome_build', 'unknown')
 
     async def _link_entities(
         self,
@@ -278,13 +278,13 @@ class ObservationFinder:
         variants: Sequence[str],
     ) -> Dict[str, List[str]]:
         params = {
-            "text": paper_text,
-            "patients": ", ".join(patients),
-            "variants": ", ".join(variants),
-            "gene_symbol": gene_symbol,
+            'text': paper_text,
+            'patients': ', '.join(patients),
+            'variants': ', '.join(variants),
+            'gene_symbol': gene_symbol,
         }
         response = await self._llm_client.prompt_json(
-            prompt_filepath=_get_observation_prompt_file_path("link_entities"),
+            prompt_filepath=_get_observation_prompt_file_path('link_entities'),
             params=params,
             prompt_tag=PromptTag.OBSERVATION_LINK_ENTITIES,
         )
@@ -293,23 +293,23 @@ class ObservationFinder:
 
     def _get_text_sections(self, paper: Paper) -> Tuple[str, List[str]]:
         # Get paper texts.
-        fulltext_xml = paper.props.get("fulltext_xml")
+        fulltext_xml = paper.props.get('fulltext_xml')
         if not fulltext_xml:
             logger.info(
-                f"Unable to retrieve fulltext for {paper.id}, falling back to abstract only."
+                f'Unable to retrieve fulltext for {paper.id}, falling back to abstract only.'
             )
-            return paper.props["abstract"], []
+            return paper.props['abstract'], []
 
         paper_text = get_fulltext(
-            fulltext_xml, exclude=["AUTH_CONT", "ACK_FUND", "COMP_INT", "REF"]
+            fulltext_xml, exclude=['AUTH_CONT', 'ACK_FUND', 'COMP_INT', 'REF']
         )
-        table_sections = list(get_sections(fulltext_xml, include=["TABLE"]))
+        table_sections = list(get_sections(fulltext_xml, include=['TABLE']))
 
         table_ids = {t.id for t in table_sections}
         table_texts = []
         for table_id in table_ids:
             table_texts.append(
-                "\n\n".join([sec.text for sec in table_sections if sec.id == table_id])
+                '\n\n'.join([sec.text for sec in table_sections if sec.id == table_id])
             )
 
         return paper_text, table_texts
@@ -317,14 +317,14 @@ class ObservationFinder:
     def _get_text_mentioning_variant(
         self, paper: Paper, variant_descriptions: Sequence[str], allow_empty: bool
     ) -> str:
-        fulltext_xml = paper.props.get("fulltext_xml")  # Can be None
+        fulltext_xml = paper.props.get('fulltext_xml')  # Can be None
         abstract_fallback_section_list = [
             TextSection(
-                section_type="abstract",
-                text_type="unknown",
+                section_type='abstract',
+                text_type='unknown',
                 offset=-1,
-                text=paper.props["abstract"],
-                id="unknown",
+                text=paper.props['abstract'],
+                id='unknown',
             )
         ]
         sections = (
@@ -332,7 +332,7 @@ class ObservationFinder:
             if fulltext_xml
             else abstract_fallback_section_list
         )
-        filtered_text = "\n\n".join(
+        filtered_text = '\n\n'.join(
             [
                 section.text
                 for section in sections
@@ -345,7 +345,7 @@ class ObservationFinder:
                 if fulltext_xml
                 else abstract_fallback_section_list
             )  # Reset the exhausted generator.
-            return "\n\n".join([section.text for section in sections])
+            return '\n\n'.join([section.text for section in sections])
         return filtered_text
 
     def _create_variant_from_text(
@@ -358,38 +358,38 @@ class ObservationFinder:
         standardized representations to `self._variant_factory` for parsing.
         """
         # If the variant_str contains a dbsnp rsid, parse it and return the variant.
-        if matched := re.match(r".*?:?(rs\d+).*?", variant_str):
+        if matched := re.match(r'.*?:?(rs\d+).*?', variant_str):
             try:
                 variant = self._variant_factory.parse_rsid(matched.group(1))
                 if variant and variant.gene_symbol == gene_symbol:
                     return variant
                 else:
                     logger.info(
-                        f"dbSNP variant {matched.group(1)} is associated with {variant.gene_symbol}, not {gene_symbol}."
+                        f'dbSNP variant {matched.group(1)} is associated with {variant.gene_symbol}, not {gene_symbol}.'
                     )
                     return None
             except ValueError as e:
                 logger.warning(
-                    f"Unable to create variant from {variant_str} and {gene_symbol}: {e}"
+                    f'Unable to create variant from {variant_str} and {gene_symbol}: {e}'
                 )
                 return None
 
         # Otherwise, assume we're working with an hgvs-like variant.
 
         # Remove all the spaces from the variant string.
-        variant_str = variant_str.replace(" ", "")
+        variant_str = variant_str.replace(' ', '')
 
         # Occassionally gene_symbol is embedded in variant_str, if it is, we'll have to extract it.
         # This is generally either of the form gene_symbol:variant or gene_symbol(variant). Sometimes,
         # gene_symbol is prefixed with a 'g' (e.g., pmid:33117677).
-        variant_str = re.sub(f"g?{gene_symbol}:", "", variant_str)
-        search_result = re.search(r"g?" + gene_symbol + r"\((.*?)\)", variant_str)
+        variant_str = re.sub(f'g?{gene_symbol}:', '', variant_str)
+        search_result = re.search(r'g?' + gene_symbol + r'\((.*?)\)', variant_str)
         if search_result:
             variant_str = search_result.group(1)
 
         # Split out the refseq if it's present.
-        if variant_str.find(":") >= 0:
-            refseq, variant_str = variant_str.split(":", 1)
+        if variant_str.find(':') >= 0:
+            refseq, variant_str = variant_str.split(':', 1)
             refseq = refseq.strip()
             variant_str = variant_str.strip()
         else:
@@ -397,76 +397,76 @@ class ObservationFinder:
             variant_str = variant_str.strip()
 
         # If the variant string looks nothing like a variant description, give up.
-        if not re.search(r"[A-Za-z]", variant_str):
+        if not re.search(r'[A-Za-z]', variant_str):
             logger.warning(f"Variant string '{variant_str}' appears unparsable.")
             return None
 
         # If the refseq looks like a chromosome designation, we've got to figure out the corresponding refseq, which
         # will depend on the genome build.
-        if refseq and refseq.find("chr") >= 0:
-            refseq = f"{genome_build}({refseq})"
+        if refseq and refseq.find('chr') >= 0:
+            refseq = f'{genome_build}({refseq})'
         # Otherwise, it should begin with NM_, NP_, or NC_, otherwise we'll ignore it.
-        elif refseq and not re.match(r"(NM_|NP_|NC_)", refseq):
-            logger.info(f"Ignoring potentially invalid refseq: {refseq}")
+        elif refseq and not re.match(r'(NM_|NP_|NC_)', refseq):
+            logger.info(f'Ignoring potentially invalid refseq: {refseq}')
             refseq = None
 
         # Remove any parentheses and brackets.
-        variant_str = variant_str.replace("(", "").replace(")", "")
-        variant_str = variant_str.replace("[", "").replace("]", "")
+        variant_str = variant_str.replace('(', '').replace(')', '')
+        variant_str = variant_str.replace('[', '').replace(']', '')
 
         # To handle variants where splitting failed, remove everything before the first semicolon.
-        variant_str = variant_str.split(";")[0]
+        variant_str = variant_str.split(';')[0]
 
         # To handle previxes that weren't removed, remove everything up through the last colon.
-        variant_str = variant_str.split(":")[-1]
+        variant_str = variant_str.split(':')[-1]
 
         # Occassionally, protein level descriptions do not include the p. prefix, add it if it's missing.
         # This will only currently handle fairly simple protein level descriptions.
-        if re.search(r"^[A-Za-z]+\d+[A-Za-z]+$", variant_str):
-            variant_str = "p." + variant_str
+        if re.search(r'^[A-Za-z]+\d+[A-Za-z]+$', variant_str):
+            variant_str = 'p.' + variant_str
 
         # Occassionally, coding level descriptions do not include the c. prefix, add it if it's missing.
         # This will only currently handle fairly simple coding level descriptions.
-        if re.search(r"^\d+[ACGT]>[ACGT]$", variant_str):
-            variant_str = "c." + variant_str
-        if re.search(r"^\d+(_\d+)?del[ACGT]*$", variant_str):
-            variant_str = "c." + variant_str
-        if re.search(r"^\d+ins[ACGT]*$", variant_str):
-            variant_str = "c." + variant_str
+        if re.search(r'^\d+[ACGT]>[ACGT]$', variant_str):
+            variant_str = 'c.' + variant_str
+        if re.search(r'^\d+(_\d+)?del[ACGT]*$', variant_str):
+            variant_str = 'c.' + variant_str
+        if re.search(r'^\d+ins[ACGT]*$', variant_str):
+            variant_str = 'c.' + variant_str
 
         # Single-letter protein level descriptions should use * for a stop codon, not X or stop.
-        variant_str = re.sub(r"(p\.[A-Z]\d+)X", r"\1*", variant_str)
-        variant_str = re.sub(r"(p\.[A-Z]\d+)stop", r"\1*", variant_str)
+        variant_str = re.sub(r'(p\.[A-Z]\d+)X', r'\1*', variant_str)
+        variant_str = re.sub(r'(p\.[A-Z]\d+)stop', r'\1*', variant_str)
 
         # Fix c. descriptions that are erroneously written as c.{ref}{pos}{alt} instead of c.{pos}{ref}>{alt}.
-        variant_str = re.sub(r"c\.([ACTG])(\d+)([A-Z]+)", r"c.\2\1>\3", variant_str)
+        variant_str = re.sub(r'c\.([ACTG])(\d+)([A-Z]+)', r'c.\2\1>\3', variant_str)
 
         # Fix three-letter p. descriptions that don't follow the capitalization convention.
         # For now, only handle reference AAs and single missense alternate AAs.
-        if "del" not in variant_str:
+        if 'del' not in variant_str:
             if match := re.match(
-                r"p\.([A-Za-z][a-z]{2})(\d+)([A-Za-z][a-z]{2})*(.*?)$", variant_str
+                r'p\.([A-Za-z][a-z]{2})(\d+)([A-Za-z][a-z]{2})*(.*?)$', variant_str
             ):
                 ref_aa, pos, alt_aa, extra = match.groups()
-                variant_str = f"p.{ref_aa.capitalize()}{pos}{alt_aa.capitalize() if alt_aa else ''}{extra}"
+                variant_str = f'p.{ref_aa.capitalize()}{pos}{alt_aa.capitalize() if alt_aa else ""}{extra}'
 
         # Frameshift should be designated with fs, not frameshift
-        variant_str = variant_str.replace("frameshift", "fs")
+        variant_str = variant_str.replace('frameshift', 'fs')
 
         # If there's a hypen that's not surrounded by numbers, remove it.
-        variant_str = re.sub(r"(?<!\d)-(?!\d)", "", variant_str)
+        variant_str = re.sub(r'(?<!\d)-(?!\d)', '', variant_str)
 
         # Remove everything after the first occurrence of "fs" if it occurs,
         # HGVS nomenclature gets variable in these cases in practice.
-        if "fs" in variant_str:
-            variant_str = variant_str.split("fs")[0] + "fs"
+        if 'fs' in variant_str:
+            variant_str = variant_str.split('fs')[0] + 'fs'
 
         try:
             return self._variant_factory.parse(variant_str, gene_symbol, refseq)
         except ValueError as e:
             # Exception is too broad, determine appropriate exceptions to catch and raise otherwise.
             logger.warning(
-                f"Unable to create variant from {variant_str} and {gene_symbol}: {e}"
+                f'Unable to create variant from {variant_str} and {gene_symbol}: {e}'
             )
             return None
 
@@ -478,8 +478,8 @@ class ObservationFinder:
     ) -> bool:
         try:
             result = await self._llm_client.prompt_json(
-                prompt_filepath=_get_observation_prompt_file_path("sanity_check"),
-                params={"text": paper_text, "gene": gene_symbol},
+                prompt_filepath=_get_observation_prompt_file_path('sanity_check'),
+                params={'text': paper_text, 'gene': gene_symbol},
                 prompt_tag=PromptTag.OBSERVATION_SANITY_CHECK,
             )
         except Exception as e:  # pragma: no cover
@@ -490,12 +490,12 @@ class ObservationFinder:
             if (
                 isinstance(e, openai.BadRequestError)
                 and isinstance(e.body, dict)
-                and e.body.get("code", "") == "context_length_exceeded"
+                and e.body.get('code', '') == 'context_length_exceeded'
             ):
-                logger.warning(f"Context length exceeded for {paper.id}. Skipping.")
+                logger.warning(f'Context length exceeded for {paper.id}. Skipping.')
                 return False
             raise e
-        return result.get("relevant", True)  # Default to including the paper.
+        return result.get('relevant', True)  # Default to including the paper.
 
     async def find_observations(
         self, gene_symbol: str, paper: Paper
@@ -526,14 +526,14 @@ class ObservationFinder:
             gene_symbol=gene_symbol,
         )
         logger.debug(
-            f"Found the following variants described for {gene_symbol} in {paper}: {variant_descriptions}"
+            f'Found the following variants described for {gene_symbol} in {paper}: {variant_descriptions}'
         )
 
-        if any("chr" in v or "g." in v for v in variant_descriptions):
+        if any('chr' in v or 'g.' in v for v in variant_descriptions):
             genome_build = await self._find_genome_build(
                 paper_text=paper_text,
             )
-            logger.info(f"Found the following genome build in {paper}: {genome_build}")
+            logger.info(f'Found the following genome build in {paper}: {genome_build}')
         else:
             genome_build = None
 
@@ -573,25 +573,25 @@ variant isn't actually associated with the gene. But the possibility of previous
 """
             if mentioning_text:
                 response = await self._llm_client.prompt_json(
-                    prompt_filepath=_get_observation_prompt_file_path("check_variant"),
+                    prompt_filepath=_get_observation_prompt_file_path('check_variant'),
                     params={
-                        "variant_descriptions": ", ".join(descriptions),
-                        "gene_symbol": gene_symbol,
-                        "text": mentioning_text,
-                        "warning": "" if consolidated_variant.valid else warning_text,
+                        'variant_descriptions': ', '.join(descriptions),
+                        'gene_symbol': gene_symbol,
+                        'text': mentioning_text,
+                        'warning': '' if consolidated_variant.valid else warning_text,
                     },
                     prompt_tag=PromptTag.OBSERVATION_CHECK_VARIANT_GENE_RELATIONSHIP,
                 )
-                if response.get("related", False) is False:
+                if response.get('related', False) is False:
                     for description in descriptions:
                         logger.info(
-                            f"Removing {description} from the list of variants."
+                            f'Removing {description} from the list of variants.'
                         )
                         variants_by_description.pop(description)
             else:
                 logger.info(
-                    f"No text found mentioning {consolidated_variant} in {paper.id} (checked {descriptions}), "
-                    "not removing during variant check."
+                    f'No text found mentioning {consolidated_variant} in {paper.id} (checked {descriptions}), '
+                    'not removing during variant check.'
                 )
 
         await asyncio.gather(*[_check_variant_gene_relationship(v) for v in cons_map])
@@ -614,7 +614,7 @@ variant isn't actually associated with the gene. But the possibility of previous
                 paper_text=paper_text,
                 focus_texts=table_texts,
             )
-            logger.debug(f"Found the following patients in {paper}: {patients}")
+            logger.debug(f'Found the following patients in {paper}: {patients}')
             variant_descriptions = list(variants_by_description.keys())
 
             if patients:
@@ -626,14 +626,14 @@ variant isn't actually associated with the gene. But the possibility of previous
                 )
                 # TODO, consider validating returned patients.
             else:
-                descriptions_by_patient = {"unknown": variant_descriptions}
+                descriptions_by_patient = {'unknown': variant_descriptions}
 
         # Assemble the observations.
         observations: List[Observation] = []
 
         individuals = list(descriptions_by_patient.keys())
         # Ensure "unmatched_variants" is always last in the list.
-        individuals.sort(key=lambda x: x == "unmatched_variants")
+        individuals.sort(key=lambda x: x == 'unmatched_variants')
 
         for individual in individuals:
             variant_descriptions = descriptions_by_patient[individual]
@@ -658,11 +658,11 @@ variant isn't actually associated with the gene. But the possibility of previous
                     for o in observations
                 ):
                     logger.warning(
-                        f"Duplicate observation for {variant} and {individual} in {paper.id}. Skipping."
+                        f'Duplicate observation for {variant} and {individual} in {paper.id}. Skipping.'
                     )
                     continue
-                if individual == "unmatched_variants":
-                    individual = "unknown"
+                if individual == 'unmatched_variants':
+                    individual = 'unknown'
                 observations.append(
                     Observation(
                         variant=variant,
@@ -672,17 +672,17 @@ variant isn't actually associated with the gene. But the possibility of previous
                         # Recreate the generator each time.
                         texts=list(
                             get_sections(
-                                paper.props["fulltext_xml"],
-                                exclude=["AUTH_CONT", "ACK_FUND", "COMP_INT", "REF"],
+                                paper.props['fulltext_xml'],
+                                exclude=['AUTH_CONT', 'ACK_FUND', 'COMP_INT', 'REF'],
                             )
-                            if paper.props["fulltext_xml"]
+                            if paper.props['fulltext_xml']
                             else [
                                 TextSection(
-                                    section_type="abstract",
-                                    text_type="unknown",
+                                    section_type='abstract',
+                                    text_type='unknown',
                                     offset=-1,
-                                    text=paper.props["abstract"],
-                                    id="unknown",
+                                    text=paper.props['abstract'],
+                                    id='unknown',
                                 )
                             ]
                         ),
@@ -693,15 +693,15 @@ variant isn't actually associated with the gene. But the possibility of previous
         # Remove redundant observations.
         observations_to_remove = []
         for observation in observations:
-            if observation.individual != "unknown":
+            if observation.individual != 'unknown':
                 continue
             if any(
                 observation.variant == other_observation.variant
                 for other_observation in observations
-                if other_observation.individual != "unknown"
+                if other_observation.individual != 'unknown'
             ):
                 logger.info(
-                    f"Removing redundant observation {observation.individual}, {observation.variant}."
+                    f'Removing redundant observation {observation.individual}, {observation.variant}.'
                 )
                 observations_to_remove.append(observation)
         for observation in observations_to_remove:
