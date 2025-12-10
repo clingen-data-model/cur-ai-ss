@@ -11,7 +11,9 @@ def run_app(pmid: str, gene_symbol: str, cache_bust: int):
         pmid,
         gene_symbol,
     )
-    return app.execute()
+    res = app.execute()
+    st.success('Ran EvAGG from scratch.')
+    return res
 
 
 st.set_page_config(page_title='cur-ai-ious', layout='wide')
@@ -35,7 +37,6 @@ if submitted:
         st.session_state.curation_data = run_app(
             pmid, gene_symbol, random.randint(0, int(1e9)) if override_cache else 0
         )
-        st.success('Fetched data from API!')
 
 # Display JSON in an expander with a spinner
 if st.session_state.curation_data:
