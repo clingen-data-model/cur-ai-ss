@@ -236,26 +236,26 @@ class ObservationFinder:
         # If the variant is reported with both coding and protein-level
         # descriptions, split these into two with another prompt.
         split_prompt_runs = []
-        for i in reversed(range(len(candidates))):
-            if "p." in candidates[i] and "c." in candidates[i]:
+        for candidate in candidates:
+            if "p." in candidate and "c." in candidate:
                 split_prompt_runs.append(
                     self._llm_client.prompt_json(
                         prompt_filepath=_get_observation_prompt_file_path(
                             "split_variants"
                         ),
-                        params={
-                            "variant_list": f'"{candidates[i]}"'
-                        },  # Encase in double-quotes for bulk calling.
+                        params={"variant_list": f'"{candidate}"'},
                         prompt_tag=PromptTag.OBSERVATION_SPLIT_VARIANTS,
                     )
                 )
-                del candidates[i]
+
+        candidates = [c for c in candidates if not ("p." in c and "c." in c)]
         # Run split prompts in parallel.
         split_responses = await asyncio.gather(*split_prompt_runs)
-        # Add the split variants back in to the candidates list.
-        candidates.extend(v for r in split_responses for v in r.get("variants", []))
-
-        return candidates
+        return [
+            *candidates,
+            # Add the split variants back in to the candidates list.
+            *[v for r in split_responses for v in r.get("variants", [])],
+        ]
 
     async def _find_genome_build(
         self,

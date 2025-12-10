@@ -1,0 +1,37 @@
+{{$text}}
+
+-- End paper text --
+
+Extract all genetic variants associated with the gene {{$gene_symbol}} from the text above. 
+Return them in a JSON object. Output no text other than the JSON.
+
+Rules:
+1. Accept any valid variant format, including but not limited to:
+   - c. (coding DNA), n. (noncoding), g. (genomic), m. (mitochondrial), p. (protein)
+   - rsIDs
+   - amino acid changes (e.g., K34T, Ser195Gly)
+   - chromosome-level variants (e.g., chr1:1234567A>T)
+   - HGVS with reference sequences (e.g., NM_, NP_, NG_, NC_, ENST_, ENSP_)
+   - natural-language descriptions of substitutions or amino-acid changes
+
+2. If a variant contains both c. and p. notation together, split them into separate elements:
+  - Attach any DNA-level reference (NM_, NG_, NC_, ENST_) to the c. variant.
+  - Attach any protein-level reference (NP_, XP_, ENSP_) to the p. variant.
+  - If only a single reference is provided and it is ambiguous, you may apply it to both the c. and p. variants.
+
+3. Variants may appear separated by punctuation or whitespace. Normalize and split them.
+
+4. A gene symbol may appear before the variant (e.g., "BRCA1 (c.123A>T)"). 
+   In such cases, return only the variant, not the gene symbol.
+
+5. Avoid returning the same logical variant twice unless it is unclear they refer to the same event.
+
+6. Consider that capitalization of {{$gene_symbol}} may vary.
+
+7. If no variants for {{$gene_symbol}} are found, return:
+   {"variants": ["unknown"]}
+
+Output format:
+{
+  "variants": ["..."]
+}
