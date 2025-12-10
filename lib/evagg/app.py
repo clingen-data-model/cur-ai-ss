@@ -35,11 +35,7 @@ class SinglePMIDApp:
                 WebClientSettings(status_code_translator=get_ncbi_response_translator())
             )
         )
-        self._vep_client = VepClient(
-            web_client=RequestsWebContentClient(
-                WebClientSettings(status_code_translator=get_ncbi_response_translator())
-            )
-        )
+        self._vep_client = VepClient(web_client=RequestsWebContentClient())
         self._extractor = PromptBasedContentExtractor(
             fields=[
                 "evidence_id",

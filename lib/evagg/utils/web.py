@@ -86,6 +86,7 @@ class RequestsWebContentClient:
         url: str,
         params: Optional[Dict[str, Any]] = None,
         data: Optional[Dict[str, Any]] = None,
+        headers: Optional[Dict[str, Any]] = None,
     ) -> Tuple[int, str]:
         """GET (or POST) the text content at the provided URL."""
         if data is not None:
@@ -94,11 +95,18 @@ class RequestsWebContentClient:
                     "POST requests must not include query parameters. Pass all data in the body."
                 )
             response = self._get_session().post(
-                url, params=params, json=data, timeout=self._settings.timeout
+                url,
+                params=params,
+                json=data,
+                timeout=self._settings.timeout,
+                headers=headers,
             )
         else:
             response = self._get_session().get(
-                url, params=params, timeout=self._settings.timeout
+                url,
+                params=params,
+                timeout=self._settings.timeout,
+                headers=headers,
             )
         return self._get_status_code(url, response.status_code, response.text)
 
@@ -114,8 +122,9 @@ class RequestsWebContentClient:
         params: Optional[Dict[str, Any]] = None,
         data: Optional[Dict[str, Any]] = None,
         content_type: Optional[str] = None,
+        headers: Optional[Dict[str, Any]] = None,
     ) -> Any:
         """GET (or POST) the content at the provided URL."""
-        code, content = self._get_content(url, params, data)
+        code, content = self._get_content(url, params, data, headers)
         self._raise_for_status(code)
         return self._transform_content(content, content_type)
