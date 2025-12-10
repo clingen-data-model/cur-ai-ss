@@ -6,6 +6,8 @@ from typing import Callable, Dict, List, Optional, Set
 
 from lib.evagg.utils.environment import env
 
+from lib.evagg.utils.environment import env
+
 LogFilter = Callable[[logging.LogRecord], bool]
 PROMPT = logging.CRITICAL + 5
 _current_run: str = ""

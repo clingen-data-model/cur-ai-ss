@@ -7,7 +7,7 @@ st.set_page_config(page_title="cur-ai-ious", layout="wide")
 st.title("cur-ai-ious")
 
 # Initialize session state
-if "curation_data" not in st.session_state:
+if 'curation_data' not in st.session_state:
     st.session_state.curation_data = []
 
 # Input fields
@@ -40,4 +40,3 @@ if st.session_state.curation_data:
             data=json.dumps(st.session_state.curation_data, indent=2),
             file_name="curation_data.json",
             mime="application/json",
-        )
