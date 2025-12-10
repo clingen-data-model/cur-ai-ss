@@ -13,6 +13,7 @@ from lib.evagg.ref import (
     WebHPOClient,
     PyHPOClient,
     RefSeqLookupClient,
+    VepClient,
 )
 from lib.evagg.utils.web import RequestsWebContentClient, WebClientSettings
 from lib.evagg.ref.ncbi import get_ncbi_response_translator
@@ -30,6 +31,11 @@ class SinglePMIDApp:
         self._pmid = pmid
         self._gene_symbol = gene_symbol
         self._ncbi_lookup_client = NcbiLookupClient(
+            web_client=RequestsWebContentClient(
+                WebClientSettings(status_code_translator=get_ncbi_response_translator())
+            )
+        )
+        self._vep_client = VepClient(
             web_client=RequestsWebContentClient(
                 WebClientSettings(status_code_translator=get_ncbi_response_translator())
             )
@@ -87,8 +93,9 @@ class SinglePMIDApp:
             ),
         )
 
-    def execute(self) -> Sequence[Dict[str, str]]:
+    def execute(self, override_cache: False) -> Sequence[Dict[str, str]]:
         paper = self._ncbi_lookup_client.fetch(self._pmid, include_fulltext=True)
         if not paper:
             raise RuntimeError(f"pmid {self._pmid} not found")
-        return self._extractor.extract(paper, self._gene_symbol)
+        extracted_fields = self._extractor.extract(paper, self._gene_symbol)
+        return self._vep_client.enrich(extracted_fields)

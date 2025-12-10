@@ -7,6 +7,7 @@ from .interfaces import (
 from .mutalyzer import MutalyzerClient
 from .ncbi import NcbiLookupClient
 from .refseq import RefSeqGeneLookupClient, RefSeqLookupClient
+from .vep import VepClient
 
 __all__ = [
     # Interfaces.
@@ -20,4 +21,6 @@ __all__ = [
     # HPO.
     "PyHPOClient",
     "WebHPOClient",
+    # VEP
+    "VepClient",
 ]
