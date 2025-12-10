@@ -14,9 +14,7 @@ def run_app(pmid: str, gene_symbol: str, cache_bust: int):
     max_attempts = 3
     for attempt in range(1, max_attempts + 1):
         try:
-            res = app.execute()
-            st.success('Ran EvAGG from scratch.')
-            return res
+            return app.execute()
         except Exception as e:
             if attempt == max_attempts:
                 st.exception(e)
@@ -39,9 +37,10 @@ if submitted:
     if not pmid or not gene_symbol:
         st.error('Please enter both a PMID and a gene symbol.')
     else:
-        st.session_state.curation_data = run_app(
+        if st.session_state.curation_data := run_app(
             pmid, gene_symbol, random.randint(0, int(1e9)) if override_cache else 0
-        )
+        ):
+            st.success("Successfully executed EvAGG")
 
 # Display JSON in an expander with a spinner
 if st.session_state.curation_data:
