@@ -8,6 +8,8 @@ from lib.evagg.content import (
     ObservationFinder,
 )
 from lib.evagg.ref import (
+    ClinvarClient,
+    GnomadClient,
     MutalyzerClient,
     NcbiLookupClient,
     WebHPOClient,
@@ -36,6 +38,8 @@ class SinglePMIDApp:
             )
         )
         self._vep_client = VepClient(web_client=RequestsWebContentClient())
+        self._clinvar_client = ClinvarClient(web_client=RequestsWebContentClient())
+        self._gnomad_client = GnomadClient(web_client=RequestsWebContentClient())
         self._extractor = PromptBasedContentExtractor(
             fields=[
                 'evidence_id',

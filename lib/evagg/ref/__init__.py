@@ -8,6 +8,8 @@ from .mutalyzer import MutalyzerClient
 from .ncbi import NcbiLookupClient
 from .refseq import RefSeqGeneLookupClient, RefSeqLookupClient
 from .vep import VepClient
+from .clinvar import ClinvarClient
+from .gnomad import GnomadClient
 
 __all__ = [
     # Interfaces.
@@ -21,6 +23,8 @@ __all__ = [
     # HPO.
     'PyHPOClient',
     'WebHPOClient',
-    # VEP
+    # Enrichers
+    'ClinvarClient',
+    'GnomadClient',
     'VepClient',
 ]
