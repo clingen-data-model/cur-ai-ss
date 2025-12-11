@@ -89,7 +89,6 @@ class PromptBasedContentExtractor:
             'valid': lambda: str(ob.variant.valid),
             'validation_error': lambda: ob.variant.validation_error or '',
             'individual_id': lambda: ob.individual,
-            'gnomad_frequency': lambda: 'unknown',
         }
 
         if field not in field_map:

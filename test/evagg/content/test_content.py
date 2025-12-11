@@ -68,7 +68,6 @@ def test_prompt_based_content_extractor_valid_fields(
         'valid': 'True',
         'validation_error': 'not an error',
         'individual_id': 'unknown',
-        'gnomad_frequency': 'unknown',
         'phenotype': 'test (HP:0123)',
         'zygosity': 'test',
         'variant_inheritance': 'test',

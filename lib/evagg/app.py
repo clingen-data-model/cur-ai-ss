@@ -46,7 +46,6 @@ class SinglePMIDApp:
                 'paper_variant',
                 'transcript',
                 'validation_error',
-                'gnomad_frequency',
                 'individual_id',
                 'phenotype',
                 'zygosity',
