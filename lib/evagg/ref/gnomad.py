@@ -1,5 +1,6 @@
 import logging
 from typing import Dict
+import typing
 
 from lib.evagg.utils import RequestsWebContentClient
 
@@ -43,6 +44,7 @@ class GnomadClient:
     def __init__(self, web_client: RequestsWebContentClient) -> None:
         self._web_client = web_client
 
+    @typing.no_type_check
     def parse(self, resp: dict[str, str]) -> dict[str, str | float]:
         variant = resp.get('data', {}).get('variant', {})
 
@@ -75,6 +77,8 @@ class GnomadClient:
         extracted_observation: Dict[str, str],
     ) -> None:
         vcf_string = extracted_observation.get('vep.vcf_string', None)
+        if vcf_string is None:
+            return
         response = self._web_client.get(
             self._URL + vcf_string,
             data={

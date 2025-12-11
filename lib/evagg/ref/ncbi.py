@@ -31,16 +31,14 @@ class NcbiClientBase:
             else {}
         )
 
-    def _esearch(
-        self, db: str, term: str, sort: str, **extra_params: Dict[str, Any]
-    ) -> Any:
+    def _esearch(self, db: str, term: str, sort: str, **kwargs: Any) -> Any:
         params = {'db': db, 'term': term, 'sort': sort, 'tool': 'biopython'}
         return self._web_client.get(
             f'{self.EUTILS_HOST}{self.EUTILS_SEARCH_SITE}',
             params={
                 **self.credential_params,
                 **params,
-                **extra_params,
+                **kwargs,
             },
             content_type='xml',
         )
@@ -51,7 +49,7 @@ class NcbiClientBase:
         id: str,
         retmode: str | None = None,
         rettype: str | None = None,
-        **extra_params: Dict[str, Any],
+        **kwargs: Any,
     ) -> Any:
         params = {'db': db, 'id': id, 'tool': 'biopython'}
         if retmode:
@@ -63,7 +61,7 @@ class NcbiClientBase:
             params={
                 **self.credential_params,
                 **params,
-                **extra_params,
+                **kwargs,
             },
             content_type=retmode,
         )
