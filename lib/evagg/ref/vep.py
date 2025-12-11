@@ -17,7 +17,9 @@ class VepClient:
         self._web_client = web_client
 
     @typing.no_type_check
-    def parse_recoder(self, recoder_response: Sequence[Dict[str, str]], hgvs_suffix: str):
+    def parse_recoder(
+        self, recoder_response: Sequence[Dict[str, str]], hgvs_suffix: str
+    ):
         record = recoder_response[0]
         alt = hgvs_suffix.split('>')[-1]
         if alt in record:

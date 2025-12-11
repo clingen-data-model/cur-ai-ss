@@ -46,7 +46,12 @@ class NcbiClientBase:
         )
 
     def _efetch(
-        self, db: str, id: str, retmode: str | None = None, rettype: str | None = None
+        self,
+        db: str,
+        id: str,
+        retmode: str | None = None,
+        rettype: str | None = None,
+        **extra_params: Dict[str, Any],
     ) -> Any:
         params = {'db': db, 'id': id, 'tool': 'biopython'}
         if retmode:
@@ -58,6 +63,7 @@ class NcbiClientBase:
             params={
                 **self.credential_params,
                 **params,
+                **extra_params,
             },
             content_type=retmode,
         )
