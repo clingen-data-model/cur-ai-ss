@@ -17,6 +17,15 @@ class VepClient:
         self._web_client = web_client
 
     @typing.no_type_check
+    def parse_recoder(self, recoder_response: Sequence[Dict[str, str]], hgvs_suffix: str):
+        record = recoder_response[0]
+        alt = hgvs_suffix.split('>')[-1]
+        if alt in record:
+            if 'id' in record[alt]:
+                return {'rsid': record[alt]['id'][0]}
+        return {}
+
+    @typing.no_type_check
     def parse_consequences(
         self,
         consequences_response: Sequence[Dict[str, str]],
@@ -105,7 +114,7 @@ class VepClient:
                         content_type='json',
                         headers={'Content-Type': 'application/json'},
                     )
-                    enriched.update({'rsid': recoder_response[0]['A']['id']})
+                    enriched.update(self.parse_recoder(recoder_response, hgvs_suffix))
                     enriched_observations.append(enriched)
                 except Exception:
                     logger.exception('Error occurred during VEP parsing')
