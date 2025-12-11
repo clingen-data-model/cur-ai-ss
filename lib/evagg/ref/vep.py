@@ -84,8 +84,8 @@ class VepClient:
             if hgvs_suffix:
                 try:
                     consequences_response = self._web_client.get(
-                        self._CONSEQUENCES_URL,
-                        +f'{extracted_observation["transcript"]}:{hgvs_suffix}',
+                        self._CONSEQUENCES_URL
+                        + f'{extracted_observation["transcript"]}:{hgvs_suffix}',
                         params={
                             'AlphaMissense': '1',
                             'CADD': '1',
