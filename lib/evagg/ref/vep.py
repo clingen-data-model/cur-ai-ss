@@ -10,17 +10,18 @@ logger = logging.getLogger(__name__)
 
 class VepClient:
     _web_client: RequestsWebContentClient
-    _URL = 'https://rest.ensembl.org/vep/human/hgvs/'
+    _CONSEQUENCES_URL = 'https://rest.ensembl.org/vep/human/hgvs/'
+    _RECODER_URL = 'https://rest.ensembl.org/variant_recoder/human/'
 
     def __init__(self, web_client: RequestsWebContentClient) -> None:
         self._web_client = web_client
 
     @typing.no_type_check
-    def parse(
+    def parse_consequences(
         self,
-        res: Sequence[Dict[str, str]],
+        consequences_response: Sequence[Dict[str, str]],
     ) -> Dict[str, Any]:
-        record = res[0]
+        record = consequences_response[0]
 
         # 1. Most severe consequence
         most_severe = record.get('most_severe_consequence')
@@ -82,9 +83,9 @@ class VepClient:
 
             if hgvs_suffix:
                 try:
-                    response = self._web_client.get(
-                        self._URL
-                        + f'{extracted_observation["transcript"]}:{hgvs_suffix}',
+                    consequences_response = self._web_client.get(
+                        self._CONSEQUENCES_URL,
+                        +f'{extracted_observation["transcript"]}:{hgvs_suffix}',
                         params={
                             'AlphaMissense': '1',
                             'CADD': '1',
@@ -97,8 +98,16 @@ class VepClient:
                         headers={'Content-Type': 'application/json'},
                     )
                     enriched = extracted_observation.copy()
-                    enriched.update(self.parse(response))
+                    enriched.update(self.parse_consequences(consequences_response))
+                    recoder_response = self._web_client.get(
+                        self._RECODER_URL
+                        + f'{extracted_observation["transcript"]}:{hgvs_suffix}',
+                        content_type='json',
+                        headers={'Content-Type': 'application/json'},
+                    )
+                    enriched.update({'rsid': recoder_response[0]['A']['id']})
                     enriched_observations.append(enriched)
                 except Exception:
+                    logger.exception('Error occurred during VEP parsing')
                     enriched_observations.append(extracted_observation)
         return enriched_observations

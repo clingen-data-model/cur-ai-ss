@@ -19,6 +19,7 @@ def run_app(pmid: str, gene_symbol: str, cache_bust: int):
             if attempt == max_attempts:
                 st.exception(e)
 
+
 st.set_page_config(page_title='cur-ai-ious', layout='wide')
 st.title('cur-ai-ious')
 
@@ -39,9 +40,9 @@ if submitted:
     else:
         if res := run_app(
             pmid, gene_symbol, random.randint(0, int(1e9)) if override_cache else 0
-        ):  
+        ):
             st.session_state.curation_data = res
-            st.success("Successfully executed EvAGG")
+            st.success('Successfully executed EvAGG')
 
 # Display JSON in an expander with a spinner
 if st.session_state.curation_data:
