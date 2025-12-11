@@ -92,5 +92,9 @@ class SinglePMIDApp:
         paper = self._ncbi_lookup_client.fetch(self._pmid, include_fulltext=True)
         if not paper:
             raise RuntimeError(f'pmid {self._pmid} not found')
-        extracted_fields = self._extractor.extract(paper, self._gene_symbol)
-        return self._vep_client.enrich(extracted_fields)
+        extracted_observations = self._extractor.extract(paper, self._gene_symbol)
+        for extracted_observation in extracted_observations:
+            self._vep_client.enrich(extracted_observation)
+            self._clinvar_client.enrich(extracted_observation)
+            self._gnomad_client.enrich(extracted_observation)
+        return extracted_observations

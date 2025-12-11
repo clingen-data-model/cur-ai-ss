@@ -50,14 +50,6 @@ class VepClient:
         # 3. vcf_string
         vcf_string = record.get('vcf_string')
 
-        # 4. Maximum cadd_phred
-        cadd_values = [
-            tx['cadd_phred']
-            for tx in record.get('transcript_consequences', [])
-            if 'cadd_phred' in tx
-        ]
-        max_cadd_phred = max(cadd_values) if cadd_values else None
-
         # 5. Any polyphen_prediction (unique)
         polyphens = {
             tx['polyphen_prediction']
@@ -66,59 +58,51 @@ class VepClient:
         }
 
         return {
-            'most_severe_consequence': most_severe,
-            'alphamissense_pred': alphamissense_pred,
-            'vcf_string': vcf_string,
-            'cadd_phred': max_cadd_phred,
-            'polyphen_predictions': list(polyphens),
+            'vep.most_severe_consequence': most_severe,
+            'vep.alphamissense_pred': alphamissense_pred,
+            'vep.vcf_string': vcf_string,
+            'vep.polyphen_predictions': list(polyphens),
         }
 
     def enrich(
         self,
-        extracted_observations: Sequence[Dict[str, str]],
-    ) -> Sequence[Dict[str, str]]:
-        enriched_observations = []
-        for extracted_observation in extracted_observations:
-            transcript = extracted_observation.get('transcript', None)
-            if not transcript:
-                enriched_observations.append(extracted_observation)
-                continue
-
-            # Determine which HGVS field to use
-            if transcript.startswith('NM_'):
-                hgvs_suffix = extracted_observation.get('hgvs_c')
-            elif transcript.startswith('NP_'):
-                hgvs_suffix = extracted_observation.get('hgvs_p')
-            else:
-                hgvs_suffix = None
-
-            if hgvs_suffix:
-                try:
-                    consequences_response = self._web_client.get(
-                        self._CONSEQUENCES_URL
-                        + f'{extracted_observation["transcript"]}:{hgvs_suffix}',
-                        params={
-                            'AlphaMissense': '1',
-                            'CADD': '1',
-                            'dbNSFP': 'ALL',
-                            'REVEL': '1',
-                            'SpliceAI': '1',
-                            'vcf_string': '1',
-                        },
-                        content_type='json',
-                        headers={'Content-Type': 'application/json'},
-                    )
-                    enriched = extracted_observation.copy()
-                    enriched.update(self.parse_consequences(consequences_response))
-                    recoder_response = self._web_client.get(
-                        self._RECODER_URL
-                        + f'{extracted_observation["transcript"]}:{hgvs_suffix}',
-                        content_type='json',
-                        headers={'Content-Type': 'application/json'},
-                    )
-                    enriched.update(self.parse_recoder(recoder_response, hgvs_suffix))
-                    enriched_observations.append(enriched)
-                except Exception:
-                    logger.exception('Error occurred during VEP parsing')
-                    enriched_observations.append(extracted_observation)
-        return enriched_observations
+        extracted_observation: Dict[str, str],
+    ) -> None:
+        transcript = extracted_observation.get('transcript', None)
+        if not transcript:
+            return
+        # Determine which HGVS field to use
+        if transcript.startswith('NM_'):
+            hgvs_suffix = extracted_observation.get('hgvs_c')
+        elif transcript.startswith('NP_'):
+            hgvs_suffix = extracted_observation.get('hgvs_p')
+        else:
+            hgvs_suffix = None
+        if hgvs_suffix:
+            try:
+                consequences_response = self._web_client.get(
+                    self._CONSEQUENCES_URL
+                    + f'{extracted_observation["transcript"]}:{hgvs_suffix}',
+                    params={
+                        'AlphaMissense': '1',
+                        'dbNSFP': 'ALL',
+                        'REVEL': '1',
+                        'vcf_string': '1',
+                    },
+                    content_type='json',
+                    headers={'Content-Type': 'application/json'},
+                )
+                extracted_observation.update(
+                    self.parse_consequences(consequences_response)
+                )
+                recoder_response = self._web_client.get(
+                    self._RECODER_URL
+                    + f'{extracted_observation["transcript"]}:{hgvs_suffix}',
+                    content_type='json',
+                    headers={'Content-Type': 'application/json'},
+                )
+                extracted_observation.update(
+                    self.parse_recoder(recoder_response, hgvs_suffix)
+                )
+            except Exception:
+                logger.exception('Error occurred during VEP parsing')
