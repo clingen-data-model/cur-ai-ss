@@ -47,6 +47,8 @@ class GnomadClient:
     @typing.no_type_check
     def parse(self, resp: dict[str, str]) -> dict[str, str | float]:
         variant = resp.get('data', {}).get('variant', {})
+        if not variant:
+            return {}
 
         # Basic AF fields
         ex = variant.get('exome', {}) or {}
