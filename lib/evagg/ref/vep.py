@@ -2,6 +2,7 @@ import logging
 
 
 from lib.evagg.utils import RequestsWebContentClient
+import requests
 from typing import Dict, Sequence, Any
 import typing
 
@@ -15,6 +16,35 @@ class VepClient:
 
     def __init__(self, web_client: RequestsWebContentClient) -> None:
         self._web_client = web_client
+
+    def fetch_consequences_with_pruning(self, transcript: str, hgvs_suffix: str) -> Any:
+        # Generate possible transcript variants by pruning version suffixes
+        # e.g., NM_006640.4 -> [NM_006640.4, NM_006640]
+        def transcript_versions(transcript: str) -> list[str]:
+            if '.' in transcript:
+                base, version = transcript.rsplit('.', 1)
+                # full version then base without version
+                return [transcript, base]
+            return [transcript]
+
+        for t in transcript_versions(transcript):
+            try:
+                url = self._CONSEQUENCES_URL + f'{t}:{hgvs_suffix}'
+                return self._web_client.get(
+                    url,
+                    params={
+                        'AlphaMissense': '1',
+                        'dbNSFP': 'ALL',
+                        'REVEL': '1',
+                        'vcf_string': '1',
+                    },
+                    content_type='json',
+                    headers={'Content-Type': 'application/json'},
+                )
+            except requests.HTTPError as e:
+                last_error = e
+
+        raise last_error
 
     @typing.no_type_check
     def parse_recoder(
@@ -77,20 +107,12 @@ class VepClient:
         elif transcript.startswith('NP_'):
             hgvs_suffix = extracted_observation.get('hgvs_p')
         else:
-            hgvs_suffix = None
+            return
+
         if hgvs_suffix:
             try:
-                consequences_response = self._web_client.get(
-                    self._CONSEQUENCES_URL
-                    + f'{extracted_observation["transcript"]}:{hgvs_suffix}',
-                    params={
-                        'AlphaMissense': '1',
-                        'dbNSFP': 'ALL',
-                        'REVEL': '1',
-                        'vcf_string': '1',
-                    },
-                    content_type='json',
-                    headers={'Content-Type': 'application/json'},
+                consequences_response = self.fetch_consequences_with_pruning(
+                    transcript, hgvs_suffix
                 )
                 extracted_observation.update(
                     self.parse_consequences(consequences_response)
