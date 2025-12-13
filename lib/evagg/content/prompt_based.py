@@ -50,12 +50,12 @@ class PromptBasedContentExtractor:
 
     def _get_lookup_field(
         self, gene_symbol: str, paper: Paper, ob: Observation, field: str
-    ) -> Tuple[str, str]:
+    ) -> Tuple[str, str | None]:
         def get_link() -> str:
             return (
-                f'https://www.ncbi.nlm.nih.gov/pmc/articles/{paper.props["pmcid"]}'
-                if paper.props.get('pmcid')
-                else paper.props.get('link', '')
+                f'https://www.ncbi.nlm.nih.gov/pmc/articles/{paper.pmcid}'
+                if paper.pmcid
+                else paper.link or ''
             )
 
         def get_hgvs_c() -> str:
@@ -76,12 +76,9 @@ class PromptBasedContentExtractor:
             'evidence_id': lambda: ob.variant.get_unique_id(paper.id, ob.individual),
             'gene': lambda: gene_symbol,
             'paper_id': lambda: paper.id,
-            'citation': lambda: paper.props.get('citation', ''),
-            'source_type': lambda: 'fulltext'
-            if paper.props.get('fulltext_xml')
-            else 'abstract',
+            'citation': lambda: paper.citation,
             'link': get_link,
-            'paper_title': lambda: paper.props.get('title', ''),
+            'paper_title': lambda: paper.title,
             'hgvs_c': get_hgvs_c,
             'hgvs_p': get_hgvs_p,
             'paper_variant': lambda: ', '.join(ob.variant_descriptions),
@@ -307,7 +304,7 @@ class PromptBasedContentExtractor:
         paper: Paper,
         ob: Observation,
         cache: Dict[Any, asyncio.Task],
-    ) -> Dict[str, str]:
+    ) -> Dict[str, str | None]:
         def _get_key(ob: Observation, field: str) -> Any:
             if field in self._CACHE_VARIANT_FIELDS:
                 return (ob.variant, field)
@@ -351,7 +348,7 @@ class PromptBasedContentExtractor:
 
     async def _extract_fields(
         self, paper: Paper, gene_symbol: str, obs: Sequence[Observation]
-    ) -> List[Dict[str, str]]:
+    ) -> List[Dict[str, str | None]]:
         # TODO - because the returned observations include the text associated with each observation, it's not trivial
         # to pre-cache the variant level fields. We don't have any easy way to collect all the unique texts associated
         # with all observations of the same variant (but different individuals). As a temporary solution, we'll cache
@@ -362,7 +359,9 @@ class PromptBasedContentExtractor:
             *[self._get_fields(gene_symbol, paper, ob, cache) for ob in obs]
         )
 
-    def extract(self, paper: Paper, gene_symbol: str) -> Sequence[Dict[str, str]]:
+    def extract(
+        self, paper: Paper, gene_symbol: str
+    ) -> Sequence[Dict[str, str | None]]:
         # Find all the observations in the paper relating to the query.
         observations = asyncio.run(
             self._observation_finder.find_observations(gene_symbol, paper)

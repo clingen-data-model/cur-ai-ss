@@ -51,7 +51,7 @@ def test_sanity_check_failure(
     paper: Paper, mock_llm_client: Any, mock_factory: Any, mock_comparator: Any
 ) -> None:
     # Remove the full text content for the paper.
-    paper.props.pop('fulltext_xml')
+    paper.fulltext_xml = ''
 
     # Paper fails sanity check.
     llm_client = mock_llm_client({'relevant': False})
@@ -71,7 +71,7 @@ def test_find_observations_no_variants(
     paper: Paper, mock_llm_client: Any, mock_factory: Any, mock_comparator: Any
 ) -> None:
     # Remove the full text content for the paper.
-    paper.props.pop('fulltext_xml')
+    paper.fulltext_xml = ''
 
     llm_client = mock_llm_client({'relevant': True}, {})
     of = ObservationFinder(llm_client, mock_factory(None), mock_comparator({}))

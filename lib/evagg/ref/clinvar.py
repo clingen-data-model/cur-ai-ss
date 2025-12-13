@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 class ClinvarClient(NcbiClientBase):
     def enrich(
         self,
-        extracted_observation: Dict[str, str],
+        extracted_observation: Dict[str, str | None],
     ) -> None:
         rsid = extracted_observation.get('rsid', None)
         if not rsid:

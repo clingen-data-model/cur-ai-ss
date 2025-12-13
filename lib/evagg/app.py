@@ -56,7 +56,6 @@ class SinglePMIDApp:
                 'variant_inheritance',
                 'variant_type',
                 'study_type',
-                'source_type',
                 'engineered_cells',
                 'patient_cells_tissues',
                 'animal_model',
@@ -92,8 +91,9 @@ class SinglePMIDApp:
             ),
         )
 
-    def execute(self) -> Sequence[Dict[str, str]]:
-        paper = self._ncbi_lookup_client.fetch(self._pmid, include_fulltext=True)
+    def execute(self) -> Sequence[Dict[str, str | None]]:
+        fulltext_xml = ''  # NOTE: shim for injecting extracted fulltext
+        paper = self._ncbi_lookup_client.fetch(self._pmid, fulltext_xml)
         if not paper:
             raise RuntimeError(f'pmid {self._pmid} not found')
         extracted_observations = self._extractor.extract(paper, self._gene_symbol)

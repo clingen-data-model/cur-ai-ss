@@ -67,27 +67,6 @@ class NcbiClientBase:
         )
 
 
-PAPER_BASE_PROPS = {
-    'id',
-    'pmid',
-    'title',
-    'abstract',
-    'journal',
-    'first_author',
-    'pub_year',
-    'doi',
-    'pmcid',
-    'citation',
-    'OA',
-    'can_access',
-    'license',
-    'link',
-}
-PAPER_FULL_TEXT_PROPS = {
-    'fulltext_xml',
-}
-
-
 class NcbiLookupClient(
     NcbiClientBase,
 ):
@@ -214,7 +193,7 @@ class NcbiLookupClient(
         ]
         return pmids
 
-    def fetch(self, paper_id: str, include_fulltext: bool = False) -> Optional[Paper]:
+    def fetch(self, paper_id: str, fulltext_xml: str) -> Optional[Paper]:
         if (
             root := self._efetch(
                 db='pubmed', id=paper_id, retmode='xml', rettype='abstract'
@@ -229,19 +208,14 @@ class NcbiLookupClient(
         ) is None:
             return None
 
-        props: Dict[str, Any] = {'id': f'pmid:{paper_id}', 'pmid': paper_id}
+        props: Dict[str, Any] = {
+            'id': f'pmid:{paper_id}',
+            'pmid': paper_id,
+            'fulltext_xml': fulltext_xml,
+        }
         props.update(self._get_xml_props(article))
         props.update(self._get_license_props(props['pmcid']))
         props.update(self._get_derived_props(props))
-        assert PAPER_BASE_PROPS == set(props.keys()), (
-            f'Missing properties: {PAPER_BASE_PROPS ^ set(props.keys())}'
-        )
-        if include_fulltext:
-            if props['can_access']:
-                props['fulltext_xml'] = self._get_full_text(props)
-            else:
-                props['fulltext_xml'] = None
-
         return Paper(**props)
 
     def gene_id_for_symbol(

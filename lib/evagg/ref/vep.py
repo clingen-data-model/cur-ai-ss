@@ -96,7 +96,7 @@ class VepClient:
 
     def enrich(
         self,
-        extracted_observation: Dict[str, str],
+        extracted_observation: Dict[str, str | None],
     ) -> None:
         transcript = extracted_observation.get('transcript', None)
         if not transcript:

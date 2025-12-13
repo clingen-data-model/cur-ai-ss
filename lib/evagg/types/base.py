@@ -2,27 +2,48 @@ from dataclasses import dataclass
 from typing import Any, List
 
 
+@dataclass(eq=False)
 class Paper:
-    def __init__(self, **kwargs: Any) -> None:
-        self.id = kwargs['id']  # id is required
-        self.props = kwargs
+    id: str
+    fulltext_xml: str
+
+    # core bibliographic fields
+    pmid: str | None = None
+    pmcid: str | None = None
+    doi: str | None = None
+
+    title: str | None = None
+    abstract: str | None = None
+    journal: str | None = None
+    first_author: str | None = None
+    pub_year: int | None = None
+    citation: str | None = None
+
+    # access / licensing
+    OA: bool | None = None
+    can_access: bool | None = None
+    license: str | None = None
+    link: str | None = None
+
+    @classmethod
+    def from_kwargs(cls, **kwargs: Any) -> 'Paper':
+        """
+        Split known fields from unknown ones.
+        """
+        field_names = {f.name for f in cls.__dataclass_fields__.values()}
+        known = {k: v for k, v in kwargs.items() if k in field_names}
+        return cls(**known)
 
     def __hash__(self) -> int:
         return hash(self.id)
 
-    def __eq__(self, o: object) -> bool:
-        if not isinstance(o, Paper):
-            return False
-        return self.id == o.id
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, Paper) and self.id == other.id
 
     def __repr__(self) -> str:
-        text = (
-            self.props.get('title')
-            or self.props.get('citation')
-            or self.props.get('abstract')
-            or 'unknown'
-        )
-        return f'id: {self.id} - "{text[:15]}{"..." if len(text) > 15 else ""}"'
+        text = self.title or self.citation or self.abstract or 'unknown'
+        snippet = str(text)[:15] + ('...' if len(text) > 15 else '')
+        return f'id: {self.id} - "{snippet}"'
 
 
 @dataclass(frozen=True)

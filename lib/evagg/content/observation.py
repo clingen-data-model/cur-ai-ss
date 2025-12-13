@@ -292,14 +292,7 @@ class ObservationFinder:
         return response
 
     def _get_text_sections(self, paper: Paper) -> Tuple[str, List[str]]:
-        # Get paper texts.
-        fulltext_xml = paper.props.get('fulltext_xml')
-        if not fulltext_xml:
-            logger.info(
-                f'Unable to retrieve fulltext for {paper.id}, falling back to abstract only.'
-            )
-            return paper.props['abstract'], []
-
+        fulltext_xml = paper.fulltext_xml
         paper_text = get_fulltext(
             fulltext_xml, exclude=['AUTH_CONT', 'ACK_FUND', 'COMP_INT', 'REF']
         )
@@ -317,21 +310,8 @@ class ObservationFinder:
     def _get_text_mentioning_variant(
         self, paper: Paper, variant_descriptions: Sequence[str], allow_empty: bool
     ) -> str:
-        fulltext_xml = paper.props.get('fulltext_xml')  # Can be None
-        abstract_fallback_section_list = [
-            TextSection(
-                section_type='abstract',
-                text_type='unknown',
-                offset=-1,
-                text=paper.props['abstract'],
-                id='unknown',
-            )
-        ]
-        sections = (
-            get_sections(fulltext_xml)
-            if fulltext_xml
-            else abstract_fallback_section_list
-        )
+        fulltext_xml = paper.fulltext_xml
+        sections = get_sections(fulltext_xml)
         filtered_text = '\n\n'.join(
             [
                 section.text
@@ -340,11 +320,7 @@ class ObservationFinder:
             ]
         )
         if not filtered_text and not allow_empty:
-            sections = (
-                get_sections(fulltext_xml)
-                if fulltext_xml
-                else abstract_fallback_section_list
-            )  # Reset the exhausted generator.
+            sections = get_sections(fulltext_xml)  # Reset the exhausted generator.
             return '\n\n'.join([section.text for section in sections])
         return filtered_text
 
@@ -672,19 +648,9 @@ variant isn't actually associated with the gene. But the possibility of previous
                         # Recreate the generator each time.
                         texts=list(
                             get_sections(
-                                paper.props['fulltext_xml'],
+                                paper.fulltext_xml,
                                 exclude=['AUTH_CONT', 'ACK_FUND', 'COMP_INT', 'REF'],
                             )
-                            if paper.props['fulltext_xml']
-                            else [
-                                TextSection(
-                                    section_type='abstract',
-                                    text_type='unknown',
-                                    offset=-1,
-                                    text=paper.props['abstract'],
-                                    id='unknown',
-                                )
-                            ]
                         ),
                         paper_id=paper.id,
                     )

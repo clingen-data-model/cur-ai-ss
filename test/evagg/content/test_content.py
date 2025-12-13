@@ -44,6 +44,7 @@ def paper() -> Paper:
         abstract='This the abstract from a test paper.',
         pmcid='PMC123',
         can_access=True,
+        fulltext_xml='',
     )
 
 
@@ -58,9 +59,9 @@ def test_prompt_based_content_extractor_valid_fields(
         'evidence_id': '12345678_c.1234A-G_unknown',  # TODO
         'gene': 'CHI3L1',
         'paper_id': '12345678',
-        'citation': paper.props['citation'],
-        'link': f'https://www.ncbi.nlm.nih.gov/pmc/articles/{paper.props["pmcid"]}',
-        'paper_title': paper.props['title'],
+        'citation': paper.citation,
+        'link': f'https://www.ncbi.nlm.nih.gov/pmc/articles/{paper.pmcid}',
+        'paper_title': paper.title,
         'hgvs_c': 'c.1234A>G',
         'hgvs_p': 'NA',
         'paper_variant': 'c.1234A>G',
@@ -71,7 +72,6 @@ def test_prompt_based_content_extractor_valid_fields(
         'phenotype': 'test (HP:0123)',
         'zygosity': 'test',
         'variant_inheritance': 'test',
-        'source_type': 'abstract',
     }
 
     observation = Observation(
@@ -1003,7 +1003,7 @@ def test_prompt_based_content_extractor_unprocessable_paper(
     mock_phenotype_searcher: Any,
     mock_phenotype_fetcher: Any,
 ) -> None:
-    paper.props['can_access'] = False
+    paper.can_access = False
     content_extractor = PromptBasedContentExtractor(
         [],
         mock_prompt({}),
