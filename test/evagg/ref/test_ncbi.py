@@ -119,8 +119,10 @@ def test_pubmed_search(mock_web_client):
 
 def test_pubmed_fetch(mock_web_client, json_load):
     web_client = mock_web_client('efetch_pubmed_paper_24290490.xml')
-    result = NcbiLookupClient(web_client).fetch('24290490', b'mock fulltext')
-    assert result and Paper(
+    result = NcbiLookupClient(web_client).fetch(
+        '24290490', Paper(id='pmid:24290490', content=b'mock fulltext')
+    )
+    assert result == Paper(
         id='pmid:24290490',
         title='Increased CPA6 promoter methylation in focal epilepsy and in febrile seizures.',
         abstract=(
@@ -162,14 +164,19 @@ def test_pubmed_pmc_oa_fetch(mock_web_client):
     web_client = mock_web_client(
         'efetch_pubmed_paper_31427284.xml', 'ncbi_pmc_is_oa_PMC6824399.xml'
     )
-    result = NcbiLookupClient(web_client).fetch('31427284', b'mock fulltext')
-    assert result and result.can_access is False
+    result = NcbiLookupClient(web_client).fetch(
+        '31427284', Paper(id='123', content=b'mock fulltext')
+    )
+    assert result.pmid and result.pmid == '31427284' and result.can_access is False
 
 
 def test_pubmed_fetch_missing(mock_web_client, xml_parse):
     web_client = mock_web_client(None)
-    result = NcbiLookupClient(web_client).fetch('7777777777777777', 'mock fulltext')
-    assert result is None
+    p = Paper(id='123', content=b'mock fulltext')
+    result = NcbiLookupClient(web_client).fetch('7777777777777777', p)
+    assert result is p
+    assert p.pmid is None
     web_client = mock_web_client(xml_parse('<PubmedArticleSet></PubmedArticleSet>'))
-    result = NcbiLookupClient(web_client).fetch('7777777777777777', 'mock fulltext')
-    assert result is None
+    result = NcbiLookupClient(web_client).fetch('7777777777777777', p)
+    assert result is p
+    assert p.pmid is None

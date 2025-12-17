@@ -1,4 +1,5 @@
 import logging
+import asyncio
 
 from lib.evagg.llm import OpenAIClient
 from lib.evagg.content import (
@@ -20,17 +21,19 @@ from lib.evagg.ref import (
 from lib.evagg.utils.web import RequestsWebContentClient, WebClientSettings
 from lib.evagg.ref.ncbi import get_ncbi_response_translator
 from typing import Dict, Sequence
+from lib.evagg.pdf.parse import parse_content
+from lib.evagg.types.prompt_tag import PromptTag
 
 logger = logging.getLogger(__name__)
 
 
-class SinglePMIDApp:
+class App:
     def __init__(
         self,
-        pmid: str,
+        content: bytes,
         gene_symbol: str,
     ) -> None:
-        self._pmid = pmid
+        self._content = content
         self._gene_symbol = gene_symbol
         self._ncbi_lookup_client = NcbiLookupClient(
             web_client=RequestsWebContentClient(
@@ -40,6 +43,7 @@ class SinglePMIDApp:
         self._vep_client = VepClient(web_client=RequestsWebContentClient())
         self._clinvar_client = ClinvarClient(web_client=RequestsWebContentClient())
         self._gnomad_client = GnomadClient(web_client=RequestsWebContentClient())
+        self._llm_client = OpenAIClient()
         self._extractor = PromptBasedContentExtractor(
             fields=[
                 'evidence_id',
@@ -63,13 +67,13 @@ class SinglePMIDApp:
                 'link',
                 'paper_title',
             ],
-            llm_client=OpenAIClient(),
+            llm_client=self._llm_client,
             phenotype_searcher=WebHPOClient(
                 web_client=RequestsWebContentClient(),
             ),
             phenotype_fetcher=PyHPOClient(),
             observation_finder=ObservationFinder(
-                llm_client=OpenAIClient(),
+                llm_client=self._llm_client,
                 variant_factory=HGVSVariantFactory(
                     mutalyzer_client=MutalyzerClient(
                         web_client=RequestsWebContentClient(
@@ -92,10 +96,27 @@ class SinglePMIDApp:
         )
 
     def execute(self) -> Sequence[Dict[str, str | None]]:
-        content = b''  # NOTE: shim for injecting extracted fulltext
-        paper = self._ncbi_lookup_client.fetch(self._pmid, content)
-        if not paper:
-            raise RuntimeError(f'pmid {self._pmid} not found')
+        paper = parse_content(self._content)
+        title = asyncio.run(
+            self._llm_client.prompt_json_from_string(
+                user_prompt=f"""
+                Extract the title of the following (truncated to 1000 characters) scientific paper.
+
+                Return your response as a JSON object like this:
+                {{
+                    "title": "The title of the paper"
+                }}
+
+                Paper: {paper.fulltext_md[:1000]}
+            """,
+                prompt_tag=PromptTag.TITLE,
+            )
+        )['title']
+        pmids = self._ncbi_lookup_client.search(
+            title + '[ti]',
+        )
+        if pmids:
+            paper = self._ncbi_lookup_client.fetch(pmids[0], paper)
         extracted_observations = self._extractor.extract(paper, self._gene_symbol)
         for extracted_observation in extracted_observations:
             self._vep_client.enrich(extracted_observation)
