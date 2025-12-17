@@ -156,34 +156,6 @@ class NcbiLookupClient(
         derived_props['link'] = f'https://pubmed.ncbi.nlm.nih.gov/{props["pmid"]}/'
         return derived_props
 
-    def _get_full_text(self, props: Dict[str, Any]) -> str:
-        """Get the full text of a paper from PMC."""
-        pmcid = props['pmcid']
-        if not props['can_access']:
-            logger.debug(
-                f"Cannot fetch full text, paper 'pmcid:{pmcid}' is not in PMC-OA or has unusable license."
-            )
-            return ''
-        try:
-            root = self._web_client.get(
-                self.BIOC_GET_URL.format(pmcid=pmcid), content_type='xml'
-            )
-        except (HTTPError, RetryError, ElementTree.ParseError) as e:
-            logger.warning(f'Unexpected error fetching BioC entry for {pmcid}: {e}')
-            return ''
-
-        # Find and return the specific document.
-        if (
-            doc := root.find(f"./document[id='{pmcid.upper().lstrip('PMC')}']")
-        ) is None:
-            # Some BioC do not have the prefix stripped, so try again with the original pmcid.
-            if (doc := root.find(f"./document[id='{pmcid.upper()}']")) is None:
-                logger.warning(
-                    f'Response received from BioC, but corresponding PMC ID not found: {pmcid}'
-                )
-                return ''
-        return ElementTree.tostring(doc, encoding='unicode')
-
     def search(self, query: str, **extra_params: Dict[str, Any]) -> Sequence[str]:
         root = self._esearch(db='pubmed', term=query, sort='relevance', **extra_params)
         pmids = [
@@ -193,7 +165,7 @@ class NcbiLookupClient(
         ]
         return pmids
 
-    def fetch(self, paper_id: str, fulltext_xml: str) -> Optional[Paper]:
+    def fetch(self, paper_id: str) -> Optional[Paper]:
         if (
             root := self._efetch(
                 db='pubmed', id=paper_id, retmode='xml', rettype='abstract'
@@ -211,7 +183,6 @@ class NcbiLookupClient(
         props: Dict[str, Any] = {
             'id': f'pmid:{paper_id}',
             'pmid': paper_id,
-            'fulltext_xml': fulltext_xml,
         }
         props.update(self._get_xml_props(article))
         props.update(self._get_license_props(props['pmcid']))
