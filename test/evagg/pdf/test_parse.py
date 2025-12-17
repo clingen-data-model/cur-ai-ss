@@ -68,3 +68,4 @@ def test_convert_and_extract_creates_outputs(
         'r'
     ) as f:
         assert '## Supporting Information' in f.read()
+

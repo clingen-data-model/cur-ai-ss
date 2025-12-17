@@ -72,6 +72,7 @@ def split_by_sections(document: DoclingDocument) -> list[tuple[str, str]]:
     return sections
 
 
+
 def parse_content(content: bytes, force: bool = False) -> Paper:
     paper = Paper.from_content(content)
     if not force and paper.pdf_extraction_success_path.exists():
