@@ -1,5 +1,4 @@
 from lib.evagg.pdf.parse import parse_content
-from lib.evagg.types.base import Paper
 
 
 def test_convert_and_extract_creates_outputs(

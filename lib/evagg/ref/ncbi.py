@@ -2,7 +2,7 @@ import logging
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from defusedxml import ElementTree
-from requests.exceptions import HTTPError, RetryError
+from requests.exceptions import HTTPError
 
 from lib.evagg.types import Paper
 from lib.evagg.utils.environment import env
@@ -165,7 +165,7 @@ class NcbiLookupClient(
         ]
         return pmids
 
-    def fetch(self, paper_id: str) -> Optional[Paper]:
+    def fetch(self, paper_id: str, content: bytes) -> Optional[Paper]:
         if (
             root := self._efetch(
                 db='pubmed', id=paper_id, retmode='xml', rettype='abstract'
@@ -183,6 +183,7 @@ class NcbiLookupClient(
         props: Dict[str, Any] = {
             'id': f'pmid:{paper_id}',
             'pmid': paper_id,
+            'content': content,
         }
         props.update(self._get_xml_props(article))
         props.update(self._get_license_props(props['pmcid']))

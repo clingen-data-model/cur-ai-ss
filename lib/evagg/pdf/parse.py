@@ -45,11 +45,8 @@ def parse_words_json(stream: BytesIO) -> list[WordLoc]:
 
 def parse_content(content: bytes, force: bool = False) -> Paper:
     paper = Paper.from_content(content)
-    if (
-        not force
-        and paper.pdf_extraction_success_path.exists()
-    ):
-        return
+    if not force and paper.pdf_extraction_success_path.exists():
+        return paper
     paper.pdf_images_dir.mkdir(parents=True, exist_ok=True)
     paper.pdf_tables_dir.mkdir(parents=True, exist_ok=True)
     doc_converter = DocumentConverter(
@@ -124,3 +121,5 @@ def parse_content(content: bytes, force: bool = False) -> Paper:
         encoding='utf-8',
     ) as fp:
         fp.write('')
+
+    return paper

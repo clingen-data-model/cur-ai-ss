@@ -92,8 +92,8 @@ class SinglePMIDApp:
         )
 
     def execute(self) -> Sequence[Dict[str, str | None]]:
-        fulltext_xml = ''  # NOTE: shim for injecting extracted fulltext
-        paper = self._ncbi_lookup_client.fetch(self._pmid, fulltext_xml)
+        content = b''  # NOTE: shim for injecting extracted fulltext
+        paper = self._ncbi_lookup_client.fetch(self._pmid, content)
         if not paper:
             raise RuntimeError(f'pmid {self._pmid} not found')
         extracted_observations = self._extractor.extract(paper, self._gene_symbol)

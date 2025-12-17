@@ -119,7 +119,7 @@ def test_pubmed_search(mock_web_client):
 
 def test_pubmed_fetch(mock_web_client, json_load):
     web_client = mock_web_client('efetch_pubmed_paper_24290490.xml')
-    result = NcbiLookupClient(web_client).fetch('24290490', 'mock fulltext')
+    result = NcbiLookupClient(web_client).fetch('24290490', b'mock fulltext')
     assert result and Paper(
         id='pmid:24290490',
         title='Increased CPA6 promoter methylation in focal epilepsy and in febrile seizures.',
@@ -154,7 +154,7 @@ def test_pubmed_fetch(mock_web_client, json_load):
         license='unknown',
         OA=False,
         link='https://pubmed.ncbi.nlm.nih.gov/24290490/',
-        fulltext_xml='mock fulltext',
+        content=b'mock fulltext',
     )
 
 
@@ -162,7 +162,7 @@ def test_pubmed_pmc_oa_fetch(mock_web_client):
     web_client = mock_web_client(
         'efetch_pubmed_paper_31427284.xml', 'ncbi_pmc_is_oa_PMC6824399.xml'
     )
-    result = NcbiLookupClient(web_client).fetch('31427284', 'mock fulltext')
+    result = NcbiLookupClient(web_client).fetch('31427284', b'mock fulltext')
     assert result and result.can_access is False
 
 
