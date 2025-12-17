@@ -14,8 +14,8 @@ def test_resources_path():
 
 @pytest.fixture
 def test_file_contents(test_resources_path):
-    def _loader(file_name):
-        with open(os.path.join(test_resources_path, file_name), 'r') as file:
+    def _loader(file_name, mode='r'):
+        with open(os.path.join(test_resources_path, file_name), mode) as file:
             return file.read()
 
     return _loader
