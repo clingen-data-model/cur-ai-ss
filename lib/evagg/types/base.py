@@ -1,11 +1,17 @@
+import hashlib
+
 from dataclasses import dataclass
 from typing import Any, List
+
+from pathlib import Path
+
+from lib.evagg.utils.environment import env
 
 
 @dataclass(eq=False)
 class Paper:
     id: str
-    fulltext_xml: str
+    content: bytes
 
     # core bibliographic fields
     pmid: str | None = None
@@ -26,6 +32,15 @@ class Paper:
     link: str | None = None
 
     @classmethod
+    def from_content(self, content: bytes) -> 'Paper':
+        h = hashlib.sha256()
+        h.update(content)
+        return Paper(
+            id=h.hexdigest(),
+            content=content,
+        )
+
+    @classmethod
     def from_kwargs(cls, **kwargs: Any) -> 'Paper':
         """
         Split known fields from unknown ones.
@@ -44,6 +59,57 @@ class Paper:
         text = self.title or self.citation or self.abstract or 'unknown'
         snippet = str(text)[:15] + ('...' if len(text) > 15 else '')
         return f'id: {self.id} - "{snippet}"'
+
+    @property
+    def fulltext_md(self) -> str:
+        with open(self.pdf_markdown_path, 'r') as f:
+            return f.read()
+
+    @property
+    def pdf_dir(self) -> Path:
+        return Path(env.EXTRACTED_PDF_DIR) / self.id
+
+    @property
+    def pdf_tables_dir(self) -> Path:
+        return self.pdf_dir / 'tables'
+
+    @property
+    def pdf_images_dir(self) -> Path:
+        return self.pdf_dir / 'images'
+
+    @property
+    def pdf_markdown_path(self) -> Path:
+        return self.pdf_dir / 'raw.md'
+
+    @property
+    def pdf_json_path(self) -> Path:
+        return self.pdf_dir / 'raw.json'
+
+    @property
+    def pdf_words_json_path(self) -> Path:
+        return self.pdf_dir / 'words.json'
+
+    @property
+    def pdf_extraction_success_path(self) -> Path:
+        return self.pdf_dir / '_SUCCESS'
+
+    def pdf_image_path(
+        self,
+        image_id: int,
+    ) -> Path:
+        return self.pdf_images_dir / f'{image_id}.png'
+
+    def pdf_table_image_path(
+        self,
+        table_id: int,
+    ) -> Path:
+        return self.pdf_tables_dir / f'{table_id}.png'
+
+    def pdf_table_markdown_path(
+        self,
+        table_id: int,
+    ) -> Path:
+        return self.pdf_tables_dir / f'{table_id}.md'
 
 
 @dataclass(frozen=True)

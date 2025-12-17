@@ -30,10 +30,10 @@ dependencies = [
     "matplotlib==3.8.4",
     "seaborn==0.13.2",
     "plotly==5.22.0",
-
     # pdf parsing
     "docling==2.64.1",
-    "pypdf"
+    "pypdf",
+    "streamlit[pdf]>=1.52.1",
 ]   
 
 [dependency-groups]

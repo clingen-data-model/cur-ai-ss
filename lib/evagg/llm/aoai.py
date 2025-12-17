@@ -161,6 +161,30 @@ class OpenAIClient:
         }
         return await self._generate_completion(messages, prompt_tag, settings)
 
+    async def prompt_json_from_string(
+        self,
+        user_prompt: str,
+        params: Optional[Dict[str, str]] = None,
+        prompt_tag: PromptTag = PromptTag.PROMPT,
+        settings: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Send a user string prompt to the LLM and parse the response as JSON.
+        Returns an empty dict if parsing fails.
+        """
+        response = await self.prompt(
+            user_prompt=user_prompt,
+            params=params,
+            prompt_tag=prompt_tag,
+            settings=settings,
+        )
+        try:
+            result = json.loads(response)
+        except json.decoder.JSONDecodeError:
+            logger.error(f'Failed to parse LLM response as JSON: {response}')
+            return {}
+        return result
+
     async def prompt_file(
         self,
         prompt_filepath: str,

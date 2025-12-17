@@ -1,6 +1,7 @@
 from io import BytesIO
 from collections import namedtuple
 import json
+from lib.evagg.types import Paper
 
 from docling_core.types.doc import DoclingDocument
 from docling_core.types.doc import ImageRefMode, PictureItem, TableItem
@@ -11,17 +12,6 @@ from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling_core.types.doc.page import TextCellUnit
 from docling_parse.pdf_parser import DoclingPdfParser, PdfDocument
 
-from lib.evagg.pdf.paths import (
-    pdf_json_path,
-    pdf_markdown_path,
-    pdf_table_image_path,
-    pdf_image_path,
-    pdf_table_markdown_path,
-    pdf_extraction_success_path,
-    pdf_words_json_path,
-    pdf_images_dir,
-    pdf_tables_dir,
-)
 
 IMAGE_RESOLUTION_SCALE = 2.0
 
@@ -53,20 +43,12 @@ def parse_words_json(stream: BytesIO) -> list[WordLoc]:
     return words_json
 
 
-def convert_and_extract(pdf_bytes: bytes, force: bool = False) -> None:
-    if (
-        not force
-        and pdf_extraction_success_path(
-            pdf_bytes,
-        ).exists()
-    ):
-        return
-    pdf_images_dir(
-        pdf_bytes,
-    ).mkdir(parents=True, exist_ok=True)
-    pdf_tables_dir(
-        pdf_bytes,
-    ).mkdir(parents=True, exist_ok=True)
+def parse_content(content: bytes, force: bool = False) -> Paper:
+    paper = Paper.from_content(content)
+    if not force and paper.pdf_extraction_success_path.exists():
+        return paper
+    paper.pdf_images_dir.mkdir(parents=True, exist_ok=True)
+    paper.pdf_tables_dir.mkdir(parents=True, exist_ok=True)
     doc_converter = DocumentConverter(
         format_options={
             InputFormat.PDF: PdfFormatOption(
@@ -80,14 +62,14 @@ def convert_and_extract(pdf_bytes: bytes, force: bool = False) -> None:
     )
     # NB: name is a required field.  We "could" pass in uploaded filename here, I just thought it wasn't relevant at this time.
     document: DoclingDocument = doc_converter.convert(
-        source=DocumentStream(name='uploaded_file', stream=BytesIO(pdf_bytes)),
+        source=DocumentStream(name='content', stream=BytesIO(paper.content)),
     ).document
     document.save_as_markdown(
-        pdf_markdown_path(pdf_bytes),
+        paper.pdf_markdown_path,
         image_mode=ImageRefMode.PLACEHOLDER,
     )
     document.save_as_json(
-        pdf_json_path(pdf_bytes),
+        paper.pdf_json_path,
         image_mode=ImageRefMode.PLACEHOLDER,
     )
     table_id, image_id = 0, 0
@@ -97,16 +79,14 @@ def convert_and_extract(pdf_bytes: bytes, force: bool = False) -> None:
             and (table_image := element.get_image(document)) is not None
         ):
             with open(
-                pdf_table_image_path(
-                    pdf_bytes,
+                paper.pdf_table_image_path(
                     table_id,
                 ),
                 'wb',
             ) as fp:
                 table_image.save(fp, 'PNG')
             with open(
-                pdf_table_markdown_path(
-                    pdf_bytes,
+                paper.pdf_table_markdown_path(
                     table_id,
                 ),
                 'w',
@@ -119,8 +99,7 @@ def convert_and_extract(pdf_bytes: bytes, force: bool = False) -> None:
             and (image := element.get_image(document)) is not None
         ):
             with open(
-                pdf_image_path(
-                    pdf_bytes,
+                paper.pdf_image_path(
                     image_id,
                 ),
                 'wb',
@@ -128,21 +107,19 @@ def convert_and_extract(pdf_bytes: bytes, force: bool = False) -> None:
                 image.save(fp, 'PNG')
             image_id += 1
 
-    words_json = parse_words_json(BytesIO(pdf_bytes))
+    words_json = parse_words_json(BytesIO(paper.content))
     with open(
-        pdf_words_json_path(
-            pdf_bytes,
-        ),
+        paper.pdf_words_json_path,
         'w',
         encoding='utf-8',
     ) as fp:
         json.dump(words_json, fp, indent=2)
 
     with open(
-        pdf_extraction_success_path(
-            pdf_bytes,
-        ),
+        paper.pdf_extraction_success_path,
         'w',
         encoding='utf-8',
     ) as fp:
         fp.write('')
+
+    return paper

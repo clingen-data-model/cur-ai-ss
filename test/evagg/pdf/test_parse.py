@@ -1,25 +1,17 @@
-from lib.evagg.pdf.extract import convert_and_extract
-from lib.evagg.pdf.paths import (
-    pdf_json_path,
-    pdf_markdown_path,
-    pdf_table_image_path,
-    pdf_table_markdown_path,
-    pdf_image_path,
-    pdf_extraction_success_path,
-)
+from lib.evagg.pdf.parse import parse_content
 
 
 def test_convert_and_extract_creates_outputs(
     test_file_contents,
 ):
-    pdf_bytes = test_file_contents('ACN3-7-1962.pdf', mode='rb')
+    content = test_file_contents('ACN3-7-1962.pdf', mode='rb')
     # run extraction (force=True to avoid cache short-circuiting)
-    convert_and_extract(pdf_bytes, force=True)
+    paper = parse_content(content, force=True)
 
     # ---- core outputs ----
-    json_path = pdf_json_path(pdf_bytes)
-    md_path = pdf_markdown_path(pdf_bytes)
-    success_path = pdf_extraction_success_path(pdf_bytes)
+    json_path = paper.pdf_json_path
+    md_path = paper.pdf_markdown_path
+    success_path = paper.pdf_extraction_success_path
 
     assert json_path.exists(), 'JSON output was not created'
     assert md_path.exists(), 'Markdown output was not created'
@@ -31,8 +23,8 @@ def test_convert_and_extract_creates_outputs(
 
     table_id = 0
     while True:
-        img = pdf_table_image_path(pdf_bytes, table_id)
-        md = pdf_table_markdown_path(pdf_bytes, table_id)
+        img = paper.pdf_table_image_path(table_id)
+        md = paper.pdf_table_markdown_path(table_id)
         if not img.exists() and not md.exists():
             break
         if img.exists():
@@ -51,7 +43,7 @@ def test_convert_and_extract_creates_outputs(
     images = []
     image_id = 0
     while True:
-        img = pdf_image_path(pdf_bytes, image_id)
+        img = paper.pdf_image_path(image_id)
         if not img.exists():
             break
         images.append(img)
