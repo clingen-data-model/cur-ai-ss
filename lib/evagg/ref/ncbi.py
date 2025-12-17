@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Sequence, Tuple
 
 from defusedxml import ElementTree
 from requests.exceptions import HTTPError
@@ -165,30 +165,27 @@ class NcbiLookupClient(
         ]
         return pmids
 
-    def fetch(self, paper_id: str, content: bytes) -> Optional[Paper]:
+    def fetch(self, pmid: str, paper: Paper) -> Paper:
         if (
             root := self._efetch(
-                db='pubmed', id=paper_id, retmode='xml', rettype='abstract'
+                db='pubmed', id=pmid, retmode='xml', rettype='abstract'
             )
         ) is None:
-            return None
+            return paper
 
         if (
             article := root.find(
-                f"PubmedArticle/MedlineCitation/PMID[.='{paper_id}']/../.."
+                f"PubmedArticle/MedlineCitation/PMID[.='{pmid}']/../.."
             )
         ) is None:
-            return None
+            return paper
 
-        props: Dict[str, Any] = {
-            'id': f'pmid:{paper_id}',
-            'pmid': paper_id,
-            'content': content,
-        }
+        # paper is found
+        props: Dict[str, Any] = {'pmid': pmid}
         props.update(self._get_xml_props(article))
         props.update(self._get_license_props(props['pmcid']))
         props.update(self._get_derived_props(props))
-        return Paper(**props)
+        return Paper.from_kwargs(id=paper.id, content=paper.content, **props)
 
     def gene_id_for_symbol(
         self, *symbols: str, allow_synonyms: bool = False

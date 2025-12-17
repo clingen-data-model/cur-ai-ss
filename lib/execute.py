@@ -3,8 +3,10 @@ import datetime
 import logging
 import traceback
 
-from lib.evagg import SinglePMIDApp
+from lib.evagg import App
 from lib.evagg.utils import init_logger
+
+from pathlib import Path
 
 
 logger = logging.getLogger(__name__)
@@ -12,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Process a PMID and gene symbol.')
-    parser.add_argument('--pmid', help='PubMed ID', required=True, type=str)
+    parser.add_argument('--pdf', help='PDF', required=True, type=Path)
     parser.add_argument('--gene-symbol', help='Gene symbol', required=True, type=str)
     parser.add_argument(
         '--retries',
@@ -28,8 +30,12 @@ def run_evagg_app() -> None:
     init_logger(
         current_run=f'{args.pmid}_{args.gene_symbol}_{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'
     )
-    app = SinglePMIDApp(
-        args.pmid,
+    if not args.pdf.exists():
+        raise RuntimeError('pdf path must exist')
+    with open(args.pdf, 'rb') as f:
+        content = f.read()
+    app = App(
+        content,
         args.gene_symbol,
     )
     max_attempts = args.retries + 1
