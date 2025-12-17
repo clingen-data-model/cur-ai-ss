@@ -78,6 +78,10 @@ class Paper:
         return self.pdf_dir / 'images'
 
     @property
+    def pdf_sections_dir(self) -> Path:
+        return self.pdf_dir / 'sections'
+
+    @property
     def pdf_markdown_path(self) -> Path:
         return self.pdf_dir / 'raw.md'
 
@@ -110,6 +114,12 @@ class Paper:
         table_id: int,
     ) -> Path:
         return self.pdf_tables_dir / f'{table_id}.md'
+
+    def pdf_section_markdown_path(
+        self,
+        section_id: int,
+    ) -> Path:
+        return self.pdf_sections_dir / f'{section_id}.md'
 
 
 @dataclass(frozen=True)

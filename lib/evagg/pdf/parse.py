@@ -3,15 +3,20 @@ from collections import namedtuple
 import json
 from lib.evagg.types import Paper
 
-from docling_core.types.doc import DoclingDocument
-from docling_core.types.doc import ImageRefMode, PictureItem, TableItem
+from docling_core.types.doc import (
+    DoclingDocument,
+    ImageRefMode,
+    PictureItem,
+    TableItem,
+    SectionHeaderItem,
+    TextItem,
+)
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.base_models import DocumentStream
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling_core.types.doc.page import TextCellUnit
 from docling_parse.pdf_parser import DoclingPdfParser, PdfDocument
-
 
 IMAGE_RESOLUTION_SCALE = 2.0
 
@@ -43,12 +48,37 @@ def parse_words_json(stream: BytesIO) -> list[WordLoc]:
     return words_json
 
 
+def split_by_sections(document: DoclingDocument) -> list[tuple[str, str]]:
+    sections: list[tuple[str, str]] = []
+    current_header = None
+    current_text: list[str] = []
+
+    for (item, _) in document.iterate_items():
+        if isinstance(item, SectionHeaderItem):
+            # flush previous section
+            if current_header is not None:
+                sections.append((current_header.text, '\n\n'.join(current_text)))
+
+            current_header = item
+            current_text = []
+
+        elif isinstance(item, TextItem):
+            current_text.append(item.text)
+
+    # flush final section
+    if current_header is not None:
+        sections.append((current_header.text, '\n\n'.join(current_text)))
+
+    return sections
+
+
 def parse_content(content: bytes, force: bool = False) -> Paper:
     paper = Paper.from_content(content)
     if not force and paper.pdf_extraction_success_path.exists():
         return paper
     paper.pdf_images_dir.mkdir(parents=True, exist_ok=True)
     paper.pdf_tables_dir.mkdir(parents=True, exist_ok=True)
+    paper.pdf_sections_dir.mkdir(parents=True, exist_ok=True)
     doc_converter = DocumentConverter(
         format_options={
             InputFormat.PDF: PdfFormatOption(
@@ -90,7 +120,6 @@ def parse_content(content: bytes, force: bool = False) -> Paper:
                     table_id,
                 ),
                 'w',
-                encoding='utf-8',
             ) as fp:
                 fp.write(element.export_to_markdown(document))
             table_id += 1
@@ -111,14 +140,22 @@ def parse_content(content: bytes, force: bool = False) -> Paper:
     with open(
         paper.pdf_words_json_path,
         'w',
-        encoding='utf-8',
     ) as fp:
         json.dump(words_json, fp, indent=2)
+
+    section_mds: list[tuple[str, str]] = split_by_sections(document)
+    for i, section_md in enumerate(section_mds):
+        with open(
+            paper.pdf_section_markdown_path(i),
+            'w',
+        ) as fp:
+            fp.write('## ' + section_md[0])
+            fp.write('\n\n')
+            fp.write(section_md[1])
 
     with open(
         paper.pdf_extraction_success_path,
         'w',
-        encoding='utf-8',
     ) as fp:
         fp.write('')
 

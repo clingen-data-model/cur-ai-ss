@@ -50,3 +50,21 @@ def test_convert_and_extract_creates_outputs(
         image_id += 1
 
     assert len(images) >= 1, 'No pictures were extracted'
+
+    # -- section markdowns ---
+    sections = []
+    section_id = 0
+    while True:
+        section_md = paper.pdf_section_markdown_path(section_id)
+        if not section_md.exists():
+            break
+        sections.append(section_md)
+        section_id += 1
+
+    assert len(sections) >= 20, 'Not enough sections were extracted'
+
+    with open(
+        paper.pdf_section_markdown_path(section_id - 1),
+        'r'
+    ) as f:
+        assert '## Supporting Information' in f.read()
