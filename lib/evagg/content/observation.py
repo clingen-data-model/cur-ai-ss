@@ -292,7 +292,7 @@ class ObservationFinder:
         return response
 
     def _get_text_sections(self, paper: Paper) -> Tuple[str, List[str]]:
-        fulltext_xml = paper.fulltext_xml
+        fulltext_xml = paper.content.decode('utf-8')
         paper_text = get_fulltext(
             fulltext_xml, exclude=['AUTH_CONT', 'ACK_FUND', 'COMP_INT', 'REF']
         )
@@ -310,7 +310,7 @@ class ObservationFinder:
     def _get_text_mentioning_variant(
         self, paper: Paper, variant_descriptions: Sequence[str], allow_empty: bool
     ) -> str:
-        fulltext_xml = paper.fulltext_xml
+        fulltext_xml = paper.content.decode('utf-8')
         sections = get_sections(fulltext_xml)
         filtered_text = '\n\n'.join(
             [
@@ -648,7 +648,7 @@ variant isn't actually associated with the gene. But the possibility of previous
                         # Recreate the generator each time.
                         texts=list(
                             get_sections(
-                                paper.fulltext_xml,
+                                paper.content.decode('utf-8'),
                                 exclude=['AUTH_CONT', 'ACK_FUND', 'COMP_INT', 'REF'],
                             )
                         ),
