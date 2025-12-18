@@ -76,6 +76,8 @@ class PromptBasedContentExtractor:
             'evidence_id': lambda: ob.variant.get_unique_id(paper.id, ob.individual),
             'gene': lambda: gene_symbol,
             'paper_id': lambda: paper.id,
+            'pmid': lambda: paper.pmid,
+            'pmcid': lambda: paper.pmcid,
             'citation': lambda: paper.citation,
             'link': get_link,
             'paper_title': lambda: paper.title,
@@ -207,11 +209,9 @@ class PromptBasedContentExtractor:
         self, gene_symbol: str, observation: Observation
     ) -> str:
         # Obtain all the phenotype strings listed in the text associated with the gene.
-        fulltext = '\n\n'.join([t.text for t in observation.texts])
+        fulltext = observation.paper.fulltext_md
         # TODO: treating all tables in paper as a single text, maybe this isn't ideal, consider grouping by 'id'
-        table_texts = '\n\n'.join(
-            [t.text for t in observation.texts if t.section_type == 'TABLE']
-        )
+        table_texts = '\n\n'.observation.paper.tables_md
 
         # Determine the phenotype strings that are associated specifically with the observation.
         v_sub = ', '.join(observation.variant_descriptions)
@@ -248,7 +248,7 @@ class PromptBasedContentExtractor:
     ) -> Dict[str, Any]:
         params = {
             # First element is full text of the observation, consider alternatives
-            'passage': '\n\n'.join([t.text for t in observation.texts]),
+            'passage': observation.paper.fulltext_md,
             'variant_descriptions': ', '.join(observation.variant_descriptions),
             'patient_descriptions': ', '.join(observation.patient_descriptions),
             'gene': gene_symbol,

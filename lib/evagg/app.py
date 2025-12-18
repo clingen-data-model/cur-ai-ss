@@ -49,6 +49,8 @@ class App:
                 'evidence_id',
                 'gene',
                 'paper_id',
+                'pmid',
+                'pmcid',
                 'hgvs_c',
                 'hgvs_p',
                 'paper_variant',
