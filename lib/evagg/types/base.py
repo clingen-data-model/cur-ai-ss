@@ -103,6 +103,12 @@ class Paper:
     ) -> Path:
         return self.pdf_images_dir / f'{image_id}.png'
 
+    def pdf_image_caption_path(
+        self,
+        image_id: int,
+    ) -> Path:
+        return self.pdf_images_dir / f'{image_id}.md'
+
     def pdf_table_image_path(
         self,
         table_id: int,

@@ -10,6 +10,7 @@ from docling_core.types.doc import (
     TableItem,
     SectionHeaderItem,
     TextItem,
+    DocItemLabel,
 )
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.base_models import DocumentStream
@@ -48,8 +49,11 @@ def parse_words_json(stream: BytesIO) -> list[WordLoc]:
     return words_json
 
 
-def split_by_sections(document: DoclingDocument) -> list[tuple[str, str]]:
+def split_by_sections(
+    document: DoclingDocument,
+) -> tuple[list[tuple[str, str]], dict[int, str]]:
     sections: list[tuple[str, str]] = []
+    image_captions: dict[int, str] = {}
     current_header = None
     current_text: list[str] = []
 
@@ -63,13 +67,23 @@ def split_by_sections(document: DoclingDocument) -> list[tuple[str, str]]:
             current_text = []
 
         elif isinstance(item, TextItem):
-            current_text.append(item.text)
+            if item.label == DocItemLabel.CAPTION:
+                if item.parent.cref.startswith('#/pictures/'):
+                    image_captions[int(item.parent.cref.split('/')[-1])] = item.text
+                elif item.parent.cref.startswith('#/tables/'):
+                    # Skip table headers as they are included in table markdown.
+                    continue
+                else:
+                    msg = f'Caption for non-image or non-table found {item.parent.cref}, violating assumption.'
+                    raise ValueError(msg)
+            else:
+                current_text.append(item.text)
 
     # flush final section
     if current_header is not None:
         sections.append((current_header.text, '\n\n'.join(current_text)))
 
-    return sections
+    return sections, image_captions
 
 
 def parse_content(content: bytes, force: bool = False) -> Paper:
@@ -143,7 +157,7 @@ def parse_content(content: bytes, force: bool = False) -> Paper:
     ) as fp:
         json.dump(words_json, fp, indent=2)
 
-    section_mds: list[tuple[str, str]] = split_by_sections(document)
+    section_mds, image_captions = split_by_sections(document)
     for i, section_md in enumerate(section_mds):
         with open(
             paper.pdf_section_markdown_path(i),
@@ -152,6 +166,13 @@ def parse_content(content: bytes, force: bool = False) -> Paper:
             fp.write('## ' + section_md[0])
             fp.write('\n\n')
             fp.write(section_md[1])
+
+    for i, caption in image_captions.items():
+        with open(
+            paper.pdf_image_caption_path(i),
+            'w',
+        ) as fp:
+            fp.write(caption)
 
     with open(
         paper.pdf_extraction_success_path,
