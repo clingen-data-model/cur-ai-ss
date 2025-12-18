@@ -53,7 +53,7 @@ def split_by_sections(document: DoclingDocument) -> list[tuple[str, str]]:
     current_header = None
     current_text: list[str] = []
 
-    for (item, _) in document.iterate_items():
+    for item, _ in document.iterate_items():
         if isinstance(item, SectionHeaderItem):
             # flush previous section
             if current_header is not None:
@@ -70,7 +70,6 @@ def split_by_sections(document: DoclingDocument) -> list[tuple[str, str]]:
         sections.append((current_header.text, '\n\n'.join(current_text)))
 
     return sections
-
 
 
 def parse_content(content: bytes, force: bool = False) -> Paper:

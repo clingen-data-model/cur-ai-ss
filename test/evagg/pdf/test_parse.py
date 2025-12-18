@@ -63,9 +63,5 @@ def test_convert_and_extract_creates_outputs(
 
     assert len(sections) >= 20, 'Not enough sections were extracted'
 
-    with open(
-        paper.pdf_section_markdown_path(section_id - 1),
-        'r'
-    ) as f:
+    with open(paper.pdf_section_markdown_path(section_id - 1), 'r') as f:
         assert '## Supporting Information' in f.read()
-
