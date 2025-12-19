@@ -69,7 +69,7 @@ class Paper:
     def sections_md(self) -> list[str]:
         sections = []
         for section_path in self.pdf_sections_dir.iterdir():
-            if section_path.endswith('md'):
+            if str(section_path).endswith('md'):
                 with open(section_path, 'r') as f:
                     return sections.append(f.read())
         return sections
@@ -78,9 +78,9 @@ class Paper:
     def tables_md(self) -> list[str]:
         tables = []
         for table_path in self.pdf_tables_dir.iterdir():
-            if table_path.endswith('md'):
+            if str(table_path).endswith('md'):
                 with open(table_path, 'r') as f:
-                    return tables.append(f.read())
+                    tables.append(f.read())
         return tables
 
     @property

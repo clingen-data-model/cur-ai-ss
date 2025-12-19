@@ -68,6 +68,8 @@ def split_by_sections(
 
         elif isinstance(item, TextItem):
             if item.label == DocItemLabel.CAPTION:
+                if not item.parent:
+                    continue
                 if item.parent.cref.startswith('#/pictures/'):
                     image_captions[int(item.parent.cref.split('/')[-1])] = item.text
                 elif item.parent.cref.startswith('#/tables/'):
