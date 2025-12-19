@@ -35,7 +35,7 @@ async def test_openai_client_prompt(
             },
             {'role': 'user', 'content': prompt_text},
         ],
-        max_output_tokens=1024,
+        max_output_tokens=2048,
         model='gpt-8',
     )
     assert (

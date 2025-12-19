@@ -35,7 +35,7 @@ with st.form(key='my_form'):
     submitted = st.form_submit_button('Submit')
 
 if uploaded_file is not None:
-    st.pdf(uploaded_file, height='stretch')
+    st.pdf(uploaded_file)
 
 if submitted:
     if not uploaded_file or not gene_symbol:

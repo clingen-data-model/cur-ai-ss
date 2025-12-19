@@ -19,7 +19,7 @@ from lib.evagg.utils.environment import env
 logger = logging.getLogger(__name__)
 
 DEFAULT_PROMPT_SETTINGS = {
-    'max_output_tokens': 1024,
+    'max_output_tokens': 2048,
 }
 
 MAX_PARALLEL_REQUESTS = 5

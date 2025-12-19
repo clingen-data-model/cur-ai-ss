@@ -28,7 +28,7 @@ def parse_args() -> argparse.Namespace:
 def run_evagg_app() -> None:
     args = parse_args()
     init_logger(
-        current_run=f'{args.pmid}_{args.gene_symbol}_{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'
+        current_run=f'{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'
     )
     if not args.pdf.exists():
         raise RuntimeError('pdf path must exist')

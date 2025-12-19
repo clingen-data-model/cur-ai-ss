@@ -173,7 +173,7 @@ class PromptBasedContentExtractor:
             self._PROMPT_FIELDS['phenotype'],
             {'passage': text},
             PromptTag.PHENOTYPES_ALL,
-            {'max_output_tokens': 4096},
+            {'max_output_tokens': 4096 * 2},
         )
         if (all_phenotypes := all_phenotypes_result.get('phenotypes', [])) == []:
             return []
