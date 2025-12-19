@@ -71,7 +71,7 @@ class Paper:
         for section_path in self.pdf_sections_dir.iterdir():
             if str(section_path).endswith('md'):
                 with open(section_path, 'r') as f:
-                    return sections.append(f.read())
+                    sections.append(f.read())
         return sections
 
     @property
