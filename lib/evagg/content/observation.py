@@ -295,17 +295,17 @@ class ObservationFinder:
     def _get_text_mentioning_variant(
         self, paper: Paper, variant_descriptions: Sequence[str], allow_empty: bool
     ) -> str:
-        sections = paper.sections_md
+        sections = paper.sections_md + paper.tables_md
         filtered_text = '\n\n'.join(
             [
-                section.text
+                section
                 for section in sections
-                if any(variant in section.text for variant in variant_descriptions)
+                if any(variant in section for variant in variant_descriptions)
             ]
         )
         if not filtered_text and not allow_empty:
             sections = paper.sections_md
-            return '\n\n'.join([section.text for section in sections])
+            return '\n\n'.join([section for section in sections])
         return filtered_text
 
     def _create_variant_from_text(
