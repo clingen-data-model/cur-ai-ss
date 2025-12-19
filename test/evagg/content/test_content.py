@@ -759,7 +759,6 @@ def test_prompt_based_content_extractor_field_caching_phenotype(
     mock_phenotype_searcher: Any,
     mock_phenotype_fetcher: Any,
 ) -> None:
-    paper_id = '12345678'
     phenotype = 'test i1 (HP:0123)'
 
     variant1 = HGVSVariant(
@@ -838,7 +837,6 @@ def test_prompt_based_content_extractor_field_caching_variant_type(
     mock_phenotype_searcher: Any,
     mock_phenotype_fetcher: Any,
 ) -> None:
-    paper_id = '12345678'
     variant_type = 'missense'
 
     variant = HGVSVariant(
@@ -891,7 +889,6 @@ def test_prompt_based_content_extractor_field_caching_study_type(
     mock_phenotype_searcher: Any,
     mock_phenotype_fetcher: Any,
 ) -> None:
-    paper_id = '12345678'
     study_type = 'case study'
 
     variant1 = HGVSVariant(

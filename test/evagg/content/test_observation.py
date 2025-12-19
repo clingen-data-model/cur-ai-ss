@@ -14,7 +14,8 @@ def paper(monkeypatch) -> Paper:
     monkeypatch.setattr(
         Paper,
         'fulltext_md',
-        property(lambda self: '''
+        property(
+            lambda self: """
             Developmental disabilities have diverse genetic causes that must be identified to facilitate precise diagnoses. We describe genomic data from 371 affected individuals, 309 of which were sequenced as proband-parent trios.
             Whole-exome sequences (WES) were generated for 365 individuals (127 affected) and whole-genome sequences (WGS) were generated for 612 individuals (244 affected).
             Pathogenic or likely pathogenic variants were found in 100 individuals (27%), with variants of uncertain significance in an additional 42 (11.3%). We found that a family history of neurological disease, especially the presence of an affected first-degree relative, reduces the pathogenic/likely pathogenic variant identification rate, reflecting both the disease relevance and ease of interpretation of de novo variants. We also found that improvements to genetic knowledge facilitated interpretation changes in many cases. Through systematic reanalyses, we have thus far reclassified 15 variants, with 11.3% of families who initially were found to harbor a VUS and 4.7% of families with a negative result eventually found to harbor a pathogenic or likely pathogenic variant. To further such progress, the data described here are being shared through ClinVar, GeneMatcher, and dbGaP.
@@ -40,13 +41,15 @@ def paper(monkeypatch) -> Paper:
             | MAST1 | 00270-C | NM_014975.2(MAST1):c.278C > T (p.Ser93Leu) | NR | Likely pathogenic | GeneMatcher | Collaboration with several other groups identified patients with comparable genotypes and phenotypes |
             | SUV420H1 | 00056-C | NM_017635.3(SUV420H1):c.2497G > T (p.Glu833Ter) | NR | Likely pathogenic | Publication | [16] |
 
-        '''),
+        """
+        ),
     )
     monkeypatch.setattr(
         Paper,
         'tables_md',
-        property(lambda self: [
-            '''
+        property(
+            lambda self: [
+                """
             Variants with an increase in pathogenicity score due to reanalysis
             | Gene | Affected individual ID(s) | Variant info | Original score | Updated score | Reason(s) for update | Evidence for upgrade |
             |---|---|---|---|---|---|---|
@@ -66,20 +69,23 @@ def paper(monkeypatch) -> Paper:
             | MAST1 | 00270-C | NM_014975.2(MAST1):c.278C > T (p.Ser93Leu) | NR | Likely pathogenic | GeneMatcher | Collaboration with several other groups identified patients with comparable genotypes and phenotypes |
             | SUV420H1 | 00056-C | NM_017635.3(SUV420H1):c.2497G > T (p.Glu833Ter) | NR | Likely pathogenic | Publication | [16] |
 
-            ''',
-        ]),
+            """,
+            ]
+        ),
     )
     monkeypatch.setattr(
         Paper,
         'sections_md',
-        property(lambda self: [
-            'Developmental disabilities have diverse genetic causes that must be identified to facilitate precise diagnoses. We describe genomic data from 371 affected individuals, 309 of which were sequenced as proband-parent trios.',
-            'Whole-exome sequences (WES) were generated for 365 individuals (127 affected) and whole-genome sequences (WGS) were generated for 612 individuals (244 affected).',
-            'Pathogenic or likely pathogenic variants were found in 100 individuals (27%), with variants of uncertain significance in an additional 42 (11.3%). We found that a family history of neurological disease, especially the presence of an affected first-degree relative, reduces the pathogenic/likely pathogenic variant identification rate, reflecting both the disease relevance and ease of interpretation of de novo variants. We also found that improvements to genetic knowledge facilitated interpretation changes in many cases. Through systematic reanalyses, we have thus far reclassified 15 variants, with 11.3% of families who initially were found to harbor a VUS and 4.7% of families with a negative result eventually found to harbor a pathogenic or likely pathogenic variant. To further such progress, the data described here are being shared through ClinVar, GeneMatcher, and dbGaP.',
-            'Our data strongly support the value of large-scale sequencing, especially WGS within proband-parent trios, as both an effective first-choice diagnostic tool and means to advance clinical and research progress related to pediatric neurological disease.',
-            'Electronic supplementary material',
-            'The online version of this article (doi:10.1186/s13073-017-0433-1) contains supplementary material, which is available to authorized users.',
-        ]),
+        property(
+            lambda self: [
+                'Developmental disabilities have diverse genetic causes that must be identified to facilitate precise diagnoses. We describe genomic data from 371 affected individuals, 309 of which were sequenced as proband-parent trios.',
+                'Whole-exome sequences (WES) were generated for 365 individuals (127 affected) and whole-genome sequences (WGS) were generated for 612 individuals (244 affected).',
+                'Pathogenic or likely pathogenic variants were found in 100 individuals (27%), with variants of uncertain significance in an additional 42 (11.3%). We found that a family history of neurological disease, especially the presence of an affected first-degree relative, reduces the pathogenic/likely pathogenic variant identification rate, reflecting both the disease relevance and ease of interpretation of de novo variants. We also found that improvements to genetic knowledge facilitated interpretation changes in many cases. Through systematic reanalyses, we have thus far reclassified 15 variants, with 11.3% of families who initially were found to harbor a VUS and 4.7% of families with a negative result eventually found to harbor a pathogenic or likely pathogenic variant. To further such progress, the data described here are being shared through ClinVar, GeneMatcher, and dbGaP.',
+                'Our data strongly support the value of large-scale sequencing, especially WGS within proband-parent trios, as both an effective first-choice diagnostic tool and means to advance clinical and research progress related to pediatric neurological disease.',
+                'Electronic supplementary material',
+                'The online version of this article (doi:10.1186/s13073-017-0433-1) contains supplementary material, which is available to authorized users.',
+            ]
+        ),
     )
     return Paper(
         **{
@@ -96,7 +102,7 @@ def paper(monkeypatch) -> Paper:
             'license': 'CC BY',
             'citation': 'Bowling (2017) Genome Med',
             'link': 'https://pubmed.ncbi.nlm.nih.gov/28554332/',
-            'content': b''
+            'content': b'',
         }
     )
 
@@ -117,7 +123,11 @@ def mock_comparator(mock_client: Any) -> Any:
 
 
 def test_sanity_check_failure(
-    paper: Paper, mock_llm_client: Any, mock_factory: Any, mock_comparator: Any, monkeypatch
+    paper: Paper,
+    mock_llm_client: Any,
+    mock_factory: Any,
+    mock_comparator: Any,
+    monkeypatch,
 ) -> None:
     # Remove the full content of the paper
     monkeypatch.setattr(
@@ -146,7 +156,11 @@ def test_sanity_check_failure(
 
 
 def test_find_observations_no_variants(
-    paper: Paper, mock_llm_client: Any, mock_factory: Any, mock_comparator: Any, monkeypatch
+    paper: Paper,
+    mock_llm_client: Any,
+    mock_factory: Any,
+    mock_comparator: Any,
+    monkeypatch,
 ) -> None:
     # Remove the full content of the paper
     monkeypatch.setattr(
