@@ -10,7 +10,6 @@ from lib.evagg.content.variant import HGVSVariantFactory
 from lib.evagg.llm import OpenAIClient
 from lib.evagg.types import HGVSVariant, Paper, PromptTag
 
-from .fulltext import TextSection
 from .variant import HGVSVariantComparator
 
 PatientVariant = Tuple[HGVSVariant, str]
@@ -34,7 +33,6 @@ class Observation:
     individual: str
     variant_descriptions: List[str]
     patient_descriptions: List[str]
-    texts: List[TextSection]
     paper: Paper
 
 

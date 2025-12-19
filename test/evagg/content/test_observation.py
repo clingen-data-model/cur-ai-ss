@@ -10,7 +10,17 @@ from lib.evagg.types import HGVSVariant, Paper
 
 
 @pytest.fixture
-def paper() -> Paper:
+def paper(monkeypatch) -> Paper:
+    monkeypatch.setattr(
+        Paper,
+        'fulltext_md',
+        property(lambda self: 'Here is the observation text.'),
+    )
+    monkeypatch.setattr(
+        Paper,
+        'tables_md',
+        property(lambda self: []),
+    )
     return Paper(
         **{
             'id': 'pmid:28554332',

@@ -211,7 +211,7 @@ class PromptBasedContentExtractor:
         # Obtain all the phenotype strings listed in the text associated with the gene.
         fulltext = observation.paper.fulltext_md
         # TODO: treating all tables in paper as a single text, maybe this isn't ideal, consider grouping by 'id'
-        table_texts = '\n\n'.observation.paper.tables_md
+        table_texts = '\n\n'.join(observation.paper.tables_md)
 
         # Determine the phenotype strings that are associated specifically with the observation.
         v_sub = ', '.join(observation.variant_descriptions)
