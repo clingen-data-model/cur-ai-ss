@@ -2,6 +2,7 @@ import argparse
 import datetime
 import logging
 import traceback
+import json
 
 from lib.evagg import App
 from lib.evagg.utils import init_logger
@@ -27,9 +28,7 @@ def parse_args() -> argparse.Namespace:
 
 def run_evagg_app() -> None:
     args = parse_args()
-    init_logger(
-        current_run=f'{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'
-    )
+    init_logger(current_run=f'{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}')
     if not args.pdf.exists():
         raise RuntimeError('pdf path must exist')
     with open(args.pdf, 'rb') as f:
@@ -42,7 +41,7 @@ def run_evagg_app() -> None:
     for attempt in range(1, max_attempts + 1):
         try:
             logger.info(f'Attempt {attempt}/{max_attempts}')
-            app.execute()
+            json.dumps(app.execute())
             return
         except KeyboardInterrupt:
             logger.info(f'Interrupted on attempt {attempt}')
