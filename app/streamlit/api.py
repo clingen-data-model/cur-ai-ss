@@ -4,6 +4,17 @@ from lib.evagg.types.base import Paper
 from lib.evagg.utils.environment import env
 
 
+def get_http_error_detail(e: requests.HTTPError) -> str:
+    """Safely extract the 'detail' from an HTTPError response."""
+    if e.response is not None:
+        try:
+            return e.response.json().get('detail', e.response.text)
+        except ValueError:
+            # Response is not JSON
+            return e.response.text
+    return str(e)
+
+
 def get_papers():
     resp = requests.get(f'http://{env.API_ENDPOINT}:{env.API_PORT}/papers')
     resp.raise_for_status()
@@ -17,14 +28,16 @@ def get_paper(paper_id: str):
 
 
 def put_paper(uploaded_file):
-    paper = {
-        'id': Paper.from_content(uploaded_file.read()).id,
-        'file_name': uploaded_file.name,
-    }
     resp = requests.put(
         f'http://{env.API_ENDPOINT}:{env.API_PORT}/papers',
-        json=paper,
-        headers={'Content-Type': 'application/json'},  # optional but explicit
+        files={
+            'uploaded_file': (
+                uploaded_file.name,
+                uploaded_file.read(),
+                'application/pdf',
+            )
+        },
+        # Content type is multipart/form-data
     )
     resp.raise_for_status()
     return resp.json()

@@ -31,12 +31,7 @@ class PaperDB(Base):
     )
 
 
-class Paper(BaseModel):
+class PaperResp(BaseModel):
     id: str
     file_name: str
     status: ExtractionStatus
-
-
-class PaperExtractionRequest(BaseModel):
-    id: str
-    file_name: str

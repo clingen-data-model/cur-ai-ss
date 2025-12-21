@@ -86,6 +86,10 @@ class Paper:
         return Path(env.EXTRACTED_PDF_DIR) / self.id
 
     @property
+    def pdf_raw_path(self) -> Path:
+        return self.pdf_dir / 'raw.pdf'
+
+    @property
     def pdf_thumbnail_path(self) -> Path:
         return self.pdf_dir / 'thumbnail.png'
 

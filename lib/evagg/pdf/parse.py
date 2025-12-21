@@ -17,7 +17,6 @@ from docling_core.types.doc import (
 from docling_core.types.doc.page import TextCellUnit
 from docling_parse.pdf_parser import DoclingPdfParser, PdfDocument
 
-from lib.evagg.pdf.thumbnail import pdf_first_page_to_thumbnail_pymupdf_bytes
 from lib.evagg.types import Paper
 
 IMAGE_RESOLUTION_SCALE = 2.0
@@ -176,9 +175,6 @@ def parse_content(content: bytes, force: bool = False) -> Paper:
             'w',
         ) as fp:
             fp.write(caption)
-
-    with open(paper.pdf_thumbnail_dir, 'wb') as fp:
-        fp.write(pdf_first_page_to_thumbnail_pymupdf_bytes(content))
 
     with open(
         paper.pdf_extraction_success_path,
