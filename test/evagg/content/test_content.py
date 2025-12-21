@@ -3,9 +3,7 @@ from typing import Any
 import pytest
 
 from lib.evagg import PromptBasedContentExtractor
-from lib.evagg.content import (
-    Observation,
-)
+from lib.evagg.content import Observation, ObservationFinder
 from lib.evagg.llm import OpenAIClient
 from lib.evagg.ref import PyHPOClient, WebHPOClient
 from lib.evagg.types import HGVSVariant, Paper
