@@ -42,3 +42,6 @@ class PromptTag(str, Enum):
     PATIENT_CELLS_TISSUES = 'patient_cells_tissues'
     ANIMAL_MODEL = 'animal_model'
     STUDY_TYPE = 'study_type'
+
+    # PDF metadata tags
+    TITLE = 'title'

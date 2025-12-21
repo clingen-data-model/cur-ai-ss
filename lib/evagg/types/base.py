@@ -1,28 +1,147 @@
+import hashlib
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, List
 
+from lib.evagg.utils.environment import env
 
+
+@dataclass(eq=False)
 class Paper:
-    def __init__(self, **kwargs: Any) -> None:
-        self.id = kwargs['id']  # id is required
-        self.props = kwargs
+    id: str
+    content: bytes
+
+    # core bibliographic fields
+    pmid: str | None = None
+    pmcid: str | None = None
+    doi: str | None = None
+
+    title: str | None = None
+    abstract: str | None = None
+    journal: str | None = None
+    first_author: str | None = None
+    pub_year: int | None = None
+    citation: str | None = None
+
+    # access / licensing
+    OA: bool | None = None
+    can_access: bool | None = None
+    license: str | None = None
+    link: str | None = None
+
+    @classmethod
+    def from_content(self, content: bytes) -> 'Paper':
+        h = hashlib.sha256()
+        h.update(content)
+        return Paper(
+            id=h.hexdigest(),
+            content=content,
+        )
+
+    @classmethod
+    def from_kwargs(cls, **kwargs: Any) -> 'Paper':
+        """
+        Split known fields from unknown ones.
+        """
+        field_names = {f.name for f in cls.__dataclass_fields__.values()}
+        known = {k: v for k, v in kwargs.items() if k in field_names}
+        return cls(**known)
 
     def __hash__(self) -> int:
         return hash(self.id)
 
-    def __eq__(self, o: object) -> bool:
-        if not isinstance(o, Paper):
-            return False
-        return self.id == o.id
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, Paper) and self.id == other.id
 
     def __repr__(self) -> str:
-        text = (
-            self.props.get('title')
-            or self.props.get('citation')
-            or self.props.get('abstract')
-            or 'unknown'
-        )
-        return f'id: {self.id} - "{text[:15]}{"..." if len(text) > 15 else ""}"'
+        text = self.title or self.citation or self.abstract or 'unknown'
+        snippet = str(text)[:15] + ('...' if len(text) > 15 else '')
+        return f'id: {self.id} - "{snippet}"'
+
+    @property
+    def fulltext_md(self) -> str:
+        with open(self.pdf_markdown_path, 'r') as f:
+            return f.read()
+
+    @property
+    def sections_md(self) -> list[str]:
+        sections = []
+        for section_path in self.pdf_sections_dir.iterdir():
+            if str(section_path).endswith('md'):
+                with open(section_path, 'r') as f:
+                    sections.append(f.read())
+        return sections
+
+    @property
+    def tables_md(self) -> list[str]:
+        tables = []
+        for table_path in self.pdf_tables_dir.iterdir():
+            if str(table_path).endswith('md'):
+                with open(table_path, 'r') as f:
+                    tables.append(f.read())
+        return tables
+
+    @property
+    def pdf_dir(self) -> Path:
+        return Path(env.EXTRACTED_PDF_DIR) / self.id
+
+    @property
+    def pdf_tables_dir(self) -> Path:
+        return self.pdf_dir / 'tables'
+
+    @property
+    def pdf_images_dir(self) -> Path:
+        return self.pdf_dir / 'images'
+
+    @property
+    def pdf_sections_dir(self) -> Path:
+        return self.pdf_dir / 'sections'
+
+    @property
+    def pdf_markdown_path(self) -> Path:
+        return self.pdf_dir / 'raw.md'
+
+    @property
+    def pdf_json_path(self) -> Path:
+        return self.pdf_dir / 'raw.json'
+
+    @property
+    def pdf_words_json_path(self) -> Path:
+        return self.pdf_dir / 'words.json'
+
+    @property
+    def pdf_extraction_success_path(self) -> Path:
+        return self.pdf_dir / '_SUCCESS'
+
+    def pdf_image_path(
+        self,
+        image_id: int,
+    ) -> Path:
+        return self.pdf_images_dir / f'{image_id}.png'
+
+    def pdf_image_caption_path(
+        self,
+        image_id: int,
+    ) -> Path:
+        return self.pdf_images_dir / f'{image_id}.md'
+
+    def pdf_table_image_path(
+        self,
+        table_id: int,
+    ) -> Path:
+        return self.pdf_tables_dir / f'{table_id}.png'
+
+    def pdf_table_markdown_path(
+        self,
+        table_id: int,
+    ) -> Path:
+        return self.pdf_tables_dir / f'{table_id}.md'
+
+    def pdf_section_markdown_path(
+        self,
+        section_id: int,
+    ) -> Path:
+        return self.pdf_sections_dir / f'{section_id}.md'
 
 
 @dataclass(frozen=True)

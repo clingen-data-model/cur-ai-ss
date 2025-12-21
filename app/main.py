@@ -3,13 +3,13 @@ import random
 
 import streamlit as st
 
-from lib.evagg.app import SinglePMIDApp
+from lib.evagg.app import App
 
 
 @st.cache_data(show_spinner='Running EvAGG...')
-def run_app(pmid: str, gene_symbol: str, cache_bust: int):
-    app = SinglePMIDApp(
-        pmid,
+def run_app(content: bytes, gene_symbol: str, cache_bust: int):
+    app = App(
+        content,
         gene_symbol,
     )
     max_attempts = 3
@@ -30,17 +30,22 @@ if 'curation_data' not in st.session_state:
 
 # Input fields
 with st.form(key='my_form'):
-    pmid = st.text_input('Enter PubMed ID (PMID):')
+    uploaded_file = st.file_uploader('Choose a PDF file', type='pdf')
     gene_symbol = st.text_input('Enter Gene Symbol:')
     override_cache = st.checkbox('Override Caching')
     submitted = st.form_submit_button('Submit')
 
+if uploaded_file is not None:
+    st.pdf(uploaded_file)
+
 if submitted:
-    if not pmid or not gene_symbol:
-        st.error('Please enter both a PMID and a gene symbol.')
+    if not uploaded_file or not gene_symbol:
+        st.error('Please enter both a pdf and a gene symbol.')
     else:
         if res := run_app(
-            pmid, gene_symbol, random.randint(0, int(1e9)) if override_cache else 0
+            uploaded_file.read(),
+            gene_symbol,
+            random.randint(0, int(1e9)) if override_cache else 0,
         ):
             st.session_state.curation_data = res
             st.success('Successfully executed EvAGG')

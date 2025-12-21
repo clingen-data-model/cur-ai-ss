@@ -10,7 +10,6 @@ from lib.evagg.content.variant import HGVSVariantFactory
 from lib.evagg.llm import OpenAIClient
 from lib.evagg.types import HGVSVariant, Paper, PromptTag
 
-from .fulltext import TextSection, get_fulltext, get_sections
 from .variant import HGVSVariantComparator
 
 PatientVariant = Tuple[HGVSVariant, str]
@@ -34,8 +33,7 @@ class Observation:
     individual: str
     variant_descriptions: List[str]
     patient_descriptions: List[str]
-    texts: List[TextSection]
-    paper_id: str
+    paper: Paper
 
 
 class ObservationFinder:
@@ -292,60 +290,22 @@ class ObservationFinder:
         return response
 
     def _get_text_sections(self, paper: Paper) -> Tuple[str, List[str]]:
-        # Get paper texts.
-        fulltext_xml = paper.props.get('fulltext_xml')
-        if not fulltext_xml:
-            logger.info(
-                f'Unable to retrieve fulltext for {paper.id}, falling back to abstract only.'
-            )
-            return paper.props['abstract'], []
-
-        paper_text = get_fulltext(
-            fulltext_xml, exclude=['AUTH_CONT', 'ACK_FUND', 'COMP_INT', 'REF']
-        )
-        table_sections = list(get_sections(fulltext_xml, include=['TABLE']))
-
-        table_ids = {t.id for t in table_sections}
-        table_texts = []
-        for table_id in table_ids:
-            table_texts.append(
-                '\n\n'.join([sec.text for sec in table_sections if sec.id == table_id])
-            )
-
-        return paper_text, table_texts
+        return paper.fulltext_md, paper.tables_md
 
     def _get_text_mentioning_variant(
         self, paper: Paper, variant_descriptions: Sequence[str], allow_empty: bool
     ) -> str:
-        fulltext_xml = paper.props.get('fulltext_xml')  # Can be None
-        abstract_fallback_section_list = [
-            TextSection(
-                section_type='abstract',
-                text_type='unknown',
-                offset=-1,
-                text=paper.props['abstract'],
-                id='unknown',
-            )
-        ]
-        sections = (
-            get_sections(fulltext_xml)
-            if fulltext_xml
-            else abstract_fallback_section_list
-        )
+        sections = paper.sections_md + paper.tables_md
         filtered_text = '\n\n'.join(
             [
-                section.text
+                section
                 for section in sections
-                if any(variant in section.text for variant in variant_descriptions)
+                if any(variant in section for variant in variant_descriptions)
             ]
         )
         if not filtered_text and not allow_empty:
-            sections = (
-                get_sections(fulltext_xml)
-                if fulltext_xml
-                else abstract_fallback_section_list
-            )  # Reset the exhausted generator.
-            return '\n\n'.join([section.text for section in sections])
+            sections = paper.sections_md
+            return '\n\n'.join([section for section in sections])
         return filtered_text
 
     def _create_variant_from_text(
@@ -669,24 +629,7 @@ variant isn't actually associated with the gene. But the possibility of previous
                         individual=individual,
                         variant_descriptions=list(set(descriptions)),
                         patient_descriptions=[individual],
-                        # Recreate the generator each time.
-                        texts=list(
-                            get_sections(
-                                paper.props['fulltext_xml'],
-                                exclude=['AUTH_CONT', 'ACK_FUND', 'COMP_INT', 'REF'],
-                            )
-                            if paper.props['fulltext_xml']
-                            else [
-                                TextSection(
-                                    section_type='abstract',
-                                    text_type='unknown',
-                                    offset=-1,
-                                    text=paper.props['abstract'],
-                                    id='unknown',
-                                )
-                            ]
-                        ),
-                        paper_id=paper.id,
+                        paper=paper,
                     )
                 )
 
