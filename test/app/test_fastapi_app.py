@@ -2,6 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.fastapi_app import app
+from app.db import get_session
 from app.models import ExtractionStatus
 
 
@@ -54,7 +55,11 @@ def test_list_jobs(client):
 def test_list_jobs_filtered_by_status(client):
     client.put('/papers', json={'id': 'job-7'})
     client.put('/papers', json={'id': 'job-8'})
-    response = client.get('/papers', params={'status': ExtractionStatus.QUEUED})
+    response = client.get('/papers', params={'status': ExtractionStatus.QUEUED.value})
     assert response.status_code == 200
     jobs = response.json()
     assert all(job['status'] == ExtractionStatus.QUEUED for job in jobs)
+
+
+
+

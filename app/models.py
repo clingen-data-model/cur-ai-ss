@@ -14,9 +14,9 @@ Base = declarative_base()
 
 
 class ExtractionStatus(str, Enum):
-    EXTRACTED = 'extracted'
-    QUEUED = 'queued'
-    FAILED = 'failed'
+    EXTRACTED = 'EXTRACTED'
+    FAILED = 'FAILED'
+    QUEUED = 'QUEUED'
 
 
 class PaperDB(Base):

@@ -24,30 +24,30 @@ app = FastAPI(title='PDF Extracting Jobs API', lifespan=lifespan)
 def queue_extraction(
     req: PaperExtractionRequest, session: Session = Depends(get_session)
 ):
-    job = session.get(PaperDB, req.id)
-    if job:
-        if job.status == ExtractionStatus.EXTRACTED:
+    paper = session.get(PaperDB, req.id)
+    if paper:
+        if paper.status == ExtractionStatus.EXTRACTED:
             raise HTTPException(
                 status_code=404, detail='Paper extraction already successful'
             )
-        if job.status == ExtractionStatus.QUEUED:
+        if paper.status == ExtractionStatus.QUEUED:
             raise HTTPException(
                 status_code=404, detail='Paper extraction already running'
             )
-    if not job:
-        job = PaperDB(id=req.id)
-        session.add(job)
+    if not paper:
+        paper = PaperDB(id=req.id)
+        session.add(paper)
     session.commit()
-    session.refresh(job)
-    return job
+    session.refresh(paper)
+    return paper
 
 
 @app.get('/papers/{paper_id}', response_model=Paper)
 def get_paper(paper_id: str, session: Session = Depends(get_session)):
-    job = session.get(PaperDB, job_id)
-    if not job:
+    paper = session.get(PaperDB, paper_id)
+    if not paper:
         raise HTTPException(status_code=404, detail='Paper not found')
-    return job
+    return paper
 
 
 @app.get('/papers', response_model=list[Paper])
