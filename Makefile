@@ -28,7 +28,7 @@ all-lint: lint type format
 
 .PHONY: test
 test:
-	@export ENV_FILE=".env.test" && uv run pytest $(PY_DIRS_TEST) --cov=$(PY_DIRS_MAIN) --cov-report=term-missing --cov-report=xml
+	@export ENV_FILE=".env.test" && uv run python3 -m pytest $(PY_DIRS_TEST) --cov=$(PY_DIRS_MAIN) --cov-report=term-missing --cov-report=xml
 
 .PHONY: lint
 lint:
