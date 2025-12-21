@@ -51,6 +51,9 @@ dev = [
 [tool.uv]
 package = true
 
+[tool.ruff]
+select = ["I"] 
+
 [tool.ruff.format]
 quote-style = "single"
 

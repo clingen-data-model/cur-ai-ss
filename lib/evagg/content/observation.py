@@ -1,16 +1,16 @@
 import asyncio
-from dataclasses import dataclass
 import logging
 import os
 import re
 from collections import defaultdict
+from dataclasses import dataclass
 from typing import Dict, List, Sequence, Tuple
 
 from lib.evagg.content.variant import HGVSVariantFactory
 from lib.evagg.llm import OpenAIClient
 from lib.evagg.types import HGVSVariant, Paper, PromptTag
 
-from .fulltext import get_fulltext, get_sections, TextSection
+from .fulltext import TextSection, get_fulltext, get_sections
 from .variant import HGVSVariantComparator
 
 PatientVariant = Tuple[HGVSVariant, str]

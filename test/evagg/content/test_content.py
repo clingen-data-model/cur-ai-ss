@@ -4,8 +4,8 @@ import pytest
 
 from lib.evagg import PromptBasedContentExtractor
 from lib.evagg.content import (
-    ObservationFinder,
     Observation,
+    ObservationFinder,
     TextSection,
 )
 from lib.evagg.content.fulltext import get_fulltext

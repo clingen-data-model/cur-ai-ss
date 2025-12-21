@@ -1,6 +1,7 @@
 import json
-import streamlit as st
 import random
+
+import streamlit as st
 
 from lib.evagg.app import SinglePMIDApp
 

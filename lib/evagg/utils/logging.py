@@ -4,7 +4,6 @@ import os
 import sys
 from typing import Callable, Dict, List, Optional, Set
 
-
 from lib.evagg.types import PromptTag
 from lib.evagg.utils.environment import env
 

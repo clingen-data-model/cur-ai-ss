@@ -1,25 +1,25 @@
 import logging
+from typing import Dict, Sequence
 
-from lib.evagg.llm import OpenAIClient
 from lib.evagg.content import (
-    PromptBasedContentExtractor,
     HGVSVariantComparator,
     HGVSVariantFactory,
     ObservationFinder,
+    PromptBasedContentExtractor,
 )
+from lib.evagg.llm import OpenAIClient
 from lib.evagg.ref import (
     ClinvarClient,
     GnomadClient,
     MutalyzerClient,
     NcbiLookupClient,
-    WebHPOClient,
     PyHPOClient,
     RefSeqLookupClient,
     VepClient,
+    WebHPOClient,
 )
-from lib.evagg.utils.web import RequestsWebContentClient, WebClientSettings
 from lib.evagg.ref.ncbi import get_ncbi_response_translator
-from typing import Dict, Sequence
+from lib.evagg.utils.web import RequestsWebContentClient, WebClientSettings
 
 logger = logging.getLogger(__name__)
 

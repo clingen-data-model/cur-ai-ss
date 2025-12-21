@@ -2,7 +2,6 @@ import os
 from functools import reduce
 from unittest.mock import AsyncMock, patch
 
-
 from lib.evagg.llm import OpenAIClient
 from lib.evagg.types import PromptTag
 

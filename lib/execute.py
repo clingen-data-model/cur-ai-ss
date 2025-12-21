@@ -6,7 +6,6 @@ import traceback
 from lib.evagg import SinglePMIDApp
 from lib.evagg.utils import init_logger
 
-
 logger = logging.getLogger(__name__)
 
 

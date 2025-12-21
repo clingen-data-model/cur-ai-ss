@@ -1,10 +1,10 @@
 import logging
+import typing
+from typing import Any, Dict, Sequence
 
+import requests
 
 from lib.evagg.utils import RequestsWebContentClient
-import requests
-from typing import Dict, Sequence, Any
-import typing
 
 logger = logging.getLogger(__name__)
 

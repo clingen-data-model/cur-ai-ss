@@ -3,7 +3,7 @@ import re
 from collections import defaultdict
 from typing import Dict, List, Sequence, Set, Tuple
 
-from lib.evagg.ref import IRefSeqLookupClient, NcbiLookupClient, MutalyzerClient
+from lib.evagg.ref import IRefSeqLookupClient, MutalyzerClient, NcbiLookupClient
 from lib.evagg.types import HGVSVariant
 
 logger = logging.getLogger(__name__)

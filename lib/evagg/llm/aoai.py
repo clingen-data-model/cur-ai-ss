@@ -13,8 +13,8 @@ from openai.types.responses import (
 
 from lib.evagg.prompts import PROMPT_REGISTRY
 from lib.evagg.types import PromptTag
-from lib.evagg.utils.logging import PROMPT
 from lib.evagg.utils.environment import env
+from lib.evagg.utils.logging import PROMPT
 
 logger = logging.getLogger(__name__)
 
