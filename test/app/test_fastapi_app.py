@@ -1,8 +1,8 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app.fastapi_app import app
 from app.db import get_session
+from app.fastapi_app import app
 from app.models import ExtractionStatus
 
 
