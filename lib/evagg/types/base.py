@@ -114,6 +114,10 @@ class Paper:
         return self.pdf_dir / 'words.json'
 
     @property
+    def evagg_json(self) -> Path:
+        return self.pdf_dir / 'evagg.json'
+
+    @property
     def pdf_extraction_success_path(self) -> Path:
         return self.pdf_dir / '_SUCCESS'
 
