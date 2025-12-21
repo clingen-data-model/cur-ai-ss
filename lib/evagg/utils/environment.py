@@ -30,6 +30,10 @@ class Env(BaseSettings):
     EXTRACTED_PDF_DIR: str = '/var/cur-ai-ss/extracted_pdfs'
     LOG_OUT_DIR: str = '/var/cur-ai-ss/logs'
 
+    # API
+    API_ENDPOINT: str = 'localhost'
+    API_PORT: int = 8000
+
     @model_validator(mode='after')
     def validate_ncbi_settings(self) -> 'Env':
         if self.NCBI_EUTILS_API_KEY and not self.NCBI_EUTILS_EMAIL:

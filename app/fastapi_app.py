@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.db import env, get_engine, get_session
@@ -22,21 +22,31 @@ app = FastAPI(title='PDF Extracting Jobs API', lifespan=lifespan)
 
 @app.put('/papers', response_model=Paper)
 def queue_extraction(
-    req: PaperExtractionRequest, session: Session = Depends(get_session)
+    req: PaperExtractionRequest,
+    session: Session = Depends(get_session),
 ):
     paper = session.get(PaperDB, req.id)
+
     if paper:
         if paper.status == ExtractionStatus.EXTRACTED:
             raise HTTPException(
-                status_code=404, detail='Paper extraction already successful'
+                status_code=status.HTTP_409_CONFLICT,
+                detail='Paper extraction already completed',
             )
+
         if paper.status == ExtractionStatus.QUEUED:
             raise HTTPException(
-                status_code=404, detail='Paper extraction already running'
+                status_code=status.HTTP_409_CONFLICT,
+                detail='Paper extraction already queued',
             )
-    if not paper:
-        paper = PaperDB(id=req.id)
+    else:
+        paper = PaperDB(
+            id=req.id,
+            file_name=req.file_name,
+            status=ExtractionStatus.QUEUED,
+        )
         session.add(paper)
+
     session.commit()
     session.refresh(paper)
     return paper

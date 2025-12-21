@@ -23,6 +23,7 @@ class PaperDB(Base):
     __tablename__ = 'jobs'
 
     id = Column(String, primary_key=True, index=True)
+    file_name = Column(String(255), nullable=False, index=True)
     status = Column(
         SQLEnum(ExtractionStatus),
         nullable=False,
@@ -32,8 +33,10 @@ class PaperDB(Base):
 
 class Paper(BaseModel):
     id: str
+    file_name: str
     status: ExtractionStatus
 
 
 class PaperExtractionRequest(BaseModel):
     id: str
+    file_name: str

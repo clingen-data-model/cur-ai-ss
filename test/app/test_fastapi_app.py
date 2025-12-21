@@ -27,7 +27,7 @@ def test_queue_existing_queued_job_fails(client):
     client.put('/papers', json={'id': 'job-1'})
     response = client.put('/papers', json={'id': 'job-1'})
     assert response.status_code == 404
-    assert response.json()['detail'] == 'Paper extraction already running'
+    assert response.json()['detail'] == 'Paper extraction already queued'
 
 
 def test_get_job_success(client):
