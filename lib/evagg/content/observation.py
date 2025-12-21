@@ -1,9 +1,9 @@
 import asyncio
-from dataclasses import dataclass
 import logging
 import os
 import re
 from collections import defaultdict
+from dataclasses import dataclass
 from typing import Dict, List, Sequence, Tuple
 
 from lib.evagg.content.variant import HGVSVariantFactory

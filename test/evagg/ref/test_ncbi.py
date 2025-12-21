@@ -1,8 +1,8 @@
 import pytest
 
 from lib.evagg.ref import NcbiLookupClient
-from lib.evagg.utils import RequestsWebContentClient
 from lib.evagg.types import Paper
+from lib.evagg.utils import RequestsWebContentClient
 
 
 @pytest.fixture

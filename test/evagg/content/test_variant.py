@@ -4,7 +4,7 @@ from unittest.mock import Mock
 import pytest
 
 from lib.evagg.content.variant import HGVSVariantComparator, HGVSVariantFactory
-from lib.evagg.ref import IRefSeqLookupClient, NcbiLookupClient, MutalyzerClient
+from lib.evagg.ref import IRefSeqLookupClient, MutalyzerClient, NcbiLookupClient
 from lib.evagg.types import HGVSVariant
 
 

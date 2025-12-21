@@ -1,7 +1,7 @@
-from enum import Enum
 import os
-from urllib.parse import quote
+from enum import Enum
 from typing import Optional
+from urllib.parse import quote
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -26,8 +26,9 @@ class Env(BaseSettings):
     LOG_LEVEL: LogLevel = LogLevel.INFO
 
     # Directories
-    EXTRACTED_PDF_DIR: str = '.extracted_pdfs'
-    LOG_OUT_DIR: str = '.out'
+    SQLLITE_DB_DIR: str = '/var/cur-ai-ss/sqllite'
+    EXTRACTED_PDF_DIR: str = '/var/cur-ai-ss/extracted_pdfs'
+    LOG_OUT_DIR: str = '/var/cur-ai-ss/logs'
 
     @model_validator(mode='after')
     def validate_ncbi_settings(self) -> 'Env':

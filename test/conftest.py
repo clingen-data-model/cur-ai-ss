@@ -1,10 +1,15 @@
 import asyncio
 import json
 import os
+import random
+import string
+from pathlib import Path
 from typing import Optional
 
 import pytest
 from defusedxml import ElementTree
+
+from app import db
 
 
 @pytest.fixture
@@ -117,3 +122,13 @@ def mock_client(arg_loader):
         return MockClient
 
     return client_creator
+
+
+@pytest.fixture
+def test_db(monkeypatch, tmp_file):
+    # Note: I was unable to get standard tempfiles to work on Macbook M1 due to some parent
+    # paths not being writable.
+    db.env.SQLLITE_DB_DIR = str(tmp_file)
+    monkeypatch.setattr(db, '_engine', None)
+    monkeypatch.setattr(db, '_session_factory', None)
+    yield

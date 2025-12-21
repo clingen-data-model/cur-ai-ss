@@ -1,7 +1,7 @@
 import logging
+from typing import Dict
 
 from lib.evagg.ref.ncbi import NcbiClientBase
-from typing import Dict
 
 logger = logging.getLogger(__name__)
 

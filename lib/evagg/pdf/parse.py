@@ -1,23 +1,23 @@
-from io import BytesIO
-from collections import namedtuple
 import json
-from lib.evagg.types import Paper
+from collections import namedtuple
+from io import BytesIO
 
+from docling.datamodel.base_models import DocumentStream, InputFormat
+from docling.datamodel.pipeline_options import PdfPipelineOptions
+from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling_core.types.doc import (
+    DocItemLabel,
     DoclingDocument,
     ImageRefMode,
     PictureItem,
-    TableItem,
     SectionHeaderItem,
+    TableItem,
     TextItem,
-    DocItemLabel,
 )
-from docling.datamodel.base_models import InputFormat
-from docling.datamodel.base_models import DocumentStream
-from docling.datamodel.pipeline_options import PdfPipelineOptions
-from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling_core.types.doc.page import TextCellUnit
 from docling_parse.pdf_parser import DoclingPdfParser, PdfDocument
+
+from lib.evagg.types import Paper
 
 IMAGE_RESOLUTION_SCALE = 2.0
 

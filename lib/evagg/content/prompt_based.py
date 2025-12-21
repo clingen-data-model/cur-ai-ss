@@ -6,8 +6,8 @@ import re
 from typing import Any, Dict, List, Sequence, Tuple
 
 from lib.evagg.llm import OpenAIClient
-from lib.evagg.types import Paper, PromptTag
 from lib.evagg.ref import PyHPOClient, WebHPOClient
+from lib.evagg.types import Paper, PromptTag
 
 from .observation import Observation, ObservationFinder
 

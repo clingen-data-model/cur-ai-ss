@@ -1,14 +1,12 @@
 import argparse
 import datetime
+import json
 import logging
 import traceback
-import json
+from pathlib import Path
 
 from lib.evagg import App
 from lib.evagg.utils import init_logger
-
-from pathlib import Path
-
 
 logger = logging.getLogger(__name__)
 

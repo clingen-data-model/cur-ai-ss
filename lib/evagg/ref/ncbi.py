@@ -5,9 +5,8 @@ from defusedxml import ElementTree
 from requests.exceptions import HTTPError
 
 from lib.evagg.types import Paper
-from lib.evagg.utils.environment import env
 from lib.evagg.utils import RequestsWebContentClient
-
+from lib.evagg.utils.environment import env
 
 logger = logging.getLogger(__name__)
 

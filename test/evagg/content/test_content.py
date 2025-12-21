@@ -4,8 +4,8 @@ import pytest
 
 from lib.evagg import PromptBasedContentExtractor
 from lib.evagg.content import (
-    ObservationFinder,
     Observation,
+    ObservationFinder,
 )
 from lib.evagg.llm import OpenAIClient
 from lib.evagg.ref import PyHPOClient, WebHPOClient

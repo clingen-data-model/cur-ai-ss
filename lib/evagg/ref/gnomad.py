@@ -1,9 +1,8 @@
 import logging
-from typing import Dict
 import typing
+from typing import Dict
 
 from lib.evagg.utils import RequestsWebContentClient
-
 
 logger = logging.getLogger(__name__)
 
