@@ -1,6 +1,6 @@
+import traceback
 from contextlib import asynccontextmanager
 from pathlib import Path
-import traceback
 
 from fastapi import (
     Depends,
@@ -8,18 +8,20 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Request,
     UploadFile,
     status,
-    Request,
 )
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from app.db import env, get_engine, get_session
 from app.models import Base, ExtractionStatus, PaperDB, PaperResp
+from lib.evagg.pdf.thumbnail import pdf_first_page_to_thumbnail_pymupdf_bytes
 from lib.evagg.types.base import Paper
 from lib.evagg.utils.environment import env
-from lib.evagg.pdf.thumbnail import pdf_first_page_to_thumbnail_pymupdf_bytes
 
 
 @asynccontextmanager
@@ -31,6 +33,24 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title='PDF Extracting Jobs API', lifespan=lifespan)
+
+
+# Static File Handling
+app.mount(
+    '/var/cur-ai-ss',  # URL path
+    StaticFiles(directory='/var/cur-ai-ss', html=False),
+    name='cur-ai-ss',
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        # Local Streamlit 
+        'http://localhost:8501'
+    ],
+    allow_credentials=True,# Allows cookies to be sent cross-origin
+    allow_methods=["*"],   # Allows all HTTP methods (GET, POST, PUT, etc.)
+    allow_headers=["*"],   # Allows all headers
+)
 
 
 @app.middleware('http')
@@ -81,27 +101,41 @@ def queue_extraction(
         paper.pdf_raw_path.parent.mkdir(parents=True, exist_ok=True)
         with open(paper.pdf_raw_path, 'wb') as f:
             f.write(content)
-        with open(paper.pdf_thumbnail_dir, 'wb') as fp:
+        with open(paper.pdf_thumbnail_path, 'wb') as fp:
             fp.write(pdf_first_page_to_thumbnail_pymupdf_bytes(content))
         paper_db = PaperDB(
             id=paper.id,
-            file_name=uploaded_file.filename,
+            filename=uploaded_file.filename,
             status=ExtractionStatus.QUEUED,
         )
         session.add(paper_db)
     session.commit()
     session.refresh(paper_db)
-    return paper_db
+    return PaperResp(
+        id=paper_db.id,
+        filename=paper_db.filename,
+        status=paper_db.status,
+        thumbnail_path=str(
+            Paper(id=paper_db.id, content=b'').pdf_thumbnail_path
+        ),  # TODO: cleaner conversion from PaperDB to Paper
+    )
 
 
 @app.get('/papers/{paper_id}', response_model=PaperResp)
 def get_paper(paper_id: str, session: Session = Depends(get_session)) -> PaperResp:
-    paper = session.get(PaperDB, paper_id)
+    paper_db = session.get(PaperDB, paper_id)
     if not paper:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
-    return paper
+    return PaperResp(
+        id=paper_db.id,
+        filename=paper_db.filename,
+        status=paper_db.status,
+        thumbnail_path=str(
+            Paper(id=paper_db.id, content=b'').pdf_thumbnail_path
+        ),  # TODO: cleaner conversion from PaperDB to Paper
+    )
 
 
 @app.get('/papers', response_model=list[PaperResp])
@@ -112,4 +146,15 @@ def list_papers(
     query = session.query(PaperDB)
     if status:
         query = query.filter(PaperDB.status == status)
-    return query.all()
+    paper_dbs = query.all()
+    return [
+        PaperResp(
+            id=paper_db.id,
+            filename=paper_db.filename,
+            status=paper_db.status,
+            thumbnail_path=str(
+                Paper(id=paper_db.id, content=b'').pdf_thumbnail_path
+            ),  # TODO: cleaner conversion from PaperDB to Paper
+        )
+        for paper_db in paper_dbs
+    ]

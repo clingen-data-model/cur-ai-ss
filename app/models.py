@@ -23,7 +23,7 @@ class PaperDB(Base):
     __tablename__ = 'jobs'
 
     id = Column(String, primary_key=True, index=True)
-    file_name = Column(String(255), nullable=False, index=True)
+    filename = Column(String(255), nullable=False, index=True)
     status = Column(
         SQLEnum(ExtractionStatus),
         nullable=False,
@@ -33,5 +33,6 @@ class PaperDB(Base):
 
 class PaperResp(BaseModel):
     id: str
-    file_name: str
+    filename: str
     status: ExtractionStatus
+    thumbnail_path: str

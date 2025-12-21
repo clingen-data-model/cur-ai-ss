@@ -3,6 +3,8 @@ import requests
 from lib.evagg.types.base import Paper
 from lib.evagg.utils.environment import env
 
+FASTAPI_HOST = f'http://{env.API_ENDPOINT}:{env.API_PORT}'
+
 
 def get_http_error_detail(e: requests.HTTPError) -> str:
     """Safely extract the 'detail' from an HTTPError response."""
@@ -16,20 +18,20 @@ def get_http_error_detail(e: requests.HTTPError) -> str:
 
 
 def get_papers():
-    resp = requests.get(f'http://{env.API_ENDPOINT}:{env.API_PORT}/papers')
+    resp = requests.get(f'{FASTAPI_HOST}/papers')
     resp.raise_for_status()
     return resp.json()
 
 
 def get_paper(paper_id: str):
-    resp = requests.get(f'http://{env.API_ENDPOINT}:{env.API_PORT}/papers/{paper_id}')
+    resp = requests.get(f'{FASTAPI_HOST}/papers/{paper_id}')
     resp.raise_for_status()
     return resp.json()
 
 
 def put_paper(uploaded_file):
     resp = requests.put(
-        f'http://{env.API_ENDPOINT}:{env.API_PORT}/papers',
+        f'{FASTAPI_HOST}/papers',
         files={
             'uploaded_file': (
                 uploaded_file.name,
