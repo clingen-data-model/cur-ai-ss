@@ -59,7 +59,3 @@ def test_list_jobs_filtered_by_status(client):
     assert response.status_code == 200
     jobs = response.json()
     assert all(job['status'] == ExtractionStatus.QUEUED for job in jobs)
-
-
-
-
