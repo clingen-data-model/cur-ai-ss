@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Process a PMID and gene symbol.')
     parser.add_argument('--pdf', help='PDF', required=True, type=Path)
-    parser.add_argument('--gene-symbol', help='Gene symbol', required=True, type=str)
     parser.add_argument(
         '--retries',
         type=int,
@@ -33,7 +32,6 @@ def run_evagg_app() -> None:
         content = f.read()
     app = App(
         content,
-        args.gene_symbol,
     )
     max_attempts = args.retries + 1
     for attempt in range(1, max_attempts + 1):

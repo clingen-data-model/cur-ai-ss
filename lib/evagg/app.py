@@ -31,10 +31,8 @@ class App:
     def __init__(
         self,
         content: bytes,
-        gene_symbol: str,
     ) -> None:
         self._content = content
-        self._gene_symbol = gene_symbol
         self._ncbi_lookup_client = NcbiLookupClient(
             web_client=RequestsWebContentClient(
                 WebClientSettings(status_code_translator=get_ncbi_response_translator())
@@ -119,7 +117,24 @@ class App:
         )
         if pmids:
             paper = self._ncbi_lookup_client.fetch(pmids[0], paper)
-        extracted_observations = self._extractor.extract(paper, self._gene_symbol)
+        gene_symbol = asyncio.run(
+            self._llm_client.prompt_json_from_string(
+                user_prompt=f"""
+                Extract the most relevant gene of interest from the following (truncated to 1000 characters) scientific paper.
+
+                If there are multiple genes, still only return the first.
+
+                Return your response as a JSON object like this:
+                {{
+                    "gene_symbol": "ABL1",
+                }}
+
+                Paper: {paper.fulltext_md[:1000]}
+            """,
+                prompt_tag=PromptTag.TITLE,
+            )
+        )['gene_symbol']
+        extracted_observations = self._extractor.extract(paper, gene_symbol)
         for extracted_observation in extracted_observations:
             self._vep_client.enrich(extracted_observation)
             self._clinvar_client.enrich(extracted_observation)
