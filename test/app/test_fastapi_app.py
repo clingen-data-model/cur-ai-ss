@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from app.db import get_session
 from app.fastapi_app import app
 from app.models import ExtractionStatus
+import io
 
 
 @pytest.fixture
@@ -11,31 +12,69 @@ def client(test_db):
     with TestClient(app) as client:
         yield client
 
+@pytest.fixture
+def test_pdf():
+    # The smallest valid pdf https://pdfa.org/the-smallest-possible-valid-pdf/
+    yield io.BytesIO(b'''
+%PDF-1.0
+1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
+2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj
+3 0 obj<</Type/Page/Parent 2 0 R/Resources<<>>/MediaBox[0 0 9 9]>>endobj
+xref
+0 4
+0000000000 65535 f 
+0000000009 00000 n 
+0000000052 00000 n 
+0000000101 00000 n 
+trailer<</Root 1 0 R/Size 4>>
+startxref
+174
+%%EOF''')
 
-def test_queue_new_job(client):
+
+
+def test_queue_new_paper(client, test_pdf):    
     response = client.put(
         '/papers',
-        json={'id': 'job-1'},
+        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
     )
     assert response.status_code == 200
     data = response.json()
-    assert data['id'] == 'job-1'
-    assert data['status'] == ExtractionStatus.QUEUED
+    assert data['id']  # Paper ID will be generated from content
+    assert data['status'] == ExtractionStatus.QUEUED.value
+    assert data['filename'] == 'job-1.pdf'
+    assert 'thumbnail_path' in data
 
 
-def test_queue_existing_queued_job_fails(client):
-    client.put('/papers', json={'id': 'job-1'})
-    response = client.put('/papers', json={'id': 'job-1'})
-    assert response.status_code == 404
-    assert response.json()['detail'] == 'Paper extraction already queued'
+def test_queue_existing_paper_fails(client, test_pdf):
+    # Second upload: same content/name triggers conflict
+    response = client.put(
+        '/papers',
+        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+    )
+    response2 = client.put(
+        '/papers',
+        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+    )
+    assert response2.status_code == 409
+    assert response2.json()['detail'] == 'Paper extraction already queued'
 
 
-def test_get_job_success(client):
-    client.put('/papers', json={'id': 'job-1'})
-    response = client.get('/papers/job-1')
-    assert response.status_code == 200
-    assert response.json()['id'] == 'job-1'
-
+def test_get_paper_success(client, test_pdf):
+    upload_response = client.put(
+        '/papers',
+        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+    )
+    assert upload_response.status_code == 200
+    data_upload = upload_response.json()
+    paper_id = data_upload['id']
+    get_response = client.get(f'/papers/{paper_id}')
+    assert get_response.status_code == 200
+    data_get = get_response.json()
+    assert data_get['id'] == paper_id
+    assert data_get['status'] == ExtractionStatus.QUEUED.value
+    assert data_get['filename'] == 'job-1.pdf'
+    assert 'thumbnail_path' in data_get
 
 def test_get_job_not_found(client):
     response = client.get('/papers/missing')
@@ -43,18 +82,29 @@ def test_get_job_not_found(client):
     assert response.json()['detail'] == 'Paper not found'
 
 
-def test_list_jobs(client):
-    client.put('/papers', json={'id': 'job-5'})
-    client.put('/papers', json={'id': 'job-6'})
+def test_list_jobs(client, test_pdf):
+    response = client.put(
+        '/papers',
+        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+    )
+    response2 = client.put(
+        '/papers',
+        files={'uploaded_file': ('job-2.pdf', io.BytesIO(test_pdf.getvalue().replace(b'9 9', b'10 9')), 'application/pdf')}
+    )
     response = client.get('/papers')
     assert response.status_code == 200
     jobs = response.json()
     assert len(jobs) == 2
 
-
-def test_list_jobs_filtered_by_status(client):
-    client.put('/papers', json={'id': 'job-7'})
-    client.put('/papers', json={'id': 'job-8'})
+def test_list_jobs_filtered_by_status(client, test_pdf):
+    response = client.put(
+        '/papers',
+        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+    )
+    response2 = client.put(
+        '/papers',
+        files={'uploaded_file': ('job-2.pdf', io.BytesIO(test_pdf.getvalue().replace(b'9 9', b'10 9')), 'application/pdf')}
+    )
     response = client.get('/papers', params={'status': ExtractionStatus.QUEUED.value})
     assert response.status_code == 200
     jobs = response.json()

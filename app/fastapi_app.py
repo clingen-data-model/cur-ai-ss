@@ -124,7 +124,7 @@ def queue_extraction(
 @app.get('/papers/{paper_id}', response_model=PaperResp)
 def get_paper(paper_id: str, session: Session = Depends(get_session)) -> PaperResp:
     paper_db = session.get(PaperDB, paper_id)
-    if not paper:
+    if not paper_db:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )

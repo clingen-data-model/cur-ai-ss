@@ -5,7 +5,7 @@ from app.streamlit.api import get_paper
 
 paper_id = st.query_params.get('paper_id')
 
-st.set_page_config(page_title='Papers Dashboard', layout='wide')
+st.set_page_config(page_title='Curation Details', layout='wide')
 left, center, right = st.columns([2, 3, 2])
 main = center.container()
 

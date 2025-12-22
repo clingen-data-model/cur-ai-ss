@@ -40,7 +40,6 @@ with center:
                         'thumbnail_path': st.column_config.ImageColumn(
                             'Thumbnail',
                             help='First page preview',
-                            width='small',
                         ),
                         'details_url': st.column_config.LinkColumn(
                             '',
