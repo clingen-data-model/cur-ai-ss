@@ -24,7 +24,7 @@ class PaperDB(Base):
 
     id = Column(String, primary_key=True, index=True)
     filename = Column(String(255), nullable=False, index=True)
-    status = Column(
+    extraction_status = Column(
         SQLEnum(ExtractionStatus),
         nullable=False,
         server_default=ExtractionStatus.QUEUED.value,
@@ -34,5 +34,6 @@ class PaperDB(Base):
 class PaperResp(BaseModel):
     id: str
     filename: str
-    status: ExtractionStatus
+    extraction_status: ExtractionStatus
+    raw_path: str
     thumbnail_path: str

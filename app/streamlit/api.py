@@ -1,5 +1,6 @@
 import requests
 
+from app.models import ExtractionStatus
 from lib.evagg.types.base import Paper
 from lib.evagg.utils.environment import env
 
@@ -40,6 +41,15 @@ def put_paper(uploaded_file):
             )
         },
         # Content type is multipart/form-data
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def requeue_paper(paper_id: str):
+    resp = requests.patch(
+        f'{FASTAPI_HOST}/papers/{paper_id}', 
+        json={'extraction_status': ExtractionStatus.QUEUED.value}
     )
     resp.raise_for_status()
     return resp.json()

@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import (
+    Body,
     Depends,
     FastAPI,
     File,
@@ -87,16 +88,10 @@ def queue_extraction(
     paper = Paper.from_content(content)
     paper_db = session.get(PaperDB, paper.id)
     if paper_db:
-        if paper_db.status == ExtractionStatus.EXTRACTED:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail='Paper extraction already completed',
-            )
-        if paper_db.status == ExtractionStatus.QUEUED:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail='Paper extraction already queued',
-            )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f'Paper extraction already {paper_db.extraction_status.value.lower()}',
+        )
     else:
         paper.pdf_raw_path.parent.mkdir(parents=True, exist_ok=True)
         with open(paper.pdf_raw_path, 'wb') as f:
@@ -106,18 +101,22 @@ def queue_extraction(
         paper_db = PaperDB(
             id=paper.id,
             filename=uploaded_file.filename,
-            status=ExtractionStatus.QUEUED,
+            extraction_status=ExtractionStatus.QUEUED,
         )
         session.add(paper_db)
     session.commit()
     session.refresh(paper_db)
+    paper = Paper(id=paper_db.id, content=b'') # TODO: cleaner conversion from PaperDB to Paper
     return PaperResp(
         id=paper_db.id,
         filename=paper_db.filename,
-        status=paper_db.status,
+        extraction_status=paper_db.extraction_status,
+        raw_path=str(
+            paper.pdf_raw_path,
+        ),
         thumbnail_path=str(
-            Paper(id=paper_db.id, content=b'').pdf_thumbnail_path
-        ),  # TODO: cleaner conversion from PaperDB to Paper
+            paper.pdf_thumbnail_path
+        ),
     )
 
 
@@ -128,33 +127,73 @@ def get_paper(paper_id: str, session: Session = Depends(get_session)) -> PaperRe
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
+    paper = Paper(id=paper_db.id, content=b'') # TODO: cleaner conversion from PaperDB to Paper
     return PaperResp(
         id=paper_db.id,
         filename=paper_db.filename,
-        status=paper_db.status,
+        extraction_status=paper_db.extraction_status,
+        raw_path=str(
+            paper.pdf_raw_path,
+        ),
         thumbnail_path=str(
-            Paper(id=paper_db.id, content=b'').pdf_thumbnail_path
-        ),  # TODO: cleaner conversion from PaperDB to Paper
+            paper.pdf_thumbnail_path
+        ),
+    )
+
+
+@app.patch('/papers/{paper_id}', response_model=PaperResp)
+def update_status(
+    paper_id: str,
+    extraction_status: ExtractionStatus = Body(..., embed=True),
+    session: Session = Depends(get_session),
+):
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    if paper_db.status == extraction_status:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=f'Status is already {status}'
+        )
+    paper_db.extraction_status = extraction_status
+    session.commit()
+    session.refresh(paper_db)
+    paper = Paper(id=paper_db.id, content=b'') # TODO: cleaner conversion from PaperDB to Paper
+    return PaperResp(
+        id=paper_db.id,
+        filename=paper_db.filename,
+        extraction_status=paper_db.extraction_status,
+        raw_path=str(
+            paper.pdf_raw_path,
+        ),
+        thumbnail_path=str(
+            paper.pdf_thumbnail_path
+        ),
     )
 
 
 @app.get('/papers', response_model=list[PaperResp])
 def list_papers(
-    status: ExtractionStatus | None = None,
+    extraction_status: ExtractionStatus | None = None,
     session: Session = Depends(get_session),
 ) -> list[PaperResp]:
     query = session.query(PaperDB)
-    if status:
-        query = query.filter(PaperDB.status == status)
+    if extraction_status:
+        query = query.filter(PaperDB.extraction_status == extraction_status)
     paper_dbs = query.all()
+    papers = [Paper(id=paper_db.id, content=b'') for paper_db in paper_dbs] # TODO: cleaner conversion from PaperDB to Paper
     return [
         PaperResp(
             id=paper_db.id,
             filename=paper_db.filename,
-            status=paper_db.status,
+            extraction_status=paper_db.extraction_status,
+            raw_path=str(
+                paper.pdf_raw_path,
+            ),
             thumbnail_path=str(
-                Paper(id=paper_db.id, content=b'').pdf_thumbnail_path
-            ),  # TODO: cleaner conversion from PaperDB to Paper
+                paper.pdf_thumbnail_path
+            ),  
         )
-        for paper_db in paper_dbs
+        for paper, paper_db in zip(papers, paper_dbs)
     ]

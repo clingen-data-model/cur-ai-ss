@@ -9,7 +9,7 @@ left, center, right = st.columns([2, 3, 2])
 main = center.container()
 
 with center:
-    st.title('📄 PDF Curation')
+    st.title('📄 Curation Dashboard')
     st.divider()
     st.subheader('📋 Papers')
     with st.spinner('Loading papers...'):
@@ -19,31 +19,32 @@ with center:
                 st.info('No papers found.')
             else:
                 df = pd.DataFrame(papers)
-                df['details_url'] = df['id'].apply(
-                    lambda paper_id: f'/details?paper_id={paper_id}'
-                )
-                df['status'] = df['status'].map(
-                    {
-                        'EXTRACTED': 'Extracted ✅',
-                        'QUEUED': 'Queued ⏳',
-                        'FAILED': 'Failed ❌',
-                    }
+                status_map = {
+                    'EXTRACTED': 'Extracted ✅',
+                    'QUEUED': 'Queued ⏳',
+                    'FAILED': 'Failed ❌',
+                }
+                df['status'] = df.apply(
+                    lambda row: f"/details?paper_id={row['id']}#{status_map.get(row['status'], row['status'])}",
+                    axis=1,
                 )
                 df['thumbnail_path'] = df['thumbnail_path'].map(
                     lambda p: f'{FASTAPI_HOST}{p}'
                 )
+                df['rerun'] = '🔄 Rerun EvAGG'
                 st.dataframe(
-                    df[['thumbnail_path', 'filename', 'status', 'details_url']],
-                    hide_index=True,
+                    df[['thumbnail_path', 'filename', 'status', 'rerun']],
                     row_height=100,
                     column_config={
                         'thumbnail_path': st.column_config.ImageColumn(
                             'Thumbnail',
                             help='First page preview',
                         ),
-                        'details_url': st.column_config.LinkColumn(
-                            '',
-                            display_text='View Extraction Details',
+                        'status': st.column_config.LinkColumn(
+                            'Status',
+                            # Regex to extract text after the '#'
+                            # Note, this is a major hack to get around the lack of a better way of doing this.
+                            display_text=r".*?#(.+)$"
                         ),
                     },
                 )

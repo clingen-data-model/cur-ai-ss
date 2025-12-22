@@ -41,9 +41,10 @@ def test_queue_new_paper(client, test_pdf):
     assert response.status_code == 200
     data = response.json()
     assert data['id']  # Paper ID will be generated from content
-    assert data['status'] == ExtractionStatus.QUEUED.value
+    assert data['extraction_status'] == ExtractionStatus.QUEUED.value
     assert data['filename'] == 'job-1.pdf'
     assert 'thumbnail_path' in data
+    assert 'raw_path' in data
 
 
 def test_queue_existing_paper_fails(client, test_pdf):
@@ -69,9 +70,10 @@ def test_get_paper_success(client, test_pdf):
     assert get_response.status_code == 200
     data_get = get_response.json()
     assert data_get['id'] == paper_id
-    assert data_get['status'] == ExtractionStatus.QUEUED.value
+    assert data_get['extraction_status'] == ExtractionStatus.QUEUED.value
     assert data_get['filename'] == 'job-1.pdf'
     assert 'thumbnail_path' in data_get
+    assert 'raw_path' in data_get
 
 
 def test_get_job_not_found(client):
@@ -114,7 +116,7 @@ def test_list_jobs_filtered_by_status(client, test_pdf):
             )
         },
     )
-    response = client.get('/papers', params={'status': ExtractionStatus.QUEUED.value})
+    response = client.get('/papers', params={'extraction_status': ExtractionStatus.QUEUED.value})
     assert response.status_code == 200
     jobs = response.json()
-    assert all(job['status'] == ExtractionStatus.QUEUED for job in jobs)
+    assert all(job['extraction_status'] == ExtractionStatus.QUEUED for job in jobs)
