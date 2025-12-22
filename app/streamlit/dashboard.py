@@ -25,7 +25,7 @@ with center:
                     'FAILED': 'Failed ❌',
                 }
                 df['extraction_status'] = df.apply(
-                    lambda row: f"/details?paper_id={row['id']}#{status_map.get(row['extraction_status'], row['extraction_status'])}",
+                    lambda row: f'/details?paper_id={row["id"]}#{status_map.get(row["extraction_status"], row["extraction_status"])}',
                     axis=1,
                 )
                 df['thumbnail_path'] = df['thumbnail_path'].map(
@@ -39,14 +39,12 @@ with center:
                             'Thumbnail',
                             help='First page preview',
                         ),
-                        'filename' : st.column_config.Column(
-                            'Filename'
-                        ),
+                        'filename': st.column_config.Column('Filename'),
                         'extraction_status': st.column_config.LinkColumn(
                             'Extraction Status',
                             # Regex to extract text after the '#'
                             # Note, this is a major hack to get around the lack of a better way of doing this.
-                            display_text=r".*?#(.+)$"
+                            display_text=r'.*?#(.+)$',
                         ),
                     },
                 )

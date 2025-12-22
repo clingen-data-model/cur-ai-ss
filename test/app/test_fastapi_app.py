@@ -2,10 +2,11 @@ import io
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import update
 
-from app.db import get_session
+from app.db import session_scope
 from app.fastapi_app import app
-from app.models import ExtractionStatus
+from app.models import ExtractionStatus, PaperDB
 
 
 @pytest.fixture
@@ -38,7 +39,7 @@ def test_queue_new_paper(client, test_pdf):
     response = client.put(
         '/papers', files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
     )
-    assert response.status_code == 200
+    assert response.status_code == 201
     data = response.json()
     assert data['id']  # Paper ID will be generated from content
     assert data['extraction_status'] == ExtractionStatus.QUEUED.value
@@ -63,7 +64,7 @@ def test_get_paper_success(client, test_pdf):
     upload_response = client.put(
         '/papers', files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
     )
-    assert upload_response.status_code == 200
+    assert upload_response.status_code == 201
     data_upload = upload_response.json()
     paper_id = data_upload['id']
     get_response = client.get(f'/papers/{paper_id}')
@@ -76,13 +77,46 @@ def test_get_paper_success(client, test_pdf):
     assert 'raw_path' in data_get
 
 
-def test_get_job_not_found(client):
+def test_get_paper_not_found(client):
     response = client.get('/papers/missing')
     assert response.status_code == 404
     assert response.json()['detail'] == 'Paper not found'
 
 
-def test_list_jobs(client, test_pdf):
+def test_update_paper_extraction_status(client, test_pdf):
+    response = client.put(
+        '/papers', files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+    )
+    data = response.json()
+    with session_scope() as sess:
+        sess.execute(
+            update(PaperDB)
+            .where(PaperDB.id == data['id'])
+            .values(extraction_status=ExtractionStatus.FAILED)
+        )
+        sess.commit()
+
+    response2 = client.patch(
+        f'/papers/{data["id"]}',
+        json={'extraction_status': ExtractionStatus.QUEUED.value},
+    )
+    assert response2.status_code == 200
+    assert response2.json()['extraction_status'] == ExtractionStatus.QUEUED.value
+    response3 = client.patch(
+        f'/papers/{response2.json()["id"]}',
+        json={'extraction_status': ExtractionStatus.QUEUED.value},
+    )
+    assert response3.status_code == 409
+    response4 = client.patch(
+        f'/papers/abcd',
+        json={
+            'extraction_status': ExtractionStatus.QUEUED.value,
+        },
+    )
+    assert response4.status_code == 404
+
+
+def test_list_paper(client, test_pdf):
     response = client.put(
         '/papers', files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
     )
@@ -102,7 +136,7 @@ def test_list_jobs(client, test_pdf):
     assert len(jobs) == 2
 
 
-def test_list_jobs_filtered_by_status(client, test_pdf):
+def test_list_papers_filtered_by_status(client, test_pdf):
     response = client.put(
         '/papers', files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
     )
@@ -116,7 +150,9 @@ def test_list_jobs_filtered_by_status(client, test_pdf):
             )
         },
     )
-    response = client.get('/papers', params={'extraction_status': ExtractionStatus.QUEUED.value})
+    response = client.get(
+        '/papers', params={'extraction_status': ExtractionStatus.QUEUED.value}
+    )
     assert response.status_code == 200
     jobs = response.json()
     assert all(job['extraction_status'] == ExtractionStatus.QUEUED for job in jobs)

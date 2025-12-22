@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator, Optional
 
@@ -34,6 +35,8 @@ def get_sessionmaker() -> sessionmaker:
     return _session_factory
 
 
+# Note: A generator, and not a context manager is required here.
+# Adding @contextmanager here, for use in non-FastAPI code, breaks the path functions.
 def get_session() -> Generator[Session, None, None]:
     """Yield a SQLAlchemy Session. Use as a context manager with FastAPI dependencies."""
     session_local = get_sessionmaker()
@@ -42,3 +45,14 @@ def get_session() -> Generator[Session, None, None]:
         yield session
     finally:
         session.close()
+
+
+@contextmanager
+def session_scope():
+    # Usable as a context manager in standard python code
+    gen = get_session()
+    session = next(gen)
+    try:
+        yield session
+    finally:
+        gen.close()

@@ -3,19 +3,19 @@ import time
 from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.db import get_sessionmaker
+from app.db import session_scope
 from app.models import ExtractionStatus, PaperDB
-
-SessionLocal = get_sessionmaker()
 
 POLL_INTERVAL_S = 10
 
 
 def mark_paper_as_extraction_status(paper_id: str, extraction_status: ExtractionStatus):
     if paper_id:
-        with SessionLocal() as session:
+        with session_scope() as session:
             session.execute(
-                update(PaperDB).where(PaperDB.id == paper_id).values(extraction_status=extraction_status)
+                update(PaperDB)
+                .where(PaperDB.id == paper_id)
+                .values(extraction_status=extraction_status)
             )
             session.commit()
 
@@ -24,7 +24,7 @@ def main():
     while True:
         paper_id = None
         try:
-            with SessionLocal() as session:
+            with session_scope() as session:
                 paper_id = session.scalars(
                     select(PaperDB.id)
                     .where(PaperDB.extraction_status == ExtractionStatus.QUEUED)

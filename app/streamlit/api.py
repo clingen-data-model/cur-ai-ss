@@ -48,8 +48,8 @@ def put_paper(uploaded_file):
 
 def requeue_paper(paper_id: str):
     resp = requests.patch(
-        f'{FASTAPI_HOST}/papers/{paper_id}', 
-        json={'extraction_status': ExtractionStatus.QUEUED.value}
+        f'{FASTAPI_HOST}/papers/{paper_id}',
+        json={'extraction_status': ExtractionStatus.QUEUED.value},
     )
     resp.raise_for_status()
     return resp.json()

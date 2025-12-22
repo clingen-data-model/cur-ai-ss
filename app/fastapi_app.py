@@ -75,7 +75,7 @@ async def log_exceptions_middleware(request: Request, call_next):
         )
 
 
-@app.put('/papers', response_model=PaperResp)
+@app.put('/papers', response_model=PaperResp, status_code=status.HTTP_201_CREATED)
 def queue_extraction(
     uploaded_file: UploadFile = File(...),
     session: Session = Depends(get_session),
@@ -106,7 +106,9 @@ def queue_extraction(
         session.add(paper_db)
     session.commit()
     session.refresh(paper_db)
-    paper = Paper(id=paper_db.id, content=b'') # TODO: cleaner conversion from PaperDB to Paper
+    paper = Paper(
+        id=paper_db.id, content=b''
+    )  # TODO: cleaner conversion from PaperDB to Paper
     return PaperResp(
         id=paper_db.id,
         filename=paper_db.filename,
@@ -114,9 +116,7 @@ def queue_extraction(
         raw_path=str(
             paper.pdf_raw_path,
         ),
-        thumbnail_path=str(
-            paper.pdf_thumbnail_path
-        ),
+        thumbnail_path=str(paper.pdf_thumbnail_path),
     )
 
 
@@ -127,7 +127,9 @@ def get_paper(paper_id: str, session: Session = Depends(get_session)) -> PaperRe
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
-    paper = Paper(id=paper_db.id, content=b'') # TODO: cleaner conversion from PaperDB to Paper
+    paper = Paper(
+        id=paper_db.id, content=b''
+    )  # TODO: cleaner conversion from PaperDB to Paper
     return PaperResp(
         id=paper_db.id,
         filename=paper_db.filename,
@@ -135,9 +137,7 @@ def get_paper(paper_id: str, session: Session = Depends(get_session)) -> PaperRe
         raw_path=str(
             paper.pdf_raw_path,
         ),
-        thumbnail_path=str(
-            paper.pdf_thumbnail_path
-        ),
+        thumbnail_path=str(paper.pdf_thumbnail_path),
     )
 
 
@@ -154,12 +154,15 @@ def update_status(
         )
     if paper_db.extraction_status == extraction_status:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail=f'Status is already {extraction_status.value}'
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f'Status is already {extraction_status.value}',
         )
     paper_db.extraction_status = extraction_status
     session.commit()
     session.refresh(paper_db)
-    paper = Paper(id=paper_db.id, content=b'') # TODO: cleaner conversion from PaperDB to Paper
+    paper = Paper(
+        id=paper_db.id, content=b''
+    )  # TODO: cleaner conversion from PaperDB to Paper
     return PaperResp(
         id=paper_db.id,
         filename=paper_db.filename,
@@ -167,9 +170,7 @@ def update_status(
         raw_path=str(
             paper.pdf_raw_path,
         ),
-        thumbnail_path=str(
-            paper.pdf_thumbnail_path
-        ),
+        thumbnail_path=str(paper.pdf_thumbnail_path),
     )
 
 
@@ -182,7 +183,9 @@ def list_papers(
     if extraction_status:
         query = query.filter(PaperDB.extraction_status == extraction_status)
     paper_dbs = query.all()
-    papers = [Paper(id=paper_db.id, content=b'') for paper_db in paper_dbs] # TODO: cleaner conversion from PaperDB to Paper
+    papers = [
+        Paper(id=paper_db.id, content=b'') for paper_db in paper_dbs
+    ]  # TODO: cleaner conversion from PaperDB to Paper
     return [
         PaperResp(
             id=paper_db.id,
@@ -191,9 +194,7 @@ def list_papers(
             raw_path=str(
                 paper.pdf_raw_path,
             ),
-            thumbnail_path=str(
-                paper.pdf_thumbnail_path
-            ),  
+            thumbnail_path=str(paper.pdf_thumbnail_path),
         )
         for paper, paper_db in zip(papers, paper_dbs)
     ]

@@ -126,8 +126,6 @@ def mock_client(arg_loader):
 
 @pytest.fixture
 def test_db(monkeypatch, tmpdir):
-    # Note: I was unable to get standard tempfiles to work on Macbook M1 due to some parent
-    # paths not being writable.
     db.env.SQLLITE_DB_DIR = str(tmpdir)
     monkeypatch.setattr(db, '_engine', None)
     monkeypatch.setattr(db, '_session_factory', None)
