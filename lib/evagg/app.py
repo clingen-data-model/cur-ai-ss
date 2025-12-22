@@ -120,18 +120,19 @@ class App:
         gene_symbol = asyncio.run(
             self._llm_client.prompt_json_from_string(
                 user_prompt=f"""
-                Extract the most relevant gene of interest from the following (truncated to 1000 characters) scientific paper.
+                Extract the most relevant gene of interest from the following (truncated to 2500 characters) scientific paper.
 
-                If there are multiple genes, still only return the first.
+                If there are multiple genes, still only return the first.  Pay special attention to the Abstract or Summary section if it exists.
+                Prefer the primary causal gene discussed, including non-coding genes (e.g., lncRNAs), over secondary or downstream genes.
 
                 Return your response as a JSON object like this:
                 {{
                     "gene_symbol": "ABL1",
                 }}
 
-                Paper: {paper.fulltext_md[:1000]}
+                Paper: {paper.fulltext_md[:2500]}
             """,
-                prompt_tag=PromptTag.TITLE,
+                prompt_tag=PromptTag.GENE_OF_INTEREST,
             )
         )['gene_symbol']
         extracted_observations = self._extractor.extract(paper, gene_symbol)
