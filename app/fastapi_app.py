@@ -12,9 +12,9 @@ from fastapi import (
     UploadFile,
     status,
 )
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from app.db import env, get_engine, get_session
@@ -44,12 +44,12 @@ app.mount(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        # Local Streamlit 
+        # Local Streamlit
         'http://localhost:8501'
     ],
-    allow_credentials=True,# Allows cookies to be sent cross-origin
-    allow_methods=["*"],   # Allows all HTTP methods (GET, POST, PUT, etc.)
-    allow_headers=["*"],   # Allows all headers
+    allow_credentials=True,  # Allows cookies to be sent cross-origin
+    allow_methods=['*'],  # Allows all HTTP methods (GET, POST, PUT, etc.)
+    allow_headers=['*'],  # Allows all headers
 )
 
 

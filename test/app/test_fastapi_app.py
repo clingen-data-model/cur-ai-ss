@@ -1,10 +1,11 @@
+import io
+
 import pytest
 from fastapi.testclient import TestClient
 
 from app.db import get_session
 from app.fastapi_app import app
 from app.models import ExtractionStatus
-import io
 
 
 @pytest.fixture
@@ -12,10 +13,11 @@ def client(test_db):
     with TestClient(app) as client:
         yield client
 
+
 @pytest.fixture
 def test_pdf():
     # The smallest valid pdf https://pdfa.org/the-smallest-possible-valid-pdf/
-    yield io.BytesIO(b'''
+    yield io.BytesIO(b"""
 %PDF-1.0
 1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj
@@ -29,14 +31,12 @@ xref
 trailer<</Root 1 0 R/Size 4>>
 startxref
 174
-%%EOF''')
+%%EOF""")
 
 
-
-def test_queue_new_paper(client, test_pdf):    
+def test_queue_new_paper(client, test_pdf):
     response = client.put(
-        '/papers',
-        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+        '/papers', files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
     )
     assert response.status_code == 200
     data = response.json()
@@ -49,12 +49,10 @@ def test_queue_new_paper(client, test_pdf):
 def test_queue_existing_paper_fails(client, test_pdf):
     # Second upload: same content/name triggers conflict
     response = client.put(
-        '/papers',
-        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+        '/papers', files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
     )
     response2 = client.put(
-        '/papers',
-        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+        '/papers', files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
     )
     assert response2.status_code == 409
     assert response2.json()['detail'] == 'Paper extraction already queued'
@@ -62,8 +60,7 @@ def test_queue_existing_paper_fails(client, test_pdf):
 
 def test_get_paper_success(client, test_pdf):
     upload_response = client.put(
-        '/papers',
-        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+        '/papers', files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
     )
     assert upload_response.status_code == 200
     data_upload = upload_response.json()
@@ -76,6 +73,7 @@ def test_get_paper_success(client, test_pdf):
     assert data_get['filename'] == 'job-1.pdf'
     assert 'thumbnail_path' in data_get
 
+
 def test_get_job_not_found(client):
     response = client.get('/papers/missing')
     assert response.status_code == 404
@@ -84,26 +82,37 @@ def test_get_job_not_found(client):
 
 def test_list_jobs(client, test_pdf):
     response = client.put(
-        '/papers',
-        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+        '/papers', files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
     )
     response2 = client.put(
         '/papers',
-        files={'uploaded_file': ('job-2.pdf', io.BytesIO(test_pdf.getvalue().replace(b'9 9', b'10 9')), 'application/pdf')}
+        files={
+            'uploaded_file': (
+                'job-2.pdf',
+                io.BytesIO(test_pdf.getvalue().replace(b'9 9', b'10 9')),
+                'application/pdf',
+            )
+        },
     )
     response = client.get('/papers')
     assert response.status_code == 200
     jobs = response.json()
     assert len(jobs) == 2
 
+
 def test_list_jobs_filtered_by_status(client, test_pdf):
     response = client.put(
-        '/papers',
-        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+        '/papers', files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
     )
     response2 = client.put(
         '/papers',
-        files={'uploaded_file': ('job-2.pdf', io.BytesIO(test_pdf.getvalue().replace(b'9 9', b'10 9')), 'application/pdf')}
+        files={
+            'uploaded_file': (
+                'job-2.pdf',
+                io.BytesIO(test_pdf.getvalue().replace(b'9 9', b'10 9')),
+                'application/pdf',
+            )
+        },
     )
     response = client.get('/papers', params={'status': ExtractionStatus.QUEUED.value})
     assert response.status_code == 200

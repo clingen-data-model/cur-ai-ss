@@ -2,7 +2,7 @@ import pandas as pd
 import requests
 import streamlit as st
 
-from app.streamlit.api import get_http_error_detail, get_papers, put_paper, FASTAPI_HOST
+from app.streamlit.api import FASTAPI_HOST, get_http_error_detail, get_papers, put_paper
 
 st.set_page_config(page_title='Papers Dashboard', layout='wide')
 left, center, right = st.columns([2, 3, 2])
@@ -30,7 +30,7 @@ with center:
                     }
                 )
                 df['thumbnail_path'] = df['thumbnail_path'].map(
-                    lambda p: f"{FASTAPI_HOST}{p}"
+                    lambda p: f'{FASTAPI_HOST}{p}'
                 )
                 st.dataframe(
                     df[['thumbnail_path', 'filename', 'status', 'details_url']],
