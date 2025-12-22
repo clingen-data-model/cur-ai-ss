@@ -35,5 +35,3 @@ class PaperResp(BaseModel):
     id: str
     filename: str
     extraction_status: ExtractionStatus
-    raw_path: str
-    thumbnail_path: str

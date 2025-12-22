@@ -88,8 +88,7 @@ def split_by_sections(
     return sections, image_captions
 
 
-def parse_content(content: bytes, force: bool = False) -> Paper:
-    paper = Paper.from_content(content)
+def parse_content(paper: Paper, force: bool = False) -> None:
     if not force and paper.pdf_extraction_success_path.exists():
         return paper
     paper.pdf_images_dir.mkdir(parents=True, exist_ok=True)
@@ -181,5 +180,3 @@ def parse_content(content: bytes, force: bool = False) -> Paper:
         'w',
     ) as fp:
         fp.write('')
-
-    return paper

@@ -2,7 +2,9 @@ import pandas as pd
 import requests
 import streamlit as st
 
+from app.models import ExtractionStatus, PaperResp
 from app.streamlit.api import FASTAPI_HOST, get_http_error_detail, get_papers, put_paper
+from lib.evagg.types.base import Paper
 
 st.set_page_config(page_title='Papers Dashboard', layout='wide')
 left, center, right = st.columns([2, 3, 2])
@@ -14,11 +16,11 @@ with center:
     st.subheader('📋 Papers')
     with st.spinner('Loading papers...'):
         try:
-            papers = get_papers()
-            if not papers:
+            paper_resps = get_papers()
+            if not paper_resps:
                 st.info('No papers found.')
             else:
-                df = pd.DataFrame(papers)
+                df = pd.DataFrame([p.model_dump() for p in paper_resps])
                 status_map = {
                     'EXTRACTED': 'Extracted ✅',
                     'QUEUED': 'Queued ⏳',
@@ -28,8 +30,8 @@ with center:
                     lambda row: f'/details?paper_id={row["id"]}#{status_map.get(row["extraction_status"], row["extraction_status"])}',
                     axis=1,
                 )
-                df['thumbnail_path'] = df['thumbnail_path'].map(
-                    lambda p: f'{FASTAPI_HOST}{p}'
+                df['thumbnail_path'] = df['id'].map(
+                    lambda paper_id: f'{FASTAPI_HOST}{Paper(id=paper_id).pdf_thumbnail_path}'
                 )
                 st.dataframe(
                     df[['thumbnail_path', 'filename', 'extraction_status']],

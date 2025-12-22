@@ -1,6 +1,7 @@
 import requests
+from pydantic import TypeAdapter
 
-from app.models import ExtractionStatus
+from app.models import ExtractionStatus, PaperResp
 from lib.evagg.types.base import Paper
 from lib.evagg.utils.environment import env
 
@@ -18,19 +19,19 @@ def get_http_error_detail(e: requests.HTTPError) -> str:
     return str(e)
 
 
-def get_papers():
+def get_papers() -> list[PaperResp]:
     resp = requests.get(f'{FASTAPI_HOST}/papers')
     resp.raise_for_status()
-    return resp.json()
+    return TypeAdapter(list[PaperResp]).validate_python(resp.json())
 
 
-def get_paper(paper_id: str):
+def get_paper(paper_id: str) -> PaperResp:
     resp = requests.get(f'{FASTAPI_HOST}/papers/{paper_id}')
     resp.raise_for_status()
-    return resp.json()
+    return PaperResp.model_validate(resp.json())
 
 
-def put_paper(uploaded_file):
+def put_paper(uploaded_file) -> PaperResp:
     resp = requests.put(
         f'{FASTAPI_HOST}/papers',
         files={
@@ -43,13 +44,13 @@ def put_paper(uploaded_file):
         # Content type is multipart/form-data
     )
     resp.raise_for_status()
-    return resp.json()
+    return PaperResp.model_validate(resp.json())
 
 
-def requeue_paper(paper_id: str):
+def requeue_paper(paper_id: str) -> PaperResp:
     resp = requests.patch(
         f'{FASTAPI_HOST}/papers/{paper_id}',
         json={'extraction_status': ExtractionStatus.QUEUED.value},
     )
     resp.raise_for_status()
-    return resp.json()
+    return PaperResp.model_validate(resp.json())

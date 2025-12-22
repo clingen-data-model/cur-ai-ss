@@ -44,8 +44,6 @@ def test_queue_new_paper(client, test_pdf):
     assert data['id']  # Paper ID will be generated from content
     assert data['extraction_status'] == ExtractionStatus.QUEUED.value
     assert data['filename'] == 'job-1.pdf'
-    assert 'thumbnail_path' in data
-    assert 'raw_path' in data
 
 
 def test_queue_existing_paper_fails(client, test_pdf):
@@ -73,8 +71,6 @@ def test_get_paper_success(client, test_pdf):
     assert data_get['id'] == paper_id
     assert data_get['extraction_status'] == ExtractionStatus.QUEUED.value
     assert data_get['filename'] == 'job-1.pdf'
-    assert 'thumbnail_path' in data_get
-    assert 'raw_path' in data_get
 
 
 def test_get_paper_not_found(client):

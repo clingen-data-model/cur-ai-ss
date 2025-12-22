@@ -106,18 +106,7 @@ def queue_extraction(
         session.add(paper_db)
     session.commit()
     session.refresh(paper_db)
-    paper = Paper(
-        id=paper_db.id, content=b''
-    )  # TODO: cleaner conversion from PaperDB to Paper
-    return PaperResp(
-        id=paper_db.id,
-        filename=paper_db.filename,
-        extraction_status=paper_db.extraction_status,
-        raw_path=str(
-            paper.pdf_raw_path,
-        ),
-        thumbnail_path=str(paper.pdf_thumbnail_path),
-    )
+    return paper_db
 
 
 @app.get('/papers/{paper_id}', response_model=PaperResp)
@@ -127,18 +116,7 @@ def get_paper(paper_id: str, session: Session = Depends(get_session)) -> PaperRe
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
-    paper = Paper(
-        id=paper_db.id, content=b''
-    )  # TODO: cleaner conversion from PaperDB to Paper
-    return PaperResp(
-        id=paper_db.id,
-        filename=paper_db.filename,
-        extraction_status=paper_db.extraction_status,
-        raw_path=str(
-            paper.pdf_raw_path,
-        ),
-        thumbnail_path=str(paper.pdf_thumbnail_path),
-    )
+    return paper_db
 
 
 @app.patch('/papers/{paper_id}', response_model=PaperResp)
@@ -160,18 +138,7 @@ def update_status(
     paper_db.extraction_status = extraction_status
     session.commit()
     session.refresh(paper_db)
-    paper = Paper(
-        id=paper_db.id, content=b''
-    )  # TODO: cleaner conversion from PaperDB to Paper
-    return PaperResp(
-        id=paper_db.id,
-        filename=paper_db.filename,
-        extraction_status=paper_db.extraction_status,
-        raw_path=str(
-            paper.pdf_raw_path,
-        ),
-        thumbnail_path=str(paper.pdf_thumbnail_path),
-    )
+    return paper_db
 
 
 @app.get('/papers', response_model=list[PaperResp])
@@ -182,19 +149,4 @@ def list_papers(
     query = session.query(PaperDB)
     if extraction_status:
         query = query.filter(PaperDB.extraction_status == extraction_status)
-    paper_dbs = query.all()
-    papers = [
-        Paper(id=paper_db.id, content=b'') for paper_db in paper_dbs
-    ]  # TODO: cleaner conversion from PaperDB to Paper
-    return [
-        PaperResp(
-            id=paper_db.id,
-            filename=paper_db.filename,
-            extraction_status=paper_db.extraction_status,
-            raw_path=str(
-                paper.pdf_raw_path,
-            ),
-            thumbnail_path=str(paper.pdf_thumbnail_path),
-        )
-        for paper, paper_db in zip(papers, paper_dbs)
-    ]
+    return query.all()

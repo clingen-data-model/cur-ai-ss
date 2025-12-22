@@ -1,8 +1,9 @@
 import requests
 import streamlit as st
 
-from app.models import ExtractionStatus
+from app.models import ExtractionStatus, PaperResp
 from app.streamlit.api import get_http_error_detail, get_paper, requeue_paper
+from lib.evagg.types.base import Paper
 
 paper_id = st.query_params.get('paper_id')
 
@@ -14,17 +15,18 @@ main = center.container()
 with center:
     with st.spinner('Loading paper...'):
         try:
-            paper = get_paper(paper_id)
-            st.title(f'📄 Details for {paper["filename"]}')
-            if paper['extraction_status'] == ExtractionStatus.EXTRACTED:
+            paper_resp: PaperResp = get_paper(paper_id)
+            st.title(f'📄 Details for {paper_resp.filename}')
+            if paper_resp.extraction_status == ExtractionStatus.EXTRACTED:
                 st.success('✅ PDF extraction completed successfully')
-            elif paper['extraction_status'] == ExtractionStatus.QUEUED:
+            elif paper_resp.extraction_status == ExtractionStatus.QUEUED:
                 st.warning('⏳ PDF extraction is queued')
-            elif paper['extraction_status'] == ExtractionStatus.FAILED:
+            elif paper_resp.extraction_status == ExtractionStatus.FAILED:
                 st.error('❌ PDF extraction failed')
 
             with st.expander('View Full PDF'):
-                st.pdf(paper['raw_path'])
+                paper = Paper(id=paper_resp.id)
+                st.pdf(paper.pdf_raw_path)
 
             # Reset Button
             if st.button('🔄 Rerun EvAGG', use_container_width=True):

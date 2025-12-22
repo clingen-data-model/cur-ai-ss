@@ -96,7 +96,8 @@ class App:
         )
 
     def execute(self) -> Sequence[Dict[str, str | None]]:
-        paper = parse_content(self._content)
+        paper = Paper.from_content(self._content)
+        parse_content(paper)
         title = asyncio.run(
             self._llm_client.prompt_json_from_string(
                 user_prompt=f"""

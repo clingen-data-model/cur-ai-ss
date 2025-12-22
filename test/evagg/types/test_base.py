@@ -7,7 +7,6 @@ def test_paper_from_dict() -> None:
         'citation': 'Test Citation',
         'abstract': 'Test Abstract',
         'pmcid': 'PMC123',
-        'content': b'',
     }
     paper = Paper(**paper_dict)
     assert paper.id == 'pmid:123'
@@ -22,7 +21,6 @@ def test_paper_equality() -> None:
         'citation': 'Test Citation',
         'abstract': 'Test Abstract',
         'pmcid': 'PMC123',
-        'content': b'',
     }
     same_paper_dict = paper_dict.copy()
     different_paper_dict = paper_dict.copy()
@@ -45,7 +43,6 @@ def test_paper_repr() -> None:
         'citation': 'Test Citation',
         'abstract': 'Test Abstract',
         'pmcid': 'PMC123',
-        'content': b'',
     }
     str_paper = 'id: pmid:123 - "Test Citation"'
 

@@ -52,7 +52,6 @@ def paper(monkeypatch) -> Paper:
         abstract='This the abstract from a test paper.',
         pmcid='PMC123',
         can_access=True,
-        content=b'',
     )
 
 
@@ -69,7 +68,7 @@ def test_prompt_based_content_extractor_valid_fields(
         'paper_id': '12345678',
         'citation': paper.citation,
         'link': f'https://www.ncbi.nlm.nih.gov/pmc/articles/{paper.pmcid}',
-        'paper_title': paper.title,
+        'title': paper.title,
         'hgvs_c': 'c.1234A>G',
         'hgvs_p': 'NA',
         'paper_variant': 'c.1234A>G',

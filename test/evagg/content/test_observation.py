@@ -102,7 +102,6 @@ def paper(monkeypatch) -> Paper:
             'license': 'CC BY',
             'citation': 'Bowling (2017) Genome Med',
             'link': 'https://pubmed.ncbi.nlm.nih.gov/28554332/',
-            'content': b'',
         }
     )
 

@@ -1,4 +1,5 @@
 from lib.evagg.pdf.parse import parse_content
+from lib.evagg.types.base import Paper
 
 
 def test_convert_and_extract_creates_outputs(
@@ -6,7 +7,8 @@ def test_convert_and_extract_creates_outputs(
 ):
     content = test_file_contents('ACN3-7-1962.pdf', mode='rb')
     # run extraction (force=True to avoid cache short-circuiting)
-    paper = parse_content(content, force=True)
+    paper = Paper.from_content(content)
+    parse_content(paper, force=True)
 
     # ---- core outputs ----
     json_path = paper.pdf_json_path

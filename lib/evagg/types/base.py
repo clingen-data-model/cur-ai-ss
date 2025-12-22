@@ -9,7 +9,7 @@ from lib.evagg.utils.environment import env
 @dataclass(eq=False)
 class Paper:
     id: str
-    content: bytes
+    content: bytes | None = None
 
     # core bibliographic fields
     pmid: str | None = None
