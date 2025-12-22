@@ -8,14 +8,14 @@ from app.models import ExtractionStatus, PaperDB
 
 SessionLocal = get_sessionmaker()
 
-POLL_INTERVAL_S = 5
+POLL_INTERVAL_S = 10
 
 
-def mark_paper_as_status(paper_id: str, status: ExtractionStatus):
+def mark_paper_as_extraction_status(paper_id: str, extraction_status: ExtractionStatus):
     if paper_id:
         with SessionLocal() as session:
             session.execute(
-                update(PaperDB).where(PaperDB.id == paper_id).values(status=status)
+                update(PaperDB).where(PaperDB.id == paper_id).values(extraction_status=extraction_status)
             )
             session.commit()
 
@@ -27,22 +27,23 @@ def main():
             with SessionLocal() as session:
                 paper_id = session.scalars(
                     select(PaperDB.id)
-                    .where(PaperDB.status == ExtractionStatus.QUEUED)
+                    .where(PaperDB.extraction_status == ExtractionStatus.QUEUED)
                     .order_by(PaperDB.id)
                     .limit(1)
                 ).first()
             if not paper_id:
                 continue
-            mark_paper_as_status(paper_id, ExtractionStatus.EXTRACTED)
+            print(paper_id)
+            mark_paper_as_extraction_status(paper_id, ExtractionStatus.EXTRACTED)
         except KeyboardInterrupt:
             print('Shutting down poller')
             break
         except SQLAlchemyError as e:
             print(f'Database error occurred: {e}')
-            mark_paper_as_status(paper_id, ExtractionStatus.FAILED)
+            mark_paper_as_extraction_status(paper_id, ExtractionStatus.FAILED)
         except Exception as e:
             print(f'An unexpected error occurred: {e}')
-            mark_paper_as_status(paper_id, ExtractionStatus.FAILED)
+            mark_paper_as_extraction_status(paper_id, ExtractionStatus.FAILED)
 
         time.sleep(POLL_INTERVAL_S)
         print('waiting for work')

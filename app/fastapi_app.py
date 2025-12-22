@@ -152,9 +152,9 @@ def update_status(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
-    if paper_db.status == extraction_status:
+    if paper_db.extraction_status == extraction_status:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail=f'Status is already {status}'
+            status_code=status.HTTP_409_CONFLICT, detail=f'Status is already {extraction_status.value}'
         )
     paper_db.extraction_status = extraction_status
     session.commit()
