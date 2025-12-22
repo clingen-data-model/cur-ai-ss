@@ -80,7 +80,7 @@ class PromptBasedContentExtractor:
             'pmcid': lambda: paper.pmcid,
             'citation': lambda: paper.citation,
             'link': get_link,
-            'paper_title': lambda: paper.title,
+            'title': lambda: paper.title,
             'hgvs_c': get_hgvs_c,
             'hgvs_p': get_hgvs_p,
             'paper_variant': lambda: ', '.join(ob.variant_descriptions),

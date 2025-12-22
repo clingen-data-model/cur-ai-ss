@@ -65,7 +65,7 @@ class App:
                 'animal_model',
                 'citation',
                 'link',
-                'paper_title',
+                'title',
             ],
             llm_client=self._llm_client,
             phenotype_searcher=WebHPOClient(
