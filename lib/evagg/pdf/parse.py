@@ -91,7 +91,7 @@ def split_by_sections(
 
 def parse_content(paper: Paper, force: bool = False) -> None:
     if not force and paper.pdf_extraction_success_path.exists():
-        return paper
+        return
     if not paper.content:
         raise RuntimeError('Paper must already have raw pdf content')
     paper.pdf_images_dir.mkdir(parents=True, exist_ok=True)
