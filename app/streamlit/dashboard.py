@@ -1,6 +1,7 @@
 import pandas as pd
 import requests
 import streamlit as st
+import time
 
 from app.models import ExtractionStatus, PaperResp
 from app.streamlit.api import FASTAPI_HOST, get_http_error_detail, get_papers, put_paper
@@ -87,7 +88,7 @@ with center:
                 try:
                     result = put_paper(uploaded_file)
                     st.success('Paper submitted successfully')
-                    st.json(result)
+                    time.sleep(.5)
                     st.rerun()
                 except requests.HTTPError as e:
                     st.error(f'Upload failed: {e}, {get_http_error_detail(e)}')

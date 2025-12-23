@@ -48,7 +48,7 @@ with center:
                         else:
                             icon = '❌'
                         st.toast(
-                            f'Failed to refresh EvAGG Job: {get_http_error_detail(e)}',
+                            f'Failed to Refresh EvAGG Job: {get_http_error_detail(e)}',
                             icon=icon,
                         )
                     except Exception as e:
