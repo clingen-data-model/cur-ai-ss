@@ -10,6 +10,8 @@ st.set_page_config(page_title='Papers Dashboard', layout='wide')
 left, center, right = st.columns([2, 3, 2])
 main = center.container()
 
+QUEUED_EXTRACTION_TEXT = 'Pending Extraction...'
+
 with center:
     st.title('📄 Curation Dashboard')
     st.divider()
@@ -20,7 +22,22 @@ with center:
             if not paper_resps:
                 st.info('No papers found.')
             else:
+                papers_by_id = {
+                    p.id: Paper(id=p.id).with_metadata()
+                    for p in paper_resps
+                }
                 df = pd.DataFrame([p.model_dump() for p in paper_resps])
+                df['thumbnail_path'] = df['id'].map(
+                    lambda paper_id: f'{FASTAPI_HOST}{papers_by_id[paper_id].pdf_thumbnail_path}'
+                )
+                df['title'] = df['id'].map(
+                    lambda paper_id: papers_by_id[paper_id].title
+                    or QUEUED_EXTRACTION_TEXT
+                )
+                df['first_author'] = df['id'].map(
+                    lambda paper_id: papers_by_id[paper_id].first_author
+                    or QUEUED_EXTRACTION_TEXT
+                )
                 status_map = {
                     'EXTRACTED': 'Extracted ✅',
                     'QUEUED': 'Queued ⏳',
@@ -30,11 +47,16 @@ with center:
                     lambda row: f'/details?paper_id={row["id"]}#{status_map.get(row["extraction_status"], row["extraction_status"])}',
                     axis=1,
                 )
-                df['thumbnail_path'] = df['id'].map(
-                    lambda paper_id: f'{FASTAPI_HOST}{Paper(id=paper_id).pdf_thumbnail_path}'
-                )
                 st.dataframe(
-                    df[['thumbnail_path', 'filename', 'extraction_status']],
+                    df[
+                        [
+                            'thumbnail_path',
+                            'title',
+                            'first_author',
+                            'filename',
+                            'extraction_status',
+                        ]
+                    ],
                     row_height=100,
                     column_config={
                         'thumbnail_path': st.column_config.ImageColumn(

@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 from typing import Dict, Sequence
 
@@ -118,6 +119,12 @@ class App:
         )
         if pmids:
             paper = self._ncbi_lookup_client.fetch(pmids[0], paper)
+
+        # Dump the paper metadata
+        paper.metadata_json_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(paper.pdf_metadata_path, 'w') as f:
+            json.dump(fp, paper.__dict__)
+
         gene_symbol = asyncio.run(
             self._llm_client.prompt_json_from_string(
                 user_prompt=f"""

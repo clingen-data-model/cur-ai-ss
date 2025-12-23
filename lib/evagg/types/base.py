@@ -1,4 +1,5 @@
 import hashlib
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, List
@@ -30,7 +31,7 @@ class Paper:
     link: str | None = None
 
     @classmethod
-    def from_content(self, content: bytes) -> 'Paper':
+    def from_content(cls, content: bytes) -> 'Paper':
         h = hashlib.sha256()
         h.update(content)
         return Paper(
@@ -38,14 +39,23 @@ class Paper:
             content=content,
         )
 
-    @classmethod
-    def from_kwargs(cls, **kwargs: Any) -> 'Paper':
+    def with_metadata(self) -> 'Paper':
+        kwargs = {}
+        if self.metadata_json_path.exists():
+            with open(self.metadata_json_path, 'r') as f:
+                kwargs = json.load(f)
+        return self.with_kwargs(**kwargs)
+
+    def with_kwargs(self, **kwargs: Any) -> 'Paper':
         """
         Split known fields from unknown ones.
         """
-        field_names = {f.name for f in cls.__dataclass_fields__.values()}
+        field_names = {f.name for f in self.__dataclass_fields__.values()}
         known = {k: v for k, v in kwargs.items() if k in field_names}
-        return cls(**known)
+        return Paper(**{
+            **self.__dict__, 
+            **known,
+        })
 
     def __hash__(self) -> int:
         return hash(self.id)
@@ -82,6 +92,14 @@ class Paper:
         return tables
 
     @property
+    def evagg_observations_path(self) -> Path:
+        return Path(env.EVAGG_DIR) / self.id / 'observations.json'
+
+    @property
+    def metadata_json_path(self) -> Path:
+        return Path(env.EVAGG_DIR) / self.id / 'metadata.json'
+
+    @property
     def pdf_dir(self) -> Path:
         return Path(env.EXTRACTED_PDF_DIR) / self.id
 
@@ -116,10 +134,6 @@ class Paper:
     @property
     def pdf_words_json_path(self) -> Path:
         return self.pdf_dir / 'words.json'
-
-    @property
-    def evagg_json(self) -> Path:
-        return self.pdf_dir / 'evagg.json'
 
     @property
     def pdf_extraction_success_path(self) -> Path:

@@ -27,6 +27,7 @@ class Env(BaseSettings):
 
     # Directories
     SQLLITE_DB_DIR: str = '/var/cur-ai-ss/sqllite'
+    EVAGG_DIR: str = '/var/cur-ai-ss/evagg'
     EXTRACTED_PDF_DIR: str = '/var/cur-ai-ss/extracted_pdfs'
     LOG_OUT_DIR: str = '/var/cur-ai-ss/logs'
 
