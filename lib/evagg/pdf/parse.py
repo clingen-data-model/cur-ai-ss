@@ -76,8 +76,9 @@ def split_by_sections(
                     # Skip table headers as they are included in table markdown.
                     continue
                 else:
-                    msg = f'Caption for non-image or non-table found {item.parent.cref}, violating assumption.'
-                    raise ValueError(msg)
+                    print(
+                        f'Caption for non-image or non-table found {item.parent.cref}, violating assumption.'
+                    )
             else:
                 current_text.append(item.text)
 
@@ -88,10 +89,11 @@ def split_by_sections(
     return sections, image_captions
 
 
-def parse_content(content: bytes, force: bool = False) -> Paper:
-    paper = Paper.from_content(content)
+def parse_content(paper: Paper, force: bool = False) -> None:
     if not force and paper.pdf_extraction_success_path.exists():
-        return paper
+        return
+    if not paper.content:
+        raise RuntimeError('Paper must already have raw pdf content')
     paper.pdf_images_dir.mkdir(parents=True, exist_ok=True)
     paper.pdf_tables_dir.mkdir(parents=True, exist_ok=True)
     paper.pdf_sections_dir.mkdir(parents=True, exist_ok=True)
@@ -181,5 +183,3 @@ def parse_content(content: bytes, force: bool = False) -> Paper:
         'w',
     ) as fp:
         fp.write('')
-
-    return paper

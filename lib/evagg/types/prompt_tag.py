@@ -45,3 +45,4 @@ class PromptTag(str, Enum):
 
     # PDF metadata tags
     TITLE = 'title'
+    GENE_OF_INTEREST = 'gene_of_interest'

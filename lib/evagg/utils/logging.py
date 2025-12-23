@@ -123,7 +123,7 @@ class FileHandler(logging.Handler):
 
 
 class ConsoleHandler(logging.StreamHandler):
-    BASE_FMT = '%(levelname)s:%(name)s:%(message)s'
+    BASE_FMT = '%(asctime)s:%(levelname)s:%(name)s:%(message)s'
     dim_grey = '\x1b[38;5;8m'
     grey = '\x1b[38;20m'
     yellow = '\x1b[1;33m'

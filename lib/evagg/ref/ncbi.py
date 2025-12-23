@@ -184,7 +184,7 @@ class NcbiLookupClient(
         props.update(self._get_xml_props(article))
         props.update(self._get_license_props(props['pmcid']))
         props.update(self._get_derived_props(props))
-        return Paper.from_kwargs(id=paper.id, content=paper.content, **props)
+        return paper.with_kwargs(**props)
 
     def gene_id_for_symbol(
         self, *symbols: str, allow_synonyms: bool = False
