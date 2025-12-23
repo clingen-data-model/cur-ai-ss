@@ -118,7 +118,7 @@ class App:
             title + '[ti]',
         )
         if pmids:
-            self._paper = self._ncbi_lookup_client.fetch(pmids[0], paper)
+            self._paper = self._ncbi_lookup_client.fetch(pmids[0], self._paper)
 
         # Dump the paper metadata
         self._paper.metadata_json_path.parent.mkdir(parents=True, exist_ok=True)

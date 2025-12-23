@@ -54,3 +54,10 @@ def requeue_paper(paper_id: str) -> PaperResp:
     )
     resp.raise_for_status()
     return PaperResp.model_validate(resp.json())
+
+
+def delete_paper(paper_id: str) -> None:
+    resp = requests.delete(
+        f'{FASTAPI_HOST}/papers/{paper_id}',
+    )
+    resp.raise_for_status()

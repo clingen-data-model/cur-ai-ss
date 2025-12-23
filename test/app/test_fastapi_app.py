@@ -2,7 +2,7 @@ import io
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import update
+from sqlalchemy import func, select, update
 
 from app.db import session_scope
 from app.fastapi_app import app
@@ -152,3 +152,21 @@ def test_list_papers_filtered_by_status(client, test_pdf):
     assert response.status_code == 200
     jobs = response.json()
     assert all(job['extraction_status'] == ExtractionStatus.QUEUED for job in jobs)
+
+
+def test_delete_paper(client, test_pdf):
+    response = client.delete(
+        f'/papers/abcd',
+    )
+    assert response.status_code == 204
+
+    response2 = client.put(
+        '/papers', files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+    )
+    response3 = client.delete(
+        f'/papers/{response2.json()["id"]}',
+    )
+    assert response3.status_code == 204
+    with session_scope() as sess:
+        result = sess.execute(select(func.count(PaperDB.id)))
+        assert result.scalar_one() == 0

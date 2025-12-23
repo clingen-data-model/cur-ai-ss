@@ -16,6 +16,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from app.db import env, get_engine, get_session
@@ -117,6 +118,15 @@ def get_paper(paper_id: str, session: Session = Depends(get_session)) -> PaperRe
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
     return paper_db
+
+
+@app.delete('/papers/{paper_id}', status_code=status.HTTP_204_NO_CONTENT)
+def delete_paper(paper_id: str, session: Session = Depends(get_session)) -> None:
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        return
+    session.delete(paper_db)
+    session.commit()
 
 
 @app.patch('/papers/{paper_id}', response_model=PaperResp)

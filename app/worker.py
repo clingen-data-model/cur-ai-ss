@@ -1,23 +1,32 @@
+import datetime
+import logging
 import time
+import traceback
 
 from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 
-from lib.evagg import App
-from lib.evagg.utils import init_logger
 from app.db import session_scope
 from app.models import ExtractionStatus, PaperDB
+from lib.evagg import App
+from lib.evagg.types.base import Paper
+from lib.evagg.utils import init_logger
 
 POLL_INTERVAL_S = 10
 RETRIES = 3
 
-def run_evagg_app(paper_id):
-    init_logger(current_run=f'{paper_id}_{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}')
+logger = logging.getLogger(__name__)
+
+
+def run_evagg_app(paper_id) -> None:
+    init_logger(
+        current_run=f'{paper_id}_{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'
+    )
     max_attempts = RETRIES + 1
     for attempt in range(1, max_attempts + 1):
         try:
             paper = Paper(id=paper_id).with_content()
-            app = App(paper)
+            App(paper).execute()
             logger.info(f'Attempt {attempt}/{max_attempts}')
             return
         except KeyboardInterrupt:
@@ -54,6 +63,7 @@ def main():
                 ).first()
             if not paper_id:
                 continue
+            print(f'Dequeued paper {paper_id}')
             run_evagg_app(paper_id)
             mark_paper_as_extraction_status(paper_id, ExtractionStatus.EXTRACTED)
         except KeyboardInterrupt:
