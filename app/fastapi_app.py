@@ -77,7 +77,7 @@ async def log_exceptions_middleware(request: Request, call_next):
 
 
 @app.put('/papers', response_model=PaperResp, status_code=status.HTTP_201_CREATED)
-def queue_extraction(
+def put_paper(
     uploaded_file: UploadFile = File(...),
     session: Session = Depends(get_session),
 ) -> PaperResp:

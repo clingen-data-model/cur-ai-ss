@@ -57,6 +57,7 @@ def mark_paper_as_extraction_status(paper_id: str, extraction_status: Extraction
 
 
 def main():
+    init_logger('worker')
     while True:
         paper_id = None
         try:
@@ -68,19 +69,19 @@ def main():
                     .limit(1)
                 ).first()
             if paper_id:
-                print(f'Dequeued paper {paper_id}')
+                logger.info(f'Dequeued paper {paper_id}')
                 run_evagg_app(paper_id)
         except KeyboardInterrupt:
-            print('Shutting down poller')
+            logger.info('Shutting down poller')
             break
         except SQLAlchemyError as e:
-            print(f'Database error occurred: {e}')
+            logger.exception(f'Database error occurred')
             mark_paper_as_extraction_status(paper_id, ExtractionStatus.FAILED)
         except Exception as e:
-            print(f'An unexpected error occurred: {e}')
+            logger.exception(f'An unexpected error occurred')
             mark_paper_as_extraction_status(paper_id, ExtractionStatus.FAILED)
         time.sleep(POLL_INTERVAL_S)
-        print('waiting for work')
+        logger.info('waiting for work')
 
 
 if __name__ == '__main__':
