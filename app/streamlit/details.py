@@ -1,7 +1,8 @@
-import requests
-import streamlit as st
 import json
 import time
+
+import requests
+import streamlit as st
 
 from app.models import ExtractionStatus, PaperResp
 from app.streamlit.api import (
@@ -90,27 +91,23 @@ with center:
                 with st.expander('View Paper Metadata'):
                     paper = Paper(id=paper_resp.id)
                     data = json.load(open(paper.metadata_json_path, 'r'))
-                    st.json(
-                        data, expanded=True
-                    )
+                    st.json(data, expanded=True)
                     st.download_button(
-                        label="Download JSON",
+                        label='Download JSON',
                         data=json.dumps(data, indent=2),
-                        file_name="metadata.json",
-                        mime="application/json",
+                        file_name='metadata.json',
+                        mime='application/json',
                     )
-    
+
                 with st.expander('View Patient Observations'):
                     paper = Paper(id=paper_resp.id)
                     data = json.load(open(paper.evagg_observations_path, 'r'))
-                    st.json(
-                        data, expanded=True
-                    )
+                    st.json(data, expanded=True)
                     st.download_button(
-                        label="Download JSON",
+                        label='Download JSON',
                         data=json.dumps(data, indent=2),
-                        file_name="observations.json",
-                        mime="application/json",
+                        file_name='observations.json',
+                        mime='application/json',
                     )
 
         except requests.HTTPError as e:

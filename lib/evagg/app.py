@@ -123,7 +123,9 @@ class App:
         # Dump the paper metadata
         self._paper.metadata_json_path.parent.mkdir(parents=True, exist_ok=True)
         with open(self._paper.metadata_json_path, 'w') as f:
-            json.dump({k: v for k,v in self._paper.__dict__.items() if k != 'content'}, f)
+            json.dump(
+                {k: v for k, v in self._paper.__dict__.items() if k != 'content'}, f
+            )
 
         gene_symbol = asyncio.run(
             self._llm_client.prompt_json_from_string(

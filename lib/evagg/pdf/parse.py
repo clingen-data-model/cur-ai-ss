@@ -76,7 +76,9 @@ def split_by_sections(
                     # Skip table headers as they are included in table markdown.
                     continue
                 else:
-                    print(f'Caption for non-image or non-table found {item.parent.cref}, violating assumption.')
+                    print(
+                        f'Caption for non-image or non-table found {item.parent.cref}, violating assumption.'
+                    )
             else:
                 current_text.append(item.text)
 
