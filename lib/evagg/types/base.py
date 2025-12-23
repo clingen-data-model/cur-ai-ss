@@ -52,10 +52,12 @@ class Paper:
         """
         field_names = {f.name for f in self.__dataclass_fields__.values()}
         known = {k: v for k, v in kwargs.items() if k in field_names}
-        return Paper(**{
-            **self.__dict__, 
-            **known,
-        })
+        return Paper(
+            **{
+                **self.__dict__,
+                **known,
+            }
+        )
 
     def __hash__(self) -> int:
         return hash(self.id)

@@ -22,6 +22,7 @@ from lib.evagg.ref import (
     WebHPOClient,
 )
 from lib.evagg.ref.ncbi import get_ncbi_response_translator
+from lib.evagg.types.base import Paper
 from lib.evagg.types.prompt_tag import PromptTag
 from lib.evagg.utils.web import RequestsWebContentClient, WebClientSettings
 
@@ -31,9 +32,9 @@ logger = logging.getLogger(__name__)
 class App:
     def __init__(
         self,
-        content: bytes,
+        paper: Paper,
     ) -> None:
-        self._content = content
+        self._paper = paper
         self._ncbi_lookup_client = NcbiLookupClient(
             web_client=RequestsWebContentClient(
                 WebClientSettings(status_code_translator=get_ncbi_response_translator())
@@ -97,8 +98,7 @@ class App:
         )
 
     def execute(self) -> Sequence[Dict[str, str | None]]:
-        paper = Paper.from_content(self._content)
-        parse_content(paper)
+        parse_content(self._paper)
         title = asyncio.run(
             self._llm_client.prompt_json_from_string(
                 user_prompt=f"""
@@ -109,7 +109,7 @@ class App:
                     "title": "The title of the paper"
                 }}
 
-                Paper: {paper.fulltext_md[:1000]}
+                Paper: {self._paper.fulltext_md[:1000]}
             """,
                 prompt_tag=PromptTag.TITLE,
             )
@@ -118,12 +118,12 @@ class App:
             title + '[ti]',
         )
         if pmids:
-            paper = self._ncbi_lookup_client.fetch(pmids[0], paper)
+            self._paper = self._ncbi_lookup_client.fetch(pmids[0], paper)
 
         # Dump the paper metadata
-        paper.metadata_json_path.parent.mkdir(parents=True, exist_ok=True)
+        self._paper.metadata_json_path.parent.mkdir(parents=True, exist_ok=True)
         with open(paper.pdf_metadata_path, 'w') as f:
-            json.dump(fp, paper.__dict__)
+            json.dump(fp, self._paper.__dict__)
 
         gene_symbol = asyncio.run(
             self._llm_client.prompt_json_from_string(
@@ -143,7 +143,7 @@ class App:
                 prompt_tag=PromptTag.GENE_OF_INTEREST,
             )
         )['gene_symbol']
-        extracted_observations = self._extractor.extract(paper, gene_symbol)
+        extracted_observations = self._extractor.extract(self._paper, gene_symbol)
         for extracted_observation in extracted_observations:
             self._vep_client.enrich(extracted_observation)
             self._clinvar_client.enrich(extracted_observation)

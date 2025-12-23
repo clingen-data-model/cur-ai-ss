@@ -23,8 +23,7 @@ with center:
                 st.info('No papers found.')
             else:
                 papers_by_id = {
-                    p.id: Paper(id=p.id).with_metadata()
-                    for p in paper_resps
+                    p.id: Paper(id=p.id).with_metadata() for p in paper_resps
                 }
                 df = pd.DataFrame([p.model_dump() for p in paper_resps])
                 df['thumbnail_path'] = df['id'].map(

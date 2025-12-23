@@ -6,6 +6,7 @@ import traceback
 from pathlib import Path
 
 from lib.evagg import App
+from lib.evagg.types.base import Paper
 from lib.evagg.utils import init_logger
 
 logger = logging.getLogger(__name__)
@@ -30,9 +31,7 @@ def run_evagg_app() -> None:
         raise RuntimeError('pdf path must exist')
     with open(args.pdf, 'rb') as f:
         content = f.read()
-    app = App(
-        content,
-    )
+    app = App(Paper.from_content(content))
     max_attempts = args.retries + 1
     for attempt in range(1, max_attempts + 1):
         try:
