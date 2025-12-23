@@ -39,6 +39,13 @@ class Paper:
             content=content,
         )
 
+    def with_content(self) -> 'Paper':
+        if not self.pdf_raw_path.exists():
+            raise RuntimeError('Raw PDF must exist prior to calling this method')
+        with open(self.pdf_raw_path, 'rb') as f:
+            self.content = f.read()
+        return self
+
     def with_metadata(self) -> 'Paper':
         kwargs = {}
         if self.metadata_json_path.exists():

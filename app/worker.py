@@ -3,10 +3,31 @@ import time
 from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 
+from lib.evagg import App
+from lib.evagg.utils import init_logger
 from app.db import session_scope
 from app.models import ExtractionStatus, PaperDB
 
 POLL_INTERVAL_S = 10
+RETRIES = 3
+
+def run_evagg_app(paper_id):
+    init_logger(current_run=f'{paper_id}_{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}')
+    max_attempts = RETRIES + 1
+    for attempt in range(1, max_attempts + 1):
+        try:
+            paper = Paper(id=paper_id).with_content()
+            app = App(paper)
+            logger.info(f'Attempt {attempt}/{max_attempts}')
+            return
+        except KeyboardInterrupt:
+            logger.info(f'Interrupted on attempt {attempt}')
+        except Exception as e:
+            logger.error(f'Error executing app on attempt {attempt}: {e}')
+            logger.error(traceback.format_exc())
+            if attempt == max_attempts:
+                logger.error('All retries exhausted. Exiting.')
+                raise
 
 
 def mark_paper_as_extraction_status(paper_id: str, extraction_status: ExtractionStatus):
@@ -33,7 +54,7 @@ def main():
                 ).first()
             if not paper_id:
                 continue
-            print(paper_id)
+            run_evagg_app(paper_id)
             mark_paper_as_extraction_status(paper_id, ExtractionStatus.EXTRACTED)
         except KeyboardInterrupt:
             print('Shutting down poller')
