@@ -1,4 +1,5 @@
 import datetime
+import json
 import logging
 import time
 import traceback
@@ -26,8 +27,13 @@ def run_evagg_app(paper_id) -> None:
     for attempt in range(1, max_attempts + 1):
         try:
             paper = Paper(id=paper_id).with_content()
-            App(paper).execute()
-            logger.info(f'Attempt {attempt}/{max_attempts}')
+            res = App(paper).execute()
+            if not res:
+                return
+            with open(paper.evagg_observations_path, 'w') as f:
+                json.dump(res, f)
+            mark_paper_as_extraction_status(paper_id, ExtractionStatus.EXTRACTED)
+            logger.info(f'Attempt {attempt}/{max_attempts} succeeded')
             return
         except KeyboardInterrupt:
             logger.info(f'Interrupted on attempt {attempt}')
@@ -61,11 +67,9 @@ def main():
                     .order_by(PaperDB.id)
                     .limit(1)
                 ).first()
-            if not paper_id:
-                continue
-            print(f'Dequeued paper {paper_id}')
-            run_evagg_app(paper_id)
-            mark_paper_as_extraction_status(paper_id, ExtractionStatus.EXTRACTED)
+            if paper_id:
+                print(f'Dequeued paper {paper_id}')
+                run_evagg_app(paper_id)
         except KeyboardInterrupt:
             print('Shutting down poller')
             break
@@ -75,7 +79,6 @@ def main():
         except Exception as e:
             print(f'An unexpected error occurred: {e}')
             mark_paper_as_extraction_status(paper_id, ExtractionStatus.FAILED)
-
         time.sleep(POLL_INTERVAL_S)
         print('waiting for work')
 

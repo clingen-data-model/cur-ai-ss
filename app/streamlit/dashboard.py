@@ -14,7 +14,7 @@ main = center.container()
 QUEUED_EXTRACTION_TEXT = 'Pending Extraction...'
 
 with center:
-    st.title('📄 Curation Dashboard')
+    st.title('📄 Dashboard')
     st.divider()
     st.subheader('📋 Papers')
     with st.spinner('Loading papers...'):
@@ -30,13 +30,13 @@ with center:
                 df['thumbnail_path'] = df['id'].map(
                     lambda paper_id: f'{FASTAPI_HOST}{papers_by_id[paper_id].pdf_thumbnail_path}'
                 )
-                df['title'] = df['id'].map(
-                    lambda paper_id: papers_by_id[paper_id].title
-                    or QUEUED_EXTRACTION_TEXT
+                df['title'] = df.apply(
+                    lambda row: f'/details?paper_id={row["id"]}#{papers_by_id[row["id"]].title or QUEUED_EXTRACTION_TEXT}',
+                    axis=1,
                 )
-                df['first_author'] = df['id'].map(
-                    lambda paper_id: papers_by_id[paper_id].first_author
-                    or QUEUED_EXTRACTION_TEXT
+                df['first_author'] = df.apply(
+                    lambda row: f'/details?paper_id={row["id"]}#{papers_by_id[row["id"]].first_author or QUEUED_EXTRACTION_TEXT}',
+                    axis=1,
                 )
                 status_map = {
                     'EXTRACTED': 'Extracted ✅',
@@ -62,6 +62,18 @@ with center:
                         'thumbnail_path': st.column_config.ImageColumn(
                             'Thumbnail',
                             help='First page preview',
+                        ),
+                        'title': st.column_config.LinkColumn(
+                            'Title',
+                            # Regex to extract text after the '#'
+                            # Note, this is a major hack to get around the lack of a better way of doing this.
+                            display_text=r'.*?#(.+)$',
+                        ),
+                        'first_author': st.column_config.LinkColumn(
+                            'First Author',
+                            # Regex to extract text after the '#'
+                            # Note, this is a major hack to get around the lack of a better way of doing this.
+                            display_text=r'.*?#(.+)$',
                         ),
                         'filename': st.column_config.Column('Filename'),
                         'extraction_status': st.column_config.LinkColumn(

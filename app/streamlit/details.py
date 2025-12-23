@@ -1,5 +1,6 @@
 import requests
 import streamlit as st
+import json
 import time
 
 from app.models import ExtractionStatus, PaperResp
@@ -42,6 +43,8 @@ with center:
                     try:
                         requeue_paper(paper_id)
                         st.toast('EvAGG Job Queued', icon=':material/thumb_up:')
+                        time.sleep(0.5)
+                        st.rerun()
                     except requests.HTTPError as e:
                         if e.response.status_code == 409:
                             icon = '⏳'
@@ -83,10 +86,38 @@ with center:
                     width='stretch',
                 )
 
+            if paper_resp.extraction_status == ExtractionStatus.EXTRACTED:
+                with st.expander('View Paper Metadata'):
+                    paper = Paper(id=paper_resp.id)
+                    data = json.load(open(paper.metadata_json_path, 'r'))
+                    st.json(
+                        data, expanded=True
+                    )
+                    st.download_button(
+                        label="Download JSON",
+                        data=json.dumps(data, indent=2),
+                        file_name="metadata.json",
+                        mime="application/json",
+                    )
+    
+                with st.expander('View Patient Observations'):
+                    paper = Paper(id=paper_resp.id)
+                    data = json.load(open(paper.evagg_observations_path, 'r'))
+                    st.json(
+                        data, expanded=True
+                    )
+                    st.download_button(
+                        label="Download JSON",
+                        data=json.dumps(data, indent=2),
+                        file_name="observations.json",
+                        mime="application/json",
+                    )
+
         except requests.HTTPError as e:
             st.error(f'Failed to load paper: {get_http_error_detail(e)}')
         except Exception as e:
             st.error(str(e))
 
-with st.sidebar:
-    st.page_link('dashboard.py', label='Curation Dashboard', icon='🏠')
+with left:
+    with st.container(horizontal=True, vertical_alignment='center'):
+        st.page_link('dashboard.py', label='Curation Dashboard', icon='🏠')
