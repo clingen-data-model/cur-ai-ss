@@ -1,5 +1,6 @@
 import requests
 import streamlit as st
+import time
 
 from app.models import ExtractionStatus, PaperResp
 from app.streamlit.api import (
@@ -61,8 +62,10 @@ with center:
                     help='Removes the paper and all curation data.',
                 ):
                     try:
-                        requeue_paper(paper_id)
-                        st.toast('Successfully removed!', icon='🗑️')
+                        delete_paper(paper_id)
+                        st.toast('Successfully deleted!', icon='🗑️')
+                        time.sleep(0.5)
+                        st.switch_page('dashboard.py')
                     except requests.HTTPError as e:
                         st.toast(f'Failed to Delete Paper: {get_http_error_detail(e)}')
                     except Exception as e:
