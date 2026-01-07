@@ -1,10 +1,15 @@
 import asyncio
 import json
 import os
+import random
+import string
+from pathlib import Path
 from typing import Optional
 
 import pytest
 from defusedxml import ElementTree
+
+from app import db
 
 
 @pytest.fixture
@@ -117,3 +122,11 @@ def mock_client(arg_loader):
         return MockClient
 
     return client_creator
+
+
+@pytest.fixture
+def test_db(monkeypatch, tmpdir):
+    db.env.SQLLITE_DB_DIR = str(tmpdir)
+    monkeypatch.setattr(db, '_engine', None)
+    monkeypatch.setattr(db, '_session_factory', None)
+    yield

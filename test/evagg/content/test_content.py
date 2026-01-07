@@ -3,7 +3,10 @@ from typing import Any
 import pytest
 
 from lib.evagg import PromptBasedContentExtractor
-from lib.evagg.content import Observation, ObservationFinder
+from lib.evagg.content import (
+    Observation,
+    ObservationFinder,
+)
 from lib.evagg.llm import OpenAIClient
 from lib.evagg.ref import PyHPOClient, WebHPOClient
 from lib.evagg.types import HGVSVariant, Paper
@@ -66,7 +69,7 @@ def test_prompt_based_content_extractor_valid_fields(
         'paper_id': '12345678',
         'citation': paper.citation,
         'link': f'https://www.ncbi.nlm.nih.gov/pmc/articles/{paper.pmcid}',
-        'paper_title': paper.title,
+        'title': paper.title,
         'hgvs_c': 'c.1234A>G',
         'hgvs_p': 'NA',
         'paper_variant': 'c.1234A>G',

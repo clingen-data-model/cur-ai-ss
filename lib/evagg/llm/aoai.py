@@ -19,7 +19,7 @@ from lib.evagg.utils.logging import PROMPT
 logger = logging.getLogger(__name__)
 
 DEFAULT_PROMPT_SETTINGS = {
-    'max_output_tokens': 2048,
+    'max_output_tokens': 4096,
 }
 
 MAX_PARALLEL_REQUESTS = 5

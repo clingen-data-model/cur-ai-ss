@@ -32,9 +32,13 @@ dependencies = [
     "plotly==5.22.0",
     # pdf parsing
     "docling==2.64.1",
-    "pypdf",
     "streamlit[pdf]>=1.52.1",
-]   
+    "fastapi>=0.126.0",
+    "sqlalchemy>=2.0.45",
+    "uvicorn>=0.38.0",
+    "pymupdf>=1.26.7",
+    "python-multipart>=0.0.21",
+]
 
 [dependency-groups]
 dev = [

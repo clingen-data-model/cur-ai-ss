@@ -1,4 +1,5 @@
 import hashlib
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, List
@@ -9,7 +10,7 @@ from lib.evagg.utils.environment import env
 @dataclass(eq=False)
 class Paper:
     id: str
-    content: bytes
+    content: bytes | None = None
 
     # core bibliographic fields
     pmid: str | None = None
@@ -30,7 +31,7 @@ class Paper:
     link: str | None = None
 
     @classmethod
-    def from_content(self, content: bytes) -> 'Paper':
+    def from_content(cls, content: bytes) -> 'Paper':
         h = hashlib.sha256()
         h.update(content)
         return Paper(
@@ -38,14 +39,32 @@ class Paper:
             content=content,
         )
 
-    @classmethod
-    def from_kwargs(cls, **kwargs: Any) -> 'Paper':
+    def with_content(self) -> 'Paper':
+        if not self.pdf_raw_path.exists():
+            raise RuntimeError('Raw PDF must exist prior to calling this method')
+        with open(self.pdf_raw_path, 'rb') as f:
+            self.content = f.read()
+        return self
+
+    def with_metadata(self) -> 'Paper':
+        kwargs = {}
+        if self.metadata_json_path.exists():
+            with open(self.metadata_json_path, 'r') as f:
+                kwargs = json.load(f)
+        return self.with_kwargs(**kwargs)
+
+    def with_kwargs(self, **kwargs: Any) -> 'Paper':
         """
         Split known fields from unknown ones.
         """
-        field_names = {f.name for f in cls.__dataclass_fields__.values()}
+        field_names = {f.name for f in self.__dataclass_fields__.values()}
         known = {k: v for k, v in kwargs.items() if k in field_names}
-        return cls(**known)
+        return Paper(
+            **{
+                **self.__dict__,
+                **known,
+            }
+        )
 
     def __hash__(self) -> int:
         return hash(self.id)
@@ -82,8 +101,24 @@ class Paper:
         return tables
 
     @property
+    def evagg_observations_path(self) -> Path:
+        return Path(env.EVAGG_DIR) / self.id / 'observations.json'
+
+    @property
+    def metadata_json_path(self) -> Path:
+        return Path(env.EVAGG_DIR) / self.id / 'metadata.json'
+
+    @property
     def pdf_dir(self) -> Path:
         return Path(env.EXTRACTED_PDF_DIR) / self.id
+
+    @property
+    def pdf_raw_path(self) -> Path:
+        return self.pdf_dir / 'raw.pdf'
+
+    @property
+    def pdf_thumbnail_path(self) -> Path:
+        return self.pdf_dir / 'thumbnail.png'
 
     @property
     def pdf_tables_dir(self) -> Path:
