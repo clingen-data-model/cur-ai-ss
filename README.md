@@ -12,9 +12,11 @@ https://platform.openai.com/account/api-keys
 - Click “Create new secret key”.
 - Give it a name (optional, but helpful if you use multiple keys).
 - Copy the generated key and store it somewhere secure. You will not be able to view it again after closing the dialog. If you lose it, you must generate a new one.
-- We recommend setting an environment variable:
+- We recommend setting environment variables:
+
 ```bash
 export OPENAI_API_KEY="your_key_here"
+export OPENAI_API_DEPLOYMENT="gpt-5-mini"
 ```
 
 ## Clone the repository
@@ -45,13 +47,21 @@ make ci
 
 To run a specific test
 ```bash
-uv run pytest test/evagg/test_io.py::test_csv_output_warning
+uv run pytest test/evagg/test_llm.py
 ```
 
-## Running with a single PMID
+## Running with a PDF
+
+To test the extraction pipeline, download a paper PDF from PubMed. For example,
+
 ```bash
-OPENAI_API_KEY=API_KEY
-OPENAI_DEPLOYMENT=gpt-5-nano
-uv run run_evagg_app  --pmid 36704923 --gene-symbol FICD
+curl -L -o pmid_36704923.pdf "https://pmc.ncbi.nlm.nih.gov/articles/PMC9994480/pdf/EMMM-15-e16491.pdf"
 ```
 
+Then run the extraction (put the path to the file if it is not in the root directory of this project):
+
+```bash
+uv run run_evagg_app --pdf pmid_36704923.pdf --gene-symbol FICD
+```
+
+NOTE: you will need to make sure you OpenAI account has available billing available since the API tokens are not available on the Free tier.

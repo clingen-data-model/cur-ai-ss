@@ -52,6 +52,7 @@ def paper(monkeypatch) -> Paper:
         abstract='This the abstract from a test paper.',
         pmcid='PMC123',
         can_access=True,
+        content=b'',
     )
 
 

@@ -38,7 +38,7 @@ dependencies = [
     "uvicorn>=0.38.0",
     "pymupdf>=1.26.7",
     "python-multipart>=0.0.21",
-]   
+]
 
 [dependency-groups]
 dev = [
@@ -58,7 +58,9 @@ dev = [
 package = true
 
 [tool.ruff]
-select = ["I"] 
+
+[tool.ruff.lint]
+select = ["I"]
 
 [tool.ruff.format]
 quote-style = "single"
@@ -76,6 +78,10 @@ ignore_missing_imports = true
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
 check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "transformers.*"
+follow_imports = "skip"
 
 [tool.coverage.run]
 omit = [
