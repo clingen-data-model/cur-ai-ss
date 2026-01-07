@@ -22,7 +22,7 @@ from lib.evagg.types import Paper
 IMAGE_RESOLUTION_SCALE = 2.0
 
 WordLoc = namedtuple(
-    'WordLoc', ['page_i', 'word', 'x0', 'y0', 'x1', 'y1', 'x2', 'y2', 'x3', 'y3']
+    "WordLoc", ["page_i", "word", "x0", "y0", "x1", "y1", "x2", "y2", "x3", "y3"]
 )
 
 
@@ -61,7 +61,7 @@ def split_by_sections(
         if isinstance(item, SectionHeaderItem):
             # flush previous section
             if current_header is not None:
-                sections.append((current_header.text, '\n\n'.join(current_text)))
+                sections.append((current_header.text, "\n\n".join(current_text)))
 
             current_header = item
             current_text = []
@@ -70,21 +70,21 @@ def split_by_sections(
             if item.label == DocItemLabel.CAPTION:
                 if not item.parent:
                     continue
-                if item.parent.cref.startswith('#/pictures/'):
-                    image_captions[int(item.parent.cref.split('/')[-1])] = item.text
-                elif item.parent.cref.startswith('#/tables/'):
+                if item.parent.cref.startswith("#/pictures/"):
+                    image_captions[int(item.parent.cref.split("/")[-1])] = item.text
+                elif item.parent.cref.startswith("#/tables/"):
                     # Skip table headers as they are included in table markdown.
                     continue
                 else:
                     print(
-                        f'Caption for non-image or non-table found {item.parent.cref}, violating assumption.'
+                        f"Caption for non-image or non-table found {item.parent.cref}, violating assumption."
                     )
             else:
                 current_text.append(item.text)
 
     # flush final section
     if current_header is not None:
-        sections.append((current_header.text, '\n\n'.join(current_text)))
+        sections.append((current_header.text, "\n\n".join(current_text)))
 
     return sections, image_captions
 
@@ -93,7 +93,7 @@ def parse_content(paper: Paper, force: bool = False) -> None:
     if not force and paper.pdf_extraction_success_path.exists():
         return
     if not paper.content:
-        raise RuntimeError('Paper must already have raw pdf content')
+        raise RuntimeError("Paper must already have raw pdf content")
     paper.pdf_images_dir.mkdir(parents=True, exist_ok=True)
     paper.pdf_tables_dir.mkdir(parents=True, exist_ok=True)
     paper.pdf_sections_dir.mkdir(parents=True, exist_ok=True)
@@ -110,7 +110,7 @@ def parse_content(paper: Paper, force: bool = False) -> None:
     )
     # NB: name is a required field.  We "could" pass in uploaded filename here, I just thought it wasn't relevant at this time.
     document: DoclingDocument = doc_converter.convert(
-        source=DocumentStream(name='content', stream=BytesIO(paper.content)),
+        source=DocumentStream(name="content", stream=BytesIO(paper.content)),
     ).document
     document.save_as_markdown(
         paper.pdf_markdown_path,
@@ -130,14 +130,14 @@ def parse_content(paper: Paper, force: bool = False) -> None:
                 paper.pdf_table_image_path(
                     table_id,
                 ),
-                'wb',
+                "wb",
             ) as fp:
-                table_image.save(fp, 'PNG')
+                table_image.save(fp, "PNG")
             with open(
                 paper.pdf_table_markdown_path(
                     table_id,
                 ),
-                'w',
+                "w",
             ) as fp:
                 fp.write(element.export_to_markdown(document))
             table_id += 1
@@ -149,15 +149,15 @@ def parse_content(paper: Paper, force: bool = False) -> None:
                 paper.pdf_image_path(
                     image_id,
                 ),
-                'wb',
+                "wb",
             ) as fp:
-                image.save(fp, 'PNG')
+                image.save(fp, "PNG")
             image_id += 1
 
     words_json = parse_words_json(BytesIO(paper.content))
     with open(
         paper.pdf_words_json_path,
-        'w',
+        "w",
     ) as fp:
         json.dump(words_json, fp, indent=2)
 
@@ -165,21 +165,21 @@ def parse_content(paper: Paper, force: bool = False) -> None:
     for i, section_md in enumerate(section_mds):
         with open(
             paper.pdf_section_markdown_path(i),
-            'w',
+            "w",
         ) as fp:
-            fp.write('## ' + section_md[0])
-            fp.write('\n\n')
+            fp.write("## " + section_md[0])
+            fp.write("\n\n")
             fp.write(section_md[1])
 
     for i, caption in image_captions.items():
         with open(
             paper.pdf_image_caption_path(i),
-            'w',
+            "w",
         ) as fp:
             fp.write(caption)
 
     with open(
         paper.pdf_extraction_success_path,
-        'w',
+        "w",
     ) as fp:
-        fp.write('')
+        fp.write("")

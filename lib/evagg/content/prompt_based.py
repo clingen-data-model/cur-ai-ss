@@ -15,24 +15,24 @@ logger = logging.getLogger(__name__)
 
 
 def _get_prompt_file_path(name: str) -> str:
-    return os.path.join(os.path.dirname(__file__), 'prompts', f'{name}.txt')
+    return os.path.join(os.path.dirname(__file__), "prompts", f"{name}.txt")
 
 
 class PromptBasedContentExtractor:
     _PROMPT_FIELDS = {
-        'phenotype': _get_prompt_file_path('phenotypes_all'),
-        'zygosity': _get_prompt_file_path('zygosity'),
-        'variant_inheritance': _get_prompt_file_path('variant_inheritance'),
-        'variant_type': _get_prompt_file_path('variant_type'),
-        'engineered_cells': _get_prompt_file_path('functional_study'),
-        'patient_cells_tissues': _get_prompt_file_path('functional_study'),
-        'animal_model': _get_prompt_file_path('functional_study'),
-        'study_type': _get_prompt_file_path('study_type'),
+        "phenotype": _get_prompt_file_path("phenotypes_all"),
+        "zygosity": _get_prompt_file_path("zygosity"),
+        "variant_inheritance": _get_prompt_file_path("variant_inheritance"),
+        "variant_type": _get_prompt_file_path("variant_type"),
+        "engineered_cells": _get_prompt_file_path("functional_study"),
+        "patient_cells_tissues": _get_prompt_file_path("functional_study"),
+        "animal_model": _get_prompt_file_path("functional_study"),
+        "study_type": _get_prompt_file_path("study_type"),
     }
     # These are the expensive prompt fields we should cache per paper.
-    _CACHE_VARIANT_FIELDS = ['variant_type', 'functional_study']
-    _CACHE_INDIVIDUAL_FIELDS = ['phenotype']
-    _CACHE_PAPER_FIELDS = ['study_type']
+    _CACHE_VARIANT_FIELDS = ["variant_type", "functional_study"]
+    _CACHE_INDIVIDUAL_FIELDS = ["phenotype"]
+    _CACHE_PAPER_FIELDS = ["study_type"]
 
     def __init__(
         self,
@@ -53,45 +53,45 @@ class PromptBasedContentExtractor:
     ) -> Tuple[str, str | None]:
         def get_link() -> str:
             return (
-                f'https://www.ncbi.nlm.nih.gov/pmc/articles/{paper.pmcid}'
+                f"https://www.ncbi.nlm.nih.gov/pmc/articles/{paper.pmcid}"
                 if paper.pmcid
-                else paper.link or ''
+                else paper.link or ""
             )
 
         def get_hgvs_c() -> str:
             return (
                 ob.variant.hgvs_desc
-                if not ob.variant.hgvs_desc.startswith('p.')
-                else 'NA'
+                if not ob.variant.hgvs_desc.startswith("p.")
+                else "NA"
             )
 
         def get_hgvs_p() -> str:
             if ob.variant.protein_consequence:
                 return ob.variant.protein_consequence.hgvs_desc
             return (
-                ob.variant.hgvs_desc if ob.variant.hgvs_desc.startswith('p.') else 'NA'
+                ob.variant.hgvs_desc if ob.variant.hgvs_desc.startswith("p.") else "NA"
             )
 
         field_map = {
-            'evidence_id': lambda: ob.variant.get_unique_id(paper.id, ob.individual),
-            'gene': lambda: gene_symbol,
-            'paper_id': lambda: paper.id,
-            'pmid': lambda: paper.pmid,
-            'pmcid': lambda: paper.pmcid,
-            'citation': lambda: paper.citation,
-            'link': get_link,
-            'title': lambda: paper.title,
-            'hgvs_c': get_hgvs_c,
-            'hgvs_p': get_hgvs_p,
-            'paper_variant': lambda: ', '.join(ob.variant_descriptions),
-            'transcript': lambda: ob.variant.refseq or 'unknown',
-            'valid': lambda: str(ob.variant.valid),
-            'validation_error': lambda: ob.variant.validation_error or '',
-            'individual_id': lambda: ob.individual,
+            "evidence_id": lambda: ob.variant.get_unique_id(paper.id, ob.individual),
+            "gene": lambda: gene_symbol,
+            "paper_id": lambda: paper.id,
+            "pmid": lambda: paper.pmid,
+            "pmcid": lambda: paper.pmcid,
+            "citation": lambda: paper.citation,
+            "link": get_link,
+            "title": lambda: paper.title,
+            "hgvs_c": get_hgvs_c,
+            "hgvs_p": get_hgvs_p,
+            "paper_variant": lambda: ", ".join(ob.variant_descriptions),
+            "transcript": lambda: ob.variant.refseq or "unknown",
+            "valid": lambda: str(ob.variant.valid),
+            "validation_error": lambda: ob.variant.validation_error or "",
+            "individual_id": lambda: ob.individual,
         }
 
         if field not in field_map:
-            raise ValueError(f'Unsupported field: {field}')
+            raise ValueError(f"Unsupported field: {field}")
 
         return field, field_map[field]()
 
@@ -104,31 +104,31 @@ class PromptBasedContentExtractor:
 
         # Any descriptions that look like valid HPO terms themselves should be validated.
         for term in phenotype.copy():
-            ids = re.findall(r'\(?[Hh][Pp]:\d+\)?', term)
+            ids = re.findall(r"\(?[Hh][Pp]:\d+\)?", term)
             if ids:
                 hpo_id = ids[0]
-                id_result = self._phenotype_fetcher.fetch(hpo_id.strip('()').upper())
+                id_result = self._phenotype_fetcher.fetch(hpo_id.strip("()").upper())
                 if id_result:
                     phenotype.remove(term)
-                    match_dict[term] = f'{id_result["name"]} ({id_result["id"]})'
+                    match_dict[term] = f"{id_result['name']} ({id_result['id']})"
 
         async def _get_match_for_term(term: str) -> str | None:
             result = self._phenotype_searcher.search(query=term, retmax=10)
 
             candidates = set()
             for i in range(len(result)):
-                candidate = f'{result[i]["name"]} ({result[i]["id"]}) - {result[i]["definition"]}'
-                if result[i]['synonyms']:
-                    candidate += f' - Synonymous with {result[i]["synonyms"]}'
+                candidate = f"{result[i]['name']} ({result[i]['id']}) - {result[i]['definition']}"
+                if result[i]["synonyms"]:
+                    candidate += f" - Synonymous with {result[i]['synonyms']}"
                 candidates.add(candidate)
 
             if candidates:
                 response = await self._llm_client.prompt_json(
-                    prompt_filepath=_get_prompt_file_path('phenotypes_candidates'),
-                    params={'term': term, 'candidates': '\n'.join(candidates)},
+                    prompt_filepath=_get_prompt_file_path("phenotypes_candidates"),
+                    params={"term": term, "candidates": "\n".join(candidates)},
                     prompt_tag=PromptTag.PHENOTYPES_CANDIDATES,
                 )
-                return response.get('match')
+                return response.get("match")
 
             return None
 
@@ -143,22 +143,22 @@ class PromptBasedContentExtractor:
         # Before we give up, try again with a simplified version of the term.
         for term in phenotype.copy():
             response = await self._llm_client.prompt_json(
-                prompt_filepath=_get_prompt_file_path('phenotypes_simplify'),
-                params={'term': term},
+                prompt_filepath=_get_prompt_file_path("phenotypes_simplify"),
+                params={"term": term},
                 prompt_tag=PromptTag.PHENOTYPES_SIMPLIFY,
             )
 
-            if simplified := response.get('simplified'):
+            if simplified := response.get("simplified"):
                 match = await _get_match_for_term(simplified)
                 if match:
-                    match_dict[f'{term} (S)'] = match
+                    match_dict[f"{term} (S)"] = match
                     phenotype.remove(term)
 
         all_values = list(match_dict.values())
-        logger.info(f'Converted phenotypes: {match_dict}')
+        logger.info(f"Converted phenotypes: {match_dict}")
 
         if phenotype:
-            logger.warning(f'Failed to convert phenotypes: {phenotype}')
+            logger.warning(f"Failed to convert phenotypes: {phenotype}")
             all_values.extend(phenotype)
 
         return list(set(all_values))
@@ -170,40 +170,40 @@ class PromptBasedContentExtractor:
         gene_symbol: str,
     ) -> List[str]:
         all_phenotypes_result = await self._llm_client.prompt_json(
-            self._PROMPT_FIELDS['phenotype'],
-            {'passage': text},
+            self._PROMPT_FIELDS["phenotype"],
+            {"passage": text},
             PromptTag.PHENOTYPES_ALL,
-            {'max_output_tokens': 4096 * 2},
+            {"max_output_tokens": 4096 * 2},
         )
-        if (all_phenotypes := all_phenotypes_result.get('phenotypes', [])) == []:
+        if (all_phenotypes := all_phenotypes_result.get("phenotypes", [])) == []:
             return []
 
         # Potentially consider linked observations like comp-hets?
         observation_phenotypes_params = {
-            'gene': gene_symbol,
-            'passage': text,
-            'observation': description,
-            'candidates': ', '.join(all_phenotypes),
+            "gene": gene_symbol,
+            "passage": text,
+            "observation": description,
+            "candidates": ", ".join(all_phenotypes),
         }
         observation_phenotypes_result = await self._llm_client.prompt_json(
-            _get_prompt_file_path('phenotypes_observation'),
+            _get_prompt_file_path("phenotypes_observation"),
             observation_phenotypes_params,
             PromptTag.PHENOTYPES_OBSERVATION,
         )
         if (
             observation_phenotypes := observation_phenotypes_result.get(
-                'phenotypes', []
+                "phenotypes", []
             )
         ) == []:
             return []
 
         observation_acronymns_result = await self._llm_client.prompt_json(
-            _get_prompt_file_path('phenotypes_acronyms'),
-            {'passage': text, 'phenotypes': ', '.join(observation_phenotypes)},
+            _get_prompt_file_path("phenotypes_acronyms"),
+            {"passage": text, "phenotypes": ", ".join(observation_phenotypes)},
             PromptTag.PHENOTYPES_ACRONYMS,
         )
 
-        return observation_acronymns_result.get('phenotypes', [])
+        return observation_acronymns_result.get("phenotypes", [])
 
     async def _generate_phenotype_field(
         self, gene_symbol: str, observation: Observation
@@ -211,19 +211,19 @@ class PromptBasedContentExtractor:
         # Obtain all the phenotype strings listed in the text associated with the gene.
         fulltext = observation.paper.fulltext_md
         # TODO: treating all tables in paper as a single text, maybe this isn't ideal, consider grouping by 'id'
-        table_texts = '\n\n'.join(observation.paper.tables_md)
+        table_texts = "\n\n".join(observation.paper.tables_md)
 
         # Determine the phenotype strings that are associated specifically with the observation.
-        v_sub = ', '.join(observation.variant_descriptions)
-        if observation.patient_descriptions != ['unknown']:
-            p_sub = ', '.join(observation.patient_descriptions)
-            obs_desc = f'the patient described as {p_sub} who possesses the variant described as {v_sub}.'
+        v_sub = ", ".join(observation.variant_descriptions)
+        if observation.patient_descriptions != ["unknown"]:
+            p_sub = ", ".join(observation.patient_descriptions)
+            obs_desc = f"the patient described as {p_sub} who possesses the variant described as {v_sub}."
         else:
-            obs_desc = f'the variant described as {v_sub}.'
+            obs_desc = f"the variant described as {v_sub}."
 
         # Run phenotype extraction for all the texts of interest.
         texts = [fulltext]
-        if table_texts != '':
+        if table_texts != "":
             texts.append(table_texts)
         result = await asyncio.gather(
             *[
@@ -241,17 +241,17 @@ class PromptBasedContentExtractor:
         )
 
         # Duplicates are conceivable, get unique set again.
-        return '; '.join(set(structured_phenotypes))
+        return "; ".join(set(structured_phenotypes))
 
     async def _run_field_prompt(
         self, gene_symbol: str, observation: Observation, field: str
     ) -> Dict[str, Any]:
         params = {
             # First element is full text of the observation, consider alternatives
-            'passage': observation.paper.fulltext_md,
-            'variant_descriptions': ', '.join(observation.variant_descriptions),
-            'patient_descriptions': ', '.join(observation.patient_descriptions),
-            'gene': gene_symbol,
+            "passage": observation.paper.fulltext_md,
+            "variant_descriptions": ", ".join(observation.variant_descriptions),
+            "patient_descriptions": ", ".join(observation.patient_descriptions),
+            "gene": gene_symbol,
         }
         return await self._llm_client.prompt_json(
             prompt_filepath=self._PROMPT_FIELDS[field],
@@ -263,7 +263,7 @@ class PromptBasedContentExtractor:
         self, gene_symbol: str, observation: Observation, field: str
     ) -> str:
         result = (await self._run_field_prompt(gene_symbol, observation, field)).get(
-            field, 'failed'
+            field, "failed"
         )
         # result can be a string or a json object.
         if not isinstance(result, str):
@@ -274,24 +274,24 @@ class PromptBasedContentExtractor:
         self, gene_symbol: str, observation: Observation, field: str
     ) -> str:
         result = await self._run_field_prompt(gene_symbol, observation, field)
-        func_studies = result.get('functional_study', [])
+        func_studies = result.get("functional_study", [])
 
         # Note the prompt uses a different set of strings to represent the study types found, so we need to map them.
         study_type_map = {
-            'engineered_cells': 'cell line',
-            'patient_cells_tissues': 'patient cells',
-            'animal_model': 'animal model',
-            'none': 'none',
+            "engineered_cells": "cell line",
+            "patient_cells_tissues": "patient cells",
+            "animal_model": "animal model",
+            "none": "none",
         }
 
-        return 'True' if (study_type_map[field] in func_studies) else 'False'
+        return "True" if (study_type_map[field] in func_studies) else "False"
 
     async def _generate_prompt_field(
         self, gene_symbol: str, observation: Observation, field: str
     ) -> str:
-        if field == 'phenotype':
+        if field == "phenotype":
             return await self._generate_phenotype_field(gene_symbol, observation)
-        elif field in ['engineered_cells', 'patient_cells_tissues', 'animal_model']:
+        elif field in ["engineered_cells", "patient_cells_tissues", "animal_model"]:
             return await self._generate_functional_study_field(
                 gene_symbol, observation, field
             )
@@ -308,7 +308,7 @@ class PromptBasedContentExtractor:
         def _get_key(ob: Observation, field: str) -> Any:
             if field in self._CACHE_VARIANT_FIELDS:
                 return (ob.variant, field)
-            elif field in self._CACHE_INDIVIDUAL_FIELDS and ob.individual != 'unknown':
+            elif field in self._CACHE_INDIVIDUAL_FIELDS and ob.individual != "unknown":
                 return (ob.individual, field)
             elif field in self._CACHE_PAPER_FIELDS:
                 # Paper instance is implicit.
@@ -320,7 +320,7 @@ class PromptBasedContentExtractor:
             key = _get_key(ob, field)
             if key and key in cache:
                 prompt_task = cache[key]
-                logger.info(f'Using cached task for {key}')
+                logger.info(f"Using cached task for {key}")
             else:
                 # Create and schedule a prompt task to get the prompt field.
                 prompt_task = asyncio.create_task(
@@ -367,11 +367,11 @@ class PromptBasedContentExtractor:
             self._observation_finder.find_observations(gene_symbol, paper)
         )
         if not observations:
-            logger.info(f'No observations found in {paper.id} for {gene_symbol}')
+            logger.info(f"No observations found in {paper.id} for {gene_symbol}")
             return []
 
         # Extract all the requested fields from the observations.
         logger.info(
-            f'Found {len(observations)} observations in {paper.id} for {gene_symbol}'
+            f"Found {len(observations)} observations in {paper.id} for {gene_symbol}"
         )
         return asyncio.run(self._extract_fields(paper, gene_symbol, observations))
