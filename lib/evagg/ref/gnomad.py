@@ -75,7 +75,7 @@ class GnomadClient:
 
     def enrich(
         self,
-        extracted_observation: Dict[str, str],
+        extracted_observation: Dict[str, str | None],
     ) -> None:
         vcf_string = extracted_observation.get('vep.vcf_string', None)
         if vcf_string is None:

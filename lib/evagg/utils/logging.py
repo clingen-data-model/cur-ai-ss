@@ -4,7 +4,6 @@ import os
 import sys
 from typing import Callable, Dict, List, Optional, Set
 
-from lib.evagg.types import PromptTag
 from lib.evagg.utils.environment import env
 
 LogFilter = Callable[[logging.LogRecord], bool]
@@ -108,6 +107,10 @@ class FileHandler(logging.Handler):
             f.write('ARGS:' + ' '.join(sys.argv) + '\n')
 
     def emit(self, record: logging.LogRecord) -> None:
+        from lib.evagg.types import (
+            PromptTag,
+        )  # TODO: this is a circular import fix, we should do better.
+
         if record.levelno == PROMPT:
             file_name = str(record.__dict__.get('prompt_tag', PromptTag.PROMPT))
             with open(

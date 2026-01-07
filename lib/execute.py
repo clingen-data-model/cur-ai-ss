@@ -1,9 +1,11 @@
 import argparse
 import datetime
+import json
 import logging
 import traceback
+from pathlib import Path
 
-from lib.evagg import SinglePMIDApp
+from lib.evagg import App
 from lib.evagg.utils import init_logger
 
 logger = logging.getLogger(__name__)
@@ -11,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Process a PMID and gene symbol.')
-    parser.add_argument('--pmid', help='PubMed ID', required=True, type=str)
+    parser.add_argument('--pdf', help='PDF', required=True, type=Path)
     parser.add_argument('--gene-symbol', help='Gene symbol', required=True, type=str)
     parser.add_argument(
         '--retries',
@@ -24,18 +26,20 @@ def parse_args() -> argparse.Namespace:
 
 def run_evagg_app() -> None:
     args = parse_args()
-    init_logger(
-        current_run=f'{args.pmid}_{args.gene_symbol}_{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'
-    )
-    app = SinglePMIDApp(
-        args.pmid,
+    init_logger(current_run=f'{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}')
+    if not args.pdf.exists():
+        raise RuntimeError('pdf path must exist')
+    with open(args.pdf, 'rb') as f:
+        content = f.read()
+    app = App(
+        content,
         args.gene_symbol,
     )
     max_attempts = args.retries + 1
     for attempt in range(1, max_attempts + 1):
         try:
             logger.info(f'Attempt {attempt}/{max_attempts}')
-            app.execute()
+            json.dumps(app.execute())
             return
         except KeyboardInterrupt:
             logger.info(f'Interrupted on attempt {attempt}')

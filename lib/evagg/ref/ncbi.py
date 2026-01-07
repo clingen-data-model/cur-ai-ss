@@ -1,8 +1,8 @@
 import logging
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Sequence, Tuple
 
 from defusedxml import ElementTree
-from requests.exceptions import HTTPError, RetryError
+from requests.exceptions import HTTPError
 
 from lib.evagg.types import Paper
 from lib.evagg.utils import RequestsWebContentClient
@@ -64,27 +64,6 @@ class NcbiClientBase:
             },
             content_type=retmode,
         )
-
-
-PAPER_BASE_PROPS = {
-    'id',
-    'pmid',
-    'title',
-    'abstract',
-    'journal',
-    'first_author',
-    'pub_year',
-    'doi',
-    'pmcid',
-    'citation',
-    'OA',
-    'can_access',
-    'license',
-    'link',
-}
-PAPER_FULL_TEXT_PROPS = {
-    'fulltext_xml',
-}
 
 
 class NcbiLookupClient(
@@ -176,34 +155,6 @@ class NcbiLookupClient(
         derived_props['link'] = f'https://pubmed.ncbi.nlm.nih.gov/{props["pmid"]}/'
         return derived_props
 
-    def _get_full_text(self, props: Dict[str, Any]) -> str:
-        """Get the full text of a paper from PMC."""
-        pmcid = props['pmcid']
-        if not props['can_access']:
-            logger.debug(
-                f"Cannot fetch full text, paper 'pmcid:{pmcid}' is not in PMC-OA or has unusable license."
-            )
-            return ''
-        try:
-            root = self._web_client.get(
-                self.BIOC_GET_URL.format(pmcid=pmcid), content_type='xml'
-            )
-        except (HTTPError, RetryError, ElementTree.ParseError) as e:
-            logger.warning(f'Unexpected error fetching BioC entry for {pmcid}: {e}')
-            return ''
-
-        # Find and return the specific document.
-        if (
-            doc := root.find(f"./document[id='{pmcid.upper().lstrip('PMC')}']")
-        ) is None:
-            # Some BioC do not have the prefix stripped, so try again with the original pmcid.
-            if (doc := root.find(f"./document[id='{pmcid.upper()}']")) is None:
-                logger.warning(
-                    f'Response received from BioC, but corresponding PMC ID not found: {pmcid}'
-                )
-                return ''
-        return ElementTree.tostring(doc, encoding='unicode')
-
     def search(self, query: str, **extra_params: Dict[str, Any]) -> Sequence[str]:
         root = self._esearch(db='pubmed', term=query, sort='relevance', **extra_params)
         pmids = [
@@ -213,35 +164,27 @@ class NcbiLookupClient(
         ]
         return pmids
 
-    def fetch(self, paper_id: str, include_fulltext: bool = False) -> Optional[Paper]:
+    def fetch(self, pmid: str, paper: Paper) -> Paper:
         if (
             root := self._efetch(
-                db='pubmed', id=paper_id, retmode='xml', rettype='abstract'
+                db='pubmed', id=pmid, retmode='xml', rettype='abstract'
             )
         ) is None:
-            return None
+            return paper
 
         if (
             article := root.find(
-                f"PubmedArticle/MedlineCitation/PMID[.='{paper_id}']/../.."
+                f"PubmedArticle/MedlineCitation/PMID[.='{pmid}']/../.."
             )
         ) is None:
-            return None
+            return paper
 
-        props: Dict[str, Any] = {'id': f'pmid:{paper_id}', 'pmid': paper_id}
+        # paper is found
+        props: Dict[str, Any] = {'pmid': pmid}
         props.update(self._get_xml_props(article))
         props.update(self._get_license_props(props['pmcid']))
         props.update(self._get_derived_props(props))
-        assert PAPER_BASE_PROPS == set(props.keys()), (
-            f'Missing properties: {PAPER_BASE_PROPS ^ set(props.keys())}'
-        )
-        if include_fulltext:
-            if props['can_access']:
-                props['fulltext_xml'] = self._get_full_text(props)
-            else:
-                props['fulltext_xml'] = None
-
-        return Paper(**props)
+        return Paper.from_kwargs(id=paper.id, content=paper.content, **props)
 
     def gene_id_for_symbol(
         self, *symbols: str, allow_synonyms: bool = False

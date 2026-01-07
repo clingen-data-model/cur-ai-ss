@@ -24,6 +24,9 @@ class Env(BaseSettings):
     OPENAI_API_DEPLOYMENT: str = Field(...)
     OPENAI_API_KEY: str = Field(...)
     LOG_LEVEL: LogLevel = LogLevel.INFO
+
+    # Directories
+    EXTRACTED_PDF_DIR: str = '.extracted_pdfs'
     LOG_OUT_DIR: str = '.out'
 
     @model_validator(mode='after')

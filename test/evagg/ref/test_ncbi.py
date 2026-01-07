@@ -1,6 +1,7 @@
 import pytest
 
 from lib.evagg.ref import NcbiLookupClient
+from lib.evagg.types import Paper
 from lib.evagg.utils import RequestsWebContentClient
 
 
@@ -118,37 +119,64 @@ def test_pubmed_search(mock_web_client):
 
 def test_pubmed_fetch(mock_web_client, json_load):
     web_client = mock_web_client('efetch_pubmed_paper_24290490.xml')
-    result = NcbiLookupClient(web_client).fetch('24290490')
-    assert result and result.props == {
-        'title': 'Increased CPA6 promoter methylation in focal epilepsy and in febrile seizures.',
-        'abstract': 'Focal epilepsy (FE) is one of the most common forms of adult epilepsy and is usually regarded as a multifactorial disorder. Febrile seizures (FS) often appear during childhood in a subtype of FE patients, i.e. with temporal lobe epilepsy (TLE) and hippocampal sclerosis (HS). FS are the most common human convulsive event associated with fever. Genetic evidences for FS have suggested a complex mode of inheritance. Until now, to investigate genes at the genomic level, linkage analysis of familial forms and association studies have been performed, but nothing conclusive has been clearly related to FE and FS. As complex disorders, environmental factors might play a crucial role through epigenetic modification of key candidate genes such as CPA6, which encodes Carboxypeptidase A6, an extracellular protein. Therefore, we assessed DNA methylation in promoter of CPA6. In 186 FE patients and 92 FS patients compared to 93 healthy controls and 42 treated controls with antiepileptic drugs (AEDs), we found significant higher levels of methylation for epileptic patients. Methylation status were 3.4% (±3.2%) for FE cases and 4.3% (±3.5%) for FS cases, whereas healthy individuals and treated controls with AEDs showed a level of 0.8% (±2.9%) and 1.5% (±3.9%), respectively (p≤0.001 for all comparisons). These results let growing evidence for DNA methylation involvment in FE and FS. Copyright © 2013 Elsevier B.V. All rights reserved.',
-        'journal': 'Epilepsy Res',
-        'first_author': 'Belhedi',
-        'pub_year': '2014',
-        'doi': '10.1016/j.eplepsyres.2013.10.007',
-        'pmcid': '',
-        'citation': 'Belhedi (2014) Epilepsy Res',
-        'can_access': False,
-        'license': 'unknown',
-        'OA': False,
-        'pmid': '24290490',
-        'id': 'pmid:24290490',
-        'link': 'https://pubmed.ncbi.nlm.nih.gov/24290490/',
-    }
+    result = NcbiLookupClient(web_client).fetch(
+        '24290490', Paper(id='pmid:24290490', content=b'mock fulltext')
+    )
+    assert result == Paper(
+        id='pmid:24290490',
+        title='Increased CPA6 promoter methylation in focal epilepsy and in febrile seizures.',
+        abstract=(
+            'Focal epilepsy (FE) is one of the most common forms of adult epilepsy and is usually '
+            'regarded as a multifactorial disorder. Febrile seizures (FS) often appear during '
+            'childhood in a subtype of FE patients, i.e. with temporal lobe epilepsy (TLE) and '
+            'hippocampal sclerosis (HS). FS are the most common human convulsive event associated '
+            'with fever. Genetic evidences for FS have suggested a complex mode of inheritance. '
+            'Until now, to investigate genes at the genomic level, linkage analysis of familial '
+            'forms and association studies have been performed, but nothing conclusive has been '
+            'clearly related to FE and FS. As complex disorders, environmental factors might play '
+            'a crucial role through epigenetic modification of key candidate genes such as CPA6, '
+            'which encodes Carboxypeptidase A6, an extracellular protein. Therefore, we assessed '
+            'DNA methylation in promoter of CPA6. In 186 FE patients and 92 FS patients compared '
+            'to 93 healthy controls and 42 treated controls with antiepileptic drugs (AEDs), we '
+            'found significant higher levels of methylation for epileptic patients. Methylation '
+            'status were 3.4% (±3.2%) for FE cases and 4.3% (±3.5%) for FS cases, whereas healthy '
+            'individuals and treated controls with AEDs showed a level of 0.8% (±2.9%) and 1.5% '
+            '(±3.9%), respectively (p≤0.001 for all comparisons). These results let growing '
+            'evidence for DNA methylation involvment in FE and FS. Copyright © 2013 Elsevier B.V. '
+            'All rights reserved.'
+        ),
+        journal='Epilepsy Res',
+        first_author='Belhedi',
+        pub_year='2014',
+        doi='10.1016/j.eplepsyres.2013.10.007',
+        pmid='24290490',
+        pmcid='',
+        citation='Belhedi (2014) Epilepsy Res',
+        can_access=False,
+        license='unknown',
+        OA=False,
+        link='https://pubmed.ncbi.nlm.nih.gov/24290490/',
+        content=b'mock fulltext',
+    )
 
 
 def test_pubmed_pmc_oa_fetch(mock_web_client):
     web_client = mock_web_client(
         'efetch_pubmed_paper_31427284.xml', 'ncbi_pmc_is_oa_PMC6824399.xml'
     )
-    result = NcbiLookupClient(web_client).fetch('31427284')
-    assert result and result.props['can_access'] is False
+    result = NcbiLookupClient(web_client).fetch(
+        '31427284', Paper(id='123', content=b'mock fulltext')
+    )
+    assert result.pmid and result.pmid == '31427284' and result.can_access is False
 
 
 def test_pubmed_fetch_missing(mock_web_client, xml_parse):
     web_client = mock_web_client(None)
-    result = NcbiLookupClient(web_client).fetch('7777777777777777')
-    assert result is None
+    p = Paper(id='123', content=b'mock fulltext')
+    result = NcbiLookupClient(web_client).fetch('7777777777777777', p)
+    assert result is p
+    assert p.pmid is None
     web_client = mock_web_client(xml_parse('<PubmedArticleSet></PubmedArticleSet>'))
-    result = NcbiLookupClient(web_client).fetch('7777777777777777')
-    assert result is None
+    result = NcbiLookupClient(web_client).fetch('7777777777777777', p)
+    assert result is p
+    assert p.pmid is None

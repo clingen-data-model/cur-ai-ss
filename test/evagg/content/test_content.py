@@ -3,12 +3,7 @@ from typing import Any
 import pytest
 
 from lib.evagg import PromptBasedContentExtractor
-from lib.evagg.content import (
-    Observation,
-    ObservationFinder,
-    TextSection,
-)
-from lib.evagg.content.fulltext import get_fulltext
+from lib.evagg.content import Observation, ObservationFinder
 from lib.evagg.llm import OpenAIClient
 from lib.evagg.ref import PyHPOClient, WebHPOClient
 from lib.evagg.types import HGVSVariant, Paper
@@ -35,7 +30,17 @@ def mock_phenotype_searcher(mock_client: type) -> WebHPOClient:
 
 
 @pytest.fixture
-def paper() -> Paper:
+def paper(monkeypatch) -> Paper:
+    monkeypatch.setattr(
+        Paper,
+        'fulltext_md',
+        property(lambda self: 'Here is the observation text.'),
+    )
+    monkeypatch.setattr(
+        Paper,
+        'tables_md',
+        property(lambda self: []),
+    )
     return Paper(
         id='12345678',
         pmid='12345678',
@@ -44,6 +49,7 @@ def paper() -> Paper:
         abstract='This the abstract from a test paper.',
         pmcid='PMC123',
         can_access=True,
+        content=b'',
     )
 
 
@@ -58,9 +64,9 @@ def test_prompt_based_content_extractor_valid_fields(
         'evidence_id': '12345678_c.1234A-G_unknown',  # TODO
         'gene': 'CHI3L1',
         'paper_id': '12345678',
-        'citation': paper.props['citation'],
-        'link': f'https://www.ncbi.nlm.nih.gov/pmc/articles/{paper.props["pmcid"]}',
-        'paper_title': paper.props['title'],
+        'citation': paper.citation,
+        'link': f'https://www.ncbi.nlm.nih.gov/pmc/articles/{paper.pmcid}',
+        'paper_title': paper.title,
         'hgvs_c': 'c.1234A>G',
         'hgvs_p': 'NA',
         'paper_variant': 'c.1234A>G',
@@ -71,9 +77,7 @@ def test_prompt_based_content_extractor_valid_fields(
         'phenotype': 'test (HP:0123)',
         'zygosity': 'test',
         'variant_inheritance': 'test',
-        'source_type': 'abstract',
     }
-
     observation = Observation(
         variant=HGVSVariant(
             hgvs_desc=fields['hgvs_c'],
@@ -86,12 +90,9 @@ def test_prompt_based_content_extractor_valid_fields(
             coding_equivalents=[],
         ),
         individual='unknown',
-        texts=[
-            TextSection('TEST', 'test', 0, 'Here is the observation text.', 'unknown')
-        ],
         variant_descriptions=fields['paper_variant'].split(', '),
         patient_descriptions=['unknown'],
-        paper_id=fields['paper_id'],
+        paper=paper,
     )
 
     prompts = mock_prompt(
@@ -131,7 +132,6 @@ def test_prompt_based_content_extractor_unsupported_field(
     mock_phenotype_fetcher: Any,
 ) -> None:
     fields = {'unsupported_field': 'unsupported_value'}
-
     observation = Observation(
         variant=HGVSVariant(
             hgvs_desc='hgvs_desc',
@@ -144,12 +144,9 @@ def test_prompt_based_content_extractor_unsupported_field(
             coding_equivalents=[],
         ),
         individual='unknown',
-        texts=[
-            TextSection('TEST', 'test', 0, 'Here is the observation text.', 'unknown')
-        ],
         variant_descriptions=['hgvs_desc'],
         patient_descriptions=['unknown'],
-        paper_id='paper_id',
+        paper=paper,
     )
 
     content_extractor = PromptBasedContentExtractor(
@@ -178,7 +175,6 @@ def test_prompt_based_content_extractor_with_protein_consequence(
         'paper_variant': 'c.1234A>G, c.1234 A > G',
         'individual_id': 'unknown',
     }
-
     protein_variant = HGVSVariant(
         fields['hgvs_p'], fields['gene'], 'transcript', True, True, None, None, []
     )
@@ -195,12 +191,9 @@ def test_prompt_based_content_extractor_with_protein_consequence(
             [],
         ),
         individual=fields['individual_id'],
-        texts=[
-            TextSection('TEST', 'test', 0, 'Here is the observation text.', 'unknown')
-        ],
         variant_descriptions=fields['paper_variant'].split(', '),
         patient_descriptions=[fields['individual_id']],
-        paper_id=fields['paper_id'],
+        paper=paper,
     )
 
     prompts = mock_prompt({})
@@ -241,12 +234,9 @@ def test_prompt_based_content_extractor_invalid_model_response(
             fields['hgvs_c'], fields['gene'], 'transcript', True, True, None, None, []
         ),
         individual=fields['individual_id'],
-        texts=[
-            TextSection('TEST', 'test', 0, 'Here is the observation text.', 'unknown')
-        ],
         variant_descriptions=fields['paper_variant'].split(', '),
         patient_descriptions=[fields['individual_id']],
-        paper_id=fields['paper_id'],
+        paper=paper,
     )
 
     prompts = mock_prompt({})
@@ -287,12 +277,9 @@ def test_prompt_based_content_extractor_phenotype_empty_list(
             fields['hgvs_c'], fields['gene'], 'transcript', True, True, None, None, []
         ),
         individual=fields['individual_id'],
-        texts=[
-            TextSection('TEST', 'test', 0, 'Here is the observation text.', 'unknown')
-        ],
         variant_descriptions=fields['paper_variant'].split(', '),
         patient_descriptions=[fields['individual_id']],
-        paper_id=fields['paper_id'],
+        paper=paper,
     )
 
     prompts = mock_prompt(
@@ -337,12 +324,9 @@ def test_prompt_based_content_extractor_phenotype_hpo_description(
             fields['hgvs_c'], fields['gene'], 'transcript', True, True, None, None, []
         ),
         individual=fields['individual_id'],
-        texts=[
-            TextSection('TEST', 'test', 0, 'Here is the observation text.', 'unknown')
-        ],
         variant_descriptions=fields['paper_variant'].split(', '),
         patient_descriptions=[fields['individual_id']],
-        paper_id=fields['paper_id'],
+        paper=paper,
     )
 
     prompts = mock_prompt(
@@ -391,12 +375,9 @@ def test_prompt_based_content_extractor_phenotype_empty_pheno_search(
             fields['hgvs_c'], fields['gene'], 'transcript', True, True, None, None, []
         ),
         individual=fields['individual_id'],
-        texts=[
-            TextSection('TEST', 'test', 0, 'Here is the observation text.', 'unknown')
-        ],
         variant_descriptions=fields['paper_variant'].split(', '),
         patient_descriptions=[fields['individual_id']],
-        paper_id=fields['paper_id'],
+        paper=paper,
     )
 
     prompts = mock_prompt(
@@ -443,12 +424,9 @@ def test_prompt_based_content_extractor_phenotype_simplification(
             fields['hgvs_c'], fields['gene'], 'transcript', True, True, None, None, []
         ),
         individual=fields['individual_id'],
-        texts=[
-            TextSection('TEST', 'test', 0, 'Here is the observation text.', 'unknown')
-        ],
         variant_descriptions=fields['paper_variant'].split(', '),
         patient_descriptions=[fields['individual_id']],
-        paper_id=fields['paper_id'],
+        paper=paper,
     )
 
     prompts = mock_prompt(
@@ -512,12 +490,9 @@ def test_prompt_based_content_extractor_phenotype_no_results_in_text(
             fields['hgvs_c'], fields['gene'], 'transcript', True, True, None, None, []
         ),
         individual=fields['individual_id'],
-        texts=[
-            TextSection('TEST', 'test', 0, 'Here is the observation text.', 'unknown')
-        ],
         variant_descriptions=fields['paper_variant'].split(', '),
         patient_descriptions=[fields['individual_id']],
-        paper_id=fields['paper_id'],
+        paper=paper,
     )
 
     prompts = mock_prompt(
@@ -559,12 +534,9 @@ def test_prompt_based_content_extractor_phenotype_no_results_for_observation(
             fields['hgvs_c'], fields['gene'], 'transcript', True, True, None, None, []
         ),
         individual=fields['individual_id'],
-        texts=[
-            TextSection('TEST', 'test', 0, 'Here is the observation text.', 'unknown')
-        ],
         variant_descriptions=fields['paper_variant'].split(', '),
         patient_descriptions=[fields['individual_id']],
-        paper_id=fields['paper_id'],
+        paper=paper,
     )
 
     prompts = mock_prompt(
@@ -607,12 +579,9 @@ def test_prompt_based_content_extractor_phenotype_specific_individual(
             fields['hgvs_c'], fields['gene'], 'transcript', True, True, None, None, []
         ),
         individual=fields['individual_id'],
-        texts=[
-            TextSection('TEST', 'test', 0, 'Here is the observation text.', 'unknown')
-        ],
         variant_descriptions=fields['paper_variant'].split(', '),
         patient_descriptions=[fields['individual_id']],
-        paper_id=fields['paper_id'],
+        paper=paper,
     )
 
     prompts = mock_prompt(
@@ -639,7 +608,14 @@ def test_prompt_based_content_extractor_phenotype_table_texts(
     mock_observation: Any,
     mock_phenotype_searcher: Any,
     mock_phenotype_fetcher: Any,
+    monkeypatch,
 ) -> None:
+    monkeypatch.setattr(
+        Paper,
+        'tables_md',
+        property(lambda self: ['Here is the table text.']),
+    )
+
     fields = {
         'gene': 'CHI3L1',
         'paper_id': '12345678',
@@ -654,13 +630,9 @@ def test_prompt_based_content_extractor_phenotype_table_texts(
             fields['hgvs_c'], fields['gene'], 'transcript', True, True, None, None, []
         ),
         individual=fields['individual_id'],
-        texts=[
-            TextSection('TEST', 'test', 0, 'Here is the observation text.', 'unknown'),
-            TextSection('TABLE', 'table', 0, 'Here is the table text.', 'unknown'),
-        ],
         variant_descriptions=fields['paper_variant'].split(', '),
         patient_descriptions=[fields['individual_id']],
-        paper_id=fields['paper_id'],
+        paper=paper,
     )
 
     prompts = mock_prompt(
@@ -704,12 +676,9 @@ def test_prompt_based_content_extractor_json_prompt_response(
             fields['hgvs_c'], fields['gene'], 'transcript', True, True, None, None, []
         ),
         individual=fields['individual_id'],
-        texts=[
-            TextSection('TEST', 'test', 0, 'Here is the observation text.', 'unknown')
-        ],
         variant_descriptions=fields['paper_variant'].split(', '),
         patient_descriptions=[fields['individual_id']],
-        paper_id=fields['paper_id'],
+        paper=paper,
     )
 
     prompts = mock_prompt(fields['zygosity'])
@@ -756,12 +725,9 @@ def test_prompt_based_content_extractor_functional_study(
             coding_equivalents=[],
         ),
         individual='unknown',
-        texts=[
-            TextSection('TEST', 'test', 0, 'Here is the observation text.', 'unknown')
-        ],
         variant_descriptions=fields['paper_variant'].split(', '),
         patient_descriptions=['unknown'],
-        paper_id=fields['paper_id'],
+        paper=paper,
     )
 
     prompts = mock_prompt(
@@ -790,7 +756,6 @@ def test_prompt_based_content_extractor_field_caching_phenotype(
     mock_phenotype_searcher: Any,
     mock_phenotype_fetcher: Any,
 ) -> None:
-    paper_id = '12345678'
     phenotype = 'test i1 (HP:0123)'
 
     variant1 = HGVSVariant(
@@ -818,23 +783,17 @@ def test_prompt_based_content_extractor_field_caching_phenotype(
     observation1 = Observation(
         variant=variant1,
         individual='I-1',
-        texts=[
-            TextSection('TEST', 'test', 0, 'Here is the observation text.', 'unknown')
-        ],
         variant_descriptions=['c.1234A>G'],
         patient_descriptions=['I-1'],
-        paper_id=paper_id,
+        paper=paper,
     )
 
     observation2 = Observation(
         variant=variant2,
         individual='I-1',
-        texts=[
-            TextSection('TEST', 'test', 0, 'Here is the observation text.', 'unknown')
-        ],
         variant_descriptions=['c.4321G>T'],
         patient_descriptions=['I-1'],
-        paper_id=paper_id,
+        paper=paper,
     )
 
     prompts = mock_prompt(
@@ -875,7 +834,6 @@ def test_prompt_based_content_extractor_field_caching_variant_type(
     mock_phenotype_searcher: Any,
     mock_phenotype_fetcher: Any,
 ) -> None:
-    paper_id = '12345678'
     variant_type = 'missense'
 
     variant = HGVSVariant(
@@ -892,23 +850,17 @@ def test_prompt_based_content_extractor_field_caching_variant_type(
     observation1 = Observation(
         variant=variant,
         individual='I-1',
-        texts=[
-            TextSection('TEST', 'test', 0, 'Here is the observation text.', 'unknown')
-        ],
         variant_descriptions=['c.1234A>G'],
         patient_descriptions=['I-1'],
-        paper_id=paper_id,
+        paper=paper,
     )
 
     observation2 = Observation(
         variant=variant,
         individual='I-2',
-        texts=[
-            TextSection('TEST', 'test', 0, 'Here is the observation text.', 'unknown')
-        ],
         variant_descriptions=['c.1234A>G'],
         patient_descriptions=['I-2'],
-        paper_id=paper_id,
+        paper=paper,
     )
     prompts = mock_prompt(
         # o1 variant_type
@@ -934,7 +886,6 @@ def test_prompt_based_content_extractor_field_caching_study_type(
     mock_phenotype_searcher: Any,
     mock_phenotype_fetcher: Any,
 ) -> None:
-    paper_id = '12345678'
     study_type = 'case study'
 
     variant1 = HGVSVariant(
@@ -962,23 +913,17 @@ def test_prompt_based_content_extractor_field_caching_study_type(
     observation1 = Observation(
         variant=variant1,
         individual='I-1',
-        texts=[
-            TextSection('TEST', 'test', 0, 'Here is the observation text.', 'unknown')
-        ],
         variant_descriptions=['c.1234A>G'],
         patient_descriptions=['I-1'],
-        paper_id=paper_id,
+        paper=paper,
     )
 
     observation2 = Observation(
         variant=variant2,
         individual='I-2',
-        texts=[
-            TextSection('TEST', 'test', 0, 'Here is the observation text.', 'unknown')
-        ],
         variant_descriptions=['c.4321T>G'],
         patient_descriptions=['I-2'],
-        paper_id=paper_id,
+        paper=paper,
     )
     prompts = mock_prompt(
         {'study_type': study_type},
@@ -1003,7 +948,7 @@ def test_prompt_based_content_extractor_unprocessable_paper(
     mock_phenotype_searcher: Any,
     mock_phenotype_fetcher: Any,
 ) -> None:
-    paper.props['can_access'] = False
+    paper.can_access = False
     content_extractor = PromptBasedContentExtractor(
         [],
         mock_prompt({}),
@@ -1031,77 +976,3 @@ def test_prompt_based_content_extractor_no_observations(
     )
     content = content_extractor.extract(paper, 'CHI3L1')
     assert content == []
-
-
-xmldoc = """
-    <document>
-        <id>7933980</id>
-        {content}
-    </document>
-"""
-
-
-def test_fulltext() -> None:
-    xml1 = """
-        <passage>
-            <infon key="section_type">TITLE</infon>
-            <infon key="type">front</infon>
-            <offset>0</offset>
-            <text>test
-                title</text>
-        </passage>
-"""
-    assert get_fulltext(None) == ''
-    assert get_fulltext(xmldoc.format(content=xml1), include=['TITLE']) == 'test title'
-    assert get_fulltext(xmldoc.format(content=xml1), exclude=['TITLE']) == ''
-    assert (
-        get_fulltext(xmldoc.format(content=xml1), include=['TITLE'], exclude=['TITLE'])
-        == ''
-    )
-
-
-def test_fulltext_missing() -> None:
-    xml1 = """
-        <passage>
-        </passage>
-"""
-    xml2 = """
-        <passage>
-            <infon key="section_type">TITLE</infon>
-        </passage>
-"""
-    xml3 = """
-        <passage>
-            <infon key="section_type">TITLE</infon>
-            <infon key="type">front</infon>
-        </passage>
-"""
-    with pytest.raises(ValueError) as e:
-        get_fulltext(xmldoc.format(content=xml1))
-    assert (
-        str(e.value)
-        == "Missing 'section_type' infon element in passage for document 7933980"
-    )
-    with pytest.raises(ValueError) as e:
-        get_fulltext(xmldoc.format(content=xml2))
-    assert (
-        str(e.value) == "Missing 'type' infon element in passage for document 7933980"
-    )
-    with pytest.raises(ValueError) as e:
-        get_fulltext(xmldoc.format(content=xml3))
-    assert (
-        str(e.value)
-        == "Missing 'offset' infon element in TITLE passage for document 7933980"
-    )
-    assert (
-        str(e.value)
-        == "Missing 'offset' infon element in TITLE passage for document 7933980"
-    )
-    assert (
-        str(e.value)
-        == "Missing 'offset' infon element in TITLE passage for document 7933980"
-    )
-    assert (
-        str(e.value)
-        == "Missing 'offset' infon element in TITLE passage for document 7933980"
-    )

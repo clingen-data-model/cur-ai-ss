@@ -10,8 +10,84 @@ from lib.evagg.types import HGVSVariant, Paper
 
 
 @pytest.fixture
-def paper(json_load: Any) -> Paper:
-    paper = Paper(
+def paper(monkeypatch) -> Paper:
+    monkeypatch.setattr(
+        Paper,
+        'fulltext_md',
+        property(
+            lambda self: """
+            Developmental disabilities have diverse genetic causes that must be identified to facilitate precise diagnoses. We describe genomic data from 371 affected individuals, 309 of which were sequenced as proband-parent trios.
+            Whole-exome sequences (WES) were generated for 365 individuals (127 affected) and whole-genome sequences (WGS) were generated for 612 individuals (244 affected).
+            Pathogenic or likely pathogenic variants were found in 100 individuals (27%), with variants of uncertain significance in an additional 42 (11.3%). We found that a family history of neurological disease, especially the presence of an affected first-degree relative, reduces the pathogenic/likely pathogenic variant identification rate, reflecting both the disease relevance and ease of interpretation of de novo variants. We also found that improvements to genetic knowledge facilitated interpretation changes in many cases. Through systematic reanalyses, we have thus far reclassified 15 variants, with 11.3% of families who initially were found to harbor a VUS and 4.7% of families with a negative result eventually found to harbor a pathogenic or likely pathogenic variant. To further such progress, the data described here are being shared through ClinVar, GeneMatcher, and dbGaP.
+            Our data strongly support the value of large-scale sequencing, especially WGS within proband-parent trios, as both an effective first-choice diagnostic tool and means to advance clinical and research progress related to pediatric neurological disease.
+            Electronic supplementary material
+            The online version of this article (doi:10.1186/s13073-017-0433-1) contains supplementary material, which is available to authorized users.
+            Variants with an increase in pathogenicity score due to reanalysis
+            | Gene | Affected individual ID(s) | Variant info | Original score | Updated score | Reason(s) for update | Evidence for upgrade |
+            |---|---|---|---|---|---|---|
+            | DDX3X | 00075-C | NM_001356.4(DDX3X):c.745G > T (p.Glu249Ter) | VUS | Pathogenic | Publication | [38] |
+            | EBF3 | 00006-C | NM_001005463.2(EBF3):c.1101+1G > T | VUS | Pathogenic | GeneMatcher | Collaboration with several other groups identified patients with comparable genotypes and phenotypes [37] |
+            | EBF3 | 00032-C | NM_001005463.2(EBF3):c.530C > T (p.Pro177Leu) | VUS | Pathogenic | GeneMatcher | Collaboration with several other groups identified patients with comparable genotypes and phenotypes [37] |
+            | KIAA2022 | 00082-C | NM_001008537.2(KIAA2022):c.2999_3000delCT (p.Ser1000Cysfs) | VUS | Pathogenic | Publication / Personal communication | [39] |
+            | TCF20 | 00078-C | NM_005650.3(TCF20):c.5385_5386delTG (p.Cys1795Trpfs) | VUS | Pathogenic | Publication | [16] |
+            | ARID2 | 00026-C | NM_152641.2(ARID2):c.1708delT (p.Cys570Valfs) | NR | Pathogenic | Publication | [40] |
+            | CDK13 | 00253-C | NM_003718.4(CDK13):c.2525A > G (p.Asn842Ser) | NR | Pathogenic | Publication | [16] |
+            | CLPB | 00127-C | NM_030813.5(CLPB):c.1222A > G (p.Arg408Gly); c.1249C > T (p.Arg417Ter) | NR | Pathogenic | Publication | [41] |
+            | FGF12 | 00074-C | NM_021032.4(FGF12):c.341G > A (p.Arg114His) | NR | Pathogenic | Publication | [42] |
+            | MTOR | 00040-C | NM_004958.3(MTOR):c.4785G > A (p.Met1595Ile) | NR | Pathogenic | Publication | For review [26]; see also [27] |
+            | MTOR | 00028-C, 00028-C2 | NM_004958.3(MTOR):c.5663T > G (p.Phe1888Cys) | NR | Pathogenic | Filter | In original filter, required allele count of one; this variant was present in identical twins |
+            | HDAC8 | 00001-C | NM_018486.2(HDAC8):c.737+1G > A | NR | Likely pathogenic | Filter | In original filter, required depth for all members of trio was set to 10 reads; father had only 7 |
+            | LAMA2 | 00055-C, 00055-S | NM_000426.3(LAMA2):c.715C > T (p.Arg239Cys) | NR | Likely pathogenic | Clarification of clinical phenotype | Discussion with clinicians was necessary to determine that patients’ phenotypes matched those observed for LAMA2 |
+            | MAST1 | 00270-C | NM_014975.2(MAST1):c.278C > T (p.Ser93Leu) | NR | Likely pathogenic | GeneMatcher | Collaboration with several other groups identified patients with comparable genotypes and phenotypes |
+            | SUV420H1 | 00056-C | NM_017635.3(SUV420H1):c.2497G > T (p.Glu833Ter) | NR | Likely pathogenic | Publication | [16] |
+
+        """
+        ),
+    )
+    monkeypatch.setattr(
+        Paper,
+        'tables_md',
+        property(
+            lambda self: [
+                """
+            Variants with an increase in pathogenicity score due to reanalysis
+            | Gene | Affected individual ID(s) | Variant info | Original score | Updated score | Reason(s) for update | Evidence for upgrade |
+            |---|---|---|---|---|---|---|
+            | DDX3X | 00075-C | NM_001356.4(DDX3X):c.745G > T (p.Glu249Ter) | VUS | Pathogenic | Publication | [38] |
+            | EBF3 | 00006-C | NM_001005463.2(EBF3):c.1101+1G > T | VUS | Pathogenic | GeneMatcher | Collaboration with several other groups identified patients with comparable genotypes and phenotypes [37] |
+            | EBF3 | 00032-C | NM_001005463.2(EBF3):c.530C > T (p.Pro177Leu) | VUS | Pathogenic | GeneMatcher | Collaboration with several other groups identified patients with comparable genotypes and phenotypes [37] |
+            | KIAA2022 | 00082-C | NM_001008537.2(KIAA2022):c.2999_3000delCT (p.Ser1000Cysfs) | VUS | Pathogenic | Publication / Personal communication | [39] |
+            | TCF20 | 00078-C | NM_005650.3(TCF20):c.5385_5386delTG (p.Cys1795Trpfs) | VUS | Pathogenic | Publication | [16] |
+            | ARID2 | 00026-C | NM_152641.2(ARID2):c.1708delT (p.Cys570Valfs) | NR | Pathogenic | Publication | [40] |
+            | CDK13 | 00253-C | NM_003718.4(CDK13):c.2525A > G (p.Asn842Ser) | NR | Pathogenic | Publication | [16] |
+            | CLPB | 00127-C | NM_030813.5(CLPB):c.1222A > G (p.Arg408Gly); c.1249C > T (p.Arg417Ter) | NR | Pathogenic | Publication | [41] |
+            | FGF12 | 00074-C | NM_021032.4(FGF12):c.341G > A (p.Arg114His) | NR | Pathogenic | Publication | [42] |
+            | MTOR | 00040-C | NM_004958.3(MTOR):c.4785G > A (p.Met1595Ile) | NR | Pathogenic | Publication | For review [26]; see also [27] |
+            | MTOR | 00028-C, 00028-C2 | NM_004958.3(MTOR):c.5663T > G (p.Phe1888Cys) | NR | Pathogenic | Filter | In original filter, required allele count of one; this variant was present in identical twins |
+            | HDAC8 | 00001-C | NM_018486.2(HDAC8):c.737+1G > A | NR | Likely pathogenic | Filter | In original filter, required depth for all members of trio was set to 10 reads; father had only 7 |
+            | LAMA2 | 00055-C, 00055-S | NM_000426.3(LAMA2):c.715C > T (p.Arg239Cys) | NR | Likely pathogenic | Clarification of clinical phenotype | Discussion with clinicians was necessary to determine that patients’ phenotypes matched those observed for LAMA2 |
+            | MAST1 | 00270-C | NM_014975.2(MAST1):c.278C > T (p.Ser93Leu) | NR | Likely pathogenic | GeneMatcher | Collaboration with several other groups identified patients with comparable genotypes and phenotypes |
+            | SUV420H1 | 00056-C | NM_017635.3(SUV420H1):c.2497G > T (p.Glu833Ter) | NR | Likely pathogenic | Publication | [16] |
+
+            """,
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        Paper,
+        'sections_md',
+        property(
+            lambda self: [
+                'Developmental disabilities have diverse genetic causes that must be identified to facilitate precise diagnoses. We describe genomic data from 371 affected individuals, 309 of which were sequenced as proband-parent trios.',
+                'Whole-exome sequences (WES) were generated for 365 individuals (127 affected) and whole-genome sequences (WGS) were generated for 612 individuals (244 affected).',
+                'Pathogenic or likely pathogenic variants were found in 100 individuals (27%), with variants of uncertain significance in an additional 42 (11.3%). We found that a family history of neurological disease, especially the presence of an affected first-degree relative, reduces the pathogenic/likely pathogenic variant identification rate, reflecting both the disease relevance and ease of interpretation of de novo variants. We also found that improvements to genetic knowledge facilitated interpretation changes in many cases. Through systematic reanalyses, we have thus far reclassified 15 variants, with 11.3% of families who initially were found to harbor a VUS and 4.7% of families with a negative result eventually found to harbor a pathogenic or likely pathogenic variant. To further such progress, the data described here are being shared through ClinVar, GeneMatcher, and dbGaP.',
+                'Our data strongly support the value of large-scale sequencing, especially WGS within proband-parent trios, as both an effective first-choice diagnostic tool and means to advance clinical and research progress related to pediatric neurological disease.',
+                'Electronic supplementary material',
+                'The online version of this article (doi:10.1186/s13073-017-0433-1) contains supplementary material, which is available to authorized users.',
+            ]
+        ),
+    )
+    return Paper(
         **{
             'id': 'pmid:28554332',
             'pmid': '28554332',
@@ -26,10 +102,9 @@ def paper(json_load: Any) -> Paper:
             'license': 'CC BY',
             'citation': 'Bowling (2017) Genome Med',
             'link': 'https://pubmed.ncbi.nlm.nih.gov/28554332/',
-            'fulltext_xml': '<document><id>5448144</id><infon key="license">CC BY</infon><passage><infon key="article-id_doi">10.1186/s13073-017-0433-1</infon><infon key="article-id_pmc">5448144</infon><infon key="article-id_pmid">28554332</infon><infon key="article-id_publisher-id">433</infon><infon key="elocation-id">43</infon><infon key="kwd">Developmental delay Intellectual disability De novo Clinical sequencing CSER</infon><infon key="license">\\nOpen AccessThis article is distributed under the terms of the Creative Commons Attribution 4.0 International License (http://creativecommons.org/licenses/by/4.0/), which permits unrestricted use, distribution, and reproduction in any medium, provided you give appropriate credit to the original author(s) and the source, provide a link to the Creative Commons license, and indicate if changes were made. The Creative Commons Public Domain Dedication waiver (http://creativecommons.org/publicdomain/zero/1.0/) applies to the data made available in this article, unless otherwise stated.</infon><infon key="name_0">surname:Bowling;given-names:Kevin M.</infon><infon key="name_1">surname:Thompson;given-names:Michelle L.</infon><infon key="name_10">surname:Kelley;given-names:Whitley V.</infon><infon key="name_11">surname:Lamb;given-names:Neil E.</infon><infon key="name_12">surname:Lose;given-names:Edward J.</infon><infon key="name_13">surname:Rich;given-names:Carla A.</infon><infon key="name_14">surname:Simmons;given-names:Shirley</infon><infon key="name_15">surname:Whittle;given-names:Jana S.</infon><infon key="name_16">surname:Weaver;given-names:Benjamin T.</infon><infon key="name_17">surname:Nesmith;given-names:Amy S.</infon><infon key="name_18">surname:Myers;given-names:Richard M.</infon><infon key="name_19">surname:Barsh;given-names:Gregory S.</infon><infon key="name_2">surname:Amaral;given-names:Michelle D.</infon><infon key="name_20">surname:Bebin;given-names:E. Martina</infon><infon key="name_21">surname:Cooper;given-names:Gregory M.</infon><infon key="name_22">surname:Cooper;given-names:Gregory M.</infon><infon key="name_23">surname:Cooper;given-names:Gregory M.</infon><infon key="name_3">surname:Finnila;given-names:Candice R.</infon><infon key="name_4">surname:Hiatt;given-names:Susan M.</infon><infon key="name_5">surname:Engel;given-names:Krysta L.</infon><infon key="name_6">surname:Cochran;given-names:J. Nicholas</infon><infon key="name_7">surname:Brothers;given-names:Kyle B.</infon><infon key="name_8">surname:East;given-names:Kelly M.</infon><infon key="name_9">surname:Gray;given-names:David E.</infon><infon key="section_type">TITLE</infon><infon key="title">Keywords</infon><infon key="type">front</infon><infon key="volume">9</infon><infon key="year">2017</infon><offset>0</offset><text>Genomic diagnosis for children with intellectual disability and/or developmental delay</text></passage><passage><infon key="section_type">ABSTRACT</infon><infon key="type">abstract_title_1</infon><offset>87</offset><text>Background</text></passage><passage><infon key="section_type">ABSTRACT</infon><infon key="type">abstract</infon><offset>98</offset><text>Developmental disabilities have diverse genetic causes that must be identified to facilitate precise diagnoses. We describe genomic data from 371 affected individuals, 309 of which were sequenced as proband-parent trios.</text></passage><passage><infon key="section_type">ABSTRACT</infon><infon key="type">abstract_title_1</infon><offset>319</offset><text>Methods</text></passage><passage><infon key="section_type">ABSTRACT</infon><infon key="type">abstract</infon><offset>327</offset><text>Whole-exome sequences (WES) were generated for 365 individuals (127 affected) and whole-genome sequences (WGS) were generated for 612 individuals (244 affected).</text></passage><passage><infon key="section_type">ABSTRACT</infon><infon key="type">abstract_title_1</infon><offset>489</offset><text>Results</text></passage><passage><infon key="section_type">ABSTRACT</infon><infon key="type">abstract</infon><offset>497</offset><text>Pathogenic or likely pathogenic variants were found in 100 individuals (27%), with variants of uncertain significance in an additional 42 (11.3%). We found that a family history of neurological disease, especially the presence of an affected first-degree relative, reduces the pathogenic/likely pathogenic variant identification rate, reflecting both the disease relevance and ease of interpretation of de novo variants. We also found that improvements to genetic knowledge facilitated interpretation changes in many cases. Through systematic reanalyses, we have thus far reclassified 15 variants, with 11.3% of families who initially were found to harbor a VUS and 4.7% of families with a negative result eventually found to harbor a pathogenic or likely pathogenic variant. To further such progress, the data described here are being shared through ClinVar, GeneMatcher, and dbGaP.</text></passage><passage><infon key="section_type">ABSTRACT</infon><infon key="type">abstract_title_1</infon><offset>1381</offset><text>Conclusions</text></passage><passage><infon key="section_type">ABSTRACT</infon><infon key="type">abstract</infon><offset>1393</offset><text>Our data strongly support the value of large-scale sequencing, especially WGS within proband-parent trios, as both an effective first-choice diagnostic tool and means to advance clinical and research progress related to pediatric neurological disease.</text></passage><passage><infon key="section_type">ABSTRACT</infon><infon key="type">abstract_title_1</infon><offset>1645</offset><text>Electronic supplementary material</text></passage><passage><infon key="section_type">ABSTRACT</infon><infon key="type">abstract</infon><offset>1679</offset><text>The online version of this article (doi:10.1186/s13073-017-0433-1) contains supplementary material, which is available to authorized users.</text></passage><passage><infon key="file">Tab3.xml</infon><infon key="id">Tab3</infon><infon key="section_type">TABLE</infon><infon key="type">table_caption</infon><offset>30344</offset><text>Variants with an increase in pathogenicity score due to reanalysis</text></passage><passage><infon key="file">Tab3.xml</infon><infon key="id">Tab3</infon><infon key="section_type">TABLE</infon><infon key="type">table</infon><infon key="xml">&lt;?xml version="1.0" encoding="UTF-8"?&gt;\\n&lt;table frame="hsides" rules="groups"&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Gene&lt;/th&gt;&lt;th&gt;Affected individual ID(s)&lt;/th&gt;&lt;th&gt;Variant info&lt;/th&gt;&lt;th&gt;Original score&lt;/th&gt;&lt;th&gt;Updated score&lt;/th&gt;&lt;th&gt;Reason(s) for update&lt;/th&gt;&lt;th&gt;Evidence for upgrade&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;DDX3X&lt;/td&gt;&lt;td&gt;00075-C&lt;/td&gt;&lt;td&gt;NM_001356.4(DDX3X):c.745G &amp;gt; T (p.Glu249Ter)&lt;/td&gt;&lt;td&gt;VUS&lt;/td&gt;&lt;td&gt;Pathogenic&lt;/td&gt;&lt;td&gt;Publication&lt;/td&gt;&lt;td&gt;&lt;xref ref-type="bibr" rid="CR38"&gt;38&lt;/xref&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;EBF3&lt;/td&gt;&lt;td&gt;00006-C&lt;/td&gt;&lt;td&gt;NM_001005463.2(EBF3):c.1101 + 1G &amp;gt; T&lt;/td&gt;&lt;td&gt;VUS&lt;/td&gt;&lt;td&gt;Pathogenic&lt;/td&gt;&lt;td&gt;GeneMatcher&lt;/td&gt;&lt;td&gt;Collaboration with several other groups identified patients with comparable genotypes and phenotypes &lt;xref ref-type="bibr" rid="CR37"&gt;37&lt;/xref&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;EBF3&lt;/td&gt;&lt;td&gt;00032-C&lt;/td&gt;&lt;td&gt;NM_001005463.2(EBF3):c.530C &amp;gt; T (p.Pro177Leu)&lt;/td&gt;&lt;td&gt;VUS&lt;/td&gt;&lt;td&gt;Pathogenic&lt;/td&gt;&lt;td&gt;GeneMatcher&lt;/td&gt;&lt;td&gt;Collaboration with several other groups identified patients with comparable genotypes and phenotypes &lt;xref ref-type="bibr" rid="CR37"&gt;37&lt;/xref&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;KIAA2022&lt;/td&gt;&lt;td&gt;00082-C&lt;/td&gt;&lt;td&gt;NM_001008537.2(KIAA2022):c.2999_3000delCT (p.Ser1000Cysfs)&lt;/td&gt;&lt;td&gt;VUS&lt;/td&gt;&lt;td&gt;Pathogenic&lt;/td&gt;&lt;td&gt;Publication/Personal communication&lt;/td&gt;&lt;td&gt;&lt;xref ref-type="bibr" rid="CR39"&gt;39&lt;/xref&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;TCF20&lt;/td&gt;&lt;td&gt;00078-C&lt;/td&gt;&lt;td&gt;NM_005650.3(TCF20):c.5385_5386delTG (p.Cys1795Trpfs)&lt;/td&gt;&lt;td&gt;VUS&lt;/td&gt;&lt;td&gt;Pathogenic&lt;/td&gt;&lt;td&gt;Publication&lt;/td&gt;&lt;td&gt;&lt;xref ref-type="bibr" rid="CR16"&gt;16&lt;/xref&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;ARID2&lt;/td&gt;&lt;td&gt;00026-C&lt;/td&gt;&lt;td&gt;NM_152641.2(ARID2):c.1708delT (p.Cys570Valfs)&lt;/td&gt;&lt;td&gt;NR&lt;/td&gt;&lt;td&gt;Pathogenic&lt;/td&gt;&lt;td&gt;Publication&lt;/td&gt;&lt;td&gt;&lt;xref ref-type="bibr" rid="CR40"&gt;40&lt;/xref&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;CDK13&lt;/td&gt;&lt;td&gt;00253-C&lt;/td&gt;&lt;td&gt;NM_003718.4(CDK13):c.2525A &amp;gt; G (p.Asn842Ser)&lt;/td&gt;&lt;td&gt;NR&lt;/td&gt;&lt;td&gt;Pathogenic&lt;/td&gt;&lt;td&gt;Publication&lt;/td&gt;&lt;td&gt;&lt;xref ref-type="bibr" rid="CR16"&gt;16&lt;/xref&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;CLPB&lt;/td&gt;&lt;td&gt;00127-C&lt;/td&gt;&lt;td&gt;NM_030813.5(CLPB):c.1222A &amp;gt; G (p.Arg408Gly) NM_030813.5(CLPB):c.1249C &amp;gt; T (p.Arg417Ter)&lt;/td&gt;&lt;td&gt;NR&lt;/td&gt;&lt;td&gt;Pathogenic&lt;/td&gt;&lt;td&gt;Publication&lt;/td&gt;&lt;td&gt;&lt;xref ref-type="bibr" rid="CR41"&gt;41&lt;/xref&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;FGF12&lt;/td&gt;&lt;td&gt;00074-C&lt;/td&gt;&lt;td&gt;NM_021032.4(FGF12):c.341G &amp;gt; A (p.R114H)&lt;/td&gt;&lt;td&gt;NR&lt;/td&gt;&lt;td&gt;Pathogenic&lt;/td&gt;&lt;td&gt;Publication&lt;/td&gt;&lt;td&gt;&lt;xref ref-type="bibr" rid="CR42"&gt;42&lt;/xref&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;MTOR&lt;/td&gt;&lt;td&gt;00040-C&lt;/td&gt;&lt;td&gt;NM_004958.3(MTOR):c.4785G &amp;gt; A (p.Met1595Ile)&lt;/td&gt;&lt;td&gt;NR&lt;/td&gt;&lt;td&gt;Pathogenic&lt;/td&gt;&lt;td&gt;Publication&lt;/td&gt;&lt;td&gt;For review&lt;xref ref-type="bibr" rid="CR26"&gt;26&lt;/xref&gt;; see also &lt;xref ref-type="bibr" rid="CR27"&gt;27&lt;/xref&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;MTOR&lt;/td&gt;&lt;td&gt;00028-C, 00028-C2&lt;/td&gt;&lt;td&gt;NM_004958.3(MTOR):c.5663 T &amp;gt; G (p.Phe1888Cys)&lt;/td&gt;&lt;td&gt;NR&lt;/td&gt;&lt;td&gt;Pathogenic&lt;/td&gt;&lt;td&gt;Filter&lt;/td&gt;&lt;td&gt;In original filter, required allele count of one; this variant was present in identical twins&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;HDAC8&lt;/td&gt;&lt;td&gt;00001-C&lt;/td&gt;&lt;td&gt;NM_018486.2(HDAC8):c.737 + 1G &amp;gt; A&lt;/td&gt;&lt;td&gt;NR&lt;/td&gt;&lt;td&gt;Likely pathogenic&lt;/td&gt;&lt;td&gt;Filter&lt;/td&gt;&lt;td&gt;In original filter, required depth for all members of trio was set to 10 reads; father had only 7&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;LAMA2&lt;/td&gt;&lt;td&gt;00055-C, 00055-S&lt;/td&gt;&lt;td&gt;NM_000426.3(LAMA2):c.715C &amp;gt; T (p.Arg239Cys)&lt;/td&gt;&lt;td&gt;NR&lt;/td&gt;&lt;td&gt;Likely pathogenic&lt;/td&gt;&lt;td&gt;Clarification of clinical phenotype&lt;/td&gt;&lt;td&gt;Discussion with clinicians was necessary to determine that patients\\\' phenotypes did match those observed for LAMA2&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;MAST1&lt;/td&gt;&lt;td&gt;00270-C&lt;/td&gt;&lt;td&gt;NM_014975.2:c.278C &amp;gt; T, p.Ser93Leu&lt;/td&gt;&lt;td&gt;NR&lt;/td&gt;&lt;td&gt;Likely pathogenic&lt;/td&gt;&lt;td&gt;GeneMatcher&lt;/td&gt;&lt;td&gt;Collaboration with several other groups identified patients with comparable genotypes and phenotypes&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;SUV420H1&lt;/td&gt;&lt;td&gt;00056-C&lt;/td&gt;&lt;td&gt;NM_017635.3:c.2497G &amp;gt; T, p.Glu833X&lt;/td&gt;&lt;td&gt;NR&lt;/td&gt;&lt;td&gt;Likely pathogenic&lt;/td&gt;&lt;td&gt;Publication&lt;/td&gt;&lt;td&gt;&lt;xref ref-type="bibr" rid="CR16"&gt;16&lt;/xref&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;\\n</infon><offset>30411</offset><text>Gene\\tAffected individual ID(s)\\tVariant info\\tOriginal score\\tUpdated score\\tReason(s) for update\\tEvidence for upgrade\\t \\tDDX3X\\t00075-C\\tNM_001356.4(DDX3X):c.745G &gt; T (p.Glu249Ter)\\tVUS\\tPathogenic\\tPublication\\t\\t \\tEBF3\\t00006-C\\tNM_001005463.2(EBF3):c.1101 + 1G &gt; T\\tVUS\\tPathogenic\\tGeneMatcher\\tCollaboration with several other groups identified patients with comparable genotypes and phenotypes \\t \\tEBF3\\t00032-C\\tNM_001005463.2(EBF3):c.530C &gt; T (p.Pro177Leu)\\tVUS\\tPathogenic\\tGeneMatcher\\tCollaboration with several other groups identified patients with comparable genotypes and phenotypes \\t \\tKIAA2022\\t00082-C\\tNM_001008537.2(KIAA2022):c.2999_3000delCT (p.Ser1000Cysfs)\\tVUS\\tPathogenic\\tPublication/Personal communication\\t\\t \\tTCF20\\t00078-C\\tNM_005650.3(TCF20):c.5385_5386delTG (p.Cys1795Trpfs)\\tVUS\\tPathogenic\\tPublication\\t\\t \\tARID2\\t00026-C\\tNM_152641.2(ARID2):c.1708delT (p.Cys570Valfs)\\tNR\\tPathogenic\\tPublication\\t\\t \\tCDK13\\t00253-C\\tNM_003718.4(CDK13):c.2525A &gt; G (p.Asn842Ser)\\tNR\\tPathogenic\\tPublication\\t\\t \\tCLPB\\t00127-C\\tNM_030813.5(CLPB):c.1222A &gt; G (p.Arg408Gly) NM_030813.5(CLPB):c.1249C &gt; T (p.Arg417Ter)\\tNR\\tPathogenic\\tPublication\\t\\t \\tFGF12\\t00074-C\\tNM_021032.4(FGF12):c.341G &gt; A (p.R114H)\\tNR\\tPathogenic\\tPublication\\t\\t \\tMTOR\\t00040-C\\tNM_004958.3(MTOR):c.4785G &gt; A (p.Met1595Ile)\\tNR\\tPathogenic\\tPublication\\tFor review; see also \\t \\tMTOR\\t00028-C, 00028-C2\\tNM_004958.3(MTOR):c.5663 T &gt; G (p.Phe1888Cys)\\tNR\\tPathogenic\\tFilter\\tIn original filter, required allele count of one; this variant was present in identical twins\\t \\tHDAC8\\t00001-C\\tNM_018486.2(HDAC8):c.737 + 1G &gt; A\\tNR\\tLikely pathogenic\\tFilter\\tIn original filter, required depth for all members of trio was set to 10 reads; father had only 7\\t \\tLAMA2\\t00055-C, 00055-S\\tNM_000426.3(LAMA2):c.715C &gt; T (p.Arg239Cys)\\tNR\\tLikely pathogenic\\tClarification of clinical phenotype\\tDiscussion with clinicians was necessary to determine that patients\\\' phenotypes did match those observed for LAMA2\\t \\tMAST1\\t00270-C\\tNM_014975.2:c.278C &gt; T, p.Ser93Leu\\tNR\\tLikely pathogenic\\tGeneMatcher\\tCollaboration with several other groups identified patients with comparable genotypes and phenotypes\\t \\tSUV420H1\\t00056-C\\tNM_017635.3:c.2497G &gt; T, p.Glu833X\\tNR\\tLikely pathogenic\\tPublication\\t\\t \\t</text></passage><passage><infon key="file">Tab3.xml</infon><infon key="id">Tab3</infon><infon key="section_type">TABLE</infon><infon key="type">table_foot</infon><offset>32651</offset><text>\\nC child/proband, C2 affected identical twin, S affected sibling, NR no returnables, VUS variant of uncertain significance</text></passage></document>\n',
+            'content': b'',
         }
     )
-    return paper
 
 
 @pytest.fixture
@@ -48,10 +123,23 @@ def mock_comparator(mock_client: Any) -> Any:
 
 
 def test_sanity_check_failure(
-    paper: Paper, mock_llm_client: Any, mock_factory: Any, mock_comparator: Any
+    paper: Paper,
+    mock_llm_client: Any,
+    mock_factory: Any,
+    mock_comparator: Any,
+    monkeypatch,
 ) -> None:
-    # Remove the full text content for the paper.
-    paper.props.pop('fulltext_xml')
+    # Remove the full content of the paper
+    monkeypatch.setattr(
+        Paper,
+        'fulltext_md',
+        property(lambda self: ''),
+    )
+    monkeypatch.setattr(
+        Paper,
+        'tables_md',
+        property(lambda self: []),
+    )
 
     # Paper fails sanity check.
     llm_client = mock_llm_client({'relevant': False})
@@ -68,10 +156,23 @@ def test_sanity_check_failure(
 
 
 def test_find_observations_no_variants(
-    paper: Paper, mock_llm_client: Any, mock_factory: Any, mock_comparator: Any
+    paper: Paper,
+    mock_llm_client: Any,
+    mock_factory: Any,
+    mock_comparator: Any,
+    monkeypatch,
 ) -> None:
-    # Remove the full text content for the paper.
-    paper.props.pop('fulltext_xml')
+    # Remove the full content of the paper
+    monkeypatch.setattr(
+        Paper,
+        'fulltext_md',
+        property(lambda self: ''),
+    )
+    monkeypatch.setattr(
+        Paper,
+        'tables_md',
+        property(lambda self: []),
+    )
 
     llm_client = mock_llm_client({'relevant': True}, {})
     of = ObservationFinder(llm_client, mock_factory(None), mock_comparator({}))
@@ -106,7 +207,7 @@ def test_find_observations_single_variant(
     assert result[0].individual == 'proband'
     assert result[0].variant_descriptions == ['c.530C > T']
     assert result[0].patient_descriptions == ['proband']
-    assert result[0].paper_id == 'pmid:28554332'
+    assert result[0].paper.id == 'pmid:28554332'
 
 
 def test_find_observations_many_patients(
@@ -163,7 +264,7 @@ def test_find_observations_many_patients(
         # asyncio).
         assert r.variant == variant
         assert r.variant_descriptions == ['c.530C > T']
-        assert r.paper_id == 'pmid:28554332'
+        assert r.paper.id == 'pmid:28554332'
 
     # Cover the full-text fallback multi-patient edge case.
     llm_client = mock_llm_client(
@@ -201,7 +302,7 @@ def test_find_observations_many_patients(
     assert len(result) == 1
     assert result[0].variant == variant
     assert result[0].variant_descriptions == ['c.530C > T']
-    assert result[0].paper_id == 'pmid:28554332'
+    assert result[0].paper.id == 'pmid:28554332'
 
 
 def test_find_observations_numeric_patients(
@@ -234,7 +335,7 @@ def test_find_observations_numeric_patients(
     assert result[0].individual == 'proband 21'
     assert result[0].variant_descriptions == ['c.530C > T']
     assert result[0].patient_descriptions == ['proband 21']
-    assert result[0].paper_id == 'pmid:28554332'
+    assert result[0].paper.id == 'pmid:28554332'
 
 
 def test_find_observations_refseq_edge_cases(
@@ -264,7 +365,7 @@ def test_find_observations_refseq_edge_cases(
     assert result[0].individual == 'proband'
     assert result[0].variant_descriptions == ['NM_001005463.2:c.530C>T']
     assert result[0].patient_descriptions == ['proband']
-    assert result[0].paper_id == 'pmid:28554332'
+    assert result[0].paper.id == 'pmid:28554332'
 
     # Test bogus refseqs.
     llm_client = mock_llm_client(
@@ -309,7 +410,7 @@ def test_find_observations_variant_edge_cases(
     assert result[0].individual == 'proband'
     assert result[0].variant_descriptions == ['c.530C > T']
     assert result[0].patient_descriptions == ['proband']
-    assert result[0].paper_id == 'pmid:28554332'
+    assert result[0].paper.id == 'pmid:28554332'
 
     # Test variants with embedded gene names.
     llm_client = mock_llm_client(
@@ -335,7 +436,7 @@ def test_find_observations_variant_edge_cases(
     assert result[0].individual == 'proband'
     assert result[0].variant_descriptions == ['gEBF3(c.530C > T)']
     assert result[0].patient_descriptions == ['proband']
-    assert result[0].paper_id == 'pmid:28554332'
+    assert result[0].paper.id == 'pmid:28554332'
 
     # Test bogus variants.
     llm_client = mock_llm_client(
@@ -425,7 +526,7 @@ def test_find_observations_c_dot_variant(
     assert result[0].individual == 'proband'
     assert result[0].variant_descriptions == ['c.530C > T']
     assert result[0].patient_descriptions == ['proband']
-    assert result[0].paper_id == 'pmid:28554332'
+    assert result[0].paper.id == 'pmid:28554332'
 
     # Test variants missing c. prefix (SNP)
     llm_client = mock_llm_client(
@@ -451,7 +552,7 @@ def test_find_observations_c_dot_variant(
     assert result[0].individual == 'proband'
     assert result[0].variant_descriptions == ['530C>T']
     assert result[0].patient_descriptions == ['proband']
-    assert result[0].paper_id == 'pmid:28554332'
+    assert result[0].paper.id == 'pmid:28554332'
 
     # Test variants missing c. prefix (del)
     llm_client = mock_llm_client(
@@ -477,7 +578,7 @@ def test_find_observations_c_dot_variant(
     assert result[0].individual == 'proband'
     assert result[0].variant_descriptions == ['530delC']
     assert result[0].patient_descriptions == ['proband']
-    assert result[0].paper_id == 'pmid:28554332'
+    assert result[0].paper.id == 'pmid:28554332'
 
     # Test variants missing c. prefix (ins)
     llm_client = mock_llm_client(
@@ -503,7 +604,7 @@ def test_find_observations_c_dot_variant(
     assert result[0].individual == 'proband'
     assert result[0].variant_descriptions == ['530insT']
     assert result[0].patient_descriptions == ['proband']
-    assert result[0].paper_id == 'pmid:28554332'
+    assert result[0].paper.id == 'pmid:28554332'
 
 
 def test_find_observations_p_dot_variant(
@@ -533,7 +634,7 @@ def test_find_observations_p_dot_variant(
     assert result[0].individual == 'proband'
     assert result[0].variant_descriptions == ['p.Pro177Leu']
     assert result[0].patient_descriptions == ['proband']
-    assert result[0].paper_id == 'pmid:28554332'
+    assert result[0].paper.id == 'pmid:28554332'
 
     # Test cases where p. is missing
     llm_client = mock_llm_client(
@@ -557,7 +658,7 @@ def test_find_observations_p_dot_variant(
     assert result[0].individual == 'proband'
     assert result[0].variant_descriptions == ['NP_123456.2:P177L']
     assert result[0].patient_descriptions == ['proband']
-    assert result[0].paper_id == 'pmid:28554332'
+    assert result[0].paper.id == 'pmid:28554332'
 
     # Test extra framshift info
     llm_client = mock_llm_client(
@@ -583,7 +684,7 @@ def test_find_observations_p_dot_variant(
     assert result[0].individual == 'proband'
     assert result[0].variant_descriptions == ['NP_123456.2:P177fsLQQX']
     assert result[0].patient_descriptions == ['proband']
-    assert result[0].paper_id == 'pmid:28554332'
+    assert result[0].paper.id == 'pmid:28554332'
 
 
 def test_find_observations_g_dot_variant(
@@ -617,7 +718,7 @@ def test_find_observations_g_dot_variant(
     assert result[0].individual == 'proband'
     assert result[0].variant_descriptions == ['chr1:g.8675309A>T']
     assert result[0].patient_descriptions == ['proband']
-    assert result[0].paper_id == 'pmid:28554332'
+    assert result[0].paper.id == 'pmid:28554332'
 
 
 def test_find_observations_rsid_variant(
@@ -669,7 +770,7 @@ def test_find_observations_rsid_variant(
     assert result[0].individual == 'proband'
     assert result[0].variant_descriptions == ['rs8675309']
     assert result[0].patient_descriptions == ['proband']
-    assert result[0].paper_id == 'pmid:28554332'
+    assert result[0].paper.id == 'pmid:28554332'
 
     # Test the case where the variant factory can't create a variant given an rsid.
 
@@ -733,7 +834,7 @@ def test_find_observations_associated_variants(
     assert result[0].individual == 'proband'
     assert result[0].variant_descriptions == ['c.530C > T']
     assert result[0].patient_descriptions == ['proband']
-    assert result[0].paper_id == 'pmid:28554332'
+    assert result[0].paper.id == 'pmid:28554332'
 
 
 def test_find_observations_linking_edge_cases(
@@ -789,12 +890,12 @@ def test_find_observations_linking_edge_cases(
     assert result[0].individual == 'proband'
     assert result[0].variant_descriptions == ['c.530C>T']
     assert result[0].patient_descriptions == ['proband']
-    assert result[0].paper_id == 'pmid:28554332'
+    assert result[0].paper.id == 'pmid:28554332'
     assert result[1].variant == variant2
     assert result[1].individual == 'unknown'
     assert result[1].variant_descriptions == ['c.540G>A']
     assert result[1].patient_descriptions == ['unknown']
-    assert result[1].paper_id == 'pmid:28554332'
+    assert result[1].paper.id == 'pmid:28554332'
 
     # Test extra variants with unknown possessor.
     llm_client = mock_llm_client(
@@ -827,7 +928,7 @@ def test_find_observations_linking_edge_cases(
     assert result[0].individual == 'unknown'
     assert result[0].variant_descriptions == ['c.530C>T']
     assert result[0].patient_descriptions == ['unknown']
-    assert result[0].paper_id == 'pmid:28554332'
+    assert result[0].paper.id == 'pmid:28554332'
 
     # Test duplicate observations.
     llm_client = mock_llm_client(
@@ -858,4 +959,4 @@ def test_find_observations_linking_edge_cases(
     assert result[0].individual == 'proband'
     assert result[0].variant_descriptions == ['c.530C>T']
     assert result[0].patient_descriptions == ['proband']
-    assert result[0].paper_id == 'pmid:28554332'
+    assert result[0].paper.id == 'pmid:28554332'
