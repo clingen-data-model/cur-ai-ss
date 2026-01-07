@@ -46,28 +46,28 @@ class App:
         self._llm_client = OpenAIClient()
         self._extractor = PromptBasedContentExtractor(
             fields=[
-                "evidence_id",
-                "gene",
-                "paper_id",
-                "pmid",
-                "pmcid",
-                "hgvs_c",
-                "hgvs_p",
-                "paper_variant",
-                "transcript",
-                "validation_error",
-                "individual_id",
-                "phenotype",
-                "zygosity",
-                "variant_inheritance",
-                "variant_type",
-                "study_type",
-                "engineered_cells",
-                "patient_cells_tissues",
-                "animal_model",
-                "citation",
-                "link",
-                "title",
+                'evidence_id',
+                'gene',
+                'paper_id',
+                'pmid',
+                'pmcid',
+                'hgvs_c',
+                'hgvs_p',
+                'paper_variant',
+                'transcript',
+                'validation_error',
+                'individual_id',
+                'phenotype',
+                'zygosity',
+                'variant_inheritance',
+                'variant_type',
+                'study_type',
+                'engineered_cells',
+                'patient_cells_tissues',
+                'animal_model',
+                'citation',
+                'link',
+                'title',
             ],
             llm_client=self._llm_client,
             phenotype_searcher=WebHPOClient(
@@ -113,18 +113,18 @@ class App:
             """,
                 prompt_tag=PromptTag.TITLE,
             )
-        )["title"]
+        )['title']
         pmids = self._ncbi_lookup_client.search(
-            title + "[ti]",
+            title + '[ti]',
         )
         if pmids:
             self._paper = self._ncbi_lookup_client.fetch(pmids[0], self._paper)
 
         # Dump the paper metadata
         self._paper.metadata_json_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self._paper.metadata_json_path, "w") as f:
+        with open(self._paper.metadata_json_path, 'w') as f:
             json.dump(
-                {k: v for k, v in self._paper.__dict__.items() if k != "content"}, f
+                {k: v for k, v in self._paper.__dict__.items() if k != 'content'}, f
             )
 
         gene_symbol = asyncio.run(
@@ -144,7 +144,7 @@ class App:
             """,
                 prompt_tag=PromptTag.GENE_OF_INTEREST,
             )
-        )["gene_symbol"]
+        )['gene_symbol']
         extracted_observations = self._extractor.extract(self._paper, gene_symbol)
         for extracted_observation in extracted_observations:
             self._vep_client.enrich(extracted_observation)
