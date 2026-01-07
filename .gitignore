@@ -172,3 +172,4 @@ cython_debug/
 
 # Track env.test
 !.env.test
+.claude/settings.local.json
