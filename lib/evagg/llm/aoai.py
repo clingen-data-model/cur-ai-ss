@@ -19,7 +19,7 @@ from lib.evagg.utils.logging import PROMPT
 logger = logging.getLogger(__name__)
 
 DEFAULT_PROMPT_SETTINGS = {
-    'max_output_tokens': 4096,
+    "max_output_tokens": 4096,
 }
 
 MAX_PARALLEL_REQUESTS = 5
@@ -31,7 +31,7 @@ class ChatMessages:
 
     @property
     def content(self) -> str:
-        return ''.join([json.dumps(message) for message in self._messages])
+        return "".join([json.dumps(message) for message in self._messages])
 
     def __init__(self, messages: Iterable[EasyInputMessageParam]) -> None:
         self._messages = list(messages)
@@ -53,7 +53,7 @@ class OpenAIClient:
 
     @lru_cache
     def _get_client_instance(self) -> AsyncOpenAI:
-        logger.info('Using AsyncOpenAI' + f' (max_parallel={MAX_PARALLEL_REQUESTS}).')
+        logger.info("Using AsyncOpenAI" + f" (max_parallel={MAX_PARALLEL_REQUESTS}).")
         return AsyncOpenAI(
             api_key=env.OPENAI_API_KEY,
             timeout=TIMEOUT_S,
@@ -61,7 +61,7 @@ class OpenAIClient:
 
     @lru_cache
     def _load_prompt_file(self, prompt_file: str) -> str:
-        with open(prompt_file, 'r') as f:
+        with open(prompt_file, "r") as f:
             return f.read()
 
     def _create_response(
@@ -71,7 +71,7 @@ class OpenAIClient:
         response = self._client.responses.create(
             input=[EasyInputMessageParam(**x) for x in messages.to_list()], **settings
         )
-        return asyncio.create_task(response, name='chat')
+        return asyncio.create_task(response, name="chat")
 
     async def _generate_completion(
         self,
@@ -85,7 +85,7 @@ class OpenAIClient:
                 # Pause 1 second if the number of pending chat completions is at the limit.
                 if (max_requests := MAX_PARALLEL_REQUESTS) > 0:
                     while (
-                        sum(1 for t in asyncio.all_tasks() if t.get_name() == 'chat')
+                        sum(1 for t in asyncio.all_tasks() if t.get_name() == "chat")
                         > max_requests
                     ):
                         await asyncio.sleep(1)
@@ -98,28 +98,28 @@ class OpenAIClient:
                 # Only report the first rate limit error not from a proxy unless it's constant.
                 if rate_limit_errors > 10 or (
                     rate_limit_errors == 0
-                    and not e.message.startswith('No good endpoints')
+                    and not e.message.startswith("No good endpoints")
                 ):
-                    logger.warning(f'Rate limit error on {prompt_tag}: {e}')
+                    logger.warning(f"Rate limit error on {prompt_tag}: {e}")
                 rate_limit_errors += 1
                 await asyncio.sleep(1)
             except (openai.APIConnectionError, openai.APITimeoutError):
                 await asyncio.sleep(1)
 
         prompt_log = {
-            'prompt_tag': prompt_tag,
-            'prompt_metadata': {
-                'returned_at': time.strftime('%Y-%m-%d %H:%M:%S'),
-                'elapsed_time': f'{elapsed:.1f} seconds',
+            "prompt_tag": prompt_tag,
+            "prompt_metadata": {
+                "returned_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "elapsed_time": f"{elapsed:.1f} seconds",
             },
-            'prompt_settings': settings,
-            'prompt_text': '\n'.join(
-                [str(m.get('content')) for m in messages.to_list()]
+            "prompt_settings": settings,
+            "prompt_text": "\n".join(
+                [str(m.get("content")) for m in messages.to_list()]
             ),
-            'prompt_response': response.output_text or '',
-            'prompt_response_metadata': {
-                'prompt_tokens': response.usage.input_tokens,
-                'completion_tokens': response.usage.output_tokens,
+            "prompt_response": response.output_text or "",
+            "prompt_response_metadata": {
+                "prompt_tokens": response.usage.input_tokens,
+                "completion_tokens": response.usage.output_tokens,
             },
         }
         logger.log(
@@ -127,7 +127,7 @@ class OpenAIClient:
             f"Chat '{prompt_tag}' complete in {elapsed:.1f} seconds.",
             extra=prompt_log,
         )
-        return response.output_text or ''
+        return response.output_text or ""
 
     async def prompt(
         self,
@@ -139,24 +139,24 @@ class OpenAIClient:
         """Get the response from a prompt."""
         # Replace any '{{${key}}}' instances with values from the params dictionary.
         user_prompt = reduce(
-            lambda x, kv: x.replace(f'{{{{${kv[0]}}}}}', kv[1]),
+            lambda x, kv: x.replace(f"{{{{${kv[0]}}}}}", kv[1]),
             (params or {}).items(),
             user_prompt,
         )
 
         messages: ChatMessages = ChatMessages(
-            [EasyInputMessageParam(role='user', content=user_prompt)]
+            [EasyInputMessageParam(role="user", content=user_prompt)]
         )
         messages.insert(
             0,
             EasyInputMessageParam(
-                role='system', content=PROMPT_REGISTRY['system'].render_template()
+                role="system", content=PROMPT_REGISTRY["system"].render_template()
             ),
         )
 
         settings = {
             **DEFAULT_PROMPT_SETTINGS,
-            'model': env.OPENAI_API_DEPLOYMENT,
+            "model": env.OPENAI_API_DEPLOYMENT,
             **(settings or {}),
         }
         return await self._generate_completion(messages, prompt_tag, settings)
@@ -181,7 +181,7 @@ class OpenAIClient:
         try:
             result = json.loads(response)
         except json.decoder.JSONDecodeError:
-            logger.error(f'Failed to parse LLM response as JSON: {response}')
+            logger.error(f"Failed to parse LLM response as JSON: {response}")
             return {}
         return result
 
@@ -216,7 +216,7 @@ class OpenAIClient:
             result = json.loads(response)
         except json.decoder.JSONDecodeError:
             logger.error(
-                f'Failed to parse response from LLM to {prompt_filepath}: {response}'
+                f"Failed to parse response from LLM to {prompt_filepath}: {response}"
             )
             return {}
         return result
