@@ -68,10 +68,6 @@ quote-style = "single"
 [tool.setuptools]
 packages = ["lib"]
 
-[project.scripts]
-run_evagg_app = "lib.execute:run_evagg_app"
-
-
 [tool.mypy]
 pretty = true
 ignore_missing_imports = true
@@ -86,7 +82,7 @@ follow_imports = "skip"
 [tool.coverage.run]
 omit = [
     "test/*",
-    "lib/scripts/*",
+    "bin/*",
 ]
 
 [tool.pytest.ini_options]
