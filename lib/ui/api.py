@@ -1,4 +1,5 @@
 import requests
+import streamlit.runtime.uploaded_file_manager
 from pydantic import TypeAdapter
 
 from lib.evagg.types.base import Paper
@@ -29,7 +30,9 @@ def get_paper(paper_id: str) -> PaperResp:
     return PaperResp.model_validate(resp.json())
 
 
-def put_paper(uploaded_file) -> PaperResp:
+def put_paper(
+    uploaded_file: streamlit.runtime.uploaded_file_manager.UploadedFile,
+) -> PaperResp:
     resp = requests.put(
         f'http://{env.API_ENDPOINT}:{env.API_PORT}/papers',
         files={

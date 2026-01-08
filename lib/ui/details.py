@@ -14,6 +14,9 @@ from lib.ui.api import (
 )
 
 paper_id = st.query_params.get('paper_id')
+if paper_id is None:
+    st.warning('No paper_id provided in URL.')
+    st.stop()  # stop further execution
 
 st.set_page_config(page_title='Curation Details', layout='wide')
 left, center, right = st.columns([2, 4, 2])
