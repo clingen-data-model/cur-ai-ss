@@ -9,10 +9,10 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 
 from lib.api.db import session_scope
-from lib.models import ExtractionStatus, PaperDB
 from lib.evagg import App
 from lib.evagg.types.base import Paper
 from lib.evagg.utils import init_logger
+from lib.models import ExtractionStatus, PaperDB
 
 POLL_INTERVAL_S = 10
 RETRIES = 3
