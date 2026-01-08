@@ -8,8 +8,8 @@ import traceback
 from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.db import session_scope
-from app.models import ExtractionStatus, PaperDB
+from lib.api.db import session_scope
+from lib.models import ExtractionStatus, PaperDB
 from lib.evagg import App
 from lib.evagg.types.base import Paper
 from lib.evagg.utils import init_logger
