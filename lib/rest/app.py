@@ -19,11 +19,11 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
-from app.db import env, get_engine, get_session
-from app.models import Base, ExtractionStatus, PaperDB, PaperResp
 from lib.evagg.pdf.thumbnail import pdf_first_page_to_thumbnail_pymupdf_bytes
 from lib.evagg.types.base import Paper
 from lib.evagg.utils.environment import env
+from lib.models import Base, ExtractionStatus, PaperDB, PaperResp
+from lib.rest.db import env, get_engine, get_session
 
 
 @asynccontextmanager

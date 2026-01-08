@@ -1,12 +1,11 @@
 import io
 
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import func, select, update
-
 from app.db import session_scope
 from app.fastapi_app import app
 from app.models import ExtractionStatus, PaperDB
+from fastapi.testclient import TestClient
+from sqlalchemy import func, select, update
 
 
 @pytest.fixture

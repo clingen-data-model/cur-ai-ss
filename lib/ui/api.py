@@ -1,11 +1,9 @@
 import requests
 from pydantic import TypeAdapter
 
-from app.models import ExtractionStatus, PaperResp
 from lib.evagg.types.base import Paper
 from lib.evagg.utils.environment import env
-
-FASTAPI_HOST = f'http://{env.API_ENDPOINT}:{env.API_PORT}'
+from lib.models import ExtractionStatus, PaperResp
 
 
 def get_http_error_detail(e: requests.HTTPError) -> str:

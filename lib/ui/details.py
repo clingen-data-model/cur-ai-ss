@@ -4,14 +4,14 @@ import time
 import requests
 import streamlit as st
 
-from app.models import ExtractionStatus, PaperResp
-from app.streamlit.api import (
+from lib.evagg.types.base import Paper
+from lib.models import ExtractionStatus, PaperResp
+from lib.ui.api import (
     delete_paper,
     get_http_error_detail,
     get_paper,
     requeue_paper,
 )
-from lib.evagg.types.base import Paper
 
 paper_id = st.query_params.get('paper_id')
 
