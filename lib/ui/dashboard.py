@@ -5,6 +5,7 @@ import requests
 import streamlit as st
 
 from lib.evagg.types.base import Paper
+from lib.evagg.utils.environment import env
 from lib.models import ExtractionStatus, PaperResp
 from lib.ui.api import get_http_error_detail, get_papers, put_paper
 
