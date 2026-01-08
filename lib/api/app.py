@@ -1,7 +1,7 @@
 import traceback
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator, Optional
 
 from fastapi import (
     Body,
@@ -84,7 +84,7 @@ async def log_exceptions_middleware(
 def put_paper(
     uploaded_file: UploadFile = File(...),
     session: Session = Depends(get_session),
-) -> PaperResp:
+) -> Any:
     if uploaded_file.content_type != 'application/pdf':
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail='Only PDF files are allowed'
@@ -115,7 +115,7 @@ def put_paper(
 
 
 @app.get('/papers/{paper_id}', response_model=PaperResp)
-def get_paper(paper_id: str, session: Session = Depends(get_session)) -> PaperResp:
+def get_paper(paper_id: str, session: Session = Depends(get_session)) -> Any:
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
         raise HTTPException(
@@ -138,7 +138,7 @@ def update_status(
     paper_id: str,
     extraction_status: ExtractionStatus = Body(..., embed=True),
     session: Session = Depends(get_session),
-) -> PaperResp:
+) -> Any:
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
         raise HTTPException(
@@ -161,6 +161,6 @@ def list_papers(
     session: Session = Depends(get_session),
 ) -> list[PaperResp]:
     query = session.query(PaperDB)
-    if extraction_status:
+    if extraction_status is not None:
         query = query.filter(PaperDB.extraction_status == extraction_status)
     return [PaperResp.from_orm(p) for p in query.all()]
