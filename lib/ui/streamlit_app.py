@@ -1,5 +1,3 @@
-import pandas as pd
-import requests
 import streamlit as st
 
 pg = st.navigation(

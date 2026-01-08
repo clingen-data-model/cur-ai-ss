@@ -9,7 +9,7 @@ from typing import Optional
 import pytest
 from defusedxml import ElementTree
 
-from app import db
+from lib.api import db
 
 
 @pytest.fixture

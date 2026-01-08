@@ -34,10 +34,10 @@ uv sync
 uv pip install -e .
 ```
 
-Test installation by running the following. You should see a help message displayed providing usage for the `run_evagg_app` command.
+Test installation by running the following. You should see a help message displayed providing usage for the command.
 
 ```bash
-uv run run_evagg_app -h
+./bin/extract_single_pdf
 ```
 
 ## Running the linting/tests
@@ -50,7 +50,7 @@ To run a specific test
 uv run pytest test/evagg/test_llm.py
 ```
 
-## Running with a PDF
+## Running the extraction with a PDF
 
 To test the extraction pipeline, download a paper PDF from PubMed. For example,
 
@@ -61,7 +61,22 @@ curl -L -o pmid_36704923.pdf "https://pmc.ncbi.nlm.nih.gov/articles/PMC9994480/p
 Then run the extraction (put the path to the file if it is not in the root directory of this project):
 
 ```bash
-uv run run_evagg_app --pdf pmid_36704923.pdf --gene-symbol FICD
+./bin/extract_single_pdf --pdf pmid_36704923.pdf
+```
+
+## Running the full application for developments
+
+In three terminals, run the following to start up each service:
+```bash
+./bin/api
+```
+
+```bash
+./bin/ui
+```
+
+```bash
+./bin/worker
 ```
 
 NOTE: you will need to make sure you OpenAI account has available billing available since the API tokens are not available on the Free tier.

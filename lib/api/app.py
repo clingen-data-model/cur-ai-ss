@@ -1,6 +1,7 @@
 import traceback
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any, AsyncGenerator, Optional
 
 from fastapi import (
     Body,
@@ -18,16 +19,17 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
+from starlette.middleware.base import RequestResponseEndpoint
+from starlette.responses import Response
 
-from app.db import env, get_engine, get_session
-from app.models import Base, ExtractionStatus, PaperDB, PaperResp
+from lib.api.db import get_engine, get_session
 from lib.evagg.pdf.thumbnail import pdf_first_page_to_thumbnail_pymupdf_bytes
 from lib.evagg.types.base import Paper
-from lib.evagg.utils.environment import env
+from lib.models import Base, ExtractionStatus, PaperDB, PaperResp
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     engine = get_engine()
     session = get_session()
     Base.metadata.create_all(bind=engine)
@@ -56,7 +58,9 @@ app.add_middleware(
 
 
 @app.middleware('http')
-async def log_exceptions_middleware(request: Request, call_next):
+async def log_exceptions_middleware(
+    request: Request, call_next: RequestResponseEndpoint
+) -> Response:
     try:
         response = await call_next(request)
         # Optionally log 5xx responses
@@ -80,7 +84,7 @@ async def log_exceptions_middleware(request: Request, call_next):
 def put_paper(
     uploaded_file: UploadFile = File(...),
     session: Session = Depends(get_session),
-) -> PaperResp:
+) -> Any:
     if uploaded_file.content_type != 'application/pdf':
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail='Only PDF files are allowed'
@@ -111,7 +115,7 @@ def put_paper(
 
 
 @app.get('/papers/{paper_id}', response_model=PaperResp)
-def get_paper(paper_id: str, session: Session = Depends(get_session)) -> PaperResp:
+def get_paper(paper_id: str, session: Session = Depends(get_session)) -> Any:
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
         raise HTTPException(
@@ -134,7 +138,7 @@ def update_status(
     paper_id: str,
     extraction_status: ExtractionStatus = Body(..., embed=True),
     session: Session = Depends(get_session),
-):
+) -> Any:
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
         raise HTTPException(
@@ -155,8 +159,8 @@ def update_status(
 def list_papers(
     extraction_status: ExtractionStatus | None = None,
     session: Session = Depends(get_session),
-) -> list[PaperResp]:
+) -> Any:
     query = session.query(PaperDB)
-    if extraction_status:
+    if extraction_status is not None:
         query = query.filter(PaperDB.extraction_status == extraction_status)
     return query.all()

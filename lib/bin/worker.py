@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import datetime
 import json
 import logging
@@ -7,11 +8,11 @@ import traceback
 from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.db import session_scope
-from app.models import ExtractionStatus, PaperDB
+from lib.api.db import session_scope
 from lib.evagg import App
 from lib.evagg.types.base import Paper
 from lib.evagg.utils import init_logger
+from lib.models import ExtractionStatus, PaperDB
 
 POLL_INTERVAL_S = 10
 RETRIES = 3
@@ -19,7 +20,7 @@ RETRIES = 3
 logger = logging.getLogger(__name__)
 
 
-def run_evagg_app(paper_id) -> None:
+def run_evagg_app(paper_id: str) -> None:
     init_logger(
         current_run=f'{paper_id}_{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'
     )
@@ -45,7 +46,9 @@ def run_evagg_app(paper_id) -> None:
                 raise
 
 
-def mark_paper_as_extraction_status(paper_id: str, extraction_status: ExtractionStatus):
+def mark_paper_as_extraction_status(
+    paper_id: str, extraction_status: ExtractionStatus
+) -> None:
     if paper_id:
         with session_scope() as session:
             session.execute(
@@ -56,7 +59,7 @@ def mark_paper_as_extraction_status(paper_id: str, extraction_status: Extraction
             session.commit()
 
 
-def main():
+def main() -> None:
     init_logger('worker')
     while True:
         paper_id = None
@@ -76,10 +79,12 @@ def main():
             break
         except SQLAlchemyError as e:
             logger.exception(f'Database error occurred')
-            mark_paper_as_extraction_status(paper_id, ExtractionStatus.FAILED)
+            if paper_id:
+                mark_paper_as_extraction_status(paper_id, ExtractionStatus.FAILED)
         except Exception as e:
             logger.exception(f'An unexpected error occurred')
-            mark_paper_as_extraction_status(paper_id, ExtractionStatus.FAILED)
+            if paper_id:
+                mark_paper_as_extraction_status(paper_id, ExtractionStatus.FAILED)
         time.sleep(POLL_INTERVAL_S)
         logger.info('waiting for work')
 

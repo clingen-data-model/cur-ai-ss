@@ -4,16 +4,19 @@ import time
 import requests
 import streamlit as st
 
-from app.models import ExtractionStatus, PaperResp
-from app.streamlit.api import (
+from lib.evagg.types.base import Paper
+from lib.models import ExtractionStatus, PaperResp
+from lib.ui.api import (
     delete_paper,
     get_http_error_detail,
     get_paper,
     requeue_paper,
 )
-from lib.evagg.types.base import Paper
 
 paper_id = st.query_params.get('paper_id')
+if paper_id is None:
+    st.warning('No paper_id provided in URL.')
+    st.stop()  # stop further execution
 
 st.set_page_config(page_title='Curation Details', layout='wide')
 left, center, right = st.columns([2, 4, 2])

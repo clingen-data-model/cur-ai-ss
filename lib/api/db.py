@@ -48,7 +48,7 @@ def get_session() -> Generator[Session, None, None]:
 
 
 @contextmanager
-def session_scope():
+def session_scope() -> Generator[Session, None, None]:
     # Usable as a context manager in standard python code
     gen = get_session()
     session = next(gen)
