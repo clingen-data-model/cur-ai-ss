@@ -83,6 +83,7 @@ follow_imports = "skip"
 omit = [
     "test/*",
     "bin/*",
+    "lib/bin/*"
 ]
 
 [tool.pytest.ini_options]

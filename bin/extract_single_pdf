@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-uv run python3 -m 'bin.extract_single_pdf' "$@"
+uv run python3 -m 'lib.bin.extract_single_pdf' "$@"
