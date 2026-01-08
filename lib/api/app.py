@@ -159,8 +159,8 @@ def update_status(
 def list_papers(
     extraction_status: ExtractionStatus | None = None,
     session: Session = Depends(get_session),
-) -> list[PaperResp]:
+) -> Any:
     query = session.query(PaperDB)
     if extraction_status is not None:
         query = query.filter(PaperDB.extraction_status == extraction_status)
-    return [PaperResp.from_orm(p) for p in query.all()]
+    return query.all()
