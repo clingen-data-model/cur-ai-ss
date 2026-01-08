@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-uv run python3 -m 'bin.worker' "$@"
+uv run python3 -m 'lib.bin.worker' "$@"
