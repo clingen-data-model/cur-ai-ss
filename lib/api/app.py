@@ -1,6 +1,7 @@
 import traceback
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import AsyncGenerator
 
 from fastapi import (
     Body,
@@ -18,6 +19,8 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
+from starlette.middleware.base import RequestResponseEndpoint
+from starlette.responses import Response
 
 from lib.api.db import get_engine, get_session
 from lib.evagg.pdf.thumbnail import pdf_first_page_to_thumbnail_pymupdf_bytes
@@ -26,7 +29,7 @@ from lib.models import Base, ExtractionStatus, PaperDB, PaperResp
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     engine = get_engine()
     session = get_session()
     Base.metadata.create_all(bind=engine)
@@ -55,7 +58,9 @@ app.add_middleware(
 
 
 @app.middleware('http')
-async def log_exceptions_middleware(request: Request, call_next):
+async def log_exceptions_middleware(
+    request: Request, call_next: RequestResponseEndpoint
+) -> Response:
     try:
         response = await call_next(request)
         # Optionally log 5xx responses
@@ -133,7 +138,7 @@ def update_status(
     paper_id: str,
     extraction_status: ExtractionStatus = Body(..., embed=True),
     session: Session = Depends(get_session),
-):
+) -> PaperResp:
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
         raise HTTPException(
@@ -158,4 +163,4 @@ def list_papers(
     query = session.query(PaperDB)
     if extraction_status:
         query = query.filter(PaperDB.extraction_status == extraction_status)
-    return query.all()
+    return [PaperResp.from_orm(p) for p in query.all()]

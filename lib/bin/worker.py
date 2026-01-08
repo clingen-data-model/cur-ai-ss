@@ -46,7 +46,9 @@ def run_evagg_app(paper_id: str) -> None:
                 raise
 
 
-def mark_paper_as_extraction_status(paper_id: str, extraction_status: ExtractionStatus) -> None:
+def mark_paper_as_extraction_status(
+    paper_id: str, extraction_status: ExtractionStatus
+) -> None:
     if paper_id:
         with session_scope() as session:
             session.execute(
