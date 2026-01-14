@@ -1,5 +1,6 @@
 import os
 from enum import Enum
+from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
 
@@ -65,13 +66,10 @@ class Env(BaseSettings):
     def log_dir(self) -> Path:
         return Path(self.CUR_AI_SS_ROOT) / self.LOG_OUT_DIR
 
-
     def init_dirs(self) -> None:
         root = Path(self.CUR_AI_SS_ROOT)
         if not root.is_absolute():
-            raise RuntimeError(
-                f"CUR_AI_SS_ROOT must be an absolute path: {root}"
-            )
+            raise RuntimeError(f'CUR_AI_SS_ROOT must be an absolute path: {root}')
         for p in (
             root,
             self.sqlite_dir,
