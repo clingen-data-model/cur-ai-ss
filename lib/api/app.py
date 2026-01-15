@@ -27,6 +27,7 @@ from lib.evagg.pdf.thumbnail import pdf_first_page_to_thumbnail_pymupdf_bytes
 from lib.evagg.types.base import Paper
 from lib.models import Base, ExtractionStatus, PaperDB, PaperResp
 
+from lib.evagg.utils.environment import env
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -41,8 +42,8 @@ app = FastAPI(title='PDF Extracting Jobs API', lifespan=lifespan)
 
 # Static File Handling
 app.mount(
-    '/var/cur-ai-ss',  # URL path
-    StaticFiles(directory='/var/cur-ai-ss', html=False),
+    env.CUR_AI_SS_ROOT,  # URL path
+    StaticFiles(directory=env.CUR_AI_SS_ROOT html=False),
     name='cur-ai-ss',
 )
 app.add_middleware(

@@ -64,7 +64,7 @@ class Env(BaseSettings):
 
     @property
     def log_dir(self) -> Path:
-        return Path(self.CUR_AI_SS_ROOT) / self.LOG_OUT_DIR
+        return Path(self.CUR_AI_SS_ROOT) / self.LOG_DIR
 
     def init_dirs(self) -> None:
         root = Path(self.CUR_AI_SS_ROOT)
