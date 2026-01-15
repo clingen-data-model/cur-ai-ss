@@ -37,7 +37,9 @@ startxref
 
 def test_queue_new_paper(client, test_pdf):
     response = client.put(
-        '/papers', files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+        '/papers',
+        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},  # <- add this
     )
     assert response.status_code == 201
     data = response.json()
@@ -49,10 +51,14 @@ def test_queue_new_paper(client, test_pdf):
 def test_queue_existing_paper_fails(client, test_pdf):
     # Second upload: same content/name triggers conflict
     response = client.put(
-        '/papers', files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+        '/papers',
+        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
     )
     response2 = client.put(
-        '/papers', files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+        '/papers',
+        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
     )
     assert response2.status_code == 409
     assert response2.json()['detail'] == 'Paper extraction already queued'
@@ -60,7 +66,9 @@ def test_queue_existing_paper_fails(client, test_pdf):
 
 def test_get_paper_success(client, test_pdf):
     upload_response = client.put(
-        '/papers', files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+        '/papers',
+        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
     )
     assert upload_response.status_code == 201
     data_upload = upload_response.json()
@@ -81,7 +89,9 @@ def test_get_paper_not_found(client):
 
 def test_update_paper_extraction_status(client, test_pdf):
     response = client.put(
-        '/papers', files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+        '/papers',
+        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
     )
     data = response.json()
     with session_scope() as sess:
@@ -114,7 +124,9 @@ def test_update_paper_extraction_status(client, test_pdf):
 
 def test_list_paper(client, test_pdf):
     response = client.put(
-        '/papers', files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+        '/papers',
+        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
     )
     response2 = client.put(
         '/papers',
@@ -125,6 +137,7 @@ def test_list_paper(client, test_pdf):
                 'application/pdf',
             )
         },
+        data={'gene_symbol': 'BRCA1'},
     )
     response = client.get('/papers')
     assert response.status_code == 200
@@ -134,7 +147,9 @@ def test_list_paper(client, test_pdf):
 
 def test_list_papers_filtered_by_status(client, test_pdf):
     response = client.put(
-        '/papers', files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+        '/papers',
+        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
     )
     response2 = client.put(
         '/papers',
@@ -145,6 +160,7 @@ def test_list_papers_filtered_by_status(client, test_pdf):
                 'application/pdf',
             )
         },
+        data={'gene_symbol': 'BRCA1'},
     )
     response = client.get(
         '/papers', params={'extraction_status': ExtractionStatus.QUEUED.value}
@@ -161,7 +177,9 @@ def test_delete_paper(client, test_pdf):
     assert response.status_code == 204
 
     response2 = client.put(
-        '/papers', files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+        '/papers',
+        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
     )
     response3 = client.delete(
         f'/papers/{response2.json()["id"]}',

@@ -43,6 +43,10 @@ def get_session() -> Generator[Session, None, None]:
     session: Session = session_local()
     try:
         yield session
+        session.commit()
+    except:
+        session.rollback()
+        raise
     finally:
         session.close()
 

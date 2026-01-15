@@ -26,7 +26,7 @@ from lib.api.db import get_engine, get_session
 from lib.evagg.pdf.thumbnail import pdf_first_page_to_thumbnail_pymupdf_bytes
 from lib.evagg.types.base import Paper
 from lib.evagg.utils.environment import env
-from lib.models import Base, ExtractionStatus, PaperDB, PaperResp
+from lib.models import Base, ExtractionStatus, PaperDB, PaperResp, CurationDB
 
 
 @asynccontextmanager
@@ -88,6 +88,7 @@ def get_status() -> dict[str, str]:
 
 @app.put('/papers', response_model=PaperResp, status_code=status.HTTP_201_CREATED)
 def put_paper(
+    gene_symbol: str = Form(...),
     uploaded_file: UploadFile = File(...),
     session: Session = Depends(get_session),
 ) -> Any:
@@ -103,6 +104,13 @@ def put_paper(
             status_code=status.HTTP_409_CONFLICT,
             detail=f'Paper extraction already {paper_db.extraction_status.value.lower()}',
         )
+
+    # Add gene symbol to curations table if not yet exist
+    curation = session.get(CurationDB, gene_symbol)
+    if not curation:
+        curation = CurationDB(gene_symbol=gene_symbol)
+        session.add(curation)
+
     else:
         paper.pdf_raw_path.parent.mkdir(parents=True, exist_ok=True)
         with open(paper.pdf_raw_path, 'wb') as f:
@@ -111,11 +119,11 @@ def put_paper(
             fp.write(pdf_first_page_to_thumbnail_pymupdf_bytes(content))
         paper_db = PaperDB(
             id=paper.id,
+            gene_symbol=gene_symbol,
             filename=uploaded_file.filename,
             extraction_status=ExtractionStatus.QUEUED,
         )
         session.add(paper_db)
-    session.commit()
     session.refresh(paper_db)
     return paper_db
 
@@ -136,7 +144,6 @@ def delete_paper(paper_id: str, session: Session = Depends(get_session)) -> None
     if not paper_db:
         return
     session.delete(paper_db)
-    session.commit()
 
 
 @app.patch('/papers/{paper_id}', response_model=PaperResp)
@@ -156,7 +163,6 @@ def update_status(
             detail=f'Status is already {extraction_status.value}',
         )
     paper_db.extraction_status = extraction_status
-    session.commit()
     session.refresh(paper_db)
     return paper_db
 
