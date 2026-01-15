@@ -36,6 +36,9 @@ services:
     volumes:
       - ${HOST_DATA_DIR}:/var/cur-ai-ss
     restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
 
   worker:
     build:
@@ -50,3 +53,6 @@ services:
     volumes:
       - ${HOST_DATA_DIR}:/var/cur-ai-ss
     restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
