@@ -29,6 +29,7 @@ from lib.models import Base, ExtractionStatus, PaperDB, PaperResp
 
 from lib.evagg.utils.environment import env
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     engine = get_engine()
@@ -80,9 +81,11 @@ async def log_exceptions_middleware(
             content={'detail': 'Internal server error'},
         )
 
-@app.get("/status", tags=["health"])
+
+@app.get('/status', tags=['health'])
 def get_status():
-    return {"status": "ok"}
+    return {'status': 'ok'}
+
 
 @app.put('/papers', response_model=PaperResp, status_code=status.HTTP_201_CREATED)
 def put_paper(
