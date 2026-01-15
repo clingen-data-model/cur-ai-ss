@@ -26,7 +26,7 @@ from lib.api.db import get_engine, get_session
 from lib.evagg.pdf.thumbnail import pdf_first_page_to_thumbnail_pymupdf_bytes
 from lib.evagg.types.base import Paper
 from lib.evagg.utils.environment import env
-from lib.models import Base, ExtractionStatus, PaperDB, PaperResp, CurationDB
+from lib.models import Base, CurationDB, ExtractionStatus, PaperDB, PaperResp
 
 
 @asynccontextmanager
@@ -96,6 +96,13 @@ def put_paper(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail='Only PDF files are allowed'
         )
+
+    # Add gene symbol to curations table if not yet exist
+    curation = session.get(CurationDB, gene_symbol)
+    if not curation:
+        curation = CurationDB(gene_symbol=gene_symbol)
+        session.add(curation)
+
     content = uploaded_file.file.read()
     paper = Paper.from_content(content)
     paper_db = session.get(PaperDB, paper.id)
@@ -104,13 +111,6 @@ def put_paper(
             status_code=status.HTTP_409_CONFLICT,
             detail=f'Paper extraction already {paper_db.extraction_status.value.lower()}',
         )
-
-    # Add gene symbol to curations table if not yet exist
-    curation = session.get(CurationDB, gene_symbol)
-    if not curation:
-        curation = CurationDB(gene_symbol=gene_symbol)
-        session.add(curation)
-
     else:
         paper.pdf_raw_path.parent.mkdir(parents=True, exist_ok=True)
         with open(paper.pdf_raw_path, 'wb') as f:
@@ -124,7 +124,6 @@ def put_paper(
             extraction_status=ExtractionStatus.QUEUED,
         )
         session.add(paper_db)
-    session.refresh(paper_db)
     return paper_db
 
 

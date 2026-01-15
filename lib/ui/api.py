@@ -35,6 +35,7 @@ def put_paper(
 ) -> PaperResp:
     resp = requests.put(
         f'http://{env.API_HOSTNAME}:{env.API_PORT}/papers',
+        data={'gene_symbol': 'BRCA1'},
         files={
             'uploaded_file': (
                 uploaded_file.name,

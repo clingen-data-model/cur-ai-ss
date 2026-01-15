@@ -3,12 +3,19 @@ from enum import Enum
 from pydantic import BaseModel
 from sqlalchemy import (
     Column,
+    ForeignKey,
     String,
 )
 from sqlalchemy import (
     Enum as SQLEnum,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, declarative_base, mapped_column
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    declarative_base,
+    mapped_column,
+    relationship,
+)
 
 
 class Base(DeclarativeBase):
@@ -26,7 +33,7 @@ class CurationDB(Base):
 
     gene_symbol: Mapped[str] = mapped_column(String, primary_key=True, index=True)
     papers: Mapped[list['PaperDB']] = relationship(
-        back_populates='gene',
+        'PaperDB',
         cascade='all, delete-orphan',
     )
 
