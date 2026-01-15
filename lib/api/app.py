@@ -82,7 +82,7 @@ async def log_exceptions_middleware(
 
 
 @app.get('/status', tags=['health'])
-def get_status():
+def get_status() -> dict[str, str]:
     return {'status': 'ok'}
 
 
