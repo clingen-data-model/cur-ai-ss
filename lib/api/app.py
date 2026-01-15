@@ -80,6 +80,9 @@ async def log_exceptions_middleware(
             content={'detail': 'Internal server error'},
         )
 
+@app.get("/status", tags=["health"])
+def get_status():
+    return {"status": "ok"}
 
 @app.put('/papers', response_model=PaperResp, status_code=status.HTTP_201_CREATED)
 def put_paper(

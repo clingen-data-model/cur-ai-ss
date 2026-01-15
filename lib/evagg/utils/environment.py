@@ -34,7 +34,7 @@ class Env(BaseSettings):
     LOG_DIR: str = 'logs'
 
     # API
-    API_ENDPOINT: str = 'localhost'
+    API_HOSTNAME: str = 'localhost'
     API_PORT: int = 8000
 
     @model_validator(mode='after')
@@ -81,3 +81,4 @@ class Env(BaseSettings):
 
 
 env = Env()  # type: ignore[call-arg]
+env.init_dirs()

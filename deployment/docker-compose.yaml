@@ -1,0 +1,49 @@
+version: "3.9"
+
+services:
+  api:
+    image: cur-ai-ss-api:latest
+    container_name: cur-ai-ss-api
+    ports:
+      - "8000:8000"
+    environment:
+      CUR_AI_SS_ROOT: /var/cur-ai-ss
+    volumes:
+      - cur-ai-ss-data:/var/cur-ai-ss
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/status"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  ui:
+    image: cur-ai-ss-ui:latest
+    container_name: cur-ai-ss-ui
+    ports:
+      - "8001:8001"
+    environment:
+      CUR_AI_SS_ROOT: /var/cur-ai-ss
+      API_HOSTNAME: api
+    depends_on:
+      api:
+        condition: service_healthy
+    volumes:
+      - cur-ai-ss-data:/var/cur-ai-ss
+    restart: unless-stopped
+
+  worker:
+    image: cur-ai-ss-worker:latest
+    container_name: cur-ai-ss-worker
+    environment:
+      CUR_AI_SS_ROOT: /var/cur-ai-ss
+      API_HOSTNAME: api
+    depends_on:
+      api:
+        condition: service_healthy
+    volumes:
+      - cur-ai-ss-data:/var/cur-ai-ss
+    restart: unless-stopped
+
+volumes:
+  cur-ai-ss-data:

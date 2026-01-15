@@ -21,5 +21,4 @@ ENV CUR_AI_SS_ROOT=/var/cur-ai-ss
 # Expose the API port
 EXPOSE 8000
 
-# Run the API server
 ENTRYPOINT ["./bin/worker"]
