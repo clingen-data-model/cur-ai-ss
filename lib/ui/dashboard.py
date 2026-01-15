@@ -4,9 +4,10 @@ import pandas as pd
 import requests
 import streamlit as st
 
-from app.models import ExtractionStatus, PaperResp
-from app.streamlit.api import FASTAPI_HOST, get_http_error_detail, get_papers, put_paper
 from lib.evagg.types.base import Paper
+from lib.evagg.utils.environment import env
+from lib.models import ExtractionStatus, PaperResp
+from lib.ui.api import get_http_error_detail, get_papers, put_paper
 
 st.set_page_config(page_title='Papers Dashboard', layout='wide')
 left, center, right = st.columns([2, 3, 2])
@@ -29,7 +30,7 @@ with center:
                 }
                 df = pd.DataFrame([p.model_dump() for p in paper_resps])
                 df['thumbnail_path'] = df['id'].map(
-                    lambda paper_id: f'{FASTAPI_HOST}{papers_by_id[paper_id].pdf_thumbnail_path}'
+                    lambda paper_id: f'http://{env.API_ENDPOINT}:{env.API_PORT}{papers_by_id[paper_id].pdf_thumbnail_path}'  # note the leading slash
                 )
                 df['title'] = df.apply(
                     lambda row: f'/details?paper_id={row["id"]}#{papers_by_id[row["id"]].title or QUEUED_EXTRACTION_TEXT}',

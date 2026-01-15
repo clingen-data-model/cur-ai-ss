@@ -8,9 +8,11 @@ from sqlalchemy import (
 from sqlalchemy import (
     Enum as SQLEnum,
 )
-from sqlalchemy.orm import declarative_base
+from sqlalchemy.orm import DeclarativeBase, Mapped, declarative_base, mapped_column
 
-Base = declarative_base()
+
+class Base(DeclarativeBase):
+    pass
 
 
 class ExtractionStatus(str, Enum):
@@ -22,9 +24,9 @@ class ExtractionStatus(str, Enum):
 class PaperDB(Base):
     __tablename__ = 'jobs'
 
-    id = Column(String, primary_key=True, index=True)
-    filename = Column(String(255), nullable=False, index=True)
-    extraction_status = Column(
+    id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    extraction_status: Mapped[ExtractionStatus] = mapped_column(
         SQLEnum(ExtractionStatus),
         nullable=False,
         server_default=ExtractionStatus.QUEUED.value,
