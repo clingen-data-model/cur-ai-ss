@@ -59,6 +59,6 @@ def requeue_paper(paper_id: str) -> PaperResp:
 
 def delete_paper(paper_id: str) -> None:
     resp = requests.delete(
-        f'{env.API_HOSTNAME}:{env.API_PORT}/papers/{paper_id}',
+        f'http://{env.API_HOSTNAME}:{env.API_PORT}/papers/{paper_id}',
     )
     resp.raise_for_status()
