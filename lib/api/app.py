@@ -43,7 +43,7 @@ app = FastAPI(title='PDF Extracting Jobs API', lifespan=lifespan)
 # Static File Handling
 app.mount(
     env.CUR_AI_SS_ROOT,  # URL path
-    StaticFiles(directory=env.CUR_AI_SS_ROOT html=False),
+    StaticFiles(directory=env.CUR_AI_SS_ROOT, html=False),
     name='cur-ai-ss',
 )
 app.add_middleware(
