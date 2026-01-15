@@ -2,14 +2,18 @@ version: "3.9"
 
 services:
   api:
-    image: cur-ai-ss-api:latest
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile.api
     container_name: cur-ai-ss-api
     ports:
       - "8000:8000"
     environment:
       CUR_AI_SS_ROOT: /var/cur-ai-ss
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_API_DEPLOYMENT: ${OPENAI_API_DEPLOYMENT}
     volumes:
-      - cur-ai-ss-data:/var/cur-ai-ss
+      - ${HOST_DATA_DIR}:/var/cur-ai-ss
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/status"]
@@ -18,32 +22,31 @@ services:
       retries: 3
 
   ui:
-    image: cur-ai-ss-ui:latest
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile.ui
     container_name: cur-ai-ss-ui
     ports:
       - "8001:8001"
     environment:
       CUR_AI_SS_ROOT: /var/cur-ai-ss
       API_HOSTNAME: api
-    depends_on:
-      api:
-        condition: service_healthy
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_API_DEPLOYMENT: ${OPENAI_API_DEPLOYMENT}
     volumes:
-      - cur-ai-ss-data:/var/cur-ai-ss
+      - ${HOST_DATA_DIR}:/var/cur-ai-ss
     restart: unless-stopped
 
   worker:
-    image: cur-ai-ss-worker:latest
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile.worker
     container_name: cur-ai-ss-worker
     environment:
       CUR_AI_SS_ROOT: /var/cur-ai-ss
       API_HOSTNAME: api
-    depends_on:
-      api:
-        condition: service_healthy
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_API_DEPLOYMENT: ${OPENAI_API_DEPLOYMENT}
     volumes:
-      - cur-ai-ss-data:/var/cur-ai-ss
+      - ${HOST_DATA_DIR}:/var/cur-ai-ss
     restart: unless-stopped
-
-volumes:
-  cur-ai-ss-data:
