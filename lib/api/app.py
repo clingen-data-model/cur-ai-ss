@@ -25,9 +25,8 @@ from starlette.responses import Response
 from lib.api.db import get_engine, get_session
 from lib.evagg.pdf.thumbnail import pdf_first_page_to_thumbnail_pymupdf_bytes
 from lib.evagg.types.base import Paper
-from lib.models import Base, ExtractionStatus, PaperDB, PaperResp
-
 from lib.evagg.utils.environment import env
+from lib.models import Base, ExtractionStatus, PaperDB, PaperResp
 
 
 @asynccontextmanager
