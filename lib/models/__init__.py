@@ -71,6 +71,10 @@ class PaperDB(Base):
         server_default=ExtractionStatus.QUEUED.value,
     )
 
+    @property
+    def gene_symbol(self) -> str:
+        return self.gene.symbol
+
 
 class PaperResp(BaseModel):
     id: str

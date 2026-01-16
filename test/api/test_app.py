@@ -5,14 +5,19 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select, update
 
 from lib.api.app import app
-from lib.api.db import session_scope
+from lib.api.db import session_scope, get_session
 from lib.models import ExtractionStatus, GeneDB, PaperDB
 
 
 @pytest.fixture
-def client(test_db):
+def client(db_session):
+    def override_get_session():
+        yield db_session
+
+    app.dependency_overrides[get_session] = override_get_session
     with TestClient(app) as client:
         yield client
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture
@@ -36,18 +41,20 @@ startxref
 
 
 @pytest.fixture
-def seeded_genes(session):
-    session.add_all(
+def seeded_genes(db_session):
+    db_session.add_all(
         [
             GeneDB(symbol='BRCA1'),
             GeneDB(symbol='BRCA2'),
             GeneDB(symbol='TP53'),
         ]
     )
-    session.commit()
+    db_session.flush()
 
 
-def test_queue_new_paper(client, test_pdf, seeded_genes):
+def test_queue_new_paper(client, test_pdf, db_session, seeded_genes):
+    count = db_session.scalar(select(func.count(GeneDB.id)))
+    assert count == 3
     response = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
@@ -58,6 +65,8 @@ def test_queue_new_paper(client, test_pdf, seeded_genes):
     assert data['id']  # Paper ID will be generated from content
     assert data['extraction_status'] == ExtractionStatus.QUEUED.value
     assert data['filename'] == 'job-1.pdf'
+    count = db_session.scalar(select(func.count(PaperDB.id)))
+    assert count == 1
 
 
 def test_queue_existing_paper_fails(client, test_pdf, seeded_genes):
@@ -99,21 +108,18 @@ def test_get_paper_not_found(client):
     assert response.json()['detail'] == 'Paper not found'
 
 
-def test_update_paper_extraction_status(client, test_pdf, seeded_genes):
+def test_update_paper_extraction_status(client, test_pdf, db_session, seeded_genes):
     response = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
         data={'gene_symbol': 'BRCA1'},
     )
     data = response.json()
-    with session_scope() as sess:
-        sess.execute(
-            update(PaperDB)
-            .where(PaperDB.id == data['id'])
-            .values(extraction_status=ExtractionStatus.FAILED)
-        )
-        sess.commit()
-
+    db_session.execute(
+        update(PaperDB)
+        .where(PaperDB.id == data['id'])
+        .values(extraction_status=ExtractionStatus.FAILED)
+    )
     response2 = client.patch(
         f'/papers/{data["id"]}',
         json={'extraction_status': ExtractionStatus.QUEUED.value},
@@ -157,7 +163,7 @@ def test_list_paper(client, test_pdf, seeded_genes):
     assert len(jobs) == 2
 
 
-def test_list_papers_filtered_by_status(client, test_pdf, seeded_genes):
+def test_list_papers_filtered_by_status(client, test_pdf, db_session, seeded_genes):
     response = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
@@ -182,7 +188,7 @@ def test_list_papers_filtered_by_status(client, test_pdf, seeded_genes):
     assert all(job['extraction_status'] == ExtractionStatus.QUEUED for job in jobs)
 
 
-def test_delete_paper(client, test_pdf, seeded_genes):
+def test_delete_paper(client, test_pdf, db_session, seeded_genes):
     response = client.delete(
         f'/papers/abcd',
     )
@@ -197,6 +203,5 @@ def test_delete_paper(client, test_pdf, seeded_genes):
         f'/papers/{response2.json()["id"]}',
     )
     assert response3.status_code == 204
-    with session_scope() as sess:
-        result = sess.execute(select(func.count(PaperDB.id)))
-        assert result.scalar_one() == 0
+    result = db_session.execute(select(func.count(PaperDB.id)))
+    assert result.scalar_one() == 0

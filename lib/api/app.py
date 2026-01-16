@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import delete, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
@@ -97,7 +97,6 @@ def put_paper(
             status_code=status.HTTP_400_BAD_REQUEST, detail='Only PDF files are allowed'
         )
 
-    # Add gene symbol to curations table if not yet exist
     gene = session.execute(
         select(GeneDB).where(GeneDB.symbol == gene_symbol)
     ).scalar_one_or_none()
@@ -108,7 +107,12 @@ def put_paper(
 
     content = uploaded_file.file.read()
     paper = Paper.from_content(content)
-    paper_db = session.get(PaperDB, paper.id)
+    paper_db = (
+        session.query(PaperDB)
+        .options(selectinload(PaperDB.gene))
+        .filter(PaperDB.id == paper.id)
+        .one_or_none()
+    )
     if paper_db:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -122,17 +126,23 @@ def put_paper(
             fp.write(pdf_first_page_to_thumbnail_pymupdf_bytes(content))
         paper_db = PaperDB(
             id=paper.id,
-            gene_symbol=gene_symbol,
             filename=uploaded_file.filename,
             extraction_status=ExtractionStatus.QUEUED,
         )
+        paper_db.gene = gene
         session.add(paper_db)
+        session.flush()
     return paper_db
 
 
 @app.get('/papers/{paper_id}', response_model=PaperResp)
 def get_paper(paper_id: str, session: Session = Depends(get_session)) -> Any:
-    paper_db = session.get(PaperDB, paper_id)
+    paper_db = (
+        session.query(PaperDB)
+        .options(selectinload(PaperDB.gene))
+        .filter(PaperDB.id == paper_id)
+        .one_or_none()
+    )
     if not paper_db:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
@@ -146,6 +156,7 @@ def delete_paper(paper_id: str, session: Session = Depends(get_session)) -> None
     if not paper_db:
         return
     session.delete(paper_db)
+    session.flush()
 
 
 @app.patch('/papers/{paper_id}', response_model=PaperResp)
@@ -154,7 +165,13 @@ def update_status(
     extraction_status: ExtractionStatus = Body(..., embed=True),
     session: Session = Depends(get_session),
 ) -> Any:
-    paper_db = session.get(PaperDB, paper_id)
+    paper_db = (
+        session.query(PaperDB)
+        .options(selectinload(PaperDB.gene))
+        .filter(PaperDB.id == paper_id)
+        .one_or_none()
+    )
+
     if not paper_db:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
@@ -173,7 +190,8 @@ def list_papers(
     extraction_status: ExtractionStatus | None = None,
     session: Session = Depends(get_session),
 ) -> Any:
-    query = session.query(PaperDB)
+    query = session.query(PaperDB).options(selectinload(PaperDB.gene))
+
     if extraction_status is not None:
         query = query.filter(PaperDB.extraction_status == extraction_status)
     return query.all()
