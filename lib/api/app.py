@@ -162,7 +162,6 @@ def update_status(
             detail=f'Status is already {extraction_status.value}',
         )
     paper_db.extraction_status = extraction_status
-    session.refresh(paper_db)
     return paper_db
 
 
