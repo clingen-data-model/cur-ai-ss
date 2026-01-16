@@ -17,7 +17,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
@@ -26,7 +26,7 @@ from lib.api.db import get_engine, get_session
 from lib.evagg.pdf.thumbnail import pdf_first_page_to_thumbnail_pymupdf_bytes
 from lib.evagg.types.base import Paper
 from lib.evagg.utils.environment import env
-from lib.models import Base, CurationDB, ExtractionStatus, PaperDB, PaperResp
+from lib.models import Base, ExtractionStatus, GeneDB, PaperDB, PaperResp
 
 
 @asynccontextmanager
@@ -98,10 +98,13 @@ def put_paper(
         )
 
     # Add gene symbol to curations table if not yet exist
-    curation = session.get(CurationDB, gene_symbol)
-    if not curation:
-        curation = CurationDB(gene_symbol=gene_symbol)
-        session.add(curation)
+    gene = session.execute(
+        select(GeneDB).where(GeneDB.symbol == gene_symbol)
+    ).scalar_one_or_none()
+    if not gene:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f'Gene {gene} not found'
+        )
 
     content = uploaded_file.file.read()
     paper = Paper.from_content(content)

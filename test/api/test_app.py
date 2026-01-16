@@ -6,7 +6,7 @@ from sqlalchemy import func, select, update
 
 from lib.api.app import app
 from lib.api.db import session_scope
-from lib.models import ExtractionStatus, PaperDB
+from lib.models import ExtractionStatus, GeneDB, PaperDB
 
 
 @pytest.fixture
@@ -35,7 +35,19 @@ startxref
 %%EOF""")
 
 
-def test_queue_new_paper(client, test_pdf):
+@pytest.fixture
+def seeded_genes(session):
+    session.add_all(
+        [
+            GeneDB(symbol='BRCA1'),
+            GeneDB(symbol='BRCA2'),
+            GeneDB(symbol='TP53'),
+        ]
+    )
+    session.commit()
+
+
+def test_queue_new_paper(client, test_pdf, seeded_genes):
     response = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
@@ -48,7 +60,7 @@ def test_queue_new_paper(client, test_pdf):
     assert data['filename'] == 'job-1.pdf'
 
 
-def test_queue_existing_paper_fails(client, test_pdf):
+def test_queue_existing_paper_fails(client, test_pdf, seeded_genes):
     # Second upload: same content/name triggers conflict
     response = client.put(
         '/papers',
@@ -64,7 +76,7 @@ def test_queue_existing_paper_fails(client, test_pdf):
     assert response2.json()['detail'] == 'Paper extraction already queued'
 
 
-def test_get_paper_success(client, test_pdf):
+def test_get_paper_success(client, test_pdf, seeded_genes):
     upload_response = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
@@ -87,7 +99,7 @@ def test_get_paper_not_found(client):
     assert response.json()['detail'] == 'Paper not found'
 
 
-def test_update_paper_extraction_status(client, test_pdf):
+def test_update_paper_extraction_status(client, test_pdf, seeded_genes):
     response = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
@@ -122,7 +134,7 @@ def test_update_paper_extraction_status(client, test_pdf):
     assert response4.status_code == 404
 
 
-def test_list_paper(client, test_pdf):
+def test_list_paper(client, test_pdf, seeded_genes):
     response = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
@@ -145,7 +157,7 @@ def test_list_paper(client, test_pdf):
     assert len(jobs) == 2
 
 
-def test_list_papers_filtered_by_status(client, test_pdf):
+def test_list_papers_filtered_by_status(client, test_pdf, seeded_genes):
     response = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
@@ -170,7 +182,7 @@ def test_list_papers_filtered_by_status(client, test_pdf):
     assert all(job['extraction_status'] == ExtractionStatus.QUEUED for job in jobs)
 
 
-def test_delete_paper(client, test_pdf):
+def test_delete_paper(client, test_pdf, seeded_genes):
     response = client.delete(
         f'/papers/abcd',
     )

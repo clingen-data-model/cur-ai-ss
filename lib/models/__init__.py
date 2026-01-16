@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from sqlalchemy import (
     Column,
     ForeignKey,
+    Integer,
     String,
 )
 from sqlalchemy import (
@@ -28,12 +29,23 @@ class ExtractionStatus(str, Enum):
     QUEUED = 'QUEUED'
 
 
-class CurationDB(Base):
-    __tablename__ = 'curations'
+class GeneDB(Base):
+    __tablename__ = 'genes'
 
-    gene_symbol: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        autoincrement=True,
+    )
+    symbol: Mapped[str] = mapped_column(
+        String,
+        nullable=False,
+        unique=True,
+        index=True,
+    )
     papers: Mapped[list['PaperDB']] = relationship(
         'PaperDB',
+        back_populates='gene',
         cascade='all, delete-orphan',
     )
 
@@ -42,11 +54,15 @@ class PaperDB(Base):
     __tablename__ = 'papers'
 
     id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
-    gene_symbol: Mapped[str] = mapped_column(
+    gene_id: Mapped[str] = mapped_column(
         String,
-        ForeignKey('curations.gene_symbol', ondelete='CASCADE'),
+        ForeignKey('genes.id', ondelete='CASCADE'),
         index=True,
         nullable=False,
+    )
+    gene: Mapped['GeneDB'] = relationship(
+        'GeneDB',
+        back_populates='papers',
     )
     filename: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     extraction_status: Mapped[ExtractionStatus] = mapped_column(
