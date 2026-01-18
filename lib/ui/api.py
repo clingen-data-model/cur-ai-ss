@@ -4,7 +4,7 @@ from pydantic import TypeAdapter
 
 from lib.evagg.types.base import Paper
 from lib.evagg.utils.environment import env
-from lib.models import ExtractionStatus, PaperResp
+from lib.models import ExtractionStatus, PaperResp, GeneResp
 
 
 def get_http_error_detail(e: requests.HTTPError) -> str:
@@ -23,6 +23,10 @@ def get_papers() -> list[PaperResp]:
     resp.raise_for_status()
     return TypeAdapter(list[PaperResp]).validate_python(resp.json())
 
+def get_genes() -> list[GeneResp]:
+    resp = requests.get(f'http://{env.API_HOSTNAME}:{env.API_PORT}/genes')
+    resp.raise_for_status()
+    return TypeAdapter(list[GeneResp]).validate_python(resp.json())
 
 def get_paper(paper_id: str) -> PaperResp:
     resp = requests.get(f'http://{env.API_HOSTNAME}:{env.API_PORT}/papers/{paper_id}')
@@ -32,10 +36,11 @@ def get_paper(paper_id: str) -> PaperResp:
 
 def put_paper(
     uploaded_file: streamlit.runtime.uploaded_file_manager.UploadedFile,
+    gene_symbol: str,
 ) -> PaperResp:
     resp = requests.put(
         f'http://{env.API_HOSTNAME}:{env.API_PORT}/papers',
-        data={'gene_symbol': 'BRCA1'},
+        data={'gene_symbol': gene_symbol},
         files={
             'uploaded_file': (
                 uploaded_file.name,

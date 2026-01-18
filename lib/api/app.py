@@ -26,7 +26,7 @@ from lib.api.db import get_engine, get_session
 from lib.evagg.pdf.thumbnail import pdf_first_page_to_thumbnail_pymupdf_bytes
 from lib.evagg.types.base import Paper
 from lib.evagg.utils.environment import env
-from lib.models import Base, ExtractionStatus, GeneDB, PaperDB, PaperResp
+from lib.models import Base, ExtractionStatus, GeneDB, PaperDB, PaperResp, GeneResp
 
 
 @asynccontextmanager
@@ -194,4 +194,11 @@ def list_papers(
 
     if extraction_status is not None:
         query = query.filter(PaperDB.extraction_status == extraction_status)
+    return query.all()
+
+@app.get('/genes', response_model=list[GeneResp])
+def list_genes(
+    session: Session = Depends(get_session),
+) -> Any:
+    query = session.query(GeneDB)
     return query.all()

@@ -19,7 +19,7 @@ if paper_id is None:
     st.stop()  # stop further execution
 
 st.set_page_config(page_title='Curation Details', layout='wide')
-left, center, right = st.columns([2, 4, 2])
+left, center, right = st.columns([1, 5, 1])
 
 with center:
     with st.spinner('Loading paper...'):

@@ -49,6 +49,9 @@ class GeneDB(Base):
         cascade='all, delete-orphan',
     )
 
+class GeneResp(BaseModel):
+    id: int
+    symbol: str
 
 class PaperDB(Base):
     __tablename__ = 'papers'
