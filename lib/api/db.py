@@ -58,7 +58,7 @@ def session_scope() -> Generator[Session, None, None]:
         session = next(gen)
         yield session
     except Exception as exc:
-        gen.throw(exc)
+        gen.throw(exc)  # this triggers the exception above, rolling back!
         raise
     else:
         gen.close()
