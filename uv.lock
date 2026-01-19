@@ -505,7 +505,6 @@ dependencies = [
     { name = "streamlit", extra = ["pdf"] },
     { name = "urllib3" },
     { name = "uvicorn" },
-    { name = "watchdog" },
 ]
 
 [package.dev-dependencies]
@@ -520,6 +519,7 @@ dev = [
     { name = "types-pyyaml" },
     { name = "types-requests" },
     { name = "types-retry" },
+    { name = "watchdog" },
 ]
 
 [package.metadata]
@@ -550,7 +550,6 @@ requires-dist = [
     { name = "streamlit", extras = ["pdf"], specifier = ">=1.52.1" },
     { name = "urllib3", specifier = "==2.2.2" },
     { name = "uvicorn", specifier = ">=0.38.0" },
-    { name = "watchdog", specifier = ">=6.0.0" },
 ]
 
 [package.metadata.requires-dev]
@@ -565,6 +564,7 @@ dev = [
     { name = "types-pyyaml", specifier = "==6.0.12.*" },
     { name = "types-requests", specifier = "==2.32.0.*" },
     { name = "types-retry", specifier = "==0.9.9.*" },
+    { name = "watchdog", specifier = ">=6.0.0" },
 ]
 
 [[package]]
