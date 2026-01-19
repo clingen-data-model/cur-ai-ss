@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select, update
 
 from lib.api.app import app
-from lib.api.db import session_scope, get_session
+from lib.api.db import get_session, session_scope
 from lib.models import ExtractionStatus, GeneDB, PaperDB
 
 

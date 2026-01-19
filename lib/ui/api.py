@@ -4,7 +4,7 @@ from pydantic import TypeAdapter
 
 from lib.evagg.types.base import Paper
 from lib.evagg.utils.environment import env
-from lib.models import ExtractionStatus, PaperResp, GeneResp
+from lib.models import ExtractionStatus, GeneResp, PaperResp
 
 
 def get_http_error_detail(e: requests.HTTPError) -> str:
@@ -23,10 +23,12 @@ def get_papers() -> list[PaperResp]:
     resp.raise_for_status()
     return TypeAdapter(list[PaperResp]).validate_python(resp.json())
 
+
 def get_genes() -> list[GeneResp]:
     resp = requests.get(f'http://{env.API_HOSTNAME}:{env.API_PORT}/genes')
     resp.raise_for_status()
     return TypeAdapter(list[GeneResp]).validate_python(resp.json())
+
 
 def get_paper(paper_id: str) -> PaperResp:
     resp = requests.get(f'http://{env.API_HOSTNAME}:{env.API_PORT}/papers/{paper_id}')

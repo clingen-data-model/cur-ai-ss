@@ -7,7 +7,7 @@ import streamlit as st
 from lib.evagg.types.base import Paper
 from lib.evagg.utils.environment import env
 from lib.models import ExtractionStatus, PaperResp
-from lib.ui.api import get_http_error_detail, get_papers, put_paper, get_genes
+from lib.ui.api import get_genes, get_http_error_detail, get_papers, put_paper
 
 st.set_page_config(page_title='Papers Dashboard', layout='wide')
 left, center, right = st.columns([2, 4, 2])
@@ -21,9 +21,10 @@ if not gene_resps:
     st.error('No genes found, cannot proceed.')
     st.stop()  # stop further execution
 
-@st.dialog("Upload PDF and Select Gene")
+
+@st.dialog('Upload PDF and Select Gene')
 def upload_paper_modal():
-    with st.form("paper"):
+    with st.form('paper'):
         uploaded_file = st.file_uploader(
             'Upload a PDF',
             type=['pdf'],
@@ -32,13 +33,13 @@ def upload_paper_modal():
         gene_symbol = st.selectbox(
             'Select gene',
             options=[gene_resp.symbol for gene_resp in gene_resps],
-            placeholder="Gene Symbol",
+            placeholder='Gene Symbol',
             index=None,
         )
-        submitted = st.form_submit_button("Submit")
+        submitted = st.form_submit_button('Submit')
         if submitted:
             if not uploaded_file or not gene_symbol:
-                st.error("Both an uploaded PDF and a selected gene are required")
+                st.error('Both an uploaded PDF and a selected gene are required')
                 return
             with st.spinner('Uploading PDF...'):
                 try:
@@ -51,10 +52,9 @@ def upload_paper_modal():
                 except Exception as e:
                     st.error(str(e))
 
+
 def render_papers_df(papers_resps: list[PaperResp]) -> None:
-    papers_by_id = {
-        p.id: Paper(id=p.id).with_metadata() for p in paper_resps
-    }
+    papers_by_id = {p.id: Paper(id=p.id).with_metadata() for p in paper_resps}
     df = pd.DataFrame([p.model_dump() for p in paper_resps])
     df['thumbnail_path'] = df['id'].map(
         lambda paper_id: f'http://{env.API_HOSTNAME}:{env.API_PORT}{papers_by_id[paper_id].pdf_thumbnail_path}'  # note the leading slash
@@ -116,6 +116,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
         },
     )
 
+
 with center:
     st.title('📄 Curation AI Assistant Dashboard')
     st.divider()
@@ -133,5 +134,5 @@ with center:
             st.error(str(e))
 
     # Button that triggers the modal
-    if st.button("➕ Add New Curation", width="stretch"):
+    if st.button('➕ Add New Curation', width='stretch'):
         upload_paper_modal()
