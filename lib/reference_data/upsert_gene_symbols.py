@@ -31,7 +31,7 @@ def download_hgnc_symbols() -> list[str]:
     return symbols
 
 
-def sync_genes_via_temp_table(session: Session, symbols: set[str]) -> None:
+def sync_genes_via_temp_table(session: Session, symbols: list[str]) -> None:
     # 1. temp table
     session.execute(
         text("""

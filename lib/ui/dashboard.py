@@ -23,7 +23,7 @@ if not gene_resps:
 
 
 @st.dialog('Upload PDF and Select Gene')
-def upload_paper_modal():
+def upload_paper_modal() -> None:
     with st.form('paper'):
         uploaded_file = st.file_uploader(
             'Upload a PDF',
