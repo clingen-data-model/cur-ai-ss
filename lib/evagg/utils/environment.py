@@ -1,5 +1,6 @@
 import os
 from enum import Enum
+from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
 
@@ -26,13 +27,14 @@ class Env(BaseSettings):
     LOG_LEVEL: LogLevel = LogLevel.INFO
 
     # Directories
-    SQLLITE_DB_DIR: str = '/var/cur-ai-ss/sqllite'
-    EVAGG_DIR: str = '/var/cur-ai-ss/evagg'
-    EXTRACTED_PDF_DIR: str = '/var/cur-ai-ss/extracted_pdfs'
-    LOG_OUT_DIR: str = '/var/cur-ai-ss/logs'
+    CUR_AI_SS_ROOT: str = '/var/cur-ai-ss'
+    SQLLITE_DIR: str = 'sqllite'
+    EVAGG_DIR: str = 'evagg'
+    EXTRACTED_PDF_DIR: str = 'extracted_pdfs'
+    LOG_DIR: str = 'logs'
 
     # API
-    API_ENDPOINT: str = 'localhost'
+    API_HOSTNAME: str = 'localhost'
     API_PORT: int = 8000
 
     @model_validator(mode='after')
@@ -48,5 +50,35 @@ class Env(BaseSettings):
         # Avoid quoting None
         return quote(v) if v else v
 
+    @property
+    def sqlite_dir(self) -> Path:
+        return Path(self.CUR_AI_SS_ROOT) / self.SQLLITE_DIR
+
+    @property
+    def evagg_dir(self) -> Path:
+        return Path(self.CUR_AI_SS_ROOT) / self.EVAGG_DIR
+
+    @property
+    def extracted_pdf_dir(self) -> Path:
+        return Path(self.CUR_AI_SS_ROOT) / self.EXTRACTED_PDF_DIR
+
+    @property
+    def log_dir(self) -> Path:
+        return Path(self.CUR_AI_SS_ROOT) / self.LOG_DIR
+
+    def init_dirs(self) -> None:
+        root = Path(self.CUR_AI_SS_ROOT)
+        if not root.is_absolute():
+            raise RuntimeError(f'CUR_AI_SS_ROOT must be an absolute path: {root}')
+        for p in (
+            root,
+            self.sqlite_dir,
+            self.evagg_dir,
+            self.extracted_pdf_dir,
+            self.log_dir,
+        ):
+            p.mkdir(parents=True, exist_ok=True)
+
 
 env = Env()  # type: ignore[call-arg]
+env.init_dirs()

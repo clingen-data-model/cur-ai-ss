@@ -17,9 +17,9 @@ def get_engine() -> Engine:
     """Return a singleton Engine."""
     global _engine
     if _engine is None:
-        Path(env.SQLLITE_DB_DIR).mkdir(parents=True, exist_ok=True)
+        Path(env.sqlite_dir).mkdir(parents=True, exist_ok=True)
         _engine = create_engine(
-            f'sqlite:///{env.SQLLITE_DB_DIR}/app.db',
+            f'sqlite:///{env.sqlite_dir}/app.db',
             connect_args={'check_same_thread': False},
             pool_pre_ping=True,
         )

@@ -30,7 +30,7 @@ with center:
                 }
                 df = pd.DataFrame([p.model_dump() for p in paper_resps])
                 df['thumbnail_path'] = df['id'].map(
-                    lambda paper_id: f'http://{env.API_ENDPOINT}:{env.API_PORT}{papers_by_id[paper_id].pdf_thumbnail_path}'  # note the leading slash
+                    lambda paper_id: f'http://{env.API_HOSTNAME}:{env.API_PORT}{papers_by_id[paper_id].pdf_thumbnail_path}'  # note the leading slash
                 )
                 df['title'] = df.apply(
                     lambda row: f'/details?paper_id={row["id"]}#{papers_by_id[row["id"]].title or QUEUED_EXTRACTION_TEXT}',

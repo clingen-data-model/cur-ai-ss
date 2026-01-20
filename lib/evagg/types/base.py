@@ -102,15 +102,15 @@ class Paper:
 
     @property
     def evagg_observations_path(self) -> Path:
-        return Path(env.EVAGG_DIR) / self.id / 'observations.json'
+        return env.evagg_dir / self.id / 'observations.json'
 
     @property
     def metadata_json_path(self) -> Path:
-        return Path(env.EVAGG_DIR) / self.id / 'metadata.json'
+        return env.evagg_dir / self.id / 'metadata.json'
 
     @property
     def pdf_dir(self) -> Path:
-        return Path(env.EXTRACTED_PDF_DIR) / self.id
+        return env.evagg_dir / self.id
 
     @property
     def pdf_raw_path(self) -> Path:

@@ -19,13 +19,13 @@ def get_http_error_detail(e: requests.HTTPError) -> str:
 
 
 def get_papers() -> list[PaperResp]:
-    resp = requests.get(f'http://{env.API_ENDPOINT}:{env.API_PORT}/papers')
+    resp = requests.get(f'http://{env.API_HOSTNAME}:{env.API_PORT}/papers')
     resp.raise_for_status()
     return TypeAdapter(list[PaperResp]).validate_python(resp.json())
 
 
 def get_paper(paper_id: str) -> PaperResp:
-    resp = requests.get(f'http://{env.API_ENDPOINT}:{env.API_PORT}/papers/{paper_id}')
+    resp = requests.get(f'http://{env.API_HOSTNAME}:{env.API_PORT}/papers/{paper_id}')
     resp.raise_for_status()
     return PaperResp.model_validate(resp.json())
 
@@ -34,7 +34,7 @@ def put_paper(
     uploaded_file: streamlit.runtime.uploaded_file_manager.UploadedFile,
 ) -> PaperResp:
     resp = requests.put(
-        f'http://{env.API_ENDPOINT}:{env.API_PORT}/papers',
+        f'http://{env.API_HOSTNAME}:{env.API_PORT}/papers',
         files={
             'uploaded_file': (
                 uploaded_file.name,
@@ -50,7 +50,7 @@ def put_paper(
 
 def requeue_paper(paper_id: str) -> PaperResp:
     resp = requests.patch(
-        f'http://{env.API_ENDPOINT}:{env.API_PORT}/papers/{paper_id}',
+        f'http://{env.API_HOSTNAME}:{env.API_PORT}/papers/{paper_id}',
         json={'extraction_status': ExtractionStatus.QUEUED.value},
     )
     resp.raise_for_status()
@@ -59,6 +59,6 @@ def requeue_paper(paper_id: str) -> PaperResp:
 
 def delete_paper(paper_id: str) -> None:
     resp = requests.delete(
-        f'{env.API_ENDPOINT}:{env.API_PORT}/papers/{paper_id}',
+        f'http://{env.API_HOSTNAME}:{env.API_PORT}/papers/{paper_id}',
     )
     resp.raise_for_status()

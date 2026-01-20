@@ -102,7 +102,7 @@ class FileHandler(logging.Handler):
 
         # If console output is enabled, write to file the
         # command-line arguments used to start the program.
-        self._console_log = os.path.join(env.LOG_OUT_DIR, _current_run, 'console.log')
+        self._console_log = os.path.join(env.log_dir, _current_run, 'console.log')
         with open(self._console_log, 'a') as f:
             f.write('ARGS:' + ' '.join(sys.argv) + '\n')
 
@@ -114,7 +114,7 @@ class FileHandler(logging.Handler):
         if record.levelno == PROMPT:
             file_name = str(record.__dict__.get('prompt_tag', PromptTag.PROMPT))
             with open(
-                os.path.join(env.LOG_OUT_DIR, _current_run, f'{file_name}.log'), 'a'
+                os.path.join(env.log_dir, _current_run, f'{file_name}.log'), 'a'
             ) as f:
                 f.write(_format_prompt(record) + '\n')
         if record.levelno != PROMPT or self._prompt_msgs_enabled:
@@ -170,7 +170,7 @@ def init_logger(
     global _current_run
     _current_run = current_run
     os.makedirs(
-        os.path.join(env.LOG_OUT_DIR, _current_run),
+        os.path.join(env.log_dir, _current_run),
         exist_ok=True,
     )
 
