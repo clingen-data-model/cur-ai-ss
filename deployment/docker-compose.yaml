@@ -2,6 +2,7 @@ version: "3.9"
 
 services:
   api:
+    platform: linux/arm64
     build:
       context: ..
       dockerfile: deployment/Dockerfile.api
@@ -22,6 +23,7 @@ services:
       retries: 3
 
   ui:
+    platform: linux/arm64
     build:
       context: ..
       dockerfile: deployment/Dockerfile.ui
@@ -41,6 +43,7 @@ services:
         condition: service_healthy
 
   worker:
+    platform: linux/arm64
     build:
       context: ..
       dockerfile: deployment/Dockerfile.worker

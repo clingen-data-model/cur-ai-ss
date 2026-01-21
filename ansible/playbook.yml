@@ -1,0 +1,125 @@
+# Curator VM Ansible Playbook
+#
+# Usage:
+#   ansible-playbook -i <ssh-host>, playbook.yml
+#
+# Examples:
+#   # Run against an SSH config host named 'curator-vm'
+#   ansible-playbook -i curator-vm, playbook.yml
+#
+#   # With verbose output
+#   ansible-playbook -i curator-vm, playbook.yml -v
+#
+#   # Dry run (check mode)
+#   ansible-playbook -i curator-vm, playbook.yml --check
+#
+# Note: The trailing comma after the hostname is required for single-host inventory.
+#       The SSH host should be pre-configured in ~/.ssh/config with appropriate
+#       User, IdentityFile, and other connection settings.
+
+- name: Configure curator VM
+  hosts: all
+  become: yes
+
+  vars:
+    curator_user: curator
+    app_dir: /home/curator/app
+    compose_src: ../deployment/docker-compose.yaml
+
+  tasks:
+    # --- Package Installation ---
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install podman and dependencies
+      apt:
+        name:
+          - podman
+          - podman-compose
+          - acl  # Required for Ansible become_user with unprivileged users
+        state: present
+
+    # --- User Setup ---
+
+    - name: Create curator user
+      user:
+        name: "{{ curator_user }}"
+        shell: /bin/bash
+        create_home: yes
+      register: curator_user_result
+
+    - name: Enable lingering for curator user
+      command: loginctl enable-linger {{ curator_user }}
+      args:
+        creates: /var/lib/systemd/linger/{{ curator_user }}
+
+    # --- Application Files ---
+
+    - name: Create app directory
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: "{{ curator_user }}"
+        group: "{{ curator_user }}"
+        mode: "0755"
+
+    - name: Copy docker-compose.yaml
+      copy:
+        src: "{{ compose_src }}"
+        dest: "{{ app_dir }}/docker-compose.yaml"
+        owner: "{{ curator_user }}"
+        group: "{{ curator_user }}"
+        mode: "0644"
+      notify: Restart curator-compose
+
+    # --- Systemd User Service ---
+
+    - name: Create systemd user config directory
+      file:
+        path: /home/{{ curator_user }}/.config/systemd/user
+        state: directory
+        owner: "{{ curator_user }}"
+        group: "{{ curator_user }}"
+        mode: "0755"
+
+    - name: Deploy curator-compose systemd service
+      template:
+        src: templates/curator-compose.service.j2
+        dest: /home/{{ curator_user }}/.config/systemd/user/curator-compose.service
+        owner: "{{ curator_user }}"
+        group: "{{ curator_user }}"
+        mode: "0644"
+      notify: Restart curator-compose
+
+    - name: Reload systemd user daemon
+      become_user: "{{ curator_user }}"
+      environment:
+        XDG_RUNTIME_DIR: /run/user/{{ curator_user_result.uid }}
+      systemd:
+        daemon_reload: yes
+        scope: user
+
+    - name: Enable and start curator-compose service
+      become_user: "{{ curator_user }}"
+      environment:
+        XDG_RUNTIME_DIR: /run/user/{{ curator_user_result.uid }}
+      systemd:
+        name: curator-compose
+        enabled: yes
+        state: started
+        scope: user
+
+  # --- Handlers ---
+
+  handlers:
+    - name: Restart curator-compose
+      become_user: "{{ curator_user }}"
+      environment:
+        XDG_RUNTIME_DIR: /run/user/{{ curator_user_result.uid }}
+      systemd:
+        name: curator-compose
+        state: restarted
+        scope: user

@@ -1,0 +1,16 @@
+[Unit]
+Description=Curator Podman Compose
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory={{ app_dir }}
+ExecStartPre=/usr/bin/podman-compose pull
+ExecStart=/usr/bin/podman-compose up -d
+ExecStop=/usr/bin/podman-compose down
+TimeoutStartSec=600
+
+[Install]
+WantedBy=default.target
