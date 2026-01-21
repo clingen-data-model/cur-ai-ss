@@ -1,7 +1,10 @@
 name: Build and Push Docker Images
 
 on:
-  push:
+  workflow_run:
+    workflows: ["Run Continuous Integration Tests"]
+    types:
+      - completed
     branches:
       - main
   pull_request:
@@ -20,6 +23,10 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04-arm
+    # If this was triggered by a workflow_run, only proceed if the workflow_run completed successfully
+    if: >
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
     strategy:
       matrix:
         include:
@@ -33,6 +40,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -62,6 +71,7 @@ jobs:
           context: .
           file: ${{ matrix.dockerfile }}
           platforms: linux/arm64
+          # Do not push if this was triggered by a pull request
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
