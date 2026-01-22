@@ -1,0 +1,22 @@
+[Unit]
+Description=Curator AI Streamlit UI
+After=network-online.target curator-api.service
+Wants=network-online.target curator-api.service
+
+[Service]
+Type=simple
+WorkingDirectory={{ app_dir }}
+Environment=CUR_AI_SS_ROOT={{ data_dir }}
+EnvironmentFile={{ app_dir }}/.env
+
+ExecStart={{ app_dir }}/.venv/bin/streamlit run lib/ui/streamlit_app.py --server.port 8001 --server.address 127.0.0.1
+
+Restart=on-failure
+RestartSec=5
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=curator-ui
+
+[Install]
+WantedBy=default.target

@@ -16,12 +16,21 @@
 #   ssl_key_secret        - Secret Manager name for SSL key (default: gene-curation-ai-ssl-key)
 #   openai_api_key_secret - Secret Manager name for OpenAI key (default: cur-ai-ss-openai-api-key)
 #   cors_allowed_origins  - CORS origins (default: https://{{ curator_domain }})
+#   git_repo              - Git repository URL (default: https://github.com/clingen-data-model/cur-ai-ss.git)
+#   git_version           - Git ref to deploy (default: main)
 #
 # Examples:
 #   ansible-playbook -i curator-vm, playbook.yml \
 #     -e curator_domain=myapp.example.com \
 #     -e gcp_project=my-gcp-project \
 #     -e openai_api_deployment=gpt-4
+#
+#   # Deploy a specific tag
+#   ansible-playbook -i curator-vm, playbook.yml \
+#     -e curator_domain=myapp.example.com \
+#     -e gcp_project=my-gcp-project \
+#     -e openai_api_deployment=gpt-4 \
+#     -e git_version=v1.0.0
 #
 #   # Dry run (check mode)
 #   ansible-playbook -i curator-vm, playbook.yml --check \
@@ -55,7 +64,9 @@
     curator_user: cur-ai-ss
     app_dir: /opt/cur-ai-ss
     data_dir: /var/cur-ai-ss
-    compose_src: ../deployment/docker-compose.yaml
+    # Git repository settings
+    git_repo: https://github.com/clingen-data-model/cur-ai-ss.git
+    git_version: main
     # Secret Manager secret names (can be overridden via -e)
     ssl_cert_secret: gene-curation-ai-ssl-cert
     ssl_key_secret: gene-curation-ai-ssl-key
@@ -71,13 +82,18 @@
         update_cache: yes
         cache_valid_time: 3600
 
-    - name: Install podman, nginx, and dependencies
+    - name: Install system dependencies
       apt:
         name:
-          - podman
-          - podman-compose
-          - acl  # Required for Ansible become_user with unprivileged users
           - nginx
+          - acl  # Required for Ansible become_user with unprivileged users
+          - git
+          # Build dependencies for Python packages
+          - build-essential
+          - python3-dev
+          # OpenCV dependencies (required by docling for table extraction)
+          - libgl1
+          - libglib2.0-0
         state: present
 
     # --- User Setup ---
@@ -94,7 +110,23 @@
       args:
         creates: /var/lib/systemd/linger/{{ curator_user }}
 
-    # --- Application Files ---
+    # --- Install uv ---
+
+    - name: Check if uv is installed
+      command: /home/{{ curator_user }}/.local/bin/uv --version
+      become_user: "{{ curator_user }}"
+      register: uv_check
+      failed_when: false
+      changed_when: false
+
+    - name: Install uv
+      become_user: "{{ curator_user }}"
+      shell: curl -LsSf https://astral.sh/uv/install.sh | sh
+      args:
+        creates: /home/{{ curator_user }}/.local/bin/uv
+      when: uv_check.rc != 0
+
+    # --- Application Directories ---
 
     - name: Create app directory
       file:
@@ -111,6 +143,38 @@
         owner: "{{ curator_user }}"
         group: "{{ curator_user }}"
         mode: "0755"
+
+    # --- Clone/Update Application Code ---
+
+    - name: Clone or update application repository
+      become_user: "{{ curator_user }}"
+      git:
+        repo: "{{ git_repo }}"
+        dest: "{{ app_dir }}"
+        version: "{{ git_version }}"
+        force: yes
+      register: git_result
+      notify: Restart curator services
+
+    # --- Python Environment ---
+
+    - name: Create virtual environment
+      become_user: "{{ curator_user }}"
+      command: /home/{{ curator_user }}/.local/bin/uv venv --python 3.12
+      args:
+        chdir: "{{ app_dir }}"
+        creates: "{{ app_dir }}/.venv/bin/python"
+
+    - name: Install Python dependencies
+      become_user: "{{ curator_user }}"
+      command: /home/{{ curator_user }}/.local/bin/uv sync --frozen --no-dev
+      args:
+        chdir: "{{ app_dir }}"
+      register: uv_sync_result
+      changed_when: "'Installed' in uv_sync_result.stderr or 'Uninstalled' in uv_sync_result.stderr"
+      notify: Restart curator services
+
+    # --- Environment File ---
 
     - name: Fetch OpenAI API key from Secret Manager
       delegate_to: localhost
@@ -130,18 +194,9 @@
         owner: "{{ curator_user }}"
         group: "{{ curator_user }}"
         mode: "0600"
-      notify: Restart curator-compose
+      notify: Restart curator services
 
-    - name: Copy docker-compose.yaml
-      copy:
-        src: "{{ compose_src }}"
-        dest: "{{ app_dir }}/docker-compose.yaml"
-        owner: "{{ curator_user }}"
-        group: "{{ curator_user }}"
-        mode: "0644"
-      notify: Restart curator-compose
-
-    # --- Systemd User Service ---
+    # --- Systemd User Services ---
 
     - name: Create systemd user config directory
       file:
@@ -151,14 +206,32 @@
         group: "{{ curator_user }}"
         mode: "0755"
 
-    - name: Deploy curator-compose systemd service
+    - name: Deploy curator-api systemd service
       template:
-        src: templates/curator-compose.service.j2
-        dest: /home/{{ curator_user }}/.config/systemd/user/curator-compose.service
+        src: templates/curator-api.service.j2
+        dest: /home/{{ curator_user }}/.config/systemd/user/curator-api.service
         owner: "{{ curator_user }}"
         group: "{{ curator_user }}"
         mode: "0644"
-      notify: Restart curator-compose
+      notify: Restart curator services
+
+    - name: Deploy curator-ui systemd service
+      template:
+        src: templates/curator-ui.service.j2
+        dest: /home/{{ curator_user }}/.config/systemd/user/curator-ui.service
+        owner: "{{ curator_user }}"
+        group: "{{ curator_user }}"
+        mode: "0644"
+      notify: Restart curator services
+
+    - name: Deploy curator-worker systemd service
+      template:
+        src: templates/curator-worker.service.j2
+        dest: /home/{{ curator_user }}/.config/systemd/user/curator-worker.service
+        owner: "{{ curator_user }}"
+        group: "{{ curator_user }}"
+        mode: "0644"
+      notify: Restart curator services
 
     - name: Reload systemd user daemon
       become_user: "{{ curator_user }}"
@@ -168,15 +241,19 @@
         daemon_reload: yes
         scope: user
 
-    - name: Enable and start curator-compose service
+    - name: Enable and start curator services
       become_user: "{{ curator_user }}"
       environment:
         XDG_RUNTIME_DIR: /run/user/{{ curator_user_result.uid }}
       systemd:
-        name: curator-compose
+        name: "{{ item }}"
         enabled: yes
         state: started
         scope: user
+      loop:
+        - curator-api
+        - curator-ui
+        - curator-worker
 
     # --- SSL Certificate Setup ---
 
@@ -267,14 +344,18 @@
   # --- Handlers ---
 
   handlers:
-    - name: Restart curator-compose
+    - name: Restart curator services
       become_user: "{{ curator_user }}"
       environment:
         XDG_RUNTIME_DIR: /run/user/{{ curator_user_result.uid }}
       systemd:
-        name: curator-compose
+        name: "{{ item }}"
         state: restarted
         scope: user
+      loop:
+        - curator-api
+        - curator-ui
+        - curator-worker
 
     - name: Reload nginx
       systemd:
