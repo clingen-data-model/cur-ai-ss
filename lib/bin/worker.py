@@ -93,9 +93,9 @@ def main() -> None:
                     .order_by(PaperDB.id)
                     .limit(1)
                 ).first()
-                if paper_db:
-                    logger.info(f'Dequeued paper {paper_db.id}')
-                    run_evagg_app(paper_db)
+            if paper_id:
+                logger.info(f'Dequeued paper {paper_id}')
+                run_evagg_app(paper)
         except KeyboardInterrupt:
             logger.info('Shutting down poller')
             break
