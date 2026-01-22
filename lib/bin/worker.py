@@ -20,15 +20,15 @@ RETRIES = 3
 logger = logging.getLogger(__name__)
 
 
-def run_evagg_app(paper_id: str) -> None:
+def run_evagg_app(paper: PaperDB) -> None:
     init_logger(
-        current_run=f'{paper_id}_{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'
+        current_run=f'{paper.id}_{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'
     )
     max_attempts = RETRIES + 1
     for attempt in range(1, max_attempts + 1):
         try:
-            paper = Paper(id=paper_id).with_content()
-            res = App(paper).execute()
+            paper = Paper(id=paper.id).with_content()
+            res = App(paper, paper.gene.gene_symbol).execute()
             if not res:
                 return
             with open(paper.evagg_observations_path, 'w') as f:
@@ -65,15 +65,16 @@ def main() -> None:
         paper_id = None
         try:
             with session_scope() as session:
-                paper_id = session.scalars(
-                    select(PaperDB.id)
+                paper = session.scalars(
+                    select(PaperDB)
+                    .options(joinedload(PaperDB.gene))
                     .where(PaperDB.extraction_status == ExtractionStatus.QUEUED)
                     .order_by(PaperDB.id)
                     .limit(1)
                 ).first()
             if paper_id:
                 logger.info(f'Dequeued paper {paper_id}')
-                run_evagg_app(paper_id)
+                run_evagg_app(paper)
         except KeyboardInterrupt:
             logger.info('Shutting down poller')
             break
