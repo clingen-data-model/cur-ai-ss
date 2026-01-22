@@ -17,8 +17,8 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import delete
-from sqlalchemy.orm import Session
+from sqlalchemy import delete, select
+from sqlalchemy.orm import Session, selectinload
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
@@ -26,7 +26,7 @@ from lib.api.db import get_engine, get_session
 from lib.evagg.pdf.thumbnail import pdf_first_page_to_thumbnail_pymupdf_bytes
 from lib.evagg.types.base import Paper
 from lib.evagg.utils.environment import env
-from lib.models import Base, ExtractionStatus, PaperDB, PaperResp
+from lib.models import Base, ExtractionStatus, GeneDB, GeneResp, PaperDB, PaperResp
 
 
 @asynccontextmanager
@@ -88,6 +88,7 @@ def get_status() -> dict[str, str]:
 
 @app.put('/papers', response_model=PaperResp, status_code=status.HTTP_201_CREATED)
 def put_paper(
+    gene_symbol: str = Form(...),
     uploaded_file: UploadFile = File(...),
     session: Session = Depends(get_session),
 ) -> Any:
@@ -95,9 +96,23 @@ def put_paper(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail='Only PDF files are allowed'
         )
+
+    gene = session.execute(
+        select(GeneDB).where(GeneDB.symbol == gene_symbol)
+    ).scalar_one_or_none()
+    if not gene:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f'Gene {gene} not found'
+        )
+
     content = uploaded_file.file.read()
     paper = Paper.from_content(content)
-    paper_db = session.get(PaperDB, paper.id)
+    paper_db = (
+        session.query(PaperDB)
+        .options(selectinload(PaperDB.gene))
+        .filter(PaperDB.id == paper.id)
+        .one_or_none()
+    )
     if paper_db:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -114,15 +129,20 @@ def put_paper(
             filename=uploaded_file.filename,
             extraction_status=ExtractionStatus.QUEUED,
         )
+        paper_db.gene = gene
         session.add(paper_db)
-    session.commit()
-    session.refresh(paper_db)
+        session.flush()
     return paper_db
 
 
 @app.get('/papers/{paper_id}', response_model=PaperResp)
 def get_paper(paper_id: str, session: Session = Depends(get_session)) -> Any:
-    paper_db = session.get(PaperDB, paper_id)
+    paper_db = (
+        session.query(PaperDB)
+        .options(selectinload(PaperDB.gene))
+        .filter(PaperDB.id == paper_id)
+        .one_or_none()
+    )
     if not paper_db:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
@@ -136,7 +156,7 @@ def delete_paper(paper_id: str, session: Session = Depends(get_session)) -> None
     if not paper_db:
         return
     session.delete(paper_db)
-    session.commit()
+    session.flush()
 
 
 @app.patch('/papers/{paper_id}', response_model=PaperResp)
@@ -145,7 +165,13 @@ def update_status(
     extraction_status: ExtractionStatus = Body(..., embed=True),
     session: Session = Depends(get_session),
 ) -> Any:
-    paper_db = session.get(PaperDB, paper_id)
+    paper_db = (
+        session.query(PaperDB)
+        .options(selectinload(PaperDB.gene))
+        .filter(PaperDB.id == paper_id)
+        .one_or_none()
+    )
+
     if not paper_db:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
@@ -156,8 +182,6 @@ def update_status(
             detail=f'Status is already {extraction_status.value}',
         )
     paper_db.extraction_status = extraction_status
-    session.commit()
-    session.refresh(paper_db)
     return paper_db
 
 
@@ -166,7 +190,16 @@ def list_papers(
     extraction_status: ExtractionStatus | None = None,
     session: Session = Depends(get_session),
 ) -> Any:
-    query = session.query(PaperDB)
+    query = session.query(PaperDB).options(selectinload(PaperDB.gene))
+
     if extraction_status is not None:
         query = query.filter(PaperDB.extraction_status == extraction_status)
+    return query.all()
+
+
+@app.get('/genes', response_model=list[GeneResp])
+def list_genes(
+    session: Session = Depends(get_session),
+) -> Any:
+    query = session.query(GeneDB)
     return query.all()

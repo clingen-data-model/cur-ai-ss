@@ -125,9 +125,13 @@ def mock_client(arg_loader):
 
 
 @pytest.fixture
-def test_db(monkeypatch, tmpdir):
+def db_session(monkeypatch, tmpdir):
     db.env.CUR_AI_SS_ROOT = str(tmpdir)
     db.env.SQLLITE_DIR = ''
     monkeypatch.setattr(db, '_engine', None)
     monkeypatch.setattr(db, '_session_factory', None)
-    yield
+    session_local = db.get_sessionmaker()
+    session: Session = session_local()
+    yield session
+    session.rollback()
+    session.close()
