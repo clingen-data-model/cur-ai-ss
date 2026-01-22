@@ -7,6 +7,7 @@ import traceback
 
 from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import joinedload
 
 from lib.api.db import session_scope
 from lib.evagg import App
@@ -20,20 +21,20 @@ RETRIES = 3
 logger = logging.getLogger(__name__)
 
 
-def run_evagg_app(paper: PaperDB) -> None:
+def run_evagg_app(paper_db: PaperDB) -> None:
     init_logger(
-        current_run=f'{paper.id}_{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'
+        current_run=f'{paper_db.id}_{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}'
     )
     max_attempts = RETRIES + 1
     for attempt in range(1, max_attempts + 1):
         try:
-            paper = Paper(id=paper.id).with_content()
-            res = App(paper, paper.gene.gene_symbol).execute()
+            paper = Paper(id=paper_db.id).with_content()
+            res = App(paper, paper_db.gene.symbol).execute()
             if not res:
                 return
             with open(paper.evagg_observations_path, 'w') as f:
                 json.dump(res, f)
-            mark_paper_as_extraction_status(paper_id, ExtractionStatus.EXTRACTED)
+            mark_paper_as_extraction_status(paper_db.id, ExtractionStatus.EXTRACTED)
             logger.info(f'Attempt {attempt}/{max_attempts} succeeded')
             return
         except KeyboardInterrupt:
