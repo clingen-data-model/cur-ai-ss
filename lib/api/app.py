@@ -46,12 +46,12 @@ app.mount(
     StaticFiles(directory=env.CUR_AI_SS_ROOT, html=False),
     name='cur-ai-ss',
 )
+# Parse CORS origins from env (comma-separated)
+_cors_origins = [origin.strip() for origin in env.CORS_ALLOWED_ORIGINS.split(',') if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        # Local Streamlit
-        'http://localhost:8501'
-    ],
+    allow_origins=_cors_origins,
     allow_credentials=True,  # Allows cookies to be sent cross-origin
     allow_methods=['*'],  # Allows all HTTP methods (GET, POST, PUT, etc.)
     allow_headers=['*'],  # Allows all headers

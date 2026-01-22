@@ -6,6 +6,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+EnvironmentFile={{ app_dir }}/.env
 WorkingDirectory={{ app_dir }}
 ExecStartPre=/usr/bin/podman-compose pull
 ExecStart=/usr/bin/podman-compose up -d

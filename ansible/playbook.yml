@@ -1,21 +1,38 @@
 # Curator VM Ansible Playbook
 #
 # Usage:
-#   ansible-playbook -i <ssh-host>, playbook.yml
+#   ansible-playbook -i <ssh-host>, playbook.yml -e curator_domain=example.com -e gcp_project=my-project
+#
+# Required variables:
+#   curator_domain  - Domain name for nginx server_name
+#   gcp_project     - GCP project containing SSL secrets
+#
+# Optional variables:
+#   ssl_cert_secret - Secret Manager name for SSL cert (default: gene-curation-ai-ssl-cert)
+#   ssl_key_secret  - Secret Manager name for SSL key (default: gene-curation-ai-ssl-key)
 #
 # Examples:
-#   # Run against an SSH config host named 'curator-vm'
-#   ansible-playbook -i curator-vm, playbook.yml
-#
-#   # With verbose output
-#   ansible-playbook -i curator-vm, playbook.yml -v
+#   ansible-playbook -i curator-vm, playbook.yml \
+#     -e curator_domain=myapp.example.com \
+#     -e gcp_project=my-gcp-project
 #
 #   # Dry run (check mode)
-#   ansible-playbook -i curator-vm, playbook.yml --check
+#   ansible-playbook -i curator-vm, playbook.yml --check \
+#     -e curator_domain=myapp.example.com \
+#     -e gcp_project=my-gcp-project
 #
 # Note: The trailing comma after the hostname is required for single-host inventory.
 #       The SSH host should be pre-configured in ~/.ssh/config with appropriate
 #       User, IdentityFile, and other connection settings.
+#
+# Prerequisites:
+#   1. SSL cert and key stored in Google Secret Manager:
+#      gcloud secrets create gene-curation-ai-ssl-cert --project=PROJECT
+#      gcloud secrets versions add gene-curation-ai-ssl-cert --data-file=fullchain.pem --project=PROJECT
+#      gcloud secrets create gene-curation-ai-ssl-key --project=PROJECT
+#      gcloud secrets versions add gene-curation-ai-ssl-key --data-file=privkey.pem --project=PROJECT
+#
+#   2. gcloud CLI installed on the control machine (where ansible runs)
 
 - name: Configure curator VM
   hosts: all
@@ -25,6 +42,10 @@
     curator_user: curator
     app_dir: /home/curator/app
     compose_src: ../deployment/docker-compose.yaml
+    # SSL/nginx vars (can be overridden via -e)
+    ssl_cert_secret: gene-curation-ai-ssl-cert
+    ssl_key_secret: gene-curation-ai-ssl-key
+    nginx_ssl_dir: /etc/nginx/ssl
 
   tasks:
     # --- Package Installation ---
@@ -34,12 +55,13 @@
         update_cache: yes
         cache_valid_time: 3600
 
-    - name: Install podman and dependencies
+    - name: Install podman, nginx, and dependencies
       apt:
         name:
           - podman
           - podman-compose
           - acl  # Required for Ansible become_user with unprivileged users
+          - nginx
         state: present
 
     # --- User Setup ---
@@ -112,6 +134,92 @@
         state: started
         scope: user
 
+    # --- SSL Certificate Setup ---
+
+    - name: Create nginx SSL directory
+      file:
+        path: "{{ nginx_ssl_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Fetch SSL certificate from Secret Manager
+      delegate_to: localhost
+      become: no
+      command: >
+        gcloud secrets versions access latest
+        --secret={{ ssl_cert_secret }}
+        --project={{ gcp_project }}
+      register: ssl_cert_content
+      changed_when: false
+      no_log: true
+
+    - name: Fetch SSL private key from Secret Manager
+      delegate_to: localhost
+      become: no
+      command: >
+        gcloud secrets versions access latest
+        --secret={{ ssl_key_secret }}
+        --project={{ gcp_project }}
+      register: ssl_key_content
+      changed_when: false
+      no_log: true
+
+    - name: Deploy SSL certificate
+      copy:
+        content: "{{ ssl_cert_content.stdout }}"
+        dest: "{{ nginx_ssl_dir }}/fullchain.pem"
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload nginx
+      no_log: true
+
+    - name: Deploy SSL private key
+      copy:
+        content: "{{ ssl_key_content.stdout }}"
+        dest: "{{ nginx_ssl_dir }}/privkey.pem"
+        owner: root
+        group: root
+        mode: "0600"
+      notify: Reload nginx
+      no_log: true
+
+    # --- Nginx Configuration ---
+
+    - name: Deploy nginx site configuration
+      template:
+        src: templates/nginx-curator.conf.j2
+        dest: /etc/nginx/sites-available/curator
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Enable nginx site
+      file:
+        src: /etc/nginx/sites-available/curator
+        dest: /etc/nginx/sites-enabled/curator
+        state: link
+      notify: Reload nginx
+
+    - name: Remove default nginx site
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: Reload nginx
+
+    - name: Validate nginx configuration
+      command: nginx -t
+      changed_when: false
+
+    - name: Enable and start nginx
+      systemd:
+        name: nginx
+        enabled: yes
+        state: started
+
   # --- Handlers ---
 
   handlers:
@@ -123,3 +231,8 @@
         name: curator-compose
         state: restarted
         scope: user
+
+    - name: Reload nginx
+      systemd:
+        name: nginx
+        state: reloaded
