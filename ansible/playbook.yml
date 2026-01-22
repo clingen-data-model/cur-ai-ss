@@ -1,36 +1,49 @@
 # Curator VM Ansible Playbook
 #
 # Usage:
-#   ansible-playbook -i <ssh-host>, playbook.yml -e curator_domain=example.com -e gcp_project=my-project
+#   ansible-playbook -i <ssh-host>, playbook.yml \
+#     -e curator_domain=example.com \
+#     -e gcp_project=my-project \
+#     -e openai_api_deployment=gpt-4
 #
 # Required variables:
-#   curator_domain  - Domain name for nginx server_name
-#   gcp_project     - GCP project containing SSL secrets
+#   curator_domain        - Domain name for nginx server_name
+#   gcp_project           - GCP project containing secrets
+#   openai_api_deployment - OpenAI deployment/model name
 #
 # Optional variables:
-#   ssl_cert_secret - Secret Manager name for SSL cert (default: gene-curation-ai-ssl-cert)
-#   ssl_key_secret  - Secret Manager name for SSL key (default: gene-curation-ai-ssl-key)
+#   ssl_cert_secret       - Secret Manager name for SSL cert (default: gene-curation-ai-ssl-cert)
+#   ssl_key_secret        - Secret Manager name for SSL key (default: gene-curation-ai-ssl-key)
+#   openai_api_key_secret - Secret Manager name for OpenAI key (default: cur-ai-ss-openai-api-key)
+#   cors_allowed_origins  - CORS origins (default: https://{{ curator_domain }})
 #
 # Examples:
 #   ansible-playbook -i curator-vm, playbook.yml \
 #     -e curator_domain=myapp.example.com \
-#     -e gcp_project=my-gcp-project
+#     -e gcp_project=my-gcp-project \
+#     -e openai_api_deployment=gpt-4
 #
 #   # Dry run (check mode)
 #   ansible-playbook -i curator-vm, playbook.yml --check \
 #     -e curator_domain=myapp.example.com \
-#     -e gcp_project=my-gcp-project
+#     -e gcp_project=my-gcp-project \
+#     -e openai_api_deployment=gpt-4
 #
 # Note: The trailing comma after the hostname is required for single-host inventory.
 #       The SSH host should be pre-configured in ~/.ssh/config with appropriate
 #       User, IdentityFile, and other connection settings.
 #
 # Prerequisites:
-#   1. SSL cert and key stored in Google Secret Manager:
+#   1. Secrets stored in Google Secret Manager:
+#      # SSL certificate
 #      gcloud secrets create gene-curation-ai-ssl-cert --project=PROJECT
 #      gcloud secrets versions add gene-curation-ai-ssl-cert --data-file=fullchain.pem --project=PROJECT
+#      # SSL private key
 #      gcloud secrets create gene-curation-ai-ssl-key --project=PROJECT
 #      gcloud secrets versions add gene-curation-ai-ssl-key --data-file=privkey.pem --project=PROJECT
+#      # OpenAI API key
+#      gcloud secrets create cur-ai-ss-openai-api-key --project=PROJECT
+#      echo -n "sk-..." | gcloud secrets versions add cur-ai-ss-openai-api-key --data-file=- --project=PROJECT
 #
 #   2. gcloud CLI installed on the control machine (where ansible runs)
 
@@ -39,12 +52,15 @@
   become: yes
 
   vars:
-    curator_user: curator
-    app_dir: /home/curator/app
+    curator_user: cur-ai-ss
+    app_dir: /opt/cur-ai-ss
+    data_dir: /var/cur-ai-ss
     compose_src: ../deployment/docker-compose.yaml
-    # SSL/nginx vars (can be overridden via -e)
+    # Secret Manager secret names (can be overridden via -e)
     ssl_cert_secret: gene-curation-ai-ssl-cert
     ssl_key_secret: gene-curation-ai-ssl-key
+    openai_api_key_secret: cur-ai-ss-openai-api-key
+    # nginx vars
     nginx_ssl_dir: /etc/nginx/ssl
 
   tasks:
@@ -87,6 +103,34 @@
         owner: "{{ curator_user }}"
         group: "{{ curator_user }}"
         mode: "0755"
+
+    - name: Create data directory
+      file:
+        path: "{{ data_dir }}"
+        state: directory
+        owner: "{{ curator_user }}"
+        group: "{{ curator_user }}"
+        mode: "0755"
+
+    - name: Fetch OpenAI API key from Secret Manager
+      delegate_to: localhost
+      become: no
+      command: >
+        gcloud secrets versions access latest
+        --secret={{ openai_api_key_secret }}
+        --project={{ gcp_project }}
+      register: openai_api_key_content
+      changed_when: false
+      no_log: true
+
+    - name: Deploy environment file
+      template:
+        src: templates/curator.env.j2
+        dest: "{{ app_dir }}/.env"
+        owner: "{{ curator_user }}"
+        group: "{{ curator_user }}"
+        mode: "0600"
+      notify: Restart curator-compose
 
     - name: Copy docker-compose.yaml
       copy:
