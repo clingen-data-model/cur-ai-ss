@@ -5,14 +5,19 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select, update
 
 from lib.api.app import app
-from lib.api.db import session_scope
-from lib.models import ExtractionStatus, PaperDB
+from lib.api.db import get_session, session_scope
+from lib.models import ExtractionStatus, GeneDB, PaperDB
 
 
 @pytest.fixture
-def client(test_db):
+def client(db_session):
+    def override_get_session():
+        yield db_session
+
+    app.dependency_overrides[get_session] = override_get_session
     with TestClient(app) as client:
         yield client
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture
@@ -35,32 +40,56 @@ startxref
 %%EOF""")
 
 
-def test_queue_new_paper(client, test_pdf):
+@pytest.fixture
+def seeded_genes(db_session):
+    db_session.add_all(
+        [
+            GeneDB(symbol='BRCA1'),
+            GeneDB(symbol='BRCA2'),
+            GeneDB(symbol='TP53'),
+        ]
+    )
+    db_session.flush()
+
+
+def test_queue_new_paper(client, test_pdf, db_session, seeded_genes):
+    count = db_session.scalar(select(func.count(GeneDB.id)))
+    assert count == 3
     response = client.put(
-        '/papers', files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+        '/papers',
+        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},  # <- add this
     )
     assert response.status_code == 201
     data = response.json()
     assert data['id']  # Paper ID will be generated from content
     assert data['extraction_status'] == ExtractionStatus.QUEUED.value
     assert data['filename'] == 'job-1.pdf'
+    count = db_session.scalar(select(func.count(PaperDB.id)))
+    assert count == 1
 
 
-def test_queue_existing_paper_fails(client, test_pdf):
+def test_queue_existing_paper_fails(client, test_pdf, seeded_genes):
     # Second upload: same content/name triggers conflict
     response = client.put(
-        '/papers', files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+        '/papers',
+        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
     )
     response2 = client.put(
-        '/papers', files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+        '/papers',
+        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
     )
     assert response2.status_code == 409
     assert response2.json()['detail'] == 'Paper extraction already queued'
 
 
-def test_get_paper_success(client, test_pdf):
+def test_get_paper_success(client, test_pdf, seeded_genes):
     upload_response = client.put(
-        '/papers', files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+        '/papers',
+        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
     )
     assert upload_response.status_code == 201
     data_upload = upload_response.json()
@@ -79,19 +108,18 @@ def test_get_paper_not_found(client):
     assert response.json()['detail'] == 'Paper not found'
 
 
-def test_update_paper_extraction_status(client, test_pdf):
+def test_update_paper_extraction_status(client, test_pdf, db_session, seeded_genes):
     response = client.put(
-        '/papers', files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+        '/papers',
+        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
     )
     data = response.json()
-    with session_scope() as sess:
-        sess.execute(
-            update(PaperDB)
-            .where(PaperDB.id == data['id'])
-            .values(extraction_status=ExtractionStatus.FAILED)
-        )
-        sess.commit()
-
+    db_session.execute(
+        update(PaperDB)
+        .where(PaperDB.id == data['id'])
+        .values(extraction_status=ExtractionStatus.FAILED)
+    )
     response2 = client.patch(
         f'/papers/{data["id"]}',
         json={'extraction_status': ExtractionStatus.QUEUED.value},
@@ -112,9 +140,11 @@ def test_update_paper_extraction_status(client, test_pdf):
     assert response4.status_code == 404
 
 
-def test_list_paper(client, test_pdf):
+def test_list_paper(client, test_pdf, seeded_genes):
     response = client.put(
-        '/papers', files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+        '/papers',
+        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
     )
     response2 = client.put(
         '/papers',
@@ -125,6 +155,7 @@ def test_list_paper(client, test_pdf):
                 'application/pdf',
             )
         },
+        data={'gene_symbol': 'BRCA1'},
     )
     response = client.get('/papers')
     assert response.status_code == 200
@@ -132,9 +163,11 @@ def test_list_paper(client, test_pdf):
     assert len(jobs) == 2
 
 
-def test_list_papers_filtered_by_status(client, test_pdf):
+def test_list_papers_filtered_by_status(client, test_pdf, db_session, seeded_genes):
     response = client.put(
-        '/papers', files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+        '/papers',
+        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
     )
     response2 = client.put(
         '/papers',
@@ -145,6 +178,7 @@ def test_list_papers_filtered_by_status(client, test_pdf):
                 'application/pdf',
             )
         },
+        data={'gene_symbol': 'BRCA1'},
     )
     response = client.get(
         '/papers', params={'extraction_status': ExtractionStatus.QUEUED.value}
@@ -154,19 +188,20 @@ def test_list_papers_filtered_by_status(client, test_pdf):
     assert all(job['extraction_status'] == ExtractionStatus.QUEUED for job in jobs)
 
 
-def test_delete_paper(client, test_pdf):
+def test_delete_paper(client, test_pdf, db_session, seeded_genes):
     response = client.delete(
         f'/papers/abcd',
     )
     assert response.status_code == 204
 
     response2 = client.put(
-        '/papers', files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')}
+        '/papers',
+        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
     )
     response3 = client.delete(
         f'/papers/{response2.json()["id"]}',
     )
     assert response3.status_code == 204
-    with session_scope() as sess:
-        result = sess.execute(select(func.count(PaperDB.id)))
-        assert result.scalar_one() == 0
+    result = db_session.execute(select(func.count(PaperDB.id)))
+    assert result.scalar_one() == 0

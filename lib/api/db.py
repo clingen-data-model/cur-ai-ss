@@ -43,16 +43,23 @@ def get_session() -> Generator[Session, None, None]:
     session: Session = session_local()
     try:
         yield session
+        session.commit()
+    except:
+        session.rollback()
+        raise
     finally:
         session.close()
 
 
 @contextmanager
 def session_scope() -> Generator[Session, None, None]:
-    # Usable as a context manager in standard python code
-    gen = get_session()
-    session = next(gen)
+    session_local = get_sessionmaker()
+    session: Session = session_local()
     try:
         yield session
+        session.commit()  # commit after normal exit
+    except:
+        session.rollback()
+        raise
     finally:
-        gen.close()
+        session.close()
