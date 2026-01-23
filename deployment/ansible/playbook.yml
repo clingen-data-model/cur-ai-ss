@@ -110,6 +110,19 @@
       args:
         creates: /var/lib/systemd/linger/{{ curator_user }}
 
+    - name: Configure XDG_RUNTIME_DIR in bashrc for systemd user services
+      blockinfile:
+        path: /home/{{ curator_user }}/.bashrc
+        marker: "# {mark} ANSIBLE MANAGED - XDG_RUNTIME_DIR"
+        block: |
+          # Set XDG_RUNTIME_DIR for systemd user services when using su
+          if [ -z "$XDG_RUNTIME_DIR" ]; then
+              export XDG_RUNTIME_DIR=/run/user/$(id -u)
+          fi
+        owner: "{{ curator_user }}"
+        group: "{{ curator_user }}"
+        mode: '0644'
+
     # --- Install uv ---
 
     - name: Check if uv is installed
