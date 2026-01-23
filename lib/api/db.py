@@ -56,7 +56,6 @@ def session_scope() -> Generator[Session, None, None]:
     session_local = get_sessionmaker()
     session: Session = session_local()
     try:
-        session = next(gen)
         yield session
         session.commit()  # commit after normal exit
     except:

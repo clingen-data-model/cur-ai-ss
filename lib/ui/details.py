@@ -12,7 +12,7 @@ from lib.ui.api import (
     get_paper,
     requeue_paper,
 )
-from lib.ui.helpers import paper_dict_to_markdown, display_markdown_stream
+from lib.ui.helpers import paper_dict_to_markdown
 
 paper_id = st.query_params.get('paper_id')
 if paper_id is None:
@@ -108,7 +108,7 @@ with center:
             data = json.load(open(paper.metadata_json_path, 'r'))
             md_tab, editable_tab = st.tabs(['View', 'Edit'])
             with md_tab:
-                st.markdown(paper_dict_to_markdown(data))                    
+                st.markdown(paper_dict_to_markdown(data))
                 st.download_button(
                     label='Download JSON',
                     data=json.dumps(data, indent=2),
@@ -116,17 +116,21 @@ with center:
                     mime='application/json',
                 )
             with editable_tab:
-                data["title"] = st.text_input("Title", data["title"])
-                data["first_author"] = st.text_input("First Author", data["first_author"])
-                data["pub_year"] = st.text_input("Year", data["pub_year"])
-                data["journal"] = st.text_input("Journal", data["journal"])
-                data["doi"] = st.text_input("DOI", data["doi"])
-                data["pmcid"] = st.text_input("PMCID", data["pmcid"])
-                data["pmid"] = st.text_input("PMID", data["pmid"])
-                data["OA"] = st.checkbox("Open Access", data["OA"])
-                data["license"] = st.text_input("License", data["license"])
-                data["link"] = st.text_input("Link", data["link"])
-                data["abstract"] = st.text_area("Abstract", data["abstract"], height=200)
+                data['title'] = st.text_input('Title', data['title'])
+                data['first_author'] = st.text_input(
+                    'First Author', data['first_author']
+                )
+                data['pub_year'] = st.text_input('Year', data['pub_year'])
+                data['journal'] = st.text_input('Journal', data['journal'])
+                data['doi'] = st.text_input('DOI', data['doi'])
+                data['pmcid'] = st.text_input('PMCID', data['pmcid'])
+                data['pmid'] = st.text_input('PMID', data['pmid'])
+                data['OA'] = st.checkbox('Open Access', data['OA'])
+                data['license'] = st.text_input('License', data['license'])
+                data['link'] = st.text_input('Link', data['link'])
+                data['abstract'] = st.text_area(
+                    'Abstract', data['abstract'], height=200
+                )
 
 with left:
     with st.container(horizontal=True, vertical_alignment='center'):

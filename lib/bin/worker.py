@@ -93,9 +93,9 @@ def main() -> None:
                     .order_by(PaperDB.id)
                     .limit(1)
                 ).first()
-            if paper_id:
-                logger.info(f'Dequeued paper {paper_id}')
-                run_evagg_app(paper)
+                if paper_db:
+                    logger.info(f'Dequeued paper {paper_db.id}')
+                    run_evagg_app(paper_db)
         except KeyboardInterrupt:
             logger.info('Shutting down poller')
             break
@@ -107,9 +107,10 @@ def main() -> None:
                     paper_db.extraction_status = ExtractionStatus.FAILED
         except Exception as e:
             logger.exception(f'An unexpected error occurred')
-            with session_scope() as session:
-                paper_db = session.merge(paper_db)
-                paper_db.extraction_status = ExtractionStatus.FAILED
+            if paper_db:
+                with session_scope() as session:
+                    paper_db = session.merge(paper_db)
+                    paper_db.extraction_status = ExtractionStatus.FAILED
         time.sleep(POLL_INTERVAL_S)
         logger.info('waiting for work')
 
