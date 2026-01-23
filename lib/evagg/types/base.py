@@ -110,7 +110,7 @@ class Paper:
 
     @property
     def pdf_dir(self) -> Path:
-        return env.evagg_dir / self.id
+        return env.extracted_pdf_dir / self.id
 
     @property
     def pdf_raw_path(self) -> Path:

@@ -68,7 +68,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
         axis=1,
     )
     status_map = {
-        'EXTRACTED': 'Extracted ✅',
+        'PARSED': 'Parsed ✅',
         'QUEUED': 'Queued ⏳',
         'FAILED': 'Failed ❌',
     }

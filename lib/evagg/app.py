@@ -100,34 +100,6 @@ class App:
         )
 
     def execute(self) -> Sequence[Dict[str, str | None]]:
-        parse_content(self._paper)
-        title = asyncio.run(
-            self._llm_client.prompt_json_from_string(
-                user_prompt=f"""
-                Extract the title of the following (truncated to 1000 characters) scientific paper.
-
-                Return your response as a JSON object like this:
-                {{
-                    "title": "The title of the paper"
-                }}
-
-                Paper: {self._paper.fulltext_md[:1000]}
-            """,
-                prompt_tag=PromptTag.TITLE,
-            )
-        )['title']
-        pmids = self._ncbi_lookup_client.search(
-            title + '[ti]',
-        )
-        if pmids:
-            self._paper = self._ncbi_lookup_client.fetch(pmids[0], self._paper)
-
-        # Dump the paper metadata
-        self._paper.metadata_json_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self._paper.metadata_json_path, 'w') as f:
-            json.dump(
-                {k: v for k, v in self._paper.__dict__.items() if k != 'content'}, f
-            )
         extracted_observations = self._extractor.extract(self._paper, self._gene_symbol)
         for extracted_observation in extracted_observations:
             self._vep_client.enrich(extracted_observation)

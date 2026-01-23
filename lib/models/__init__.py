@@ -24,7 +24,7 @@ class Base(DeclarativeBase):
 
 
 class ExtractionStatus(str, Enum):
-    EXTRACTED = 'EXTRACTED'
+    PARSED = 'PARSED'
     FAILED = 'FAILED'
     QUEUED = 'QUEUED'
 

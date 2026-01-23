@@ -53,12 +53,13 @@ def get_session() -> Generator[Session, None, None]:
 
 @contextmanager
 def session_scope() -> Generator[Session, None, None]:
-    gen = get_session()
+    session_local = get_sessionmaker()
+    session: Session = session_local()
     try:
-        session = next(gen)
         yield session
-    except Exception as exc:
-        gen.throw(exc)  # this triggers the exception above, rolling back!
+        session.commit()  # commit after normal exit
+    except:
+        session.rollback()
         raise
-    else:
-        gen.close()
+    finally:
+        session.close()
