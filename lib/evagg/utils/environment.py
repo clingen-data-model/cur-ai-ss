@@ -36,6 +36,7 @@ class Env(BaseSettings):
     # API
     API_HOSTNAME: str = 'localhost'
     API_PORT: int = 8000
+    CORS_ALLOWED_ORIGINS: str = 'http://localhost:8501'  # Comma-separated list
 
     @model_validator(mode='after')
     def validate_ncbi_settings(self) -> 'Env':

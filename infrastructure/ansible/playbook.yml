@@ -1,0 +1,376 @@
+# Curator VM Ansible Playbook
+#
+# Usage:
+#   ansible-playbook -i <ssh-host>, playbook.yml \
+#     -e curator_domain=example.com \
+#     -e gcp_project=my-project \
+#     -e openai_api_deployment=gpt-4
+#
+# Required variables:
+#   curator_domain        - Domain name for nginx server_name
+#   gcp_project           - GCP project containing secrets
+#   openai_api_deployment - OpenAI deployment/model name
+#
+# Optional variables:
+#   ssl_cert_secret       - Secret Manager name for SSL cert (default: gene-curation-ai-ssl-cert)
+#   ssl_key_secret        - Secret Manager name for SSL key (default: gene-curation-ai-ssl-key)
+#   openai_api_key_secret - Secret Manager name for OpenAI key (default: cur-ai-ss-openai-api-key)
+#   cors_allowed_origins  - CORS origins (default: https://{{ curator_domain }})
+#   git_repo              - Git repository URL (default: https://github.com/clingen-data-model/cur-ai-ss.git)
+#   git_version           - Git ref to deploy (default: main)
+#
+# Examples:
+#   ansible-playbook -i curator-vm, playbook.yml \
+#     -e curator_domain=myapp.example.com \
+#     -e gcp_project=my-gcp-project \
+#     -e openai_api_deployment=gpt-4
+#
+#   # Deploy a specific tag
+#   ansible-playbook -i curator-vm, playbook.yml \
+#     -e curator_domain=myapp.example.com \
+#     -e gcp_project=my-gcp-project \
+#     -e openai_api_deployment=gpt-4 \
+#     -e git_version=v1.0.0
+#
+#   # Dry run (check mode)
+#   ansible-playbook -i curator-vm, playbook.yml --check \
+#     -e curator_domain=myapp.example.com \
+#     -e gcp_project=my-gcp-project \
+#     -e openai_api_deployment=gpt-4
+#
+# Note: The trailing comma after the hostname is required for single-host inventory.
+#       The SSH host should be pre-configured in ~/.ssh/config with appropriate
+#       User, IdentityFile, and other connection settings.
+#
+# Prerequisites:
+#   1. Secrets stored in Google Secret Manager:
+#      # SSL certificate
+#      gcloud secrets create gene-curation-ai-ssl-cert --project=PROJECT
+#      gcloud secrets versions add gene-curation-ai-ssl-cert --data-file=fullchain.pem --project=PROJECT
+#      # SSL private key
+#      gcloud secrets create gene-curation-ai-ssl-key --project=PROJECT
+#      gcloud secrets versions add gene-curation-ai-ssl-key --data-file=privkey.pem --project=PROJECT
+#      # OpenAI API key
+#      gcloud secrets create cur-ai-ss-openai-api-key --project=PROJECT
+#      echo -n "sk-..." | gcloud secrets versions add cur-ai-ss-openai-api-key --data-file=- --project=PROJECT
+#
+#   2. gcloud CLI installed on the control machine (where ansible runs)
+
+- name: Configure curator VM
+  hosts: all
+  become: yes
+
+  vars:
+    curator_user: cur-ai-ss
+    app_dir: /opt/cur-ai-ss
+    data_dir: /var/cur-ai-ss
+    # Git repository settings
+    git_repo: https://github.com/clingen-data-model/cur-ai-ss.git
+    git_version: main
+    # Secret Manager secret names (can be overridden via -e)
+    ssl_cert_secret: gene-curation-ai-ssl-cert
+    ssl_key_secret: gene-curation-ai-ssl-key
+    openai_api_key_secret: cur-ai-ss-openai-api-key
+    # nginx vars
+    nginx_ssl_dir: /etc/nginx/ssl
+
+  tasks:
+    # --- Package Installation ---
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install system dependencies
+      apt:
+        name:
+          - nginx
+          - acl  # Required for Ansible become_user with unprivileged users
+          - git
+          # Build dependencies for Python packages
+          - build-essential
+          - python3-dev
+          # OpenCV dependencies (required by docling for table extraction)
+          - libgl1
+          - libglib2.0-0
+        state: present
+
+    # --- User Setup ---
+
+    - name: Create curator user
+      user:
+        name: "{{ curator_user }}"
+        shell: /bin/bash
+        create_home: yes
+      register: curator_user_result
+
+    - name: Enable lingering for curator user
+      command: loginctl enable-linger {{ curator_user }}
+      args:
+        creates: /var/lib/systemd/linger/{{ curator_user }}
+
+    - name: Configure XDG_RUNTIME_DIR in bashrc for systemd user services
+      blockinfile:
+        path: /home/{{ curator_user }}/.bashrc
+        marker: "# {mark} ANSIBLE MANAGED - XDG_RUNTIME_DIR"
+        block: |
+          # Set XDG_RUNTIME_DIR for systemd user services when using su
+          if [ -z "$XDG_RUNTIME_DIR" ]; then
+              export XDG_RUNTIME_DIR=/run/user/$(id -u)
+          fi
+        owner: "{{ curator_user }}"
+        group: "{{ curator_user }}"
+        mode: '0644'
+
+    # --- Install uv ---
+
+    - name: Check if uv is installed
+      command: /home/{{ curator_user }}/.local/bin/uv --version
+      become_user: "{{ curator_user }}"
+      register: uv_check
+      failed_when: false
+      changed_when: false
+
+    - name: Install uv
+      become_user: "{{ curator_user }}"
+      shell: curl -LsSf https://astral.sh/uv/install.sh | sh
+      args:
+        creates: /home/{{ curator_user }}/.local/bin/uv
+      when: uv_check.rc != 0
+
+    # --- Application Directories ---
+
+    - name: Create app directory
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: "{{ curator_user }}"
+        group: "{{ curator_user }}"
+        mode: "0755"
+
+    - name: Create data directory
+      file:
+        path: "{{ data_dir }}"
+        state: directory
+        owner: "{{ curator_user }}"
+        group: "{{ curator_user }}"
+        mode: "0755"
+
+    # --- Clone/Update Application Code ---
+
+    - name: Clone or update application repository
+      become_user: "{{ curator_user }}"
+      git:
+        repo: "{{ git_repo }}"
+        dest: "{{ app_dir }}"
+        version: "{{ git_version }}"
+        force: yes
+      register: git_result
+      notify: Restart curator services
+
+    # --- Python Environment ---
+
+    - name: Create virtual environment
+      become_user: "{{ curator_user }}"
+      command: /home/{{ curator_user }}/.local/bin/uv venv --python 3.12
+      args:
+        chdir: "{{ app_dir }}"
+        creates: "{{ app_dir }}/.venv/bin/python"
+
+    - name: Install Python dependencies
+      become_user: "{{ curator_user }}"
+      command: /home/{{ curator_user }}/.local/bin/uv sync --frozen --no-dev
+      args:
+        chdir: "{{ app_dir }}"
+      register: uv_sync_result
+      changed_when: "'Installed' in uv_sync_result.stderr or 'Uninstalled' in uv_sync_result.stderr"
+      notify: Restart curator services
+
+    # --- Environment File ---
+
+    - name: Fetch OpenAI API key from Secret Manager
+      delegate_to: localhost
+      become: no
+      command: >
+        gcloud secrets versions access latest
+        --secret={{ openai_api_key_secret }}
+        --project={{ gcp_project }}
+      register: openai_api_key_content
+      changed_when: false
+      no_log: true
+
+    - name: Deploy environment file
+      template:
+        src: templates/curator.env.j2
+        dest: "{{ app_dir }}/.env"
+        owner: "{{ curator_user }}"
+        group: "{{ curator_user }}"
+        mode: "0600"
+      notify: Restart curator services
+
+    # --- Systemd User Services ---
+
+    - name: Create systemd user config directory
+      file:
+        path: /home/{{ curator_user }}/.config/systemd/user
+        state: directory
+        owner: "{{ curator_user }}"
+        group: "{{ curator_user }}"
+        mode: "0755"
+
+    - name: Deploy curator-api systemd service
+      template:
+        src: templates/curator-api.service.j2
+        dest: /home/{{ curator_user }}/.config/systemd/user/curator-api.service
+        owner: "{{ curator_user }}"
+        group: "{{ curator_user }}"
+        mode: "0644"
+      notify: Restart curator services
+
+    - name: Deploy curator-ui systemd service
+      template:
+        src: templates/curator-ui.service.j2
+        dest: /home/{{ curator_user }}/.config/systemd/user/curator-ui.service
+        owner: "{{ curator_user }}"
+        group: "{{ curator_user }}"
+        mode: "0644"
+      notify: Restart curator services
+
+    - name: Deploy curator-worker systemd service
+      template:
+        src: templates/curator-worker.service.j2
+        dest: /home/{{ curator_user }}/.config/systemd/user/curator-worker.service
+        owner: "{{ curator_user }}"
+        group: "{{ curator_user }}"
+        mode: "0644"
+      notify: Restart curator services
+
+    - name: Reload systemd user daemon
+      become_user: "{{ curator_user }}"
+      environment:
+        XDG_RUNTIME_DIR: /run/user/{{ curator_user_result.uid }}
+      systemd:
+        daemon_reload: yes
+        scope: user
+
+    - name: Enable and start curator services
+      become_user: "{{ curator_user }}"
+      environment:
+        XDG_RUNTIME_DIR: /run/user/{{ curator_user_result.uid }}
+      systemd:
+        name: "{{ item }}"
+        enabled: yes
+        state: started
+        scope: user
+      loop:
+        - curator-api
+        - curator-ui
+        - curator-worker
+
+    # --- SSL Certificate Setup ---
+
+    - name: Create nginx SSL directory
+      file:
+        path: "{{ nginx_ssl_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Fetch SSL certificate from Secret Manager
+      delegate_to: localhost
+      become: no
+      command: >
+        gcloud secrets versions access latest
+        --secret={{ ssl_cert_secret }}
+        --project={{ gcp_project }}
+      register: ssl_cert_content
+      changed_when: false
+      no_log: true
+
+    - name: Fetch SSL private key from Secret Manager
+      delegate_to: localhost
+      become: no
+      command: >
+        gcloud secrets versions access latest
+        --secret={{ ssl_key_secret }}
+        --project={{ gcp_project }}
+      register: ssl_key_content
+      changed_when: false
+      no_log: true
+
+    - name: Deploy SSL certificate
+      copy:
+        content: "{{ ssl_cert_content.stdout }}"
+        dest: "{{ nginx_ssl_dir }}/fullchain.pem"
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload nginx
+      no_log: true
+
+    - name: Deploy SSL private key
+      copy:
+        content: "{{ ssl_key_content.stdout }}"
+        dest: "{{ nginx_ssl_dir }}/privkey.pem"
+        owner: root
+        group: root
+        mode: "0600"
+      notify: Reload nginx
+      no_log: true
+
+    # --- Nginx Configuration ---
+
+    - name: Deploy nginx site configuration
+      template:
+        src: templates/nginx-curator.conf.j2
+        dest: /etc/nginx/sites-available/curator
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Enable nginx site
+      file:
+        src: /etc/nginx/sites-available/curator
+        dest: /etc/nginx/sites-enabled/curator
+        state: link
+      notify: Reload nginx
+
+    - name: Remove default nginx site
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: Reload nginx
+
+    - name: Validate nginx configuration
+      command: nginx -t
+      changed_when: false
+
+    - name: Enable and start nginx
+      systemd:
+        name: nginx
+        enabled: yes
+        state: started
+
+  # --- Handlers ---
+
+  handlers:
+    - name: Restart curator services
+      become_user: "{{ curator_user }}"
+      environment:
+        XDG_RUNTIME_DIR: /run/user/{{ curator_user_result.uid }}
+      systemd:
+        name: "{{ item }}"
+        state: restarted
+        scope: user
+      loop:
+        - curator-api
+        - curator-ui
+        - curator-worker
+
+    - name: Reload nginx
+      systemd:
+        name: nginx
+        state: reloaded
