@@ -87,39 +87,3 @@ resource "google_compute_firewall" "allow_https" {
   source_ranges = ["0.0.0.0/0"]
   target_tags   = ["https-server"]
 }
-
-# Firewall rule - Allow GCP Health Checks (IPv4)
-resource "google_compute_firewall" "allow_health_check" {
-  name     = "default-allow-health-check"
-  network  = google_compute_network.default.name
-  priority = 1000
-
-  allow {
-    protocol = "tcp"
-  }
-
-  source_ranges = [
-    "35.191.0.0/16",
-    "130.211.0.0/22",
-    "209.85.152.0/22",
-    "209.85.204.0/22"
-  ]
-  target_tags = ["lb-health-check"]
-}
-
-# Firewall rule - Allow GCP Health Checks (IPv6)
-resource "google_compute_firewall" "allow_health_check_ipv6" {
-  name     = "default-allow-health-check-ipv6"
-  network  = google_compute_network.default.name
-  priority = 1000
-
-  allow {
-    protocol = "tcp"
-  }
-
-  source_ranges = [
-    "2600:1901:8001::/48",
-    "2600:2d00:1:b029::/64"
-  ]
-  target_tags = ["lb-health-check"]
-}
