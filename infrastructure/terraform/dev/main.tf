@@ -2,7 +2,7 @@ terraform {
   required_version = ">= 1.5.0"
 
   backend "gcs" {
-    bucket = "terraform-state"
+    bucket = "caa-terraform-state"
     prefix = "dev"
   }
 
@@ -33,6 +33,6 @@ module "dev-caa" {
   source                    = "../vm"
   project_id                = data.google_project.project.project_id
   name                      = "dev-caa"
-  network_self_link         = data.terraform_remote_state.shared_network.outputs.vpc_network.self_link
+  network_self_link         = data.terraform_remote_state.shared_network.outputs.network.self_link
   subnetwork_self_link      = data.terraform_remote_state.shared_network.outputs.subnetwork.self_link
 }

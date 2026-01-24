@@ -173,3 +173,10 @@ cython_debug/
 # Track env.test
 !.env.test
 .claude/settings.local.json
+
+# Local .terraform directories
+.terraform*
+
+# .tfstate files
+*.tfstate
+*.tfstate.*

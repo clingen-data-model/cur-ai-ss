@@ -1,4 +1,4 @@
-output "vpc_network" {
+output "network" {
   description = "Default VPC network"
   value = {
     id         = google_compute_network.default.id
