@@ -1,7 +1,7 @@
 # Reserved static IP address
 resource "google_compute_address" "this" {
   name         = var.name
-  region       = var.region
+  region       = "us-east4"
   network_tier = "PREMIUM"
 }
 
@@ -31,8 +31,8 @@ resource "google_compute_instance" "this" {
   }
 
   network_interface {
-    network    = google_compute_network.default.id
-    subnetwork = google_compute_subnetwork.default.id
+    network    = var.network_self_link
+    subnetwork = var.subnetwork_self_link
 
     access_config {
       nat_ip       = google_compute_address.this.address

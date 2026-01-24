@@ -8,15 +8,9 @@ variable "name" {
   description = "Base name for all caa dashboard resources"
 }
 
-variable "region" {
-  type        = string
-  description = "GCP region"
-  default     = "us-east4"
-}
-
 variable "zone" {
   type        = string
-  description = "GCP zone"
+  description = "GCP zone in us-east4"
   default     = "us-east4-a"
 }
 
@@ -43,4 +37,14 @@ variable "boot_image" {
 variable "tags" {
   type    = list(string)
   default = ["http-server", "https-server", "lb-health-check"]
+}
+
+variable "network_self_link" {
+  description = "Self-link of the VPC network (required for Shared VPC or cross-project usage)"
+  type        = string
+}
+
+variable "subnetwork_self_link" {
+  description = "Self-link of the subnetwork"
+  type        = string
 }
