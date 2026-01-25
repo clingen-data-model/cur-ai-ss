@@ -5,32 +5,31 @@
 #
 # Usage:
 #   ansible-playbook -i <ssh-host>, playbook.yml \
-#     -e curator_domain=example.com
+#     -e caa_domain=example.com
 #
 # Required variables:
-#   curator_domain        - Domain name for nginx server_name
+#   caa_domain        - Domain name for nginx server_name
 #
 # Optional variables:
 #   gcp_project           - CAA project name (default: clingen-caa)
 #   ssl_cert_secret       - Secret Manager name for SSL cert (default: caa-ssl-cert)
 #   ssl_key_secret        - Secret Manager name for SSL key (default: caa-ssl-key)
 #   openai_api_key_secret - Secret Manager name for OpenAI key (default: caa-openai-api-key)
-#   cors_allowed_origins  - CORS origins (default: https://{{ curator_domain }})
 #   git_repo              - Git repository URL (default: https://github.com/clingen-data-model/cur-ai-ss.git)
 #   git_version           - Git ref to deploy (default: main)
 #
 # Examples:
 #   ansible-playbook -i dev-caa, playbook.yml \
-#     -e curator_domain=myapp.example.com \
+#     -e caa_domain=myapp.example.com \
 #
 #   # Deploy a specific tag
 #   ansible-playbook -i dev-caa, playbook.yml \
-#     -e curator_domain=myapp.example.com \
+#     -e caa_domain=myapp.example.com \
 #     -e git_version=v1.0.0
 #
 #   # Dry run (check mode)
 #   ansible-playbook -i dev-caa, playbook.yml --check \
-#     -e curator_domain=myapp.example.com
+#     -e caa_domain=myapp.example.com
 #
 # Note: The trailing comma after the hostname is required for single-host inventory.
 #       The SSH host should be pre-configured in ~/.ssh/config with appropriate
@@ -42,10 +41,10 @@
 #      gcloud secrets create caa-ssl-cert --project=PROJECT
 #      gcloud secrets versions add caa-ssl-cert --data-file=fullchain.pem --project=PROJECT
 #      # SSL private key
-#      gcloud secrets create gene-curation-ai-ssl-key --project=PROJECT
+#      gcloud secrets create caa-ai-ssl-key --project=PROJECT
 #      gcloud secrets versions add caa-ssl-key --data-file=privkey.pem --project=PROJECT
 #      # OpenAI API key
-#      gcloud secrets create cur-ai-ss-openai-api-key --project=PROJECT
+#      gcloud secrets create caa-openai-api-key --project=PROJECT
 #      echo -n "sk-..." | gcloud secrets versions add caa-openai-api-key --data-file=- --project=PROJECT
 #
 #   2. gcloud CLI installed on the control machine (where ansible runs)
@@ -56,7 +55,7 @@
 
   vars:
     gcp_project: clingen-caa
-    curator_user: cur-ai-ss
+    caa_user: caa
     app_dir: /opt/cur-ai-ss
     data_dir: /var/cur-ai-ss
     # Git repository settings
@@ -95,43 +94,43 @@
 
     - name: Create curator user
       user:
-        name: "{{ curator_user }}"
+        name: "{{ caa_user }}"
         shell: /bin/bash
         create_home: yes
-      register: curator_user_result
+      register: caa_user_result
 
     - name: Enable lingering for curator user
-      command: loginctl enable-linger {{ curator_user }}
+      command: loginctl enable-linger {{ caa_user }}
       args:
-        creates: /var/lib/systemd/linger/{{ curator_user }}
+        creates: /var/lib/systemd/linger/{{ caa_user }}
 
     - name: Configure XDG_RUNTIME_DIR in bashrc for systemd user services
       blockinfile:
-        path: /home/{{ curator_user }}/.bashrc
+        path: /home/{{ caa_user }}/.bashrc
         marker: "# {mark} ANSIBLE MANAGED - XDG_RUNTIME_DIR"
         block: |
           # Set XDG_RUNTIME_DIR for systemd user services when using su
           if [ -z "$XDG_RUNTIME_DIR" ]; then
               export XDG_RUNTIME_DIR=/run/user/$(id -u)
           fi
-        owner: "{{ curator_user }}"
-        group: "{{ curator_user }}"
+        owner: "{{ caa_user }}"
+        group: "{{ caa_user }}"
         mode: '0644'
 
     # --- Install uv ---
 
     - name: Check if uv is installed
-      command: /home/{{ curator_user }}/.local/bin/uv --version
-      become_user: "{{ curator_user }}"
+      command: /home/{{ caa_user }}/.local/bin/uv --version
+      become_user: "{{ caa_user }}"
       register: uv_check
       failed_when: false
       changed_when: false
 
     - name: Install uv
-      become_user: "{{ curator_user }}"
+      become_user: "{{ caa_user }}"
       shell: curl -LsSf https://astral.sh/uv/install.sh | sh
       args:
-        creates: /home/{{ curator_user }}/.local/bin/uv
+        creates: /home/{{ caa_user }}/.local/bin/uv
       when: uv_check.rc != 0
 
     # --- Application Directories ---
@@ -140,22 +139,22 @@
       file:
         path: "{{ app_dir }}"
         state: directory
-        owner: "{{ curator_user }}"
-        group: "{{ curator_user }}"
+        owner: "{{ caa_user }}"
+        group: "{{ caa_user }}"
         mode: "0755"
 
     - name: Create data directory
       file:
         path: "{{ data_dir }}"
         state: directory
-        owner: "{{ curator_user }}"
-        group: "{{ curator_user }}"
+        owner: "{{ caa_user }}"
+        group: "{{ caa_user }}"
         mode: "0755"
 
     # --- Clone/Update Application Code ---
 
     - name: Clone or update application repository
-      become_user: "{{ curator_user }}"
+      become_user: "{{ caa_user }}"
       git:
         repo: "{{ git_repo }}"
         dest: "{{ app_dir }}"
@@ -167,15 +166,15 @@
     # --- Python Environment ---
 
     - name: Create virtual environment
-      become_user: "{{ curator_user }}"
-      command: /home/{{ curator_user }}/.local/bin/uv venv --python 3.12
+      become_user: "{{ caa_user }}"
+      command: /home/{{ caa_user }}/.local/bin/uv venv --python 3.12
       args:
         chdir: "{{ app_dir }}"
         creates: "{{ app_dir }}/.venv/bin/python"
 
     - name: Install Python dependencies
-      become_user: "{{ curator_user }}"
-      command: /home/{{ curator_user }}/.local/bin/uv sync --frozen --no-dev
+      become_user: "{{ caa_user }}"
+      command: /home/{{ caa_user }}/.local/bin/uv sync --frozen --no-dev
       args:
         chdir: "{{ app_dir }}"
       register: uv_sync_result
@@ -199,8 +198,8 @@
       template:
         src: templates/curator.env.j2
         dest: "{{ app_dir }}/.env"
-        owner: "{{ curator_user }}"
-        group: "{{ curator_user }}"
+        owner: "{{ caa_user }}"
+        group: "{{ caa_user }}"
         mode: "0600"
       notify: Restart curator services
 
@@ -208,51 +207,51 @@
 
     - name: Create systemd user config directory
       file:
-        path: /home/{{ curator_user }}/.config/systemd/user
+        path: /home/{{ caa_user }}/.config/systemd/user
         state: directory
-        owner: "{{ curator_user }}"
-        group: "{{ curator_user }}"
+        owner: "{{ caa_user }}"
+        group: "{{ caa_user }}"
         mode: "0755"
 
     - name: Deploy curator-api systemd service
       template:
         src: templates/curator-api.service.j2
-        dest: /home/{{ curator_user }}/.config/systemd/user/curator-api.service
-        owner: "{{ curator_user }}"
-        group: "{{ curator_user }}"
+        dest: /home/{{ caa_user }}/.config/systemd/user/curator-api.service
+        owner: "{{ caa_user }}"
+        group: "{{ caa_user }}"
         mode: "0644"
       notify: Restart curator services
 
     - name: Deploy curator-ui systemd service
       template:
         src: templates/curator-ui.service.j2
-        dest: /home/{{ curator_user }}/.config/systemd/user/curator-ui.service
-        owner: "{{ curator_user }}"
-        group: "{{ curator_user }}"
+        dest: /home/{{ caa_user }}/.config/systemd/user/curator-ui.service
+        owner: "{{ caa_user }}"
+        group: "{{ caa_user }}"
         mode: "0644"
       notify: Restart curator services
 
     - name: Deploy curator-worker systemd service
       template:
         src: templates/curator-worker.service.j2
-        dest: /home/{{ curator_user }}/.config/systemd/user/curator-worker.service
-        owner: "{{ curator_user }}"
-        group: "{{ curator_user }}"
+        dest: /home/{{ caa_user }}/.config/systemd/user/curator-worker.service
+        owner: "{{ caa_user }}"
+        group: "{{ caa_user }}"
         mode: "0644"
       notify: Restart curator services
 
     - name: Reload systemd user daemon
-      become_user: "{{ curator_user }}"
+      become_user: "{{ caa_user }}"
       environment:
-        XDG_RUNTIME_DIR: /run/user/{{ curator_user_result.uid }}
+        XDG_RUNTIME_DIR: /run/user/{{ caa_user_result.uid }}
       systemd:
         daemon_reload: yes
         scope: user
 
     - name: Enable and start curator services
-      become_user: "{{ curator_user }}"
+      become_user: "{{ caa_user }}"
       environment:
-        XDG_RUNTIME_DIR: /run/user/{{ curator_user_result.uid }}
+        XDG_RUNTIME_DIR: /run/user/{{ caa_user_result.uid }}
       systemd:
         name: "{{ item }}"
         enabled: yes
@@ -353,9 +352,9 @@
 
   handlers:
     - name: Restart curator services
-      become_user: "{{ curator_user }}"
+      become_user: "{{ caa_user }}"
       environment:
-        XDG_RUNTIME_DIR: /run/user/{{ curator_user_result.uid }}
+        XDG_RUNTIME_DIR: /run/user/{{ caa_user_result.uid }}
       systemd:
         name: "{{ item }}"
         state: restarted

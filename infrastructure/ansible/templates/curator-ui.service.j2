@@ -6,13 +6,12 @@ Wants=network-online.target curator-api.service
 [Service]
 Type=simple
 WorkingDirectory={{ app_dir }}
-Environment=CUR_AI_SS_ROOT={{ data_dir }}
 EnvironmentFile={{ app_dir }}/.env
 
 ExecStart={{ app_dir }}/.venv/bin/streamlit run lib/ui/streamlit_app.py \
     --server.port 8001 \
     --server.address 127.0.0.1 \
-    --browser.serverAddress {{ curator_domain }} \
+    --browser.serverAddress {{ caa_domain }} \
     --browser.serverPort 443
 
 Restart=on-failure

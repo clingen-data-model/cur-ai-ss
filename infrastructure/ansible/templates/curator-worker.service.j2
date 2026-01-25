@@ -6,7 +6,6 @@ Wants=network-online.target curator-api.service
 [Service]
 Type=simple
 WorkingDirectory={{ app_dir }}
-Environment=CUR_AI_SS_ROOT={{ data_dir }}
 EnvironmentFile={{ app_dir }}/.env
 
 ExecStart={{ app_dir }}/.venv/bin/python -m lib.bin.worker
