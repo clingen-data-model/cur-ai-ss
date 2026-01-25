@@ -20,17 +20,16 @@
 #   git_version           - Git ref to deploy (default: main)
 #
 # Examples:
-#   ansible-playbook -i curator-vm, playbook.yml \
+#   ansible-playbook -i dev-caa, playbook.yml \
 #     -e curator_domain=myapp.example.com \
-#     -e gcp_project=my-gcp-project \
 #
 #   # Deploy a specific tag
-#   ansible-playbook -i curator-vm, playbook.yml \
+#   ansible-playbook -i dev-caa, playbook.yml \
 #     -e curator_domain=myapp.example.com \
 #     -e git_version=v1.0.0
 #
 #   # Dry run (check mode)
-#   ansible-playbook -i curator-vm, playbook.yml --check \
+#   ansible-playbook -i dev-caa, playbook.yml --check \
 #     -e curator_domain=myapp.example.com
 #
 # Note: The trailing comma after the hostname is required for single-host inventory.
@@ -47,7 +46,7 @@
 #      gcloud secrets versions add caa-ssl-key --data-file=privkey.pem --project=PROJECT
 #      # OpenAI API key
 #      gcloud secrets create cur-ai-ss-openai-api-key --project=PROJECT
-#      echo -n "sk-..." | gcloud secrets versions add cur-ai-ss-openai-api-key --data-file=- --project=PROJECT
+#      echo -n "sk-..." | gcloud secrets versions add caa-openai-api-key --data-file=- --project=PROJECT
 #
 #   2. gcloud CLI installed on the control machine (where ansible runs)
 
