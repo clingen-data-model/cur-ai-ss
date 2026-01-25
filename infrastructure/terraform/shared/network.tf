@@ -42,22 +42,6 @@ resource "google_compute_firewall" "allow_icmp" {
   source_ranges = ["0.0.0.0/0"]
 }
 
-# Firewall rule - Allow SSH
-resource "google_compute_firewall" "allow_ssh" {
-  name        = "default-allow-ssh"
-  network     = google_compute_network.default.name
-  description = "Allows TCP connections from any source to any instance on the network using port 22."
-  priority    = 65534
-
-  allow {
-    protocol = "tcp"
-    ports    = ["22"]
-  }
-
-  source_ranges = ["0.0.0.0/0"]
-  target_tags   = ["allow-ssh"]
-}
-
 # Firewall rule - Allow HTTP
 resource "google_compute_firewall" "allow_http" {
   name     = "default-allow-http"
