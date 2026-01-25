@@ -56,15 +56,13 @@
   vars:
     gcp_project: clingen-caa
     caa_user: caa
-    app_dir: /opt/cur-ai-ss
-    data_dir: /var/cur-ai-ss
     # Git repository settings
     git_repo: https://github.com/clingen-data-model/cur-ai-ss.git
     git_version: main
     # Secret Manager secret names (can be overridden via -e)
-    ssl_cert_secret: gene-curation-ai-ssl-cert
-    ssl_key_secret: gene-curation-ai-ssl-key
-    openai_api_key_secret: cur-ai-ss-openai-api-key
+    ssl_cert_secret: caa-ssl-cert
+    ssl_key_secret: caa-ssl-key
+    openai_api_key_secret: caa-openai-api-key
     # nginx vars
     nginx_ssl_dir: /etc/nginx/ssl
 
@@ -137,7 +135,7 @@
 
     - name: Create app directory
       file:
-        path: "{{ app_dir }}"
+        path: "/opt/{{ caa_user }}"
         state: directory
         owner: "{{ caa_user }}"
         group: "{{ caa_user }}"
@@ -145,7 +143,7 @@
 
     - name: Create data directory
       file:
-        path: "{{ data_dir }}"
+        path: "/var/{{ caa_user }}"
         state: directory
         owner: "{{ caa_user }}"
         group: "{{ caa_user }}"
@@ -157,7 +155,7 @@
       become_user: "{{ caa_user }}"
       git:
         repo: "{{ git_repo }}"
-        dest: "{{ app_dir }}"
+        dest: "/opt/{{ caa_user }}"
         version: "{{ git_version }}"
         force: yes
       register: git_result
@@ -169,14 +167,14 @@
       become_user: "{{ caa_user }}"
       command: /home/{{ caa_user }}/.local/bin/uv venv --python 3.12
       args:
-        chdir: "{{ app_dir }}"
-        creates: "{{ app_dir }}/.venv/bin/python"
+        chdir: "/opt/{{ caa_user }}"
+        creates: "/opt/{{ caa_user }}/.venv/bin/python"
 
     - name: Install Python dependencies
       become_user: "{{ caa_user }}"
       command: /home/{{ caa_user }}/.local/bin/uv sync --frozen --no-dev
       args:
-        chdir: "{{ app_dir }}"
+        chdir: "/opt/{{ caa_user }}"
       register: uv_sync_result
       changed_when: "'Installed' in uv_sync_result.stderr or 'Uninstalled' in uv_sync_result.stderr"
       notify: Restart curator services
@@ -197,7 +195,7 @@
     - name: Deploy environment file
       template:
         src: templates/curator.env.j2
-        dest: "{{ app_dir }}/.env"
+        dest: "/opt/{{ caa_user }}/.env"
         owner: "{{ caa_user }}"
         group: "{{ caa_user }}"
         mode: "0600"
