@@ -24,7 +24,7 @@ data "google_project" "project" {}
 data "terraform_remote_state" "shared_network" {
   backend = "gcs"
   config = {
-    bucket = "terraform-state"
+    bucket = "caa-terraform-state"
     prefix = "shared"
   }
 }
