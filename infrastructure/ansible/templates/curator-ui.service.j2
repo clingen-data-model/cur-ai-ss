@@ -5,8 +5,8 @@ Wants=network-online.target curator-api.service
 
 [Service]
 Type=simple
-WorkingDirectory={{ app_dir }}
-EnvironmentFile={{ app_dir }}/.env
+WorkingDirectory=/opt/{{ caa_user }}
+EnvironmentFile=/opt/{{ caa_user }}/.env
 
 ExecStart={{ app_dir }}/.venv/bin/streamlit run lib/ui/streamlit_app.py \
     --server.port 8001 \

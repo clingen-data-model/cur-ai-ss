@@ -5,8 +5,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory={{ app_dir }}
-EnvironmentFile={{ app_dir }}/.env
+WorkingDirectory=/opt/{{ caa_user }}
+EnvironmentFile=/opt/{{ caa_user }}/.env
 
 ExecStart={{ app_dir }}/.venv/bin/uvicorn lib.api.app:app --host 127.0.0.1 --port 8000
 
