@@ -27,7 +27,7 @@ class Env(BaseSettings):
     LOG_LEVEL: LogLevel = LogLevel.INFO
 
     # Directories
-    CAA_ROOT: str = '/var/cur-ai-ss'
+    CAA_ROOT: str = '/var/caa'
     SQLLITE_DIR: str = 'sqllite'
     EVAGG_DIR: str = 'evagg'
     EXTRACTED_PDF_DIR: str = 'extracted_pdfs'
