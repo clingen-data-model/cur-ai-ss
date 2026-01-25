@@ -63,8 +63,6 @@
     ssl_cert_secret: caa-ssl-cert
     ssl_key_secret: caa-ssl-key
     openai_api_key_secret: caa-openai-api-key
-    # nginx vars
-    nginx_ssl_dir: /etc/nginx/ssl
 
   tasks:
     # --- Package Installation ---
@@ -159,7 +157,7 @@
         version: "{{ git_version }}"
         force: yes
       register: git_result
-      notify: Restart CAA services
+      notify: Restart services
 
     # --- Python Environment ---
 
@@ -177,7 +175,7 @@
         chdir: "/opt/{{ caa_user }}"
       register: uv_sync_result
       changed_when: "'Installed' in uv_sync_result.stderr or 'Uninstalled' in uv_sync_result.stderr"
-      notify: Restart CAA services
+      notify: Restart services
 
     # --- Environment File ---
 
@@ -194,12 +192,12 @@
 
     - name: Deploy environment file
       template:
-        src: templates/caa.env.j2
+        src: templates/env.j2
         dest: "/opt/{{ caa_user }}/.env"
         owner: "{{ caa_user }}"
         group: "{{ caa_user }}"
         mode: "0600"
-      notify: Restart CAA services
+      notify: Restart services
 
     # --- Systemd User Services ---
 
@@ -211,32 +209,32 @@
         group: "{{ caa_user }}"
         mode: "0755"
 
-    - name: Deploy caa-api systemd service
+    - name: Deploy api systemd service
       template:
-        src: templates/caa-api.service.j2
-        dest: /home/{{ caa_user }}/.config/systemd/user/caa-api.service
+        src: templates/api.service.j2
+        dest: /home/{{ caa_user }}/.config/systemd/user/api.service
         owner: "{{ caa_user }}"
         group: "{{ caa_user }}"
         mode: "0644"
-      notify: Restart CAA services
+      notify: Restart services
 
-    - name: Deploy curator-ui systemd service
+    - name: Deploy ui systemd service
       template:
-        src: templates/caa-ui.service.j2
-        dest: /home/{{ caa_user }}/.config/systemd/user/caa-ui.service
+        src: templates/ui.service.j2
+        dest: /home/{{ caa_user }}/.config/systemd/user/ui.service
         owner: "{{ caa_user }}"
         group: "{{ caa_user }}"
         mode: "0644"
-      notify: Restart CAA services
+      notify: Restart services
 
-    - name: Deploy caa-worker systemd service
+    - name: Deploy worker systemd service
       template:
-        src: templates/caa-worker.service.j2
-        dest: /home/{{ caa_user }}/.config/systemd/user/caa-worker.service
+        src: templates/worker.service.j2
+        dest: /home/{{ caa_user }}/.config/systemd/user/worker.service
         owner: "{{ caa_user }}"
         group: "{{ caa_user }}"
         mode: "0644"
-      notify: Restart CAA services
+      notify: Restart services
 
     - name: Reload systemd user daemon
       become_user: "{{ caa_user }}"
@@ -256,15 +254,15 @@
         state: started
         scope: user
       loop:
-        - caa-api
-        - caa-ui
-        - caa-worker
+        - api
+        - ui
+        - worker
 
     # --- SSL Certificate Setup ---
 
     - name: Create nginx SSL directory
       file:
-        path: "{{ nginx_ssl_dir }}"
+        path: /etc/nginx/ssl
         state: directory
         owner: root
         group: root
@@ -295,7 +293,7 @@
     - name: Deploy SSL certificate
       copy:
         content: "{{ ssl_cert_content.stdout }}"
-        dest: "{{ nginx_ssl_dir }}/fullchain.pem"
+        dest: /etc/nginx/ssl/fullchain.pem
         owner: root
         group: root
         mode: "0644"
@@ -305,7 +303,7 @@
     - name: Deploy SSL private key
       copy:
         content: "{{ ssl_key_content.stdout }}"
-        dest: "{{ nginx_ssl_dir }}/privkey.pem"
+        dest: /etc/nginx/ssl/privkey.pem
         owner: root
         group: root
         mode: "0600"
@@ -349,7 +347,7 @@
   # --- Handlers ---
 
   handlers:
-    - name: Restart CAA services
+    - name: Restart services
       become_user: "{{ caa_user }}"
       environment:
         XDG_RUNTIME_DIR: /run/user/{{ caa_user_result.uid }}
@@ -358,9 +356,9 @@
         state: restarted
         scope: user
       loop:
-        - caa-api
-        - caa-ui
-        - caa-worker
+        - api
+        - ui
+        - worker
 
     - name: Reload nginx
       systemd:
