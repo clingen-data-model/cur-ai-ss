@@ -84,7 +84,30 @@
           # OpenCV dependencies (required by docling for table extraction)
           - libgl1
           - libglib2.0-0
+          # Dependencies for gcloud
+          - apt-transport-https
+          - ca-certificates
+          - gnupg
+          - curl
         state: present
+
+    # -- gcloud Installation
+    - name: Add Google Cloud SDK apt key
+      apt_key:
+        url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+        state: present
+
+    - name: Add Google Cloud SDK apt repo
+      apt_repository:
+        repo: "deb https://packages.cloud.google.com/apt cloud-sdk main"
+        state: present
+        filename: google-cloud-sdk
+
+    - name: Install gcloud SDK
+      apt:
+        name: google-cloud-sdk
+        state: present
+        update_cache: yes
 
     # --- User Setup ---
 
