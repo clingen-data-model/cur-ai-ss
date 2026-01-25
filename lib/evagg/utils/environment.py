@@ -27,7 +27,7 @@ class Env(BaseSettings):
     LOG_LEVEL: LogLevel = LogLevel.INFO
 
     # Directories
-    CUR_AI_SS_ROOT: str = '/var/cur-ai-ss'
+    CAA_ROOT: str = '/var/cur-ai-ss'
     SQLLITE_DIR: str = 'sqllite'
     EVAGG_DIR: str = 'evagg'
     EXTRACTED_PDF_DIR: str = 'extracted_pdfs'
@@ -53,24 +53,24 @@ class Env(BaseSettings):
 
     @property
     def sqlite_dir(self) -> Path:
-        return Path(self.CUR_AI_SS_ROOT) / self.SQLLITE_DIR
+        return Path(self.CAA_ROOT) / self.SQLLITE_DIR
 
     @property
     def evagg_dir(self) -> Path:
-        return Path(self.CUR_AI_SS_ROOT) / self.EVAGG_DIR
+        return Path(self.CAA_ROOT) / self.EVAGG_DIR
 
     @property
     def extracted_pdf_dir(self) -> Path:
-        return Path(self.CUR_AI_SS_ROOT) / self.EXTRACTED_PDF_DIR
+        return Path(self.CAA_ROOT) / self.EXTRACTED_PDF_DIR
 
     @property
     def log_dir(self) -> Path:
-        return Path(self.CUR_AI_SS_ROOT) / self.LOG_DIR
+        return Path(self.CAA_ROOT) / self.LOG_DIR
 
     def init_dirs(self) -> None:
-        root = Path(self.CUR_AI_SS_ROOT)
+        root = Path(self.CAA_ROOT)
         if not root.is_absolute():
-            raise RuntimeError(f'CUR_AI_SS_ROOT must be an absolute path: {root}')
+            raise RuntimeError(f'CAA_ROOT must be an absolute path: {root}')
         for p in (
             root,
             self.sqlite_dir,
