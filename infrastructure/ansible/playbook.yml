@@ -1,20 +1,20 @@
 # Curator VM Ansible Playbook
+# 
+# Ansible Installation:
+#   - `brew install ansible` on Mac.
 #
 # Usage:
 #   ansible-playbook -i <ssh-host>, playbook.yml \
-#     -e curator_domain=example.com \
-#     -e gcp_project=my-project \
-#     -e openai_api_deployment=gpt-4
+#     -e curator_domain=example.com
 #
 # Required variables:
 #   curator_domain        - Domain name for nginx server_name
-#   gcp_project           - GCP project containing secrets
-#   openai_api_deployment - OpenAI deployment/model name
 #
 # Optional variables:
-#   ssl_cert_secret       - Secret Manager name for SSL cert (default: gene-curation-ai-ssl-cert)
-#   ssl_key_secret        - Secret Manager name for SSL key (default: gene-curation-ai-ssl-key)
-#   openai_api_key_secret - Secret Manager name for OpenAI key (default: cur-ai-ss-openai-api-key)
+#   gcp_project           - CAA project name (default: clingen-caa)
+#   ssl_cert_secret       - Secret Manager name for SSL cert (default: caa-ssl-cert)
+#   ssl_key_secret        - Secret Manager name for SSL key (default: caa-ssl-key)
+#   openai_api_key_secret - Secret Manager name for OpenAI key (default: caa-openai-api-key)
 #   cors_allowed_origins  - CORS origins (default: https://{{ curator_domain }})
 #   git_repo              - Git repository URL (default: https://github.com/clingen-data-model/cur-ai-ss.git)
 #   git_version           - Git ref to deploy (default: main)
@@ -23,20 +23,15 @@
 #   ansible-playbook -i curator-vm, playbook.yml \
 #     -e curator_domain=myapp.example.com \
 #     -e gcp_project=my-gcp-project \
-#     -e openai_api_deployment=gpt-4
 #
 #   # Deploy a specific tag
 #   ansible-playbook -i curator-vm, playbook.yml \
 #     -e curator_domain=myapp.example.com \
-#     -e gcp_project=my-gcp-project \
-#     -e openai_api_deployment=gpt-4 \
 #     -e git_version=v1.0.0
 #
 #   # Dry run (check mode)
 #   ansible-playbook -i curator-vm, playbook.yml --check \
-#     -e curator_domain=myapp.example.com \
-#     -e gcp_project=my-gcp-project \
-#     -e openai_api_deployment=gpt-4
+#     -e curator_domain=myapp.example.com
 #
 # Note: The trailing comma after the hostname is required for single-host inventory.
 #       The SSH host should be pre-configured in ~/.ssh/config with appropriate
@@ -45,11 +40,11 @@
 # Prerequisites:
 #   1. Secrets stored in Google Secret Manager:
 #      # SSL certificate
-#      gcloud secrets create gene-curation-ai-ssl-cert --project=PROJECT
-#      gcloud secrets versions add gene-curation-ai-ssl-cert --data-file=fullchain.pem --project=PROJECT
+#      gcloud secrets create caa-ssl-cert --project=PROJECT
+#      gcloud secrets versions add caa-ssl-cert --data-file=fullchain.pem --project=PROJECT
 #      # SSL private key
 #      gcloud secrets create gene-curation-ai-ssl-key --project=PROJECT
-#      gcloud secrets versions add gene-curation-ai-ssl-key --data-file=privkey.pem --project=PROJECT
+#      gcloud secrets versions add caa-ssl-key --data-file=privkey.pem --project=PROJECT
 #      # OpenAI API key
 #      gcloud secrets create cur-ai-ss-openai-api-key --project=PROJECT
 #      echo -n "sk-..." | gcloud secrets versions add cur-ai-ss-openai-api-key --data-file=- --project=PROJECT
@@ -61,6 +56,7 @@
   become: yes
 
   vars:
+    gcp_project: clingen-caa
     curator_user: cur-ai-ss
     app_dir: /opt/cur-ai-ss
     data_dir: /var/cur-ai-ss
