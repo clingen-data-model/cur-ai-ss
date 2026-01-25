@@ -47,7 +47,9 @@ app.mount(
     name='caa',
 )
 # Parse CORS origins from env (comma-separated)
-_cors_origins = [origin.strip() for origin in env.CORS_ALLOWED_ORIGINS.split(',') if origin.strip()]
+_cors_origins = [
+    origin.strip() for origin in env.CORS_ALLOWED_ORIGINS.split(',') if origin.strip()
+]
 
 app.add_middleware(
     CORSMiddleware,

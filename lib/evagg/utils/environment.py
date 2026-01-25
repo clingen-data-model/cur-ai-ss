@@ -22,7 +22,7 @@ class Env(BaseSettings):
     NCBI_EUTILS_EMAIL: Optional[str] = None
 
     # Required fields
-    OPENAI_API_DEPLOYMENT: str = "gpt-5-mini"
+    OPENAI_API_DEPLOYMENT: str = 'gpt-5-mini'
     OPENAI_API_KEY: str = Field(...)
     LOG_LEVEL: LogLevel = LogLevel.INFO
 
