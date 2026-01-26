@@ -36,19 +36,17 @@
 #       User, IdentityFile, and other connection settings.
 #
 # Prerequisites:
-#   1. Secrets stored in Google Secret Manager:
+#   -  Secrets stored in Google Secret Manager:
 #      # SSL certificate
 #      gcloud secrets create caa-ssl-cert --project=PROJECT
 #      gcloud secrets versions add caa-ssl-cert --data-file=fullchain.pem --project=PROJECT
 #      # SSL private key
-#      gcloud secrets create caa-ai-ssl-key --project=PROJECT
+#      gcloud secrets create caa-ssl-key --project=PROJECT
 #      gcloud secrets versions add caa-ssl-key --data-file=privkey.pem --project=PROJECT
 #      # OpenAI API key
 #      gcloud secrets create caa-openai-api-key --project=PROJECT
 #      echo -n "sk-..." | gcloud secrets versions add caa-openai-api-key --data-file=- --project=PROJECT
 #
-#   2. gcloud CLI installed on the control machine (where ansible runs)
-
 - name: Configure CAA VM
   hosts: all
   become: yes
@@ -66,7 +64,6 @@
 
   tasks:
     # --- Package Installation ---
-
     - name: Update apt cache
       apt:
         update_cache: yes
@@ -80,34 +77,12 @@
           - git
           # Build dependencies for Python packages
           - build-essential
-          - python3-dev
+          - python3.12
+          - python3.12-dev
           # OpenCV dependencies (required by docling for table extraction)
           - libgl1
           - libglib2.0-0
-          # Dependencies for gcloud
-          - apt-transport-https
-          - ca-certificates
-          - gnupg
-          - curl
         state: present
-
-    # -- gcloud Installation
-    - name: Add Google Cloud SDK apt key
-      apt_key:
-        url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
-        state: present
-
-    - name: Add Google Cloud SDK apt repo
-      apt_repository:
-        repo: "deb https://packages.cloud.google.com/apt cloud-sdk main"
-        state: present
-        filename: google-cloud-sdk
-
-    - name: Install gcloud SDK
-      apt:
-        name: google-cloud-sdk
-        state: present
-        update_cache: yes
 
     # --- User Setup ---
 
@@ -118,39 +93,44 @@
         create_home: yes
       register: caa_user_result
 
+    - name: Ensure XDG runtime dir exists
+      file:
+        path: /run/user/{{ caa_user_result.uid }}
+        state: directory
+        owner: "{{ caa_user }}"
+        group: "{{ caa_user }}"
+        mode: "0700"
+
     - name: Enable lingering for CAA user
       command: loginctl enable-linger {{ caa_user }}
       args:
         creates: /var/lib/systemd/linger/{{ caa_user }}
+      failed_when: false # Prevents the task from failing if the command returns a non-zero exit code (e.g., if the user is already configured to linger).
+      changed_when: false # Prevents the task from showing as "changed" in Ansible reports, keeping output clean if already enabled.
 
-    - name: Configure XDG_RUNTIME_DIR in bashrc for systemd user services
+    - name: Configure user environment (PATH + XDG_RUNTIME_DIR)
       blockinfile:
-        path: /home/{{ caa_user }}/.bashrc
-        marker: "# {mark} ANSIBLE MANAGED - XDG_RUNTIME_DIR"
+        path: /home/{{ caa_user }}/.profile
+        marker: "# {mark} ANSIBLE MANAGED - user env"
         block: |
-          # Set XDG_RUNTIME_DIR for systemd user services when using su
+          # Ensure user-local binaries are on PATH
+          export PATH="$HOME/.local/bin:$PATH"
+
+          # Set XDG_RUNTIME_DIR for systemd user services when needed
           if [ -z "$XDG_RUNTIME_DIR" ]; then
-              export XDG_RUNTIME_DIR=/run/user/$(id -u)
+              export XDG_RUNTIME_DIR="/run/user/$(id -u)"
           fi
         owner: "{{ caa_user }}"
         group: "{{ caa_user }}"
-        mode: '0644'
+        mode: "0644"
 
-    # --- Install uv ---
-
-    - name: Check if uv is installed
-      command: /home/{{ caa_user }}/.local/bin/uv --version
+    # --- Idempotently Install uv ---
+    - name: Install uv (idempotent)
       become_user: "{{ caa_user }}"
-      register: uv_check
-      failed_when: false
-      changed_when: false
-
-    - name: Install uv
-      become_user: "{{ caa_user }}"
-      shell: curl -LsSf https://astral.sh/uv/install.sh | sh
+      shell: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
       args:
-        creates: /home/{{ caa_user }}/.local/bin/uv
-      when: uv_check.rc != 0
+        creates: /home/{{ caa_user }}/.local/bin/uv # If the file exists → task is skipped → idempotent
 
     # --- Application Directories ---
 
@@ -184,20 +164,13 @@
 
     # --- Python Environment ---
 
-    - name: Create virtual environment
-      become_user: "{{ caa_user }}"
-      command: /home/{{ caa_user }}/.local/bin/uv venv --python 3.12
-      args:
-        chdir: "/opt/{{ caa_user }}"
-        creates: "/opt/{{ caa_user }}/.venv/bin/python"
-
     - name: Install Python dependencies
       become_user: "{{ caa_user }}"
-      command: /home/{{ caa_user }}/.local/bin/uv sync --frozen --no-dev
+      command: /home/{{ caa_user }}/.local/bin/uv sync --frozen --no-dev --system
       args:
         chdir: "/opt/{{ caa_user }}"
       register: uv_sync_result
-      changed_when: "'Installed' in uv_sync_result.stderr or 'Uninstalled' in uv_sync_result.stderr"
+      changed_when: uv_sync_result.rc == 0
       notify: Restart services
 
     # --- Environment File ---
