@@ -4,6 +4,14 @@ import time
 import requests
 import streamlit as st
 
+from lib.agents.variant_extraction_agent import (
+    HgvsInferenceConfidence,
+    Inheritance,
+    Variant,
+    VariantExtractionOutput,
+    VariantType,
+    Zygosity,
+)
 from lib.evagg.types.base import Paper
 from lib.models import ExtractionStatus, PaperResp
 from lib.ui.api import (
@@ -131,6 +139,128 @@ with center:
                 data['abstract'] = st.text_area(
                     'Abstract', data['abstract'], height=200
                 )
+    with tab3:
+        if paper_resp.extraction_status != ExtractionStatus.PARSED:
+            st.write('Not yet parsed')
+        else:
+            paper = Paper(id=paper_resp.id)
+            data = json.load(open(paper.variants_json_path, 'r'))
+            variants: list[Variant] = VariantExtractionOutput.model_validate(
+                data
+            ).variants
+            for i, variant in enumerate(variants):
+                st.markdown(f'### Variant {i + 1} ')
+                with st.expander(
+                    f'{variant.variant_notation_original or "New variant"}'
+                ):
+                    with st.container():
+                        st.subheader('Variant Summary')
+                        st.text(f'Gene: {variant.gene}')
+                        st.text(
+                            f'Variant Notation: {variant.variant_notation_original}'
+                        )
+                        st.text_area(
+                            'Variant Evidence Context',
+                            variant.variant_evidence_context or '',
+                            height=60,
+                            disabled=True,
+                            key=f'{i}-vec',
+                        )
+                        variant.transcript = st.text_input(
+                            f'Transcript',
+                            variant.transcript or '',
+                            key=f'{i}-transcript',
+                        )
+                        variant.genomic_coordinates = st.text_input(
+                            'Genomic Coordinates',
+                            variant.genomic_coordinates or '',
+                            key=f'{i}-coords',
+                        )
+                        variant.hgvs_c = st.text_input(
+                            'HGVS c.', variant.hgvs_c or '', key=f'{i}-hgvs_c'
+                        )
+                        variant.hgvs_p = st.text_input(
+                            'HGVS p.', variant.hgvs_p or '', key=f'{i}-hgvs_p'
+                        )
+
+                    # --- HGVS Inference (info only) ---
+                    with st.expander('HGVS Inference (info only)', expanded=False):
+                        st.text(f'HGVS c. inferred: {variant.hgvs_c_inferred or ""}')
+                        st.text(f'HGVS p. inferred: {variant.hgvs_p_inferred or ""}')
+                        st.text(
+                            f'HGVS Inference Confidence: {variant.hgvs_inference_confidence.value if variant.hgvs_inference_confidence else ""}'
+                        )
+                        st.text_area(
+                            'HGVS Inference Evidence',
+                            variant.hgvs_inference_evidence_context or '',
+                            height=60,
+                            disabled=True,
+                            key=f'{i}-hic',
+                        )
+
+                    with st.container():
+                        st.subheader('Variant Type')
+                        selected_value = st.selectbox(
+                            'Variant Type',
+                            [vt.value for vt in VariantType],  # display strings
+                            index=[vt.value for vt in VariantType].index(
+                                variant.variant_type.value
+                            )
+                            if variant.variant_type
+                            else 0,
+                            key=f'{i}-type',
+                        )
+                        st.text_area(
+                            'Variant Type Evidence Context',
+                            variant.variant_type_evidence_context or '',
+                            height=60,
+                            disabled=True,
+                            key=f'{i}-vtec',
+                        )
+
+                    with st.container():
+                        st.subheader('Zygosity')
+                        variant.zygosity = Zygosity(
+                            st.selectbox(
+                                'Zygosity',
+                                [z.value for z in Zygosity],  # display strings
+                                index=[x.value for x in Zygosity].index(
+                                    variant.zygosity.value
+                                )
+                                if variant.zygosity
+                                else 0,
+                                key=f'{i}-zygosity',
+                            )
+                        )
+                        st.text_area(
+                            'Zygosity Evidence Context',
+                            variant.zygosity_evidence_context or '',
+                            height=60,
+                            disabled=True,
+                            key=f'{i}-zec',
+                        )
+
+                    with st.container():
+                        st.subheader('Inheritance')
+                        variant.inheritance = Inheritance(
+                            st.selectbox(
+                                'Inheritance',
+                                [inh.value for inh in Inheritance],  # display strings
+                                index=[inh.value for inh in Inheritance].index(
+                                    variant.inheritance.value
+                                )
+                                if variant.inheritance
+                                else 0,
+                                key=f'{i}-inheritance',
+                            )
+                        )
+                        st.text_area(
+                            'Inheritance Evidence Context',
+                            variant.inheritance_evidence_context or '',
+                            height=60,
+                            disabled=True,
+                            key=f'{i}-iec',
+                        )
 
 with left:
     with st.container(horizontal=True, vertical_alignment='center'):

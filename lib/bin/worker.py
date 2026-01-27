@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 import asyncio
-import datetime
 import json
 import logging
 import time
 import traceback
 
+from agents import Runner
 from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 
+from lib.agents.variant_extraction_agent import agent as variant_extraction_agent
 from lib.api.db import session_scope
 from lib.evagg.llm import OpenAIClient
 from lib.evagg.pdf.parse import parse_content
@@ -27,7 +28,7 @@ RETRIES = 3
 logger = logging.getLogger(__name__)
 
 
-def dump_paper_metadata(paper: Paper) -> Paper:
+def parse_paper_metadata_task(paper: Paper) -> Paper:
     llm_client = OpenAIClient()
     ncbi_lookup_client = NcbiLookupClient(
         web_client=RequestsWebContentClient(
@@ -61,18 +62,32 @@ def dump_paper_metadata(paper: Paper) -> Paper:
     return paper
 
 
-def run_evagg_app(paper_db: PaperDB) -> None:
+def parse_variants_task(paper: Paper, gene_symbol: str) -> None:
+    result = Runner.run_sync(
+        variant_extraction_agent,
+        f'Gene Symbol: {gene_symbol} \n Paper (fulltext md): {paper.fulltext_md}',
+    )
+    json_response = result.final_output.model_dump_json(indent=2)
+    # Dump the response
+    paper.variants_json_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(paper.variants_json_path, 'w') as f:
+        f.write(json_response)
+
+
+def initial_extraction(paper_db: PaperDB) -> None:
     max_attempts = RETRIES + 1
     for attempt in range(1, max_attempts + 1):
         try:
             paper = Paper(id=paper_db.id).with_content()
             parse_content(paper)
-            dump_paper_metadata(paper)
+            paper = parse_paper_metadata_task(paper)
+            parse_variants_task(paper, paper_db.gene.symbol)
             paper_db.extraction_status = ExtractionStatus.PARSED
             logger.info(f'Attempt {attempt}/{max_attempts} succeeded')
             return
         except KeyboardInterrupt:
             logger.info(f'Interrupted on attempt {attempt}')
+            raise
         except Exception as e:
             logger.error(f'Error executing app on attempt {attempt}: {e}')
             logger.error(traceback.format_exc())
@@ -95,7 +110,7 @@ def main() -> None:
                 ).first()
                 if paper_db:
                     logger.info(f'Dequeued paper {paper_db.id}')
-                    run_evagg_app(paper_db)
+                    initial_extraction(paper_db)
         except KeyboardInterrupt:
             logger.info('Shutting down poller')
             break

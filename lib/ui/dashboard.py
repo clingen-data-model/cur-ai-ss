@@ -7,12 +7,19 @@ import streamlit as st
 from lib.evagg.types.base import Paper
 from lib.evagg.utils.environment import env
 from lib.models import ExtractionStatus, PaperResp
-from lib.ui.api import get_genes, get_http_error_detail, get_papers, put_paper
+from lib.ui.api import (
+    delete_paper,
+    get_genes,
+    get_http_error_detail,
+    get_papers,
+    put_paper,
+)
 
 st.set_page_config(page_title='Papers Dashboard', layout='wide')
-left, center, right = st.columns([2, 4, 2])
+left, center, right = st.columns([2, 5, 2])
 main = center.container()
 
+CURATIONS_DF_KEY = 'CURATIONS_DF_KEY'
 QUEUED_EXTRACTION_TEXT = 'Pending Extraction...'
 
 # Global Requests
@@ -20,6 +27,14 @@ gene_resps = get_genes()
 if not gene_resps:
     st.error('No genes found, cannot proceed.')
     st.stop()  # stop further execution
+
+
+def papers_df_on_change() -> None:
+    # deleted_rows returns the
+    idx_of_deleted = st.session_state[CURATIONS_DF_KEY]['deleted_rows'][-1]
+    if paper_resps:
+        paper_id = paper_resps[idx_of_deleted].id
+        delete_paper(paper_id)
 
 
 @st.dialog('Upload PDF and Select Gene')
@@ -76,7 +91,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
         lambda row: f'/details?paper_id={row["id"]}#{status_map.get(row["extraction_status"], row["extraction_status"])}',
         axis=1,
     )
-    st.dataframe(
+    st.data_editor(
         df[
             [
                 'gene_symbol',
@@ -114,6 +129,17 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
                 display_text=r'.*?#(.+)$',
             ),
         },
+        disabled=[
+            'gene_symbol',
+            'thumbnail_path',
+            'title',
+            'first_author',
+            'filename',
+            'extraction_status',
+        ],
+        num_rows='delete',
+        key=CURATIONS_DF_KEY,
+        on_change=papers_df_on_change,
     )
 
 

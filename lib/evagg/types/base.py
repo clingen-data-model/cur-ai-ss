@@ -109,6 +109,10 @@ class Paper:
         return env.evagg_dir / self.id / 'metadata.json'
 
     @property
+    def variants_json_path(self) -> Path:
+        return env.evagg_dir / self.id / 'variants.json'
+
+    @property
     def pdf_dir(self) -> Path:
         return env.extracted_pdf_dir / self.id
 
