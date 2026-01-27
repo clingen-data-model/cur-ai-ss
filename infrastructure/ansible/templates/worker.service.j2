@@ -7,6 +7,7 @@ Wants=network-online.target curator-api.service
 Type=simple
 WorkingDirectory=/opt/{{ caa_user }}
 EnvironmentFile=/opt/{{ caa_user }}/.env
+Environment=PATH="/home/{{ caa_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
 
 ExecStart=/opt/{{ caa_user }}/bin/worker
 

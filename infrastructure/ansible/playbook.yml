@@ -110,7 +110,7 @@
 
     - name: Configure user environment (PATH + XDG_RUNTIME_DIR)
       blockinfile:
-        path: /home/{{ caa_user }}/.profile
+        path: /home/{{ caa_user }}/.bashrc
         marker: "# {mark} ANSIBLE MANAGED - user env"
         block: |
           # Ensure user-local binaries are on PATH
