@@ -163,14 +163,13 @@
       notify: Restart services
 
     # --- Python Environment ---
-
     - name: Install Python dependencies
       become_user: "{{ caa_user }}"
       command: /home/{{ caa_user }}/.local/bin/uv sync --frozen --no-dev
       args:
         chdir: "/opt/{{ caa_user }}"
       register: uv_sync_result
-      changed_when: uv_sync_result.rc == 0
+      changed_when: true   # <- always marked as changed
       notify: Restart services
 
     # --- Environment File ---

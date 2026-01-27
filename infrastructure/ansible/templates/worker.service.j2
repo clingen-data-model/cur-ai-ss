@@ -8,7 +8,7 @@ Type=simple
 WorkingDirectory=/opt/{{ caa_user }}
 EnvironmentFile=/opt/{{ caa_user }}/.env
 
-ExecStart=bin/worker
+ExecStart=/opt/{{ caa_user }}/bin/worker
 
 Restart=on-failure
 RestartSec=5

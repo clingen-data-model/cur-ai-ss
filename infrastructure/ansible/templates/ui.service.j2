@@ -8,7 +8,7 @@ Type=simple
 WorkingDirectory=/opt/{{ caa_user }}
 EnvironmentFile=/opt/{{ caa_user }}/.env
 
-ExecStart=bin/ui \
+ExecStart=/opt/{{ caa_user }}/bin/ui \
     --server.port 8001 \
     --server.address 127.0.0.1 \
     --browser.serverAddress {{ domain }} \
