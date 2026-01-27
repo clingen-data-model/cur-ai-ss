@@ -78,7 +78,8 @@ Guidelines:
 1. Extract only explicitly stated information.
 2. Preserve original wording for age and country.
 3. Use enum values when possible; otherwise, return unknown/Other.
-4. Provide exact evidence text for each field.
+4. Provide exact evidence text for each field.  If citing a figure, in addition to the raw text
+also include the title and an interpretable explanation of why the text was cited.
 5. Return null for any missing fields.
 6. Each patient must have a identifier; if not stated, skip that patient.
 
