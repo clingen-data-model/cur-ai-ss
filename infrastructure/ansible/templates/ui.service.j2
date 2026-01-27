@@ -9,7 +9,7 @@ WorkingDirectory=/opt/{{ caa_user }}
 EnvironmentFile=/opt/{{ caa_user }}/.env
 Environment=PATH="/home/{{ caa_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
 Environment=PROTOCOL="https://"
-Environment=API_HOSTNAME="{{ domain }}/api"
+Environment=API_ENDPOINT="{{ domain }}/api"
 
 ExecStart=/opt/{{ caa_user }}/bin/ui \
     --server.port 8001 \
