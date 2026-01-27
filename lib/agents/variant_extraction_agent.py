@@ -94,7 +94,7 @@ For each extracted variant, provide:
 - hgvs_inference_confidence (one of "high", "medium", "low", or null)
 - hgvs_inference_evidence_context
 - variant_type (must match above labels exactly)
-- zygosity (one of "homozygous", "hemizygous", "heterozygous", "compound heterozygous", "not applicable")
+- zygosity (one of "homozygous", "hemizygous", "heterozygous", "compound heterozygous", "unknown")
 - inheritance (one of "dominant", "recessive", "semi-dominant", "X-linked", "de novo", "somatic mosaicism", "mitochondrial", or "unknown")
 
 Evidence Handling:
@@ -150,7 +150,7 @@ class Zygosity(str, Enum):
     hemizygous = 'hemizygous'
     heterozygous = 'heterozygous'
     compound_heterozygous = 'compound heterozygous'
-    not_applicable = 'not applicable'
+    unknown = 'unknown'
 
 
 class Inheritance(str, Enum):
@@ -188,9 +188,9 @@ class Variant(BaseModel):
     hgvs_inference_evidence_context: Optional[str]
 
     # Other variant attributes
-    variant_type: Optional[VariantType]
-    zygosity: Optional[Zygosity]
-    inheritance: Optional[Inheritance]
+    variant_type: VariantType
+    zygosity: Zygosity
+    inheritance: Inheritance
 
     # Evidence
     variant_type_evidence_context: Optional[str]
