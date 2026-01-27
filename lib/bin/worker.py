@@ -83,7 +83,7 @@ async def parse_variants_task_async(paper: Paper, gene_symbol: str) -> None:
     with open(paper.variants_json_path, "w") as f:
         f.write(json_response)
 
-async def run_tasks_concurrently(paper: Paper, gene_symbol: str):
+async def run_tasks_concurrently(paper: Paper, gene_symbol: str) -> None:
     await asyncio.gather(
         parse_patients_task_async(paper),
         parse_variants_task_async(paper, gene_symbol),
