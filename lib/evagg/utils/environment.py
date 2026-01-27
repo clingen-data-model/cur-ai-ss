@@ -34,7 +34,7 @@ class Env(BaseSettings):
     LOG_DIR: str = 'logs'
 
     # UI->API
-    API_ENDPOINT = 'localhost:8000'
+    API_ENDPOINT: str = 'localhost:8000'
     PROTOCOL: str = 'http://'
 
     # API allowed origins
