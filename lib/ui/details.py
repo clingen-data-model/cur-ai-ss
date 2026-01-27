@@ -151,13 +151,19 @@ with center:
             for i, variant in enumerate(variants):
                 st.markdown(f'### Variant {i + 1} ')
                 with st.expander(
-                    f'{variant.variant_notation_original or "New variant"}'
+                    f'{variant.variant_verbatim or "New variant"}'
                 ):
                     with st.container():
                         st.subheader('Variant Summary')
-                        st.text(f'Gene: {variant.gene}')
-                        st.text(
-                            f'Variant Notation: {variant.variant_notation_original}'
+                        col1, col2, col3_label, col3_input = st.columns([1, 3, 1, 3])
+                        col1.markdown(f"**Gene:** {variant.gene or 'N/A'}")
+                        col2.markdown(f"**Variant:** {variant.variant_verbatim or 'N/A'}")
+                        col3_label.markdown("**Transcript:**")
+                        variant.transcript = col3_input.text_input(
+                            'Transcript',
+                            variant.transcript or '',
+                            key=f'{i}-transcript',
+                            label_visibility='collapsed',
                         )
                         st.text_area(
                             'Variant Evidence Context',
@@ -166,11 +172,7 @@ with center:
                             disabled=True,
                             key=f'{i}-vec',
                         )
-                        variant.transcript = st.text_input(
-                            f'Transcript',
-                            variant.transcript or '',
-                            key=f'{i}-transcript',
-                        )
+
                         variant.genomic_coordinates = st.text_input(
                             'Genomic Coordinates',
                             variant.genomic_coordinates or '',

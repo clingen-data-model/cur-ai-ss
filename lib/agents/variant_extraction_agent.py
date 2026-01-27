@@ -25,7 +25,7 @@ Transcript Handling:
 - Preserve transcript identifiers exactly as written.
 - If absent, return null.
 
-Examples of variant_notation_original:
+Examples of variant_verbatim:
 - "Val600Glu mutation"
 - "c.1799T>A in exon 15"
 - "glycine to arginine substitution at codon 12"
@@ -85,7 +85,7 @@ Examples of disallowed inference:
 For each extracted variant, provide:
 - gene
 - transcript
-- variant_notation_original (verbatim text describing the variant)
+- variant_verbatim (exact text describing the variant from source)
 - genomic_coordinates
 - hgvs_c
 - hgvs_p
@@ -174,7 +174,7 @@ class Variant(BaseModel):
     # Core extraction fields
     gene: str  # Not optional, statically comes from human
     transcript: Optional[str]
-    variant_notation_original: Optional[str]
+    variant_verbatim: Optional[str]
     genomic_coordinates: Optional[str]
 
     # Explicit HGVS from text
