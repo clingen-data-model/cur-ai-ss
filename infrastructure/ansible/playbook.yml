@@ -166,7 +166,7 @@
 
     - name: Install Python dependencies
       become_user: "{{ caa_user }}"
-      command: /home/{{ caa_user }}/.local/bin/uv sync --frozen --no-dev --system
+      command: /home/{{ caa_user }}/.local/bin/uv sync --frozen --no-dev
       args:
         chdir: "/opt/{{ caa_user }}"
       register: uv_sync_result

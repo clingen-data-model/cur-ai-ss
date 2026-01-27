@@ -8,7 +8,7 @@ Type=simple
 WorkingDirectory=/opt/{{ caa_user }}
 EnvironmentFile=/opt/{{ caa_user }}/.env
 
-ExecStart={{ app_dir }}/bin/api --host 127.0.0.1 --port 8000
+ExecStart=bin/api --host 127.0.0.1 --port 8000
 
 Restart=on-failure
 RestartSec=5
