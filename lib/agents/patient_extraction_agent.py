@@ -14,17 +14,17 @@ class Sex(str, Enum):
 
 
 class RaceEthnicity(str, Enum):
-    African_American = "African/African American"
-    Latino_Admixed_American = "Latino/Admixed American"
-    Ashkenazi_Jewish = "Ashkenazi Jewish"
-    East_Asian = "East Asian"
-    Finnish = "Finnish"
-    Non_Finnish_European = "Non-Finnish European"
-    South_Asian = "South Asian"
-    Middle_Eastern = "Middle Eastern"
-    Amish = "Amish"
-    Other = "Other"
-    Unknown = "Unknown"
+    African_American = 'African/African American'
+    Latino_Admixed_American = 'Latino/Admixed American'
+    Ashkenazi_Jewish = 'Ashkenazi Jewish'
+    East_Asian = 'East Asian'
+    Finnish = 'Finnish'
+    Non_Finnish_European = 'Non-Finnish European'
+    South_Asian = 'South Asian'
+    Middle_Eastern = 'Middle Eastern'
+    Amish = 'Amish'
+    Other = 'Other'
+    Unknown = 'Unknown'
 
 
 # --- Patient model

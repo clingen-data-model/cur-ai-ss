@@ -31,7 +31,7 @@ variable "boot_disk_type" {
 
 variable "boot_image" {
   type    = string
-  default = "ubuntu-os-cloud/ubuntu-2510-arm64"
+  default = "ubuntu-os-cloud/ubuntu-2404-lts-arm64"
 }
 
 variable "tags" {
