@@ -63,28 +63,31 @@ def parse_paper_metadata_task(paper: Paper) -> Paper:
     return paper
 
 
-def parse_patients_task(paper: Paper) -> None:
-    result = Runner.run_sync(
+async def parse_patients_task_async(paper: Paper) -> None:
+    result = await Runner.run(
         patient_extraction_agent,
-        f'Paper (fulltext md): {paper.fulltext_md}',
+        f"Paper (fulltext md): {paper.fulltext_md}",
     )
     json_response = result.final_output.model_dump_json(indent=2)
-    # Dump the response
     paper.patient_info_json_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(paper.patient_info_json_path, 'w') as f:
+    with open(paper.patient_info_json_path, "w") as f:
         f.write(json_response)
 
-
-def parse_variants_task(paper: Paper, gene_symbol: str) -> None:
-    result = Runner.run_sync(
+async def parse_variants_task_async(paper: Paper, gene_symbol: str) -> None:
+    result = await Runner.run(
         variant_extraction_agent,
-        f'Gene Symbol: {gene_symbol} \n Paper (fulltext md): {paper.fulltext_md}',
+        f"Gene Symbol: {gene_symbol}\nPaper (fulltext md): {paper.fulltext_md}",
     )
     json_response = result.final_output.model_dump_json(indent=2)
-    # Dump the response
     paper.variants_json_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(paper.variants_json_path, 'w') as f:
+    with open(paper.variants_json_path, "w") as f:
         f.write(json_response)
+
+async def run_tasks_concurrently(paper: Paper, gene_symbol: str):
+    await asyncio.gather(
+        parse_patients_task_async(paper),
+        parse_variants_task_async(paper, gene_symbol),
+    )
 
 
 def initial_extraction(paper_db: PaperDB) -> None:
@@ -94,8 +97,7 @@ def initial_extraction(paper_db: PaperDB) -> None:
             paper = Paper(id=paper_db.id).with_content()
             parse_content(paper, force=True)
             paper = parse_paper_metadata_task(paper)
-            parse_patients_task(paper)
-            parse_variants_task(paper, paper_db.gene.symbol)
+            asyncio.run(run_tasks_concurrently(paper, paper_db.gene.symbol))
             paper_db.extraction_status = ExtractionStatus.PARSED
             logger.info(f'Attempt {attempt}/{max_attempts} succeeded')
             return
