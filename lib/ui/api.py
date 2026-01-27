@@ -20,20 +20,22 @@ def get_http_error_detail(e: requests.HTTPError) -> str:
 
 
 def get_papers() -> list[PaperResp]:
-    resp = requests.get(f'http://{env.API_HOSTNAME}:{env.API_PORT}/papers')
+    resp = requests.get(f'{env.PROTOCOL}{env.API_HOSTNAME}:{env.API_PORT}/papers')
     resp.raise_for_status()
     return TypeAdapter(list[PaperResp]).validate_python(resp.json())
 
 
 @st.cache_data(ttl='1d')
 def get_genes() -> list[GeneResp]:
-    resp = requests.get(f'http://{env.API_HOSTNAME}:{env.API_PORT}/genes')
+    resp = requests.get(f'{env.PROTOCOL}{env.API_HOSTNAME}:{env.API_PORT}/genes')
     resp.raise_for_status()
     return TypeAdapter(list[GeneResp]).validate_python(resp.json())
 
 
 def get_paper(paper_id: str) -> PaperResp:
-    resp = requests.get(f'http://{env.API_HOSTNAME}:{env.API_PORT}/papers/{paper_id}')
+    resp = requests.get(
+        f'{env.PROTOCOL}{env.API_HOSTNAME}:{env.API_PORT}/papers/{paper_id}'
+    )
     resp.raise_for_status()
     return PaperResp.model_validate(resp.json())
 
@@ -43,7 +45,7 @@ def put_paper(
     gene_symbol: str,
 ) -> PaperResp:
     resp = requests.put(
-        f'http://{env.API_HOSTNAME}:{env.API_PORT}/papers',
+        f'{env.PROTOCOL}{env.API_HOSTNAME}:{env.API_PORT}/papers',
         data={'gene_symbol': gene_symbol},
         files={
             'uploaded_file': (
@@ -60,7 +62,7 @@ def put_paper(
 
 def requeue_paper(paper_id: str) -> PaperResp:
     resp = requests.patch(
-        f'http://{env.API_HOSTNAME}:{env.API_PORT}/papers/{paper_id}',
+        f'{env.PROTOCOL}{env.API_HOSTNAME}:{env.API_PORT}/papers/{paper_id}',
         json={'extraction_status': ExtractionStatus.QUEUED.value},
     )
     resp.raise_for_status()
@@ -69,6 +71,6 @@ def requeue_paper(paper_id: str) -> PaperResp:
 
 def delete_paper(paper_id: str) -> None:
     resp = requests.delete(
-        f'http://{env.API_HOSTNAME}:{env.API_PORT}/papers/{paper_id}',
+        f'{env.PROTOCOL}{env.API_HOSTNAME}:{env.API_PORT}/papers/{paper_id}',
     )
     resp.raise_for_status()

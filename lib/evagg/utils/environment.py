@@ -33,9 +33,12 @@ class Env(BaseSettings):
     EXTRACTED_PDF_DIR: str = 'extracted_pdfs'
     LOG_DIR: str = 'logs'
 
-    # API
+    # UI->API
     API_HOSTNAME: str = 'localhost'
     API_PORT: int = 8000
+    PROTOCOL: str = 'http://'
+
+    # API allowed origins
     CORS_ALLOWED_ORIGINS: str = 'http://localhost:8501'  # Comma-separated list
 
     @model_validator(mode='after')
