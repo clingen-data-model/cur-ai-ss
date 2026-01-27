@@ -118,7 +118,7 @@ Output:
 from enum import Enum
 from typing import List, Literal, Optional, Tuple
 
-from agents import Agent
+from agents import Agent, ModelSettings
 from pydantic import BaseModel
 
 from lib.evagg.utils.environment import env
@@ -208,4 +208,5 @@ agent = Agent(
     instructions=VARIANT_EXTRACTION_INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
     output_type=VariantExtractionOutput,
+    model_settings=ModelSettings(max_tokens=8192),
 )

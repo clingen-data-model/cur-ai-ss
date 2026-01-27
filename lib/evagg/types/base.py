@@ -109,6 +109,10 @@ class Paper:
         return env.evagg_dir / self.id / 'metadata.json'
 
     @property
+    def patient_info_json_path(self) -> Path:
+        return env.evagg_dir / self.id / 'patient_info.json'
+
+    @property
     def variants_json_path(self) -> Path:
         return env.evagg_dir / self.id / 'variants.json'
 

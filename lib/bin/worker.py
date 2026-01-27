@@ -10,6 +10,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 
+from lib.agents.patient_extraction_agent import agent as patient_extraction_agent
 from lib.agents.variant_extraction_agent import agent as variant_extraction_agent
 from lib.api.db import session_scope
 from lib.evagg.llm import OpenAIClient
@@ -62,6 +63,18 @@ def parse_paper_metadata_task(paper: Paper) -> Paper:
     return paper
 
 
+def parse_patients_task(paper: Paper) -> None:
+    result = Runner.run_sync(
+        patient_extraction_agent,
+        f'Paper (fulltext md): {paper.fulltext_md}',
+    )
+    json_response = result.final_output.model_dump_json(indent=2)
+    # Dump the response
+    paper.patient_info_json_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(paper.patient_info_json_path, 'w') as f:
+        f.write(json_response)
+
+
 def parse_variants_task(paper: Paper, gene_symbol: str) -> None:
     result = Runner.run_sync(
         variant_extraction_agent,
@@ -79,8 +92,9 @@ def initial_extraction(paper_db: PaperDB) -> None:
     for attempt in range(1, max_attempts + 1):
         try:
             paper = Paper(id=paper_db.id).with_content()
-            parse_content(paper)
+            parse_content(paper, force=True)
             paper = parse_paper_metadata_task(paper)
+            parse_patients_task(paper)
             parse_variants_task(paper, paper_db.gene.symbol)
             paper_db.extraction_status = ExtractionStatus.PARSED
             logger.info(f'Attempt {attempt}/{max_attempts} succeeded')

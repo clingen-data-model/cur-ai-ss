@@ -4,6 +4,12 @@ import time
 import requests
 import streamlit as st
 
+from lib.agents.patient_extraction_agent import (
+    PatientInfo,
+    PatientInfoExtractionOutput,
+    RaceEthnicity,
+    Sex,
+)
 from lib.agents.variant_extraction_agent import (
     HgvsInferenceConfidence,
     Inheritance,
@@ -95,7 +101,9 @@ with center:
             except Exception as e:
                 st.toast(str(e))
 
-    tab1, tab2, tab3 = st.tabs(['Full PDF', 'Paper Metadata', 'Variant Details'])
+    tab1, tab2, tab3, tab4 = st.tabs(
+        ['Full PDF', 'Paper Metadata', 'Patient Info', 'Variant Details']
+    )
 
     with tab1:
         paper = Paper(id=paper_resp.id)
@@ -139,7 +147,129 @@ with center:
                 data['abstract'] = st.text_area(
                     'Abstract', data['abstract'], height=200
                 )
+
     with tab3:
+        if paper_resp.extraction_status != ExtractionStatus.PARSED:
+            st.write('Not yet parsed')
+        else:
+            paper = Paper(id=paper_resp.id)
+            data = json.load(open(paper.patient_info_json_path, 'r'))
+            patients: list[PatientInfo] = PatientInfoExtractionOutput.model_validate(
+                data
+            ).patients
+            for i, patient in enumerate(patients):
+                with st.expander(f'{patient.identifier or "N/A"}'):
+                    # --- Proband Identifier
+                    patient.identifier = st.text_input(
+                        'Proband Identifier',
+                        patient.identifier,
+                        key=f'{i}-identifier',
+                    )
+                    st.text_area(
+                        'Proband Identifier Evidence',
+                        patient.identifier_evidence or '',
+                        height=60,
+                        disabled=True,
+                        key=f'{i}-identifier-evidence',
+                    )
+
+                    # --- Sex (enum)
+                    patient.sex = Sex(
+                        st.selectbox(
+                            'Sex',
+                            [s.value for s in Sex],
+                            index=[s.value for s in Sex].index(patient.sex.value)
+                            if patient.sex
+                            else 0,
+                            key=f'{i}-sex',
+                        )
+                    )
+                    st.text_area(
+                        'Sex Evidence',
+                        patient.sex_evidence or '',
+                        height=60,
+                        disabled=True,
+                        key=f'{i}-sex-evidence',
+                    )
+
+                    # --- Age at Diagnosis
+                    patient.age_diagnosis = st.text_input(
+                        'Age at Diagnosis',
+                        patient.age_diagnosis or '',
+                        key=f'{i}-age-diagnosis',
+                    )
+                    st.text_area(
+                        'Age at Diagnosis Evidence',
+                        patient.age_diagnosis_evidence or '',
+                        height=60,
+                        disabled=True,
+                        key=f'{i}-age-diagnosis-evidence',
+                    )
+
+                    # --- Age at Report
+                    patient.age_report = st.text_input(
+                        'Age at Report',
+                        patient.age_report or '',
+                        key=f'{i}-age-report',
+                    )
+                    st.text_area(
+                        'Age at Report Evidence',
+                        patient.age_report_evidence or '',
+                        height=60,
+                        disabled=True,
+                        key=f'{i}-age-report-evidence',
+                    )
+
+                    # --- Age at Death
+                    patient.age_death = st.text_input(
+                        'Age at Death',
+                        patient.age_death or '',
+                        key=f'{i}-age-death',
+                    )
+                    st.text_area(
+                        'Age at Death Evidence',
+                        patient.age_death_evidence or '',
+                        height=60,
+                        disabled=True,
+                        key=f'{i}-age-death-evidence',
+                    )
+
+                    # --- Country of Origin
+                    patient.country_of_origin = st.text_input(
+                        'Country of Origin',
+                        patient.country_of_origin or '',
+                        key=f'{i}-country',
+                    )
+                    st.text_area(
+                        'Country of Origin Evidence',
+                        patient.country_of_origin_evidence or '',
+                        height=60,
+                        disabled=True,
+                        key=f'{i}-country-evidence',
+                    )
+
+                    # --- Race/Ethnicity (enum)
+                    patient.race_ethnicity = RaceEthnicity(
+                        st.selectbox(
+                            'Race/Ethnicity',
+                            [r.value for r in RaceEthnicity],
+                            index=[r.value for r in RaceEthnicity].index(
+                                patient.race_ethnicity.value
+                            )
+                            if patient.race_ethnicity
+                            else 0,
+                            key=f'{i}-race',
+                        )
+                    )
+                    st.text_area(
+                        'Race/Ethnicity Evidence',
+                        patient.race_ethnicity_evidence or '',
+                        height=60,
+                        disabled=True,
+                        key=f'{i}-race-evidence',
+                    )
+
+    with tab4:
         if paper_resp.extraction_status != ExtractionStatus.PARSED:
             st.write('Not yet parsed')
         else:
@@ -150,15 +280,15 @@ with center:
             ).variants
             for i, variant in enumerate(variants):
                 st.markdown(f'### Variant {i + 1} ')
-                with st.expander(
-                    f'{variant.variant_verbatim or "New variant"}'
-                ):
+                with st.expander(f'{variant.variant_verbatim or "New variant"}'):
                     with st.container():
                         st.subheader('Variant Summary')
                         col1, col2, col3_label, col3_input = st.columns([1, 3, 1, 3])
-                        col1.markdown(f"**Gene:** {variant.gene or 'N/A'}")
-                        col2.markdown(f"**Variant:** {variant.variant_verbatim or 'N/A'}")
-                        col3_label.markdown("**Transcript:**")
+                        col1.markdown(f'**Gene:** {variant.gene or "N/A"}')
+                        col2.markdown(
+                            f'**Variant:** {variant.variant_verbatim or "N/A"}'
+                        )
+                        col3_label.markdown('**Transcript:**')
                         variant.transcript = col3_input.text_input(
                             'Transcript',
                             variant.transcript or '',
@@ -202,15 +332,17 @@ with center:
 
                     with st.container():
                         st.subheader('Variant Type')
-                        selected_value = st.selectbox(
-                            'Variant Type',
-                            [vt.value for vt in VariantType],  # display strings
-                            index=[vt.value for vt in VariantType].index(
-                                variant.variant_type.value
+                        selected_value = VariantType(
+                            st.selectbox(
+                                'Variant Type',
+                                [vt.value for vt in VariantType],  # display strings
+                                index=[vt.value for vt in VariantType].index(
+                                    variant.variant_type.value
+                                )
+                                if variant.variant_type
+                                else 0,
+                                key=f'{i}-type',
                             )
-                            if variant.variant_type
-                            else 0,
-                            key=f'{i}-type',
                         )
                         st.text_area(
                             'Variant Type Evidence Context',
