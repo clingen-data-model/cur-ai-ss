@@ -31,10 +31,12 @@ if not gene_resps:
 
 def papers_df_on_change() -> None:
     # deleted_rows returns the
-    idx_of_deleted = st.session_state[CURATIONS_DF_KEY]['deleted_rows'][-1]
-    if paper_resps:
-        paper_id = paper_resps[idx_of_deleted].id
-        delete_paper(paper_id)
+    deleted_idxs = st.session_state[CURATIONS_DF_KEY]['deleted_rows']
+    for deleted_idx in reversed(sorted(deleted_idxs)): # iterate in reversed order as paper_resps will be mutated!
+        if paper_resps and 0 <= deleted_idx < len(paper_resps):
+            paper_id = paper_resps[deleted_idx].id
+            delete_paper(paper_id)
+            paper_resps.pop(deleted_idx)
 
 
 @st.dialog('Upload PDF and Select Gene')
