@@ -6,21 +6,22 @@ from pydantic import BaseModel
 
 from lib.evagg.utils.environment import env
 
+
 class SequencingMethod(str, Enum):
-    Chromosomal_Microarray = "Chromosomal microarray"
-    Denaturing_Gradient_Gel = "Denaturing gradient gel"
-    Exome_Sequencing = "Exome sequencing"
-    Genotyping = "Genotyping"
-    High_Resolution_Melting = "High resolution melting"
-    Homozygosity_Mapping = "Homozygosity mapping"
-    Linkage_Analysis = "Linkage analysis"
-    Next_Generation_Sequencing_Panels = "Next generation sequencing panels"
-    PCR = "PCR"
-    Restriction_Digest = "Restriction digest"
-    Sanger_Sequencing = "Sanger sequencing"
-    SSCP = "SSCP"
-    Whole_Genome_Shotgun_Sequencing = "Whole genome shotgun sequencing"
-    Other = "Other"
+    Chromosomal_Microarray = 'Chromosomal microarray'
+    Denaturing_Gradient_Gel = 'Denaturing gradient gel'
+    Exome_Sequencing = 'Exome sequencing'
+    Genotyping = 'Genotyping'
+    High_Resolution_Melting = 'High resolution melting'
+    Homozygosity_Mapping = 'Homozygosity mapping'
+    Linkage_Analysis = 'Linkage analysis'
+    Next_Generation_Sequencing_Panels = 'Next generation sequencing panels'
+    PCR = 'PCR'
+    Restriction_Digest = 'Restriction digest'
+    Sanger_Sequencing = 'Sanger sequencing'
+    SSCP = 'SSCP'
+    Whole_Genome_Shotgun_Sequencing = 'Whole genome shotgun sequencing'
+    Other = 'Other'
     Unknown = 'Unknown'
 
 
