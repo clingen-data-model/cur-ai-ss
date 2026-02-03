@@ -321,7 +321,7 @@ class PatientInfo(BaseModel):
     age_diagnosis: Optional[str]  # exact text from source
     age_report: Optional[str]
     age_death: Optional[str]
-    country_of_origin: Optional[CountryCode]
+    country_of_origin: CountryCode
     race_ethnicity: RaceEthnicity
 
     # Evidence for each field
