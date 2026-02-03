@@ -5,10 +5,11 @@ import requests
 import streamlit as st
 
 from lib.agents.patient_extraction_agent import (
+    CountryCode,
     PatientInfo,
     PatientInfoExtractionOutput,
     RaceEthnicity,
-    Sex,
+    SexAtBirth,
 )
 from lib.agents.variant_extraction_agent import (
     HgvsInferenceConfidence,
@@ -173,19 +174,19 @@ with center:
                         key=f'{i}-identifier-evidence',
                     )
 
-                    # --- Sex (enum)
-                    patient.sex = Sex(
+                    # --- SexAtBirth (enum)
+                    patient.sex = SexAtBirth(
                         st.selectbox(
-                            'Sex',
-                            [s.value for s in Sex],
-                            index=[s.value for s in Sex].index(patient.sex.value)
+                            'Sex At Birth',
+                            [s.value for s in SexAtBirth],
+                            index=[s.value for s in SexAtBirth].index(patient.sex.value)
                             if patient.sex
                             else 0,
                             key=f'{i}-sex',
                         )
                     )
                     st.text_area(
-                        'Sex Evidence',
+                        'Sex At Birth Evidence',
                         patient.sex_evidence or '',
                         height=60,
                         disabled=True,
@@ -235,10 +236,17 @@ with center:
                     )
 
                     # --- Country of Origin
-                    patient.country_of_origin = st.text_input(
-                        'Country of Origin',
-                        patient.country_of_origin or '',
-                        key=f'{i}-country',
+                    patient.country_of_origin = CountryCode(
+                        st.selectbox(
+                            'Country of Origin',
+                            [c.value for c in CountryCode],
+                            index=[c.value for c in CountryCode].index(
+                                patient.country_of_origin.value
+                            )
+                            if patient.country_of_origin
+                            else 0,
+                            key=f'{i}-country',
+                        )
                     )
                     st.text_area(
                         'Country of Origin Evidence',
