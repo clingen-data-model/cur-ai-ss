@@ -114,11 +114,11 @@ def parse_content(paper: Paper, force: bool = False) -> None:
     ).document
     document.save_as_markdown(
         paper.pdf_markdown_path,
-        image_mode=ImageRefMode.PLACEHOLDER,
+        image_mode=ImageRefMode.REFERENCED,
     )
     document.save_as_json(
         paper.pdf_json_path,
-        image_mode=ImageRefMode.PLACEHOLDER,
+        image_mode=ImageRefMode.REFERENCED,
     )
     table_id, image_id = 0, 0
     for element, _level in document.iterate_items():
