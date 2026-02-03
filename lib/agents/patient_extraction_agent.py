@@ -390,5 +390,4 @@ agent = Agent(
     instructions=PATIENT_EXTRACTION_INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
     output_type=PatientInfoExtractionOutput,
-    model_settings=ModelSettings(max_tokens=8192),
 )

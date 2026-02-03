@@ -208,5 +208,4 @@ agent = Agent(
     instructions=VARIANT_EXTRACTION_INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
     output_type=VariantExtractionOutput,
-    model_settings=ModelSettings(max_tokens=8192),
 )
