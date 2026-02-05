@@ -46,7 +46,7 @@ def parse_paper_metadata_task(paper: Paper) -> Paper:
                 "title": "The title of the paper"
             }}
 
-            Paper: {paper.fulltext_md[:1000]}
+            Paper: {'\n\n'.join(paper.sections_md)[:1000]}
         """,
         )
     )['title']

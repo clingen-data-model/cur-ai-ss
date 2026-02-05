@@ -79,8 +79,7 @@ class Paper:
 
     @property
     def fulltext_md(self) -> str:
-        with open(self.pdf_markdown_path, 'r') as f:
-            return f.read()
+        return '\n\n'.join(self.sections_md)
 
     @property
     def sections_md(self) -> list[str]:
@@ -139,10 +138,6 @@ class Paper:
     @property
     def pdf_sections_dir(self) -> Path:
         return self.pdf_dir / 'sections'
-
-    @property
-    def pdf_markdown_path(self) -> Path:
-        return self.pdf_dir / 'raw.md'
 
     @property
     def pdf_json_path(self) -> Path:
