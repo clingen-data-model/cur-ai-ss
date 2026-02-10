@@ -2,7 +2,7 @@ from enum import Enum
 from typing import List, Optional
 
 import requests
-from agents import Agent, ModelSettings, function_tool
+from agents import Agent, function_tool
 from pydantic import BaseModel
 
 from lib.evagg.utils.environment import env
@@ -120,11 +120,6 @@ agent = Agent(
     name='paper_extractor',
     instructions=PAPER_EXTRACTION_INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
-    model_settings=ModelSettings(
-        reasoning={'effort': 'medium'},
-        # optional but helpful
-        response_format='json',
-    ),
     output_type=PaperExtractionOutput,
     tools=[pubmed_search, pubmed_fetch_xml],
 )
