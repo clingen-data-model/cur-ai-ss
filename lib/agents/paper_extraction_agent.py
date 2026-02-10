@@ -36,11 +36,9 @@ def pubmed_search(title: str, first_author: str | None = None) -> List[str]:
     if first_author:
         terms.append(f'{first_author}[au]')
 
-    query = ' AND '.join(terms)
-
-    params = {
+    params: dict[str, str | int] = {
         'db': 'pubmed',
-        'term': query,
+        'term': ' AND '.join(terms),
         'retmode': 'json',
         'sort': 'relevance',
         'retmax': 5,
