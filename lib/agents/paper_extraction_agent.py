@@ -10,6 +10,23 @@ from lib.evagg.utils.environment import env
 ESEARCH_ENDPOINT = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
 EFETCH_ENDPOINT = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
 
+class TestingMethod(str, Enum):
+    Chromosomal_microarray = "Chromosomal microarray"
+    Next_generation_sequencing_panels = "Next generation sequencing panels"
+    Exome_sequencing = "Exome sequencing"
+    Genome_sequencing = "Genome sequencing"
+    Sanger_sequencing = "Sanger sequencing"
+    Pcr = "PCR"
+    Homozygosity_mapping = "Homozygosity mapping"
+    Linkage_analysis = "Linkage analysis"
+    Genotyping = "Genotyping"
+    Denaturing_gradient_gel = "Denaturing gradient gel"
+    High_resolution_melting = "High resolution melting"
+    Restriction_digest = "Restriction digest"
+    Single_strand_conformation_polymorphism = "Single-strand conformation polymorphism"
+    Unknown = "Unknown"
+    Other = "Other"
+
 
 class PaperExtractionOutput(BaseModel):
     title: str
@@ -20,6 +37,7 @@ class PaperExtractionOutput(BaseModel):
     pmid: str | None = None
     pmcid: str | None = None
     doi: str | None = None
+    testing_method: PaperExtractionOutput
 
 
 @function_tool
@@ -90,6 +108,11 @@ Task Overview:
 2. When a field cannot be confidently identified from either the text or PubMed,
    the task should fail rather than guessing.
 3. Use PubMed search to find candidate PMIDs using title and author identified from the text.
+  - The title and first author should almost always be extracted directly
+  from the paper text.
+  - Do not use PubMed to discover or replace the title or first author unless
+  they are genuinely missing or cannot be reliably determined from the text.
+  - PubMed may be trusted as authoritative for the other fields.
 4. If and only if a PMID is identified:
    - Use PubMed fetch to retrieve authoritative metadata.
    - When PubMed XML is provided:
@@ -103,13 +126,24 @@ Task Overview:
        - pmcid: PubmedData/ArticleIdList/ArticleId with IdType="pmc"
    - Do not invent values.
 
-More Context:
-- The title and first author should almost always be extracted directly
-  from the paper text.
-- Do not use PubMed to discover or replace the title or first author unless
-  they are genuinely missing or cannot be reliably determined from the text.
-- PubMed may be trusted as authoritative for the other fields.
-- Retry the tool requests up to 3 times on an exponential delay.
+Testing Method Extraction Options:
+    - Chromosomal_microarray – Genome-wide copy number analysis.
+    - Next_generation_sequencing_panels – Targeted multi-gene NGS.
+    - Exome_sequencing – Coding regions only (WES).
+    - Genome_sequencing – Whole genome (WGS).
+    - Sanger_sequencing – Capillary sequencing.
+    - Pcr – PCR-based testing.
+    - Homozygosity_mapping – Shared homozygous region analysis.
+    - Linkage_analysis – Family-based locus mapping.
+    - Genotyping – Predefined variant testing.
+    - Denaturing_gradient_gel – DGGE variant detection.
+    - High_resolution_melting – HRM variant detection.
+    - Restriction_digest – Restriction enzyme assay.
+    - Single_strand_conformation_polymorphism – SSCP variant detection.
+    - Unknown – Method not stated.
+    - Other – Method not listed.
+
+Retry the tool requests up to 3 times on an exponential delay.
 """
 
 # --- Agent definition
