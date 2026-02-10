@@ -3,29 +3,31 @@ from typing import List, Optional
 
 import requests
 from agents import Agent, function_tool
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
+from typing_extensions import Self
 
 from lib.evagg.utils.environment import env
 
 ESEARCH_ENDPOINT = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
 EFETCH_ENDPOINT = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
 
+
 class TestingMethod(str, Enum):
-    Chromosomal_microarray = "Chromosomal microarray"
-    Next_generation_sequencing_panels = "Next generation sequencing panels"
-    Exome_sequencing = "Exome sequencing"
-    Genome_sequencing = "Genome sequencing"
-    Sanger_sequencing = "Sanger sequencing"
-    Pcr = "PCR"
-    Homozygosity_mapping = "Homozygosity mapping"
-    Linkage_analysis = "Linkage analysis"
-    Genotyping = "Genotyping"
-    Denaturing_gradient_gel = "Denaturing gradient gel"
-    High_resolution_melting = "High resolution melting"
-    Restriction_digest = "Restriction digest"
-    Single_strand_conformation_polymorphism = "Single-strand conformation polymorphism"
-    Unknown = "Unknown"
-    Other = "Other"
+    Chromosomal_microarray = 'Chromosomal microarray'
+    Next_generation_sequencing_panels = 'Next generation sequencing panels'
+    Exome_sequencing = 'Exome sequencing'
+    Genome_sequencing = 'Genome sequencing'
+    Sanger_sequencing = 'Sanger sequencing'
+    Pcr = 'PCR'
+    Homozygosity_mapping = 'Homozygosity mapping'
+    Linkage_analysis = 'Linkage analysis'
+    Genotyping = 'Genotyping'
+    Denaturing_gradient_gel = 'Denaturing gradient gel'
+    High_resolution_melting = 'High resolution melting'
+    Restriction_digest = 'Restriction digest'
+    Single_strand_conformation_polymorphism = 'Single-strand conformation polymorphism'
+    Unknown = 'Unknown'
+    Other = 'Other'
 
 
 class PaperExtractionOutput(BaseModel):
@@ -40,10 +42,10 @@ class PaperExtractionOutput(BaseModel):
     testing_methods: List[TestingMethod]
     testing_methods_evidence: List[str | None]
 
-    @model_validator(mode="after")
-    def max_two_methods(self):
+    @model_validator(mode='after')
+    def max_two_methods(self) -> Self:
         if len(self.testing_methods) > 2:
-            raise ValueError("testing_methods must contain at most two items")
+            raise ValueError('testing_methods must contain at most two items')
         return self
 
 
