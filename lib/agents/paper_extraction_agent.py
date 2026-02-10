@@ -2,7 +2,7 @@ from enum import Enum
 from typing import List, Optional
 
 import requests
-from agents import Agent, function_tool, ModelSettings
+from agents import Agent, ModelSettings, function_tool
 from pydantic import BaseModel
 
 from lib.evagg.utils.environment import env
@@ -20,6 +20,7 @@ class PaperExtractionOutput(BaseModel):
     pmid: str | None = None
     pmcid: str | None = None
     doi: str | None = None
+
 
 @function_tool
 def pubmed_search(title: str, first_author: str | None = None) -> List[str]:
@@ -54,6 +55,7 @@ def pubmed_search(title: str, first_author: str | None = None) -> List[str]:
 
     data = r.json()
     return data.get('esearchresult', {}).get('idlist', [])
+
 
 @function_tool
 def pubmed_fetch_xml(pmid: str) -> str:
@@ -119,9 +121,9 @@ agent = Agent(
     instructions=PAPER_EXTRACTION_INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
     model_settings=ModelSettings(
-        reasoning={"effort": "medium"},
+        reasoning={'effort': 'medium'},
         # optional but helpful
-        response_format="json"
+        response_format='json',
     ),
     output_type=PaperExtractionOutput,
     tools=[pubmed_search, pubmed_fetch_xml],
