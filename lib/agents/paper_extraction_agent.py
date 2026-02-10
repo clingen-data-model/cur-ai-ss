@@ -37,7 +37,14 @@ class PaperExtractionOutput(BaseModel):
     pmid: str | None = None
     pmcid: str | None = None
     doi: str | None = None
-    testing_method: PaperExtractionOutput
+    testing_methods: List[TestingMethod]
+    testing_methods_evidence: List[str | None]
+
+    @model_validator(mode="after")
+    def max_two_methods(self):
+        if len(self.testing_methods) > 2:
+            raise ValueError("testing_methods must contain at most two items")
+        return self
 
 
 @function_tool
@@ -104,19 +111,25 @@ Input:
 - Full text of an academic paper, case report, or registry entry.
 
 Task Overview:
-1. Extract bibliographic metadata directly from the text when explicitly present.
-2. When a field cannot be confidently identified from either the text or PubMed,
-   the task should fail rather than guessing.
-3. Use PubMed search to find candidate PMIDs using title and author identified from the text.
-  - The title and first author should almost always be extracted directly
-  from the paper text.
-  - Do not use PubMed to discover or replace the title or first author unless
-  they are genuinely missing or cannot be reliably determined from the text.
-  - PubMed may be trusted as authoritative for the other fields.
-4. If and only if a PMID is identified:
-   - Use PubMed fetch to retrieve authoritative metadata.
-   - When PubMed XML is provided:
-     - Extract fields using these XML locations as guidance:
+
+1. **Bibliographic Metadata Extraction**
+   - Extract metadata directly from the text whenever explicitly present.
+   - Fields to extract:
+     - title
+     - first_author
+     - journal
+     - abstract
+     - pub_year
+     - doi
+     - pmid
+     - pmcid
+   - When a field cannot be confidently identified from the text or PubMed, fail rather than guessing.
+   - Use PubMed search to find candidate PMIDs using the title and first author extracted from the text.
+     - Do not use PubMed to discover or replace the title or first author unless they are genuinely missing or unreliable in the text.
+     - PubMed may be trusted as authoritative for all other fields.
+   - If a PMID is identified:
+     - Fetch metadata from PubMed.
+     - When PubMed XML is provided, extract fields using these locations:
        - title: MedlineCitation/Article/ArticleTitle
        - first_author: MedlineCitation/Article/AuthorList/Author[1]/LastName
        - journal: MedlineCitation/Article/Journal/ISOAbbreviation
@@ -124,26 +137,41 @@ Task Overview:
        - pub_year: MedlineCitation/Article/Journal/JournalIssue/PubDate/Year
        - doi: PubmedData/ArticleIdList/ArticleId with IdType="doi"
        - pmcid: PubmedData/ArticleIdList/ArticleId with IdType="pmc"
-   - Do not invent values.
+     - Do not invent values.
 
-Testing Method Extraction Options:
-    - Chromosomal_microarray – Genome-wide copy number analysis.
-    - Next_generation_sequencing_panels – Targeted multi-gene NGS.
-    - Exome_sequencing – Coding regions only (WES).
-    - Genome_sequencing – Whole genome (WGS).
-    - Sanger_sequencing – Capillary sequencing.
-    - Pcr – PCR-based testing.
-    - Homozygosity_mapping – Shared homozygous region analysis.
-    - Linkage_analysis – Family-based locus mapping.
-    - Genotyping – Predefined variant testing.
-    - Denaturing_gradient_gel – DGGE variant detection.
-    - High_resolution_melting – HRM variant detection.
-    - Restriction_digest – Restriction enzyme assay.
-    - Single_strand_conformation_polymorphism – SSCP variant detection.
-    - Unknown – Method not stated.
-    - Other – Method not listed.
+2. **Top-Two Testing Method Selection**
+   - From the list below, identify the **top two most relevant testing methods** used in the study.
+   - Provide exact evidence text for each method.
+   - Rules:
+     - Select **at most two** methods.
+     - Rank them in order of relevance (most relevant first).
+     - Base relevance on what was actually used to generate the reported findings (not background methods or confirmatory-only assays).
+     - Prefer explicitly stated methods in the text.
+     - If multiple methods are mentioned, choose the two that contributed most directly to variant discovery or diagnosis.
+     - If only one method is clearly described, return a single method.
+     - If no method can be confidently determined, output `Unknown` for the method and `None` for evidence.
+     - Do not invent or guess values.
+   - Allowed methods:
+     - Chromosomal_microarray – Genome-wide copy number analysis.
+     - Next_generation_sequencing_panels – Targeted multi-gene NGS.
+     - Exome_sequencing – Coding regions only (WES).
+     - Genome_sequencing – Whole genome (WGS).
+     - Sanger_sequencing – Capillary sequencing.
+     - Pcr – PCR-based testing.
+     - Homozygosity_mapping – Shared homozygous region analysis.
+     - Linkage_analysis – Family-based locus mapping.
+     - Genotyping – Predefined variant testing.
+     - Denaturing_gradient_gel – DGGE variant detection.
+     - High_resolution_melting – HRM variant detection.
+     - Restriction_digest – Restriction enzyme assay.
+     - Single_strand_conformation_polymorphism – SSCP variant detection.
+     - Unknown – Method not stated.
+     - Other – Method not listed.
+   - Output format:
+     - testing_methods: [<method_1>, <method_2>]
+     - testing_methods_evidence: [<evidence method_1>, <evidence method_2>]
 
-Retry the tool requests up to 3 times on an exponential delay.
+Retry any tool requests (PubMed fetch or search) up to 3 times on an exponential delay.
 """
 
 # --- Agent definition
