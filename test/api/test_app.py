@@ -1,4 +1,5 @@
 import io
+from contextlib import asynccontextmanager
 
 import pytest
 from fastapi.testclient import TestClient
@@ -6,7 +7,7 @@ from sqlalchemy import func, select, update
 
 from lib.api.app import app
 from lib.api.db import get_session, session_scope
-from lib.models import ExtractionStatus, GeneDB, PaperDB
+from lib.models import ExtractionStatus, GeneDB, PaperDB, PatientDB, VariantDB
 
 
 @pytest.fixture
@@ -15,8 +16,18 @@ def client(db_session):
         yield db_session
 
     app.dependency_overrides[get_session] = override_get_session
+
+    # Replace the lifespan to avoid Alembic running during tests
+    # (db_session fixture already creates tables via create_all)
+    @asynccontextmanager
+    async def _noop_lifespan(app):  # type: ignore
+        yield
+
+    original_router_lifespan = app.router.lifespan_context
+    app.router.lifespan_context = _noop_lifespan
     with TestClient(app) as client:
         yield client
+    app.router.lifespan_context = original_router_lifespan
     app.dependency_overrides.clear()
 
 
@@ -205,3 +216,123 @@ def test_delete_paper(client, test_pdf, db_session, seeded_genes):
     assert response3.status_code == 204
     result = db_session.execute(select(func.count(PaperDB.id)))
     assert result.scalar_one() == 0
+
+
+def _create_paper_with_extraction_data(db_session, client, test_pdf, seeded_genes):
+    """Helper: create a paper and seed patients + variants."""
+    response = client.put(
+        '/papers',
+        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
+    )
+    paper_id = response.json()['id']
+    # Add patients
+    db_session.add_all(
+        [
+            PatientDB(
+                paper_id=paper_id,
+                identifier='Patient 1',
+                sex='Male',
+                country_of_origin='United States',
+                race_ethnicity='Non-Finnish European',
+            ),
+            PatientDB(
+                paper_id=paper_id,
+                identifier='Patient 2',
+                sex='Female',
+            ),
+        ]
+    )
+    # Add variants
+    db_session.add_all(
+        [
+            VariantDB(
+                paper_id=paper_id,
+                gene='BRCA1',
+                variant_verbatim='c.1799T>A',
+                variant_type='missense',
+                zygosity='heterozygous',
+                inheritance='dominant',
+            ),
+        ]
+    )
+    db_session.flush()
+    return paper_id
+
+
+def test_list_paper_patients(client, test_pdf, db_session, seeded_genes):
+    paper_id = _create_paper_with_extraction_data(
+        db_session, client, test_pdf, seeded_genes
+    )
+    response = client.get(f'/papers/{paper_id}/patients')
+    assert response.status_code == 200
+    patients = response.json()
+    assert len(patients) == 2
+    assert patients[0]['identifier'] == 'Patient 1'
+    assert patients[0]['paper_id'] == paper_id
+    assert patients[1]['identifier'] == 'Patient 2'
+
+
+def test_list_paper_patients_not_found(client):
+    response = client.get('/papers/nonexistent/patients')
+    assert response.status_code == 404
+
+
+def test_list_paper_variants(client, test_pdf, db_session, seeded_genes):
+    paper_id = _create_paper_with_extraction_data(
+        db_session, client, test_pdf, seeded_genes
+    )
+    response = client.get(f'/papers/{paper_id}/variants')
+    assert response.status_code == 200
+    variants = response.json()
+    assert len(variants) == 1
+    assert variants[0]['gene'] == 'BRCA1'
+    assert variants[0]['variant_verbatim'] == 'c.1799T>A'
+    assert variants[0]['paper_id'] == paper_id
+
+
+def test_list_paper_variants_not_found(client):
+    response = client.get('/papers/nonexistent/variants')
+    assert response.status_code == 404
+
+
+def test_paper_resp_includes_metadata(client, test_pdf, db_session, seeded_genes):
+    response = client.put(
+        '/papers',
+        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
+    )
+    paper_id = response.json()['id']
+    # Update metadata on the paper
+    paper_db = db_session.get(PaperDB, paper_id)
+    paper_db.title = 'Test Paper Title'
+    paper_db.pmid = '12345'
+    paper_db.is_open_access = True
+    db_session.flush()
+
+    get_response = client.get(f'/papers/{paper_id}')
+    assert get_response.status_code == 200
+    data = get_response.json()
+    assert data['title'] == 'Test Paper Title'
+    assert data['pmid'] == '12345'
+    assert data['is_open_access'] is True
+    assert data['abstract'] is None
+
+
+def test_delete_paper_cascades_patients_variants(
+    client, test_pdf, db_session, seeded_genes
+):
+    paper_id = _create_paper_with_extraction_data(
+        db_session, client, test_pdf, seeded_genes
+    )
+    # Verify data exists
+    assert db_session.scalar(select(func.count(PatientDB.id))) == 2
+    assert db_session.scalar(select(func.count(VariantDB.id))) == 1
+
+    # Delete paper
+    response = client.delete(f'/papers/{paper_id}')
+    assert response.status_code == 204
+
+    # Verify cascade
+    assert db_session.scalar(select(func.count(PatientDB.id))) == 0
+    assert db_session.scalar(select(func.count(VariantDB.id))) == 0

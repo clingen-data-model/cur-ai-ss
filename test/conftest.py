@@ -10,6 +10,7 @@ import pytest
 from defusedxml import ElementTree
 
 from lib.api import db
+from lib.models import Base
 
 
 @pytest.fixture
@@ -130,8 +131,12 @@ def db_session(monkeypatch, tmpdir):
     db.env.SQLLITE_DIR = ''
     monkeypatch.setattr(db, '_engine', None)
     monkeypatch.setattr(db, '_session_factory', None)
+    engine = db.get_engine()
+    Base.metadata.create_all(bind=engine)
     session_local = db.get_sessionmaker()
-    session: Session = session_local()
-    yield session
-    session.rollback()
-    session.close()
+    session = session_local()
+    try:
+        yield session
+    finally:
+        session.rollback()
+        session.close()
