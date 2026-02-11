@@ -181,7 +181,7 @@ def parse_content(paper: Paper, force: bool = False) -> None:
         header_level = min(section.level, 4)  # cap depth for readability
         header = '#' * header_level
 
-        with open(paper.pdf_section_markdown_path(i), 'w') as fp:
+        with open(paper.pdf_section_llm_txt_path(i), 'w') as fp:
             fp.write(f'{header} {section.title}\n\n')
             fp.write(section.text)
             fp.write('\n')
