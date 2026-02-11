@@ -7,7 +7,6 @@ import streamlit as st
 from lib.agents.patient_extraction_agent import (
     CountryCode,
     PatientInfo,
-    PatientInfoExtractionOutput,
     RaceEthnicity,
     SexAtBirth,
 )
@@ -15,7 +14,6 @@ from lib.agents.variant_extraction_agent import (
     HgvsInferenceConfidence,
     Inheritance,
     Variant,
-    VariantExtractionOutput,
     VariantType,
     Zygosity,
 )
@@ -25,6 +23,8 @@ from lib.ui.api import (
     delete_paper,
     get_http_error_detail,
     get_paper,
+    get_paper_patients,
+    get_paper_variants,
     requeue_paper,
 )
 from lib.ui.helpers import paper_dict_to_markdown
@@ -121,8 +121,23 @@ with center:
         if paper_resp.extraction_status != ExtractionStatus.PARSED:
             st.write('Not yet parsed')
         else:
-            paper = Paper(id=paper_resp.id)
-            data = json.load(open(paper.metadata_json_path, 'r'))
+            # Build metadata dict from PaperResp (DB-backed)
+            data = {
+                'id': paper_resp.id,
+                'pmid': paper_resp.pmid,
+                'pmcid': paper_resp.pmcid,
+                'doi': paper_resp.doi,
+                'title': paper_resp.title,
+                'abstract': paper_resp.abstract,
+                'journal': paper_resp.journal,
+                'first_author': paper_resp.first_author,
+                'pub_year': paper_resp.pub_year,
+                'citation': paper_resp.citation,
+                'OA': paper_resp.is_open_access,
+                'can_access': paper_resp.can_access,
+                'license': paper_resp.license,
+                'link': paper_resp.link,
+            }
             md_tab, editable_tab = st.tabs(['View', 'Edit'])
             with md_tab:
                 st.markdown(paper_dict_to_markdown(data))
@@ -133,31 +148,52 @@ with center:
                     mime='application/json',
                 )
             with editable_tab:
-                data['title'] = st.text_input('Title', data['title'])
+                data['title'] = st.text_input('Title', data['title'] or '')
                 data['first_author'] = st.text_input(
-                    'First Author', data['first_author']
+                    'First Author', data['first_author'] or ''
                 )
-                data['pub_year'] = st.text_input('Year', data['pub_year'])
-                data['journal'] = st.text_input('Journal', data['journal'])
-                data['doi'] = st.text_input('DOI', data['doi'])
-                data['pmcid'] = st.text_input('PMCID', data['pmcid'])
-                data['pmid'] = st.text_input('PMID', data['pmid'])
-                data['OA'] = st.checkbox('Open Access', data['OA'])
-                data['license'] = st.text_input('License', data['license'])
-                data['link'] = st.text_input('Link', data['link'])
+                data['pub_year'] = st.text_input('Year', data['pub_year'] or '')
+                data['journal'] = st.text_input('Journal', data['journal'] or '')
+                data['doi'] = st.text_input('DOI', data['doi'] or '')
+                data['pmcid'] = st.text_input('PMCID', data['pmcid'] or '')
+                data['pmid'] = st.text_input('PMID', data['pmid'] or '')
+                data['OA'] = st.checkbox('Open Access', bool(data['OA']))
+                data['license'] = st.text_input('License', data['license'] or '')
+                data['link'] = st.text_input('Link', data['link'] or '')
                 data['abstract'] = st.text_area(
-                    'Abstract', data['abstract'], height=200
+                    'Abstract', data['abstract'] or '', height=200
                 )
 
     with tab3:
         if paper_resp.extraction_status != ExtractionStatus.PARSED:
             st.write('Not yet parsed')
         else:
-            paper = Paper(id=paper_resp.id)
-            data = json.load(open(paper.patient_info_json_path, 'r'))
-            patients: list[PatientInfo] = PatientInfoExtractionOutput.model_validate(
-                data
-            ).patients
+            patient_resps = get_paper_patients(paper_id)
+            # Convert PatientResp -> PatientInfo for UI rendering
+            patients: list[PatientInfo] = []
+            for pr in patient_resps:
+                patients.append(
+                    PatientInfo(
+                        identifier=pr.identifier or '',
+                        sex=SexAtBirth(pr.sex) if pr.sex else SexAtBirth.Unknown,
+                        age_diagnosis=pr.age_diagnosis,
+                        age_report=pr.age_report,
+                        age_death=pr.age_death,
+                        country_of_origin=CountryCode(pr.country_of_origin)
+                        if pr.country_of_origin
+                        else CountryCode.Unknown,
+                        race_ethnicity=RaceEthnicity(pr.race_ethnicity)
+                        if pr.race_ethnicity
+                        else RaceEthnicity.Unknown,
+                        identifier_evidence=pr.identifier_evidence,
+                        sex_evidence=pr.sex_evidence,
+                        age_diagnosis_evidence=pr.age_diagnosis_evidence,
+                        age_report_evidence=pr.age_report_evidence,
+                        age_death_evidence=pr.age_death_evidence,
+                        country_of_origin_evidence=pr.country_of_origin_evidence,
+                        race_ethnicity_evidence=pr.race_ethnicity_evidence,
+                    )
+                )
             for i, patient in enumerate(patients):
                 with st.expander(f'{patient.identifier or "N/A"}'):
                     # --- Proband Identifier
@@ -281,11 +317,41 @@ with center:
         if paper_resp.extraction_status != ExtractionStatus.PARSED:
             st.write('Not yet parsed')
         else:
-            paper = Paper(id=paper_resp.id)
-            data = json.load(open(paper.variants_json_path, 'r'))
-            variants: list[Variant] = VariantExtractionOutput.model_validate(
-                data
-            ).variants
+            variant_resps = get_paper_variants(paper_id)
+            # Convert VariantResp -> Variant for UI rendering
+            variants: list[Variant] = []
+            for vr in variant_resps:
+                variants.append(
+                    Variant(
+                        gene=vr.gene or '',
+                        transcript=vr.transcript,
+                        variant_verbatim=vr.variant_verbatim,
+                        genomic_coordinates=vr.genomic_coordinates,
+                        hgvs_c=vr.hgvs_c,
+                        hgvs_p=vr.hgvs_p,
+                        hgvs_c_inferred=vr.hgvs_c_inferred,
+                        hgvs_p_inferred=vr.hgvs_p_inferred,
+                        hgvs_inference_confidence=HgvsInferenceConfidence(
+                            vr.hgvs_inference_confidence
+                        )
+                        if vr.hgvs_inference_confidence
+                        else None,
+                        hgvs_inference_evidence_context=vr.hgvs_inference_evidence_context,
+                        variant_type=VariantType(vr.variant_type)
+                        if vr.variant_type
+                        else VariantType.unknown,
+                        zygosity=Zygosity(vr.zygosity)
+                        if vr.zygosity
+                        else Zygosity.unknown,
+                        inheritance=Inheritance(vr.inheritance)
+                        if vr.inheritance
+                        else Inheritance.unknown,
+                        variant_type_evidence_context=vr.variant_type_evidence_context,
+                        variant_evidence_context=vr.variant_evidence_context,
+                        zygosity_evidence_context=vr.zygosity_evidence_context,
+                        inheritance_evidence_context=vr.inheritance_evidence_context,
+                    )
+                )
             for i, variant in enumerate(variants):
                 st.markdown(f'### Variant {i + 1} ')
                 with st.expander(f'{variant.variant_verbatim or "New variant"}'):

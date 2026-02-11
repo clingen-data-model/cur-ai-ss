@@ -53,6 +53,10 @@ class Env(BaseSettings):
         # Avoid quoting None
         return quote(v) if v else v
 
+    @field_validator('CAA_ROOT', mode='after')
+    def expand_caa_root(cls, v: str) -> str:
+        return str(Path(os.path.expandvars(v)).expanduser())
+
     @property
     def sqlite_dir(self) -> Path:
         return Path(self.CAA_ROOT) / self.SQLLITE_DIR

@@ -1,11 +1,14 @@
 from enum import Enum
+from typing import Optional
 
 from pydantic import BaseModel
 from sqlalchemy import (
+    Boolean,
     Column,
     ForeignKey,
     Integer,
     String,
+    Text,
 )
 from sqlalchemy import (
     Enum as SQLEnum,
@@ -76,9 +79,122 @@ class PaperDB(Base):
         server_default=ExtractionStatus.QUEUED.value,
     )
 
+    # --- Metadata columns (nullable, populated after NCBI fetch) ---
+    pmid: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    pmcid: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    doi: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    title: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    abstract: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    journal: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    first_author: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    pub_year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    citation: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    is_open_access: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    can_access: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    license: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    link: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+    # --- Relationships to extraction tables ---
+    patients: Mapped[list['PatientDB']] = relationship(
+        'PatientDB',
+        back_populates='paper',
+        cascade='all, delete-orphan',
+    )
+    variants: Mapped[list['VariantDB']] = relationship(
+        'VariantDB',
+        back_populates='paper',
+        cascade='all, delete-orphan',
+    )
+
     @property
     def gene_symbol(self) -> str:
         return self.gene.symbol
+
+
+class PatientDB(Base):
+    __tablename__ = 'patients'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    paper_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey('papers.id', ondelete='CASCADE'),
+        index=True,
+        nullable=False,
+    )
+    paper: Mapped['PaperDB'] = relationship('PaperDB', back_populates='patients')
+
+    # Core patient fields
+    identifier: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    sex: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    age_diagnosis: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    age_report: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    age_death: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    country_of_origin: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    race_ethnicity: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+    # Evidence fields
+    identifier_evidence: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    sex_evidence: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    age_diagnosis_evidence: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    age_report_evidence: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    age_death_evidence: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    country_of_origin_evidence: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )
+    race_ethnicity_evidence: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
+class VariantDB(Base):
+    __tablename__ = 'variants'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    paper_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey('papers.id', ondelete='CASCADE'),
+        index=True,
+        nullable=False,
+    )
+    paper: Mapped['PaperDB'] = relationship('PaperDB', back_populates='variants')
+
+    # Core extraction fields
+    gene: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    transcript: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    variant_verbatim: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    genomic_coordinates: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+    # Explicit HGVS from text
+    hgvs_c: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    hgvs_p: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+    # Optional inferred HGVS
+    hgvs_c_inferred: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    hgvs_p_inferred: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    hgvs_inference_confidence: Mapped[Optional[str]] = mapped_column(
+        String, nullable=True
+    )
+    hgvs_inference_evidence_context: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )
+
+    # Classification
+    variant_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    zygosity: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    inheritance: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+    # Evidence
+    variant_type_evidence_context: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )
+    variant_evidence_context: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    zygosity_evidence_context: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )
+    inheritance_evidence_context: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )
+
+
+# --- Pydantic response models ---
 
 
 class PaperResp(BaseModel):
@@ -86,3 +202,58 @@ class PaperResp(BaseModel):
     gene_symbol: str
     filename: str
     extraction_status: ExtractionStatus
+    # Metadata fields (optional, populated after extraction)
+    pmid: Optional[str] = None
+    pmcid: Optional[str] = None
+    doi: Optional[str] = None
+    title: Optional[str] = None
+    abstract: Optional[str] = None
+    journal: Optional[str] = None
+    first_author: Optional[str] = None
+    pub_year: Optional[int] = None
+    citation: Optional[str] = None
+    is_open_access: Optional[bool] = None
+    can_access: Optional[bool] = None
+    license: Optional[str] = None
+    link: Optional[str] = None
+
+
+class PatientResp(BaseModel):
+    id: int
+    paper_id: str
+    identifier: Optional[str] = None
+    sex: Optional[str] = None
+    age_diagnosis: Optional[str] = None
+    age_report: Optional[str] = None
+    age_death: Optional[str] = None
+    country_of_origin: Optional[str] = None
+    race_ethnicity: Optional[str] = None
+    identifier_evidence: Optional[str] = None
+    sex_evidence: Optional[str] = None
+    age_diagnosis_evidence: Optional[str] = None
+    age_report_evidence: Optional[str] = None
+    age_death_evidence: Optional[str] = None
+    country_of_origin_evidence: Optional[str] = None
+    race_ethnicity_evidence: Optional[str] = None
+
+
+class VariantResp(BaseModel):
+    id: int
+    paper_id: str
+    gene: Optional[str] = None
+    transcript: Optional[str] = None
+    variant_verbatim: Optional[str] = None
+    genomic_coordinates: Optional[str] = None
+    hgvs_c: Optional[str] = None
+    hgvs_p: Optional[str] = None
+    hgvs_c_inferred: Optional[str] = None
+    hgvs_p_inferred: Optional[str] = None
+    hgvs_inference_confidence: Optional[str] = None
+    hgvs_inference_evidence_context: Optional[str] = None
+    variant_type: Optional[str] = None
+    zygosity: Optional[str] = None
+    inheritance: Optional[str] = None
+    variant_type_evidence_context: Optional[str] = None
+    variant_evidence_context: Optional[str] = None
+    zygosity_evidence_context: Optional[str] = None
+    inheritance_evidence_context: Optional[str] = None

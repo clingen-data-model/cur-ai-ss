@@ -3,6 +3,8 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, AsyncGenerator, Optional
 
+from alembic import command
+from alembic.config import Config as AlembicConfig
 from fastapi import (
     Body,
     Depends,
@@ -26,14 +28,28 @@ from lib.api.db import get_engine, get_session
 from lib.evagg.pdf.thumbnail import pdf_first_page_to_thumbnail_pymupdf_bytes
 from lib.evagg.types.base import Paper
 from lib.evagg.utils.environment import env
-from lib.models import Base, ExtractionStatus, GeneDB, GeneResp, PaperDB, PaperResp
+from lib.models import (
+    Base,
+    ExtractionStatus,
+    GeneDB,
+    GeneResp,
+    PaperDB,
+    PaperResp,
+    PatientDB,
+    PatientResp,
+    VariantDB,
+    VariantResp,
+)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     engine = get_engine()
-    session = get_session()
-    Base.metadata.create_all(bind=engine)
+    if Path('alembic.ini').exists():
+        alembic_cfg = AlembicConfig('alembic.ini')
+        command.upgrade(alembic_cfg, 'head')
+    else:
+        Base.metadata.create_all(bind=engine)
     yield
 
 
@@ -197,6 +213,26 @@ def list_papers(
     if extraction_status is not None:
         query = query.filter(PaperDB.extraction_status == extraction_status)
     return query.all()
+
+
+@app.get('/papers/{paper_id}/patients', response_model=list[PatientResp])
+def list_paper_patients(paper_id: str, session: Session = Depends(get_session)) -> Any:
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    return session.query(PatientDB).filter(PatientDB.paper_id == paper_id).all()
+
+
+@app.get('/papers/{paper_id}/variants', response_model=list[VariantResp])
+def list_paper_variants(paper_id: str, session: Session = Depends(get_session)) -> Any:
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    return session.query(VariantDB).filter(VariantDB.paper_id == paper_id).all()
 
 
 @app.get('/genes', response_model=list[GeneResp])
