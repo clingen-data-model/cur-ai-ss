@@ -37,7 +37,7 @@ from lib.ui.helpers import paper_extraction_output_to_markdown
 
 
 @st.fragment
-def render_editable_paper_extraction_tab(paper_extraction_output):
+def render_editable_paper_extraction_tab(paper_extraction_output: PaperExtractionOutput) -> None:
     paper_extraction_output.title = st.text_input(
         'Title', paper_extraction_output.title
     )
