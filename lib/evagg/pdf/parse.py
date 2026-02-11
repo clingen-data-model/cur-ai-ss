@@ -16,7 +16,6 @@ from docling_core.types.doc import (
 )
 from docling_core.types.doc.page import TextCellUnit
 from docling_parse.pdf_parser import DoclingPdfParser, PdfDocument
-from pydantic import BaseModel
 
 from lib.evagg.types import Paper
 
@@ -25,12 +24,6 @@ IMAGE_RESOLUTION_SCALE = 2.0
 WordLoc = namedtuple(
     'WordLoc', ['page_i', 'word', 'x0', 'y0', 'x1', 'y1', 'x2', 'y2', 'x3', 'y3']
 )
-
-
-class Section(BaseModel):
-    title: str
-    level: int
-    text: str
 
 
 def parse_words_json(stream: BytesIO) -> list[WordLoc]:
@@ -58,10 +51,9 @@ def parse_words_json(stream: BytesIO) -> list[WordLoc]:
 
 def split_by_sections(
     document: DoclingDocument,
-) -> tuple[list[Section], dict[int, str]]:
-    sections: list[Section] = []
+) -> tuple[list[tuple[str, str]], dict[int, str]]:
+    sections: list[tuple[str, str]] = []
     image_captions: dict[int, str] = {}
-
     current_header = None
     current_text: list[str] = []
 
@@ -69,13 +61,7 @@ def split_by_sections(
         if isinstance(item, SectionHeaderItem):
             # flush previous section
             if current_header is not None:
-                sections.append(
-                    Section(
-                        title=current_header.text,
-                        level=current_header.level,
-                        text='\n\n'.join(current_text).strip(),
-                    )
-                )
+                sections.append((current_header.text, '\n\n'.join(current_text)))
 
             current_header = item
             current_text = []
@@ -87,6 +73,7 @@ def split_by_sections(
                 if item.parent.cref.startswith('#/pictures/'):
                     image_captions[int(item.parent.cref.split('/')[-1])] = item.text
                 elif item.parent.cref.startswith('#/tables/'):
+                    # Skip table headers as they are included in table markdown.
                     continue
                 else:
                     print(
@@ -97,13 +84,7 @@ def split_by_sections(
 
     # flush final section
     if current_header is not None:
-        sections.append(
-            Section(
-                title=current_header.text,
-                level=current_header.level,
-                text='\n\n'.join(current_text).strip(),
-            )
-        )
+        sections.append((current_header.text, '\n\n'.join(current_text)))
 
     return sections, image_captions
 
@@ -131,6 +112,10 @@ def parse_content(paper: Paper, force: bool = False) -> None:
     document: DoclingDocument = doc_converter.convert(
         source=DocumentStream(name='content', stream=BytesIO(paper.content)),
     ).document
+    document.save_as_markdown(
+        paper.pdf_markdown_path,
+        image_mode=ImageRefMode.REFERENCED,
+    )
     document.save_as_json(
         paper.pdf_json_path,
         image_mode=ImageRefMode.REFERENCED,
@@ -176,15 +161,15 @@ def parse_content(paper: Paper, force: bool = False) -> None:
     ) as fp:
         json.dump(words_json, fp, indent=2)
 
-    sections, image_captions = split_by_sections(document)
-    for i, section in enumerate(sections):
-        header_level = min(section.level, 4)  # cap depth for readability
-        header = '#' * header_level
-
-        with open(paper.pdf_section_llm_txt_path(i), 'w') as fp:
-            fp.write(f'{header} {section.title}\n\n')
-            fp.write(section.text)
-            fp.write('\n')
+    section_mds, image_captions = split_by_sections(document)
+    for i, section_md in enumerate(section_mds):
+        with open(
+            paper.pdf_section_markdown_path(i),
+            'w',
+        ) as fp:
+            fp.write('## ' + section_md[0])
+            fp.write('\n\n')
+            fp.write(section_md[1])
 
     for i, caption in image_captions.items():
         with open(

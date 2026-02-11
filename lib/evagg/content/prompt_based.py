@@ -209,7 +209,7 @@ class PromptBasedContentExtractor:
         self, gene_symbol: str, observation: Observation
     ) -> str:
         # Obtain all the phenotype strings listed in the text associated with the gene.
-        fulltext = '\n\n'.join(observation.paper.llm_txts)
+        fulltext = observation.paper.fulltext_md
         # TODO: treating all tables in paper as a single text, maybe this isn't ideal, consider grouping by 'id'
         table_texts = '\n\n'.join(observation.paper.tables_md)
 
@@ -248,7 +248,7 @@ class PromptBasedContentExtractor:
     ) -> Dict[str, Any]:
         params = {
             # First element is full text of the observation, consider alternatives
-            'passage': '\n\n'.join(observation.paper.llm_txts),
+            'passage': observation.paper.fulltext_md,
             'variant_descriptions': ', '.join(observation.variant_descriptions),
             'patient_descriptions': ', '.join(observation.patient_descriptions),
             'gene': gene_symbol,

@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 async def parse_paper_task_async(paper: Paper) -> None:
     result = await Runner.run(
         paper_extraction_agent,
-        f'Paper (fulltext md): {"\n\n".join(paper.llm_txts)}',
+        f'Paper (fulltext md): {paper.fulltext_md}',
     )
     json_response = result.final_output.model_dump_json(indent=2)
     paper.metadata_json_path.parent.mkdir(parents=True, exist_ok=True)
@@ -44,7 +44,7 @@ async def parse_paper_task_async(paper: Paper) -> None:
 async def parse_patients_task_async(paper: Paper) -> None:
     result = await Runner.run(
         patient_extraction_agent,
-        f'Paper (fulltext): {"\n\n".join(paper.llm_txts)}',
+        f'Paper (fulltext md): {paper.fulltext_md}',
     )
     json_response = result.final_output.model_dump_json(indent=2)
     paper.patient_info_json_path.parent.mkdir(parents=True, exist_ok=True)
@@ -55,7 +55,7 @@ async def parse_patients_task_async(paper: Paper) -> None:
 async def parse_variants_task_async(paper: Paper, gene_symbol: str) -> None:
     result = await Runner.run(
         variant_extraction_agent,
-        f'Gene Symbol: {gene_symbol}\nPaper (fulltext): {"\n\n".join(paper.llm_txts)}',
+        f'Gene Symbol: {gene_symbol}\nPaper (fulltext md): {paper.fulltext_md}',
     )
     json_response = result.final_output.model_dump_json(indent=2)
     paper.variants_json_path.parent.mkdir(parents=True, exist_ok=True)
