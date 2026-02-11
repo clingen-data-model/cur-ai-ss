@@ -1,6 +1,8 @@
+import html
 import json
 from collections import namedtuple
 from io import BytesIO
+from pathlib import Path
 
 from docling.datamodel.base_models import DocumentStream, InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions
@@ -24,6 +26,11 @@ IMAGE_RESOLUTION_SCALE = 2.0
 WordLoc = namedtuple(
     'WordLoc', ['page_i', 'word', 'x0', 'y0', 'x1', 'y1', 'x2', 'y2', 'x3', 'y3']
 )
+
+
+def save_unescaped_markdown(document: DoclingDocument, path: Path) -> None:
+    document.save_as_markdown(path, image_mode=ImageRefMode.REFERENCED)
+    path.write_text(html.unescape(path.read_text(encoding='utf-8')), encoding='utf-8')
 
 
 def parse_words_json(stream: BytesIO) -> list[WordLoc]:
@@ -112,9 +119,9 @@ def parse_content(paper: Paper, force: bool = False) -> None:
     document: DoclingDocument = doc_converter.convert(
         source=DocumentStream(name='content', stream=BytesIO(paper.content)),
     ).document
-    document.save_as_markdown(
+    save_unescaped_markdown(
+        document,
         paper.pdf_markdown_path,
-        image_mode=ImageRefMode.REFERENCED,
     )
     document.save_as_json(
         paper.pdf_json_path,

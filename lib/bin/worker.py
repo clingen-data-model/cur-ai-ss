@@ -10,6 +10,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 
+from lib.agents.paper_extraction_agent import agent as paper_extraction_agent
 from lib.agents.patient_extraction_agent import agent as patient_extraction_agent
 from lib.agents.variant_extraction_agent import agent as variant_extraction_agent
 from lib.api.db import session_scope
@@ -29,38 +30,15 @@ RETRIES = 3
 logger = logging.getLogger(__name__)
 
 
-def parse_paper_metadata_task(paper: Paper) -> Paper:
-    llm_client = OpenAIClient()
-    ncbi_lookup_client = NcbiLookupClient(
-        web_client=RequestsWebContentClient(
-            WebClientSettings(status_code_translator=get_ncbi_response_translator())
-        )
+async def parse_paper_task_async(paper: Paper) -> None:
+    result = await Runner.run(
+        paper_extraction_agent,
+        f'Paper (fulltext md): {paper.fulltext_md}',
     )
-    title = asyncio.run(
-        llm_client.prompt_json_from_string(
-            user_prompt=f"""
-            Extract the title of the following (truncated to 1000 characters) scientific paper.
-
-            Return your response as a JSON object like this:
-            {{
-                "title": "The title of the paper"
-            }}
-
-            Paper: {paper.fulltext_md[:1000]}
-        """,
-        )
-    )['title']
-    pmids = ncbi_lookup_client.search(
-        title + '[ti]',
-    )
-    if pmids:
-        paper = ncbi_lookup_client.fetch(pmids[0], paper)
-
-    # Dump the paper metadata
+    json_response = result.final_output.model_dump_json(indent=2)
     paper.metadata_json_path.parent.mkdir(parents=True, exist_ok=True)
     with open(paper.metadata_json_path, 'w') as f:
-        json.dump({k: v for k, v in paper.__dict__.items() if k != 'content'}, f)
-    return paper
+        f.write(json_response)
 
 
 async def parse_patients_task_async(paper: Paper) -> None:
@@ -87,6 +65,7 @@ async def parse_variants_task_async(paper: Paper, gene_symbol: str) -> None:
 
 async def run_tasks_concurrently(paper: Paper, gene_symbol: str) -> None:
     await asyncio.gather(
+        parse_paper_task_async(paper),
         parse_patients_task_async(paper),
         parse_variants_task_async(paper, gene_symbol),
     )
@@ -98,7 +77,6 @@ def initial_extraction(paper_db: PaperDB) -> None:
         try:
             paper = Paper(id=paper_db.id).with_content()
             parse_content(paper, force=True)
-            paper = parse_paper_metadata_task(paper)
             asyncio.run(run_tasks_concurrently(paper, paper_db.gene.symbol))
             paper_db.extraction_status = ExtractionStatus.PARSED
             logger.info(f'Attempt {attempt}/{max_attempts} succeeded')
