@@ -12,8 +12,8 @@ def paper_dict_to_markdown(paper: dict) -> str:
     author_line = []
     if 'first_author' in paper:
         author_line.append(f'**First Author:** {paper["first_author"]}')
-    if 'pub_year' in paper:
-        author_line.append(f'**Year:** {paper["pub_year"]}')
+    if 'publication_year' in paper:
+        author_line.append(f'**Publication Year:** {paper["publication_year"]}')
     if 'journal' in paper:
         author_line.append(f'**Journal:** {paper["journal"]}')
     if author_line:
@@ -33,15 +33,6 @@ def paper_dict_to_markdown(paper: dict) -> str:
         )
     if id_lines:
         lines.append(' | '.join(id_lines) + '\n')
-
-    # Open Access / License
-    oa_lines = []
-    if paper.get('OA'):
-        oa_lines.append('✅ Open Access')
-    if paper.get('license'):
-        oa_lines.append(f'**License:** {paper["license"]}')
-    if oa_lines:
-        lines.append(' | '.join(oa_lines) + '\n')
 
     # Abstract
     if paper.get('abstract'):

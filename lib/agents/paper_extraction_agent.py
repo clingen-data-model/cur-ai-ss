@@ -36,9 +36,9 @@ class PaperExtractionOutput(BaseModel):
     journal_name: str | None
     abstract: str | None = None
     publication_year: int | None = None
+    doi: str | None = None
     pmid: str | None = None
     pmcid: str | None = None
-    doi: str | None = None
     testing_methods: List[TestingMethod]
     testing_methods_evidence: List[str | None]
 
@@ -121,7 +121,7 @@ Task Overview:
      - first_author
      - journal
      - abstract
-     - pub_year
+     - publication_year
      - doi
      - pmid
      - pmcid
@@ -136,42 +136,42 @@ Task Overview:
        - first_author: MedlineCitation/Article/AuthorList/Author[1]/LastName
        - journal: MedlineCitation/Article/Journal/ISOAbbreviation
        - abstract: MedlineCitation/Article/Abstract
-       - pub_year: MedlineCitation/Article/Journal/JournalIssue/PubDate/Year
+       - publication_year: MedlineCitation/Article/Journal/JournalIssue/PubDate/Year
        - doi: PubmedData/ArticleIdList/ArticleId with IdType="doi"
        - pmcid: PubmedData/ArticleIdList/ArticleId with IdType="pmc"
      - Do not invent values.
 
 2. **Top-Two Testing Method Selection**
-   - From the list below, identify the **top two most relevant testing methods** used in the study.
-   - Provide exact evidence text for each method.
-   - Rules:
-     - Select **at most two** methods.
-     - Rank them in order of relevance (most relevant first).
-     - Base relevance on what was actually used to generate the reported findings (not background methods or confirmatory-only assays).
-     - Prefer explicitly stated methods in the text.
-     - If multiple methods are mentioned, choose the two that contributed most directly to variant discovery or diagnosis.
-     - If only one method is clearly described, return a single method.
-     - If no method can be confidently determined, output `Unknown` for the method and `None` for evidence.
-     - Do not invent or guess values.
-   - Allowed methods:
-     - Chromosomal_microarray – Genome-wide copy number analysis.
-     - Next_generation_sequencing_panels – Targeted multi-gene NGS.
-     - Exome_sequencing – Coding regions only (WES).
-     - Genome_sequencing – Whole genome (WGS).
-     - Sanger_sequencing – Capillary sequencing.
-     - Pcr – PCR-based testing.
-     - Homozygosity_mapping – Shared homozygous region analysis.
-     - Linkage_analysis – Family-based locus mapping.
-     - Genotyping – Predefined variant testing.
-     - Denaturing_gradient_gel – DGGE variant detection.
-     - High_resolution_melting – HRM variant detection.
-     - Restriction_digest – Restriction enzyme assay.
-     - Single_strand_conformation_polymorphism – SSCP variant detection.
-     - Unknown – Method not stated.
-     - Other – Method not listed.
-   - Output format:
-     - testing_methods: [<method_1>, <method_2>]
-     - testing_methods_evidence: [<evidence method_1>, <evidence method_2>]
+  - From the list below, identify the **top two most relevant testing methods** used in the study.
+  - Provide exact evidence text for each method.
+  - Rules:
+    - Select **at most two** methods.
+    - Rank them in order of relevance (most relevant first).
+    - Base relevance on what was actually used to generate the reported findings (not background methods or confirmatory-only assays).
+    - Prefer explicitly stated methods in the text.
+    - If multiple methods are mentioned, choose the two that contributed most directly to variant discovery or diagnosis.
+    - If only one method is clearly described, return a single method.
+    - If no method can be confidently determined, output `Unknown` for the method and `None` for evidence.
+    - Do not invent or guess values.
+  - Allowed methods:
+    - Chromosomal_microarray – Genome-wide copy number analysis.
+    - Next_generation_sequencing_panels – Targeted multi-gene NGS.
+    - Exome_sequencing – Coding regions only (WES).
+    - Genome_sequencing – Whole genome (WGS).
+    - Sanger_sequencing – Capillary sequencing.
+    - Pcr – PCR-based testing.
+    - Homozygosity_mapping – Shared homozygous region analysis.
+    - Linkage_analysis – Family-based locus mapping.
+    - Genotyping – Predefined variant testing.
+    - Denaturing_gradient_gel – DGGE variant detection.
+    - High_resolution_melting – HRM variant detection.
+    - Restriction_digest – Restriction enzyme assay.
+    - Single_strand_conformation_polymorphism – SSCP variant detection.
+    - Unknown – Method not stated.
+    - Other – Method not listed.
+  - Output format:
+    - testing_methods: [<method_1>, <method_2>]
+    - testing_methods_evidence: [<evidence method_1>, <evidence method_2>]
 
 Retry any tool requests (PubMed fetch or search) up to 3 times on an exponential delay.
 """
