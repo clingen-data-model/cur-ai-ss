@@ -45,7 +45,7 @@ def paper_extraction_output_to_markdown(paper: PaperExtractionOutput) -> str:
     # Testing Methods (optional addition)
     if paper.testing_methods:
         method_lines = [
-            f'- {method.value}' + (f': {evidence}' if evidence else '')
+            f'- **{method.value}**' + (f': {evidence}' if evidence else '')
             for method, evidence in zip(
                 paper.testing_methods, paper.testing_methods_evidence
             )
