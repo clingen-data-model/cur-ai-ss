@@ -1,14 +1,20 @@
+from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 from pydantic import BaseModel
 from sqlalchemy import (
     Boolean,
     Column,
+    DateTime,
     ForeignKey,
     Integer,
     String,
     Text,
+    func,
 )
 from sqlalchemy import (
     Enum as SQLEnum,
@@ -51,6 +57,50 @@ class GeneDB(Base):
         back_populates='gene',
         cascade='all, delete-orphan',
     )
+
+
+class StaticFileHeaderDB(Base):
+    __tablename__ = 'static_file_headers'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    file_identifier: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    etag: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    last_modified: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    content_length: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    created_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, server_default=func.now()
+    )
+
+    @classmethod
+    def latest(
+        cls, session: 'Session', identifier: str
+    ) -> Optional['StaticFileHeaderDB']:
+        """Return the most recent header record for the given file identifier."""
+        from sqlalchemy import select
+
+        stmt = (
+            select(cls)
+            .where(cls.file_identifier == identifier)
+            .order_by(cls.created_at.desc())
+            .limit(1)
+        )
+        return session.execute(stmt).scalar_one_or_none()
+
+    def matches_headers(self, headers: dict[str, Optional[str]]) -> bool:
+        """Check if cached headers match remote headers (ETag > Last-Modified > Content-Length)."""
+        remote_etag = headers.get('etag')
+        if self.etag and remote_etag:
+            return self.etag == remote_etag
+
+        remote_lm = headers.get('last_modified')
+        if self.last_modified and remote_lm:
+            return self.last_modified == remote_lm
+
+        remote_cl = headers.get('content_length')
+        if self.content_length and remote_cl:
+            return self.content_length == remote_cl
+
+        return False
 
 
 class GeneResp(BaseModel):

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from lib.api.db import get_sessionmaker
 from lib.models import GeneDB
+from lib.reference_data.file_headers import should_update_file, update_cached_headers
 
 HGNC_URL = 'https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt'
 
@@ -74,13 +75,21 @@ def sync_genes_via_temp_table(session: Session, symbols: list[str]) -> None:
 
 
 def main() -> None:
-    print('Downloading HGNC gene set...')
-    symbols = download_hgnc_symbols()
-    print(f'Downloaded {len(symbols)} symbols.')
-
     SessionLocal = get_sessionmaker()
     with SessionLocal() as session:
+        if not should_update_file(
+            session, 'hgnc_complete_set', HGNC_URL, model_class=GeneDB
+        ):
+            print('HGNC gene set is up to date, skipping download.')
+            return
+
+        print('Downloading HGNC gene set...')
+        symbols = download_hgnc_symbols()
+        print(f'Downloaded {len(symbols)} symbols.')
+
         sync_genes_via_temp_table(session, symbols)
+
+        update_cached_headers(session, 'hgnc_complete_set', HGNC_URL)
 
 
 if __name__ == '__main__':
