@@ -33,8 +33,9 @@ logger = logging.getLogger(__name__)
 async def parse_paper_task_async(paper: Paper) -> None:
     result = await Runner.run(
         paper_extraction_agent,
-        f'Paper (fulltext md): {paper.fulltext_md}',
+        f'Paper (fulltext md): {"\n\n".join(paper.llm_txts)}',
     )
+    json_response = result.final_output.model_dump_json(indent=2)
     paper.metadata_json_path.parent.mkdir(parents=True, exist_ok=True)
     with open(paper.metadata_json_path, 'w') as f:
         f.write(json_response)
