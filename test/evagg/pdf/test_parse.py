@@ -12,9 +12,11 @@ def test_convert_and_extract_creates_outputs(
 
     # ---- core outputs ----
     json_path = paper.pdf_json_path
+    md_path = paper.pdf_markdown_path
     success_path = paper.pdf_extraction_success_path
 
     assert json_path.exists(), 'JSON output was not created'
+    assert md_path.exists(), 'Markdown output was not created'
     assert success_path.exists(), 'Success marker file was not created'
 
     # ---- tables ----
@@ -64,4 +66,4 @@ def test_convert_and_extract_creates_outputs(
     assert len(sections) >= 20, 'Not enough sections were extracted'
 
     with open(paper.pdf_section_markdown_path(section_id - 1), 'r') as f:
-        assert '# Supporting Information' in f.read()
+        assert '## Supporting Information' in f.read()

@@ -290,12 +290,12 @@ class ObservationFinder:
         return response
 
     def _get_text_sections(self, paper: Paper) -> Tuple[str, List[str]]:
-        return '\n\n'.join(paper.llm_txts), paper.tables_md
+        return paper.fulltext_md, paper.tables_md
 
     def _get_text_mentioning_variant(
         self, paper: Paper, variant_descriptions: Sequence[str], allow_empty: bool
     ) -> str:
-        sections = paper.llm_txts + paper.tables_md
+        sections = paper.sections_md + paper.tables_md
         filtered_text = '\n\n'.join(
             [
                 section
@@ -304,7 +304,8 @@ class ObservationFinder:
             ]
         )
         if not filtered_text and not allow_empty:
-            return '\n\n'.join([section for section in paper.llm_txts])
+            sections = paper.sections_md
+            return '\n\n'.join([section for section in sections])
         return filtered_text
 
     def _create_variant_from_text(

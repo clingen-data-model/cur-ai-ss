@@ -78,10 +78,15 @@ class Paper:
         return f'id: {self.id} - "{snippet}"'
 
     @property
-    def llm_txts(self) -> list[str]:
+    def fulltext_md(self) -> str:
+        with open(self.pdf_markdown_path, 'r') as f:
+            return f.read()
+
+    @property
+    def sections_md(self) -> list[str]:
         sections = []
         for section_path in self.pdf_sections_dir.iterdir():
-            if str(section_path).endswith('.llm.txt'):
+            if str(section_path).endswith('md'):
                 with open(section_path, 'r') as f:
                     sections.append(f.read())
         return sections
@@ -136,6 +141,10 @@ class Paper:
         return self.pdf_dir / 'sections'
 
     @property
+    def pdf_markdown_path(self) -> Path:
+        return self.pdf_dir / 'raw.md'
+
+    @property
     def pdf_json_path(self) -> Path:
         return self.pdf_dir / 'raw.json'
 
@@ -171,11 +180,11 @@ class Paper:
     ) -> Path:
         return self.pdf_tables_dir / f'{table_id}.md'
 
-    def pdf_section_llm_txt_path(
+    def pdf_section_markdown_path(
         self,
         section_id: int,
     ) -> Path:
-        return self.pdf_sections_dir / f'{section_id}.llm.txt'
+        return self.pdf_sections_dir / f'{section_id}.md'
 
 
 @dataclass(frozen=True)
