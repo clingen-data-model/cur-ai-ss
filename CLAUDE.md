@@ -28,11 +28,11 @@ Evidence Aggregator is a system for extracting and aggregating genetic variant e
 
 The full-stack app consists of three processes:
 
-1. **FastAPI API** (`lib/api/app.py`) — REST API for paper and gene management. Run with `uv run uvicorn lib.api.app:app`. On startup, runs Alembic migrations. Endpoints: `/papers`, `/papers/{id}`, `/papers/{id}/patients`, `/papers/{id}/variants`, `/genes`, `/status`.
+1. **FastAPI API** (`lib/api/app.py`) — REST API for paper and gene management. Run with `./bin/api`. On startup, runs Alembic migrations. Endpoints: `/papers`, `/papers/{id}`, `/papers/{id}/patients`, `/papers/{id}/variants`, `/genes`, `/status`.
 
-2. **Streamlit UI** (`lib/ui/streamlit_app.py`) — Web frontend. Run with `uv run streamlit run lib/ui/streamlit_app.py`. Pages: dashboard (paper list) and details (single paper view). Communicates with the API via HTTP (`lib/ui/api.py`).
+2. **Streamlit UI** (`lib/ui/streamlit_app.py`) — Web frontend. Run with `./bin/ui`. Pages: dashboard (paper list) and details (single paper view). Communicates with the API via HTTP (`lib/ui/api.py`).
 
-3. **Worker** (`lib/bin/worker.py`) — Background job processor. Run with `uv run python lib/bin/worker.py`. Polls the database for papers with `QUEUED` status, then for each paper: parses the PDF, extracts metadata via LLM + NCBI lookup, runs patient and variant extraction agents concurrently (OpenAI Agents SDK), and persists results to the database.
+3. **Worker** (`lib/bin/worker.py`) — Background job processor. Run with `./bin/worker`. Polls the database for papers with `QUEUED` status, then for each paper: parses the PDF, extracts metadata via LLM + NCBI lookup, runs patient and variant extraction agents concurrently (OpenAI Agents SDK), and persists results to the database.
 
 ### CLI Tool
 

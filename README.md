@@ -1,6 +1,6 @@
 ## Install software prerequisites
 
-- **Python** 3.12 or above
+- **Python** 3.12
 - **git**
 - **uv**.  Follow the instructions [here](https://docs.astral.sh/uv/getting-started/installation/) 
 - **make** [optional] only for [development tasks](README.md#pre-pr-checks)
@@ -31,7 +31,6 @@ cd cur-ai-ss
 ## Install Dependencies
 ```bash
 uv sync
-uv pip install -e .
 ```
 
 Test installation by running the following. You should see a help message displayed providing usage for the command.
@@ -47,7 +46,7 @@ make ci
 
 To run a specific test
 ```bash
-uv run pytest test/evagg/test_llm.py
+ENV_FILE=.env.test uv run pytest test/evagg/test_llm.py
 ```
 
 ## Running the extraction with a PDF
