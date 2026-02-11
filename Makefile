@@ -46,3 +46,7 @@ fix:
 .PHONY: type
 type:
 	@uv run mypy $(PY_DIRS_MAIN)
+
+.PHONY: update-genes
+update-genes:
+	@uv run python3 -m lib.reference_data.upsert_gene_symbols
