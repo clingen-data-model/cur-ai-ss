@@ -61,7 +61,7 @@ Environment variables are managed via pydantic-settings (`lib/evagg/utils/enviro
 
 ### Database
 
-SQLite via SQLAlchemy. Alembic migrations in `migrations/` (not `alembic/`, to avoid Python import conflicts). The migrations directory is configured in `alembic.ini`.
+SQLite via SQLAlchemy. The database file is at `$CAA_ROOT/app.db` (where `CAA_ROOT` comes from `.env`). Alembic migrations in `migrations/` (not `alembic/`, to avoid Python import conflicts). The migrations directory is configured in `alembic.ini`. When inspecting the database directly, use the `CAA_ROOT` value from `.env` (e.g. `sqlite3 ~/.local/share/caa/app.db`).
 
 ### Testing
 
