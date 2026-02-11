@@ -4,60 +4,65 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Commands
 
-This project uses `uv` for package management and `make` for common development tasks:
+This project uses `uv` for package management and `make` for common development tasks. **Prefer make targets over raw commands when available**:
 
-- **Run all CI checks**: `make ci` or `make` (default target) - runs linting, tests, and security checks
-- **Run tests**: `make test` - runs pytest with coverage report
-- **Run linting**: `make lint` - runs flake8 and mypy
-- **Run type checking**: `make type` - runs mypy only
-- **Run security checks**: `make sec` - runs bandit security linter
-- **Run single test file**: `uv run pytest test/path/to/test_file.py`
+- **Run all CI checks**: `make ci` or `make` (default target) — runs linting, type checking, format checking, and tests
+- **Run tests**: `make test` — runs pytest with coverage (sets `ENV_FILE=.env.test` automatically)
+- **Run linting**: `make lint` — runs `ruff check`
+- **Run type checking**: `make type` — runs mypy
+- **Run format check**: `make format` — runs `ruff format --check`
+- **Run all linters**: `make all-lint` — runs lint + type + format
+- **Auto-fix lint and formatting**: `make fix` — runs `ruff check --fix` and `ruff format`
+- **Run single test file**: `ENV_FILE=.env.test uv run pytest test/path/to/test_file.py`
 - **Install dependencies**: `uv sync` (after making changes to pyproject.toml)
+
+## Formatting
+
+After all code edits, run `make fix` to auto-fix import sorting and formatting.
 
 ## Architecture Overview
 
-Evidence Aggregator is a modular pipeline system for querying, filtering, and aggregating genetic variant publication evidence using AI. The architecture follows a dependency injection pattern with YAML-based configuration.
+Evidence Aggregator is a system for extracting and aggregating genetic variant evidence from scientific papers using AI. It runs as a three-component full-stack application, plus a standalone CLI tool.
 
-### Core Architecture
+### Full-Stack Application
 
-**Pipeline Apps**: The main entry point is `run_evagg_app <config.yaml>` which instantiates and runs pipeline applications. Apps implement the `IEvAggApp` protocol with an `execute()` method.
+The full-stack app consists of three processes:
 
-**Dependency Injection System**: The `lib.di` module provides a container that instantiates objects from YAML specifications. YAML configs use the `di_factory` key to specify the class/module to instantiate, with parameters passed as keyword arguments.
+1. **FastAPI API** (`lib/api/app.py`) — REST API for paper and gene management. Run with `uv run uvicorn lib.api.app:app`. On startup, runs Alembic migrations. Endpoints: `/papers`, `/papers/{id}`, `/papers/{id}/patients`, `/papers/{id}/variants`, `/genes`, `/status`.
 
-**Component Protocols**: The system is built around four main interfaces:
-- `IGetPapers`: Search and retrieve papers (e.g., from PubMed)
-- `IExtractFields`: Extract structured data from papers using AI
-- `IWriteOutput`: Output results in various formats (JSON, tables)
-- `IEvAggApp`: Top-level application orchestrator
+2. **Streamlit UI** (`lib/ui/streamlit_app.py`) — Web frontend. Run with `uv run streamlit run lib/ui/streamlit_app.py`. Pages: dashboard (paper list) and details (single paper view). Communicates with the API via HTTP (`lib/ui/api.py`).
+
+3. **Worker** (`lib/bin/worker.py`) — Background job processor. Run with `uv run python lib/bin/worker.py`. Polls the database for papers with `QUEUED` status, then for each paper: parses the PDF, extracts metadata via LLM + NCBI lookup, runs patient and variant extraction agents concurrently (OpenAI Agents SDK), and persists results to the database.
+
+### CLI Tool
+
+`lib/bin/extract_single_pdf.py` — Standalone single-paper extraction using the `App` class from `lib/evagg/app.py`. Takes `--pdf`, `--gene-symbol`, and `--retries` arguments.
 
 ### Key Modules
 
-- `lib/evagg/`: Core library with main components and interfaces
-- `lib/evagg/app.py`: Main pipeline applications (`PaperQueryApp`, `SinglePMIDApp`)
-- `lib/evagg/library/`: Paper retrieval implementations (rare disease databases, single papers)
-- `lib/evagg/content/`: Content extraction using AI (prompt-based, cached variants)
-- `lib/evagg/ref/`: Reference data providers (NCBI, HPO, Mutalyzer)
-- `lib/evagg/llm/`: AI model interfaces (Azure OpenAI)
-- `lib/di.py`: Dependency injection container
-- `lib/config/`: YAML pipeline configurations
+- `lib/api/` — FastAPI app (`app.py`) and database layer (`db.py`: `get_engine()`, `get_sessionmaker()`, `get_session()`, `session_scope()`)
+- `lib/ui/` — Streamlit UI (`streamlit_app.py`, `dashboard.py`, `details.py`, `api.py`, `helpers.py`)
+- `lib/bin/` — Entry points (`worker.py`, `extract_single_pdf.py`)
+- `lib/agents/` — OpenAI Agents SDK agent definitions (`patient_extraction_agent.py`, `variant_extraction_agent.py`)
+- `lib/models/` — SQLAlchemy models (`GeneDB`, `PaperDB`, `PatientDB`, `VariantDB`), Pydantic response models, and `converters.py` (agent output to DB conversion)
+- `lib/evagg/app.py` — `App` class: single-paper extraction pipeline (content extraction, VEP/ClinVar/gnomAD enrichment)
+- `lib/evagg/content/` — Content extraction (prompt-based, observation finding, HGVS variant handling)
+- `lib/evagg/ref/` — Reference data providers (NCBI, VEP, ClinVar, gnomAD, HPO, Mutalyzer, RefSeq)
+- `lib/evagg/llm/` — OpenAI client
+- `lib/evagg/pdf/` — PDF parsing and thumbnail generation
+- `lib/evagg/types/` — Type definitions (`Paper`, `PromptTag`)
+- `lib/evagg/utils/` — Environment config (pydantic-settings), web client
+- `lib/evagg/library/` — Paper retrieval
+- `migrations/` — Alembic database migrations
 
-### Configuration Pattern
+### Configuration
 
-YAML specs follow this structure:
-```yaml
-# Resources (singletons, reusable objects)
-resource_name:
-  di_factory: module.ClassName
-  param: value
+Environment variables are managed via pydantic-settings (`lib/evagg/utils/environment.py`), loaded from an `.env` file (overridden by the `ENV_FILE` env var). Key variables: `OPENAI_API_KEY`, `CAA_ROOT` (data directory, default `/var/caa`), `API_ENDPOINT`, `CORS_ALLOWED_ORIGINS`.
 
-# App definition
-di_factory: lib.evagg.AppClass
-app_param: "{{resource_name}}"  # Reference to resource
-other_param: value
-```
+### Database
 
-The DI system resolves `{{resource_name}}` references and handles nested object instantiation recursively.
+SQLite via SQLAlchemy. Alembic migrations in `migrations/` (not `alembic/`, to avoid Python import conflicts). The migrations directory is configured in `alembic.ini`.
 
 ### Testing
 
-Tests are organized under `test/` mirroring the `lib/` structure. The project uses pytest with coverage reporting and includes unit tests for core functionality.
+Tests are under `test/` mirroring the `lib/` structure. Tests require `ENV_FILE=.env.test` (the `.env.test` file should set `CAA_ROOT` to a temp directory like `/tmp/caa_test`). The `make test` target sets this automatically.

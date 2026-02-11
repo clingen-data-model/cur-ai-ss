@@ -38,6 +38,11 @@ lint:
 format:
 	@uv run ruff format --check $(PY_DIRS_ALL)
 
+.PHONY: fix
+fix:
+	@uv run ruff check --fix $(PY_DIRS_ALL)
+	@uv run ruff format $(PY_DIRS_ALL)
+
 .PHONY: type
 type:
 	@uv run mypy $(PY_DIRS_MAIN)
