@@ -16,6 +16,7 @@ ExecStart=/opt/{{ caa_user }}/bin/ui \
     --server.address 127.0.0.1 \
     --browser.serverAddress {{ domain }} \
     --browser.serverPort 443
+    --client.toolbarMode developer
 
 Restart=on-failure
 RestartSec=5

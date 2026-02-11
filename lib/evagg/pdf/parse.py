@@ -30,7 +30,10 @@ WordLoc = namedtuple(
 
 def save_unescaped_markdown(document: DoclingDocument, path: Path) -> None:
     document.save_as_markdown(path, image_mode=ImageRefMode.REFERENCED)
-    path.write_text(html.unescape(path.read_text(encoding='utf-8')), encoding='utf-8')
+    text = path.read_text(encoding='utf-8')
+    text = text.replace(r"\_", "_")
+    text = html.unescape(text)
+    path.write_text(text, encoding='utf-8')
 
 
 def parse_words_json(stream: BytesIO) -> list[WordLoc]:
