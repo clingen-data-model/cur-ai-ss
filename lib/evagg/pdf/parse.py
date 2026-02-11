@@ -31,7 +31,7 @@ WordLoc = namedtuple(
 def save_unescaped_markdown(document: DoclingDocument, path: Path) -> None:
     document.save_as_markdown(path, image_mode=ImageRefMode.REFERENCED)
     text = path.read_text(encoding='utf-8')
-    text = text.replace(r"\_", "_")
+    text = text.replace(r'\_', '_')
     text = html.unescape(text)
     path.write_text(text, encoding='utf-8')
 
