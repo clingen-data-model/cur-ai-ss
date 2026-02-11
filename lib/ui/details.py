@@ -35,7 +35,6 @@ from lib.ui.api import (
 )
 from lib.ui.helpers import paper_extraction_output_to_markdown
 
-import streamlit as st
 
 @st.fragment
 def render_editable_paper_extraction_tab(paper_extraction_output):
