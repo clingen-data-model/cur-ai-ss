@@ -2,7 +2,7 @@
 
 - **Python** 3.12
 - **git**
-- **uv**.  Follow the instructions [here](https://docs.astral.sh/uv/getting-started/installation/) 
+- **uv**.  Follow the instructions [here](https://docs.astral.sh/uv/getting-started/installation/)
 - **make** [optional] only for [development tasks](README.md#pre-pr-checks)
 
 ## Generate an OpenAI api key
@@ -17,6 +17,12 @@ https://platform.openai.com/account/api-keys
 ```bash
 export OPENAI_API_KEY="your_key_here"
 export OPENAI_API_DEPLOYMENT="gpt-5-mini"
+```
+
+Or in `.env` which will be automatically loaded into the environment at application startup (note that any variables set in the shell will override values set in `.env`):
+```sh
+OPENAI_API_KEY="your_key_here"
+OPENAI_API_DEPLOYMENT="gpt-5-mini"
 ```
 
 ## Clone the repository
