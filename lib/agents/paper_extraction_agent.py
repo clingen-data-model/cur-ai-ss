@@ -30,6 +30,17 @@ class TestingMethod(str, Enum):
     Other = 'Other'
 
 
+class PaperType(str, Enum):
+    Letter = 'Letter'
+    Research = 'Research'
+    Case_series = 'Case_series'
+    Case_study = 'Case_study'
+    Cohort_analysis = 'Cohort_analysis'
+    Case_control = 'Case_control'
+    Unknown = 'Unknown'
+    Other = 'Other'
+
+
 class PaperExtractionOutput(BaseModel):
     title: str
     first_author: str
@@ -41,6 +52,13 @@ class PaperExtractionOutput(BaseModel):
     pmcid: str | None = None
     testing_methods: List[TestingMethod]
     testing_methods_evidence: List[str | None]
+    paper_types: List[PaperType]
+
+    @model_validator(mode='after')
+    def max_two_paper_types(self) -> Self:
+        if len(self.paper_types) > 2:
+            raise ValueError('paper_types must contain at most two items')
+        return self
 
     @model_validator(mode='after')
     def max_two_methods(self) -> Self:
@@ -172,6 +190,17 @@ Task Overview:
   - Output format:
     - testing_methods: [<method_1>, <method_2>]
     - testing_methods_evidence: [<evidence method_1>, <evidence method_2>]
+
+3. **Paper Type Selection**
+ - Classify the paper into at MOST two of the following types:
+   - Letter: Short correspondence or “Letter to the Editor”; brief report or commentary with limited data and minimal methodological detail.
+   - Research: Full original research article presenting novel experimental, computational, or clinical findings with complete methods, results, and discussion.
+   - Case_series: Descriptive report of multiple patients or families with shared phenotypes or variants, without a control group or formal statistical comparison.
+   - Case_study: Detailed report of a single patient or a single family, often describing a rare phenotype or novel genetic variant.
+   - Cohort_analysis: Observational analysis of a defined group of individuals selected by shared criteria, focusing on frequencies, outcomes, or genotype–phenotype correlations.
+   - Case_control: Observational study comparing affected individuals (cases) to unaffected individuals (controls) to test genetic association or variant enrichment.
+   - Unknown: The paper type cannot be confidently determined from the provided text.
+   - Other: Does not fit the above categories (e.g., review, meta-analysis, guideline, methods, or database/resource paper).
 
 Retry any tool requests (PubMed fetch or search) up to 3 times on an exponential delay.
 """

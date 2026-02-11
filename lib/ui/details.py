@@ -4,11 +4,16 @@ import time
 import requests
 import streamlit as st
 
-from lib.agents.paper_extraction_agent import PaperExtractionOutput, TestingMethod
+from lib.agents.paper_extraction_agent import (
+    PaperExtractionOutput,
+    PaperType,
+    TestingMethod,
+)
 from lib.agents.patient_extraction_agent import (
     CountryCode,
     PatientInfo,
     PatientInfoExtractionOutput,
+    ProbandStatus,
     RaceEthnicity,
     SexAtBirth,
 )
@@ -29,6 +34,73 @@ from lib.ui.api import (
     requeue_paper,
 )
 from lib.ui.helpers import paper_extraction_output_to_markdown
+
+import streamlit as st
+
+@st.fragment
+def render_editable_paper_extraction_tab(paper_extraction_output):
+    paper_extraction_output.title = st.text_input(
+        'Title', paper_extraction_output.title
+    )
+
+    paper_extraction_output.first_author = st.text_input(
+        'First Author', paper_extraction_output.first_author
+    )
+
+    # Publication Year
+    pub_year_input = st.text_input(
+        'Publication Year',
+        str(paper_extraction_output.publication_year)
+        if paper_extraction_output.publication_year
+        else '',
+    )
+    paper_extraction_output.publication_year = (
+        int(pub_year_input) if pub_year_input.isdigit() else None
+    )
+
+    paper_extraction_output.journal_name = st.text_input(
+        'Journal Name', paper_extraction_output.journal_name
+    )
+
+    paper_extraction_output.paper_types = [
+        PaperType(pt)
+        for pt in st.pills(
+            'Paper Types',
+            options=[pt.value for pt in PaperType],
+            selection_mode='multi',
+            default=[pt.value for pt in paper_extraction_output.paper_types]
+            if paper_extraction_output.paper_types
+            else [],
+            key='paper-types',
+        )
+    ]
+
+    paper_extraction_output.abstract = st.text_area(
+        'Abstract', paper_extraction_output.abstract, height=200
+    )
+
+    # Testing methods
+    for i in range(len(paper_extraction_output.testing_methods)):
+        paper_extraction_output.testing_methods[i] = TestingMethod(
+            st.selectbox(
+                f'Testing Method #{i + 1}',
+                [tm.value for tm in TestingMethod],
+                index=[tm.value for tm in TestingMethod].index(
+                    paper_extraction_output.testing_methods[i].value
+                )
+                if paper_extraction_output.testing_methods[i]
+                else 0,
+                key=f'{i}-testing-method',
+            )
+        )
+
+        paper_extraction_output.testing_methods_evidence[i] = st.text_area(
+            f'Testing Method #{i + 1} Evidence',
+            paper_extraction_output.testing_methods_evidence[i] or '',
+            height=150,
+            key=f'{i}-testing-evidence',
+        )
+
 
 paper_id = st.query_params.get('paper_id')
 if paper_id is None:
@@ -139,50 +211,7 @@ with center:
                     mime='application/json',
                 )
             with editable_tab:
-                paper_extraction_output.title = st.text_input(
-                    'Title', paper_extraction_output.title
-                )
-                paper_extraction_output.first_author = st.text_input(
-                    'First Author', paper_extraction_output.first_author
-                )
-
-                # Convert publication_year safely
-                pub_year_input = st.text_input(
-                    'Publication Year',
-                    str(paper_extraction_output.publication_year)
-                    if paper_extraction_output.publication_year
-                    else '',
-                )
-                paper_extraction_output.publication_year = (
-                    int(pub_year_input) if pub_year_input.isdigit() else None
-                )
-
-                paper_extraction_output.journal_name = st.text_input(
-                    'Journal Name', paper_extraction_output.journal_name
-                )
-                paper_extraction_output.abstract = st.text_area(
-                    'Abstract', paper_extraction_output.abstract, height=200
-                )
-
-                # Loop over testing methods safely
-                for i in range(len(paper_extraction_output.testing_methods)):
-                    paper_extraction_output.testing_methods[i] = TestingMethod(
-                        st.selectbox(
-                            f'Testing Method #{i + 1}',
-                            [tm.value for tm in TestingMethod],
-                            index=[tm.value for tm in TestingMethod].index(
-                                paper_extraction_output.testing_methods[i].value
-                            )
-                            if paper_extraction_output.testing_methods[i]
-                            else 0,
-                            key=f'{i}-testing-method',
-                        )
-                    )
-                    paper_extraction_output.testing_methods_evidence[i] = st.text_area(
-                        f'Testing Method #{i + 1} Evidence',
-                        paper_extraction_output.testing_methods_evidence[i] or '',
-                        height=150,
-                    )
+                render_editable_paper_extraction_tab(paper_extraction_output)
 
     with tab3:
         if paper_resp.extraction_status != ExtractionStatus.PARSED:
@@ -195,18 +224,32 @@ with center:
             ).patients
             for i, patient in enumerate(patients):
                 with st.expander(f'{patient.identifier or "N/A"}'):
-                    # --- Proband Identifier
+                    # --- Patient Identifier
                     patient.identifier = st.text_input(
-                        'Proband Identifier',
+                        'Patient Identifier',
                         patient.identifier,
                         key=f'{i}-identifier',
                     )
                     st.text_area(
-                        'Proband Identifier Evidence',
+                        'Patient Identifier Evidence',
                         patient.identifier_evidence or '',
                         height=60,
                         disabled=True,
                         key=f'{i}-identifier-evidence',
+                    )
+
+                    # --- ProbandStatus (enum)
+                    patient.proband_status = ProbandStatus(
+                        st.selectbox(
+                            'Proband Status',
+                            [ps.value for ps in ProbandStatus],
+                            index=[ps.value for ps in ProbandStatus].index(
+                                patient.proband_status.value
+                            )
+                            if patient.proband_status
+                            else 0,
+                            key=f'{i}-proband-status',
+                        )
                     )
 
                     # --- SexAtBirth (enum)

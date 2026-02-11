@@ -34,6 +34,10 @@ def paper_extraction_output_to_markdown(paper: PaperExtractionOutput) -> str:
         id_lines.append(
             f'**PMID:** [{paper.pmid}](https://pubmed.ncbi.nlm.nih.gov/{paper.pmid}/)'
         )
+    if paper.paper_types:
+        id_lines.append(
+            f'**Paper Types:** ' + ', '.join(pt.value.replace('_', ' ') for pt in paper.paper_types)
+        )
     if id_lines:
         lines.append(' | '.join(id_lines) + '\n')
 
