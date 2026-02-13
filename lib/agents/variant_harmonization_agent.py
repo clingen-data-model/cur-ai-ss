@@ -188,6 +188,8 @@ def gnomad_style_id_from_variant_validator(variant_description: str) -> str | No
 
         # Remove "chr" prefix for gnomAD style
         chrom = chrom.replace("chr", "")
+        if chrom in {'M', 'MT'}:
+            chrom = 'M'
 
         return f"{chrom}-{pos}-{ref}-{alt}"
     return None
@@ -228,18 +230,26 @@ def genomic_accession_for_gene_and_transcript(
         if not genomic_spans:
             continue
 
-        # Map genome build -> NC_ accession
         genome_build_map = {}
-        for acc in genomic_spans:
-            if acc.startswith('NC_'):  # ignore NG_/LRG_
-                if acc.endswith('.11'):
-                    genome_build_map[GenomeBuild.GRCh37] = acc
-                elif acc.endswith('.12'):
-                    genome_build_map[GenomeBuild.GRCh38] = acc
+        # Filter only NC_ accessions (ignore NG_/LRG_/etc)
+        nc_accessions = [acc for acc in genomic_spans if acc.startswith("NC_")]
+        if not nc_accessions:
+            continue
+
+        # Sort lexicographically
+        nc_accessions_sorted = sorted(nc_accessions)
+        if len(nc_accessions_sorted) >= 2:
+            genome_build_map[GenomeBuild.GRCh37] = nc_accessions_sorted[0]  # smaller string
+            genome_build_map[GenomeBuild.GRCh38] = nc_accessions_sorted[-1]  # larger string
+        else:
+            # Only one NC_ accession — assume GRCh38 (or GRCh37 if you prefer)
+            genome_build_map[GenomeBuild.GRCh38] = nc_accessions_sorted[0]
+
         if genome_build_map:
             return genome_build_map
 
     return None
+
 
 
 @function_tool
@@ -353,25 +363,31 @@ Guidelines:
 and it can directly be converted to a gnomad style id, directly resolve with the allele_registry_resolver tool.
     - Confirm the converion (e.g. chr1:55051215 G>A -> 1-55051215-G-A) before passing to allele_registry_resolver.
     - This excludes transcripts, rsIDs, HGVS (including g.), any biological lookup, any coordinate projection.
-- If rsid OR caid is provided, also proceed directly to the allele_registry_resolver tool.
+- If rsid OR caid is provided, proceed directly to the allele_registry_resolver tool and return the result.
 - If both hgvs_g and a genomic accession are provided, use the gnomad_style_id_from_variant_validator tool directly, 
     passing in hgvsg in combination with genomic accession.
+    - If hgvs_g contains a genomic accession (e.g., starts with NC_), use it directly.
 - If hgvs_g is provided but the genomic accession is missing, use the genomic_accession_for_gene_and_transcript tool.
     - If the transcript is missing, first fetch the canonical transcript for the gene using the select_transcript tool.
-- If transcript or protein_accession is missing, rely on the select_transcript tool to provide the canonical transcipt and protein accession for the gene and reference genome.
+- Call select_transcript if projection via VariantValidator is required and no transcript/protein context exists.
 - Use the gnomad_style_id_from_variant_validator tool to attempt to map and normalize hgvsc w/ transcript OR hgvsp w/ protein accession if the first fails.
     - Note that transcript may be present in both the transcript field and the hgvs; when this happens use just the hgvs
 - If hgvs_c or hgvs_p is missing, fall back to hgvs_c_inferred or hgvs_p_inferred respectively.
 - The allele_registry_resolver tool should be used as a final step to output all required fields.
     - If all input arguments are None skip calling the tool and return None for all expected output.
+    - If the allele_registry_resolver returns None because the variant is missing from the Clingen Allele Registry, populate
+    the required output fields to the best of your ability without extrapolation.
 - If we are not able to provide genomic accession, transcript, or protein as context to the gnomad_style_id_from_variant_validator
-tool when constructing the variant description, fail early and return None for all expected output.
+tool when constructing the variant description, return None for all expected output.
+- When using the gnomad_style_id_from_variant_validator tool, note that the function argument requires combining one of the pairs
+of (genomic_accession, hgvs_g), (transcript, hgvs_c), (protein_accession, hgvs_p).  You are free to infer the best possible 
+approach to combine the two elements, accounting for the potential that the accession may be present multiple times.
 
-Normalization Notes:
-- Provided a precise step-by-step description of the logical flow here; any inferences, tool calls etc.  For example:
+Please Provided a precise step-by-step description of the logical flow here; any inferences, tool calls, projection inferences etc.  For example:
 
 Input genomic_coordinates was 'chr1:55051215 G>A', and because chromosome, position, reference, and alt are supplied
 we can directly convert to a gnomad style id.  We then call allele_registry_resolver and return:
+
 
 ```
 {'gnomad_style_coordinates': '1-55051215-G-GA',
