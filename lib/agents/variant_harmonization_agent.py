@@ -1,5 +1,6 @@
+import re
 from enum import Enum
-from typing import List, Literal, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
 from urllib.parse import quote
 
 import requests
@@ -10,6 +11,7 @@ from lib.agents.variant_extraction_agent import GenomeBuild, VariantExtractionOu
 from lib.evagg.utils.environment import env
 
 CLINGEN_ALLELE_REGISTRY_ENDPOINT = 'https://reg.genome.network'
+EUTILS_BASE = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils'
 VV_GENE2TRANSCRIPTSV1_ENDPOINT = (
     'https://rest.variantvalidator.org/VariantValidator/tools/gene2transcripts'
 )
@@ -22,6 +24,87 @@ VV_VARIANT_VALIDATOR_ENDPOINT = (
 VV_VARIANT_VALIDATOR_ENSEMBL_ENDPOINT = (
     'https://rest.variantvalidator.org/VariantValidator/variantvalidator_ensembl'
 )
+
+
+@function_tool
+def clinvar_rescue(query: str) -> List[Dict[str, Any]]:
+    """
+    Search ClinVar and return structured info for each matching record:
+        - hgvs
+        - caid (ClinGen Allele ID)
+        - rsid (dbSNP rsID)
+
+    Example query:
+        "BRCA1 AND (Arg157Ser OR p.Arg157Ser OR R157S)"
+    """
+
+    headers = {'content-type': 'application/json'}
+
+    # ---------------------
+    # Step 1: ESearch
+    # ---------------------
+    esearch_url = f'{EUTILS_BASE}/esearch.fcgi'
+    esearch_params: dict[str, str | int] = {
+        'db': 'clinvar',
+        'term': query,
+        'retmax': 100,
+        'retmode': 'json',
+        'sort': 'relevance',
+    }
+
+    r = requests.get(esearch_url, params=esearch_params, headers=headers, timeout=10)
+    r.raise_for_status()
+    search_data = r.json()
+
+    ids = search_data.get('esearchresult', {}).get('idlist', [])
+    if not ids:
+        return []
+
+    # ---------------------
+    # Step 2: ESummary
+    # ---------------------
+    esummary_url = f'{EUTILS_BASE}/esummary.fcgi'
+    esummary_params = {
+        'db': 'clinvar',
+        'id': ','.join(ids),
+        'retmode': 'json',
+    }
+
+    r = requests.get(esummary_url, params=esummary_params, headers=headers, timeout=10)
+    r.raise_for_status()
+    summary_data = r.json()
+
+    result = summary_data.get('result', {})
+    uids = result.get('uids', [])
+
+    records: List[Dict[str, Any]] = []
+
+    for uid in uids:
+        record = result.get(uid, {})
+        variation_set = record.get('variation_set', [])
+
+        for v in variation_set:
+            variation_name = v.get('variation_name')
+
+            caid = None
+            rsid = None
+
+            for xref in v.get('variation_xrefs', []):
+                if xref.get('db_source') == 'ClinGen':
+                    caid = xref.get('db_id')
+                elif xref.get('db_source') == 'dbSNP':
+                    db_id = xref.get('db_id')
+                    if db_id:
+                        rsid = f'rs{db_id}'
+
+            records.append(
+                {
+                    'hgvs': variation_name,
+                    'caid': caid,
+                    'rsid': rsid,
+                }
+            )
+    return records
 
 
 @function_tool
@@ -260,7 +343,7 @@ def genomic_accession_for_gene_and_transcript(
 
 
 @function_tool
-def select_transcript(
+def select_canonical_transcript(
     gene_symbol: str,
     genome_build: GenomeBuild | None,
 ) -> Optional[dict[str, str]]:
@@ -333,7 +416,7 @@ def select_transcript(
             }
 
     # Rank 5: Longest CDS fallback
-    def cds_length(t):
+    def cds_length(t: dict[Any, Any]) -> int:
         return t.get('coding_end', 0) - t.get('coding_start', 0)
 
     best = max(transcripts, key=cds_length)
@@ -345,70 +428,275 @@ def select_transcript(
 
 
 VARIANT_HARMONIZATION_INSTRUCTIONS = """
-System: You are an expert genomics curator and variant normalizer.
+System: You are an expert genomics curator and deterministic variant normalizer.
 
-Instructions:
+You must follow the state machine below strictly.
+You may not skip states.
+You may not revisit a previous state except where explicitly allowed.
+You may not call ClinVar more than once.
 
-Using the following fields of the provided variant structure:
-- gene
+Goal:
+Normalize the variant to a GRCh38 gnomAD-style identifier and resolve via
+allele_registry_resolver as the final step whenever possible.
+
+============================================================
+STATE 0 — INITIAL DATA ASSESSMENT
+============================================================
+
+Use the following fields of the provided structured input:
+- gene (required)
 - transcript
 - protein_accession
 - genomic_accession
 - genomic_coordinates
 - genome_build
 - rsid
+- caid
 - hgvs_c
 - hgvs_p
 - hgvs_g
 - hgvs_c_inferred
 - hgvs_p_inferred
 
-normalize/canonicalize/harmonize the variant to a gnomAD style identifier aligned the GRCh38 reference genome.
+If hgvs_c is missing → use hgvs_c_inferred if present.
+If hgvs_p is missing → use hgvs_p_inferred if present.
 
-Guidelines:
-- If genomic_coordinates are provided, and the input explicitly contains chromosome, 1-based position, reference allele, alternate allele,
-and it can directly be converted to a gnomad style id, directly resolve with the allele_registry_resolver tool.
-    - Confirm the converion (e.g. chr1:55051215 G>A -> 1-55051215-G-A) before passing to allele_registry_resolver.
-    - This excludes transcripts, rsIDs, HGVS (including g.), any biological lookup, any coordinate projection.
-- If rsid OR caid is provided, proceed directly to the allele_registry_resolver tool and return the result.
-- If both hgvs_g and a genomic accession are provided, use the gnomad_style_id_from_variant_validator tool directly, 
-    passing in hgvsg in combination with genomic accession.
-    - If hgvs_g contains a genomic accession (e.g., starts with NC_), use it directly.
-- If hgvs_g is provided but the genomic accession is missing, use the genomic_accession_for_gene_and_transcript tool.
-    - If the transcript is missing, first fetch the canonical transcript for the gene using the select_transcript tool.
-- Call select_transcript if projection via VariantValidator is required and no transcript/protein context exists.
-- Use the gnomad_style_id_from_variant_validator tool to attempt to map and normalize hgvsc w/ transcript OR hgvsp w/ protein accession if the first fails.
-    - Note that transcript may be present in both the transcript field and the hgvs; when this happens use just the hgvs
-- If hgvs_c or hgvs_p is missing, fall back to hgvs_c_inferred or hgvs_p_inferred respectively.
-- The allele_registry_resolver tool should be used as a final step to output all required fields.
-    - If all input arguments are None skip calling the tool and return None for all expected output.
-    - If the allele_registry_resolver returns None because the variant is missing from the Clingen Allele Registry, populate
-    the required output fields to the best of your ability without extrapolation.
-- If we are not able to provide genomic accession, transcript, or protein as context to the gnomad_style_id_from_variant_validator
-tool when constructing the variant description, return None for all expected output.
-- When using the gnomad_style_id_from_variant_validator tool, note that the function argument requires combining one of the pairs
-of (genomic_accession, hgvs_g), (transcript, hgvs_c), (protein_accession, hgvs_p).  You are free to infer the best possible 
-approach to combine the two elements, accounting for the potential that the accession may be present multiple times.
+Proceed to State 1.
 
-Please Provided a precise step-by-step description of the logical flow here; any inferences, tool calls, projection inferences etc.  For example:
+============================================================
+STATE 1 — DIRECT GENOMIC COORDINATE RESOLUTION
+============================================================
 
-Input genomic_coordinates was 'chr1:55051215 G>A', and because chromosome, position, reference, and alt are supplied
-we can directly convert to a gnomad style id.  We then call allele_registry_resolver and return:
+Condition:
+Input contains EXPLICIT genomic_coordinates with:
+    chromosome, 1-based position, ref allele, alt allele.
+
+Action:
+1. Convert to gnomAD-style format:
+    chr1:55051215 G>A → 1-55051215-G-A
+    Remove "chr"
+    Normalize MT → M
+
+2. Call allele_registry_resolver using:
+    gnomad_style_coordinates
+
+3. RETURN result.
+
+If not eligible → proceed to State 2.
+
+============================================================
+STATE 2 — IDENTIFIER RESOLUTION
+============================================================
+
+Condition:
+rsid OR caid present in input.
+
+Action:
+Call allele_registry_resolver using available identifier.
+
+RETURN result.
+
+If neither present → proceed to State 3.
+
+============================================================
+STATE 3 — GENOMIC HGVS PROJECTION
+============================================================
+
+Condition:
+hgvs_g present.
+
+Action:
+
+A) If hgvs_g already contains genomic accession (e.g., starts with NC_):
+    Call gnomad_style_id_from_variant_validator using hgvs_g directly.
+
+B) If genomic_accession missing:
+    If transcript missing:
+        Call select_canonical_transcript(gene, genome_build or GRCh38 default)
+    Then Call genomic_accession_for_gene_and_transcript to retrieve genomic accession using either
+    the provided or the selected transcript.
+
+    If genomic accession still unavailable:
+        FAIL → return None outputs (low confidence).
+
+C) Construct:
+    genomic_accession + ":" + hgvs_g
+
+Call gnomad_style_id_from_variant_validator.
+
+If successful:
+    → Call allele_registry_resolver
+    → RETURN result.
+
+If unsuccessful:
+    → Proceed to State 4.
+
+============================================================
+STATE 4 — TRANSCRIPT-BASED PROJECTION
+============================================================
+
+Condition:
+hgvs_c OR hgvs_p available.
+
+Step 4A — Transcript-based (preferred)
+If hgvs_c available:
+
+    If transcript missing:
+        Call select_canonical_transcript(gene, genome_build or GRCh38 default)
+
+    If transcript available:
+        Construct transcript + ":" + hgvs_c
+        Call gnomad_style_id_from_variant_validator.
+
+        If successful:
+            → Call allele_registry_resolver
+            → RETURN result.
+
+Step 4B — Protein-based fallback
+
+If hgvs_p available:
+
+    If protein_accession available:
+        Construct protein_accession + ":" + hgvs_p
+
+    Else:
+        If transcript missing:
+            Call select_canonical_transcript(gene, genome_build or GRCh38 default)
+
+        If transcript available:
+            Construct transcript + ":" + hgvs_p
+        Else:
+            Skip to State 5
+
+    Call gnomad_style_id_from_variant_validator.
+
+    If successful:
+        → Call allele_registry_resolver
+        → RETURN result.
+
+If projection fails → proceed to State 5.
+
+============================================================
+STATE 5 — CLINVAR RESCUE (ONE TIME ONLY)
+============================================================
+
+Condition:
+Projection in States 3 and 4 failed.
+
+You may call clinvar_rescue EXACTLY ONCE.
+
+Step 5A — Construct Query
+
+If hgvs_p and hgvs_p_inferred are both missing:
+    Skip ClinVar rescue and return low confidence.
+
+Query must include:
+    gene AND (
+        all protein representations
+    )
+
+Include:
+    hgvs_p
+    hgvs_p_inferred
+    3-letter format (p.Arg157Ser)
+    1-letter format (p.R157S)
+    Without "p." prefix
+
+Example:
+BRCA1 AND (Arg157Ser OR p.Arg157Ser OR R157S OR p.R157S)
+
+If hgvs_p contains transcript prefix (e.g., NM_...:p.Arg157Ser),
+strip transcript before constructing query.
+
+Step 5B — Call clinvar_rescue(query)
+
+Step 5C — Interpret Results
+
+If multiple ClinVar records returned:
+    1. Prefer record with both caid AND rsid
+    2. Else prefer record with caid
+    3. Else prefer record with rsid
+    4. Else use first record
+
+Case A — rsid OR caid returned:
+    Call allele_registry_resolver using identifier.
+    RETURN result.
+    normalization_confidence = medium
+
+Case B — Only hgvs returned:
+    Extract transcript and hgvs_c from hgvs.
+    Example:
+        NM_007294.3(BRCA1):c.4675G>A (p.Arg1559Lys) -> NM_007294.3:c.4675G>A
+
+    Construct transcript + ":" + hgvs_c
+    Call gnomad_style_id_from_variant_validator.
+
+    If successful:
+        → Call allele_registry_resolver
+        → RETURN result.
+        normalization_confidence = medium
+
+    If unsuccessful:
+        → RETURN None outputs.
+        normalization_confidence = low
+
+Case C — No records:
+    RETURN None outputs.
+    normalization_confidence = low
 
 
-```
-{'gnomad_style_coordinates': '1-55051215-G-GA',
- 'rsid': 'rs527413419',
- 'caid': 'CA871474',
- 'hgvsc': 'NM_174936.4:c.524-1063_524-1062insA',
- 'hgvsg': 'NC_000001.11:g.55051215_55051216insA',
- 'hgvsp': 'NP_777596.2:n.524-1063_524-1062insA'}
- ```
 
+You may NOT call ClinVar again.
+
+============================================================
+STATE 6 — FINALIZATION
+============================================================
+
+If allele_registry_resolver returned:
+    gnomad_style_coordinates
+    rsid
+    caid
+    hgvs_c
+    hgvs_g
+    hgvs_p
+
+Return those fields.
+
+Confidence Levels:
+
+high:
+    - Direct genomic coordinate conversion
+    - rsid/caid direct resolution
+    - Successful VariantValidator projection
+
+medium:
+    - Any resolution achieved via ClinVar rescue pathway
+
+low:
+    - Partial recovery only
+    - No resolution possible
+
+============================================================
+NORMALIZATION NOTES REQUIREMENT
+============================================================
+
+You must populate normalization_notes with a clear, human-readable
+summary of the normalization path taken.
+
+Rules:
+- Use short declarative sentences.
+- Describe only actions actually performed.
+- Do not include internal reasoning.
+- Do not reference state numbers.
+- Do not speculate.
+- Mention tools used (VariantValidator, ClinVar, ClinGen Allele Registry).
+- If canonical transcript selection occurred, mention which transcript was selected.
+- If ClinVar rescue was used, explicitly state this.
+- If resolution failed, clearly state that no registry match was found.
 """
 
 
-class NormalizedVariant(BaseModel):
+class HarmonizedVariant(BaseModel):
     gnomad_style_coordinates: Optional[str]
     rsid: Optional[str]
     caid: Optional[str]
@@ -423,11 +711,12 @@ agent = Agent(
     name='variant_canonicalizer',
     instructions=VARIANT_HARMONIZATION_INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
-    output_type=NormalizedVariant,
+    output_type=HarmonizedVariant,
     tools=[
-        select_transcript,
+        select_canonical_transcript,
         genomic_accession_for_gene_and_transcript,
         allele_registry_resolver,
         gnomad_style_id_from_variant_validator,
+        clinvar_rescue,
     ],
 )
