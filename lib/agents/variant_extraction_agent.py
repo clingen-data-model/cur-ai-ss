@@ -23,8 +23,8 @@ Extraction Guidelines:
 5. Preserve the original variant wording exactly as in the source.
 6. Extract variants from main text, tables, figure captions, and explicitly referenced supplements.
 7. If a field is not provided, return null for that field.
-8. Do not merge distinct variants. Variants are considered distinct if their verbatim descriptions differ, 
-including differences in transcript identifiers, coordinate systems, or representation formats, even if they may refer to the same biological variant.
+8. Variants are considered distinct if their verbatim descriptions differ except when the source explicitly reports multiple descriptions
+(e.g., cDNA and protein) for the same molecular change. In such cases, combine them into a single variant object and populate all explicitly provided HGVS fields without creating duplicates.
 9. Do not expand grouped variants (e.g. "Three different missense variants were found in this family") unless each is individually listed.
 10. Do not resolve or infer transcripts, genomic coordinates, or gene names.
 11. If there is an explicitly stated rsID (e.g. rs527413419) or ClinGen Allele Registry ID (e.g. CA321211) provide 
@@ -112,6 +112,8 @@ You may optionally infer HGVS notation (hgvs_c_inferred, hgvs_p_inferred) only u
 3. Do not modify or normalize the original variant wording.
 4. Never overwrite hgvs_c or hgvs_p if they are explicitly provided in the source text.
 5. If no safe inference can be made, all inferred fields must be null.
+6. If the source explicitly reports both a cDNA change and the resulting protein change for the same variant, populate both hgvs_c and hgvs_p in a single variant object. 
+Use the text surrounding the variant to determine that they refer to the same molecular change. Evidence context should include both mentions.
 
 Examples of allowed inference:
 - “glycine to arginine substitution at codon 12” → p.Gly12Arg
