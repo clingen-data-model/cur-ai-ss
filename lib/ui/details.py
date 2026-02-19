@@ -453,6 +453,17 @@ with center:
                             'HGVS g.', variant.hgvs_g or '', key=f'{i}-hgvs_g'
                         )
 
+                    # --- Add variant evidence context here ---
+                    with st.container():
+                        st.subheader('Variant Evidence')
+                        st.text_area(
+                            'Variant Evidence Context',
+                            variant.variant_evidence_context or '',
+                            height=100,
+                            disabled=True,
+                            key=f'{i}-vec',
+                        )
+
                     # --- HGVS Inference (info only) ---
                     with st.expander('HGVS Inference (info only)', expanded=False):
                         st.text(f'HGVS c. inferred: {variant.hgvs_c_inferred or ""}')
