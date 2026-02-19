@@ -465,7 +465,8 @@ with center:
                         )
 
                     # --- HGVS Inference (info only) ---
-                    with st.expander('HGVS Inference (info only)', expanded=False):
+                    with st.container():
+                        st.subheader('HGVS Inference (info only)')
                         st.text(f'HGVS c. inferred: {variant.hgvs_c_inferred or ""}')
                         st.text(f'HGVS p. inferred: {variant.hgvs_p_inferred or ""}')
                         st.text(
