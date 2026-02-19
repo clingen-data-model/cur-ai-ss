@@ -18,12 +18,11 @@ from lib.agents.patient_extraction_agent import (
     SexAtBirth,
 )
 from lib.agents.variant_extraction_agent import (
+    GenomeBuild,
     HgvsInferenceConfidence,
-    Inheritance,
     Variant,
     VariantExtractionOutput,
     VariantType,
-    Zygosity,
 )
 from lib.evagg.types.base import Paper
 from lib.models import ExtractionStatus, PaperResp
@@ -366,15 +365,18 @@ with center:
                 data
             ).variants
             for i, variant in enumerate(variants):
-                st.markdown(f'### Variant {i + 1} ')
-                with st.expander(f'{variant.variant_verbatim or "New variant"}'):
+                st.markdown(f'### Variant {i + 1}')
+                with st.expander(
+                    f'{variant.variant_description_verbatim or "New variant"}'
+                ):
                     with st.container():
                         st.subheader('Variant Summary')
                         col1, col2, col3_label, col3_input = st.columns([1, 3, 1, 3])
                         col1.markdown(f'**Gene:** {variant.gene or "N/A"}')
                         col2.markdown(
-                            f'**Variant:** {variant.variant_verbatim or "N/A"}'
+                            f'**Variant:** {variant.variant_description_verbatim or "N/A"}'
                         )
+
                         col3_label.markdown('**Transcript:**')
                         variant.transcript = col3_input.text_input(
                             'Transcript',
@@ -382,12 +384,37 @@ with center:
                             key=f'{i}-transcript',
                             label_visibility='collapsed',
                         )
-                        st.text_area(
-                            'Variant Evidence Context',
-                            variant.variant_evidence_context or '',
-                            height=60,
-                            disabled=True,
-                            key=f'{i}-vec',
+
+                        col3_label.markdown('**Protein Accession:**')
+                        variant.protein_accession = col3_input.text_input(
+                            'Protein Accession',
+                            variant.protein_accession or '',
+                            key=f'{i}-protein',
+                            label_visibility='collapsed',
+                        )
+
+                        col3_label.markdown('**Genomic Accession:**')
+                        variant.genomic_accession = col3_input.text_input(
+                            'Genomic Accession',
+                            variant.genomic_accession or '',
+                            key=f'{i}-genomic',
+                            label_visibility='collapsed',
+                        )
+
+                        col3_label.markdown('**LRG Accession:**')
+                        variant.lrg_accession = col3_input.text_input(
+                            'LRG Accession',
+                            variant.lrg_accession or '',
+                            key=f'{i}-lrg',
+                            label_visibility='collapsed',
+                        )
+
+                        col3_label.markdown('**Gene Accession:**')
+                        variant.gene_accession = col3_input.text_input(
+                            'Gene Accession',
+                            variant.gene_accession or '',
+                            key=f'{i}-gene-acc',
+                            label_visibility='collapsed',
                         )
 
                         variant.genomic_coordinates = st.text_input(
@@ -395,11 +422,35 @@ with center:
                             variant.genomic_coordinates or '',
                             key=f'{i}-coords',
                         )
+
+                        options = [''] + [gb.value for gb in GenomeBuild]
+                        index = (
+                            options.index(variant.genome_build.value)
+                            if variant.genome_build
+                            else 0
+                        )
+                        selected = st.selectbox(
+                            'Genome Build', options, index=index, key=f'{i}-build'
+                        )
+                        variant.genome_build = (
+                            GenomeBuild(selected) if selected else None
+                        )
+
+                        variant.rsid = st.text_input(
+                            'rsID', variant.rsid or '', key=f'{i}-rsid'
+                        )
+                        variant.caid = st.text_input(
+                            'CAID', variant.caid or '', key=f'{i}-caid'
+                        )
+
                         variant.hgvs_c = st.text_input(
                             'HGVS c.', variant.hgvs_c or '', key=f'{i}-hgvs_c'
                         )
                         variant.hgvs_p = st.text_input(
                             'HGVS p.', variant.hgvs_p or '', key=f'{i}-hgvs_p'
+                        )
+                        variant.hgvs_g = st.text_input(
+                            'HGVS g.', variant.hgvs_g or '', key=f'{i}-hgvs_g'
                         )
 
                     # --- HGVS Inference (info only) ---
@@ -407,14 +458,24 @@ with center:
                         st.text(f'HGVS c. inferred: {variant.hgvs_c_inferred or ""}')
                         st.text(f'HGVS p. inferred: {variant.hgvs_p_inferred or ""}')
                         st.text(
-                            f'HGVS Inference Confidence: {variant.hgvs_inference_confidence.value if variant.hgvs_inference_confidence else ""}'
+                            f'HGVS c. inference confidence: {variant.hgvs_c_inference_confidence.value if variant.hgvs_c_inference_confidence else ""}'
+                        )
+                        st.text(
+                            f'HGVS p. inference confidence: {variant.hgvs_p_inference_confidence.value if variant.hgvs_p_inference_confidence else ""}'
                         )
                         st.text_area(
-                            'HGVS Inference Evidence',
-                            variant.hgvs_inference_evidence_context or '',
+                            'HGVS c. inference evidence',
+                            variant.hgvs_c_inference_evidence_context or '',
                             height=60,
                             disabled=True,
-                            key=f'{i}-hic',
+                            key=f'{i}-hic_c',
+                        )
+                        st.text_area(
+                            'HGVS p. inference evidence',
+                            variant.hgvs_p_inference_evidence_context or '',
+                            height=60,
+                            disabled=True,
+                            key=f'{i}-hic_p',
                         )
 
                     with st.container():
@@ -422,7 +483,7 @@ with center:
                         selected_value = VariantType(
                             st.selectbox(
                                 'Variant Type',
-                                [vt.value for vt in VariantType],  # display strings
+                                [vt.value for vt in VariantType],
                                 index=[vt.value for vt in VariantType].index(
                                     variant.variant_type.value
                                 )
@@ -437,50 +498,6 @@ with center:
                             height=60,
                             disabled=True,
                             key=f'{i}-vtec',
-                        )
-
-                    with st.container():
-                        st.subheader('Zygosity')
-                        variant.zygosity = Zygosity(
-                            st.selectbox(
-                                'Zygosity',
-                                [z.value for z in Zygosity],  # display strings
-                                index=[x.value for x in Zygosity].index(
-                                    variant.zygosity.value
-                                )
-                                if variant.zygosity
-                                else 0,
-                                key=f'{i}-zygosity',
-                            )
-                        )
-                        st.text_area(
-                            'Zygosity Evidence Context',
-                            variant.zygosity_evidence_context or '',
-                            height=60,
-                            disabled=True,
-                            key=f'{i}-zec',
-                        )
-
-                    with st.container():
-                        st.subheader('Inheritance')
-                        variant.inheritance = Inheritance(
-                            st.selectbox(
-                                'Inheritance',
-                                [inh.value for inh in Inheritance],  # display strings
-                                index=[inh.value for inh in Inheritance].index(
-                                    variant.inheritance.value
-                                )
-                                if variant.inheritance
-                                else 0,
-                                key=f'{i}-inheritance',
-                            )
-                        )
-                        st.text_area(
-                            'Inheritance Evidence Context',
-                            variant.inheritance_evidence_context or '',
-                            height=60,
-                            disabled=True,
-                            key=f'{i}-iec',
                         )
 
 with left:

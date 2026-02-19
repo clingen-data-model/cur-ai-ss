@@ -1,3 +1,11 @@
+from enum import Enum
+from typing import List, Literal, Optional, Tuple
+
+from agents import Agent, ModelSettings
+from pydantic import BaseModel
+
+from lib.evagg.utils.environment import env
+
 VARIANT_EXTRACTION_INSTRUCTIONS = """
 System: You are an expert genomics curator.
 
@@ -15,17 +23,42 @@ Extraction Guidelines:
 5. Preserve the original variant wording exactly as in the source.
 6. Extract variants from main text, tables, figure captions, and explicitly referenced supplements.
 7. If a field is not provided, return null for that field.
-8. Do not merge distinct variants.
-9. Do not expand grouped variants unless each is individually listed.
+8. Do not merge distinct variants. Variants are considered distinct if their verbatim descriptions differ, 
+including differences in transcript identifiers, coordinate systems, or representation formats, even if they may refer to the same biological variant.
+9. Do not expand grouped variants (e.g. "Three different missense variants were found in this family") unless each is individually listed.
 10. Do not resolve or infer transcripts, genomic coordinates, or gene names.
+11. If there is an explicitly stated rsID (e.g. rs527413419) or ClinGen Allele Registry ID (e.g. CA321211) provide 
+them in the rsid and caid fields respectively.
 
-Transcript Handling:
-- Extract transcript identifiers only if explicitly stated (e.g., NM_002448.3, ENST00000312345).
-- Do not add, infer, or substitute transcript identifiers.
-- Preserve transcript identifiers exactly as written.
-- If absent, return null.
+Reference Sequence Handling:
+- If an NM_ or ENST accession is explicitly written, populate transcript_accession.
+- If an NP_ or ENSP accession is explicitly written, populate protein_accession.
+- If an NC_ or NG_ accession is explicitly written, populate genomic_accession.
+- If an LRG accession (LRG_*) is written, preserve exactly as written and populate lrg_accession.
+- If an ENSG accession is written, preserve exactly as written and populate gene_accession.
 
-Examples of variant_verbatim:
+- If multiple reference accessions are explicitly written (e.g., transcript and protein),
+  populate each appropriate field independently.
+- Do NOT validate biological consistency between them.
+
+- Preserve all accessions exactly as written, including version numbers.
+- If no version is present, do NOT infer or append one.
+- Do NOT normalize accession formatting.
+
+- If a reference sequence is embedded inside an HGVS string 
+  (e.g., NC_000007.13:g.140453136A>T),
+  extract the accession into the appropriate reference field AND preserve the full HGVS string unchanged.
+- Strict Non-Inference Rules:
+  - Do NOT derive NP_ from NM_.
+  - Do NOT derive NM_ from NP_.
+  - Do NOT derive NC_ from genomic coordinates.
+  - Do NOT convert LRG to NM_ or ENST.
+  - Do NOT infer genome build from coordinates alone.
+  - Do NOT populate a reference sequence field if HGVS is written without an explicit accession.
+  - Do NOT modify HGVS strings to match extracted reference fields.
+
+
+Examples of variant_description_verbatim:
 - "Val600Glu mutation"
 - "c.1799T>A in exon 15"
 - "glycine to arginine substitution at codon 12"
@@ -34,13 +67,20 @@ Genomic Coordinates Handling:
 - Populate genomic_coordinates **only if the paper explicitly provides a genomic location** of the variant.
 - Acceptable formats include:
     - Chromosome and position: "chr7:140453136", "7:140453136"
-    - Chromosome, position, and alleles: "chr7:140453136 A>T", "7-140453136-A-T"
+    - Chromosome, position, and alleles: "chr7:140453136 A>T", "7-140453136-A-T", "chr3:g.150928107A>C"
     - gnomAD-style coordinate strings: e.g., "gnomAD: 7-140453136-A-T", "chr7-140453136-A-T"
 - Copy coordinates **exactly as written**, without modification or normalization.
 - Do NOT infer coordinates from HGVS, transcripts, amino acid changes, exon numbers, or other descriptions.
 - Do NOT treat identifiers alone as coordinates:
     - Examples to ignore: rsIDs ("rs113488022"), gnomAD allele IDs ("gnomAD allele ID 123456"), ClinVar IDs
 - If only an identifier is provided, or no genomic location is explicitly stated, return null.
+- If the genome assembly (e.g., GRCh37, GRCh38, hg19, hg38) is explicitly stated in the text, 
+extract it into a separate field (genome_build).  You may infer hg19 -> GRCh37 and hg38 -> GRCh38.
+
+HGVS Genomic Handling:
+- Populate hgvs_g only if a genomic HGVS expression (e.g., NC_000007.13:g.140453136A>T) is explicitly written in the source text.
+- Do not infer hgvs_g from cDNA, protein, transcript, exon number, or chromosomal coordinates.
+- Accept g. notation even if reference sequence prefix is absent, but only if explicitly written as g.
 
 Variant Type Classification (use these labels exactly):
 - "missense": single amino acid change
@@ -75,7 +115,7 @@ You may optionally infer HGVS notation (hgvs_c_inferred, hgvs_p_inferred) only u
 
 Examples of allowed inference:
 - “glycine to arginine substitution at codon 12” → p.Gly12Arg
-- “Val600Glu mutation” →v p.Val600Glu
+- “Val600Glu mutation” → p.Val600Glu
 
 Examples of disallowed inference:
 - exon-level deletions without transcript context
@@ -84,26 +124,30 @@ Examples of disallowed inference:
 
 For each extracted variant, provide:
 - gene
-- transcript
-- variant_verbatim (exact text describing the variant from source)
+- transcript (e.g. NM_ )
+- protein accession (e.g. NP_ )
+- genomic accession (e.g NC_ )
+- variant_description_verbatim (exact text describing the variant from source)
 - genomic_coordinates
+- genome_build
+- rsid
+- hgvs_g
 - hgvs_c
 - hgvs_p
 - hgvs_c_inferred
 - hgvs_p_inferred
-- hgvs_inference_confidence (one of "high", "medium", "low", or null)
-- hgvs_inference_evidence_context
+- hgvs_c_inference_confidence (one of "high", "medium", "low", or null)
+- hgvs_c_inference_evidence_context
+- hgvs_p_inference_confidence (one of "high", "medium", "low", or null)
+- hgvs_p_inference_evidence_context
 - variant_type (must match above labels exactly)
-- zygosity (one of "homozygous", "hemizygous", "heterozygous", "compound heterozygous", "unknown")
-- inheritance (one of "dominant", "recessive", "semi-dominant", "X-linked", "de novo", "somatic mosaicism", "mitochondrial", or "unknown")
 
 Evidence Handling:
 - Each variant must have its own supporting evidence context.
 - variant_evidence_context: Exact text from source stating the variant.
 - variant_type_evidence_context: Exact text explicitly stating the variant type, if applicable.
-- zygosity_evidence_context: Exact text explicitly stating zygosity, if available.
-- inheritance_evidence_context: Exact text explicitly stating inheritance, if available.
-- hgvs_inference_evidence_context: Exact text used to justify any inferred HGVS, if applicable.
+- hgvs_c_inference_evidence_context: Exact text used to justify any inferred hgvs.c, if applicable.
+- hgvs_p_inference_evidence_context: Exact text used to justify any inferred hgvs.p, if applicable.
 - Copy all evidence text verbatim.
 - Evidence must be directly linked to each claim and not from different sections.
 - If no explicit evidence is available for a field, return null.
@@ -114,14 +158,6 @@ Output:
 - For any undetermined field, use null.
 - Do not include extra fields.
 """
-
-from enum import Enum
-from typing import List, Literal, Optional, Tuple
-
-from agents import Agent, ModelSettings
-from pydantic import BaseModel
-
-from lib.evagg.utils.environment import env
 
 
 class VariantType(str, Enum):
@@ -145,58 +181,52 @@ class VariantType(str, Enum):
     unknown = 'unknown'
 
 
-class Zygosity(str, Enum):
-    homozygous = 'homozygous'
-    hemizygous = 'hemizygous'
-    heterozygous = 'heterozygous'
-    compound_heterozygous = 'compound heterozygous'
-    unknown = 'unknown'
-
-
-class Inheritance(str, Enum):
-    dominant = 'dominant'
-    recessive = 'recessive'
-    semi_dominant = 'semi-dominant'
-    x_linked = 'X-linked'
-    de_novo = 'de novo'
-    somatic_mosaicism = 'somatic mosaicism'
-    mitochondrial = 'mitochondrial'
-    unknown = 'unknown'
-
-
 class HgvsInferenceConfidence(str, Enum):
     high = 'high'
     medium = 'medium'
     low = 'low'
 
 
+class GenomeBuild(str, Enum):
+    GRCh37 = 'GRCh37'
+    GRCh38 = 'GRCh38'
+
+
 class Variant(BaseModel):
     # Core extraction fields
     gene: str  # Not optional, statically comes from human
-    transcript: Optional[str]
-    variant_verbatim: Optional[str]
+
+    # Reference sequences
+    transcript: Optional[str]  # e.g., NM_or ENST
+    protein_accession: Optional[str]  # e.g., NP_ or ENSP
+    genomic_accession: Optional[str]  # e.g.  NC_ or NG_
+    lrg_accession: Optional[str]  # e.g. LRG_
+    gene_accession: Optional[str]  # e.g. ENSG
+
+    variant_description_verbatim: Optional[str]
     genomic_coordinates: Optional[str]
+    genome_build: Optional[GenomeBuild]
+    rsid: Optional[str]
+    caid: Optional[str]
 
     # Explicit HGVS from text
     hgvs_c: Optional[str]
     hgvs_p: Optional[str]
+    hgvs_g: Optional[str]
 
     # Optional inferred HGVS (clearly labeled)
     hgvs_c_inferred: Optional[str]
     hgvs_p_inferred: Optional[str]
-    hgvs_inference_confidence: Optional[HgvsInferenceConfidence]
-    hgvs_inference_evidence_context: Optional[str]
+    hgvs_p_inference_confidence: Optional[HgvsInferenceConfidence]
+    hgvs_p_inference_evidence_context: Optional[str]
+    hgvs_c_inference_confidence: Optional[HgvsInferenceConfidence]
+    hgvs_c_inference_evidence_context: Optional[str]
 
-    # Other variant attributes
     variant_type: VariantType
-    zygosity: Zygosity
-    inheritance: Inheritance
 
     # Evidence
-    variant_type_evidence_context: Optional[str]
     variant_evidence_context: Optional[str]
-    zygosity_evidence_context: Optional[str]
-    inheritance_evidence_context: Optional[str]
+    variant_type_evidence_context: Optional[str]
 
 
 class VariantExtractionOutput(BaseModel):
