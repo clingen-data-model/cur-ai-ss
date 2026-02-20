@@ -511,6 +511,13 @@ with center:
                             disabled=True,
                             key=f'{i}-vtec',
                         )
+                    harmonized_variant_data = json.load(open(paper.harmonized_variants_json_path, 'r'))
+                    st.download_button(
+                        label='Harmoized Variant JSON',
+                        data=json.dumps(harmonized_variant_data, indent=2),
+                        file_name='harmonized_variant.json',
+                        mime='application/json',
+                    )
 
 with left:
     with st.container(horizontal=True, vertical_alignment='center'):
