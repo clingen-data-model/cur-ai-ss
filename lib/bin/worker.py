@@ -13,6 +13,7 @@ from sqlalchemy.orm import joinedload
 from lib.agents.paper_extraction_agent import agent as paper_extraction_agent
 from lib.agents.patient_extraction_agent import agent as patient_extraction_agent
 from lib.agents.variant_extraction_agent import agent as variant_extraction_agent
+from lib.agents.variant_harmonization_agent import agent as variant_harmonization_agent
 from lib.api.db import session_scope
 from lib.evagg.llm import OpenAIClient
 from lib.evagg.pdf.parse import parse_content
@@ -52,7 +53,21 @@ async def parse_patients_task_async(paper: Paper) -> None:
         f.write(json_response)
 
 
-async def parse_variants_task_async(paper: Paper, gene_symbol: str) -> None:
+async def harmonize_variants_task_async(paper: Paper) -> None:
+    with open(paper.variants_json_path, 'r') as f:
+        variants_output = json.load(f)
+
+    result = await Runner.run(
+        variant_harmonization_agent,
+        f'Variants JSON:\n{json.dumps(variants_output, indent=2)}',
+    )
+    json_response = result.final_output.model_dump_json(indent=2)
+    paper.harmonized_variants_json_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(paper.harmonized_variants_json_path, 'w') as f:
+        f.write(json_response)
+
+
+async def extract_variants_task_async(paper: Paper, gene_symbol: str) -> None:
     result = await Runner.run(
         variant_extraction_agent,
         f'Gene Symbol: {gene_symbol}\nPaper (fulltext md): {paper.fulltext_md}',
@@ -67,8 +82,10 @@ async def run_tasks_concurrently(paper: Paper, gene_symbol: str) -> None:
     await asyncio.gather(
         parse_paper_task_async(paper),
         parse_patients_task_async(paper),
-        parse_variants_task_async(paper, gene_symbol),
+        extract_variants_task_async(paper, gene_symbol),
     )
+    # Runs after variants completes
+    await harmonize_variants_task_async(paper)
 
 
 def initial_extraction(paper_db: PaperDB) -> None:

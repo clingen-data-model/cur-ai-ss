@@ -436,7 +436,7 @@ You may not revisit a previous state except where explicitly allowed.
 You may not call ClinVar more than once.
 
 Goal:
-Normalize the variant to a GRCh38 gnomAD-style identifier and resolve via
+Normalize each of the provided variants to a GRCh38 gnomAD-style identifier and resolve via
 allele_registry_resolver as the final step whenever possible.
 
 ============================================================
@@ -707,11 +707,15 @@ class HarmonizedVariant(BaseModel):
     normalization_notes: Optional[str]
 
 
+class VariantHarmonizationOutput(BaseModel):
+    variants: List[HarmonizedVariant]
+
+
 agent = Agent(
     name='variant_canonicalizer',
     instructions=VARIANT_HARMONIZATION_INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
-    output_type=HarmonizedVariant,
+    output_type=VariantHarmonizationOutput,
     tools=[
         select_canonical_transcript,
         genomic_accession_for_gene_and_transcript,
