@@ -132,23 +132,58 @@ def allele_registry_resolver(
     if not data:
         return None
 
-    # If query endpoint returned a list, take first match
     if isinstance(data, list):
         data = data[0]
 
-    # --- CAID ---
+    # -----------------------
+    # CAID
+    # -----------------------
     resolved_caid = None
     allele_id_url = data.get('@id')
     if allele_id_url:
         resolved_caid = allele_id_url.rstrip('/').split('/')[-1]
 
-    # --- gnomAD v4 ---
+    # -----------------------
+    # gnomAD-style (derived from genomicAlleles)
+    # -----------------------
     resolved_gnomad = None
-    gnomad_v4_records = data.get('externalRecords', {}).get('gnomAD_4', [])
-    if gnomad_v4_records:
-        resolved_gnomad = gnomad_v4_records[0].get('id')
 
-    # --- rsID ---
+    genomic_alleles = data.get('genomicAlleles', [])
+
+    def build_gnomad_id(g):
+        coords = g.get('coordinates', [])
+        if not coords:
+            return None
+
+        coord = coords[0]
+
+        chrom = g.get('chromosome')
+        pos = coord.get('end')  # 1-based position
+        ref = coord.get('referenceAllele')
+        alt = coord.get('allele')
+
+        if not all([chrom, pos, ref, alt]):
+            return None
+
+        return f'{chrom}-{pos}-{ref}-{alt}'
+
+    # Prefer GRCh38
+    for g in genomic_alleles:
+        if g.get('referenceGenome') == 'GRCh38':
+            resolved_gnomad = build_gnomad_id(g)
+            if resolved_gnomad:
+                break
+
+    # Fallback to first available genome
+    if not resolved_gnomad:
+        for g in genomic_alleles:
+            resolved_gnomad = build_gnomad_id(g)
+            if resolved_gnomad:
+                break
+
+    # -----------------------
+    # rsID
+    # -----------------------
     resolved_rsid = None
     dbsnp_records = data.get('externalRecords', {}).get('dbSNP', [])
     if dbsnp_records:
@@ -161,19 +196,15 @@ def allele_registry_resolver(
     # -----------------------
     resolved_hgvsg = None
 
-    for g in data.get('genomicAlleles', []):
-        genome = g.get('referenceGenome')
-        hgvs_list = g.get('hgvs', [])
-        if not hgvs_list:
-            continue
+    for g in genomic_alleles:
+        if g.get('referenceGenome') == 'GRCh38':
+            hgvs_list = g.get('hgvs', [])
+            if hgvs_list:
+                resolved_hgvsg = hgvs_list[0]
+                break
 
-        if genome == 'GRCh38':
-            resolved_hgvsg = hgvs_list[0]
-            break
-
-    # fallback if no GRCh38 found
     if not resolved_hgvsg:
-        for g in data.get('genomicAlleles', []):
+        for g in genomic_alleles:
             hgvs_list = g.get('hgvs', [])
             if hgvs_list:
                 resolved_hgvsg = hgvs_list[0]
@@ -189,7 +220,6 @@ def allele_registry_resolver(
     for t in data.get('transcriptAlleles', []):
         mane = t.get('MANE')
         if mane and mane.get('maneStatus') == 'MANE Select':
-            # Prefer MANE Select RefSeq
             refseq_nuc = mane.get('nucleotide', {}).get('RefSeq', {}).get('hgvs')
             refseq_pro = mane.get('protein', {}).get('RefSeq', {}).get('hgvs')
 
@@ -199,9 +229,8 @@ def allele_registry_resolver(
                 resolved_hgvsp = refseq_pro
 
             found_mane = True
-            continue  # still finish loop, but ignore fallbacks
+            continue
 
-        # Fallback collection (only if MANE not found yet)
         if not found_mane:
             if not resolved_hgvsc:
                 for h in t.get('hgvs', []):
@@ -433,7 +462,7 @@ System: You are an expert genomics curator and deterministic variant normalizer.
 You must follow the state machine below strictly.
 You may not skip states.
 You may not revisit a previous state except where explicitly allowed.
-You may not call ClinVar more than once.
+You may not call ClinVar more than once for each attempted variant.
 
 Goal:
 Normalize each of the provided variants to a GRCh38 gnomAD-style identifier and resolve via
@@ -686,6 +715,7 @@ summary of the normalization path taken.
 Rules:
 - Use short declarative sentences.
 - Describe only actions actually performed.
+- Please include the query arguments to the tool calls in the usage descriptions.
 - Do not include internal reasoning.
 - Do not reference state numbers.
 - Do not speculate.
