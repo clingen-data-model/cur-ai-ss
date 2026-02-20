@@ -150,7 +150,7 @@ def allele_registry_resolver(
 
     genomic_alleles = data.get('genomicAlleles', [])
 
-    def build_gnomad_id(g):
+    def build_gnomad_id(g: dict[str, Any]) -> str | None:
         coords = g.get('coordinates', [])
         if not coords:
             return None
