@@ -715,6 +715,7 @@ summary of the normalization path taken.
 Rules:
 - Use short declarative sentences.
 - Describe only actions actually performed.
+- Output each step in-order, numerically (e.g. 1. "step" ), new line delimited.
 - Please include the query arguments to the tool calls in the usage descriptions.
 - Do not include internal reasoning.
 - Do not reference state numbers.
