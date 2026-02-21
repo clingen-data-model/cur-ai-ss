@@ -644,43 +644,75 @@ STATE 4 — TRANSCRIPT-BASED PROJECTION
 Condition:
 hgvs_c OR hgvs_p available.
 
-Step 4A — Transcript-based (preferred)
+Definition:
+A transcript or protein accession is considered valid for projection
+ONLY if it contains a version suffix (e.g., NM_000059.3, ENST00000357654.9, NP_000050.2).
+Unversioned accessions must not be used for projection.
+
+------------------------------------------------------------
+Step 4A — Transcript-based projection (preferred)
+------------------------------------------------------------
+
 If hgvs_c available:
 
-    If transcript missing:
+    1. If transcript missing OR transcript lacks a version:
         Call select_canonical_transcript(gene, genome_build or GRCh38 default)
+        Replace transcript with returned versioned transcript.
+        Record selected transcript in normalization_notes.
 
-    If transcript available:
-        Construct transcript + ":" + hgvs_c
-        Call gnomad_style_id_from_variant_validator.
+    2. Construct:
+           transcript + ":" + hgvs_c
 
-        If successful:
-            → Call allele_registry_resolver
-            → RETURN result.
+    3. Call gnomad_style_id_from_variant_validator.
 
+    4. If projection fails:
+        Call select_canonical_transcript again (to handle retired versions),
+        replace transcript with returned versioned transcript,
+        reconstruct transcript + ":" + hgvs_c,
+        and retry gnomad_style_id_from_variant_validator once.
+
+    5. If projection succeeds:
+        Call allele_registry_resolver using gnomad_style_coordinates.
+        RETURN result.
+
+    6. If projection still fails:
+        Proceed to Step 4B.
+
+------------------------------------------------------------
 Step 4B — Protein-based fallback
+------------------------------------------------------------
 
 If hgvs_p available:
 
-    If protein_accession available:
-        Construct protein_accession + ":" + hgvs_p
+    1. If protein_accession present AND versioned:
+           Construct:
+               protein_accession + ":" + hgvs_p
 
-    Else:
-        If transcript missing:
-            Call select_canonical_transcript(gene, genome_build or GRCh38 default)
+       Else:
+           If transcript missing OR transcript lacks a version:
+               Call select_canonical_transcript(gene, genome_build or GRCh38 default)
+               Replace transcript with returned versioned transcript.
+               Record selected transcript in normalization_notes.
 
-        If transcript available:
-            Construct transcript + ":" + hgvs_p
-        Else:
-            Skip to State 5
+           If transcript available:
+               Construct:
+                   transcript + ":" + hgvs_p
+           Else:
+               Proceed to State 5.
 
-    Proceed to clinvar_lookup.
+    2. Do NOT attempt direct VariantValidator projection for protein-only rescue.
+       Instead proceed to ClinVar rescue pathway.
 
-    If successful:
-        → Call allele_registry_resolver
-        → RETURN result.
+    3. Call clinvar_lookup according to State 5 rules.
 
-If projection fails → proceed to State 5.
+    4. If ClinVar returns rsid or caid:
+           Call allele_registry_resolver.
+           RETURN result.
+
+    5. If ClinVar rescue fails:
+           Proceed to State 5.
+
+If both transcript-based and protein-based attempts fail → proceed to State 5.
 
 ============================================================
 STATE 5 — CLINVAR LOOKUP
