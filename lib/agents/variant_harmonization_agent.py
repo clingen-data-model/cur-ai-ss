@@ -12,6 +12,7 @@ from lib.evagg.utils.environment import env
 
 CLINGEN_ALLELE_REGISTRY_ENDPOINT = 'https://reg.genome.network'
 EUTILS_BASE = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils'
+SPDI_TO_HGVS_BASE = 'https://api.ncbi.nlm.nih.gov/variation/v0/spdi'
 VV_GENE2TRANSCRIPTSV1_ENDPOINT = (
     'https://rest.variantvalidator.org/VariantValidator/tools/gene2transcripts'
 )
@@ -27,7 +28,7 @@ VV_VARIANT_VALIDATOR_ENSEMBL_ENDPOINT = (
 
 
 @function_tool
-def clinvar_rescue(query: str) -> List[Dict[str, Any]]:
+def clinvar_lookup(query: str) -> List[Dict[str, Any]]:
     """
     Search ClinVar and return structured info for each matching record:
         - hgvs
@@ -105,6 +106,79 @@ def clinvar_rescue(query: str) -> List[Dict[str, Any]]:
                 }
             )
     return records
+
+
+@function_tool
+def dbsnp_lookup(query: str) -> List[str]:
+    """
+    Search dbSNP and return genomic HGVS (HGVSg) strings
+    derived deterministically from SPDI using the NCBI Variation API.
+    """
+
+    headers = {'content-type': 'application/json'}
+    hgvs_results: List[str] = []
+
+    # ---------------------
+    # Step 1: ESearch
+    # ---------------------
+    esearch_url = f'{EUTILS_BASE}/esearch.fcgi'
+    esearch_params: dict[str, str | int] = {
+        'db': 'snp',
+        'term': query,
+        'retmax': 50,
+        'retmode': 'json',
+        'sort': 'relevance',
+    }
+
+    r = requests.get(esearch_url, params=esearch_params, headers=headers, timeout=10)
+    r.raise_for_status()
+    search_data = r.json()
+
+    ids = search_data.get('esearchresult', {}).get('idlist', [])
+    if not ids:
+        return []
+
+    # ---------------------
+    # Step 2: ESummary
+    # ---------------------
+    esummary_url = f'{EUTILS_BASE}/esummary.fcgi'
+    esummary_params = {
+        'db': 'snp',
+        'id': ','.join(ids),
+        'retmode': 'json',
+    }
+
+    r = requests.get(esummary_url, params=esummary_params, headers=headers, timeout=10)
+    r.raise_for_status()
+    summary_data = r.json()
+
+    results = summary_data.get('result', {})
+    uids = results.get('uids', [])
+
+    # ---------------------
+    # Step 3: Extract SPDI + Convert to HGVS
+    # ---------------------
+    for uid in uids:
+        record = results.get(uid, {})
+        spdi = record.get('spdi')
+        if not spdi:
+            continue
+
+        try:
+            variation_url = f'{SPDI_TO_HGVS_BASE}/{spdi}/hgvs'
+            vr = requests.get(variation_url, timeout=10)
+            vr.raise_for_status()
+            variation_data = vr.json()
+
+            hgvs = variation_data.get('data', {}).get('hgvs')
+            if hgvs:
+                hgvs_results.append(hgvs)
+
+        except requests.RequestException:
+            # Skip failures but continue processing remaining records
+            continue
+
+    return hgvs_results
 
 
 @function_tool
@@ -462,7 +536,10 @@ System: You are an expert genomics curator and deterministic variant normalizer.
 You must follow the state machine below strictly.
 You may not skip states.
 You may not revisit a previous state except where explicitly allowed.
-You may not call clinvar_rescue more than once for each attempted variant.
+You may not call clinvar_lookup more than once for each attempted variant.
+You may not call dbsnp_lookup more than once per variant.
+You should not need to call select_canonical_transcript for the gene more than once per genome build.
+You should not need to call genomic_accession_for_gene_and_transcript more than once per gene and transcript.
 
 Goal:
 Normalize each of the provided variants to a GRCh38 gnomAD-style identifier and resolve via
@@ -597,7 +674,7 @@ If hgvs_p available:
         Else:
             Skip to State 5
 
-    Call gnomad_style_id_from_variant_validator.
+    Proceed to clinvar_lookup.
 
     If successful:
         → Call allele_registry_resolver
@@ -606,13 +683,13 @@ If hgvs_p available:
 If projection fails → proceed to State 5.
 
 ============================================================
-STATE 5 — CLINVAR RESCUE (ONE TIME ONLY)
+STATE 5 — CLINVAR LOOKUP
 ============================================================
 
 Condition:
 Projection in States 3 and 4 failed.
 
-You may call clinvar_rescue EXACTLY ONCE per variant.
+You may call clinvar_lookup EXACTLY ONCE per variant.
 
 Step 5A — Construct Query
 
@@ -637,7 +714,7 @@ BRCA1 AND (Arg157Ser OR p.Arg157Ser OR R157S OR p.R157S)
 If hgvs_p contains transcript prefix (e.g., NM_...:p.Arg157Ser),
 strip transcript before constructing query.
 
-Step 5B — Call clinvar_rescue(query)
+Step 5B — Call clinvar_lookup(query)
 
 Step 5C — Interpret Results
 
@@ -669,13 +746,30 @@ Case B — Only hgvs returned:
         → RETURN None outputs.
         normalization_confidence = low
 
-Case C — No records:
-    RETURN None outputs.
-    normalization_confidence = low
+Case C — No ClinVar records:
+
+    If hgvs_p OR hgvs_p_inferred present:
+
+        Call dbsnp_lookup using the same query string
+        that was constructed for ClinVar.
+
+        If dbsnp_lookup returns genomic HGVS (hgvs_g):
+
+            For each returned hgvs_g:
+                Call gnomad_style_id_from_variant_validator
+                using hgvs_g directly.
+
+                If successful:
+                    Call allele_registry_resolver
+                    RETURN result.
+                    normalization_confidence = medium
+
+    If dbsnp_lookup returns no usable results:
+        RETURN None outputs.
+        normalization_confidence = low
 
 
-
-You may NOT call clinvar_rescue again while resolving this variant.
+You may NOT call clinvar_lookup again while resolving this variant.
 
 ============================================================
 STATE 6 — FINALIZATION
@@ -699,7 +793,7 @@ high:
     - Successful VariantValidator projection
 
 medium:
-    - Any resolution achieved via ClinVar rescue pathway
+    - Any resolution achieved via ClinVar or dbSNP lookup pathways
 
 low:
     - Partial recovery only
@@ -722,7 +816,7 @@ Rules:
 - Do not speculate.
 - Mention tools used (VariantValidator, ClinVar, ClinGen Allele Registry).
 - If canonical transcript selection occurred, mention which transcript was selected.
-- If ClinVar rescue was used, explicitly state this.
+- If ClinVar or dbSNP were used, explicitly state this.
 - If resolution failed, clearly state that no registry match was found.
 """
 
@@ -752,6 +846,7 @@ agent = Agent(
         genomic_accession_for_gene_and_transcript,
         allele_registry_resolver,
         gnomad_style_id_from_variant_validator,
-        clinvar_rescue,
+        clinvar_lookup,
+        dbsnp_lookup,
     ],
 )

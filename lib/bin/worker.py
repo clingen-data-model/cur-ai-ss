@@ -60,6 +60,7 @@ async def harmonize_variants_task_async(paper: Paper) -> None:
     result = await Runner.run(
         variant_harmonization_agent,
         f'Variants JSON:\n{json.dumps(variants_output, indent=2)}',
+        max_turns=7 * len(variants_output['variants']),
     )
     json_response = result.final_output.model_dump_json(indent=2)
     paper.harmonized_variants_json_path.parent.mkdir(parents=True, exist_ok=True)
