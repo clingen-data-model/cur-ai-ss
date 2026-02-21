@@ -515,10 +515,11 @@ with center:
                         open(paper.harmonized_variants_json_path, 'r')
                     )
                     st.download_button(
-                        label='Harmoized Variant JSON',
+                        label='Harmonized Variant JSON',
                         data=json.dumps(harmonized_variant_data, indent=2),
                         file_name='harmonized_variant.json',
                         mime='application/json',
+                        key=f'{i}-hv-json',
                     )
 
 with left:
