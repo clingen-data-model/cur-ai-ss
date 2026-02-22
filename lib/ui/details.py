@@ -357,169 +357,132 @@ with center:
 
     with tab4:
         if paper_resp.extraction_status != ExtractionStatus.PARSED:
-            st.write('Not yet parsed')
+            st.write("Not yet parsed")
         else:
             paper = Paper(id=paper_resp.id)
-            data = json.load(open(paper.variants_json_path, 'r'))
-            variants: list[Variant] = VariantExtractionOutput.model_validate(
-                data
-            ).variants
-            for i, variant in enumerate(variants):
-                st.markdown(f'### Variant {i + 1}')
+
+            # ----------------------------
+            # Load extracted variants
+            # ----------------------------
+            extracted_data = json.load(open(paper.variants_json_path, "r"))
+            extracted_variants: list[Variant] = (
+                VariantExtractionOutput.model_validate(extracted_data).variants
+            )
+
+            # ----------------------------
+            # Load harmonized variants
+            # ----------------------------
+            harmonized_data = json.load(
+                open(paper.harmonized_variants_json_path, "r")
+            )
+            harmonized_variants: list[HarmonizedVariant] = (
+                VariantHarmonizationOutput.model_validate(harmonized_data).variants
+            )
+
+            for i, harmonized_variant in enumerate(harmonized_variants):
+                extracted_variant = extracted_variants[i]
+
+                st.markdown(f"### Variant {i + 1}")
+
                 with st.expander(
-                    f'{variant.variant_description_verbatim or "New variant"}'
+                    extracted_variant.variant_description_verbatim
+                    or harmonized_variant.hgvs_c
+                    or harmonized_variant.hgvs_p
+                    or "Variant"
                 ):
+                    # ======================================================
+                    # Harmonized Variant (PRIMARY DISPLAY)
+                    # ======================================================
                     with st.container():
-                        st.subheader('Variant Summary')
-                        col1, col2, col3_label, col3_input = st.columns([1, 3, 1, 3])
-                        col1.markdown(f'**Gene:** {variant.gene or "N/A"}')
+                        st.subheader("Harmonized Variant")
+
+                        col1, col2 = st.columns(2)
+
+                        col1.markdown(
+                            f"**gnomAD-style coordinates:** "
+                            f"{harmonized_variant.gnomad_style_coordinates or 'N/A'}"
+                        )
+                        col1.markdown(
+                            f"**rsID:** {harmonized_variant.rsid or 'N/A'}"
+                        )
+                        col1.markdown(
+                            f"**CAID:** {harmonized_variant.caid or 'N/A'}"
+                        )
+
                         col2.markdown(
-                            f'**Variant:** {variant.variant_description_verbatim or "N/A"}'
+                            f"**HGVS c.:** {harmonized_variant.hgvs_c or 'N/A'}"
+                        )
+                        col2.markdown(
+                            f"**HGVS p.:** {harmonized_variant.hgvs_p or 'N/A'}"
+                        )
+                        col2.markdown(
+                            f"**HGVS g.:** {harmonized_variant.hgvs_g or 'N/A'}"
                         )
 
-                        col3_label.markdown('**Transcript:**')
-                        variant.transcript = col3_input.text_input(
-                            'Transcript',
-                            variant.transcript or '',
-                            key=f'{i}-transcript',
-                            label_visibility='collapsed',
+                        st.markdown(
+                            f"**Normalization confidence:** "
+                            f"{harmonized_variant.normalization_confidence}"
                         )
 
-                        col3_label.markdown('**Protein Accession:**')
-                        variant.protein_accession = col3_input.text_input(
-                            'Protein Accession',
-                            variant.protein_accession or '',
-                            key=f'{i}-protein',
-                            label_visibility='collapsed',
-                        )
-
-                        col3_label.markdown('**Genomic Accession:**')
-                        variant.genomic_accession = col3_input.text_input(
-                            'Genomic Accession',
-                            variant.genomic_accession or '',
-                            key=f'{i}-genomic',
-                            label_visibility='collapsed',
-                        )
-
-                        col3_label.markdown('**LRG Accession:**')
-                        variant.lrg_accession = col3_input.text_input(
-                            'LRG Accession',
-                            variant.lrg_accession or '',
-                            key=f'{i}-lrg',
-                            label_visibility='collapsed',
-                        )
-
-                        col3_label.markdown('**Gene Accession:**')
-                        variant.gene_accession = col3_input.text_input(
-                            'Gene Accession',
-                            variant.gene_accession or '',
-                            key=f'{i}-gene-acc',
-                            label_visibility='collapsed',
-                        )
-
-                        variant.genomic_coordinates = st.text_input(
-                            'Genomic Coordinates',
-                            variant.genomic_coordinates or '',
-                            key=f'{i}-coords',
-                        )
-
-                        options = [''] + [gb.value for gb in GenomeBuild]
-                        index = (
-                            options.index(variant.genome_build.value)
-                            if variant.genome_build
-                            else 0
-                        )
-                        selected = st.selectbox(
-                            'Genome Build', options, index=index, key=f'{i}-build'
-                        )
-                        variant.genome_build = (
-                            GenomeBuild(selected) if selected else None
-                        )
-
-                        variant.rsid = st.text_input(
-                            'rsID', variant.rsid or '', key=f'{i}-rsid'
-                        )
-                        variant.caid = st.text_input(
-                            'CAID', variant.caid or '', key=f'{i}-caid'
-                        )
-
-                        variant.hgvs_c = st.text_input(
-                            'HGVS c.', variant.hgvs_c or '', key=f'{i}-hgvs_c'
-                        )
-                        variant.hgvs_p = st.text_input(
-                            'HGVS p.', variant.hgvs_p or '', key=f'{i}-hgvs_p'
-                        )
-                        variant.hgvs_g = st.text_input(
-                            'HGVS g.', variant.hgvs_g or '', key=f'{i}-hgvs_g'
-                        )
-
-                    # --- Add variant evidence context here ---
-                    with st.container():
-                        st.subheader('Variant Evidence')
                         st.text_area(
-                            'Variant Evidence Context',
-                            variant.variant_evidence_context or '',
+                            "Normalization Notes",
+                            harmonized_variant.normalization_notes or "",
+                            height=120,
+                            disabled=True,
+                            key=f"{i}-norm-notes",
+                        )
+
+                    # ======================================================
+                    # Extracted Variant Context (READ-ONLY)
+                    # ======================================================
+                    with st.container():
+                        st.subheader("Extracted Variant Context")
+
+                        st.markdown(
+                            f"**Variant description (verbatim):** "
+                            f"{extracted_variant.variant_description_verbatim or 'N/A'}"
+                        )
+
+                        st.markdown(
+                            f"**Variant type:** "
+                            f"{extracted_variant.variant_type.value}"
+                        )
+
+                        st.text_area(
+                            "Variant Evidence Context",
+                            extracted_variant.variant_evidence_context or "",
                             height=100,
                             disabled=True,
-                            key=f'{i}-vec',
+                            key=f"{i}-vec",
                         )
 
-                    # --- HGVS Inference (info only) ---
-                    with st.container():
-                        st.subheader('HGVS Inference (info only)')
-                        st.text(f'HGVS c. inferred: {variant.hgvs_c_inferred or ""}')
-                        st.text(f'HGVS p. inferred: {variant.hgvs_p_inferred or ""}')
-                        st.text(
-                            f'HGVS c. inference confidence: {variant.hgvs_c_inference_confidence.value if variant.hgvs_c_inference_confidence else ""}'
-                        )
-                        st.text(
-                            f'HGVS p. inference confidence: {variant.hgvs_p_inference_confidence.value if variant.hgvs_p_inference_confidence else ""}'
-                        )
                         st.text_area(
-                            'HGVS c. inference evidence',
-                            variant.hgvs_c_inference_evidence_context or '',
-                            height=60,
+                            "Variant Type Evidence Context",
+                            extracted_variant.variant_type_evidence_context or "",
+                            height=80,
                             disabled=True,
-                            key=f'{i}-hic_c',
-                        )
-                        st.text_area(
-                            'HGVS p. inference evidence',
-                            variant.hgvs_p_inference_evidence_context or '',
-                            height=60,
-                            disabled=True,
-                            key=f'{i}-hic_p',
+                            key=f"{i}-vtec",
                         )
 
-                    with st.container():
-                        st.subheader('Variant Type')
-                        selected_value = VariantType(
-                            st.selectbox(
-                                'Variant Type',
-                                [vt.value for vt in VariantType],
-                                index=[vt.value for vt in VariantType].index(
-                                    variant.variant_type.value
-                                )
-                                if variant.variant_type
-                                else 0,
-                                key=f'{i}-type',
-                            )
-                        )
-                        st.text_area(
-                            'Variant Type Evidence Context',
-                            variant.variant_type_evidence_context or '',
-                            height=60,
-                            disabled=True,
-                            key=f'{i}-vtec',
-                        )
-                    harmonized_variant_data = json.load(
-                        open(paper.harmonized_variants_json_path, 'r')
+                    # ======================================================
+                    # Downloads
+                    # ======================================================
+                    col_dl1, col_dl2 = st.columns(2)
+
+                    col_dl1.download_button(
+                        label="Download Extracted Variant JSON",
+                        data=json.dumps(extracted_data, indent=2),
+                        file_name="extracted_variants.json",
+                        mime="application/json",
+                        key=f"{i}-extract-json",
                     )
-                    st.download_button(
-                        label='Harmonized Variant JSON',
-                        data=json.dumps(harmonized_variant_data, indent=2),
-                        file_name='harmonized_variant.json',
-                        mime='application/json',
-                        key=f'{i}-hv-json',
+
+                    col_dl2.download_button(
+                        label="Download Harmonized Variant JSON",
+                        data=json.dumps(harmonized_data, indent=2),
+                        file_name="harmonized_variants.json",
+                        mime="application/json",
+                        key=f"{i}-harm-json",
                     )
 
 with left:
