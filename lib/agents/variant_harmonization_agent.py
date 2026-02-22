@@ -563,6 +563,7 @@ Use the following fields of the provided structured input:
 - hgvs_g
 - hgvs_c_inferred
 - hgvs_p_inferred
+- variant_evidence_context
 
 If hgvs_c is missing → use hgvs_c_inferred if present.
 If hgvs_p is missing → use hgvs_p_inferred if present.
@@ -751,10 +752,13 @@ Step 5B — Call clinvar_lookup(query)
 Step 5C — Interpret Results
 
 If multiple ClinVar records returned:
-    1. Prefer record with both caid AND rsid
-    2. Else prefer record with caid
-    3. Else prefer record with rsid
-    4. Else use first record
+    1. Ensure the hgvs of the record matches the query gene.
+    2. Sometimes multiple variants with different nucleotide substitutions will exist (A>C and A>T).  Prefer
+    one that aligns with the free-text description in the `variant_evidence_context` field (e.g. a 12939 A-C transversion).
+    2. Prefer record with both caid AND rsid
+    3. Else prefer record with caid
+    4. Else prefer record with rsid
+    5. Else use first record
 
 Case A — rsid OR caid returned:
     Call allele_registry_resolver using identifier.
