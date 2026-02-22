@@ -701,7 +701,7 @@ If hgvs_p available:
                Proceed to State 5.
 
     2. Do NOT attempt direct VariantValidator projection for protein-only rescue.
-       Instead proceed to ClinVar rescue pathway.
+       Instead proceed to ClinVar lookup pathway.
 
     3. Call clinvar_lookup according to State 5 rules.
 
@@ -709,13 +709,13 @@ If hgvs_p available:
            Call allele_registry_resolver.
            RETURN result.
 
-    5. If ClinVar rescue fails:
+    5. If ClinVar lookup fails:
            Proceed to State 5.
 
 If both transcript-based and protein-based attempts fail → proceed to State 5.
 
 ============================================================
-STATE 5 — CLINVAR LOOKUP
+STATE 5 — CLINVAR & DBSNP LOOKUP
 ============================================================
 
 Condition:
@@ -726,7 +726,7 @@ You may call clinvar_lookup EXACTLY ONCE per variant.
 Step 5A — Construct Query
 
 If hgvs_p and hgvs_p_inferred are both missing:
-    Skip ClinVar rescue and return low confidence.
+    Skip ClinVar lookup and return low confidence.
 
 Query must include:
     gene AND (

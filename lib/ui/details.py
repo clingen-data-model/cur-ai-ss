@@ -436,9 +436,9 @@ with center:
                                 'Variant Type',
                                 [vt.value for vt in VariantType],
                                 index=[vt.value for vt in VariantType].index(
-                                    variant.variant_type.value
+                                    extracted_variant.variant_type.value
                                 )
-                                if variant.variant_type
+                                if extracted_variant.variant_type
                                 else 0,
                                 key=f'{i}-type',
                             )
