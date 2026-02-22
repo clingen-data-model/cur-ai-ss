@@ -396,7 +396,7 @@ with center:
                     # Harmonized Variant (PRIMARY DISPLAY)
                     # ======================================================
                     with st.container():
-                        st.subheader('Harmonized Variant')
+                        st.subheader('Harmonized Variant Info')
 
                         col1, col2 = st.columns(2)
 
@@ -418,20 +418,42 @@ with center:
                         )
 
                         st.markdown(
-                            f'**Normalization confidence:** '
+                            f'**Harmonization confidence:** '
                             f'{harmonized_variant.normalization_confidence}'
                         )
 
                         st.text_area(
-                            'Normalization Notes',
+                            'Harmonization Notes',
                             harmonized_variant.normalization_notes or '',
-                            height=120,
+                            height=140,
                             disabled=True,
                             key=f'{i}-norm-notes',
                         )
 
+                        st.subheader('Variant Type')
+                        selected_value = VariantType(
+                            st.selectbox(
+                                'Variant Type',
+                                [vt.value for vt in VariantType],
+                                index=[vt.value for vt in VariantType].index(
+                                    variant.variant_type.value
+                                )
+                                if variant.variant_type
+                                else 0,
+                                key=f'{i}-type',
+                            )
+                        )
+
+                        st.text_area(
+                            'Variant Type Evidence Context',
+                            extracted_variant.variant_type_evidence_context or '',
+                            height=80,
+                            disabled=True,
+                            key=f'{i}-vtec',
+                        )
+
                     # ======================================================
-                    # Extracted Variant Context (READ-ONLY)
+                    # Extracted Variant Description (READ-ONLY)
                     # ======================================================
                     with st.container():
                         st.subheader('Extracted Variant Context')
@@ -441,24 +463,12 @@ with center:
                             f'{extracted_variant.variant_description_verbatim or "N/A"}'
                         )
 
-                        st.markdown(
-                            f'**Variant type:** {extracted_variant.variant_type.value}'
-                        )
-
                         st.text_area(
                             'Variant Evidence Context',
                             extracted_variant.variant_evidence_context or '',
                             height=100,
                             disabled=True,
                             key=f'{i}-vec',
-                        )
-
-                        st.text_area(
-                            'Variant Type Evidence Context',
-                            extracted_variant.variant_type_evidence_context or '',
-                            height=80,
-                            disabled=True,
-                            key=f'{i}-vtec',
                         )
 
                     # ======================================================
