@@ -19,12 +19,14 @@ from lib.agents.patient_extraction_agent import (
 )
 from lib.agents.variant_extraction_agent import (
     GenomeBuild,
-    HarmonizedVariant,
     HgvsInferenceConfidence,
     Variant,
     VariantExtractionOutput,
-    VariantHarmonizationOutput,
     VariantType,
+)
+from lib.agents.variant_harmonization_agent import (
+    HarmonizedVariant,
+    VariantHarmonizationOutput,
 )
 from lib.evagg.types.base import Paper
 from lib.models import ExtractionStatus, PaperResp
