@@ -13,9 +13,9 @@ from sqlalchemy.orm import joinedload
 from lib.agents.paper_extraction_agent import agent as paper_extraction_agent
 from lib.agents.patient_extraction_agent import agent as patient_extraction_agent
 from lib.agents.variant_enrichment_agent import (
-    enrich_variants_batch,
     HarmonizedVariant,
     VariantEnrichmentOutput,
+    enrich_variants_batch,
 )
 from lib.agents.variant_extraction_agent import agent as variant_extraction_agent
 from lib.agents.variant_harmonization_agent import agent as variant_harmonization_agent
