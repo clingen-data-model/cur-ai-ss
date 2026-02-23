@@ -1,6 +1,7 @@
 import json
 import time
 
+import pandas as pd
 import requests
 import streamlit as st
 
@@ -17,6 +18,7 @@ from lib.agents.patient_extraction_agent import (
     RaceEthnicity,
     SexAtBirth,
 )
+from lib.agents.variant_enrichment_agent import EnrichedVariant, VariantEnrichmentOutput
 from lib.agents.variant_extraction_agent import (
     GenomeBuild,
     HgvsInferenceConfidence,
@@ -381,8 +383,15 @@ with center:
                 VariantHarmonizationOutput.model_validate(harmonized_data).variants
             )
 
+            # Enriched variants
+            enriched_data = json.load(open(paper.enriched_variants_json_path, 'r'))
+            enriched_variants: list[EnrichedVariant] = (
+                VariantEnrichmentOutput.model_validate(enriched_data).variants
+            )
+
             for i, harmonized_variant in enumerate(harmonized_variants):
                 extracted_variant = extracted_variants[i]
+                enriched_variant = enriched_variants[i]
 
                 st.markdown(f'### Variant {i + 1}')
 
@@ -469,6 +478,107 @@ with center:
                             height=100,
                             disabled=True,
                             key=f'{i}-vec',
+                        )
+
+                    #
+                    # Annotations
+                    #
+                    # ======================================================
+                    # Annotations (ClinVar + gnomAD + In Silico)
+                    # ======================================================
+                    with st.container():
+                        st.subheader('Annotations')
+
+                        ev = enriched_variant
+
+                        # ----------------------------
+                        # ClinVar
+                        # ----------------------------
+                        st.markdown('#### ClinVar')
+
+                        stars_display = '⭐' * ev.stars if ev.stars else 'N/A'
+
+                        clinvar_df = pd.DataFrame(
+                            [
+                                {
+                                    'Pathogenicity': ev.pathogenicity or 'N/A',
+                                    'Submissions': ev.submissions or 'N/A',
+                                    'Review Status': stars_display,
+                                    'Exon': ev.exon or 'N/A',
+                                }
+                            ]
+                        )
+
+                        st.dataframe(
+                            clinvar_df, use_container_width=True, hide_index=True
+                        )
+
+                        # ----------------------------
+                        # In Silico Predictors
+                        # ----------------------------
+                        st.markdown('#### In Silico Scores')
+
+                        if ev.spliceai:
+                            spliceai_display = (
+                                f'{ev.spliceai.max_score:.3f}'
+                                + (
+                                    f' | {ev.spliceai.effect_type}'
+                                    if ev.spliceai.effect_type
+                                    else ''
+                                )
+                                + (
+                                    f' @ {ev.spliceai.position}'
+                                    if ev.spliceai.position is not None
+                                    else ''
+                                )
+                            )
+                        else:
+                            spliceai_display = 'N/A'
+
+                        in_silico_df = pd.DataFrame(
+                            [
+                                {
+                                    'REVEL': round(ev.revel, 3)
+                                    if ev.revel is not None
+                                    else 'N/A',
+                                    'AlphaMissense Class': ev.alphamissense_class
+                                    or 'N/A',
+                                    'AlphaMissense Score': round(
+                                        ev.alphamissense_score, 3
+                                    )
+                                    if ev.alphamissense_score is not None
+                                    else 'N/A',
+                                    'SpliceAI': spliceai_display,
+                                }
+                            ]
+                        )
+
+                        st.dataframe(
+                            in_silico_df, use_container_width=True, hide_index=True
+                        )
+
+                        # ----------------------------
+                        # gnomAD
+                        # ----------------------------
+                        st.markdown('#### gnomAD')
+
+                        gnomad_df = pd.DataFrame(
+                            [
+                                {
+                                    'Top-level AF': ev.gnomad_top_level_af
+                                    if ev.gnomad_top_level_af is not None
+                                    else 'N/A',
+                                    'Popmax AF': ev.gnomad_popmax_af
+                                    if ev.gnomad_popmax_af is not None
+                                    else 'N/A',
+                                    'Popmax Population': ev.gnomad_popmax_population
+                                    or 'N/A',
+                                }
+                            ]
+                        )
+
+                        st.dataframe(
+                            gnomad_df, use_container_width=True, hide_index=True
                         )
 
                     # ======================================================
