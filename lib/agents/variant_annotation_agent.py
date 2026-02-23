@@ -281,10 +281,6 @@ def gnomad_lookup(gnomad_style_coordinates: str) -> AnnotatedVariant:
     return result_variant
 
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Optional
-
-
 def enrich_variant(hv: HarmonizedVariant) -> AnnotatedVariant:
     enriched = AnnotatedVariant(
         gnomad_style_coordinates=hv.gnomad_style_coordinates,
