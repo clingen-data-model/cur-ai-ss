@@ -1,8 +1,10 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 from pydantic import BaseModel
+
+from lib.agents.variant_harmonization_agent import HarmonizedVariant
 
 GNOMAD_BASE = 'https://gnomad.broadinstitute.org/api'
 EUTILS_BASE = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils'
@@ -46,7 +48,7 @@ class SpliceAI(BaseModel):
         return cls(max_score=max_score, effect_type=effect_type, position=position)
 
 
-class AnnotatedVariant(BaseModel):
+class EnrichedVariant(BaseModel):
     gnomad_style_coordinates: Optional[str] = None
     rsid: Optional[str] = None
     caid: Optional[str] = None
@@ -66,12 +68,12 @@ class AnnotatedVariant(BaseModel):
 
 
 class VariantEnrichmentOutput(BaseModel):
-    variants: List[AnnotatedVariant]
+    variants: List[EnrichedVariant]
 
 
-def clinvar_lookup(rsid: Optional[str], caid: Optional[str]) -> AnnotatedVariant:
+def clinvar_lookup(rsid: Optional[str], caid: Optional[str]) -> EnrichedVariant:
     headers = {'content-type': 'application/json'}
-    result_variant = AnnotatedVariant(rsid=rsid, caid=caid)
+    result_variant = EnrichedVariant(rsid=rsid, caid=caid)
 
     if not (caid or rsid):
         return result_variant
@@ -129,7 +131,7 @@ def clinvar_lookup(rsid: Optional[str], caid: Optional[str]) -> AnnotatedVariant
 def vep_lookup(
     rsid: str | None,
     hgvs_g: str | None,
-) -> AnnotatedVariant:
+) -> EnrichedVariant:
     """Query Ensembl VEP for a given variant identifier and extract key annotations from the most relevant transcript."""
     if rsid is not None:
         ext = (
@@ -144,7 +146,7 @@ def vep_lookup(
     r = requests.get(VEP_BASE + ext, headers=headers, timeout=10)
     r.raise_for_status()
     data = r.json()
-    result_variant = AnnotatedVariant(rsid=rsid)
+    result_variant = EnrichedVariant(rsid=rsid)
 
     if not data:
         return result_variant
@@ -181,11 +183,10 @@ def vep_lookup(
     return result_variant
 
 
-@function_tool
-def gnomad_lookup(gnomad_style_coordinates: str) -> AnnotatedVariant:
+def gnomad_lookup(gnomad_style_coordinates: str) -> EnrichedVariant:
     headers = {'content-type': 'application/json'}
 
-    result_variant = AnnotatedVariant(gnomad_style_coordinates=gnomad_style_coordinates)
+    result_variant = EnrichedVariant(gnomad_style_coordinates=gnomad_style_coordinates)
 
     query = """
     query ($variantId: String!) {
@@ -281,15 +282,15 @@ def gnomad_lookup(gnomad_style_coordinates: str) -> AnnotatedVariant:
     return result_variant
 
 
-def enrich_variant(hv: HarmonizedVariant) -> AnnotatedVariant:
-    enriched = AnnotatedVariant(
+def enrich_variant(hv: HarmonizedVariant) -> EnrichedVariant:
+    enriched = EnrichedVariant(
         gnomad_style_coordinates=hv.gnomad_style_coordinates,
         rsid=hv.rsid,
         caid=hv.caid,
     )
 
     futures = []
-    results: List[AnnotatedVariant] = []
+    results: List[EnrichedVariant] = []
 
     with ThreadPoolExecutor(max_workers=3) as executor:
         # Submit tasks conditionally
@@ -306,7 +307,7 @@ def enrich_variant(hv: HarmonizedVariant) -> AnnotatedVariant:
         for future in as_completed(futures):
             try:
                 result = future.result()
-                if isinstance(result, AnnotatedVariant):
+                if isinstance(result, EnrichedVariant):
                     results.append(result)
             except Exception:
                 # Fail-soft: ignore individual tool failure
@@ -318,3 +319,21 @@ def enrich_variant(hv: HarmonizedVariant) -> AnnotatedVariant:
         enriched = enriched.model_copy(update=result.model_dump(exclude_none=True))
 
     return enriched
+
+
+def enrich_variants_batch(
+    harmonized_variants: List[HarmonizedVariant],
+) -> List[EnrichedVariant]:
+    results: List[EnrichedVariant] = []
+
+    # Parallelize across variants
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        futures = [executor.submit(enrich_variant, hv) for hv in harmonized_variants]
+
+        for future in futures:
+            try:
+                results.append(future.result())
+            except Exception:
+                continue
+
+    return results

@@ -12,6 +12,10 @@ from sqlalchemy.orm import joinedload
 
 from lib.agents.paper_extraction_agent import agent as paper_extraction_agent
 from lib.agents.patient_extraction_agent import agent as patient_extraction_agent
+from lib.agents.variant_enrichment_agent import (
+    HarmonizedVariant,
+    VariantEnrichmentOutput,
+)
 from lib.agents.variant_extraction_agent import agent as variant_extraction_agent
 from lib.agents.variant_harmonization_agent import agent as variant_harmonization_agent
 from lib.api.db import session_scope
@@ -77,6 +81,26 @@ async def extract_variants_task_async(paper: Paper, gene_symbol: str) -> None:
     paper.variants_json_path.parent.mkdir(parents=True, exist_ok=True)
     with open(paper.variants_json_path, 'w') as f:
         f.write(json_response)
+
+
+async def enrich_variants_task_async(paper: Paper) -> None:
+    with open(paper.harmonized_variants_json_path, 'r') as f:
+        harmonized_data = json.load(f)
+
+    harmonized_variants = [HarmonizedVariant(**v) for v in harmonized_data['variants']]
+
+    # Offload blocking enrichment to thread
+    enriched_variants = await asyncio.to_thread(
+        enrich_variants_batch,
+        harmonized_variants,
+    )
+
+    output = VariantEnrichmentOutput(variants=enriched_variants)
+
+    paper.enriched_variants_json_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(paper.enriched_variants_json_path, 'w') as f:
+        f.write(output.model_dump_json(indent=2))
 
 
 async def run_tasks_concurrently(paper: Paper, gene_symbol: str) -> None:
