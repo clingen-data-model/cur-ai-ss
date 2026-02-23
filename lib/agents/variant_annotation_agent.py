@@ -1,8 +1,10 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional
 
 import requests
 from pydantic import BaseModel
 
+GNOMAD_BASE = 'https://gnomad.broadinstitute.org/api'
 EUTILS_BASE = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils'
 VEP_BASE = 'https://rest.ensembl.org'
 
@@ -19,9 +21,6 @@ CLINVAR_GOLD_STARS_LOOKUP = {
 }
 
 
-# ----------------------------
-# Pydantic models
-# ----------------------------
 class SpliceAI(BaseModel):
     max_score: float = 0.0
     effect_type: Optional[str] = None
@@ -60,15 +59,17 @@ class AnnotatedVariant(BaseModel):
     alphamissense_score: Optional[float] = None
     spliceai: Optional[SpliceAI] = None
 
+    # --- gnomAD ---
+    gnomad_top_level_af: Optional[float] = None
+    gnomad_popmax_af: Optional[float] = None
+    gnomad_popmax_population: Optional[str] = None
+
 
 class VariantEnrichmentOutput(BaseModel):
     variants: List[AnnotatedVariant]
 
 
-# ----------------------------
-# ClinVar lookup
-# ----------------------------
-def clinvar_lookup(caid: Optional[str], rsid: Optional[str]) -> AnnotatedVariant:
+def clinvar_lookup(rsid: Optional[str], caid: Optional[str]) -> AnnotatedVariant:
     headers = {'content-type': 'application/json'}
     result_variant = AnnotatedVariant(rsid=rsid, caid=caid)
 
@@ -125,9 +126,6 @@ def clinvar_lookup(caid: Optional[str], rsid: Optional[str]) -> AnnotatedVariant
     return result_variant
 
 
-# ----------------------------
-# VEP lookup
-# ----------------------------
 def vep_lookup(
     rsid: str | None,
     hgvs_g: str | None,
@@ -181,3 +179,146 @@ def vep_lookup(
         result_variant.spliceai = SpliceAI.from_raw(tx['spliceai'])
 
     return result_variant
+
+
+@function_tool
+def gnomad_lookup(gnomad_style_coordinates: str) -> AnnotatedVariant:
+    headers = {'content-type': 'application/json'}
+
+    result_variant = AnnotatedVariant(gnomad_style_coordinates=gnomad_style_coordinates)
+
+    query = """
+    query ($variantId: String!) {
+      variant(variantId: $variantId, dataset: gnomad_r4) {
+        variantId
+        joint {
+          ac
+          an
+          populations {
+            id
+            ac
+            an
+          }
+        }
+      }
+    }
+    """
+
+    # ---------------------
+    # Step 1: GraphQL POST
+    # ---------------------
+    r = requests.post(
+        GNOMAD_BASE,
+        json={
+            'query': query,
+            'variables': {'variantId': gnomad_style_coordinates},
+        },
+        headers={
+            **headers,
+            'User-Agent': 'Mozilla/5.0',  # required by gnomAD
+        },
+        timeout=10,
+    )
+    r.raise_for_status()
+
+    payload = r.json()
+
+    if 'errors' in payload:
+        return result_variant
+
+    variant = payload.get('data', {}).get('variant')
+    if not variant:
+        return result_variant
+
+    joint = variant.get('joint')
+    if not joint:
+        return result_variant
+
+    # ---------------------
+    # Step 2: Compute top-level AF
+    # ---------------------
+    ac = joint.get('ac') or 0
+    an = joint.get('an') or 0
+
+    if an:
+        result_variant.gnomad_top_level_af = ac / an
+
+    # ---------------------
+    # Step 3: Filter populations
+    # ---------------------
+    populations = joint.get('populations') or []
+    valid_pops: List[Tuple[str, float]] = []
+
+    for pop in populations:
+        pop_id = pop.get('id')
+        pop_ac = pop.get('ac') or 0
+        pop_an = pop.get('an') or 0
+
+        if not pop_id:
+            continue
+        if pop_id == 'remaining':
+            continue
+        if pop_id in {'XX', 'XY'}:
+            continue
+        if pop_id.endswith('_XX') or pop_id.endswith('_XY'):
+            continue
+        if pop_an < 2000:
+            continue
+        if pop_an == 0:
+            continue
+
+        af = pop_ac / pop_an
+        valid_pops.append((pop_id, af))
+
+    if not valid_pops:
+        return result_variant
+
+    popmax_population, popmax_af = max(valid_pops, key=lambda x: x[1])
+
+    result_variant.gnomad_popmax_population = popmax_population
+    result_variant.gnomad_popmax_af = popmax_af
+
+    return result_variant
+
+
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import List, Optional
+
+
+def enrich_variant(hv: HarmonizedVariant) -> AnnotatedVariant:
+    enriched = AnnotatedVariant(
+        gnomad_style_coordinates=hv.gnomad_style_coordinates,
+        rsid=hv.rsid,
+        caid=hv.caid,
+    )
+
+    futures = []
+    results: List[AnnotatedVariant] = []
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        # Submit tasks conditionally
+        if hv.gnomad_style_coordinates:
+            futures.append(executor.submit(gnomad_lookup, hv.gnomad_style_coordinates))
+
+        if hv.rsid or hv.caid:
+            futures.append(executor.submit(clinvar_lookup, hv.rsid, hv.caid))
+
+        if hv.rsid or hv.hgvs_g:
+            futures.append(executor.submit(vep_lookup, hv.rsid, hv.hgvs_g))
+
+        # Collect results as they complete
+        for future in as_completed(futures):
+            try:
+                result = future.result()
+                if isinstance(result, AnnotatedVariant):
+                    results.append(result)
+            except Exception:
+                # Fail-soft: ignore individual tool failure
+                continue
+
+    # Deterministic merge phase
+    # (merge after all threads complete to avoid race conditions)
+    for result in results:
+        enriched = enriched.model_copy(update=result.model_dump(exclude_none=True))
+
+    return enriched
