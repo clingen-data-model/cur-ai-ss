@@ -131,6 +131,7 @@ def clinvar_lookup(rsid: Optional[str], caid: Optional[str]) -> EnrichedVariant:
 def vep_lookup(
     rsid: str | None,
     hgvs_g: str | None,
+    hgvs_c: str | None,
 ) -> EnrichedVariant:
     """Query Ensembl VEP for a given variant identifier and extract key annotations from the most relevant transcript."""
     if rsid is not None:
@@ -138,6 +139,8 @@ def vep_lookup(
             f'/vep/human/id/{rsid}?mane=1&numbers=1&SpliceAI=2&REVEL=1&AlphaMissense=1'
         )
     elif hgvs_g is not None:
+        ext = f'/vep/human/hgvs/{hgvs_g}?mane=1&numbers=1&SpliceAI=2&REVEL=1&AlphaMissense=1'
+    elif hgvs_c is not None:
         ext = f'/vep/human/hgvs/{hgvs_g}?mane=1&numbers=1&SpliceAI=2&REVEL=1&AlphaMissense=1'
     else:
         raise ValueError('Requires rsid or hgvs_g')
@@ -301,7 +304,7 @@ def enrich_variant(hv: HarmonizedVariant) -> EnrichedVariant:
             futures.append(executor.submit(clinvar_lookup, hv.rsid, hv.caid))
 
         if hv.rsid or hv.hgvs_g:
-            futures.append(executor.submit(vep_lookup, hv.rsid, hv.hgvs_g))
+            futures.append(executor.submit(vep_lookup, hv.rsid, hv.hgvs_g, hv.hgvs_c))
 
         # Collect results as they complete
         for future in as_completed(futures):

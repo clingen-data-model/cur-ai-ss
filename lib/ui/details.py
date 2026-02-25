@@ -496,7 +496,10 @@ with center:
                         # ----------------------------
                         st.markdown('#### ClinVar')
 
-                        stars_display = '⭐' * ev.stars if ev.stars else 'N/A'
+                        stars_display = (
+                            '⭐' * ev.stars if ev.stars is not None and ev.stars > 0
+                            else ('0⭐' if ev.stars == 0 else 'N/A')
+                        )
 
                         clinvar_df = pd.DataFrame(
                             [
