@@ -507,7 +507,6 @@ with center:
                                     'Pathogenicity': ev.pathogenicity or 'N/A',
                                     'Submissions': ev.submissions or 'N/A',
                                     'Review Status': stars_display,
-                                    'Exon': ev.exon or 'N/A',
                                 }
                             ]
                         )
@@ -552,6 +551,7 @@ with center:
                                     if ev.alphamissense_score is not None
                                     else 'N/A',
                                     'SpliceAI': spliceai_display,
+                                    'Exon': ev.exon or 'N/A',
                                 }
                             ]
                         )
