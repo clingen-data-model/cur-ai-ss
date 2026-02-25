@@ -1,8 +1,8 @@
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Generator, Optional
+from typing import Any, Generator, Optional
 
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 
 from lib.evagg.utils.environment import env
@@ -20,10 +20,20 @@ def get_engine() -> Engine:
         Path(env.sqlite_dir).mkdir(parents=True, exist_ok=True)
         _engine = create_engine(
             f'sqlite:///{env.sqlite_dir}/app.db',
-            connect_args={'check_same_thread': False},
+            connect_args={'check_same_thread': False, 'timeout': 30},
             pool_pre_ping=True,
         )
+        event.listen(_engine, 'connect', _sqlite_set_pragmas)
     return _engine
+
+
+def _sqlite_set_pragmas(dbapi_connection: Any, _connection_record: Any) -> None:
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute('PRAGMA journal_mode=WAL')
+        cursor.execute('PRAGMA foreign_keys=ON')
+    finally:
+        cursor.close()
 
 
 def get_sessionmaker() -> sessionmaker:

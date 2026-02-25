@@ -8,6 +8,12 @@ from typing import Optional
 
 import pytest
 from defusedxml import ElementTree
+from sqlalchemy.orm import Session
+
+# Ensure tests load deterministic settings (avoids relying on a developer's local `.env`).
+os.environ.setdefault(
+    'ENV_FILE', str(Path(__file__).resolve().parents[1] / '.env.test')
+)
 
 from lib.api import db
 
@@ -126,10 +132,13 @@ def mock_client(arg_loader):
 
 @pytest.fixture
 def db_session(monkeypatch, tmpdir):
+    from lib.models import Base
+
     db.env.CAA_ROOT = str(tmpdir)
     db.env.SQLLITE_DIR = ''
     monkeypatch.setattr(db, '_engine', None)
     monkeypatch.setattr(db, '_session_factory', None)
+    Base.metadata.create_all(bind=db.get_engine())
     session_local = db.get_sessionmaker()
     session: Session = session_local()
     yield session

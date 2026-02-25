@@ -39,6 +39,7 @@ dependencies = [
     "uvicorn>=0.38.0",
     "pymupdf>=1.26.7",
     "python-multipart>=0.0.21",
+    "alembic>=1.15.0",
 ]
 
 [dependency-groups]

@@ -13,7 +13,6 @@ from lib.agents.paper_extraction_agent import (
 from lib.agents.patient_extraction_agent import (
     CountryCode,
     PatientInfo,
-    PatientInfoExtractionOutput,
     ProbandStatus,
     RaceEthnicity,
     SexAtBirth,
@@ -32,13 +31,15 @@ from lib.agents.variant_harmonization_agent import (
 )
 from lib.evagg.types.base import Paper
 from lib.models import ExtractionStatus, PaperResp
+from lib.models.converters import patient_resp_to_pydantic
 from lib.ui.api import (
     delete_paper,
     get_http_error_detail,
     get_paper,
+    get_paper_patients,
     requeue_paper,
 )
-from lib.ui.helpers import paper_extraction_output_to_markdown
+from lib.ui.helpers import paper_extraction_output_to_markdown, paper_resp_to_markdown
 
 
 @st.fragment
@@ -199,12 +200,24 @@ with center:
     with tab2:
         if paper_resp.extraction_status != ExtractionStatus.PARSED:
             st.write('Not yet parsed')
+        elif paper_resp.title:
+            # DB has metadata — render from PaperResp
+            md_tab, editable_tab = st.tabs(['View', 'Edit'])
+            with md_tab:
+                st.markdown(paper_resp_to_markdown(paper_resp))
+            with editable_tab:
+                # Still need the full JSON for the editable form
+                paper = Paper(id=paper_resp.id)
+                data = json.load(open(paper.metadata_json_path, 'r'))
+                paper_extraction_output: PaperExtractionOutput = (
+                    PaperExtractionOutput.model_validate(data)
+                )
+                render_editable_paper_extraction_tab(paper_extraction_output)
         else:
+            # Fallback to JSON
             paper = Paper(id=paper_resp.id)
             data = json.load(open(paper.metadata_json_path, 'r'))
-            paper_extraction_output: PaperExtractionOutput = (
-                PaperExtractionOutput.model_validate(data)
-            )
+            paper_extraction_output = PaperExtractionOutput.model_validate(data)
             md_tab, editable_tab = st.tabs(['View', 'Edit'])
             with md_tab:
                 st.markdown(
@@ -223,11 +236,11 @@ with center:
         if paper_resp.extraction_status != ExtractionStatus.PARSED:
             st.write('Not yet parsed')
         else:
-            paper = Paper(id=paper_resp.id)
-            data = json.load(open(paper.patient_info_json_path, 'r'))
-            patients: list[PatientInfo] = PatientInfoExtractionOutput.model_validate(
-                data
-            ).patients
+            patient_resps = get_paper_patients(paper_id)
+            patients: list[PatientInfo] = []
+            for pr in patient_resps:
+                patients.append(patient_resp_to_pydantic(pr))
+
             for i, patient in enumerate(patients):
                 with st.expander(f'{patient.identifier or "N/A"}'):
                     # --- Patient Identifier
