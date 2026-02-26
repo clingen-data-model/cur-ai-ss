@@ -1,7 +1,7 @@
+import logging
 import traceback
 from contextlib import asynccontextmanager
-from pathlib import Path
-from typing import Any, AsyncGenerator, Optional
+from typing import Any, AsyncGenerator
 
 from fastapi import (
     Body,
@@ -17,7 +17,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
@@ -26,14 +26,36 @@ from lib.api.db import get_engine, get_session
 from lib.evagg.pdf.thumbnail import pdf_first_page_to_thumbnail_pymupdf_bytes
 from lib.evagg.types.base import Paper
 from lib.evagg.utils.environment import env
-from lib.models import Base, ExtractionStatus, GeneDB, GeneResp, PaperDB, PaperResp
+from lib.models import (
+    Base,
+    ExtractionStatus,
+    GeneDB,
+    GeneResp,
+    PaperDB,
+    PaperResp,
+    PatientDB,
+    PatientResp,
+    VariantDB,
+    VariantResp,
+)
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     engine = get_engine()
-    session = get_session()
-    Base.metadata.create_all(bind=engine)
+    try:
+        from alembic import command
+        from alembic.config import Config
+
+        cfg = Config('alembic.ini')
+        command.upgrade(cfg, 'head')
+    except Exception:
+        logger.warning(
+            'Alembic upgrade failed, falling back to create_all', exc_info=True
+        )
+        Base.metadata.create_all(bind=engine)
     yield
 
 
@@ -104,7 +126,8 @@ def put_paper(
     ).scalar_one_or_none()
     if not gene:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=f'Gene {gene} not found'
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f'Gene {gene} not found',
         )
 
     content = uploaded_file.file.read()
@@ -205,3 +228,23 @@ def list_genes(
 ) -> Any:
     query = session.query(GeneDB)
     return query.all()
+
+
+@app.get('/papers/{paper_id}/patients', response_model=list[PatientResp])
+def get_paper_patients(paper_id: str, session: Session = Depends(get_session)) -> Any:
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    return session.query(PatientDB).filter(PatientDB.paper_id == paper_id).all()
+
+
+@app.get('/papers/{paper_id}/variants', response_model=list[VariantResp])
+def get_paper_variants(paper_id: str, session: Session = Depends(get_session)) -> Any:
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    return session.query(VariantDB).filter(VariantDB.paper_id == paper_id).all()
