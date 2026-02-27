@@ -108,7 +108,7 @@ def render_editable_paper_extraction_tab(
         )
 
 
-def render_patient(patient: PatientInfo, key_prefix: str):
+def render_patient(patient: PatientInfo, key_prefix: str) -> None:
     with st.expander(f'{patient.identifier or "N/A"}'):
         # --- Patient Identifier
         patient.identifier = st.text_input(
@@ -375,11 +375,11 @@ with center:
             # Split Patients
             # ----------------------------
             probands = [
-                p for p in patients if p.proband_status == ProbandStatus.PROBAND
+                p for p in patients if p.proband_status == ProbandStatus.Proband
             ]
 
             non_probands = [
-                p for p in patients if p.proband_status != ProbandStatus.PROBAND
+                p for p in patients if p.proband_status != ProbandStatus.Proband
             ]
 
             proband_tab, non_proband_tab = st.tabs(
