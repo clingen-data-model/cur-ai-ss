@@ -373,6 +373,7 @@ Fields to extract (for each patient):
 
 - race/ethnicity:
   - Use enum values: African/African American, Latino/Admixed American, Ashkenazi Jewish, East Asian, Finnish, Non-Finnish European, South Asian, Middle Eastern, Amish, Other, Unknown
+  - When the text contains a more specific subgroup of a listed category, normalize to the closest matching enum value.
 
 Guidelines:
 
