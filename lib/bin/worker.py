@@ -41,7 +41,7 @@ RETRIES = 3
 logger = logging.getLogger(__name__)
 
 
-async def parse_paper_task_async(paper: Paper, paper_id: str) -> None:
+async def parse_paper_task_async(paper: Paper) -> None:
     result = await Runner.run(
         paper_extraction_agent,
         f'Paper (fulltext md): {paper.fulltext_md}',
@@ -53,12 +53,12 @@ async def parse_paper_task_async(paper: Paper, paper_id: str) -> None:
 
     # Persist metadata to DB
     with session_scope() as session:
-        paper_db = session.get(PaperDB, paper_id)
+        paper_db = session.get(PaperDB, paper.id)
         if paper_db:
             paper_metadata_to_db(result.final_output, paper_db)
 
 
-async def parse_patients_task_async(paper: Paper, paper_id: str) -> None:
+async def parse_patients_task_async(paper: Paper) -> None:
     result = await Runner.run(
         patient_extraction_agent,
         f'Paper (fulltext md): {paper.fulltext_md}',
@@ -70,9 +70,9 @@ async def parse_patients_task_async(paper: Paper, paper_id: str) -> None:
 
     # Persist patients to DB
     with session_scope() as session:
-        session.execute(delete(PatientDB).where(PatientDB.paper_id == paper_id))
+        session.execute(delete(PatientDB).where(PatientDB.paper_id == paper.id))
         for patient in result.final_output.patients:
-            session.add(patient_info_to_db(patient, paper_id))
+            session.add(patient_info_to_db(patient, paper.id))
 
 
 async def harmonize_variants_task_async(paper: Paper) -> None:
@@ -90,9 +90,7 @@ async def harmonize_variants_task_async(paper: Paper) -> None:
         f.write(json_response)
 
 
-async def extract_variants_task_async(
-    paper: Paper, gene_symbol: str, paper_id: str
-) -> None:
+async def extract_variants_task_async(paper: Paper, gene_symbol: str) -> None:
     result = await Runner.run(
         variant_extraction_agent,
         f'Gene Symbol: {gene_symbol}\nPaper (fulltext md): {paper.fulltext_md}',
@@ -104,9 +102,9 @@ async def extract_variants_task_async(
 
     # Persist variants to DB
     with session_scope() as session:
-        session.execute(delete(VariantDB).where(VariantDB.paper_id == paper_id))
+        session.execute(delete(VariantDB).where(VariantDB.paper_id == paper.id))
         for variant in result.final_output.variants:
-            session.add(variant_to_db(variant, paper_id))
+            session.add(variant_to_db(variant, paper.id))
 
 
 async def enrich_variants_task_async(paper: Paper) -> None:
@@ -124,11 +122,11 @@ async def enrich_variants_task_async(paper: Paper) -> None:
         f.write(output.model_dump_json(indent=2))
 
 
-async def run_tasks_concurrently(paper: Paper, gene_symbol: str, paper_id: str) -> None:
+async def run_tasks_concurrently(paper: Paper, gene_symbol: str) -> None:
     await asyncio.gather(
-        parse_paper_task_async(paper, paper_id),
-        parse_patients_task_async(paper, paper_id),
-        extract_variants_task_async(paper, gene_symbol, paper_id),
+        parse_paper_task_async(paper),
+        parse_patients_task_async(paper),
+        extract_variants_task_async(paper, gene_symbol),
     )
     # Runs after variants completes
     await harmonize_variants_task_async(paper)
@@ -141,9 +139,7 @@ def initial_extraction(paper_db: PaperDB) -> None:
         try:
             paper = Paper(id=paper_db.id).with_content()
             parse_content(paper, force=True)
-            asyncio.run(
-                run_tasks_concurrently(paper, paper_db.gene.symbol, paper_db.id)
-            )
+            asyncio.run(run_tasks_concurrently(paper, paper_db.gene.symbol))
             paper_db.extraction_status = ExtractionStatus.PARSED
             logger.info(f'Attempt {attempt}/{max_attempts} succeeded')
             return
