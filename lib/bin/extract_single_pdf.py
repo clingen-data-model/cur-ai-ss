@@ -7,6 +7,7 @@ import traceback
 from pathlib import Path
 
 from lib.evagg import App
+from lib.evagg.pdf.parse import parse_content
 from lib.evagg.types.base import Paper
 from lib.evagg.utils import init_logger
 
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Process a PMID and gene symbol.')
     parser.add_argument('--pdf', help='PDF', required=True, type=Path)
-    parser.add_argument('--gene-symbol', help='Gene Symbol', required=True, type=Path)
+    parser.add_argument('--gene-symbol', help='Gene Symbol', required=True, type=str)
     parser.add_argument(
         '--retries',
         type=int,
@@ -33,7 +34,9 @@ def run_evagg_app() -> None:
         raise RuntimeError('pdf path must exist')
     with open(args.pdf, 'rb') as f:
         content = f.read()
-    app = App(Paper.from_content(content), args.gene_symbol)
+    paper = Paper.from_content(content)
+    parse_content(paper, force=True)
+    app = App(paper, args.gene_symbol)
     max_attempts = args.retries + 1
     for attempt in range(1, max_attempts + 1):
         try:
