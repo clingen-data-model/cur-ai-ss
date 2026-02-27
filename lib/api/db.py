@@ -9,7 +9,7 @@ from lib.evagg.utils.environment import env
 
 _engine: Optional[Engine] = None
 _session_factory: Optional[sessionmaker] = (
-    None  # a Session factory local to this process
+    None  # a Session factory that is local to this application/process
 )
 
 

@@ -58,6 +58,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         if session.scalar(select(func.count(GeneDB.id))) == 0:
             logger.info('genes table is empty, seeding from HGNC...')
             seed_genes()
+            logger.info('gene seeding complete')
 
     yield
 
