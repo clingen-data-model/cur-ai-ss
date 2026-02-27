@@ -96,18 +96,18 @@ async def patient_variant_linking_task_async(paper: Paper) -> None:
     structured_variants = [
         {
             'variant_id': idx,
-            'variant_description_verbatim': variant.variant_description_verbatim,
-            'variant_evidence_context': variant.variant_evidence_context,
+            'variant_description_verbatim': variant['variant_description_verbatim'],
+            'variant_evidence_context': variant['variant_evidence_context'],
         }
-        for idx, variant in enumerate(variants_output.variants, start=1)
+        for idx, variant in enumerate(variants_output['variants'], start=1)
     ]
     structured_patients = [
         {
             'patient_id': idx,
-            'identifier': patient.identifier,
-            'identifier_evidence': patient.identifier_evidence,
+            'identifier': patient['identifier'],
+            'identifier_evidence': patient['identifier_evidence'],
         }
-        for idx, patient in enumerate(patients_output.patients, start=1)
+        for idx, patient in enumerate(patients_output['patients'], start=1)
     ]
     result = await Runner.run(
         patient_variant_linking_agent,
