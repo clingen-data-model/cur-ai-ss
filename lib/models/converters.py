@@ -11,12 +11,7 @@ from lib.agents.patient_extraction_agent import (
     RaceEthnicity,
     SexAtBirth,
 )
-from lib.agents.variant_extraction_agent import (
-    GenomeBuild,
-    HgvsInferenceConfidence,
-    Variant,
-    VariantType,
-)
+from lib.agents.variant_extraction_agent import Variant
 from lib.models import PaperDB, PatientDB, PatientResp, VariantDB
 
 E = TypeVar('E', bound=Enum)
@@ -65,32 +60,6 @@ def patient_info_to_db(patient: PatientInfo, paper_id: str) -> PatientDB:
         age_death_evidence=patient.age_death_evidence,
         country_of_origin_evidence=patient.country_of_origin_evidence,
         race_ethnicity_evidence=patient.race_ethnicity_evidence,
-    )
-
-
-def patient_db_to_pydantic(patient_db: PatientDB) -> PatientInfo:
-    return PatientInfo(
-        identifier=patient_db.identifier,
-        proband_status=_str_to_enum(
-            patient_db.proband_status or ProbandStatus.Unknown.value, ProbandStatus
-        ),
-        sex=_str_to_enum(patient_db.sex or SexAtBirth.Unknown.value, SexAtBirth),
-        age_diagnosis=patient_db.age_diagnosis,
-        age_report=patient_db.age_report,
-        age_death=patient_db.age_death,
-        country_of_origin=_str_to_enum(
-            patient_db.country_of_origin or CountryCode.Unknown.value, CountryCode
-        ),
-        race_ethnicity=_str_to_enum(
-            patient_db.race_ethnicity or RaceEthnicity.Unknown.value, RaceEthnicity
-        ),
-        identifier_evidence=patient_db.identifier_evidence,
-        sex_evidence=patient_db.sex_evidence,
-        age_diagnosis_evidence=patient_db.age_diagnosis_evidence,
-        age_report_evidence=patient_db.age_report_evidence,
-        age_death_evidence=patient_db.age_death_evidence,
-        country_of_origin_evidence=patient_db.country_of_origin_evidence,
-        race_ethnicity_evidence=patient_db.race_ethnicity_evidence,
     )
 
 
@@ -154,40 +123,6 @@ def variant_to_db(variant: Variant, paper_id: str) -> VariantDB:
     )
 
 
-def variant_db_to_pydantic(variant_db: VariantDB) -> Variant:
-    return Variant(
-        gene=variant_db.gene,
-        transcript=variant_db.transcript,
-        protein_accession=variant_db.protein_accession,
-        genomic_accession=variant_db.genomic_accession,
-        lrg_accession=variant_db.lrg_accession,
-        gene_accession=variant_db.gene_accession,
-        variant_description_verbatim=variant_db.variant_description_verbatim,
-        genomic_coordinates=variant_db.genomic_coordinates,
-        genome_build=_str_to_enum(variant_db.genome_build, GenomeBuild),
-        rsid=variant_db.rsid,
-        caid=variant_db.caid,
-        hgvs_c=variant_db.hgvs_c,
-        hgvs_p=variant_db.hgvs_p,
-        hgvs_g=variant_db.hgvs_g,
-        hgvs_c_inferred=variant_db.hgvs_c_inferred,
-        hgvs_p_inferred=variant_db.hgvs_p_inferred,
-        hgvs_p_inference_confidence=_str_to_enum(
-            variant_db.hgvs_p_inference_confidence, HgvsInferenceConfidence
-        ),
-        hgvs_p_inference_evidence_context=variant_db.hgvs_p_inference_evidence_context,
-        hgvs_c_inference_confidence=_str_to_enum(
-            variant_db.hgvs_c_inference_confidence, HgvsInferenceConfidence
-        ),
-        hgvs_c_inference_evidence_context=variant_db.hgvs_c_inference_evidence_context,
-        variant_type=_str_to_enum(
-            variant_db.variant_type or VariantType.unknown.value, VariantType
-        ),
-        variant_evidence_context=variant_db.variant_evidence_context,
-        variant_type_evidence_context=variant_db.variant_type_evidence_context,
-    )
-
-
 # ---------------------------------------------------------------------------
 # Paper metadata converter
 # ---------------------------------------------------------------------------
@@ -214,22 +149,3 @@ def paper_metadata_to_db(output: PaperExtractionOutput, paper_db: PaperDB) -> No
         if output.testing_methods_evidence
         else None
     )
-
-
-def paper_db_to_metadata_dict(paper_db: PaperDB) -> dict:
-    """Return a dict of paper metadata fields from PaperDB."""
-    return {
-        'title': paper_db.title,
-        'first_author': paper_db.first_author,
-        'journal': paper_db.journal,
-        'abstract': paper_db.abstract,
-        'pub_year': paper_db.pub_year,
-        'doi': paper_db.doi,
-        'pmid': paper_db.pmid,
-        'pmcid': paper_db.pmcid,
-        'citation': paper_db.citation,
-        'is_open_access': paper_db.is_open_access,
-        'can_access': paper_db.can_access,
-        'license': paper_db.license,
-        'link': paper_db.link,
-    }
