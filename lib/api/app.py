@@ -3,6 +3,8 @@ import traceback
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator
 
+import alembic.command
+import alembic.config
 from fastapi import (
     Body,
     Depends,
@@ -22,12 +24,11 @@ from sqlalchemy.orm import Session, selectinload
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
-from lib.api.db import get_engine, get_session
+from lib.api.db import get_engine, get_session, get_sessionmaker
 from lib.evagg.pdf.thumbnail import pdf_first_page_to_thumbnail_pymupdf_bytes
 from lib.evagg.types.base import Paper
 from lib.evagg.utils.environment import env
 from lib.models import (
-    Base,
     ExtractionStatus,
     GeneDB,
     GeneResp,
@@ -44,18 +45,20 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    engine = get_engine()
-    try:
-        from alembic import command
-        from alembic.config import Config
+    cfg = alembic.config.Config('alembic.ini')
+    alembic.command.upgrade(cfg, 'head')
 
-        cfg = Config('alembic.ini')
-        command.upgrade(cfg, 'head')
-    except Exception:
-        logger.warning(
-            'Alembic upgrade failed, falling back to create_all', exc_info=True
-        )
-        Base.metadata.create_all(bind=engine)
+    # Seed genes if the table is empty
+    from sqlalchemy import func
+
+    from lib.reference_data.upsert_gene_symbols import main as seed_genes
+
+    session_factory = get_sessionmaker()
+    with session_factory() as session:
+        if session.scalar(select(func.count(GeneDB.id))) == 0:
+            logger.info('genes table is empty, seeding from HGNC...')
+            seed_genes()
+
     yield
 
 
@@ -127,7 +130,7 @@ def put_paper(
     if not gene:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f'Gene {gene} not found',
+            detail=f'Gene {gene_symbol} not found',
         )
 
     content = uploaded_file.file.read()

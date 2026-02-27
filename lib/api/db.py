@@ -9,7 +9,7 @@ from lib.evagg.utils.environment import env
 
 _engine: Optional[Engine] = None
 _session_factory: Optional[sessionmaker] = (
-    None  # a Session factory that is local to this application/process
+    None  # a Session factory local to this process
 )
 
 
@@ -45,10 +45,12 @@ def get_sessionmaker() -> sessionmaker:
     return _session_factory
 
 
-# Note: A generator, and not a context manager is required here.
-# Adding @contextmanager here, for use in non-FastAPI code, breaks the path functions.
 def get_session() -> Generator[Session, None, None]:
-    """Yield a SQLAlchemy Session. Use as a context manager with FastAPI dependencies."""
+    """
+    Yield a SQLAlchemy Session.
+
+    Used in FastAPI Depends. FastAPI handles the contextmanager functionality.
+    """
     session_local = get_sessionmaker()
     session: Session = session_local()
     try:
@@ -63,13 +65,9 @@ def get_session() -> Generator[Session, None, None]:
 
 @contextmanager
 def session_scope() -> Generator[Session, None, None]:
-    session_local = get_sessionmaker()
-    session: Session = session_local()
-    try:
-        yield session
-        session.commit()  # commit after normal exit
-    except:
-        session.rollback()
-        raise
-    finally:
-        session.close()
+    """
+    Context manager wrapper around get_session.
+
+    Used in `with` statements.
+    """
+    yield from get_session()
