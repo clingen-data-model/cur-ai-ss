@@ -108,6 +108,147 @@ def render_editable_paper_extraction_tab(
         )
 
 
+def render_patient(patient: PatientInfo, key_prefix: str):
+    with st.expander(f'{patient.identifier or "N/A"}'):
+        # --- Patient Identifier
+        patient.identifier = st.text_input(
+            'Patient Identifier',
+            patient.identifier,
+            key=f'{key_prefix}-identifier',
+        )
+
+        st.text_area(
+            'Patient Identifier Evidence',
+            patient.identifier_evidence or '',
+            height=60,
+            disabled=True,
+            key=f'{key_prefix}-identifier-evidence',
+        )
+
+        # --- Proband Status
+        patient.proband_status = ProbandStatus(
+            st.selectbox(
+                'Proband Status',
+                [ps.value for ps in ProbandStatus],
+                index=[ps.value for ps in ProbandStatus].index(
+                    patient.proband_status.value
+                )
+                if patient.proband_status
+                else 0,
+                key=f'{key_prefix}-proband-status',
+            )
+        )
+
+        # --- Sex At Birth
+        patient.sex = SexAtBirth(
+            st.selectbox(
+                'Sex At Birth',
+                [s.value for s in SexAtBirth],
+                index=[s.value for s in SexAtBirth].index(patient.sex.value)
+                if patient.sex
+                else 0,
+                key=f'{key_prefix}-sex',
+            )
+        )
+
+        st.text_area(
+            'Sex At Birth Evidence',
+            patient.sex_evidence or '',
+            height=60,
+            disabled=True,
+            key=f'{key_prefix}-sex-evidence',
+        )
+
+        # --- Age at Diagnosis
+        patient.age_diagnosis = st.text_input(
+            'Age at Diagnosis',
+            patient.age_diagnosis or '',
+            key=f'{key_prefix}-age-diagnosis',
+        )
+
+        st.text_area(
+            'Age at Diagnosis Evidence',
+            patient.age_diagnosis_evidence or '',
+            height=60,
+            disabled=True,
+            key=f'{key_prefix}-age-diagnosis-evidence',
+        )
+
+        # --- Age at Report
+        patient.age_report = st.text_input(
+            'Age at Report',
+            patient.age_report or '',
+            key=f'{key_prefix}-age-report',
+        )
+
+        st.text_area(
+            'Age at Report Evidence',
+            patient.age_report_evidence or '',
+            height=60,
+            disabled=True,
+            key=f'{key_prefix}-age-report-evidence',
+        )
+
+        # --- Age at Death
+        patient.age_death = st.text_input(
+            'Age at Death',
+            patient.age_death or '',
+            key=f'{key_prefix}-age-death',
+        )
+
+        st.text_area(
+            'Age at Death Evidence',
+            patient.age_death_evidence or '',
+            height=60,
+            disabled=True,
+            key=f'{key_prefix}-age-death-evidence',
+        )
+
+        # --- Country of Origin
+        patient.country_of_origin = CountryCode(
+            st.selectbox(
+                'Country of Origin',
+                [c.value for c in CountryCode],
+                index=[c.value for c in CountryCode].index(
+                    patient.country_of_origin.value
+                )
+                if patient.country_of_origin
+                else 0,
+                key=f'{key_prefix}-country',
+            )
+        )
+
+        st.text_area(
+            'Country of Origin Evidence',
+            patient.country_of_origin_evidence or '',
+            height=60,
+            disabled=True,
+            key=f'{key_prefix}-country-evidence',
+        )
+
+        # --- Race/Ethnicity
+        patient.race_ethnicity = RaceEthnicity(
+            st.selectbox(
+                'Race/Ethnicity',
+                [r.value for r in RaceEthnicity],
+                index=[r.value for r in RaceEthnicity].index(
+                    patient.race_ethnicity.value
+                )
+                if patient.race_ethnicity
+                else 0,
+                key=f'{key_prefix}-race',
+            )
+        )
+
+        st.text_area(
+            'Race/Ethnicity Evidence',
+            patient.race_ethnicity_evidence or '',
+            height=60,
+            disabled=True,
+            key=f'{key_prefix}-race-evidence',
+        )
+
+
 paper_id = st.query_params.get('paper_id')
 if paper_id is None:
     st.warning('No paper_id provided in URL.')
@@ -225,141 +366,43 @@ with center:
         else:
             paper = Paper(id=paper_resp.id)
             data = json.load(open(paper.patient_info_json_path, 'r'))
+
             patients: list[PatientInfo] = PatientInfoExtractionOutput.model_validate(
                 data
             ).patients
-            for i, patient in enumerate(patients):
-                with st.expander(f'{patient.identifier or "N/A"}'):
-                    # --- Patient Identifier
-                    patient.identifier = st.text_input(
-                        'Patient Identifier',
-                        patient.identifier,
-                        key=f'{i}-identifier',
-                    )
-                    st.text_area(
-                        'Patient Identifier Evidence',
-                        patient.identifier_evidence or '',
-                        height=60,
-                        disabled=True,
-                        key=f'{i}-identifier-evidence',
-                    )
 
-                    # --- ProbandStatus (enum)
-                    patient.proband_status = ProbandStatus(
-                        st.selectbox(
-                            'Proband Status',
-                            [ps.value for ps in ProbandStatus],
-                            index=[ps.value for ps in ProbandStatus].index(
-                                patient.proband_status.value
-                            )
-                            if patient.proband_status
-                            else 0,
-                            key=f'{i}-proband-status',
-                        )
-                    )
+            # ----------------------------
+            # Split Patients
+            # ----------------------------
+            probands = [
+                p for p in patients if p.proband_status == ProbandStatus.PROBAND
+            ]
 
-                    # --- SexAtBirth (enum)
-                    patient.sex = SexAtBirth(
-                        st.selectbox(
-                            'Sex At Birth',
-                            [s.value for s in SexAtBirth],
-                            index=[s.value for s in SexAtBirth].index(patient.sex.value)
-                            if patient.sex
-                            else 0,
-                            key=f'{i}-sex',
-                        )
-                    )
-                    st.text_area(
-                        'Sex At Birth Evidence',
-                        patient.sex_evidence or '',
-                        height=60,
-                        disabled=True,
-                        key=f'{i}-sex-evidence',
-                    )
+            non_probands = [
+                p for p in patients if p.proband_status != ProbandStatus.PROBAND
+            ]
 
-                    # --- Age at Diagnosis
-                    patient.age_diagnosis = st.text_input(
-                        'Age at Diagnosis',
-                        patient.age_diagnosis or '',
-                        key=f'{i}-age-diagnosis',
-                    )
-                    st.text_area(
-                        'Age at Diagnosis Evidence',
-                        patient.age_diagnosis_evidence or '',
-                        height=60,
-                        disabled=True,
-                        key=f'{i}-age-diagnosis-evidence',
-                    )
+            proband_tab, non_proband_tab = st.tabs(
+                [f'Probands ({len(probands)})', f'Non-Probands ({len(non_probands)})']
+            )
 
-                    # --- Age at Report
-                    patient.age_report = st.text_input(
-                        'Age at Report',
-                        patient.age_report or '',
-                        key=f'{i}-age-report',
-                    )
-                    st.text_area(
-                        'Age at Report Evidence',
-                        patient.age_report_evidence or '',
-                        height=60,
-                        disabled=True,
-                        key=f'{i}-age-report-evidence',
-                    )
+            # ----------------------------
+            # Probands
+            # ----------------------------
+            with proband_tab:
+                if not probands:
+                    st.info('No probands detected.')
+                for idx, patient in enumerate(probands):
+                    render_patient(patient, key_prefix=f'proband-{idx}')
 
-                    # --- Age at Death
-                    patient.age_death = st.text_input(
-                        'Age at Death',
-                        patient.age_death or '',
-                        key=f'{i}-age-death',
-                    )
-                    st.text_area(
-                        'Age at Death Evidence',
-                        patient.age_death_evidence or '',
-                        height=60,
-                        disabled=True,
-                        key=f'{i}-age-death-evidence',
-                    )
-
-                    # --- Country of Origin
-                    patient.country_of_origin = CountryCode(
-                        st.selectbox(
-                            'Country of Origin',
-                            [c.value for c in CountryCode],
-                            index=[c.value for c in CountryCode].index(
-                                patient.country_of_origin.value
-                            )
-                            if patient.country_of_origin
-                            else 0,
-                            key=f'{i}-country',
-                        )
-                    )
-                    st.text_area(
-                        'Country of Origin Evidence',
-                        patient.country_of_origin_evidence or '',
-                        height=60,
-                        disabled=True,
-                        key=f'{i}-country-evidence',
-                    )
-
-                    # --- Race/Ethnicity (enum)
-                    patient.race_ethnicity = RaceEthnicity(
-                        st.selectbox(
-                            'Race/Ethnicity',
-                            [r.value for r in RaceEthnicity],
-                            index=[r.value for r in RaceEthnicity].index(
-                                patient.race_ethnicity.value
-                            )
-                            if patient.race_ethnicity
-                            else 0,
-                            key=f'{i}-race',
-                        )
-                    )
-                    st.text_area(
-                        'Race/Ethnicity Evidence',
-                        patient.race_ethnicity_evidence or '',
-                        height=60,
-                        disabled=True,
-                        key=f'{i}-race-evidence',
-                    )
+            # ----------------------------
+            # Non-Probands
+            # ----------------------------
+            with non_proband_tab:
+                if not non_probands:
+                    st.info('No non-probands detected.')
+                for idx, patient in enumerate(non_probands):
+                    render_patient(patient, key_prefix=f'nonproband-{idx}')
 
     with tab4:
         if paper_resp.extraction_status != ExtractionStatus.PARSED:
