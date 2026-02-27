@@ -34,7 +34,7 @@ from lib.evagg.utils.web import RequestsWebContentClient, WebClientSettings
 from lib.models import ExtractionStatus, PaperDB
 
 POLL_INTERVAL_S = 10
-RETRIES = 3
+RETRIES = 2
 
 logger = logging.getLogger(__name__)
 
