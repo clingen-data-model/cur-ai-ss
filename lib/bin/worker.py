@@ -12,6 +12,9 @@ from sqlalchemy.orm import joinedload
 
 from lib.agents.paper_extraction_agent import agent as paper_extraction_agent
 from lib.agents.patient_extraction_agent import agent as patient_extraction_agent
+from lib.agents.patient_variant_linking_agent import (
+    agent as patient_variant_linking_agent,
+)
 from lib.agents.variant_enrichment_agent import (
     HarmonizedVariant,
     VariantEnrichmentOutput,
@@ -84,6 +87,38 @@ async def extract_variants_task_async(paper: Paper, gene_symbol: str) -> None:
         f.write(json_response)
 
 
+async def patient_variant_linking_task_async(paper: Paper) -> None:
+    with open(paper.variants_json_path, 'r') as f:
+        variants_output = json.load(f)
+    with open(paper.patient_info_json_path, 'r') as f:
+        patients_output = json.load(f)
+
+    structured_variants = [
+        {
+            'variant_id': idx,
+            'variant_description_verbatim': variant.variant_description_verbatim,
+            'variant_evidence_context': variant.variant_evidence_context,
+        }
+        for idx, variant in enumerate(variants_output.variants, start=1)
+    ]
+    structured_patients = [
+        {
+            'patient_id': idx,
+            'identifier': patient.identifier,
+            'identifier_evidence': patient.identifier_evidence,
+        }
+        for idx, patient in enumerate(patients_output.patients, start=1)
+    ]
+    result = await Runner.run(
+        patient_variant_linking_agent,
+        f'Variants JSON:\n{structured_variants}\n Patients JSON:\n {structured_patients}',
+    )
+    json_response = result.final_output.model_dump_json(indent=2)
+    paper.patient_variant_links_json_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(paper.patient_variant_links_json_path, 'w') as f:
+        f.write(json_response)
+
+
 async def enrich_variants_task_async(paper: Paper) -> None:
     with open(paper.harmonized_variants_json_path, 'r') as f:
         harmonized_data = json.load(f)
@@ -105,8 +140,10 @@ async def run_tasks_concurrently(paper: Paper, gene_symbol: str) -> None:
         parse_patients_task_async(paper),
         extract_variants_task_async(paper, gene_symbol),
     )
-    # Runs after variants completes
-    await harmonize_variants_task_async(paper)
+    await asyncio.gather(
+        harmonize_variants_task_async(paper),
+        patient_variant_linking_task_async(paper),
+    )
     await enrich_variants_task_async(paper)
 
 
