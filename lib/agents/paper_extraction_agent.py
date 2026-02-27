@@ -147,6 +147,7 @@ Task Overview:
    - Use PubMed search to find candidate PMIDs using the title and first author extracted from the text.
      - Do not use PubMed to discover or replace the title or first author unless they are genuinely missing or unreliable in the text.
      - PubMed may be trusted as authoritative for all other fields.
+     - You should search using just the author's last name, then last name and first initial.
    - If a PMID is identified:
      - Fetch metadata from PubMed.
      - When PubMed XML is provided, extract fields using these locations:
