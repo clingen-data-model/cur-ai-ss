@@ -1,8 +1,10 @@
 import json
 import time
+from typing import Optional
 
 import requests
 import streamlit as st
+from pydantic import BaseModel, ValidationError
 
 from lib.agents.paper_extraction_agent import (
     PaperExtractionOutput,
@@ -17,19 +19,42 @@ from lib.ui.api import (
 )
 
 
+class PaperQueryParams(BaseModel):
+    paper_id: str
+    patient_id: Optional[int] = None
+    variant_id: Optional[int] = None
+
+    @classmethod
+    def from_query_params(cls) -> 'PaperQueryParams':
+        raw_params = {
+            'paper_id': st.query_params.get('paper_id'),
+            'patient_id': st.query_params.get('patient_id'),
+            'variant_id': st.query_params.get('variant_id'),
+        }
+
+        if not raw_params['paper_id']:
+            st.warning('No paper_id provided in URL.')
+            st.stop()
+
+        try:
+            return cls(**raw_params)
+        except ValidationError:
+            # If ints fail to parse, fall back to None instead of crashing
+            return cls(
+                paper_id=raw_params['paper_id'],
+                patient_id=None,
+                variant_id=None,
+            )
+
+
 def render_paper_header() -> tuple[
     Paper, PaperResp, PaperExtractionOutput, st.delta_generator.DeltaGenerator
 ]:
     st.set_page_config(layout='wide')
-
-    paper_id = st.query_params.get('paper_id')
-    if paper_id is None:
-        st.warning('No paper_id provided in URL.')
-        st.stop()
-
+    paper_query_params = PaperQueryParams.from_query_params()
     with st.spinner('Loading paper...'):
         try:
-            paper_resp: PaperResp = get_paper(paper_id)
+            paper_resp: PaperResp = get_paper(paper_query_params.paper_id)
             if paper_resp is None:
                 st.stop()
         except requests.HTTPError as e:
@@ -74,8 +99,10 @@ def render_paper_header() -> tuple[
                 ]
                 for i, (label, page) in enumerate(PAPER_PAGES):
                     if st.button(label, type='tertiary', width='content'):
-                        st.query_params['paper_id'] = paper_id
-                        st.switch_page(page, query_params={'paper_id': paper_id})
+                        st.query_params['paper_id'] = paper_query_params.paper_id
+                        st.switch_page(
+                            page, query_params={'paper_id': paper_query_params.paper_id}
+                        )
                     if i < len(PAPER_PAGES) - 1:
                         st.space('small')
 
@@ -95,14 +122,14 @@ def render_paper_header() -> tuple[
                     st.badge('AI Extraction Failed', icon='❌', color='red')
                 if st.button('🔄 Rerun EvAGG', type='tertiary', width='content'):
                     try:
-                        requeue_paper(paper_id)
+                        requeue_paper(paper_query_params.paper_id)
                         st.toast('EvAGG Job Queued', icon=':material/thumb_up:')
                         st.rerun()
                     except Exception as e:
                         st.toast(f'Failed to requeue: {str(e)}', icon='❌')
                 if st.button('🗑️ Delete Paper', type='tertiary', width='content'):
                     try:
-                        delete_paper(paper_id)
+                        delete_paper(paper_query_params.paper_id)
                         st.toast('Successfully deleted!', icon='🗑️')
                         st.switch_page('dashboard.py')
                     except Exception as e:

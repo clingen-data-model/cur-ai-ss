@@ -10,7 +10,7 @@ from lib.agents.patient_extraction_agent import (
     RaceEthnicity,
     SexAtBirth,
 )
-from lib.ui.paper.header import render_paper_header
+from lib.ui.paper.header import PaperQueryParams, render_paper_header
 
 
 def render_patient(
@@ -173,24 +173,10 @@ def render_patient(
 
 
 # -----------------------------
-# Read query param (original index)
-# -----------------------------
-query_params = st.query_params
-selected_patient = query_params.get('patient_id')
-
-try:
-    selected_patient_idx = (
-        int(selected_patient) if selected_patient is not None else None
-    )
-except ValueError:
-    selected_patient_idx = None
-
-
-# -----------------------------
 # Load patients
 # -----------------------------
+paper_query_params = PaperQueryParams.from_query_params()
 paper, paper_resp, paper_extraction_output, center = render_paper_header()
-
 with center:
     with open(paper.patient_info_json_path, 'r') as f:
         data = json.load(f)
@@ -211,24 +197,26 @@ with center:
     proband_tab, non_proband_tab = st.tabs(
         tabs,
         default=tabs[1]
-        if selected_patient_idx in {p[0] for p in non_probands}
+        if paper_query_params.patient_id in {p[0] for p in non_probands}
         else tabs[0],
     )
     with proband_tab:
         if not probands:
             st.info('No probands detected.')
         for original_idx, patient in probands:
+            st.markdown(f'### Patient {original_idx}')
             render_patient(
                 patient,
                 key_prefix=f'patient-{original_idx}',
-                expanded=(selected_patient_idx == original_idx),
+                expanded=(paper_query_params.patient_id == original_idx),
             )
     with non_proband_tab:
         if not non_probands:
             st.info('No non-probands detected.')
         for original_idx, patient in non_probands:
+            st.markdown(f'### Patient {original_idx}')
             render_patient(
                 patient,
                 key_prefix=f'patient-{original_idx}',
-                expanded=(selected_patient_idx == original_idx),
+                expanded=(paper_query_params.patient_id == original_idx),
             )

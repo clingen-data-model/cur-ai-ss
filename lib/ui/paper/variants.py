@@ -14,8 +14,9 @@ from lib.agents.variant_harmonization_agent import (
     HarmonizedVariant,
     VariantHarmonizationOutput,
 )
-from lib.ui.paper.header import render_paper_header
+from lib.ui.paper.header import PaperQueryParams, render_paper_header
 
+paper_query_params = PaperQueryParams.from_query_params()
 paper, paper_resp, paper_extraction_output, center = render_paper_header()
 with center:
     with open(paper.variants_json_path, 'r') as f:
@@ -33,15 +34,16 @@ with center:
         enriched_variants: list[EnrichedVariant] = (
             VariantEnrichmentOutput.model_validate(enriched_data).variants
         )
-    for i, harmonized_variant in enumerate(harmonized_variants):
-        extracted_variant = extracted_variants[i]
-        enriched_variant = enriched_variants[i]
-        st.markdown(f'### Variant {i + 1}')
+    for i, harmonized_variant in enumerate(harmonized_variants, start=1):
+        extracted_variant = extracted_variants[i - 1]
+        enriched_variant = enriched_variants[i - 1]
+        st.markdown(f'### Variant {i}')
         with st.expander(
             extracted_variant.variant_description_verbatim
             or harmonized_variant.hgvs_c
             or harmonized_variant.hgvs_p
-            or 'Variant'
+            or 'Variant',
+            expanded=(i == paper_query_params.variant_id),
         ):
             # ======================================================
             # Harmonized Variant (PRIMARY DISPLAY)
