@@ -1,7 +1,7 @@
 import json
 
-import streamlit as st
 import pandas as pd
+import streamlit as st
 
 from lib.agents.variant_enrichment_agent import EnrichedVariant, VariantEnrichmentOutput
 from lib.agents.variant_extraction_agent import (
@@ -16,8 +16,7 @@ from lib.agents.variant_harmonization_agent import (
 )
 from lib.ui.paper.header import render_paper_header
 
-paper, _, _, center = render_paper_header()
-
+paper, paper_resp, paper_extraction_output, center = render_paper_header()
 with center:
     with open(paper.variants_json_path, 'r') as f:
         extracted_data = json.load(f)
@@ -31,9 +30,9 @@ with center:
         )
     with open(paper.enriched_variants_json_path, 'r') as f:
         enriched_data = json.load(f)
-        enriched_variants: list[EnrichedVariant] = VariantEnrichmentOutput.model_validate(
-            enriched_data
-        ).variants
+        enriched_variants: list[EnrichedVariant] = (
+            VariantEnrichmentOutput.model_validate(enriched_data).variants
+        )
     for i, harmonized_variant in enumerate(harmonized_variants):
         extracted_variant = extracted_variants[i]
         enriched_variant = enriched_variants[i]

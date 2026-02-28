@@ -2,7 +2,7 @@ import streamlit as st
 
 from lib.ui.paper.header import render_paper_header
 
-paper, _, _, center = render_paper_header()
+paper, paper_resp, paper_extraction_output, center = render_paper_header()
 with center:
     st.pdf(paper.pdf_raw_path)
     st.download_button(

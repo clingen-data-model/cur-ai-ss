@@ -64,97 +64,102 @@ def render_patient(patient: PatientInfo, key_prefix: str) -> None:
             key=f'{key_prefix}-sex-evidence',
         )
 
-        # --- Age at Diagnosis
-        patient.age_diagnosis = st.text_input(
-            'Age at Diagnosis',
-            patient.age_diagnosis or '',
-            key=f'{key_prefix}-age-diagnosis',
-        )
+        # =========================
+        # Ages (3 columns with evidence under each)
+        # =========================
+        col1, col2, col3 = st.columns(3)
 
-        st.text_area(
-            'Age at Diagnosis Evidence',
-            patient.age_diagnosis_evidence or '',
-            height=60,
-            disabled=True,
-            key=f'{key_prefix}-age-diagnosis-evidence',
-        )
-
-        # --- Age at Report
-        patient.age_report = st.text_input(
-            'Age at Report',
-            patient.age_report or '',
-            key=f'{key_prefix}-age-report',
-        )
-
-        st.text_area(
-            'Age at Report Evidence',
-            patient.age_report_evidence or '',
-            height=60,
-            disabled=True,
-            key=f'{key_prefix}-age-report-evidence',
-        )
-
-        # --- Age at Death
-        patient.age_death = st.text_input(
-            'Age at Death',
-            patient.age_death or '',
-            key=f'{key_prefix}-age-death',
-        )
-
-        st.text_area(
-            'Age at Death Evidence',
-            patient.age_death_evidence or '',
-            height=60,
-            disabled=True,
-            key=f'{key_prefix}-age-death-evidence',
-        )
-
-        # --- Country of Origin
-        patient.country_of_origin = CountryCode(
-            st.selectbox(
-                'Country of Origin',
-                [c.value for c in CountryCode],
-                index=[c.value for c in CountryCode].index(
-                    patient.country_of_origin.value
-                )
-                if patient.country_of_origin
-                else 0,
-                key=f'{key_prefix}-country',
+        with col1:
+            patient.age_diagnosis = st.text_input(
+                'Age at Diagnosis',
+                patient.age_diagnosis or '',
+                key=f'{key_prefix}-age-diagnosis',
             )
-        )
-
-        st.text_area(
-            'Country of Origin Evidence',
-            patient.country_of_origin_evidence or '',
-            height=60,
-            disabled=True,
-            key=f'{key_prefix}-country-evidence',
-        )
-
-        # --- Race/Ethnicity
-        patient.race_ethnicity = RaceEthnicity(
-            st.selectbox(
-                'Race/Ethnicity',
-                [r.value for r in RaceEthnicity],
-                index=[r.value for r in RaceEthnicity].index(
-                    patient.race_ethnicity.value
-                )
-                if patient.race_ethnicity
-                else 0,
-                key=f'{key_prefix}-race',
+            st.text_area(
+                'Age at Diagnosis Evidence',
+                patient.age_diagnosis_evidence or '',
+                height=60,
+                disabled=True,
+                key=f'{key_prefix}-age-diagnosis-evidence',
             )
-        )
 
-        st.text_area(
-            'Race/Ethnicity Evidence',
-            patient.race_ethnicity_evidence or '',
-            height=60,
-            disabled=True,
-            key=f'{key_prefix}-race-evidence',
-        )
+        with col2:
+            patient.age_report = st.text_input(
+                'Age at Report',
+                patient.age_report or '',
+                key=f'{key_prefix}-age-report',
+            )
+            st.text_area(
+                'Age at Report Evidence',
+                patient.age_report_evidence or '',
+                height=60,
+                disabled=True,
+                key=f'{key_prefix}-age-report-evidence',
+            )
+
+        with col3:
+            patient.age_death = st.text_input(
+                'Age at Death',
+                patient.age_death or '',
+                key=f'{key_prefix}-age-death',
+            )
+            st.text_area(
+                'Age at Death Evidence',
+                patient.age_death_evidence or '',
+                height=60,
+                disabled=True,
+                key=f'{key_prefix}-age-death-evidence',
+            )
+
+        # =========================
+        # Country + Ethnicity (2 columns with grouped evidence)
+        # =========================
+        col1, col2 = st.columns(2)
+
+        with col1:
+            patient.country_of_origin = CountryCode(
+                st.selectbox(
+                    'Country of Origin',
+                    [c.value for c in CountryCode],
+                    index=[c.value for c in CountryCode].index(
+                        patient.country_of_origin.value
+                    )
+                    if patient.country_of_origin
+                    else 0,
+                    key=f'{key_prefix}-country',
+                )
+            )
+            st.text_area(
+                'Country of Origin Evidence',
+                patient.country_of_origin_evidence or '',
+                height=60,
+                disabled=True,
+                key=f'{key_prefix}-country-evidence',
+            )
+
+        with col2:
+            patient.race_ethnicity = RaceEthnicity(
+                st.selectbox(
+                    'Race/Ethnicity',
+                    [r.value for r in RaceEthnicity],
+                    index=[r.value for r in RaceEthnicity].index(
+                        patient.race_ethnicity.value
+                    )
+                    if patient.race_ethnicity
+                    else 0,
+                    key=f'{key_prefix}-race',
+                )
+            )
+            st.text_area(
+                'Race/Ethnicity Evidence',
+                patient.race_ethnicity_evidence or '',
+                height=60,
+                disabled=True,
+                key=f'{key_prefix}-race-evidence',
+            )
 
 
-paper, _, _, center = render_paper_header()
+paper, paper_resp, paper_extraction_output, center = render_paper_header()
 with center:
     with open(paper.patient_info_json_path, 'r') as f:
         data = json.load(f)

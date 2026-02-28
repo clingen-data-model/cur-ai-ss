@@ -16,27 +16,27 @@ from lib.ui.api import (
     requeue_paper,
 )
 
-st.set_page_config(layout='wide')
-
-paper_id = st.query_params.get('paper_id')
-if paper_id is None:
-    st.warning('No paper_id provided in URL.')
-    st.stop()
-
-with st.spinner('Loading paper...'):
-    try:
-        paper_resp: PaperResp = get_paper(paper_id)
-        if paper_resp is None:
-            st.stop()
-    except requests.HTTPError as e:
-        st.error(f'Failed to load paper: {get_http_error_detail(e)}')
-    except Exception as e:
-        st.error(str(e))
-
 
 def render_paper_header() -> tuple[
     Paper, PaperResp, PaperExtractionOutput, st.delta_generator.DeltaGenerator
 ]:
+    st.set_page_config(layout='wide')
+
+    paper_id = st.query_params.get('paper_id')
+    if paper_id is None:
+        st.warning('No paper_id provided in URL.')
+        st.stop()
+
+    with st.spinner('Loading paper...'):
+        try:
+            paper_resp: PaperResp = get_paper(paper_id)
+            if paper_resp is None:
+                st.stop()
+        except requests.HTTPError as e:
+            st.error(f'Failed to load paper: {get_http_error_detail(e)}')
+        except Exception as e:
+            st.error(str(e))
+
     left, center, right = st.columns([1, 10, 1])
     with left:
         with st.container(horizontal=True, vertical_alignment='center'):
