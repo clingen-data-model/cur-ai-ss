@@ -60,7 +60,7 @@ class PatientVariantLink(BaseModel):
     confidence: Literal['high', 'moderate', 'low']
     linkage_notes: str
     testing_methods: List[TestingMethod]
-    testing_methods_evidence: List[str | None]
+    testing_methods_evidence: List[str]
 
     @model_validator(mode='after')
     def max_two_methods(self) -> Self:
@@ -206,23 +206,21 @@ Do NOT use `inferred_from_family_context` if:
 TESTING METHOD EXTRACTION RULES
 ---------------------------------------------------
 
-For each patient–variant link, identify the **top two most relevant testing methods**
-used in the study to generate the reported variant findings.
+For each patient–variant link, identify up to two testing methods that directly contributed to identifying or confirming the variant.
 
 You must:
 
-1. Select at most TWO methods.
-2. Rank them in order of relevance (most relevant first).
-3. Base relevance on what was actually used to generate the reported findings
+1. Identify up to two relevant testing methods.
+2. Base relevance on what was actually used to generate the reported findings
    (not background methods or confirmatory-only assays unless they are primary).
-4. Prefer explicitly stated methods in the text.
-5. If multiple methods are mentioned, choose the two that contributed most directly
+3. Prefer explicitly stated methods in the text.
+4. If multiple methods are mentioned, choose the two that contributed most directly
    to variant discovery or diagnosis.
-6. If only one method is clearly described, return a single method.
-7. If no method can be confidently determined:
+5. If only one method is clearly described, return a single method.
+6. If no method can be confidently determined:
       - Output: [Unknown]
-      - Output testing_methods_evidence: [None]
-8. Do NOT invent or guess values.
+      - Output testing_methods_evidence: []
+7. Do NOT invent or guess values.
 
 Allowed methods (must match exactly):
 
@@ -250,7 +248,7 @@ Evidence requirements:
     - Clearly support its use in generating findings
 - Each method must have a corresponding evidence entry.
 - The length of testing_methods and testing_methods_evidence must match.
-- If method is Unknown → evidence must be None.
+- If testing_methods = [Unknown], then testing_methods_evidence must be an empty list.
 
 Do NOT:
 - Select methods mentioned only in background discussion
@@ -347,7 +345,8 @@ VALIDATION
     - The variant exactly matches one of the structured variants
     - The evidence is explicit enough to support the link
 - Confirm testing_methods contains at most two values.
-- Confirm testing_methods_evidence length matches testing_methods.
+- Confirm that the number of testing_methods_evidence entries exactly equals 
+the number of testing_methods.  If testing_methods = [Unknown], then testing_methods_evidence must be an empty list.
 - If any check fails, remove the link
 - Do NOT create links for wild-type or negative genotypes
 - Multiple patients sharing a variant should result in separate links
