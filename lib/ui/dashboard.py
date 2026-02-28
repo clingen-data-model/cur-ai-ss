@@ -79,11 +79,11 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
         lambda paper_id: f'{env.PROTOCOL}{env.API_ENDPOINT}{papers_by_id[paper_id].pdf_thumbnail_path}'  # note the leading slash
     )
     df['title'] = df.apply(
-        lambda row: f'/paper/header?paper_id={row["id"]}#{papers_by_id[row["id"]].title or QUEUED_EXTRACTION_TEXT}',
+        lambda row: f'/paper-pdf?paper_id={row["id"]}#{papers_by_id[row["id"]].title or QUEUED_EXTRACTION_TEXT}',
         axis=1,
     )
     df['first_author'] = df.apply(
-        lambda row: f'/paper/header?paper_id={row["id"]}#{papers_by_id[row["id"]].first_author or QUEUED_EXTRACTION_TEXT}',
+        lambda row: f'/paper-pdf?paper_id={row["id"]}#{papers_by_id[row["id"]].first_author or QUEUED_EXTRACTION_TEXT}',
         axis=1,
     )
     status_map = {
@@ -92,7 +92,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
         'FAILED': 'Failed ❌',
     }
     df['extraction_status'] = df.apply(
-        lambda row: f'/paper/header?paper_id={row["id"]}#{status_map.get(row["extraction_status"], row["extraction_status"])}',
+        lambda row: f'/paper-pdf?paper_id={row["id"]}#{status_map.get(row["extraction_status"], row["extraction_status"])}',
         axis=1,
     )
     st.data_editor(
