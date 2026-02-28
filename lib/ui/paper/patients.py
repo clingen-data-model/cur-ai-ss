@@ -1,4 +1,5 @@
 import json
+from collections import defaultdict
 
 import streamlit as st
 
@@ -10,13 +11,23 @@ from lib.agents.patient_extraction_agent import (
     RaceEthnicity,
     SexAtBirth,
 )
+from lib.agents.patient_variant_linking_agent import (
+    PatientVariantLink,
+    PatientVariantLinkerOutput,
+)
+from lib.agents.variant_extraction_agent import Variant, VariantExtractionOutput
+from lib.agents.variant_harmonization_agent import (
+    HarmonizedVariant,
+    VariantHarmonizationOutput,
+)
 from lib.ui.paper.header import PaperQueryParams, render_paper_header
 
 
 def render_patient(
     patient: PatientInfo,
+    patient_links: list[tuple[PatientVariantLink, Variant, HarmonizedVariant]],
+    expanded: bool,
     key_prefix: str,
-    expanded: bool = False,
 ) -> None:
     with st.expander(
         f'{patient.identifier or "N/A"}',
@@ -171,18 +182,101 @@ def render_patient(
                 key=f'{key_prefix}-race-evidence',
             )
 
+        variant_count = len(patient_links)
+        if variant_count == 0:
+            st.caption('No linked variants', text_alignment='center')
+            return
+        with st.popover(f'Variants ({variant_count})', width='stretch'):
+            for i, (link, variant, harmonized_variant) in enumerate(patient_links):
+                title = (
+                    variant.variant_description_verbatim
+                    or harmonized_variant.hgvs_c
+                    or harmonized_variant.hgvs_p
+                    or f'Variant {link.variant_id}'
+                )
+                st.page_link(
+                    'paper/variants.py',  # adjust path to your actual variants page
+                    label=title,
+                    query_params={ # type: ignore
+                        'paper_id': paper_query_params.paper_id,
+                        'variant_id': link.variant_id,
+                    },
+                )
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown(
+                        f'**Zygosity:** {link.zygosity.value}  \n'
+                        f'**Inheritance:** {link.inheritance.value}  \n'
+                        f'**Link Type:** {link.link_type.value}'
+                    )
 
-# -----------------------------
-# Load patients
-# -----------------------------
+                with col2:
+                    testing = (
+                        f'  \n**Testing:** {", ".join(m.value for m in link.testing_methods)}'
+                        if link.testing_methods
+                        else ''
+                    )
+                    st.markdown(f'**Confidence:** {link.confidence}{testing}')
+
+                if link.evidence_context:
+                    st.markdown(f'**Evidence:** {link.evidence_context}')
+
+                if link.testing_methods_evidence:
+                    st.markdown(
+                        f'**Testing Evidence:** '
+                        f'{", ".join(link.testing_methods_evidence)}'
+                    )
+
+                if link.linkage_notes:
+                    with st.expander('Notes', expanded=False):
+                        st.write(link.linkage_notes)
+
+                # subtle separator between variants (not after last)
+                if i < len(patient_links) - 1:
+                    st.markdown('---')
+
+
 paper_query_params = PaperQueryParams.from_query_params()
 paper, paper_resp, paper_extraction_output, center = render_paper_header()
 with center:
+    # -----------------------------
+    # Load patients & variants & links
+    # -----------------------------
     with open(paper.patient_info_json_path, 'r') as f:
-        data = json.load(f)
+        patient_info_data = json.load(f)
     patients: list[PatientInfo] = PatientInfoExtractionOutput.model_validate(
-        data
+        patient_info_data
     ).patients
+    with open(paper.variants_json_path, 'r') as f:
+        extracted_data = json.load(f)
+        extracted_variants: list[Variant] = VariantExtractionOutput.model_validate(
+            extracted_data
+        ).variants
+    with open(paper.harmonized_variants_json_path, 'r') as f:
+        harmonized_variant_data = json.load(f)
+        harmonized_variants: list[HarmonizedVariant] = (
+            VariantHarmonizationOutput.model_validate(harmonized_variant_data).variants
+        )
+    with open(paper.patient_variant_links_json_path, 'r') as f:
+        link_data = json.load(f)
+    links: list[PatientVariantLink] = PatientVariantLinkerOutput.model_validate(
+        link_data
+    ).links
+    links_by_patient: dict[
+        int, list[tuple[PatientVariantLink, Variant, HarmonizedVariant]]
+    ] = defaultdict(list)
+    for link in links:
+        links_by_patient[link.patient_id].append(
+            (
+                link,
+                extracted_variants[link.variant_id - 1],
+                harmonized_variants[link.variant_id - 1],
+            )
+        )
+
+    # -----------------------------
+    # Display Patients
+    # -----------------------------
     indexed_patients = list(enumerate(patients, start=1))
     probands = [
         (i, p) for i, p in indexed_patients if p.proband_status == ProbandStatus.Proband
@@ -207,8 +301,9 @@ with center:
             st.markdown(f'### Patient {original_idx}')
             render_patient(
                 patient,
-                key_prefix=f'patient-{original_idx}',
+                patient_links=links_by_patient.get(original_idx, []),
                 expanded=(paper_query_params.patient_id == original_idx),
+                key_prefix=f'patient-{original_idx}',
             )
     with non_proband_tab:
         if not non_probands:
@@ -217,6 +312,7 @@ with center:
             st.markdown(f'### Patient {original_idx}')
             render_patient(
                 patient,
-                key_prefix=f'patient-{original_idx}',
+                patient_links=links_by_patient.get(original_idx, []),
                 expanded=(paper_query_params.patient_id == original_idx),
+                key_prefix=f'patient-{original_idx}',
             )
