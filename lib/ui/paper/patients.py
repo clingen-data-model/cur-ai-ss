@@ -194,12 +194,9 @@ paper, paper_resp, paper_extraction_output, center = render_paper_header()
 with center:
     with open(paper.patient_info_json_path, 'r') as f:
         data = json.load(f)
-
     patients: list[PatientInfo] = PatientInfoExtractionOutput.model_validate(
         data
     ).patients
-
-    # Preserve original indices
     indexed_patients = list(enumerate(patients, start=1))
     probands = [
         (i, p) for i, p in indexed_patients if p.proband_status == ProbandStatus.Proband
@@ -207,12 +204,15 @@ with center:
     non_probands = [
         (i, p) for i, p in indexed_patients if p.proband_status != ProbandStatus.Proband
     ]
+    tabs = [
+        f'Probands ({len(probands)})',
+        f'Non-Probands ({len(non_probands)})',
+    ]
     proband_tab, non_proband_tab = st.tabs(
-        [
-            f'Probands ({len(probands)})',
-            f'Non-Probands ({len(non_probands)})',
-        ],
-        default=f'Non-Probands ({len(non_probands)})' if selected_patient_idx in {p[0] for p in non_probands} else f'Probands ({len(probands)})',
+        tabs,
+        default=tabs[1]
+        if selected_patient_idx in {p[0] for p in non_probands}
+        else tabs[0],
     )
     with proband_tab:
         if not probands:
