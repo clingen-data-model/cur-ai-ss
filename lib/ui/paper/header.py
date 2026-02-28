@@ -37,7 +37,7 @@ class PaperQueryParams(BaseModel):
             st.stop()
 
         try:
-            return cls(**raw_params)
+            return cls(**raw_params)  # type: ignore
         except ValidationError:
             # If ints fail to parse, fall back to None instead of crashing
             return cls(

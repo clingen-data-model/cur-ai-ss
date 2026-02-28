@@ -12,24 +12,6 @@ ESEARCH_ENDPOINT = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
 EFETCH_ENDPOINT = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
 
 
-class TestingMethod(str, Enum):
-    Chromosomal_microarray = 'Chromosomal microarray'
-    Next_generation_sequencing_panels = 'Next generation sequencing panels'
-    Exome_sequencing = 'Exome sequencing'
-    Genome_sequencing = 'Genome sequencing'
-    Sanger_sequencing = 'Sanger sequencing'
-    Pcr = 'PCR'
-    Homozygosity_mapping = 'Homozygosity mapping'
-    Linkage_analysis = 'Linkage analysis'
-    Genotyping = 'Genotyping'
-    Denaturing_gradient_gel = 'Denaturing gradient gel'
-    High_resolution_melting = 'High resolution melting'
-    Restriction_digest = 'Restriction digest'
-    Single_strand_conformation_polymorphism = 'Single-strand conformation polymorphism'
-    Unknown = 'Unknown'
-    Other = 'Other'
-
-
 class PaperType(str, Enum):
     Letter = 'Letter'
     Research = 'Research'
@@ -50,20 +32,12 @@ class PaperExtractionOutput(BaseModel):
     doi: str | None = None
     pmid: str | None = None
     pmcid: str | None = None
-    testing_methods: List[TestingMethod]
-    testing_methods_evidence: List[str | None]
     paper_types: List[PaperType]
 
     @model_validator(mode='after')
     def max_two_paper_types(self) -> Self:
         if len(self.paper_types) > 2:
             raise ValueError('paper_types must contain at most two items')
-        return self
-
-    @model_validator(mode='after')
-    def max_two_methods(self) -> Self:
-        if len(self.testing_methods) > 2:
-            raise ValueError('testing_methods must contain at most two items')
         return self
 
 
@@ -160,39 +134,7 @@ Task Overview:
        - pmcid: PubmedData/ArticleIdList/ArticleId with IdType="pmc"
      - Do not invent values.
 
-2. **Top-Two Testing Method Selection**
-  - From the list below, identify the **top two most relevant testing methods** used in the study.
-  - Provide exact evidence text for each method.
-  - Rules:
-    - Select **at most two** methods.
-    - Rank them in order of relevance (most relevant first).
-    - Base relevance on what was actually used to generate the reported findings (not background methods or confirmatory-only assays).
-    - Prefer explicitly stated methods in the text.
-    - If multiple methods are mentioned, choose the two that contributed most directly to variant discovery or diagnosis.
-    - If only one method is clearly described, return a single method.
-    - If no method can be confidently determined, output `Unknown` for the method and `None` for evidence.
-    - Do not invent or guess values.
-  - Allowed methods:
-    - Chromosomal_microarray – Genome-wide copy number analysis.
-    - Next_generation_sequencing_panels – Targeted multi-gene NGS.
-    - Exome_sequencing – Coding regions only (WES).
-    - Genome_sequencing – Whole genome (WGS).
-    - Sanger_sequencing – Capillary sequencing.
-    - Pcr – PCR-based testing.
-    - Homozygosity_mapping – Shared homozygous region analysis.
-    - Linkage_analysis – Family-based locus mapping.
-    - Genotyping – Predefined variant testing.
-    - Denaturing_gradient_gel – DGGE variant detection.
-    - High_resolution_melting – HRM variant detection.
-    - Restriction_digest – Restriction enzyme assay.
-    - Single_strand_conformation_polymorphism – SSCP variant detection.
-    - Unknown – Method not stated.
-    - Other – Method not listed.
-  - Output format:
-    - testing_methods: [<method_1>, <method_2>]
-    - testing_methods_evidence: [<evidence method_1>, <evidence method_2>]
-
-3. **Paper Type Selection**
+2. **Paper Type Selection**
  - Classify the paper into at MOST two of the following types:
    - Letter: Short correspondence or “Letter to the Editor”; brief report or commentary with limited data and minimal methodological detail.
    - Research: Full original research article presenting novel experimental, computational, or clinical findings with complete methods, results, and discussion.

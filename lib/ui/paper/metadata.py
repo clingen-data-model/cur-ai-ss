@@ -5,7 +5,6 @@ import streamlit as st
 from lib.agents.paper_extraction_agent import (
     PaperExtractionOutput,
     PaperType,
-    TestingMethod,
 )
 from lib.ui.helpers import paper_extraction_output_to_markdown
 from lib.ui.paper.header import render_paper_header
@@ -54,28 +53,6 @@ def render_editable_paper_extraction_tab(
     paper_extraction_output.abstract = st.text_area(
         'Abstract', paper_extraction_output.abstract, height=200
     )
-
-    # Testing methods
-    for i in range(len(paper_extraction_output.testing_methods)):
-        paper_extraction_output.testing_methods[i] = TestingMethod(
-            st.selectbox(
-                f'Testing Method #{i + 1}',
-                [tm.value for tm in TestingMethod],
-                index=[tm.value for tm in TestingMethod].index(
-                    paper_extraction_output.testing_methods[i].value
-                )
-                if paper_extraction_output.testing_methods[i]
-                else 0,
-                key=f'{i}-testing-method',
-            )
-        )
-
-        paper_extraction_output.testing_methods_evidence[i] = st.text_area(
-            f'Testing Method #{i + 1} Evidence',
-            paper_extraction_output.testing_methods_evidence[i] or '',
-            height=150,
-            key=f'{i}-testing-evidence',
-        )
 
 
 paper, _, paper_extraction_output, center = render_paper_header()

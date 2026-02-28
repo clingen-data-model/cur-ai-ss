@@ -2,7 +2,8 @@ from enum import Enum
 from typing import List, Literal
 
 from agents import Agent
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
+from typing_extensions import Self
 
 from lib.evagg.utils.environment import env
 
@@ -26,6 +27,24 @@ class Inheritance(str, Enum):
     unknown = 'unknown'
 
 
+class TestingMethod(str, Enum):
+    Chromosomal_microarray = 'Chromosomal microarray'
+    Next_generation_sequencing_panels = 'Next generation sequencing panels'
+    Exome_sequencing = 'Exome sequencing'
+    Genome_sequencing = 'Genome sequencing'
+    Sanger_sequencing = 'Sanger sequencing'
+    Pcr = 'PCR'
+    Homozygosity_mapping = 'Homozygosity mapping'
+    Linkage_analysis = 'Linkage analysis'
+    Genotyping = 'Genotyping'
+    Denaturing_gradient_gel = 'Denaturing gradient gel'
+    High_resolution_melting = 'High resolution melting'
+    Restriction_digest = 'Restriction digest'
+    Single_strand_conformation_polymorphism = 'Single-strand conformation polymorphism'
+    Unknown = 'Unknown'
+    Other = 'Other'
+
+
 class LinkType(str, Enum):
     explicit = 'explicit'
     inferred_from_family_context = 'inferred_from_family_context'
@@ -40,6 +59,14 @@ class PatientVariantLink(BaseModel):
     evidence_context: str
     confidence: Literal['high', 'moderate', 'low']
     linkage_notes: str
+    testing_methods: List[TestingMethod]
+    testing_methods_evidence: List[str | None]
+
+    @model_validator(mode='after')
+    def max_two_methods(self) -> Self:
+        if len(self.testing_methods) > 2:
+            raise ValueError('testing_methods must contain at most two items')
+        return self
 
 
 class PatientVariantLinkerOutput(BaseModel):
@@ -82,7 +109,9 @@ For every valid patient–variant relationship found in the paper, return:
 - link_type
 - evidence_context
 - confidence
-
+- testing_methods
+- testing_methods_evidence
+- linkage_notes
 ---------------------------------------------------
 LINKING RULES
 ---------------------------------------------------
@@ -174,6 +203,62 @@ Do NOT use `inferred_from_family_context` if:
 - The patient’s membership in the group is ambiguous
 
 ---------------------------------------------------
+TESTING METHOD EXTRACTION RULES
+---------------------------------------------------
+
+For each patient–variant link, identify the **top two most relevant testing methods**
+used in the study to generate the reported variant findings.
+
+You must:
+
+1. Select at most TWO methods.
+2. Rank them in order of relevance (most relevant first).
+3. Base relevance on what was actually used to generate the reported findings
+   (not background methods or confirmatory-only assays unless they are primary).
+4. Prefer explicitly stated methods in the text.
+5. If multiple methods are mentioned, choose the two that contributed most directly
+   to variant discovery or diagnosis.
+6. If only one method is clearly described, return a single method.
+7. If no method can be confidently determined:
+      - Output: [Unknown]
+      - Output testing_methods_evidence: [None]
+8. Do NOT invent or guess values.
+
+Allowed methods (must match exactly):
+
+- Chromosomal_microarray – Genome-wide copy number analysis.
+- Next_generation_sequencing_panels – Targeted multi-gene NGS.
+- Exome_sequencing – Coding regions only (WES).
+- Genome_sequencing – Whole genome (WGS).
+- Sanger_sequencing – Capillary sequencing.
+- Pcr – PCR-based testing.
+- Homozygosity_mapping – Shared homozygous region analysis.
+- Linkage_analysis – Family-based locus mapping.
+- Genotyping – Predefined variant testing.
+- Denaturing_gradient_gel – DGGE variant detection.
+- High_resolution_melting – HRM variant detection.
+- Restriction_digest – Restriction enzyme assay.
+- Single_strand_conformation_polymorphism – SSCP variant detection.
+- Unknown – Method not stated.
+- Other – Method not listed.
+
+Evidence requirements:
+
+- testing_methods_evidence must:
+    - Be verbatim excerpts from the paper
+    - Directly mention the method
+    - Clearly support its use in generating findings
+- Each method must have a corresponding evidence entry.
+- The length of testing_methods and testing_methods_evidence must match.
+- If method is Unknown → evidence must be None.
+
+Do NOT:
+- Select methods mentioned only in background discussion
+- Select methods used only for literature review
+- Select methods unrelated to variant identification
+- Select more than two methods
+
+---------------------------------------------------
 ZYGOSITY INFERENCE RULES
 ---------------------------------------------------
 
@@ -261,6 +346,8 @@ VALIDATION
     - The patient is clearly identified (directly or via an unambiguous group)
     - The variant exactly matches one of the structured variants
     - The evidence is explicit enough to support the link
+- Confirm testing_methods contains at most two values.
+- Confirm testing_methods_evidence length matches testing_methods.
 - If any check fails, remove the link
 - Do NOT create links for wild-type or negative genotypes
 - Multiple patients sharing a variant should result in separate links
@@ -281,6 +368,7 @@ For each link you create, fill in the `linkage_notes` field with a concise, step
 4. How inheritance was inferred (if stated, from family context, or unknown)
 5. Any reasoning for choosing the link type (`explicit` vs `inferred_from_family_context`)
 6. Notes about confidence assignment
+7. How testing methods were selected, ranked, and supported by evidence
 
 Output each step in-order, numerically (e.g. 1. "step" ), new line delimited.
 
@@ -295,6 +383,7 @@ linkage_notes:
 4. Inheritance not specified → unknown
 5. Link type is explicit because patient-level statement exists
 6. Confidence is high due to direct textual evidence
+7. Testing method identified as Exome_sequencing based on explicit statement in Methods section
 """
 
 agent = Agent(

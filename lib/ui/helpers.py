@@ -1,4 +1,4 @@
-from lib.agents.paper_extraction_agent import PaperExtractionOutput, TestingMethod
+from lib.agents.paper_extraction_agent import PaperExtractionOutput
 
 
 def paper_extraction_output_to_markdown(paper: PaperExtractionOutput) -> str:
@@ -46,17 +46,5 @@ def paper_extraction_output_to_markdown(paper: PaperExtractionOutput) -> str:
     if paper.abstract:
         lines.append('## Abstract\n')
         lines.append(paper.abstract + '\n')
-
-    # Testing Methods (optional addition)
-    if paper.testing_methods:
-        method_lines = [
-            f'- **{method.value}**' + (f': {evidence}' if evidence else '')
-            for method, evidence in zip(
-                paper.testing_methods, paper.testing_methods_evidence
-            )
-        ]
-        lines.append('## Testing Methods\n')
-        lines.extend(method_lines)
-        lines.append('')  # newline
 
     return '\n'.join(lines)
