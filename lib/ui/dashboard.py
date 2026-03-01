@@ -87,7 +87,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
         axis=1,
     )
     df['pipeline_status'] = df.apply(
-        lambda row: f'/paper-pdf?paper_id={row["id"]}#{PipelineStatus(row["pipeline_status"]).icon}',
+        lambda row: f'/paper-pdf?paper_id={row["id"]}#{PipelineStatus(row["pipeline_status"]).value + PipelineStatus(row["pipeline_status"]).icon}',
         axis=1,
     )
     st.data_editor(

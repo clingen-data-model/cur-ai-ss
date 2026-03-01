@@ -79,46 +79,56 @@ def render_rerun_evagg_fragment(paper_query_params: PaperQueryParams) -> None:
 
 
 def render_paper_header() -> tuple[
-    Paper, PaperResp, PaperExtractionOutput, st.delta_generator.DeltaGenerator
+    Paper, PaperResp, PaperExtractionOutput | None, st.delta_generator.DeltaGenerator
 ]:
     st.set_page_config(layout='wide')
     paper_query_params = PaperQueryParams.from_query_params()
+    paper = Paper(id=paper_query_params.paper_id)
+    paper_extraction_output = None
     with st.spinner('Loading paper...'):
         try:
             paper_resp: PaperResp = get_paper(paper_query_params.paper_id)
             if paper_resp is None:
+                st.error(f'Failed to Fetch {paper_query_params.paper_id}')
+                st.divider()
                 st.stop()
+                return
         except requests.HTTPError as e:
             st.error(f'Failed to load paper: {get_http_error_detail(e)}')
+            st.stop()
+            return
         except Exception as e:
             st.error(str(e))
+            st.stop()
+            return
 
     left, center, right = st.columns([1, 10, 1])
     with left:
         with st.container(horizontal=True, vertical_alignment='center'):
             st.page_link('dashboard.py', label='Dashboard', icon='🏠')
     with center:
-        if paper_resp.pipeline_status == PipelineStatus.QUEUED:
+        if paper_resp.pipeline_status in {
+            PipelineStatus.EXTRACTION_COMPLETED,
+            PipelineStatus.LINKING_RUNNING,
+            PipelineStatus.LINKING_FAILED,
+            PipelineStatus.COMPLETED,
+        }:
+            with open(paper.metadata_json_path, 'r') as f:
+                data = json.load(f)
+                paper_extraction_output: PaperExtractionOutput = (
+                    PaperExtractionOutput.model_validate(data)
+                )
+            st.markdown(f'# {paper_extraction_output.title}')
+            parts = [
+                f'{paper_extraction_output.first_author} et al. {paper_extraction_output.publication_year}'
+            ]
+            if paper_extraction_output.pmid:
+                parts.append(f'PMID: {paper_extraction_output.pmid}')
+            if paper_extraction_output.journal_name:
+                parts.append(paper_extraction_output.journal_name)
+            st.caption(' • '.join(parts))
+        else:
             st.markdown(f'# {paper_resp.filename}')
-            st.caption('Not Yet Extracted...')
-            st.divider()
-            st.stop()
-
-        paper = Paper(id=paper_resp.id)
-        with open(paper.metadata_json_path, 'r') as f:
-            data = json.load(f)
-            paper_extraction_output: PaperExtractionOutput = (
-                PaperExtractionOutput.model_validate(data)
-            )
-        st.markdown(f'# {paper_extraction_output.title}')
-        parts = [
-            f'{paper_extraction_output.first_author} et al. {paper_extraction_output.publication_year}'
-        ]
-        if paper_extraction_output.pmid:
-            parts.append(f'PMID: {paper_extraction_output.pmid}')
-        if paper_extraction_output.journal_name:
-            parts.append(paper_extraction_output.journal_name)
-        st.caption(' • '.join(parts))
         st.divider()
         left, right = st.columns([4, 2])
         with left:
@@ -144,25 +154,23 @@ def render_paper_header() -> tuple[
                 vertical_alignment='center',
                 horizontal_alignment='center',
             ):
-                if paper_resp.pipeline_status == PipelineStatus.COMPLETED:
-                    st.badge('AI Pipeline Completed', icon='🎉', color='green')
-                elif paper_resp.pipeline_status == PipelineStatus.EXTRACTION_COMPLETED:
-                    st.badge(
-                        'Extraction Completed', icon='check_circle', color='violet'
-                    )
-                elif paper_resp.pipeline_status in {
-                    PipelineStatus.LINKING_RUNNING,
-                    PipelineStatus.EXTRACTION_RUNNING,
-                }:
-                    st.badge(paper_resp.pipeline_status, icon='🟡', color='yellow')
-                elif paper_resp.pipeline_status == PipelineStatus.QUEUED:
-                    st.badge('Pipeline Queued', icon='⏳', color='yellow')
-                elif paper_resp.pipeline_status in {
-                    PipelineStatus.LINKING_FAILED,
-                    PipelineStatus.EXTRACTION_FAILED,
-                }:
-                    st.badge(paper_resp.pipeline_status.value, icon='❌', color='red')
-                with st.popover('🔄 Rerun EvAGG', type='tertiary'):
+                st.badge(
+                    paper_resp.pipeline_status.value,
+                    icon=paper_resp.pipeline_status.icon,
+                    color=paper_resp.pipeline_status.color,
+                )
+                with st.popover(
+                    '🔄 Rerun Extraction Pipeline',
+                    type='tertiary',
+                    disabled=(
+                        paper_resp.pipeline_status
+                        in {
+                            PipelineStatus.QUEUED,
+                            PipelineStatus.EXTRACTION_RUNNING,
+                            PipelineStatus.LINKING_RUNNING,
+                        }
+                    ),
+                ):
                     render_rerun_evagg_fragment(paper_query_params)
                 if st.button('🗑️ Delete Paper', type='tertiary', width='content'):
                     try:

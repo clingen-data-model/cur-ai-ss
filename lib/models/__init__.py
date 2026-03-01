@@ -47,6 +47,18 @@ class PipelineStatus(str, Enum):
             PipelineStatus.COMPLETED: '🎉',
         }[self]
 
+    @property
+    def color(self) -> str:
+        return {
+            PipelineStatus.QUEUED: 'yellow',
+            PipelineStatus.EXTRACTION_RUNNING: 'yellow',
+            PipelineStatus.EXTRACTION_FAILED: 'red',
+            PipelineStatus.EXTRACTION_COMPLETED: 'violet',
+            PipelineStatus.LINKING_RUNNING: 'yellow',
+            PipelineStatus.LINKING_FAILED: 'red',
+            PipelineStatus.COMPLETED: 'green',
+        }[self]
+
 
 class GeneDB(Base):
     __tablename__ = 'genes'

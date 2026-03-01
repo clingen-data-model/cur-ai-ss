@@ -55,8 +55,11 @@ def render_editable_paper_extraction_tab(
     )
 
 
-paper, _, paper_extraction_output, center = render_paper_header()
+paper, paper_resp, paper_extraction_output, center = render_paper_header()
 with center:
+    if not paper_extraction_output:
+        st.write(f'{paper_resp.filename} not yet extracted...')
+        st.stop()
     md_tab, editable_tab = st.tabs(['View', 'Edit'])
     with md_tab:
         st.markdown(paper_extraction_output_to_markdown(paper_extraction_output))

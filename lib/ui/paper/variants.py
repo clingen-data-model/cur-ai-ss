@@ -15,10 +15,17 @@ from lib.agents.variant_harmonization_agent import (
     VariantHarmonizationOutput,
 )
 from lib.ui.paper.header import PaperQueryParams, render_paper_header
+from lib.models import PipelineStatus
 
 paper_query_params = PaperQueryParams.from_query_params()
 paper, paper_resp, paper_extraction_output, center = render_paper_header()
 with center:
+    if not paper_extraction_output:
+        st.write(f'{paper_resp.filename} not yet extracted...')
+        st.stop()
+    if paper_resp.pipeline_status != PipelineStatus.COMPLETED:
+        st.write(f'Entity Linking not yet completed...')
+        st.stop()
     with open(paper.variants_json_path, 'r') as f:
         extracted_data = json.load(f)
         extracted_variants: list[Variant] = VariantExtractionOutput.model_validate(
