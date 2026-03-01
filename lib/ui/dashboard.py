@@ -6,7 +6,7 @@ import streamlit as st
 
 from lib.evagg.types.base import Paper
 from lib.evagg.utils.environment import env
-from lib.models import ExtractionStatus, PaperResp
+from lib.models import PaperResp, PipelineStatus
 from lib.ui.api import (
     delete_paper,
     get_genes,
@@ -86,13 +86,8 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
         lambda row: f'/paper-pdf?paper_id={row["id"]}#{papers_by_id[row["id"]].first_author or QUEUED_EXTRACTION_TEXT}',
         axis=1,
     )
-    status_map = {
-        'PARSED': 'Parsed ✅',
-        'QUEUED': 'Queued ⏳',
-        'FAILED': 'Failed ❌',
-    }
-    df['extraction_status'] = df.apply(
-        lambda row: f'/paper-pdf?paper_id={row["id"]}#{status_map.get(row["extraction_status"], row["extraction_status"])}',
+    df['pipeline_status'] = df.apply(
+        lambda row: f'/paper-pdf?paper_id={row["id"]}#{PipelineStatus(row["pipeline_status"]).icon}',
         axis=1,
     )
     st.data_editor(
@@ -103,7 +98,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
                 'title',
                 'first_author',
                 'filename',
-                'extraction_status',
+                'pipeline_status',
             ]
         ],
         row_height=100,
@@ -126,7 +121,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
                 display_text=r'.*?#(.+)$',
             ),
             'filename': st.column_config.Column('Filename'),
-            'extraction_status': st.column_config.LinkColumn(
+            'pipeline_status': st.column_config.LinkColumn(
                 'Extraction Status',
                 # Regex to extract text after the '#'
                 # Note, this is a major hack to get around the lack of a better way of doing this.
@@ -139,7 +134,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
             'title',
             'first_author',
             'filename',
-            'extraction_status',
+            'pipeline_status',
         ],
         num_rows='delete',
         key=CURATIONS_DF_KEY,

@@ -10,7 +10,7 @@ from lib.agents.paper_extraction_agent import (
     PaperExtractionOutput,
 )
 from lib.evagg.types.base import Paper
-from lib.models import ExtractionStatus, PaperResp
+from lib.models import PaperResp, PipelineStatus
 from lib.ui.api import (
     delete_paper,
     get_http_error_detail,
@@ -47,6 +47,37 @@ class PaperQueryParams(BaseModel):
             )
 
 
+@st.fragment
+def render_rerun_evagg_fragment(paper_query_params: PaperQueryParams) -> None:
+    rerun_mode = st.radio(
+        'What would you like to rerun?',
+        options=[
+            'Full pipeline (initial extraction + linking)',
+            'Linking only (reuse existing initial extraction)',
+        ],
+    )
+    prompt_override = st.text_area(
+        'Optional override instructions for the backend agent:',
+        placeholder='Give context to the agent about the mistake.',
+    )
+    confirm = st.button('Confirm Rerun', type='secondary')
+    if confirm:
+        try:
+            requeue_paper(
+                paper_id=paper_query_params.paper_id,
+                pipeline_status=(
+                    PipelineStatus.QUEUED
+                    if rerun_mode == 'Full pipeline (initial extraction + linking)'
+                    else PipelineStatus.EXTRACTION_COMPLETED
+                ),
+                prompt_override=prompt_override or None,
+            )
+            st.toast('EvAGG Job Queued', icon=':material/thumb_up:')
+            st.rerun()
+        except Exception as e:
+            st.toast(f'Failed to requeue: {str(e)}', icon='❌')
+
+
 def render_paper_header() -> tuple[
     Paper, PaperResp, PaperExtractionOutput, st.delta_generator.DeltaGenerator
 ]:
@@ -67,11 +98,12 @@ def render_paper_header() -> tuple[
         with st.container(horizontal=True, vertical_alignment='center'):
             st.page_link('dashboard.py', label='Dashboard', icon='🏠')
     with center:
-        if paper_resp.extraction_status != ExtractionStatus.PARSED:
+        if paper_resp.pipeline_status == PipelineStatus.QUEUED:
             st.markdown(f'# {paper_resp.filename}')
             st.caption('Not Yet Extracted...')
             st.divider()
             st.stop()
+
         paper = Paper(id=paper_resp.id)
         with open(paper.metadata_json_path, 'r') as f:
             data = json.load(f)
@@ -112,21 +144,26 @@ def render_paper_header() -> tuple[
                 vertical_alignment='center',
                 horizontal_alignment='center',
             ):
-                if paper_resp.extraction_status == ExtractionStatus.PARSED:
+                if paper_resp.pipeline_status == PipelineStatus.COMPLETED:
+                    st.badge('AI Pipeline Completed', icon='🎉', color='green')
+                elif paper_resp.pipeline_status == PipelineStatus.EXTRACTION_COMPLETED:
                     st.badge(
-                        'AI Extraction Success', icon=':material/check:', color='green'
+                        'Extraction Completed', icon='check_circle', color='violet'
                     )
-                elif paper_resp.extraction_status == ExtractionStatus.QUEUED:
-                    st.badge('AI Extraction Queued', icon='⏳', color='yellow')
-                elif paper_resp.extraction_status == ExtractionStatus.FAILED:
-                    st.badge('AI Extraction Failed', icon='❌', color='red')
-                if st.button('🔄 Rerun EvAGG', type='tertiary', width='content'):
-                    try:
-                        requeue_paper(paper_query_params.paper_id)
-                        st.toast('EvAGG Job Queued', icon=':material/thumb_up:')
-                        st.rerun()
-                    except Exception as e:
-                        st.toast(f'Failed to requeue: {str(e)}', icon='❌')
+                elif paper_resp.pipeline_status in {
+                    PipelineStatus.LINKING_RUNNING,
+                    PipelineStatus.EXTRACTION_RUNNING,
+                }:
+                    st.badge(paper_resp.pipeline_status, icon='🟡', color='yellow')
+                elif paper_resp.pipeline_status == PipelineStatus.QUEUED:
+                    st.badge('Pipeline Queued', icon='⏳', color='yellow')
+                elif paper_resp.pipeline_status in {
+                    PipelineStatus.LINKING_FAILED,
+                    PipelineStatus.EXTRACTION_FAILED,
+                }:
+                    st.badge(paper_resp.pipeline_status.value, icon='❌', color='red')
+                with st.popover('🔄 Rerun EvAGG', type='tertiary'):
+                    render_rerun_evagg_fragment(paper_query_params)
                 if st.button('🗑️ Delete Paper', type='tertiary', width='content'):
                     try:
                         delete_paper(paper_query_params.paper_id)

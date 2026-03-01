@@ -5,7 +5,7 @@ from pydantic import TypeAdapter
 
 from lib.evagg.types.base import Paper
 from lib.evagg.utils.environment import env
-from lib.models import ExtractionStatus, GeneResp, PaperResp
+from lib.models import GeneResp, PaperResp, PipelineStatus
 
 
 def get_http_error_detail(e: requests.HTTPError) -> str:
@@ -58,10 +58,12 @@ def put_paper(
     return PaperResp.model_validate(resp.json())
 
 
-def requeue_paper(paper_id: str) -> PaperResp:
+def requeue_paper(
+    paper_id: str, pipeline_status: PipelineStatus, prompt_override: str | None
+) -> PaperResp:
     resp = requests.patch(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}',
-        json={'extraction_status': ExtractionStatus.QUEUED.value},
+        json={'pipeline_status': pipeline_status, 'prompt_override': prompt_override},
     )
     resp.raise_for_status()
     return PaperResp.model_validate(resp.json())

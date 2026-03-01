@@ -197,7 +197,7 @@ def render_patient(
                 st.page_link(
                     'paper/variants.py',  # adjust path to your actual variants page
                     label=title,
-                    query_params={ # type: ignore
+                    query_params={  # type: ignore
                         'paper_id': paper_query_params.paper_id,
                         'variant_id': link.variant_id,
                     },

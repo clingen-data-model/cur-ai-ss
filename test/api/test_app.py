@@ -6,7 +6,7 @@ from sqlalchemy import func, select, update
 
 from lib.api.app import app
 from lib.api.db import get_session, session_scope
-from lib.models import ExtractionStatus, GeneDB, PaperDB
+from lib.models import GeneDB, PaperDB, PipelineStatus
 
 
 @pytest.fixture
@@ -63,7 +63,7 @@ def test_queue_new_paper(client, test_pdf, db_session, seeded_genes):
     assert response.status_code == 201
     data = response.json()
     assert data['id']  # Paper ID will be generated from content
-    assert data['extraction_status'] == ExtractionStatus.QUEUED.value
+    assert data['extraction_status'] == PipelineStatus.QUEUED.value
     assert data['filename'] == 'job-1.pdf'
     count = db_session.scalar(select(func.count(PaperDB.id)))
     assert count == 1
@@ -98,7 +98,7 @@ def test_get_paper_success(client, test_pdf, seeded_genes):
     assert get_response.status_code == 200
     data_get = get_response.json()
     assert data_get['id'] == paper_id
-    assert data_get['extraction_status'] == ExtractionStatus.QUEUED.value
+    assert data_get['extraction_status'] == PipelineStatus.QUEUED.value
     assert data_get['filename'] == 'job-1.pdf'
 
 
@@ -118,23 +118,23 @@ def test_update_paper_extraction_status(client, test_pdf, db_session, seeded_gen
     db_session.execute(
         update(PaperDB)
         .where(PaperDB.id == data['id'])
-        .values(extraction_status=ExtractionStatus.FAILED)
+        .values(extraction_status=PipelineStatus.EXTRACTION_FAILED)
     )
     response2 = client.patch(
         f'/papers/{data["id"]}',
-        json={'extraction_status': ExtractionStatus.QUEUED.value},
+        json={'extraction_status': PipelineStatus.QUEUED.value},
     )
     assert response2.status_code == 200
-    assert response2.json()['extraction_status'] == ExtractionStatus.QUEUED.value
+    assert response2.json()['extraction_status'] == PipelineStatus.QUEUED.value
     response3 = client.patch(
         f'/papers/{response2.json()["id"]}',
-        json={'extraction_status': ExtractionStatus.QUEUED.value},
+        json={'extraction_status': PipelineStatus.QUEUED.value},
     )
     assert response3.status_code == 409
     response4 = client.patch(
         f'/papers/abcd',
         json={
-            'extraction_status': ExtractionStatus.QUEUED.value,
+            'extraction_status': PipelineStatus.QUEUED.value,
         },
     )
     assert response4.status_code == 404
@@ -181,11 +181,11 @@ def test_list_papers_filtered_by_status(client, test_pdf, db_session, seeded_gen
         data={'gene_symbol': 'BRCA1'},
     )
     response = client.get(
-        '/papers', params={'extraction_status': ExtractionStatus.QUEUED.value}
+        '/papers', params={'extraction_status': PipelineStatus.QUEUED.value}
     )
     assert response.status_code == 200
     jobs = response.json()
-    assert all(job['extraction_status'] == ExtractionStatus.QUEUED for job in jobs)
+    assert all(job['extraction_status'] == PipelineStatus.QUEUED for job in jobs)
 
 
 def test_delete_paper(client, test_pdf, db_session, seeded_genes):
