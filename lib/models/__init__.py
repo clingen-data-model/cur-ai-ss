@@ -1,4 +1,6 @@
+from datetime import datetime
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel
 from sqlalchemy import (
@@ -50,7 +52,11 @@ class PipelineStatus(str, Enum):
         }[self]
 
     @property
-    def color(self) -> str:
+    def color(
+        self,
+    ) -> Literal[
+        'red', 'orange', 'yellow', 'blue', 'green', 'violet', 'gray', 'grey', 'primary'
+    ]:
         return {
             PipelineStatus.QUEUED: 'yellow',
             PipelineStatus.EXTRACTION_RUNNING: 'yellow',

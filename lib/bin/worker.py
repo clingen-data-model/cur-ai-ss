@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 import asyncio
+import datetime
 import json
 import logging
 import time
 import traceback
 
 from agents import Runner
-from sqlalchemy import select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 
@@ -33,6 +34,7 @@ from lib.evagg.types.base import Paper
 from lib.evagg.utils.web import RequestsWebContentClient, WebClientSettings
 from lib.models import PaperDB, PipelineStatus
 
+LEASE_TIMEOUT_S = 900
 POLL_INTERVAL_S = 10
 RETRIES = 2
 
@@ -222,6 +224,8 @@ def linking_tasks(paper_id: str) -> None:
 def main() -> None:
     while True:
         try:
+            now = datetime.datetime.utcnow()
+            expired_cutoff = now - datetime.timedelta(seconds=LEASE_TIMEOUT_S)
             with session_scope() as session:
                 # Extraction queue
                 extraction_job = session.scalars(
@@ -275,10 +279,6 @@ def main() -> None:
             if linking_job:
                 linking_tasks(paper_id)
                 continue
-
-            LEASE_TIMEOUT = timedelta(minutes=30)
-            now = datetime.utcnow()
-            expired_cutoff = now - LEASE_TIMEOUT
 
         except KeyboardInterrupt:
             logger.info('Shutting down poller')

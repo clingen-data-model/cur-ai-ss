@@ -782,23 +782,24 @@ Case B — Only hgvs returned:
         → RETURN None outputs.
         normalization_confidence = low
 
-Case C — No ClinVar records or the ClinVar lookup fails:
+Case C — ClinVar returns an empty list:
 
-    If hgvs_p OR hgvs_p_inferred present:
+    This branch is terminal for ClinVar.
+    You must not modify the query.
+    You must not call clinvar_lookup again, unless retrying for a network connectivity issue.
+    You must not attempt to reinterpret the protein string.
 
-        Call dbsnp_lookup using the same query string
-        that was constructed for ClinVar.
+    Immediately proceed to dbSNP lookup, calling dbsnp_lookup using the EXACT SAME query string.
 
-        If dbsnp_lookup returns genomic HGVS (hgvs_g):
+    If dbsnp_lookup returns genomic HGVS (hgvs_g):
+        For each returned hgvs_g:
+            Call gnomad_style_id_from_variant_validator
+            using hgvs_g directly.
 
-            For each returned hgvs_g:
-                Call gnomad_style_id_from_variant_validator
-                using hgvs_g directly.
-
-                If successful:
-                    Call allele_registry_resolver
-                    RETURN result.
-                    normalization_confidence = medium
+            If successful:
+                Call allele_registry_resolver
+                RETURN result.
+                normalization_confidence = medium
 
     If dbsnp_lookup returns no usable results:
         RETURN None outputs.

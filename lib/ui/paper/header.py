@@ -84,7 +84,7 @@ def render_paper_header() -> tuple[
     st.set_page_config(layout='wide')
     paper_query_params = PaperQueryParams.from_query_params()
     paper = Paper(id=paper_query_params.paper_id)
-    paper_extraction_output = None
+    paper_extraction_output: PaperExtractionOutput | None = None
     with st.spinner('Loading paper...'):
         try:
             paper_resp: PaperResp = get_paper(paper_query_params.paper_id)
@@ -115,9 +115,7 @@ def render_paper_header() -> tuple[
         }:
             with open(paper.metadata_json_path, 'r') as f:
                 data = json.load(f)
-                paper_extraction_output: PaperExtractionOutput = (
-                    PaperExtractionOutput.model_validate(data)
-                )
+                paper_extraction_output = PaperExtractionOutput.model_validate(data)
             st.markdown(f'# {paper_extraction_output.title}')
             parts = [
                 f'{paper_extraction_output.first_author} et al. {paper_extraction_output.publication_year}'
