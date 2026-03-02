@@ -73,17 +73,18 @@ def upload_paper_modal() -> None:
 
 
 def render_papers_df(papers_resps: list[PaperResp]) -> None:
-    papers_by_id = {p.id: Paper(id=p.id).with_metadata() for p in paper_resps}
     df = pd.DataFrame([p.model_dump() for p in paper_resps])
+    # Paper() below used to construct pdf_thumbnail_path.
+    # TODO it may make sense to add the image data into the PaperResp or add a /thumbnail endpoint
     df['thumbnail_path'] = df['id'].map(
-        lambda paper_id: f'{env.PROTOCOL}{env.API_ENDPOINT}{papers_by_id[paper_id].pdf_thumbnail_path}'  # note the leading slash
+        lambda paper_id: f'{env.PROTOCOL}{env.API_ENDPOINT}{Paper(id=paper_id).pdf_thumbnail_path}'
     )
     df['title'] = df.apply(
-        lambda row: f'/details?paper_id={row["id"]}#{papers_by_id[row["id"]].title or QUEUED_EXTRACTION_TEXT}',
+        lambda row: f'/details?paper_id={row["id"]}#{row["title"] or QUEUED_EXTRACTION_TEXT}',
         axis=1,
     )
     df['first_author'] = df.apply(
-        lambda row: f'/details?paper_id={row["id"]}#{papers_by_id[row["id"]].first_author or QUEUED_EXTRACTION_TEXT}',
+        lambda row: f'/details?paper_id={row["id"]}#{row["first_author"] or QUEUED_EXTRACTION_TEXT}',
         axis=1,
     )
     status_map = {

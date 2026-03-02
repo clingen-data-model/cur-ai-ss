@@ -6,7 +6,6 @@ import requests
 import streamlit as st
 
 from lib.agents.paper_extraction_agent import (
-    PaperExtractionOutput,
     PaperType,
     TestingMethod,
 )
@@ -39,71 +38,50 @@ from lib.ui.api import (
     get_paper_patients,
     requeue_paper,
 )
-from lib.ui.helpers import paper_extraction_output_to_markdown, paper_resp_to_markdown
+from lib.ui.helpers import paper_resp_to_markdown
 
 
 @st.fragment
-def render_editable_paper_extraction_tab(
-    paper_extraction_output: PaperExtractionOutput,
-) -> None:
-    paper_extraction_output.title = st.text_input(
-        'Title', paper_extraction_output.title
-    )
+def render_editable_paper_extraction_tab(paper_resp: PaperResp) -> None:
+    st.text_input('Title', paper_resp.title or '')
 
-    paper_extraction_output.first_author = st.text_input(
-        'First Author', paper_extraction_output.first_author
-    )
+    st.text_input('First Author', paper_resp.first_author or '')
 
     # Publication Year
-    pub_year_input = st.text_input(
+    st.text_input(
         'Publication Year',
-        str(paper_extraction_output.publication_year)
-        if paper_extraction_output.publication_year
-        else '',
-    )
-    paper_extraction_output.publication_year = (
-        int(pub_year_input) if pub_year_input.isdigit() else None
+        str(paper_resp.pub_year) if paper_resp.pub_year else '',
     )
 
-    paper_extraction_output.journal_name = st.text_input(
-        'Journal Name', paper_extraction_output.journal_name
+    st.text_input('Journal Name', paper_resp.journal or '')
+
+    st.pills(
+        'Paper Types',
+        options=[pt.value for pt in PaperType],
+        selection_mode='multi',
+        default=paper_resp.paper_types if paper_resp.paper_types else [],
+        key='paper-types',
     )
 
-    paper_extraction_output.paper_types = [
-        PaperType(pt)
-        for pt in st.pills(
-            'Paper Types',
-            options=[pt.value for pt in PaperType],
-            selection_mode='multi',
-            default=[pt.value for pt in paper_extraction_output.paper_types]
-            if paper_extraction_output.paper_types
-            else [],
-            key='paper-types',
-        )
-    ]
-
-    paper_extraction_output.abstract = st.text_area(
-        'Abstract', paper_extraction_output.abstract, height=200
-    )
+    st.text_area('Abstract', paper_resp.abstract or '', height=200)
 
     # Testing methods
-    for i in range(len(paper_extraction_output.testing_methods)):
-        paper_extraction_output.testing_methods[i] = TestingMethod(
-            st.selectbox(
-                f'Testing Method #{i + 1}',
-                [tm.value for tm in TestingMethod],
-                index=[tm.value for tm in TestingMethod].index(
-                    paper_extraction_output.testing_methods[i].value
-                )
-                if paper_extraction_output.testing_methods[i]
-                else 0,
-                key=f'{i}-testing-method',
-            )
+    testing_methods = paper_resp.testing_methods or []
+    testing_methods_evidence = paper_resp.testing_methods_evidence or []
+    for i, method in enumerate(testing_methods):
+        st.selectbox(
+            f'Testing Method #{i + 1}',
+            [tm.value for tm in TestingMethod],
+            index=[tm.value for tm in TestingMethod].index(method) if method else 0,
+            key=f'{i}-testing-method',
         )
 
-        paper_extraction_output.testing_methods_evidence[i] = st.text_area(
+        evidence = (
+            testing_methods_evidence[i] if i < len(testing_methods_evidence) else None
+        )
+        st.text_area(
             f'Testing Method #{i + 1} Evidence',
-            paper_extraction_output.testing_methods_evidence[i] or '',
+            evidence or '',
             height=150,
             key=f'{i}-testing-evidence',
         )
@@ -118,9 +96,10 @@ st.set_page_config(page_title='Curation Details', layout='wide')
 left, center, right = st.columns([1, 5, 1])
 
 with center:
+    paper_resp: PaperResp | None = None
     with st.spinner('Loading paper...'):
         try:
-            paper_resp: PaperResp = get_paper(paper_id)
+            paper_resp = get_paper(paper_id)
         except requests.HTTPError as e:
             st.error(f'Failed to load paper: {get_http_error_detail(e)}')
         except Exception as e:
@@ -200,37 +179,12 @@ with center:
     with tab2:
         if paper_resp.extraction_status != ExtractionStatus.PARSED:
             st.write('Not yet parsed')
-        elif paper_resp.title:
-            # DB has metadata — render from PaperResp
+        else:
             md_tab, editable_tab = st.tabs(['View', 'Edit'])
             with md_tab:
                 st.markdown(paper_resp_to_markdown(paper_resp))
             with editable_tab:
-                # Still need the full JSON for the editable form
-                paper = Paper(id=paper_resp.id)
-                data = json.load(open(paper.metadata_json_path, 'r'))
-                paper_extraction_output: PaperExtractionOutput = (
-                    PaperExtractionOutput.model_validate(data)
-                )
-                render_editable_paper_extraction_tab(paper_extraction_output)
-        else:
-            # Fallback to JSON
-            paper = Paper(id=paper_resp.id)
-            data = json.load(open(paper.metadata_json_path, 'r'))
-            paper_extraction_output = PaperExtractionOutput.model_validate(data)
-            md_tab, editable_tab = st.tabs(['View', 'Edit'])
-            with md_tab:
-                st.markdown(
-                    paper_extraction_output_to_markdown(paper_extraction_output)
-                )
-                st.download_button(
-                    label='Download JSON',
-                    data=json.dumps(data, indent=2),
-                    file_name='metadata.json',
-                    mime='application/json',
-                )
-            with editable_tab:
-                render_editable_paper_extraction_tab(paper_extraction_output)
+                render_editable_paper_extraction_tab(paper_resp)
 
     with tab3:
         if paper_resp.extraction_status != ExtractionStatus.PARSED:
