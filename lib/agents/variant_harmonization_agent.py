@@ -782,7 +782,7 @@ Case B — Only hgvs returned:
         → RETURN None outputs.
         normalization_confidence = low
 
-Case C — No ClinVar records:
+Case C — No ClinVar records or the ClinVar lookup fails:
 
     If hgvs_p OR hgvs_p_inferred present:
 

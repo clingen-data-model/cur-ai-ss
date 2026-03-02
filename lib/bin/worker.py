@@ -68,7 +68,7 @@ async def harmonize_variants_task_async(paper: Paper) -> None:
     result = await Runner.run(
         variant_harmonization_agent,
         f'Variants JSON:\n{json.dumps(variants_output, indent=2)}',
-        max_turns=7 * len(variants_output['variants']),
+        max_turns=10 * len(variants_output['variants']),
     )
     json_response = result.final_output.model_dump_json(indent=2)
     paper.harmonized_variants_json_path.parent.mkdir(parents=True, exist_ok=True)
@@ -226,8 +226,17 @@ def main() -> None:
                 # Extraction queue
                 extraction_job = session.scalars(
                     select(PaperDB)
-                    .where(PaperDB.pipeline_status == PipelineStatus.QUEUED)
-                    .order_by(PaperDB.id)
+                    .where(
+                        or_(
+                            PaperDB.pipeline_status == PipelineStatus.QUEUED,
+                            and_(
+                                PaperDB.pipeline_status
+                                == PipelineStatus.EXTRACTION_RUNNING,
+                                PaperDB.last_modified < expired_cutoff,
+                            ),
+                        )
+                    )
+                    .order_by(PaperDB.last_modified.asc())  # oldest first
                     .limit(1)
                 ).first()
 
@@ -245,9 +254,17 @@ def main() -> None:
                 linking_job = session.scalars(
                     select(PaperDB)
                     .where(
-                        PaperDB.pipeline_status == PipelineStatus.EXTRACTION_COMPLETED
+                        or_(
+                            PaperDB.pipeline_status
+                            == PipelineStatus.EXTRACTION_COMPLETED,
+                            and_(
+                                PaperDB.pipeline_status
+                                == PipelineStatus.LINKING_RUNNING,
+                                PaperDB.last_modified < expired_cutoff,
+                            ),
+                        )
                     )
-                    .order_by(PaperDB.id)
+                    .order_by(PaperDB.last_modified.asc())
                     .limit(1)
                 ).first()
 
@@ -258,6 +275,10 @@ def main() -> None:
             if linking_job:
                 linking_tasks(paper_id)
                 continue
+
+            LEASE_TIMEOUT = timedelta(minutes=30)
+            now = datetime.utcnow()
+            expired_cutoff = now - LEASE_TIMEOUT
 
         except KeyboardInterrupt:
             logger.info('Shutting down poller')

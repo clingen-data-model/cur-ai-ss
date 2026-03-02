@@ -353,7 +353,7 @@ the number of testing_methods.  If testing_methods = [Unknown], then testing_met
 
 Over-inference is a critical error
 When uncertain, do NOT create a link
-It is acceptable and correct to return an empty list
+If no links have been created, retry!
 
 ---------------------------------------------------
 LINKAGE NOTES FIELD

@@ -160,7 +160,7 @@ def render_paper_header() -> tuple[
                     color=paper_resp.pipeline_status.color,
                 )
                 with st.popover(
-                    '🔄 Rerun Extraction Pipeline',
+                    '🔄 Rerun Extraction',
                     type='tertiary',
                     disabled=(
                         paper_resp.pipeline_status

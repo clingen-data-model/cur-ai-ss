@@ -306,7 +306,7 @@ class PatientInfo(BaseModel):
     identifier: str  # Required
     proband_status: ProbandStatus
     sex: SexAtBirth
-    age_diagnosis: Optional[str]  # exact text from source
+    age_diagnosis: Optional[str]
     age_report: Optional[str]
     age_death: Optional[str]
     country_of_origin: CountryCode

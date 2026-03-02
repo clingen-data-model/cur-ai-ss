@@ -14,8 +14,8 @@ from lib.agents.variant_harmonization_agent import (
     HarmonizedVariant,
     VariantHarmonizationOutput,
 )
-from lib.ui.paper.header import PaperQueryParams, render_paper_header
 from lib.models import PipelineStatus
+from lib.ui.paper.header import PaperQueryParams, render_paper_header
 
 paper_query_params = PaperQueryParams.from_query_params()
 paper, paper_resp, paper_extraction_output, center = render_paper_header()

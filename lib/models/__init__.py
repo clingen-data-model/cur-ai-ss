@@ -3,9 +3,11 @@ from enum import Enum
 from pydantic import BaseModel
 from sqlalchemy import (
     Column,
+    DateTime,
     ForeignKey,
     Integer,
     String,
+    func,
 )
 from sqlalchemy import (
     Enum as SQLEnum,
@@ -28,7 +30,7 @@ class PipelineStatus(str, Enum):
 
     EXTRACTION_RUNNING = 'Extraction Running...'
     EXTRACTION_FAILED = 'Extraction Failed'
-    EXTRACTION_COMPLETED = 'Extraction Completd'
+    EXTRACTION_COMPLETED = 'Extraction Completed'
 
     LINKING_RUNNING = 'Linking Running...'
     LINKING_FAILED = 'Linking Failed'
@@ -41,7 +43,7 @@ class PipelineStatus(str, Enum):
             PipelineStatus.QUEUED: '⏳',
             PipelineStatus.EXTRACTION_RUNNING: '🟡',
             PipelineStatus.EXTRACTION_FAILED: '❌',
-            PipelineStatus.EXTRACTION_COMPLETED: '✅',
+            PipelineStatus.EXTRACTION_COMPLETED: '✔️',
             PipelineStatus.LINKING_RUNNING: '🟡',
             PipelineStatus.LINKING_FAILED: '❌',
             PipelineStatus.COMPLETED: '🎉',
@@ -105,6 +107,13 @@ class PaperDB(Base):
         SQLEnum(PipelineStatus),
         nullable=False,
         server_default=PipelineStatus.QUEUED.value,
+    )
+    last_modified: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+        index=True,
     )
 
     @property
