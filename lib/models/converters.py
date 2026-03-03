@@ -141,11 +141,3 @@ def paper_metadata_to_db(output: PaperExtractionOutput, paper_db: PaperDB) -> No
     paper_db.paper_types = (
         [pt.value for pt in output.paper_types] if output.paper_types else None
     )
-    paper_db.testing_methods = (
-        [tm.value for tm in output.testing_methods] if output.testing_methods else None
-    )
-    paper_db.testing_methods_evidence = (
-        list(output.testing_methods_evidence)
-        if output.testing_methods_evidence
-        else None
-    )

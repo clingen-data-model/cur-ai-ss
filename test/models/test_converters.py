@@ -3,7 +3,6 @@ import pytest
 from lib.agents.paper_extraction_agent import (
     PaperExtractionOutput,
     PaperType,
-    TestingMethod,
 )
 from lib.agents.patient_extraction_agent import (
     CountryCode,
@@ -169,8 +168,6 @@ class TestPaperMetadataConverter:
             doi='10.1234/test',
             pmid='12345678',
             pmcid='PMC123456',
-            testing_methods=[TestingMethod.Exome_sequencing],
-            testing_methods_evidence=['WES was performed'],
             paper_types=[PaperType.Research],
         )
         paper_db = PaperDB(
@@ -188,5 +185,3 @@ class TestPaperMetadataConverter:
         assert paper_db.pmid == '12345678'
         assert paper_db.pmcid == 'PMC123456'
         assert paper_db.paper_types == ['Research']
-        assert paper_db.testing_methods == ['Exome sequencing']
-        assert paper_db.testing_methods_evidence == ['WES was performed']

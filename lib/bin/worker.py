@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
 import asyncio
+import datetime
 import json
 import logging
 import time
 import traceback
 
 from agents import Runner
-from sqlalchemy import delete, select, update
+from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload
 
 from lib.agents.paper_extraction_agent import agent as paper_extraction_agent
 from lib.agents.patient_extraction_agent import agent as patient_extraction_agent
+from lib.agents.patient_variant_linking_agent import (
+    agent as patient_variant_linking_agent,
+)
 from lib.agents.variant_enrichment_agent import (
     HarmonizedVariant,
     VariantEnrichmentOutput,
@@ -28,15 +32,16 @@ from lib.evagg.ref import (
 from lib.evagg.ref.ncbi import get_ncbi_response_translator
 from lib.evagg.types.base import Paper
 from lib.evagg.utils.web import RequestsWebContentClient, WebClientSettings
-from lib.models import ExtractionStatus, PaperDB, PatientDB, VariantDB
+from lib.models import PaperDB, PatientDB, PipelineStatus, VariantDB
 from lib.models.converters import (
     paper_metadata_to_db,
     patient_info_to_db,
     variant_to_db,
 )
 
+LEASE_TIMEOUT_S = 900
 POLL_INTERVAL_S = 10
-RETRIES = 3
+RETRIES = 2
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +87,7 @@ async def harmonize_variants_task_async(paper: Paper) -> None:
     result = await Runner.run(
         variant_harmonization_agent,
         f'Variants JSON:\n{json.dumps(variants_output, indent=2)}',
-        max_turns=7 * len(variants_output['variants']),
+        max_turns=10 * len(variants_output['variants']),
     )
     json_response = result.final_output.model_dump_json(indent=2)
     paper.harmonized_variants_json_path.parent.mkdir(parents=True, exist_ok=True)
@@ -107,6 +112,38 @@ async def extract_variants_task_async(paper: Paper, gene_symbol: str) -> None:
             session.add(variant_to_db(variant, paper.id))
 
 
+async def patient_variant_linking_task_async(paper: Paper) -> None:
+    with open(paper.variants_json_path, 'r') as f:
+        variants_output = json.load(f)
+    with open(paper.patient_info_json_path, 'r') as f:
+        patients_output = json.load(f)
+
+    structured_variants = [
+        {
+            'variant_id': idx,
+            'variant_description_verbatim': variant['variant_description_verbatim'],
+            'variant_evidence_context': variant['variant_evidence_context'],
+        }
+        for idx, variant in enumerate(variants_output['variants'], start=1)
+    ]
+    structured_patients = [
+        {
+            'patient_id': idx,
+            'identifier': patient['identifier'],
+            'identifier_evidence': patient['identifier_evidence'],
+        }
+        for idx, patient in enumerate(patients_output['patients'], start=1)
+    ]
+    result = await Runner.run(
+        patient_variant_linking_agent,
+        f'Variants JSON:\n{structured_variants}\n Patients JSON:\n {structured_patients}',
+    )
+    json_response = result.final_output.model_dump_json(indent=2)
+    paper.patient_variant_links_json_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(paper.patient_variant_links_json_path, 'w') as f:
+        f.write(json_response)
+
+
 async def enrich_variants_task_async(paper: Paper) -> None:
     with open(paper.harmonized_variants_json_path, 'r') as f:
         harmonized_data = json.load(f)
@@ -122,70 +159,158 @@ async def enrich_variants_task_async(paper: Paper) -> None:
         f.write(output.model_dump_json(indent=2))
 
 
-async def run_tasks_concurrently(paper: Paper, gene_symbol: str) -> None:
-    await asyncio.gather(
-        parse_paper_task_async(paper),
-        parse_patients_task_async(paper),
-        extract_variants_task_async(paper, gene_symbol),
-    )
-    # Runs after variants completes
-    await harmonize_variants_task_async(paper)
-    await enrich_variants_task_async(paper)
+def initial_extraction(paper_id: str, gene_symbol: str) -> None:
+    async def _run_extraction_pipeline(paper: Paper, gene_symbol: str) -> None:
+        await asyncio.gather(
+            parse_paper_task_async(paper),
+            parse_patients_task_async(paper),
+            extract_variants_task_async(paper, gene_symbol),
+        )
 
-
-def initial_extraction(paper_db: PaperDB) -> None:
     max_attempts = RETRIES + 1
+    with session_scope() as session:
+        session.execute(
+            update(PaperDB)
+            .where(PaperDB.id == paper_id)
+            .values(pipeline_status=PipelineStatus.EXTRACTION_RUNNING)
+        )
     for attempt in range(1, max_attempts + 1):
         try:
-            paper = Paper(id=paper_db.id).with_content()
+            paper = Paper(id=paper_id).with_content()
             parse_content(paper, force=True)
-            asyncio.run(run_tasks_concurrently(paper, paper_db.gene.symbol))
-            paper_db.extraction_status = ExtractionStatus.PARSED
+            asyncio.run(_run_extraction_pipeline(paper, gene_symbol))
+            with session_scope() as session:
+                session.execute(
+                    update(PaperDB)
+                    .where(PaperDB.id == paper_id)
+                    .values(pipeline_status=PipelineStatus.EXTRACTION_COMPLETED)
+                )
+            logger.info(f'Extraction attempt {attempt}/{max_attempts} succeeded')
+            return
+        except KeyboardInterrupt:
+            logger.info(f'Interrupted on attempt {attempt}')
+            raise
+        except Exception:
+            logger.exception(f'Extraction failed on attempt {attempt}')
+            if attempt == max_attempts:
+                with session_scope() as session:
+                    session.execute(
+                        update(PaperDB)
+                        .where(PaperDB.id == paper_id)
+                        .values(pipeline_status=PipelineStatus.EXTRACTION_FAILED)
+                    )
+                return
+
+
+def linking_tasks(paper_id: str) -> None:
+    async def _run_linking_pipeline(paper: Paper) -> None:
+        await asyncio.gather(
+            harmonize_variants_task_async(paper),
+            patient_variant_linking_task_async(paper),
+        )
+        await enrich_variants_task_async(paper)
+
+    max_attempts = RETRIES + 1
+    with session_scope() as session:
+        session.execute(
+            update(PaperDB)
+            .where(PaperDB.id == paper_id)
+            .values(pipeline_status=PipelineStatus.LINKING_RUNNING)
+        )
+    for attempt in range(1, max_attempts + 1):
+        try:
+            paper = Paper(id=paper_id).with_content()
+            asyncio.run(_run_linking_pipeline(paper))
+            with session_scope() as session:
+                session.execute(
+                    update(PaperDB)
+                    .where(PaperDB.id == paper_id)
+                    .values(pipeline_status=PipelineStatus.COMPLETED)
+                )
             logger.info(f'Attempt {attempt}/{max_attempts} succeeded')
             return
         except KeyboardInterrupt:
             logger.info(f'Interrupted on attempt {attempt}')
             raise
         except Exception as e:
-            logger.error(f'Error executing app on attempt {attempt}: {e}')
-            logger.error(traceback.format_exc())
+            logger.exception(f'Linking failed on attempt {attempt}')
             if attempt == max_attempts:
-                logger.error('All retries exhausted. Exiting.')
-                raise
+                with session_scope() as session:
+                    session.execute(
+                        update(PaperDB)
+                        .where(PaperDB.id == paper_id)
+                        .values(pipeline_status=PipelineStatus.LINKING_FAILED)
+                    )
+                return
 
 
 def main() -> None:
     while True:
-        paper_db = None
         try:
+            now = datetime.datetime.utcnow()
+            expired_cutoff = now - datetime.timedelta(seconds=LEASE_TIMEOUT_S)
             with session_scope() as session:
-                paper_db = session.scalars(
+                # Extraction queue
+                extraction_job = session.scalars(
                     select(PaperDB)
-                    .options(joinedload(PaperDB.gene))
-                    .where(PaperDB.extraction_status == ExtractionStatus.QUEUED)
-                    .order_by(PaperDB.id)
+                    .where(
+                        or_(
+                            PaperDB.pipeline_status == PipelineStatus.QUEUED,
+                            and_(
+                                PaperDB.pipeline_status
+                                == PipelineStatus.EXTRACTION_RUNNING,
+                                PaperDB.last_modified < expired_cutoff,
+                            ),
+                        )
+                    )
+                    .order_by(PaperDB.last_modified.asc())  # oldest first
                     .limit(1)
                 ).first()
-                if paper_db:
-                    logger.info(f'Dequeued paper {paper_db.id}')
-                    initial_extraction(paper_db)
+
+                if extraction_job:
+                    paper_id = extraction_job.id
+                    gene_symbol = extraction_job.gene.symbol
+                    logger.info(f'Dequeued paper {paper_id} for extraction')
+
+            if extraction_job:
+                initial_extraction(paper_id, gene_symbol)
+                continue  # restart loop immediately
+
+            with session_scope() as session:
+                # Linking queue
+                linking_job = session.scalars(
+                    select(PaperDB)
+                    .where(
+                        or_(
+                            PaperDB.pipeline_status
+                            == PipelineStatus.EXTRACTION_COMPLETED,
+                            and_(
+                                PaperDB.pipeline_status
+                                == PipelineStatus.LINKING_RUNNING,
+                                PaperDB.last_modified < expired_cutoff,
+                            ),
+                        )
+                    )
+                    .order_by(PaperDB.last_modified.asc())
+                    .limit(1)
+                ).first()
+
+                if linking_job:
+                    paper_id = linking_job.id
+                    logger.info(f'Dequeued paper {paper_id} for linking')
+
+            if linking_job:
+                linking_tasks(paper_id)
+                continue
+
         except KeyboardInterrupt:
             logger.info('Shutting down poller')
             break
-        except SQLAlchemyError as e:
-            logger.exception(f'Database error occurred')
-            if paper_db:
-                with session_scope() as session:
-                    paper_db = session.merge(paper_db)
-                    paper_db.extraction_status = ExtractionStatus.FAILED
-        except Exception as e:
-            logger.exception(f'An unexpected error occurred')
-            if paper_db:
-                with session_scope() as session:
-                    paper_db = session.merge(paper_db)
-                    paper_db.extraction_status = ExtractionStatus.FAILED
+
+        except Exception:
+            logger.exception('Unexpected error in poller loop')
+
         time.sleep(POLL_INTERVAL_S)
-        logger.info('waiting for work')
 
 
 if __name__ == '__main__':

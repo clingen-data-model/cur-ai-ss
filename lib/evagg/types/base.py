@@ -125,6 +125,10 @@ class Paper:
         return env.evagg_dir / self.id / 'enriched_variants.json'
 
     @property
+    def patient_variant_links_json_path(self) -> Path:
+        return env.evagg_dir / self.id / 'patient_variant_links.json'
+
+    @property
     def pdf_dir(self) -> Path:
         return env.extracted_pdf_dir / self.id
 

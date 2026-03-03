@@ -1,15 +1,18 @@
+from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel
 from sqlalchemy import (
     JSON,
     Boolean,
     Column,
+    DateTime,
     ForeignKey,
     Integer,
     String,
     Text,
+    func,
 )
 from sqlalchemy import (
     Enum as SQLEnum,
@@ -21,15 +24,51 @@ from sqlalchemy.orm import (
     relationship,
 )
 
+Color = Literal[
+    'red', 'orange', 'yellow', 'blue', 'green', 'violet', 'gray', 'grey', 'primary'
+]
+
 
 class Base(DeclarativeBase):
     pass
 
 
-class ExtractionStatus(str, Enum):
-    PARSED = 'PARSED'
-    FAILED = 'FAILED'
-    QUEUED = 'QUEUED'
+class PipelineStatus(str, Enum):
+    QUEUED = 'Queued'
+
+    EXTRACTION_RUNNING = 'Extraction Running...'
+    EXTRACTION_FAILED = 'Extraction Failed'
+    EXTRACTION_COMPLETED = 'Extraction Completed'
+
+    LINKING_RUNNING = 'Linking Running...'
+    LINKING_FAILED = 'Linking Failed'
+
+    COMPLETED = 'Completed'
+
+    @property
+    def icon(self) -> str:
+        return {
+            PipelineStatus.QUEUED: '⏳',
+            PipelineStatus.EXTRACTION_RUNNING: '🟡',
+            PipelineStatus.EXTRACTION_FAILED: '❌',
+            PipelineStatus.EXTRACTION_COMPLETED: '✔️',
+            PipelineStatus.LINKING_RUNNING: '🟡',
+            PipelineStatus.LINKING_FAILED: '❌',
+            PipelineStatus.COMPLETED: '🎉',
+        }[self]
+
+    @property
+    def color(self) -> Color:
+        color_map: dict[PipelineStatus, Color] = {
+            PipelineStatus.QUEUED: 'yellow',
+            PipelineStatus.EXTRACTION_RUNNING: 'yellow',
+            PipelineStatus.EXTRACTION_FAILED: 'red',
+            PipelineStatus.EXTRACTION_COMPLETED: 'violet',
+            PipelineStatus.LINKING_RUNNING: 'yellow',
+            PipelineStatus.LINKING_FAILED: 'red',
+            PipelineStatus.COMPLETED: 'green',
+        }
+        return color_map[self]
 
 
 class GeneDB(Base):
@@ -73,10 +112,17 @@ class PaperDB(Base):
         back_populates='papers',
     )
     filename: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    extraction_status: Mapped[ExtractionStatus] = mapped_column(
-        SQLEnum(ExtractionStatus),
+    pipeline_status: Mapped[PipelineStatus] = mapped_column(
+        SQLEnum(PipelineStatus),
         nullable=False,
-        server_default=ExtractionStatus.QUEUED.value,
+        server_default=PipelineStatus.QUEUED.value,
+    )
+    last_modified: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+        index=True,
     )
 
     # Paper metadata (nullable, populated after extraction)
@@ -214,7 +260,8 @@ class PaperResp(BaseModel):
     id: str
     gene_symbol: str
     filename: str
-    extraction_status: ExtractionStatus
+    pipeline_status: PipelineStatus
+
     # Optional metadata fields
     pmid: Optional[str] = None
     pmcid: Optional[str] = None
@@ -280,3 +327,8 @@ class VariantResp(BaseModel):
     variant_type: Optional[str] = None
     variant_evidence_context: Optional[str] = None
     variant_type_evidence_context: Optional[str] = None
+
+
+class PipelineUpdateRequest(BaseModel):
+    pipeline_status: PipelineStatus
+    prompt_override: str | None = None

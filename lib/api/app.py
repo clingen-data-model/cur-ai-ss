@@ -29,13 +29,15 @@ from lib.evagg.pdf.thumbnail import pdf_first_page_to_thumbnail_pymupdf_bytes
 from lib.evagg.types.base import Paper
 from lib.evagg.utils.environment import env
 from lib.models import (
-    ExtractionStatus,
+    Base,
     GeneDB,
     GeneResp,
     PaperDB,
     PaperResp,
     PatientDB,
     PatientResp,
+    PipelineStatus,
+    PipelineUpdateRequest,
     VariantDB,
     VariantResp,
 )
@@ -145,7 +147,7 @@ def put_paper(
     if paper_db:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f'Paper extraction already {paper_db.extraction_status.value.lower()}',
+            detail=f'Paper extraction already {paper_db.pipeline_status.value.lower()}',
         )
     else:
         paper.pdf_raw_path.parent.mkdir(parents=True, exist_ok=True)
@@ -156,7 +158,7 @@ def put_paper(
         paper_db = PaperDB(
             id=paper.id,
             filename=uploaded_file.filename,
-            extraction_status=ExtractionStatus.QUEUED,
+            pipeline_status=PipelineStatus.QUEUED,
         )
         paper_db.gene = gene
         session.add(paper_db)
@@ -191,7 +193,7 @@ def delete_paper(paper_id: str, session: Session = Depends(get_session)) -> None
 @app.patch('/papers/{paper_id}', response_model=PaperResp)
 def update_status(
     paper_id: str,
-    extraction_status: ExtractionStatus = Body(..., embed=True),
+    request: PipelineUpdateRequest,
     session: Session = Depends(get_session),
 ) -> Any:
     paper_db = (
@@ -205,24 +207,24 @@ def update_status(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
-    if paper_db.extraction_status == extraction_status:
+    if paper_db.pipeline_status == request.pipeline_status:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f'Status is already {extraction_status.value}',
+            detail=f'Status is already {request.pipeline_status.value}',
         )
-    paper_db.extraction_status = extraction_status
+    paper_db.pipeline_status = request.pipeline_status
     return paper_db
 
 
 @app.get('/papers', response_model=list[PaperResp])
 def list_papers(
-    extraction_status: ExtractionStatus | None = None,
+    pipeline_status: PipelineStatus | None = None,
     session: Session = Depends(get_session),
 ) -> Any:
     query = session.query(PaperDB).options(selectinload(PaperDB.gene))
 
-    if extraction_status is not None:
-        query = query.filter(PaperDB.extraction_status == extraction_status)
+    if pipeline_status is not None:
+        query = query.filter(PaperDB.pipeline_status == pipeline_status)
     return query.all()
 
 

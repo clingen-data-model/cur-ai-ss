@@ -7,13 +7,7 @@ from sqlalchemy import func, select, update
 
 from lib.api.app import app
 from lib.api.db import get_session, session_scope
-from lib.models import (
-    ExtractionStatus,
-    GeneDB,
-    PaperDB,
-    PatientDB,
-    VariantDB,
-)
+from lib.models import GeneDB, PaperDB, PatientDB, PipelineStatus, VariantDB
 
 
 @pytest.fixture
@@ -45,10 +39,10 @@ def test_pdf():
 3 0 obj<</Type/Page/Parent 2 0 R/Resources<<>>/MediaBox[0 0 9 9]>>endobj
 xref
 0 4
-0000000000 65535 f 
-0000000009 00000 n 
-0000000052 00000 n 
-0000000101 00000 n 
+0000000000 65535 f
+0000000009 00000 n
+0000000052 00000 n
+0000000101 00000 n
 trailer<</Root 1 0 R/Size 4>>
 startxref
 174
@@ -88,7 +82,7 @@ def test_queue_new_paper(client, test_pdf, db_session, seeded_genes):
     assert response.status_code == 201
     data = response.json()
     assert data['id']  # Paper ID will be generated from content
-    assert data['extraction_status'] == ExtractionStatus.QUEUED.value
+    assert data['pipeline_status'] == PipelineStatus.QUEUED.value
     assert data['filename'] == 'job-1.pdf'
     count = db_session.scalar(select(func.count(PaperDB.id)))
     assert count == 1
@@ -123,7 +117,7 @@ def test_get_paper_success(client, test_pdf, seeded_genes):
     assert get_response.status_code == 200
     data_get = get_response.json()
     assert data_get['id'] == paper_id
-    assert data_get['extraction_status'] == ExtractionStatus.QUEUED.value
+    assert data_get['pipeline_status'] == PipelineStatus.QUEUED.value
     assert data_get['filename'] == 'job-1.pdf'
 
 
@@ -133,7 +127,7 @@ def test_get_paper_not_found(client):
     assert response.json()['detail'] == 'Paper not found'
 
 
-def test_update_paper_extraction_status(client, test_pdf, db_session, seeded_genes):
+def test_update_paper_pipeline_status(client, test_pdf, db_session, seeded_genes):
     response = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
@@ -143,23 +137,24 @@ def test_update_paper_extraction_status(client, test_pdf, db_session, seeded_gen
     db_session.execute(
         update(PaperDB)
         .where(PaperDB.id == data['id'])
-        .values(extraction_status=ExtractionStatus.FAILED)
+        .values(pipeline_status=PipelineStatus.EXTRACTION_FAILED)
     )
     response2 = client.patch(
         f'/papers/{data["id"]}',
-        json={'extraction_status': ExtractionStatus.QUEUED.value},
+        json={'pipeline_status': PipelineStatus.QUEUED.value, 'prompt_override': None},
     )
     assert response2.status_code == 200
-    assert response2.json()['extraction_status'] == ExtractionStatus.QUEUED.value
+    assert response2.json()['pipeline_status'] == PipelineStatus.QUEUED.value
     response3 = client.patch(
         f'/papers/{response2.json()["id"]}',
-        json={'extraction_status': ExtractionStatus.QUEUED.value},
+        json={'pipeline_status': PipelineStatus.QUEUED.value, 'prompt_override': None},
     )
     assert response3.status_code == 409
     response4 = client.patch(
         f'/papers/abcd',
         json={
-            'extraction_status': ExtractionStatus.QUEUED.value,
+            'pipeline_status': PipelineStatus.QUEUED.value,
+            'prompt_override': None,
         },
     )
     assert response4.status_code == 404
@@ -206,11 +201,11 @@ def test_list_papers_filtered_by_status(client, test_pdf, db_session, seeded_gen
         data={'gene_symbol': 'BRCA1'},
     )
     response = client.get(
-        '/papers', params={'extraction_status': ExtractionStatus.QUEUED.value}
+        '/papers', params={'pipeline_status': PipelineStatus.QUEUED.value}
     )
     assert response.status_code == 200
     jobs = response.json()
-    assert all(job['extraction_status'] == ExtractionStatus.QUEUED for job in jobs)
+    assert all(job['pipeline_status'] == PipelineStatus.QUEUED for job in jobs)
 
 
 def test_delete_paper(client, test_pdf, db_session, seeded_genes):

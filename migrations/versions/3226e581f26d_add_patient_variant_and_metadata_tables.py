@@ -33,7 +33,8 @@ def upgrade() -> None:
     sa.Column('id', sa.String(), nullable=False),
     sa.Column('gene_id', sa.Integer(), nullable=False),
     sa.Column('filename', sa.String(length=255), nullable=False),
-    sa.Column('extraction_status', sa.Enum('PARSED', 'FAILED', 'QUEUED', name='extractionstatus'), server_default='QUEUED', nullable=False),
+    sa.Column('pipeline_status', sa.Enum('QUEUED', 'EXTRACTION_RUNNING', 'EXTRACTION_FAILED', 'EXTRACTION_COMPLETED', 'LINKING_RUNNING', 'LINKING_FAILED', 'COMPLETED', name='pipelinestatus'), server_default='Queued', nullable=False),
+    sa.Column('last_modified', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     sa.Column('pmid', sa.String(), nullable=True),
     sa.Column('pmcid', sa.String(), nullable=True),
     sa.Column('doi', sa.String(), nullable=True),
@@ -57,6 +58,7 @@ def upgrade() -> None:
         batch_op.create_index(batch_op.f('ix_papers_filename'), ['filename'], unique=False)
         batch_op.create_index(batch_op.f('ix_papers_gene_id'), ['gene_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_papers_id'), ['id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_papers_last_modified'), ['last_modified'], unique=False)
 
     op.create_table('patients',
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
@@ -129,6 +131,7 @@ def downgrade() -> None:
 
     op.drop_table('patients')
     with op.batch_alter_table('papers', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_papers_last_modified'))
         batch_op.drop_index(batch_op.f('ix_papers_id'))
         batch_op.drop_index(batch_op.f('ix_papers_gene_id'))
         batch_op.drop_index(batch_op.f('ix_papers_filename'))

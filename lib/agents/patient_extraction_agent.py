@@ -306,7 +306,7 @@ class PatientInfo(BaseModel):
     identifier: str  # Required
     proband_status: ProbandStatus
     sex: SexAtBirth
-    age_diagnosis: Optional[str]  # exact text from source
+    age_diagnosis: Optional[str]
     age_report: Optional[str]
     age_death: Optional[str]
     country_of_origin: CountryCode
@@ -349,10 +349,25 @@ Fields to extract (for each patient):
 
 - identifier:
   - A clear textual identifier (e.g., Patient 1, II-2, I-1, proband, index case, sibling, mother).
-  - If explicitly labeled as proband or index case, preserve this label as the identifier (e.g., "proband").
-  - If multiple probands exist, distinguish them using the text’s identifiers (e.g., “Proband 1”, “Patient A”).
   - Do NOT return numeric-only identifiers (e.g., “34”, “75987”).
   - If an individual has no usable textual identifier, skip that individual.
+
+    Identifier priority rules (apply in this order):
+
+    1. If a short alphanumeric identifier is explicitly provided
+       (especially in parentheses), such as:
+       P1, II-2, IV:3, Patient A, Case 1,
+       use that EXACT string as the identifier.
+         - Preserve capitalization and punctuation exactly as written.
+         - Do NOT expand, reinterpret, or normalize it.
+         - Example: "the proband (P1)" → identifier = "P1"
+
+    2. If no alphanumeric identifier is provided, but the individual is
+       explicitly labeled as "proband", "index case", "patient",
+       "sibling", "mother", etc., use that label as written.
+
+    3. If multiple probands exist and they are distinguished in the text
+       (e.g., "Proband 1", "Patient A"), preserve the exact wording used.
 
 - proband_status:
   - Use enum: Proband, Non-proband, Unknown
@@ -373,6 +388,7 @@ Fields to extract (for each patient):
 
 - race/ethnicity:
   - Use enum values: African/African American, Latino/Admixed American, Ashkenazi Jewish, East Asian, Finnish, Non-Finnish European, South Asian, Middle Eastern, Amish, Other, Unknown
+  - When the text contains a more specific subgroup of a listed category, normalize to the closest matching enum value.
 
 Guidelines:
 
