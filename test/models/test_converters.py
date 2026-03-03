@@ -1,0 +1,50 @@
+from lib.agents.paper_extraction_agent import PaperExtractionOutput, PaperType
+from lib.models import PaperDB
+from lib.models.converters import paper_extraction_to_db
+
+
+def test_paper_extraction_to_db_maps_all_fields():
+    output = PaperExtractionOutput(
+        title='A Novel Variant in BRCA1',
+        first_author='Smith',
+        journal_name='Nature Genetics',
+        abstract='We describe a novel variant...',
+        publication_year=2024,
+        doi='10.1234/ng.5678',
+        pmid='12345678',
+        pmcid='PMC9999999',
+        paper_types=[PaperType.Research, PaperType.Case_study],
+    )
+    paper_db = PaperDB(id='test-id', gene_id='1', filename='test.pdf')
+    paper_extraction_to_db(output, paper_db)
+
+    assert paper_db.title == 'A Novel Variant in BRCA1'
+    assert paper_db.first_author == 'Smith'
+    assert paper_db.journal == 'Nature Genetics'
+    assert paper_db.abstract == 'We describe a novel variant...'
+    assert paper_db.pub_year == 2024
+    assert paper_db.doi == '10.1234/ng.5678'
+    assert paper_db.pmid == '12345678'
+    assert paper_db.pmcid == 'PMC9999999'
+    assert paper_db.paper_types == ['Research', 'Case_study']
+
+
+def test_paper_extraction_to_db_handles_none_fields():
+    output = PaperExtractionOutput(
+        title='Minimal Paper',
+        first_author='Doe',
+        journal_name=None,
+        paper_types=[PaperType.Unknown],
+    )
+    paper_db = PaperDB(id='test-id-2', gene_id='1', filename='test2.pdf')
+    paper_extraction_to_db(output, paper_db)
+
+    assert paper_db.title == 'Minimal Paper'
+    assert paper_db.first_author == 'Doe'
+    assert paper_db.journal is None
+    assert paper_db.abstract is None
+    assert paper_db.pub_year is None
+    assert paper_db.doi is None
+    assert paper_db.pmid is None
+    assert paper_db.pmcid is None
+    assert paper_db.paper_types == ['Unknown']

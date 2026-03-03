@@ -1,4 +1,5 @@
 import io
+from contextlib import asynccontextmanager
 
 import pytest
 from fastapi.testclient import TestClient
@@ -14,10 +15,19 @@ def client(db_session):
     def override_get_session():
         yield db_session
 
+    @asynccontextmanager
+    async def _noop_lifespan(app):
+        yield
+
+    # This overrides the app lifespan so it doesn't try to run migrations.
+    # DB initialization for tests should be handled by the `db_session` fixture.
+    original_lifespan = app.router.lifespan_context
+    app.router.lifespan_context = _noop_lifespan
     app.dependency_overrides[get_session] = override_get_session
     with TestClient(app) as client:
         yield client
     app.dependency_overrides.clear()
+    app.router.lifespan_context = original_lifespan
 
 
 @pytest.fixture
@@ -30,10 +40,10 @@ def test_pdf():
 3 0 obj<</Type/Page/Parent 2 0 R/Resources<<>>/MediaBox[0 0 9 9]>>endobj
 xref
 0 4
-0000000000 65535 f 
-0000000009 00000 n 
-0000000052 00000 n 
-0000000101 00000 n 
+0000000000 65535 f
+0000000009 00000 n
+0000000052 00000 n
+0000000101 00000 n
 trailer<</Root 1 0 R/Size 4>>
 startxref
 174

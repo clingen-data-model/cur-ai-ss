@@ -22,12 +22,11 @@ from sqlalchemy.orm import Session, selectinload
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
-from lib.api.db import get_engine, get_session
+from lib.api.db import get_session
 from lib.evagg.pdf.thumbnail import pdf_first_page_to_thumbnail_pymupdf_bytes
 from lib.evagg.types.base import Paper
 from lib.evagg.utils.environment import env
 from lib.models import (
-    Base,
     GeneDB,
     GeneResp,
     PaperDB,
@@ -39,9 +38,11 @@ from lib.models import (
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    engine = get_engine()
-    session = get_session()
-    Base.metadata.create_all(bind=engine)
+    from alembic import command
+    from alembic.config import Config
+
+    alembic_cfg = Config('alembic.ini')
+    command.upgrade(alembic_cfg, 'head')
     yield
 
 

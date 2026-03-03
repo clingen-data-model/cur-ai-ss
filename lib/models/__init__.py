@@ -9,6 +9,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Text,
     func,
 )
 from sqlalchemy import (
@@ -21,6 +22,7 @@ from sqlalchemy.orm import (
     mapped_column,
     relationship,
 )
+from sqlalchemy.types import JSON
 
 Color = Literal[
     'red', 'orange', 'yellow', 'blue', 'green', 'violet', 'gray', 'grey', 'primary'
@@ -122,6 +124,17 @@ class PaperDB(Base):
         onupdate=func.now(),
         index=True,
     )
+
+    # Paper extraction metadata (populated asynchronously by extraction agent)
+    pmid: Mapped[str | None] = mapped_column(String, nullable=True)
+    pmcid: Mapped[str | None] = mapped_column(String, nullable=True)
+    doi: Mapped[str | None] = mapped_column(String, nullable=True)
+    title: Mapped[str | None] = mapped_column(String, nullable=True)
+    abstract: Mapped[str | None] = mapped_column(Text, nullable=True)
+    journal: Mapped[str | None] = mapped_column(String, nullable=True)
+    first_author: Mapped[str | None] = mapped_column(String, nullable=True)
+    pub_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    paper_types: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     @property
     def gene_symbol(self) -> str:
