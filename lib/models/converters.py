@@ -11,8 +11,11 @@ from lib.agents.patient_extraction_agent import (
     RaceEthnicity,
     SexAtBirth,
 )
+from lib.agents.patient_variant_linking_agent import (
+    PatientVariantLink,
+)
 from lib.agents.variant_extraction_agent import Variant
-from lib.models import PaperDB, PatientDB, PatientResp, VariantDB
+from lib.models import PaperDB, PatientDB, PatientResp, PatientVariantLinkDB, VariantDB
 
 E = TypeVar('E', bound=Enum)
 
@@ -140,4 +143,30 @@ def paper_metadata_to_db(output: PaperExtractionOutput, paper_db: PaperDB) -> No
     paper_db.pmcid = output.pmcid
     paper_db.paper_types = (
         [pt.value for pt in output.paper_types] if output.paper_types else None
+    )
+
+
+# ---------------------------------------------------------------------------
+# Patient-variant link converter
+# ---------------------------------------------------------------------------
+
+
+def patient_variant_link_to_db(
+    link: PatientVariantLink,
+    paper_id: str,
+    patient_db_id: int,
+    variant_db_id: int,
+) -> PatientVariantLinkDB:
+    return PatientVariantLinkDB(
+        paper_id=paper_id,
+        patient_id=patient_db_id,
+        variant_id=variant_db_id,
+        zygosity=_enum_to_str(link.zygosity) or '',
+        inheritance=_enum_to_str(link.inheritance) or '',
+        link_type=_enum_to_str(link.link_type) or '',
+        evidence_context=link.evidence_context,
+        confidence=link.confidence,
+        linkage_notes=link.linkage_notes,
+        testing_methods=[m.value for m in link.testing_methods],
+        testing_methods_evidence=list(link.testing_methods_evidence),
     )

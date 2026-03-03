@@ -5,7 +5,14 @@ from pydantic import TypeAdapter
 
 from lib.evagg.types.base import Paper
 from lib.evagg.utils.environment import env
-from lib.models import GeneResp, PaperResp, PatientResp, PipelineStatus, VariantResp
+from lib.models import (
+    GeneResp,
+    PaperResp,
+    PatientResp,
+    PatientVariantLinkResp,
+    PipelineStatus,
+    VariantResp,
+)
 
 
 def get_http_error_detail(e: requests.HTTPError) -> str:
@@ -86,3 +93,9 @@ def get_paper_variants(paper_id: str) -> list[VariantResp]:
     resp = requests.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/variants')
     resp.raise_for_status()
     return TypeAdapter(list[VariantResp]).validate_python(resp.json())
+
+
+def get_paper_links(paper_id: str) -> list[PatientVariantLinkResp]:
+    resp = requests.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/links')
+    resp.raise_for_status()
+    return TypeAdapter(list[PatientVariantLinkResp]).validate_python(resp.json())

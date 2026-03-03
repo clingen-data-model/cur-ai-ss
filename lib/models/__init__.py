@@ -158,6 +158,11 @@ class PaperDB(Base):
         back_populates='paper',
         cascade='all, delete-orphan',
     )
+    patient_variant_links: Mapped[list['PatientVariantLinkDB']] = relationship(
+        'PatientVariantLinkDB',
+        back_populates='paper',
+        cascade='all, delete-orphan',
+    )
 
     @property
     def gene_symbol(self) -> str:
@@ -186,6 +191,13 @@ class PatientDB(Base):
     country_of_origin: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     race_ethnicity: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
+    # Relationships
+    patient_variant_links: Mapped[list['PatientVariantLinkDB']] = relationship(
+        'PatientVariantLinkDB',
+        back_populates='patient',
+        cascade='all, delete-orphan',
+    )
+
     # Evidence fields
     identifier_evidence: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     sex_evidence: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -209,6 +221,13 @@ class VariantDB(Base):
         nullable=False,
     )
     paper: Mapped['PaperDB'] = relationship('PaperDB', back_populates='variants')
+
+    # Relationships
+    patient_variant_links: Mapped[list['PatientVariantLinkDB']] = relationship(
+        'PatientVariantLinkDB',
+        back_populates='variant',
+        cascade='all, delete-orphan',
+    )
 
     # Core fields
     gene: Mapped[str] = mapped_column(String, nullable=False)
@@ -253,6 +272,51 @@ class VariantDB(Base):
     variant_evidence_context: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     variant_type_evidence_context: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True
+    )
+
+
+class PatientVariantLinkDB(Base):
+    __tablename__ = 'patient_variant_links'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    paper_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey('papers.id', ondelete='CASCADE'),
+        index=True,
+        nullable=False,
+    )
+    patient_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey('patients.id', ondelete='CASCADE'),
+        index=True,
+        nullable=False,
+    )
+    variant_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey('variants.id', ondelete='CASCADE'),
+        index=True,
+        nullable=False,
+    )
+
+    paper: Mapped['PaperDB'] = relationship(
+        'PaperDB', back_populates='patient_variant_links'
+    )
+    patient: Mapped['PatientDB'] = relationship(
+        'PatientDB', back_populates='patient_variant_links'
+    )
+    variant: Mapped['VariantDB'] = relationship(
+        'VariantDB', back_populates='patient_variant_links'
+    )
+
+    zygosity: Mapped[str] = mapped_column(String, nullable=False)
+    inheritance: Mapped[str] = mapped_column(String, nullable=False)
+    link_type: Mapped[str] = mapped_column(String, nullable=False)
+    evidence_context: Mapped[str] = mapped_column(Text, nullable=False)
+    confidence: Mapped[str] = mapped_column(String, nullable=False)
+    linkage_notes: Mapped[str] = mapped_column(Text, nullable=False)
+    testing_methods: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
+    testing_methods_evidence: Mapped[Optional[list[str]]] = mapped_column(
+        JSON, nullable=True
     )
 
 
@@ -327,6 +391,21 @@ class VariantResp(BaseModel):
     variant_type: Optional[str] = None
     variant_evidence_context: Optional[str] = None
     variant_type_evidence_context: Optional[str] = None
+
+
+class PatientVariantLinkResp(BaseModel):
+    id: int
+    paper_id: str
+    patient_id: int
+    variant_id: int
+    zygosity: str
+    inheritance: str
+    link_type: str
+    evidence_context: str
+    confidence: str
+    linkage_notes: str
+    testing_methods: Optional[list[str]] = None
+    testing_methods_evidence: Optional[list[str]] = None
 
 
 class PipelineUpdateRequest(BaseModel):

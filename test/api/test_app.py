@@ -7,7 +7,14 @@ from sqlalchemy import func, select, update
 
 from lib.api.app import app
 from lib.api.db import get_session, session_scope
-from lib.models import GeneDB, PaperDB, PatientDB, PipelineStatus, VariantDB
+from lib.models import (
+    GeneDB,
+    PaperDB,
+    PatientDB,
+    PatientVariantLinkDB,
+    PipelineStatus,
+    VariantDB,
+)
 
 
 @pytest.fixture
@@ -347,3 +354,92 @@ def test_paper_resp_includes_metadata(client, test_pdf, db_session, seeded_genes
     assert data['paper_types'] == ['Research', 'Case_study']
     assert data['testing_methods'] == ['Exome sequencing']
     assert data['testing_methods_evidence'] == ['WES was performed']
+
+
+# ---------------------------------------------------------------------------
+# Patient-variant link endpoint tests
+# ---------------------------------------------------------------------------
+
+
+def test_get_paper_links_empty(client, test_pdf, db_session, seeded_genes):
+    resp = _create_paper(client, test_pdf)
+    paper_id = resp.json()['id']
+    response = client.get(f'/papers/{paper_id}/links')
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_get_paper_links_not_found(client):
+    response = client.get('/papers/missing/links')
+    assert response.status_code == 404
+
+
+def test_get_paper_links_with_data(client, test_pdf, db_session, seeded_genes):
+    resp = _create_paper(client, test_pdf)
+    paper_id = resp.json()['id']
+
+    patient = PatientDB(paper_id=paper_id, identifier='Patient 1')
+    variant = VariantDB(paper_id=paper_id, gene='BRCA1')
+    db_session.add(patient)
+    db_session.add(variant)
+    db_session.flush()
+
+    link = PatientVariantLinkDB(
+        paper_id=paper_id,
+        patient_id=patient.id,
+        variant_id=variant.id,
+        zygosity='heterozygous',
+        inheritance='unknown',
+        link_type='explicit',
+        evidence_context='Patient 1 carried the variant',
+        confidence='high',
+        linkage_notes='Direct statement',
+        testing_methods=['Exome sequencing'],
+        testing_methods_evidence=['WES performed'],
+    )
+    db_session.add(link)
+    db_session.flush()
+
+    response = client.get(f'/papers/{paper_id}/links')
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]['zygosity'] == 'heterozygous'
+    assert data[0]['confidence'] == 'high'
+    assert data[0]['patient_id'] == patient.id
+    assert data[0]['variant_id'] == variant.id
+    assert data[0]['testing_methods'] == ['Exome sequencing']
+
+
+def test_cascade_delete_links(client, test_pdf, db_session, seeded_genes):
+    resp = _create_paper(client, test_pdf)
+    paper_id = resp.json()['id']
+
+    patient = PatientDB(paper_id=paper_id, identifier='Patient 1')
+    variant = VariantDB(paper_id=paper_id, gene='BRCA1')
+    db_session.add(patient)
+    db_session.add(variant)
+    db_session.flush()
+
+    db_session.add(
+        PatientVariantLinkDB(
+            paper_id=paper_id,
+            patient_id=patient.id,
+            variant_id=variant.id,
+            zygosity='heterozygous',
+            inheritance='unknown',
+            link_type='explicit',
+            evidence_context='evidence',
+            confidence='high',
+            linkage_notes='notes',
+            testing_methods=['Exome sequencing'],
+            testing_methods_evidence=['WES'],
+        )
+    )
+    db_session.flush()
+
+    assert db_session.scalar(select(func.count(PatientVariantLinkDB.id))) == 1
+
+    client.delete(f'/papers/{paper_id}')
+
+    assert db_session.scalar(select(func.count(PatientVariantLinkDB.id))) == 0

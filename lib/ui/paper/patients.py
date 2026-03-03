@@ -241,6 +241,14 @@ def render_patient(
 paper_query_params = PaperQueryParams.from_query_params()
 paper, paper_resp, center = render_paper_header()
 with center:
+    if paper_resp.pipeline_status not in {
+        PipelineStatus.EXTRACTION_COMPLETED,
+        PipelineStatus.LINKING_RUNNING,
+        PipelineStatus.LINKING_FAILED,
+        PipelineStatus.COMPLETED,
+    }:
+        st.write(f'{paper_resp.filename} not yet extracted...')
+        st.stop()
     if paper_resp.pipeline_status != PipelineStatus.COMPLETED:
         st.write(f'Entity Linking not yet completed...')
         st.stop()

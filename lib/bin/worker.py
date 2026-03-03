@@ -14,6 +14,9 @@ from sqlalchemy.orm import Session, joinedload
 from lib.agents.paper_extraction_agent import agent as paper_extraction_agent
 from lib.agents.patient_extraction_agent import agent as patient_extraction_agent
 from lib.agents.patient_variant_linking_agent import (
+    PatientVariantLinkerOutput,
+)
+from lib.agents.patient_variant_linking_agent import (
     agent as patient_variant_linking_agent,
 )
 from lib.agents.variant_enrichment_agent import (
@@ -32,10 +35,17 @@ from lib.evagg.ref import (
 from lib.evagg.ref.ncbi import get_ncbi_response_translator
 from lib.evagg.types.base import Paper
 from lib.evagg.utils.web import RequestsWebContentClient, WebClientSettings
-from lib.models import PaperDB, PatientDB, PipelineStatus, VariantDB
+from lib.models import (
+    PaperDB,
+    PatientDB,
+    PatientVariantLinkDB,
+    PipelineStatus,
+    VariantDB,
+)
 from lib.models.converters import (
     paper_metadata_to_db,
     patient_info_to_db,
+    patient_variant_link_to_db,
     variant_to_db,
 )
 
@@ -222,6 +232,50 @@ def linking_tasks(paper_id: str) -> None:
             paper = Paper(id=paper_id).with_content()
             asyncio.run(_run_linking_pipeline(paper))
             with session_scope() as session:
+                # Persist patient-variant links to DB
+                with open(paper.patient_variant_links_json_path, 'r') as f:
+                    links_output = PatientVariantLinkerOutput.model_validate(
+                        json.load(f)
+                    )
+
+                # Build index maps: 1-based agent index -> DB id
+                patient_rows = (
+                    session.query(PatientDB)
+                    .filter(PatientDB.paper_id == paper_id)
+                    .order_by(PatientDB.id.asc())
+                    .all()
+                )
+                variant_rows = (
+                    session.query(VariantDB)
+                    .filter(VariantDB.paper_id == paper_id)
+                    .order_by(VariantDB.id.asc())
+                    .all()
+                )
+                patient_id_map = {i + 1: row.id for i, row in enumerate(patient_rows)}
+                variant_id_map = {i + 1: row.id for i, row in enumerate(variant_rows)}
+
+                # Delete existing links for idempotent re-runs
+                session.execute(
+                    delete(PatientVariantLinkDB).where(
+                        PatientVariantLinkDB.paper_id == paper_id
+                    )
+                )
+
+                for link in links_output.links:
+                    patient_db_id = patient_id_map.get(link.patient_id)
+                    variant_db_id = variant_id_map.get(link.variant_id)
+                    if patient_db_id is None or variant_db_id is None:
+                        logger.warning(
+                            'Skipping link with out-of-range index: '
+                            f'patient_id={link.patient_id}, variant_id={link.variant_id}'
+                        )
+                        continue
+                    session.add(
+                        patient_variant_link_to_db(
+                            link, paper_id, patient_db_id, variant_db_id
+                        )
+                    )
+
                 session.execute(
                     update(PaperDB)
                     .where(PaperDB.id == paper_id)

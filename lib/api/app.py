@@ -36,6 +36,8 @@ from lib.models import (
     PaperResp,
     PatientDB,
     PatientResp,
+    PatientVariantLinkDB,
+    PatientVariantLinkResp,
     PipelineStatus,
     PipelineUpdateRequest,
     VariantDB,
@@ -254,3 +256,17 @@ def get_paper_variants(paper_id: str, session: Session = Depends(get_session)) -
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
     return session.query(VariantDB).filter(VariantDB.paper_id == paper_id).all()
+
+
+@app.get('/papers/{paper_id}/links', response_model=list[PatientVariantLinkResp])
+def get_paper_links(paper_id: str, session: Session = Depends(get_session)) -> Any:
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    return (
+        session.query(PatientVariantLinkDB)
+        .filter(PatientVariantLinkDB.paper_id == paper_id)
+        .all()
+    )

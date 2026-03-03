@@ -2,7 +2,8 @@ import streamlit as st
 
 from lib.agents.paper_extraction_agent import PaperType
 from lib.agents.patient_variant_linking_agent import TestingMethod
-from lib.models import PaperResp
+from lib.models import PaperResp, PipelineStatus
+from lib.ui.api import get_paper_links
 from lib.ui.helpers import paper_resp_to_markdown
 from lib.ui.paper.header import render_paper_header
 
@@ -30,7 +31,9 @@ def render_editable_paper_extraction_tab(
             options=[pt.value for pt in PaperType],
             selection_mode='multi',
             default=[
-                pt for pt in paper_resp.paper_types if pt in {e.value for e in PaperType}
+                pt
+                for pt in paper_resp.paper_types
+                if pt in {e.value for e in PaperType}
             ]
             if paper_resp.paper_types
             else [],
@@ -40,39 +43,38 @@ def render_editable_paper_extraction_tab(
 
     paper_resp.abstract = st.text_area('Abstract', paper_resp.abstract, height=200)
 
-    paper_resp.testing_methods = list(
-        st.pills(
-            'Testing Methods',
-            options=[tm.value for tm in TestingMethod],
-            selection_mode='multi',
-            default=[
-                tm
-                for tm in (paper_resp.testing_methods or [])
-                if tm in {e.value for e in TestingMethod}
-            ],
-            key='testing-methods',
-        )
-    )
-
-    paper_resp.testing_methods_evidence = [
-        st.text_area(
-            f'Evidence for {method}',
-            value=(paper_resp.testing_methods_evidence or [''])[i]
-            if paper_resp.testing_methods_evidence
-            and i < len(paper_resp.testing_methods_evidence)
-            else '',
-            height=60,
-            key=f'testing-method-evidence-{i}',
-        )
-        for i, method in enumerate(paper_resp.testing_methods or [])
-    ]
-
 
 paper, paper_resp, center = render_paper_header()
 with center:
-    if not paper_resp.title:
+    if paper_resp.pipeline_status not in {
+        PipelineStatus.EXTRACTION_COMPLETED,
+        PipelineStatus.LINKING_RUNNING,
+        PipelineStatus.LINKING_FAILED,
+        PipelineStatus.COMPLETED,
+    }:
         st.write(f'{paper_resp.filename} not yet extracted...')
         st.stop()
+
+    # Aggregate testing methods from links API when pipeline is completed
+    if paper_resp.pipeline_status == PipelineStatus.COMPLETED:
+        links = get_paper_links(paper_resp.id)
+        methods: dict[str, str | None] = {}
+        for link in links:
+            for i, method in enumerate(link.testing_methods or []):
+                if method == TestingMethod.Unknown.value:
+                    continue
+                if method not in methods:
+                    evidence = (
+                        link.testing_methods_evidence[i]
+                        if link.testing_methods_evidence
+                        and i < len(link.testing_methods_evidence)
+                        else None
+                    )
+                    methods[method] = evidence
+        if methods:
+            paper_resp.testing_methods = list(methods.keys())
+            paper_resp.testing_methods_evidence = [v or '' for v in methods.values()]
+
     md_tab, editable_tab = st.tabs(['View', 'Edit'])
     with md_tab:
         st.markdown(paper_resp_to_markdown(paper_resp))

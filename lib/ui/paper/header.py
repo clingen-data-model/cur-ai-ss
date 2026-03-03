@@ -73,9 +73,7 @@ def render_rerun_evagg_fragment(paper_query_params: PaperQueryParams) -> None:
             st.toast(f'Failed to requeue: {str(e)}', icon='❌')
 
 
-def render_paper_header() -> tuple[
-    Paper, PaperResp, st.delta_generator.DeltaGenerator
-]:
+def render_paper_header() -> tuple[Paper, PaperResp, st.delta_generator.DeltaGenerator]:
     st.set_page_config(layout='wide')
     paper_query_params = PaperQueryParams.from_query_params()
     paper = Paper(id=paper_query_params.paper_id)
@@ -101,7 +99,12 @@ def render_paper_header() -> tuple[
         with st.container(horizontal=True, vertical_alignment='center'):
             st.page_link('dashboard.py', label='Dashboard', icon='🏠')
     with center:
-        if paper_resp.title:
+        if paper_resp.pipeline_status in {
+            PipelineStatus.EXTRACTION_COMPLETED,
+            PipelineStatus.LINKING_RUNNING,
+            PipelineStatus.LINKING_FAILED,
+            PipelineStatus.COMPLETED,
+        }:
             st.markdown(f'# {paper_resp.title}')
             parts = [f'{paper_resp.first_author} et al. {paper_resp.pub_year}']
             if paper_resp.pmid:

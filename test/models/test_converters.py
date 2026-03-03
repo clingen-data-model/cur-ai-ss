@@ -11,6 +11,13 @@ from lib.agents.patient_extraction_agent import (
     RaceEthnicity,
     SexAtBirth,
 )
+from lib.agents.patient_variant_linking_agent import (
+    Inheritance,
+    LinkType,
+    PatientVariantLink,
+    TestingMethod,
+    Zygosity,
+)
 from lib.agents.variant_extraction_agent import (
     GenomeBuild,
     HgvsInferenceConfidence,
@@ -21,6 +28,7 @@ from lib.models import PaperDB
 from lib.models.converters import (
     paper_metadata_to_db,
     patient_info_to_db,
+    patient_variant_link_to_db,
     variant_to_db,
 )
 
@@ -185,3 +193,39 @@ class TestPaperMetadataConverter:
         assert paper_db.pmid == '12345678'
         assert paper_db.pmcid == 'PMC123456'
         assert paper_db.paper_types == ['Research']
+
+
+class TestPatientVariantLinkConverter:
+    def test_to_db(self):
+        link = PatientVariantLink(
+            patient_id=1,
+            variant_id=2,
+            zygosity=Zygosity.heterozygous,
+            inheritance=Inheritance.dominant,
+            link_type=LinkType.explicit,
+            evidence_context='Patient 1 was heterozygous for the variant',
+            confidence='high',
+            linkage_notes='Direct statement in text',
+            testing_methods=[
+                TestingMethod.Exome_sequencing,
+                TestingMethod.Sanger_sequencing,
+            ],
+            testing_methods_evidence=['WES performed', 'Confirmed by Sanger'],
+        )
+        db_row = patient_variant_link_to_db(
+            link, paper_id='paper789', patient_db_id=10, variant_db_id=20
+        )
+        assert db_row.paper_id == 'paper789'
+        assert db_row.patient_id == 10
+        assert db_row.variant_id == 20
+        assert db_row.zygosity == 'heterozygous'
+        assert db_row.inheritance == 'dominant'
+        assert db_row.link_type == 'explicit'
+        assert db_row.evidence_context == 'Patient 1 was heterozygous for the variant'
+        assert db_row.confidence == 'high'
+        assert db_row.linkage_notes == 'Direct statement in text'
+        assert db_row.testing_methods == ['Exome sequencing', 'Sanger sequencing']
+        assert db_row.testing_methods_evidence == [
+            'WES performed',
+            'Confirmed by Sanger',
+        ]
