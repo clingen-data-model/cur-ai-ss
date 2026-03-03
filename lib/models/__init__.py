@@ -22,6 +22,10 @@ from sqlalchemy.orm import (
     relationship,
 )
 
+Color = Literal[
+    'red', 'orange', 'yellow', 'blue', 'green', 'violet', 'gray', 'grey', 'primary'
+]
+
 
 class Base(DeclarativeBase):
     pass
@@ -52,12 +56,8 @@ class PipelineStatus(str, Enum):
         }[self]
 
     @property
-    def color(
-        self,
-    ) -> Literal[
-        'red', 'orange', 'yellow', 'blue', 'green', 'violet', 'gray', 'grey', 'primary'
-    ]:
-        return {
+    def color(self) -> Color:
+        color_map: dict[PipelineStatus, Color] = {
             PipelineStatus.QUEUED: 'yellow',
             PipelineStatus.EXTRACTION_RUNNING: 'yellow',
             PipelineStatus.EXTRACTION_FAILED: 'red',
@@ -65,7 +65,8 @@ class PipelineStatus(str, Enum):
             PipelineStatus.LINKING_RUNNING: 'yellow',
             PipelineStatus.LINKING_FAILED: 'red',
             PipelineStatus.COMPLETED: 'green',
-        }[self]
+        }
+        return color_map[self]
 
 
 class GeneDB(Base):
