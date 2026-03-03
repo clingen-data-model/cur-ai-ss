@@ -76,12 +76,9 @@ def render_editable_paper_extraction_tab(paper_resp: PaperResp) -> None:
             key=f'{i}-testing-method',
         )
 
-        evidence = (
-            testing_methods_evidence[i] if i < len(testing_methods_evidence) else None
-        )
         st.text_area(
             f'Testing Method #{i + 1} Evidence',
-            evidence or '',
+            testing_methods_evidence[i] or '',
             height=150,
             key=f'{i}-testing-evidence',
         )
