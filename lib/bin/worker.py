@@ -11,6 +11,7 @@ from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 
+from lib.agents.paper_extraction_agent import PaperExtractionOutput
 from lib.agents.paper_extraction_agent import agent as paper_extraction_agent
 from lib.agents.patient_extraction_agent import agent as patient_extraction_agent
 from lib.agents.patient_variant_linking_agent import (
@@ -50,6 +51,15 @@ async def parse_paper_task_async(paper: Paper) -> None:
     paper.metadata_json_path.parent.mkdir(parents=True, exist_ok=True)
     with open(paper.metadata_json_path, 'w') as f:
         f.write(json_response)
+    _persist_paper_extraction(paper.id, result.final_output)
+
+
+def _persist_paper_extraction(paper_id: str, output: PaperExtractionOutput) -> None:
+    """Persist PaperExtractionOutput fields to the papers table."""
+    with session_scope() as session:
+        paper_db = session.get(PaperDB, paper_id)
+        if paper_db:
+            output.apply_to(paper_db)
 
 
 async def parse_patients_task_async(paper: Paper) -> None:

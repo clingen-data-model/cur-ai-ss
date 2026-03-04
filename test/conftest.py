@@ -8,6 +8,7 @@ from typing import Optional
 
 import pytest
 from defusedxml import ElementTree
+from sqlalchemy.orm import Session
 
 from lib.api import db
 
@@ -28,10 +29,14 @@ def test_file_contents(test_resources_path):
 
 @pytest.fixture
 def db_session(monkeypatch, tmpdir):
+    from lib.models import Base
+
     db.env.CAA_ROOT = str(tmpdir)
     db.env.SQLLITE_DIR = ''
     monkeypatch.setattr(db, '_engine', None)
     monkeypatch.setattr(db, '_session_factory', None)
+    engine = db.get_engine()
+    Base.metadata.create_all(bind=engine)
     session_local = db.get_sessionmaker()
     session: Session = session_local()
     yield session
