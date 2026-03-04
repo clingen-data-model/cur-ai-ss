@@ -1,3 +1,4 @@
+import asyncio
 import traceback
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -42,7 +43,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from alembic.config import Config
 
     alembic_cfg = Config('alembic.ini')
-    command.upgrade(alembic_cfg, 'head')
+    await asyncio.to_thread(command.upgrade, alembic_cfg, 'head')
     yield
 
 
