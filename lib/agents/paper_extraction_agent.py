@@ -7,6 +7,7 @@ from pydantic import BaseModel, model_validator
 from typing_extensions import Self
 
 from lib.evagg.utils.environment import env
+from lib.models import PaperDB
 
 ESEARCH_ENDPOINT = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
 EFETCH_ENDPOINT = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
@@ -39,6 +40,12 @@ class PaperExtractionOutput(BaseModel):
         if len(self.paper_types) > 2:
             raise ValueError('paper_types must contain at most two items')
         return self
+
+    def apply_to(self, paper_db: PaperDB) -> None:
+        data = self.model_dump()
+        data['paper_types'] = [pt.value for pt in self.paper_types]
+        for key, value in data.items():
+            setattr(paper_db, key, value)
 
 
 @function_tool

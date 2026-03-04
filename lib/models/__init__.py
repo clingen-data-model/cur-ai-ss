@@ -9,6 +9,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Text,
     func,
 )
 from sqlalchemy import (
@@ -21,6 +22,7 @@ from sqlalchemy.orm import (
     mapped_column,
     relationship,
 )
+from sqlalchemy.types import JSON
 
 Color = Literal[
     'red', 'orange', 'yellow', 'blue', 'green', 'violet', 'gray', 'grey', 'primary'
@@ -109,19 +111,30 @@ class PaperDB(Base):
         'GeneDB',
         back_populates='papers',
     )
-    filename: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
     pipeline_status: Mapped[PipelineStatus] = mapped_column(
         SQLEnum(PipelineStatus),
         nullable=False,
         server_default=PipelineStatus.QUEUED.value,
+        index=True,
     )
     last_modified: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
-        index=True,
     )
+
+    # Paper extraction metadata (populated asynchronously by extraction agent)
+    pmid: Mapped[str | None] = mapped_column(String, nullable=True)
+    pmcid: Mapped[str | None] = mapped_column(String, nullable=True)
+    doi: Mapped[str | None] = mapped_column(String, nullable=True)
+    title: Mapped[str | None] = mapped_column(String, nullable=True)
+    abstract: Mapped[str | None] = mapped_column(Text, nullable=True)
+    journal_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    first_author: Mapped[str | None] = mapped_column(String, nullable=True)
+    publication_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    paper_types: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     @property
     def gene_symbol(self) -> str:
