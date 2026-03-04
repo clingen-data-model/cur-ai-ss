@@ -34,7 +34,6 @@ from lib.evagg.ref.ncbi import get_ncbi_response_translator
 from lib.evagg.types.base import Paper
 from lib.evagg.utils.web import RequestsWebContentClient, WebClientSettings
 from lib.models import PaperDB, PipelineStatus
-from lib.models.converters import paper_extraction_to_db
 
 LEASE_TIMEOUT_S = 900
 POLL_INTERVAL_S = 10
@@ -60,7 +59,7 @@ def _persist_paper_extraction(paper_id: str, output: PaperExtractionOutput) -> N
     with session_scope() as session:
         paper_db = session.get(PaperDB, paper_id)
         if paper_db:
-            paper_extraction_to_db(output, paper_db)
+            output.apply_to(paper_db)
 
 
 async def parse_patients_task_async(paper: Paper) -> None:

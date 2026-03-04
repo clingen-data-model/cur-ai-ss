@@ -131,9 +131,9 @@ class PaperDB(Base):
     doi: Mapped[str | None] = mapped_column(String, nullable=True)
     title: Mapped[str | None] = mapped_column(String, nullable=True)
     abstract: Mapped[str | None] = mapped_column(Text, nullable=True)
-    journal: Mapped[str | None] = mapped_column(String, nullable=True)
+    journal_name: Mapped[str | None] = mapped_column(String, nullable=True)
     first_author: Mapped[str | None] = mapped_column(String, nullable=True)
-    pub_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    publication_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     paper_types: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     @property
