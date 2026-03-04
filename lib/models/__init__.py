@@ -111,18 +111,18 @@ class PaperDB(Base):
         'GeneDB',
         back_populates='papers',
     )
-    filename: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
     pipeline_status: Mapped[PipelineStatus] = mapped_column(
         SQLEnum(PipelineStatus),
         nullable=False,
         server_default=PipelineStatus.QUEUED.value,
+        index=True,
     )
     last_modified: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
-        index=True,
     )
 
     # Paper extraction metadata (populated asynchronously by extraction agent)
