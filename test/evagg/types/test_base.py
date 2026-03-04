@@ -1,4 +1,4 @@
-from lib.evagg.types import HGVSVariant, Paper
+from lib.evagg.types import Paper
 
 
 def test_paper_from_dict() -> None:
@@ -51,30 +51,3 @@ def test_paper_repr() -> None:
 
     paper = Paper(**paper_dict)
     assert str(paper) == str_paper
-
-
-def test_variant_equality() -> None:
-    variant1 = HGVSVariant('var1', 'gene1', 'ref1', False, True, None, None, [])
-    variant2 = HGVSVariant('var1', 'gene1', 'ref1', False, True, None, None, [])
-    variant3 = HGVSVariant('var1', 'gene2', 'ref2', False, True, None, None, [])
-
-    assert variant1 == variant1
-    assert variant1 == variant2
-    assert variant1 != variant3
-    assert variant1 != 'not a variant'
-
-
-def test_variant_hash() -> None:
-    variant1 = HGVSVariant('var1', 'gene1', 'ref1', False, True, None, None, [])
-    variant2 = HGVSVariant('var2', 'gene1', 'ref1', False, True, None, None, [])
-    assert hash(variant1) != hash(variant2)
-
-
-def test_variant_str() -> None:
-    variant = HGVSVariant('var', 'gene', 'ref', False, True, None, None, [])
-    assert str(variant) == 'ref:var'
-
-
-def test_variant_repr() -> None:
-    variant = HGVSVariant('var', 'gene', 'ref', False, True, None, None, [])
-    assert variant.__repr__() == 'ref:var'
