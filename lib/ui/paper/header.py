@@ -83,7 +83,6 @@ def render_paper_header() -> tuple[
 ]:
     st.set_page_config(layout='wide')
     paper_query_params = PaperQueryParams.from_query_params()
-    paper = Paper(id=paper_query_params.paper_id)
     paper_extraction_output: PaperExtractionOutput | None = None
     with st.spinner('Loading paper...'):
         try:
