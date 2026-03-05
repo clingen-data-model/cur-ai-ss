@@ -1,8 +1,10 @@
+import hashlib
 from datetime import datetime
 from enum import Enum
+from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import (
     Column,
     DateTime,
@@ -23,6 +25,8 @@ from sqlalchemy.orm import (
     relationship,
 )
 from sqlalchemy.types import JSON
+
+from lib.evagg.utils.environment import env
 
 Color = Literal[
     'red', 'orange', 'yellow', 'blue', 'green', 'violet', 'gray', 'grey', 'primary'
@@ -140,13 +144,126 @@ class PaperDB(Base):
     def gene_symbol(self) -> str:
         return self.gene.symbol
 
+    @classmethod
+    def from_content(cls, content: bytes) -> 'PaperDB':
+        h = hashlib.sha256()
+        h.update(content)
+        return cls(
+            id=h.hexdigest(),
+        )
+
+    @property
+    def evagg_observations_path(self) -> Path:
+        return env.evagg_dir / self.id / 'observations.json'
+
+    @property
+    def metadata_json_path(self) -> Path:
+        return env.evagg_dir / self.id / 'metadata.json'
+
+    @property
+    def patient_info_json_path(self) -> Path:
+        return env.evagg_dir / self.id / 'patient_info.json'
+
+    @property
+    def variants_json_path(self) -> Path:
+        return env.evagg_dir / self.id / 'variants.json'
+
+    @property
+    def harmonized_variants_json_path(self) -> Path:
+        return env.evagg_dir / self.id / 'harmonized_variants.json'
+
+    @property
+    def enriched_variants_json_path(self) -> Path:
+        return env.evagg_dir / self.id / 'enriched_variants.json'
+
+    @property
+    def patient_variant_links_json_path(self) -> Path:
+        return env.evagg_dir / self.id / 'patient_variant_links.json'
+
+    @property
+    def pdf_dir(self) -> Path:
+        return env.extracted_pdf_dir / self.id
+
+    @property
+    def pdf_raw_path(self) -> Path:
+        return self.pdf_dir / 'raw.pdf'
+
+    @property
+    def pdf_thumbnail_path(self) -> Path:
+        return self.pdf_dir / 'thumbnail.png'
+
+    @property
+    def pdf_tables_dir(self) -> Path:
+        return self.pdf_dir / 'tables'
+
+    @property
+    def pdf_images_dir(self) -> Path:
+        return self.pdf_dir / 'images'
+
+    @property
+    def pdf_sections_dir(self) -> Path:
+        return self.pdf_dir / 'sections'
+
+    @property
+    def pdf_markdown_path(self) -> Path:
+        return self.pdf_dir / 'raw.md'
+
+    @property
+    def pdf_json_path(self) -> Path:
+        return self.pdf_dir / 'raw.json'
+
+    @property
+    def pdf_words_json_path(self) -> Path:
+        return self.pdf_dir / 'words.json'
+
+    @property
+    def pdf_extraction_success_path(self) -> Path:
+        return self.pdf_dir / '_SUCCESS'
+
+    def pdf_image_path(
+        self,
+        image_id: int,
+    ) -> Path:
+        return self.pdf_images_dir / f'{image_id}.png'
+
+    def pdf_image_caption_path(
+        self,
+        image_id: int,
+    ) -> Path:
+        return self.pdf_images_dir / f'{image_id}.md'
+
+    def pdf_table_image_path(
+        self,
+        table_id: int,
+    ) -> Path:
+        return self.pdf_tables_dir / f'{table_id}.png'
+
+    def pdf_table_markdown_path(
+        self,
+        table_id: int,
+    ) -> Path:
+        return self.pdf_tables_dir / f'{table_id}.md'
+
+    def pdf_section_markdown_path(
+        self,
+        section_id: int,
+    ) -> Path:
+        return self.pdf_sections_dir / f'{section_id}.md'
+
 
 class PaperResp(BaseModel):
     id: str
     gene_symbol: str
     filename: str
     pipeline_status: PipelineStatus
+    title: str | None
+    first_author: str | None
+    pdf_thumbnail_path: str
 
+    @field_validator("pdf_thumbnail_path", mode="before")
+    @classmethod
+    def serialize_categories(cls, path):
+        return str(path)
 
 class PipelineUpdateRequest(BaseModel):
     pipeline_status: PipelineStatus

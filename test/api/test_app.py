@@ -79,13 +79,14 @@ def test_queue_new_paper(client, test_pdf, db_session, seeded_genes):
     assert count == 1
 
 
-def test_queue_existing_paper_fails(client, test_pdf, seeded_genes):
+def test_queue_existing_paper_fails(client, db_session, test_pdf, seeded_genes):
     # Second upload: same content/name triggers conflict
     response = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
         data={'gene_symbol': 'BRCA1'},
     )
+    db_session.commit()  # 👈 make first request durable
     response2 = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},

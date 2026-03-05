@@ -19,13 +19,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
 from lib.api.db import get_session
 from lib.evagg.pdf.thumbnail import pdf_first_page_to_thumbnail_pymupdf_bytes
-from lib.evagg.types.base import Paper
 from lib.evagg.utils.environment import env
 from lib.models import (
     GeneDB,
@@ -108,43 +108,40 @@ def put_paper(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail='Only PDF files are allowed'
         )
-
     gene = session.execute(
         select(GeneDB).where(GeneDB.symbol == gene_symbol)
     ).scalar_one_or_none()
     if not gene:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=f'Gene {gene} not found'
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f'Gene {gene_symbol} not found',
         )
-
     content = uploaded_file.file.read()
-    paper = Paper.from_content(content)
-    paper_db = (
-        session.query(PaperDB)
-        .options(selectinload(PaperDB.gene))
-        .filter(PaperDB.id == paper.id)
-        .one_or_none()
-    )
-    if paper_db:
+    paper_db = PaperDB.from_content(content)
+    paper_db.gene_id = gene.id
+    paper_db.filename = uploaded_file.filename
+    paper_db.pipeline_status = PipelineStatus.QUEUED
+    session.add(paper_db)
+    try:
+        session.flush()
+        paper_db.pdf_raw_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(paper_db.pdf_raw_path, 'wb') as f:
+            f.write(content)
+        with open(paper_db.pdf_thumbnail_path, 'wb') as fp:
+            fp.write(pdf_first_page_to_thumbnail_pymupdf_bytes(content))
+        return paper_db
+    except IntegrityError:
+        session.rollback()
+        existing = (
+            session.query(PaperDB)
+            .options(selectinload(PaperDB.gene))
+            .filter(PaperDB.id == paper_db.id)
+            .one()
+        )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f'Paper extraction already {paper_db.pipeline_status.value.lower()}',
+            detail=f'Paper extraction already {existing.pipeline_status.value.lower()}',
         )
-    else:
-        paper.pdf_raw_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(paper.pdf_raw_path, 'wb') as f:
-            f.write(content)
-        with open(paper.pdf_thumbnail_path, 'wb') as fp:
-            fp.write(pdf_first_page_to_thumbnail_pymupdf_bytes(content))
-        paper_db = PaperDB(
-            id=paper.id,
-            filename=uploaded_file.filename,
-            pipeline_status=PipelineStatus.QUEUED,
-        )
-        paper_db.gene = gene
-        session.add(paper_db)
-        session.flush()
-    return paper_db
 
 
 @app.get('/papers/{paper_id}', response_model=PaperResp)
