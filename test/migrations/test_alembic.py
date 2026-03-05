@@ -8,6 +8,7 @@ from alembic.migration import MigrationContext
 from lib.api import db
 from lib.models import Base
 
+
 def test_alembic_upgrade_head(monkeypatch, tmp_path):
     """Simple test that all migrations apply cleanly on a fresh DB."""
 
@@ -26,5 +27,7 @@ def test_alembic_upgrade_head(monkeypatch, tmp_path):
     # To generate a new migration with the reflected updates, run `uv run alembic revision --autogenerate`
     # (with `./bin/api` running, as the command references your local database).
     engine = db.get_engine()
-    diffs = compare_metadata(MigrationContext.configure(engine.connect()), Base.metadata)
+    diffs = compare_metadata(
+        MigrationContext.configure(engine.connect()), Base.metadata
+    )
     assert diffs == []
