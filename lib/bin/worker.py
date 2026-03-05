@@ -3,12 +3,11 @@ import asyncio
 import datetime
 import json
 import logging
+import sys
 import time
 import traceback
 
 from agents import Runner
-from lib.evagg.llm import OpenAIClient
-from lib.evagg.utils.web import RequestsWebContentClient, WebClientSettings
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
@@ -35,7 +34,11 @@ POLL_INTERVAL_S = 10
 RETRIES = 2
 
 logger = logging.getLogger(__name__)
-
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] [%(process)d] %(name)s: %(message)s",
+    stream=sys.stdout,
+)
 
 async def parse_paper_task_async(paper_db: PaperDB) -> None:
     result = await Runner.run(
