@@ -114,6 +114,7 @@ def test_get_paper_success(client, test_pdf, seeded_genes):
     assert data_get['pdf_thumbnail_path'].endswith(
         'extracted_pdfs/0e487d93695f2c04d955d8b2cba27384d71aea0acd87d9748ec2abbf2e8a6a0d/thumbnail.png'
     )
+    assert data_get['gene_symbol'] == 'BRCA1'
 
 
 def test_get_paper_not_found(client):
@@ -200,6 +201,7 @@ def test_list_papers_filtered_by_status(client, test_pdf, db_session, seeded_gen
     assert response.status_code == 200
     jobs = response.json()
     assert all(job['pipeline_status'] == PipelineStatus.QUEUED for job in jobs)
+    assert all(job['gene_symbol'] == 'BRCA1' for job in jobs)
 
 
 def test_delete_paper(client, test_pdf, db_session, seeded_genes):
