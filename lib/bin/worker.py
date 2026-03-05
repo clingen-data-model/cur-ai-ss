@@ -295,6 +295,7 @@ def main() -> None:
         except Exception:
             logger.exception('Unexpected error in poller loop')
 
+        logger.info("Looking for work")
         time.sleep(POLL_INTERVAL_S)
 
 
