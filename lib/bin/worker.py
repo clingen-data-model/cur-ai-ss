@@ -36,9 +36,10 @@ RETRIES = 2
 logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] [%(process)d] %(name)s: %(message)s",
+    format='%(asctime)s [%(levelname)s] [%(process)d] %(name)s: %(message)s',
     stream=sys.stdout,
 )
+
 
 async def parse_paper_task_async(paper_db: PaperDB) -> None:
     result = await Runner.run(
@@ -295,7 +296,7 @@ def main() -> None:
         except Exception:
             logger.exception('Unexpected error in poller loop')
 
-        logger.info("Looking for work")
+        logger.info('Looking for work')
         time.sleep(POLL_INTERVAL_S)
 
 
