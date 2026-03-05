@@ -18,7 +18,7 @@ from lib.models import PipelineStatus
 from lib.ui.paper.header import PaperQueryParams, render_paper_header
 
 paper_query_params = PaperQueryParams.from_query_params()
-paper, paper_resp, paper_extraction_output, center = render_paper_header()
+paper_resp, paper_extraction_output, center = render_paper_header()
 with center:
     if not paper_extraction_output:
         st.write(f'{paper_resp.filename} not yet extracted...')
@@ -26,17 +26,17 @@ with center:
     if paper_resp.pipeline_status != PipelineStatus.COMPLETED:
         st.write(f'Entity Linking not yet completed...')
         st.stop()
-    with open(paper.variants_json_path, 'r') as f:
+    with open(paper_resp.variants_json_path, 'r') as f:
         extracted_data = json.load(f)
         extracted_variants: list[Variant] = VariantExtractionOutput.model_validate(
             extracted_data
         ).variants
-    with open(paper.harmonized_variants_json_path, 'r') as f:
+    with open(paper_resp.harmonized_variants_json_path, 'r') as f:
         harmonized_data = json.load(f)
         harmonized_variants: list[HarmonizedVariant] = (
             VariantHarmonizationOutput.model_validate(harmonized_data).variants
         )
-    with open(paper.enriched_variants_json_path, 'r') as f:
+    with open(paper_resp.enriched_variants_json_path, 'r') as f:
         enriched_data = json.load(f)
         enriched_variants: list[EnrichedVariant] = (
             VariantEnrichmentOutput.model_validate(enriched_data).variants

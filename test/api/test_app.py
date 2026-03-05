@@ -111,7 +111,9 @@ def test_get_paper_success(client, test_pdf, seeded_genes):
     assert data_get['id'] == paper_id
     assert data_get['pipeline_status'] == PipelineStatus.QUEUED.value
     assert data_get['filename'] == 'job-1.pdf'
-    assert data_get['pdf_thumbnail_path'].endswith('extracted_pdfs/0e487d93695f2c04d955d8b2cba27384d71aea0acd87d9748ec2abbf2e8a6a0d/thumbnail.png')
+    assert data_get['pdf_thumbnail_path'].endswith(
+        'extracted_pdfs/0e487d93695f2c04d955d8b2cba27384d71aea0acd87d9748ec2abbf2e8a6a0d/thumbnail.png'
+    )
 
 
 def test_get_paper_not_found(client):

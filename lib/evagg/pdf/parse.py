@@ -19,7 +19,7 @@ from docling_core.types.doc import (
 from docling_core.types.doc.page import TextCellUnit
 from docling_parse.pdf_parser import DoclingPdfParser, PdfDocument
 
-from lib.evagg.types import Paper
+from lib.models import PaperDB
 
 IMAGE_RESOLUTION_SCALE = 2.0
 
@@ -99,14 +99,13 @@ def split_by_sections(
     return sections, image_captions
 
 
-def parse_content(paper: Paper, force: bool = False) -> None:
-    if not force and paper.pdf_extraction_success_path.exists():
+def parse_content(paper_db: PaperDB, force: bool = False) -> None:
+    if not force and paper_db.pdf_extraction_success_path.exists():
         return
-    if not paper.content:
-        raise RuntimeError('Paper must already have raw pdf content')
-    paper.pdf_images_dir.mkdir(parents=True, exist_ok=True)
-    paper.pdf_tables_dir.mkdir(parents=True, exist_ok=True)
-    paper.pdf_sections_dir.mkdir(parents=True, exist_ok=True)
+    paper_db = paper_db.with_content()
+    paper_db.pdf_images_dir.mkdir(parents=True, exist_ok=True)
+    paper_db.pdf_tables_dir.mkdir(parents=True, exist_ok=True)
+    paper_db.pdf_sections_dir.mkdir(parents=True, exist_ok=True)
     doc_converter = DocumentConverter(
         format_options={
             InputFormat.PDF: PdfFormatOption(
@@ -120,14 +119,14 @@ def parse_content(paper: Paper, force: bool = False) -> None:
     )
     # NB: name is a required field.  We "could" pass in uploaded filename here, I just thought it wasn't relevant at this time.
     document: DoclingDocument = doc_converter.convert(
-        source=DocumentStream(name='content', stream=BytesIO(paper.content)),
+        source=DocumentStream(name='content', stream=BytesIO(paper_db.content)),
     ).document
     save_unescaped_markdown(
         document,
-        paper.pdf_markdown_path,
+        paper_db.pdf_markdown_path,
     )
     document.save_as_json(
-        paper.pdf_json_path,
+        paper_db.pdf_json_path,
         image_mode=ImageRefMode.REFERENCED,
     )
     table_id, image_id = 0, 0
@@ -137,14 +136,14 @@ def parse_content(paper: Paper, force: bool = False) -> None:
             and (table_image := element.get_image(document)) is not None
         ):
             with open(
-                paper.pdf_table_image_path(
+                paper_db.pdf_table_image_path(
                     table_id,
                 ),
                 'wb',
             ) as fp:
                 table_image.save(fp, 'PNG')
             with open(
-                paper.pdf_table_markdown_path(
+                paper_db.pdf_table_markdown_path(
                     table_id,
                 ),
                 'w',
@@ -156,7 +155,7 @@ def parse_content(paper: Paper, force: bool = False) -> None:
             and (image := element.get_image(document)) is not None
         ):
             with open(
-                paper.pdf_image_path(
+                paper_db.pdf_image_path(
                     image_id,
                 ),
                 'wb',
@@ -164,9 +163,9 @@ def parse_content(paper: Paper, force: bool = False) -> None:
                 image.save(fp, 'PNG')
             image_id += 1
 
-    words_json = parse_words_json(BytesIO(paper.content))
+    words_json = parse_words_json(BytesIO(paper_db.content))
     with open(
-        paper.pdf_words_json_path,
+        paper_db.pdf_words_json_path,
         'w',
     ) as fp:
         json.dump(words_json, fp, indent=2)
@@ -174,7 +173,7 @@ def parse_content(paper: Paper, force: bool = False) -> None:
     section_mds, image_captions = split_by_sections(document)
     for i, section_md in enumerate(section_mds):
         with open(
-            paper.pdf_section_markdown_path(i),
+            paper_db.pdf_section_markdown_path(i),
             'w',
         ) as fp:
             fp.write('## ' + section_md[0])
@@ -183,13 +182,13 @@ def parse_content(paper: Paper, force: bool = False) -> None:
 
     for i, caption in image_captions.items():
         with open(
-            paper.pdf_image_caption_path(i),
+            paper_db.pdf_image_caption_path(i),
             'w',
         ) as fp:
             fp.write(caption)
 
     with open(
-        paper.pdf_extraction_success_path,
+        paper_db.pdf_extraction_success_path,
         'w',
     ) as fp:
         fp.write('')

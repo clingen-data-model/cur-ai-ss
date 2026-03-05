@@ -1,19 +1,22 @@
 from lib.evagg.pdf.parse import parse_content
-from lib.evagg.types.base import Paper
+from lib.models import PaperDB
 
 
 def test_convert_and_extract_creates_outputs(
     test_file_contents,
 ):
     content = test_file_contents('ACN3-7-1962.pdf', mode='rb')
-    # run extraction (force=True to avoid cache short-circuiting)
-    paper = Paper.from_content(content)
-    parse_content(paper, force=True)
+    paper_db = PaperDB.from_content(content)
+    paper_db.pdf_raw_path.parent.mkdir(parents=True, exist_ok=True)
+    paper_db.pdf_raw_path.write_bytes(content)
+    parse_content(
+        paper_db, force=True
+    )  # run extraction (force=True to avoid cache short-circuiting)
 
     # ---- core outputs ----
-    json_path = paper.pdf_json_path
-    md_path = paper.pdf_markdown_path
-    success_path = paper.pdf_extraction_success_path
+    json_path = paper_db.pdf_json_path
+    md_path = paper_db.pdf_markdown_path
+    success_path = paper_db.pdf_extraction_success_path
 
     assert json_path.exists(), 'JSON output was not created'
     assert md_path.exists(), 'Markdown output was not created'
@@ -25,8 +28,8 @@ def test_convert_and_extract_creates_outputs(
 
     table_id = 0
     while True:
-        img = paper.pdf_table_image_path(table_id)
-        md = paper.pdf_table_markdown_path(table_id)
+        img = paper_db.pdf_table_image_path(table_id)
+        md = paper_db.pdf_table_markdown_path(table_id)
         if not img.exists() and not md.exists():
             break
         if img.exists():
@@ -45,7 +48,7 @@ def test_convert_and_extract_creates_outputs(
     images = []
     image_id = 0
     while True:
-        img = paper.pdf_image_path(image_id)
+        img = paper_db.pdf_image_path(image_id)
         if not img.exists():
             break
         images.append(img)
@@ -57,7 +60,7 @@ def test_convert_and_extract_creates_outputs(
     sections = []
     section_id = 0
     while True:
-        section_md = paper.pdf_section_markdown_path(section_id)
+        section_md = paper_db.pdf_section_markdown_path(section_id)
         if not section_md.exists():
             break
         sections.append(section_md)
@@ -65,5 +68,5 @@ def test_convert_and_extract_creates_outputs(
 
     assert len(sections) >= 20, 'Not enough sections were extracted'
 
-    with open(paper.pdf_section_markdown_path(section_id - 1), 'r') as f:
+    with open(paper_db.pdf_section_markdown_path(section_id - 1), 'r') as f:
         assert '## Supporting Information' in f.read()

@@ -28,7 +28,6 @@ from lib.agents.variant_extraction_agent import agent as variant_extraction_agen
 from lib.agents.variant_harmonization_agent import agent as variant_harmonization_agent
 from lib.api.db import session_scope
 from lib.evagg.pdf.parse import parse_content
-from lib.evagg.types.base import Paper
 from lib.models import PaperDB, PipelineStatus
 
 LEASE_TIMEOUT_S = 900
@@ -38,16 +37,16 @@ RETRIES = 2
 logger = logging.getLogger(__name__)
 
 
-async def parse_paper_task_async(paper: Paper) -> None:
+async def parse_paper_task_async(paper_db: PaperDB) -> None:
     result = await Runner.run(
         paper_extraction_agent,
-        f'Paper (fulltext md): {paper.fulltext_md}',
+        f'Paper (fulltext md): {paper_db.fulltext_md}',
     )
     json_response = result.final_output.model_dump_json(indent=2)
-    paper.metadata_json_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(paper.metadata_json_path, 'w') as f:
+    paper_db.metadata_json_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(paper_db.metadata_json_path, 'w') as f:
         f.write(json_response)
-    _persist_paper_extraction(paper.id, result.final_output)
+    _persist_paper_extraction(paper_db.id, result.final_output)
 
 
 def _persist_paper_extraction(paper_id: str, output: PaperExtractionOutput) -> None:
@@ -58,19 +57,19 @@ def _persist_paper_extraction(paper_id: str, output: PaperExtractionOutput) -> N
             output.apply_to(paper_db)
 
 
-async def parse_patients_task_async(paper: Paper) -> None:
+async def parse_patients_task_async(paper_db: PaperDB) -> None:
     result = await Runner.run(
         patient_extraction_agent,
-        f'Paper (fulltext md): {paper.fulltext_md}',
+        f'Paper (fulltext md): {paper_db.fulltext_md}',
     )
     json_response = result.final_output.model_dump_json(indent=2)
-    paper.patient_info_json_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(paper.patient_info_json_path, 'w') as f:
+    paper_db.patient_info_json_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(paper_db.patient_info_json_path, 'w') as f:
         f.write(json_response)
 
 
-async def harmonize_variants_task_async(paper: Paper) -> None:
-    with open(paper.variants_json_path, 'r') as f:
+async def harmonize_variants_task_async(paper_db: PaperDB) -> None:
+    with open(paper_db.variants_json_path, 'r') as f:
         variants_output = json.load(f)
 
     result = await Runner.run(
@@ -79,26 +78,26 @@ async def harmonize_variants_task_async(paper: Paper) -> None:
         max_turns=10 * len(variants_output['variants']),
     )
     json_response = result.final_output.model_dump_json(indent=2)
-    paper.harmonized_variants_json_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(paper.harmonized_variants_json_path, 'w') as f:
+    paper_db.harmonized_variants_json_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(paper_db.harmonized_variants_json_path, 'w') as f:
         f.write(json_response)
 
 
-async def extract_variants_task_async(paper: Paper, gene_symbol: str) -> None:
+async def extract_variants_task_async(paper_db: PaperDB, gene_symbol: str) -> None:
     result = await Runner.run(
         variant_extraction_agent,
-        f'Gene Symbol: {gene_symbol}\nPaper (fulltext md): {paper.fulltext_md}',
+        f'Gene Symbol: {gene_symbol}\nPaper (fulltext md): {paper_db.fulltext_md}',
     )
     json_response = result.final_output.model_dump_json(indent=2)
-    paper.variants_json_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(paper.variants_json_path, 'w') as f:
+    paper_db.variants_json_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(paper_db.variants_json_path, 'w') as f:
         f.write(json_response)
 
 
-async def patient_variant_linking_task_async(paper: Paper) -> None:
-    with open(paper.variants_json_path, 'r') as f:
+async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
+    with open(paper_db.variants_json_path, 'r') as f:
         variants_output = json.load(f)
-    with open(paper.patient_info_json_path, 'r') as f:
+    with open(paper_db.patient_info_json_path, 'r') as f:
         patients_output = json.load(f)
 
     structured_variants = [
@@ -122,13 +121,13 @@ async def patient_variant_linking_task_async(paper: Paper) -> None:
         f'Variants JSON:\n{structured_variants}\n Patients JSON:\n {structured_patients}',
     )
     json_response = result.final_output.model_dump_json(indent=2)
-    paper.patient_variant_links_json_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(paper.patient_variant_links_json_path, 'w') as f:
+    paper_db.patient_variant_links_json_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(paper_db.patient_variant_links_json_path, 'w') as f:
         f.write(json_response)
 
 
-async def enrich_variants_task_async(paper: Paper) -> None:
-    with open(paper.harmonized_variants_json_path, 'r') as f:
+async def enrich_variants_task_async(paper_db: PaperDB) -> None:
+    with open(paper_db.harmonized_variants_json_path, 'r') as f:
         harmonized_data = json.load(f)
     harmonized_variants = [HarmonizedVariant(**v) for v in harmonized_data['variants']]
     # Offload blocking enrichment to thread
@@ -137,17 +136,17 @@ async def enrich_variants_task_async(paper: Paper) -> None:
         harmonized_variants,
     )
     output = VariantEnrichmentOutput(variants=enriched_variants)
-    paper.enriched_variants_json_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(paper.enriched_variants_json_path, 'w') as f:
+    paper_db.enriched_variants_json_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(paper_db.enriched_variants_json_path, 'w') as f:
         f.write(output.model_dump_json(indent=2))
 
 
 def initial_extraction(paper_id: str, gene_symbol: str) -> None:
-    async def _run_extraction_pipeline(paper: Paper, gene_symbol: str) -> None:
+    async def _run_extraction_pipeline(paper_db: PaperDB, gene_symbol: str) -> None:
         await asyncio.gather(
-            parse_paper_task_async(paper),
-            parse_patients_task_async(paper),
-            extract_variants_task_async(paper, gene_symbol),
+            parse_paper_task_async(paper_db),
+            parse_patients_task_async(paper_db),
+            extract_variants_task_async(paper_db, gene_symbol),
         )
 
     max_attempts = RETRIES + 1
@@ -159,9 +158,9 @@ def initial_extraction(paper_id: str, gene_symbol: str) -> None:
         )
     for attempt in range(1, max_attempts + 1):
         try:
-            paper = Paper(id=paper_id).with_content()
-            parse_content(paper, force=True)
-            asyncio.run(_run_extraction_pipeline(paper, gene_symbol))
+            paper_db = PaperDB(id=paper_id)
+            parse_content(paper_db, force=True)
+            asyncio.run(_run_extraction_pipeline(paper_db, gene_symbol))
             with session_scope() as session:
                 session.execute(
                     update(PaperDB)
@@ -186,12 +185,12 @@ def initial_extraction(paper_id: str, gene_symbol: str) -> None:
 
 
 def linking_tasks(paper_id: str) -> None:
-    async def _run_linking_pipeline(paper: Paper) -> None:
+    async def _run_linking_pipeline(paper_db: PaperDB) -> None:
         await asyncio.gather(
-            harmonize_variants_task_async(paper),
-            patient_variant_linking_task_async(paper),
+            harmonize_variants_task_async(paper_db),
+            patient_variant_linking_task_async(paper_db),
         )
-        await enrich_variants_task_async(paper)
+        await enrich_variants_task_async(paper_db)
 
     max_attempts = RETRIES + 1
     with session_scope() as session:
@@ -202,8 +201,8 @@ def linking_tasks(paper_id: str) -> None:
         )
     for attempt in range(1, max_attempts + 1):
         try:
-            paper = Paper(id=paper_id).with_content()
-            asyncio.run(_run_linking_pipeline(paper))
+            paper_db = PaperDB(id=paper_id).with_content()
+            asyncio.run(_run_linking_pipeline(paper_db))
             with session_scope() as session:
                 session.execute(
                     update(PaperDB)

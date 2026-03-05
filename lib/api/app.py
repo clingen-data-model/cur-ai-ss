@@ -119,7 +119,7 @@ def put_paper(
     content = uploaded_file.file.read()
     paper_db = PaperDB.from_content(content)
     paper_db.gene_id = gene.id
-    paper_db.filename = uploaded_file.filename
+    paper_db.filename = uploaded_file.filename or ''
     paper_db.pipeline_status = PipelineStatus.QUEUED
     session.add(paper_db)
     try:

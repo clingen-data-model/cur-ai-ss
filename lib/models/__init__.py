@@ -105,8 +105,8 @@ class PaperDB(Base):
     __tablename__ = 'papers'
 
     id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
-    gene_id: Mapped[str] = mapped_column(
-        String,
+    gene_id: Mapped[int] = mapped_column(
+        Integer,
         ForeignKey('genes.id', ondelete='CASCADE'),
         index=True,
         nullable=False,
@@ -151,6 +151,36 @@ class PaperDB(Base):
         return cls(
             id=h.hexdigest(),
         )
+
+    def with_content(self) -> 'PaperDB':
+        if not self.pdf_raw_path.exists():
+            raise RuntimeError('Raw PDF must exist prior to calling this method')
+        with open(self.pdf_raw_path, 'rb') as f:
+            self.content = f.read()
+        return self
+
+    @property
+    def fulltext_md(self) -> str:
+        with open(self.pdf_markdown_path, 'r') as f:
+            return f.read()
+
+    @property
+    def sections_md(self) -> list[str]:
+        sections = []
+        for section_path in self.pdf_sections_dir.iterdir():
+            if str(section_path).endswith('md'):
+                with open(section_path, 'r') as f:
+                    sections.append(f.read())
+        return sections
+
+    @property
+    def tables_md(self) -> list[str]:
+        tables = []
+        for table_path in self.pdf_tables_dir.iterdir():
+            if str(table_path).endswith('md'):
+                with open(table_path, 'r') as f:
+                    tables.append(f.read())
+        return tables
 
     @property
     def evagg_observations_path(self) -> Path:
@@ -258,12 +288,55 @@ class PaperResp(BaseModel):
     pipeline_status: PipelineStatus
     title: str | None
     first_author: str | None
+    metadata_json_path: str
     pdf_thumbnail_path: str
+    pdf_raw_path: str
+    patient_info_json_path: str
+    enriched_variants_json_path: str
+    harmonized_variants_json_path: str
+    variants_json_path: str
+    patient_variant_links_json_path: str
 
-    @field_validator("pdf_thumbnail_path", mode="before")
+    @field_validator('metadata_json_path', mode='before')
     @classmethod
-    def serialize_categories(cls, path):
+    def str1(cls, path: Path) -> str:
         return str(path)
+
+    @field_validator('pdf_thumbnail_path', mode='before')
+    @classmethod
+    def str2(cls, path: Path) -> str:
+        return str(path)
+
+    @field_validator('pdf_raw_path', mode='before')
+    @classmethod
+    def str3(cls, path: Path) -> str:
+        return str(path)
+
+    @field_validator('patient_info_json_path', mode='before')
+    @classmethod
+    def str4(cls, path: Path) -> str:
+        return str(path)
+
+    @field_validator('enriched_variants_json_path', mode='before')
+    @classmethod
+    def str5(cls, path: Path) -> str:
+        return str(path)
+
+    @field_validator('harmonized_variants_json_path', mode='before')
+    @classmethod
+    def str6(cls, path: Path) -> str:
+        return str(path)
+
+    @field_validator('variants_json_path', mode='before')
+    @classmethod
+    def str7(cls, path: Path) -> str:
+        return str(path)
+
+    @field_validator('patient_variant_links_json_path', mode='before')
+    @classmethod
+    def str8(cls, path: Path) -> str:
+        return str(path)
+
 
 class PipelineUpdateRequest(BaseModel):
     pipeline_status: PipelineStatus

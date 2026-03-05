@@ -55,7 +55,7 @@ def render_editable_paper_extraction_tab(
     )
 
 
-paper, paper_resp, paper_extraction_output, center = render_paper_header()
+paper_resp, paper_extraction_output, center = render_paper_header()
 with center:
     if not paper_extraction_output:
         st.write(f'{paper_resp.filename} not yet extracted...')
