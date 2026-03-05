@@ -238,9 +238,9 @@ def render_patient(
 
 
 paper_query_params = PaperQueryParams.from_query_params()
-paper_resp, paper_extraction_output, center = render_paper_header()
+paper_resp, center = render_paper_header()
 with center:
-    if not paper_extraction_output:
+    if not paper_resp.title:
         st.write(f'{paper_resp.filename} not yet extracted...')
         st.stop()
     if paper_resp.pipeline_status != PipelineStatus.COMPLETED:

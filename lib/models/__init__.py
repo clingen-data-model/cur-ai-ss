@@ -101,6 +101,41 @@ class GeneResp(BaseModel):
     symbol: str
 
 
+class PaperType(str, Enum):
+    Letter = 'Letter'
+    Research = 'Research'
+    Case_series = 'Case_series'
+    Case_study = 'Case_study'
+    Cohort_analysis = 'Cohort_analysis'
+    Case_control = 'Case_control'
+    Unknown = 'Unknown'
+    Other = 'Other'
+
+
+class PaperExtractionOutput(BaseModel):
+    title: str
+    first_author: str
+    journal_name: str | None
+    abstract: str | None = None
+    publication_year: int | None = None
+    doi: str | None = None
+    pmid: str | None = None
+    pmcid: str | None = None
+    paper_types: List[PaperType]
+
+    @model_validator(mode='after')
+    def max_two_paper_types(self) -> Self:
+        if len(self.paper_types) > 2:
+            raise ValueError('paper_types must contain at most two items')
+        return self
+
+    def apply_to(self, paper_db: PaperDB) -> None:
+        data = self.model_dump()
+        data['paper_types'] = [pt.value for pt in self.paper_types]
+        for key, value in data.items():
+            setattr(paper_db, key, value)
+
+
 class PaperDB(Base):
     __tablename__ = 'papers'
 
@@ -130,14 +165,14 @@ class PaperDB(Base):
     )
 
     # Paper extraction metadata (populated asynchronously by extraction agent)
+    title: Mapped[str | None] = mapped_column(String, nullable=True)
+    first_author: Mapped[str | None] = mapped_column(String, nullable=True)
+    journal_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    abstract: Mapped[str | None] = mapped_column(Text, nullable=True)
+    publication_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    doi: Mapped[str | None] = mapped_column(String, nullable=True)
     pmid: Mapped[str | None] = mapped_column(String, nullable=True)
     pmcid: Mapped[str | None] = mapped_column(String, nullable=True)
-    doi: Mapped[str | None] = mapped_column(String, nullable=True)
-    title: Mapped[str | None] = mapped_column(String, nullable=True)
-    abstract: Mapped[str | None] = mapped_column(Text, nullable=True)
-    journal_name: Mapped[str | None] = mapped_column(String, nullable=True)
-    first_author: Mapped[str | None] = mapped_column(String, nullable=True)
-    publication_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
     paper_types: Mapped[list | None] = mapped_column(JSON, nullable=True)
 
     @property
@@ -181,14 +216,6 @@ class PaperDB(Base):
                 with open(table_path, 'r') as f:
                     tables.append(f.read())
         return tables
-
-    @property
-    def evagg_observations_path(self) -> Path:
-        return env.evagg_dir / self.id / 'observations.json'
-
-    @property
-    def metadata_json_path(self) -> Path:
-        return env.evagg_dir / self.id / 'metadata.json'
 
     @property
     def patient_info_json_path(self) -> Path:
@@ -286,9 +313,6 @@ class PaperResp(BaseModel):
     gene_symbol: str
     filename: str
     pipeline_status: PipelineStatus
-    title: str | None
-    first_author: str | None
-    metadata_json_path: Path
     pdf_thumbnail_path: Path
     pdf_raw_path: Path
     patient_info_json_path: Path
