@@ -9,7 +9,6 @@ from pydantic import BaseModel, ValidationError
 from lib.agents.paper_extraction_agent import (
     PaperExtractionOutput,
 )
-from lib.evagg.types.base import Paper
 from lib.models import PaperResp, PipelineStatus
 from lib.ui.api import (
     delete_paper,
@@ -79,11 +78,10 @@ def render_rerun_evagg_fragment(paper_query_params: PaperQueryParams) -> None:
 
 
 def render_paper_header() -> tuple[
-    Paper, PaperResp, PaperExtractionOutput | None, st.delta_generator.DeltaGenerator
+    PaperResp, PaperExtractionOutput | None, st.delta_generator.DeltaGenerator
 ]:
     st.set_page_config(layout='wide')
     paper_query_params = PaperQueryParams.from_query_params()
-    paper = Paper(id=paper_query_params.paper_id)
     paper_extraction_output: PaperExtractionOutput | None = None
     with st.spinner('Loading paper...'):
         try:
@@ -113,7 +111,7 @@ def render_paper_header() -> tuple[
             PipelineStatus.LINKING_FAILED,
             PipelineStatus.COMPLETED,
         }:
-            with open(paper.metadata_json_path, 'r') as f:
+            with open(paper_resp.metadata_json_path, 'r') as f:
                 data = json.load(f)
                 paper_extraction_output = PaperExtractionOutput.model_validate(data)
             st.markdown(f'# {paper_extraction_output.title}')
@@ -178,4 +176,4 @@ def render_paper_header() -> tuple[
                     except Exception as e:
                         st.toast(f'Failed to delete: {str(e)}', icon='❌')
 
-    return paper, paper_resp, paper_extraction_output, center
+    return paper_resp, paper_extraction_output, center

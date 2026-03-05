@@ -238,7 +238,7 @@ def render_patient(
 
 
 paper_query_params = PaperQueryParams.from_query_params()
-paper, paper_resp, paper_extraction_output, center = render_paper_header()
+paper_resp, paper_extraction_output, center = render_paper_header()
 with center:
     if not paper_extraction_output:
         st.write(f'{paper_resp.filename} not yet extracted...')
@@ -249,22 +249,22 @@ with center:
     # -----------------------------
     # Load patients & variants & links
     # -----------------------------
-    with open(paper.patient_info_json_path, 'r') as f:
+    with open(paper_resp.patient_info_json_path, 'r') as f:
         patient_info_data = json.load(f)
     patients: list[PatientInfo] = PatientInfoExtractionOutput.model_validate(
         patient_info_data
     ).patients
-    with open(paper.variants_json_path, 'r') as f:
+    with open(paper_resp.variants_json_path, 'r') as f:
         extracted_data = json.load(f)
         extracted_variants: list[Variant] = VariantExtractionOutput.model_validate(
             extracted_data
         ).variants
-    with open(paper.harmonized_variants_json_path, 'r') as f:
+    with open(paper_resp.harmonized_variants_json_path, 'r') as f:
         harmonized_variant_data = json.load(f)
         harmonized_variants: list[HarmonizedVariant] = (
             VariantHarmonizationOutput.model_validate(harmonized_variant_data).variants
         )
-    with open(paper.patient_variant_links_json_path, 'r') as f:
+    with open(paper_resp.patient_variant_links_json_path, 'r') as f:
         link_data = json.load(f)
     links: list[PatientVariantLink] = PatientVariantLinkerOutput.model_validate(
         link_data

@@ -4,7 +4,6 @@ import pandas as pd
 import requests
 import streamlit as st
 
-from lib.evagg.types.base import Paper
 from lib.evagg.utils.environment import env
 from lib.models import PaperResp, PipelineStatus
 from lib.ui.api import (
@@ -73,7 +72,7 @@ def upload_paper_modal() -> None:
 
 
 def render_papers_df(papers_resps: list[PaperResp]) -> None:
-    papers_by_id = {p.id: Paper(id=p.id).with_metadata() for p in paper_resps}
+    papers_by_id = {p.id: p for p in paper_resps}
     df = pd.DataFrame([p.model_dump() for p in paper_resps])
     df['thumbnail_path'] = df['id'].map(
         lambda paper_id: f'{env.PROTOCOL}{env.API_ENDPOINT}{papers_by_id[paper_id].pdf_thumbnail_path}'  # note the leading slash

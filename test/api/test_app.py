@@ -79,13 +79,14 @@ def test_queue_new_paper(client, test_pdf, db_session, seeded_genes):
     assert count == 1
 
 
-def test_queue_existing_paper_fails(client, test_pdf, seeded_genes):
+def test_queue_existing_paper_fails(client, db_session, test_pdf, seeded_genes):
     # Second upload: same content/name triggers conflict
     response = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
         data={'gene_symbol': 'BRCA1'},
     )
+    db_session.commit()  # 👈 make first request durable
     response2 = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
@@ -110,6 +111,10 @@ def test_get_paper_success(client, test_pdf, seeded_genes):
     assert data_get['id'] == paper_id
     assert data_get['pipeline_status'] == PipelineStatus.QUEUED.value
     assert data_get['filename'] == 'job-1.pdf'
+    assert data_get['pdf_thumbnail_path'].endswith(
+        'extracted_pdfs/0e487d93695f2c04d955d8b2cba27384d71aea0acd87d9748ec2abbf2e8a6a0d/thumbnail.png'
+    )
+    assert data_get['gene_symbol'] == 'BRCA1'
 
 
 def test_get_paper_not_found(client):
@@ -196,6 +201,7 @@ def test_list_papers_filtered_by_status(client, test_pdf, db_session, seeded_gen
     assert response.status_code == 200
     jobs = response.json()
     assert all(job['pipeline_status'] == PipelineStatus.QUEUED for job in jobs)
+    assert all(job['gene_symbol'] == 'BRCA1' for job in jobs)
 
 
 def test_delete_paper(client, test_pdf, db_session, seeded_genes):
