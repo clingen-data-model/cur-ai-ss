@@ -6,9 +6,8 @@ from typing import Iterable
 
 import requests
 from sqlalchemy import select, text
-from sqlalchemy.orm import Session
 
-from lib.api.db import get_sessionmaker
+from lib.api.db import session_scope
 from lib.models import GeneDB
 
 HGNC_URL = 'https://storage.googleapis.com/public-download-files/hgnc/tsv/tsv/hgnc_complete_set.txt'
@@ -31,56 +30,54 @@ def download_hgnc_symbols() -> list[str]:
     return symbols
 
 
-def sync_genes_via_temp_table(session: Session, symbols: list[str]) -> None:
-    # 1. temp table
-    session.execute(
-        text("""
-        CREATE TEMPORARY TABLE tmp_hgnc_genes (
-            symbol TEXT PRIMARY KEY
+def sync_genes_via_temp_table(symbols: list[str]) -> None:
+    with session_scope() as session:
+        # 1. temp table
+        session.execute(
+            text("""
+            CREATE TEMPORARY TABLE tmp_hgnc_genes (
+                symbol TEXT PRIMARY KEY
+            )
+        """)
         )
-    """)
-    )
 
-    # 2. bulk insert into temp table (executemany, no IN clause)
-    session.execute(
-        text('INSERT INTO tmp_hgnc_genes (symbol) VALUES (:symbol)'),
-        [{'symbol': s} for s in symbols],
-    )
+        # 2. bulk insert into temp table (executemany, no IN clause)
+        session.execute(
+            text('INSERT INTO tmp_hgnc_genes (symbol) VALUES (:symbol)'),
+            [{'symbol': s} for s in symbols],
+        )
 
-    # 3. insert missing genes
-    session.execute(
-        text("""
-        INSERT INTO genes (symbol)
-        SELECT t.symbol
-        FROM tmp_hgnc_genes t
-        LEFT JOIN genes g ON g.symbol = t.symbol
-        WHERE g.symbol IS NULL
-    """)
-    )
-
-    # 4. delete genes not in HGNC
-    session.execute(
-        text("""
-        DELETE FROM genes
-        WHERE NOT EXISTS (
-            SELECT 1
+        # 3. insert missing genes
+        session.execute(
+            text("""
+            INSERT INTO genes (symbol)
+            SELECT t.symbol
             FROM tmp_hgnc_genes t
-            WHERE t.symbol = genes.symbol
+            LEFT JOIN genes g ON g.symbol = t.symbol
+            WHERE g.symbol IS NULL
+        """)
         )
-    """)
-    )
 
-    session.commit()
+        # 4. delete genes not in HGNC
+        session.execute(
+            text("""
+            DELETE FROM genes
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM tmp_hgnc_genes t
+                WHERE t.symbol = genes.symbol
+            )
+        """)
+        )
+
+        session.commit()
 
 
 def main() -> None:
     print('Downloading HGNC gene set...')
     symbols = download_hgnc_symbols()
     print(f'Downloaded {len(symbols)} symbols.')
-
-    SessionLocal = get_sessionmaker()
-    with SessionLocal() as session:
-        sync_genes_via_temp_table(session, symbols)
+    sync_genes_via_temp_table(symbols)
 
 
 if __name__ == '__main__':

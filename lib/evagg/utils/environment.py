@@ -40,6 +40,9 @@ class Env(BaseSettings):
     # API allowed origins
     CORS_ALLOWED_ORIGINS: str = 'http://localhost:8501'  # Comma-separated list
 
+    # Feature Flags
+    SKIP_DATA_MIGRATIONS: bool = False
+
     @model_validator(mode='after')
     def validate_ncbi_settings(self) -> 'Env':
         if self.NCBI_EUTILS_API_KEY and not self.NCBI_EUTILS_EMAIL:
