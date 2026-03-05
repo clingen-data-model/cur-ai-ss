@@ -288,54 +288,14 @@ class PaperResp(BaseModel):
     pipeline_status: PipelineStatus
     title: str | None
     first_author: str | None
-    metadata_json_path: str
-    pdf_thumbnail_path: str
-    pdf_raw_path: str
-    patient_info_json_path: str
-    enriched_variants_json_path: str
-    harmonized_variants_json_path: str
-    variants_json_path: str
-    patient_variant_links_json_path: str
-
-    @field_validator('metadata_json_path', mode='before')
-    @classmethod
-    def str1(cls, path: Path) -> str:
-        return str(path)
-
-    @field_validator('pdf_thumbnail_path', mode='before')
-    @classmethod
-    def str2(cls, path: Path) -> str:
-        return str(path)
-
-    @field_validator('pdf_raw_path', mode='before')
-    @classmethod
-    def str3(cls, path: Path) -> str:
-        return str(path)
-
-    @field_validator('patient_info_json_path', mode='before')
-    @classmethod
-    def str4(cls, path: Path) -> str:
-        return str(path)
-
-    @field_validator('enriched_variants_json_path', mode='before')
-    @classmethod
-    def str5(cls, path: Path) -> str:
-        return str(path)
-
-    @field_validator('harmonized_variants_json_path', mode='before')
-    @classmethod
-    def str6(cls, path: Path) -> str:
-        return str(path)
-
-    @field_validator('variants_json_path', mode='before')
-    @classmethod
-    def str7(cls, path: Path) -> str:
-        return str(path)
-
-    @field_validator('patient_variant_links_json_path', mode='before')
-    @classmethod
-    def str8(cls, path: Path) -> str:
-        return str(path)
+    metadata_json_path: Path
+    pdf_thumbnail_path: Path
+    pdf_raw_path: Path
+    patient_info_json_path: Path
+    enriched_variants_json_path: Path
+    harmonized_variants_json_path: Path
+    variants_json_path: Path
+    patient_variant_links_json_path: Path
 
 
 class PipelineUpdateRequest(BaseModel):
