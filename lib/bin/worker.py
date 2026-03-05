@@ -7,6 +7,12 @@ import time
 import traceback
 
 from agents import Runner
+from lib.evagg.llm import OpenAIClient
+from lib.evagg.ref import (
+    NcbiLookupClient,
+)
+from lib.evagg.ref.ncbi import get_ncbi_response_translator
+from lib.evagg.utils.web import RequestsWebContentClient, WebClientSettings
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
@@ -25,14 +31,8 @@ from lib.agents.variant_enrichment_agent import (
 from lib.agents.variant_extraction_agent import agent as variant_extraction_agent
 from lib.agents.variant_harmonization_agent import agent as variant_harmonization_agent
 from lib.api.db import session_scope
-from lib.evagg.llm import OpenAIClient
 from lib.evagg.pdf.parse import parse_content
-from lib.evagg.ref import (
-    NcbiLookupClient,
-)
-from lib.evagg.ref.ncbi import get_ncbi_response_translator
 from lib.evagg.types.base import Paper
-from lib.evagg.utils.web import RequestsWebContentClient, WebClientSettings
 from lib.models import PaperDB, PipelineStatus
 
 LEASE_TIMEOUT_S = 900
