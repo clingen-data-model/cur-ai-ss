@@ -4,7 +4,7 @@ from typing import List, Literal, Optional, Tuple
 from agents import Agent, ModelSettings
 from pydantic import BaseModel
 
-from lib.evagg.utils.environment import env
+from lib.core.environment import env
 
 VARIANT_EXTRACTION_INSTRUCTIONS = """
 System: You are an expert genomics curator.

@@ -2,8 +2,6 @@
 import asyncio
 import datetime
 import json
-import logging
-import sys
 import time
 import traceback
 
@@ -25,20 +23,16 @@ from lib.agents.variant_enrichment_agent import (
 from lib.agents.variant_extraction_agent import agent as variant_extraction_agent
 from lib.agents.variant_harmonization_agent import agent as variant_harmonization_agent
 from lib.api.db import session_scope
-from lib.evagg.pdf.parse import parse_content
-from lib.evagg.pdf.paths import fulltext_md
+from lib.core.logging import setup_logging
+from lib.misc.pdf.parse import parse_content
+from lib.misc.pdf.paths import fulltext_md
 from lib.models import PaperDB, PipelineStatus
 
 LEASE_TIMEOUT_S = 900
 POLL_INTERVAL_S = 10
 RETRIES = 2
 
-logger = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] [%(process)d] %(name)s: %(message)s',
-    stream=sys.stdout,
-)
+logger = setup_logging(__name__)
 
 
 async def parse_paper_task_async(paper_id: str) -> None:

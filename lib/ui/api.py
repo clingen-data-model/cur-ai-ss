@@ -3,7 +3,7 @@ import streamlit as st
 import streamlit.runtime.uploaded_file_manager
 from pydantic import TypeAdapter
 
-from lib.evagg.utils.environment import env
+from lib.core.environment import env
 from lib.models import GeneResp, PaperResp, PaperUpdateRequest, PipelineStatus
 
 

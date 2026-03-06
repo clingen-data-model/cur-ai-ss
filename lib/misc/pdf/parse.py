@@ -19,7 +19,7 @@ from docling_core.types.doc import (
 from docling_core.types.doc.page import TextCellUnit
 from docling_parse.pdf_parser import DoclingPdfParser, PdfDocument
 
-from lib.evagg.pdf.paths import (
+from lib.misc.pdf.paths import (
     pdf_extraction_success_path,
     pdf_image_caption_path,
     pdf_image_path,

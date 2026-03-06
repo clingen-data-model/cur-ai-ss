@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from lib.evagg.utils.environment import env
+from lib.core.environment import env
 
 
 def pdf_dir(paper_id: str) -> Path:
