@@ -195,29 +195,6 @@ class PaperDB(Base):
         return self
 
     @property
-    def fulltext_md(self) -> str:
-        with pdf_markdown_path(self.id).open('r') as f:
-            return f.read()
-
-    @property
-    def sections_md(self) -> list[str]:
-        sections = []
-        for section_path in pdf_sections_dir(self.id).iterdir():
-            if str(section_path).endswith('md'):
-                with open(section_path, 'r') as f:
-                    sections.append(f.read())
-        return sections
-
-    @property
-    def tables_md(self) -> list[str]:
-        tables = []
-        for table_path in pdf_tables_dir(self.id).iterdir():
-            if str(table_path).endswith('md'):
-                with open(table_path, 'r') as f:
-                    tables.append(f.read())
-        return tables
-
-    @property
     def patient_info_json_path(self) -> Path:
         return env.evagg_dir / self.id / 'patient_info.json'
 

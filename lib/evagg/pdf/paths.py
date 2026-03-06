@@ -61,3 +61,26 @@ def pdf_table_markdown_path(paper_id: str, table_id: int) -> Path:
 
 def pdf_section_markdown_path(paper_id: str, section_id: int) -> Path:
     return pdf_sections_dir(paper_id) / f'{section_id}.md'
+
+
+def fulltext_md(paper_id: str) -> str:
+    with pdf_markdown_path(paper_id).open('r') as f:
+        return f.read()
+
+
+def sections_md(paper_id: str) -> list[str]:
+    sections = []
+    for section_path in pdf_sections_dir(paper_id).iterdir():
+        if section_path.suffix == '.md':
+            with section_path.open('r') as f:
+                sections.append(f.read())
+    return sections
+
+
+def tables_md(paper_id: str) -> list[str]:
+    tables = []
+    for table_path in pdf_tables_dir(paper_id).iterdir():
+        if table_path.suffix == '.md':
+            with table_path.open('r') as f:
+                tables.append(f.read())
+    return tables

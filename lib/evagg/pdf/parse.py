@@ -113,14 +113,11 @@ def split_by_sections(
     return sections, image_captions
 
 
-def parse_content(paper_db: PaperDB, force: bool = False) -> None:
-    paper_id = paper_db.id
-
+def parse_content(paper_id: str, force: bool = False) -> None:
     if not force and pdf_extraction_success_path(paper_id).exists():
         return
 
-    paper_db = paper_db.with_content()
-
+    paper_db = PaperDB(id=paper_id).with_content()
     pdf_images_dir(paper_id).mkdir(parents=True, exist_ok=True)
     pdf_tables_dir(paper_id).mkdir(parents=True, exist_ok=True)
     pdf_sections_dir(paper_id).mkdir(parents=True, exist_ok=True)

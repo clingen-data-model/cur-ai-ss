@@ -17,11 +17,9 @@ def test_convert_and_extract_creates_outputs(test_file_contents):
 
     paper_db = PaperDB.from_content(content)
     paper_id = paper_db.id
-
     pdf_raw_path(paper_id).parent.mkdir(parents=True, exist_ok=True)
     pdf_raw_path(paper_id).write_bytes(content)
-
-    parse_content(paper_db, force=True)
+    parse_content(paper_id, force=True)
 
     # ---- core outputs ----
     json_path = pdf_json_path(paper_id)
