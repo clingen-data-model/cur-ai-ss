@@ -12,16 +12,14 @@ def render_editable_paper_tab(
 ) -> None:
     title = st.text_input('Title', paper_resp.title)
     first_author = st.text_input('First Author', paper_resp.first_author)
-
-    # Publication Year
-    pub_year_input = st.text_input(
-        'Publication Year',
-        str(paper_resp.publication_year) if paper_resp.publication_year else '',
+    publication_year = st.number_input(
+        'Publication Year (leave blank if unknown)',
+        min_value=1950,
+        max_value=2030,
+        value=paper_resp.publication_year,
+        step=1,
+        format='%d',
     )
-    paper_resp.publication_year = (
-        int(pub_year_input) if pub_year_input.isdigit() else None
-    )
-    publication_year = int(pub_year_input) if pub_year_input.isdigit() else None
     journal_name = st.text_input('Journal Name', paper_resp.journal_name)
 
     # Paper Types
@@ -41,25 +39,24 @@ def render_editable_paper_tab(
     paper_types = [PaperType(pt) for pt in selected_values]
 
     abstract = st.text_area('Abstract', paper_resp.abstract, height=200)
-    if (
-        title != paper_resp.title
-        or first_author != paper_resp.first_author
-        or publication_year != paper_resp.publication_year
-        or journal_name != paper_resp.journal_name
-        or paper_types != paper_resp.paper_types
-        or abstract != paper_resp.abstract
-    ):
+    update_data = {}
+    if title != paper_resp.title:
+        update_data['title'] = title
+    if first_author != paper_resp.first_author:
+        update_data['first_author'] = first_author
+    if publication_year != paper_resp.publication_year:
+        update_data['publication_year'] = publication_year
+    if journal_name != paper_resp.journal_name:
+        update_data['journal_name'] = journal_name
+    if paper_types != paper_resp.paper_types:
+        update_data['paper_types'] = paper_types
+    if abstract != paper_resp.abstract:
+        update_data['abstract'] = abstract
+    if update_data:
         try:
             update_paper(
                 paper_id=paper_resp.id,
-                update_request=PaperUpdateRequest(
-                    title=title,
-                    first_author=first_author,
-                    publication_year=publication_year,
-                    journal_name=journal_name,
-                    paper_types=paper_types,
-                    abstract=abstract,
-                ),
+                update_request=PaperUpdateRequest(**update_data),
             )
             st.toast('Saved!', icon=':material/check:')
         except Exception as e:
