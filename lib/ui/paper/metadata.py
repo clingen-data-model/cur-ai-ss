@@ -44,7 +44,7 @@ def render_editable_paper_tab(
 
 paper_resp, center = render_paper_header()
 with center:
-    if not paper_resp:
+    if not paper_resp.title:
         st.write(f'{paper_resp.filename} not yet extracted...')
         st.stop()
     md_tab, editable_tab = st.tabs(['View', 'Edit'])

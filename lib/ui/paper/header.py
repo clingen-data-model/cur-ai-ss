@@ -115,7 +115,7 @@ def render_paper_header() -> tuple[PaperResp, st.delta_generator.DeltaGenerator]
         else:
             st.markdown(f'# {paper_resp.filename}')
         st.divider()
-        left, right = st.columns([4, 2])
+        left, right = st.columns([5, 3])
         with left:
             with st.container(horizontal=True, vertical_alignment='center'):
                 PAPER_PAGES = [
