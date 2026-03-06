@@ -27,6 +27,7 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
 from lib.api.db import get_session
+from lib.api.middleware import log_request_middleware
 from lib.core.environment import env
 from lib.core.logging import setup_logging
 from lib.misc.pdf.paths import (
@@ -42,7 +43,6 @@ from lib.models import (
     PaperUpdateRequest,
     PipelineStatus,
 )
-from lib.api.middleware import log_request_middleware
 
 logger = setup_logging(__name__)
 
