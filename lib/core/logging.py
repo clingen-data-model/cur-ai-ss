@@ -17,6 +17,7 @@ def setup_logging(name: str) -> logging.Logger:
     logger = logging.getLogger(name)
     logger.setLevel(env.LOG_LEVEL.value)
     logger.handlers.clear()
+    logger.propagate = False  # Don't propagate to root logger
 
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(

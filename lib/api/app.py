@@ -1,4 +1,6 @@
 import asyncio
+import json
+import time
 import traceback
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -78,21 +80,74 @@ app.add_middleware(
 
 
 @app.middleware('http')
-async def log_exceptions_middleware(
+async def log_request_middleware(
     request: Request, call_next: RequestResponseEndpoint
 ) -> Response:
+    start_time = time.time()
+
+    # Log request details
+    request_body = None
+    if request.method in ['POST', 'PUT', 'PATCH']:
+        try:
+            request_body = await request.body()
+            # Decode if possible
+            if request_body:
+                try:
+                    request_body = json.loads(request_body)
+                except json.JSONDecodeError:
+                    request_body = request_body[:200]  # Truncate large binary data
+        except Exception:
+            pass
+
+    logger.info(
+        f'Incoming {request.method} {request.url.path}',
+        extra={
+            'method': request.method,
+            'path': request.url.path,
+            'query': str(request.url.query) if request.url.query else None,
+            'request_body': request_body,
+        }
+    )
+
     try:
         response = await call_next(request)
-        # Optionally log 5xx responses
-        if 500 <= response.status_code < 600:
-            logger.error(
-                f'Server error: {request.method} {request.url} returned {response.status_code}'
-            )
+        duration = time.time() - start_time
+
+        # Log response details
+        response_body = None
+        if response.status_code < 500:
+            try:
+                response_body = response.body
+                if response_body:
+                    try:
+                        response_body = json.loads(response_body)
+                    except (json.JSONDecodeError, TypeError):
+                        response_body = str(response_body)[:200]
+            except Exception:
+                pass
+
+        log_fn = logger.error if 500 <= response.status_code < 600 else logger.info
+        log_fn(
+            f'{request.method} {request.url.path} returned {response.status_code} ({duration:.3f}s)',
+            extra={
+                'method': request.method,
+                'path': request.url.path,
+                'status_code': response.status_code,
+                'duration_seconds': duration,
+                'response_body': response_body,
+            }
+        )
         return response
     except Exception as e:
-        # Log the traceback
-        tb = traceback.format_exc()
-        logger.exception(f'Unhandled exception: {request.method} {request.url}')
+        duration = time.time() - start_time
+        logger.exception(
+            f'Unhandled exception in {request.method} {request.url.path} ({duration:.3f}s)',
+            extra={
+                'method': request.method,
+                'path': request.url.path,
+                'duration_seconds': duration,
+            }
+        )
         # Return generic 500 response
         return JSONResponse(
             status_code=500,
