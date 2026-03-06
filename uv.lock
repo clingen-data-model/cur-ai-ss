@@ -217,15 +217,6 @@ wheels = [
 ]
 
 [[package]]
-name = "defusedxml"
-version = "0.7.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/0f/d5/c66da9b79e5bdb124974bfe172b4daf3c984ebd9c2a06e2b8a4dc7331c72/defusedxml-0.7.1.tar.gz", hash = "sha256:1bb3032db185915b62d7c6209c5a8792be6a32ab2fedacc84e01b52c51aa3e69", size = 75520, upload-time = "2021-03-08T10:59:26.269Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/07/6c/aa3f2f849e01cb6a001cd8554a88d4c77c5c1a31c95bdf1cf9301e6d9ef4/defusedxml-0.7.1-py2.py3-none-any.whl", hash = "sha256:a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61", size = 25604, upload-time = "2021-03-08T10:59:24.45Z" },
-]
-
-[[package]]
 name = "dill"
 version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -374,21 +365,17 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
-    { name = "defusedxml" },
     { name = "docling" },
     { name = "fastapi" },
-    { name = "httpx" },
     { name = "openai" },
     { name = "openai-agents" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "pymupdf" },
     { name = "python-multipart" },
-    { name = "ratelimit" },
     { name = "requests" },
     { name = "sqlalchemy" },
     { name = "streamlit", extra = ["pdf"] },
-    { name = "urllib3" },
     { name = "uvicorn" },
 ]
 
@@ -396,35 +383,26 @@ dependencies = [
 dev = [
     { name = "mypy" },
     { name = "pytest" },
-    { name = "pytest-asyncio" },
     { name = "pytest-cov" },
-    { name = "pytest-mock" },
-    { name = "pyyaml" },
     { name = "ruff" },
-    { name = "types-pyyaml" },
     { name = "types-requests" },
-    { name = "types-retry" },
     { name = "watchdog" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.18.4" },
-    { name = "defusedxml", specifier = "==0.7.1" },
     { name = "docling", specifier = "==2.64.1" },
     { name = "fastapi", specifier = ">=0.126.0" },
-    { name = "httpx", specifier = "==0.27.0" },
     { name = "openai", specifier = "==2.15.0" },
     { name = "openai-agents", specifier = "==0.7.0" },
     { name = "pydantic", specifier = "==2.12.5" },
     { name = "pydantic-settings", specifier = "==2.12.0" },
     { name = "pymupdf", specifier = ">=1.26.7" },
     { name = "python-multipart", specifier = ">=0.0.21" },
-    { name = "ratelimit", specifier = "==2.2.1" },
     { name = "requests", specifier = ">=2.32.5" },
     { name = "sqlalchemy", specifier = ">=2.0.45" },
     { name = "streamlit", extras = ["pdf"], specifier = ">=1.52.1" },
-    { name = "urllib3", specifier = "==2.2.2" },
     { name = "uvicorn", specifier = ">=0.38.0" },
 ]
 
@@ -432,14 +410,9 @@ requires-dist = [
 dev = [
     { name = "mypy", specifier = "==1.10.1" },
     { name = "pytest", specifier = "==8.2.2" },
-    { name = "pytest-asyncio", specifier = "==0.23.7" },
     { name = "pytest-cov", specifier = "==5.0.0" },
-    { name = "pytest-mock", specifier = "==3.14.0" },
-    { name = "pyyaml", specifier = "==6.0.3" },
     { name = "ruff", specifier = "==0.14.6" },
-    { name = "types-pyyaml", specifier = "==6.0.12.*" },
     { name = "types-requests", specifier = "==2.32.0.*" },
-    { name = "types-retry", specifier = "==0.9.9.*" },
     { name = "watchdog", specifier = ">=6.0.0" },
 ]
 
@@ -1512,18 +1485,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pytest-asyncio"
-version = "0.23.7"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pytest" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/13/d9/1dcac9b3fc6eccf8f1e3a657439c11ffc5cf762edd20f65577f832ba248b/pytest_asyncio-0.23.7.tar.gz", hash = "sha256:5f5c72948f4c49e7db4f29f2521d4031f1c27f86e57b046126654083d4770268", size = 46296, upload-time = "2024-05-19T11:56:08.552Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/e5/98/947690b1a79af83e584143cb904497caff05bb6016614b38326a81076357/pytest_asyncio-0.23.7-py3-none-any.whl", hash = "sha256:009b48127fbe44518a547bddd25611551b0e43ccdbf1e67d12479f569832c20b", size = 17585, upload-time = "2024-05-19T11:56:06.431Z" },
-]
-
-[[package]]
 name = "pytest-cov"
 version = "5.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1534,18 +1495,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/74/67/00efc8d11b630c56f15f4ad9c7f9223f1e5ec275aaae3fa9118c6a223ad2/pytest-cov-5.0.0.tar.gz", hash = "sha256:5837b58e9f6ebd335b0f8060eecce69b662415b16dc503883a02f45dfeb14857", size = 63042, upload-time = "2024-03-24T20:16:34.856Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/78/3a/af5b4fa5961d9a1e6237b530eb87dd04aea6eb83da09d2a4073d81b54ccf/pytest_cov-5.0.0-py3-none-any.whl", hash = "sha256:4f0764a1219df53214206bf1feea4633c3b558a2925c8b59f144f682861ce652", size = 21990, upload-time = "2024-03-24T20:16:32.444Z" },
-]
-
-[[package]]
-name = "pytest-mock"
-version = "3.14.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pytest" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/c6/90/a955c3ab35ccd41ad4de556596fa86685bf4fc5ffcc62d22d856cfd4e29a/pytest-mock-3.14.0.tar.gz", hash = "sha256:2719255a1efeceadbc056d6bf3df3d1c5015530fb40cf347c0f9afac88410bd0", size = 32814, upload-time = "2024-03-21T22:14:04.964Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/f2/3b/b26f90f74e2986a82df6e7ac7e319b8ea7ccece1caec9f8ab6104dc70603/pytest_mock-3.14.0-py3-none-any.whl", hash = "sha256:0b72c38033392a5f4621342fe11e9219ac11ec9d375f8e2a0c164539e0d70f6f", size = 9863, upload-time = "2024-03-21T22:14:02.694Z" },
 ]
 
 [[package]]
@@ -1663,12 +1612,6 @@ dependencies = [
 wheels = [
     { url = "https://files.pythonhosted.org/packages/be/5a/9a61f7c3250d7651c2043e763045e1181fe2fd12d0d5879f726f351818ad/rapidocr-3.4.5-py3-none-any.whl", hash = "sha256:6fb21ffb55b3aa49fee2a7c5cc5190851180e5be538b076b2166b7f44213cd5c", size = 15060573, upload-time = "2025-12-18T03:16:15.738Z" },
 ]
-
-[[package]]
-name = "ratelimit"
-version = "2.2.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/ab/38/ff60c8fc9e002d50d48822cc5095deb8ebbc5f91a6b8fdd9731c87a147c9/ratelimit-2.2.1.tar.gz", hash = "sha256:af8a9b64b821529aca09ebaf6d8d279100d766f19e90b5059ac6a718ca6dee42", size = 5251, upload-time = "2018-12-17T18:55:49.675Z" }
 
 [[package]]
 name = "referencing"
@@ -2307,15 +2250,6 @@ wheels = [
 ]
 
 [[package]]
-name = "types-pyyaml"
-version = "6.0.12.20250915"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/7e/69/3c51b36d04da19b92f9e815be12753125bd8bc247ba0470a982e6979e71c/types_pyyaml-6.0.12.20250915.tar.gz", hash = "sha256:0f8b54a528c303f0e6f7165687dd33fafa81c807fcac23f632b63aa624ced1d3", size = 17522, upload-time = "2025-09-15T03:01:00.728Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/bd/e0/1eed384f02555dde685fff1a1ac805c1c7dcb6dd019c916fe659b1c1f9ec/types_pyyaml-6.0.12.20250915-py3-none-any.whl", hash = "sha256:e7d4d9e064e89a3b3cae120b4990cd370874d2bf12fa5f46c97018dd5d3c9ab6", size = 20338, upload-time = "2025-09-15T03:00:59.218Z" },
-]
-
-[[package]]
 name = "types-requests"
 version = "2.32.0.20250602"
 source = { registry = "https://pypi.org/simple" }
@@ -2325,15 +2259,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/48/b0/5321e6eeba5d59e4347fcf9bf06a5052f085c3aa0f4876230566d6a4dc97/types_requests-2.32.0.20250602.tar.gz", hash = "sha256:ee603aeefec42051195ae62ca7667cd909a2f8128fdf8aad9e8a5219ecfab3bf", size = 23042, upload-time = "2025-06-02T03:15:02.958Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/da/18/9b782980e575c6581d5c0c1c99f4c6f89a1d7173dad072ee96b2756c02e6/types_requests-2.32.0.20250602-py3-none-any.whl", hash = "sha256:f4f335f87779b47ce10b8b8597b409130299f6971ead27fead4fe7ba6ea3e726", size = 20638, upload-time = "2025-06-02T03:15:01.959Z" },
-]
-
-[[package]]
-name = "types-retry"
-version = "0.9.9.20250322"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/4b/02/d2183adcbf136d314fd45214357f7b8d85f5a43f3ad05455b7a0932296ae/types_retry-0.9.9.20250322.tar.gz", hash = "sha256:2eaa6f4b832c187121056988bbe6d2d0b6f4eb03631fdc9752e2ac2802f7b726", size = 7741, upload-time = "2025-03-22T02:48:34.916Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/df/52/d7be523dafd0b4b54ce7678981092ef3c9235f659f5f1c0b72d37eb00355/types_retry-0.9.9.20250322-py3-none-any.whl", hash = "sha256:77cf8dbbe1640c6c471eafd5b9a4ce206f30b7faa6dac41a16cbcb18b1cc8ec2", size = 7718, upload-time = "2025-03-22T02:48:33.829Z" },
 ]
 
 [[package]]
