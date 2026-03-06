@@ -2,6 +2,7 @@
 import asyncio
 import datetime
 import json
+import logging
 import time
 import traceback
 
@@ -32,7 +33,8 @@ LEASE_TIMEOUT_S = 900
 POLL_INTERVAL_S = 10
 RETRIES = 2
 
-logger = setup_logging(__name__)
+setup_logging()
+logger = logging.getLogger(__name__)
 
 
 async def parse_paper_task_async(paper_id: str) -> None:

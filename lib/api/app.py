@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import time
 import traceback
 from contextlib import asynccontextmanager
@@ -27,7 +28,7 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
 from lib.api.db import get_session
-from lib.api.middleware import log_request_middleware
+from lib.api.middleware import make_log_request_middleware
 from lib.core.environment import env
 from lib.core.logging import setup_logging
 from lib.misc.pdf.paths import (
@@ -44,7 +45,7 @@ from lib.models import (
     PipelineStatus,
 )
 
-logger = setup_logging(__name__)
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -54,11 +55,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     alembic_cfg = Config('alembic.ini')
     await asyncio.to_thread(command.upgrade, alembic_cfg, 'head')
+
+    setup_logging()  # NB: run setup logging after the alembic setup to prevent it from overriding.
     yield
 
 
 app = FastAPI(title='PDF Extracting Jobs API', lifespan=lifespan)
-
 
 # Static File Handling
 app.mount(
@@ -78,8 +80,7 @@ app.add_middleware(
     allow_methods=['*'],  # Allows all HTTP methods (GET, POST, PUT, etc.)
     allow_headers=['*'],  # Allows all headers
 )
-
-app.middleware('http')(log_request_middleware)
+app.middleware('http')(make_log_request_middleware(logger))  # Logging middleware
 
 
 @app.get('/status', tags=['health'])
