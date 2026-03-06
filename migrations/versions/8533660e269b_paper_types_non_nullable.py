@@ -1,4 +1,4 @@
-"""empty message
+"""paper types non nullable
 
 Revision ID: 8533660e269b
 Revises: eb6bb798b30f
