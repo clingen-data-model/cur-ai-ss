@@ -4,7 +4,13 @@ from enum import Enum
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 from sqlalchemy import (
     Column,
     DateTime,
@@ -27,6 +33,13 @@ from sqlalchemy.orm import (
 from sqlalchemy.types import JSON
 from typing_extensions import Self
 
+from lib.evagg.pdf.paths import (
+    pdf_markdown_path,
+    pdf_raw_path,
+    pdf_sections_dir,
+    pdf_tables_dir,
+    pdf_thumbnail_path,
+)
 from lib.evagg.utils.environment import env
 
 Color = Literal[
@@ -175,21 +188,21 @@ class PaperDB(Base):
         )
 
     def with_content(self) -> 'PaperDB':
-        if not self.pdf_raw_path.exists():
+        if not pdf_raw_path(self.id).exists():
             raise RuntimeError('Raw PDF must exist prior to calling this method')
-        with open(self.pdf_raw_path, 'rb') as f:
+        with open(pdf_raw_path(self.id), 'rb') as f:
             self.content = f.read()
         return self
 
     @property
     def fulltext_md(self) -> str:
-        with open(self.pdf_markdown_path, 'r') as f:
+        with pdf_markdown_path(self.id).open('r') as f:
             return f.read()
 
     @property
     def sections_md(self) -> list[str]:
         sections = []
-        for section_path in self.pdf_sections_dir.iterdir():
+        for section_path in pdf_sections_dir(self.id).iterdir():
             if str(section_path).endswith('md'):
                 with open(section_path, 'r') as f:
                     sections.append(f.read())
@@ -198,7 +211,7 @@ class PaperDB(Base):
     @property
     def tables_md(self) -> list[str]:
         tables = []
-        for table_path in self.pdf_tables_dir.iterdir():
+        for table_path in pdf_tables_dir(self.id).iterdir():
             if str(table_path).endswith('md'):
                 with open(table_path, 'r') as f:
                     tables.append(f.read())
@@ -223,76 +236,6 @@ class PaperDB(Base):
     @property
     def patient_variant_links_json_path(self) -> Path:
         return env.evagg_dir / self.id / 'patient_variant_links.json'
-
-    @property
-    def pdf_dir(self) -> Path:
-        return env.extracted_pdf_dir / self.id
-
-    @property
-    def pdf_raw_path(self) -> Path:
-        return self.pdf_dir / 'raw.pdf'
-
-    @property
-    def pdf_thumbnail_path(self) -> Path:
-        return self.pdf_dir / 'thumbnail.png'
-
-    @property
-    def pdf_tables_dir(self) -> Path:
-        return self.pdf_dir / 'tables'
-
-    @property
-    def pdf_images_dir(self) -> Path:
-        return self.pdf_dir / 'images'
-
-    @property
-    def pdf_sections_dir(self) -> Path:
-        return self.pdf_dir / 'sections'
-
-    @property
-    def pdf_markdown_path(self) -> Path:
-        return self.pdf_dir / 'raw.md'
-
-    @property
-    def pdf_json_path(self) -> Path:
-        return self.pdf_dir / 'raw.json'
-
-    @property
-    def pdf_words_json_path(self) -> Path:
-        return self.pdf_dir / 'words.json'
-
-    @property
-    def pdf_extraction_success_path(self) -> Path:
-        return self.pdf_dir / '_SUCCESS'
-
-    def pdf_image_path(
-        self,
-        image_id: int,
-    ) -> Path:
-        return self.pdf_images_dir / f'{image_id}.png'
-
-    def pdf_image_caption_path(
-        self,
-        image_id: int,
-    ) -> Path:
-        return self.pdf_images_dir / f'{image_id}.md'
-
-    def pdf_table_image_path(
-        self,
-        table_id: int,
-    ) -> Path:
-        return self.pdf_tables_dir / f'{table_id}.png'
-
-    def pdf_table_markdown_path(
-        self,
-        table_id: int,
-    ) -> Path:
-        return self.pdf_tables_dir / f'{table_id}.md'
-
-    def pdf_section_markdown_path(
-        self,
-        section_id: int,
-    ) -> Path:
-        return self.pdf_sections_dir / f'{section_id}.md'
 
 
 class PaperExtractionOutput(BaseModel):
@@ -333,14 +276,19 @@ class PaperResp(PaperExtractionOutput):
     title: str | None = None  # type: ignore
     first_author: str | None = None  # type: ignore
 
-    pdf_thumbnail_path: Path
-    pdf_raw_path: Path
-
     patient_info_json_path: Path
     enriched_variants_json_path: Path
     harmonized_variants_json_path: Path
     variants_json_path: Path
     patient_variant_links_json_path: Path
+
+    @computed_field
+    def pdf_raw_path(self) -> Path:
+        return pdf_raw_path(self.id)
+
+    @computed_field
+    def pdf_thumbnail_path(self) -> Path:
+        return pdf_thumbnail_path(self.id)
 
 
 class PaperUpdateRequest(PatchModel):
