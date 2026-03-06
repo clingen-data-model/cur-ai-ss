@@ -1,8 +1,7 @@
-import json
-
 import streamlit as st
 
-from lib.models import PaperResp, PaperType
+from lib.models import PaperResp, PaperType, PaperUpdateRequest
+from lib.ui.api import get_http_error_detail, update_paper
 from lib.ui.helpers import paper_resp_to_markdown
 from lib.ui.paper.header import render_paper_header
 
@@ -11,9 +10,8 @@ from lib.ui.paper.header import render_paper_header
 def render_editable_paper_tab(
     paper_resp: PaperResp,
 ) -> None:
-    paper_resp.title = st.text_input('Title', paper_resp.title)
-
-    paper_resp.first_author = st.text_input('First Author', paper_resp.first_author)
+    title = st.text_input('Title', paper_resp.title)
+    first_author = st.text_input('First Author', paper_resp.first_author)
 
     # Publication Year
     pub_year_input = st.text_input(
@@ -23,10 +21,9 @@ def render_editable_paper_tab(
     paper_resp.publication_year = (
         int(pub_year_input) if pub_year_input.isdigit() else None
     )
-
-    paper_resp.journal_name = st.text_input('Journal Name', paper_resp.journal_name)
-
-    paper_resp.paper_types = [
+    publication_year = int(pub_year_input) if pub_year_input.isdigit() else None
+    journal_name = st.text_input('Journal Name', paper_resp.journal_name)
+    paper_types = [
         PaperType(pt)
         for pt in st.pills(
             'Paper Types',
@@ -39,7 +36,30 @@ def render_editable_paper_tab(
         )
     ]
 
-    paper_resp.abstract = st.text_area('Abstract', paper_resp.abstract, height=200)
+    abstract = st.text_area('Abstract', paper_resp.abstract, height=200)
+    if (
+        title != paper_resp.title
+        or first_author != paper_resp.first_author
+        or publication_year != paper_resp.publication_year
+        or journal_name != paper_resp.journal_name
+        or paper_types != paper_resp.paper_types
+        or abstract != paper_resp.abstract
+    ):
+        try:
+            update_paper(
+                paper_id=paper_resp.id,
+                update_request=PaperUpdateRequest(
+                    title=title,
+                    first_author=first_author,
+                    publication_year=publication_year,
+                    journal_name=journal_name,
+                    paper_types=paper_types,
+                    abstract=abstract,
+                ),
+            )
+            st.toast('Saved!', icon=':material/check:')
+        except Exception as e:
+            st.toast(f'Failed to save: {str(e)}', icon='❌')
 
 
 paper_resp, center = render_paper_header()

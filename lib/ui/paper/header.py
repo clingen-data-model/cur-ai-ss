@@ -6,12 +6,12 @@ import requests
 import streamlit as st
 from pydantic import BaseModel, ValidationError
 
-from lib.models import PaperResp, PipelineStatus
+from lib.models import PaperResp, PaperUpdateRequest, PipelineStatus
 from lib.ui.api import (
     delete_paper,
     get_http_error_detail,
     get_paper,
-    requeue_paper,
+    update_paper,
 )
 
 
@@ -59,14 +59,16 @@ def render_rerun_evagg_fragment(paper_query_params: PaperQueryParams) -> None:
     confirm = st.button('Confirm Rerun', type='secondary')
     if confirm:
         try:
-            requeue_paper(
+            update_paper(
                 paper_id=paper_query_params.paper_id,
-                pipeline_status=(
-                    PipelineStatus.QUEUED
-                    if rerun_mode == 'Full pipeline (initial extraction + linking)'
-                    else PipelineStatus.EXTRACTION_COMPLETED
+                update_request=PaperUpdateRequest(
+                    pipeline_status=(
+                        PipelineStatus.QUEUED
+                        if rerun_mode == 'Full pipeline (initial extraction + linking)'
+                        else PipelineStatus.EXTRACTION_COMPLETED
+                    ),
+                    prompt_override=prompt_override or None,
                 ),
-                prompt_override=prompt_override or None,
             )
             st.toast('EvAGG Job Queued', icon=':material/thumb_up:')
             st.rerun()

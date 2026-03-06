@@ -4,7 +4,7 @@ from typing import List, Optional
 from agents import Agent, ModelSettings
 from pydantic import BaseModel
 
-from lib.evagg.utils.environment import env
+from lib.core.environment import env
 
 
 class ProbandStatus(str, Enum):
