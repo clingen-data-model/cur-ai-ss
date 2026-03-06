@@ -1,4 +1,4 @@
-"""empty message
+"""gene_id to integer
 
 Revision ID: 794187dcb219
 Revises: ee7328bb1a69
@@ -8,9 +8,8 @@ Create Date: 2026-03-05 14:33:33.233061
 
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = '794187dcb219'

@@ -1,5 +1,4 @@
-from lib.agents.paper_extraction_agent import PaperExtractionOutput, PaperType
-from lib.models import PaperDB
+from lib.models import PaperDB, PaperExtractionOutput, PaperType
 
 
 def test_apply_to_maps_all_fields():

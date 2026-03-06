@@ -4,7 +4,13 @@ from enum import Enum
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, field_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 from sqlalchemy import (
     Column,
     DateTime,
@@ -25,7 +31,15 @@ from sqlalchemy.orm import (
     relationship,
 )
 from sqlalchemy.types import JSON
+from typing_extensions import Self
 
+from lib.evagg.pdf.paths import (
+    pdf_markdown_path,
+    pdf_raw_path,
+    pdf_sections_dir,
+    pdf_tables_dir,
+    pdf_thumbnail_path,
+)
 from lib.evagg.utils.environment import env
 
 Color = Literal[
@@ -35,6 +49,12 @@ Color = Literal[
 
 class Base(DeclarativeBase):
     pass
+
+
+class PatchModel(BaseModel):
+    def apply_to(self, obj: Base) -> None:
+        for field, value in self.model_dump(exclude_unset=True).items():
+            setattr(obj, field, value)
 
 
 class PipelineStatus(str, Enum):
@@ -101,6 +121,17 @@ class GeneResp(BaseModel):
     symbol: str
 
 
+class PaperType(str, Enum):
+    Letter = 'Letter'
+    Research = 'Research'
+    Case_series = 'Case_series'
+    Case_study = 'Case_study'
+    Cohort_analysis = 'Cohort_analysis'
+    Case_control = 'Case_control'
+    Unknown = 'Unknown'
+    Other = 'Other'
+
+
 class PaperDB(Base):
     __tablename__ = 'papers'
 
@@ -130,15 +161,19 @@ class PaperDB(Base):
     )
 
     # Paper extraction metadata (populated asynchronously by extraction agent)
+    title: Mapped[str | None] = mapped_column(String, nullable=True)
+    first_author: Mapped[str | None] = mapped_column(String, nullable=True)
+    journal_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    abstract: Mapped[str | None] = mapped_column(Text, nullable=True)
+    publication_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    doi: Mapped[str | None] = mapped_column(String, nullable=True)
     pmid: Mapped[str | None] = mapped_column(String, nullable=True)
     pmcid: Mapped[str | None] = mapped_column(String, nullable=True)
-    doi: Mapped[str | None] = mapped_column(String, nullable=True)
-    title: Mapped[str | None] = mapped_column(String, nullable=True)
-    abstract: Mapped[str | None] = mapped_column(Text, nullable=True)
-    journal_name: Mapped[str | None] = mapped_column(String, nullable=True)
-    first_author: Mapped[str | None] = mapped_column(String, nullable=True)
-    publication_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    paper_types: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    paper_types: Mapped[list[str]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+    )
 
     @property
     def gene_symbol(self) -> str:
@@ -153,42 +188,11 @@ class PaperDB(Base):
         )
 
     def with_content(self) -> 'PaperDB':
-        if not self.pdf_raw_path.exists():
+        if not pdf_raw_path(self.id).exists():
             raise RuntimeError('Raw PDF must exist prior to calling this method')
-        with open(self.pdf_raw_path, 'rb') as f:
+        with open(pdf_raw_path(self.id), 'rb') as f:
             self.content = f.read()
         return self
-
-    @property
-    def fulltext_md(self) -> str:
-        with open(self.pdf_markdown_path, 'r') as f:
-            return f.read()
-
-    @property
-    def sections_md(self) -> list[str]:
-        sections = []
-        for section_path in self.pdf_sections_dir.iterdir():
-            if str(section_path).endswith('md'):
-                with open(section_path, 'r') as f:
-                    sections.append(f.read())
-        return sections
-
-    @property
-    def tables_md(self) -> list[str]:
-        tables = []
-        for table_path in self.pdf_tables_dir.iterdir():
-            if str(table_path).endswith('md'):
-                with open(table_path, 'r') as f:
-                    tables.append(f.read())
-        return tables
-
-    @property
-    def evagg_observations_path(self) -> Path:
-        return env.evagg_dir / self.id / 'observations.json'
-
-    @property
-    def metadata_json_path(self) -> Path:
-        return env.evagg_dir / self.id / 'metadata.json'
 
     @property
     def patient_info_json_path(self) -> Path:
@@ -210,94 +214,71 @@ class PaperDB(Base):
     def patient_variant_links_json_path(self) -> Path:
         return env.evagg_dir / self.id / 'patient_variant_links.json'
 
-    @property
-    def pdf_dir(self) -> Path:
-        return env.extracted_pdf_dir / self.id
 
-    @property
-    def pdf_raw_path(self) -> Path:
-        return self.pdf_dir / 'raw.pdf'
+class PaperExtractionOutput(BaseModel):
+    title: str
+    first_author: str
+    journal_name: str | None
+    abstract: str | None = None
+    publication_year: int | None = None
+    doi: str | None = None
+    pmid: str | None = None
+    pmcid: str | None = None
+    paper_types: list[PaperType]
 
-    @property
-    def pdf_thumbnail_path(self) -> Path:
-        return self.pdf_dir / 'thumbnail.png'
+    @model_validator(mode='after')
+    def max_two_paper_types(self) -> Self:
+        if len(self.paper_types) > 2:
+            raise ValueError('paper_types must contain at most two items')
+        return self
 
-    @property
-    def pdf_tables_dir(self) -> Path:
-        return self.pdf_dir / 'tables'
-
-    @property
-    def pdf_images_dir(self) -> Path:
-        return self.pdf_dir / 'images'
-
-    @property
-    def pdf_sections_dir(self) -> Path:
-        return self.pdf_dir / 'sections'
-
-    @property
-    def pdf_markdown_path(self) -> Path:
-        return self.pdf_dir / 'raw.md'
-
-    @property
-    def pdf_json_path(self) -> Path:
-        return self.pdf_dir / 'raw.json'
-
-    @property
-    def pdf_words_json_path(self) -> Path:
-        return self.pdf_dir / 'words.json'
-
-    @property
-    def pdf_extraction_success_path(self) -> Path:
-        return self.pdf_dir / '_SUCCESS'
-
-    def pdf_image_path(
-        self,
-        image_id: int,
-    ) -> Path:
-        return self.pdf_images_dir / f'{image_id}.png'
-
-    def pdf_image_caption_path(
-        self,
-        image_id: int,
-    ) -> Path:
-        return self.pdf_images_dir / f'{image_id}.md'
-
-    def pdf_table_image_path(
-        self,
-        table_id: int,
-    ) -> Path:
-        return self.pdf_tables_dir / f'{table_id}.png'
-
-    def pdf_table_markdown_path(
-        self,
-        table_id: int,
-    ) -> Path:
-        return self.pdf_tables_dir / f'{table_id}.md'
-
-    def pdf_section_markdown_path(
-        self,
-        section_id: int,
-    ) -> Path:
-        return self.pdf_sections_dir / f'{section_id}.md'
+    def apply_to(self, paper_db: PaperDB) -> None:
+        data = self.model_dump()
+        data['paper_types'] = [pt.value for pt in self.paper_types]
+        for key, value in data.items():
+            setattr(paper_db, key, value)
 
 
-class PaperResp(BaseModel):
+class PaperResp(PaperExtractionOutput):
+    # From DB
     id: str
     gene_symbol: str
     filename: str
     pipeline_status: PipelineStatus
-    title: str | None
-    first_author: str | None
-    metadata_json_path: Path
-    pdf_thumbnail_path: Path
-    pdf_raw_path: Path
+
+    # Override the PaperExtractionOutput to make the fields optional.
+    # Handles the case when paper is QUEUED.
+    # Note that mypy does not approve of the override, though Pydantic functions
+    # just fine in practice.
+    title: str | None = None  # type: ignore
+    first_author: str | None = None  # type: ignore
+
     patient_info_json_path: Path
     enriched_variants_json_path: Path
     harmonized_variants_json_path: Path
     variants_json_path: Path
     patient_variant_links_json_path: Path
 
+    @computed_field  # type: ignore
+    @property
+    def pdf_raw_path(self) -> Path:
+        return pdf_raw_path(self.id)
 
-class PipelineUpdateRequest(BaseModel):
-    pipeline_status: PipelineStatus
+    @computed_field  # type: ignore
+    @property
+    def pdf_thumbnail_path(self) -> Path:
+        return pdf_thumbnail_path(self.id)
+
+
+class PaperUpdateRequest(PatchModel):
+    pipeline_status: PipelineStatus | None = None
+    title: str | None = None
+    first_author: str | None = None
+    journal_name: str | None = None
+    abstract: str | None = None
+    publication_year: int | None = None
+    doi: str | None = None
+    pmid: str | None = None
+    pmcid: str | None = None
+    paper_types: list[PaperType] | None = None
     prompt_override: str | None = None

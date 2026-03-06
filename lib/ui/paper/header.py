@@ -6,9 +6,6 @@ import requests
 import streamlit as st
 from pydantic import BaseModel, ValidationError
 
-from lib.agents.paper_extraction_agent import (
-    PaperExtractionOutput,
-)
 from lib.models import PaperResp, PipelineStatus
 from lib.ui.api import (
     delete_paper,
@@ -77,12 +74,9 @@ def render_rerun_evagg_fragment(paper_query_params: PaperQueryParams) -> None:
             st.toast(f'Failed to requeue: {str(e)}', icon='❌')
 
 
-def render_paper_header() -> tuple[
-    PaperResp, PaperExtractionOutput | None, st.delta_generator.DeltaGenerator
-]:
+def render_paper_header() -> tuple[PaperResp, st.delta_generator.DeltaGenerator]:
     st.set_page_config(layout='wide')
     paper_query_params = PaperQueryParams.from_query_params()
-    paper_extraction_output: PaperExtractionOutput | None = None
     with st.spinner('Loading paper...'):
         try:
             paper_resp: PaperResp = get_paper(paper_query_params.paper_id)
@@ -111,22 +105,17 @@ def render_paper_header() -> tuple[
             PipelineStatus.LINKING_FAILED,
             PipelineStatus.COMPLETED,
         }:
-            with open(paper_resp.metadata_json_path, 'r') as f:
-                data = json.load(f)
-                paper_extraction_output = PaperExtractionOutput.model_validate(data)
-            st.markdown(f'# {paper_extraction_output.title}')
-            parts = [
-                f'{paper_extraction_output.first_author} et al. {paper_extraction_output.publication_year}'
-            ]
-            if paper_extraction_output.pmid:
-                parts.append(f'PMID: {paper_extraction_output.pmid}')
-            if paper_extraction_output.journal_name:
-                parts.append(paper_extraction_output.journal_name)
+            st.markdown(f'# {paper_resp.title}')
+            parts = [f'{paper_resp.first_author} et al. {paper_resp.publication_year}']
+            if paper_resp.pmid:
+                parts.append(f'PMID: {paper_resp.pmid}')
+            if paper_resp.journal_name:
+                parts.append(paper_resp.journal_name)
             st.caption(' • '.join(parts))
         else:
             st.markdown(f'# {paper_resp.filename}')
         st.divider()
-        left, right = st.columns([4, 2])
+        left, right = st.columns([5, 3])
         with left:
             with st.container(horizontal=True, vertical_alignment='center'):
                 PAPER_PAGES = [
@@ -176,4 +165,4 @@ def render_paper_header() -> tuple[
                     except Exception as e:
                         st.toast(f'Failed to delete: {str(e)}', icon='❌')
 
-    return paper_resp, paper_extraction_output, center
+    return paper_resp, center

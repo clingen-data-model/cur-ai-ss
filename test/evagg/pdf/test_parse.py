@@ -1,22 +1,30 @@
 from lib.evagg.pdf.parse import parse_content
+from lib.evagg.pdf.paths import (
+    pdf_extraction_success_path,
+    pdf_image_path,
+    pdf_json_path,
+    pdf_markdown_path,
+    pdf_raw_path,
+    pdf_section_markdown_path,
+    pdf_table_image_path,
+    pdf_table_markdown_path,
+)
 from lib.models import PaperDB
 
 
-def test_convert_and_extract_creates_outputs(
-    test_file_contents,
-):
+def test_convert_and_extract_creates_outputs(test_file_contents):
     content = test_file_contents('ACN3-7-1962.pdf', mode='rb')
+
     paper_db = PaperDB.from_content(content)
-    paper_db.pdf_raw_path.parent.mkdir(parents=True, exist_ok=True)
-    paper_db.pdf_raw_path.write_bytes(content)
-    parse_content(
-        paper_db, force=True
-    )  # run extraction (force=True to avoid cache short-circuiting)
+    paper_id = paper_db.id
+    pdf_raw_path(paper_id).parent.mkdir(parents=True, exist_ok=True)
+    pdf_raw_path(paper_id).write_bytes(content)
+    parse_content(paper_id, force=True)
 
     # ---- core outputs ----
-    json_path = paper_db.pdf_json_path
-    md_path = paper_db.pdf_markdown_path
-    success_path = paper_db.pdf_extraction_success_path
+    json_path = pdf_json_path(paper_id)
+    md_path = pdf_markdown_path(paper_id)
+    success_path = pdf_extraction_success_path(paper_id)
 
     assert json_path.exists(), 'JSON output was not created'
     assert md_path.exists(), 'Markdown output was not created'
@@ -28,14 +36,18 @@ def test_convert_and_extract_creates_outputs(
 
     table_id = 0
     while True:
-        img = paper_db.pdf_table_image_path(table_id)
-        md = paper_db.pdf_table_markdown_path(table_id)
+        img = pdf_table_image_path(paper_id, table_id)
+        md = pdf_table_markdown_path(paper_id, table_id)
+
         if not img.exists() and not md.exists():
             break
+
         if img.exists():
             table_images.append(img)
+
         if md.exists():
             table_markdowns.append(md)
+
         table_id += 1
 
     assert len(table_images) >= 1, 'No table images were extracted'
@@ -47,26 +59,32 @@ def test_convert_and_extract_creates_outputs(
     # ---- pictures ----
     images = []
     image_id = 0
+
     while True:
-        img = paper_db.pdf_image_path(image_id)
+        img = pdf_image_path(paper_id, image_id)
+
         if not img.exists():
             break
+
         images.append(img)
         image_id += 1
 
     assert len(images) >= 1, 'No pictures were extracted'
 
-    # -- section markdowns ---
+    # ---- section markdowns ----
     sections = []
     section_id = 0
+
     while True:
-        section_md = paper_db.pdf_section_markdown_path(section_id)
+        section_md = pdf_section_markdown_path(paper_id, section_id)
+
         if not section_md.exists():
             break
+
         sections.append(section_md)
         section_id += 1
 
     assert len(sections) >= 20, 'Not enough sections were extracted'
 
-    with open(paper_db.pdf_section_markdown_path(section_id - 1), 'r') as f:
+    with open(pdf_section_markdown_path(paper_id, section_id - 1), 'r') as f:
         assert '## Supporting Information' in f.read()
