@@ -74,9 +74,7 @@ def render_rerun_evagg_fragment(paper_query_params: PaperQueryParams) -> None:
             st.toast(f'Failed to requeue: {str(e)}', icon='❌')
 
 
-def render_paper_header() -> tuple[
-    PaperResp, st.delta_generator.DeltaGenerator
-]:
+def render_paper_header() -> tuple[PaperResp, st.delta_generator.DeltaGenerator]:
     st.set_page_config(layout='wide')
     paper_query_params = PaperQueryParams.from_query_params()
     with st.spinner('Loading paper...'):

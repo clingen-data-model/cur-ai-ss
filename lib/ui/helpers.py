@@ -1,7 +1,7 @@
 from lib.models import PaperResp
 
 
-def paper_extraction_output_to_markdown(paper_resp: PaperResp) -> str:
+def paper_resp_to_markdown(paper_resp: PaperResp) -> str:
     """
     Converts a PaperExtractionOutput Pydantic model to a Markdown string.
     """

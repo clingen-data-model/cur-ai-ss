@@ -3,8 +3,7 @@ from typing import List, Optional
 
 import requests
 from agents import Agent, function_tool
-from pydantic import BaseModel, model_validator
-from typing_extensions import Self
+from pydantic import BaseModel
 
 from lib.evagg.utils.environment import env
 from lib.models import PaperExtractionOutput

@@ -46,10 +46,10 @@ async def parse_paper_task_async(paper_db: PaperDB) -> None:
         f'Paper (fulltext md): {paper_db.fulltext_md}',
     )
     with session_scope() as session:
-        paper_db = session.get(PaperDB, paper_db.id)
-        if not paper_db:
+        fetched_paper = session.get(PaperDB, paper_db.id)
+        if not fetched_paper:
             return None
-        result.final_output.apply_to(paper_db)
+        result.final_output.apply_to(fetched_paper)
 
 
 async def parse_patients_task_async(paper_db: PaperDB) -> None:

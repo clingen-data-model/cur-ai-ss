@@ -4,7 +4,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import (
     Column,
     DateTime,
@@ -25,6 +25,7 @@ from sqlalchemy.orm import (
     relationship,
 )
 from sqlalchemy.types import JSON
+from typing_extensions import Self
 
 from lib.evagg.utils.environment import env
 
@@ -112,30 +113,6 @@ class PaperType(str, Enum):
     Other = 'Other'
 
 
-class PaperExtractionOutput(BaseModel):
-    title: str
-    first_author: str
-    journal_name: str | None
-    abstract: str | None = None
-    publication_year: int | None = None
-    doi: str | None = None
-    pmid: str | None = None
-    pmcid: str | None = None
-    paper_types: List[PaperType]
-
-    @model_validator(mode='after')
-    def max_two_paper_types(self) -> Self:
-        if len(self.paper_types) > 2:
-            raise ValueError('paper_types must contain at most two items')
-        return self
-
-    def apply_to(self, paper_db: PaperDB) -> None:
-        data = self.model_dump()
-        data['paper_types'] = [pt.value for pt in self.paper_types]
-        for key, value in data.items():
-            setattr(paper_db, key, value)
-
-
 class PaperDB(Base):
     __tablename__ = 'papers'
 
@@ -173,7 +150,11 @@ class PaperDB(Base):
     doi: Mapped[str | None] = mapped_column(String, nullable=True)
     pmid: Mapped[str | None] = mapped_column(String, nullable=True)
     pmcid: Mapped[str | None] = mapped_column(String, nullable=True)
-    paper_types: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    paper_types: Mapped[list[str]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+    )
 
     @property
     def gene_symbol(self) -> str:
@@ -308,13 +289,47 @@ class PaperDB(Base):
         return self.pdf_sections_dir / f'{section_id}.md'
 
 
-class PaperResp(BaseModel):
+class PaperExtractionOutput(BaseModel):
+    title: str
+    first_author: str
+    journal_name: str | None
+    abstract: str | None = None
+    publication_year: int | None = None
+    doi: str | None = None
+    pmid: str | None = None
+    pmcid: str | None = None
+    paper_types: list[PaperType]
+
+    @model_validator(mode='after')
+    def max_two_paper_types(self) -> Self:
+        if len(self.paper_types) > 2:
+            raise ValueError('paper_types must contain at most two items')
+        return self
+
+    def apply_to(self, paper_db: PaperDB) -> None:
+        data = self.model_dump()
+        data['paper_types'] = [pt.value for pt in self.paper_types]
+        for key, value in data.items():
+            setattr(paper_db, key, value)
+
+
+class PaperResp(PaperExtractionOutput):
+    # From DB
     id: str
     gene_symbol: str
     filename: str
     pipeline_status: PipelineStatus
+
+    # Override the PaperExtractionOutput to make the fields optional.
+    # Handles the case when paper is QUEUED.
+    # Note that mypy does not approve of the override, though Pydantic functions
+    # just fine in practice.
+    title: str | None = None  # type: ignore
+    first_author: str | None = None  # type: ignore
+
     pdf_thumbnail_path: Path
     pdf_raw_path: Path
+
     patient_info_json_path: Path
     enriched_variants_json_path: Path
     harmonized_variants_json_path: Path
