@@ -4,7 +4,7 @@ import streamlit.runtime.uploaded_file_manager
 from pydantic import TypeAdapter
 
 from lib.evagg.utils.environment import env
-from lib.models import GeneResp, PaperResp, PipelineStatus
+from lib.models import GeneResp, PaperResp, PaperUpdateRequest, PipelineStatus
 
 
 def get_http_error_detail(e: requests.HTTPError) -> str:
@@ -57,12 +57,10 @@ def put_paper(
     return PaperResp.model_validate(resp.json())
 
 
-def requeue_paper(
-    paper_id: str, pipeline_status: PipelineStatus, prompt_override: str | None
-) -> PaperResp:
+def update_paper(paper_id: str, update_request: PaperUpdateRequest) -> PaperResp:
     resp = requests.patch(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}',
-        json={'pipeline_status': pipeline_status, 'prompt_override': prompt_override},
+        json=update_request.model_dump(mode='json'),
     )
     resp.raise_for_status()
     return PaperResp.model_validate(resp.json())
