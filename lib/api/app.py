@@ -26,6 +26,7 @@ from starlette.responses import Response
 
 from lib.api.db import get_session
 from lib.core.environment import env
+from lib.core.logging import setup_logging
 from lib.misc.pdf.paths import (
     pdf_raw_path,
     pdf_thumbnail_path,
@@ -39,6 +40,8 @@ from lib.models import (
     PaperUpdateRequest,
     PipelineStatus,
 )
+
+logger = setup_logging(__name__)
 
 
 @asynccontextmanager
@@ -82,14 +85,14 @@ async def log_exceptions_middleware(
         response = await call_next(request)
         # Optionally log 5xx responses
         if 500 <= response.status_code < 600:
-            print(
+            logger.error(
                 f'Server error: {request.method} {request.url} returned {response.status_code}'
             )
         return response
     except Exception as e:
         # Log the traceback
         tb = traceback.format_exc()
-        print(f'Unhandled exception: {request.method} {request.url}\n{tb}')
+        logger.exception(f'Unhandled exception: {request.method} {request.url}')
         # Return generic 500 response
         return JSONResponse(
             status_code=500,
