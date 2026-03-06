@@ -9,10 +9,11 @@ Create Date: 2026-03-05 16:04:39.887523
 import traceback
 from typing import Sequence, Union
 
-import sqlalchemy as sa
 from alembic import op
+import sqlalchemy as sa
 
 from lib.evagg.utils.environment import env
+
 
 # revision identifiers, used by Alembic.
 revision: str = 'eb6bb798b30f'
