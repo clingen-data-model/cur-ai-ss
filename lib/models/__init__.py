@@ -33,14 +33,14 @@ from sqlalchemy.orm import (
 from sqlalchemy.types import JSON
 from typing_extensions import Self
 
-from lib.evagg.pdf.paths import (
+from lib.core.environment import env
+from lib.misc.pdf.paths import (
     pdf_markdown_path,
     pdf_raw_path,
     pdf_sections_dir,
     pdf_tables_dir,
     pdf_thumbnail_path,
 )
-from lib.evagg.utils.environment import env
 
 Color = Literal[
     'red', 'orange', 'yellow', 'blue', 'green', 'violet', 'gray', 'grey', 'primary'

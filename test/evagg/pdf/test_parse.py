@@ -1,5 +1,5 @@
-from lib.evagg.pdf.parse import parse_content
-from lib.evagg.pdf.paths import (
+from lib.misc.pdf.parse import parse_content
+from lib.misc.pdf.paths import (
     pdf_extraction_success_path,
     pdf_image_path,
     pdf_json_path,

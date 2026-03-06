@@ -4,7 +4,7 @@ import pandas as pd
 import requests
 import streamlit as st
 
-from lib.evagg.utils.environment import env
+from lib.core.environment import env
 from lib.models import PaperResp, PipelineStatus
 from lib.ui.api import (
     delete_paper,

@@ -25,8 +25,8 @@ from lib.agents.variant_enrichment_agent import (
 from lib.agents.variant_extraction_agent import agent as variant_extraction_agent
 from lib.agents.variant_harmonization_agent import agent as variant_harmonization_agent
 from lib.api.db import session_scope
-from lib.evagg.pdf.parse import parse_content
-from lib.evagg.pdf.paths import fulltext_md
+from lib.misc.pdf.parse import parse_content
+from lib.misc.pdf.paths import fulltext_md
 from lib.models import PaperDB, PipelineStatus
 
 LEASE_TIMEOUT_S = 900

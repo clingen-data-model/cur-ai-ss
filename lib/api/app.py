@@ -25,12 +25,12 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
 from lib.api.db import get_session
-from lib.evagg.pdf.paths import (
+from lib.core.environment import env
+from lib.misc.pdf.paths import (
     pdf_raw_path,
     pdf_thumbnail_path,
 )
-from lib.evagg.pdf.thumbnail import pdf_first_page_to_thumbnail_pymupdf_bytes
-from lib.evagg.utils.environment import env
+from lib.misc.pdf.thumbnail import pdf_first_page_to_thumbnail_pymupdf_bytes
 from lib.models import (
     GeneDB,
     GeneResp,
