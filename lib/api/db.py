@@ -5,7 +5,7 @@ from typing import Generator, Optional
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from lib.evagg.utils.environment import env
+from lib.core.environment import env
 
 _engine: Optional[Engine] = None
 _session_factory: Optional[sessionmaker] = (

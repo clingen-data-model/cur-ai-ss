@@ -5,7 +5,7 @@ from agents import Agent
 from pydantic import BaseModel, model_validator
 from typing_extensions import Self
 
-from lib.evagg.utils.environment import env
+from lib.core.environment import env
 
 
 class Zygosity(str, Enum):

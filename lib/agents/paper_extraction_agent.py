@@ -5,7 +5,7 @@ import requests
 from agents import Agent, function_tool
 from pydantic import BaseModel
 
-from lib.evagg.utils.environment import env
+from lib.core.environment import env
 from lib.models import PaperExtractionOutput
 
 ESEARCH_ENDPOINT = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'

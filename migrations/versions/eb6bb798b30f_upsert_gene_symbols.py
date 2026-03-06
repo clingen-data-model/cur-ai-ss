@@ -12,7 +12,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-from lib.evagg.utils.environment import env
+from lib.core.environment import env
 
 # revision identifiers, used by Alembic.
 revision: str = 'eb6bb798b30f'
