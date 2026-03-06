@@ -1,4 +1,4 @@
-"""empty message
+"""gene_id to integer
 
 Revision ID: 794187dcb219
 Revises: ee7328bb1a69

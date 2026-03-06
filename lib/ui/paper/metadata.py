@@ -13,14 +13,16 @@ def render_editable_paper_tab(
     title = st.text_input('Title', paper_resp.title)
     first_author = st.text_input('First Author', paper_resp.first_author)
 
+    # Publication Year
     pub_year_input = st.text_input(
         'Publication Year',
         str(paper_resp.publication_year) if paper_resp.publication_year else '',
     )
+    paper_resp.publication_year = (
+        int(pub_year_input) if pub_year_input.isdigit() else None
+    )
     publication_year = int(pub_year_input) if pub_year_input.isdigit() else None
-
     journal_name = st.text_input('Journal Name', paper_resp.journal_name)
-
     paper_types = [
         PaperType(pt)
         for pt in st.pills(
@@ -35,7 +37,6 @@ def render_editable_paper_tab(
     ]
 
     abstract = st.text_area('Abstract', paper_resp.abstract, height=200)
-
     if (
         title != paper_resp.title
         or first_author != paper_resp.first_author
