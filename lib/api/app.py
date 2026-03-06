@@ -32,8 +32,8 @@ from lib.models import (
     GeneResp,
     PaperDB,
     PaperResp,
+    PaperUpdateRequest,
     PipelineStatus,
-    PipelineUpdateRequest,
 )
 
 
@@ -171,7 +171,7 @@ def delete_paper(paper_id: str, session: Session = Depends(get_session)) -> None
 @app.patch('/papers/{paper_id}', response_model=PaperResp)
 def update_status(
     paper_id: str,
-    request: PipelineUpdateRequest,
+    patch_request: PaperUpdateRequest,
     session: Session = Depends(get_session),
 ) -> Any:
     paper_db = (
@@ -185,12 +185,12 @@ def update_status(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
-    if paper_db.pipeline_status == request.pipeline_status:
+    if paper_db.pipeline_status == patch_request.pipeline_status:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f'Status is already {request.pipeline_status.value}',
+            detail=f'Status is already {patch_request.pipeline_status.value}',
         )
-    paper_db.pipeline_status = request.pipeline_status
+    patch_request.apply_to(paper_db)
     return paper_db
 
 

@@ -38,6 +38,12 @@ class Base(DeclarativeBase):
     pass
 
 
+class PatchModel(BaseModel):
+    def apply_to(self, obj: Base) -> None:
+        for field, value in self.model_dump(exclude_unset=True).items():
+            setattr(obj, field, value)
+
+
 class PipelineStatus(str, Enum):
     QUEUED = 'Queued'
 
@@ -337,6 +343,15 @@ class PaperResp(PaperExtractionOutput):
     patient_variant_links_json_path: Path
 
 
-class PipelineUpdateRequest(BaseModel):
-    pipeline_status: PipelineStatus
+class PaperUpdateRequest(PatchModel):
+    pipeline_status: PipelineStatus | None = None
+    title: str | None = None
+    first_author: str | None = None
+    journal_name: str | None = None
+    abstract: str | None = None
+    publication_year: int | None = None
+    doi: str | None = None
+    pmid: str | None = None
+    pmcid: str | None = None
+    paper_types: list[PaperType] | None = None
     prompt_override: str | None = None
