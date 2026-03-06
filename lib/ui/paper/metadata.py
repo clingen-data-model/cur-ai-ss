@@ -23,18 +23,22 @@ def render_editable_paper_tab(
     )
     publication_year = int(pub_year_input) if pub_year_input.isdigit() else None
     journal_name = st.text_input('Journal Name', paper_resp.journal_name)
-    paper_types = [
-        PaperType(pt)
-        for pt in st.pills(
-            'Paper Types',
-            options=[pt.value for pt in PaperType],
-            selection_mode='multi',
-            default=[pt.value for pt in paper_resp.paper_types]
-            if paper_resp.paper_types
-            else [],
-            key='paper-types',
-        )
-    ]
+
+    # Paper Types
+    selected_values = st.pills(
+        'Paper Types',
+        options=[pt.value for pt in PaperType],
+        selection_mode='multi',
+        default=[pt.value for pt in paper_resp.paper_types]
+        if paper_resp.paper_types
+        else [],
+        key='paper-types',
+    )
+    # Enforce max 2 choices
+    if len(selected_values) > 2:
+        st.warning('Please select only **two** paper types.')
+        selected_values = selected_values[:2]  # automatically keep the first two
+    paper_types = [PaperType(pt) for pt in selected_values]
 
     abstract = st.text_area('Abstract', paper_resp.abstract, height=200)
     if (
