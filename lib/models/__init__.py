@@ -259,11 +259,13 @@ class PaperResp(PaperExtractionOutput):
     variants_json_path: Path
     patient_variant_links_json_path: Path
 
-    @computed_field
+    @computed_field  # type: ignore
+    @property
     def pdf_raw_path(self) -> Path:
         return pdf_raw_path(self.id)
 
-    @computed_field
+    @computed_field  # type: ignore
+    @property
     def pdf_thumbnail_path(self) -> Path:
         return pdf_thumbnail_path(self.id)
 
