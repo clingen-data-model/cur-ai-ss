@@ -39,28 +39,24 @@ def render_editable_paper_tab(
     paper_types = [PaperType(pt) for pt in selected_values]
 
     abstract = st.text_area('Abstract', paper_resp.abstract, height=200)
-    update_data = {}
-    if title != paper_resp.title:
-        update_data['title'] = title
-    if first_author != paper_resp.first_author:
-        update_data['first_author'] = first_author
-    if publication_year != paper_resp.publication_year:
-        update_data['publication_year'] = publication_year
-    if journal_name != paper_resp.journal_name:
-        update_data['journal_name'] = journal_name
-    if paper_types != paper_resp.paper_types:
-        update_data['paper_types'] = paper_types
-    if abstract != paper_resp.abstract:
-        update_data['abstract'] = abstract
-    if update_data:
-        try:
-            update_paper(
-                paper_id=paper_resp.id,
-                update_request=PaperUpdateRequest(**update_data),
-            )
-            st.toast('Saved!', icon=':material/check:')
-        except Exception as e:
-            st.toast(f'Failed to save: {str(e)}', icon='❌')
+    update_request = PaperUpdateRequest(
+        title=title if title != paper_resp.title else None,
+        first_author=first_author if first_author != paper_resp.first_author else None,
+        publication_year=publication_year
+        if publication_year != paper_resp.publication_year
+        else None,
+        journal_name=journal_name if journal_name != paper_resp.journal_name else None,
+        paper_types=paper_types if paper_types != paper_resp.paper_types else None,
+        abstract=abstract if abstract != paper_resp.abstract else None,
+    )
+    try:
+        update_paper(
+            paper_id=paper_resp.id,
+            update_request=update_request,
+        )
+        st.toast('Saved!', icon=':material/check:')
+    except Exception as e:
+        st.toast(f'Failed to save: {str(e)}', icon='❌')
 
 
 paper_resp, center = render_paper_header()
