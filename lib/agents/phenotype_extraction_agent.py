@@ -7,7 +7,6 @@ from agents import Agent, function_tool
 from lib.core.environment import env
 from lib.models import PhenotypeInfoExtractionOutput
 
-
 PHENOTYPE_EXTRACTION_INSTRUCTIONS = """
 You are an expert clinical data curator.
 
@@ -30,7 +29,7 @@ Fields:
 8. severity: optional string describing the severity of the phenotype if mentioned (e.g., "mild", "severe").
 9. modifier: optional string capturing additional qualifiers (e.g., "intermittent", "progressive").
 10. section: optional string indicating which section of the paper the phenotype was mentioned in (e.g., "case report", "results", "discussion").
-11. confidence: optional float (0–1) reflecting your confidence in the extraction if available.
+11. confidence: float (0–1) reflecting your confidence in the extraction if available.
 
 Instructions:
 - Include every phenotype mention, even if repeated, but capture its context and flags correctly.

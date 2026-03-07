@@ -1,4 +1,5 @@
 import time
+from collections import defaultdict
 from pathlib import Path
 
 import hpotk
@@ -37,41 +38,14 @@ def ensure_ontology() -> Path:
         return download_ontology()
     return path
 
-def build_term_lookup() -> Dict[str, List[dict]]:
-    """
-    Build a lookup dictionary from term names and synonyms to a list of metadata dicts:
-    {
-        'term_text_lower': [
-            {
-                'id': 'HP:0001327',
-                'name': 'Photosensitive myoclonic seizure',
-                'definition': 'Generalised myoclonic seizure provoked by flashing or flickering light.',
-                'synonyms': ['Photically induced myoclonic seizure', 'Photomyoclonic seizure']
-            },
-            ...
-        ]
-    }
-    """
-    hpo = hpotk.load_ontology(ensure_ontology())
+
+def build_term_lookup() -> defaultdict[str, list[hpotk.model._term_id.DefaultTermId]]:
+    hpo = hpotk.load_ontology(str(ensure_ontology()))
     term_lookup = defaultdict(list)
-
     for term in hpo.terms:
-        # gather synonyms
-        synonyms = [syn.name for syn in term.synonyms] if term.synonyms else []
-
-        # build metadata dict
-        metadata = {
-            'id': term.identifier,
-            'name': term.name,
-            'definition': term.definition.definition if term.definition else None,
-            'synonyms': synonyms
-        }
-
-        # map main name
-        term_lookup[term.name.lower()].append(metadata)
-
-        # map synonyms
-        for syn_name in synonyms:
-            term_lookup[syn_name.lower()].append(metadata)
-
+        term_lookup[term.name.lower()].append(term.identifier)
+        if not term.synonyms:
+            continue
+        for syn in term.synonyms:
+            term_lookup[syn.name.lower()].append(term.identifier)
     return term_lookup
