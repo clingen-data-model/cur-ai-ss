@@ -183,15 +183,8 @@ async def hpo_linking_task_async(paper_db: PaperDB) -> None:
 
     # Add HPO candidates to each phenotype
     for entry in phenotype_linking.phenotypes:
-        candidates = find_matching_hpo_terms(entry.text, term_lookup, limit=10)
-        entry.candidates = [  # type: ignore
-            {
-                'hpo_id': c.hpo_id,
-                'hpo_name': c.hpo_name,
-                'similarity_score': c.similarity_score,
-            }
-            for c in candidates
-        ]
+        candidates = find_matching_hpo_terms(entry.text, term_lookup=term_lookup)
+        entry.candidates = candidates
 
     # Exclude optional fields to keep agent input clean
     phenotype_data_filtered = phenotype_linking.model_dump(
