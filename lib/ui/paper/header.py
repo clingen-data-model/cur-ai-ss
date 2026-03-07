@@ -14,6 +14,7 @@ from lib.ui.api import (
     update_paper,
 )
 from lib.ui.paper.metadata import render_metadata_tab
+from lib.ui.paper.occurrences import render_patient_variant_occurrences_tab
 from lib.ui.paper.patients import render_patients_tab
 from lib.ui.paper.pdf import render_pdf_tab
 from lib.ui.paper.variants import render_variants_tab
@@ -119,9 +120,17 @@ with center:
     left, right = st.columns([5, 2])
     with left:
         with st.container(horizontal=True, vertical_alignment='center'):
-            pdf_tab, metadata_tab, patients_tab, variants_tab = st.tabs(
-                ['📄 PDF', '📝 Metadata', '👤 Patients', '🧬 Variants'],
+            default_tab = (
+                '👤 Patients'
+                if paper_query_params.patient_id
+                else '🧬 Variants'
+                if paper_query_params.variant_id
+                else '📄 PDF'
+            )
+            pdf_tab, metadata_tab, patients_tab, variants_tab, occurrences_tab = st.tabs(
+                ['📄 PDF', '📝 Metadata', '👤 Patients', '🧬 Variants', '🔗 Occurrences'],
                 on_change='rerun',
+                default=default_tab,
             )
             with center:
                 if pdf_tab.open:
@@ -132,6 +141,8 @@ with center:
                     render_patients_tab(paper_resp, paper_query_params.patient_id)
                 elif variants_tab.open:
                     render_variants_tab(paper_resp, paper_query_params.variant_id)
+                elif occurrences_tab.open:
+                    render_patient_variant_occurrences_tab(paper_resp)
 
     with right:
         with st.container(
