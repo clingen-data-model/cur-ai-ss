@@ -200,8 +200,8 @@ class PaperDB(Base):
         return env.evagg_dir / self.id / 'patient_info.json'
 
     @property
-    def phenotype_info_json_path(self) -> Path:
-        return env.evagg_dir / self.id / 'phenotype_info.json'
+    def phenotype_linking_json_path(self) -> Path:
+        return env.evagg_dir / self.id / 'phenotype_linking.json'
 
     @property
     def variants_json_path(self) -> Path:
@@ -218,10 +218,6 @@ class PaperDB(Base):
     @property
     def patient_variant_links_json_path(self) -> Path:
         return env.evagg_dir / self.id / 'patient_variant_links.json'
-
-    @property
-    def hpo_links_json_path(self) -> Path:
-        return env.evagg_dir / self.id / 'hpo_links.json'
 
 
 class PaperExtractionOutput(BaseModel):
@@ -263,12 +259,11 @@ class PaperResp(PaperExtractionOutput):
     first_author: str | None = None  # type: ignore
 
     patient_info_json_path: Path
-    phenotype_info_json_path: Path
+    phenotype_linking_json_path: Path
     enriched_variants_json_path: Path
     harmonized_variants_json_path: Path
     variants_json_path: Path
     patient_variant_links_json_path: Path
-    hpo_links_json_path: Path
 
     @computed_field  # type: ignore
     @property
@@ -336,3 +331,30 @@ class HpoPhenotypeLinkingOutput(BaseModel):
     """Output from HPO phenotype linking agent."""
 
     links: List[HpoPhenotypeLink]
+
+
+class PhenotypeLinkingEntry(BaseModel):
+    """Combined phenotype extraction + HPO linking for one phenotype."""
+
+    patient_id: int
+    text: str
+    negated: bool
+    uncertain: bool
+    family_history: bool
+    notes: str
+    onset: str | None
+    location: str | None
+    severity: str | None
+    modifier: str | None
+    section: str | None
+    phenotype_confidence: float
+    hpo_id: str | None
+    hpo_name: str | None
+    hpo_confidence: HpoConfidence | None
+    hpo_match_notes: str | None
+
+
+class PhenotypeLinkingOutput(BaseModel):
+    """Combined phenotype extraction + HPO linking output."""
+
+    phenotypes: List[PhenotypeLinkingEntry]
