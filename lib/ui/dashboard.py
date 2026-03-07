@@ -78,15 +78,15 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
         lambda paper_id: f'{env.PROTOCOL}{env.API_ENDPOINT}{papers_by_id[paper_id].pdf_thumbnail_path}'  # note the leading slash
     )
     df['title'] = df.apply(
-        lambda row: f'/paper-pdf?paper_id={row["id"]}#{papers_by_id[row["id"]].title or QUEUED_EXTRACTION_TEXT}',
+        lambda row: f'/paper?paper_id={row["id"]}#{papers_by_id[row["id"]].title or QUEUED_EXTRACTION_TEXT}',
         axis=1,
     )
     df['first_author'] = df.apply(
-        lambda row: f'/paper-pdf?paper_id={row["id"]}#{papers_by_id[row["id"]].first_author or QUEUED_EXTRACTION_TEXT}',
+        lambda row: f'/paper?paper_id={row["id"]}#{papers_by_id[row["id"]].first_author or QUEUED_EXTRACTION_TEXT}',
         axis=1,
     )
     df['pipeline_status'] = df.apply(
-        lambda row: f'/paper-pdf?paper_id={row["id"]}#{PipelineStatus(row["pipeline_status"]).value + PipelineStatus(row["pipeline_status"]).icon}',
+        lambda row: f'/paper?paper_id={row["id"]}#{PipelineStatus(row["pipeline_status"]).value + PipelineStatus(row["pipeline_status"]).icon}',
         axis=1,
     )
     st.data_editor(
