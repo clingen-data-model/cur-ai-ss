@@ -32,7 +32,9 @@ def test_find_matching_hpo_terms_exact_match(
     mock_term_lookup: defaultdict[str, list[hpotk.model._term_id.DefaultTermId]],
 ) -> None:
     """Test that exact matches are found with high similarity score."""
-    result = find_matching_hpo_terms('abnormality of the skeletal system', mock_term_lookup)
+    result = find_matching_hpo_terms(
+        'abnormality of the skeletal system', mock_term_lookup
+    )
 
     assert len(result) > 0
     assert result[0].hpo_id == 'HP:0000001'
@@ -66,15 +68,9 @@ def test_find_matching_hpo_terms_case_insensitive(
     mock_term_lookup: defaultdict[str, list[hpotk.model._term_id.DefaultTermId]],
 ) -> None:
     """Test that matching is case-insensitive."""
-    result_lower = find_matching_hpo_terms(
-        'intellectual disability', mock_term_lookup
-    )
-    result_upper = find_matching_hpo_terms(
-        'INTELLECTUAL DISABILITY', mock_term_lookup
-    )
-    result_mixed = find_matching_hpo_terms(
-        'InTeLLeCtUaL dIsAbIlItY', mock_term_lookup
-    )
+    result_lower = find_matching_hpo_terms('intellectual disability', mock_term_lookup)
+    result_upper = find_matching_hpo_terms('INTELLECTUAL DISABILITY', mock_term_lookup)
+    result_mixed = find_matching_hpo_terms('InTeLLeCtUaL dIsAbIlItY', mock_term_lookup)
 
     assert result_lower[0].hpo_id == result_upper[0].hpo_id
     assert result_lower[0].hpo_id == result_mixed[0].hpo_id

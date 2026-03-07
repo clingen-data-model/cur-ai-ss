@@ -11,6 +11,7 @@ from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 
+from lib.agents.hpo_linking_agent import agent as hpo_linking_agent
 from lib.agents.paper_extraction_agent import agent as paper_extraction_agent
 from lib.agents.patient_extraction_agent import agent as patient_extraction_agent
 from lib.agents.patient_variant_linking_agent import (
@@ -160,6 +161,45 @@ async def enrich_variants_task_async(paper_db: PaperDB) -> None:
         f.write(output.model_dump_json(indent=2))
 
 
+async def hpo_linking_task_async(paper_db: PaperDB) -> None:
+    from lib.models import PhenotypeInfoExtractionOutput
+    from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
+
+    with open(paper_db.phenotype_info_json_path, 'r') as f:
+        phenotype_data = json.load(f)
+
+    phenotypes = PhenotypeInfoExtractionOutput(**phenotype_data).phenotypes
+    term_lookup = build_term_lookup()
+
+    structured_input = []
+    for ph in phenotypes:
+        candidates = find_matching_hpo_terms(ph.text, term_lookup, limit=10)
+        structured_input.append(
+            {
+                'patient_id': ph.patient_id,
+                'text': ph.text,
+                'candidates': [
+                    {
+                        'hpo_id': c.hpo_id,
+                        'hpo_name': c.hpo_name,
+                        'similarity_score': c.similarity_score,
+                    }
+                    for c in candidates
+                ],
+            }
+        )
+
+    result = await Runner.run(
+        hpo_linking_agent,
+        f'Phenotypes JSON:\n{json.dumps(structured_input, indent=2)}',
+        max_turns=10 * len(structured_input),
+    )
+    json_response = result.final_output.model_dump_json(indent=2)
+    paper_db.hpo_links_json_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(paper_db.hpo_links_json_path, 'w') as f:
+        f.write(json_response)
+
+
 def initial_extraction(paper_id: str, gene_symbol: str) -> None:
     async def _run_extraction_pipeline(paper_id: str, gene_symbol: str) -> None:
         await asyncio.gather(
@@ -209,7 +249,10 @@ def linking_tasks(paper_id: str) -> None:
             patient_variant_linking_task_async(paper_db),
             phenotype_patient_linking_task_async(paper_db),
         )
-        await enrich_variants_task_async(paper_db)
+        await asyncio.gather(
+            enrich_variants_task_async(paper_db),
+            hpo_linking_task_async(paper_db),
+        )
 
     max_attempts = RETRIES + 1
     with session_scope() as session:
