@@ -200,6 +200,10 @@ class PaperDB(Base):
         return env.evagg_dir / self.id / 'patient_info.json'
 
     @property
+    def phenotype_info_json_path(self) -> Path:
+        return env.evagg_dir / self.id / 'phenotype_info.json'
+
+    @property
     def variants_json_path(self) -> Path:
         return env.evagg_dir / self.id / 'variants.json'
 
@@ -255,6 +259,7 @@ class PaperResp(PaperExtractionOutput):
     first_author: str | None = None  # type: ignore
 
     patient_info_json_path: Path
+    phenotype_info_json_path: Path
     enriched_variants_json_path: Path
     harmonized_variants_json_path: Path
     variants_json_path: Path
@@ -283,3 +288,21 @@ class PaperUpdateRequest(PatchModel):
     pmcid: str | None = None
     paper_types: list[PaperType] | None = None
     prompt_override: str | None = None
+
+
+class PhenotypeExtractionOutput(BaseModel):
+    text: str
+    negated: bool = False
+    uncertain: bool = False
+    family_history: bool = False
+    notes: str
+    onset: Optional[str] = None
+    location: Optional[str] = None
+    severity: Optional[str] = None
+    modifier: Optional[str] = None
+    section: Optional[str] = None
+    confidence: Optional[float] = None
+
+
+class PhenotypeInfoExtractionOutput(BaseModel):
+    phenotypes: List[PhenotypeExtractionOutput]
