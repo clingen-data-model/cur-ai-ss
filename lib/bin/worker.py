@@ -16,7 +16,9 @@ from lib.agents.patient_extraction_agent import agent as patient_extraction_agen
 from lib.agents.patient_variant_linking_agent import (
     agent as patient_variant_linking_agent,
 )
-from lib.agents.phenotype_extraction_agent import agent as phenotype_extraction_agent
+from lib.agents.phenotype_patient_linking_agent import (
+    agent as phenotype_patient_linking_agent,
+)
 from lib.agents.variant_enrichment_agent import (
     HarmonizedVariant,
     VariantEnrichmentOutput,
@@ -60,19 +62,6 @@ async def parse_patients_task_async(paper_id: str) -> None:
         parents=True, exist_ok=True
     )
     with open(PaperDB(id=paper_id).patient_info_json_path, 'w') as f:
-        f.write(json_response)
-
-
-async def extract_phenotypes_task_async(paper_id: str) -> None:
-    result = await Runner.run(
-        phenotype_extraction_agent,
-        f'Paper (fulltext md): {fulltext_md(paper_id)}',
-    )
-    json_response = result.final_output.model_dump_json(indent=2)
-    PaperDB(id=paper_id).phenotype_info_json_path.parent.mkdir(
-        parents=True, exist_ok=True
-    )
-    with open(PaperDB(id=paper_id).phenotype_info_json_path, 'w') as f:
         f.write(json_response)
 
 
@@ -134,6 +123,28 @@ async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
         f.write(json_response)
 
 
+async def phenotype_patient_linking_task_async(paper_db: PaperDB) -> None:
+    with open(paper_db.patient_info_json_path, 'r') as f:
+        patients_output = json.load(f)
+
+    structured_patients = [
+        {
+            'patient_id': idx,
+            'identifier': patient['identifier'],
+            'identifier_evidence': patient['identifier_evidence'],
+        }
+        for idx, patient in enumerate(patients_output['patients'], start=1)
+    ]
+    result = await Runner.run(
+        phenotype_patient_linking_agent,
+        f'Paper (fulltext md): {fulltext_md(paper_db.id)}\n\nStructured Patients JSON:\n{structured_patients}',
+    )
+    json_response = result.final_output.model_dump_json(indent=2)
+    paper_db.phenotype_info_json_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(paper_db.phenotype_info_json_path, 'w') as f:
+        f.write(json_response)
+
+
 async def enrich_variants_task_async(paper_db: PaperDB) -> None:
     with open(paper_db.harmonized_variants_json_path, 'r') as f:
         harmonized_data = json.load(f)
@@ -154,7 +165,6 @@ def initial_extraction(paper_id: str, gene_symbol: str) -> None:
         await asyncio.gather(
             parse_paper_task_async(paper_id),
             parse_patients_task_async(paper_id),
-            extract_phenotypes_task_async(paper_id),
             extract_variants_task_async(paper_id, gene_symbol),
         )
 
@@ -197,6 +207,7 @@ def linking_tasks(paper_id: str) -> None:
         await asyncio.gather(
             harmonize_variants_task_async(paper_db),
             patient_variant_linking_task_async(paper_db),
+            phenotype_patient_linking_task_async(paper_db),
         )
         await enrich_variants_task_async(paper_db)
 
