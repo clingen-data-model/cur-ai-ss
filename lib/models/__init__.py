@@ -333,25 +333,34 @@ class HpoPhenotypeLinkingOutput(BaseModel):
     links: List[HpoPhenotypeLink]
 
 
-class PhenotypeLinkingEntry(BaseModel):
+class PhenotypeLinkingEntry(PhenotypeExtractionOutput):
     """Combined phenotype extraction + HPO linking for one phenotype."""
 
-    patient_id: int
-    text: str
-    negated: bool
-    uncertain: bool
-    family_history: bool
-    notes: str
-    onset: str | None
-    location: str | None
-    severity: str | None
-    modifier: str | None
-    section: str | None
-    phenotype_confidence: float
-    hpo_id: str | None
-    hpo_name: str | None
-    hpo_confidence: HpoConfidence | None
-    hpo_match_notes: str | None
+    hpo_id: str | None = None
+    hpo_name: str | None = None
+    hpo_confidence: HpoConfidence | None = None
+    hpo_match_notes: str | None = None
+    candidates: list | None = None  # HPO candidate suggestions for agent
+
+    @classmethod
+    def from_extraction(
+        cls,
+        extraction: PhenotypeExtractionOutput,
+        hpo_id: str | None = None,
+        hpo_name: str | None = None,
+        hpo_confidence: HpoConfidence | None = None,
+        hpo_match_notes: str | None = None,
+        candidates: list | None = None,
+    ) -> 'PhenotypeLinkingEntry':
+        """Create a PhenotypeLinkingEntry from a PhenotypeExtractionOutput."""
+        return cls(
+            **extraction.model_dump(),
+            hpo_id=hpo_id,
+            hpo_name=hpo_name,
+            hpo_confidence=hpo_confidence,
+            hpo_match_notes=hpo_match_notes,
+            candidates=candidates,
+        )
 
 
 class PhenotypeLinkingOutput(BaseModel):

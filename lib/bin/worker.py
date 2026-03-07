@@ -31,7 +31,13 @@ from lib.api.db import session_scope
 from lib.core.logging import setup_logging
 from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import fulltext_md
-from lib.models import PaperDB, PipelineStatus
+from lib.models import (
+    PaperDB,
+    PhenotypeLinkingEntry,
+    PhenotypeLinkingOutput,
+    PipelineStatus,
+)
+from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
 
 LEASE_TIMEOUT_S = 900
 POLL_INTERVAL_S = 10
@@ -125,8 +131,6 @@ async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
 
 
 async def phenotype_patient_linking_task_async(paper_db: PaperDB) -> None:
-    from lib.models import PhenotypeLinkingEntry, PhenotypeLinkingOutput
-
     with open(paper_db.patient_info_json_path, 'r') as f:
         patients_output = json.load(f)
 
@@ -146,24 +150,7 @@ async def phenotype_patient_linking_task_async(paper_db: PaperDB) -> None:
     # Convert phenotype extraction output to combined phenotype-linking format
     phenotypes_output = result.final_output
     phenotype_links = [
-        PhenotypeLinkingEntry(
-            patient_id=ph.patient_id,
-            text=ph.text,
-            negated=ph.negated,
-            uncertain=ph.uncertain,
-            family_history=ph.family_history,
-            notes=ph.notes,
-            onset=ph.onset,
-            location=ph.location,
-            severity=ph.severity,
-            modifier=ph.modifier,
-            section=ph.section,
-            phenotype_confidence=ph.confidence,
-            hpo_id=None,
-            hpo_name=None,
-            hpo_confidence=None,
-            hpo_match_notes=None,
-        )
+        PhenotypeLinkingEntry.from_extraction(ph)
         for ph in phenotypes_output.phenotypes
     ]
     combined_output = PhenotypeLinkingOutput(phenotypes=phenotype_links)
@@ -189,48 +176,31 @@ async def enrich_variants_task_async(paper_db: PaperDB) -> None:
 
 
 async def hpo_linking_task_async(paper_db: PaperDB) -> None:
-    from lib.models import PhenotypeLinkingOutput
-    from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
-
     with open(paper_db.phenotype_linking_json_path, 'r') as f:
         phenotype_data = json.load(f)
 
     phenotype_linking = PhenotypeLinkingOutput(**phenotype_data)
     term_lookup = build_term_lookup()
 
-    structured_input = []
+    # Add HPO candidates to each phenotype
     for entry in phenotype_linking.phenotypes:
         candidates = find_matching_hpo_terms(entry.text, term_lookup, limit=10)
-        structured_input.append(
+        entry.candidates = [  # type: ignore
             {
-                'patient_id': entry.patient_id,
-                'text': entry.text,
-                'candidates': [
-                    {
-                        'hpo_id': c.hpo_id,
-                        'hpo_name': c.hpo_name,
-                        'similarity_score': c.similarity_score,
-                    }
-                    for c in candidates
-                ],
+                'hpo_id': c.hpo_id,
+                'hpo_name': c.hpo_name,
+                'similarity_score': c.similarity_score,
             }
-        )
+            for c in candidates
+        ]
 
     result = await Runner.run(
         hpo_linking_agent,
-        f'Phenotypes JSON:\n{json.dumps(structured_input, indent=2)}',
-        max_turns=10 * len(structured_input),
+        f'Phenotypes JSON:\n{phenotype_linking.model_dump_json(indent=2)}',
+        max_turns=10 * len(phenotype_linking.phenotypes),
     )
 
-    # Merge HPO linking results back into phenotype linking output
-    hpo_links = result.final_output.links
-    for entry, hpo_link in zip(phenotype_linking.phenotypes, hpo_links):
-        entry.hpo_id = hpo_link.hpo_id
-        entry.hpo_name = hpo_link.hpo_name
-        entry.hpo_confidence = hpo_link.confidence
-        entry.hpo_match_notes = hpo_link.match_notes
-
-    json_response = phenotype_linking.model_dump_json(indent=2)
+    json_response = result.final_output.model_dump_json(indent=2)
     with open(paper_db.phenotype_linking_json_path, 'w') as f:
         f.write(json_response)
 
