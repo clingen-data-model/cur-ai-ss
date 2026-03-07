@@ -125,6 +125,8 @@ async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
 
 
 async def phenotype_patient_linking_task_async(paper_db: PaperDB) -> None:
+    from lib.models import PhenotypeLinkingEntry, PhenotypeLinkingOutput
+
     with open(paper_db.patient_info_json_path, 'r') as f:
         patients_output = json.load(f)
 
@@ -140,9 +142,34 @@ async def phenotype_patient_linking_task_async(paper_db: PaperDB) -> None:
         phenotype_patient_linking_agent,
         f'Paper (fulltext md): {fulltext_md(paper_db.id)}\n\nStructured Patients JSON:\n{structured_patients}',
     )
-    json_response = result.final_output.model_dump_json(indent=2)
-    paper_db.phenotype_info_json_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(paper_db.phenotype_info_json_path, 'w') as f:
+
+    # Convert phenotype extraction output to combined phenotype-linking format
+    phenotypes_output = result.final_output
+    phenotype_links = [
+        PhenotypeLinkingEntry(
+            patient_id=ph.patient_id,
+            text=ph.text,
+            negated=ph.negated,
+            uncertain=ph.uncertain,
+            family_history=ph.family_history,
+            notes=ph.notes,
+            onset=ph.onset,
+            location=ph.location,
+            severity=ph.severity,
+            modifier=ph.modifier,
+            section=ph.section,
+            phenotype_confidence=ph.confidence,
+            hpo_id=None,
+            hpo_name=None,
+            hpo_confidence=None,
+            hpo_match_notes=None,
+        )
+        for ph in phenotypes_output.phenotypes
+    ]
+    combined_output = PhenotypeLinkingOutput(phenotypes=phenotype_links)
+    json_response = combined_output.model_dump_json(indent=2)
+    paper_db.phenotype_linking_json_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(paper_db.phenotype_linking_json_path, 'w') as f:
         f.write(json_response)
 
 
@@ -162,22 +189,22 @@ async def enrich_variants_task_async(paper_db: PaperDB) -> None:
 
 
 async def hpo_linking_task_async(paper_db: PaperDB) -> None:
-    from lib.models import PhenotypeInfoExtractionOutput
+    from lib.models import PhenotypeLinkingOutput
     from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
 
-    with open(paper_db.phenotype_info_json_path, 'r') as f:
+    with open(paper_db.phenotype_linking_json_path, 'r') as f:
         phenotype_data = json.load(f)
 
-    phenotypes = PhenotypeInfoExtractionOutput(**phenotype_data).phenotypes
+    phenotype_linking = PhenotypeLinkingOutput(**phenotype_data)
     term_lookup = build_term_lookup()
 
     structured_input = []
-    for ph in phenotypes:
-        candidates = find_matching_hpo_terms(ph.text, term_lookup, limit=10)
+    for entry in phenotype_linking.phenotypes:
+        candidates = find_matching_hpo_terms(entry.text, term_lookup, limit=10)
         structured_input.append(
             {
-                'patient_id': ph.patient_id,
-                'text': ph.text,
+                'patient_id': entry.patient_id,
+                'text': entry.text,
                 'candidates': [
                     {
                         'hpo_id': c.hpo_id,
@@ -194,9 +221,17 @@ async def hpo_linking_task_async(paper_db: PaperDB) -> None:
         f'Phenotypes JSON:\n{json.dumps(structured_input, indent=2)}',
         max_turns=10 * len(structured_input),
     )
-    json_response = result.final_output.model_dump_json(indent=2)
-    paper_db.hpo_links_json_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(paper_db.hpo_links_json_path, 'w') as f:
+
+    # Merge HPO linking results back into phenotype linking output
+    hpo_links = result.final_output.links
+    for entry, hpo_link in zip(phenotype_linking.phenotypes, hpo_links):
+        entry.hpo_id = hpo_link.hpo_id
+        entry.hpo_name = hpo_link.hpo_name
+        entry.hpo_confidence = hpo_link.confidence
+        entry.hpo_match_notes = hpo_link.match_notes
+
+    json_response = phenotype_linking.model_dump_json(indent=2)
+    with open(paper_db.phenotype_linking_json_path, 'w') as f:
         f.write(json_response)
 
 
