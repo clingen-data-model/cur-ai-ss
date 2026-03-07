@@ -2,7 +2,7 @@ import hashlib
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Literal
+from typing import List, Literal
 
 from pydantic import (
     BaseModel,
@@ -296,12 +296,12 @@ class PhenotypeExtractionOutput(BaseModel):
     uncertain: bool = False
     family_history: bool = False
     notes: str
-    onset: Optional[str] = None
-    location: Optional[str] = None
-    severity: Optional[str] = None
-    modifier: Optional[str] = None
-    section: Optional[str] = None
-    confidence: Optional[float] = None
+    onset: str | None
+    location: str | None
+    severity: str | None
+    modifier: str | None
+    section: str | None
+    confidence: float
 
 
 class PhenotypeInfoExtractionOutput(BaseModel):
