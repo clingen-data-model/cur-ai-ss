@@ -54,7 +54,7 @@ def get_ontology() -> hpotk.MinimalOntology:
 
 
 def build_term_lookup() -> defaultdict[str, list[hpotk.model._term_id.DefaultTermId]]:
-    hpo = hpotk.load_ontology(str(ensure_ontology()))
+    hpo = get_ontology()
     term_lookup = defaultdict(list)
     for term in hpo.terms:
         term_lookup[term.name.lower()].append(term.identifier)
