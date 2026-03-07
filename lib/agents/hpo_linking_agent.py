@@ -3,7 +3,7 @@ from agents import Agent, function_tool
 
 from lib.core.environment import env
 from lib.models import PhenotypeLinkingOutput
-from lib.reference_data.hpo import get_ontology
+from lib.reference_data.hpo import find_matching_hpo_terms, get_ontology
 
 
 @function_tool
@@ -68,6 +68,26 @@ def get_hpo_children(hpo_id: str) -> list[dict]:
     return children
 
 
+@function_tool
+def search_hpo_terms(phenotype_text: str, limit: int = 10) -> list[dict]:
+    """
+    Search the HPO ontology for terms matching a phenotype description.
+
+    Returns a list of matching terms with their IDs, names, and similarity scores.
+    Use this when the provided candidates don't have a clear match or when you need
+    to explore alternative terms.
+    """
+    candidates = find_matching_hpo_terms(phenotype_text, limit=limit)
+    return [
+        {
+            'hpo_id': c.hpo_id,
+            'hpo_name': c.hpo_name,
+            'similarity_score': c.similarity_score,
+        }
+        for c in candidates
+    ]
+
+
 INSTRUCTIONS = """
 You are an expert at mapping clinical phenotype descriptions to terms in the
 Human Phenotype Ontology (HPO).
@@ -117,15 +137,23 @@ For each phenotype:
    Do not assume the top candidate is correct. Evaluate multiple
    candidates for semantic accuracy.
 
-3. Use ontology tools when helpful
-   - get_hpo_term(hpo_id) to inspect term details
-   - get_hpo_parents(hpo_id) to understand broader categories
-   - get_hpo_children(hpo_id) to explore more specific terms
+3. Use tools actively when there is NO clear match
+   If none of the provided candidates seem like a good fit, you MUST use tools
+   to explore further. Do not return null prematurely.
 
-   This is useful when:
-   - candidates have similar meanings
-   - the phenotype appears more specific than the candidates
-   - term definitions are needed for clarification
+   Available tools:
+   - search_hpo_terms(phenotype_text) - Search the ontology with alternative
+     phrasings or synonyms. Use this when provided candidates are poor matches.
+   - get_hpo_term(hpo_id) - Inspect details, definition, and synonyms of a term
+   - get_hpo_parents(hpo_id) - Understand broader categories
+   - get_hpo_children(hpo_id) - Explore more specific terms
+
+   Strategy for unclear phenotypes:
+   - Try rephrasing the phenotype using clinical synonyms
+   - Search for related anatomical terms or functional concepts
+   - Use get_hpo_term() to read definitions of search results
+   - Use get_hpo_parents() if a term seems too specific
+   - Use get_hpo_children() if a term seems too broad
 
 4. Select the best matching term
    Prefer terms that:
@@ -137,20 +165,27 @@ For each phenotype:
 
 WHEN NO HPO MATCH EXISTS
 
-It is acceptable that a phenotype has no appropriate HPO match.
+It is acceptable that a phenotype has no appropriate HPO match, but only AFTER
+exhausting tool-based exploration.
 
-If none of the candidate terms represent the phenotype meaning, leave:
+If none of the candidate terms represent the phenotype meaning:
+1. Use search_hpo_terms() with different phrasings or clinical synonyms
+2. Use get_hpo_term() to inspect promising results
+3. Use hierarchy tools (get_hpo_parents/children) to find related terms
+
+Only return null after tool exploration reveals no suitable match:
 - hpo_id: null
 - hpo_name: null
 - hpo_confidence: null
 
-Use this when:
-- the phenotype is too vague
-- the phenotype is not represented in HPO
-- no candidate meaningfully matches the phenotype
-- selecting a term would require guessing
+Return null when:
+- the phenotype is too vague (e.g., "symptom", "finding")
+- the phenotype is genuinely not represented in HPO
+- search attempts with multiple phrasings yield no meaningful matches
+- selecting any term would require significant guessing
 
-It is better to return null than to select an incorrect HPO term.
+It is better to return null than to select an incorrect HPO term, but
+actively use tools before giving up.
 
 ---------------------------------------------------------------------
 
@@ -225,5 +260,5 @@ agent = Agent(
     instructions=INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
     output_type=PhenotypeLinkingOutput,
-    tools=[get_hpo_term, get_hpo_parents, get_hpo_children],
+    tools=[search_hpo_terms, get_hpo_term, get_hpo_parents, get_hpo_children],
 )

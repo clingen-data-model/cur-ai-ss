@@ -7,8 +7,7 @@ import requests
 from rapidfuzz import fuzz, process
 
 from lib.core.environment import env
-
-HpoCandidate = namedtuple('HpoCandidate', ['hpo_id', 'hpo_name', 'similarity_score'])
+from lib.models import HpoCandidate
 
 # Lazy-loaded ontology
 _ontology: hpotk.MinimalOntology | None = None
@@ -67,9 +66,10 @@ def build_term_lookup() -> defaultdict[str, list[hpotk.model._term_id.DefaultTer
 
 def find_matching_hpo_terms(
     phenotype_text: str,
-    term_lookup: defaultdict[str, list[hpotk.model._term_id.DefaultTermId]],
     limit: int = 10,
     score_cutoff: float = 20.0,
+    term_lookup: defaultdict[str, list[hpotk.model._term_id.DefaultTermId]]
+    | None = None,
 ) -> list[HpoCandidate]:
     """
     Match free-text phenotype descriptions to candidate HPO terms using fuzzy matching.
@@ -92,6 +92,8 @@ def find_matching_hpo_terms(
     BPB Note: token_sort_order > token_set_order to improve performace of short queries
     matching too many queries.
     """
+    if not term_lookup:
+        term_lookup = build_term_lookup()
 
     query = phenotype_text.lower()
     all_terms = list(term_lookup.keys())
