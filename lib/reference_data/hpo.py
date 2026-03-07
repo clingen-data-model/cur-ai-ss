@@ -10,6 +10,9 @@ from lib.core.environment import env
 
 HpoCandidate = namedtuple('HpoCandidate', ['hpo_id', 'hpo_name', 'similarity_score'])
 
+# Lazy-loaded ontology
+_ontology: hpotk.MinimalOntology | None = None
+
 ONTOLOGY_ENDPOINT = 'https://github.com/obophenotype/human-phenotype-ontology/releases/latest/download/hp.json'
 MAX_AGE_S = 7 * 24 * 60 * 60  # 7 days
 
@@ -42,6 +45,14 @@ def ensure_ontology() -> Path:
     return path
 
 
+def get_ontology() -> hpotk.MinimalOntology:
+    """Load and cache the HPO ontology."""
+    global _ontology
+    if _ontology is None:
+        _ontology = hpotk.load_ontology(str(ensure_ontology()))
+    return _ontology
+
+
 def build_term_lookup() -> defaultdict[str, list[hpotk.model._term_id.DefaultTermId]]:
     hpo = hpotk.load_ontology(str(ensure_ontology()))
     term_lookup = defaultdict(list)
@@ -57,57 +68,63 @@ def build_term_lookup() -> defaultdict[str, list[hpotk.model._term_id.DefaultTer
 def find_matching_hpo_terms(
     phenotype_text: str,
     term_lookup: defaultdict[str, list[hpotk.model._term_id.DefaultTermId]],
-    limit: int = 5,
+    limit: int = 10,
     score_cutoff: float = 20.0,
 ) -> list[HpoCandidate]:
     """
-    Find matching HPO terms for a phenotype text using rapidfuzz similarity scoring.
+    Match free-text phenotype descriptions to candidate HPO terms using fuzzy matching.
 
-    Args:
-        phenotype_text: The phenotype description text to match.
-        term_lookup: A dict mapping term names to HPO term IDs.
-        limit: Max number of candidates to return (default 5).
-        score_cutoff: Minimum similarity score (0-100) to include a match (default 20).
+    Strategy
+    --------
+    1. Use RapidFuzz `token_sort_ratio` to compare the query against all HPO names and
+       synonyms. This scorer ignores word order but penalizes extra tokens, which helps
+       rank more specific ontology terms lower when the query is generic.
 
-    Returns:
-        List of dicts with keys:
-            - hpo_id: The HPO ID string (e.g., "HP:0001234")
-            - hpo_name: The official term name
-            - similarity_score: Float between 0-100
+    2. Retrieve a moderately large pool of matches (e.g. 10 x expected_output) to ensure good recall.
+
+    3. Collapse synonyms by HPO ID, keeping only the best-scoring string for each term.
+
+    4. Sort candidates by similarity score and return the top `limit`.
+
+    If no candidates pass the cutoff, the root phenotype term
+    ("Phenotypic abnormality", HP:0000118) is returned as a fallback.
+
+    BPB Note: token_sort_order > token_set_order to improve performace of short queries
+    matching too many queries.
     """
+
+    query = phenotype_text.lower()
     all_terms = list(term_lookup.keys())
-    top_matches = process.extract(
-        phenotype_text.lower(),
+
+    matches = process.extract(
+        query,
         all_terms,
-        # "This works best for ontology matching because it ignores extra words and focuses on shared tokens"
-        # per ChatGPT: ontology terms are usually short canonical phrases
-        # text often contains modifiers or extra context
-        # order may vary
-        # Algorithm:
-        # Extract tokens
-        # Compute:
-        #    intersection tokens
-        #    unique tokens in each string
-        # Compare combinations of these token groups
-        scorer=fuzz.token_set_ratio,
-        limit=limit,
+        scorer=fuzz.token_sort_ratio,
+        limit=10 * limit,
         score_cutoff=score_cutoff,
     )
 
-    candidates: list[HpoCandidate] = []
-    for name, score, _ in top_matches:
-        hpo_ids = term_lookup[name]
-        if hpo_ids:
-            hpo_id = str(hpo_ids[0])
-            candidate = HpoCandidate(
-                hpo_id=hpo_id,
-                hpo_name=name,
-                similarity_score=float(score),
-            )
-            candidates.append(candidate)
+    best_by_hpo: dict[str, HpoCandidate] = {}
+
+    for name, score, _ in matches:
+        hpo_id = str(term_lookup[name][0])
+
+        candidate = HpoCandidate(
+            hpo_id=hpo_id,
+            hpo_name=name,
+            similarity_score=float(score),
+        )
+
+        if hpo_id not in best_by_hpo or score > best_by_hpo[hpo_id].similarity_score:
+            best_by_hpo[hpo_id] = candidate
+
+    candidates = sorted(
+        best_by_hpo.values(),
+        key=lambda c: c.similarity_score,
+        reverse=True,
+    )[:limit]
 
     if not candidates:
-        # fallback root phenotype
         candidates.append(
             HpoCandidate(
                 hpo_id='HP:0000118',
@@ -115,4 +132,5 @@ def find_matching_hpo_terms(
                 similarity_score=0.0,
             )
         )
+
     return candidates
