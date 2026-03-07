@@ -19,7 +19,7 @@ def get_hpo_term(hpo_id: str) -> dict:
         raise ValueError(f'HPO term {hpo_id} not found')
 
     return {
-        'id': str(term.id),
+        'id': str(term.identifier.value),
         'name': term.name,
         'definition': term.definition,
         'synonyms': [s.name for s in term.synonyms],
@@ -37,7 +37,7 @@ def get_hpo_parents(hpo_id: str) -> list[dict]:
         if term:
             parents.append(
                 {
-                    'id': str(term.id),
+                    'id': str(term.identifier.value),
                     'name': term.name,
                     'definition': term.definition,
                     'synonyms': [s.name for s in term.synonyms],
@@ -58,7 +58,7 @@ def get_hpo_children(hpo_id: str) -> list[dict]:
         if term:
             children.append(
                 {
-                    'id': str(term.id),
+                    'id': str(term.identifier.value),
                     'name': term.name,
                     'definition': term.definition,
                     'synonyms': [s.name for s in term.synonyms],
