@@ -3,18 +3,7 @@ from agents import Agent, function_tool
 
 from lib.core.environment import env
 from lib.models import PhenotypeLinkingOutput
-from lib.reference_data.hpo import ensure_ontology
-
-# Lazy-loaded ontology
-_ontology: hpotk.MinimalOntology | None = None
-
-
-def _get_ontology() -> hpotk.MinimalOntology:
-    """Load and cache the HPO ontology."""
-    global _ontology
-    if _ontology is None:
-        _ontology = hpotk.load_ontology(str(ensure_ontology()))
-    return _ontology
+from lib.reference_data.hpo import get_ontology
 
 
 @function_tool
@@ -22,7 +11,7 @@ def get_hpo_term(hpo_id: str) -> dict:
     """
     Fetch HPO term information.
     """
-    ontology = _get_ontology()
+    ontology = get_ontology()
     term_id = hpotk.TermId.from_curie(hpo_id)
     term = ontology.get_term(term_id)
 
@@ -39,7 +28,7 @@ def get_hpo_term(hpo_id: str) -> dict:
 
 @function_tool
 def get_hpo_parents(hpo_id: str) -> list[dict]:
-    ontology = _get_ontology()
+    ontology = get_ontology()
     term_id = hpotk.TermId.from_curie(hpo_id)
 
     parents = []
@@ -60,7 +49,7 @@ def get_hpo_parents(hpo_id: str) -> list[dict]:
 
 @function_tool
 def get_hpo_children(hpo_id: str) -> list[dict]:
-    ontology = _get_ontology()
+    ontology = get_ontology()
     term_id = hpotk.TermId.from_curie(hpo_id)
 
     children = []
@@ -107,8 +96,7 @@ You will receive a JSON object with:
 - phenotypes: array of phenotype entries containing:
     - patient_id (int)
     - text (str): phenotype description from the paper
-    - negated, uncertain, family_history, notes (all boolean/string)
-    - onset, location, severity, modifier, section (string or null)
+    - negated, uncertain, family_history (boolean)
     - confidence (float): extraction confidence
     - candidates (list): HPO term suggestions
         - hpo_id (str)
@@ -196,13 +184,8 @@ Return a JSON object with the enriched phenotype data:
       "negated": false,
       "uncertain": false,
       "family_history": false,
-      "notes": "...",
-      "onset": null,
-      "location": null,
-      "severity": null,
-      "modifier": null,
-      "section": null,
       "confidence": 0.95,
+      "candidates": [...],
       "hpo_id": "HP:0001250",
       "hpo_name": "Seizure",
       "hpo_confidence": "high",
@@ -214,13 +197,8 @@ Return a JSON object with the enriched phenotype data:
       "negated": false,
       "uncertain": false,
       "family_history": false,
-      "notes": "...",
-      "onset": null,
-      "location": null,
-      "severity": null,
-      "modifier": null,
-      "section": null,
       "confidence": 0.85,
+      "candidates": [...],
       "hpo_id": null,
       "hpo_name": null,
       "hpo_confidence": null,
@@ -235,7 +213,7 @@ IMPORTANT NOTES
 
 - Maintain the same order as the input.
 - Return exactly one enriched phenotype per input phenotype.
-- Include all original phenotype fields (text, negated, uncertain, etc).
+- Include all input phenotype fields (patient_id, text, negated, uncertain, family_history, confidence, candidates).
 - If no HPO match exists, set hpo_id, hpo_name, and hpo_confidence to null.
 - Duplicate HPO terms per patient are allowed.
 - Only use HPO IDs from the candidate list or ontology tools.

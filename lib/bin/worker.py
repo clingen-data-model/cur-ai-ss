@@ -150,8 +150,7 @@ async def phenotype_patient_linking_task_async(paper_db: PaperDB) -> None:
     # Convert phenotype extraction output to combined phenotype-linking format
     phenotypes_output = result.final_output
     phenotype_links = [
-        PhenotypeLinkingEntry.from_extraction(ph)
-        for ph in phenotypes_output.phenotypes
+        PhenotypeLinkingEntry.from_extraction(ph) for ph in phenotypes_output.phenotypes
     ]
     combined_output = PhenotypeLinkingOutput(phenotypes=phenotype_links)
     json_response = combined_output.model_dump_json(indent=2)
@@ -194,9 +193,13 @@ async def hpo_linking_task_async(paper_db: PaperDB) -> None:
             for c in candidates
         ]
 
+    # Exclude optional fields to keep agent input clean
+    phenotype_data_filtered = phenotype_linking.model_dump(
+        exclude={'notes', 'onset', 'location', 'severity', 'modifier', 'section'}
+    )
     result = await Runner.run(
         hpo_linking_agent,
-        f'Phenotypes JSON:\n{phenotype_linking.model_dump_json(indent=2)}',
+        f'Phenotypes JSON:\n{json.dumps(phenotype_data_filtered, indent=2)}',
         max_turns=10 * len(phenotype_linking.phenotypes),
     )
 

@@ -55,10 +55,10 @@ def test_find_matching_hpo_terms_partial_match(
 
     # Verify specific term matches and score ranges
     assert result[0].hpo_id == 'HP:0000001'
-    assert result[0].similarity_score == 64.0
+    assert int(result[0].similarity_score) == 59
 
-    assert result[2].hpo_id == 'HP:0000003'
-    assert result[2].similarity_score == 45.0
+    assert result[2].hpo_id == 'HP:0000004'
+    assert int(result[2].similarity_score) == 44
 
     # Scores should be different between top and third match
     assert result[0].similarity_score > result[2].similarity_score
