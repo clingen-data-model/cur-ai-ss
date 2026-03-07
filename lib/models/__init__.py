@@ -291,6 +291,7 @@ class PaperUpdateRequest(PatchModel):
 
 
 class PhenotypeExtractionOutput(BaseModel):
+    patient_id: int
     text: str
     negated: bool = False
     uncertain: bool = False
