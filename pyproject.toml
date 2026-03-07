@@ -1,10 +1,10 @@
 [project]
-name = "evagg"
+name = "caa"
 version = "0.1.0"
-description = "evagg"
+description = "caa"
 requires-python = "==3.12.*"
 authors = [
-    {name = "Microsoft Biomedical Computing Group", email = "BiomedComp@microsoft.com"},
+    {name = "The Translational Genomics Group"},
 ]
 dependencies = [
     # General utilities
@@ -23,6 +23,8 @@ dependencies = [
     "pymupdf>=1.26.7",
     "python-multipart>=0.0.21",
     "alembic>=1.18.4",
+    "hpo-toolkit>=0.7.0",
+    "ipython",
 ]
 
 [dependency-groups]

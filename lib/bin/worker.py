@@ -16,6 +16,7 @@ from lib.agents.patient_extraction_agent import agent as patient_extraction_agen
 from lib.agents.patient_variant_linking_agent import (
     agent as patient_variant_linking_agent,
 )
+from lib.agents.phenotype_extraction_agent import agent as phenotype_extraction_agent
 from lib.agents.variant_enrichment_agent import (
     HarmonizedVariant,
     VariantEnrichmentOutput,
@@ -59,6 +60,19 @@ async def parse_patients_task_async(paper_id: str) -> None:
         parents=True, exist_ok=True
     )
     with open(PaperDB(id=paper_id).patient_info_json_path, 'w') as f:
+        f.write(json_response)
+
+
+async def extract_phenotypes_task_async(paper_id: str) -> None:
+    result = await Runner.run(
+        phenotype_extraction_agent,
+        f'Paper (fulltext md): {fulltext_md(paper_id)}',
+    )
+    json_response = result.final_output.model_dump_json(indent=2)
+    PaperDB(id=paper_id).phenotype_info_json_path.parent.mkdir(
+        parents=True, exist_ok=True
+    )
+    with open(PaperDB(id=paper_id).phenotype_info_json_path, 'w') as f:
         f.write(json_response)
 
 
@@ -140,6 +154,7 @@ def initial_extraction(paper_id: str, gene_symbol: str) -> None:
         await asyncio.gather(
             parse_paper_task_async(paper_id),
             parse_patients_task_async(paper_id),
+            extract_phenotypes_task_async(paper_id),
             extract_variants_task_async(paper_id, gene_symbol),
         )
 
