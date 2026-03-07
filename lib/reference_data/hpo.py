@@ -57,7 +57,8 @@ def build_term_lookup() -> defaultdict[str, list[hpotk.model._term_id.DefaultTer
 def find_matching_hpo_terms(
     phenotype_text: str,
     term_lookup: defaultdict[str, list[hpotk.model._term_id.DefaultTermId]],
-    limit: int = 10,
+    limit: int = 5,
+    score_cutoff: float = 20.0,
 ) -> list[HpoCandidate]:
     """
     Find matching HPO terms for a phenotype text using rapidfuzz similarity scoring.
@@ -65,7 +66,8 @@ def find_matching_hpo_terms(
     Args:
         phenotype_text: The phenotype description text to match.
         term_lookup: A dict mapping term names to HPO term IDs.
-        limit: Max number of candidates to return (default 10).
+        limit: Max number of candidates to return (default 5).
+        score_cutoff: Minimum similarity score (0-100) to include a match (default 20).
 
     Returns:
         List of dicts with keys:
@@ -77,21 +79,40 @@ def find_matching_hpo_terms(
     top_matches = process.extract(
         phenotype_text.lower(),
         all_terms,
+        # "This works best for ontology matching because it ignores extra words and focuses on shared tokens"
+        # per ChatGPT: ontology terms are usually short canonical phrases
+        # text often contains modifiers or extra context
+        # order may vary
+        # Algorithm:
+        # Extract tokens
+        # Compute:
+        #    intersection tokens
+        #    unique tokens in each string
+        # Compare combinations of these token groups
         scorer=fuzz.token_set_ratio,
         limit=limit,
+        score_cutoff=score_cutoff,
     )
 
     candidates: list[HpoCandidate] = []
     for name, score, _ in top_matches:
-        if name in term_lookup:
-            hpo_ids = term_lookup[name]
-            if hpo_ids:
-                hpo_id = str(hpo_ids[0])
-                candidate = HpoCandidate(
-                    hpo_id=hpo_id,
-                    hpo_name=name,
-                    similarity_score=float(score),
-                )
-                candidates.append(candidate)
+        hpo_ids = term_lookup[name]
+        if hpo_ids:
+            hpo_id = str(hpo_ids[0])
+            candidate = HpoCandidate(
+                hpo_id=hpo_id,
+                hpo_name=name,
+                similarity_score=float(score),
+            )
+            candidates.append(candidate)
 
+    if not candidates:
+        # fallback root phenotype
+        candidates.append(
+            HpoCandidate(
+                hpo_id='HP:0000118',
+                hpo_name='Phenotypic abnormality',
+                similarity_score=0.0,
+            )
+        )
     return candidates

@@ -163,8 +163,8 @@ Ensure:
 """
 
 agent = Agent(
-   name='phenotype_patient_linker',
-   instructions=INSTRUCTIONS,
-   model=env.OPENAI_API_DEPLOYMENT,
-   output_type=PhenotypeInfoExtractionOutput,
+    name='phenotype_patient_linker',
+    instructions=INSTRUCTIONS,
+    model=env.OPENAI_API_DEPLOYMENT,
+    output_type=PhenotypeInfoExtractionOutput,
 )

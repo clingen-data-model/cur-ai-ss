@@ -219,6 +219,10 @@ class PaperDB(Base):
     def patient_variant_links_json_path(self) -> Path:
         return env.evagg_dir / self.id / 'patient_variant_links.json'
 
+    @property
+    def hpo_links_json_path(self) -> Path:
+        return env.evagg_dir / self.id / 'hpo_links.json'
+
 
 class PaperExtractionOutput(BaseModel):
     title: str
@@ -264,6 +268,7 @@ class PaperResp(PaperExtractionOutput):
     harmonized_variants_json_path: Path
     variants_json_path: Path
     patient_variant_links_json_path: Path
+    hpo_links_json_path: Path
 
     @computed_field  # type: ignore
     @property
@@ -307,3 +312,27 @@ class PhenotypeExtractionOutput(BaseModel):
 
 class PhenotypeInfoExtractionOutput(BaseModel):
     phenotypes: List[PhenotypeExtractionOutput]
+
+
+class HpoConfidence(str, Enum):
+    """Confidence level for HPO term matching."""
+
+    high = 'high'
+    moderate = 'moderate'
+    low = 'low'
+
+
+class HpoPhenotypeLink(BaseModel):
+    """Link between a phenotype and an HPO term."""
+
+    patient_id: int
+    hpo_id: str | None
+    hpo_name: str | None
+    confidence: HpoConfidence | None
+    match_notes: str
+
+
+class HpoPhenotypeLinkingOutput(BaseModel):
+    """Output from HPO phenotype linking agent."""
+
+    links: List[HpoPhenotypeLink]
