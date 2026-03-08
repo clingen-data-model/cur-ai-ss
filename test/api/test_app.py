@@ -51,7 +51,9 @@ startxref
 %%EOF""")
 
 
-def _assert_last_modified_recent(last_modified_str: str, max_age_seconds: int = 60) -> None:
+def _assert_last_modified_recent(
+    last_modified_str: str, max_age_seconds: int = 60
+) -> None:
     """Assert that last_modified timestamp is within the last minute."""
     last_modified = datetime.fromisoformat(last_modified_str)
     # Handle naive datetimes by assuming UTC
@@ -59,7 +61,9 @@ def _assert_last_modified_recent(last_modified_str: str, max_age_seconds: int = 
         last_modified = last_modified.replace(tzinfo=timezone.utc)
     now = datetime.now(timezone.utc)
     age = (now - last_modified).total_seconds()
-    assert 0 <= age <= max_age_seconds, f'last_modified is {age}s old, expected within {max_age_seconds}s'
+    assert 0 <= age <= max_age_seconds, (
+        f'last_modified is {age}s old, expected within {max_age_seconds}s'
+    )
 
 
 @pytest.fixture

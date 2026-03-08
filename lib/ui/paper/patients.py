@@ -207,10 +207,12 @@ def _render_patient_phenotypes(
     matched = [p for p in patient_phenotypes if p.hpo_id]
     unmatched = [p for p in patient_phenotypes if not p.hpo_id]
 
-    matched_tab, unmatched_tab = st.tabs([
-        f'🔗 Matched to HPO ({len(matched)})',
-        f'❓ Unmatched ({len(unmatched)})',
-    ])
+    matched_tab, unmatched_tab = st.tabs(
+        [
+            f'🔗 Matched to HPO ({len(matched)})',
+            f'❓ Unmatched ({len(unmatched)})',
+        ]
+    )
 
     with matched_tab:
         if not matched:
@@ -256,11 +258,15 @@ def _render_phenotypes_table(
         }
 
         if show_hpo:
-            row.update({
-                'HPO ID': phenotype.hpo_id or 'N/A',
-                'HPO Term': phenotype.hpo_name or 'N/A',
-                'Confidence': phenotype.hpo_confidence.value if phenotype.hpo_confidence else 'N/A',
-            })
+            row.update(
+                {
+                    'HPO ID': phenotype.hpo_id or 'N/A',
+                    'HPO Term': phenotype.hpo_name or 'N/A',
+                    'Confidence': phenotype.hpo_confidence.value
+                    if phenotype.hpo_confidence
+                    else 'N/A',
+                }
+            )
 
         rows.append(row)
 
@@ -281,15 +287,17 @@ def _render_phenotypes_table(
         ),
     }
     if show_hpo:
-        column_config.update({
-            'HPO ID': st.column_config.TextColumn('HPO ID', width='small'),
-            'HPO Term': st.column_config.TextColumn('HPO Term', width='medium'),
-            'Confidence': st.column_config.SelectboxColumn(
-                'Confidence',
-                options=confidence_options,
-                width='small',
-            ),
-        })
+        column_config.update(
+            {
+                'HPO ID': st.column_config.TextColumn('HPO ID', width='small'),
+                'HPO Term': st.column_config.TextColumn('HPO Term', width='medium'),
+                'Confidence': st.column_config.SelectboxColumn(
+                    'Confidence',
+                    options=confidence_options,
+                    width='small',
+                ),
+            }
+        )
 
     editted_df = st.data_editor(
         df,
@@ -356,9 +364,7 @@ def render_patients_tab(paper_resp: PaperResp, selected_patient_id: int | None) 
     phenotypes: list[PhenotypeLinkingEntry] | None = None
     with open(paper_resp.phenotype_linking_json_path, 'r') as f:
         phenotype_data = json.load(f)
-    phenotypes = PhenotypeLinkingOutput.model_validate(
-        phenotype_data
-    ).phenotypes
+    phenotypes = PhenotypeLinkingOutput.model_validate(phenotype_data).phenotypes
 
     # -----------------------------
     # Display Patients

@@ -22,7 +22,7 @@ def get_hpo_term(hpo_id: str) -> dict:
         'id': str(term.identifier.value),
         'name': term.name,
         'definition': term.definition,
-        'synonyms': [s.name for s in term.synonyms] if term.synonyms else[],
+        'synonyms': [s.name for s in term.synonyms] if term.synonyms else [],
     }
 
 
@@ -40,7 +40,9 @@ def get_hpo_parents(hpo_id: str) -> list[dict]:
                     'id': str(term.identifier.value),
                     'name': term.name,
                     'definition': term.definition,
-                    'synonyms': [s.name for s in term.synonyms] if term.synonyms else[],
+                    'synonyms': [s.name for s in term.synonyms]
+                    if term.synonyms
+                    else [],
                 }
             )
 
@@ -61,7 +63,9 @@ def get_hpo_children(hpo_id: str) -> list[dict]:
                     'id': str(term.identifier.value),
                     'name': term.name,
                     'definition': term.definition,
-                    'synonyms': [s.name for s in term.synonyms] if term.synonyms else[],
+                    'synonyms': [s.name for s in term.synonyms]
+                    if term.synonyms
+                    else [],
                 }
             )
 
