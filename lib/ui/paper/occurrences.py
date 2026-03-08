@@ -8,8 +8,12 @@ from lib.agents.patient_extraction_agent import (
     PatientInfoExtractionOutput,
 )
 from lib.agents.patient_variant_linking_agent import (
+    Inheritance,
+    LinkType,
     PatientVariantLink,
     PatientVariantLinkerOutput,
+    TestingMethod,
+    Zygosity,
 )
 from lib.agents.variant_extraction_agent import Variant, VariantExtractionOutput
 from lib.agents.variant_harmonization_agent import (
@@ -17,7 +21,6 @@ from lib.agents.variant_harmonization_agent import (
     VariantHarmonizationOutput,
 )
 from lib.models import PaperResp, PipelineStatus
-
 
 def render_patient_variant_occurrences_tab(paper_resp: PaperResp) -> None:
     """Display patient-variant links in a table with a detail panel for selected rows."""
@@ -68,28 +71,28 @@ def render_patient_variant_occurrences_tab(paper_resp: PaperResp) -> None:
             or f'Variant {link.variant_id}'
         )
 
-        # Join testing methods
-        testing_str = (
-            ', '.join(m.value for m in link.testing_methods)
+        # Format testing methods as a list
+        testing_methods_list = (
+            [m.value for m in link.testing_methods]
             if link.testing_methods
-            else 'Unknown'
+            else []
         )
 
         patient_display = patient.identifier or f'Patient {link.patient_id}'
         patient_link = f'/paper?paper_id={paper_resp.id}&patient_id={link.patient_id}#{patient_display}'
-
         variant_link = f'/paper?paper_id={paper_resp.id}&variant_id={link.variant_id}#{variant_desc}'
-
         rows.append({
+            'Select': False,
             'Patient': patient_link,
             'Variant': variant_link,
             'Zygosity': link.zygosity.value,
             'Inheritance': link.inheritance.value,
             'Confidence': link.confidence,
             'Link Type': link.link_type.value,
-            'Testing Methods': testing_str,
-            # Store full link object for detail panel
+            'Testing Methods': testing_methods_list,
+            # Store full objects for detail panel
             '_link': link,
+            '_patient': patient,
             '_extracted_variant': extracted_variant,
             '_harmonized_variant': harmonized_variant,
         })
@@ -109,13 +112,20 @@ def render_patient_variant_occurrences_tab(paper_resp: PaperResp) -> None:
     st.subheader('Patient/Variant Occurrences')
     st.caption(f'{len(rows)} total occurrences')
 
-    selected = st.dataframe(
+    # Get enum options for multiselect columns
+    zygosity_options = [e.value for e in Zygosity]
+    inheritance_options = [e.value for e in Inheritance]
+    link_type_options = [e.value for e in LinkType]
+    testing_method_options = [e.value for e in TestingMethod]
+    confidence_options = ['high', 'moderate', 'low']
+
+    editted_df = st.data_editor(
         df,
-        selection_mode='single-row',
-        on_select='rerun',
         width='stretch',
         hide_index=True,
+        disabled=["Patient", "Variant"],
         column_config={
+            'Select': st.column_config.CheckboxColumn("Select", width=5),
             'Patient': st.column_config.LinkColumn(
                 'Patient',
                 display_text=r'.*?#(.+)$',
@@ -124,18 +134,97 @@ def render_patient_variant_occurrences_tab(paper_resp: PaperResp) -> None:
                 'Variant',
                 display_text=r'.*?#(.+)$',
             ),
+            'Zygosity': st.column_config.SelectboxColumn(
+                'Zygosity',
+                options=zygosity_options,
+                width='small',
+            ),
+            'Inheritance': st.column_config.SelectboxColumn(
+                'Inheritance',
+                options=inheritance_options,
+                width='small',
+            ),
+            'Confidence': st.column_config.SelectboxColumn(
+                'Confidence',
+                options=confidence_options,
+                width='small',
+            ),
+            'Link Type': st.column_config.SelectboxColumn(
+                'Link Type',
+                options=link_type_options,
+                width='small',
+            ),
+            'Testing Methods': st.column_config.MultiselectColumn(
+                'Testing Methods',
+                options=testing_method_options,
+                color=["#ffa421", "#803df5", "#00c0f2"],
+                format_func=lambda x: x.capitalize(),
+            )
         },
     )
 
-    # Show detail panel when a row is selected
-    if selected.selection.rows:
-        idx = selected.selection.rows[0]
+    # Show editable panel when a row is selected
+    selected_rows = editted_df[editted_df['Select']].index.tolist()
+    if selected_rows:
+        idx = selected_rows[0]
         link = rows[idx]['_link']
+        patient = rows[idx].get('_patient') or patients[link.patient_id - 1]
         extracted_variant = rows[idx]['_extracted_variant']
         harmonized_variant = rows[idx]['_harmonized_variant']
 
         st.divider()
         st.subheader('Occurrence Details')
+
+        # Display patient info and harmonized variant info side by side
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown('#### Patient Info')
+            patient_data = {
+                'Field': [
+                    '**Identifier**',
+                    '**Proband Status**',
+                    '**Sex at Birth**',
+                    '**Age at Diagnosis**',
+                    '**Age at Report**',
+                    '**Country of Origin**',
+                    '**Race/Ethnicity**',
+                ],
+                'Value': [
+                    patient.identifier or 'N/A',
+                    patient.proband_status.value if patient.proband_status else 'N/A',
+                    patient.sex.value if patient.sex else 'N/A',
+                    patient.age_diagnosis or 'N/A',
+                    patient.age_report or 'N/A',
+                    patient.country_of_origin.value if patient.country_of_origin else 'N/A',
+                    patient.race_ethnicity.value if patient.race_ethnicity else 'N/A',
+                ],
+            }
+            st.table(pd.DataFrame(patient_data))
+
+        with col2:
+            st.markdown('#### Harmonized Variant Info')
+            variant_data = {
+                'Field': [
+                    '**HGVS g.**',
+                    '**HGVS c.**',
+                    '**HGVS p.**',
+                    '**rsID**',
+                    '**gnomAD-style**',
+                    '**Normalization Confidence**',
+                ],
+                'Value': [
+                    harmonized_variant.hgvs_g or 'N/A',
+                    harmonized_variant.hgvs_c or 'N/A',
+                    harmonized_variant.hgvs_p or 'N/A',
+                    harmonized_variant.rsid or 'N/A',
+                    harmonized_variant.gnomad_style_coordinates or 'N/A',
+                    harmonized_variant.normalization_confidence or 'N/A',
+                ],
+            }
+            st.table(pd.DataFrame(variant_data))
+
+        st.divider()
 
         with st.expander('Evidence Context', expanded=False):
             st.text(link.evidence_context or 'No evidence provided')
@@ -148,13 +237,3 @@ def render_patient_variant_occurrences_tab(paper_resp: PaperResp) -> None:
                 for i, evidence in enumerate(link.testing_methods_evidence, start=1):
                     st.text(f'**Method {i}:** {evidence}')
 
-        # Show harmonized variant info for reference
-        st.markdown('**Harmonized Variant Info**')
-        col1, col2 = st.columns(2)
-        with col1:
-            st.text(f'HGVS c.: {harmonized_variant.hgvs_c or "N/A"}')
-            st.text(f'HGVS p.: {harmonized_variant.hgvs_p or "N/A"}')
-            st.text(f'rsID: {harmonized_variant.rsid or "N/A"}')
-        with col2:
-            st.text(f'gnomAD-style: {harmonized_variant.gnomad_style_coordinates or "N/A"}')
-            st.text(f'Normalization Confidence: {harmonized_variant.normalization_confidence or "N/A"}')
