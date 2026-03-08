@@ -3,11 +3,8 @@ import json
 import os
 import random
 import string
-from pathlib import Path
-from typing import Optional
 
 import pytest
-from defusedxml import ElementTree
 from sqlalchemy.orm import Session
 
 from lib.api import db
