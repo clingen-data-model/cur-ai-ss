@@ -127,10 +127,18 @@ with center:
                 if paper_query_params.variant_id
                 else '📄 PDF'
             )
-            pdf_tab, metadata_tab, patients_tab, variants_tab, occurrences_tab = st.tabs(
-                ['📄 PDF', '📝 Metadata', '👤 Patients', '🧬 Variants', '🔗 Occurrences'],
-                on_change='rerun',
-                default=default_tab,
+            pdf_tab, metadata_tab, patients_tab, variants_tab, occurrences_tab = (
+                st.tabs(
+                    [
+                        '📄 PDF',
+                        '📝 Metadata',
+                        '👤 Patients',
+                        '🧬 Variants',
+                        '🔗 Occurrences',
+                    ],
+                    on_change='rerun',
+                    default=default_tab,
+                )
             )
             with center:
                 if pdf_tab.open:

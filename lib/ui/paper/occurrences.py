@@ -22,6 +22,7 @@ from lib.agents.variant_harmonization_agent import (
 )
 from lib.models import PaperResp, PipelineStatus
 
+
 def render_patient_variant_occurrences_tab(paper_resp: PaperResp) -> None:
     """Display patient-variant links in a table with a detail panel for selected rows."""
     if not paper_resp.title:
@@ -73,29 +74,29 @@ def render_patient_variant_occurrences_tab(paper_resp: PaperResp) -> None:
 
         # Format testing methods as a list
         testing_methods_list = (
-            [m.value for m in link.testing_methods]
-            if link.testing_methods
-            else []
+            [m.value for m in link.testing_methods] if link.testing_methods else []
         )
 
         patient_display = patient.identifier or f'Patient {link.patient_id}'
         patient_link = f'/paper?paper_id={paper_resp.id}&patient_id={link.patient_id}#{patient_display}'
         variant_link = f'/paper?paper_id={paper_resp.id}&variant_id={link.variant_id}#{variant_desc}'
-        rows.append({
-            'Select': False,
-            'Patient': patient_link,
-            'Variant': variant_link,
-            'Zygosity': link.zygosity.value,
-            'Inheritance': link.inheritance.value,
-            'Confidence': link.confidence,
-            'Link Type': link.link_type.value,
-            'Testing Methods': testing_methods_list,
-            # Store full objects for detail panel
-            '_link': link,
-            '_patient': patient,
-            '_extracted_variant': extracted_variant,
-            '_harmonized_variant': harmonized_variant,
-        })
+        rows.append(
+            {
+                'Select': False,
+                'Patient': patient_link,
+                'Variant': variant_link,
+                'Zygosity': link.zygosity.value,
+                'Inheritance': link.inheritance.value,
+                'Confidence': link.confidence,
+                'Link Type': link.link_type.value,
+                'Testing Methods': testing_methods_list,
+                # Store full objects for detail panel
+                '_link': link,
+                '_patient': patient,
+                '_extracted_variant': extracted_variant,
+                '_harmonized_variant': harmonized_variant,
+            }
+        )
 
     if not rows:
         st.info('No Patient/Variant links found.')
@@ -103,8 +104,7 @@ def render_patient_variant_occurrences_tab(paper_resp: PaperResp) -> None:
 
     # Create DataFrame for display (exclude internal columns)
     display_rows = [
-        {k: v for k, v in row.items() if not k.startswith('_')}
-        for row in rows
+        {k: v for k, v in row.items() if not k.startswith('_')} for row in rows
     ]
     df = pd.DataFrame(display_rows)
 
@@ -123,9 +123,9 @@ def render_patient_variant_occurrences_tab(paper_resp: PaperResp) -> None:
         df,
         width='stretch',
         hide_index=True,
-        disabled=["Patient", "Variant"],
+        disabled=['Patient', 'Variant'],
         column_config={
-            'Select': st.column_config.CheckboxColumn("Select", width=5),
+            'Select': st.column_config.CheckboxColumn('Select', width=5),
             'Patient': st.column_config.LinkColumn(
                 'Patient',
                 display_text=r'.*?#(.+)$',
@@ -157,9 +157,9 @@ def render_patient_variant_occurrences_tab(paper_resp: PaperResp) -> None:
             'Testing Methods': st.column_config.MultiselectColumn(
                 'Testing Methods',
                 options=testing_method_options,
-                color=["#ffa421", "#803df5", "#00c0f2"],
+                color=['#ffa421', '#803df5', '#00c0f2'],
                 format_func=lambda x: x.capitalize(),
-            )
+            ),
         },
     )
 
@@ -196,7 +196,9 @@ def render_patient_variant_occurrences_tab(paper_resp: PaperResp) -> None:
                     patient.sex.value if patient.sex else 'N/A',
                     patient.age_diagnosis or 'N/A',
                     patient.age_report or 'N/A',
-                    patient.country_of_origin.value if patient.country_of_origin else 'N/A',
+                    patient.country_of_origin.value
+                    if patient.country_of_origin
+                    else 'N/A',
                     patient.race_ethnicity.value if patient.race_ethnicity else 'N/A',
                 ],
             }
@@ -236,4 +238,3 @@ def render_patient_variant_occurrences_tab(paper_resp: PaperResp) -> None:
             with st.expander('Testing Methods Evidence', expanded=False):
                 for i, evidence in enumerate(link.testing_methods_evidence, start=1):
                     st.text(f'**Method {i}:** {evidence}')
-
