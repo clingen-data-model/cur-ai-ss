@@ -1,5 +1,6 @@
 import json
 
+import pandas as pd
 import streamlit as st
 
 from lib.agents.patient_extraction_agent import (
@@ -10,13 +11,21 @@ from lib.agents.patient_extraction_agent import (
     RaceEthnicity,
     SexAtBirth,
 )
-from lib.models import PaperResp, PipelineStatus
+from lib.models import (
+    HpoConfidence,
+    PaperResp,
+    PhenotypeLinkingEntry,
+    PhenotypeLinkingOutput,
+    PipelineStatus,
+)
 
 
 def render_patient(
     patient: PatientInfo,
     expanded: bool,
     key_prefix: str,
+    patient_id: int,
+    phenotypes: list[PhenotypeLinkingEntry] | None = None,
 ) -> None:
     with st.expander(
         f'{patient.identifier or "N/A"}',
@@ -171,6 +180,161 @@ def render_patient(
                 key=f'{key_prefix}-race-evidence',
             )
 
+        # --- Phenotypes Section
+        if phenotypes:
+            st.divider()
+            _render_patient_phenotypes(
+                phenotypes,
+                patient_id,
+                key_prefix,
+            )
+
+
+def _render_patient_phenotypes(
+    all_phenotypes: list[PhenotypeLinkingEntry],
+    patient_id: int,
+    key_prefix: str,
+) -> None:
+    """Render phenotypes for a specific patient with matched/unmatched tabs."""
+    # Filter phenotypes for this patient
+    patient_phenotypes = [p for p in all_phenotypes if p.patient_id == patient_id]
+
+    if not patient_phenotypes:
+        st.info('No phenotypes for this patient.')
+        return
+
+    # Split into matched and unmatched
+    matched = [p for p in patient_phenotypes if p.hpo_id]
+    unmatched = [p for p in patient_phenotypes if not p.hpo_id]
+
+    matched_tab, unmatched_tab = st.tabs([
+        f'🔗 Matched to HPO ({len(matched)})',
+        f'❓ Unmatched ({len(unmatched)})',
+    ])
+
+    with matched_tab:
+        if not matched:
+            st.info('No phenotypes matched to HPO terms.')
+        else:
+            _render_phenotypes_table(
+                matched,
+                patient_id,
+                key_prefix,
+                show_hpo=True,
+                table_type='matched-phenotypes',
+            )
+
+    with unmatched_tab:
+        if not unmatched:
+            st.info('All phenotypes were successfully matched to HPO terms.')
+        else:
+            _render_phenotypes_table(
+                unmatched,
+                patient_id,
+                key_prefix,
+                show_hpo=False,
+                table_type='unmatched-phenotypes',
+            )
+
+
+def _render_phenotypes_table(
+    phenotypes: list[PhenotypeLinkingEntry],
+    patient_id: int,
+    key_prefix: str,
+    show_hpo: bool,
+    table_type: str,
+) -> None:
+    """Render phenotypes table with detail panel."""
+    # Build table rows
+    rows = []
+    for phenotype in phenotypes:
+        row = {
+            'Select': False,
+            'Phenotype': phenotype.text,
+            'Evidence Context': phenotype.notes,
+            '_phenotype': phenotype,
+        }
+
+        if show_hpo:
+            row.update({
+                'HPO ID': phenotype.hpo_id or 'N/A',
+                'HPO Term': phenotype.hpo_name or 'N/A',
+                'Confidence': phenotype.hpo_confidence.value if phenotype.hpo_confidence else 'N/A',
+            })
+
+        rows.append(row)
+
+    # Create DataFrame for display (exclude internal columns)
+    display_rows = [
+        {k: v for k, v in row.items() if not k.startswith('_')} for row in rows
+    ]
+    df = pd.DataFrame(display_rows)
+
+    # Display table
+    confidence_options = [e.value for e in HpoConfidence]
+
+    column_config = {
+        'Select': st.column_config.CheckboxColumn('Select', width=5),
+        'Phenotype': st.column_config.TextColumn(
+            'Phenotype',
+            width='large',
+        ),
+    }
+    if show_hpo:
+        column_config.update({
+            'HPO ID': st.column_config.TextColumn('HPO ID', width='small'),
+            'HPO Term': st.column_config.TextColumn('HPO Term', width='medium'),
+            'Confidence': st.column_config.SelectboxColumn(
+                'Confidence',
+                options=confidence_options,
+                width='small',
+            ),
+        })
+
+    editted_df = st.data_editor(
+        df,
+        width='stretch',
+        hide_index=True,
+        disabled=['Phenotype'] + (['HPO ID', 'HPO Term'] if show_hpo else []),
+        column_config=column_config,
+        key=f'{key_prefix}-{table_type}-editor',
+    )
+
+    # Show detail panel when a row is selected
+    selected_rows = editted_df[editted_df['Select']].index.tolist()
+    if selected_rows:
+        idx = selected_rows[0]
+        phenotype = rows[idx]['_phenotype']
+
+        st.divider()
+        st.markdown('##### Phenotype Details')
+
+        details_data = {
+            'Field': [
+                '**Text**',
+                '**HPO ID**',
+                '**HPO Term**',
+                '**HPO Confidence**',
+            ],
+            'Value': [
+                phenotype.text,
+                phenotype.hpo_id or 'N/A',
+                phenotype.hpo_name or 'N/A',
+                phenotype.hpo_confidence.value if phenotype.hpo_confidence else 'N/A',
+            ],
+        }
+        st.table(pd.DataFrame(details_data))
+
+        # Evidence context
+        if phenotype.notes:
+            with st.expander('Evidence Context', expanded=False):
+                st.text(phenotype.notes)
+
+        # HPO matching notes
+        if phenotype.hpo_match_notes:
+            with st.expander('HPO Matching Notes', expanded=False):
+                st.text(phenotype.hpo_match_notes)
+
 
 def render_patients_tab(paper_resp: PaperResp, selected_patient_id: int | None) -> None:
     if not paper_resp.title:
@@ -187,6 +351,14 @@ def render_patients_tab(paper_resp: PaperResp, selected_patient_id: int | None) 
     patients: list[PatientInfo] = PatientInfoExtractionOutput.model_validate(
         patient_info_data
     ).patients
+
+    # Load phenotype linking data
+    phenotypes: list[PhenotypeLinkingEntry] | None = None
+    with open(paper_resp.phenotype_linking_json_path, 'r') as f:
+        phenotype_data = json.load(f)
+    phenotypes = PhenotypeLinkingOutput.model_validate(
+        phenotype_data
+    ).phenotypes
 
     # -----------------------------
     # Display Patients
@@ -217,6 +389,8 @@ def render_patients_tab(paper_resp: PaperResp, selected_patient_id: int | None) 
                 patient,
                 expanded=(original_idx == selected_patient_id),
                 key_prefix=f'patient-{original_idx}',
+                patient_id=original_idx,
+                phenotypes=phenotypes,
             )
     with non_proband_tab:
         if not non_probands:
@@ -227,4 +401,6 @@ def render_patients_tab(paper_resp: PaperResp, selected_patient_id: int | None) 
                 patient,
                 expanded=(original_idx == selected_patient_id),
                 key_prefix=f'patient-{original_idx}',
+                patient_id=original_idx,
+                phenotypes=phenotypes,
             )

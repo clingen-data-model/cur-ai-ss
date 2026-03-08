@@ -98,6 +98,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
                 'first_author',
                 'filename',
                 'pipeline_status',
+                'last_modified',
             ]
         ],
         row_height=100,
@@ -126,6 +127,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
                 # Note, this is a major hack to get around the lack of a better way of doing this.
                 display_text=r'.*?#(.+)$',
             ),
+            'last_modified': st.column_config.Column('Last Modified'),
         },
         disabled=[
             'gene_symbol',
@@ -134,6 +136,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
             'first_author',
             'filename',
             'pipeline_status',
+            'last_modified',
         ],
         num_rows='delete',
         key=CURATIONS_DF_KEY,

@@ -260,6 +260,7 @@ class PaperResp(PaperExtractionOutput):
     gene_symbol: str
     filename: str
     pipeline_status: PipelineStatus
+    last_modified: datetime
 
     # Override the PaperExtractionOutput to make the fields optional.
     # Handles the case when paper is QUEUED.

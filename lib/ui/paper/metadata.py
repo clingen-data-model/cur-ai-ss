@@ -25,6 +25,10 @@ def paper_resp_to_markdown(paper_resp: PaperResp) -> str:
     if author_line:
         lines.append(' | '.join(author_line) + '\n')
 
+    # Last Modified
+    if paper_resp.last_modified:
+        lines.append(f'**Last Modified:** {paper_resp.last_modified.strftime("%Y-%m-%d %H:%M:%S %Z")}\n')
+
     # DOI / PMC / PMID
     id_lines = []
     if paper_resp.doi:
