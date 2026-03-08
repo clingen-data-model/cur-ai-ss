@@ -125,41 +125,139 @@ You will receive a JSON object with:
 
 ---------------------------------------------------------------------
 
-TASK
+HPO TERM SELECTION FRAMEWORK
 
-For each phenotype:
+For each phenotype, follow this structured decision process before
+selecting an HPO term.
 
-1. Understand the phenotype
-   Identify the core clinical concept. Ignore stylistic differences
-   or wording variations.
+STEP 1 — Interpret the phenotype
 
-2. Review candidate terms
-   Do not assume the top candidate is correct. Evaluate multiple
-   candidates for semantic accuracy.
+Identify the core clinical meaning of the phenotype text.
 
-3. Use tools actively when there is NO clear match
-   If none of the provided candidates seem like a good fit, you MUST use tools
-   to explore further. Do not return null prematurely.
+Consider:
+- anatomical structure
+- functional abnormality
+- morphology
+- severity or modifiers
+- whether the text is specific or general
 
-   Available tools:
-   - search_hpo_terms(phenotype_text) - Search the ontology with alternative
-     phrasings or synonyms. Use this when provided candidates are poor matches.
-   - get_hpo_term(hpo_id) - Inspect details, definition, and synonyms of a term
-   - get_hpo_parents(hpo_id) - Understand broader categories
-   - get_hpo_children(hpo_id) - Explore more specific terms
+Rewrite the phenotype internally as a concise clinical concept.
 
-   Strategy for unclear phenotypes:
-   - Try rephrasing the phenotype using clinical synonyms
-   - Search for related anatomical terms or functional concepts
-   - Use get_hpo_term() to read definitions of search results
-   - Use get_hpo_parents() if a term seems too specific
-   - Use get_hpo_children() if a term seems too broad
+Example:
+"abnormal outer ear shape" → structural abnormality of the external ear
 
-4. Select the best matching term
-   Prefer terms that:
-   - accurately represent the phenotype
-   - have appropriate specificity
-   - match the clinical meaning
+---------------------------------------------------------------------
+
+STEP 2 — Evaluate candidate terms
+
+Review all provided candidate HPO terms.
+
+For promising candidates:
+- inspect the term name
+- verify meaning with get_hpo_term()
+
+Reject candidates that are:
+- semantically incorrect
+- unrelated anatomically
+- clearly too specific
+- clearly too broad
+
+Similarity scores should not determine the final choice.
+
+---------------------------------------------------------------------
+
+STEP 3 — Verify ontology position
+
+For promising candidates, check whether the term is at the correct
+level of specificity.
+
+Use:
+- get_hpo_parents() if the candidate may be too specific
+- get_hpo_children() if the candidate may be too broad
+
+Goal:
+Select the term that best captures the phenotype without
+over-specifying or under-specifying.
+
+---------------------------------------------------------------------
+
+ONTOLOGY HIERARCHY EXPLORATION
+
+Use the ontology graph to verify the correct level of specificity.
+
+If a candidate term appears too specific for the phenotype,
+explore broader categories using get_hpo_parents().
+
+If a candidate term appears too broad,
+explore more specific terms using get_hpo_children().
+
+You may call these tools multiple times to walk the ontology hierarchy
+until you identify the most appropriate level.
+
+Multiple sequential tool calls may be required to find the correct term.
+
+Continue exploring until:
+- the best matching term is found
+- the hierarchy becomes too broad
+- or no better term exists.
+
+Do not assume the candidate list already contains the correct term.
+The appropriate HPO term may exist above or below the candidates
+in the ontology hierarchy.
+
+When exploring children of a term, prioritize children whose names
+or synonyms are semantically related to the phenotype description.
+
+---------------------------------------------------------------------
+
+STEP 4 — Search for alternatives if needed
+
+If the candidate list does not contain a good match:
+
+Use search_hpo_terms() with alternative phrasings.
+
+Strategies:
+- anatomical synonyms
+- clinical synonyms
+- broader functional concepts
+
+Examples:
+"outer ear abnormality"
+"external ear malformation"
+"ear structural abnormality"
+
+Inspect promising search results using get_hpo_term().
+
+---------------------------------------------------------------------
+
+STEP 5 — Make the final selection
+
+Choose the HPO term that:
+
+- accurately reflects the phenotype meaning
+- is neither too broad nor too specific
+- aligns with the ontology structure
+
+If multiple terms could apply, prefer the term that best matches
+the wording and specificity of the phenotype.
+
+Before assigning **high confidence**, you MUST call get_hpo_term()
+to confirm the definition and scope of the selected term.
+
+Prefer the most specific HPO term that is fully supported by
+the phenotype text, but do not infer details that are not stated.
+
+---------------------------------------------------------------------
+
+STEP 6 — If no match exists
+
+Return null ONLY after:
+
+- reviewing candidate terms
+- searching the ontology with alternative phrasings
+- inspecting promising results with tools
+
+Never return null without tool exploration.
 
 ---------------------------------------------------------------------
 
@@ -207,52 +305,28 @@ If no HPO term is selected, hpo_confidence must be null.
 
 ---------------------------------------------------------------------
 
-OUTPUT FORMAT
+HPO_MATCH_NOTES REQUIREMENTS (STEP-BY-STEP JUSTIFICATION)
 
-Return a JSON object with the enriched phenotype data:
+The `hpo_match_notes` field MUST summarize the reasoning process
+using the HPO TERM SELECTION FRAMEWORK.
 
-{
-  "phenotypes": [
-    {
-      "patient_id": 1,
-      "text": "seizures",
-      "negated": false,
-      "uncertain": false,
-      "family_history": false,
-      "confidence": 0.95,
-      "candidates": [...],
-      "hpo_id": "HP:0001250",
-      "hpo_name": "Seizure",
-      "hpo_confidence": "high",
-      "hpo_match_notes": "The phenotype explicitly describes seizures."
-    },
-    {
-      "patient_id": 1,
-      "text": "...",
-      "negated": false,
-      "uncertain": false,
-      "family_history": false,
-      "confidence": 0.85,
-      "candidates": [...],
-      "hpo_id": null,
-      "hpo_name": null,
-      "hpo_confidence": null,
-      "hpo_match_notes": "Phenotype description is too vague to map to a specific HPO term."
-    }
-  ]
-}
+The explanation should document the resolution process in a concise
+step-by-step format.
+
+Include:
+
+1. Phenotype interpretation
+2. Candidate evaluation
+3. Tool usage
+4. Hierarchy reasoning
+5. Final selection
+
+Do not omit tool calls if they were used.
 
 ---------------------------------------------------------------------
 
-IMPORTANT NOTES
-
-- Maintain the same order as the input.
-- Return exactly one enriched phenotype per input phenotype.
-- Include all input phenotype fields (patient_id, text, negated, uncertain, family_history, confidence, candidates).
-- If no HPO match exists, set hpo_id, hpo_name, and hpo_confidence to null.
-- Duplicate HPO terms per patient are allowed.
-- Only use HPO IDs from the candidate list or ontology tools.
-- Do not rely solely on similarity_score.
+OUTPUT FORMAT
+...
 """
 
 agent = Agent(
