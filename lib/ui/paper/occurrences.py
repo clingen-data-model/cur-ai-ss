@@ -113,7 +113,7 @@ def render_patient_variant_occurrences_tab(paper_resp: PaperResp) -> None:
         df,
         selection_mode='single-row',
         on_select='rerun',
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
         column_config={
             'Patient': st.column_config.LinkColumn(
