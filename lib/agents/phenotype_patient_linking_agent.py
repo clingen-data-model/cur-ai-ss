@@ -90,7 +90,9 @@ PHENOTYPE FIELD DEFINITIONS
      - One for proband with family_history=false
      - One for "mother" as patient with family_history=false
 
-5. **notes**: Additional context from the text (sentence or paragraph containing phenotype)
+5. **notes**: Additional context from the text (sentence or paragraph containing phenotype). 
+This MUST be a single contiguous span of text from the paper.  Multiple mentions should be split
+into individual entries in this list.
 
 6. **onset**: Age or disease stage when phenotype occurred
    - Example: "infancy", "early childhood", "adult onset", "age 5"

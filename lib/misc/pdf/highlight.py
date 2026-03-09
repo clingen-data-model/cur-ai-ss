@@ -22,8 +22,7 @@ def parse_hex_color(color_str: str) -> tuple[float, float, float]:
                 pass
 
     raise ValueError(
-        f'Invalid color: "{color_str}". Use a color name (e.g., "yellow"), '
-        'hex code (e.g., "#FF0000"), or RGB tuple (0-1).'
+        f'Invalid color: "{color_str}". Use a hex code (e.g., "#FF0000")'
     )
 
 
@@ -68,7 +67,6 @@ def find_best_match(query: str, paper_id: str) -> list[list[int | float | str]] 
         if not fuzzy_match(word_norm, tokens[0]):
             continue
 
-        match_words = [word]
         prev_idx = start_idx
         gap = 0
         similarity_sum = fuzz.partial_ratio(word_norm, tokens[0]) / 100
@@ -83,61 +81,98 @@ def find_best_match(query: str, paper_id: str) -> list[list[int | float | str]] 
                 gap += j - prev_idx - 1
                 prev_idx = j
                 similarity_sum += fuzz.partial_ratio(word_norm, tokens[token_idx]) / 100
-                match_words.append(words[j])
                 token_idx += 1
 
         if token_idx == len(tokens):
             score = similarity_sum - gap_penalty(gap)
             if best_score is None or score > best_score:
                 best_score = score
-                best_match = match_words
+                # Note, rather than just returning the matched words, we return the entire matched span.
+                best_match = words[start_idx:prev_idx + 1]
     return best_match
 
 
 def highlight_words_in_pdf(
     paper_id: str,
     words: list[list[int | float | str]],
-    color: tuple[float, float, float],
+    rgb_color: tuple[float, float, float],
 ) -> Path:
     """
     Highlight words in a PDF at their bounding box locations.
 
     Args:
         paper_id: The paper ID to identify the PDF file
-        words: List of word entries with format [word_id, text, page, x0, y0, x1, y1, x2, y2, x3, y3]
-        color: RGB tuple with values 0-1
+        words: List of word entries with format [page_id, word, x0, y0, x1, y1, x2, y2, x3, y3]
+        rgb_color: RGB tuple with values 0-1
 
     Returns:
         Path to the highlighted PDF file
     """
-    # Load PDF
-    pdf_path = pdf_raw_path(paper_id)
+
+     # Load PDF
+    pdf_path = pdf_highlighted_path(paper_id)
     pdf_doc = fitz.open(pdf_path)
 
     # Group words by page
-    words_by_page: dict[int | float, list[list[int | float | str]]] = {}
+    words_by_page: dict[int, list[list[int | float | str]]] = {}
     for word in words:
-        page = int(word[2])
-        if page not in words_by_page:
-            words_by_page[page] = []
-        words_by_page[page].append(word)
+        page_id = int(word[0])
+        if page_id not in words_by_page:
+            words_by_page[page_id] = []
+        words_by_page[page_id].append(word)
 
     # Highlight words on each page
-    for page_num, page_words in words_by_page.items():
-        page = cast(Any, pdf_doc)[int(page_num)]  # type: ignore[index]
+    for page_id, page_words in words_by_page.items():
+        page_index = page_id - 1  # convert 1-based → 0-based
+        page = pdf_doc[page_index]
+        page_height = page.rect.height
+        prev_points = None
         for word in page_words:
-            # Extract coordinates: [word_id, text, page, x0, y0, x1, y1, x2, y2, x3, y3]
-            x0 = float(word[3])
-            y0 = float(word[4])
-            x1 = float(word[5])
-            y1 = float(word[6])
-            rect = fitz.Rect(x0, y0, x1, y1)
-            page.draw_rect(rect, color=color, fill=color, fill_opacity=0.3)  # type: ignore[attr-defined]
+            points = [
+                (word[2], page_height - word[3]), # top-left
+                (word[4], page_height - word[5]), # top-right
+                (word[6], page_height - word[7]), # bottom-right
+                (word[8], page_height - word[9]), # bottom-left
+            ]
+            if prev_points is None:
+                prev_points = points
+                continue
+
+            # coordinate checks
+            y_tol, x_tol = 2, 15
+            same_top = abs(prev_points[0][1] - points[0][1]) < y_tol
+            same_bottom = abs(prev_points[3][1] - points[3][1]) < y_tol
+            small_gap = (points[0][0] - prev_points[1][0]) < x_tol
+            if same_top and same_bottom and small_gap:
+                # merge polygons
+                prev_points = [
+                    prev_points[0],  # top-left
+                    points[1],       # new top-right
+                    points[2],       # new bottom-right
+                    prev_points[3],  # bottom-left
+                ]
+            else:
+                # draw previous merged polygon
+                page.draw_polyline(
+                    prev_points,
+                    color=rgb_color,
+                    fill=rgb_color,
+                    fill_opacity=0.3
+                )
+                prev_points = points
+
+        # draw final merged polygon
+        if prev_points is not None:
+            page.draw_polyline(
+                prev_points,
+                color=rgb_color,
+                fill=rgb_color,
+                fill_opacity=0.3
+            )
 
     # Save highlighted PDF
     output_path = pdf_highlighted_path(paper_id)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    pdf_doc.save(output_path)
+    pdf_doc.save(output_path, incremental=True, encryption=fitz.PDF_ENCRYPT_KEEP)
     pdf_doc.close()
 
     return output_path

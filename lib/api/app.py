@@ -246,6 +246,7 @@ def highlight_pdf(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f'Could not find text matching query: "{request.query}"',
         )
+    print(matched_words)
 
     # Highlight the matched words in the PDF
     highlight_words_in_pdf(paper_id, matched_words, rgb_color)

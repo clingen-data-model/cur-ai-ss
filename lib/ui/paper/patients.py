@@ -367,7 +367,7 @@ def _render_phenotypes_table(
                     st.markdown('Choose Color: ')
                     color_key = f'{key_prefix}-highlight-color-{phenotype.notes}'
                     if color_key not in st.session_state:
-                        st.session_state[color_key] = '#FFFF00'
+                        st.session_state[color_key] = '#EE00FF'
                     # Color picker — key handles session state automatically
                     color = st.color_picker(
                         'Choose Color:', label_visibility='collapsed', key=color_key
