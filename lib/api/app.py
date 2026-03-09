@@ -224,7 +224,7 @@ def highlight_pdf(
 
     Args:
         paper_id: The ID of the paper
-        request: JSON body with query and color fields
+        request: JSON body with queries (list) and color fields
     """
     # Verify paper exists
     paper_db = session.get(PaperDB, paper_id)
@@ -239,14 +239,15 @@ def highlight_pdf(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    # Find best match for the query in the PDF
-    matched_words = find_best_match(request.query, paper_id)
-    if not matched_words:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f'Could not find text matching query: "{request.query}"',
-        )
-    print(matched_words)
+    # Process each query
+    for query in request.queries:
+        # Find best match for the query in the PDF
+        matched_words = find_best_match(query, paper_id)
+        if not matched_words:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f'Could not find text matching query: "{query}"',
+            )
 
-    # Highlight the matched words in the PDF
-    highlight_words_in_pdf(paper_id, matched_words, rgb_color)
+        # Highlight the matched words in the PDF
+        highlight_words_in_pdf(paper_id, matched_words, rgb_color)

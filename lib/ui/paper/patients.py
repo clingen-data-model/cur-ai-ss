@@ -261,7 +261,7 @@ def _render_phenotypes_table(
         row = {
             'Select': False,
             'Phenotype': phenotype.text,
-            'Evidence Context': phenotype.notes,
+            'Evidence Context': '\n '.join(phenotype.evidence_contexts) if phenotype.evidence_contexts else '',
             '_phenotype': phenotype,
         }
 
@@ -346,9 +346,10 @@ def _render_phenotypes_table(
 
         # Evidence context
         with col1:
-            if phenotype.notes:
+            if phenotype.evidence_contexts:
                 with st.expander('Evidence Context', expanded=False):
-                    st.text(phenotype.notes)
+                    for i, note in enumerate(phenotype.evidence_contexts, 1):
+                        st.markdown(f'**Note {i}:** {note}')
 
         # HPO matching notes
         with col2:
@@ -358,14 +359,14 @@ def _render_phenotypes_table(
 
         # Highlight button with popover
         with col3:
-            if paper_resp and phenotype.notes:
+            if paper_resp and phenotype.evidence_contexts:
                 with st.container(
                     horizontal=True,
                     vertical_alignment='center',
                     horizontal_alignment='right',
                 ):
                     st.markdown('Choose Color: ')
-                    color_key = f'{key_prefix}-highlight-color-{phenotype.notes}'
+                    color_key = f'{key_prefix}-highlight-color-{phenotype.text}'
                     if color_key not in st.session_state:
                         st.session_state[color_key] = '#EE00FF'
                     # Color picker — key handles session state automatically
@@ -374,13 +375,13 @@ def _render_phenotypes_table(
                     )
                     if st.button(
                         'Highlight',
-                        key=f'{key_prefix}-highlight-confirm-{phenotype.notes}',
+                        key=f'{key_prefix}-highlight-confirm-{phenotype.text}',
                         type='secondary',
                     ):
                         try:
                             highlight_pdf(
                                 paper_resp.id,
-                                phenotype.notes,
+                                phenotype.evidence_contexts,
                                 color,
                             )
                             st.success('PDF highlighted! Reload to see changes.')

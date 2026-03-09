@@ -308,5 +308,5 @@ class PaperUpdateRequest(PatchModel):
 
 
 class HighlightRequest(BaseModel):
-    query: str
+    queries: list[str]
     color: str
