@@ -35,6 +35,7 @@ from typing_extensions import Self
 
 from lib.core.environment import env
 from lib.misc.pdf.paths import (
+    pdf_highlighted_path,
     pdf_markdown_path,
     pdf_raw_path,
     pdf_sections_dir,
@@ -286,6 +287,11 @@ class PaperResp(PaperExtractionOutput):
     def pdf_thumbnail_path(self) -> Path:
         return pdf_thumbnail_path(self.id)
 
+    @computed_field  # type: ignore
+    @property
+    def pdf_highlighted_path(self) -> Path:
+        return pdf_highlighted_path(self.id)
+
 
 class PaperUpdateRequest(PatchModel):
     pipeline_status: PipelineStatus | None = None
@@ -299,3 +305,8 @@ class PaperUpdateRequest(PatchModel):
     pmcid: str | None = None
     paper_types: list[PaperType] | None = None
     prompt_override: str | None = None
+
+
+class HighlightRequest(BaseModel):
+    query: str
+    color: str

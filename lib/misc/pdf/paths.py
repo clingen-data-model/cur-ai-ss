@@ -39,6 +39,10 @@ def pdf_words_json_path(paper_id: str) -> Path:
     return pdf_dir(paper_id) / 'words.json'
 
 
+def pdf_highlighted_path(paper_id: str) -> Path:
+    return pdf_dir(paper_id) / 'highlighted.pdf'
+
+
 def pdf_extraction_success_path(paper_id: str) -> Path:
     return pdf_dir(paper_id) / '_SUCCESS'
 

@@ -24,10 +24,16 @@ def test_file_contents(test_resources_path):
 
 
 @pytest.fixture
-def db_session(monkeypatch, tmpdir):
+def mocked_root_dir(monkeypatch, tmpdir):
+    """Mock CAA_ROOT to point to a temporary directory."""
+    monkeypatch.setattr(db.env, 'CAA_ROOT', str(tmpdir))
+    return tmpdir
+
+
+@pytest.fixture
+def db_session(mocked_root_dir, monkeypatch):
     from lib.models import Base
 
-    db.env.CAA_ROOT = str(tmpdir)
     db.env.SQLLITE_DIR = ''
     monkeypatch.setattr(db, '_engine', None)
     monkeypatch.setattr(db, '_session_factory', None)
