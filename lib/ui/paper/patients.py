@@ -1,6 +1,7 @@
 import json
 
 import pandas as pd
+import requests
 import streamlit as st
 
 from lib.agents.patient_extraction_agent import (
@@ -18,6 +19,7 @@ from lib.models import (
     PhenotypeLinkingOutput,
     PipelineStatus,
 )
+from lib.ui.api import get_http_error_detail, highlight_pdf
 
 
 def render_patient(
@@ -26,6 +28,7 @@ def render_patient(
     key_prefix: str,
     patient_id: int,
     phenotypes: list[PhenotypeLinkingEntry] | None = None,
+    paper_resp: PaperResp | None = None,
 ) -> None:
     with st.expander(
         f'{patient.identifier or "N/A"}',
@@ -187,6 +190,7 @@ def render_patient(
                 phenotypes,
                 patient_id,
                 key_prefix,
+                paper_resp,
             )
 
 
@@ -194,6 +198,7 @@ def _render_patient_phenotypes(
     all_phenotypes: list[PhenotypeLinkingEntry],
     patient_id: int,
     key_prefix: str,
+    paper_resp: PaperResp | None = None,
 ) -> None:
     """Render phenotypes for a specific patient with matched/unmatched tabs."""
     # Filter phenotypes for this patient
@@ -224,6 +229,7 @@ def _render_patient_phenotypes(
                 key_prefix,
                 show_hpo=True,
                 table_type='matched-phenotypes',
+                paper_resp=paper_resp,
             )
 
     with unmatched_tab:
@@ -236,6 +242,7 @@ def _render_patient_phenotypes(
                 key_prefix,
                 show_hpo=False,
                 table_type='unmatched-phenotypes',
+                paper_resp=paper_resp,
             )
 
 
@@ -245,6 +252,7 @@ def _render_phenotypes_table(
     key_prefix: str,
     show_hpo: bool,
     table_type: str,
+    paper_resp: PaperResp | None = None,
 ) -> None:
     """Render phenotypes table with detail panel."""
     # Build table rows
@@ -333,15 +341,51 @@ def _render_phenotypes_table(
         }
         st.table(pd.DataFrame(details_data))
 
+        # Create three horizontal columns
+        col1, col2, col3 = st.columns(3)
+
         # Evidence context
-        if phenotype.notes:
-            with st.expander('Evidence Context', expanded=False):
-                st.text(phenotype.notes)
+        with col1:
+            if phenotype.notes:
+                with st.expander('Evidence Context', expanded=False):
+                    st.text(phenotype.notes)
 
         # HPO matching notes
-        if phenotype.hpo_match_notes:
-            with st.expander('HPO Matching Notes', expanded=False):
-                st.text(phenotype.hpo_match_notes)
+        with col2:
+            if phenotype.hpo_match_notes:
+                with st.expander('HPO Matching Notes', expanded=False):
+                    st.text(phenotype.hpo_match_notes)
+
+        # Highlight button with popover
+        with col3:
+            if paper_resp and phenotype.notes:
+                with st.container(
+                    horizontal=True,
+                    vertical_alignment='center',
+                    horizontal_alignment='right',
+                ):
+                    st.markdown('Choose Color: ')
+                    color_key = f'{key_prefix}-highlight-color-{phenotype.notes}'
+                    if color_key not in st.session_state:
+                        st.session_state[color_key] = '#FFFF00'
+                    # Color picker — key handles session state automatically
+                    color = st.color_picker(
+                        'Choose Color:', label_visibility='collapsed', key=color_key
+                    )
+                    if st.button(
+                        'Highlight',
+                        key=f'{key_prefix}-highlight-confirm-{phenotype.notes}',
+                        type='secondary',
+                    ):
+                        try:
+                            highlight_pdf(
+                                paper_resp.id,
+                                phenotype.notes,
+                                color,
+                            )
+                            st.success('PDF highlighted! Reload to see changes.')
+                        except requests.HTTPError as e:
+                            st.error(f'Failed to highlight: {get_http_error_detail(e)}')
 
 
 def render_patients_tab(paper_resp: PaperResp, selected_patient_id: int | None) -> None:
@@ -397,6 +441,7 @@ def render_patients_tab(paper_resp: PaperResp, selected_patient_id: int | None) 
                 key_prefix=f'patient-{original_idx}',
                 patient_id=original_idx,
                 phenotypes=phenotypes,
+                paper_resp=paper_resp,
             )
     with non_proband_tab:
         if not non_probands:
@@ -409,4 +454,5 @@ def render_patients_tab(paper_resp: PaperResp, selected_patient_id: int | None) 
                 key_prefix=f'patient-{original_idx}',
                 patient_id=original_idx,
                 phenotypes=phenotypes,
+                paper_resp=paper_resp,
             )

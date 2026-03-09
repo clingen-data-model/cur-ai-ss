@@ -71,3 +71,12 @@ def delete_paper(paper_id: str) -> None:
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}',
     )
     resp.raise_for_status()
+
+
+def highlight_pdf(paper_id: str, query: str, color: str) -> None:
+    """Highlight text in a PDF."""
+    resp = requests.post(
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/highlight',
+        json={'query': query, 'color': color},
+    )
+    resp.raise_for_status()

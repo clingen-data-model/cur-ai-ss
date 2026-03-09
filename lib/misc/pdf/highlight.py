@@ -1,8 +1,10 @@
 import json
+import math
 from pathlib import Path
 from typing import Any, cast
 
 import fitz
+from rapidfuzz import fuzz
 
 from lib.misc.pdf.paths import pdf_highlighted_path, pdf_raw_path, pdf_words_json_path
 
@@ -26,6 +28,26 @@ def parse_hex_color(color_str: str) -> tuple[float, float, float]:
 
 
 def find_best_match(query: str, paper_id: str) -> list[list[int | float | str]] | None:
+    def normalize(token: str) -> str:
+        """Normalize tokens to improve fuzzy matching."""
+        token = token.replace('\u00ad', '')  # remove soft hyphen
+        token = token.replace('\u2010', '-')  # hyphen
+        token = token.replace('\u2011', '-')  # non-breaking hyphen
+        token = token.replace('\u2012', '-')  # figure dash
+        token = token.replace('\u2013', '-')  # en dash
+        token = token.replace('\u2014', '-')  # em dash
+        token = token.replace('\u2015', '-')  # horizontal bar
+        return token
+
+    def fuzzy_match(a: str, b: str, threshold: int = 80) -> bool:
+        """Return True if tokens are similar enough."""
+        if not a or not b:
+            return False
+        return fuzz.partial_ratio(a, b) >= threshold
+
+    def gap_penalty(gap: int) -> float:
+        return math.log1p(gap) / 2
+
     """
     Finds the best match of a query string in a PDF word list, allowing skipped words.
     Returns the matched words (as dictionaries/lists) with the minimal total gap.
@@ -39,39 +61,36 @@ def find_best_match(query: str, paper_id: str) -> list[list[int | float | str]] 
     n = len(words)
 
     best_match = None
-    best_gap = None
+    best_score = None
 
-    # For each occurrence of the first token
     for start_idx, word in enumerate(words):
-        if word[1] != tokens[0]:
+        word_norm = normalize(word[1])
+        if not fuzzy_match(word_norm, tokens[0]):
             continue
 
-        match_words = [word]  # store matched words
-        prev_idx = (
-            start_idx  # stores the index of the last matched token in the word list
-        )
+        match_words = [word]
+        prev_idx = start_idx
         gap = 0
-        token_idx = 1  # next token to match
+        similarity_sum = fuzz.partial_ratio(word_norm, tokens[0]) / 100
+        token_idx = 1
 
-        # Scan forward through the rest of the words
         for j in range(start_idx + 1, n):
             if token_idx >= len(tokens):
-                break  # matched all tokens
+                break
 
-            if words[j][1] == tokens[token_idx]:
-                gap += (
-                    j - prev_idx - 1
-                )  # counts the number of words skipped between the previous match and the current one.
-                match_words.append(words[j])
+            word_norm = normalize(words[j][1])
+            if fuzzy_match(word_norm, tokens[token_idx]):
+                gap += j - prev_idx - 1
                 prev_idx = j
+                similarity_sum += fuzz.partial_ratio(word_norm, tokens[token_idx]) / 100
+                match_words.append(words[j])
                 token_idx += 1
 
-        # If we matched all tokens, update best match if gap is smaller
         if token_idx == len(tokens):
-            if best_gap is None or gap < best_gap:
-                best_gap = gap
+            score = similarity_sum - gap_penalty(gap)
+            if best_score is None or score > best_score:
+                best_score = score
                 best_match = match_words
-
     return best_match
 
 

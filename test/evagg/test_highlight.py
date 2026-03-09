@@ -27,7 +27,7 @@ def test_minimal_gap_selection(mock_pdf_words):
 
     # The best match should be the second "Nature" occurrence
     expected_word_ids = [6, 7, 8, 9]
-    expected_texts = ['Nature', 'Publishing', 'Group', 'Science']
+    expected_texts = ['Nature', 'Publishing', 'Grou', 'Scienes.'] # Note fuzzy matches.
 
     assert result is not None
     assert [w[1] for w in result] == expected_texts
