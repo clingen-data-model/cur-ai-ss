@@ -403,6 +403,7 @@ Guidelines:
      - The exact quoted text
      - The figure title
      - A brief explanation of why the text supports the extracted value.
+   - If the evidence spans a page break (indicated by a contextual discontinuity such as an abrupt topic shift, an incomplete sentence, or text that appears to continue from a different location), include `<PAGE_SPLIT>` at the point where the page break occurs.
 8. Return null for any missing fields.
 9. Each patient must have an identifier; if not stated, skip that patient.
 10. If no specific human patients are identified, or you are uncertain, respond only with:

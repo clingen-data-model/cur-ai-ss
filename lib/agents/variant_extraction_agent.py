@@ -152,6 +152,7 @@ Evidence Handling:
 - hgvs_p_inference_evidence_context: Exact text used to justify any inferred hgvs.p, if applicable.
 - Copy all evidence text verbatim.
 - Evidence must be directly linked to each claim and not from different sections.
+- If the evidence spans a page break (indicated by a contextual discontinuity such as an abrupt topic shift, an incomplete sentence, or text that appears to continue from a different location), include `<PAGE_SPLIT>` at the point where the page break occurs.
 - If no explicit evidence is available for a field, return null.
 
 Output:
