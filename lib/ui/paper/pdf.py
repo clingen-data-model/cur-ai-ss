@@ -1,9 +1,9 @@
 import streamlit as st
 
-from lib.ui.paper.header import render_paper_header
+from lib.models import PaperResp
 
-paper_resp, center = render_paper_header()
-with center:
+
+def render_pdf_tab(paper_resp: PaperResp) -> None:
     st.pdf(paper_resp.pdf_raw_path)
     st.download_button(
         label='Download PDF',
