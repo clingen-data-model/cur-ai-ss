@@ -1,5 +1,4 @@
 import json
-from collections import defaultdict
 
 import streamlit as st
 
@@ -11,21 +10,11 @@ from lib.agents.patient_extraction_agent import (
     RaceEthnicity,
     SexAtBirth,
 )
-from lib.agents.patient_variant_linking_agent import (
-    PatientVariantLink,
-    PatientVariantLinkerOutput,
-)
-from lib.agents.variant_extraction_agent import Variant, VariantExtractionOutput
-from lib.agents.variant_harmonization_agent import (
-    HarmonizedVariant,
-    VariantHarmonizationOutput,
-)
 from lib.models import PaperResp, PipelineStatus
 
 
 def render_patient(
     patient: PatientInfo,
-    patient_links: list[tuple[PatientVariantLink, Variant, HarmonizedVariant]],
     expanded: bool,
     key_prefix: str,
 ) -> None:
@@ -182,52 +171,6 @@ def render_patient(
                 key=f'{key_prefix}-race-evidence',
             )
 
-        variant_count = len(patient_links)
-        if variant_count == 0:
-            st.caption('No linked variants', text_alignment='center')
-            return
-        with st.popover(f'Variants ({variant_count})', width='stretch'):
-            for i, (link, variant, harmonized_variant) in enumerate(patient_links):
-                title = (
-                    variant.variant_description_verbatim
-                    or harmonized_variant.hgvs_c
-                    or harmonized_variant.hgvs_p
-                    or f'Variant {link.variant_id}'
-                )
-                st.markdown(title)
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.markdown(
-                        f'**Zygosity:** {link.zygosity.value}  \n'
-                        f'**Inheritance:** {link.inheritance.value}  \n'
-                        f'**Link Type:** {link.link_type.value}'
-                    )
-
-                with col2:
-                    testing = (
-                        f'  \n**Testing:** {", ".join(m.value for m in link.testing_methods)}'
-                        if link.testing_methods
-                        else ''
-                    )
-                    st.markdown(f'**Confidence:** {link.confidence}{testing}')
-
-                if link.evidence_context:
-                    st.markdown(f'**Evidence:** {link.evidence_context}')
-
-                if link.testing_methods_evidence:
-                    st.markdown(
-                        f'**Testing Evidence:** '
-                        f'{", ".join(link.testing_methods_evidence)}'
-                    )
-
-                if link.linkage_notes:
-                    with st.expander('Notes', expanded=False):
-                        st.write(link.linkage_notes)
-
-                # subtle separator between variants (not after last)
-                if i < len(patient_links) - 1:
-                    st.markdown('---')
-
 
 def render_patients_tab(paper_resp: PaperResp, selected_patient_id: int | None) -> None:
     if not paper_resp.title:
@@ -237,39 +180,13 @@ def render_patients_tab(paper_resp: PaperResp, selected_patient_id: int | None) 
         st.write(f'Entity Linking not yet completed...')
         st.stop()
     # -----------------------------
-    # Load patients & variants & links
-    # -----------------------------
+    # Load patients
+    # ---------------
     with open(paper_resp.patient_info_json_path, 'r') as f:
         patient_info_data = json.load(f)
     patients: list[PatientInfo] = PatientInfoExtractionOutput.model_validate(
         patient_info_data
     ).patients
-    with open(paper_resp.variants_json_path, 'r') as f:
-        extracted_data = json.load(f)
-        extracted_variants: list[Variant] = VariantExtractionOutput.model_validate(
-            extracted_data
-        ).variants
-    with open(paper_resp.harmonized_variants_json_path, 'r') as f:
-        harmonized_variant_data = json.load(f)
-        harmonized_variants: list[HarmonizedVariant] = (
-            VariantHarmonizationOutput.model_validate(harmonized_variant_data).variants
-        )
-    with open(paper_resp.patient_variant_links_json_path, 'r') as f:
-        link_data = json.load(f)
-    links: list[PatientVariantLink] = PatientVariantLinkerOutput.model_validate(
-        link_data
-    ).links
-    links_by_patient: dict[
-        int, list[tuple[PatientVariantLink, Variant, HarmonizedVariant]]
-    ] = defaultdict(list)
-    for link in links:
-        links_by_patient[link.patient_id].append(
-            (
-                link,
-                extracted_variants[link.variant_id - 1],
-                harmonized_variants[link.variant_id - 1],
-            )
-        )
 
     # -----------------------------
     # Display Patients
@@ -298,7 +215,6 @@ def render_patients_tab(paper_resp: PaperResp, selected_patient_id: int | None) 
             st.markdown(f'### Patient {original_idx}')
             render_patient(
                 patient,
-                patient_links=links_by_patient.get(original_idx, []),
                 expanded=(original_idx == selected_patient_id),
                 key_prefix=f'patient-{original_idx}',
             )
@@ -309,7 +225,6 @@ def render_patients_tab(paper_resp: PaperResp, selected_patient_id: int | None) 
             st.markdown(f'### Patient {original_idx}')
             render_patient(
                 patient,
-                patient_links=links_by_patient.get(original_idx, []),
                 expanded=(original_idx == selected_patient_id),
                 key_prefix=f'patient-{original_idx}',
             )
