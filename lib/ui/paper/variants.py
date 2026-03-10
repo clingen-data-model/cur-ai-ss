@@ -14,10 +14,12 @@ from lib.agents.variant_harmonization_agent import (
     HarmonizedVariant,
     VariantHarmonizationOutput,
 )
-from lib.models import PaperResp, PipelineStatus
+from lib.models import PipelineStatus
+from lib.ui.paper.header import PaperQueryParams, render_paper_header
 
-
-def render_variants_tab(paper_resp: PaperResp, selected_variant_id: int | None) -> None:
+paper_query_params = PaperQueryParams.from_query_params()
+paper_resp, center = render_paper_header()
+with center:
     if not paper_resp.title:
         st.write(f'{paper_resp.filename} not yet extracted...')
         st.stop()
@@ -48,7 +50,7 @@ def render_variants_tab(paper_resp: PaperResp, selected_variant_id: int | None) 
             or harmonized_variant.hgvs_c
             or harmonized_variant.hgvs_p
             or 'Variant',
-            expanded=(i == selected_variant_id),
+            expanded=(i == paper_query_params.variant_id),
         ):
             # ======================================================
             # Harmonized Variant (PRIMARY DISPLAY)
