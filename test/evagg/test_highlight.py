@@ -1,4 +1,5 @@
 import json
+
 import pytest
 
 from lib.misc.pdf.highlight import find_best_match
@@ -28,7 +29,7 @@ def test_minimal_gap_selection(mock_pdf_words):
 
     # The best match should be the second "Nature" occurrence
     expected_word_ids = [6, 7, 8, 9]
-    expected_texts = ['Nature', 'Publishing', 'Grou', 'Scienes.'] # Note fuzzy matches.
+    expected_texts = ['Nature', 'Publishing', 'Grou', 'Scienes.']  # Note fuzzy matches.
 
     assert result is not None
     assert [w[1] for w in result] == expected_texts
@@ -42,24 +43,24 @@ def mock_pdf_words_with_page_break(mocked_root_dir):
 
     # Padding words at start (to avoid index 0 issues)
     padding_words = [
-        [1, "Background", 0, 10.0, 10.0, 100.0, 25.0, 0, 0, 0],
+        [1, 'Background', 0, 10.0, 10.0, 100.0, 25.0, 0, 0, 0],
     ]
 
     # Words on page 1: "rare genetic disorder" with OCR noise
     page1_words = [
-        [1, "rar3", 0, 50.0, 50.0, 120.0, 65.0, 0, 0, 0],
-        [1, "genetic", 0, 130.0, 50.0, 220.0, 65.0, 0, 0, 0],
-        [1, "d1sorder", 0, 230.0, 50.0, 330.0, 65.0, 0, 0, 0],
+        [1, 'rar3', 0, 50.0, 50.0, 120.0, 65.0, 0, 0, 0],
+        [1, 'genetic', 0, 130.0, 50.0, 220.0, 65.0, 0, 0, 0],
+        [1, 'd1sorder', 0, 230.0, 50.0, 330.0, 65.0, 0, 0, 0],
     ]
 
     # Words on page 2: "affects patients severely" with OCR noise
     page2_words = [
-        [2, "Nature", 0, 50.0, 100.0, 130.0, 115.0, 0, 0, 0],
-        [2, "Publishing", 0, 140.0, 100.0, 250.0, 115.0, 0, 0, 0],
-        [2, "Group", 0, 260.0, 100.0, 360.0, 115.0, 0, 0, 0],
-        [2, "affect5", 0, 50.0, 100.0, 130.0, 115.0, 0, 0, 0],
-        [2, "p@tients", 0, 140.0, 100.0, 250.0, 115.0, 0, 0, 0],
-        [2, "severity", 0, 260.0, 100.0, 360.0, 115.0, 0, 0, 0],
+        [2, 'Nature', 0, 50.0, 100.0, 130.0, 115.0, 0, 0, 0],
+        [2, 'Publishing', 0, 140.0, 100.0, 250.0, 115.0, 0, 0, 0],
+        [2, 'Group', 0, 260.0, 100.0, 360.0, 115.0, 0, 0, 0],
+        [2, 'affect5', 0, 50.0, 100.0, 130.0, 115.0, 0, 0, 0],
+        [2, 'p@tients', 0, 140.0, 100.0, 250.0, 115.0, 0, 0, 0],
+        [2, 'severity', 0, 260.0, 100.0, 360.0, 115.0, 0, 0, 0],
     ]
 
     words = padding_words + page1_words + page2_words

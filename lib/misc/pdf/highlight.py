@@ -21,9 +21,8 @@ def parse_hex_color(color_str: str) -> tuple[float, float, float]:
             except ValueError:
                 pass
 
-    raise ValueError(
-        f'Invalid color: "{color_str}". Use a hex code (e.g., "#FF0000")'
-    )
+    raise ValueError(f'Invalid color: "{color_str}". Use a hex code (e.g., "#FF0000")')
+
 
 def find_best_match(query: str, paper_id: str) -> list[list[int | float | str]] | None:
     """
@@ -50,7 +49,7 @@ def find_best_match(query: str, paper_id: str) -> list[list[int | float | str]] 
     n = len(words)
 
     # Split query on <SPLIT>
-    parts = [p.strip() for p in query.split("<SPLIT>")]
+    parts = [p.strip() for p in query.split('<SPLIT>')]
     if not parts:
         return None
 
@@ -69,7 +68,7 @@ def find_best_match(query: str, paper_id: str) -> list[list[int | float | str]] 
                 j = i + span_len
                 if j > n:
                     break
-                span_text = " ".join(normalize(w[1]) for w in words[i:j])
+                span_text = ' '.join(normalize(w[1]) for w in words[i:j])
                 score = fuzz.ratio(span_text, query_norm)
                 if score > best_score:
                     best_score = score
@@ -80,11 +79,12 @@ def find_best_match(query: str, paper_id: str) -> list[list[int | float | str]] 
             return None
 
         i, j = best_span
-        full_span.extend(words[i:j + 1])
+        full_span.extend(words[i : j + 1])
         # For next part, start searching after the current match
         search_start = j + 1
 
     return full_span
+
 
 def highlight_words_in_pdf(
     paper_id: str,
@@ -103,7 +103,7 @@ def highlight_words_in_pdf(
         Path to the highlighted PDF file
     """
 
-     # Load PDF
+    # Load PDF
     pdf_path = pdf_highlighted_path(paper_id)
     pdf_doc = fitz.open(pdf_path)
 
@@ -123,10 +123,10 @@ def highlight_words_in_pdf(
         prev_points = None
         for word in page_words:
             points = [
-                (word[2], page_height - word[3]), # top-left
-                (word[4], page_height - word[5]), # top-right
-                (word[6], page_height - word[7]), # bottom-right
-                (word[8], page_height - word[9]), # bottom-left
+                (word[2], page_height - word[3]),  # top-left
+                (word[4], page_height - word[5]),  # top-right
+                (word[6], page_height - word[7]),  # bottom-right
+                (word[8], page_height - word[9]),  # bottom-left
             ]
             if prev_points is None:
                 prev_points = points
@@ -141,27 +141,21 @@ def highlight_words_in_pdf(
                 # merge polygons
                 prev_points = [
                     prev_points[0],  # top-left
-                    points[1],       # new top-right
-                    points[2],       # new bottom-right
+                    points[1],  # new top-right
+                    points[2],  # new bottom-right
                     prev_points[3],  # bottom-left
                 ]
             else:
                 # draw previous merged polygon
                 page.draw_polyline(
-                    prev_points,
-                    color=rgb_color,
-                    fill=rgb_color,
-                    fill_opacity=0.3
+                    prev_points, color=rgb_color, fill=rgb_color, fill_opacity=0.3
                 )
                 prev_points = points
 
         # draw final merged polygon
         if prev_points is not None:
             page.draw_polyline(
-                prev_points,
-                color=rgb_color,
-                fill=rgb_color,
-                fill_opacity=0.3
+                prev_points, color=rgb_color, fill=rgb_color, fill_opacity=0.3
             )
 
     # Save highlighted PDF

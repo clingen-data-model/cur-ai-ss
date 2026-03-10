@@ -261,7 +261,9 @@ def _render_phenotypes_table(
         row = {
             'Select': False,
             'Phenotype': phenotype.text,
-            'Evidence Context': '\n '.join(phenotype.evidence_contexts) if phenotype.evidence_contexts else '',
+            'Evidence Context': '\n '.join(phenotype.evidence_contexts)
+            if phenotype.evidence_contexts
+            else '',
             '_phenotype': phenotype,
         }
 

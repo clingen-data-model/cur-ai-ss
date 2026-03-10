@@ -98,7 +98,9 @@ def render_variants_tab(paper_resp: PaperResp, selected_variant_id: int | None) 
 
                 st.text_area(
                     'Variant Type Evidence Context',
-                    (extracted_variant.variant_type_evidence_context or '').replace('<SPLIT>', ''),
+                    (extracted_variant.variant_type_evidence_context or '').replace(
+                        '<SPLIT>', ''
+                    ),
                     height=80,
                     disabled=True,
                     key=f'{i}-vtec',
@@ -117,7 +119,9 @@ def render_variants_tab(paper_resp: PaperResp, selected_variant_id: int | None) 
 
                 st.text_area(
                     'Variant Evidence Context',
-                    (extracted_variant.variant_evidence_context or '').replace('<SPLIT>', ''),
+                    (extracted_variant.variant_evidence_context or '').replace(
+                        '<SPLIT>', ''
+                    ),
                     height=100,
                     disabled=True,
                     key=f'{i}-vec',
