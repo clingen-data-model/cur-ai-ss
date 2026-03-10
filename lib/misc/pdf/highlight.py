@@ -25,10 +25,6 @@ def parse_hex_color(color_str: str) -> tuple[float, float, float]:
         f'Invalid color: "{color_str}". Use a hex code (e.g., "#FF0000")'
     )
 
-
-from rapidfuzz import fuzz
-import json
-
 def find_best_match(query: str, paper_id: str) -> list[list[int | float | str]] | None:
     """
     Finds the best match of a query in a PDF word list.
@@ -59,7 +55,7 @@ def find_best_match(query: str, paper_id: str) -> list[list[int | float | str]] 
         return None
 
     full_span = []
-    start_page = 1 
+    search_start = 0
 
     for part in parts:
         q_len = len(part.split())
@@ -68,7 +64,7 @@ def find_best_match(query: str, paper_id: str) -> list[list[int | float | str]] 
         query_norm = normalize(part)
 
         # Slide window over remaining words
-        for i in range(start_page, n):
+        for i in range(search_start, n):
             for span_len in range(min_len, max_len + 1):
                 j = i + span_len
                 if j > n:
