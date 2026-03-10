@@ -229,7 +229,9 @@ def render_patient_variant_occurrences_tab(paper_resp: PaperResp) -> None:
         st.divider()
 
         with st.expander('Evidence Context', expanded=False):
-            st.text(link.evidence_context or 'No evidence provided')
+            st.text(
+                (link.evidence_context or 'No evidence provided').replace('<SPLIT>', '')
+            )
 
         with st.expander('Linkage Notes', expanded=False):
             st.text(link.linkage_notes or 'No notes provided')
@@ -237,4 +239,4 @@ def render_patient_variant_occurrences_tab(paper_resp: PaperResp) -> None:
         if link.testing_methods_evidence:
             with st.expander('Testing Methods Evidence', expanded=False):
                 for i, evidence in enumerate(link.testing_methods_evidence, start=1):
-                    st.text(f'**Method {i}:** {evidence}')
+                    st.text(f'**Method {i}:** {evidence.replace("<SPLIT>", "")}')

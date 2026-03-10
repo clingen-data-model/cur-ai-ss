@@ -334,6 +334,7 @@ The evidence_context must:
 
 Do NOT paraphrase or summarize
 Use exact quoted text from the paper
+If the evidence spans a content break (indicated by a contextual discontinuity such as an abrupt topic shift, an incomplete sentence, or text that appears to continue from a different location), include `<SPLIT>` at the point where the break occurs.
 
 ---------------------------------------------------
 VALIDATION

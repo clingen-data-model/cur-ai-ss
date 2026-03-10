@@ -31,7 +31,13 @@ from lib.api.db import get_session
 from lib.api.middleware import make_log_request_middleware
 from lib.core.environment import env
 from lib.core.logging import setup_logging
+from lib.misc.pdf.highlight import (
+    find_best_match,
+    highlight_words_in_pdf,
+    parse_hex_color,
+)
 from lib.misc.pdf.paths import (
+    pdf_highlighted_path,
     pdf_raw_path,
     pdf_thumbnail_path,
 )
@@ -39,6 +45,7 @@ from lib.misc.pdf.thumbnail import pdf_first_page_to_thumbnail_pymupdf_bytes
 from lib.models import (
     GeneDB,
     GeneResp,
+    HighlightRequest,
     PaperDB,
     PaperResp,
     PaperUpdateRequest,
@@ -116,6 +123,8 @@ def put_paper(
         session.flush()
         pdf_raw_path(paper_db.id).parent.mkdir(parents=True, exist_ok=True)
         with open(pdf_raw_path(paper_db.id), 'wb') as f:
+            f.write(content)
+        with open(pdf_highlighted_path(paper_db.id), 'wb') as f:
             f.write(content)
         with open(pdf_thumbnail_path(paper_db.id), 'wb') as fp:
             fp.write(pdf_first_page_to_thumbnail_pymupdf_bytes(content))
@@ -202,3 +211,43 @@ def list_genes(
 ) -> Any:
     query = session.query(GeneDB)
     return query.all()
+
+
+@app.post('/papers/{paper_id}/highlight', status_code=status.HTTP_204_NO_CONTENT)
+def highlight_pdf(
+    paper_id: str,
+    request: HighlightRequest,
+    session: Session = Depends(get_session),
+) -> None:
+    """
+    Highlight text in a PDF and save the highlighted version.
+
+    Args:
+        paper_id: The ID of the paper
+        request: JSON body with queries (list) and color fields
+    """
+    # Verify paper exists
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+
+    # Parse and validate color
+    try:
+        rgb_color = parse_hex_color(request.color)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    # Process each query
+    for query in request.queries:
+        # Find best match for the query in the PDF
+        matched_words = find_best_match(query, paper_id)
+        if not matched_words:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f'Could not find text matching query: "{query}"',
+            )
+
+        # Highlight the matched words in the PDF
+        highlight_words_in_pdf(paper_id, matched_words, rgb_color)

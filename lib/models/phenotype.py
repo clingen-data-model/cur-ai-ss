@@ -10,7 +10,7 @@ class PhenotypeExtractionOutput(BaseModel):
     negated: bool = False
     uncertain: bool = False
     family_history: bool = False
-    notes: str
+    evidence_contexts: list[str]
     onset: str | None
     location: str | None
     severity: str | None
