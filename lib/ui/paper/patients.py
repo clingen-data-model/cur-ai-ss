@@ -20,7 +20,8 @@ from lib.agents.variant_harmonization_agent import (
     HarmonizedVariant,
     VariantHarmonizationOutput,
 )
-from lib.models import PaperResp, PipelineStatus
+from lib.models import PipelineStatus
+from lib.ui.paper.header import PaperQueryParams, render_paper_header
 
 
 def render_patient(
@@ -194,7 +195,14 @@ def render_patient(
                     or harmonized_variant.hgvs_p
                     or f'Variant {link.variant_id}'
                 )
-                st.markdown(title)
+                st.page_link(
+                    'paper/variants.py',  # adjust path to your actual variants page
+                    label=title,
+                    query_params={  # type: ignore
+                        'paper_id': paper_query_params.paper_id,
+                        'variant_id': link.variant_id,
+                    },
+                )
                 col1, col2 = st.columns(2)
                 with col1:
                     st.markdown(
@@ -229,7 +237,9 @@ def render_patient(
                     st.markdown('---')
 
 
-def render_patients_tab(paper_resp: PaperResp, selected_patient_id: int | None) -> None:
+paper_query_params = PaperQueryParams.from_query_params()
+paper_resp, center = render_paper_header()
+with center:
     if not paper_resp.title:
         st.write(f'{paper_resp.filename} not yet extracted...')
         st.stop()
@@ -288,7 +298,7 @@ def render_patients_tab(paper_resp: PaperResp, selected_patient_id: int | None) 
     proband_tab, non_proband_tab = st.tabs(
         tabs,
         default=tabs[1]
-        if selected_patient_id in {p[0] for p in non_probands}
+        if paper_query_params.patient_id in {p[0] for p in non_probands}
         else tabs[0],
     )
     with proband_tab:
@@ -299,7 +309,7 @@ def render_patients_tab(paper_resp: PaperResp, selected_patient_id: int | None) 
             render_patient(
                 patient,
                 patient_links=links_by_patient.get(original_idx, []),
-                expanded=(original_idx == selected_patient_id),
+                expanded=(paper_query_params.patient_id == original_idx),
                 key_prefix=f'patient-{original_idx}',
             )
     with non_proband_tab:
@@ -310,6 +320,6 @@ def render_patients_tab(paper_resp: PaperResp, selected_patient_id: int | None) 
             render_patient(
                 patient,
                 patient_links=links_by_patient.get(original_idx, []),
-                expanded=(original_idx == selected_patient_id),
+                expanded=(paper_query_params.patient_id == original_idx),
                 key_prefix=f'patient-{original_idx}',
             )
