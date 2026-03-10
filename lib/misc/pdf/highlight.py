@@ -27,8 +27,11 @@ def parse_hex_color(color_str: str) -> tuple[float, float, float]:
 
 
 def find_best_match(query: str, paper_id: str) -> list[list[int | float | str]] | None:
+    window_size = 5
+
     def normalize(token: str) -> str:
         """Normalize tokens to improve fuzzy matching."""
+        token = token.lower()
         token = token.replace('\u00ad', '')  # remove soft hyphen
         token = token.replace('\u2010', '-')  # hyphen
         token = token.replace('\u2011', '-')  # non-breaking hyphen
@@ -38,59 +41,30 @@ def find_best_match(query: str, paper_id: str) -> list[list[int | float | str]] 
         token = token.replace('\u2015', '-')  # horizontal bar
         return token
 
-    def fuzzy_match(a: str, b: str, threshold: int = 80) -> bool:
-        """Return True if tokens are similar enough."""
-        if not a or not b:
-            return False
-        return fuzz.partial_ratio(a, b) >= threshold
-
-    def gap_penalty(gap: int) -> float:
-        return math.log1p(gap) / 2
-
-    """
-    Finds the best match of a query string in a PDF word list, allowing skipped words.
-    Returns the matched words (as dictionaries/lists) with the minimal total gap.
-    """
-
     # Load words from JSON
     with open(pdf_words_json_path(paper_id), 'r') as f:
         words = json.load(f)
 
-    tokens = query.split()
+    # Variable Initializations
+    q_len = len(query.split())
+    min_len, max_len = max(1, q_len - window_size), q_len + window_size
+    best_score, best_span = 0, None
+    query_norm = normalize(query)
     n = len(words)
-
-    best_match = None
-    best_score = None
-
-    for start_idx, word in enumerate(words):
-        word_norm = normalize(word[1])
-        if not fuzzy_match(word_norm, tokens[0]):
-            continue
-
-        prev_idx = start_idx
-        gap = 0
-        similarity_sum = fuzz.partial_ratio(word_norm, tokens[0]) / 100
-        token_idx = 1
-
-        for j in range(start_idx + 1, n):
-            if token_idx >= len(tokens):
+    for i in range(n):
+        for span_len in range(min_len, max_len + 1):
+            j = i + span_len
+            if j > n:
                 break
-
-            word_norm = normalize(words[j][1])
-            if fuzzy_match(word_norm, tokens[token_idx]):
-                gap += j - prev_idx - 1
-                prev_idx = j
-                similarity_sum += fuzz.partial_ratio(word_norm, tokens[token_idx]) / 100
-                token_idx += 1
-
-        if token_idx == len(tokens):
-            score = similarity_sum - gap_penalty(gap)
-            if best_score is None or score > best_score:
+            span_text = " ".join(normalize(w[1]) for w in words[i:j])
+            score = fuzz.ratio(span_text, query_norm)
+            if score > best_score:
                 best_score = score
-                # Note, rather than just returning the matched words, we return the entire matched span.
-                best_match = words[start_idx:prev_idx + 1]
-    return best_match
-
+                best_span = (i, j - 1)
+    if best_span is None:
+        return None
+    i, j = best_span
+    return words[i:j + 1]
 
 def highlight_words_in_pdf(
     paper_id: str,
