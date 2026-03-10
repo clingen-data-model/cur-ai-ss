@@ -26,13 +26,20 @@ def parse_hex_color(color_str: str) -> tuple[float, float, float]:
     )
 
 
+from rapidfuzz import fuzz
+import json
+
 def find_best_match(query: str, paper_id: str) -> list[list[int | float | str]] | None:
+    """
+    Finds the best match of a query in a PDF word list.
+    Supports <SPLIT> for evidence spanning multiple pages/sections.
+    """
     window_size = 5
 
     def normalize(token: str) -> str:
         """Normalize tokens to improve fuzzy matching."""
         token = token.lower()
-        token = token.replace('\u00ad', '')  # remove soft hyphen
+        token = token.replace('\u00ad', '')  # soft hyphen
         token = token.replace('\u2010', '-')  # hyphen
         token = token.replace('\u2011', '-')  # non-breaking hyphen
         token = token.replace('\u2012', '-')  # figure dash
@@ -44,27 +51,44 @@ def find_best_match(query: str, paper_id: str) -> list[list[int | float | str]] 
     # Load words from JSON
     with open(pdf_words_json_path(paper_id), 'r') as f:
         words = json.load(f)
-
-    # Variable Initializations
-    q_len = len(query.split())
-    min_len, max_len = max(1, q_len - window_size), q_len + window_size
-    best_score, best_span = 0, None
-    query_norm = normalize(query)
     n = len(words)
-    for i in range(n):
-        for span_len in range(min_len, max_len + 1):
-            j = i + span_len
-            if j > n:
-                break
-            span_text = " ".join(normalize(w[1]) for w in words[i:j])
-            score = fuzz.ratio(span_text, query_norm)
-            if score > best_score:
-                best_score = score
-                best_span = (i, j - 1)
-    if best_span is None:
+
+    # Split query on <SPLIT>
+    parts = [p.strip() for p in query.split("<SPLIT>")]
+    if not parts:
         return None
-    i, j = best_span
-    return words[i:j + 1]
+
+    full_span = []
+    start_page = 1 
+
+    for part in parts:
+        q_len = len(part.split())
+        min_len, max_len = max(1, q_len - window_size), q_len + window_size
+        best_score, best_span = 0, None
+        query_norm = normalize(part)
+
+        # Slide window over remaining words
+        for i in range(start_page, n):
+            for span_len in range(min_len, max_len + 1):
+                j = i + span_len
+                if j > n:
+                    break
+                span_text = " ".join(normalize(w[1]) for w in words[i:j])
+                score = fuzz.ratio(span_text, query_norm)
+                if score > best_score:
+                    best_score = score
+                    best_span = (i, j - 1)
+
+        if best_span is None:
+            # if any part cannot be matched, return None
+            return None
+
+        i, j = best_span
+        full_span.extend(words[i:j + 1])
+        # For next part, start searching after the current match
+        search_start = j + 1
+
+    return full_span
 
 def highlight_words_in_pdf(
     paper_id: str,

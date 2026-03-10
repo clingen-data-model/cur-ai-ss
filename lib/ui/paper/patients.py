@@ -43,7 +43,7 @@ def render_patient(
 
         st.text_area(
             'Patient Identifier Evidence',
-            (patient.identifier_evidence or '').replace('<PAGE_SPLIT>', ''),
+            (patient.identifier_evidence or '').replace('<SPLIT>', ''),
             height=60,
             disabled=True,
             key=f'{key_prefix}-identifier-evidence',
@@ -81,7 +81,7 @@ def render_patient(
 
         st.text_area(
             'Sex At Birth Evidence',
-            (patient.sex_evidence or '').replace('<PAGE_SPLIT>', ''),
+            (patient.sex_evidence or '').replace('<SPLIT>', ''),
             height=60,
             disabled=True,
             key=f'{key_prefix}-sex-evidence',
@@ -98,7 +98,7 @@ def render_patient(
             )
             st.text_area(
                 'Age at Diagnosis Evidence',
-                (patient.age_diagnosis_evidence or '').replace('<PAGE_SPLIT>', ''),
+                (patient.age_diagnosis_evidence or '').replace('<SPLIT>', ''),
                 height=60,
                 disabled=True,
                 key=f'{key_prefix}-age-diagnosis-evidence',
@@ -112,7 +112,7 @@ def render_patient(
             )
             st.text_area(
                 'Age at Report Evidence',
-                (patient.age_report_evidence or '').replace('<PAGE_SPLIT>', ''),
+                (patient.age_report_evidence or '').replace('<SPLIT>', ''),
                 height=60,
                 disabled=True,
                 key=f'{key_prefix}-age-report-evidence',
@@ -126,7 +126,7 @@ def render_patient(
             )
             st.text_area(
                 'Age at Death Evidence',
-                (patient.age_death_evidence or '').replace('<PAGE_SPLIT>', ''),
+                (patient.age_death_evidence or '').replace('<SPLIT>', ''),
                 height=60,
                 disabled=True,
                 key=f'{key_prefix}-age-death-evidence',
@@ -153,7 +153,7 @@ def render_patient(
 
             st.text_area(
                 'Country of Origin Evidence',
-                (patient.country_of_origin_evidence or '').replace('<PAGE_SPLIT>', ''),
+                (patient.country_of_origin_evidence or '').replace('<SPLIT>', ''),
                 height=60,
                 disabled=True,
                 key=f'{key_prefix}-country-evidence',
@@ -177,7 +177,7 @@ def render_patient(
 
             st.text_area(
                 'Race/Ethnicity Evidence',
-                (patient.race_ethnicity_evidence or '').replace('<PAGE_SPLIT>', ''),
+                (patient.race_ethnicity_evidence or '').replace('<SPLIT>', ''),
                 height=60,
                 disabled=True,
                 key=f'{key_prefix}-race-evidence',
@@ -349,7 +349,7 @@ def _render_phenotypes_table(
             if phenotype.evidence_contexts:
                 with st.expander('Evidence Context', expanded=False):
                     for i, note in enumerate(phenotype.evidence_contexts, 1):
-                        st.markdown(f'**Note {i}:** {note.replace("<PAGE_SPLIT>", "")}')
+                        st.markdown(f'**Note {i}:** {note.replace("<SPLIT>", "")}')
 
         # HPO matching notes
         with col2:
