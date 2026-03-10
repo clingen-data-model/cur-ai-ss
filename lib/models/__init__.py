@@ -2,7 +2,7 @@ import hashlib
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Literal
+from typing import List, Literal
 
 from pydantic import (
     BaseModel,
@@ -40,6 +40,16 @@ from lib.misc.pdf.paths import (
     pdf_sections_dir,
     pdf_tables_dir,
     pdf_thumbnail_path,
+)
+from lib.models.phenotype import (
+    HpoCandidate,
+    HpoConfidence,
+    HpoPhenotypeLink,
+    HpoPhenotypeLinkingOutput,
+    PhenotypeExtractionOutput,
+    PhenotypeInfoExtractionOutput,
+    PhenotypeLinkingEntry,
+    PhenotypeLinkingOutput,
 )
 
 Color = Literal[
@@ -200,6 +210,10 @@ class PaperDB(Base):
         return env.evagg_dir / self.id / 'patient_info.json'
 
     @property
+    def phenotype_linking_json_path(self) -> Path:
+        return env.evagg_dir / self.id / 'phenotype_linking.json'
+
+    @property
     def variants_json_path(self) -> Path:
         return env.evagg_dir / self.id / 'variants.json'
 
@@ -246,6 +260,7 @@ class PaperResp(PaperExtractionOutput):
     gene_symbol: str
     filename: str
     pipeline_status: PipelineStatus
+    last_modified: datetime
 
     # Override the PaperExtractionOutput to make the fields optional.
     # Handles the case when paper is QUEUED.
@@ -255,6 +270,7 @@ class PaperResp(PaperExtractionOutput):
     first_author: str | None = None  # type: ignore
 
     patient_info_json_path: Path
+    phenotype_linking_json_path: Path
     enriched_variants_json_path: Path
     harmonized_variants_json_path: Path
     variants_json_path: Path

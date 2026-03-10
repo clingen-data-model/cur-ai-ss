@@ -11,10 +11,14 @@ from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 
+from lib.agents.hpo_linking_agent import agent as hpo_linking_agent
 from lib.agents.paper_extraction_agent import agent as paper_extraction_agent
 from lib.agents.patient_extraction_agent import agent as patient_extraction_agent
 from lib.agents.patient_variant_linking_agent import (
     agent as patient_variant_linking_agent,
+)
+from lib.agents.phenotype_patient_linking_agent import (
+    agent as phenotype_patient_linking_agent,
 )
 from lib.agents.variant_enrichment_agent import (
     HarmonizedVariant,
@@ -27,7 +31,13 @@ from lib.api.db import session_scope
 from lib.core.logging import setup_logging
 from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import fulltext_md
-from lib.models import PaperDB, PipelineStatus
+from lib.models import (
+    PaperDB,
+    PhenotypeLinkingEntry,
+    PhenotypeLinkingOutput,
+    PipelineStatus,
+)
+from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
 
 LEASE_TIMEOUT_S = 900
 POLL_INTERVAL_S = 10
@@ -120,6 +130,35 @@ async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
         f.write(json_response)
 
 
+async def phenotype_patient_linking_task_async(paper_db: PaperDB) -> None:
+    with open(paper_db.patient_info_json_path, 'r') as f:
+        patients_output = json.load(f)
+
+    structured_patients = [
+        {
+            'patient_id': idx,
+            'identifier': patient['identifier'],
+            'identifier_evidence': patient['identifier_evidence'],
+        }
+        for idx, patient in enumerate(patients_output['patients'], start=1)
+    ]
+    result = await Runner.run(
+        phenotype_patient_linking_agent,
+        f'Paper (fulltext md): {fulltext_md(paper_db.id)}\n\nStructured Patients JSON:\n{structured_patients}',
+    )
+
+    # Convert phenotype extraction output to combined phenotype-linking format
+    phenotypes_output = result.final_output
+    phenotype_links = [
+        PhenotypeLinkingEntry.from_extraction(ph) for ph in phenotypes_output.phenotypes
+    ]
+    combined_output = PhenotypeLinkingOutput(phenotypes=phenotype_links)
+    json_response = combined_output.model_dump_json(indent=2)
+    paper_db.phenotype_linking_json_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(paper_db.phenotype_linking_json_path, 'w') as f:
+        f.write(json_response)
+
+
 async def enrich_variants_task_async(paper_db: PaperDB) -> None:
     with open(paper_db.harmonized_variants_json_path, 'r') as f:
         harmonized_data = json.load(f)
@@ -133,6 +172,33 @@ async def enrich_variants_task_async(paper_db: PaperDB) -> None:
     paper_db.enriched_variants_json_path.parent.mkdir(parents=True, exist_ok=True)
     with open(paper_db.enriched_variants_json_path, 'w') as f:
         f.write(output.model_dump_json(indent=2))
+
+
+async def hpo_linking_task_async(paper_db: PaperDB) -> None:
+    with open(paper_db.phenotype_linking_json_path, 'r') as f:
+        phenotype_data = json.load(f)
+
+    phenotype_linking = PhenotypeLinkingOutput(**phenotype_data)
+    term_lookup = build_term_lookup()
+
+    # Add HPO candidates to each phenotype
+    for entry in phenotype_linking.phenotypes:
+        candidates = find_matching_hpo_terms(entry.text, term_lookup=term_lookup)
+        entry.candidates = candidates
+
+    # Exclude optional fields to keep agent input clean
+    phenotype_data_filtered = phenotype_linking.model_dump(
+        exclude={'notes', 'onset', 'location', 'severity', 'modifier', 'section'}
+    )
+    result = await Runner.run(
+        hpo_linking_agent,
+        f'Phenotypes JSON:\n{json.dumps(phenotype_data_filtered, indent=2)}',
+        max_turns=10 * len(phenotype_linking.phenotypes),
+    )
+
+    json_response = result.final_output.model_dump_json(indent=2)
+    with open(paper_db.phenotype_linking_json_path, 'w') as f:
+        f.write(json_response)
 
 
 def initial_extraction(paper_id: str, gene_symbol: str) -> None:
@@ -182,8 +248,12 @@ def linking_tasks(paper_id: str) -> None:
         await asyncio.gather(
             harmonize_variants_task_async(paper_db),
             patient_variant_linking_task_async(paper_db),
+            phenotype_patient_linking_task_async(paper_db),
         )
-        await enrich_variants_task_async(paper_db)
+        await asyncio.gather(
+            enrich_variants_task_async(paper_db),
+            hpo_linking_task_async(paper_db),
+        )
 
     max_attempts = RETRIES + 1
     with session_scope() as session:

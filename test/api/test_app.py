@@ -1,5 +1,6 @@
 import io
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -50,6 +51,21 @@ startxref
 %%EOF""")
 
 
+def _assert_last_modified_recent(
+    last_modified_str: str, max_age_seconds: int = 60
+) -> None:
+    """Assert that last_modified timestamp is within the last minute."""
+    last_modified = datetime.fromisoformat(last_modified_str)
+    # Handle naive datetimes by assuming UTC
+    if last_modified.tzinfo is None:
+        last_modified = last_modified.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    age = (now - last_modified).total_seconds()
+    assert 0 <= age <= max_age_seconds, (
+        f'last_modified is {age}s old, expected within {max_age_seconds}s'
+    )
+
+
 @pytest.fixture
 def seeded_genes(db_session):
     db_session.add_all(
@@ -75,6 +91,7 @@ def test_queue_new_paper(client, test_pdf, db_session, seeded_genes):
     assert data['id']  # Paper ID will be generated from content
     assert data['pipeline_status'] == PipelineStatus.QUEUED.value
     assert data['filename'] == 'job-1.pdf'
+    _assert_last_modified_recent(data['last_modified'])
     count = db_session.scalar(select(func.count(PaperDB.id)))
     assert count == 1
 
@@ -105,6 +122,7 @@ def test_get_paper_success(client, test_pdf, seeded_genes):
     assert upload_response.status_code == 201
     data_upload = upload_response.json()
     paper_id = data_upload['id']
+    _assert_last_modified_recent(data_upload['last_modified'])
     get_response = client.get(f'/papers/{paper_id}')
     assert get_response.status_code == 200
     data_get = get_response.json()
@@ -115,6 +133,7 @@ def test_get_paper_success(client, test_pdf, seeded_genes):
         'extracted_pdfs/0e487d93695f2c04d955d8b2cba27384d71aea0acd87d9748ec2abbf2e8a6a0d/thumbnail.png'
     )
     assert data_get['gene_symbol'] == 'BRCA1'
+    _assert_last_modified_recent(data_get['last_modified'])
 
 
 def test_get_paper_not_found(client):
@@ -130,6 +149,7 @@ def test_update_paper_pipeline_status(client, test_pdf, db_session, seeded_genes
         data={'gene_symbol': 'BRCA1'},
     )
     data = response.json()
+    _assert_last_modified_recent(data['last_modified'])
     db_session.execute(
         update(PaperDB)
         .where(PaperDB.id == data['id'])
@@ -140,7 +160,9 @@ def test_update_paper_pipeline_status(client, test_pdf, db_session, seeded_genes
         json={'pipeline_status': PipelineStatus.QUEUED.value},
     )
     assert response2.status_code == 200
-    assert response2.json()['pipeline_status'] == PipelineStatus.QUEUED.value
+    data2 = response2.json()
+    assert data2['pipeline_status'] == PipelineStatus.QUEUED.value
+    _assert_last_modified_recent(data2['last_modified'])
     response3 = client.patch(
         f'/papers/{response2.json()["id"]}',
         json={'pipeline_status': PipelineStatus.QUEUED.value},
@@ -176,6 +198,8 @@ def test_list_paper(client, test_pdf, seeded_genes):
     assert response.status_code == 200
     jobs = response.json()
     assert len(jobs) == 2
+    for job in jobs:
+        _assert_last_modified_recent(job['last_modified'])
 
 
 def test_list_papers_filtered_by_status(client, test_pdf, db_session, seeded_genes):
@@ -202,6 +226,8 @@ def test_list_papers_filtered_by_status(client, test_pdf, db_session, seeded_gen
     jobs = response.json()
     assert all(job['pipeline_status'] == PipelineStatus.QUEUED for job in jobs)
     assert all(job['gene_symbol'] == 'BRCA1' for job in jobs)
+    for job in jobs:
+        _assert_last_modified_recent(job['last_modified'])
 
 
 def test_delete_paper(client, test_pdf, db_session, seeded_genes):

@@ -1,3 +1,4 @@
+import inspect
 import os
 from enum import Enum
 from pathlib import Path
@@ -32,6 +33,7 @@ class Env(BaseSettings):
     EVAGG_DIR: str = 'evagg'
     EXTRACTED_PDF_DIR: str = 'extracted_pdfs'
     LOG_DIR: str = 'logs'
+    REFERENCE_DATA_DIR: str = 'reference_data'
 
     # UI->API
     API_ENDPOINT: str = 'localhost:8000'
@@ -72,18 +74,22 @@ class Env(BaseSettings):
     def log_dir(self) -> Path:
         return Path(self.CAA_ROOT) / self.LOG_DIR
 
+    @property
+    def reference_data_dir(self) -> Path:
+        return Path(self.CAA_ROOT) / self.REFERENCE_DATA_DIR
+
     def init_dirs(self) -> None:
         root = Path(self.CAA_ROOT)
         if not root.is_absolute():
             raise RuntimeError(f'CAA_ROOT must be an absolute path: {root}')
-        for p in (
-            root,
-            self.sqlite_dir,
-            self.evagg_dir,
-            self.extracted_pdf_dir,
-            self.log_dir,
+        root.mkdir(parents=True, exist_ok=True)
+        for name, prop in inspect.getmembers(
+            type(self), lambda x: isinstance(x, property)
         ):
-            p.mkdir(parents=True, exist_ok=True)
+            if name.endswith('_dir'):
+                path = getattr(self, name)
+                if isinstance(path, Path):
+                    path.mkdir(parents=True, exist_ok=True)
 
 
 env = Env()  # type: ignore[call-arg]
