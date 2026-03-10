@@ -59,7 +59,7 @@ def find_best_match(query: str, paper_id: str) -> list[list[int | float | str]] 
     for part in parts:
         q_len = len(part.split())
         min_len, max_len = max(1, q_len - window_size), q_len + window_size
-        best_score, best_span = 0, None
+        best_score, best_span = float(0), None
         query_norm = normalize(part)
 
         # Slide window over remaining words

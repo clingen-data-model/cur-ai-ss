@@ -92,4 +92,3 @@ def test_noisy_spans_with_page_break(mock_pdf_words_with_page_break):
     expected_page_ids = [1, 1, 1, 2, 2, 2]
 
     assert [w[1] for w in result] == expected_texts
-    assert False
