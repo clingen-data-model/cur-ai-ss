@@ -1,4 +1,3 @@
-import json
 import math
 from pathlib import Path
 from typing import Any, cast
@@ -6,7 +5,8 @@ from typing import Any, cast
 import fitz
 from rapidfuzz import fuzz
 
-from lib.misc.pdf.paths import pdf_highlighted_path, pdf_raw_path, pdf_words_json_path
+from lib.misc.pdf.parse import WordLoc
+from lib.misc.pdf.paths import pdf_highlighted_path, pdf_raw_path
 
 
 def parse_hex_color(color_str: str) -> tuple[float, float, float]:
@@ -24,10 +24,14 @@ def parse_hex_color(color_str: str) -> tuple[float, float, float]:
     raise ValueError(f'Invalid color: "{color_str}". Use a hex code (e.g., "#FF0000")')
 
 
-def find_best_match(query: str, paper_id: str) -> list[list[int | float | str]] | None:
+def find_best_match(query: str, words: list[WordLoc]) -> list[WordLoc] | None:
     """
     Finds the best match of a query in a PDF word list.
     Supports <SPLIT> for evidence spanning multiple pages/sections.
+
+    Args:
+        query: The text to search for, with optional <SPLIT> separators
+        words: List of WordLoc entries from PDF extraction
     """
     window_size = 5
 
@@ -43,24 +47,19 @@ def find_best_match(query: str, paper_id: str) -> list[list[int | float | str]] 
         token = token.replace('\u2015', '-')  # horizontal bar
         return token
 
-    # Load words from JSON
-    with open(pdf_words_json_path(paper_id), 'r') as f:
-        words = json.load(f)
     n = len(words)
-
-    # Split query on <SPLIT>
-    parts = [p.strip() for p in query.split('<SPLIT>')]
-    if not parts:
+    normalized_words = [normalize(w[1]) for w in words]
+    normalized_parts = [normalize(p.strip()) for p in query.split('<SPLIT>')]
+    if not normalized_parts:
         return None
 
     full_span = []
     search_start = 0
 
-    for part in parts:
-        q_len = len(part.split())
+    for normalized_part in normalized_parts:
+        q_len = len(normalized_part.split())
         min_len, max_len = max(1, q_len - window_size), q_len + window_size
         best_score, best_span = float(0), None
-        query_norm = normalize(part)
 
         # Slide window over remaining words
         for i in range(search_start, n):
@@ -68,8 +67,8 @@ def find_best_match(query: str, paper_id: str) -> list[list[int | float | str]] 
                 j = i + span_len
                 if j > n:
                     break
-                span_text = ' '.join(normalize(w[1]) for w in words[i:j])
-                score = fuzz.ratio(span_text, query_norm)
+                span_text = ' '.join(normalized_words[i:j])
+                score = fuzz.ratio(span_text, normalized_part)
                 if score > best_score:
                     best_score = score
                     best_span = (i, j - 1)
@@ -88,7 +87,7 @@ def find_best_match(query: str, paper_id: str) -> list[list[int | float | str]] 
 
 def highlight_words_in_pdf(
     paper_id: str,
-    words: list[list[int | float | str]],
+    words: list[WordLoc],
     rgb_color: tuple[float, float, float],
 ) -> Path:
     """
@@ -96,7 +95,7 @@ def highlight_words_in_pdf(
 
     Args:
         paper_id: The paper ID to identify the PDF file
-        words: List of word entries with format [page_id, word, x0, y0, x1, y1, x2, y2, x3, y3]
+        words: List of WordLoc entries from PDF extraction
         rgb_color: RGB tuple with values 0-1
 
     Returns:
@@ -108,7 +107,7 @@ def highlight_words_in_pdf(
     pdf_doc = fitz.open(pdf_path)
 
     # Group words by page
-    words_by_page: dict[int, list[list[int | float | str]]] = {}
+    words_by_page: dict[int, list[WordLoc]] = {}
     for word in words:
         page_id = int(word[0])
         if page_id not in words_by_page:

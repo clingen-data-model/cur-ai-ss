@@ -24,8 +24,13 @@ def mock_pdf_words(mocked_root_dir, test_file_contents):
 
 def test_minimal_gap_selection(mock_pdf_words):
     """Test finding best match with minimal gaps."""
+    # Load words from the mock file
+    words_file = pdf_words_json_path(mock_pdf_words)
+    with open(words_file, 'r') as f:
+        words = json.load(f)
+
     query = 'Nature Publishing Group Science'
-    result = find_best_match(query, mock_pdf_words)
+    result = find_best_match(query, words)
 
     # The best match should be the second "Nature" occurrence
     expected_word_ids = [6, 7, 8, 9]
@@ -81,10 +86,15 @@ def test_noisy_spans_with_page_break(mock_pdf_words_with_page_break):
     The query should include <SPLIT> to indicate where the page break occurs
     in the evidence text.
     """
+    # Load words from the mock file
+    words_file = pdf_words_json_path(mock_pdf_words_with_page_break)
+    with open(words_file, 'r') as f:
+        words = json.load(f)
+
     # Query with page break: "rare genetic disorder <SPLIT> affects patients severity"
     # Should match noisy OCR versions across page 1 and page 2
     query = 'rare genetic disorder <SPLIT> affects patients severity'
-    result = find_best_match(query, mock_pdf_words_with_page_break)
+    result = find_best_match(query, words)
 
     assert result is not None
     # Should match 6 words: page 1 (rar3, genetic, d1sorder) + page 2 (affect5, p@tients, severity)

@@ -40,6 +40,7 @@ from lib.misc.pdf.paths import (
     pdf_highlighted_path,
     pdf_raw_path,
     pdf_thumbnail_path,
+    pdf_words_json_path,
 )
 from lib.misc.pdf.thumbnail import pdf_first_page_to_thumbnail_pymupdf_bytes
 from lib.models import (
@@ -239,10 +240,15 @@ def highlight_pdf(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
+    # Load words from JSON file
+    words_file = pdf_words_json_path(paper_id)
+    with open(words_file, 'r') as f:
+        words = json.load(f)
+
     # Process each query
     for query in request.queries:
         # Find best match for the query in the PDF
-        matched_words = find_best_match(query, paper_id)
+        matched_words = find_best_match(query, words)
         if not matched_words:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
