@@ -3,6 +3,7 @@ import streamlit as st
 from lib.models import PaperResp, PaperType, PaperUpdateRequest
 from lib.ui.api import get_http_error_detail, update_paper
 
+
 def render_metadata_tab() -> None:
     paper_resp: PaperResp = st.session_state['paper_resp']
     if not paper_resp.title:
@@ -57,4 +58,3 @@ def render_metadata_tab() -> None:
             st.toast('Saved!', icon=':material/check:')
         except Exception as e:
             st.toast(f'Failed to save: {str(e)}', icon='❌')
-
