@@ -18,12 +18,13 @@ from lib.ui.paper.occurrences import render_patient_variant_occurrences_tab
 from lib.ui.paper.patients import render_patients_tab
 from lib.ui.paper.pdf import render_pdf_tab
 from lib.ui.paper.variants import render_variants_tab
-
+from lib.ui.paper.constants import HEADER_TABS, HEADER_TABS_KEY
 
 class PaperQueryParams(BaseModel):
     paper_id: str
     patient_id: Optional[int] = None
     variant_id: Optional[int] = None
+    tab_id: Optional[int] = None
 
     @classmethod
     def from_query_params(cls) -> 'PaperQueryParams':
@@ -31,6 +32,7 @@ class PaperQueryParams(BaseModel):
             'paper_id': st.query_params.get('paper_id'),
             'patient_id': st.query_params.get('patient_id'),
             'variant_id': st.query_params.get('variant_id'),
+            'tab_id': st.query_params.get('tab_id'),
         }
 
         if not raw_params['paper_id']:
@@ -130,24 +132,20 @@ with center:
     left, right = st.columns([5, 2])
     with left:
         with st.container(horizontal=True, vertical_alignment='center'):
-            default_tab = (
-                '👤 Patients'
-                if paper_query_params.patient_id
-                else '🧬 Variants'
-                if paper_query_params.variant_id
-                else '📄 PDF'
-            )
+            if paper_query_params.tab_id:
+                default_tab = HEADER_TABS[paper_query_params.tab_id]
+            elif paper_query_params.patient_id:
+                default_tab = '👤 Patients'
+            elif paper_query_params.variant_id:
+                default_tab = '🧬 Variants'
+            else:
+                default_tab = '📄 PDF'
             pdf_tab, metadata_tab, patients_tab, variants_tab, occurrences_tab = (
                 st.tabs(
-                    [
-                        '📄 PDF',
-                        '📝 Metadata',
-                        '👤 Patients',
-                        '🧬 Variants',
-                        '🔗 Occurrences',
-                    ],
+                    HEADER_TABS,
                     on_change='rerun',
                     default=default_tab,
+                    key=HEADER_TABS_KEY,
                 )
             )
             with center:

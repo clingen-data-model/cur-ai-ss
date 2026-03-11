@@ -1,4 +1,5 @@
 import json
+import time
 
 import pandas as pd
 import requests
@@ -19,7 +20,21 @@ from lib.models import (
     PhenotypeLinkingOutput,
     PipelineStatus,
 )
-from lib.ui.api import get_http_error_detail, highlight_pdf
+from lib.ui.api import get_http_error_detail, grobid_annotations, highlight_pdf
+from lib.ui.paper.constants import CURRENT_ANNOTATIONS_KEY, HEADER_TABS, HEADER_TABS_KEY
+
+def highlight_and_switch_tab(paper_id, contexts, color, tab_index):
+    try:
+        current_annotations = grobid_annotations(
+            paper_id,
+            contexts,
+            color,
+        )
+        st.toast("PDF highlighted! Zooming to highlight.")
+        st.session_state[HEADER_TABS_KEY] = HEADER_TABS[tab_index]
+        st.session_state[CURRENT_ANNOTATIONS_KEY] = current_annotations
+    except requests.HTTPError as e:
+        st.error(f'Failed to highlight: {get_http_error_detail(e)}')
 
 
 def render_patient(
@@ -388,20 +403,13 @@ def _render_phenotypes_table(
                     color = st.color_picker(
                         'Choose Color:', label_visibility='collapsed', key=color_key
                     )
-                    if st.button(
+                    st.button(
                         'Highlight',
                         key=f'{key_prefix}-highlight-confirm-{phenotype.text}',
                         type='secondary',
-                    ):
-                        try:
-                            highlight_pdf(
-                                paper_resp.id,
-                                phenotype.evidence_contexts,
-                                color,
-                            )
-                            st.success('PDF highlighted! Reload to see changes.')
-                        except requests.HTTPError as e:
-                            st.error(f'Failed to highlight: {get_http_error_detail(e)}')
+                        on_click=highlight_and_switch_tab,
+                        args=(paper_resp.id, phenotype.evidence_contexts, color, 0)
+                    )
 
 
 def render_patients_tab(selected_patient_id: int | None) -> None:
