@@ -5,6 +5,7 @@ from pydantic import TypeAdapter
 
 from lib.core.environment import env
 from lib.models import GeneResp, PaperResp, PaperUpdateRequest, PipelineStatus
+from lib.misc.pdf.highlight import GrobidAnnotation
 
 
 def get_http_error_detail(e: requests.HTTPError) -> str:
@@ -74,8 +75,6 @@ def delete_paper(paper_id: str) -> None:
 
 
 def highlight_pdf(paper_id: str, queries: list[str] | str, color: str) -> None:
-    """Highlight text in a PDF."""
-    # Support both single string and list of strings
     if isinstance(queries, str):
         queries = [queries]
     resp = requests.post(
@@ -83,3 +82,14 @@ def highlight_pdf(paper_id: str, queries: list[str] | str, color: str) -> None:
         json={'queries': queries, 'color': color},
     )
     resp.raise_for_status()
+
+
+def grobid_annotations(paper_id: str, queries: list[str] | str, color: str) -> None:
+    if isinstance(queries, str):
+        queries = [queries]
+    resp = requests.get(
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/grobid-annotation',
+        json={'queries': queries, 'color': color},
+    )
+    resp.raise_for_status()
+    return TypeAdapter(list[GrobidAnnotation]).validate_python(resp.json())

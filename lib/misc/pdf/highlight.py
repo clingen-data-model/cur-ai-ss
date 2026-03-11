@@ -1,13 +1,88 @@
 import math
-from pathlib import Path
 import re
+from pathlib import Path
 from typing import Any, cast
 
 import fitz
+from pydantic import BaseModel
 from rapidfuzz import fuzz
 
 from lib.misc.pdf.parse import WordLoc
 from lib.misc.pdf.paths import pdf_highlighted_path, pdf_raw_path
+
+
+class GrobidAnnotation(BaseModel):
+    """GROBID-style coordinate with top-left origin (y increases downward)."""
+
+    page: int
+    x: float
+    y: float
+    width: float
+    height: float
+    color: str
+    border: str = 'solid'
+
+
+def words_to_grobid_annotations(
+    words: list[WordLoc],
+    page_heights: dict[int, float],
+    color: str = 'red',
+    border: str = 'solid',
+) -> list[GrobidAnnotation]:
+    """
+    Convert matched WordLoc objects to GROBID-style annotations.
+
+    Creates one annotation per word with top-left origin coordinates.
+
+    Args:
+        words: List of WordLoc objects from find_best_match
+        page_heights: Dictionary mapping page_idx to page height
+        color: Highlight color (default: 'red')
+        border: Border style (default: 'solid')
+
+    Returns:
+        List of GrobidAnnotation objects, one per word
+    """
+    annotations = []
+    for word in words:
+        page_idx = int(word.page_idx)
+        page_height = page_heights.get(page_idx, 0)
+
+        # Convert to screen coordinates (top-left origin)
+        x = word.x0
+        y = page_height - word.y0
+        width = word.x1 - word.x0  # top-right - top-left
+        height = word.y2 - word.y1  # bottom-right - top-right
+
+        annotations.append(
+            GrobidAnnotation(
+                page=page_idx,
+                x=x,
+                y=y,
+                width=width,
+                height=height,
+                color=color,
+                border=border,
+            )
+        )
+
+    return annotations
+
+
+def get_page_heights(paper_id: str) -> dict[int, float]:
+    """
+    Get the height of each page in a PDF.
+
+    Args:
+        paper_id: The paper ID to identify the PDF file
+
+    Returns:
+        Dictionary mapping 1-based page index to height
+    """
+    pdf_doc = fitz.open(pdf_raw_path(paper_id))
+    page_heights = {i + 1: pdf_doc[i].rect.height for i in range(len(pdf_doc))}
+    pdf_doc.close()
+    return page_heights
 
 
 def parse_hex_color(color_str: str) -> tuple[float, float, float]:

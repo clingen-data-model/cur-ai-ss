@@ -115,9 +115,13 @@ with center:
         st.markdown(f'# {paper_resp.title}')
         parts = [f'{paper_resp.first_author} et al. {paper_resp.publication_year}']
         if paper_resp.pmid:
-            parts.append(f'PMID: [{paper_resp.pmid}](https://pubmed.ncbi.nlm.nih.gov/{paper_resp.pmid}/)')
+            parts.append(
+                f'PMID: [{paper_resp.pmid}](https://pubmed.ncbi.nlm.nih.gov/{paper_resp.pmid}/)'
+            )
         if paper_resp.pmcid:
-            parts.append(f'PMCID: [{paper_resp.pmcid}](https://www.ncbi.nlm.nih.gov/pmc/articles/{paper_resp.pmcid}/)')
+            parts.append(
+                f'PMCID: [{paper_resp.pmcid}](https://www.ncbi.nlm.nih.gov/pmc/articles/{paper_resp.pmcid}/)'
+            )
         if paper_resp.journal_name:
             parts.append(paper_resp.journal_name)
         st.caption(' • '.join(parts))

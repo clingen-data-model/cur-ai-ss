@@ -32,17 +32,20 @@ from lib.api.middleware import make_log_request_middleware
 from lib.core.environment import env
 from lib.core.logging import setup_logging
 from lib.misc.pdf.highlight import (
+    GrobidAnnotation,
     find_best_match,
+    get_page_heights,
     highlight_words_in_pdf,
     parse_hex_color,
+    words_to_grobid_annotations,
 )
+from lib.misc.pdf.parse import WordLoc
 from lib.misc.pdf.paths import (
     pdf_highlighted_path,
     pdf_raw_path,
     pdf_thumbnail_path,
     pdf_words_json_path,
 )
-from lib.misc.pdf.parse import WordLoc
 from lib.misc.pdf.thumbnail import pdf_first_page_to_thumbnail_pymupdf_bytes
 from lib.models import (
     GeneDB,
@@ -259,3 +262,57 @@ def highlight_pdf(
 
         # Highlight the matched words in the PDF
         highlight_words_in_pdf(paper_id, matched_words, rgb_color)
+
+
+@app.get('/papers/{paper_id}/grobid-annotation', response_model=list[GrobidAnnotation])
+def grobid_annotation(
+    paper_id: str,
+    request: HighlightRequest,
+    session: Session = Depends(get_session),
+) -> list[GrobidAnnotation]:
+    """
+    Find best text matches and return their coordinates in GROBID format.
+
+    Args:
+        paper_id: The ID of the paper
+        request: JSON body with queries (list) and color fields
+
+    Returns:
+        List of GROBID-style coordinates for all matched text
+    """
+    # Verify paper exists
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+
+    # Load words from JSON file
+    words_file = pdf_words_json_path(paper_id)
+    with open(words_file, 'r') as f:
+        words = json.load(f)
+        words = [WordLoc(*word) for word in words]
+
+    # Get page heights
+    page_heights = get_page_heights(paper_id)
+
+    # Find matches for all queries and collect annotations
+    all_annotations: list[GrobidAnnotation] = []
+    for query in request.queries:
+        matched_words = find_best_match(query, words)
+        if not matched_words:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f'Could not find text matching query: "{query}"',
+            )
+
+        # Convert to GROBID annotations
+        annotations = words_to_grobid_annotations(
+            matched_words,
+            page_heights,
+            color=request.color,
+            border='solid',
+        )
+        all_annotations.extend(annotations)
+
+    return all_annotations
