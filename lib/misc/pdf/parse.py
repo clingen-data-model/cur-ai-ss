@@ -38,7 +38,7 @@ from lib.models import PaperDB
 IMAGE_RESOLUTION_SCALE = 2.0
 
 WordLoc = namedtuple(
-    'WordLoc', ['page_i', 'word', 'x0', 'y0', 'x1', 'y1', 'x2', 'y2', 'x3', 'y3']
+    'WordLoc', ['page_idx', 'word', 'x0', 'y0', 'x1', 'y1', 'x2', 'y2', 'x3', 'y3']
 )
 
 
@@ -54,11 +54,11 @@ def parse_words_json(stream: BytesIO) -> list[WordLoc]:
     words_json = []
     parser = DoclingPdfParser()
     pdf_doc: PdfDocument = parser.load(path_or_stream=stream)
-    for page_i, pred_page in pdf_doc.iterate_pages():
+    for page_idx, pred_page in pdf_doc.iterate_pages():
         for word in pred_page.iterate_cells(unit_type=TextCellUnit.WORD):
             words_json.append(
                 WordLoc(
-                    page_i,
+                    page_idx,
                     word.text,
                     word.rect.r_x0,
                     word.rect.r_y0,

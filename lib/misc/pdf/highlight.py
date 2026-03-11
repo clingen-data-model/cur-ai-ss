@@ -48,7 +48,7 @@ def find_best_match(query: str, words: list[WordLoc]) -> list[WordLoc] | None:
         return token
 
     n = len(words)
-    normalized_words = [normalize(w[1]) for w in words]
+    normalized_words = [normalize(w.word) for w in words]
     normalized_parts = [normalize(p.strip()) for p in query.split('<SPLIT>')]
     if not normalized_parts:
         return None
@@ -109,23 +109,22 @@ def highlight_words_in_pdf(
     # Group words by page
     words_by_page: dict[int, list[WordLoc]] = {}
     for word in words:
-        page_id = int(word[0])
-        if page_id not in words_by_page:
-            words_by_page[page_id] = []
-        words_by_page[page_id].append(word)
+        page_idx = int(word.page_idx)
+        if page_idx not in words_by_page:
+            words_by_page[page_idx] = []
+        words_by_page[page_idx].append(word)
 
     # Highlight words on each page
-    for page_id, page_words in words_by_page.items():
-        page_index = page_id - 1  # convert 1-based → 0-based
-        page = pdf_doc[page_index]
+    for page_idx, page_words in words_by_page.items():
+        page = pdf_doc[page_idx - 1]  # convert 1-based → 0-based
         page_height = page.rect.height
         prev_points = None
         for word in page_words:
             points = [
-                (word[2], page_height - word[3]),  # top-left
-                (word[4], page_height - word[5]),  # top-right
-                (word[6], page_height - word[7]),  # bottom-right
-                (word[8], page_height - word[9]),  # bottom-left
+                (word.x0, page_height - word.y0),  # top-left
+                (word.x1, page_height - word.y1),  # top-right
+                (word.x2, page_height - word.y2),  # bottom-right
+                (word.x3, page_height - word.y3),  # bottom-left
             ]
             if prev_points is None:
                 prev_points = points
