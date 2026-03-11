@@ -64,7 +64,7 @@ def render_rerun_evagg_fragment(paper_query_params: PaperQueryParams) -> None:
     confirm = st.button('Confirm Rerun', type='secondary')
     if confirm:
         try:
-            update_paper(
+            st.session_state['paper_resp'] = update_paper(
                 paper_id=paper_query_params.paper_id,
                 update_request=PaperUpdateRequest(
                     pipeline_status=(
@@ -85,11 +85,15 @@ st.set_page_config(layout='wide')
 paper_query_params = PaperQueryParams.from_query_params()
 with st.spinner('Loading paper...'):
     try:
-        paper_resp: PaperResp = get_paper(paper_query_params.paper_id)
-        if paper_resp is None:
-            st.error(f'Failed to Fetch {paper_query_params.paper_id}')
-            st.divider()
-            st.stop()
+        if 'paper_resp' not in st.session_state:
+            paper_resp: PaperResp = get_paper(paper_query_params.paper_id)
+            if paper_resp is None:
+                st.error(f'Failed to Fetch {paper_query_params.paper_id}')
+                st.divider()
+                st.stop()
+            st.session_state['paper_resp'] = paper_resp
+        else:
+            paper_resp = st.session_state['paper_resp']
     except requests.HTTPError as e:
         st.error(f'Failed to load paper: {get_http_error_detail(e)}')
         st.stop()
@@ -142,15 +146,15 @@ with center:
             )
             with center:
                 if pdf_tab.open:
-                    render_pdf_tab(paper_resp)
+                    render_pdf_tab()
                 elif metadata_tab.open:
-                    render_metadata_tab(paper_resp)
+                    render_metadata_tab()
                 elif patients_tab.open:
-                    render_patients_tab(paper_resp, paper_query_params.patient_id)
+                    render_patients_tab(paper_query_params.patient_id)
                 elif variants_tab.open:
-                    render_variants_tab(paper_resp, paper_query_params.variant_id)
+                    render_variants_tab(paper_query_params.variant_id)
                 elif occurrences_tab.open:
-                    render_patient_variant_occurrences_tab(paper_resp)
+                    render_patient_variant_occurrences_tab()
 
     with right:
         with st.container(

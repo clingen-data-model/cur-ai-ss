@@ -23,8 +23,9 @@ from lib.agents.variant_harmonization_agent import (
 from lib.models import PaperResp, PipelineStatus
 
 
-def render_patient_variant_occurrences_tab(paper_resp: PaperResp) -> None:
+def render_patient_variant_occurrences_tab() -> None:
     """Display patient-variant links in a table with a detail panel for selected rows."""
+    paper_resp: PaperResp = st.session_state['paper_resp']
     if not paper_resp.title:
         st.write(f'{paper_resp.filename} not yet extracted...')
         st.stop()

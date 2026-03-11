@@ -28,7 +28,6 @@ def render_patient(
     key_prefix: str,
     patient_id: int,
     phenotypes: list[PhenotypeLinkingEntry] | None = None,
-    paper_resp: PaperResp | None = None,
 ) -> None:
     with st.expander(
         f'{patient.identifier or "N/A"}',
@@ -190,7 +189,6 @@ def render_patient(
                 phenotypes,
                 patient_id,
                 key_prefix,
-                paper_resp,
             )
 
 
@@ -198,7 +196,6 @@ def _render_patient_phenotypes(
     all_phenotypes: list[PhenotypeLinkingEntry],
     patient_id: int,
     key_prefix: str,
-    paper_resp: PaperResp | None = None,
 ) -> None:
     """Render phenotypes for a specific patient with matched/unmatched tabs."""
     # Filter phenotypes for this patient
@@ -229,7 +226,6 @@ def _render_patient_phenotypes(
                 key_prefix,
                 show_hpo=True,
                 table_type='matched-phenotypes',
-                paper_resp=paper_resp,
             )
 
     with unmatched_tab:
@@ -242,7 +238,6 @@ def _render_patient_phenotypes(
                 key_prefix,
                 show_hpo=False,
                 table_type='unmatched-phenotypes',
-                paper_resp=paper_resp,
             )
 
 
@@ -252,9 +247,9 @@ def _render_phenotypes_table(
     key_prefix: str,
     show_hpo: bool,
     table_type: str,
-    paper_resp: PaperResp | None = None,
 ) -> None:
     """Render phenotypes table with detail panel."""
+    paper_resp = st.session_state.get('paper_resp')
     # Build table rows
     rows = []
     for phenotype in phenotypes:
@@ -409,7 +404,8 @@ def _render_phenotypes_table(
                             st.error(f'Failed to highlight: {get_http_error_detail(e)}')
 
 
-def render_patients_tab(paper_resp: PaperResp, selected_patient_id: int | None) -> None:
+def render_patients_tab(selected_patient_id: int | None) -> None:
+    paper_resp: PaperResp = st.session_state['paper_resp']
     if not paper_resp.title:
         st.write(f'{paper_resp.filename} not yet extracted...')
         st.stop()
@@ -462,7 +458,6 @@ def render_patients_tab(paper_resp: PaperResp, selected_patient_id: int | None) 
                 key_prefix=f'patient-{original_idx}',
                 patient_id=original_idx,
                 phenotypes=phenotypes,
-                paper_resp=paper_resp,
             )
     with non_proband_tab:
         if not non_probands:
@@ -475,5 +470,4 @@ def render_patients_tab(paper_resp: PaperResp, selected_patient_id: int | None) 
                 key_prefix=f'patient-{original_idx}',
                 patient_id=original_idx,
                 phenotypes=phenotypes,
-                paper_resp=paper_resp,
             )

@@ -17,7 +17,8 @@ from lib.agents.variant_harmonization_agent import (
 from lib.models import PaperResp, PipelineStatus
 
 
-def render_variants_tab(paper_resp: PaperResp, selected_variant_id: int | None) -> None:
+def render_variants_tab(selected_variant_id: int | None) -> None:
+    paper_resp: PaperResp = st.session_state['paper_resp']
     if not paper_resp.title:
         st.write(f'{paper_resp.filename} not yet extracted...')
         st.stop()
