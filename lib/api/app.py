@@ -42,6 +42,7 @@ from lib.misc.pdf.paths import (
     pdf_thumbnail_path,
     pdf_words_json_path,
 )
+from lib.misc.pdf.parse import WordLoc
 from lib.misc.pdf.thumbnail import pdf_first_page_to_thumbnail_pymupdf_bytes
 from lib.models import (
     GeneDB,
@@ -244,6 +245,7 @@ def highlight_pdf(
     words_file = pdf_words_json_path(paper_id)
     with open(words_file, 'r') as f:
         words = json.load(f)
+        words = [WordLoc(*word) for word in words]
 
     # Process each query
     for query in request.queries:
