@@ -268,10 +268,20 @@ def _render_phenotypes_table(
         }
 
         if show_hpo:
+            hpo_id_link = (
+                f'https://hpo.jax.org/app/browse/term/{phenotype.hpo_id}#{phenotype.hpo_id}'
+                if phenotype.hpo_id
+                else None
+            )
+            hpo_term_link = (
+                f'https://hpo.jax.org/app/browse/term/{phenotype.hpo_id}#{phenotype.hpo_name}'
+                if phenotype.hpo_id
+                else None
+            )
             row.update(
                 {
-                    'HPO ID': phenotype.hpo_id or 'N/A',
-                    'HPO Term': phenotype.hpo_name or 'N/A',
+                    'HPO ID': hpo_id_link,
+                    'HPO Term': hpo_term_link,
                     'Confidence': phenotype.hpo_confidence.value
                     if phenotype.hpo_confidence
                     else 'N/A',
@@ -299,8 +309,16 @@ def _render_phenotypes_table(
     if show_hpo:
         column_config.update(
             {
-                'HPO ID': st.column_config.TextColumn('HPO ID', width='small'),
-                'HPO Term': st.column_config.TextColumn('HPO Term', width='medium'),
+                'HPO ID': st.column_config.LinkColumn(
+                    'HPO ID',
+                    width='small',
+                    display_text=r'.*?#(.+)$',
+                ),
+                'HPO Term': st.column_config.LinkColumn(
+                    'HPO Term',
+                    width='medium',
+                    display_text=r'.*?#(.+)$',
+                ),
                 'Confidence': st.column_config.SelectboxColumn(
                     'Confidence',
                     options=confidence_options,
