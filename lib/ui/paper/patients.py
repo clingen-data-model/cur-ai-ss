@@ -290,7 +290,7 @@ def _render_phenotypes_table(
     confidence_options = [e.value for e in HpoConfidence]
 
     column_config = {
-        'Select': st.column_config.CheckboxColumn('Select', width=5),
+        'Select': st.column_config.CheckboxColumn('Select', width='small'),
         'Phenotype': st.column_config.TextColumn(
             'Phenotype',
             width='large',

@@ -15,7 +15,7 @@ from lib.ui.api import (
 )
 
 st.set_page_config(page_title='Papers Dashboard', layout='wide')
-left, center, right = st.columns([2, 5, 2])
+left, center, right = st.columns([2, 7, 2])
 main = center.container()
 
 CURATIONS_DF_KEY = 'CURATIONS_DF_KEY'
