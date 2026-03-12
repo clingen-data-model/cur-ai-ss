@@ -178,7 +178,7 @@ def words_to_grobid_annotations(
                     y=y,
                     width=width,
                     height=height,
-                    color=f'rgb({color[0]},{color[1]},{color[2]})',
+                    color=f'rgb({color[0] * 255.0},{color[1] * 255.0},{color[2] * 255.0})',
                     border='solid',
                 )
             )

@@ -153,30 +153,6 @@ Evidence Handling:
 - Copy all evidence text verbatim.
 - Evidence must be directly linked to each claim and not from different sections.
 
-MANDATORY RULE FOR <SPLIT>:
-
-The input paper text is derived from a PDF converted to Markdown.
-During this conversion, layout artifacts such as page headers, footers,
-figure captions, page numbers, or figure/table blocks may appear in the
-middle of otherwise continuous sentences.
-
-If the evidence span crosses one of these layout artifacts, you MUST insert
-<SPLIT> at the point where the artifact interrupts the sentence.
-
-Examples of layout artifacts include:
-- page headers or footers
-- page numbers
-- figure or table captions
-- figure/table blocks
-- reference markers inserted mid-sentence
-- any text that clearly does not belong to the narrative sentence
-
-Insert <SPLIT> exactly where the narrative text resumes after the artifact.
-
-IMPORTANT:
-- Do NOT insert <SPLIT> for normal multi-sentence prose.
-- Only insert <SPLIT> when a layout artifact interrupts the narrative text.
-
 - If no explicit evidence is available for a field, return null.
 
 Output:
