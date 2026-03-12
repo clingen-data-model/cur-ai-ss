@@ -185,6 +185,7 @@ def render_patient_variant_occurrences_tab() -> None:
                 'Field': [
                     '**Identifier**',
                     '**Proband Status**',
+                    '**Affected Status**',
                     '**Sex at Birth**',
                     '**Age at Diagnosis**',
                     '**Age at Report**',
@@ -194,6 +195,7 @@ def render_patient_variant_occurrences_tab() -> None:
                 'Value': [
                     patient.identifier or 'N/A',
                     patient.proband_status.value if patient.proband_status else 'N/A',
+                    patient.affected_status.value if patient.affected_status else 'N/A',
                     patient.sex.value if patient.sex else 'N/A',
                     patient.age_diagnosis or 'N/A',
                     patient.age_report or 'N/A',
