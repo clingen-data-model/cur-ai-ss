@@ -3,6 +3,7 @@ import json
 import pytest
 
 from lib.misc.pdf.highlight import find_best_match
+from lib.misc.pdf.parse import WordLoc
 from lib.misc.pdf.paths import pdf_words_json_path
 
 
@@ -28,6 +29,7 @@ def test_minimal_gap_selection(mock_pdf_words):
     words_file = pdf_words_json_path(mock_pdf_words)
     with open(words_file, 'r') as f:
         words = json.load(f)
+        words = [WordLoc(**w) for w in words]
 
     query = 'Nature Publishing Group Science'
     result = find_best_match(query, words)
@@ -37,8 +39,8 @@ def test_minimal_gap_selection(mock_pdf_words):
     expected_texts = ['Nature', 'Publishing', 'Grou', 'Scienes.']  # Note fuzzy matches.
 
     assert result is not None
-    assert [w[1] for w in result] == expected_texts
-    assert [w[0] for w in result] == expected_word_ids
+    assert [w.word for w in result] == expected_texts
+    assert [w.page_idx for w in result] == expected_word_ids
 
 
 @pytest.fixture
@@ -46,26 +48,137 @@ def mock_pdf_words_with_page_break(mocked_root_dir):
     """Create mock PDF words JSON with spans on different pages separated by a break."""
     paper_id = 'test_paper_page_break'
 
-    # Padding words at start (to avoid index 0 issues)
+    # Create mock words with WordLoc-compatible field names
+    # [page_idx, word, x0, y0, x1, y1, x2, y2, x3, y3]
     padding_words = [
-        [1, 'Background', 0, 10.0, 10.0, 100.0, 25.0, 0, 0, 0],
+        {
+            'page_idx': 1,
+            'word': 'Background',
+            'x0': 0,
+            'y0': 10.0,
+            'x1': 10.0,
+            'y1': 100.0,
+            'x2': 25.0,
+            'y2': 0,
+            'x3': 0,
+            'y3': 0,
+        },
     ]
 
     # Words on page 1: "rare genetic disorder" with OCR noise
     page1_words = [
-        [1, 'rar3', 0, 50.0, 50.0, 120.0, 65.0, 0, 0, 0],
-        [1, 'genetic', 0, 130.0, 50.0, 220.0, 65.0, 0, 0, 0],
-        [1, 'd1sorder', 0, 230.0, 50.0, 330.0, 65.0, 0, 0, 0],
+        {
+            'page_idx': 1,
+            'word': 'rar3',
+            'x0': 0,
+            'y0': 50.0,
+            'x1': 50.0,
+            'y1': 120.0,
+            'x2': 65.0,
+            'y2': 0,
+            'x3': 0,
+            'y3': 0,
+        },
+        {
+            'page_idx': 1,
+            'word': 'genetic',
+            'x0': 0,
+            'y0': 130.0,
+            'x1': 50.0,
+            'y1': 220.0,
+            'x2': 65.0,
+            'y2': 0,
+            'x3': 0,
+            'y3': 0,
+        },
+        {
+            'page_idx': 1,
+            'word': 'd1sorder',
+            'x0': 0,
+            'y0': 230.0,
+            'x1': 50.0,
+            'y1': 330.0,
+            'x2': 65.0,
+            'y2': 0,
+            'x3': 0,
+            'y3': 0,
+        },
     ]
 
     # Words on page 2: "affects patients severely" with OCR noise
     page2_words = [
-        [2, 'Nature', 0, 50.0, 100.0, 130.0, 115.0, 0, 0, 0],
-        [2, 'Publishing', 0, 140.0, 100.0, 250.0, 115.0, 0, 0, 0],
-        [2, 'Group', 0, 260.0, 100.0, 360.0, 115.0, 0, 0, 0],
-        [2, 'affect5', 0, 50.0, 100.0, 130.0, 115.0, 0, 0, 0],
-        [2, 'p@tients', 0, 140.0, 100.0, 250.0, 115.0, 0, 0, 0],
-        [2, 'severity', 0, 260.0, 100.0, 360.0, 115.0, 0, 0, 0],
+        {
+            'page_idx': 2,
+            'word': 'Nature',
+            'x0': 0,
+            'y0': 50.0,
+            'x1': 100.0,
+            'y1': 130.0,
+            'x2': 115.0,
+            'y2': 0,
+            'x3': 0,
+            'y3': 0,
+        },
+        {
+            'page_idx': 2,
+            'word': 'Publishing',
+            'x0': 0,
+            'y0': 140.0,
+            'x1': 100.0,
+            'y1': 250.0,
+            'x2': 115.0,
+            'y2': 0,
+            'x3': 0,
+            'y3': 0,
+        },
+        {
+            'page_idx': 2,
+            'word': 'Group',
+            'x0': 0,
+            'y0': 260.0,
+            'x1': 100.0,
+            'y1': 360.0,
+            'x2': 115.0,
+            'y2': 0,
+            'x3': 0,
+            'y3': 0,
+        },
+        {
+            'page_idx': 2,
+            'word': 'affect5',
+            'x0': 0,
+            'y0': 50.0,
+            'x1': 100.0,
+            'y1': 130.0,
+            'x2': 115.0,
+            'y2': 0,
+            'x3': 0,
+            'y3': 0,
+        },
+        {
+            'page_idx': 2,
+            'word': 'p@tients',
+            'x0': 0,
+            'y0': 140.0,
+            'x1': 100.0,
+            'y1': 250.0,
+            'x2': 115.0,
+            'y2': 0,
+            'x3': 0,
+            'y3': 0,
+        },
+        {
+            'page_idx': 2,
+            'word': 'severity',
+            'x0': 0,
+            'y0': 260.0,
+            'x1': 100.0,
+            'y1': 360.0,
+            'x2': 115.0,
+            'y2': 0,
+            'x3': 0,
+            'y3': 0,
+        },
     ]
 
     words = padding_words + page1_words + page2_words
@@ -90,6 +203,7 @@ def test_noisy_spans_with_page_break(mock_pdf_words_with_page_break):
     words_file = pdf_words_json_path(mock_pdf_words_with_page_break)
     with open(words_file, 'r') as f:
         words = json.load(f)
+        words = [WordLoc(**w) for w in words]
 
     # Query with page break: "rare genetic disorder <SPLIT> affects patients severity"
     # Should match noisy OCR versions across page 1 and page 2
@@ -101,4 +215,4 @@ def test_noisy_spans_with_page_break(mock_pdf_words_with_page_break):
     expected_texts = ['rar3', 'genetic', 'd1sorder', 'affect5', 'p@tients', 'severity']
     expected_page_ids = [1, 1, 1, 2, 2, 2]
 
-    assert [w[1] for w in result] == expected_texts
+    assert [w.word for w in result] == expected_texts
