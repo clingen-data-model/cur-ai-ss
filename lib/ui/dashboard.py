@@ -3,6 +3,7 @@ import time
 import pandas as pd
 import requests
 import streamlit as st
+from streamlit_searchbox import st_searchbox
 
 from lib.core.environment import env
 from lib.models import PaperResp, PipelineStatus
@@ -19,6 +20,7 @@ left, center, right = st.columns([2, 7, 2])
 main = center.container()
 
 CURATIONS_DF_KEY = 'CURATIONS_DF_KEY'
+GENES_SEARCHBOX_KEY = 'GENES_SEARCHBOX_KEY'
 QUEUED_EXTRACTION_TEXT = 'Pending Extraction...'
 
 # Global Requests
@@ -53,6 +55,11 @@ def upload_paper_modal() -> None:
             options=[gene_resp.symbol for gene_resp in gene_resps],
             placeholder='Gene Symbol',
             index=None,
+        )
+        st_searchbox(
+            lambda x: print(x),
+            placeholder='Select a Gene',
+            key=GENES_SEARCHBOX_KEY,
         )
         submitted = st.form_submit_button('Submit')
         if submitted:
