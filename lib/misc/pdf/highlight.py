@@ -25,6 +25,7 @@ class GrobidAnnotation(BaseModel):
     color: str
     border: str = 'solid'
 
+
 def parse_hex_color(color_str: str) -> tuple[float, float, float]:
     if color_str.startswith('#'):
         hex_str = color_str.lstrip('#')
@@ -86,11 +87,13 @@ def merge_adjacent_polygons(
 def find_best_match(query: str, words: list[WordLoc]) -> list[WordLoc] | None:
     def get_aligner() -> PairwiseAligner:
         aligner = PairwiseAligner()
-        aligner.mode = 'local' # Smith-Waterman local alignment
-        aligner.match_score = 1.0 # Match/mismatch scoring
-        aligner.mismatch_score = -0.5 # Affine Gap penalties
-        aligner.open_gap_score = -2.5 # Larger Penalty to open a gap (allowing a single large page break)
-        aligner.extend_gap_score = -0.1 # Smaller Penalty to extend a gap
+        aligner.mode = 'local'  # Smith-Waterman local alignment
+        aligner.match_score = 1.0  # Match/mismatch scoring
+        aligner.mismatch_score = -0.5  # Affine Gap penalties
+        aligner.open_gap_score = (
+            -2.5
+        )  # Larger Penalty to open a gap (allowing a single large page break)
+        aligner.extend_gap_score = -0.1  # Smaller Penalty to extend a gap
         return aligner
 
     def normalize(token: str) -> str:
@@ -115,7 +118,11 @@ def find_best_match(query: str, words: list[WordLoc]) -> list[WordLoc] | None:
             start = end + 1
         return offsets
 
-    def get_words_from_alignment(aligned_blocks: list[tuple[int, int]], word_to_offset: list[tuple[int, int]], words: list[WordLoc]) -> list[WordLoc]:
+    def get_words_from_alignment(
+        aligned_blocks: list[tuple[int, int]],
+        word_to_offset: list[tuple[int, int]],
+        words: list[WordLoc],
+    ) -> list[WordLoc]:
         matched_words = []
         for pdf_start, pdf_end in aligned_blocks:
             for i, (start, end) in enumerate(word_to_offset):
