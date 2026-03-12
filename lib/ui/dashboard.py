@@ -9,7 +9,7 @@ from lib.core.environment import env
 from lib.models import PaperResp, PipelineStatus
 from lib.ui.api import (
     delete_paper,
-    get_genes,
+    search_genes,
     get_http_error_detail,
     get_papers,
     put_paper,
@@ -20,15 +20,15 @@ left, center, right = st.columns([2, 7, 2])
 main = center.container()
 
 CURATIONS_DF_KEY = 'CURATIONS_DF_KEY'
+DIALOG_STATE_KEY = 'DIALOG_STATE_KEY'
 GENES_SEARCHBOX_KEY = 'GENES_SEARCHBOX_KEY'
 QUEUED_EXTRACTION_TEXT = 'Pending Extraction...'
 
 # Global Requests
-gene_resps = get_genes()
-if not gene_resps:
+initial_genes = search_genes('A', limit=20)
+if not initial_genes:
     st.error('No genes found, cannot proceed.')
     st.stop()  # stop further execution
-
 
 def papers_df_on_change() -> None:
     # deleted_rows returns the
@@ -44,38 +44,39 @@ def papers_df_on_change() -> None:
 
 @st.dialog('Upload PDF and Select Gene')
 def upload_paper_modal() -> None:
-    with st.form('paper'):
-        uploaded_file = st.file_uploader(
-            'Upload a PDF',
-            type=['pdf'],
-            accept_multiple_files=False,
-        )
-        gene_symbol = st.selectbox(
-            'Select gene',
-            options=[gene_resp.symbol for gene_resp in gene_resps],
-            placeholder='Gene Symbol',
-            index=None,
-        )
-        st_searchbox(
-            lambda x: print(x),
-            placeholder='Select a Gene',
-            key=GENES_SEARCHBOX_KEY,
-        )
-        submitted = st.form_submit_button('Submit')
-        if submitted:
-            if not uploaded_file or not gene_symbol:
-                st.error('Both an uploaded PDF and a selected gene are required')
-                return
-            with st.spinner('Uploading PDF...'):
-                try:
-                    result = put_paper(uploaded_file, gene_symbol)
-                    st.success('Paper submitted successfully')
-                    time.sleep(0.5)
-                    st.rerun()
-                except requests.HTTPError as e:
-                    st.error(f'Upload failed: {e}, {get_http_error_detail(e)}')
-                except Exception as e:
-                    st.error(str(e))
+    st.session_state[DIALOG_STATE_KEY] = True
+    uploaded_file = st.file_uploader(
+        'Upload a PDF',
+        type=['pdf'],
+        accept_multiple_files=False,
+    )
+    # Note: https://github.com/m-wrzr/streamlit-searchbox/issues/20
+    # The original architecture here used a form submit... but st_searchbox
+    # does not integrate well with the streamlit form "batched updates". 
+    gene_symbol = st_searchbox(
+        search_function=lambda s: [g.symbol for g in search_genes(s)],
+        placeholder='Select a Gene Symbol...',
+        key=GENES_SEARCHBOX_KEY,
+        rerun_on_update=True,
+        rerun_scope='fragment',
+        default_options=[g.symbol for g in initial_genes],
+        debounce=250,
+    )
+    if st.button('Submit'):
+        if not uploaded_file or not gene_symbol:
+            st.error('Both an uploaded PDF and a selected gene are required')
+            return
+        with st.spinner('Uploading PDF...'):
+            try:
+                result = put_paper(uploaded_file, gene_symbol)
+                st.success('Paper submitted successfully')
+                time.sleep(0.5)
+                st.rerun()
+            except requests.HTTPError as e:
+                st.error(f'Upload failed: {e}, {get_http_error_detail(e)}')
+            except Exception as e:
+                st.error(str(e))
+            st.session_state.pop(DIALOG_STATE_KEY)
 
 
 def render_papers_df(papers_resps: list[PaperResp]) -> None:
@@ -168,5 +169,5 @@ with center:
             st.error(str(e))
 
     # Button that triggers the modal
-    if st.button('➕ Add New Curation', width='stretch'):
+    if st.button('➕ Add New Curation', width='stretch') or st.session_state.get(DIALOG_STATE_KEY):
         upload_paper_modal()
