@@ -28,7 +28,7 @@ def get_papers() -> list[PaperResp]:
 def search_genes(prefix: str, limit: int = 10) -> list[GeneResp]:
     resp = requests.get(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/genes/search',
-        params={'prefix': prefix, 'limit': limit},
+        params={'prefix': prefix, 'limit': str(limit)},
     )
     resp.raise_for_status()
     return TypeAdapter(list[GeneResp]).validate_python(resp.json())
