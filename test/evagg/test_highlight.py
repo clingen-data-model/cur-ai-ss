@@ -190,6 +190,153 @@ def mock_pdf_words_with_page_break(mocked_root_dir):
     return paper_id
 
 
+@pytest.fixture
+def mock_pdf_words_with_page_break(mocked_root_dir):
+    """Create mock PDF words JSON with spans on different pages separated by a break."""
+    paper_id = 'test_paper_page_break'
+
+    # Create mock words with WordLoc-compatible field names
+    # [page_idx, word, x0, y0, x1, y1, x2, y2, x3, y3]
+    padding_words = [
+        {
+            'page_idx': 1,
+            'word': 'Background',
+            'x0': 0,
+            'y0': 10.0,
+            'x1': 10.0,
+            'y1': 100.0,
+            'x2': 25.0,
+            'y2': 0,
+            'x3': 0,
+            'y3': 0,
+        },
+    ]
+
+    # Words on page 1: "rare genetic disorder" with OCR noise
+    page1_words = [
+        {
+            'page_idx': 1,
+            'word': 'rar3',
+            'x0': 0,
+            'y0': 50.0,
+            'x1': 50.0,
+            'y1': 120.0,
+            'x2': 65.0,
+            'y2': 0,
+            'x3': 0,
+            'y3': 0,
+        },
+        {
+            'page_idx': 1,
+            'word': 'genetic',
+            'x0': 0,
+            'y0': 130.0,
+            'x1': 50.0,
+            'y1': 220.0,
+            'x2': 65.0,
+            'y2': 0,
+            'x3': 0,
+            'y3': 0,
+        },
+        {
+            'page_idx': 1,
+            'word': 'd1sorder',
+            'x0': 0,
+            'y0': 230.0,
+            'x1': 50.0,
+            'y1': 330.0,
+            'x2': 65.0,
+            'y2': 0,
+            'x3': 0,
+            'y3': 0,
+        },
+    ]
+
+    # Words on page 2: "affects patients severely" with OCR noise
+    page2_words = [
+        {
+            'page_idx': 2,
+            'word': 'Nature',
+            'x0': 0,
+            'y0': 50.0,
+            'x1': 100.0,
+            'y1': 130.0,
+            'x2': 115.0,
+            'y2': 0,
+            'x3': 0,
+            'y3': 0,
+        },
+        {
+            'page_idx': 2,
+            'word': 'Publishing',
+            'x0': 0,
+            'y0': 140.0,
+            'x1': 100.0,
+            'y1': 250.0,
+            'x2': 115.0,
+            'y2': 0,
+            'x3': 0,
+            'y3': 0,
+        },
+        {
+            'page_idx': 2,
+            'word': 'Group',
+            'x0': 0,
+            'y0': 260.0,
+            'x1': 100.0,
+            'y1': 360.0,
+            'x2': 115.0,
+            'y2': 0,
+            'x3': 0,
+            'y3': 0,
+        },
+        {
+            'page_idx': 2,
+            'word': 'affect5',
+            'x0': 0,
+            'y0': 50.0,
+            'x1': 100.0,
+            'y1': 130.0,
+            'x2': 115.0,
+            'y2': 0,
+            'x3': 0,
+            'y3': 0,
+        },
+        {
+            'page_idx': 2,
+            'word': 'p@tients',
+            'x0': 0,
+            'y0': 140.0,
+            'x1': 100.0,
+            'y1': 250.0,
+            'x2': 115.0,
+            'y2': 0,
+            'x3': 0,
+            'y3': 0,
+        },
+        {
+            'page_idx': 2,
+            'word': 'severity',
+            'x0': 0,
+            'y0': 260.0,
+            'x1': 100.0,
+            'y1': 360.0,
+            'x2': 115.0,
+            'y2': 0,
+            'x3': 0,
+            'y3': 0,
+        },
+    ]
+
+    words = padding_words + page1_words + page2_words
+
+    words_file = pdf_words_json_path(paper_id)
+    words_file.parent.mkdir(parents=True, exist_ok=True)
+    words_file.write_text(json.dumps(words))
+
+    return paper_id
+
+
 def test_noisy_spans_with_page_break(mock_pdf_words_with_page_break):
     """Test finding best match for two noisy spans separated by page break.
 

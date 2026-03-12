@@ -85,10 +85,9 @@ def merge_adjacent_polygons(
 def find_best_match(query: str, words: list[WordLoc]) -> list[WordLoc] | None:
     """
     Finds the best match of a query in a PDF word list.
-    Supports <SPLIT> for evidence spanning multiple pages/sections.
 
     Args:
-        query: The text to search for, with optional <SPLIT> separators
+        query: The text to search for
         words: List of WordLoc entries from PDF extraction
     """
     window_size = 5
@@ -108,40 +107,31 @@ def find_best_match(query: str, words: list[WordLoc]) -> list[WordLoc] | None:
 
     n = len(words)
     normalized_words = [normalize(w.word) for w in words]
-    normalized_parts = [normalize(p.strip()) for p in query.split('<SPLIT>')]
-    if not normalized_parts:
+    normalized_query = normalize(query.strip())
+    if not normalized_query:
         return None
 
-    full_span = []
-    search_start = 0
+    q_len = len(normalized_query.split())
+    min_len, max_len = max(1, q_len - window_size), q_len + window_size
+    best_score, best_span = float(0), None
 
-    for normalized_part in normalized_parts:
-        q_len = len(normalized_part.split())
-        min_len, max_len = max(1, q_len - window_size), q_len + window_size
-        best_score, best_span = float(0), None
+    # Slide window over words
+    for i in range(n):
+        for span_len in range(min_len, max_len + 1):
+            j = i + span_len
+            if j > n:
+                break
+            span_text = ' '.join(normalized_words[i:j])
+            score = fuzz.ratio(span_text, normalized_query)
+            if score > best_score:
+                best_score = score
+                best_span = (i, j - 1)
 
-        # Slide window over remaining words
-        for i in range(search_start, n):
-            for span_len in range(min_len, max_len + 1):
-                j = i + span_len
-                if j > n:
-                    break
-                span_text = ' '.join(normalized_words[i:j])
-                score = fuzz.ratio(span_text, normalized_part)
-                if score > best_score:
-                    best_score = score
-                    best_span = (i, j - 1)
+    if best_span is None:
+        return None
 
-        if best_span is None:
-            # if any part cannot be matched, return None
-            return None
-
-        i, j = best_span
-        full_span.extend(words[i : j + 1])
-        # For next part, start searching after the current match
-        search_start = j + 1
-
-    return full_span
+    i, j = best_span
+    return words[i : j + 1]
 
 
 def words_to_grobid_annotations(

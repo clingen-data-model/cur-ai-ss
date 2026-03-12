@@ -26,6 +26,7 @@ dependencies = [
     "hpo-toolkit>=0.7.0",
     "ipython",
     "streamlit-pdf-viewer>=0.0.27",
+    "biopython>=1.86",
 ]
 
 [dependency-groups]
