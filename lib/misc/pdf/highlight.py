@@ -5,13 +5,12 @@ from pathlib import Path
 from typing import Any, cast
 
 import fitz
+from Bio.Align import PairwiseAligner
 from pydantic import BaseModel
 from rapidfuzz import fuzz
 
 from lib.misc.pdf.parse import Polygon, WordLoc
 from lib.misc.pdf.paths import pdf_highlighted_path, pdf_raw_path
-
-from Bio.Align import PairwiseAligner
 
 
 class GrobidAnnotation(BaseModel):
