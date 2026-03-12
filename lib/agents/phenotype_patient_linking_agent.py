@@ -98,11 +98,6 @@ separate elements of the list.
 Each evidence_contexts entry MUST normally be a single contiguous span of
 prose from the paper.
 
-However, the input paper text is derived from a PDF converted to Markdown.
-During this conversion, layout artifacts such as page headers, footers,
-figure captions, page numbers, or figure/table blocks may appear in the
-middle of otherwise continuous sentences.
-
 6. **onset**: Age or disease stage when phenotype occurred
    - Example: "infancy", "early childhood", "adult onset", "age 5"
 
