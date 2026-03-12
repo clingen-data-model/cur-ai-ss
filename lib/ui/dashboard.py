@@ -9,10 +9,10 @@ from lib.core.environment import env
 from lib.models import PaperResp, PipelineStatus
 from lib.ui.api import (
     delete_paper,
-    search_genes,
     get_http_error_detail,
     get_papers,
     put_paper,
+    search_genes,
 )
 
 st.set_page_config(page_title='Papers Dashboard', layout='wide')
@@ -29,6 +29,7 @@ initial_genes = search_genes('A', limit=20)
 if not initial_genes:
     st.error('No genes found, cannot proceed.')
     st.stop()  # stop further execution
+
 
 def papers_df_on_change() -> None:
     # deleted_rows returns the
@@ -52,7 +53,7 @@ def upload_paper_modal() -> None:
     )
     # Note: https://github.com/m-wrzr/streamlit-searchbox/issues/20
     # The original architecture here used a form submit... but st_searchbox
-    # does not integrate well with the streamlit form "batched updates". 
+    # does not integrate well with the streamlit form "batched updates".
     gene_symbol = st_searchbox(
         search_function=lambda s: [g.symbol for g in search_genes(s)],
         placeholder='Select a Gene Symbol...',
@@ -169,5 +170,7 @@ with center:
             st.error(str(e))
 
     # Button that triggers the modal
-    if st.button('➕ Add New Curation', width='stretch') or st.session_state.get(DIALOG_STATE_KEY):
+    if st.button('➕ Add New Curation', width='stretch') or st.session_state.get(
+        DIALOG_STATE_KEY
+    ):
         upload_paper_modal()
