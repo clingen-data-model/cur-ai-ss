@@ -6,6 +6,7 @@ import requests
 import streamlit as st
 
 from lib.agents.patient_extraction_agent import (
+    AffectedStatus,
     CountryCode,
     PatientInfo,
     PatientInfoExtractionOutput,
@@ -80,6 +81,30 @@ def render_patient(
                 ),
                 key=f'{key_prefix}-proband-status',
             )
+        )
+
+        # --- Affected Status
+        patient.affected_status = AffectedStatus(
+            st.selectbox(
+                'Affected Status',
+                [a.value for a in AffectedStatus],
+                index=(
+                    [a.value for a in AffectedStatus].index(
+                        patient.affected_status.value
+                    )
+                    if patient.affected_status
+                    else 0
+                ),
+                key=f'{key_prefix}-affected-status',
+            )
+        )
+
+        st.text_area(
+            'Affected Status Evidence',
+            (patient.affected_status_evidence_context or ''),
+            height=60,
+            disabled=True,
+            key=f'{key_prefix}-affected-status-evidence',
         )
 
         # --- Sex At Birth

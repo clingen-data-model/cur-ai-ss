@@ -13,6 +13,12 @@ class ProbandStatus(str, Enum):
     Unknown = 'Unknown'
 
 
+class AffectedStatus(str, Enum):
+    Affected = 'Affected'
+    Unaffected = 'Unaffected'
+    Unknown = 'Unknown'
+
+
 class SexAtBirth(str, Enum):
     Male = 'Male'
     Female = 'Female'
@@ -311,6 +317,7 @@ class PatientInfo(BaseModel):
     age_death: Optional[str]
     country_of_origin: CountryCode
     race_ethnicity: RaceEthnicity
+    affected_status: AffectedStatus
 
     # Evidence for each field
     identifier_evidence_context: Optional[str]
@@ -320,6 +327,7 @@ class PatientInfo(BaseModel):
     age_death_evidence_context: Optional[str]
     country_of_origin_evidence_context: Optional[str]
     race_ethnicity_evidence_context: Optional[str]
+    affected_status_evidence_context: Optional[str]
 
 
 # --- Output wrapper
@@ -389,6 +397,12 @@ Fields to extract (for each patient):
 - race/ethnicity:
   - Use enum values: African/African American, Latino/Admixed American, Ashkenazi Jewish, East Asian, Finnish, Non-Finnish European, South Asian, Middle Eastern, Amish, Other, Unknown
   - When the text contains a more specific subgroup of a listed category, normalize to the closest matching enum value.
+
+- affected_status:
+  - Use enum: Affected, Unaffected, Unknown
+  - Affected: the patient is reported to have the condition, phenotype, or disease under study.
+  - Unaffected: the patient is explicitly described as NOT having the condition (e.g., unaffected carrier, unaffected sibling).
+  - Unknown: affected status is not stated or cannot be determined.
 
 Guidelines:
 
