@@ -23,14 +23,17 @@ from lib.models import (
 from lib.ui.api import get_http_error_detail, grobid_annotations, highlight_pdf
 from lib.ui.paper.constants import CURRENT_ANNOTATIONS_KEY, HEADER_TABS, HEADER_TABS_KEY
 
-def highlight_and_switch_tab(paper_id, contexts, color, tab_index):
+
+def highlight_and_switch_tab(
+    paper_id: str, contexts: list[str], color: str, tab_index: int
+) -> None:
     try:
         current_annotations = grobid_annotations(
             paper_id,
             contexts,
             color,
         )
-        st.toast("PDF highlighted! Zooming to highlight.")
+        st.toast('PDF highlighted! Zooming to highlight.')
         st.session_state[HEADER_TABS_KEY] = HEADER_TABS[tab_index]
         st.session_state[CURRENT_ANNOTATIONS_KEY] = current_annotations
     except requests.HTTPError as e:
@@ -408,7 +411,7 @@ def _render_phenotypes_table(
                         key=f'{key_prefix}-highlight-confirm-{phenotype.text}',
                         type='secondary',
                         on_click=highlight_and_switch_tab,
-                        args=(paper_resp.id, phenotype.evidence_contexts, color, 0)
+                        args=(paper_resp.id, phenotype.evidence_contexts, color, 0),
                     )
 
 

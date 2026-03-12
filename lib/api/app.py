@@ -34,7 +34,6 @@ from lib.core.logging import setup_logging
 from lib.misc.pdf.highlight import (
     GrobidAnnotation,
     find_best_match,
-    get_page_heights,
     highlight_words_in_pdf,
     parse_hex_color,
     words_to_grobid_annotations,
@@ -248,7 +247,7 @@ def highlight_pdf(
     words_file = pdf_words_json_path(paper_id)
     with open(words_file, 'r') as f:
         words = json.load(f)
-        words = [WordLoc(*word) for word in words]
+        words = [WordLoc(**word) for word in words]
 
     # Process each query
     for query in request.queries:
@@ -264,7 +263,7 @@ def highlight_pdf(
         highlight_words_in_pdf(paper_id, matched_words, rgb_color)
 
 
-@app.get('/papers/{paper_id}/grobid-annotation', response_model=list[GrobidAnnotation])
+@app.post('/papers/{paper_id}/grobid-annotation', response_model=list[GrobidAnnotation])
 def grobid_annotation(
     paper_id: str,
     request: HighlightRequest,
@@ -287,14 +286,17 @@ def grobid_annotation(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
 
+    # Parse and validate color
+    try:
+        rgb_color = parse_hex_color(request.color)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
     # Load words from JSON file
     words_file = pdf_words_json_path(paper_id)
     with open(words_file, 'r') as f:
         words = json.load(f)
-        words = [WordLoc(*word) for word in words]
-
-    # Get page heights
-    page_heights = get_page_heights(paper_id)
+        words = [WordLoc(**word) for word in words]
 
     # Find matches for all queries and collect annotations
     all_annotations: list[GrobidAnnotation] = []
@@ -308,10 +310,9 @@ def grobid_annotation(
 
         # Convert to GROBID annotations
         annotations = words_to_grobid_annotations(
+            paper_id,
             matched_words,
-            page_heights,
-            color=request.color,
-            border='solid',
+            color=rgb_color,
         )
         all_annotations.extend(annotations)
 

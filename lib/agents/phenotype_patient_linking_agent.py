@@ -93,8 +93,8 @@ PHENOTYPE FIELD DEFINITIONS
 5. **evidence_contexts**: Additional context from the text (sentence or paragraph containing phenotype).
 This MUST be a single contiguous span of text from the paper.  Multiple mentions should be split
 into individual entries in this list.
-If the evidence spans a content break (indicated by a contextual discontinuity such as an abrupt topic shift, an incomplete sentence, or text that appears to continue from a different location), include `<SPLIT>` at the point where the break occurs.
-
+   MANDATORY: If the evidence_contexts spans a contextual discontinuity in the text— such as a topic change, paragraph break, abrupt sentence fragment, or a shift between patients— you MUST insert <SPLIT> at the point of discontinuity.   Do not omit <SPLIT> when such discontinuity exists. If the evidence is fully continuous (one coherent sentence or paragraph), do NOT insert <SPLIT>.
+   
 6. **onset**: Age or disease stage when phenotype occurred
    - Example: "infancy", "early childhood", "adult onset", "age 5"
 

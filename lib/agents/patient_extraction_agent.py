@@ -403,7 +403,8 @@ Guidelines:
      - The exact quoted text
      - The figure title
      - A brief explanation of why the text supports the extracted value.
-   - If the evidence spans a content break (indicated by a contextual discontinuity such as an abrupt topic shift, an incomplete sentence, or text that appears to continue from a different location), include `<SPLIT>` at the point where the break occurs.
+   - MANDATORY: If the evidence spans a contextual discontinuity in the text— such as a topic change, paragraph break, page break, abrupt sentence fragment, or a shift between patients— you MUST insert <SPLIT> at the point of discontinuity.
+                Do not omit <SPLIT> when such discontinuity exists. If the evidence is fully continuous (one coherent sentence or paragraph), do NOT insert <SPLIT>.
 8. Return null for any missing fields.
 9. Each patient must have an identifier; if not stated, skip that patient.
 10. If no specific human patients are identified, or you are uncertain, respond only with:

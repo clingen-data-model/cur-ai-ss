@@ -152,7 +152,7 @@ Evidence Handling:
 - hgvs_p_inference_evidence_context: Exact text used to justify any inferred hgvs.p, if applicable.
 - Copy all evidence text verbatim.
 - Evidence must be directly linked to each claim and not from different sections.
-- If the evidence spans a content break (indicated by a contextual discontinuity such as an abrupt topic shift, an incomplete sentence, or text that appears to continue from a different location), include `<SPLIT>` at the point where the break occurs.
+- MANDATORY: If the evidence spans a contextual discontinuity in the text— such as a topic change, paragraph break, abrupt sentence fragment, or a shift between patients— you MUST insert <SPLIT> at the point of discontinuity. Do not omit <SPLIT> when such discontinuity exists. If the evidence is fully continuous (one coherent sentence or paragraph), do NOT insert <SPLIT>.
 - If no explicit evidence is available for a field, return null.
 
 Output:

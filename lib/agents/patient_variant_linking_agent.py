@@ -334,7 +334,7 @@ The evidence_context must:
 
 Do NOT paraphrase or summarize
 Use exact quoted text from the paper
-If the evidence spans a content break (indicated by a contextual discontinuity such as an abrupt topic shift, an incomplete sentence, or text that appears to continue from a different location), include `<SPLIT>` at the point where the break occurs.
+MANDATORY: If the evidence spans a contextual discontinuity in the text— such as a topic change, paragraph break, abrupt sentence fragment, or a shift between patients— you MUST insert <SPLIT> at the point of discontinuity. Do not omit <SPLIT> when such discontinuity exists. If the evidence is fully continuous (one coherent sentence or paragraph), do NOT insert <SPLIT>.
 
 ---------------------------------------------------
 VALIDATION

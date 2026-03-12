@@ -4,8 +4,8 @@ import streamlit.runtime.uploaded_file_manager
 from pydantic import TypeAdapter
 
 from lib.core.environment import env
-from lib.models import GeneResp, PaperResp, PaperUpdateRequest, PipelineStatus
 from lib.misc.pdf.highlight import GrobidAnnotation
+from lib.models import GeneResp, PaperResp, PaperUpdateRequest, PipelineStatus
 
 
 def get_http_error_detail(e: requests.HTTPError) -> str:
@@ -84,10 +84,12 @@ def highlight_pdf(paper_id: str, queries: list[str] | str, color: str) -> None:
     resp.raise_for_status()
 
 
-def grobid_annotations(paper_id: str, queries: list[str] | str, color: str) -> None:
+def grobid_annotations(
+    paper_id: str, queries: list[str] | str, color: str
+) -> list[GrobidAnnotation]:
     if isinstance(queries, str):
         queries = [queries]
-    resp = requests.get(
+    resp = requests.post(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/grobid-annotation',
         json={'queries': queries, 'color': color},
     )
