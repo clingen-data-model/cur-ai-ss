@@ -17,7 +17,6 @@ dependencies = [
     "openai-agents==0.7.0",
     # pdf parsing
     "docling==2.64.1",
-    "streamlit[pdf]>=1.55.0",
     "fastapi>=0.126.0",
     "sqlalchemy>=2.0.45",
     "uvicorn>=0.38.0",
@@ -26,6 +25,8 @@ dependencies = [
     "alembic>=1.18.4",
     "hpo-toolkit>=0.7.0",
     "ipython",
+    "streamlit-pdf-viewer>=0.0.27",
+    "biopython>=1.86",
 ]
 
 [dependency-groups]

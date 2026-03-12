@@ -1,4 +1,5 @@
 import json
+import time
 
 import pandas as pd
 import requests
@@ -19,7 +20,24 @@ from lib.models import (
     PhenotypeLinkingOutput,
     PipelineStatus,
 )
-from lib.ui.api import get_http_error_detail, highlight_pdf
+from lib.ui.api import get_http_error_detail, grobid_annotations, highlight_pdf
+from lib.ui.paper.constants import CURRENT_ANNOTATIONS_KEY, HEADER_TABS, HEADER_TABS_KEY
+
+
+def highlight_and_switch_tab(
+    paper_id: str, contexts: list[str], color: str, tab_index: int
+) -> None:
+    try:
+        current_annotations = grobid_annotations(
+            paper_id,
+            contexts,
+            color,
+        )
+        st.toast('PDF highlighted! Zooming to highlight.')
+        st.session_state[HEADER_TABS_KEY] = HEADER_TABS[tab_index]
+        st.session_state[CURRENT_ANNOTATIONS_KEY] = current_annotations
+    except requests.HTTPError as e:
+        st.error(f'Failed to highlight: {get_http_error_detail(e)}')
 
 
 def render_patient(
@@ -42,7 +60,7 @@ def render_patient(
 
         st.text_area(
             'Patient Identifier Evidence',
-            (patient.identifier_evidence or '').replace('<SPLIT>', ''),
+            (patient.identifier_evidence_context or ''),
             height=60,
             disabled=True,
             key=f'{key_prefix}-identifier-evidence',
@@ -80,7 +98,7 @@ def render_patient(
 
         st.text_area(
             'Sex At Birth Evidence',
-            (patient.sex_evidence or '').replace('<SPLIT>', ''),
+            (patient.sex_evidence_context or ''),
             height=60,
             disabled=True,
             key=f'{key_prefix}-sex-evidence',
@@ -97,7 +115,7 @@ def render_patient(
             )
             st.text_area(
                 'Age at Diagnosis Evidence',
-                (patient.age_diagnosis_evidence or '').replace('<SPLIT>', ''),
+                (patient.age_diagnosis_evidence_context or ''),
                 height=60,
                 disabled=True,
                 key=f'{key_prefix}-age-diagnosis-evidence',
@@ -111,7 +129,7 @@ def render_patient(
             )
             st.text_area(
                 'Age at Report Evidence',
-                (patient.age_report_evidence or '').replace('<SPLIT>', ''),
+                (patient.age_report_evidence_context or ''),
                 height=60,
                 disabled=True,
                 key=f'{key_prefix}-age-report-evidence',
@@ -125,7 +143,7 @@ def render_patient(
             )
             st.text_area(
                 'Age at Death Evidence',
-                (patient.age_death_evidence or '').replace('<SPLIT>', ''),
+                (patient.age_death_evidence_context or ''),
                 height=60,
                 disabled=True,
                 key=f'{key_prefix}-age-death-evidence',
@@ -152,7 +170,7 @@ def render_patient(
 
             st.text_area(
                 'Country of Origin Evidence',
-                (patient.country_of_origin_evidence or '').replace('<SPLIT>', ''),
+                (patient.country_of_origin_evidence_context or ''),
                 height=60,
                 disabled=True,
                 key=f'{key_prefix}-country-evidence',
@@ -176,7 +194,7 @@ def render_patient(
 
             st.text_area(
                 'Race/Ethnicity Evidence',
-                (patient.race_ethnicity_evidence or '').replace('<SPLIT>', ''),
+                (patient.race_ethnicity_evidence_context or ''),
                 height=60,
                 disabled=True,
                 key=f'{key_prefix}-race-evidence',
@@ -364,7 +382,7 @@ def _render_phenotypes_table(
             if phenotype.evidence_contexts:
                 with st.expander('Evidence Context', expanded=False):
                     for i, note in enumerate(phenotype.evidence_contexts, 1):
-                        st.markdown(f'**Note {i}:** {note.replace("<SPLIT>", "")}')
+                        st.markdown(f'**Note {i}:** {note}')
 
         # HPO matching notes
         with col2:
@@ -388,20 +406,13 @@ def _render_phenotypes_table(
                     color = st.color_picker(
                         'Choose Color:', label_visibility='collapsed', key=color_key
                     )
-                    if st.button(
+                    st.button(
                         'Highlight',
                         key=f'{key_prefix}-highlight-confirm-{phenotype.text}',
                         type='secondary',
-                    ):
-                        try:
-                            highlight_pdf(
-                                paper_resp.id,
-                                phenotype.evidence_contexts,
-                                color,
-                            )
-                            st.success('PDF highlighted! Reload to see changes.')
-                        except requests.HTTPError as e:
-                            st.error(f'Failed to highlight: {get_http_error_detail(e)}')
+                        on_click=highlight_and_switch_tab,
+                        args=(paper_resp.id, phenotype.evidence_contexts, color, 0),
+                    )
 
 
 def render_patients_tab(selected_patient_id: int | None) -> None:

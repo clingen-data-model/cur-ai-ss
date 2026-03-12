@@ -313,13 +313,13 @@ class PatientInfo(BaseModel):
     race_ethnicity: RaceEthnicity
 
     # Evidence for each field
-    identifier_evidence: Optional[str]
-    sex_evidence: Optional[str]
-    age_diagnosis_evidence: Optional[str]
-    age_report_evidence: Optional[str]
-    age_death_evidence: Optional[str]
-    country_of_origin_evidence: Optional[str]
-    race_ethnicity_evidence: Optional[str]
+    identifier_evidence_context: Optional[str]
+    sex_evidence_context: Optional[str]
+    age_diagnosis_evidence_context: Optional[str]
+    age_report_evidence_context: Optional[str]
+    age_death_evidence_context: Optional[str]
+    country_of_origin_evidence_context: Optional[str]
+    race_ethnicity_evidence_context: Optional[str]
 
 
 # --- Output wrapper
@@ -403,7 +403,7 @@ Guidelines:
      - The exact quoted text
      - The figure title
      - A brief explanation of why the text supports the extracted value.
-   - If the evidence spans a content break (indicated by a contextual discontinuity such as an abrupt topic shift, an incomplete sentence, or text that appears to continue from a different location), include `<SPLIT>` at the point where the break occurs.
+
 8. Return null for any missing fields.
 9. Each patient must have an identifier; if not stated, skip that patient.
 10. If no specific human patients are identified, or you are uncertain, respond only with:

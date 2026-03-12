@@ -93,7 +93,7 @@ You are given:
    Each patient includes:
       - patient_id (integer index in list)
       - identifier (e.g., "Patient 1", "Proband", "II-3", etc.)
-      - identifier_evidence (text snippet where patient is described)
+      - identifier_evidence_context (text snippet where patient is described)
 
 Your task:
 
@@ -334,7 +334,6 @@ The evidence_context must:
 
 Do NOT paraphrase or summarize
 Use exact quoted text from the paper
-If the evidence spans a content break (indicated by a contextual discontinuity such as an abrupt topic shift, an incomplete sentence, or text that appears to continue from a different location), include `<SPLIT>` at the point where the break occurs.
 
 ---------------------------------------------------
 VALIDATION

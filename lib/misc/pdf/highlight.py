@@ -1,13 +1,28 @@
 import math
-from pathlib import Path
 import re
+from collections import defaultdict
+from pathlib import Path
 from typing import Any, cast
 
 import fitz
+from Bio.Align import PairwiseAligner
+from pydantic import BaseModel
 from rapidfuzz import fuzz
 
-from lib.misc.pdf.parse import WordLoc
+from lib.misc.pdf.parse import Polygon, WordLoc
 from lib.misc.pdf.paths import pdf_highlighted_path, pdf_raw_path
+
+
+class GrobidAnnotation(BaseModel):
+    """GROBID-style coordinate with top-left origin (y increases downward)."""
+
+    page: int
+    x: float
+    y: float
+    width: float
+    height: float
+    color: str
+    border: str = 'solid'
 
 
 def parse_hex_color(color_str: str) -> tuple[float, float, float]:
@@ -25,16 +40,60 @@ def parse_hex_color(color_str: str) -> tuple[float, float, float]:
     raise ValueError(f'Invalid color: "{color_str}". Use a hex code (e.g., "#FF0000")')
 
 
-def find_best_match(query: str, words: list[WordLoc]) -> list[WordLoc] | None:
+def merge_adjacent_polygons(
+    words: list[WordLoc],
+) -> list[Polygon]:
     """
-    Finds the best match of a query in a PDF word list.
-    Supports <SPLIT> for evidence spanning multiple pages/sections.
+    Merge adjacent polygons if they are aligned and close together.
 
     Args:
-        query: The text to search for, with optional <SPLIT> separators
-        words: List of WordLoc entries from PDF extraction
+        words: List of WordLoc objects (each with 4 corner coordinates)
+
+    Returns:
+        List of merged Polygon objects
     """
-    window_size = 5
+    if not words:
+        return []
+
+    y_tol, x_tol = 2, 15
+    merged: list[Polygon] = [words[0].to_polygon()]
+
+    for word in words[1:]:
+        prev = merged[-1]
+        same_top = abs(prev.y0 - word.y0) < y_tol
+        same_bottom = abs(prev.y3 - word.y3) < y_tol
+        small_gap = (word.x0 - prev.x1) < x_tol
+
+        if same_top and same_bottom and small_gap:
+            # Merge: extend previous polygon's right edge to current word's right edge
+            merged[-1] = Polygon(
+                x0=prev.x0,
+                y0=prev.y0,
+                x1=word.x1,
+                y1=word.y1,
+                x2=word.x2,
+                y2=word.y2,
+                x3=prev.x3,
+                y3=prev.y3,
+            )
+        else:
+            # Add as separate polygon
+            merged.append(word.to_polygon())
+
+    return merged
+
+
+def find_best_match(query: str, words: list[WordLoc]) -> list[WordLoc] | None:
+    def get_aligner() -> PairwiseAligner:
+        aligner = PairwiseAligner()
+        aligner.mode = 'local'  # Smith-Waterman local alignment
+        aligner.match_score = 1.0  # Match/mismatch scoring
+        aligner.mismatch_score = -0.5  # Affine Gap penalties
+        aligner.open_gap_score = (
+            -2.5
+        )  # Larger Penalty to open a gap (allowing a single large page break)
+        aligner.extend_gap_score = -0.1  # Smaller Penalty to extend a gap
+        return aligner
 
     def normalize(token: str) -> str:
         """Normalize tokens to improve fuzzy matching."""
@@ -49,42 +108,83 @@ def find_best_match(query: str, words: list[WordLoc]) -> list[WordLoc] | None:
         token = re.sub(r'\s+', ' ', token)
         return token
 
-    n = len(words)
-    normalized_words = [normalize(w.word) for w in words]
-    normalized_parts = [normalize(p.strip()) for p in query.split('<SPLIT>')]
-    if not normalized_parts:
+    def get_word_to_offset(normalized_words: list[str]) -> list[tuple[int, int]]:
+        offsets = []
+        start = 0
+        for normalized_word in normalized_words:
+            end = start + len(normalized_word)
+            offsets.append((start, end))
+            start = end + 1
+        return offsets
+
+    def get_words_from_alignment(
+        aligned_blocks: list[tuple[int, int]],
+        word_to_offset: list[tuple[int, int]],
+        words: list[WordLoc],
+    ) -> list[WordLoc]:
+        matched_words = []
+        for pdf_start, pdf_end in aligned_blocks:
+            for i, (start, end) in enumerate(word_to_offset):
+                if end > pdf_start and start < pdf_end:
+                    matched_words.append(words[i])
+        return matched_words
+
+    n_words, n_query = len(words), len(query.split())
+    if n_words == 0 or n_query == 0:
         return None
 
-    full_span = []
-    search_start = 0
+    normalized_query = normalize(query)
+    normalized_words = [normalize(w.word) for w in words]
+    word_to_offset = get_word_to_offset(normalized_words)
+    aligner = get_aligner()
+    alignments = aligner.align(normalized_query, ' '.join(normalized_words))
+    if not alignments:
+        return None
+    return get_words_from_alignment(alignments[0].aligned[1], word_to_offset, words)
 
-    for normalized_part in normalized_parts:
-        q_len = len(normalized_part.split())
-        min_len, max_len = max(1, q_len - window_size), q_len + window_size
-        best_score, best_span = float(0), None
 
-        # Slide window over remaining words
-        for i in range(search_start, n):
-            for span_len in range(min_len, max_len + 1):
-                j = i + span_len
-                if j > n:
-                    break
-                span_text = ' '.join(normalized_words[i:j])
-                score = fuzz.ratio(span_text, normalized_part)
-                if score > best_score:
-                    best_score = score
-                    best_span = (i, j - 1)
+def words_to_grobid_annotations(
+    paper_id: str,
+    words: list[WordLoc],
+    color: tuple[float, float, float],
+) -> list[GrobidAnnotation]:
+    pdf_path = pdf_highlighted_path(paper_id)
+    pdf_doc = fitz.open(pdf_path)
 
-        if best_span is None:
-            # if any part cannot be matched, return None
-            return None
+    words_by_page: dict[int, list[WordLoc]] = defaultdict(list)
+    for word in words:
+        words_by_page[int(word.page_idx)].append(word)
 
-        i, j = best_span
-        full_span.extend(words[i : j + 1])
-        # For next part, start searching after the current match
-        search_start = j + 1
+    annotations = []
+    for page_idx, page_words in words_by_page.items():
+        page = pdf_doc[page_idx - 1]  # convert 1-based → 0-based
+        page_height = page.rect.height
 
-    return full_span
+        # Merge adjacent words on this page into polygons
+        merged_polygons = merge_adjacent_polygons(page_words)
+
+        for polygon in merged_polygons:
+            # Convert to screen coordinates (bottom-left origin, using bottom-left point)
+            x = polygon.x3
+            y = page_height - polygon.y3
+            width = polygon.x1 - polygon.x0
+            height = polygon.y2 - polygon.y1
+
+            annotations.append(
+                GrobidAnnotation(
+                    page=page_idx,
+                    x=x,
+                    y=y,
+                    width=width,
+                    height=height,
+                    color=f'rgb({color[0] * 255.0},{color[1] * 255.0},{color[2] * 255.0})',
+                    border='solid',
+                )
+            )
+
+    pdf_doc.close()
+
+    return annotations
 
 
 def highlight_words_in_pdf(
@@ -92,70 +192,33 @@ def highlight_words_in_pdf(
     words: list[WordLoc],
     rgb_color: tuple[float, float, float],
 ) -> Path:
-    """
-    Highlight words in a PDF at their bounding box locations.
-
-    Args:
-        paper_id: The paper ID to identify the PDF file
-        words: List of WordLoc entries from PDF extraction
-        rgb_color: RGB tuple with values 0-1
-
-    Returns:
-        Path to the highlighted PDF file
-    """
-
     # Load PDF
     pdf_path = pdf_highlighted_path(paper_id)
     pdf_doc = fitz.open(pdf_path)
 
     # Group words by page
-    words_by_page: dict[int, list[WordLoc]] = {}
+    words_by_page: dict[int, list[WordLoc]] = defaultdict(list)
     for word in words:
-        page_idx = int(word.page_idx)
-        if page_idx not in words_by_page:
-            words_by_page[page_idx] = []
-        words_by_page[page_idx].append(word)
+        words_by_page[int(word.page_idx)].append(word)
 
     # Highlight words on each page
     for page_idx, page_words in words_by_page.items():
         page = pdf_doc[page_idx - 1]  # convert 1-based → 0-based
         page_height = page.rect.height
-        prev_points = None
-        for word in page_words:
+
+        # Merge adjacent polygons
+        merged_polygons = merge_adjacent_polygons(page_words)
+
+        # Draw all merged polygons
+        for polygon in merged_polygons:
             points = [
-                (word.x0, page_height - word.y0),  # top-left
-                (word.x1, page_height - word.y1),  # top-right
-                (word.x2, page_height - word.y2),  # bottom-right
-                (word.x3, page_height - word.y3),  # bottom-left
+                (polygon.x0, page_height - polygon.y0),
+                (polygon.x1, page_height - polygon.y1),
+                (polygon.x2, page_height - polygon.y2),
+                (polygon.x3, page_height - polygon.y3),
             ]
-            if prev_points is None:
-                prev_points = points
-                continue
-
-            # coordinate checks
-            y_tol, x_tol = 2, 15
-            same_top = abs(prev_points[0][1] - points[0][1]) < y_tol
-            same_bottom = abs(prev_points[3][1] - points[3][1]) < y_tol
-            small_gap = (points[0][0] - prev_points[1][0]) < x_tol
-            if same_top and same_bottom and small_gap:
-                # merge polygons
-                prev_points = [
-                    prev_points[0],  # top-left
-                    points[1],  # new top-right
-                    points[2],  # new bottom-right
-                    prev_points[3],  # bottom-left
-                ]
-            else:
-                # draw previous merged polygon
-                page.draw_polyline(
-                    prev_points, color=rgb_color, fill=rgb_color, fill_opacity=0.3
-                )
-                prev_points = points
-
-        # draw final merged polygon
-        if prev_points is not None:
             page.draw_polyline(
-                prev_points, color=rgb_color, fill=rgb_color, fill_opacity=0.3
+                points, color=rgb_color, fill=rgb_color, fill_opacity=0.3
             )
 
     # Save highlighted PDF
