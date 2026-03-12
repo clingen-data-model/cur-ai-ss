@@ -91,10 +91,37 @@ PHENOTYPE FIELD DEFINITIONS
      - One for "mother" as patient with family_history=false
 
 5. **evidence_contexts**: Additional context from the text (sentence or paragraph containing phenotype).
-This MUST be a single contiguous span of text from the paper.  Multiple mentions should be split
-into individual entries in this list.
-   MANDATORY: If the evidence_contexts spans a contextual discontinuity in the text— such as a topic change, paragraph break, abrupt sentence fragment, or a shift between patients— you MUST insert <SPLIT> at the point of discontinuity.   Do not omit <SPLIT> when such discontinuity exists. If the evidence is fully continuous (one coherent sentence or paragraph), do NOT insert <SPLIT>.
-   
+
+If there are multiple mentions that provide evidence context, include them as
+separate elements of the list.
+
+Each evidence_contexts entry MUST normally be a single contiguous span of
+prose from the paper.
+
+However, the input paper text is derived from a PDF converted to Markdown.
+During this conversion, layout artifacts such as page headers, footers,
+figure captions, page numbers, or figure/table blocks may appear in the
+middle of otherwise continuous sentences.
+
+MANDATORY RULE FOR <SPLIT>:
+
+If the evidence span crosses one of these layout artifacts, you MUST insert
+<SPLIT> at the point where the artifact interrupts the sentence.
+
+Examples of layout artifacts include:
+- page headers or footers
+- page numbers
+- figure or table captions
+- figure/table blocks
+- reference markers inserted mid-sentence
+- any text that clearly does not belong to the narrative sentence
+
+Insert <SPLIT> exactly where the narrative text resumes after the artifact.
+
+IMPORTANT:
+- Do NOT insert <SPLIT> for normal multi-sentence prose.
+- Only insert <SPLIT> when a layout artifact interrupts the narrative text.
+
 6. **onset**: Age or disease stage when phenotype occurred
    - Example: "infancy", "early childhood", "adult onset", "age 5"
 
