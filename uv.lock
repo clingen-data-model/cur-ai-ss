@@ -168,6 +168,7 @@ dependencies = [
     { name = "requests" },
     { name = "sqlalchemy" },
     { name = "streamlit-pdf-viewer" },
+    { name = "streamlit-searchbox" },
     { name = "uvicorn" },
 ]
 
@@ -199,6 +200,7 @@ requires-dist = [
     { name = "requests", specifier = ">=2.32.5" },
     { name = "sqlalchemy", specifier = ">=2.0.45" },
     { name = "streamlit-pdf-viewer", specifier = ">=0.0.27" },
+    { name = "streamlit-searchbox", specifier = ">=0.1.24" },
     { name = "uvicorn", specifier = ">=0.38.0" },
 ]
 
@@ -2171,6 +2173,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/e5/22/59f714ab28357ce29eac8f61295d36f334e49849bd42db3c6faa55073087/streamlit_pdf_viewer-0.0.27.tar.gz", hash = "sha256:72985d30cac26650e126f31270ed3e8aa7ee87f277464271e0c323208c856a37", size = 2276543, upload-time = "2026-01-09T17:35:29.333Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/3e/d7/e89f9b86d1da41b9151d8b58761ef8c73994225fe091aa64b65056167d98/streamlit_pdf_viewer-0.0.27-py3-none-any.whl", hash = "sha256:e10bb1cfe8e7e7fd6dd0b095e0422555d82537b7abe0cbcddf29533f3382933f", size = 2316344, upload-time = "2026-01-09T17:35:27.773Z" },
+]
+
+[[package]]
+name = "streamlit-searchbox"
+version = "0.1.24"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "streamlit" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/46/c1/b037f76f7d6da73af6311720df3c56ed534616572da4261c0dea1e37110e/streamlit_searchbox-0.1.24.tar.gz", hash = "sha256:b6009c368812feea0dd211f03c9cc5cc85b540b0d0a57165bb2885f67d6a8a3d", size = 844522, upload-time = "2025-12-23T07:44:55.367Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4e/4d/cd7f4ca601f700b88a2ddf9b4dff9595ca15c77ab1c786b894d0668fe319/streamlit_searchbox-0.1.24-py3-none-any.whl", hash = "sha256:52ebae43acf8a5c7b6a0e681efc58170c880da308c846dd2db907da84633e468", size = 847934, upload-time = "2025-12-23T07:44:53.885Z" },
 ]
 
 [[package]]

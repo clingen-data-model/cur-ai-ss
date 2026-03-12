@@ -25,9 +25,11 @@ def get_papers() -> list[PaperResp]:
     return TypeAdapter(list[PaperResp]).validate_python(resp.json())
 
 
-@st.cache_data(ttl='1d')
-def get_genes() -> list[GeneResp]:
-    resp = requests.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/genes')
+def search_genes(prefix: str, limit: int = 10) -> list[GeneResp]:
+    resp = requests.get(
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/genes/search',
+        params={'prefix': prefix, 'limit': str(limit)},
+    )
     resp.raise_for_status()
     return TypeAdapter(list[GeneResp]).validate_python(resp.json())
 

@@ -247,3 +247,31 @@ def test_delete_paper(client, test_pdf, db_session, seeded_genes):
     assert response3.status_code == 204
     result = db_session.execute(select(func.count(PaperDB.id)))
     assert result.scalar_one() == 0
+
+
+def test_search_genes_by_prefix(client, seeded_genes):
+    # Test searching for genes starting with 'BR'
+    response = client.get('/genes/search?prefix=BR')
+    assert response.status_code == 200
+    genes = response.json()
+    assert len(genes) == 2
+    assert all(gene['symbol'].startswith('BR') for gene in genes)
+    symbols = {gene['symbol'] for gene in genes}
+    assert symbols == {'BRCA1', 'BRCA2'}
+
+
+def test_search_genes_by_prefix_single_result(client, seeded_genes):
+    # Test searching for genes starting with 'TP'
+    response = client.get('/genes/search?prefix=TP')
+    assert response.status_code == 200
+    genes = response.json()
+    assert len(genes) == 1
+    assert genes[0]['symbol'] == 'TP53'
+
+
+def test_search_genes_by_prefix_no_match(client, seeded_genes):
+    # Test searching for genes with no matches
+    response = client.get('/genes/search?prefix=XYZ')
+    assert response.status_code == 200
+    genes = response.json()
+    assert len(genes) == 0
