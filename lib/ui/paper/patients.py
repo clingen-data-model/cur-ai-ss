@@ -60,7 +60,7 @@ def render_patient(
 
         st.text_area(
             'Patient Identifier Evidence',
-            (patient.identifier_evidence or '').replace('<SPLIT>', ''),
+            (patient.identifier_evidence_context or '').replace('<SPLIT>', ''),
             height=60,
             disabled=True,
             key=f'{key_prefix}-identifier-evidence',
@@ -98,7 +98,7 @@ def render_patient(
 
         st.text_area(
             'Sex At Birth Evidence',
-            (patient.sex_evidence or '').replace('<SPLIT>', ''),
+            (patient.sex_evidence_context or '').replace('<SPLIT>', ''),
             height=60,
             disabled=True,
             key=f'{key_prefix}-sex-evidence',
@@ -115,7 +115,7 @@ def render_patient(
             )
             st.text_area(
                 'Age at Diagnosis Evidence',
-                (patient.age_diagnosis_evidence or '').replace('<SPLIT>', ''),
+                (patient.age_diagnosis_evidence_context or '').replace('<SPLIT>', ''),
                 height=60,
                 disabled=True,
                 key=f'{key_prefix}-age-diagnosis-evidence',
@@ -129,7 +129,7 @@ def render_patient(
             )
             st.text_area(
                 'Age at Report Evidence',
-                (patient.age_report_evidence or '').replace('<SPLIT>', ''),
+                (patient.age_report_evidence_context or '').replace('<SPLIT>', ''),
                 height=60,
                 disabled=True,
                 key=f'{key_prefix}-age-report-evidence',
@@ -143,7 +143,7 @@ def render_patient(
             )
             st.text_area(
                 'Age at Death Evidence',
-                (patient.age_death_evidence or '').replace('<SPLIT>', ''),
+                (patient.age_death_evidence_context or '').replace('<SPLIT>', ''),
                 height=60,
                 disabled=True,
                 key=f'{key_prefix}-age-death-evidence',
@@ -170,7 +170,7 @@ def render_patient(
 
             st.text_area(
                 'Country of Origin Evidence',
-                (patient.country_of_origin_evidence or '').replace('<SPLIT>', ''),
+                (patient.country_of_origin_evidence_context or '').replace('<SPLIT>', ''),
                 height=60,
                 disabled=True,
                 key=f'{key_prefix}-country-evidence',
@@ -194,7 +194,7 @@ def render_patient(
 
             st.text_area(
                 'Race/Ethnicity Evidence',
-                (patient.race_ethnicity_evidence or '').replace('<SPLIT>', ''),
+                (patient.race_ethnicity_evidence_context or '').replace('<SPLIT>', ''),
                 height=60,
                 disabled=True,
                 key=f'{key_prefix}-race-evidence',

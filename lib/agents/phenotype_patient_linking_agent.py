@@ -20,7 +20,7 @@ You are given:
    Each patient includes:
       - patient_id (integer index in list)
       - identifier (e.g., "Patient 1", "Proband", "II-3", etc.)
-      - identifier_evidence (text snippet where patient is described)
+      - identifier_evidence_context (text snippet where patient is described)
 
 Your task:
 
