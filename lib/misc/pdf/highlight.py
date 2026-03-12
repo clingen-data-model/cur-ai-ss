@@ -11,6 +11,8 @@ from rapidfuzz import fuzz
 from lib.misc.pdf.parse import Polygon, WordLoc
 from lib.misc.pdf.paths import pdf_highlighted_path, pdf_raw_path
 
+from Bio.Align import PairwiseAligner
+
 
 class GrobidAnnotation(BaseModel):
     """GROBID-style coordinate with top-left origin (y increases downward)."""
@@ -22,7 +24,6 @@ class GrobidAnnotation(BaseModel):
     height: float
     color: str
     border: str = 'solid'
-
 
 def parse_hex_color(color_str: str) -> tuple[float, float, float]:
     if color_str.startswith('#'):
@@ -83,14 +84,14 @@ def merge_adjacent_polygons(
 
 
 def find_best_match(query: str, words: list[WordLoc]) -> list[WordLoc] | None:
-    """
-    Finds the best match of a query in a PDF word list.
-
-    Args:
-        query: The text to search for
-        words: List of WordLoc entries from PDF extraction
-    """
-    window_size = 5
+    def get_aligner() -> PairwiseAligner:
+        aligner = PairwiseAligner()
+        aligner.mode = 'local' # Smith-Waterman local alignment
+        aligner.match_score = 1.0 # Match/mismatch scoring
+        aligner.mismatch_score = -0.5 # Affine Gap penalties
+        aligner.open_gap_score = -2.5 # Larger Penalty to open a gap (allowing a single large page break)
+        aligner.extend_gap_score = -0.1 # Smaller Penalty to extend a gap
+        return aligner
 
     def normalize(token: str) -> str:
         """Normalize tokens to improve fuzzy matching."""
@@ -105,33 +106,35 @@ def find_best_match(query: str, words: list[WordLoc]) -> list[WordLoc] | None:
         token = re.sub(r'\s+', ' ', token)
         return token
 
-    n = len(words)
+    def get_word_to_offset(normalized_words: list[str]) -> list[tuple[int, int]]:
+        offsets = []
+        start = 0
+        for normalized_word in normalized_words:
+            end = start + len(normalized_word)
+            offsets.append((start, end))
+            start = end + 1
+        return offsets
+
+    def get_words_from_alignment(aligned_blocks: list[tuple[int, int]], word_to_offset: list[tuple[int, int]], words: list[WordLoc]) -> list[WordLoc]:
+        matched_words = []
+        for pdf_start, pdf_end in aligned_blocks:
+            for i, (start, end) in enumerate(word_to_offset):
+                if end > pdf_start and start < pdf_end:
+                    matched_words.append(words[i])
+        return matched_words
+
+    n_words, n_query = len(words), len(query.split())
+    if n_words == 0 or n_query == 0:
+        return None
+
+    normalized_query = normalize(query)
     normalized_words = [normalize(w.word) for w in words]
-    normalized_query = normalize(query.strip())
-    if not normalized_query:
+    word_to_offset = get_word_to_offset(normalized_words)
+    aligner = get_aligner()
+    alignments = aligner.align(normalized_query, ' '.join(normalized_words))
+    if not alignments:
         return None
-
-    q_len = len(normalized_query.split())
-    min_len, max_len = max(1, q_len - window_size), q_len + window_size
-    best_score, best_span = float(0), None
-
-    # Slide window over words
-    for i in range(n):
-        for span_len in range(min_len, max_len + 1):
-            j = i + span_len
-            if j > n:
-                break
-            span_text = ' '.join(normalized_words[i:j])
-            score = fuzz.ratio(span_text, normalized_query)
-            if score > best_score:
-                best_score = score
-                best_span = (i, j - 1)
-
-    if best_span is None:
-        return None
-
-    i, j = best_span
-    return words[i : j + 1]
+    return get_words_from_alignment(alignments[0].aligned[1], word_to_offset, words)
 
 
 def words_to_grobid_annotations(
