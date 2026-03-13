@@ -113,7 +113,8 @@ def put_paper(
         )
     if supplement_file and supplement_file.content_type != 'application/pdf':
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail='Only PDF files are allowed for supplements'
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Only PDF files are allowed for supplements',
         )
     gene = session.execute(
         select(GeneDB).where(GeneDB.symbol == gene_symbol)
