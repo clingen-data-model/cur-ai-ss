@@ -51,6 +51,13 @@ def upload_paper_modal() -> None:
         type=['pdf'],
         accept_multiple_files=False,
     )
+    if uploaded_file:
+        supplement_file = st.file_uploader(
+            'Upload Supplement PDF (optional)',
+            type=['pdf'],
+            accept_multiple_files=False,
+            key='supplement_uploader',
+        )
     # Note: https://github.com/m-wrzr/streamlit-searchbox/issues/20
     # The original architecture here used a form submit... but st_searchbox
     # does not integrate well with the streamlit form "batched updates".
@@ -69,7 +76,7 @@ def upload_paper_modal() -> None:
             return
         with st.spinner('Uploading PDF...'):
             try:
-                result = put_paper(uploaded_file, gene_symbol)
+                result = put_paper(uploaded_file, gene_symbol, supplement_file)
                 st.success('Paper submitted successfully')
                 time.sleep(0.5)
                 st.rerun()

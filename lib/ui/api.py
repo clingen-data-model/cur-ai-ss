@@ -43,17 +43,26 @@ def get_paper(paper_id: str) -> PaperResp:
 def put_paper(
     uploaded_file: streamlit.runtime.uploaded_file_manager.UploadedFile,
     gene_symbol: str,
+    supplement_file: streamlit.runtime.uploaded_file_manager.UploadedFile | None = None,
 ) -> PaperResp:
+    files = {
+        'uploaded_file': (
+            uploaded_file.name,
+            uploaded_file.read(),
+            'application/pdf',
+        )
+    }
+    if supplement_file:
+        files['supplement_file'] = (
+            supplement_file.name,
+            supplement_file.read(),
+            'application/pdf',
+        )
+
     resp = requests.put(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers',
         data={'gene_symbol': gene_symbol},
-        files={
-            'uploaded_file': (
-                uploaded_file.name,
-                uploaded_file.read(),
-                'application/pdf',
-            )
-        },
+        files=files,
         # Content type is multipart/form-data
     )
     resp.raise_for_status()

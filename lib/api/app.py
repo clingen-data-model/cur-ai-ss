@@ -39,6 +39,7 @@ from lib.misc.pdf.highlight import (
     parse_hex_color,
     words_to_grobid_annotations,
 )
+from lib.misc.pdf.misc import merge_pdfs, pdf_first_page_to_thumbnail_pymupdf_bytes
 from lib.misc.pdf.parse import WordLoc
 from lib.misc.pdf.paths import (
     pdf_highlighted_path,
@@ -46,7 +47,6 @@ from lib.misc.pdf.paths import (
     pdf_thumbnail_path,
     pdf_words_json_path,
 )
-from lib.misc.pdf.thumbnail import pdf_first_page_to_thumbnail_pymupdf_bytes
 from lib.models import (
     GeneDB,
     GeneResp,
@@ -104,11 +104,17 @@ def get_status() -> dict[str, str]:
 def put_paper(
     gene_symbol: str = Form(...),
     uploaded_file: UploadFile = File(...),
+    supplement_file: UploadFile | None = File(None),
     session: Session = Depends(get_session),
 ) -> Any:
     if uploaded_file.content_type != 'application/pdf':
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail='Only PDF files are allowed'
+        )
+    if supplement_file and supplement_file.content_type != 'application/pdf':
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Only PDF files are allowed for supplements',
         )
     gene = session.execute(
         select(GeneDB).where(GeneDB.symbol == gene_symbol)
@@ -118,7 +124,15 @@ def put_paper(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f'Gene {gene_symbol} not found',
         )
-    content = uploaded_file.file.read()
+    main_content = uploaded_file.file.read()
+
+    # Merge with supplement if provided
+    if supplement_file:
+        supplement_content = supplement_file.file.read()
+        content = merge_pdfs(main_content, supplement_content)
+    else:
+        content = main_content
+
     paper_db = PaperDB.from_content(content)
     paper_db.gene_id = gene.id
     paper_db.filename = uploaded_file.filename or ''
