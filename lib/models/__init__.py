@@ -230,6 +230,10 @@ class PaperDB(Base):
     def patient_variant_links_json_path(self) -> Path:
         return env.evagg_dir / self.id / 'patient_variant_links.json'
 
+    @property
+    def pedigree_descriptions_json_path(self) -> Path:
+        return env.evagg_dir / self.id / 'pedigree_descriptions.json'
+
 
 class PaperExtractionOutput(BaseModel):
     title: str

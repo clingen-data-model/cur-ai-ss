@@ -17,6 +17,7 @@ from lib.agents.patient_extraction_agent import agent as patient_extraction_agen
 from lib.agents.patient_variant_linking_agent import (
     agent as patient_variant_linking_agent,
 )
+from lib.agents.pedigree_describer_agent import agent as pedigree_describer_agent
 from lib.agents.phenotype_patient_linking_agent import (
     agent as phenotype_patient_linking_agent,
 )
@@ -28,9 +29,10 @@ from lib.agents.variant_enrichment_agent import (
 from lib.agents.variant_extraction_agent import agent as variant_extraction_agent
 from lib.agents.variant_harmonization_agent import agent as variant_harmonization_agent
 from lib.api.db import session_scope
+from lib.core.environment import env
 from lib.core.logging import setup_logging
 from lib.misc.pdf.parse import parse_content
-from lib.misc.pdf.paths import fulltext_md
+from lib.misc.pdf.paths import fulltext_md, pdf_image_caption_path, pdf_image_path
 from lib.models import (
     PaperDB,
     PhenotypeLinkingEntry,
@@ -95,6 +97,45 @@ async def extract_variants_task_async(paper_id: str, gene_symbol: str) -> None:
     json_response = result.final_output.model_dump_json(indent=2)
     PaperDB(id=paper_id).variants_json_path.parent.mkdir(parents=True, exist_ok=True)
     with open(PaperDB(id=paper_id).variants_json_path, 'w') as f:
+        f.write(json_response)
+
+
+async def pedigree_describer_task_async(paper_id: str) -> None:
+    images, image_id = [], 0
+    while True:
+        pdf_image = pdf_image_path(paper_id, image_id)
+        if not pdf_image.exists():
+            break
+        caption = pdf_image_caption_path(paper_id, image_id)
+        if caption.exists():
+            images.append(
+                [
+                    {'type': 'input_text', 'text': caption.read_text()},
+                    {
+                        'type': 'input_image',
+                        'image_url': f'{env.PROTOCOL}{env.API_ENDPOINT}{pdf_image}',
+                    },
+                ]
+            )
+        else:
+            images.append(
+                [
+                    {
+                        'type': 'input_image',
+                        'image_url': f'{env.PROTOCOL}{env.API_ENDPOINT}{pdf_image}',
+                    },
+                ]
+            )
+        image_id += 1
+    result = await Runner.run(
+        pedigree_describer_agent,
+        images,
+    )
+    json_response = result.final_output.model_dump_json(indent=2)
+    PaperDB(id=paper_id).pedigree_descriptions_json_path.parent.mkdir(
+        parents=True, exist_ok=True
+    )
+    with open(PaperDB(id=paper_id).pedigree_descriptions_json_path, 'w') as f:
         f.write(json_response)
 
 
@@ -207,6 +248,7 @@ def initial_extraction(paper_id: str, gene_symbol: str) -> None:
             parse_paper_task_async(paper_id),
             parse_patients_task_async(paper_id),
             extract_variants_task_async(paper_id, gene_symbol),
+            pedigree_describer_task_async(paper_id),
         )
 
     max_attempts = RETRIES + 1

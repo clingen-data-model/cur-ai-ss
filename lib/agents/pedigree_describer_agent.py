@@ -1,15 +1,20 @@
-from pydantic import BaseModel
 from typing import List, Optional
+
 from agents import Agent
+from pydantic import BaseModel
+
 from lib.core.environment import env
+
 
 # --- Output schema ---
 class PedigreeResult(BaseModel):
     is_pedigree: bool
     description: Optional[str]
 
+
 class PedigreeExtractionOutput(BaseModel):
     pedigrees: List[PedigreeResult]
+
 
 # --- Agent instructions ---
 PEDIGREE_EXTRACTION_INSTRUCTIONS = """
