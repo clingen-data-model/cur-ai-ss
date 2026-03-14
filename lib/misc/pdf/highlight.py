@@ -144,6 +144,54 @@ def find_best_match(query: str, words: list[WordLoc]) -> list[WordLoc] | None:
     return get_words_from_alignment(alignments[0].aligned[1], word_to_offset, words)
 
 
+def images_to_grobid_annotations(
+    paper_id: str,
+    image_ids: list[int],
+    color: tuple[float, float, float],
+) -> list[GrobidAnnotation]:
+    pdf_path = pdf_highlighted_path(paper_id)
+    pdf_doc = fitz.open(pdf_path)
+
+    docling_json_file = pdf_json_path(paper_id)
+    with open(docling_json_file, 'r') as f:
+        docling_json = json.load(f)
+
+    annotations = []
+    for image_id in image_ids:
+        bounding_boxes = docling_json['pictures'][image_id]['prov']
+        for bounding_box in bounding_boxes:
+            page = pdf_doc[bounding_box['page_no'] - 1]
+            page_height = page.rect.height
+            l, t, r, b = (
+                bounding_box['bbox']['l'],
+                bounding_box['bbox']['t'],
+                bounding_box['bbox']['r'],
+                bounding_box['bbox']['b'],
+            )
+
+            # Convert to screen coordinates (bottom-left origin, using bottom-left point)
+            x = l
+            y = page_height - b
+            width = r - l
+            height = t - b
+
+            annotations.append(
+                GrobidAnnotation(
+                    page=bounding_box['page_no'] - 1,
+                    x=x,
+                    y=y,
+                    width=width,
+                    height=height,
+                    color=f'rgb({color[0] * 255.0},{color[1] * 255.0},{color[2] * 255.0})',
+                    border='solid',
+                )
+            )
+
+    pdf_doc.close()
+
+    return annotations
+
+
 def words_to_grobid_annotations(
     paper_id: str,
     words: list[WordLoc],
