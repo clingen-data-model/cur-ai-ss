@@ -207,7 +207,8 @@ def highlight_images_in_pdf(
     for image_id in image_ids:
         bounding_boxes = docling_json['pictures'][image_id]['prov']
         for bounding_box in bounding_boxes:
-            page = pdf_doc[bounding_box['page_no']]
+            page = pdf_doc[bounding_box['page_no'] - 1]
+            page_height = page.rect.height
             l, t, r, b = (
                 bounding_box['bbox']['l'],
                 bounding_box['bbox']['t'],
@@ -215,10 +216,10 @@ def highlight_images_in_pdf(
                 bounding_box['bbox']['b'],
             )
             bounding_box = [
-                (l, t),  # top-left
-                (r, t),  # top-right
-                (r, b),  # bottom-right
-                (l, b),  # bottom-left
+                (l, page_height - t),  # top-left
+                (r, page_height - t),  # top-right
+                (r, page_height - b),  # bottom-right
+                (l, page_height - b),  # bottom-left
             ]
             page.draw_polyline(
                 bounding_box, color=rgb_color, fill=rgb_color, fill_opacity=0.3
