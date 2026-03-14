@@ -101,18 +101,20 @@ async def extract_variants_task_async(paper_id: str, gene_symbol: str) -> None:
 
 
 async def pedigree_describer_task_async(paper_id: str) -> None:
-    image_id, combined_text = 0, ""
+    image_id, combined_text = 0, ''
     while True:
         pdf_image = pdf_image_path(paper_id, image_id)
         if not pdf_image.exists():
             break
         caption_path = pdf_image_caption_path(paper_id, image_id)
-        caption_text = caption_path.read_text() if caption_path.exists() else "No caption"
-        #image_url = f"{env.PROTOCOL}{env.API_ENDPOINT}{pdf_image}"
-        image_url = f"https://tqgsc-172-56-114-145.a.free.pinggy.link{pdf_image}"
-        combined_text += f"[Processing Pipeline Figure {image_id}]\n"
-        combined_text += f"URL: {image_url}\n"
-        combined_text += f"Caption: {caption_text}\n\n"
+        caption_text = (
+            caption_path.read_text() if caption_path.exists() else 'No caption'
+        )
+        # image_url = f"{env.PROTOCOL}{env.API_ENDPOINT}{pdf_image}"
+        image_url = f'https://tqgsc-172-56-114-145.a.free.pinggy.link{pdf_image}'
+        combined_text += f'[Processing Pipeline Figure {image_id}]\n'
+        combined_text += f'URL: {image_url}\n'
+        combined_text += f'Caption: {caption_text}\n\n'
         image_id += 1
     result = await Runner.run(
         pedigree_describer_agent,

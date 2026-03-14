@@ -313,4 +313,5 @@ class PaperUpdateRequest(PatchModel):
 
 class HighlightRequest(BaseModel):
     queries: list[str]
+    images: list[int]
     color: str

@@ -1,3 +1,4 @@
+import json
 import math
 import re
 from collections import defaultdict
@@ -10,7 +11,7 @@ from pydantic import BaseModel
 from rapidfuzz import fuzz
 
 from lib.misc.pdf.parse import Polygon, WordLoc
-from lib.misc.pdf.paths import pdf_highlighted_path, pdf_raw_path
+from lib.misc.pdf.paths import pdf_highlighted_path, pdf_json_path, pdf_raw_path
 
 
 class GrobidAnnotation(BaseModel):
@@ -187,11 +188,55 @@ def words_to_grobid_annotations(
     return annotations
 
 
+def highlight_images_in_pdf(
+    paper_id: str,
+    image_ids: list[int],
+    rgb_color: tuple[float, float, float],
+) -> None:
+    if not image_ids:
+        return
+
+    # Load PDF
+    pdf_path = pdf_highlighted_path(paper_id)
+    pdf_doc = fitz.open(pdf_path)
+
+    docling_json_file = pdf_json_path(paper_id)
+    with open(docling_json_file, 'r') as f:
+        docling_json = json.load(f)
+
+    for image_id in image_ids:
+        bounding_boxes = docling_json['pictures'][image_id]['prov']
+        for bounding_box in bounding_boxes:
+            page = pdf_doc[bounding_box['page_no']]
+            l, t, r, b = (
+                bounding_box['bbox']['l'],
+                bounding_box['bbox']['t'],
+                bounding_box['bbox']['r'],
+                bounding_box['bbox']['b'],
+            )
+            bounding_box = [
+                (l, t),  # top-left
+                (r, t),  # top-right
+                (r, b),  # bottom-right
+                (l, b),  # bottom-left
+            ]
+            page.draw_polyline(
+                bounding_box, color=rgb_color, fill=rgb_color, fill_opacity=0.3
+            )
+
+    # Save highlighted PDF
+    output_path = pdf_highlighted_path(paper_id)
+    pdf_doc.save(output_path, incremental=True, encryption=fitz.PDF_ENCRYPT_KEEP)
+    pdf_doc.close()
+
+    return None
+
+
 def highlight_words_in_pdf(
     paper_id: str,
     words: list[WordLoc],
     rgb_color: tuple[float, float, float],
-) -> Path:
+) -> None:
     # Load PDF
     pdf_path = pdf_highlighted_path(paper_id)
     pdf_doc = fitz.open(pdf_path)
@@ -226,4 +271,4 @@ def highlight_words_in_pdf(
     pdf_doc.save(output_path, incremental=True, encryption=fitz.PDF_ENCRYPT_KEEP)
     pdf_doc.close()
 
-    return output_path
+    return None
