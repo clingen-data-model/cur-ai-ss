@@ -110,8 +110,7 @@ async def pedigree_describer_task_async(paper_id: str) -> None:
         caption_text = (
             caption_path.read_text() if caption_path.exists() else 'No caption'
         )
-        # image_url = f"{env.PROTOCOL}{env.API_ENDPOINT}{pdf_image}"
-        image_url = f'https://tqgsc-172-56-114-145.a.free.pinggy.link{pdf_image}'
+        image_url = f'{env.PROTOCOL}{env.API_ENDPOINT}{pdf_image}'
         combined_text += f'[Processing Pipeline Figure {image_id}]\n'
         combined_text += f'URL: {image_url}\n'
         combined_text += f'Caption: {caption_text}\n\n'
@@ -133,6 +132,8 @@ async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
         variants_output = json.load(f)
     with open(paper_db.patient_info_json_path, 'r') as f:
         patients_output = json.load(f)
+    with open(paper_db.pedigree_descriptions_json_path, 'r') as f:
+        pedigree_descriptions_output = json.load(f)
 
     structured_variants = [
         {
@@ -150,9 +151,19 @@ async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
         }
         for idx, patient in enumerate(patients_output['patients'], start=1)
     ]
+    structured_pedigree_descriptions = [
+        {
+            'image_id': idx,
+            'is_pedigree': pedigree_description['is_pedigree'],
+            'description': pedigree_description['description'],
+        }
+        for idx, pedigree_description in enumerate(
+            pedigree_descriptions_output, start=1
+        )
+    ]
     result = await Runner.run(
         patient_variant_linking_agent,
-        f'Variants JSON:\n{structured_variants}\n Patients JSON:\n {structured_patients}',
+        f'Variants JSON:\n{structured_variants}\n Patients JSON:\n {structured_patients} Image Descriptions JSON: \n {structured_pedigree_descriptions}',
     )
     json_response = result.final_output.model_dump_json(indent=2)
     paper_db.patient_variant_links_json_path.parent.mkdir(parents=True, exist_ok=True)

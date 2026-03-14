@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 from agents import Agent
 from pydantic import BaseModel, model_validator
@@ -56,11 +56,20 @@ class PatientVariantLink(BaseModel):
     zygosity: Zygosity
     inheritance: Inheritance
     link_type: LinkType
-    evidence_context: str
+    evidence_context: Optional[str] = None
+    pedigree_image_id: Optional[int] = None
     confidence: Literal['high', 'moderate', 'low']
     linkage_notes: str
     testing_methods: List[TestingMethod]
     testing_methods_evidence: List[str]
+
+    @model_validator(mode='after')
+    def validate_evidence(self) -> Self:
+        if (self.evidence_context is None) == (self.pedigree_image_id is None):
+            raise ValueError(
+                'Exactly one of evidence_context or pedigree_image_id must be provided'
+            )
+        return self
 
     @model_validator(mode='after')
     def max_two_methods(self) -> Self:
@@ -94,6 +103,19 @@ You are given:
       - patient_id (integer index in list)
       - identifier (e.g., "Patient 1", "Proband", "II-3", etc.)
       - identifier_evidence_context (text snippet where patient is described)
+5. A structured list of descriptions of images in the paper.
+   Each description includes:
+      - image_id (integer index)
+      - is_pedigree (true/false)
+      - description
+
+   If is_pedigree is true, the description summarizes the pedigree structure,
+   including family relationships, affected status, and any genotype or
+   segregation information visible in the figure.
+
+   These descriptions represent information that appears visually in the
+   figure and may be used as supporting evidence.
+
 
 Your task:
 
@@ -108,6 +130,7 @@ For every valid patient–variant relationship found in the paper, return:
 - inheritance
 - link_type
 - evidence_context
+- pedigree_image_id
 - confidence
 - testing_methods
 - testing_methods_evidence
@@ -167,6 +190,37 @@ Sentence-level precision:
 
 - Do not combine distant paragraphs or loosely connected sentences to justify a link
 - Links must be justified by textual evidence that a human curator would recognize as sufficient
+
+---------------------------------------------------
+PEDIGREE EVIDENCE RULES
+---------------------------------------------------
+
+Pedigree figures may contain genotype or segregation information that is
+not explicitly described in the text.
+
+You may use pedigree descriptions as evidence when:
+
+- The pedigree description explicitly indicates a patient's genotype
+- OR the pedigree clearly shows segregation that identifies which
+  individuals carry the variant
+
+Only use pedigree evidence if the pedigree individual can be confidently
+mapped to a patient in the structured patient list.
+
+Examples of acceptable pedigree evidence:
+
+- The pedigree labels individual II-3 as homozygous for the variant
+- The pedigree shows all affected siblings carrying the mutation
+
+When using pedigree evidence:
+
+- Set `pedigree_image_id` to the corresponding image_id
+- Set `evidence_context` to null
+- Do NOT copy the pedigree description text into evidence_context
+
+Pedigree-derived links will usually have
+`link_type = inferred_from_family_context`
+unless the individual's genotype is explicitly labeled.
 
 ---------------------------------------------------
 LINK TYPE DEFINITIONS
@@ -324,16 +378,26 @@ Confidence must reflect the strength of textual evidence, not biological plausib
 EVIDENCE CONTEXT REQUIREMENTS
 ---------------------------------------------------
 
-The evidence_context must:
+Evidence supporting a link may come from either:
 
-- Be a short verbatim excerpt from the paper
-- Directly support the link
-- Include BOTH:
-    - The patient identifier
-    - The variant description OR genotype statement
+1. Text in the paper
+2. A pedigree image
 
-Do NOT paraphrase or summarize
-Use exact quoted text from the paper
+If evidence comes from text:
+
+- evidence_context must contain a short verbatim excerpt from the paper
+- It must include BOTH:
+    - the patient identifier
+    - the variant description OR genotype statement
+- pedigree_image_id must be null
+
+If evidence comes from a pedigree image:
+
+- pedigree_image_id must contain the corresponding image_id
+- evidence_context must be null
+
+Do NOT paraphrase or summarize text evidence.
+Use exact quoted text when evidence comes from the paper.
 
 ---------------------------------------------------
 VALIDATION
@@ -345,6 +409,7 @@ VALIDATION
     - The variant exactly matches one of the structured variants
     - The evidence is explicit enough to support the link
 - Confirm testing_methods contains at most two values.
+- Confirm that exactly one of evidence_context or pedigree_image_id is provided.
 - Confirm that the number of testing_methods_evidence entries exactly equals 
 the number of testing_methods.  If testing_methods = [Unknown], then testing_methods_evidence must be an empty list.
 - If any check fails, remove the link
