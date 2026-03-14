@@ -101,35 +101,22 @@ async def extract_variants_task_async(paper_id: str, gene_symbol: str) -> None:
 
 
 async def pedigree_describer_task_async(paper_id: str) -> None:
-    images, image_id = [], 0
+    image_id, combined_text = 0, ""
     while True:
         pdf_image = pdf_image_path(paper_id, image_id)
         if not pdf_image.exists():
             break
-        caption = pdf_image_caption_path(paper_id, image_id)
-        if caption.exists():
-            images.append(
-                [
-                    {'type': 'input_text', 'text': caption.read_text()},
-                    {
-                        'type': 'input_image',
-                        'image_url': f'{env.PROTOCOL}{env.API_ENDPOINT}{pdf_image}',
-                    },
-                ]
-            )
-        else:
-            images.append(
-                [
-                    {
-                        'type': 'input_image',
-                        'image_url': f'{env.PROTOCOL}{env.API_ENDPOINT}{pdf_image}',
-                    },
-                ]
-            )
+        caption_path = pdf_image_caption_path(paper_id, image_id)
+        caption_text = caption_path.read_text() if caption_path.exists() else "No caption"
+        #image_url = f"{env.PROTOCOL}{env.API_ENDPOINT}{pdf_image}"
+        image_url = f"https://tqgsc-172-56-114-145.a.free.pinggy.link{pdf_image}"
+        combined_text += f"[Processing Pipeline Figure {image_id}]\n"
+        combined_text += f"URL: {image_url}\n"
+        combined_text += f"Caption: {caption_text}\n\n"
         image_id += 1
     result = await Runner.run(
         pedigree_describer_agent,
-        images,
+        combined_text,
     )
     json_response = result.final_output.model_dump_json(indent=2)
     PaperDB(id=paper_id).pedigree_descriptions_json_path.parent.mkdir(
