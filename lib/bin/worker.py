@@ -107,10 +107,12 @@ async def parse_paper_task_async(paper_id: str) -> None:
         result.final_output.apply_to(fetched_paper)
 
 
-async def parse_patients_task_async(paper_id: str) -> None:
+async def parse_patients_task_async(paper_db: PaperDB) -> None:
+    with open(paper_db.pedigree_descriptions_json_path, 'r') as f:
+        pedigree_descriptions_output = json.load(f)
     result = await Runner.run(
         patient_extraction_agent,
-        f'Paper (fulltext md): {fulltext_md(paper_id)}',
+        f'Paper (fulltext md): {fulltext_md(paper_db.id)} Pedigree Description: \n {pedigree_descriptions_output}',
     )
     json_response = result.final_output.model_dump_json(indent=2)
     PaperDB(id=paper_id).patient_info_json_path.parent.mkdir(
@@ -281,16 +283,22 @@ async def hpo_linking_task_async(paper_db: PaperDB) -> None:
 def initial_extraction(paper_id: str, gene_symbol: str) -> None:
 
     def run():
-        async def _run():
+        async def _run1():
             await asyncio.gather(
                 parse_paper_task_async(paper_id),
-                parse_patients_task_async(paper_id),
                 extract_variants_task_async(paper_id, gene_symbol),
                 pedigree_describer_task_async(paper_id),
             )
 
+        paper_db = PaperDB(id=paper_id).with_content()
+        async def _run2():
+            await asyncio.gather(
+                parse_patients_task_async(paper_db),
+            )
+
         parse_content(paper_id, force=True)
-        asyncio.run(_run())
+        asyncio.run(_run1())
+        asyncio.run(_run2())
 
     run_with_retries(
         paper_id=paper_id,

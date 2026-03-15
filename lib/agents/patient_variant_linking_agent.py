@@ -102,7 +102,7 @@ You are given:
    Each patient includes:
       - patient_id (integer index in list)
       - identifier (e.g., "Patient 1", "Proband", "II-3", etc.)
-      - identifier_evidence_context (text snippet where patient is described)
+      - identifier_evidence_context (the text snippet where patient is described.  If the pedigree image description was used, indicate "Pedigree Image")
 5. A structured description of a pedigree included in the paper.
    The description will include:
       - image_id (integer index of the pedigree image out of all images in the paper)
