@@ -244,8 +244,10 @@ def render_patient_variant_occurrences_tab() -> None:
                     vertical_alignment='center',
                     horizontal_alignment='right',
                 ):
-                    st.text(link.evidence_context or 'Evidence found in Pedigree Image.')
-                    st.space("stretch")
+                    st.text(
+                        link.evidence_context or 'Evidence found in Pedigree Image.'
+                    )
+                    st.space('stretch')
                     st.markdown('Choose Color: ')
                     color_key = f'{link.patient_id}-{link.variant_id}-highlight-color-link-evidence'
                     if color_key not in st.session_state:
