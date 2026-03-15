@@ -14,6 +14,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Query,
     Request,
     UploadFile,
     status,
@@ -209,11 +210,27 @@ def list_papers(
     return query.all()
 
 
-@app.get('/genes', response_model=list[GeneResp])
-def list_genes(
+@app.get('/genes/search', response_model=list[GeneResp])
+def search_genes(
+    prefix: str = Query(...),
+    limit: int = Query(10),
     session: Session = Depends(get_session),
 ) -> Any:
-    query = session.query(GeneDB)
+    query = (
+        session.query(GeneDB)
+        .filter(GeneDB.symbol.startswith(prefix))
+        .order_by(GeneDB.symbol)
+        .limit(limit)
+    )
+    return query.all()
+
+
+@app.get('/genes', response_model=list[GeneResp])
+def list_genes(
+    limit: int = Query(10),
+    session: Session = Depends(get_session),
+) -> Any:
+    query = session.query(GeneDB).order_by(GeneDB.symbol).limit(limit)
     return query.all()
 
 
