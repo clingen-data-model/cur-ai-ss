@@ -41,6 +41,7 @@ from lib.misc.pdf.paths import (
     pdf_sections_dir,
     pdf_tables_dir,
     pdf_thumbnail_path,
+    pdf_image_path,
 )
 from lib.models.phenotype import (
     HpoCandidate,
@@ -280,6 +281,7 @@ class PaperResp(PaperExtractionOutput):
     harmonized_variants_json_path: Path
     variants_json_path: Path
     patient_variant_links_json_path: Path
+    pedigree_descriptions_json_path: Path
 
     @computed_field  # type: ignore
     @property

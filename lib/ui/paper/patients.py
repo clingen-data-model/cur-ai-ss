@@ -23,6 +23,8 @@ from lib.models import (
 )
 from lib.ui.api import get_http_error_detail, grobid_annotations, highlight_pdf
 from lib.ui.paper.shared import highlight_and_switch_tab
+from lib.core.environment import env
+from lib.misc.pdf.paths import pdf_image_path
 
 
 def render_patient(
@@ -447,6 +449,10 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
         phenotype_data = json.load(f)
     phenotypes = PhenotypeLinkingOutput.model_validate(phenotype_data).phenotypes
 
+    # Load pedigree description
+    with open(paper_resp.pedigree_descriptions_json_path, 'r') as f:
+        pedigree_description = json.load(f)
+
     # -----------------------------
     # Display Patients
     # -----------------------------
@@ -529,5 +535,13 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
                 phenotypes=phenotypes,
             )
     with pedigree_image_tab:
-        st.info('No pedigree image available')
-
+        if not pedigree_description['description']:
+            st.info('No pedigree image available')
+        else:
+            col1, col2, col3 = st.columns([1, 3, 1])
+            with col2:
+                st.image(
+                    f"{env.PROTOCOL}{env.API_ENDPOINT}{pdf_image_path(paper_resp.id, int(pedigree_description['image_id']))}",
+                    use_container_width=True
+                )
+                st.write(pedigree_description['description'])
