@@ -537,7 +537,10 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
                 phenotypes=phenotypes,
             )
     with pedigree_image_tab:
-        if not pedigree_description['description'] or not pedigree_description['image_id']:
+        if (
+            not pedigree_description['description']
+            or not pedigree_description['image_id']
+        ):
             st.info('No pedigree image available')
         else:
             col1, col2, col3 = st.columns([1, 3, 1])

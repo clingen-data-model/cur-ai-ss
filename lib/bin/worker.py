@@ -48,6 +48,7 @@ RETRIES = 2
 setup_logging()
 logger = logging.getLogger(__name__)
 
+
 def run_with_retries(
     paper_id: str,
     run_fn: callable,
@@ -281,7 +282,6 @@ async def hpo_linking_task_async(paper_db: PaperDB) -> None:
 
 
 def initial_extraction(paper_id: str, gene_symbol: str) -> None:
-
     def run():
         async def _run1():
             await asyncio.gather(
@@ -291,6 +291,7 @@ def initial_extraction(paper_id: str, gene_symbol: str) -> None:
             )
 
         paper_db = PaperDB(id=paper_id).with_content()
+
         async def _run2():
             await asyncio.gather(
                 parse_patients_task_async(paper_db),
@@ -310,7 +311,6 @@ def initial_extraction(paper_id: str, gene_symbol: str) -> None:
 
 
 def linking_tasks(paper_id: str) -> None:
-
     def run():
         async def _run():
             paper_db = PaperDB(id=paper_id).with_content()
@@ -335,6 +335,7 @@ def linking_tasks(paper_id: str) -> None:
         success_status=PipelineStatus.COMPLETED,
         failure_status=PipelineStatus.LINKING_FAILED,
     )
+
 
 def main() -> None:
     while True:
