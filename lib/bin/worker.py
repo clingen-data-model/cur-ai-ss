@@ -115,10 +115,10 @@ async def parse_patients_task_async(paper_db: PaperDB) -> None:
         f'Paper (fulltext md): {fulltext_md(paper_db.id)} Pedigree Description: \n {pedigree_descriptions_output}',
     )
     json_response = result.final_output.model_dump_json(indent=2)
-    PaperDB(id=paper_id).patient_info_json_path.parent.mkdir(
+    PaperDB(id=paper_db.id).patient_info_json_path.parent.mkdir(
         parents=True, exist_ok=True
     )
-    with open(PaperDB(id=paper_id).patient_info_json_path, 'w') as f:
+    with open(PaperDB(id=paper_db.id).patient_info_json_path, 'w') as f:
         f.write(json_response)
 
 
