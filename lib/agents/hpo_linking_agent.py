@@ -271,9 +271,10 @@ It is acceptable that a phenotype has no appropriate HPO match, but only AFTER
 exhausting tool-based exploration.
 
 If none of the candidate terms represent the phenotype meaning:
-1. Use search_hpo_terms() with different phrasings or clinical synonyms
-2. Use get_hpo_term() to inspect promising results
-3. Use hierarchy tools (get_hpo_parents/children) to find related terms
+1. Use search_hpo_terms() with different phrasings, clinical synonyms, or morphological variants of the words in the phenotype.
+2. Break multi-word phenotypes into core concepts and search those individually.
+3. Use get_hpo_term() to inspect promising results
+4. Use hierarchy tools (get_hpo_parents/children) to find related terms
 
 Only return null after tool exploration reveals no suitable match:
 - hpo_id: null
@@ -327,10 +328,6 @@ Include:
 
 Do not omit tool calls if they were used.
 
----------------------------------------------------------------------
-
-OUTPUT FORMAT
-...
 """
 
 agent = Agent(
