@@ -135,6 +135,40 @@ For every valid patient–variant relationship found in the paper, return:
 - testing_methods
 - testing_methods_evidence
 - linkage_notes
+
+---------------------------------------------------
+TABLE AND STRUCTURED DATA INTERPRETATION
+---------------------------------------------------
+
+Genetic variant assignments are frequently reported in tables.
+
+Before linking patients and variants from narrative text,
+carefully examine any tables, structured lists, or figure captions
+that contain fields such as:
+
+- Patient
+- Individual
+- Proband
+- Family member
+- Mutation
+- Variant
+- Genotype
+
+If a table or list clearly maps patients to variants through row or
+column alignment, treat this mapping as explicit evidence.
+
+Examples:
+
+Patient | Variant
+P1      | c.1451G>A
+P2      | c.891+1G>T
+
+or
+
+Mutation (cDNA): c.1451G>A (P1)
+
+These structures constitute explicit patient–variant relationships.
+
 ---------------------------------------------------
 LINKING RULES
 ---------------------------------------------------
@@ -151,14 +185,23 @@ Do NOT assume:
 - That a variant applies globally to all cases unless explicitly stated
 - That inferred links can be propagated across patients or variants
 
-Evidence requirements:
+Evidence supporting a patient–variant link may appear in:
 
-- A valid link must be supported by text containing BOTH:
-    - The patient identifier (or a clearly defined group that explicitly includes the patient)
-    - The variant description OR genotype statement
-- The patient identifier / group and variant/genotype must occur:
-    - Within the same sentence, OR
-    - Within consecutive sentences where the linkage is explicit (e.g., "these patients carried...", "both individuals were homozygous...")
+- The same sentence
+- Consecutive sentences
+- Structured lists
+- Tables
+- Figure captions
+
+The patient identifier and variant description do NOT need to appear
+in the exact same sentence if the surrounding context clearly links them.
+
+Acceptable contextual linkage includes:
+
+- Lists where variants are annotated with patient identifiers
+- Tables where rows or columns align patients with variants
+- Short passages where the patient is introduced and the genotype
+  is stated immediately after
 
 Indirect patient references:
 
@@ -186,10 +229,11 @@ Negative genotypes:
     - Non-carriers
 - Only model positive carrier links in this agent
 
-Sentence-level precision:
+Contextual linkage:
 
-- Do not combine distant paragraphs or loosely connected sentences to justify a link
-- Links must be justified by textual evidence that a human curator would recognize as sufficient
+- Avoid combining unrelated paragraphs. However, it is acceptable to combine nearby sentences, list entries,
+or table cells when the surrounding context clearly describes the same patient and genotype.
+
 
 ---------------------------------------------------
 PEDIGREE EVIDENCE RULES
@@ -230,13 +274,19 @@ Assign one of the following:
 
 1) "explicit"
 
-Use when:
-- The paper directly states that the specific patient carries the specific variant
-- The genotype is clearly attributed to that individual in a sentence
+Use when the paper clearly associates a patient with a variant through:
+
+- direct statements
+- table mappings
+- structured lists
+- variant annotations including patient identifiers
+- genotype descriptions clearly referring to the patient
 
 Examples:
-- "Patient 2 was homozygous for c.2300_2318del."
-- "The proband carried the p.Arg117His variant."
+- "Patient 2 carried c.1451G>A."
+- "c.1451G>A (Patient 2)"
+- "Table: P2 | c.1451G>A"
+- "The proband (P1) harbored the variant."
 
 2) "inferred_from_family_context"
 
@@ -386,9 +436,15 @@ Evidence supporting a link may come from either:
 If evidence comes from text:
 
 - evidence_context must contain a short verbatim excerpt from the paper
-- It must include BOTH:
+- The evidence excerpt should ideally contain both:
     - the patient identifier
-    - the variant description OR genotype statement
+    - the variant description or genotype statement
+  However, when evidence comes from a structured source such as a table,
+  list, or figure caption, the patient identifier and variant may appear
+  in separate but clearly aligned fields.
+
+  In these cases, quote the minimal excerpt that demonstrates the
+  association (for example a table row or column pair).
 - pedigree_image_id must be null
 
 If evidence comes from a pedigree image:
@@ -417,8 +473,14 @@ the number of testing_methods.  If testing_methods = [Unknown], then testing_met
 - Do NOT create links for wild-type or negative genotypes
 - Multiple patients sharing a variant should result in separate links
 
-Over-inference is a critical error
-When uncertain, do NOT create a link
+Avoid speculative links.
+
+However, if the paper provides reasonable contextual evidence
+(e.g., tables, lists, nearby sentences, or family descriptions)
+that a human curator would interpret as linking a patient and
+variant, you should create the link and assign an appropriate
+confidence level.
+
 If no links have been created, retry!
 
 ---------------------------------------------------
