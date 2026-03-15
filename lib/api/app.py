@@ -358,7 +358,7 @@ def grobid_annotation(
 
     all_annotations.extend(
         images_to_grobid_annotations(
-            paper_db,
+            paper_id,
             request.image_ids,
             rgb_color,
         )

@@ -234,7 +234,7 @@ async def hpo_linking_task_async(paper_db: PaperDB) -> None:
     result = await Runner.run(
         hpo_linking_agent,
         f'Phenotypes JSON:\n{json.dumps(phenotype_data_filtered, indent=2)}',
-        max_turns=10 * len(phenotype_linking.phenotypes),
+        max_turns=5 * len(phenotype_linking.phenotypes),
     )
 
     json_response = result.final_output.model_dump_json(indent=2)

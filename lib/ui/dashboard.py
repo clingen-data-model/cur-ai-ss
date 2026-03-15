@@ -145,8 +145,8 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
                 display_text=r'.*?#(.+)$',
             ),
             'last_modified': st.column_config.DatetimeColumn(
-                "Last Modified",
-                format="D MMM YYYY, h:mm a",
+                'Last Modified',
+                format='D MMM YYYY, h:mm a',
             ),
         },
         disabled=[

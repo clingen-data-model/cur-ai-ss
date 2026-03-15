@@ -2,7 +2,7 @@ import streamlit as st
 from streamlit_pdf_viewer import pdf_viewer
 
 from lib.models import PaperResp
-from lib.ui.paper.constants import CURRENT_ANNOTATIONS_KEY
+from lib.ui.paper.shared import CURRENT_ANNOTATIONS_KEY
 
 
 def render_pdf_tab() -> None:
@@ -17,6 +17,7 @@ def render_pdf_tab() -> None:
         show_page_separator=True,  # Show separators between pages
         annotations=[a.dict() for a in annotations],
         scroll_to_annotation=1 if annotations else None,
+        render_text=True,
     )
     st.download_button(
         label='Download PDF',
