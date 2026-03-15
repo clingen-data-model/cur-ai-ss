@@ -48,6 +48,52 @@ RETRIES = 2
 setup_logging()
 logger = logging.getLogger(__name__)
 
+def run_with_retries(
+    paper_id: str,
+    run_fn: callable,
+    running_status: PipelineStatus,
+    success_status: PipelineStatus,
+    failure_status: PipelineStatus,
+) -> None:
+    max_attempts = RETRIES + 1
+
+    with session_scope() as session:
+        session.execute(
+            update(PaperDB)
+            .where(PaperDB.id == paper_id)
+            .values(pipeline_status=running_status)
+        )
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            run_fn()
+
+            with session_scope() as session:
+                session.execute(
+                    update(PaperDB)
+                    .where(PaperDB.id == paper_id)
+                    .values(pipeline_status=success_status)
+                )
+
+            logger.info(f'Attempt {attempt}/{max_attempts} succeeded')
+            return
+
+        except KeyboardInterrupt:
+            logger.info(f'Interrupted on attempt {attempt}')
+            raise
+
+        except Exception:
+            logger.exception(f'Attempt {attempt} failed')
+
+            if attempt == max_attempts:
+                with session_scope() as session:
+                    session.execute(
+                        update(PaperDB)
+                        .where(PaperDB.id == paper_id)
+                        .values(pipeline_status=failure_status)
+                    )
+                return
+
 
 async def parse_paper_task_async(paper_id: str) -> None:
     result = await Runner.run(
@@ -233,93 +279,54 @@ async def hpo_linking_task_async(paper_db: PaperDB) -> None:
 
 
 def initial_extraction(paper_id: str, gene_symbol: str) -> None:
-    async def _run_extraction_pipeline(paper_id: str, gene_symbol: str) -> None:
-        await asyncio.gather(
-            parse_paper_task_async(paper_id),
-            parse_patients_task_async(paper_id),
-            extract_variants_task_async(paper_id, gene_symbol),
-            pedigree_describer_task_async(paper_id),
-        )
 
-    max_attempts = RETRIES + 1
-    with session_scope() as session:
-        session.execute(
-            update(PaperDB)
-            .where(PaperDB.id == paper_id)
-            .values(pipeline_status=PipelineStatus.EXTRACTION_RUNNING)
-        )
-    for attempt in range(1, max_attempts + 1):
-        try:
-            parse_content(paper_id, force=True)
-            asyncio.run(_run_extraction_pipeline(paper_id, gene_symbol))
-            with session_scope() as session:
-                session.execute(
-                    update(PaperDB)
-                    .where(PaperDB.id == paper_id)
-                    .values(pipeline_status=PipelineStatus.EXTRACTION_COMPLETED)
-                )
-            logger.info(f'Extraction attempt {attempt}/{max_attempts} succeeded')
-            return
-        except KeyboardInterrupt:
-            logger.info(f'Interrupted on attempt {attempt}')
-            raise
-        except Exception:
-            logger.exception(f'Extraction failed on attempt {attempt}')
-            if attempt == max_attempts:
-                with session_scope() as session:
-                    session.execute(
-                        update(PaperDB)
-                        .where(PaperDB.id == paper_id)
-                        .values(pipeline_status=PipelineStatus.EXTRACTION_FAILED)
-                    )
-                return
+    def run():
+        async def _run():
+            await asyncio.gather(
+                parse_paper_task_async(paper_id),
+                parse_patients_task_async(paper_id),
+                extract_variants_task_async(paper_id, gene_symbol),
+                pedigree_describer_task_async(paper_id),
+            )
+
+        parse_content(paper_id, force=True)
+        asyncio.run(_run())
+
+    run_with_retries(
+        paper_id=paper_id,
+        run_fn=run,
+        running_status=PipelineStatus.EXTRACTION_RUNNING,
+        success_status=PipelineStatus.EXTRACTION_COMPLETED,
+        failure_status=PipelineStatus.EXTRACTION_FAILED,
+    )
 
 
 def linking_tasks(paper_id: str) -> None:
-    async def _run_linking_pipeline(paper_db: PaperDB) -> None:
-        await asyncio.gather(
-            harmonize_variants_task_async(paper_db),
-            patient_variant_linking_task_async(paper_db),
-            phenotype_patient_linking_task_async(paper_db),
-        )
-        await asyncio.gather(
-            enrich_variants_task_async(paper_db),
-            hpo_linking_task_async(paper_db),
-        )
 
-    max_attempts = RETRIES + 1
-    with session_scope() as session:
-        session.execute(
-            update(PaperDB)
-            .where(PaperDB.id == paper_id)
-            .values(pipeline_status=PipelineStatus.LINKING_RUNNING)
-        )
-    for attempt in range(1, max_attempts + 1):
-        try:
+    def run():
+        async def _run():
             paper_db = PaperDB(id=paper_id).with_content()
-            asyncio.run(_run_linking_pipeline(paper_db))
-            with session_scope() as session:
-                session.execute(
-                    update(PaperDB)
-                    .where(PaperDB.id == paper_id)
-                    .values(pipeline_status=PipelineStatus.COMPLETED)
-                )
-            logger.info(f'Attempt {attempt}/{max_attempts} succeeded')
-            return
-        except KeyboardInterrupt:
-            logger.info(f'Interrupted on attempt {attempt}')
-            raise
-        except Exception as e:
-            logger.exception(f'Linking failed on attempt {attempt}')
-            if attempt == max_attempts:
-                with session_scope() as session:
-                    session.execute(
-                        update(PaperDB)
-                        .where(PaperDB.id == paper_id)
-                        .values(pipeline_status=PipelineStatus.LINKING_FAILED)
-                    )
-                return
 
+            await asyncio.gather(
+                harmonize_variants_task_async(paper_db),
+                patient_variant_linking_task_async(paper_db),
+                phenotype_patient_linking_task_async(paper_db),
+            )
+
+            await asyncio.gather(
+                enrich_variants_task_async(paper_db),
+                hpo_linking_task_async(paper_db),
+            )
+
+        asyncio.run(_run())
+
+    run_with_retries(
+        paper_id=paper_id,
+        run_fn=run,
+        running_status=PipelineStatus.LINKING_RUNNING,
+        success_status=PipelineStatus.COMPLETED,
+        failure_status=PipelineStatus.LINKING_FAILED,
+    )
 
 def main() -> None:
     while True:
