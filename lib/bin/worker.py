@@ -151,19 +151,9 @@ async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
         }
         for idx, patient in enumerate(patients_output['patients'], start=1)
     ]
-    structured_pedigree_descriptions = [
-        {
-            'image_id': idx,
-            'is_pedigree': pedigree_description['is_pedigree'],
-            'description': pedigree_description['description'],
-        }
-        for idx, pedigree_description in enumerate(
-            pedigree_descriptions_output['pedigrees'], start=1
-        )
-    ]
     result = await Runner.run(
         patient_variant_linking_agent,
-        f'Variants JSON:\n{structured_variants}\n Patients JSON:\n {structured_patients} Image Descriptions JSON: \n {structured_pedigree_descriptions}',
+        f'Variants JSON:\n{structured_variants}\n Patients JSON:\n {structured_patients} Pedigree Description: \n {pedigree_descriptions_output}',
     )
     json_response = result.final_output.model_dump_json(indent=2)
     paper_db.patient_variant_links_json_path.parent.mkdir(parents=True, exist_ok=True)

@@ -103,19 +103,19 @@ You are given:
       - patient_id (integer index in list)
       - identifier (e.g., "Patient 1", "Proband", "II-3", etc.)
       - identifier_evidence_context (text snippet where patient is described)
-5. A structured list of descriptions of images in the paper.
-   Each description includes:
-      - image_id (integer index)
-      - is_pedigree (true/false)
+5. A structured description of a pedigree included in the paper.
+   The description will include:
+      - image_id (integer index of the pedigree image out of all images in the paper)
       - description
-
-   If is_pedigree is true, the description summarizes the pedigree structure,
+   
+   The description should summarize the pedigree structure,
    including family relationships, affected status, and any genotype or
    segregation information visible in the figure.
 
-   These descriptions represent information that appears visually in the
+   This description represents information that appears visually in the
    figure and may be used as supporting evidence.
 
+   If the description is null, there was no pedigree image included in the paper.
 
 Your task:
 
@@ -410,6 +410,7 @@ VALIDATION
     - The evidence is explicit enough to support the link
 - Confirm testing_methods contains at most two values.
 - Confirm that exactly one of evidence_context or pedigree_image_id is provided.
+- Confirm that pedigree_image_id is equal to the image_id of the input pedigree description.
 - Confirm that the number of testing_methods_evidence entries exactly equals 
 the number of testing_methods.  If testing_methods = [Unknown], then testing_methods_evidence must be an empty list.
 - If any check fails, remove the link

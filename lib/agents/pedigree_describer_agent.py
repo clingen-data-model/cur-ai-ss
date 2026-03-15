@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Optional
 
 from agents import Agent
 from pydantic import BaseModel
@@ -7,13 +7,9 @@ from lib.core.environment import env
 
 
 # --- Output schema ---
-class PedigreeResult(BaseModel):
-    is_pedigree: bool
-    description: Optional[str]
-
-
 class PedigreeExtractionOutput(BaseModel):
-    pedigrees: List[PedigreeResult]
+    image_id: Optional[int]
+    description: Optional[str]
 
 
 # --- Agent instructions ---
@@ -22,9 +18,10 @@ You are an expert genetics curator.
 
 Input:
 A list of images with captions extracted from a scientific paper.
+Each image has an associated image_id.
 
 Task:
-For each image, determine whether it contains a pedigree diagram.
+Determine whether ANY of the images contains a pedigree diagram.
 
 Pedigree diagrams typically include:
 - squares (male) and circles (female)
@@ -34,18 +31,29 @@ Pedigree diagrams typically include:
 - shading indicating affected individuals
 - arrows indicating a proband
 
-If the image contains a pedigree:
-- set is_pedigree = true
-- describe the pedigree in a structured narrative including:
+If multiple images contain pedigrees:
+- Select the SINGLE pedigree that provides the most complete and descriptive family structure.
+- Prefer pedigrees that include:
+  - individual identifiers
+  - multiple generations
+  - affected status
+  - clear parent-child relationships
+  - a proband indicator
+- Prefer the pedigree with the largest number of individuals if multiple are present.
 
-  1. All visible individual identifiers (e.g. II-1, III-2, P1, Patient 3, etc.).
-  2. Parent-child relationships.
-  3. Sex of individuals when visually indicated (square = male, circle = female).
-  4. Affected status when indicated (e.g. filled symbols).
-  5. The proband if an arrow is shown.
-  6. The number of generations visible.
+If a pedigree is present:
+- Set image_id to the id of the image containing the pedigree you selected.
 
-Write the description so that another system could reconstruct the pedigree.
+Write a structured narrative describing the pedigree including:
+
+1. All visible individual identifiers (e.g. II-1, III-2, P1, Patient 3).
+2. Parent-child relationships.
+3. Sex when visually indicated (square = male, circle = female).
+4. Affected status when indicated (filled symbols).
+5. The proband if an arrow is shown.
+6. The number of generations visible.
+
+Write the description so another system could reconstruct the pedigree.
 
 Use explicit language such as:
 - "Individual II-2 (female, affected) is the child of I-1 and I-2."
@@ -53,29 +61,31 @@ Use explicit language such as:
 - "The proband is III-1 (male, affected)."
 
 Include all visible individuals and relationships.
-If identifiers are not present in the image, describe individuals by generation and position if possible (e.g., "leftmost male in generation II").
 
-Do not invent identifiers or relationships not clearly shown in the pedigree.
+If identifiers are not present, describe individuals by generation and position when possible
+(e.g., "leftmost male in generation II").
 
-Some images contain multiple panels (e.g., A, B, C) with different types of data.
+Do not invent identifiers or relationships not clearly shown.
 
-- Examine the full image and determine if any part contains a pedigree diagram.
-- If a pedigree is present:
-    - Ignore panels that are clearly not pedigrees (plots, protein structures, microscopy, MRI, charts, etc.)
-    - Focus only on the pedigree portion for describing individuals and relationships.
-- If no pedigree is present, set is_pedigree = false and description = null.
+Some images contain multiple panels (A, B, C) with different types of data.
+
+- Examine all images and panels.
+- Ignore panels that are clearly not pedigrees (plots, protein structures, microscopy, MRI, charts).
+- Focus only on the pedigree portion when describing individuals.
+
+If NO pedigree diagram is present in any image:
+- Return image_id = null
+- Return description = null
 
 Guidelines:
 - Only describe structures clearly visible in the image.
 - Do not invent family members or inheritance patterns.
-- Images showing plots, molecular diagrams, MRI scans, microscopy, or charts are NOT pedigrees.
-
-Return one result for each image in the same order they were provided.
 """
+
 
 # --- Agent definition ---
 agent = Agent(
-    name='pedigree_describer',
+    name="pedigree_describer",
     instructions=PEDIGREE_EXTRACTION_INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
     output_type=PedigreeExtractionOutput,

@@ -472,8 +472,9 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
         f'Non-Probands ({len(non_probands)})',
         f'Affecteds ({len(affecteds)})',
         f'Unaffecteds ({len(unaffecteds)})',
+        'Pedigree Image',
     ]
-    proband_tab, non_proband_tab, affecteds_tab, unaffecteds_tab = st.tabs(
+    proband_tab, non_proband_tab, affecteds_tab, unaffecteds_tab, pedigree_image_tab = st.tabs(
         tabs,
         default=tabs[1]
         if selected_patient_id in {p[0] for p in non_probands}
@@ -527,3 +528,6 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
                 patient_id=original_idx,
                 phenotypes=phenotypes,
             )
+    with pedigree_image_tab:
+        st.info('No pedigree image available')
+
