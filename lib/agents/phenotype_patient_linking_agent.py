@@ -20,7 +20,7 @@ You are given:
    Each patient includes:
       - patient_id (integer index in list)
       - identifier (e.g., "Patient 1", "Proband", "II-3", etc.)
-      - identifier_evidence (text snippet where patient is described)
+      - identifier_evidence_context (text snippet where patient is described)
 
 Your task:
 
@@ -91,9 +91,12 @@ PHENOTYPE FIELD DEFINITIONS
      - One for "mother" as patient with family_history=false
 
 5. **evidence_contexts**: Additional context from the text (sentence or paragraph containing phenotype).
-This MUST be a single contiguous span of text from the paper.  Multiple mentions should be split
-into individual entries in this list.
-If the evidence spans a content break (indicated by a contextual discontinuity such as an abrupt topic shift, an incomplete sentence, or text that appears to continue from a different location), include `<SPLIT>` at the point where the break occurs.
+
+If there are multiple mentions that provide evidence context, include them as
+separate elements of the list.
+
+Each evidence_contexts entry MUST normally be a single contiguous span of
+prose from the paper.
 
 6. **onset**: Age or disease stage when phenotype occurred
    - Example: "infancy", "early childhood", "adult onset", "age 5"
