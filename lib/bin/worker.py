@@ -201,7 +201,7 @@ async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
     ]
     result = await Runner.run(
         patient_variant_linking_agent,
-        f'Variants JSON:\n{structured_variants}\n Patients JSON:\n {structured_patients} Pedigree Description: \n {pedigree_descriptions_output}',
+        f'Variants JSON:\n{structured_variants}\n Patients JSON:\n {structured_patients} Pedigree Description: \n {pedigree_descriptions_output} Paper (fulltext md): {fulltext_md(paper_db.id)}',
     )
     json_response = result.final_output.model_dump_json(indent=2)
     paper_db.patient_variant_links_json_path.parent.mkdir(parents=True, exist_ok=True)

@@ -28,19 +28,19 @@ class Inheritance(str, Enum):
 
 
 class TestingMethod(str, Enum):
-    Chromosomal_microarray = 'Chromosomal microarray'
-    Next_generation_sequencing_panels = 'Next generation sequencing panels'
-    Exome_sequencing = 'Exome sequencing'
-    Genome_sequencing = 'Genome sequencing'
-    Sanger_sequencing = 'Sanger sequencing'
+    Chromosomal_microarray = 'Chromosomal_microarray'
+    Next_generation_sequencing_panels = 'Next_generation_sequencing_panels'
+    Exome_sequencing = 'Exome_sequencing'
+    Genome_sequencing = 'Genome_sequencing'
+    Sanger_sequencing = 'Sanger_sequencing'
     Pcr = 'PCR'
-    Homozygosity_mapping = 'Homozygosity mapping'
-    Linkage_analysis = 'Linkage analysis'
+    Homozygosity_mapping = 'Homozygosity_mapping'
+    Linkage_analysis = 'Linkage_analysis'
     Genotyping = 'Genotyping'
-    Denaturing_gradient_gel = 'Denaturing gradient gel'
-    High_resolution_melting = 'High resolution melting'
-    Restriction_digest = 'Restriction digest'
-    Single_strand_conformation_polymorphism = 'Single-strand conformation polymorphism'
+    Denaturing_gradient_gel = 'Denaturing_gradient_gel'
+    High_resolution_melting = 'High_resolution_melting'
+    Restriction_digest = 'Restriction_digest'
+    Single_strand_conformation_polymorphism = 'Single_strand_conformation_polymorphism'
     Unknown = 'Unknown'
     Other = 'Other'
 
@@ -157,18 +157,6 @@ that contain fields such as:
 If a table or list clearly maps patients to variants through row or
 column alignment, treat this mapping as explicit evidence.
 
-Examples:
-
-Patient | Variant
-P1      | c.1451G>A
-P2      | c.891+1G>T
-
-or
-
-Mutation (cDNA): c.1451G>A (P1)
-
-These structures constitute explicit patient–variant relationships.
-
 ---------------------------------------------------
 LINKING RULES
 ---------------------------------------------------
@@ -283,9 +271,9 @@ Use when the paper clearly associates a patient with a variant through:
 - genotype descriptions clearly referring to the patient
 
 Examples:
-- "Patient 2 carried c.1451G>A."
-- "c.1451G>A (Patient 2)"
-- "Table: P2 | c.1451G>A"
+- "Patient 2 carried p.Arg31Pro."
+- "p.Arg31Pro (Patient 2)"
+- "Table: P2 | p.Arg31Pro"
 - "The proband (P1) harbored the variant."
 
 2) "inferred_from_family_context"
@@ -432,6 +420,7 @@ Evidence supporting a link may come from either:
 
 1. Text in the paper
 2. A pedigree image
+3. Table or list mapping patients to variants.
 
 If evidence comes from text:
 
@@ -451,6 +440,8 @@ If evidence comes from a pedigree image:
 
 - pedigree_image_id must contain the corresponding image_id
 - evidence_context must be null
+
+If evidence comes from a table or a list, provide a text description of the figure.
 
 Do NOT paraphrase or summarize text evidence.
 Use exact quoted text when evidence comes from the paper.
@@ -480,8 +471,6 @@ However, if the paper provides reasonable contextual evidence
 that a human curator would interpret as linking a patient and
 variant, you should create the link and assign an appropriate
 confidence level.
-
-If no links have been created, retry!
 
 ---------------------------------------------------
 LINKAGE NOTES FIELD
