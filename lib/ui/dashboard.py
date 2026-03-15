@@ -79,6 +79,7 @@ def upload_paper_modal() -> None:
                 result = put_paper(uploaded_file, gene_symbol, supplement_file)
                 st.success('Paper submitted successfully')
                 time.sleep(0.5)
+                st.session_state.pop(DIALOG_STATE_KEY)
                 st.rerun()
             except requests.HTTPError as e:
                 st.error(f'Upload failed: {e}, {get_http_error_detail(e)}')
@@ -143,7 +144,10 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
                 # Note, this is a major hack to get around the lack of a better way of doing this.
                 display_text=r'.*?#(.+)$',
             ),
-            'last_modified': st.column_config.Column('Last Modified'),
+            'last_modified': st.column_config.DatetimeColumn(
+                "Last Modified",
+                format="D MMM YYYY, h:mm a",
+            ),
         },
         disabled=[
             'gene_symbol',
@@ -157,6 +161,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
         num_rows='delete',
         key=CURATIONS_DF_KEY,
         on_change=papers_df_on_change,
+        hide_index=True,
     )
 
 

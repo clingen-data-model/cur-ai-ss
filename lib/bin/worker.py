@@ -158,7 +158,7 @@ async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
             'description': pedigree_description['description'],
         }
         for idx, pedigree_description in enumerate(
-            pedigree_descriptions_output, start=1
+            pedigree_descriptions_output['pedigrees'], start=1
         )
     ]
     result = await Runner.run(

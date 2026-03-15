@@ -473,11 +473,23 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
     non_probands = [
         (i, p) for i, p in indexed_patients if p.proband_status != ProbandStatus.Proband
     ]
+    affecteds = [
+        (i, p)
+        for i, p in indexed_patients
+        if p.affected_status == AffectedStatus.Affected
+    ]
+    unaffecteds = [
+        (i, p)
+        for i, p in indexed_patients
+        if p.affected_status != AffectedStatus.Affected
+    ]
     tabs = [
         f'Probands ({len(probands)})',
         f'Non-Probands ({len(non_probands)})',
+        f'Affecteds ({len(affecteds)})',
+        f'Unaffecteds ({len(unaffecteds)})',
     ]
-    proband_tab, non_proband_tab = st.tabs(
+    proband_tab, non_proband_tab, affecteds_tab, unaffecteds_tab = st.tabs(
         tabs,
         default=tabs[1]
         if selected_patient_id in {p[0] for p in non_probands}
@@ -491,7 +503,7 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
             render_patient(
                 patient,
                 expanded=(original_idx == selected_patient_id),
-                key_prefix=f'patient-{original_idx}',
+                key_prefix=f'patient-proband-{original_idx}',
                 patient_id=original_idx,
                 phenotypes=phenotypes,
             )
@@ -503,7 +515,31 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
             render_patient(
                 patient,
                 expanded=(original_idx == selected_patient_id),
-                key_prefix=f'patient-{original_idx}',
+                key_prefix=f'patient-non-proband-{original_idx}',
+                patient_id=original_idx,
+                phenotypes=phenotypes,
+            )
+    with affecteds_tab:
+        if not affecteds:
+            st.info('No affected patients detected.')
+        for original_idx, patient in probands:
+            st.markdown(f'### Patient {original_idx}')
+            render_patient(
+                patient,
+                expanded=(original_idx == selected_patient_id),
+                key_prefix=f'patient-affected-{original_idx}',
+                patient_id=original_idx,
+                phenotypes=phenotypes,
+            )
+    with unaffecteds_tab:
+        if not unaffecteds:
+            st.info('No affected patients detected.')
+        for original_idx, patient in probands:
+            st.markdown(f'### Patient {original_idx}')
+            render_patient(
+                patient,
+                expanded=(original_idx == selected_patient_id),
+                key_prefix=f'patient-unaffected-{original_idx}',
                 patient_id=original_idx,
                 phenotypes=phenotypes,
             )
