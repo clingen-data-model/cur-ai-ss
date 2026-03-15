@@ -143,6 +143,83 @@ For each phenotype mention in the text, determine which patient it belongs to:
 - Or skip the extraction if ambiguity is too severe
 
 ---------------------------------------------------
+PHENOTYPE PRIORITIZATION AND LIMITING
+---------------------------------------------------
+
+The goal is to capture the most clinically informative phenotypes
+that characterize the patient's genetic disease.
+
+For each patient:
+
+- Extract AT MOST FIVE phenotypes.
+
+If more than five phenotypes are mentioned for a patient:
+
+1. Rank all candidate phenotypes by clinical importance
+2. Return only the FIVE most informative
+
+Use the following prioritization order:
+
+Highest priority:
+- Congenital anomalies or structural abnormalities
+- Neurologic abnormalities
+- Developmental abnormalities
+- Dysmorphic features
+- Organ dysfunction strongly associated with genetic disease
+
+Medium priority:
+- Persistent clinical symptoms
+- Objective laboratory abnormalities related to disease
+
+Lower priority (generally exclude if higher priority exists):
+- Common nonspecific symptoms (fatigue, fever, headache)
+- Secondary complications
+- Treatment effects
+- Incidental findings
+
+Additional rules:
+
+- Prefer phenotypes emphasized repeatedly in the case description
+- Prefer phenotypes appearing in diagnostic summaries
+- Prefer phenotypes mentioned in figure captions or patient summaries
+- Prefer phenotypes used to establish diagnosis
+- Avoid redundant or highly overlapping phenotypes
+
+If fewer than five phenotypes exist, return only those present.
+Do NOT invent phenotypes to reach five.
+
+---------------------------------------------------
+PHENOTYPE DEDUPLICATION
+---------------------------------------------------
+
+If multiple extracted phenotypes describe the same underlying
+clinical feature, keep only the most specific version.
+
+Examples:
+
+- "developmental delay" + "global developmental delay"
+  → keep "global developmental delay"
+
+- "seizures" + "generalized tonic-clonic seizures"
+  → keep "generalized tonic-clonic seizures"
+
+Avoid returning redundant phenotypes for the same patient.
+
+---------------------------------------------------
+GENETIC DISEASE RELEVANCE FILTER
+---------------------------------------------------
+
+Prefer phenotypes that would help a clinician recognize
+the underlying genetic disorder.
+
+Avoid extracting phenotypes that are:
+
+- very common in the general population
+- transient symptoms
+- unrelated to the genetic condition
+- clearly secondary to treatment or hospitalization
+
+---------------------------------------------------
 VALIDATION
 ---------------------------------------------------
 
