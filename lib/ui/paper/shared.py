@@ -8,6 +8,10 @@ HEADER_TABS = ['📄 PDF', '📝 Metadata', '👤 Patients', '🧬 Variants', '�
 HEADER_TABS_KEY = 'HEADER_TABS_KEY'
 
 
+def get_gnomad_url(variant_id: str) -> str:
+    return f'https://gnomad.broadinstitute.org/variant/{variant_id}?dataset=gnomad_r4'
+
+
 def highlight_and_switch_tab(
     paper_id: str, queries: list[str], image_ids: list[int], color: str
 ) -> None:

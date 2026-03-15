@@ -21,7 +21,7 @@ from lib.agents.variant_harmonization_agent import (
     VariantHarmonizationOutput,
 )
 from lib.models import PaperResp, PipelineStatus
-from lib.ui.paper.shared import highlight_and_switch_tab
+from lib.ui.paper.shared import get_gnomad_url, highlight_and_switch_tab
 
 
 def render_patient_variant_occurrences_tab() -> None:
@@ -210,6 +210,11 @@ def render_patient_variant_occurrences_tab() -> None:
 
         with col2:
             st.markdown('#### Harmonized Variant Info')
+            gnomad_coords = (
+                f'[{harmonized_variant.gnomad_style_coordinates}]({get_gnomad_url(harmonized_variant.gnomad_style_coordinates)})'
+                if harmonized_variant.gnomad_style_coordinates
+                else 'N/A'
+            )
             variant_data = {
                 'Field': [
                     '**HGVS g.**',
@@ -224,7 +229,7 @@ def render_patient_variant_occurrences_tab() -> None:
                     harmonized_variant.hgvs_c or 'N/A',
                     harmonized_variant.hgvs_p or 'N/A',
                     harmonized_variant.rsid or 'N/A',
-                    harmonized_variant.gnomad_style_coordinates or 'N/A',
+                    gnomad_coords,
                     harmonized_variant.normalization_confidence or 'N/A',
                 ],
             }
@@ -239,7 +244,8 @@ def render_patient_variant_occurrences_tab() -> None:
                     vertical_alignment='center',
                     horizontal_alignment='right',
                 ):
-                    st.text(link.evidence_context or 'Pedigree Image')
+                    st.text(link.evidence_context or 'Evidence found in Pedigree Image.')
+                    st.space("stretch")
                     st.markdown('Choose Color: ')
                     color_key = f'{link.patient_id}-{link.variant_id}-highlight-color-link-evidence'
                     if color_key not in st.session_state:

@@ -544,6 +544,6 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
             with col2:
                 st.image(
                     f'{env.PROTOCOL}{env.API_ENDPOINT}{pdf_image_path(paper_resp.id, int(pedigree_description["image_id"]))}',
-                    widh='content',
+                    width='content',
                 )
                 st.write(pedigree_description['description'])
