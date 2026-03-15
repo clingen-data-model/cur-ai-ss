@@ -62,6 +62,10 @@ Using the list from Step 1, describe:
 - affected individuals
 - the proband if present
 - number of generations
+
+If no pedigree exists:
+- image_id -> null
+- description -> null
 """
 
 
