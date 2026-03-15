@@ -36,12 +36,12 @@ from typing_extensions import Self
 from lib.core.environment import env
 from lib.misc.pdf.paths import (
     pdf_highlighted_path,
+    pdf_image_path,
     pdf_markdown_path,
     pdf_raw_path,
     pdf_sections_dir,
     pdf_tables_dir,
     pdf_thumbnail_path,
-    pdf_image_path,
 )
 from lib.models.phenotype import (
     HpoCandidate,

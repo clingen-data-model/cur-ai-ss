@@ -158,7 +158,7 @@ def images_to_grobid_annotations(
 
     annotations = []
     for image_id in image_ids:
-        bounding_boxes = docling_json['pictures'][image_id - 1]['prov']
+        bounding_boxes = docling_json['pictures'][image_id]['prov']
         for bounding_box in bounding_boxes:
             page = pdf_doc[bounding_box['page_no'] - 1]
             page_height = page.rect.height
@@ -169,9 +169,10 @@ def images_to_grobid_annotations(
                 bounding_box['bbox']['b'],
             )
 
-            # Convert to screen coordinates (bottom-left origin, using bottom-left point)
             x = l
-            y = page_height - b
+            y = (
+                page_height - t
+            )  # NB: I am confused by the 't' here, as below it is the opposite.
             width = r - l
             height = t - b
 

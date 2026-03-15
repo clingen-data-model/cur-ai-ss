@@ -85,7 +85,7 @@ Guidelines:
 
 # --- Agent definition ---
 agent = Agent(
-    name="pedigree_describer",
+    name='pedigree_describer',
     instructions=PEDIGREE_EXTRACTION_INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
     output_type=PedigreeExtractionOutput,
