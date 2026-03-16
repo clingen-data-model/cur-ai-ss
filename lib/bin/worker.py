@@ -5,6 +5,7 @@ import json
 import logging
 import time
 import traceback
+from typing import Callable
 
 from agents import Runner
 from sqlalchemy import and_, func, or_, select, update
@@ -51,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 def run_with_retries(
     paper_id: str,
-    run_fn: callable,
+    run_fn: Callable,
     running_status: PipelineStatus,
     success_status: PipelineStatus,
     failure_status: PipelineStatus,
@@ -282,8 +283,8 @@ async def hpo_linking_task_async(paper_db: PaperDB) -> None:
 
 
 def initial_extraction(paper_id: str, gene_symbol: str) -> None:
-    def run():
-        async def _run1():
+    def run() -> None:
+        async def _run1() -> None:
             await asyncio.gather(
                 parse_paper_task_async(paper_id),
                 extract_variants_task_async(paper_id, gene_symbol),
@@ -292,7 +293,7 @@ def initial_extraction(paper_id: str, gene_symbol: str) -> None:
 
         paper_db = PaperDB(id=paper_id).with_content()
 
-        async def _run2():
+        async def _run2() -> None:
             await asyncio.gather(
                 parse_patients_task_async(paper_db),
             )
@@ -311,8 +312,8 @@ def initial_extraction(paper_id: str, gene_symbol: str) -> None:
 
 
 def linking_tasks(paper_id: str) -> None:
-    def run():
-        async def _run():
+    def run() -> None:
+        async def _run() -> None:
             paper_db = PaperDB(id=paper_id).with_content()
 
             await asyncio.gather(
