@@ -93,7 +93,7 @@ def find_best_match(query: str, words: list[WordLoc]) -> list[WordLoc] | None:
         aligner.open_gap_score = (
             -2.5
         )  # Larger Penalty to open a gap (allowing a single large page break)
-        aligner.extend_gap_score = -0.1  # Smaller Penalty to extend a gap
+        aligner.extend_gap_score = -0.05  # Smaller Penalty to extend a gap
         return aligner
 
     def normalize(token: str) -> str:
