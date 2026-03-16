@@ -4,13 +4,11 @@ import datetime
 import json
 import logging
 import time
-import traceback
-from typing import Callable
+
+from prefect import flow, task
 
 from agents import Runner
-from sqlalchemy import and_, func, or_, select, update
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import joinedload
+from sqlalchemy import and_, or_, select, update
 
 from lib.agents.hpo_linking_agent import agent as hpo_linking_agent
 from lib.agents.paper_extraction_agent import agent as paper_extraction_agent
@@ -50,57 +48,15 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 
-def run_with_retries(
-    paper_id: str,
-    run_fn: Callable,
-    running_status: PipelineStatus,
-    success_status: PipelineStatus,
-    failure_status: PipelineStatus,
-) -> None:
-    max_attempts = RETRIES + 1
+# ---------------------------------------------------------------------------
+# Tasks — each retries independently on failure
+# ---------------------------------------------------------------------------
 
-    with session_scope() as session:
-        session.execute(
-            update(PaperDB)
-            .where(PaperDB.id == paper_id)
-            .values(pipeline_status=running_status)
-        )
-
-    for attempt in range(1, max_attempts + 1):
-        try:
-            run_fn()
-
-            with session_scope() as session:
-                session.execute(
-                    update(PaperDB)
-                    .where(PaperDB.id == paper_id)
-                    .values(pipeline_status=success_status)
-                )
-
-            logger.info(f'Attempt {attempt}/{max_attempts} succeeded')
-            return
-
-        except KeyboardInterrupt:
-            logger.info(f'Interrupted on attempt {attempt}')
-            raise
-
-        except Exception:
-            logger.exception(f'Attempt {attempt} failed')
-
-            if attempt == max_attempts:
-                with session_scope() as session:
-                    session.execute(
-                        update(PaperDB)
-                        .where(PaperDB.id == paper_id)
-                        .values(pipeline_status=failure_status)
-                    )
-                return
-
-
-async def parse_paper_task_async(paper_id: str) -> None:
+@task(retries=RETRIES, retry_delay_seconds=5)
+async def parse_paper_task(paper_id: str) -> None:
     result = await Runner.run(
         paper_extraction_agent,
-        f'Paper (fulltext md): {fulltext_md(paper_id)}',
+        f'Paper (fulltext md): {fulltext_md(paper_id)} \n\n',
     )
     with session_scope() as session:
         fetched_paper = session.get(PaperDB, paper_id)
@@ -109,12 +65,13 @@ async def parse_paper_task_async(paper_id: str) -> None:
         result.final_output.apply_to(fetched_paper)
 
 
-async def parse_patients_task_async(paper_db: PaperDB) -> None:
+@task(retries=RETRIES, retry_delay_seconds=5)
+async def parse_patients_task(paper_db: PaperDB) -> None:
     with open(paper_db.pedigree_descriptions_json_path, 'r') as f:
         pedigree_descriptions_output = json.load(f)
     result = await Runner.run(
         patient_extraction_agent,
-        f'Paper (fulltext md): {fulltext_md(paper_db.id)} Pedigree Description: \n {pedigree_descriptions_output}',
+        f'Paper (fulltext md): {fulltext_md(paper_db.id)}\n\nPedigree Description: \n{pedigree_descriptions_output}\n\n',
     )
     json_response = result.final_output.model_dump_json(indent=2)
     PaperDB(id=paper_db.id).patient_info_json_path.parent.mkdir(
@@ -124,25 +81,11 @@ async def parse_patients_task_async(paper_db: PaperDB) -> None:
         f.write(json_response)
 
 
-async def harmonize_variants_task_async(paper_db: PaperDB) -> None:
-    with open(paper_db.variants_json_path, 'r') as f:
-        variants_output = json.load(f)
-
-    result = await Runner.run(
-        variant_harmonization_agent,
-        f'Variants JSON:\n{json.dumps(variants_output, indent=2)}',
-        max_turns=10 * len(variants_output['variants']),
-    )
-    json_response = result.final_output.model_dump_json(indent=2)
-    paper_db.harmonized_variants_json_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(paper_db.harmonized_variants_json_path, 'w') as f:
-        f.write(json_response)
-
-
-async def extract_variants_task_async(paper_id: str, gene_symbol: str) -> None:
+@task(retries=RETRIES, retry_delay_seconds=5)
+async def extract_variants_task(paper_id: str, gene_symbol: str) -> None:
     result = await Runner.run(
         variant_extraction_agent,
-        f'Gene Symbol: {gene_symbol}\nPaper (fulltext md): {fulltext_md(paper_id)}',
+        f'Paper (fulltext md): {fulltext_md(paper_id)}\n\nGene Symbol: {gene_symbol}\n\n',
     )
     json_response = result.final_output.model_dump_json(indent=2)
     PaperDB(id=paper_id).variants_json_path.parent.mkdir(parents=True, exist_ok=True)
@@ -150,7 +93,8 @@ async def extract_variants_task_async(paper_id: str, gene_symbol: str) -> None:
         f.write(json_response)
 
 
-async def pedigree_describer_task_async(paper_id: str) -> None:
+@task(retries=RETRIES, retry_delay_seconds=5)
+async def pedigree_describer_task(paper_id: str) -> None:
     image_id, combined_text = 0, ''
     while True:
         pdf_image = pdf_image_path(paper_id, image_id)
@@ -177,7 +121,23 @@ async def pedigree_describer_task_async(paper_id: str) -> None:
         f.write(json_response)
 
 
-async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
+@task(retries=RETRIES, retry_delay_seconds=5)
+async def harmonize_variants_task(paper_db: PaperDB) -> None:
+    with open(paper_db.variants_json_path, 'r') as f:
+        variants_output = json.load(f)
+    result = await Runner.run(
+        variant_harmonization_agent,
+        f'Variants JSON:\n{json.dumps(variants_output, indent=2)}',
+        max_turns=10 * len(variants_output['variants']),
+    )
+    json_response = result.final_output.model_dump_json(indent=2)
+    paper_db.harmonized_variants_json_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(paper_db.harmonized_variants_json_path, 'w') as f:
+        f.write(json_response)
+
+
+@task(retries=RETRIES, retry_delay_seconds=5)
+async def patient_variant_linking_task(paper_db: PaperDB) -> None:
     with open(paper_db.variants_json_path, 'r') as f:
         variants_output = json.load(f)
     with open(paper_db.patient_info_json_path, 'r') as f:
@@ -211,7 +171,8 @@ async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
         f.write(json_response)
 
 
-async def phenotype_patient_linking_task_async(paper_db: PaperDB) -> None:
+@task(retries=RETRIES, retry_delay_seconds=5)
+async def phenotype_patient_linking_task(paper_db: PaperDB) -> None:
     with open(paper_db.patient_info_json_path, 'r') as f:
         patients_output = json.load(f)
 
@@ -228,7 +189,6 @@ async def phenotype_patient_linking_task_async(paper_db: PaperDB) -> None:
         f'Paper (fulltext md): {fulltext_md(paper_db.id)}\n\nStructured Patients JSON:\n{structured_patients}',
     )
 
-    # Convert phenotype extraction output to combined phenotype-linking format
     phenotypes_output = result.final_output
     phenotype_links = [
         PhenotypeLinkingEntry.from_extraction(ph) for ph in phenotypes_output.phenotypes
@@ -240,11 +200,11 @@ async def phenotype_patient_linking_task_async(paper_db: PaperDB) -> None:
         f.write(json_response)
 
 
-async def enrich_variants_task_async(paper_db: PaperDB) -> None:
+@task(retries=RETRIES, retry_delay_seconds=5)
+async def enrich_variants_task(paper_db: PaperDB) -> None:
     with open(paper_db.harmonized_variants_json_path, 'r') as f:
         harmonized_data = json.load(f)
     harmonized_variants = [HarmonizedVariant(**v) for v in harmonized_data['variants']]
-    # Offload blocking enrichment to thread
     enriched_variants = await asyncio.to_thread(
         enrich_variants_batch,
         harmonized_variants,
@@ -255,19 +215,18 @@ async def enrich_variants_task_async(paper_db: PaperDB) -> None:
         f.write(output.model_dump_json(indent=2))
 
 
-async def hpo_linking_task_async(paper_db: PaperDB) -> None:
+@task(retries=RETRIES, retry_delay_seconds=5)
+async def hpo_linking_task(paper_db: PaperDB) -> None:
     with open(paper_db.phenotype_linking_json_path, 'r') as f:
         phenotype_data = json.load(f)
 
     phenotype_linking = PhenotypeLinkingOutput(**phenotype_data)
     term_lookup = build_term_lookup()
 
-    # Add HPO candidates to each phenotype
     for entry in phenotype_linking.phenotypes:
         candidates = find_matching_hpo_terms(entry.text, term_lookup=term_lookup)
         entry.candidates = candidates
 
-    # Exclude optional fields to keep agent input clean
     phenotype_data_filtered = phenotype_linking.model_dump(
         exclude={'notes', 'onset', 'location', 'severity', 'modifier', 'section'}
     )
@@ -282,69 +241,80 @@ async def hpo_linking_task_async(paper_db: PaperDB) -> None:
         f.write(json_response)
 
 
-def initial_extraction(paper_id: str, gene_symbol: str) -> None:
-    def run() -> None:
-        async def _run1() -> None:
-            await asyncio.gather(
-                parse_paper_task_async(paper_id),
-                extract_variants_task_async(paper_id, gene_symbol),
-                pedigree_describer_task_async(paper_id),
-            )
+# ---------------------------------------------------------------------------
+# Flows — orchestrate tasks and own DB status transitions
+# ---------------------------------------------------------------------------
 
+def _set_pipeline_status(paper_id: str, status: PipelineStatus) -> None:
+    with session_scope() as session:
+        session.execute(
+            update(PaperDB)
+            .where(PaperDB.id == paper_id)
+            .values(pipeline_status=status)
+        )
+
+
+@flow(name='initial-extraction', flow_run_name='extraction-{paper_id}')
+async def initial_extraction(paper_id: str, gene_symbol: str) -> None:
+    _set_pipeline_status(paper_id, PipelineStatus.EXTRACTION_RUNNING)
+    try:
+        parse_content(paper_id, force=True)
+
+        # Submit independently — Prefect tracks these as concurrent siblings
+        f_paper    = parse_paper_task.submit(paper_id)
+        f_variants = extract_variants_task.submit(paper_id, gene_symbol)
+        f_pedigree = pedigree_describer_task.submit(paper_id)
+
+        # Depends on all three above — Prefect will not schedule this until they complete
+        paper_db = PaperDB(id=paper_id).with_content()
+        f_patients = parse_patients_task.submit(
+            paper_db, wait_for=[f_pedigree]
+        )
+        f_patients.result()
+
+    except Exception:
+        _set_pipeline_status(paper_id, PipelineStatus.EXTRACTION_FAILED)
+        raise
+
+    _set_pipeline_status(paper_id, PipelineStatus.EXTRACTION_COMPLETED)
+
+
+@flow(name='linking-tasks', flow_run_name='linking-{paper_id}')
+async def linking_tasks(paper_id: str) -> None:
+    _set_pipeline_status(paper_id, PipelineStatus.LINKING_RUNNING)
+    try:
         paper_db = PaperDB(id=paper_id).with_content()
 
-        async def _run2() -> None:
-            await asyncio.gather(
-                parse_patients_task_async(paper_db),
-            )
+        # First wave — all three are independent of each other
+        f_harmonize  = harmonize_variants_task.submit(paper_db)
+        f_pv_linking = patient_variant_linking_task.submit(paper_db)
+        f_ph_linking = phenotype_patient_linking_task.submit(paper_db)
 
-        parse_content(paper_id, force=True)
-        asyncio.run(_run1())
-        asyncio.run(_run2())
+        # Second wave — enrich depends on harmonize, hpo depends on phenotype linking
+        f_enrich = enrich_variants_task.submit(paper_db, wait_for=[f_harmonize])
+        f_hpo    = hpo_linking_task.submit(paper_db, wait_for=[f_ph_linking])
 
-    run_with_retries(
-        paper_id=paper_id,
-        run_fn=run,
-        running_status=PipelineStatus.EXTRACTION_RUNNING,
-        success_status=PipelineStatus.EXTRACTION_COMPLETED,
-        failure_status=PipelineStatus.EXTRACTION_FAILED,
-    )
+        # patient_variant_linking has no second-wave dependent; still wait on it
+        for f in [f_enrich, f_hpo, f_pv_linking]:
+            f.result()
 
+    except Exception:
+        _set_pipeline_status(paper_id, PipelineStatus.LINKING_FAILED)
+        raise
 
-def linking_tasks(paper_id: str) -> None:
-    def run() -> None:
-        async def _run() -> None:
-            paper_db = PaperDB(id=paper_id).with_content()
+    _set_pipeline_status(paper_id, PipelineStatus.COMPLETED)
 
-            await asyncio.gather(
-                harmonize_variants_task_async(paper_db),
-                patient_variant_linking_task_async(paper_db),
-                phenotype_patient_linking_task_async(paper_db),
-            )
-
-            await asyncio.gather(
-                enrich_variants_task_async(paper_db),
-                hpo_linking_task_async(paper_db),
-            )
-
-        asyncio.run(_run())
-
-    run_with_retries(
-        paper_id=paper_id,
-        run_fn=run,
-        running_status=PipelineStatus.LINKING_RUNNING,
-        success_status=PipelineStatus.COMPLETED,
-        failure_status=PipelineStatus.LINKING_FAILED,
-    )
-
+# ---------------------------------------------------------------------------
+# Polling loop
+# ---------------------------------------------------------------------------
 
 def main() -> None:
     while True:
         try:
             now = datetime.datetime.utcnow()
             expired_cutoff = now - datetime.timedelta(seconds=LEASE_TIMEOUT_S)
+
             with session_scope() as session:
-                # Extraction queue
                 extraction_job = session.scalars(
                     select(PaperDB)
                     .where(
@@ -357,7 +327,7 @@ def main() -> None:
                             ),
                         )
                     )
-                    .order_by(PaperDB.last_modified.asc())  # oldest first
+                    .order_by(PaperDB.last_modified.asc())
                     .limit(1)
                 ).first()
 
@@ -367,11 +337,10 @@ def main() -> None:
                     logger.info(f'Dequeued paper {paper_id} for extraction')
 
             if extraction_job:
-                initial_extraction(paper_id, gene_symbol)
-                continue  # restart loop immediately
+                asyncio.run(initial_extraction(paper_id, gene_symbol))
+                continue
 
             with session_scope() as session:
-                # Linking queue
                 linking_job = session.scalars(
                     select(PaperDB)
                     .where(
@@ -394,7 +363,7 @@ def main() -> None:
                     logger.info(f'Dequeued paper {paper_id} for linking')
 
             if linking_job:
-                linking_tasks(paper_id)
+                asyncio.run(linking_tasks(paper_id))
                 continue
 
         except KeyboardInterrupt:

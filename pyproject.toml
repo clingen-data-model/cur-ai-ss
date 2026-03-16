@@ -12,28 +12,24 @@ dependencies = [
     "pydantic-settings==2.12.0",
     "requests>=2.32.5",
     "rapidfuzz>=3.0",
-
     # AI/ML
     "openai==2.15.0",
     "openai-agents==0.7.0",
     "fastapi>=0.126.0",
     "sqlalchemy>=2.0.45",
     "uvicorn>=0.38.0",
-    
     "python-multipart>=0.0.21",
     "alembic>=1.18.4",
-    "ipython",    
-
+    "ipython",
     # pdf parsing
     "docling==2.64.1",
     "biopython>=1.86",
     "pymupdf>=1.26.7",
-
     "hpo-toolkit>=0.7.0",
-
     # Streamlit components
     "streamlit-pdf-viewer>=0.0.27",
     "streamlit-searchbox>=0.1.24",
+    "prefect>=3.6.22",
 ]
 
 [dependency-groups]
