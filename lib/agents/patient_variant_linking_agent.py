@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import List, Literal
+from typing import List, Literal, Optional
 
 from agents import Agent
 from pydantic import BaseModel, model_validator
@@ -28,19 +28,19 @@ class Inheritance(str, Enum):
 
 
 class TestingMethod(str, Enum):
-    Chromosomal_microarray = 'Chromosomal microarray'
-    Next_generation_sequencing_panels = 'Next generation sequencing panels'
-    Exome_sequencing = 'Exome sequencing'
-    Genome_sequencing = 'Genome sequencing'
-    Sanger_sequencing = 'Sanger sequencing'
+    Chromosomal_microarray = 'Chromosomal_microarray'
+    Next_generation_sequencing_panels = 'Next_generation_sequencing_panels'
+    Exome_sequencing = 'Exome_sequencing'
+    Genome_sequencing = 'Genome_sequencing'
+    Sanger_sequencing = 'Sanger_sequencing'
     Pcr = 'PCR'
-    Homozygosity_mapping = 'Homozygosity mapping'
-    Linkage_analysis = 'Linkage analysis'
+    Homozygosity_mapping = 'Homozygosity_mapping'
+    Linkage_analysis = 'Linkage_analysis'
     Genotyping = 'Genotyping'
-    Denaturing_gradient_gel = 'Denaturing gradient gel'
-    High_resolution_melting = 'High resolution melting'
-    Restriction_digest = 'Restriction digest'
-    Single_strand_conformation_polymorphism = 'Single-strand conformation polymorphism'
+    Denaturing_gradient_gel = 'Denaturing_gradient_gel'
+    High_resolution_melting = 'High_resolution_melting'
+    Restriction_digest = 'Restriction_digest'
+    Single_strand_conformation_polymorphism = 'Single_strand_conformation_polymorphism'
     Unknown = 'Unknown'
     Other = 'Other'
 
@@ -56,11 +56,20 @@ class PatientVariantLink(BaseModel):
     zygosity: Zygosity
     inheritance: Inheritance
     link_type: LinkType
-    evidence_context: str
+    evidence_context: Optional[str] = None
+    pedigree_image_id: Optional[int] = None
     confidence: Literal['high', 'moderate', 'low']
     linkage_notes: str
     testing_methods: List[TestingMethod]
     testing_methods_evidence: List[str]
+
+    @model_validator(mode='after')
+    def validate_evidence(self) -> Self:
+        if (self.evidence_context is None) == (self.pedigree_image_id is None):
+            raise ValueError(
+                'Exactly one of evidence_context or pedigree_image_id must be provided'
+            )
+        return self
 
     @model_validator(mode='after')
     def max_two_methods(self) -> Self:
@@ -93,7 +102,20 @@ You are given:
    Each patient includes:
       - patient_id (integer index in list)
       - identifier (e.g., "Patient 1", "Proband", "II-3", etc.)
-      - identifier_evidence_context (text snippet where patient is described)
+      - identifier_evidence_context (the text snippet where patient is described.  If the pedigree image description was used, indicate "Pedigree Image")
+5. A structured description of a pedigree included in the paper.
+   The description will include:
+      - image_id (integer index of the pedigree image out of all images in the paper)
+      - description
+   
+   The description should summarize the pedigree structure,
+   including family relationships, affected status, and any genotype or
+   segregation information visible in the figure.
+
+   This description represents information that appears visually in the
+   figure and may be used as supporting evidence.
+
+   If the description is null, there was no pedigree image included in the paper.
 
 Your task:
 
@@ -108,10 +130,33 @@ For every valid patient–variant relationship found in the paper, return:
 - inheritance
 - link_type
 - evidence_context
+- pedigree_image_id
 - confidence
 - testing_methods
 - testing_methods_evidence
 - linkage_notes
+
+---------------------------------------------------
+TABLE AND STRUCTURED DATA INTERPRETATION
+---------------------------------------------------
+
+Genetic variant assignments are frequently reported in tables.
+
+Before linking patients and variants from narrative text,
+carefully examine any tables, structured lists, or figure captions
+that contain fields such as:
+
+- Patient
+- Individual
+- Proband
+- Family member
+- Mutation
+- Variant
+- Genotype
+
+If a table or list clearly maps patients to variants through row or
+column alignment, treat this mapping as explicit evidence.
+
 ---------------------------------------------------
 LINKING RULES
 ---------------------------------------------------
@@ -128,14 +173,23 @@ Do NOT assume:
 - That a variant applies globally to all cases unless explicitly stated
 - That inferred links can be propagated across patients or variants
 
-Evidence requirements:
+Evidence supporting a patient–variant link may appear in:
 
-- A valid link must be supported by text containing BOTH:
-    - The patient identifier (or a clearly defined group that explicitly includes the patient)
-    - The variant description OR genotype statement
-- The patient identifier / group and variant/genotype must occur:
-    - Within the same sentence, OR
-    - Within consecutive sentences where the linkage is explicit (e.g., "these patients carried...", "both individuals were homozygous...")
+- The same sentence
+- Consecutive sentences
+- Structured lists
+- Tables
+- Figure captions
+
+The patient identifier and variant description do NOT need to appear
+in the exact same sentence if the surrounding context clearly links them.
+
+Acceptable contextual linkage includes:
+
+- Lists where variants are annotated with patient identifiers
+- Tables where rows or columns align patients with variants
+- Short passages where the patient is introduced and the genotype
+  is stated immediately after
 
 Indirect patient references:
 
@@ -163,10 +217,42 @@ Negative genotypes:
     - Non-carriers
 - Only model positive carrier links in this agent
 
-Sentence-level precision:
+Contextual linkage:
 
-- Do not combine distant paragraphs or loosely connected sentences to justify a link
-- Links must be justified by textual evidence that a human curator would recognize as sufficient
+- Avoid combining unrelated paragraphs. However, it is acceptable to combine nearby sentences, list entries,
+or table cells when the surrounding context clearly describes the same patient and genotype.
+
+
+---------------------------------------------------
+PEDIGREE EVIDENCE RULES
+---------------------------------------------------
+
+Pedigree figures may contain genotype or segregation information that is
+not explicitly described in the text.
+
+You may use pedigree descriptions as evidence when:
+
+- The pedigree description explicitly indicates a patient's genotype
+- OR the pedigree clearly shows segregation that identifies which
+  individuals carry the variant
+
+Only use pedigree evidence if the pedigree individual can be confidently
+mapped to a patient in the structured patient list.
+
+Examples of acceptable pedigree evidence:
+
+- The pedigree labels individual II-3 as homozygous for the variant
+- The pedigree shows all affected siblings carrying the mutation
+
+When using pedigree evidence:
+
+- Set `pedigree_image_id` to the corresponding image_id
+- Set `evidence_context` to null
+- Do NOT copy the pedigree description text into evidence_context
+
+Pedigree-derived links will usually have
+`link_type = inferred_from_family_context`
+unless the individual's genotype is explicitly labeled.
 
 ---------------------------------------------------
 LINK TYPE DEFINITIONS
@@ -176,13 +262,19 @@ Assign one of the following:
 
 1) "explicit"
 
-Use when:
-- The paper directly states that the specific patient carries the specific variant
-- The genotype is clearly attributed to that individual in a sentence
+Use when the paper clearly associates a patient with a variant through:
+
+- direct statements
+- table mappings
+- structured lists
+- variant annotations including patient identifiers
+- genotype descriptions clearly referring to the patient
 
 Examples:
-- "Patient 2 was homozygous for c.2300_2318del."
-- "The proband carried the p.Arg117His variant."
+- "Patient 2 carried p.Arg31Pro."
+- "p.Arg31Pro (Patient 2)"
+- "Table: P2 | p.Arg31Pro"
+- "The proband (P1) harbored the variant."
 
 2) "inferred_from_family_context"
 
@@ -324,16 +416,35 @@ Confidence must reflect the strength of textual evidence, not biological plausib
 EVIDENCE CONTEXT REQUIREMENTS
 ---------------------------------------------------
 
-The evidence_context must:
+Evidence supporting a link may come from either:
 
-- Be a short verbatim excerpt from the paper
-- Directly support the link
-- Include BOTH:
-    - The patient identifier
-    - The variant description OR genotype statement
+1. Text in the paper
+2. A pedigree image
+3. Table or list mapping patients to variants.
 
-Do NOT paraphrase or summarize
-Use exact quoted text from the paper
+If evidence comes from text:
+
+- evidence_context must contain a short verbatim excerpt from the paper
+- The evidence excerpt should ideally contain both:
+    - the patient identifier
+    - the variant description or genotype statement
+  However, when evidence comes from a structured source such as a table,
+  list, or figure caption, the patient identifier and variant may appear
+  in separate but clearly aligned fields.
+
+  In these cases, quote the minimal excerpt that demonstrates the
+  association (for example a table row or column pair).
+- pedigree_image_id must be null
+
+If evidence comes from a pedigree image:
+
+- pedigree_image_id must contain the corresponding image_id
+- evidence_context must be null
+
+If evidence comes from a table or a list, provide a text description of the figure.
+
+Do NOT paraphrase or summarize text evidence.
+Use exact quoted text when evidence comes from the paper.
 
 ---------------------------------------------------
 VALIDATION
@@ -345,15 +456,21 @@ VALIDATION
     - The variant exactly matches one of the structured variants
     - The evidence is explicit enough to support the link
 - Confirm testing_methods contains at most two values.
+- Confirm that exactly one of evidence_context or pedigree_image_id is provided.
+- Confirm that pedigree_image_id is equal to the image_id of the input pedigree description.
 - Confirm that the number of testing_methods_evidence entries exactly equals 
 the number of testing_methods.  If testing_methods = [Unknown], then testing_methods_evidence must be an empty list.
 - If any check fails, remove the link
 - Do NOT create links for wild-type or negative genotypes
 - Multiple patients sharing a variant should result in separate links
 
-Over-inference is a critical error
-When uncertain, do NOT create a link
-If no links have been created, retry!
+Avoid speculative links.
+
+However, if the paper provides reasonable contextual evidence
+(e.g., tables, lists, nearby sentences, or family descriptions)
+that a human curator would interpret as linking a patient and
+variant, you should create the link and assign an appropriate
+confidence level.
 
 ---------------------------------------------------
 LINKAGE NOTES FIELD

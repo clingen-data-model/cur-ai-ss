@@ -36,6 +36,7 @@ from typing_extensions import Self
 from lib.core.environment import env
 from lib.misc.pdf.paths import (
     pdf_highlighted_path,
+    pdf_image_path,
     pdf_markdown_path,
     pdf_raw_path,
     pdf_sections_dir,
@@ -230,6 +231,10 @@ class PaperDB(Base):
     def patient_variant_links_json_path(self) -> Path:
         return env.evagg_dir / self.id / 'patient_variant_links.json'
 
+    @property
+    def pedigree_descriptions_json_path(self) -> Path:
+        return env.evagg_dir / self.id / 'pedigree_descriptions.json'
+
 
 class PaperExtractionOutput(BaseModel):
     title: str
@@ -276,6 +281,7 @@ class PaperResp(PaperExtractionOutput):
     harmonized_variants_json_path: Path
     variants_json_path: Path
     patient_variant_links_json_path: Path
+    pedigree_descriptions_json_path: Path
 
     @computed_field  # type: ignore
     @property
@@ -309,4 +315,5 @@ class PaperUpdateRequest(PatchModel):
 
 class HighlightRequest(BaseModel):
     queries: list[str]
+    image_ids: list[int]
     color: str

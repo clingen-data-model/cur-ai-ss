@@ -96,13 +96,11 @@ def highlight_pdf(paper_id: str, queries: list[str] | str, color: str) -> None:
 
 
 def grobid_annotations(
-    paper_id: str, queries: list[str] | str, color: str
+    paper_id: str, queries: list[str], image_ids: list[int], color: str
 ) -> list[GrobidAnnotation]:
-    if isinstance(queries, str):
-        queries = [queries]
     resp = requests.post(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/grobid-annotation',
-        json={'queries': queries, 'color': color},
+        json={'queries': queries, 'image_ids': image_ids, 'color': color},
     )
     resp.raise_for_status()
     return TypeAdapter(list[GrobidAnnotation]).validate_python(resp.json())

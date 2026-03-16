@@ -15,6 +15,7 @@ from lib.agents.variant_harmonization_agent import (
     VariantHarmonizationOutput,
 )
 from lib.models import PaperResp, PipelineStatus
+from lib.ui.paper.shared import get_gnomad_url
 
 
 def render_variants_tab(selected_variant_id: int | None) -> None:
@@ -59,10 +60,12 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
 
                 col1, col2 = st.columns(2)
 
-                col1.markdown(
-                    f'**gnomAD-style coordinates:** '
-                    f'{harmonized_variant.gnomad_style_coordinates or "N/A"}'
+                gnomad_coords = (
+                    f'[{harmonized_variant.gnomad_style_coordinates}]({get_gnomad_url(harmonized_variant.gnomad_style_coordinates)})'
+                    if harmonized_variant.gnomad_style_coordinates
+                    else 'N/A'
                 )
+                col1.markdown(f'**gnomAD-style coordinates:** {gnomad_coords}')
                 col1.markdown(f'**rsID:** {harmonized_variant.rsid or "N/A"}')
                 col1.markdown(f'**CAID:** {harmonized_variant.caid or "N/A"}')
 

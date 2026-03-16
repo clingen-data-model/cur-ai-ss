@@ -21,6 +21,7 @@ from lib.agents.variant_harmonization_agent import (
     VariantHarmonizationOutput,
 )
 from lib.models import PaperResp, PipelineStatus
+from lib.ui.paper.shared import get_gnomad_url, highlight_and_switch_tab
 
 
 def render_patient_variant_occurrences_tab() -> None:
@@ -209,6 +210,11 @@ def render_patient_variant_occurrences_tab() -> None:
 
         with col2:
             st.markdown('#### Harmonized Variant Info')
+            gnomad_coords = (
+                f'[{harmonized_variant.gnomad_style_coordinates}]({get_gnomad_url(harmonized_variant.gnomad_style_coordinates)})'
+                if harmonized_variant.gnomad_style_coordinates
+                else 'N/A'
+            )
             variant_data = {
                 'Field': [
                     '**HGVS g.**',
@@ -223,7 +229,7 @@ def render_patient_variant_occurrences_tab() -> None:
                     harmonized_variant.hgvs_c or 'N/A',
                     harmonized_variant.hgvs_p or 'N/A',
                     harmonized_variant.rsid or 'N/A',
-                    harmonized_variant.gnomad_style_coordinates or 'N/A',
+                    gnomad_coords,
                     harmonized_variant.normalization_confidence or 'N/A',
                 ],
             }
@@ -232,7 +238,38 @@ def render_patient_variant_occurrences_tab() -> None:
         st.divider()
 
         with st.expander('Evidence Context', expanded=False):
-            st.text(link.evidence_context or 'No evidence provided')
+            if link.evidence_context or link.pedigree_image_id:
+                with st.container(
+                    horizontal=True,
+                    vertical_alignment='center',
+                    horizontal_alignment='right',
+                ):
+                    st.text(
+                        link.evidence_context or 'Evidence found in Pedigree Image.'
+                    )
+                    st.space('stretch')
+                    st.markdown('Choose Color: ')
+                    color_key = f'{link.patient_id}-{link.variant_id}-highlight-color-link-evidence'
+                    if color_key not in st.session_state:
+                        st.session_state[color_key] = '#EE00FF'
+                    # Color picker — key handles session state automatically
+                    color = st.color_picker(
+                        'Choose Color:', label_visibility='collapsed', key=color_key
+                    )
+                    st.button(
+                        'Highlight',
+                        key=f'{link.patient_id}-{link.variant_id}-highlight-confirm-link-evidence',
+                        type='secondary',
+                        on_click=highlight_and_switch_tab,
+                        args=(
+                            paper_resp.id,
+                            [link.evidence_context] if link.evidence_context else [],
+                            [link.pedigree_image_id] if link.pedigree_image_id else [],
+                            color,
+                        ),
+                    )
+            else:
+                st.text('No evidence provided')
 
         with st.expander('Linkage Notes', expanded=False):
             st.text(link.linkage_notes or 'No notes provided')
@@ -240,4 +277,4 @@ def render_patient_variant_occurrences_tab() -> None:
         if link.testing_methods_evidence:
             with st.expander('Testing Methods Evidence', expanded=False):
                 for i, evidence in enumerate(link.testing_methods_evidence, start=1):
-                    st.text(f'**Method {i}:** {evidence}')
+                    st.text(evidence)

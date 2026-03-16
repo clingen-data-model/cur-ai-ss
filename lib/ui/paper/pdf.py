@@ -2,7 +2,7 @@ import streamlit as st
 from streamlit_pdf_viewer import pdf_viewer
 
 from lib.models import PaperResp
-from lib.ui.paper.constants import CURRENT_ANNOTATIONS_KEY
+from lib.ui.paper.shared import CURRENT_ANNOTATIONS_KEY
 
 
 def render_pdf_tab() -> None:
@@ -16,7 +16,11 @@ def render_pdf_tab() -> None:
         viewer_align='center',  # Center alignment
         show_page_separator=True,  # Show separators between pages
         annotations=[a.dict() for a in annotations],
-        scroll_to_annotation=1 if annotations else None,
+        # NB: scroll_to_annotation does not support 0... which is the index if there
+        # is only a single annotation.
+        scroll_to_annotation=1 if len(annotations) > 1 else None,
+        scroll_to_page=annotations[0].page if len(annotations) == 1 else None,
+        render_text=True,
     )
     st.download_button(
         label='Download PDF',

@@ -344,6 +344,19 @@ System: You are an expert clinical data curator.
 
 Inputs:
 - Text of a paper, case report, or patient registry entry
+- A structured description of a pedigree included in the paper.
+   The description will include:
+      - image_id (integer index of the pedigree image out of all images in the paper)
+      - description
+   
+   The description should summarize the pedigree structure,
+   including family relationships, affected status, and any genotype or
+   segregation information visible in the figure.
+
+   This description represents information that appears visually in the
+   figure and may be used as supporting evidence.
+
+   If the description is null, there was no pedigree image included in the paper.
 
 Task: Extract patient-level demographic information for each individual human patient explicitly described in the text, distinguishing clearly between probands and non-probands.
 

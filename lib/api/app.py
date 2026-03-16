@@ -35,7 +35,9 @@ from lib.core.logging import setup_logging
 from lib.misc.pdf.highlight import (
     GrobidAnnotation,
     find_best_match,
+    highlight_images_in_pdf,
     highlight_words_in_pdf,
+    images_to_grobid_annotations,
     parse_hex_color,
     words_to_grobid_annotations,
 )
@@ -293,6 +295,13 @@ def highlight_pdf(
         # Highlight the matched words in the PDF
         highlight_words_in_pdf(paper_id, matched_words, rgb_color)
 
+    # Also highlight requested images
+    highlight_images_in_pdf(
+        paper_id,
+        request.image_ids,
+        rgb_color,
+    )
+
 
 @app.post('/papers/{paper_id}/grobid-annotation', response_model=list[GrobidAnnotation])
 def grobid_annotation(
@@ -343,8 +352,16 @@ def grobid_annotation(
         annotations = words_to_grobid_annotations(
             paper_id,
             matched_words,
-            color=rgb_color,
+            rgb_color,
         )
         all_annotations.extend(annotations)
+
+    all_annotations.extend(
+        images_to_grobid_annotations(
+            paper_id,
+            request.image_ids,
+            rgb_color,
+        )
+    )
 
     return all_annotations

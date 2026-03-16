@@ -14,6 +14,8 @@ from lib.agents.patient_extraction_agent import (
     RaceEthnicity,
     SexAtBirth,
 )
+from lib.core.environment import env
+from lib.misc.pdf.paths import pdf_image_path
 from lib.models import (
     HpoConfidence,
     PaperResp,
@@ -22,23 +24,7 @@ from lib.models import (
     PipelineStatus,
 )
 from lib.ui.api import get_http_error_detail, grobid_annotations, highlight_pdf
-from lib.ui.paper.constants import CURRENT_ANNOTATIONS_KEY, HEADER_TABS, HEADER_TABS_KEY
-
-
-def highlight_and_switch_tab(
-    paper_id: str, contexts: list[str], color: str, tab_index: int
-) -> None:
-    try:
-        current_annotations = grobid_annotations(
-            paper_id,
-            contexts,
-            color,
-        )
-        st.toast('PDF highlighted! Zooming to highlight.')
-        st.session_state[HEADER_TABS_KEY] = HEADER_TABS[tab_index]
-        st.session_state[CURRENT_ANNOTATIONS_KEY] = current_annotations
-    except requests.HTTPError as e:
-        st.error(f'Failed to highlight: {get_http_error_detail(e)}')
+from lib.ui.paper.shared import highlight_and_switch_tab
 
 
 def render_patient(
@@ -436,7 +422,7 @@ def _render_phenotypes_table(
                         key=f'{key_prefix}-highlight-confirm-{phenotype.text}',
                         type='secondary',
                         on_click=highlight_and_switch_tab,
-                        args=(paper_resp.id, phenotype.evidence_contexts, color, 0),
+                        args=(paper_resp.id, phenotype.evidence_contexts, [], color),
                     )
 
 
@@ -463,6 +449,10 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
         phenotype_data = json.load(f)
     phenotypes = PhenotypeLinkingOutput.model_validate(phenotype_data).phenotypes
 
+    # Load pedigree description
+    with open(paper_resp.pedigree_descriptions_json_path, 'r') as f:
+        pedigree_description = json.load(f)
+
     # -----------------------------
     # Display Patients
     # -----------------------------
@@ -473,15 +463,30 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
     non_probands = [
         (i, p) for i, p in indexed_patients if p.proband_status != ProbandStatus.Proband
     ]
+    affecteds = [
+        (i, p)
+        for i, p in indexed_patients
+        if p.affected_status == AffectedStatus.Affected
+    ]
+    unaffecteds = [
+        (i, p)
+        for i, p in indexed_patients
+        if p.affected_status != AffectedStatus.Affected
+    ]
     tabs = [
         f'Probands ({len(probands)})',
         f'Non-Probands ({len(non_probands)})',
+        f'Affecteds ({len(affecteds)})',
+        f'Unaffecteds ({len(unaffecteds)})',
+        'Pedigree Image',
     ]
-    proband_tab, non_proband_tab = st.tabs(
-        tabs,
-        default=tabs[1]
-        if selected_patient_id in {p[0] for p in non_probands}
-        else tabs[0],
+    proband_tab, non_proband_tab, affecteds_tab, unaffecteds_tab, pedigree_image_tab = (
+        st.tabs(
+            tabs,
+            default=tabs[1]
+            if selected_patient_id in {p[0] for p in non_probands}
+            else tabs[0],
+        )
     )
     with proband_tab:
         if not probands:
@@ -491,7 +496,7 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
             render_patient(
                 patient,
                 expanded=(original_idx == selected_patient_id),
-                key_prefix=f'patient-{original_idx}',
+                key_prefix=f'patient-proband-{original_idx}',
                 patient_id=original_idx,
                 phenotypes=phenotypes,
             )
@@ -503,7 +508,45 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
             render_patient(
                 patient,
                 expanded=(original_idx == selected_patient_id),
-                key_prefix=f'patient-{original_idx}',
+                key_prefix=f'patient-non-proband-{original_idx}',
                 patient_id=original_idx,
                 phenotypes=phenotypes,
             )
+    with affecteds_tab:
+        if not affecteds:
+            st.info('No affected patients detected.')
+        for original_idx, patient in affecteds:
+            st.markdown(f'### Patient {original_idx}')
+            render_patient(
+                patient,
+                expanded=(original_idx == selected_patient_id),
+                key_prefix=f'patient-affected-{original_idx}',
+                patient_id=original_idx,
+                phenotypes=phenotypes,
+            )
+    with unaffecteds_tab:
+        if not unaffecteds:
+            st.info('No affected patients detected.')
+        for original_idx, patient in unaffecteds:
+            st.markdown(f'### Patient {original_idx}')
+            render_patient(
+                patient,
+                expanded=(original_idx == selected_patient_id),
+                key_prefix=f'patient-unaffected-{original_idx}',
+                patient_id=original_idx,
+                phenotypes=phenotypes,
+            )
+    with pedigree_image_tab:
+        if (
+            not pedigree_description['description']
+            or not pedigree_description['image_id']
+        ):
+            st.info('No pedigree image available')
+        else:
+            col1, col2, col3 = st.columns([1, 3, 1])
+            with col2:
+                st.image(
+                    f'{env.PROTOCOL}{env.API_ENDPOINT}{pdf_image_path(paper_resp.id, int(pedigree_description["image_id"]))}',
+                    width='content',
+                )
+                st.write(pedigree_description['description'])

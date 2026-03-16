@@ -545,6 +545,11 @@ Goal:
 Normalize each of the provided variants to a GRCh38 gnomAD-style identifier and resolve via
 allele_registry_resolver as the final step whenever possible.
 
+You must return exactly one output object for each input variant.
+    - The number of output variants must equal the number of input variants.
+    - The order of variants must remain unchanged.
+    - You must not add or remove variants.
+
 ============================================================
 STATE 0 — INITIAL DATA ASSESSMENT
 ============================================================
