@@ -5,9 +5,8 @@ import json
 import logging
 import time
 
-from prefect import flow, task
-
 from agents import Runner
+from prefect import flow, task
 from sqlalchemy import and_, or_, select, update
 
 from lib.agents.hpo_linking_agent import agent as hpo_linking_agent
@@ -51,6 +50,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Tasks — each retries independently on failure
 # ---------------------------------------------------------------------------
+
 
 @task(retries=RETRIES, retry_delay_seconds=5)
 async def parse_paper_task(paper_id: str) -> None:
@@ -245,12 +245,11 @@ async def hpo_linking_task(paper_db: PaperDB) -> None:
 # Flows — orchestrate tasks and own DB status transitions
 # ---------------------------------------------------------------------------
 
+
 def _set_pipeline_status(paper_id: str, status: PipelineStatus) -> None:
     with session_scope() as session:
         session.execute(
-            update(PaperDB)
-            .where(PaperDB.id == paper_id)
-            .values(pipeline_status=status)
+            update(PaperDB).where(PaperDB.id == paper_id).values(pipeline_status=status)
         )
 
 
@@ -261,15 +260,13 @@ async def initial_extraction(paper_id: str, gene_symbol: str) -> None:
         parse_content(paper_id, force=True)
 
         # Submit independently — Prefect tracks these as concurrent siblings
-        f_paper    = parse_paper_task.submit(paper_id)
+        f_paper = parse_paper_task.submit(paper_id)
         f_variants = extract_variants_task.submit(paper_id, gene_symbol)
         f_pedigree = pedigree_describer_task.submit(paper_id)
 
         # Depends on all three above — Prefect will not schedule this until they complete
         paper_db = PaperDB(id=paper_id).with_content()
-        f_patients = parse_patients_task.submit(
-            paper_db, wait_for=[f_pedigree]
-        )
+        f_patients = parse_patients_task.submit(paper_db, wait_for=[f_pedigree])
         f_patients.result()
 
     except Exception:
@@ -286,13 +283,13 @@ async def linking_tasks(paper_id: str) -> None:
         paper_db = PaperDB(id=paper_id).with_content()
 
         # First wave — all three are independent of each other
-        f_harmonize  = harmonize_variants_task.submit(paper_db)
+        f_harmonize = harmonize_variants_task.submit(paper_db)
         f_pv_linking = patient_variant_linking_task.submit(paper_db)
         f_ph_linking = phenotype_patient_linking_task.submit(paper_db)
 
         # Second wave — enrich depends on harmonize, hpo depends on phenotype linking
         f_enrich = enrich_variants_task.submit(paper_db, wait_for=[f_harmonize])
-        f_hpo    = hpo_linking_task.submit(paper_db, wait_for=[f_ph_linking])
+        f_hpo = hpo_linking_task.submit(paper_db, wait_for=[f_ph_linking])
 
         # patient_variant_linking has no second-wave dependent; still wait on it
         for f in [f_enrich, f_hpo, f_pv_linking]:
@@ -304,9 +301,11 @@ async def linking_tasks(paper_id: str) -> None:
 
     _set_pipeline_status(paper_id, PipelineStatus.COMPLETED)
 
+
 # ---------------------------------------------------------------------------
 # Polling loop
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     while True:
