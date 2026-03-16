@@ -26,6 +26,18 @@ class GrobidAnnotation(BaseModel):
     border: str = 'solid'
 
 
+class GrobidAnnotation(BaseModel):
+    """GROBID-style coordinate with top-left origin (y increases downward)."""
+
+    page: int
+    x: float
+    y: float
+    width: float
+    height: float
+    color: str
+    border: str = 'solid'
+
+
 def parse_hex_color(color_str: str) -> tuple[float, float, float]:
     if color_str.startswith('#'):
         hex_str = color_str.lstrip('#')
