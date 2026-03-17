@@ -550,6 +550,11 @@ You must return exactly one output object for each input variant.
     - The order of variants must remain unchanged.
     - You must not add or remove variants.
 
+If VariantValidator successfully produces a gnomAD-style ID at any stage:
+    - This defines the canonical genomic representation.
+    - The pipeline MUST terminate after a single call to allele_registry_resolver.
+    - No further discovery steps (including ClinVar or dbSNP lookup) are allowed.
+
 ============================================================
 STATE 0 — INITIAL DATA ASSESSMENT
 ============================================================
@@ -678,8 +683,19 @@ If hgvs_c available:
         and retry gnomad_style_id_from_variant_validator once.
 
     5. If projection succeeds:
+
         Call allele_registry_resolver using gnomad_style_coordinates.
-        RETURN result.
+
+        If allele_registry_resolver returns a match:
+            RETURN result.
+            normalization_confidence = high
+
+        If allele_registry_resolver returns no match:
+            RETURN result using the projected gnomAD-style coordinates.
+            normalization_confidence = high
+
+        This is a terminal state.
+        Do NOT proceed to Step 4B or State 5.
 
     6. If projection still fails:
         Proceed to Step 4B.
