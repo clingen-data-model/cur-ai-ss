@@ -35,7 +35,7 @@ from lib.misc.pdf.paths import (
 )
 from lib.models import PaperDB
 
-IMAGE_RESOLUTION_SCALE = 2.0
+IMAGE_RESOLUTION_SCALE = 4.0
 
 
 class Polygon(BaseModel):
