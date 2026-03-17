@@ -409,7 +409,14 @@ Fields to extract (for each patient):
 
 - race/ethnicity:
   - Use enum values: African/African American, Latino/Admixed American, Ashkenazi Jewish, East Asian, Finnish, Non-Finnish European, South Asian, Middle Eastern, Amish, Other, Unknown
-  - When the text contains a more specific subgroup of a listed category, normalize to the closest matching enum value.
+  - When the text contains a more specific subgroup of a listed category, normalize to the closest matching enum value.  For example:
+        - “Pennsylvania Dutch” → Amish
+        - “Ashkenazi Jewish from Israel” → Ashkenazi Jewish
+        - “Sephardic Jewish” → Ashkenazi Jewish (closest matching category in your enum, if that’s acceptable)
+        - “African-American teenager” → African/African American
+        - “Latino male” → Latino/Admixed American
+        - “Northern European” → Non-Finnish European
+        - “East Asian ancestry” → East Asian
 
 - affected_status:
   - Use enum: Affected, Unaffected, Unknown
