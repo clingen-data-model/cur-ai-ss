@@ -75,7 +75,9 @@ def render_highlight_controls(
     """Render color picker + Highlight + Focus & Switch Tab buttons."""
     if color_key not in st.session_state:
         st.session_state[color_key] = default_color or random.choice(COLORS)
-    color = st.color_picker('Choose Color', label_visibility='collapsed', key=color_key, disabled=disabled)
+    color = st.color_picker(
+        'Choose Color', label_visibility='collapsed', key=color_key, disabled=disabled
+    )
     st.button(
         'Highlight',
         key=f'{button_key_prefix}-highlight',

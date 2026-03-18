@@ -1,5 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import requests
 from pydantic import BaseModel
@@ -102,13 +102,16 @@ def clinvar_lookup(
     # Step 1: ESearch
     r = requests.get(
         f'{EUTILS_BASE}/esearch.fcgi',
-        params={
-            'db': 'clinvar',
-            'term': term,
-            'retmax': 100,
-            'retmode': 'json',
-            'sort': 'relevance',
-        },
+        params=cast(
+            dict[str, str | int],
+            {
+                'db': 'clinvar',
+                'term': term,
+                'retmax': 100,
+                'retmode': 'json',
+                'sort': 'relevance',
+            },
+        ),
         headers=headers,
         timeout=10,
     )
@@ -319,7 +322,7 @@ def enrich_variant(hv: HarmonizedVariant) -> EnrichedVariant:
         if hv.gnomad_style_coordinates:
             futures.append(executor.submit(gnomad_lookup, hv.gnomad_style_coordinates))
 
-        if hv.rsid or hv.caid or hv.hgvs_g or hhv.hgvs_c:
+        if hv.rsid or hv.caid or hv.hgvs_g or hv.hgvs_c:
             futures.append(
                 executor.submit(clinvar_lookup, hv.rsid, hv.caid, hv.hgvs_g, hv.hgvs_c)
             )
