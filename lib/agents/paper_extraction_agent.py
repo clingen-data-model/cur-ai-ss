@@ -34,6 +34,11 @@ def pubmed_search(title: str, first_author: str | None = None) -> List[str]:
         'retmax': 5,
     }
 
+    if env.NCBI_API_KEY:
+        params['api_key'] = env.NCBI_API_KEY
+    if env.NCBI_EMAIL:
+        params['email'] = env.NCBI_EMAIL
+
     r = requests.get(
         ESEARCH_ENDPOINT,
         params=params,
@@ -59,6 +64,11 @@ def pubmed_fetch_xml(pmid: str) -> str:
         'id': pmid,
         'retmode': 'xml',
     }
+
+    if env.NCBI_API_KEY:
+        params['api_key'] = env.NCBI_API_KEY
+    if env.NCBI_EMAIL:
+        params['email'] = env.NCBI_EMAIL
 
     r = requests.get(
         EFETCH_ENDPOINT,

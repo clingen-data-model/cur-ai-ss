@@ -53,6 +53,11 @@ def clinvar_lookup(query: str) -> List[Dict[str, Any]]:
         'sort': 'relevance',
     }
 
+    if env.NCBI_API_KEY:
+        esearch_params['api_key'] = env.NCBI_API_KEY
+    if env.NCBI_EMAIL:
+        esearch_params['email'] = env.NCBI_EMAIL
+
     r = requests.get(esearch_url, params=esearch_params, headers=headers, timeout=10)
     r.raise_for_status()
     search_data = r.json()
@@ -70,6 +75,11 @@ def clinvar_lookup(query: str) -> List[Dict[str, Any]]:
         'id': ','.join(ids),
         'retmode': 'json',
     }
+
+    if env.NCBI_API_KEY:
+        esummary_params['api_key'] = env.NCBI_API_KEY
+    if env.NCBI_EMAIL:
+        esummary_params['email'] = env.NCBI_EMAIL
 
     r = requests.get(esummary_url, params=esummary_params, headers=headers, timeout=10)
     r.raise_for_status()
@@ -130,6 +140,11 @@ def dbsnp_lookup(query: str) -> List[str]:
         'sort': 'relevance',
     }
 
+    if env.NCBI_API_KEY:
+        esearch_params['api_key'] = env.NCBI_API_KEY
+    if env.NCBI_EMAIL:
+        esearch_params['email'] = env.NCBI_EMAIL
+
     r = requests.get(esearch_url, params=esearch_params, headers=headers, timeout=10)
     r.raise_for_status()
     search_data = r.json()
@@ -147,6 +162,11 @@ def dbsnp_lookup(query: str) -> List[str]:
         'id': ','.join(ids),
         'retmode': 'json',
     }
+
+    if env.NCBI_API_KEY:
+        esummary_params['api_key'] = env.NCBI_API_KEY
+    if env.NCBI_EMAIL:
+        esummary_params['email'] = env.NCBI_EMAIL
 
     r = requests.get(esummary_url, params=esummary_params, headers=headers, timeout=10)
     r.raise_for_status()

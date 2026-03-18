@@ -15,6 +15,8 @@
 #   ssl_cert_secret       - Secret Manager name for SSL cert (default: caa-ssl-cert)
 #   ssl_key_secret        - Secret Manager name for SSL key (default: caa-ssl-key)
 #   openai_api_key_secret - Secret Manager name for OpenAI key (default: caa-openai-api-key)
+#   ncbi_api_key_secret   - Secret Manager name for NCBI Api Key (default: caa-ncbi-api-key)
+#   ncbi_email_secret     - Secret Manager name for NCBI Email (default: caa-ncbi-email)
 #   git_repo              - Git repository URL (default: https://github.com/clingen-data-model/cur-ai-ss.git)
 #   git_version           - Git ref to deploy (default: main)
 #
@@ -46,7 +48,12 @@
 #      # OpenAI API key
 #      gcloud secrets create caa-openai-api-key --project=PROJECT
 #      echo -n "sk-..." | gcloud secrets versions add caa-openai-api-key --data-file=- --project=PROJECT
-#
+#      # NCBI API key
+#      gcloud secrets create caa-ncbi-api-key --project=PROJECT
+#      echo -n "..." | gcloud secrets versions add caa-ncbi-api-key --data-file=- --project=PROJECT
+#      # NCBI email
+#      gcloud secrets create caa-ncbi-email --project=PROJECT
+#      echo -n "user@example.com" | gcloud secrets versions add caa-ncbi-email --data-file=- --project=PROJECT
 - name: Configure CAA VM
   hosts: all
   become: yes
@@ -61,6 +68,8 @@
     ssl_cert_secret: caa-ssl-cert
     ssl_key_secret: caa-ssl-key
     openai_api_key_secret: caa-openai-api-key
+    ncbi_api_key_secret: caa-ncbi-api-key
+    ncbi_email_secret: caa-ncbi-email
 
   tasks:
     # --- Package Installation ---
@@ -182,6 +191,28 @@
         --secret={{ openai_api_key_secret }}
         --project={{ gcp_project }}
       register: openai_api_key_content
+      changed_when: false
+      no_log: true
+
+    - name: Fetch NCBI API key from Secret Manager
+      delegate_to: localhost
+      become: no
+      command: >
+        gcloud secrets versions access latest
+        --secret={{ ncbi_api_key_secret }}
+        --project={{ gcp_project }}
+      register: ncbi_api_key_content
+      changed_when: false
+      no_log: true
+
+    - name: Fetch NCBI email from Secret Manager
+      delegate_to: localhost
+      become: no
+      command: >
+        gcloud secrets versions access latest
+        --secret={{ ncbi_email_secret }}
+        --project={{ gcp_project }}
+      register: ncbi_email_content
       changed_when: false
       no_log: true
 

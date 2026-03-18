@@ -5,6 +5,7 @@ import requests
 from pydantic import BaseModel
 
 from lib.agents.variant_harmonization_agent import HarmonizedVariant
+from lib.core.environment import env
 
 GNOMAD_BASE = 'https://gnomad.broadinstitute.org/api'
 EUTILS_BASE = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils'
@@ -100,18 +101,25 @@ def clinvar_lookup(
     term = ' OR '.join(term_parts)
 
     # Step 1: ESearch
+    esearch_params = cast(
+        dict[str, str | int],
+        {
+            'db': 'clinvar',
+            'term': term,
+            'retmax': 100,
+            'retmode': 'json',
+            'sort': 'relevance',
+        },
+    )
+
+    if env.NCBI_API_KEY:
+        esearch_params['api_key'] = env.NCBI_API_KEY
+    if env.NCBI_EMAIL:
+        esearch_params['email'] = env.NCBI_EMAIL
+
     r = requests.get(
         f'{EUTILS_BASE}/esearch.fcgi',
-        params=cast(
-            dict[str, str | int],
-            {
-                'db': 'clinvar',
-                'term': term,
-                'retmax': 100,
-                'retmode': 'json',
-                'sort': 'relevance',
-            },
-        ),
+        params=esearch_params,
         headers=headers,
         timeout=10,
     )
@@ -121,14 +129,21 @@ def clinvar_lookup(
         return result_variant
 
     # Step 2: ESummary
+    esummary_params = {
+        'db': 'clinvar',
+        'id': ','.join(ids),
+        'retmode': 'json',
+        'rettype': 'vcv',
+    }
+
+    if env.NCBI_API_KEY:
+        esummary_params['api_key'] = env.NCBI_API_KEY
+    if env.NCBI_EMAIL:
+        esummary_params['email'] = env.NCBI_EMAIL
+
     r = requests.get(
         f'{EUTILS_BASE}/esummary.fcgi',
-        params={
-            'db': 'clinvar',
-            'id': ','.join(ids),
-            'retmode': 'json',
-            'rettype': 'vcv',
-        },
+        params=esummary_params,
         headers=headers,
         timeout=10,
     )
