@@ -115,9 +115,7 @@ def grobid_annotations(
 
 
 def get_patients(paper_id: str) -> list[PatientResp]:
-    resp = requests.get(
-        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/patients'
-    )
+    resp = requests.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/patients')
     resp.raise_for_status()
     return TypeAdapter(list[PatientResp]).validate_python(resp.json())
 
