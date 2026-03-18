@@ -1,18 +1,38 @@
+import random
+
 import requests
 import streamlit as st
 
-from lib.ui.api import get_http_error_detail, grobid_annotations
+from lib.ui.api import get_http_error_detail, grobid_annotations, highlight_pdf
 
 CURRENT_ANNOTATIONS_KEY = 'CURRENT_ANNOTATIONS_KEY'
 HEADER_TABS = ['📄 PDF', '📝 Metadata', '👤 Patients', '🧬 Variants', '🔗 Occurrences']
 HEADER_TABS_KEY = 'HEADER_TABS_KEY'
+
+COLORS = [
+    '#FFF59D',  # soft yellow
+    '#FFE082',  # warm amber
+    '#FFCC80',  # light orange
+    '#FFAB91',  # soft coral
+    '#F48FB1',  # light pink
+    '#CE93D8',  # soft purple
+    '#B39DDB',  # lavender
+    '#9FA8DA',  # muted indigo
+    '#90CAF9',  # light blue
+    '#81D4FA',  # sky blue
+    '#80DEEA',  # cyan
+    '#A5D6A7',  # light green
+    '#C5E1A5',  # lime green
+    '#E6EE9C',  # pale lime
+    '#D7CCC8',  # soft beige/gray
+]
 
 
 def get_gnomad_url(variant_id: str) -> str:
     return f'https://gnomad.broadinstitute.org/variant/{variant_id}?dataset=gnomad_r4'
 
 
-def highlight_and_switch_tab(
+def focus_and_switch_tab(
     paper_id: str, queries: list[str], image_ids: list[int], color: str
 ) -> None:
     try:
@@ -22,8 +42,73 @@ def highlight_and_switch_tab(
             image_ids,
             color,
         )
-        st.toast('PDF highlighted! Zooming to highlight.')
+        st.toast('Found annotation for Focus - Zooming into the pdf!')
         st.session_state[HEADER_TABS_KEY] = HEADER_TABS[0]
         st.session_state[CURRENT_ANNOTATIONS_KEY] = current_annotations
     except requests.HTTPError as e:
+        st.error(f'Failed to find Focus : {get_http_error_detail(e)}')
+
+
+def highlight_evidence(
+    paper_id: str, queries: list[str], image_ids: list[int], color: str
+) -> None:
+    try:
+        highlight_pdf(
+            paper_id,
+            queries,
+            image_ids,
+            color,
+        )
+        st.toast('PDF Highlighted!')
+    except requests.HTTPError as e:
         st.error(f'Failed to highlight: {get_http_error_detail(e)}')
+
+
+def render_highlight_controls(
+    paper_id: str,
+    queries: list[str],
+    color_key: str,
+    button_key_prefix: str,
+    default_color: str | None = None,
+) -> None:
+    """Render color picker + Highlight + Focus & Switch Tab buttons."""
+    if color_key not in st.session_state:
+        st.session_state[color_key] = default_color or random.choice(COLORS)
+    color = st.color_picker('Choose Color', label_visibility='collapsed', key=color_key)
+    st.button(
+        'Highlight',
+        key=f'{button_key_prefix}-highlight',
+        type='secondary',
+        on_click=highlight_evidence,
+        args=(paper_id, queries, [], color),
+    )
+    st.button(
+        'Focus & Switch Tab',
+        key=f'{button_key_prefix}-focus',
+        type='secondary',
+        on_click=focus_and_switch_tab,
+        args=(paper_id, queries, [], color),
+    )
+
+
+def render_evidence_controls(
+    paper_id: str,
+    label: str,
+    evidence_context: str | None,
+    reasoning: str | None,
+    color_key: str,
+    button_key_prefix: str,
+) -> None:
+    """Render popover + color picker + Highlight + Focus & Switch Tab buttons."""
+    with st.container(
+        horizontal=True, vertical_alignment='center', horizontal_alignment='right'
+    ):
+        with st.popover(label, type='tertiary'):
+            st.markdown('**Evidence**: ' + (evidence_context or ''))
+            st.markdown('**Reasoning**: ' + (reasoning or ''))
+        render_highlight_controls(
+            paper_id,
+            [evidence_context] if evidence_context else [],
+            color_key,
+            button_key_prefix,
+        )

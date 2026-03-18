@@ -85,12 +85,14 @@ def delete_paper(paper_id: str) -> None:
     resp.raise_for_status()
 
 
-def highlight_pdf(paper_id: str, queries: list[str] | str, color: str) -> None:
+def highlight_pdf(
+    paper_id: str, queries: list[str], image_ids: list[int], color: str
+) -> None:
     if isinstance(queries, str):
         queries = [queries]
     resp = requests.post(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/highlight',
-        json={'queries': queries, 'color': color},
+        json={'queries': queries, 'image_ids': image_ids, 'color': color},
     )
     resp.raise_for_status()
 
@@ -104,3 +106,10 @@ def grobid_annotations(
     )
     resp.raise_for_status()
     return TypeAdapter(list[GrobidAnnotation]).validate_python(resp.json())
+
+
+def clear_highlights(paper_id: str) -> None:
+    resp = requests.post(
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/clear-highlights',
+    )
+    resp.raise_for_status()

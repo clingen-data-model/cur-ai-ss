@@ -2,6 +2,7 @@ import streamlit as st
 from streamlit_pdf_viewer import pdf_viewer
 
 from lib.models import PaperResp
+from lib.ui.api import clear_highlights
 from lib.ui.paper.shared import CURRENT_ANNOTATIONS_KEY
 
 
@@ -22,10 +23,18 @@ def render_pdf_tab() -> None:
         scroll_to_page=annotations[0].page if len(annotations) == 1 else None,
         render_text=True,
     )
-    st.download_button(
-        label='Download PDF',
-        data=open(paper_resp.pdf_highlighted_path, 'rb').read(),
-        icon=':material/download:',
-        mime='application/pdf',
-        width='stretch',
-    )
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button(
+            'Clear Highlights', width='stretch', icon=':material/highlight_off:'
+        ):
+            clear_highlights(paper_resp.id)
+            st.rerun()
+    with col2:
+        st.download_button(
+            label='Download PDF',
+            data=open(paper_resp.pdf_highlighted_path, 'rb').read(),
+            icon=':material/download:',
+            mime='application/pdf',
+            width='stretch',
+        )

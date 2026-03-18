@@ -365,3 +365,30 @@ def grobid_annotation(
     )
 
     return all_annotations
+
+
+@app.post('/papers/{paper_id}/clear-highlights', status_code=status.HTTP_204_NO_CONTENT)
+def clear_highlights(
+    paper_id: str,
+    session: Session = Depends(get_session),
+) -> None:
+    """
+    Clear all highlights from a paper by replacing the highlighted PDF with the raw PDF.
+
+    Args:
+        paper_id: The ID of the paper
+    """
+    # Verify paper exists
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+
+    raw_path = pdf_raw_path(paper_id)
+    highlighted_path = pdf_highlighted_path(paper_id)
+
+    with open(raw_path, 'rb') as f:
+        content = f.read()
+    with open(highlighted_path, 'wb') as f:
+        f.write(content)

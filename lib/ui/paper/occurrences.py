@@ -21,7 +21,7 @@ from lib.agents.variant_harmonization_agent import (
     VariantHarmonizationOutput,
 )
 from lib.models import PaperResp, PipelineStatus
-from lib.ui.paper.shared import get_gnomad_url, highlight_and_switch_tab
+from lib.ui.paper.shared import focus_and_switch_tab, get_gnomad_url, highlight_evidence
 
 
 def render_patient_variant_occurrences_tab() -> None:
@@ -249,7 +249,9 @@ def render_patient_variant_occurrences_tab() -> None:
                     )
                     st.space('stretch')
                     st.markdown('Choose Color: ')
-                    color_key = f'{link.patient_id}-{link.variant_id}-highlight-color-link-evidence'
+                    color_key = (
+                        f'{link.patient_id}-{link.variant_id}-color-link-evidence'
+                    )
                     if color_key not in st.session_state:
                         st.session_state[color_key] = '#EE00FF'
                     # Color picker — key handles session state automatically
@@ -260,7 +262,19 @@ def render_patient_variant_occurrences_tab() -> None:
                         'Highlight',
                         key=f'{link.patient_id}-{link.variant_id}-highlight-confirm-link-evidence',
                         type='secondary',
-                        on_click=highlight_and_switch_tab,
+                        on_click=highlight_evidence,
+                        args=(
+                            paper_resp.id,
+                            [link.evidence_context] if link.evidence_context else [],
+                            [link.pedigree_image_id] if link.pedigree_image_id else [],
+                            color,
+                        ),
+                    )
+                    st.button(
+                        'Focus & Switch Tab',
+                        key=f'{link.patient_id}-{link.variant_id}-focus-confirm-link-evidence',
+                        type='secondary',
+                        on_click=focus_and_switch_tab,
                         args=(
                             paper_resp.id,
                             [link.evidence_context] if link.evidence_context else [],
