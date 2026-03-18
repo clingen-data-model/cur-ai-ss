@@ -70,17 +70,19 @@ def render_highlight_controls(
     color_key: str,
     button_key_prefix: str,
     default_color: str | None = None,
+    disabled: bool = False,
 ) -> None:
     """Render color picker + Highlight + Focus & Switch Tab buttons."""
     if color_key not in st.session_state:
         st.session_state[color_key] = default_color or random.choice(COLORS)
-    color = st.color_picker('Choose Color', label_visibility='collapsed', key=color_key)
+    color = st.color_picker('Choose Color', label_visibility='collapsed', key=color_key, disabled=disabled)
     st.button(
         'Highlight',
         key=f'{button_key_prefix}-highlight',
         type='secondary',
         on_click=highlight_evidence,
         args=(paper_id, queries, [], color),
+        disabled=disabled,
     )
     st.button(
         'Focus & Switch Tab',
@@ -88,6 +90,7 @@ def render_highlight_controls(
         type='secondary',
         on_click=focus_and_switch_tab,
         args=(paper_id, queries, [], color),
+        disabled=disabled,
     )
 
 
@@ -103,7 +106,7 @@ def render_evidence_controls(
     with st.container(
         horizontal=True, vertical_alignment='center', horizontal_alignment='right'
     ):
-        with st.popover(label, type='tertiary'):
+        with st.popover(label, type='tertiary', disabled=not evidence_context):
             st.markdown('**Evidence**: ' + (evidence_context or ''))
             st.markdown('**Reasoning**: ' + (reasoning or ''))
         render_highlight_controls(
@@ -111,4 +114,5 @@ def render_evidence_controls(
             [evidence_context] if evidence_context else [],
             color_key,
             button_key_prefix,
+            disabled=not evidence_context,
         )

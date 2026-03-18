@@ -151,6 +151,7 @@ def render_patient(
                 key=f'{key_prefix}-age-diagnosis',
             )
         with col2:
+            st.space()
             render_evidence_controls(
                 paper_resp.id,
                 label='Age at Diagnosis Evidence',
@@ -167,6 +168,7 @@ def render_patient(
                 key=f'{key_prefix}-age-report',
             )
         with col2:
+            st.space()
             render_evidence_controls(
                 paper_resp.id,
                 label='Age at Report Evidence',
@@ -183,6 +185,7 @@ def render_patient(
                 key=f'{key_prefix}-age-death',
             )
         with col2:
+            st.space()
             render_evidence_controls(
                 paper_resp.id,
                 label='Age at Death Evidence',
@@ -210,6 +213,7 @@ def render_patient(
                 )
             )
         with col2:
+            st.space()
             render_evidence_controls(
                 paper_resp.id,
                 label='Country of Origin Evidence',
@@ -236,6 +240,7 @@ def render_patient(
                 )
             )
         with col2:
+            st.space()
             render_evidence_controls(
                 paper_resp.id,
                 label='Race/Ethnicity Evidence',
@@ -437,7 +442,7 @@ def _render_phenotypes_table(
 
         # Highlight button with popover
         with col3:
-            if paper_resp and phenotype.evidence_contexts:
+            if paper_resp:
                 with st.container(
                     horizontal=True,
                     vertical_alignment='center',
@@ -445,10 +450,11 @@ def _render_phenotypes_table(
                 ):
                     render_highlight_controls(
                         paper_resp.id,
-                        phenotype.evidence_contexts,
+                        phenotype.evidence_contexts or [],
                         color_key=f'{key_prefix}-highlight-color-{phenotype.text}',
                         button_key_prefix=f'{key_prefix}-highlight-confirm-{phenotype.text}',
                         default_color='#EE00FF',
+                        disabled=not phenotype.evidence_contexts,
                     )
 
 
