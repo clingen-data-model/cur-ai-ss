@@ -1,4 +1,5 @@
 import random
+from urllib.parse import quote
 
 import requests
 import streamlit as st
@@ -37,6 +38,18 @@ COLORS = [
     '#64DD17',  # lime neon
     '#FF9100',  # vivid orange
 ]
+
+
+def get_clinvar_url(
+    hgvs_g: str | None = None,
+    hgvs_c: str | None = None,
+    rsid: str | None = None,
+) -> str | None:
+    identifier = hgvs_g or hgvs_c or rsid
+    if not identifier:
+        return None
+    encoded = quote(identifier)
+    return f'https://www.ncbi.nlm.nih.gov/clinvar/?term={encoded}'
 
 
 def get_gnomad_url(variant_id: str) -> str:

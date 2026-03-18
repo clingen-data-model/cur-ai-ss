@@ -15,7 +15,7 @@ from lib.agents.variant_harmonization_agent import (
     VariantHarmonizationOutput,
 )
 from lib.models import PaperResp, PipelineStatus
-from lib.ui.paper.shared import get_gnomad_url
+from lib.ui.paper.shared import get_clinvar_url, get_gnomad_url
 
 
 def render_variants_tab(selected_variant_id: int | None) -> None:
@@ -149,22 +149,43 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                     else ('0⭐' if ev.stars == 0 else 'N/A')
                 )
 
+                clinvar_url = get_clinvar_url(
+                    harmonized_variant.hgvs_g,
+                    harmonized_variant.hgvs_c,
+                    harmonized_variant.rsid,
+                )
                 clinvar_df = pd.DataFrame(
                     [
                         {
-                            'Pathogenicity': ev.pathogenicity or 'N/A',
+                            'Pathogenicity': (
+                                f'{clinvar_url}#{ev.pathogenicity}'
+                                if clinvar_url and ev.pathogenicity
+                                else (ev.pathogenicity or 'N/A')
+                            ),
                             'Submissions': ev.submissions or 'N/A',
                             'Review Status': stars_display,
                         }
                     ]
                 )
 
-                st.dataframe(clinvar_df, width='stretch', hide_index=True)
+                st.dataframe(
+                    clinvar_df,
+                    width='stretch',
+                    hide_index=True,
+                    column_config={
+                        'Pathogenicity': st.column_config.LinkColumn(
+                            'Pathogenicity',
+                            display_text=r'.*?#(.+)$',
+                        )
+                    },
+                )
 
                 # ----------------------------
                 # In Silico Predictors
                 # ----------------------------
-                st.markdown('#### In Silico Scores')
+                st.markdown(
+                    '#### In Silico Scores',
+                )
 
                 if ev.spliceai:
                     spliceai_display = (
