@@ -311,7 +311,7 @@ def test_get_patients_returns_ordered_by_position(client, db_session, seeded_pap
     db_session.add(
         PatientDB(
             paper_id=seeded_paper.id,
-            position=3,
+            patient_idx=3,
             identifier='P3',
             **required,
         )
@@ -319,7 +319,7 @@ def test_get_patients_returns_ordered_by_position(client, db_session, seeded_pap
     db_session.add(
         PatientDB(
             paper_id=seeded_paper.id,
-            position=1,
+            patient_idx=1,
             identifier='P1',
             **required,
         )
@@ -327,7 +327,7 @@ def test_get_patients_returns_ordered_by_position(client, db_session, seeded_pap
     db_session.add(
         PatientDB(
             paper_id=seeded_paper.id,
-            position=2,
+            patient_idx=2,
             identifier='P2',
             **required,
         )
@@ -338,7 +338,7 @@ def test_get_patients_returns_ordered_by_position(client, db_session, seeded_pap
     assert response.status_code == 200
     patients = response.json()
     assert len(patients) == 3
-    assert [p['position'] for p in patients] == [1, 2, 3]
+    assert [p['patient_idx'] for p in patients] == [1, 2, 3]
     assert [p['identifier'] for p in patients] == ['P1', 'P2', 'P3']
 
 

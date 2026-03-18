@@ -328,7 +328,7 @@ class PatientDB(Base):
     paper_id: Mapped[str] = mapped_column(
         String, ForeignKey('papers.id', ondelete='CASCADE'), nullable=False
     )
-    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    patient_idx: Mapped[int] = mapped_column(Integer, nullable=False)
 
     identifier: Mapped[str] = mapped_column(Text, nullable=False)
     proband_status: Mapped[str] = mapped_column(Text, nullable=False)
@@ -377,7 +377,9 @@ class PatientDB(Base):
     paper: Mapped['PaperDB'] = relationship('PaperDB', back_populates='patients')
 
     __table_args__ = (
-        UniqueConstraint('paper_id', 'position', name='uq_patients_paper_position'),
+        UniqueConstraint(
+            'paper_id', 'patient_idx', name='uq_patients_paper_patient_idx'
+        ),
         Index('ix_patients_paper_id', 'paper_id'),
         Index('ix_patients_paper_id_identifier', 'paper_id', 'identifier'),
     )
@@ -387,5 +389,5 @@ class PatientResp(PatientInfo):
     model_config = {'from_attributes': True}
     id: int
     paper_id: str
-    position: int
+    patient_idx: int
     created_at: datetime

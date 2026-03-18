@@ -122,8 +122,10 @@ async def parse_patients_task_async(paper_db: PaperDB) -> None:
     # Persist patients to DB (idempotent: delete-then-insert)
     with session_scope() as session:
         session.query(PatientDB).filter(PatientDB.paper_id == paper_db.id).delete()
-        for position, patient_info in enumerate(result.final_output.patients, start=1):
-            session.add(patient_info_to_db(paper_db.id, position, patient_info))
+        for patient_index, patient_info in enumerate(
+            result.final_output.patients, start=1
+        ):
+            session.add(patient_info_to_db(paper_db.id, patient_index, patient_info))
 
 
 async def harmonize_variants_task_async(paper_db: PaperDB) -> None:
@@ -196,12 +198,12 @@ async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
         patient_rows = (
             session.query(PatientDB)
             .filter(PatientDB.paper_id == paper_db.id)
-            .order_by(PatientDB.position)
+            .order_by(PatientDB.patient_idx)
             .all()
         )
         structured_patients = [
             {
-                'patient_id': p.position,
+                'patient_idx': p.patient_idx,
                 'identifier': p.identifier,
                 'identifier_evidence_context': p.identifier_evidence_context,
             }
@@ -222,12 +224,12 @@ async def phenotype_patient_linking_task_async(paper_db: PaperDB) -> None:
         patient_rows = (
             session.query(PatientDB)
             .filter(PatientDB.paper_id == paper_db.id)
-            .order_by(PatientDB.position)
+            .order_by(PatientDB.patient_idx)
             .all()
         )
         structured_patients = [
             {
-                'patient_id': p.position,
+                'patient_idx': p.patient_idx,
                 'identifier': p.identifier,
                 'identifier_evidence_context': p.identifier_evidence_context,
             }

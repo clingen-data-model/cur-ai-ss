@@ -34,7 +34,7 @@ def render_patient(
     patient: PatientResp,
     expanded: bool,
     key_prefix: str,
-    patient_id: int,
+    patient_idx: int,
     phenotypes: list[PhenotypeLinkingEntry] | None = None,
 ) -> None:
     with st.expander(
@@ -254,19 +254,19 @@ def render_patient(
             st.divider()
             _render_patient_phenotypes(
                 phenotypes,
-                patient_id,
+                patient_idx,
                 key_prefix,
             )
 
 
 def _render_patient_phenotypes(
     all_phenotypes: list[PhenotypeLinkingEntry],
-    patient_id: int,
+    patient_idx: int,
     key_prefix: str,
 ) -> None:
     """Render phenotypes for a specific patient with matched/unmatched tabs."""
     # Filter phenotypes for this patient
-    patient_phenotypes = [p for p in all_phenotypes if p.patient_id == patient_id]
+    patient_phenotypes = [p for p in all_phenotypes if p.patient_idx == patient_idx]
 
     if not patient_phenotypes:
         st.info('No phenotypes for this patient.')
@@ -289,7 +289,7 @@ def _render_patient_phenotypes(
         else:
             _render_phenotypes_table(
                 matched,
-                patient_id,
+                patient_idx,
                 key_prefix,
                 show_hpo=True,
                 table_type='matched-phenotypes',
@@ -301,7 +301,7 @@ def _render_patient_phenotypes(
         else:
             _render_phenotypes_table(
                 unmatched,
-                patient_id,
+                patient_idx,
                 key_prefix,
                 show_hpo=False,
                 table_type='unmatched-phenotypes',
@@ -310,7 +310,7 @@ def _render_patient_phenotypes(
 
 def _render_phenotypes_table(
     phenotypes: list[PhenotypeLinkingEntry],
-    patient_id: int,
+    patient_idx: int,
     key_prefix: str,
     show_hpo: bool,
     table_type: str,
@@ -456,7 +456,7 @@ def _render_phenotypes_table(
                     )
 
 
-def render_patients_tab(selected_patient_id: int | None) -> None:
+def render_patients_tab(selected_patient_idx: int | None) -> None:
     paper_resp: PaperResp = st.session_state['paper_resp']
     if not paper_resp.title:
         st.write(f'{paper_resp.filename} not yet extracted...')
@@ -482,7 +482,7 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
     # -----------------------------
     # Display Patients
     # -----------------------------
-    indexed_patients = [(p.position, p) for p in patients]
+    indexed_patients = [(p.patient_idx, p) for p in patients]
     probands = [
         (i, p) for i, p in indexed_patients if p.proband_status == ProbandStatus.Proband
     ]
@@ -510,7 +510,7 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
         st.tabs(
             tabs,
             default=tabs[1]
-            if selected_patient_id in {p[0] for p in non_probands}
+            if selected_patient_idx in {p[0] for p in non_probands}
             else tabs[0],
         )
     )
@@ -522,9 +522,9 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
             render_patient(
                 paper_resp,
                 patient,
-                expanded=(original_idx == selected_patient_id),
+                expanded=(original_idx == selected_patient_idx),
                 key_prefix=f'patient-proband-{original_idx}',
-                patient_id=original_idx,
+                patient_idx=original_idx,
                 phenotypes=phenotypes,
             )
     with non_proband_tab:
@@ -535,9 +535,9 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
             render_patient(
                 paper_resp,
                 patient,
-                expanded=(original_idx == selected_patient_id),
+                expanded=(original_idx == selected_patient_idx),
                 key_prefix=f'patient-non-proband-{original_idx}',
-                patient_id=original_idx,
+                patient_idx=original_idx,
                 phenotypes=phenotypes,
             )
     with affecteds_tab:
@@ -548,9 +548,9 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
             render_patient(
                 paper_resp,
                 patient,
-                expanded=(original_idx == selected_patient_id),
+                expanded=(original_idx == selected_patient_idx),
                 key_prefix=f'patient-affected-{original_idx}',
-                patient_id=original_idx,
+                patient_idx=original_idx,
                 phenotypes=phenotypes,
             )
     with unaffecteds_tab:
@@ -561,9 +561,9 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
             render_patient(
                 paper_resp,
                 patient,
-                expanded=(original_idx == selected_patient_id),
+                expanded=(original_idx == selected_patient_idx),
                 key_prefix=f'patient-unaffected-{original_idx}',
-                patient_id=original_idx,
+                patient_idx=original_idx,
                 phenotypes=phenotypes,
             )
     with pedigree_image_tab:

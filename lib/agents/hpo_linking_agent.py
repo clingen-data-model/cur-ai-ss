@@ -118,7 +118,7 @@ INPUT FORMAT
 You will receive a JSON object with:
 
 - phenotypes: array of phenotype entries containing:
-    - patient_id (int)
+    - patient_idx (int)
     - text (str): phenotype description from the paper
     - negated, uncertain, family_history (boolean)
     - candidates (list): HPO term suggestions

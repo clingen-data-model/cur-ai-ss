@@ -24,7 +24,7 @@ def upgrade() -> None:
         'patients',
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
         sa.Column('paper_id', sa.String(), nullable=False),
-        sa.Column('position', sa.Integer(), nullable=False),
+        sa.Column('patient_idx', sa.Integer(), nullable=False),
         sa.Column('identifier', sa.Text(), nullable=False),
         sa.Column('proband_status', sa.Text(), nullable=False),
         sa.Column('sex', sa.Text(), nullable=False),
@@ -60,7 +60,9 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(['paper_id'], ['papers.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('paper_id', 'position', name='uq_patients_paper_position'),
+        sa.UniqueConstraint(
+            'paper_id', 'patient_idx', name='uq_patients_paper_patient_idx'
+        ),
     )
     with op.batch_alter_table('patients', schema=None) as batch_op:
         batch_op.create_index('ix_patients_paper_id', ['paper_id'], unique=False)

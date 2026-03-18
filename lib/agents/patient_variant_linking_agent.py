@@ -81,7 +81,7 @@ class TestingMethod(str, Enum):
 # PatientVariantLink
 # ------------------------------
 class PatientVariantLink(BaseModel):
-    patient_id: int
+    patient_idx: int
     variant_id: int
     zygosity: EvidenceBlock[Zygosity]
     inheritance: EvidenceBlock[Inheritance]
@@ -116,7 +116,7 @@ You are given:
    - variant_id (integer index)
    - variant_evidence_context (text snippet from the paper mentioning the variant)
 4. A structured list of extracted patients. Each patient includes:
-   - patient_id (integer index)
+   - patient_idx (integer index)
    - identifier (e.g., "Patient 1", "Proband", "II-3")
    - identifier_evidence_context (text snippet or "Pedigree Image")
 5. Any pedigree description. Includes:
@@ -128,7 +128,7 @@ Your task:
 For each patient, determine whether they carry one or more variants.  
 Return **exactly** the following for each link:
 
-- patient_id  
+- patient_idx  
 - variant_id  
 - zygosity: a single EvidenceBlock[Zygosity]  
 - inheritance: a single EvidenceBlock[Inheritance]  

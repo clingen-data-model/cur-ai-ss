@@ -238,7 +238,7 @@ def get_patients(paper_id: str, session: Session = Depends(get_session)) -> Any:
     patients = (
         session.query(PatientDB)
         .filter(PatientDB.paper_id == paper_id)
-        .order_by(PatientDB.position)
+        .order_by(PatientDB.patient_idx)
         .all()
     )
     return patients

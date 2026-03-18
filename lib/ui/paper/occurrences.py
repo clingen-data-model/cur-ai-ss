@@ -106,7 +106,7 @@ def render_patient_variant_occurrences_tab() -> None:
     # Build a list of rows for the DataFrame
     rows = []
     for link in links:
-        patient = patients[link.patient_id - 1]
+        patient = patients[link.patient_idx - 1]
         extracted_variant = extracted_variants[link.variant_id - 1]
         harmonized_variant = harmonized_variants[link.variant_id - 1]
 
@@ -124,8 +124,8 @@ def render_patient_variant_occurrences_tab() -> None:
         # Format testing methods as a list from EvidenceBlocks
         testing_methods_list = [m.value.value for m in link.testing_methods]
 
-        patient_display = patient.identifier or f'Patient {link.patient_id}'
-        patient_link = f'/paper?paper_id={paper_resp.id}&patient_id={link.patient_id}#{patient_display}'
+        patient_display = patient.identifier or f'Patient {link.patient_idx}'
+        patient_link = f'/paper?paper_id={paper_resp.id}&patient_idx={link.patient_idx}#{patient_display}'
         variant_link = f'/paper?paper_id={paper_resp.id}&variant_id={link.variant_id}#{variant_desc}'
         rows.append(
             {
@@ -208,7 +208,7 @@ def render_patient_variant_occurrences_tab() -> None:
     if selected_rows:
         idx = selected_rows[0]
         link = rows[idx]['_link']
-        patient = rows[idx].get('_patient') or patients[link.patient_id - 1]
+        patient = rows[idx].get('_patient') or patients[link.patient_idx - 1]
         extracted_variant = rows[idx]['_extracted_variant']
         harmonized_variant = rows[idx]['_harmonized_variant']
 

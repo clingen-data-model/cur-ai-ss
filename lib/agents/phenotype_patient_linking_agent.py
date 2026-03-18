@@ -18,7 +18,7 @@ You are given:
 1. The full academic paper text.
 2. A structured list of extracted patients described in the paper.
    Each patient includes:
-      - patient_id (integer index in list)
+      - patient_idx (integer index in list)
       - identifier (e.g., "Patient 1", "Proband", "II-3", etc.)
       - identifier_evidence_context (text snippet where patient is described)
 
@@ -28,11 +28,11 @@ For each mention of a human phenotypic feature (observable trait, sign, or sympt
 
 1. Extract the phenotype with full metadata
 2. Determine which patient the phenotype belongs to
-3. Return the phenotype linked to the correct patient_id
+3. Return the phenotype linked to the correct patient_idx
 
 For every valid phenotype extraction, return:
 
-- patient_id
+- patient_idx
 - text
 - negated
 - uncertain
@@ -123,23 +123,23 @@ For each phenotype mention in the text, determine which patient it belongs to:
 
 **Explicit attribution:**
 - The patient identifier explicitly appears with or near the phenotype description
-- Example: "Patient 1 experienced tremor" → patient_id = 1
-- Example: "II-3 had hearing loss" → patient_id = 2 (if II-3 is the second patient in list)
+- Example: "Patient 1 experienced tremor" → patient_idx = 1
+- Example: "II-3 had hearing loss" → patient_idx = 2 (if II-3 is the second patient in list)
 
 **Unambiguous pronoun reference:**
 - Pronouns ("he", "she", "the patient", "the proband") unambiguously refer to one patient in context
 - Only use if context makes clear which patient is referenced
-- Example: "Patient 1 presented with tremor. He also had seizures." → both to patient_id = 1
+- Example: "Patient 1 presented with tremor. He also had seizures." → both to patient_idx = 1
 
 **Family member phenotypes:**
 - If describing a family member's phenotype, create a separate extraction for that family member
 - Example: "The proband had seizures. His mother had hearing loss."
-  - Extraction 1: phenotype="seizures", patient_id=proband_id, family_history=false
-  - Extraction 2: phenotype="hearing loss", patient_id=mother_id (if mother is in patient list), family_history=false
+  - Extraction 1: phenotype="seizures", patient identifier=proband_id, family_history=false
+  - Extraction 2: phenotype="hearing loss", patient identifier=mother_id (if mother is in patient list), family_history=false
 - If family member is NOT in the patient list, skip their phenotypes
 
 **Ambiguous cases:**
-- If unsure which patient a phenotype belongs to, use patient_id=1 (first/primary patient)
+- If unsure which patient a phenotype belongs to, use patient_idx=1 (first/primary patient)
 - Or skip the extraction if ambiguity is too severe
 
 ---------------------------------------------------
@@ -227,7 +227,7 @@ For each extracted phenotype:
 
 - Confirm the phenotype is clearly a phenotype, not a diagnosis
 - Confirm the patient linkage is justified by the text
-- Confirm patient_id matches one of the patient IDs in the provided patient list
+- Confirm patient_idx matches one of the patient IDs in the provided patient list
 - Confirm all boolean fields are true/false (not "yes"/"no" or strings)
 - Confirm text is verbatim from paper or very close paraphrase
 - If any check fails, adjust or skip the extraction
@@ -241,7 +241,7 @@ Return a **list of JSON objects**, one per extracted phenotype.
 Ensure:
 - All required fields are present
 - All optional fields are either provided if mentioned in text, or null/omitted
-- Each phenotype has a valid patient_id (integer from patient list)
+- Each phenotype has a valid patient_idx (integer from patient list)
 - confidence is always a float between 0 and 1
 """
 

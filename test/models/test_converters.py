@@ -90,7 +90,7 @@ def test_patient_info_to_db_maps_all_fields():
     row = patient_info_to_db('paper123', 1, patient)
 
     assert row.paper_id == 'paper123'
-    assert row.position == 1
+    assert row.patient_idx == 1
     assert row.identifier == 'P1'
     # Enum fields stored as plain strings
     assert row.proband_status == 'Proband'

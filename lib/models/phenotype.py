@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 
 class PhenotypeExtractionOutput(BaseModel):
-    patient_id: int
+    patient_idx: int
     text: str
     negated: bool = False
     uncertain: bool = False
@@ -32,7 +32,7 @@ class HpoConfidence(str, Enum):
 class HpoPhenotypeLink(BaseModel):
     """Link between a phenotype and an HPO term."""
 
-    patient_id: int
+    patient_idx: int
     hpo_id: str | None
     hpo_name: str | None
     hpo_confidence: HpoConfidence | None
