@@ -116,6 +116,13 @@ Task Overview:
    - Unknown: The paper type cannot be confidently determined from the provided text.
    - Other: Does not fit the above categories (e.g., review, meta-analysis, guideline, methods, or database/resource paper).
 
+3. **Functional Evidence**
+ - Determine if the paper provides **functional evidence** for the variant(s) described.
+ - Set `functional_evidence` to True or False.
+ - Provide supporting fields:
+     - `functional_evidence_evidence_context`: quote or excerpt from the paper that supports this.
+     - `functional_evidence_reasoning`: brief explanation of why the evidence supports (or does not support) functional relevance.
+
 Retry any tool requests (PubMed fetch or search) up to 3 times on an exponential delay.
 """
 

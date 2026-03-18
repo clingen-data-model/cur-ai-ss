@@ -15,7 +15,11 @@ from lib.agents.variant_harmonization_agent import (
     VariantHarmonizationOutput,
 )
 from lib.models import PaperResp, PipelineStatus
-from lib.ui.paper.shared import get_clinvar_url, get_gnomad_url
+from lib.ui.paper.shared import (
+    get_clinvar_url,
+    get_gnomad_url,
+    render_evidence_controls,
+)
 
 
 def render_variants_tab(selected_variant_id: int | None) -> None:
@@ -100,13 +104,37 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                     )
                 )
 
-                st.text_area(
-                    'Variant Type Evidence Context',
-                    extracted_variant.variant_type_evidence_context or '',
-                    height=80,
-                    disabled=True,
-                    key=f'{i}-vtec',
+                render_evidence_controls(
+                    paper_id=paper_resp.pmid or 'unknown',
+                    label='📋 Evidence & Reasoning',
+                    evidence_context=extracted_variant.variant_type_evidence_context,
+                    reasoning=extracted_variant.variant_type_reasoning,
+                    color_key=f'{i}-vtype-color',
+                    button_key_prefix=f'{i}-vtype',
                 )
+
+            # ======================================================
+            # Functional Evidence
+            # ======================================================
+            with st.container():
+                st.subheader('Functional Evidence')
+
+                if extracted_variant.functional_evidence is not None:
+                    st.markdown(
+                        f'**Functional evidence present:** '
+                        f'{"✅ Yes" if extracted_variant.functional_evidence else "❌ No"}'
+                    )
+
+                    render_evidence_controls(
+                        paper_id=paper_resp.pmid or 'unknown',
+                        label='📋 Evidence & Reasoning',
+                        evidence_context=extracted_variant.functional_evidence_evidence_context,
+                        reasoning=extracted_variant.functional_evidence_reasoning,
+                        color_key=f'{i}-func-ev-color',
+                        button_key_prefix=f'{i}-func-ev',
+                    )
+                else:
+                    st.markdown('**Functional evidence:** Not yet assessed')
 
             # ======================================================
             # Extracted Variant Description (READ-ONLY)

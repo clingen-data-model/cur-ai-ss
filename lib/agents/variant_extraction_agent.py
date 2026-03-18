@@ -144,6 +144,12 @@ For each extracted variant, provide:
 - hgvs_p_inference_evidence_context
 - variant_type (must match above labels exactly)
 
+Functional Evidence Assessment:
+- For each variant, assess whether the paper provides functional evidence (experimental data, assays, etc.) supporting the variant's role in disease.
+- functional_evidence: Boolean indicating if functional evidence is present for this specific variant.
+- functional_evidence_evidence_context: Exact text from the source describing the functional evidence, if present.
+- functional_evidence_reasoning: Brief explanation of why the evidence is or is not considered functional evidence for this variant.
+
 Evidence Handling:
 - Each variant must have its own supporting evidence context.
 - variant_evidence_context: Exact text from source stating the variant.
@@ -225,11 +231,18 @@ class Variant(BaseModel):
     hgvs_c_inference_confidence: Optional[HgvsInferenceConfidence]
     hgvs_c_inference_evidence_context: Optional[str]
 
-    variant_type: VariantType
-
     # Evidence
     variant_evidence_context: Optional[str]
+
+    # Variant Type
+    variant_type: VariantType
     variant_type_evidence_context: Optional[str]
+    variant_type_reasoning: Optional[str]
+
+    # Functional evidence assessment
+    functional_evidence: Optional[bool]
+    functional_evidence_evidence_context: Optional[str]
+    functional_evidence_reasoning: Optional[str]
 
 
 class VariantExtractionOutput(BaseModel):
