@@ -5,7 +5,13 @@ from pydantic import TypeAdapter
 
 from lib.core.environment import env
 from lib.misc.pdf.highlight import GrobidAnnotation
-from lib.models import GeneResp, PaperResp, PaperUpdateRequest, PipelineStatus
+from lib.models import (
+    GeneResp,
+    PaperResp,
+    PaperUpdateRequest,
+    PatientResp,
+    PipelineStatus,
+)
 
 
 def get_http_error_detail(e: requests.HTTPError) -> str:
@@ -106,6 +112,14 @@ def grobid_annotations(
     )
     resp.raise_for_status()
     return TypeAdapter(list[GrobidAnnotation]).validate_python(resp.json())
+
+
+def get_patients(paper_id: str) -> list[PatientResp]:
+    resp = requests.get(
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/patients'
+    )
+    resp.raise_for_status()
+    return TypeAdapter(list[PatientResp]).validate_python(resp.json())
 
 
 def clear_highlights(paper_id: str) -> None:

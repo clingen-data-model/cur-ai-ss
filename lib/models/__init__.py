@@ -35,6 +35,7 @@ from sqlalchemy.orm import (
 from sqlalchemy.types import JSON
 from typing_extensions import Self
 
+from lib.agents.patient_extraction_agent import PatientInfo
 from lib.core.environment import env
 from lib.misc.pdf.paths import (
     pdf_highlighted_path,
@@ -387,36 +388,9 @@ class PatientDB(Base):
     )
 
 
-class PatientResp(BaseModel):
+class PatientResp(PatientInfo):
     model_config = {'from_attributes': True}
     id: int
     paper_id: str
     position: int
-    identifier: str
-    proband_status: str
-    sex: str
-    age_diagnosis: str | None
-    age_report: str | None
-    age_death: str | None
-    country_of_origin: str
-    race_ethnicity: str
-    affected_status: str
-    identifier_evidence_context: str | None
-    proband_status_evidence_context: str | None
-    sex_evidence_context: str | None
-    age_diagnosis_evidence_context: str | None
-    age_report_evidence_context: str | None
-    age_death_evidence_context: str | None
-    country_of_origin_evidence_context: str | None
-    race_ethnicity_evidence_context: str | None
-    affected_status_evidence_context: str | None
-    identifier_reasoning: str | None
-    proband_status_reasoning: str | None
-    sex_reasoning: str | None
-    age_diagnosis_reasoning: str | None
-    age_report_reasoning: str | None
-    age_death_reasoning: str | None
-    country_of_origin_reasoning: str | None
-    race_ethnicity_reasoning: str | None
-    affected_status_reasoning: str | None
     created_at: datetime
