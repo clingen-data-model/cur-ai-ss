@@ -25,6 +25,17 @@ COLORS = [
     '#C5E1A5',  # lime green
     '#E6EE9C',  # pale lime
     '#D7CCC8',  # soft beige/gray
+    # Neon-ish / bright additions
+    '#FF3D00',  # neon red
+    '#FF6D00',  # bright orange
+    '#FFEA00',  # neon yellow
+    '#00E676',  # bright green
+    '#00B0FF',  # neon blue
+    '#D500F9',  # neon magenta
+    '#FF4081',  # bright pink
+    '#18FFFF',  # cyan neon
+    '#64DD17',  # lime neon
+    '#FF9100',  # vivid orange
 ]
 
 
@@ -69,12 +80,14 @@ def render_highlight_controls(
     queries: list[str],
     color_key: str,
     button_key_prefix: str,
-    default_color: str | None = None,
     disabled: bool = False,
+    image_ids: list[int] | None = None,
 ) -> None:
     """Render color picker + Highlight + Focus & Switch Tab buttons."""
+    if image_ids is None:
+        image_ids = []
     if color_key not in st.session_state:
-        st.session_state[color_key] = default_color or random.choice(COLORS)
+        st.session_state[color_key] = random.choice(COLORS)
     color = st.color_picker(
         'Choose Color', label_visibility='collapsed', key=color_key, disabled=disabled
     )
@@ -83,7 +96,7 @@ def render_highlight_controls(
         key=f'{button_key_prefix}-highlight',
         type='secondary',
         on_click=highlight_evidence,
-        args=(paper_id, queries, [], color),
+        args=(paper_id, queries, image_ids, color),
         disabled=disabled,
     )
     st.button(
@@ -91,7 +104,7 @@ def render_highlight_controls(
         key=f'{button_key_prefix}-focus',
         type='secondary',
         on_click=focus_and_switch_tab,
-        args=(paper_id, queries, [], color),
+        args=(paper_id, queries, image_ids, color),
         disabled=disabled,
     )
 

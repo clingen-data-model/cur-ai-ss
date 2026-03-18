@@ -453,7 +453,6 @@ def _render_phenotypes_table(
                         phenotype.evidence_contexts or [],
                         color_key=f'{key_prefix}-highlight-color-{phenotype.text}',
                         button_key_prefix=f'{key_prefix}-highlight-confirm-{phenotype.text}',
-                        default_color='#EE00FF',
                         disabled=not phenotype.evidence_contexts,
                     )
 
