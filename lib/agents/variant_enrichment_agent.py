@@ -71,14 +71,33 @@ class VariantEnrichmentOutput(BaseModel):
     variants: List[EnrichedVariant]
 
 
-def clinvar_lookup(rsid: Optional[str], caid: Optional[str]) -> EnrichedVariant:
+def clinvar_lookup(
+    rsid: Optional[str],
+    caid: Optional[str],
+    hgvs_g: Optional[str],
+    hgvs_c: Optional[str],
+) -> EnrichedVariant:
     headers = {'content-type': 'application/json'}
     result_variant = EnrichedVariant(rsid=rsid, caid=caid)
 
-    if not (caid or rsid):
+    if not (caid or rsid or hgvs_g or hgvs_c):
         return result_variant
 
-    term = f'{caid} AND {rsid}' if (caid and rsid) else (caid or rsid)
+    term_parts = []
+
+    if rsid:
+        term_parts.append(rsid)
+
+    if caid:
+        term_parts.append(caid)
+
+    if hgvs_g:
+        term_parts.append(hgvs_g)
+
+    if hgvs_c:
+        term_parts.append(hgvs_c)
+
+    term = ' OR '.join(term_parts)
 
     # Step 1: ESearch
     r = requests.get(
@@ -300,8 +319,10 @@ def enrich_variant(hv: HarmonizedVariant) -> EnrichedVariant:
         if hv.gnomad_style_coordinates:
             futures.append(executor.submit(gnomad_lookup, hv.gnomad_style_coordinates))
 
-        if hv.rsid or hv.caid:
-            futures.append(executor.submit(clinvar_lookup, hv.rsid, hv.caid))
+        if hv.rsid or hv.caid or hv.hgvs_g or hhv.hgvs_c:
+            futures.append(
+                executor.submit(clinvar_lookup, hv.rsid, hv.caid, hv.hgvs_g, hv.hgvs_c)
+            )
 
         if hv.rsid or hv.hgvs_g or hv.hgvs_c:
             futures.append(executor.submit(vep_lookup, hv.rsid, hv.hgvs_g, hv.hgvs_c))
