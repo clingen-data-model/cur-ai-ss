@@ -48,9 +48,7 @@ class Env(BaseSettings):
     @model_validator(mode='after')
     def validate_ncbi_settings(self) -> 'Env':
         if self.NCBI_API_KEY and not self.NCBI_EMAIL:
-            raise ValueError(
-                'If NCBI_API_KEY is specified, NCBI_EMAIL is required.'
-            )
+            raise ValueError('If NCBI_API_KEY is specified, NCBI_EMAIL is required.')
         return self
 
     @field_validator('NCBI_EMAIL', mode='after')
