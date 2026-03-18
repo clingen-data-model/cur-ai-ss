@@ -115,9 +115,12 @@ def render_patient_variant_occurrences_tab() -> None:
 
         # Determine the variant description
         variant_desc = (
-            extracted_variant.variant_description_verbatim
+            harmonized_variant.hgvs_g
             or harmonized_variant.hgvs_c
+            or harmonized_variant.gnomad_style_coordinates
+            or harmonized_variant.rsid
             or harmonized_variant.hgvs_p
+            or extracted_variant.variant_evidence_context
             or f'Variant {link.variant_id}'
         )
 

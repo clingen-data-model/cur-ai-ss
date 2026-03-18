@@ -114,8 +114,7 @@ You are given:
 2. The full academic paper text.
 3. A structured list of extracted variants. Each variant includes:
    - variant_id (integer index)
-   - variant_description_verbatim
-   - variant_evidence_context
+   - variant_evidence_context (text snippet from the paper mentioning the variant)
 4. A structured list of extracted patients. Each patient includes:
    - patient_id (integer index)
    - identifier (e.g., "Patient 1", "Proband", "II-3")

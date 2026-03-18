@@ -5,7 +5,6 @@ import streamlit as st
 
 from lib.agents.variant_enrichment_agent import EnrichedVariant, VariantEnrichmentOutput
 from lib.agents.variant_extraction_agent import (
-    HgvsInferenceConfidence,
     Variant,
     VariantExtractionOutput,
     VariantType,
@@ -50,10 +49,13 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
         enriched_variant = enriched_variants[i - 1]
         st.markdown(f'### Variant {i}')
         with st.expander(
-            extracted_variant.variant_description_verbatim
+            harmonized_variant.hgvs_g
             or harmonized_variant.hgvs_c
+            or harmonized_variant.gnomad_style_coordinates
+            or harmonized_variant.rsid
             or harmonized_variant.hgvs_p
-            or 'Variant',
+            or extracted_variant.variant_evidence_context
+            or f'Variant {link.variant_id}',
             expanded=(i == selected_variant_id),
         ):
             # ======================================================
@@ -61,21 +63,20 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
             # ======================================================
             with st.container():
                 st.subheader('Harmonized Variant Info')
-
                 col1, col2 = st.columns(2)
-
                 gnomad_coords = (
                     f'[{harmonized_variant.gnomad_style_coordinates}]({get_gnomad_url(harmonized_variant.gnomad_style_coordinates)})'
                     if harmonized_variant.gnomad_style_coordinates
                     else 'N/A'
                 )
-                col1.markdown(f'**gnomAD-style coordinates:** {gnomad_coords}')
-                col1.markdown(f'**rsID:** {harmonized_variant.rsid or "N/A"}')
-                col1.markdown(f'**CAID:** {harmonized_variant.caid or "N/A"}')
-
-                col2.markdown(f'**HGVS c.:** {harmonized_variant.hgvs_c or "N/A"}')
-                col2.markdown(f'**HGVS p.:** {harmonized_variant.hgvs_p or "N/A"}')
-                col2.markdown(f'**HGVS g.:** {harmonized_variant.hgvs_g or "N/A"}')
+                with col1:
+                    st.markdown(f'**gnomAD-style coordinates:** {gnomad_coords}')
+                    st.markdown(f'**rsID:** {harmonized_variant.rsid or "N/A"}')
+                    st.markdown(f'**CAID:** {harmonized_variant.caid or "N/A"}')
+                with col2:
+                    col2.markdown(f'**HGVS c.:** {harmonized_variant.hgvs_c or "N/A"}')
+                    col2.markdown(f'**HGVS p.:** {harmonized_variant.hgvs_p or "N/A"}')
+                    col2.markdown(f'**HGVS g.:** {harmonized_variant.hgvs_g or "N/A"}')
 
                 st.markdown(
                     f'**Harmonization confidence:** '
@@ -90,7 +91,11 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                     key=f'{i}-norm-notes',
                 )
 
-                st.subheader('Variant Type')
+            # ======================================================
+            # Variant Type
+            # ======================================================
+            col1, col2 = st.columns(2)
+            with col1:
                 selected_value = VariantType(
                     st.selectbox(
                         'Variant Type',
@@ -104,6 +109,8 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                     )
                 )
 
+            with col2:
+                st.space()
                 render_evidence_controls(
                     paper_id=paper_resp.id,
                     label='📋 Evidence & Reasoning',
@@ -116,12 +123,14 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
             # ======================================================
             # Functional Evidence
             # ======================================================
-            with st.container():
-                st.subheader('Functional Evidence')
+            col1, col2 = st.columns(2)
+            with col1:
                 st.markdown(
                     f'**Functional evidence present:** '
                     f'{"✅ Yes" if extracted_variant.functional_evidence else "❌ No"}'
                 )
+            with col2:
+                st.space()
                 render_evidence_controls(
                     paper_id=paper_resp.id,
                     label='📋 Evidence & Reasoning',
@@ -132,22 +141,20 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                 )
 
             # ======================================================
-            # Extracted Variant Description (READ-ONLY)
+            # Extracted Variant Evidence & Reasoning
             # ======================================================
-            with st.container():
-                st.subheader('Extracted Variant Context')
-
-                st.markdown(
-                    f'**Variant description (verbatim):** '
-                    f'{extracted_variant.variant_description_verbatim or "N/A"}'
-                )
-
-                st.text_area(
-                    'Variant Evidence Context',
-                    extracted_variant.variant_evidence_context or '',
-                    height=100,
-                    disabled=True,
-                    key=f'{i}-vec',
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown('**Variant Evidence & Reasoning**')
+            with col2:
+                st.space()
+                render_evidence_controls(
+                    paper_id=paper_resp.id,
+                    label='📋 Evidence & Reasoning',
+                    evidence_context=extracted_variant.variant_evidence_context,
+                    reasoning=extracted_variant.variant_reasoning,
+                    color_key=f'{i}-var-color',
+                    button_key_prefix=f'{i}-var',
                 )
 
             #

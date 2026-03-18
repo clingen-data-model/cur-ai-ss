@@ -571,12 +571,7 @@ Use the following fields of the provided structured input:
 - hgvs_c
 - hgvs_p
 - hgvs_g
-- hgvs_c_inferred
-- hgvs_p_inferred
 - variant_evidence_context
-
-If hgvs_c is missing → use hgvs_c_inferred if present.
-If hgvs_p is missing → use hgvs_p_inferred if present.
 
 Proceed to State 1.
 
@@ -747,7 +742,7 @@ You may call clinvar_lookup EXACTLY ONCE per variant.
 
 Step 5A — Construct Query
 
-If hgvs_p and hgvs_p_inferred are both missing:
+If hgvs_p is missing:
     Skip ClinVar lookup and return low confidence.
 
 Query must include:
@@ -757,7 +752,6 @@ Query must include:
 
 Include:
     hgvs_p
-    hgvs_p_inferred
     3-letter format (p.Arg157Ser)
     1-letter format (p.R157S)
     Without "p." prefix
