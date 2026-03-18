@@ -118,12 +118,6 @@ async def parse_patients_task_async(paper_db: PaperDB) -> None:
         patient_extraction_agent,
         f'Paper (fulltext md): {fulltext_md(paper_db.id)} Pedigree Description: \n {pedigree_descriptions_output}',
     )
-    json_response = result.final_output.model_dump_json(indent=2)
-    PaperDB(id=paper_db.id).patient_info_json_path.parent.mkdir(
-        parents=True, exist_ok=True
-    )
-    with open(PaperDB(id=paper_db.id).patient_info_json_path, 'w') as f:
-        f.write(json_response)
 
     # Persist patients to DB (idempotent: delete-then-insert)
     with session_scope() as session:
@@ -188,8 +182,6 @@ async def pedigree_describer_task_async(paper_id: str) -> None:
 async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
     with open(paper_db.variants_json_path, 'r') as f:
         variants_output = json.load(f)
-    with open(paper_db.patient_info_json_path, 'r') as f:
-        patients_output = json.load(f)
     with open(paper_db.pedigree_descriptions_json_path, 'r') as f:
         pedigree_descriptions_output = json.load(f)
 
@@ -200,14 +192,21 @@ async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
         }
         for idx, variant in enumerate(variants_output['variants'], start=1)
     ]
-    structured_patients = [
-        {
-            'patient_id': idx,
-            'identifier': patient['identifier'],
-            'identifier_evidence_context': patient['identifier_evidence_context'],
-        }
-        for idx, patient in enumerate(patients_output['patients'], start=1)
-    ]
+    with session_scope() as session:
+        patient_rows = (
+            session.query(PatientDB)
+            .filter(PatientDB.paper_id == paper_db.id)
+            .order_by(PatientDB.position)
+            .all()
+        )
+        structured_patients = [
+            {
+                'patient_id': p.position,
+                'identifier': p.identifier,
+                'identifier_evidence_context': p.identifier_evidence_context,
+            }
+            for p in patient_rows
+        ]
     result = await Runner.run(
         patient_variant_linking_agent,
         f'Variants JSON:\n{structured_variants}\n Patients JSON:\n {structured_patients} Pedigree Description: \n {pedigree_descriptions_output} Paper (fulltext md): {fulltext_md(paper_db.id)}',

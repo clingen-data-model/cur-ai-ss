@@ -55,7 +55,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
             or harmonized_variant.rsid
             or harmonized_variant.hgvs_p
             or extracted_variant.variant_evidence_context
-            or f'Variant {link.variant_id}',
+            or f'Variant {i}',
             expanded=(i == selected_variant_id),
         ):
             # ======================================================

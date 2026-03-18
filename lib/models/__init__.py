@@ -211,10 +211,6 @@ class PaperDB(Base):
         return self
 
     @property
-    def patient_info_json_path(self) -> Path:
-        return env.evagg_dir / self.id / 'patient_info.json'
-
-    @property
     def phenotype_linking_json_path(self) -> Path:
         return env.evagg_dir / self.id / 'phenotype_linking.json'
 
@@ -282,7 +278,6 @@ class PaperResp(PaperExtractionOutput):
     title: str | None = None  # type: ignore
     first_author: str | None = None  # type: ignore
 
-    patient_info_json_path: Path
     phenotype_linking_json_path: Path
     enriched_variants_json_path: Path
     harmonized_variants_json_path: Path

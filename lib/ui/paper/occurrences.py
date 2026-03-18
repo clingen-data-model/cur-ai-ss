@@ -20,7 +20,8 @@ from lib.agents.variant_harmonization_agent import (
     HarmonizedVariant,
     VariantHarmonizationOutput,
 )
-from lib.models import PaperResp, PipelineStatus
+from lib.models import PaperResp, PatientResp, PipelineStatus
+from lib.ui.api import get_patients
 from lib.ui.paper.shared import (
     get_gnomad_url,
     render_highlight_controls,
@@ -82,11 +83,7 @@ def render_patient_variant_occurrences_tab() -> None:
         st.stop()
 
     # Load all data sources
-    with open(paper_resp.patient_info_json_path, 'r') as f:
-        patient_info_data = json.load(f)
-    patients: list[PatientInfo] = PatientInfoExtractionOutput.model_validate(
-        patient_info_data
-    ).patients
+    patients: list[PatientResp] = get_patients(paper_resp.id)
 
     with open(paper_resp.variants_json_path, 'r') as f:
         extracted_data = json.load(f)
