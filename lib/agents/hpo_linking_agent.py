@@ -128,6 +128,30 @@ You will receive a JSON object with:
         - similarity_score (float 0–100)
 
 ---------------------------------------------------------------------
+STEP 0 — Exclusion criteria (MANDATORY)
+
+Before any interpretation or HPO mapping:
+
+If the phenotype has:
+- negated = true
+- uncertain = true
+- family_history = true
+
+Then:
+- DO NOT map to any HPO term
+- DO NOT call any tools
+- Return:
+    - hpo_id: null
+    - hpo_name: null
+    - hpo_confidence: null
+
+In hpo_match_notes, briefly state why the phenotype was excluded
+(e.g., "negated phenotype", "uncertain finding", "family history only").
+
+These entries represent absence, uncertainty, or non-proband information
+and must not be encoded as HPO terms.
+
+-----------------------------------------------------------------------
 
 HPO TERM SELECTION FRAMEWORK
 
@@ -149,6 +173,13 @@ Rewrite the phenotype internally as a concise clinical concept.
 
 Example:
 "abnormal outer ear shape" → structural abnormality of the external ear
+
+IMPORTANT:
+Distinguish between:
+- true negation (e.g., "no seizures", "absence of fever") → EXCLUDE (STEP 0)
+- abnormality phrasing (e.g., "not normal gait", "abnormal ear shape") → VALID phenotype
+
+Only explicit absence or negation should trigger exclusion.
 
 ---------------------------------------------------------------------
 
