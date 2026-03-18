@@ -227,15 +227,14 @@ async def phenotype_patient_linking_task_async(paper_db: PaperDB) -> None:
             .order_by(PatientDB.position)
             .all()
         )
-
-    structured_patients = [
-        {
-            'patient_id': p.position,
-            'identifier': p.identifier,
-            'identifier_evidence_context': p.identifier_evidence_context,
-        }
-        for p in patient_rows
-    ]
+        structured_patients = [
+            {
+                'patient_id': p.position,
+                'identifier': p.identifier,
+                'identifier_evidence_context': p.identifier_evidence_context,
+            }
+            for p in patient_rows
+        ]
     result = await Runner.run(
         phenotype_patient_linking_agent,
         f'Paper (fulltext md): {fulltext_md(paper_db.id)}\n\nStructured Patients JSON:\n{structured_patients}',
