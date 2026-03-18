@@ -269,7 +269,7 @@ async def hpo_linking_task_async(paper_db: PaperDB) -> None:
 
     # Exclude optional fields to keep agent input clean
     phenotype_data_filtered = phenotype_linking.model_dump(
-        exclude={'notes', 'onset', 'location', 'severity', 'modifier', 'section'}
+        exclude={'onset', 'location', 'severity', 'modifier'}
     )
     result = await Runner.run(
         hpo_linking_agent,

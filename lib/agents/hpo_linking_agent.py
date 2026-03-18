@@ -121,7 +121,6 @@ You will receive a JSON object with:
     - patient_id (int)
     - text (str): phenotype description from the paper
     - negated, uncertain, family_history (boolean)
-    - confidence (float): extraction confidence
     - candidates (list): HPO term suggestions
         - hpo_id (str)
         - hpo_name (str)
@@ -144,8 +143,9 @@ Then:
     - hpo_id: null
     - hpo_name: null
     - hpo_confidence: null
+    - hpo_reasoning: null
 
-In hpo_match_notes, briefly state why the phenotype was excluded
+In hpo_reasoning, briefly state why the phenotype was excluded
 (e.g., "negated phenotype", "uncertain finding", "family history only").
 
 These entries represent absence, uncertainty, or non-proband information
@@ -311,6 +311,7 @@ Only return null after tool exploration reveals no suitable match:
 - hpo_id: null
 - hpo_name: null
 - hpo_confidence: null
+- hpo_reasoning: null
 
 Return null when:
 - the phenotype is too vague (e.g., "symptom", "finding")
@@ -337,13 +338,14 @@ moderate
 low
     Approximate match but still clinically related.
 
-If no HPO term is selected, hpo_confidence must be null.
+If no HPO term is selected, hpo_confidence must be null.  hpo_reasoning
+should still be populated with a description of why it is null.
 
 ---------------------------------------------------------------------
 
-HPO_MATCH_NOTES REQUIREMENTS (STEP-BY-STEP JUSTIFICATION)
+HPO_REASONING REQUIREMENTS (STEP-BY-STEP JUSTIFICATION)
 
-The `hpo_match_notes` field MUST summarize the reasoning process
+The `hpo_reasoning` field MUST summarize the reasoning process
 using the HPO TERM SELECTION FRAMEWORK.
 
 The explanation should document the resolution process in a concise

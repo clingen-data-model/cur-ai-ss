@@ -15,8 +15,6 @@ class PhenotypeExtractionOutput(BaseModel):
     location: str | None
     severity: str | None
     modifier: str | None
-    section: str | None
-    confidence: float
 
 
 class PhenotypeInfoExtractionOutput(BaseModel):
@@ -37,8 +35,8 @@ class HpoPhenotypeLink(BaseModel):
     patient_id: int
     hpo_id: str | None
     hpo_name: str | None
-    confidence: HpoConfidence | None
-    match_notes: str
+    hpo_confidence: HpoConfidence | None
+    hpo_reasoning: str
 
 
 class HpoPhenotypeLinkingOutput(BaseModel):
@@ -61,7 +59,7 @@ class PhenotypeLinkingEntry(PhenotypeExtractionOutput):
     hpo_id: str | None = None
     hpo_name: str | None = None
     hpo_confidence: HpoConfidence | None = None
-    hpo_match_notes: str | None = None
+    hpo_reasoning: str | None = None
     candidates: list[HpoCandidate] | None = None  # HPO candidate suggestions for agent
 
     @classmethod
@@ -71,7 +69,7 @@ class PhenotypeLinkingEntry(PhenotypeExtractionOutput):
         hpo_id: str | None = None,
         hpo_name: str | None = None,
         hpo_confidence: HpoConfidence | None = None,
-        hpo_match_notes: str | None = None,
+        hpo_reasoning: str | None = None,
         candidates: list[HpoCandidate] | None = None,
     ) -> 'PhenotypeLinkingEntry':
         """Create a PhenotypeLinkingEntry from a PhenotypeExtractionOutput."""
@@ -80,7 +78,7 @@ class PhenotypeLinkingEntry(PhenotypeExtractionOutput):
             hpo_id=hpo_id,
             hpo_name=hpo_name,
             hpo_confidence=hpo_confidence,
-            hpo_match_notes=hpo_match_notes,
+            hpo_reasoning=hpo_reasoning,
             candidates=candidates,
         )
 

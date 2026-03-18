@@ -436,9 +436,9 @@ def _render_phenotypes_table(
 
         # HPO matching notes
         with col2:
-            if phenotype.hpo_match_notes:
-                with st.expander('HPO Matching Notes', expanded=False):
-                    st.text(phenotype.hpo_match_notes)
+            if phenotype.hpo_reasoning:
+                with st.expander('HPO Reasoning', expanded=False):
+                    st.text(phenotype.hpo_reasoning)
 
         # Highlight button with popover
         with col3:
