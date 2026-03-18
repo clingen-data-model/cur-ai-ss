@@ -254,7 +254,7 @@ def highlight_images_in_pdf(
         docling_json = json.load(f)
 
     for image_id in image_ids:
-        bounding_boxes = docling_json['pictures'][image_id - 1]['prov']
+        bounding_boxes = docling_json['pictures'][image_id]['prov']
         for bounding_box in bounding_boxes:
             page = pdf_doc[bounding_box['page_no'] - 1]
             page_height = page.rect.height

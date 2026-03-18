@@ -134,7 +134,9 @@ def render_evidence_controls(
     with st.container(
         horizontal=True, vertical_alignment='center', horizontal_alignment='right'
     ):
-        with st.popover(label, type='tertiary', disabled=not evidence_context):
+        with st.popover(
+            label, type='tertiary', disabled=not evidence_context and not reasoning
+        ):
             st.markdown('**Evidence**: ' + (evidence_context or ''))
             st.markdown('**Reasoning**: ' + (reasoning or ''))
         render_highlight_controls(

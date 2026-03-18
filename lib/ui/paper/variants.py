@@ -63,7 +63,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
             # ======================================================
             with st.container():
                 st.subheader('Harmonized Variant Info')
-                col1, col2 = st.columns(2)
+                col1, col2, col3 = st.columns([1, 1, 2])
                 gnomad_coords = (
                     f'[{harmonized_variant.gnomad_style_coordinates}]({get_gnomad_url(harmonized_variant.gnomad_style_coordinates)})'
                     if harmonized_variant.gnomad_style_coordinates
@@ -77,6 +77,15 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                     col2.markdown(f'**HGVS c.:** {harmonized_variant.hgvs_c or "N/A"}')
                     col2.markdown(f'**HGVS p.:** {harmonized_variant.hgvs_p or "N/A"}')
                     col2.markdown(f'**HGVS g.:** {harmonized_variant.hgvs_g or "N/A"}')
+                with col3:
+                    render_evidence_controls(
+                        paper_id=paper_resp.id,
+                        label='📋 Evidence & Reasoning',
+                        evidence_context=extracted_variant.variant_evidence_context,
+                        reasoning=extracted_variant.variant_reasoning,
+                        color_key=f'{i}-var-color',
+                        button_key_prefix=f'{i}-var',
+                    )
 
                 st.markdown(
                     f'**Harmonization confidence:** '
@@ -125,9 +134,11 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
             # ======================================================
             col1, col2 = st.columns(2)
             with col1:
-                st.markdown(
-                    f'**Functional evidence present:** '
-                    f'{"✅ Yes" if extracted_variant.functional_evidence else "❌ No"}'
+                st.checkbox(
+                    'Functional Evidence Present',
+                    value=extracted_variant.functional_evidence,
+                    width='stretch',
+                    key=f'{i}-func-ev',
                 )
             with col2:
                 st.space()
@@ -138,23 +149,6 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                     reasoning=extracted_variant.functional_evidence_reasoning,
                     color_key=f'{i}-func-ev-color',
                     button_key_prefix=f'{i}-func-ev',
-                )
-
-            # ======================================================
-            # Extracted Variant Evidence & Reasoning
-            # ======================================================
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown('**Variant Evidence & Reasoning**')
-            with col2:
-                st.space()
-                render_evidence_controls(
-                    paper_id=paper_resp.id,
-                    label='📋 Evidence & Reasoning',
-                    evidence_context=extracted_variant.variant_evidence_context,
-                    reasoning=extracted_variant.variant_reasoning,
-                    color_key=f'{i}-var-color',
-                    button_key_prefix=f'{i}-var',
                 )
 
             #
