@@ -105,7 +105,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                 )
 
                 render_evidence_controls(
-                    paper_id=paper_resp.pmid or 'unknown',
+                    paper_id=paper_resp.id,
                     label='📋 Evidence & Reasoning',
                     evidence_context=extracted_variant.variant_type_evidence_context,
                     reasoning=extracted_variant.variant_type_reasoning,
@@ -118,23 +118,18 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
             # ======================================================
             with st.container():
                 st.subheader('Functional Evidence')
-
-                if extracted_variant.functional_evidence is not None:
-                    st.markdown(
-                        f'**Functional evidence present:** '
-                        f'{"✅ Yes" if extracted_variant.functional_evidence else "❌ No"}'
-                    )
-
-                    render_evidence_controls(
-                        paper_id=paper_resp.pmid or 'unknown',
-                        label='📋 Evidence & Reasoning',
-                        evidence_context=extracted_variant.functional_evidence_evidence_context,
-                        reasoning=extracted_variant.functional_evidence_reasoning,
-                        color_key=f'{i}-func-ev-color',
-                        button_key_prefix=f'{i}-func-ev',
-                    )
-                else:
-                    st.markdown('**Functional evidence:** Not yet assessed')
+                st.markdown(
+                    f'**Functional evidence present:** '
+                    f'{"✅ Yes" if extracted_variant.functional_evidence else "❌ No"}'
+                )
+                render_evidence_controls(
+                    paper_id=paper_resp.id,
+                    label='📋 Evidence & Reasoning',
+                    evidence_context=extracted_variant.functional_evidence_evidence_context,
+                    reasoning=extracted_variant.functional_evidence_reasoning,
+                    color_key=f'{i}-func-ev-color',
+                    button_key_prefix=f'{i}-func-ev',
+                )
 
             # ======================================================
             # Extracted Variant Description (READ-ONLY)
