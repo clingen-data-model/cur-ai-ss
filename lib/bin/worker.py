@@ -36,10 +36,12 @@ from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import fulltext_md, pdf_image_caption_path, pdf_image_path
 from lib.models import (
     PaperDB,
+    PatientDB,
     PhenotypeLinkingEntry,
     PhenotypeLinkingOutput,
     PipelineStatus,
 )
+from lib.models.converters import patient_info_to_db
 from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
 
 LEASE_TIMEOUT_S = 900
@@ -122,6 +124,12 @@ async def parse_patients_task_async(paper_db: PaperDB) -> None:
     )
     with open(PaperDB(id=paper_db.id).patient_info_json_path, 'w') as f:
         f.write(json_response)
+
+    # Persist patients to DB (idempotent: delete-then-insert)
+    with session_scope() as session:
+        session.query(PatientDB).filter(PatientDB.paper_id == paper_db.id).delete()
+        for position, patient_info in enumerate(result.final_output.patients, start=1):
+            session.add(patient_info_to_db(paper_db.id, position, patient_info))
 
 
 async def harmonize_variants_task_async(paper_db: PaperDB) -> None:

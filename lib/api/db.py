@@ -1,11 +1,21 @@
 from contextlib import contextmanager
 from pathlib import Path
+from sqlite3 import Connection as SQLite3Connection
 from typing import Generator, Optional
 
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 
 from lib.core.environment import env
+
+
+@event.listens_for(Engine, 'connect')
+def set_sqlite_pragma(dbapi_connection: object, connection_record: object) -> None:
+    if isinstance(dbapi_connection, SQLite3Connection):
+        cursor = dbapi_connection.cursor()
+        cursor.execute('PRAGMA foreign_keys=ON')
+        cursor.close()
+
 
 _engine: Optional[Engine] = None
 _session_factory: Optional[sessionmaker] = (
