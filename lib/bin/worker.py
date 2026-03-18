@@ -220,16 +220,21 @@ async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
 
 
 async def phenotype_patient_linking_task_async(paper_db: PaperDB) -> None:
-    with open(paper_db.patient_info_json_path, 'r') as f:
-        patients_output = json.load(f)
+    with session_scope() as session:
+        patient_rows = (
+            session.query(PatientDB)
+            .filter(PatientDB.paper_id == paper_db.id)
+            .order_by(PatientDB.position)
+            .all()
+        )
 
     structured_patients = [
         {
-            'patient_id': idx,
-            'identifier': patient['identifier'],
-            'identifier_evidence_context': patient['identifier_evidence_context'],
+            'patient_id': p.position,
+            'identifier': p.identifier,
+            'identifier_evidence_context': p.identifier_evidence_context,
         }
-        for idx, patient in enumerate(patients_output['patients'], start=1)
+        for p in patient_rows
     ]
     result = await Runner.run(
         phenotype_patient_linking_agent,
