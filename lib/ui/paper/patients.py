@@ -8,8 +8,6 @@ import streamlit as st
 from lib.agents.patient_extraction_agent import (
     AffectedStatus,
     CountryCode,
-    PatientInfo,
-    PatientInfoExtractionOutput,
     ProbandStatus,
     RaceEthnicity,
     SexAtBirth,
@@ -19,11 +17,12 @@ from lib.misc.pdf.paths import pdf_image_path
 from lib.models import (
     HpoConfidence,
     PaperResp,
+    PatientResp,
     PhenotypeLinkingEntry,
     PhenotypeLinkingOutput,
     PipelineStatus,
 )
-from lib.ui.api import get_http_error_detail, grobid_annotations
+from lib.ui.api import get_http_error_detail, get_patients, grobid_annotations
 from lib.ui.paper.shared import (
     render_evidence_controls,
     render_highlight_controls,
@@ -32,7 +31,7 @@ from lib.ui.paper.shared import (
 
 def render_patient(
     paper_resp: PaperResp,
-    patient: PatientInfo,
+    patient: PatientResp,
     expanded: bool,
     key_prefix: str,
     patient_id: int,
@@ -468,11 +467,7 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
     # -----------------------------
     # Load patients
     # ---------------
-    with open(paper_resp.patient_info_json_path, 'r') as f:
-        patient_info_data = json.load(f)
-    patients: list[PatientInfo] = PatientInfoExtractionOutput.model_validate(
-        patient_info_data
-    ).patients
+    patients: list[PatientResp] = get_patients(paper_resp.id)
 
     # Load phenotype linking data
     phenotypes: list[PhenotypeLinkingEntry] | None = None
@@ -487,7 +482,7 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
     # -----------------------------
     # Display Patients
     # -----------------------------
-    indexed_patients = list(enumerate(patients, start=1))
+    indexed_patients = [(p.position, p) for p in patients]
     probands = [
         (i, p) for i, p in indexed_patients if p.proband_status == ProbandStatus.Proband
     ]

@@ -56,6 +56,8 @@ from lib.models import (
     PaperDB,
     PaperResp,
     PaperUpdateRequest,
+    PatientDB,
+    PatientResp,
     PipelineStatus,
 )
 
@@ -224,6 +226,22 @@ def list_papers(
     if pipeline_status is not None:
         query = query.filter(PaperDB.pipeline_status == pipeline_status)
     return query.all()
+
+
+@app.get('/papers/{paper_id}/patients', response_model=list[PatientResp])
+def get_patients(paper_id: str, session: Session = Depends(get_session)) -> Any:
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    patients = (
+        session.query(PatientDB)
+        .filter(PatientDB.paper_id == paper_id)
+        .order_by(PatientDB.position)
+        .all()
+    )
+    return patients
 
 
 @app.get('/genes/search', response_model=list[GeneResp])
