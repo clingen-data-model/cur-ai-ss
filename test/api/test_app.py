@@ -241,12 +241,35 @@ def test_delete_paper(client, test_pdf, db_session, seeded_genes):
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
         data={'gene_symbol': 'BRCA1'},
     )
+    paper_id = response2.json()["id"]
+
+    # Add a patient to the paper
+    db_session.add(
+        PatientDB(
+            paper_id=paper_id,
+            patient_idx=1,
+            identifier='P1',
+            proband_status='Unknown',
+            sex='Unknown',
+            country_of_origin='Unknown',
+            race_ethnicity='Unknown',
+            affected_status='Unknown',
+        )
+    )
+    db_session.flush()
+
+    # Verify patient was added
+    patient_count = db_session.execute(select(func.count(PatientDB.id))).scalar_one()
+    assert patient_count == 1
+
     response3 = client.delete(
-        f'/papers/{response2.json()["id"]}',
+        f'/papers/{paper_id}',
     )
     assert response3.status_code == 204
-    result = db_session.execute(select(func.count(PaperDB.id)))
-    assert result.scalar_one() == 0
+    paper_result = db_session.execute(select(func.count(PaperDB.id)))
+    assert paper_result.scalar_one() == 0
+    patient_result = db_session.execute(select(func.count(PatientDB.id)))
+    assert patient_result.scalar_one() == 0
 
 
 def test_search_genes_by_prefix(client, seeded_genes):
@@ -299,7 +322,7 @@ def test_get_patients_empty(client, seeded_paper):
     assert response.json() == []
 
 
-def test_get_patients_returns_ordered_by_position(client, db_session, seeded_paper):
+def test_get_patients_returns_ordered_by_idx(client, db_session, seeded_paper):
     required = dict(
         proband_status='Unknown',
         sex='Unknown',
