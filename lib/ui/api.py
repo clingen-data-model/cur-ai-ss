@@ -122,10 +122,10 @@ def get_patients(paper_id: str) -> list[PatientResp]:
 
 
 def update_patient(
-    paper_id: str, patient_id: int, update_request: PatientUpdateRequest
+    paper_id: str, patient_idx: int, update_request: PatientUpdateRequest
 ) -> PatientResp:
     resp = requests.patch(
-        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/patients/{patient_id}',
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/patients/{patient_idx}',
         json=update_request.model_dump(mode='json', exclude_unset=True),
     )
     resp.raise_for_status()

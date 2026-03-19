@@ -245,16 +245,16 @@ def get_patients(paper_id: str, session: Session = Depends(get_session)) -> Any:
     return patients
 
 
-@app.patch('/papers/{paper_id}/patients/{patient_id}', response_model=PatientResp)
+@app.patch('/papers/{paper_id}/patients/{patient_idx}', response_model=PatientResp)
 def update_patient(
     paper_id: str,
-    patient_id: int,
+    patient_idx: int,
     patch_request: PatientUpdateRequest,
     session: Session = Depends(get_session),
 ) -> Any:
     patient_db = (
         session.query(PatientDB)
-        .filter(PatientDB.id == patient_id, PatientDB.paper_id == paper_id)
+        .filter(PatientDB.patient_idx == patient_idx, PatientDB.paper_id == paper_id)
         .one_or_none()
     )
     if not patient_db:

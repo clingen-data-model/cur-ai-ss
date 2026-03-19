@@ -280,7 +280,7 @@ def render_patient(
 
         if changes:
             try:
-                update_patient(paper_resp.id, patient.id, update_request)
+                update_patient(paper_resp.id, patient.patient_idx, update_request)
                 st.toast('Saved!', icon=':material/check:')
             except Exception as e:
                 st.toast(f'Failed to save: {str(e)}', icon='❌')
