@@ -91,7 +91,7 @@ def find_best_match(query: str, words: list[WordLoc]) -> list[WordLoc] | None:
         aligner.match_score = 1.0  # Match/mismatch scoring
         aligner.mismatch_score = -0.5  # Affine Gap penalties
         aligner.open_gap_score = -2
-        aligner.extend_gap_score = -.001
+        aligner.extend_gap_score = -0.001
         return aligner
 
     def normalize(token: str) -> str:

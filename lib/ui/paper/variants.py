@@ -28,7 +28,10 @@ def _is_pathogenic(pathogenicity: str | None) -> bool:
         return False
     pathogenicity_lower = pathogenicity.lower()
     # Exclude conflicting and No_pathogenic_assertion
-    if 'conflicting' in pathogenicity_lower or 'no_pathogenic_assertion' in pathogenicity_lower:
+    if (
+        'conflicting' in pathogenicity_lower
+        or 'no_pathogenic_assertion' in pathogenicity_lower
+    ):
         return False
     return bool(re.search(r'pathogenic', pathogenicity, re.IGNORECASE))
 
@@ -59,9 +62,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
 
     # Separate variants into pathogenic and other
     pathogenic_indices = [
-        i
-        for i, ev in enumerate(enriched_variants)
-        if _is_pathogenic(ev.pathogenicity)
+        i for i, ev in enumerate(enriched_variants) if _is_pathogenic(ev.pathogenicity)
     ]
     other_indices = [
         i for i in range(len(enriched_variants)) if i not in pathogenic_indices
@@ -109,9 +110,15 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                         st.markdown(f'**rsID:** {harmonized_variant.rsid or "N/A"}')
                         st.markdown(f'**CAID:** {harmonized_variant.caid or "N/A"}')
                     with col2:
-                        col2.markdown(f'**HGVS c.:** {harmonized_variant.hgvs_c or "N/A"}')
-                        col2.markdown(f'**HGVS p.:** {harmonized_variant.hgvs_p or "N/A"}')
-                        col2.markdown(f'**HGVS g.:** {harmonized_variant.hgvs_g or "N/A"}')
+                        col2.markdown(
+                            f'**HGVS c.:** {harmonized_variant.hgvs_c or "N/A"}'
+                        )
+                        col2.markdown(
+                            f'**HGVS p.:** {harmonized_variant.hgvs_p or "N/A"}'
+                        )
+                        col2.markdown(
+                            f'**HGVS g.:** {harmonized_variant.hgvs_g or "N/A"}'
+                        )
                     with col3:
                         render_evidence_controls(
                             paper_id=paper_resp.id,
@@ -295,7 +302,8 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                                 'Popmax AF': ev.gnomad_popmax_af
                                 if ev.gnomad_popmax_af is not None
                                 else 'N/A',
-                                'Popmax Population': ev.gnomad_popmax_population or 'N/A',
+                                'Popmax Population': ev.gnomad_popmax_population
+                                or 'N/A',
                             }
                         ]
                     )
