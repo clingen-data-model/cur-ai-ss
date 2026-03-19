@@ -63,6 +63,5 @@ def render_metadata_tab() -> None:
                 update_request=update_request,
             )
             st.toast('Saved!', icon=':material/check:')
-            st.rerun()
         except Exception as e:
             st.toast(f'Failed to save: {str(e)}', icon='❌')

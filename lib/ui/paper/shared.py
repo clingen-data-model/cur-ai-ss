@@ -5,10 +5,15 @@ import requests
 import streamlit as st
 from streamlit_pdf_viewer import pdf_viewer
 
-from lib.ui.api import get_http_error_detail, grobid_annotations, highlight_pdf
+from lib.ui.api import (
+    clear_highlights,
+    get_http_error_detail,
+    grobid_annotations,
+    highlight_pdf,
+)
 
 CURRENT_ANNOTATIONS_KEY = 'CURRENT_ANNOTATIONS_KEY'
-HEADER_TABS = ['📄 PDF', '📝 Metadata', '👤 Patients', '🧬 Variants', '🔗 Occurrences']
+HEADER_TABS = ['📝 Metadata', '👤 Patients', '🧬 Variants', '🔗 Occurrences']
 HEADER_TABS_KEY = 'HEADER_TABS_KEY'
 
 COLORS = [
@@ -79,6 +84,21 @@ def pdf_focus_modal() -> None:
         scroll_to_page=annotations[0].page if len(annotations) == 1 else None,
         render_text=True,
     )
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button(
+            'Clear Highlights', width='stretch', icon=':material/highlight_off:'
+        ):
+            clear_highlights(paper_resp.id)
+            st.rerun()
+    with col2:
+        st.download_button(
+            label='Download PDF',
+            data=open(paper_resp.pdf_highlighted_path, 'rb').read(),
+            icon=':material/download:',
+            mime='application/pdf',
+            width='stretch',
+        )
 
 
 def focus_and_show_dialog(

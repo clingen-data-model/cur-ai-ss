@@ -16,7 +16,6 @@ from lib.ui.api import (
 from lib.ui.paper.metadata import render_metadata_tab
 from lib.ui.paper.occurrences import render_patient_variant_occurrences_tab
 from lib.ui.paper.patients import render_patients_tab
-from lib.ui.paper.pdf import render_pdf_tab
 from lib.ui.paper.shared import CURRENT_ANNOTATIONS_KEY, HEADER_TABS, HEADER_TABS_KEY
 from lib.ui.paper.variants import render_variants_tab
 
@@ -140,19 +139,15 @@ with center:
             elif paper_query_params.variant_id:
                 default_tab = '🧬 Variants'
             else:
-                default_tab = '📄 PDF'
-            pdf_tab, metadata_tab, patients_tab, variants_tab, occurrences_tab = (
-                st.tabs(
-                    HEADER_TABS,
-                    on_change='rerun',
-                    default=default_tab,
-                    key=HEADER_TABS_KEY,
-                )
+                default_tab = '📝 Metadata'
+            metadata_tab, patients_tab, variants_tab, occurrences_tab = st.tabs(
+                HEADER_TABS,
+                on_change='rerun',
+                default=default_tab,
+                key=HEADER_TABS_KEY,
             )
             with center:
-                if pdf_tab.open:
-                    render_pdf_tab()
-                elif metadata_tab.open:
+                if metadata_tab.open:
                     render_metadata_tab()
                 elif patients_tab.open:
                     render_patients_tab(paper_query_params.patient_idx)
