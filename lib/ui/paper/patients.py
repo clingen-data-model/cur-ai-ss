@@ -18,11 +18,16 @@ from lib.models import (
     HpoConfidence,
     PaperResp,
     PatientResp,
+    PatientUpdateRequest,
     PhenotypeLinkingEntry,
     PhenotypeLinkingOutput,
     PipelineStatus,
 )
-from lib.ui.api import get_http_error_detail, get_patients, grobid_annotations
+from lib.ui.api import (
+    get_patients,
+    grobid_annotations,
+    update_patient,
+)
 from lib.ui.paper.shared import (
     render_evidence_controls,
     render_highlight_controls,
@@ -43,7 +48,7 @@ def render_patient(
     ):
         col1, col2 = st.columns(2)
         with col1:
-            patient.identifier = st.text_input(
+            identifier = st.text_input(
                 'Patient Identifier',
                 patient.identifier,
                 key=f'{key_prefix}-identifier',
@@ -62,7 +67,7 @@ def render_patient(
         col1, col2 = st.columns(2)
         with col1:
             # --- Proband Status
-            patient.proband_status = ProbandStatus(
+            proband_status = ProbandStatus(
                 st.selectbox(
                     'Proband Status',
                     [ps.value for ps in ProbandStatus],
@@ -90,7 +95,7 @@ def render_patient(
         # --- Affected Status
         col1, col2 = st.columns(2)
         with col1:
-            patient.affected_status = AffectedStatus(
+            affected_status = AffectedStatus(
                 st.selectbox(
                     'Affected Status',
                     [a.value for a in AffectedStatus],
@@ -118,7 +123,7 @@ def render_patient(
         # --- Sex At Birth
         col1, col2 = st.columns(2)
         with col1:
-            patient.sex = SexAtBirth(
+            sex = SexAtBirth(
                 st.selectbox(
                     'Sex At Birth',
                     [s.value for s in SexAtBirth],
@@ -144,7 +149,7 @@ def render_patient(
         # --- Ages
         col1, col2 = st.columns(2)
         with col1:
-            patient.age_diagnosis = st.text_input(
+            age_diagnosis = st.text_input(
                 'Age at Diagnosis',
                 patient.age_diagnosis or '',
                 key=f'{key_prefix}-age-diagnosis',
@@ -161,7 +166,7 @@ def render_patient(
             )
         col1, col2 = st.columns(2)
         with col1:
-            patient.age_report = st.text_input(
+            age_report = st.text_input(
                 'Age at Report',
                 patient.age_report or '',
                 key=f'{key_prefix}-age-report',
@@ -178,7 +183,7 @@ def render_patient(
             )
         col1, col2 = st.columns(2)
         with col1:
-            patient.age_death = st.text_input(
+            age_death = st.text_input(
                 'Age at Death',
                 patient.age_death or '',
                 key=f'{key_prefix}-age-death',
@@ -197,7 +202,7 @@ def render_patient(
         # --- Country + Ethnicity
         col1, col2 = st.columns(2)
         with col1:
-            patient.country_of_origin = CountryCode(
+            country_of_origin = CountryCode(
                 st.selectbox(
                     'Country of Origin',
                     [c.value for c in CountryCode],
@@ -224,7 +229,7 @@ def render_patient(
 
         col1, col2 = st.columns(2)
         with col1:
-            patient.race_ethnicity = RaceEthnicity(
+            race_ethnicity = RaceEthnicity(
                 st.selectbox(
                     'Race/Ethnicity',
                     [r.value for r in RaceEthnicity],
@@ -248,6 +253,37 @@ def render_patient(
                 color_key=f'{key_prefix}-{patient.identifier}-color-race-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-race-evidence',
             )
+
+        # --- Save edits: only include changed fields so exclude_unset works
+        # Fields which can be initially empty, or later cleared from nonempty to empty,
+        # are mapped to None rather than empty string. (empty UI text fields are '')
+        changes: dict[str, str | None] = {}
+        if identifier != patient.identifier:
+            changes['identifier'] = identifier
+        if proband_status != patient.proband_status:
+            changes['proband_status'] = proband_status.value
+        if affected_status != patient.affected_status:
+            changes['affected_status'] = affected_status.value
+        if sex != patient.sex:
+            changes['sex'] = sex.value
+        if (age_diagnosis or None) != patient.age_diagnosis:
+            changes['age_diagnosis'] = age_diagnosis or None
+        if (age_report or None) != patient.age_report:
+            changes['age_report'] = age_report or None
+        if (age_death or None) != patient.age_death:
+            changes['age_death'] = age_death or None
+        if country_of_origin != patient.country_of_origin:
+            changes['country_of_origin'] = country_of_origin.value
+        if race_ethnicity != patient.race_ethnicity:
+            changes['race_ethnicity'] = race_ethnicity.value
+        update_request = PatientUpdateRequest(**changes)
+
+        if changes:
+            try:
+                update_patient(paper_resp.id, patient.patient_idx, update_request)
+                st.toast('Saved!', icon=':material/check:')
+            except Exception as e:
+                st.toast(f'Failed to save: {str(e)}', icon='❌')
 
         # --- Phenotypes Section
         if phenotypes:

@@ -69,8 +69,7 @@ class Base(DeclarativeBase):
 class PatchModel(BaseModel):
     def apply_to(self, obj: Base) -> None:
         for field, value in self.model_dump(exclude_unset=True).items():
-            if value:
-                setattr(obj, field, value)
+            setattr(obj, field, value)
 
 
 class PipelineStatus(StrEnum):
@@ -391,3 +390,15 @@ class PatientResp(PatientInfo):
     paper_id: str
     patient_idx: int
     created_at: datetime
+
+
+class PatientUpdateRequest(PatchModel):
+    identifier: str | None = None
+    proband_status: str | None = None
+    affected_status: str | None = None
+    sex: str | None = None
+    age_diagnosis: str | None = None
+    age_report: str | None = None
+    age_death: str | None = None
+    country_of_origin: str | None = None
+    race_ethnicity: str | None = None
