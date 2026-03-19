@@ -10,6 +10,7 @@ from lib.models import (
     PaperResp,
     PaperUpdateRequest,
     PatientResp,
+    PatientUpdateRequest,
     PipelineStatus,
 )
 
@@ -118,6 +119,17 @@ def get_patients(paper_id: str) -> list[PatientResp]:
     resp = requests.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/patients')
     resp.raise_for_status()
     return TypeAdapter(list[PatientResp]).validate_python(resp.json())
+
+
+def update_patient(
+    paper_id: str, patient_id: int, update_request: PatientUpdateRequest
+) -> PatientResp:
+    resp = requests.patch(
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/patients/{patient_id}',
+        json=update_request.model_dump(mode='json', exclude_unset=True),
+    )
+    resp.raise_for_status()
+    return PatientResp.model_validate(resp.json())
 
 
 def clear_highlights(paper_id: str) -> None:

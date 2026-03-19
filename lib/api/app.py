@@ -58,6 +58,7 @@ from lib.models import (
     PaperUpdateRequest,
     PatientDB,
     PatientResp,
+    PatientUpdateRequest,
     PipelineStatus,
 )
 
@@ -242,6 +243,26 @@ def get_patients(paper_id: str, session: Session = Depends(get_session)) -> Any:
         .all()
     )
     return patients
+
+
+@app.patch('/papers/{paper_id}/patients/{patient_id}', response_model=PatientResp)
+def update_patient(
+    paper_id: str,
+    patient_id: int,
+    patch_request: PatientUpdateRequest,
+    session: Session = Depends(get_session),
+) -> Any:
+    patient_db = (
+        session.query(PatientDB)
+        .filter(PatientDB.id == patient_id, PatientDB.paper_id == paper_id)
+        .one_or_none()
+    )
+    if not patient_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Patient not found'
+        )
+    patch_request.apply_to(patient_db)
+    return patient_db
 
 
 @app.get('/genes/search', response_model=list[GeneResp])
