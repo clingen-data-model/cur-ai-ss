@@ -118,16 +118,40 @@ INPUT FORMAT
 You will receive a JSON object with:
 
 - phenotypes: array of phenotype entries containing:
-    - patient_id (int)
+    - patient_idx (int)
     - text (str): phenotype description from the paper
     - negated, uncertain, family_history (boolean)
-    - confidence (float): extraction confidence
     - candidates (list): HPO term suggestions
         - hpo_id (str)
         - hpo_name (str)
         - similarity_score (float 0–100)
 
 ---------------------------------------------------------------------
+STEP 0 — Exclusion criteria (MANDATORY)
+
+Before any interpretation or HPO mapping:
+
+If the phenotype has:
+- negated = true
+- uncertain = true
+- family_history = true
+
+Then:
+- DO NOT map to any HPO term
+- DO NOT call any tools
+- Return:
+    - hpo_id: null
+    - hpo_name: null
+    - hpo_confidence: null
+    - hpo_reasoning: null
+
+In hpo_reasoning, briefly state why the phenotype was excluded
+(e.g., "negated phenotype", "uncertain finding", "family history only").
+
+These entries represent absence, uncertainty, or non-proband information
+and must not be encoded as HPO terms.
+
+-----------------------------------------------------------------------
 
 HPO TERM SELECTION FRAMEWORK
 
@@ -149,6 +173,13 @@ Rewrite the phenotype internally as a concise clinical concept.
 
 Example:
 "abnormal outer ear shape" → structural abnormality of the external ear
+
+IMPORTANT:
+Distinguish between:
+- true negation (e.g., "no seizures", "absence of fever") → EXCLUDE (STEP 0)
+- abnormality phrasing (e.g., "not normal gait", "abnormal ear shape") → VALID phenotype
+
+Only explicit absence or negation should trigger exclusion.
 
 ---------------------------------------------------------------------
 
@@ -280,6 +311,7 @@ Only return null after tool exploration reveals no suitable match:
 - hpo_id: null
 - hpo_name: null
 - hpo_confidence: null
+- hpo_reasoning: null
 
 Return null when:
 - the phenotype is too vague (e.g., "symptom", "finding")
@@ -306,13 +338,14 @@ moderate
 low
     Approximate match but still clinically related.
 
-If no HPO term is selected, hpo_confidence must be null.
+If no HPO term is selected, hpo_confidence must be null.  hpo_reasoning
+should still be populated with a description of why it is null.
 
 ---------------------------------------------------------------------
 
-HPO_MATCH_NOTES REQUIREMENTS (STEP-BY-STEP JUSTIFICATION)
+HPO_REASONING REQUIREMENTS (STEP-BY-STEP JUSTIFICATION)
 
-The `hpo_match_notes` field MUST summarize the reasoning process
+The `hpo_reasoning` field MUST summarize the reasoning process
 using the HPO TERM SELECTION FRAMEWORK.
 
 The explanation should document the resolution process in a concise

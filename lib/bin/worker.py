@@ -33,10 +33,12 @@ from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import fulltext_md, pdf_image_caption_path, pdf_image_path
 from lib.models import (
     PaperDB,
+    PatientDB,
     PhenotypeLinkingEntry,
     PhenotypeLinkingOutput,
     PipelineStatus,
 )
+from lib.models.converters import patient_info_to_db
 from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
 
 LEASE_TIMEOUT_S = 900
@@ -73,12 +75,14 @@ async def parse_patients_task(paper_db: PaperDB) -> None:
         patient_extraction_agent,
         f'Paper (fulltext md): {fulltext_md(paper_db.id)}\n\nPedigree Description: \n{pedigree_descriptions_output}\n\n',
     )
-    json_response = result.final_output.model_dump_json(indent=2)
-    PaperDB(id=paper_db.id).patient_info_json_path.parent.mkdir(
-        parents=True, exist_ok=True
-    )
-    with open(PaperDB(id=paper_db.id).patient_info_json_path, 'w') as f:
-        f.write(json_response)
+
+    # Persist patients to DB (idempotent: delete-then-insert)
+    with session_scope() as session:
+        session.query(PatientDB).filter(PatientDB.paper_id == paper_db.id).delete()
+        for patient_index, patient_info in enumerate(
+            result.final_output.patients, start=1
+        ):
+            session.add(patient_info_to_db(paper_db.id, patient_index, patient_info))
 
 
 @task(retries=RETRIES, retry_delay_seconds=5)
@@ -140,27 +144,31 @@ async def harmonize_variants_task(paper_db: PaperDB) -> None:
 async def patient_variant_linking_task(paper_db: PaperDB) -> None:
     with open(paper_db.variants_json_path, 'r') as f:
         variants_output = json.load(f)
-    with open(paper_db.patient_info_json_path, 'r') as f:
-        patients_output = json.load(f)
     with open(paper_db.pedigree_descriptions_json_path, 'r') as f:
         pedigree_descriptions_output = json.load(f)
 
     structured_variants = [
         {
             'variant_id': idx,
-            'variant_description_verbatim': variant['variant_description_verbatim'],
             'variant_evidence_context': variant['variant_evidence_context'],
         }
         for idx, variant in enumerate(variants_output['variants'], start=1)
     ]
-    structured_patients = [
-        {
-            'patient_id': idx,
-            'identifier': patient['identifier'],
-            'identifier_evidence_context': patient['identifier_evidence_context'],
-        }
-        for idx, patient in enumerate(patients_output['patients'], start=1)
-    ]
+    with session_scope() as session:
+        patient_rows = (
+            session.query(PatientDB)
+            .filter(PatientDB.paper_id == paper_db.id)
+            .order_by(PatientDB.patient_idx)
+            .all()
+        )
+        structured_patients = [
+            {
+                'patient_idx': p.patient_idx,
+                'identifier': p.identifier,
+                'identifier_evidence_context': p.identifier_evidence_context,
+            }
+            for p in patient_rows
+        ]
     result = await Runner.run(
         patient_variant_linking_agent,
         f'Variants JSON:\n{structured_variants}\n Patients JSON:\n {structured_patients} Pedigree Description: \n {pedigree_descriptions_output} Paper (fulltext md): {fulltext_md(paper_db.id)}',
@@ -172,18 +180,22 @@ async def patient_variant_linking_task(paper_db: PaperDB) -> None:
 
 
 @task(retries=RETRIES, retry_delay_seconds=5)
-async def phenotype_patient_linking_task(paper_db: PaperDB) -> None:
-    with open(paper_db.patient_info_json_path, 'r') as f:
-        patients_output = json.load(f)
-
-    structured_patients = [
-        {
-            'patient_id': idx,
-            'identifier': patient['identifier'],
-            'identifier_evidence_context': patient['identifier_evidence_context'],
-        }
-        for idx, patient in enumerate(patients_output['patients'], start=1)
-    ]
+async def phenotype_patient_linking_task_async(paper_db: PaperDB) -> None:
+    with session_scope() as session:
+        patient_rows = (
+            session.query(PatientDB)
+            .filter(PatientDB.paper_id == paper_db.id)
+            .order_by(PatientDB.patient_idx)
+            .all()
+        )
+        structured_patients = [
+            {
+                'patient_idx': p.patient_idx,
+                'identifier': p.identifier,
+                'identifier_evidence_context': p.identifier_evidence_context,
+            }
+            for p in patient_rows
+        ]
     result = await Runner.run(
         phenotype_patient_linking_agent,
         f'Paper (fulltext md): {fulltext_md(paper_db.id)}\n\nStructured Patients JSON:\n{structured_patients}',
@@ -228,7 +240,7 @@ async def hpo_linking_task(paper_db: PaperDB) -> None:
         entry.candidates = candidates
 
     phenotype_data_filtered = phenotype_linking.model_dump(
-        exclude={'notes', 'onset', 'location', 'severity', 'modifier', 'section'}
+        exclude={'onset', 'location', 'severity', 'modifier'}
     )
     result = await Runner.run(
         hpo_linking_agent,

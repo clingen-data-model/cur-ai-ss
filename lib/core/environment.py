@@ -19,8 +19,8 @@ class LogLevel(str, Enum):
 class Env(BaseSettings):
     model_config = SettingsConfigDict(env_file=os.environ.get('ENV_FILE', '.env'))
 
-    NCBI_EUTILS_API_KEY: Optional[str] = None
-    NCBI_EUTILS_EMAIL: Optional[str] = None
+    NCBI_API_KEY: Optional[str] = None
+    NCBI_EMAIL: Optional[str] = None
 
     # Required fields
     OPENAI_API_DEPLOYMENT: str = 'gpt-5-mini'
@@ -47,13 +47,11 @@ class Env(BaseSettings):
 
     @model_validator(mode='after')
     def validate_ncbi_settings(self) -> 'Env':
-        if self.NCBI_EUTILS_API_KEY and not self.NCBI_EUTILS_EMAIL:
-            raise ValueError(
-                'If NCBI_EUTILS_API_KEY is specified, NCBI_EUTILS_EMAIL is required.'
-            )
+        if self.NCBI_API_KEY and not self.NCBI_EMAIL:
+            raise ValueError('If NCBI_API_KEY is specified, NCBI_EMAIL is required.')
         return self
 
-    @field_validator('NCBI_EUTILS_EMAIL', mode='after')
+    @field_validator('NCBI_EMAIL', mode='after')
     def encode_email(cls, v: Optional[str]) -> Optional[str]:
         # Avoid quoting None
         return quote(v) if v else v

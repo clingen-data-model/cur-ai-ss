@@ -321,6 +321,7 @@ class PatientInfo(BaseModel):
 
     # Evidence for each field
     identifier_evidence_context: Optional[str]
+    proband_status_evidence_context: Optional[str]
     sex_evidence_context: Optional[str]
     age_diagnosis_evidence_context: Optional[str]
     age_report_evidence_context: Optional[str]
@@ -328,6 +329,17 @@ class PatientInfo(BaseModel):
     country_of_origin_evidence_context: Optional[str]
     race_ethnicity_evidence_context: Optional[str]
     affected_status_evidence_context: Optional[str]
+
+    # --- Reasonings (model interpretation, optional but encouraged)
+    identifier_reasoning: Optional[str]
+    proband_status_reasoning: Optional[str]
+    sex_reasoning: Optional[str]
+    age_diagnosis_reasoning: Optional[str]
+    age_report_reasoning: Optional[str]
+    age_death_reasoning: Optional[str]
+    country_of_origin_reasoning: Optional[str]
+    race_ethnicity_reasoning: Optional[str]
+    affected_status_reasoning: Optional[str]
 
 
 # --- Output wrapper
@@ -409,7 +421,14 @@ Fields to extract (for each patient):
 
 - race/ethnicity:
   - Use enum values: African/African American, Latino/Admixed American, Ashkenazi Jewish, East Asian, Finnish, Non-Finnish European, South Asian, Middle Eastern, Amish, Other, Unknown
-  - When the text contains a more specific subgroup of a listed category, normalize to the closest matching enum value.
+  - When the text contains a more specific subgroup of a listed category, normalize to the closest matching enum value.  For example:
+        - “Pennsylvania Dutch” → Amish
+        - “Ashkenazi Jewish from Israel” → Ashkenazi Jewish
+        - “Sephardic Jewish” → Ashkenazi Jewish (closest matching category in your enum, if that’s acceptable)
+        - “African-American teenager” → African/African American
+        - “Latino male” → Latino/Admixed American
+        - “Northern European” → Non-Finnish European
+        - “East Asian ancestry” → East Asian
 
 - affected_status:
   - Use enum: Affected, Unaffected, Unknown
@@ -426,10 +445,9 @@ Guidelines:
 5. Preserve original wording for age and country in evidence.
 6. Use enum values when possible; otherwise, return Other or Unknown as defined below.
 7. Provide exact evidence text for each extracted field.
-   - If citing a figure, include:
-     - The exact quoted text
-     - The figure title
-     - A brief explanation of why the text supports the extracted value.
+   - Evidence must be a direct verbatim quote from the input text.
+   - Do NOT modify, summarize, or interpret the text.
+   - Keep quotes as short as possible while still supporting the value.
 
 8. Return null for any missing fields.
 9. Each patient must have an identifier; if not stated, skip that patient.
@@ -449,6 +467,28 @@ Output:
 - If the text explicitly indicates a value that does not match any predefined enum category, use "Other".
 - If the text explicitly states that the value is unknown, ambiguous, or cannot be determined, use "Unknown".
 - If the field is completely missing or not mentioned in the source text, return null.
+
+CRITICAL RULES FOR EVIDENCE VS REASONING:
+
+- Evidence fields (*_evidence_context) MUST contain ONLY verbatim text copied from the source.
+  - No paraphrasing
+  - No summarization
+  - No interpretation
+  - No added words
+  - Must be a direct quote or exact substring from the input text
+
+- Reasoning fields (*_reasoning) contain any interpretation, normalization, or justification.
+
+- NEVER include reasoning inside evidence fields.
+- NEVER include phrases like "this suggests", "indicating", "therefore", etc. in evidence fields.
+
+GOOD EXAMPLE:
+  sex = Female
+  sex_evidence_context = "a 12-year-old girl"
+  sex_reasoning = "The word 'girl' indicates female sex."
+
+BAD EXAMPLE:
+  sex_evidence_context = "a 12-year-old girl, indicating the patient is female"
 """
 
 # --- Agent definition

@@ -1,6 +1,6 @@
 import hashlib
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import List, Literal
 
@@ -15,9 +15,11 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy import (
@@ -33,6 +35,7 @@ from sqlalchemy.orm import (
 from sqlalchemy.types import JSON
 from typing_extensions import Self
 
+from lib.agents.patient_extraction_agent import PatientInfo
 from lib.core.environment import env
 from lib.misc.pdf.paths import (
     pdf_highlighted_path,
@@ -70,7 +73,7 @@ class PatchModel(BaseModel):
                 setattr(obj, field, value)
 
 
-class PipelineStatus(str, Enum):
+class PipelineStatus(StrEnum):
     QUEUED = 'Queued'
 
     EXTRACTION_RUNNING = 'Extraction Running...'
@@ -134,7 +137,7 @@ class GeneResp(BaseModel):
     symbol: str
 
 
-class PaperType(str, Enum):
+class PaperType(StrEnum):
     Letter = 'Letter'
     Research = 'Research'
     Case_series = 'Case_series'
@@ -208,10 +211,6 @@ class PaperDB(Base):
         return self
 
     @property
-    def patient_info_json_path(self) -> Path:
-        return env.evagg_dir / self.id / 'patient_info.json'
-
-    @property
     def phenotype_linking_json_path(self) -> Path:
         return env.evagg_dir / self.id / 'phenotype_linking.json'
 
@@ -234,6 +233,10 @@ class PaperDB(Base):
     @property
     def pedigree_descriptions_json_path(self) -> Path:
         return env.evagg_dir / self.id / 'pedigree_descriptions.json'
+
+    patients: Mapped[list['PatientDB']] = relationship(
+        'PatientDB', back_populates='paper', cascade='all, delete-orphan'
+    )
 
 
 class PaperExtractionOutput(BaseModel):
@@ -275,7 +278,6 @@ class PaperResp(PaperExtractionOutput):
     title: str | None = None  # type: ignore
     first_author: str | None = None  # type: ignore
 
-    patient_info_json_path: Path
     phenotype_linking_json_path: Path
     enriched_variants_json_path: Path
     harmonized_variants_json_path: Path
@@ -317,3 +319,75 @@ class HighlightRequest(BaseModel):
     queries: list[str]
     image_ids: list[int]
     color: str
+
+
+class PatientDB(Base):
+    __tablename__ = 'patients'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    paper_id: Mapped[str] = mapped_column(
+        String, ForeignKey('papers.id', ondelete='CASCADE'), nullable=False
+    )
+    patient_idx: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    identifier: Mapped[str] = mapped_column(Text, nullable=False)
+    proband_status: Mapped[str] = mapped_column(Text, nullable=False)
+    sex: Mapped[str] = mapped_column(Text, nullable=False)
+    age_diagnosis: Mapped[str | None] = mapped_column(Text, nullable=True)
+    age_report: Mapped[str | None] = mapped_column(Text, nullable=True)
+    age_death: Mapped[str | None] = mapped_column(Text, nullable=True)
+    country_of_origin: Mapped[str] = mapped_column(Text, nullable=False)
+    race_ethnicity: Mapped[str] = mapped_column(Text, nullable=False)
+    affected_status: Mapped[str] = mapped_column(Text, nullable=False)
+
+    identifier_evidence_context: Mapped[str | None] = mapped_column(Text, nullable=True)
+    proband_status_evidence_context: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
+    sex_evidence_context: Mapped[str | None] = mapped_column(Text, nullable=True)
+    age_diagnosis_evidence_context: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
+    age_report_evidence_context: Mapped[str | None] = mapped_column(Text, nullable=True)
+    age_death_evidence_context: Mapped[str | None] = mapped_column(Text, nullable=True)
+    country_of_origin_evidence_context: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
+    race_ethnicity_evidence_context: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
+    affected_status_evidence_context: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
+
+    identifier_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
+    proband_status_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sex_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
+    age_diagnosis_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
+    age_report_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
+    age_death_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
+    country_of_origin_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
+    race_ethnicity_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
+    affected_status_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    paper: Mapped['PaperDB'] = relationship('PaperDB', back_populates='patients')
+
+    __table_args__ = (
+        UniqueConstraint(
+            'paper_id', 'patient_idx', name='uq_patients_paper_patient_idx'
+        ),
+        Index('ix_patients_paper_id', 'paper_id'),
+        Index('ix_patients_paper_id_identifier', 'paper_id', 'identifier'),
+    )
+
+
+class PatientResp(PatientInfo):
+    model_config = {'from_attributes': True}
+    id: int
+    paper_id: str
+    patient_idx: int
+    created_at: datetime

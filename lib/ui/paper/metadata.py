@@ -38,6 +38,7 @@ def render_metadata_tab() -> None:
     paper_types = [PaperType(pt) for pt in selected_values]
 
     abstract = st.text_area('Abstract', paper_resp.abstract, height=200)
+
     update_request = PaperUpdateRequest(
         title=title if title != paper_resp.title else None,
         first_author=first_author if first_author != paper_resp.first_author else None,

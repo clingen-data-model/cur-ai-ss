@@ -8,8 +8,8 @@ from lib.agents.patient_extraction_agent import (
     PatientInfoExtractionOutput,
 )
 from lib.agents.patient_variant_linking_agent import (
+    EvidenceBlock,
     Inheritance,
-    LinkType,
     PatientVariantLink,
     PatientVariantLinkerOutput,
     TestingMethod,
@@ -20,8 +20,56 @@ from lib.agents.variant_harmonization_agent import (
     HarmonizedVariant,
     VariantHarmonizationOutput,
 )
-from lib.models import PaperResp, PipelineStatus
-from lib.ui.paper.shared import get_gnomad_url, highlight_and_switch_tab
+from lib.models import PaperResp, PatientResp, PipelineStatus
+from lib.ui.api import get_patients
+from lib.ui.paper.shared import (
+    get_gnomad_url,
+    render_highlight_controls,
+)
+
+
+def _render_evidence_block(
+    evidence_block: EvidenceBlock, paper_id: str, block_id: str
+) -> None:
+    """Render an EvidenceBlock with reasoning and evidence sources."""
+    st.text_area('Reasoning', evidence_block.reasoning, height=20, disabled=True)
+
+    # Display evidence sources
+    evidence_sources = []
+    if evidence_block.evidence_context:
+        evidence_sources.append(('Text Evidence', evidence_block.evidence_context))
+    if evidence_block.table_id is not None:
+        evidence_sources.append(('Table', f'Table #{evidence_block.table_id}'))
+    if evidence_block.image_id is not None:
+        evidence_sources.append(('Pedigree', f'Image #{evidence_block.image_id}'))
+
+    if evidence_sources:
+        st.markdown('**Evidence Sources:**')
+        for source_type, source_value in evidence_sources:
+            col1, col2 = st.columns([0.2, 0.8])
+            with col1:
+                st.markdown(f'*{source_type}*')
+            with col2:
+                st.text(source_value)
+
+            with st.container(
+                horizontal=True,
+                vertical_alignment='center',
+                horizontal_alignment='right',
+            ):
+                render_highlight_controls(
+                    paper_id,
+                    [evidence_block.evidence_context]
+                    if evidence_block.evidence_context
+                    else [],
+                    color_key=f'{paper_id}-{block_id}-color-evidence',
+                    button_key_prefix=f'{paper_id}-{block_id}-evidence',
+                    image_ids=[evidence_block.image_id]
+                    if evidence_block.image_id
+                    else [],
+                )
+    else:
+        st.text('No evidence provided')
 
 
 def render_patient_variant_occurrences_tab() -> None:
@@ -35,11 +83,7 @@ def render_patient_variant_occurrences_tab() -> None:
         st.stop()
 
     # Load all data sources
-    with open(paper_resp.patient_info_json_path, 'r') as f:
-        patient_info_data = json.load(f)
-    patients: list[PatientInfo] = PatientInfoExtractionOutput.model_validate(
-        patient_info_data
-    ).patients
+    patients: list[PatientResp] = get_patients(paper_resp.id)
 
     with open(paper_resp.variants_json_path, 'r') as f:
         extracted_data = json.load(f)
@@ -62,35 +106,35 @@ def render_patient_variant_occurrences_tab() -> None:
     # Build a list of rows for the DataFrame
     rows = []
     for link in links:
-        patient = patients[link.patient_id - 1]
+        patient = patients[link.patient_idx - 1]
         extracted_variant = extracted_variants[link.variant_id - 1]
         harmonized_variant = harmonized_variants[link.variant_id - 1]
 
         # Determine the variant description
         variant_desc = (
-            extracted_variant.variant_description_verbatim
+            harmonized_variant.hgvs_g
             or harmonized_variant.hgvs_c
+            or harmonized_variant.gnomad_style_coordinates
+            or harmonized_variant.rsid
             or harmonized_variant.hgvs_p
+            or extracted_variant.variant_evidence_context
             or f'Variant {link.variant_id}'
         )
 
-        # Format testing methods as a list
-        testing_methods_list = (
-            [m.value for m in link.testing_methods] if link.testing_methods else []
-        )
+        # Format testing methods as a list from EvidenceBlocks
+        testing_methods_list = [m.value.value for m in link.testing_methods]
 
-        patient_display = patient.identifier or f'Patient {link.patient_id}'
-        patient_link = f'/paper?paper_id={paper_resp.id}&patient_id={link.patient_id}#{patient_display}'
+        patient_display = patient.identifier or f'Patient {link.patient_idx}'
+        patient_link = f'/paper?paper_id={paper_resp.id}&patient_idx={link.patient_idx}#{patient_display}'
         variant_link = f'/paper?paper_id={paper_resp.id}&variant_id={link.variant_id}#{variant_desc}'
         rows.append(
             {
                 'Select': False,
                 'Patient': patient_link,
                 'Variant': variant_link,
-                'Zygosity': link.zygosity.value,
-                'Inheritance': link.inheritance.value,
+                'Zygosity': link.zygosity.value.value,
+                'Inheritance': link.inheritance.value.value,
                 'Confidence': link.confidence,
-                'Link Type': link.link_type.value,
                 'Testing Methods': testing_methods_list,
                 # Store full objects for detail panel
                 '_link': link,
@@ -117,7 +161,6 @@ def render_patient_variant_occurrences_tab() -> None:
     # Get enum options for multiselect columns
     zygosity_options = [e.value for e in Zygosity]
     inheritance_options = [e.value for e in Inheritance]
-    link_type_options = [e.value for e in LinkType]
     testing_method_options = [e.value for e in TestingMethod]
     confidence_options = ['high', 'moderate', 'low']
 
@@ -151,11 +194,6 @@ def render_patient_variant_occurrences_tab() -> None:
                 options=confidence_options,
                 width='small',
             ),
-            'Link Type': st.column_config.SelectboxColumn(
-                'Link Type',
-                options=link_type_options,
-                width='small',
-            ),
             'Testing Methods': st.column_config.MultiselectColumn(
                 'Testing Methods',
                 options=testing_method_options,
@@ -170,7 +208,7 @@ def render_patient_variant_occurrences_tab() -> None:
     if selected_rows:
         idx = selected_rows[0]
         link = rows[idx]['_link']
-        patient = rows[idx].get('_patient') or patients[link.patient_id - 1]
+        patient = rows[idx].get('_patient') or patients[link.patient_idx - 1]
         extracted_variant = rows[idx]['_extracted_variant']
         harmonized_variant = rows[idx]['_harmonized_variant']
 
@@ -237,44 +275,23 @@ def render_patient_variant_occurrences_tab() -> None:
 
         st.divider()
 
-        with st.expander('Evidence Context', expanded=False):
-            if link.evidence_context or link.pedigree_image_id:
-                with st.container(
-                    horizontal=True,
-                    vertical_alignment='center',
-                    horizontal_alignment='right',
+        # Display evidence blocks for zygosity and inheritance
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown('#### Zygosity Evidence')
+            _render_evidence_block(link.zygosity, paper_resp.id, 'zygosity')
+
+        with col2:
+            st.markdown('#### Inheritance Evidence')
+            _render_evidence_block(link.inheritance, paper_resp.id, 'inheritance')
+
+        # Display testing methods evidence
+        if link.testing_methods:
+            st.markdown('#### Testing Methods Evidence')
+            for i, method_block in enumerate(link.testing_methods, start=1):
+                with st.expander(
+                    f'Method {i}: {method_block.value.value}',
+                    expanded=False,
                 ):
-                    st.text(
-                        link.evidence_context or 'Evidence found in Pedigree Image.'
-                    )
-                    st.space('stretch')
-                    st.markdown('Choose Color: ')
-                    color_key = f'{link.patient_id}-{link.variant_id}-highlight-color-link-evidence'
-                    if color_key not in st.session_state:
-                        st.session_state[color_key] = '#EE00FF'
-                    # Color picker — key handles session state automatically
-                    color = st.color_picker(
-                        'Choose Color:', label_visibility='collapsed', key=color_key
-                    )
-                    st.button(
-                        'Highlight',
-                        key=f'{link.patient_id}-{link.variant_id}-highlight-confirm-link-evidence',
-                        type='secondary',
-                        on_click=highlight_and_switch_tab,
-                        args=(
-                            paper_resp.id,
-                            [link.evidence_context] if link.evidence_context else [],
-                            [link.pedigree_image_id] if link.pedigree_image_id else [],
-                            color,
-                        ),
-                    )
-            else:
-                st.text('No evidence provided')
-
-        with st.expander('Linkage Notes', expanded=False):
-            st.text(link.linkage_notes or 'No notes provided')
-
-        if link.testing_methods_evidence:
-            with st.expander('Testing Methods Evidence', expanded=False):
-                for i, evidence in enumerate(link.testing_methods_evidence, start=1):
-                    st.text(evidence)
+                    _render_evidence_block(method_block, paper_resp.id, f'method_{i}')

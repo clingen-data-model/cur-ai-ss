@@ -53,6 +53,11 @@ def clinvar_lookup(query: str) -> List[Dict[str, Any]]:
         'sort': 'relevance',
     }
 
+    if env.NCBI_API_KEY:
+        esearch_params['api_key'] = env.NCBI_API_KEY
+    if env.NCBI_EMAIL:
+        esearch_params['email'] = env.NCBI_EMAIL
+
     r = requests.get(esearch_url, params=esearch_params, headers=headers, timeout=10)
     r.raise_for_status()
     search_data = r.json()
@@ -70,6 +75,11 @@ def clinvar_lookup(query: str) -> List[Dict[str, Any]]:
         'id': ','.join(ids),
         'retmode': 'json',
     }
+
+    if env.NCBI_API_KEY:
+        esummary_params['api_key'] = env.NCBI_API_KEY
+    if env.NCBI_EMAIL:
+        esummary_params['email'] = env.NCBI_EMAIL
 
     r = requests.get(esummary_url, params=esummary_params, headers=headers, timeout=10)
     r.raise_for_status()
@@ -130,6 +140,11 @@ def dbsnp_lookup(query: str) -> List[str]:
         'sort': 'relevance',
     }
 
+    if env.NCBI_API_KEY:
+        esearch_params['api_key'] = env.NCBI_API_KEY
+    if env.NCBI_EMAIL:
+        esearch_params['email'] = env.NCBI_EMAIL
+
     r = requests.get(esearch_url, params=esearch_params, headers=headers, timeout=10)
     r.raise_for_status()
     search_data = r.json()
@@ -147,6 +162,11 @@ def dbsnp_lookup(query: str) -> List[str]:
         'id': ','.join(ids),
         'retmode': 'json',
     }
+
+    if env.NCBI_API_KEY:
+        esummary_params['api_key'] = env.NCBI_API_KEY
+    if env.NCBI_EMAIL:
+        esummary_params['email'] = env.NCBI_EMAIL
 
     r = requests.get(esummary_url, params=esummary_params, headers=headers, timeout=10)
     r.raise_for_status()
@@ -550,6 +570,11 @@ You must return exactly one output object for each input variant.
     - The order of variants must remain unchanged.
     - You must not add or remove variants.
 
+If VariantValidator successfully produces a gnomAD-style ID at any stage:
+    - This defines the canonical genomic representation.
+    - The pipeline MUST terminate after a single call to allele_registry_resolver.
+    - No further discovery steps (including ClinVar or dbSNP lookup) are allowed.
+
 ============================================================
 STATE 0 — INITIAL DATA ASSESSMENT
 ============================================================
@@ -566,12 +591,7 @@ Use the following fields of the provided structured input:
 - hgvs_c
 - hgvs_p
 - hgvs_g
-- hgvs_c_inferred
-- hgvs_p_inferred
 - variant_evidence_context
-
-If hgvs_c is missing → use hgvs_c_inferred if present.
-If hgvs_p is missing → use hgvs_p_inferred if present.
 
 Proceed to State 1.
 
@@ -678,8 +698,19 @@ If hgvs_c available:
         and retry gnomad_style_id_from_variant_validator once.
 
     5. If projection succeeds:
+
         Call allele_registry_resolver using gnomad_style_coordinates.
-        RETURN result.
+
+        If allele_registry_resolver returns a match:
+            RETURN result.
+            normalization_confidence = high
+
+        If allele_registry_resolver returns no match:
+            RETURN result using the projected gnomAD-style coordinates.
+            normalization_confidence = high
+
+        This is a terminal state.
+        Do NOT proceed to Step 4B or State 5.
 
     6. If projection still fails:
         Proceed to Step 4B.
@@ -731,7 +762,7 @@ You may call clinvar_lookup EXACTLY ONCE per variant.
 
 Step 5A — Construct Query
 
-If hgvs_p and hgvs_p_inferred are both missing:
+If hgvs_p is missing:
     Skip ClinVar lookup and return low confidence.
 
 Query must include:
@@ -741,7 +772,6 @@ Query must include:
 
 Include:
     hgvs_p
-    hgvs_p_inferred
     3-letter format (p.Arg157Ser)
     1-letter format (p.R157S)
     Without "p." prefix

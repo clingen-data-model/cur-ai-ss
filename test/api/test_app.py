@@ -8,7 +8,7 @@ from sqlalchemy import func, select, update
 
 from lib.api.app import app
 from lib.api.db import get_session, session_scope
-from lib.models import GeneDB, PaperDB, PipelineStatus
+from lib.models import GeneDB, PaperDB, PatientDB, PipelineStatus
 
 
 @pytest.fixture
@@ -275,3 +275,74 @@ def test_search_genes_by_prefix_no_match(client, seeded_genes):
     assert response.status_code == 200
     genes = response.json()
     assert len(genes) == 0
+
+
+@pytest.fixture
+def seeded_paper(db_session):
+    gene = GeneDB(symbol='BRCA1')
+    db_session.add(gene)
+    db_session.flush()
+    paper = PaperDB(
+        id='abc123',
+        gene_id=gene.id,
+        filename='test.pdf',
+        pipeline_status=PipelineStatus.QUEUED,
+    )
+    db_session.add(paper)
+    db_session.flush()
+    return paper
+
+
+def test_get_patients_empty(client, seeded_paper):
+    response = client.get(f'/papers/{seeded_paper.id}/patients')
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_get_patients_returns_ordered_by_position(client, db_session, seeded_paper):
+    required = dict(
+        proband_status='Unknown',
+        sex='Unknown',
+        country_of_origin='Unknown',
+        race_ethnicity='Unknown',
+        affected_status='Unknown',
+    )
+    # Insert patients out of position order
+    db_session.add(
+        PatientDB(
+            paper_id=seeded_paper.id,
+            patient_idx=3,
+            identifier='P3',
+            **required,
+        )
+    )
+    db_session.add(
+        PatientDB(
+            paper_id=seeded_paper.id,
+            patient_idx=1,
+            identifier='P1',
+            **required,
+        )
+    )
+    db_session.add(
+        PatientDB(
+            paper_id=seeded_paper.id,
+            patient_idx=2,
+            identifier='P2',
+            **required,
+        )
+    )
+    db_session.flush()
+
+    response = client.get(f'/papers/{seeded_paper.id}/patients')
+    assert response.status_code == 200
+    patients = response.json()
+    assert len(patients) == 3
+    assert [p['patient_idx'] for p in patients] == [1, 2, 3]
+    assert [p['identifier'] for p in patients] == ['P1', 'P2', 'P3']
+
+
+def test_get_patients_paper_not_found(client):
+    response = client.get('/papers/nonexistent/patients')
+    assert response.status_code == 404
+    assert response.json()['detail'] == 'Paper not found'

@@ -1,10 +1,11 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import requests
 from pydantic import BaseModel
 
 from lib.agents.variant_harmonization_agent import HarmonizedVariant
+from lib.core.environment import env
 
 GNOMAD_BASE = 'https://gnomad.broadinstitute.org/api'
 EUTILS_BASE = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils'
@@ -71,25 +72,54 @@ class VariantEnrichmentOutput(BaseModel):
     variants: List[EnrichedVariant]
 
 
-def clinvar_lookup(rsid: Optional[str], caid: Optional[str]) -> EnrichedVariant:
+def clinvar_lookup(
+    rsid: Optional[str],
+    caid: Optional[str],
+    hgvs_g: Optional[str],
+    hgvs_c: Optional[str],
+) -> EnrichedVariant:
     headers = {'content-type': 'application/json'}
     result_variant = EnrichedVariant(rsid=rsid, caid=caid)
 
-    if not (caid or rsid):
+    if not (caid or rsid or hgvs_g or hgvs_c):
         return result_variant
 
-    term = f'{caid} AND {rsid}' if (caid and rsid) else (caid or rsid)
+    term_parts = []
+
+    if rsid:
+        term_parts.append(rsid)
+
+    if caid:
+        term_parts.append(caid)
+
+    if hgvs_g:
+        term_parts.append(hgvs_g)
+
+    if hgvs_c:
+        term_parts.append(hgvs_c)
+
+    term = ' OR '.join(term_parts)
 
     # Step 1: ESearch
-    r = requests.get(
-        f'{EUTILS_BASE}/esearch.fcgi',
-        params={
+    esearch_params = cast(
+        dict[str, str | int],
+        {
             'db': 'clinvar',
             'term': term,
             'retmax': 100,
             'retmode': 'json',
             'sort': 'relevance',
         },
+    )
+
+    if env.NCBI_API_KEY:
+        esearch_params['api_key'] = env.NCBI_API_KEY
+    if env.NCBI_EMAIL:
+        esearch_params['email'] = env.NCBI_EMAIL
+
+    r = requests.get(
+        f'{EUTILS_BASE}/esearch.fcgi',
+        params=esearch_params,
         headers=headers,
         timeout=10,
     )
@@ -99,14 +129,21 @@ def clinvar_lookup(rsid: Optional[str], caid: Optional[str]) -> EnrichedVariant:
         return result_variant
 
     # Step 2: ESummary
+    esummary_params = {
+        'db': 'clinvar',
+        'id': ','.join(ids),
+        'retmode': 'json',
+        'rettype': 'vcv',
+    }
+
+    if env.NCBI_API_KEY:
+        esummary_params['api_key'] = env.NCBI_API_KEY
+    if env.NCBI_EMAIL:
+        esummary_params['email'] = env.NCBI_EMAIL
+
     r = requests.get(
         f'{EUTILS_BASE}/esummary.fcgi',
-        params={
-            'db': 'clinvar',
-            'id': ','.join(ids),
-            'retmode': 'json',
-            'rettype': 'vcv',
-        },
+        params=esummary_params,
         headers=headers,
         timeout=10,
     )
@@ -300,8 +337,10 @@ def enrich_variant(hv: HarmonizedVariant) -> EnrichedVariant:
         if hv.gnomad_style_coordinates:
             futures.append(executor.submit(gnomad_lookup, hv.gnomad_style_coordinates))
 
-        if hv.rsid or hv.caid:
-            futures.append(executor.submit(clinvar_lookup, hv.rsid, hv.caid))
+        if hv.rsid or hv.caid or hv.hgvs_g or hv.hgvs_c:
+            futures.append(
+                executor.submit(clinvar_lookup, hv.rsid, hv.caid, hv.hgvs_g, hv.hgvs_c)
+            )
 
         if hv.rsid or hv.hgvs_g or hv.hgvs_c:
             futures.append(executor.submit(vep_lookup, hv.rsid, hv.hgvs_g, hv.hgvs_c))
