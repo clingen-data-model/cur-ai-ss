@@ -3,6 +3,7 @@ from urllib.parse import quote
 
 import requests
 import streamlit as st
+from streamlit_pdf_viewer import pdf_viewer
 
 from lib.ui.api import get_http_error_detail, grobid_annotations, highlight_pdf
 
@@ -56,7 +57,31 @@ def get_gnomad_url(variant_id: str) -> str:
     return f'https://gnomad.broadinstitute.org/variant/{variant_id}?dataset=gnomad_r4'
 
 
-def focus_and_switch_tab(
+@st.dialog(
+    'Pdf Focus Modal',
+    width='large',
+    on_dismiss=lambda: st.session_state.pop(CURRENT_ANNOTATIONS_KEY),
+)
+def pdf_focus_modal() -> None:
+    paper_resp = st.session_state['paper_resp']
+    annotations = st.session_state.get(CURRENT_ANNOTATIONS_KEY, [])
+    pdf_viewer(
+        paper_resp.pdf_highlighted_path,
+        width=1000,
+        height=800,
+        zoom_level=1.5,
+        viewer_align='center',  # Center alignment
+        show_page_separator=True,  # Show separators between pages
+        annotations=[a.dict() for a in annotations],
+        # NB: scroll_to_annotation does not support 0... which is the index if there
+        # is only a single annotation.
+        scroll_to_annotation=1 if len(annotations) > 1 else None,
+        scroll_to_page=annotations[0].page if len(annotations) == 1 else None,
+        render_text=True,
+    )
+
+
+def focus_and_show_dialog(
     paper_id: str, queries: list[str], image_ids: list[int], color: str
 ) -> None:
     try:
@@ -66,9 +91,8 @@ def focus_and_switch_tab(
             image_ids,
             color,
         )
-        st.toast('Found annotation for Focus - Zooming into the pdf!')
-        st.session_state[HEADER_TABS_KEY] = HEADER_TABS[0]
         st.session_state[CURRENT_ANNOTATIONS_KEY] = current_annotations
+        pdf_focus_modal()
     except requests.HTTPError as e:
         st.error(f'Failed to find Focus : {get_http_error_detail(e)}')
 
@@ -113,10 +137,10 @@ def render_highlight_controls(
         disabled=disabled,
     )
     st.button(
-        'Focus & Switch Tab',
+        'Focus',
         key=f'{button_key_prefix}-focus',
         type='secondary',
-        on_click=focus_and_switch_tab,
+        on_click=focus_and_show_dialog,
         args=(paper_id, queries, image_ids, color),
         disabled=disabled,
     )

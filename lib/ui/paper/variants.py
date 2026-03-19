@@ -75,9 +75,9 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
     ]
     tab_pathogenic, tab_other = st.tabs(
         tabs,
-        default=tabs[0]
-        if selected_variant_id and (selected_variant_id - 1) in pathogenic_indices
-        else tabs[1],
+        default=tabs[1]
+        if selected_variant_id and (selected_variant_id - 1) in other_indices
+        else tabs[0],
     )
 
     # Helper function to render variants for a given set of indices
