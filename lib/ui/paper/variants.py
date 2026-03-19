@@ -81,7 +81,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
     )
 
     # Helper function to render variants for a given set of indices
-    def render_variant_list(indices):
+    def render_variant_list(indices: list[int]) -> None:
         for idx in indices:
             i = idx + 1  # Convert 0-based to 1-based for display
             harmonized_variant = harmonized_variants[idx]
