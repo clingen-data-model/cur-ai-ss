@@ -42,7 +42,21 @@ resource "google_compute_firewall" "allow_icmp" {
   source_ranges = ["0.0.0.0/0"]
 }
 
-# Firewall rule - Allow HTTP
+# Load internal networks from GCS
+data "http" "internal_networks" {
+  url = "https://storage.googleapis.com/broad-institute-networking/internal_networks.json"
+
+  request_headers = {
+    Accept = "application/json"
+  }
+}
+
+locals {
+  internal_networks_data = jsondecode(data.http.internal_networks.response_body)
+  internal_cidrs         = local.internal_networks_data
+}
+
+# Firewall rule - Allow HTTP from internal networks
 resource "google_compute_firewall" "allow_http" {
   name     = "default-allow-http"
   network  = google_compute_network.default.name
@@ -53,11 +67,11 @@ resource "google_compute_firewall" "allow_http" {
     ports    = ["80"]
   }
 
-  source_ranges = ["0.0.0.0/0"]
+  source_ranges = local.internal_cidrs
   target_tags   = ["http-server"]
 }
 
-# Firewall rule - Allow HTTPS
+# Firewall rule - Allow HTTPS from internal networks
 resource "google_compute_firewall" "allow_https" {
   name     = "default-allow-https"
   network  = google_compute_network.default.name
@@ -68,6 +82,6 @@ resource "google_compute_firewall" "allow_https" {
     ports    = ["443"]
   }
 
-  source_ranges = ["0.0.0.0/0"]
+  source_ranges = local.internal_cidrs
   target_tags   = ["https-server"]
 }
