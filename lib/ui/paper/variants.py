@@ -23,8 +23,12 @@ from lib.ui.paper.shared import (
 
 
 def _is_pathogenic(pathogenicity: str | None) -> bool:
-    """Check if pathogenicity matches 'pathogenic' (case-insensitive)."""
+    """Check if pathogenicity matches 'pathogenic' (case-insensitive), excluding 'conflicting' and 'No_pathogenic_assertion'."""
     if not pathogenicity:
+        return False
+    pathogenicity_lower = pathogenicity.lower()
+    # Exclude conflicting and No_pathogenic_assertion
+    if 'conflicting' in pathogenicity_lower or 'no_pathogenic_assertion' in pathogenicity_lower:
         return False
     return bool(re.search(r'pathogenic', pathogenicity, re.IGNORECASE))
 
