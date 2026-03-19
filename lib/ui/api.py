@@ -79,7 +79,7 @@ def put_paper(
 def update_paper(paper_id: str, update_request: PaperUpdateRequest) -> PaperResp:
     resp = requests.patch(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}',
-        json=update_request.model_dump(mode='json'),
+        json=update_request.model_dump(mode='json', exclude_unset=True),
     )
     resp.raise_for_status()
     return PaperResp.model_validate(resp.json())
