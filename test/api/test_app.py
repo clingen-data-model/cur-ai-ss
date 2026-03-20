@@ -300,12 +300,25 @@ def test_get_patients_empty(client, seeded_paper):
 
 
 def test_get_patients_returns_ordered_by_position(client, db_session, seeded_paper):
+    evidence = dict(
+        reasoning='test evidence',
+        evidence_context='test context',
+    )
     required = dict(
         proband_status='Unknown',
         sex='Unknown',
         country_of_origin='Unknown',
         race_ethnicity='Unknown',
         affected_status='Unknown',
+        identifier_evidence=evidence,
+        proband_status_evidence=evidence,
+        sex_evidence=evidence,
+        age_diagnosis_evidence=evidence,
+        age_report_evidence=evidence,
+        age_death_evidence=evidence,
+        country_of_origin_evidence=evidence,
+        race_ethnicity_evidence=evidence,
+        affected_status_evidence=evidence,
     )
     # Insert patients out of position order
     db_session.add(

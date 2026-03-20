@@ -2,39 +2,11 @@ from enum import Enum
 from typing import Generic, List, Literal, Optional, TypeVar
 
 from agents import Agent
+from lib.modles.evidence_block import EvidenceBlock
 from pydantic import BaseModel, model_validator
 from typing_extensions import Self
 
 from lib.core.environment import env
-
-T = TypeVar('T')
-
-
-# ------------------------------
-# EvidenceBlock
-# ------------------------------
-class EvidenceBlock(BaseModel, Generic[T]):
-    value: T
-    evidence_context: Optional[str] = None  # verbatim quote from text
-    table_id: Optional[int] = None  # table-based evidence
-    image_id: Optional[int] = None  # figure/pedigree evidence
-    reasoning: str  # human-readable summary (always required)
-
-    @model_validator(mode='after')
-    def validate_sources(self) -> Self:
-        if not self.reasoning.strip():
-            raise ValueError('reasoning must be non-empty')
-
-        if not self.evidence_context and not self.table_id and not self.image_id:
-            raise ValueError(
-                'At least one evidence source must be provided: '
-                'evidence_context, table_id, or image_id'
-            )
-
-        if self.table_id is not None and self.image_id is not None:
-            raise ValueError('Only one of table_id or image_id may be provided')
-
-        return self
 
 
 # ------------------------------

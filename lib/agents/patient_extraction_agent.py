@@ -1,357 +1,10 @@
-from enum import Enum
-from typing import List, Optional
+from agents import Agent
 
-from agents import Agent, ModelSettings
-from pydantic import BaseModel
-
+from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
 from lib.core.environment import env
+from lib.models.patient import Patient, PatientExtractionOutput
 
-
-class ProbandStatus(str, Enum):
-    Proband = 'Proband'
-    Non_proband = 'Non_proband'
-    Unknown = 'Unknown'
-
-
-class AffectedStatus(str, Enum):
-    Affected = 'Affected'
-    Unaffected = 'Unaffected'
-    Unknown = 'Unknown'
-
-
-class SexAtBirth(str, Enum):
-    Male = 'Male'
-    Female = 'Female'
-    Intersex = 'Intersex'
-    Mtf = 'MTF/Transwoman/Transgender Female'
-    Ftm = 'FTM/Transman/Transgender Male'
-    Ambiguous = 'Ambiguous'
-    Other = 'Other'
-    Unknown = 'Unknown'
-
-
-class RaceEthnicity(str, Enum):
-    African_American = 'African/African American'
-    Latino_Admixed_American = 'Latino/Admixed American'
-    Ashkenazi_Jewish = 'Ashkenazi Jewish'
-    East_Asian = 'East Asian'
-    Finnish = 'Finnish'
-    Non_Finnish_European = 'Non-Finnish European'
-    South_Asian = 'South Asian'
-    Middle_Eastern = 'Middle Eastern'
-    Amish = 'Amish'
-    Other = 'Other'
-    Unknown = 'Unknown'
-
-
-class CountryCode(str, Enum):
-    Afghanistan = 'Afghanistan'
-    Åland_Islands = 'Åland Islands'
-    Albania = 'Albania'
-    Algeria = 'Algeria'
-    American_Samoa = 'American Samoa'
-    Andorra = 'Andorra'
-    Angola = 'Angola'
-    Anguilla = 'Anguilla'
-    Antarctica = 'Antarctica'
-    Antigua_and_Barbuda = 'Antigua and Barbuda'
-    Argentina = 'Argentina'
-    Armenia = 'Armenia'
-    Aruba = 'Aruba'
-    Australia = 'Australia'
-    Austria = 'Austria'
-    Azerbaijan = 'Azerbaijan'
-    Bahamas = 'Bahamas'
-    Bahrain = 'Bahrain'
-    Bangladesh = 'Bangladesh'
-    Barbados = 'Barbados'
-    Belarus = 'Belarus'
-    Belgium = 'Belgium'
-    Belize = 'Belize'
-    Benin = 'Benin'
-    Bermuda = 'Bermuda'
-    Bhutan = 'Bhutan'
-    Bolivia_Plurinational_State_of = 'Bolivia, Plurinational State of'
-    Bonaire_Sint_Eustatius_and_Saba = 'Bonaire, Sint Eustatius and Saba'
-    Bosnia_and_Herzegovina = 'Bosnia and Herzegovina'
-    Botswana = 'Botswana'
-    Bouvet_Island = 'Bouvet Island'
-    Brazil = 'Brazil'
-    British_Indian_Ocean_Territory = 'British Indian Ocean Territory'
-    Brunei_Darussalam = 'Brunei Darussalam'
-    Bulgaria = 'Bulgaria'
-    Burkina_Faso = 'Burkina Faso'
-    Burundi = 'Burundi'
-    Cambodia = 'Cambodia'
-    Cameroon = 'Cameroon'
-    Canada = 'Canada'
-    Cape_Verde = 'Cape Verde'
-    Cayman_Islands = 'Cayman Islands'
-    Central_African_Republic = 'Central African Republic'
-    Chad = 'Chad'
-    Chile = 'Chile'
-    China = 'China'
-    Christmas_Island = 'Christmas Island'
-    Cocos_Keeling_Islands = 'Cocos (Keeling) Islands'
-    Colombia = 'Colombia'
-    Comoros = 'Comoros'
-    Congo = 'Congo'
-    Congo_Democratic_Republic_of_the = 'Congo, the Democratic Republic of the'
-    Cook_Islands = 'Cook Islands'
-    Costa_Rica = 'Costa Rica'
-    Cote_dIvoire = "Côte d'Ivoire"
-    Croatia = 'Croatia'
-    Cuba = 'Cuba'
-    Curaçao = 'Curaçao'
-    Cyprus = 'Cyprus'
-    Czech_Republic = 'Czech Republic'
-    Denmark = 'Denmark'
-    Djibouti = 'Djibouti'
-    Dominica = 'Dominica'
-    Dominican_Republic = 'Dominican Republic'
-    Ecuador = 'Ecuador'
-    Egypt = 'Egypt'
-    El_Salvador = 'El Salvador'
-    Equatorial_Guinea = 'Equatorial Guinea'
-    Eritrea = 'Eritrea'
-    Estonia = 'Estonia'
-    Ethiopia = 'Ethiopia'
-    Falkland_Islands_Malvinas = 'Falkland Islands (Malvinas)'
-    Faroe_Islands = 'Faroe Islands'
-    Fiji = 'Fiji'
-    Finland = 'Finland'
-    France = 'France'
-    French_Guiana = 'French Guiana'
-    French_Polynesia = 'French Polynesia'
-    French_Southern_Territories = 'French Southern Territories'
-    Gabon = 'Gabon'
-    Gambia = 'Gambia'
-    Georgia = 'Georgia'
-    Germany = 'Germany'
-    Ghana = 'Ghana'
-    Gibraltar = 'Gibraltar'
-    Greece = 'Greece'
-    Greenland = 'Greenland'
-    Grenada = 'Grenada'
-    Guadeloupe = 'Guadeloupe'
-    Guam = 'Guam'
-    Guatemala = 'Guatemala'
-    Guernsey = 'Guernsey'
-    Guinea = 'Guinea'
-    Guinea_Bissau = 'Guinea-Bissau'
-    Guyana = 'Guyana'
-    Haiti = 'Haiti'
-    Heard_Island_and_McDonald_Islands = 'Heard Island and McDonald Islands'
-    Holy_See_Vatican_City_State = 'Holy See (Vatican City State)'
-    Honduras = 'Honduras'
-    Hong_Kong = 'Hong Kong'
-    Hungary = 'Hungary'
-    Iceland = 'Iceland'
-    India = 'India'
-    Indonesia = 'Indonesia'
-    Iran_Islamic_Republic_of = 'Iran, Islamic Republic of'
-    Iraq = 'Iraq'
-    Ireland = 'Ireland'
-    Isle_of_Man = 'Isle of Man'
-    Israel = 'Israel'
-    Italy = 'Italy'
-    Jamaica = 'Jamaica'
-    Japan = 'Japan'
-    Jersey = 'Jersey'
-    Jordan = 'Jordan'
-    Kazakhstan = 'Kazakhstan'
-    Kenya = 'Kenya'
-    Kiribati = 'Kiribati'
-    Korea_Democratic_Peoples_Republic_of = "Korea, Democratic People's Republic of"
-    Korea_Republic_of = 'Korea, Republic of'
-    Kuwait = 'Kuwait'
-    Kyrgyzstan = 'Kyrgyzstan'
-    Lao_Peoples_Democratic_Republic = "Lao People's Democratic Republic"
-    Latvia = 'Latvia'
-    Lebanon = 'Lebanon'
-    Lesotho = 'Lesotho'
-    Liberia = 'Liberia'
-    Libya = 'Libya'
-    Liechtenstein = 'Liechtenstein'
-    Lithuania = 'Lithuania'
-    Luxembourg = 'Luxembourg'
-    Macao = 'Macao'
-    Macedonia_the_former_Yugoslav_Republic_of = (
-        'Macedonia, the former Yugoslav Republic of'
-    )
-    Madagascar = 'Madagascar'
-    Malawi = 'Malawi'
-    Malaysia = 'Malaysia'
-    Maldives = 'Maldives'
-    Mali = 'Mali'
-    Malta = 'Malta'
-    Marshall_Islands = 'Marshall Islands'
-    Martinique = 'Martinique'
-    Mauritania = 'Mauritania'
-    Mauritius = 'Mauritius'
-    Mayotte = 'Mayotte'
-    Mexico = 'Mexico'
-    Micronesia_Federated_States_of = 'Micronesia, Federated States of'
-    Moldova_Republic_of = 'Moldova, Republic of'
-    Monaco = 'Monaco'
-    Mongolia = 'Mongolia'
-    Montenegro = 'Montenegro'
-    Montserrat = 'Montserrat'
-    Morocco = 'Morocco'
-    Mozambique = 'Mozambique'
-    Myanmar = 'Myanmar'
-    Namibia = 'Namibia'
-    Nauru = 'Nauru'
-    Nepal = 'Nepal'
-    Netherlands = 'Netherlands'
-    New_Caledonia = 'New Caledonia'
-    New_Zealand = 'New Zealand'
-    Nicaragua = 'Nicaragua'
-    Niger = 'Niger'
-    Nigeria = 'Nigeria'
-    Niue = 'Niue'
-    Norfolk_Island = 'Norfolk Island'
-    Northern_Mariana_Islands = 'Northern Mariana Islands'
-    Norway = 'Norway'
-    Oman = 'Oman'
-    Pakistan = 'Pakistan'
-    Palau = 'Palau'
-    Palestinian_Territory_Occupied = 'Palestinian Territory, Occupied'
-    Panama = 'Panama'
-    Papua_New_Guinea = 'Papua New Guinea'
-    Paraguay = 'Paraguay'
-    Peru = 'Peru'
-    Philippines = 'Philippines'
-    Pitcairn = 'Pitcairn'
-    Poland = 'Poland'
-    Portugal = 'Portugal'
-    Puerto_Rico = 'Puerto Rico'
-    Qatar = 'Qatar'
-    Réunion = 'Réunion'
-    Romania = 'Romania'
-    Russian_Federation = 'Russian Federation'
-    Rwanda = 'Rwanda'
-    Saint_Barthélemy = 'Saint Barthélemy'
-    Saint_Helena_Ascension_and_Tristan_da_Cunha = (
-        'Saint Helena, Ascension and Tristan da Cunha'
-    )
-    Saint_Kitts_and_Nevis = 'Saint Kitts and Nevis'
-    Saint_Lucia = 'Saint Lucia'
-    Saint_Martin_French_part = 'Saint Martin (French part)'
-    Saint_Pierre_and_Miquelon = 'Saint Pierre and Miquelon'
-    Saint_Vincent_and_the_Grenadines = 'Saint Vincent and the Grenadines'
-    Samoa = 'Samoa'
-    San_Marino = 'San Marino'
-    Sao_Tome_and_Principe = 'Sao Tome and Principe'
-    Saudi_Arabia = 'Saudi Arabia'
-    Senegal = 'Senegal'
-    Serbia = 'Serbia'
-    Seychelles = 'Seychelles'
-    Sierra_Leone = 'Sierra Leone'
-    Singapore = 'Singapore'
-    Sint_Maarten_Dutch_part = 'Sint Maarten (Dutch part)'
-    Slovakia = 'Slovakia'
-    Slovenia = 'Slovenia'
-    Solomon_Islands = 'Solomon Islands'
-    Somalia = 'Somalia'
-    South_Africa = 'South Africa'
-    South_Georgia_and_the_South_Sandwich_Islands = (
-        'South Georgia and the South Sandwich Islands'
-    )
-    South_Sudan = 'South Sudan'
-    Spain = 'Spain'
-    Sri_Lanka = 'Sri Lanka'
-    Sudan = 'Sudan'
-    Suriname = 'Suriname'
-    Svalbard_and_Jan_Mayen = 'Svalbard and Jan Mayen'
-    Swaziland = 'Swaziland'
-    Sweden = 'Sweden'
-    Switzerland = 'Switzerland'
-    Syrian_Arab_Republic = 'Syrian Arab Republic'
-    Taiwan_Province_of_China = 'Taiwan, Province of China'
-    Tajikistan = 'Tajikistan'
-    Tanzania_United_Republic_of = 'Tanzania, United Republic of'
-    Thailand = 'Thailand'
-    Timor_Leste = 'Timor-Leste'
-    Togo = 'Togo'
-    Tokelau = 'Tokelau'
-    Tonga = 'Tonga'
-    Trinidad_and_Tobago = 'Trinidad and Tobago'
-    Tunisia = 'Tunisia'
-    Turkey = 'Turkey'
-    Turkmenistan = 'Turkmenistan'
-    Turks_and_Caicos_Islands = 'Turks and Caicos Islands'
-    Tuvalu = 'Tuvalu'
-    Uganda = 'Uganda'
-    Ukraine = 'Ukraine'
-    United_Arab_Emirates = 'United Arab Emirates'
-    United_Kingdom = 'United Kingdom'
-    United_States = 'United States'
-    United_States_Minor_Outlying_Islands = 'United States Minor Outlying Islands'
-    Uruguay = 'Uruguay'
-    Uzbekistan = 'Uzbekistan'
-    Vanuatu = 'Vanuatu'
-    Venezuela_Bolivarian_Republic_of = 'Venezuela, Bolivarian Republic of'
-    Viet_Nam = 'Viet Nam'
-    Virgin_Islands_British = 'Virgin Islands, British'
-    Virgin_Islands_US = 'Virgin Islands, U.S.'
-    Wallis_and_Futuna = 'Wallis and Futuna'
-    Western_Sahara = 'Western Sahara'
-    Yemen = 'Yemen'
-    Zambia = 'Zambia'
-    Zimbabwe = 'Zimbabwe'
-    Other = 'Other'
-    Unknown = 'Unknown'
-
-
-# --- Patient model
-
-
-class PatientInfo(BaseModel):
-    # Core patient fields
-    identifier: str  # Required
-    proband_status: ProbandStatus
-    sex: SexAtBirth
-    age_diagnosis: Optional[str]
-    age_report: Optional[str]
-    age_death: Optional[str]
-    country_of_origin: CountryCode
-    race_ethnicity: RaceEthnicity
-    affected_status: AffectedStatus
-
-    # Evidence for each field
-    identifier_evidence_context: Optional[str]
-    proband_status_evidence_context: Optional[str]
-    sex_evidence_context: Optional[str]
-    age_diagnosis_evidence_context: Optional[str]
-    age_report_evidence_context: Optional[str]
-    age_death_evidence_context: Optional[str]
-    country_of_origin_evidence_context: Optional[str]
-    race_ethnicity_evidence_context: Optional[str]
-    affected_status_evidence_context: Optional[str]
-
-    # --- Reasonings (model interpretation, optional but encouraged)
-    identifier_reasoning: Optional[str]
-    proband_status_reasoning: Optional[str]
-    sex_reasoning: Optional[str]
-    age_diagnosis_reasoning: Optional[str]
-    age_report_reasoning: Optional[str]
-    age_death_reasoning: Optional[str]
-    country_of_origin_reasoning: Optional[str]
-    race_ethnicity_reasoning: Optional[str]
-    affected_status_reasoning: Optional[str]
-
-
-# --- Output wrapper
-
-
-class PatientInfoExtractionOutput(BaseModel):
-    patients: List[PatientInfo]
-
-
-# --- Instructions for agent
-
-PATIENT_EXTRACTION_INSTRUCTIONS = """
+PATIENT_EXTRACTION_INSTRUCTIONS = f"""
 System: You are an expert clinical data curator.
 
 Inputs:
@@ -360,142 +13,87 @@ Inputs:
    The description will include:
       - image_id (integer index of the pedigree image out of all images in the paper)
       - description
-   
-   The description should summarize the pedigree structure,
-   including family relationships, affected status, and any genotype or
-   segregation information visible in the figure.
 
-   This description represents information that appears visually in the
-   figure and may be used as supporting evidence.
+   The description summarizes pedigree structure including relationships, affected status, and any genotype or segregation information visible in the figure.
 
    If the description is null, there was no pedigree image included in the paper.
 
 Task: Extract patient-level demographic information for each individual human patient explicitly described in the text, distinguishing clearly between probands and non-probands.
 
 Definitions:
-- Proband: The primary affected individual(s) through whom a family was ascertained for the study. May be explicitly labeled as “proband,” “index case,” “case 1,” etc.
+- Proband: The primary affected individual(s) through whom a family was ascertained for the study.
 - Non-proband: Any other explicitly described human individual (e.g., sibling, parent, affected relative, unrelated patient in a cohort).
-- Some papers may contain multiple unrelated probands (e.g., “We report 5 unrelated patients…”). Each should be treated as a separate patient.
-- Some papers may describe both a proband and additional family members. Extract each individual separately if they have explicitly stated demographic information.
+
+Notes:
+- Some papers may contain multiple unrelated probands; extract each separately.
+- Extract only individuals with explicitly stated demographic or clinical information.
 
 Fields to extract (for each patient):
 
-- identifier:
-  - A clear textual identifier (e.g., Patient 1, II-2, I-1, proband, index case, sibling, mother).
-  - Do NOT return numeric-only identifiers (e.g., “34”, “75987”).
-  - If an individual has no usable textual identifier, skip that individual.
+Each field is an EvidenceBlock containing:
+  - value: the extracted data
+  - reasoning: explanation of how the value was determined
+  - evidence_context: verbatim quote from text (when available)
+  - table_id: if derived from a table
+  - image_id: if derived from a figure/pedigree
+  At least one of evidence_context, table_id, or image_id is required.
 
-    Identifier priority rules (apply in this order):
+- identifier (EvidenceBlock[string]):
+  - A clear textual identifier (e.g., Patient 1, II-2, proband, index case, sibling, mother).
+  - Do NOT return numeric-only identifiers.
+  - If an individual has no usable textual identifier, skip that patient.
 
-    1. If a short alphanumeric identifier is explicitly provided
-       (especially in parentheses), such as:
-       P1, II-2, IV:3, Patient A, Case 1,
-       use that EXACT string as the identifier.
-         - Preserve capitalization and punctuation exactly as written.
-         - Do NOT expand, reinterpret, or normalize it.
-         - Example: "the proband (P1)" → identifier = "P1"
+  Identifier priority rules:
+    1. Prefer explicit alphanumeric identifiers exactly as written (e.g., "P1", "II-2", "Case 1").
+       - Preserve capitalization and punctuation.
+       - Do NOT normalize or reinterpret.
+    2. If none exists, use descriptive labels (e.g., "proband", "sister") as written.
+    3. Preserve exact wording when multiple probands or cases are distinguished.
 
-    2. If no alphanumeric identifier is provided, but the individual is
-       explicitly labeled as "proband", "index case", "patient",
-       "sibling", "mother", etc., use that label as written.
+- proband_status (EvidenceBlock[enum: Proband, Non-Proband, Unknown]):
+  - Proband: explicitly described as proband/index case
+  - Non-Proband: clearly another cohort member or relative
+  - Unknown: unclear
 
-    3. If multiple probands exist and they are distinguished in the text
-       (e.g., "Proband 1", "Patient A"), preserve the exact wording used.
+- sex (EvidenceBlock[enum: Male, Female, Intersex, MTF/Transwoman/Transgender Female, FTM/Transman/Transgender Male, Ambiguous/Unable to Determine, Other, Unknown]):
+  - Extract sex/gender as explicitly stated in text or pedigree
 
-- proband_status:
-  - Use enum: Proband, Non-proband, Unknown
-  - If explicitly described as proband/index case → Proband
-  - If clearly a relative or another cohort patient → Non-proband
-  - If unclear whether they are the proband → Unknown
+- age_diagnosis, age_report, age_death (EvidenceBlock[int | None]):
+  - Extract ages as reported in text, tables, or pedigrees
+  - None if not stated
 
-- sex:
-  - Use enum: Male, Female, Intersex, MTF/Transwoman/Transgender Female, FTM/Transman/Transgender Male, Ambiguous, Other, Unknown
+- country_of_origin (EvidenceBlock[enum of valid country names]):
+  - Extract from explicit geographic references
 
-- age:
-  - Capture age at diagnosis, at report, and at death if available.
-  - Preserve original wording as text.
+- race_ethnicity (EvidenceBlock[enum: African/African American, Latino/Admixed American, Ashkenazi Jewish, East Asian, Finnish, Non-Finnish European, South Asian, Middle Eastern, Amish, Other, Unknown]):
+  - Normalize specific subgroups to the closest enum value when applicable.
+  - Extract from demographic tables or textual descriptions
 
-- country_of_origin:
-  - Use enum values: Afghanistan, Åland Islands, Albania, Algeria, American Samoa, Andorra, Angola, Anguilla, Antarctica, Antigua and Barbuda, Argentina, Armenia, Aruba, Australia, Austria, Azerbaijan, Bahamas, Bahrain, Bangladesh, Barbados, Belarus, Belgium, Belize, Benin, Bermuda, Bhutan, Bolivia, Plurinational State of, Bonaire, Sint Eustatius and Saba, Bosnia and Herzegovina, Botswana, Bouvet Island, Brazil, British Indian Ocean Territory, Brunei Darussalam, Bulgaria, Burkina Faso, Burundi, Cambodia, Cameroon, Canada, Cape Verde, Cayman Islands, Central African Republic, Chad, Chile, China, Christmas Island, Cocos (Keeling) Islands, Colombia, Comoros, Congo, Congo, the Democratic Republic of the, Cook Islands, Costa Rica, Côte d'Ivoire, Croatia, Cuba, Curaçao, Cyprus, Czech Republic, Denmark, Djibouti, Dominica, Dominican Republic, Ecuador, Egypt, El Salvador, Equatorial Guinea, Eritrea, Estonia, Ethiopia, Falkland Islands (Malvinas), Faroe Islands, Fiji, Finland, France, French Guiana, French Polynesia, French Southern Territories, Gabon, Gambia, Georgia, Germany, Ghana, Gibraltar, Greece, Greenland, Grenada, Guadeloupe, Guam, Guatemala, Guernsey, Guinea, Guinea-Bissau, Guyana, Haiti, Heard Island and McDonald Islands, Holy See (Vatican City State), Honduras, Hong Kong, Hungary, Iceland, India, Indonesia, Iran, Islamic Republic of, Iraq, Ireland, Isle of Man, Israel, Italy, Jamaica, Japan, Jersey, Jordan, Kazakhstan, Kenya, Kiribati, Korea, Democratic People's Republic of, Korea, Republic of, Kuwait, Kyrgyzstan, Lao People's Democratic Republic, Latvia, Lebanon, Lesotho, Liberia, Libya, Liechtenstein, Lithuania, Luxembourg, Macao, Macedonia, the former Yugoslav Republic of, Madagascar, Malawi, Malaysia, Maldives, Mali, Malta, Marshall Islands, Martinique, Mauritania, Mauritius, Mayotte, Mexico, Micronesia, Federated States of, Moldova, Republic of, Monaco, Mongolia, Montenegro, Montserrat, Morocco, Mozambique, Myanmar, Namibia, Nauru, Nepal, Netherlands, New Caledonia, New Zealand, Nicaragua, Niger, Nigeria, Niue, Norfolk Island, Northern Mariana Islands, Norway, Oman, Pakistan, Palau, Palestinian Territory, Occupied, Panama, Papua New Guinea, Paraguay, Peru, Philippines, Pitcairn, Poland, Portugal, Puerto Rico, Qatar, Réunion, Romania, Russian Federation, Rwanda, Saint Barthélemy, Saint Helena, Ascension and Tristan da Cunha, Saint Kitts and Nevis, Saint Lucia, Saint Martin (French part), Saint Pierre and Miquelon, Saint Vincent and the Grenadines, Samoa, San Marino, Sao Tome and Principe, Saudi Arabia, Senegal, Serbia, Seychelles, Sierra Leone, Singapore, Sint Maarten (Dutch part), Slovakia, Slovenia, Solomon Islands, Somalia, South Africa, South Georgia and the South Sandwich Islands, South Sudan, Spain, Sri Lanka, Sudan, Suriname, Svalbard and Jan Mayen, Swaziland, Sweden, Switzerland, Syrian Arab Republic, Taiwan, Province of China, Tajikistan, Tanzania, United Republic of, Thailand, Timor-Leste, Togo, Tokelau, Tonga, Trinidad and Tobago, Tunisia, Turkey, Turkmenistan, Turks and Caicos Islands, Tuvalu, Uganda, Ukraine, United Arab Emirates, United Kingdom, United States, United States Minor Outlying Islands, Uruguay, Uzbekistan, Vanuatu, Venezuela, Bolivarian Republic of, Viet Nam, Virgin Islands, British, Virgin Islands, U.S., Wallis and Futuna, Western Sahara, Yemen, Zambia, Zimbabwe, Other, Unknown
-  - Preserve original wording in evidence.
-
-- race/ethnicity:
-  - Use enum values: African/African American, Latino/Admixed American, Ashkenazi Jewish, East Asian, Finnish, Non-Finnish European, South Asian, Middle Eastern, Amish, Other, Unknown
-  - When the text contains a more specific subgroup of a listed category, normalize to the closest matching enum value.  For example:
-        - “Pennsylvania Dutch” → Amish
-        - “Ashkenazi Jewish from Israel” → Ashkenazi Jewish
-        - “Sephardic Jewish” → Ashkenazi Jewish (closest matching category in your enum, if that’s acceptable)
-        - “African-American teenager” → African/African American
-        - “Latino male” → Latino/Admixed American
-        - “Northern European” → Non-Finnish European
-        - “East Asian ancestry” → East Asian
-
-- affected_status:
-  - Use enum: Affected, Unaffected, Unknown
-  - Affected: the patient is reported to have the condition, phenotype, or disease under study.
-  - Unaffected: the patient is explicitly described as NOT having the condition (e.g., unaffected carrier, unaffected sibling).
-  - Unknown: affected status is not stated or cannot be determined.
+- affected_status (EvidenceBlock[enum: Affected, Unaffected, Unknown]):
+  - Affected: explicitly reported condition
+  - Unaffected: explicitly reported as not affected
+  - Unknown: not stated or unclear
 
 Guidelines:
 
 1. Extract only explicitly stated information. Do NOT infer.
-2. Distinguish clearly between probands and non-probands.
-3. If a cohort is described (e.g., “10 patients”), extract each only if individually identifiable.
-4. If only aggregate demographic data are provided (e.g., “5 males and 3 females”) without patient-level identifiers, return "unknown".
-5. Preserve original wording for age and country in evidence.
-6. Use enum values when possible; otherwise, return Other or Unknown as defined below.
-7. Provide exact evidence text for each extracted field.
-   - Evidence must be a direct verbatim quote from the input text.
-   - Do NOT modify, summarize, or interpret the text.
-   - Keep quotes as short as possible while still supporting the value.
-
-8. Return null for any missing fields.
-9. Each patient must have an identifier; if not stated, skip that patient.
-10. If no specific human patients are identified, or you are uncertain, respond only with:
-    "unknown"
-11. In text, patients are often described using relational phrases (e.g., “proband’s affected sister”).
-    - Simplify identifier to the core role (e.g., “sister”).
-12. If the paper is a single case report describing only one patient:
-    - Use identifier: "patient"
-    - Set proband_status to "Proband"
-    - Do not add additional commentary beyond structured output.
-13. Do not extract authors, study participants without clinical description, or animal models.
-
-Output:
-- Structured per patient.
-- Use enum values when possible.
-- If the text explicitly indicates a value that does not match any predefined enum category, use "Other".
-- If the text explicitly states that the value is unknown, ambiguous, or cannot be determined, use "Unknown".
-- If the field is completely missing or not mentioned in the source text, return null.
-
-CRITICAL RULES FOR EVIDENCE VS REASONING:
-
-- Evidence fields (*_evidence_context) MUST contain ONLY verbatim text copied from the source.
-  - No paraphrasing
-  - No summarization
-  - No interpretation
-  - No added words
-  - Must be a direct quote or exact substring from the input text
-
-- Reasoning fields (*_reasoning) contain any interpretation, normalization, or justification.
-
-- NEVER include reasoning inside evidence fields.
-- NEVER include phrases like "this suggests", "indicating", "therefore", etc. in evidence fields.
-
-GOOD EXAMPLE:
-  sex = Female
-  sex_evidence_context = "a 12-year-old girl"
-  sex_reasoning = "The word 'girl' indicates female sex."
-
-BAD EXAMPLE:
-  sex_evidence_context = "a 12-year-old girl, indicating the patient is female"
+2. Distinguish probands from non-probands.
+3. Extract only individuals with identifiable patient-level information.
+4. If only aggregate statistics are provided (e.g., "5 males"), do not extract individuals.
+5. Each patient must have an identifier; otherwise skip.
+6. If no identifiable human patients are present, return "unknown".
+7. For relational descriptions (e.g., "proband's sister"), simplify identifier to the role (e.g., "sister").
+8. For single case reports:
+   - Use identifier: "patient"
+   - Set proband_status to "Proband"
+9. Do not extract authors, non-clinical mentions, or animal models.
+10. Use enum values when possible; otherwise use "Other" or "Unknown".
+11. Missing fields should be returned as null (not omitted from the structured output).
 """
-
-# --- Agent definition
 
 agent = Agent(
     name='patient_info_extractor',
-    instructions=PATIENT_EXTRACTION_INSTRUCTIONS,
+    instructions=(PATIENT_EXTRACTION_INSTRUCTIONS + '\n\n' + CORE_EXTRACTION_SPEC),
     model=env.OPENAI_API_DEPLOYMENT,
-    output_type=PatientInfoExtractionOutput,
+    output_type=PatientExtractionOutput,
 )

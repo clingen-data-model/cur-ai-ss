@@ -5,13 +5,6 @@ import pandas as pd
 import requests
 import streamlit as st
 
-from lib.agents.patient_extraction_agent import (
-    AffectedStatus,
-    CountryCode,
-    ProbandStatus,
-    RaceEthnicity,
-    SexAtBirth,
-)
 from lib.core.environment import env
 from lib.misc.pdf.paths import pdf_image_path
 from lib.models import (
@@ -22,6 +15,13 @@ from lib.models import (
     PhenotypeLinkingEntry,
     PhenotypeLinkingOutput,
     PipelineStatus,
+)
+from lib.models.patient import (
+    AffectedStatus,
+    CountryCode,
+    ProbandStatus,
+    RaceEthnicity,
+    SexAtBirth,
 )
 from lib.ui.api import (
     get_patients,
@@ -58,8 +58,8 @@ def render_patient(
             render_evidence_controls(
                 paper_resp.id,
                 label='Patient Identifier Evidence',
-                evidence_context=patient.identifier_evidence_context,
-                reasoning=patient.identifier_reasoning,
+                evidence_context=patient.identifier_evidence.evidence_context,
+                reasoning=patient.identifier_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-pi-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-pi-evidence',
             )
@@ -86,8 +86,8 @@ def render_patient(
             render_evidence_controls(
                 paper_resp.id,
                 label='Proband Status Evidence',
-                evidence_context=patient.proband_status_evidence_context,
-                reasoning=patient.proband_status_reasoning,
+                evidence_context=patient.proband_status_evidence.evidence_context,
+                reasoning=patient.proband_status_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-ps-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-ps-evidence',
             )
@@ -114,8 +114,8 @@ def render_patient(
             render_evidence_controls(
                 paper_resp.id,
                 label='Affected Status Evidence',
-                evidence_context=patient.affected_status_evidence_context,
-                reasoning=patient.affected_status_reasoning,
+                evidence_context=patient.affected_status_evidence.evidence_context,
+                reasoning=patient.affected_status_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-as-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-as-evidence',
             )
@@ -140,8 +140,8 @@ def render_patient(
             render_evidence_controls(
                 paper_resp.id,
                 label='Sex At Birth Evidence',
-                evidence_context=patient.sex_evidence_context,
-                reasoning=patient.sex_reasoning,
+                evidence_context=patient.sex_evidence.evidence_context,
+                reasoning=patient.sex_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-sex-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-sex-evidence',
             )
@@ -159,8 +159,8 @@ def render_patient(
             render_evidence_controls(
                 paper_resp.id,
                 label='Age at Diagnosis Evidence',
-                evidence_context=patient.age_diagnosis_evidence_context,
-                reasoning=patient.age_diagnosis_reasoning,
+                evidence_context=patient.age_diagnosis_evidence.evidence_context,
+                reasoning=patient.age_diagnosis_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-agediag-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-agediag-evidence',
             )
@@ -176,8 +176,8 @@ def render_patient(
             render_evidence_controls(
                 paper_resp.id,
                 label='Age at Report Evidence',
-                evidence_context=patient.age_report_evidence_context,
-                reasoning=patient.age_report_reasoning,
+                evidence_context=patient.age_report_evidence.evidence_context,
+                reasoning=patient.age_report_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-agereport-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-agereport-evidence',
             )
@@ -193,8 +193,8 @@ def render_patient(
             render_evidence_controls(
                 paper_resp.id,
                 label='Age at Death Evidence',
-                evidence_context=patient.age_death_evidence_context,
-                reasoning=patient.age_death_reasoning,
+                evidence_context=patient.age_death_evidence.evidence_context,
+                reasoning=patient.age_death_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-agedeath-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-agedeath-evidence',
             )
@@ -221,8 +221,8 @@ def render_patient(
             render_evidence_controls(
                 paper_resp.id,
                 label='Country of Origin Evidence',
-                evidence_context=patient.country_of_origin_evidence_context,
-                reasoning=patient.country_of_origin_reasoning,
+                evidence_context=patient.country_of_origin_evidence.evidence_context,
+                reasoning=patient.country_of_origin_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-country-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-country-evidence',
             )
@@ -248,8 +248,8 @@ def render_patient(
             render_evidence_controls(
                 paper_resp.id,
                 label='Race/Ethnicity Evidence',
-                evidence_context=patient.race_ethnicity_evidence_context,
-                reasoning=patient.race_ethnicity_reasoning,
+                evidence_context=patient.race_ethnicity_evidence.evidence_context,
+                reasoning=patient.race_ethnicity_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-race-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-race-evidence',
             )
@@ -257,7 +257,7 @@ def render_patient(
         # --- Save edits: only include changed fields so exclude_unset works
         # Fields which can be initially empty, or later cleared from nonempty to empty,
         # are mapped to None rather than empty string. (empty UI text fields are '')
-        changes: dict[str, str | None] = {}
+        changes: dict[str, str | int | None] = {}
         if identifier != patient.identifier:
             changes['identifier'] = identifier
         if proband_status != patient.proband_status:
@@ -276,7 +276,7 @@ def render_patient(
             changes['country_of_origin'] = country_of_origin.value
         if race_ethnicity != patient.race_ethnicity:
             changes['race_ethnicity'] = race_ethnicity.value
-        update_request = PatientUpdateRequest(**changes)
+        update_request = PatientUpdateRequest(**changes)  # type: ignore[arg-type]
 
         if changes:
             try:

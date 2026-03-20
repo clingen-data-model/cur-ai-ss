@@ -35,7 +35,6 @@ from sqlalchemy.orm import (
 from sqlalchemy.types import JSON
 from typing_extensions import Self
 
-from lib.agents.patient_extraction_agent import PatientInfo
 from lib.core.environment import env
 from lib.misc.pdf.paths import (
     pdf_highlighted_path,
@@ -45,6 +44,15 @@ from lib.misc.pdf.paths import (
     pdf_sections_dir,
     pdf_tables_dir,
     pdf_thumbnail_path,
+)
+from lib.models.evidence_block import EvidenceBlock
+from lib.models.patient import (
+    AffectedStatus,
+    CountryCode,
+    Patient,
+    ProbandStatus,
+    RaceEthnicity,
+    SexAtBirth,
 )
 from lib.models.phenotype import (
     HpoCandidate,
@@ -329,45 +337,27 @@ class PatientDB(Base):
     )
     patient_idx: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    identifier: Mapped[str] = mapped_column(Text, nullable=False)
-    proband_status: Mapped[str] = mapped_column(Text, nullable=False)
-    sex: Mapped[str] = mapped_column(Text, nullable=False)
-    age_diagnosis: Mapped[str | None] = mapped_column(Text, nullable=True)
-    age_report: Mapped[str | None] = mapped_column(Text, nullable=True)
-    age_death: Mapped[str | None] = mapped_column(Text, nullable=True)
-    country_of_origin: Mapped[str] = mapped_column(Text, nullable=False)
-    race_ethnicity: Mapped[str] = mapped_column(Text, nullable=False)
-    affected_status: Mapped[str] = mapped_column(Text, nullable=False)
+    # Extracted values (updateable, strongly typed)
+    identifier: Mapped[str] = mapped_column(String, nullable=False)
+    proband_status: Mapped[str] = mapped_column(String, nullable=False)
+    sex: Mapped[str] = mapped_column(String, nullable=False)
+    age_diagnosis: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    age_report: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    age_death: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    country_of_origin: Mapped[str] = mapped_column(String, nullable=False)
+    race_ethnicity: Mapped[str] = mapped_column(String, nullable=False)
+    affected_status: Mapped[str] = mapped_column(String, nullable=False)
 
-    identifier_evidence_context: Mapped[str | None] = mapped_column(Text, nullable=True)
-    proband_status_evidence_context: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
-    sex_evidence_context: Mapped[str | None] = mapped_column(Text, nullable=True)
-    age_diagnosis_evidence_context: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
-    age_report_evidence_context: Mapped[str | None] = mapped_column(Text, nullable=True)
-    age_death_evidence_context: Mapped[str | None] = mapped_column(Text, nullable=True)
-    country_of_origin_evidence_context: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
-    race_ethnicity_evidence_context: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
-    affected_status_evidence_context: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
-
-    identifier_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
-    proband_status_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
-    sex_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
-    age_diagnosis_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
-    age_report_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
-    age_death_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
-    country_of_origin_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
-    race_ethnicity_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
-    affected_status_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Evidence blocks (static, immutable)
+    identifier_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    proband_status_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    sex_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    age_diagnosis_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    age_report_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    age_death_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    country_of_origin_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    race_ethnicity_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    affected_status_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -380,16 +370,33 @@ class PatientDB(Base):
             'paper_id', 'patient_idx', name='uq_patients_paper_patient_idx'
         ),
         Index('ix_patients_paper_id', 'paper_id'),
-        Index('ix_patients_paper_id_identifier', 'paper_id', 'identifier'),
     )
 
 
-class PatientResp(PatientInfo):
-    model_config = {'from_attributes': True}
+class PatientResp(BaseModel):
     id: int
     paper_id: str
     patient_idx: int
+    identifier: str
+    proband_status: ProbandStatus
+    sex: SexAtBirth
+    age_diagnosis: int | None
+    age_report: int | None
+    age_death: int | None
+    country_of_origin: CountryCode
+    race_ethnicity: RaceEthnicity
+    affected_status: AffectedStatus
     created_at: datetime
+    # Evidence blocks (from DB JSON columns)
+    identifier_evidence: EvidenceBlock[str]
+    proband_status_evidence: EvidenceBlock[ProbandStatus]
+    sex_evidence: EvidenceBlock[SexAtBirth]
+    age_diagnosis_evidence: EvidenceBlock[int | None]
+    age_report_evidence: EvidenceBlock[int | None]
+    age_death_evidence: EvidenceBlock[int | None]
+    country_of_origin_evidence: EvidenceBlock[CountryCode]
+    race_ethnicity_evidence: EvidenceBlock[RaceEthnicity]
+    affected_status_evidence: EvidenceBlock[AffectedStatus]
 
 
 class PatientUpdateRequest(PatchModel):
@@ -397,8 +404,8 @@ class PatientUpdateRequest(PatchModel):
     proband_status: str | None = None
     affected_status: str | None = None
     sex: str | None = None
-    age_diagnosis: str | None = None
-    age_report: str | None = None
-    age_death: str | None = None
+    age_diagnosis: int | None = None
+    age_report: int | None = None
+    age_death: int | None = None
     country_of_origin: str | None = None
     race_ethnicity: str | None = None
