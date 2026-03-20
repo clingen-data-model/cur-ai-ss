@@ -149,9 +149,11 @@ def render_patient(
         # --- Ages
         col1, col2 = st.columns(2)
         with col1:
-            age_diagnosis = st.text_input(
+            age_diagnosis = st.number_input(
                 'Age at Diagnosis',
-                patient.age_diagnosis or '',
+                value=patient.age_diagnosis,
+                min_value=0,
+                step=1,
                 key=f'{key_prefix}-age-diagnosis',
             )
         with col2:
@@ -166,9 +168,11 @@ def render_patient(
             )
         col1, col2 = st.columns(2)
         with col1:
-            age_report = st.text_input(
+            age_report = st.number_input(
                 'Age at Report',
-                patient.age_report or '',
+                value=patient.age_report,
+                min_value=0,
+                step=1,
                 key=f'{key_prefix}-age-report',
             )
         with col2:
@@ -183,9 +187,11 @@ def render_patient(
             )
         col1, col2 = st.columns(2)
         with col1:
-            age_death = st.text_input(
+            age_death = st.number_input(
                 'Age at Death',
-                patient.age_death or '',
+                value=patient.age_death,
+                min_value=0,
+                step=1,
                 key=f'{key_prefix}-age-death',
             )
         with col2:
@@ -255,8 +261,11 @@ def render_patient(
             )
 
         # --- Save edits: only include changed fields so exclude_unset works
-        # Fields which can be initially empty, or later cleared from nonempty to empty,
-        # are mapped to None rather than empty string. (empty UI text fields are '')
+        # Age fields are numeric (int or None). Convert 0 to None for empty values.
+        age_diagnosis_val = age_diagnosis if age_diagnosis else None
+        age_report_val = age_report if age_report else None
+        age_death_val = age_death if age_death else None
+
         changes: dict[str, str | int | None] = {}
         if identifier != patient.identifier:
             changes['identifier'] = identifier
@@ -266,12 +275,12 @@ def render_patient(
             changes['affected_status'] = affected_status.value
         if sex != patient.sex:
             changes['sex'] = sex.value
-        if (age_diagnosis or None) != patient.age_diagnosis:
-            changes['age_diagnosis'] = age_diagnosis or None
-        if (age_report or None) != patient.age_report:
-            changes['age_report'] = age_report or None
-        if (age_death or None) != patient.age_death:
-            changes['age_death'] = age_death or None
+        if age_diagnosis_val != patient.age_diagnosis:
+            changes['age_diagnosis'] = age_diagnosis_val
+        if age_report_val != patient.age_report:
+            changes['age_report'] = age_report_val
+        if age_death_val != patient.age_death:
+            changes['age_death'] = age_death_val
         if country_of_origin != patient.country_of_origin:
             changes['country_of_origin'] = country_of_origin.value
         if race_ethnicity != patient.race_ethnicity:

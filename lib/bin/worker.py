@@ -190,7 +190,7 @@ async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
     structured_variants = [
         {
             'variant_id': idx,
-            'variant_quote': variant['variant_quote'],
+            'variant_quote': variant['variant_evidence_context'],
         }
         for idx, variant in enumerate(variants_output['variants'], start=1)
     ]
