@@ -5,6 +5,7 @@ from agents import Agent
 from pydantic import BaseModel, model_validator
 from typing_extensions import Self
 
+from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
 from lib.core.environment import env
 from lib.models.evidence_block import EvidenceBlock
 
@@ -75,7 +76,7 @@ class PatientVariantLinkerOutput(BaseModel):
 
 
 INSTRUCTIONS = """
-You are an expert clinical genetic data curator performing structured evidence extraction 
+You are an expert clinical genetic data curator performing structured evidence extraction
 from biomedical literature.
 
 Your task is to LINK patients described in the paper to variants in the target gene of interest.
@@ -97,27 +98,15 @@ You are given:
 
 Your task:
 
-For each patient, determine whether they carry one or more variants.  
+For each patient, determine whether they carry one or more variants.
 Return **exactly** the following for each link:
 
-- patient_idx  
-- variant_id  
-- zygosity: a single EvidenceBlock[Zygosity]  
-- inheritance: a single EvidenceBlock[Inheritance]  
-- testing_methods: a list of EvidenceBlock[TestingMethod] (max 2 items)  
-- confidence: "high", "moderate", or "low"  
-
-**EvidenceBlock rules:**
-
-- Each EvidenceBlock must include:
-  - value: the enum value
-  - reasoning: human-readable explanation (required)
-  - quote: optional verbatim text from paper, possibly a table row.
-  - table_id: optional index if evidence comes from a table
-  - image_id: optional index if evidence comes from a figure/pedigree
-- reasoning must always be present.
-- At least one evidence source (text, table, or image) must be provided.
-- Do not mix table_id and image_id in the same EvidenceBlock.
+- patient_idx
+- variant_id
+- zygosity: a single EvidenceBlock[Zygosity]
+- inheritance: a single EvidenceBlock[Inheritance]
+- testing_methods: a list of EvidenceBlock[TestingMethod] (max 2 items)
+- confidence: "high", "moderate", or "low"
 
 **Linking rules:**
 
@@ -134,17 +123,11 @@ Return **exactly** the following for each link:
 - "high": direct, explicit patient-level evidence
 - "moderate": inferred from group/pedigree context, strong indirect support, patient membership unambiguous
 - "low": partially ambiguous textual evidence; never for pure speculation
-
-**Evidence handling:**
-
-- For text or table evidence, provide verbatim quote in quote.
-- For pedigree evidence, quote is null and image_id is set.
-- Include reasoning for each EvidenceBlock explaining why it supports the value.
 """
 
 agent = Agent(
     name='patient_variant_linker',
-    instructions=INSTRUCTIONS,
+    instructions=(INSTRUCTIONS + '\n\n' + CORE_EXTRACTION_SPEC),
     model=env.OPENAI_API_DEPLOYMENT,
     output_type=PatientVariantLinkerOutput,
 )
