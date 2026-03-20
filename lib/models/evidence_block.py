@@ -18,12 +18,16 @@ class EvidenceBlock(BaseModel, Generic[T]):
             raise ValueError('reasoning must be non-empty')
 
         # Skip evidence source requirement if value is None or UNKNOWN
-        is_unknown = (
-            self.value is None or
-            (hasattr(self.value, 'value') and self.value.value in ('unknown', 'Unknown'))
+        is_unknown = self.value is None or (
+            hasattr(self.value, 'value') and self.value.value in ('unknown', 'Unknown')
         )
 
-        if not is_unknown and not self.quote and not self.table_id and not self.image_id:
+        if (
+            not is_unknown
+            and not self.quote
+            and not self.table_id
+            and not self.image_id
+        ):
             raise ValueError(
                 'At least one evidence source must be provided: '
                 'quote, table_id, or image_id'

@@ -2,11 +2,11 @@ from enum import Enum
 from typing import Generic, List, Literal, Optional, TypeVar
 
 from agents import Agent
-from lib.models.evidence_block import EvidenceBlock
 from pydantic import BaseModel, model_validator
 from typing_extensions import Self
 
 from lib.core.environment import env
+from lib.models.evidence_block import EvidenceBlock
 
 
 # ------------------------------
