@@ -58,7 +58,7 @@ def render_patient(
             render_evidence_controls(
                 paper_resp.id,
                 label='Patient Identifier Evidence',
-                evidence_context=patient.identifier_evidence.evidence_context,
+                quote=patient.identifier_evidence.quote,
                 reasoning=patient.identifier_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-pi-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-pi-evidence',
@@ -86,7 +86,7 @@ def render_patient(
             render_evidence_controls(
                 paper_resp.id,
                 label='Proband Status Evidence',
-                evidence_context=patient.proband_status_evidence.evidence_context,
+                quote=patient.proband_status_evidence.quote,
                 reasoning=patient.proband_status_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-ps-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-ps-evidence',
@@ -114,7 +114,7 @@ def render_patient(
             render_evidence_controls(
                 paper_resp.id,
                 label='Affected Status Evidence',
-                evidence_context=patient.affected_status_evidence.evidence_context,
+                quote=patient.affected_status_evidence.quote,
                 reasoning=patient.affected_status_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-as-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-as-evidence',
@@ -140,7 +140,7 @@ def render_patient(
             render_evidence_controls(
                 paper_resp.id,
                 label='Sex At Birth Evidence',
-                evidence_context=patient.sex_evidence.evidence_context,
+                quote=patient.sex_evidence.quote,
                 reasoning=patient.sex_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-sex-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-sex-evidence',
@@ -159,7 +159,7 @@ def render_patient(
             render_evidence_controls(
                 paper_resp.id,
                 label='Age at Diagnosis Evidence',
-                evidence_context=patient.age_diagnosis_evidence.evidence_context,
+                quote=patient.age_diagnosis_evidence.quote,
                 reasoning=patient.age_diagnosis_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-agediag-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-agediag-evidence',
@@ -176,7 +176,7 @@ def render_patient(
             render_evidence_controls(
                 paper_resp.id,
                 label='Age at Report Evidence',
-                evidence_context=patient.age_report_evidence.evidence_context,
+                quote=patient.age_report_evidence.quote,
                 reasoning=patient.age_report_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-agereport-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-agereport-evidence',
@@ -193,7 +193,7 @@ def render_patient(
             render_evidence_controls(
                 paper_resp.id,
                 label='Age at Death Evidence',
-                evidence_context=patient.age_death_evidence.evidence_context,
+                quote=patient.age_death_evidence.quote,
                 reasoning=patient.age_death_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-agedeath-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-agedeath-evidence',
@@ -221,7 +221,7 @@ def render_patient(
             render_evidence_controls(
                 paper_resp.id,
                 label='Country of Origin Evidence',
-                evidence_context=patient.country_of_origin_evidence.evidence_context,
+                quote=patient.country_of_origin_evidence.quote,
                 reasoning=patient.country_of_origin_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-country-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-country-evidence',
@@ -248,7 +248,7 @@ def render_patient(
             render_evidence_controls(
                 paper_resp.id,
                 label='Race/Ethnicity Evidence',
-                evidence_context=patient.race_ethnicity_evidence.evidence_context,
+                quote=patient.race_ethnicity_evidence.quote,
                 reasoning=patient.race_ethnicity_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-race-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-race-evidence',

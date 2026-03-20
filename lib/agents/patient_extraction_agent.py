@@ -33,10 +33,10 @@ Fields to extract (for each patient):
 Each field is an EvidenceBlock containing:
   - value: the extracted data
   - reasoning: explanation of how the value was determined
-  - evidence_context: verbatim quote from text (when available)
+  - quote: verbatim quote from text (when available)
   - table_id: if derived from a table
   - image_id: if derived from a figure/pedigree
-  At least one of evidence_context, table_id, or image_id is required.
+  At least one of quote, table_id, or image_id is required.
 
 - identifier (EvidenceBlock[string]):
   - A clear textual identifier (e.g., Patient 1, II-2, proband, index case, sibling, mother).

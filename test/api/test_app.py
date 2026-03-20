@@ -302,7 +302,7 @@ def test_get_patients_empty(client, seeded_paper):
 def test_get_patients_returns_ordered_by_position(client, db_session, seeded_paper):
     evidence = dict(
         reasoning='test evidence',
-        evidence_context='test context',
+        quote='test context',
     )
     required = dict(
         proband_status='Unknown',

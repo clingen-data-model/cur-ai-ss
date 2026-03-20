@@ -190,7 +190,7 @@ async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
     structured_variants = [
         {
             'variant_id': idx,
-            'variant_evidence_context': variant['variant_evidence_context'],
+            'variant_quote': variant['variant_quote'],
         }
         for idx, variant in enumerate(variants_output['variants'], start=1)
     ]
@@ -205,7 +205,7 @@ async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
             {
                 'patient_idx': p.patient_idx,
                 'identifier': p.identifier,
-                'identifier_evidence_context': p.identifier_evidence_context,
+                'identifier_quote': p.identifier_evidence,
             }
             for p in patient_rows
         ]
@@ -231,7 +231,7 @@ async def phenotype_patient_linking_task_async(paper_db: PaperDB) -> None:
             {
                 'patient_idx': p.patient_idx,
                 'identifier': p.identifier,
-                'identifier_evidence_context': p.identifier_evidence_context,
+                'identifier_quote': p.identifier_evidence_context,
             }
             for p in patient_rows
         ]

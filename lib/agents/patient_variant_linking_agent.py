@@ -86,11 +86,11 @@ You are given:
 2. The full academic paper text.
 3. A structured list of extracted variants. Each variant includes:
    - variant_id (integer index)
-   - variant_evidence_context (text snippet from the paper mentioning the variant)
+   - variant_quote (text snippet from the paper mentioning the variant)
 4. A structured list of extracted patients. Each patient includes:
    - patient_idx (integer index)
    - identifier (e.g., "Patient 1", "Proband", "II-3")
-   - identifier_evidence_context (text snippet or "Pedigree Image")
+   - identifier_quote (text snippet or "Pedigree Image")
 5. Any pedigree description. Includes:
    - image_id (integer)
    - description (summary of family structure, affected status, genotype/segregation)
@@ -112,7 +112,7 @@ Return **exactly** the following for each link:
 - Each EvidenceBlock must include:
   - value: the enum value
   - reasoning: human-readable explanation (required)
-  - evidence_context: optional verbatim text from paper, possibly a table row.
+  - quote: optional verbatim text from paper, possibly a table row.
   - table_id: optional index if evidence comes from a table
   - image_id: optional index if evidence comes from a figure/pedigree
 - reasoning must always be present.
@@ -137,8 +137,8 @@ Return **exactly** the following for each link:
 
 **Evidence handling:**
 
-- For text or table evidence, provide verbatim quote in evidence_context.
-- For pedigree evidence, evidence_context is null and image_id is set.
+- For text or table evidence, provide verbatim quote in quote.
+- For pedigree evidence, quote is null and image_id is set.
 - Include reasoning for each EvidenceBlock explaining why it supports the value.
 """
 

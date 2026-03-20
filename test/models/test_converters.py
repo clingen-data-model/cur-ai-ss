@@ -62,22 +62,22 @@ def test_patient_to_db_maps_all_fields():
     patient = Patient(
         identifier=EvidenceBlock(
             value='P1',
-            evidence_context='referred to as P1',
+            quote='referred to as P1',
             reasoning='labeled P1 in table',
         ),
         proband_status=EvidenceBlock(
             value=ProbandStatus.Proband,
-            evidence_context='index case',
+            quote='index case',
             reasoning='first identified',
         ),
         sex=EvidenceBlock(
             value=SexAtBirth.Female,
-            evidence_context='female patient',
+            quote='female patient',
             reasoning='stated female',
         ),
         age_diagnosis=EvidenceBlock(
             value=5,
-            evidence_context='diagnosed at 5',
+            quote='diagnosed at 5',
             reasoning='age at diagnosis noted',
         ),
         age_report=EvidenceBlock(
@@ -85,23 +85,23 @@ def test_patient_to_db_maps_all_fields():
         ),
         age_death=EvidenceBlock(
             value=None,
-            evidence_context=None,
+            quote=None,
             image_id=1,
             reasoning='no death information available',
         ),
         country_of_origin=EvidenceBlock(
             value=CountryCode.Japan,
-            evidence_context='from Japan',
+            quote='from Japan',
             reasoning='origin stated',
         ),
         race_ethnicity=EvidenceBlock(
             value=RaceEthnicity.East_Asian,
-            evidence_context='East Asian descent',
+            quote='East Asian descent',
             reasoning='ethnicity stated',
         ),
         affected_status=EvidenceBlock(
             value=AffectedStatus.Affected,
-            evidence_context='affected individual',
+            quote='affected individual',
             reasoning='clearly affected',
         ),
     )
@@ -121,7 +121,7 @@ def test_patient_to_db_maps_all_fields():
     assert row.affected_status == 'Affected'
     # Evidence blocks
     assert row.identifier_evidence['value'] == 'P1'
-    assert row.identifier_evidence['evidence_context'] == 'referred to as P1'
+    assert row.identifier_evidence['quote'] == 'referred to as P1'
     assert row.identifier_evidence['reasoning'] == 'labeled P1 in table'
 
 
@@ -129,12 +129,12 @@ def test_patient_to_db_handles_optional_none_values():
     patient = Patient(
         identifier=EvidenceBlock(
             value='II-2',
-            evidence_context='pedigree notation',
+            quote='pedigree notation',
             reasoning='labeled in pedigree',
         ),
         proband_status=EvidenceBlock(
             value=ProbandStatus.Unknown,
-            evidence_context=None,
+            quote=None,
             image_id=1,
             reasoning='unclear from pedigree',
         ),
@@ -146,7 +146,7 @@ def test_patient_to_db_handles_optional_none_values():
         ),
         age_report=EvidenceBlock(
             value=None,
-            evidence_context=None,
+            quote=None,
             table_id=2,
             reasoning='no report age available',
         ),
@@ -155,18 +155,18 @@ def test_patient_to_db_handles_optional_none_values():
         ),
         country_of_origin=EvidenceBlock(
             value=CountryCode.Unknown,
-            evidence_context='location not stated',
+            quote='location not stated',
             reasoning='no origin information',
         ),
         race_ethnicity=EvidenceBlock(
             value=RaceEthnicity.Unknown,
-            evidence_context=None,
+            quote=None,
             image_id=1,
             reasoning='ethnicity not mentioned',
         ),
         affected_status=EvidenceBlock(
             value=AffectedStatus.Unknown,
-            evidence_context='status unclear',
+            quote='status unclear',
             reasoning='phenotype not detailed',
         ),
     )

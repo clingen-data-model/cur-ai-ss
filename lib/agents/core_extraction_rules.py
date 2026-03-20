@@ -12,7 +12,7 @@ CORE EXTRACTION RULES:
 
 - EvidenceBlock requirements:
   - value: extracted value
-  - evidence_context: verbatim quote when available
+  - quote: verbatim quote when available
   - table_id: required when evidence is derived from a table (see TABLE EVIDENCE RULES)
     - A field is considered table-derived if the information is explicitly presented in a structured table (rows and columns) in the source.
     - If a verbatim quote cannot be extracted (i.e., the exact table row or cell text is not available as a substring of the input text), then table_id alone is sufficient.
@@ -20,10 +20,10 @@ CORE EXTRACTION RULES:
   - reasoning: required explanation
 
 - At least one of:
-  evidence_context, table_id, or image_id MUST be provided.
+  quote, table_id, or image_id MUST be provided.
 
 CRITICAL:
-- evidence_context MUST contain ONLY verbatim text copied from the input source text.
+- quote MUST contain ONLY verbatim text copied from the input source text.
   - No paraphrasing, summarization, or added words.
 - A verbatim quote means an exact substring of the input source text with no modifications.
 
@@ -31,25 +31,25 @@ CRITICAL:
   - reasoning should primarily explain how the value was derived.
   - Any quoted text in reasoning must be copied exactly from the input source text.
 
-- Do NOT place interpretive commentary inside evidence_context.
-- Do NOT paraphrase text inside evidence_context.
+- Do NOT place interpretive commentary inside quote.
+- Do NOT paraphrase text inside quote.
 
 TABLE EVIDENCE RULES:
 
 - When a field is derived from a table:
   - table_id MUST be provided.
 
-  - evidence_context MUST contain a verbatim quote from the table WHEN POSSIBLE.
+  - quote MUST contain a verbatim quote from the table WHEN POSSIBLE.
     - This should be either:
       - the full row containing the relevant value, OR
       - the minimal exact cell text copied exactly as shown
 
   - If a verbatim quote cannot be extracted (i.e., the exact table row or cell text is not available as a substring of the input text), then:
     - table_id alone is sufficient.
-    - evidence_context SHOULD be omitted.
+    - quote SHOULD be omitted.
     - reasoning MUST explain how the value was determined from the table.
 
-- Do NOT fabricate or approximate evidence_context when the exact text is not available.
+- Do NOT fabricate or approximate quote when the exact text is not available.
 
-- Do NOT paraphrase table content into evidence_context as a substitute for a verbatim quote.
+- Do NOT paraphrase table content into quote as a substitute for a verbatim quote.
 """
