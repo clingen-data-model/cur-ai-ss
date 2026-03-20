@@ -127,7 +127,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                         render_evidence_controls(
                             paper_id=paper_resp.id,
                             label='📋 Evidence & Reasoning',
-                            evidence_context=extracted_variant.variant_evidence_context,
+                            quote=extracted_variant.variant_evidence_context,
                             reasoning=extracted_variant.variant_reasoning,
                             color_key=f'{i}-var-color',
                             button_key_prefix=f'{i}-var',
@@ -169,7 +169,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                     render_evidence_controls(
                         paper_id=paper_resp.id,
                         label='📋 Evidence & Reasoning',
-                        evidence_context=extracted_variant.variant_type_evidence_context,
+                        quote=extracted_variant.variant_type_evidence_context,
                         reasoning=extracted_variant.variant_type_reasoning,
                         color_key=f'{i}-vtype-color',
                         button_key_prefix=f'{i}-vtype',
@@ -191,7 +191,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                     render_evidence_controls(
                         paper_id=paper_resp.id,
                         label='📋 Evidence & Reasoning',
-                        evidence_context=extracted_variant.functional_evidence_evidence_context,
+                        quote=extracted_variant.functional_evidence_evidence_context,
                         reasoning=extracted_variant.functional_evidence_reasoning,
                         color_key=f'{i}-func-ev-color',
                         button_key_prefix=f'{i}-func-ev',

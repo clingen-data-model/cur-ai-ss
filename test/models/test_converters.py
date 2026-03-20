@@ -81,7 +81,7 @@ def test_patient_to_db_maps_all_fields():
             reasoning='age at diagnosis noted',
         ),
         age_report=EvidenceBlock(
-            value=10, evidence_context='reported at 10', reasoning='age at report noted'
+            value=10, quote='reported at 10', reasoning='age at report noted'
         ),
         age_death=EvidenceBlock(
             value=None,

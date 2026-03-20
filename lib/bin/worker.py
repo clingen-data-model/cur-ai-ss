@@ -205,7 +205,7 @@ async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
             {
                 'patient_idx': p.patient_idx,
                 'identifier': p.identifier,
-                'identifier_quote': p.identifier_evidence,
+                'identifier_quote': p.identifier_evidence['quote'],
             }
             for p in patient_rows
         ]
@@ -231,7 +231,7 @@ async def phenotype_patient_linking_task_async(paper_db: PaperDB) -> None:
             {
                 'patient_idx': p.patient_idx,
                 'identifier': p.identifier,
-                'identifier_quote': p.identifier_evidence_context,
+                'identifier_quote': p.identifier_evidence['quote'],
             }
             for p in patient_rows
         ]
