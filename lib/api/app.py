@@ -59,6 +59,8 @@ from lib.models import (
     PatientDB,
     PatientResp,
     PatientUpdateRequest,
+    PedigreeDB,
+    PedigreeResp,
     PipelineStatus,
 )
 
@@ -243,6 +245,19 @@ def get_patients(paper_id: str, session: Session = Depends(get_session)) -> Any:
         .all()
     )
     return patients
+
+
+@app.get('/papers/{paper_id}/pedigree', response_model=PedigreeResp | None)
+def get_pedigree(paper_id: str, session: Session = Depends(get_session)) -> Any:
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    pedigree = (
+        session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).one_or_none()
+    )
+    return pedigree
 
 
 @app.patch('/papers/{paper_id}/patients/{patient_idx}', response_model=PatientResp)

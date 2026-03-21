@@ -25,6 +25,7 @@ from lib.models.patient import (
 )
 from lib.ui.api import (
     get_patients,
+    get_pedigree,
     grobid_annotations,
     update_patient,
 )
@@ -521,8 +522,7 @@ def render_patients_tab(selected_patient_idx: int | None) -> None:
     phenotypes = PhenotypeLinkingOutput.model_validate(phenotype_data).phenotypes
 
     # Load pedigree description
-    with open(paper_resp.pedigree_descriptions_json_path, 'r') as f:
-        pedigree_description = json.load(f)
+    pedigree_description = get_pedigree(paper_resp.id)
 
     # -----------------------------
     # Display Patients
@@ -612,16 +612,13 @@ def render_patients_tab(selected_patient_idx: int | None) -> None:
                 phenotypes=phenotypes,
             )
     with pedigree_image_tab:
-        if (
-            not pedigree_description['description']
-            or not pedigree_description['image_id']
-        ):
+        if not pedigree_description:
             st.info('No pedigree image available')
         else:
             col1, col2, col3 = st.columns([1, 3, 1])
             with col2:
                 st.image(
-                    f'{env.PROTOCOL}{env.API_ENDPOINT}{pdf_image_path(paper_resp.id, int(pedigree_description["image_id"]))}',
+                    f'{env.PROTOCOL}{env.API_ENDPOINT}{pdf_image_path(paper_resp.id, pedigree_description.image_id)}',
                     width='content',
                 )
-                st.write(pedigree_description['description'])
+                st.write(pedigree_description.description)

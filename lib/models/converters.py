@@ -1,4 +1,5 @@
-from lib.models import PatientDB
+from lib.agents.pedigree_describer_agent import PedigreeExtractionOutput
+from lib.models import PatientDB, PedigreeDB
 from lib.models.patient import Patient
 
 
@@ -16,3 +17,12 @@ def patient_to_db(paper_id: str, patient_idx: int, patient: Patient) -> PatientD
         kwargs[f'{field_name}_evidence'] = field_value.model_dump()
 
     return PatientDB(**kwargs)
+
+
+def pedigree_to_db(paper_id: str, pedigree: PedigreeExtractionOutput) -> PedigreeDB:
+    """Convert PedigreeExtractionOutput to PedigreeDB."""
+    return PedigreeDB(
+        paper_id=paper_id,
+        image_id=pedigree.image_id,
+        description=pedigree.description,
+    )

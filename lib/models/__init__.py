@@ -244,6 +244,12 @@ class PaperDB(Base):
     patients: Mapped[list['PatientDB']] = relationship(
         'PatientDB', back_populates='paper', cascade='all, delete-orphan'
     )
+    pedigree: Mapped['PedigreeDB | None'] = relationship(
+        'PedigreeDB',
+        back_populates='paper',
+        cascade='all, delete-orphan',
+        uselist=False,
+    )
 
 
 class PaperExtractionOutput(BaseModel):
@@ -373,6 +379,24 @@ class PatientDB(Base):
     )
 
 
+class PedigreeDB(Base):
+    __tablename__ = 'pedigrees'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    paper_id: Mapped[str] = mapped_column(
+        String, ForeignKey('papers.id', ondelete='CASCADE'), nullable=False, unique=True
+    )
+    image_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    paper: Mapped['PaperDB'] = relationship('PaperDB', back_populates='pedigree')
+
+    __table_args__ = (Index('ix_pedigrees_paper_id', 'paper_id'),)
+
+
 class PatientResp(BaseModel):
     id: int
     paper_id: str
@@ -409,3 +433,8 @@ class PatientUpdateRequest(PatchModel):
     age_death: int | None = None
     country_of_origin: str | None = None
     race_ethnicity: str | None = None
+
+
+class PedigreeResp(BaseModel):
+    image_id: int
+    description: str

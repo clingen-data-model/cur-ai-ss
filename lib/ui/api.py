@@ -11,6 +11,7 @@ from lib.models import (
     PaperUpdateRequest,
     PatientResp,
     PatientUpdateRequest,
+    PedigreeResp,
     PipelineStatus,
 )
 
@@ -119,6 +120,13 @@ def get_patients(paper_id: str) -> list[PatientResp]:
     resp = requests.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/patients')
     resp.raise_for_status()
     return TypeAdapter(list[PatientResp]).validate_python(resp.json())
+
+
+def get_pedigree(paper_id: str) -> PedigreeResp | None:
+    resp = requests.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/pedigree')
+    resp.raise_for_status()
+    data = resp.json()
+    return PedigreeResp.model_validate(data) if data else None
 
 
 def update_patient(
