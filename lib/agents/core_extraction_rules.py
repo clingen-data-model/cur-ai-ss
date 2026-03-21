@@ -5,7 +5,7 @@ The following rules define the evidence and extraction contract:
 
 CORE EXTRACTION RULES:
 
-- All extracted values MUST be supported by evidence.
+- All extracted values wrapped with an EvidenceBlock MUST be supported by evidence.
 - Evidence must be:
   - Verbatim for text/table sources
   - Referenced via image_id for figures when applicable
