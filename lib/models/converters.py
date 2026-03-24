@@ -59,16 +59,8 @@ def variant_to_db(
     ]
 
     for field_name in evidence_fields:
-        evidence_block = getattr(variant, field_name)
-        # Extract the value from the evidence block
-        value = evidence_block.value
-        # Handle enum types that need .value
-        if field_name == 'genome_build' and value is not None:
-            value = value.value
-        elif field_name == 'variant_type':
-            value = value.value
-        kwargs[field_name] = value
-        # Store the evidence block as dict
-        kwargs[f'{field_name}_evidence'] = evidence_block.model_dump()
+        field_value = getattr(variant, field_name)
+        kwargs[field_name] = field_value.value
+        kwargs[f'{field_name}_evidence'] = field_value.model_dump()
 
     return ExtractedVariantDB(**kwargs)
