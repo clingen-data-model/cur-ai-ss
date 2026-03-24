@@ -12,6 +12,11 @@ from pydantic import (
 
 if TYPE_CHECKING:
     from lib.models.patient import PatientDB
+    from lib.models.phenotype import ExtractedPhenotypeDB
+    from lib.models.variant import ExtractedVariantDB
+
+from typing import Literal, TypeAlias
+
 from sqlalchemy import (
     DateTime,
     ForeignKey,
@@ -45,7 +50,9 @@ from lib.misc.pdf.paths import (
 )
 from lib.models.base import Base, PatchModel
 
-Color = type('Color', (), {})  # Placeholder for type hint
+Color: TypeAlias = Literal[
+    'red', 'orange', 'yellow', 'blue', 'green', 'violet', 'gray', 'grey', 'primary'
+]
 
 
 class PipelineStatus(StrEnum):
@@ -73,8 +80,8 @@ class PipelineStatus(StrEnum):
         }[self]
 
     @property
-    def color(self) -> str:
-        color_map: dict[PipelineStatus, str] = {
+    def color(self) -> Color:
+        color_map: dict[PipelineStatus, Color] = {
             PipelineStatus.QUEUED: 'yellow',
             PipelineStatus.EXTRACTION_RUNNING: 'yellow',
             PipelineStatus.EXTRACTION_FAILED: 'red',

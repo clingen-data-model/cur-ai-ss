@@ -17,6 +17,7 @@ from sqlalchemy.types import JSON
 
 from lib.models.base import Base, PatchModel
 from lib.models.evidence_block import EvidenceBlock
+from lib.models.paper import PaperDB
 
 
 class ProbandStatus(str, Enum):
@@ -367,7 +368,7 @@ class PatientDB(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
-    paper: Mapped['PaperDB'] = relationship('PaperDB', back_populates='patients')
+    paper: Mapped[PaperDB] = relationship('PaperDB', back_populates='patients')
 
     __table_args__ = (
         UniqueConstraint(

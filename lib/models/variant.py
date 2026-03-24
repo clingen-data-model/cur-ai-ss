@@ -18,6 +18,7 @@ from sqlalchemy.types import JSON
 
 from lib.models.base import Base
 from lib.models.evidence_block import EvidenceBlock
+from lib.models.paper import PaperDB
 
 
 class VariantType(str, Enum):
@@ -176,7 +177,7 @@ class ExtractedVariantDB(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
-    paper: Mapped['PaperDB'] = relationship(
+    paper: Mapped[PaperDB] = relationship(
         'PaperDB', back_populates='extracted_variants'
     )
 

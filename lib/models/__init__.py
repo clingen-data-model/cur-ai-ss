@@ -36,7 +36,3 @@ from lib.models.phenotype import (
     PhenotypeLinkingOutput,
 )
 from lib.models.variant import ExtractedVariantDB, ExtractedVariantResp
-
-Color = Literal[
-    'red', 'orange', 'yellow', 'blue', 'green', 'violet', 'gray', 'grey', 'primary'
-]
