@@ -21,7 +21,6 @@ from lib.models.paper import (
 from lib.models.patient import PatientDB, PatientResp, PatientUpdateRequest
 from lib.models.phenotype import (
     HpoCandidate,
-    HpoConfidence,
     HpoPhenotypeLink,
     HpoPhenotypeLinkingOutput,
     PhenotypeExtractionOutput,

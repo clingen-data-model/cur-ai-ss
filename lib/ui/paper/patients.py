@@ -8,7 +8,6 @@ import streamlit as st
 from lib.core.environment import env
 from lib.misc.pdf.paths import pdf_image_path
 from lib.models import (
-    HpoConfidence,
     PaperResp,
     PatientResp,
     PatientUpdateRequest,
@@ -390,9 +389,6 @@ def _render_phenotypes_table(
                 {
                     'HPO ID': hpo_id_link,
                     'HPO Term': hpo_term_link,
-                    'Confidence': phenotype.hpo_confidence.value
-                    if phenotype.hpo_confidence
-                    else 'N/A',
                 }
             )
 
@@ -405,8 +401,6 @@ def _render_phenotypes_table(
     df = pd.DataFrame(display_rows)
 
     # Display table
-    confidence_options = [e.value for e in HpoConfidence]
-
     column_config = {
         'Select': st.column_config.CheckboxColumn('Select', width='small'),
         'Phenotype': st.column_config.TextColumn(
@@ -426,11 +420,6 @@ def _render_phenotypes_table(
                     'HPO Term',
                     width='medium',
                     display_text=r'.*?#(.+)$',
-                ),
-                'Confidence': st.column_config.SelectboxColumn(
-                    'Confidence',
-                    options=confidence_options,
-                    width='small',
                 ),
             }
         )
@@ -458,13 +447,11 @@ def _render_phenotypes_table(
                 '**Text**',
                 '**HPO ID**',
                 '**HPO Term**',
-                '**HPO Confidence**',
             ],
             'Value': [
                 phenotype.text,
                 phenotype.hpo_id or 'N/A',
                 phenotype.hpo_name or 'N/A',
-                phenotype.hpo_confidence.value if phenotype.hpo_confidence else 'N/A',
             ],
         }
         st.table(pd.DataFrame(details_data))

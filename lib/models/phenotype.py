@@ -1,4 +1,3 @@
-from enum import Enum
 from typing import List
 
 from pydantic import BaseModel
@@ -21,21 +20,12 @@ class PhenotypeInfoExtractionOutput(BaseModel):
     phenotypes: List[PhenotypeExtractionOutput]
 
 
-class HpoConfidence(str, Enum):
-    """Confidence level for HPO term matching."""
-
-    high = 'high'
-    moderate = 'moderate'
-    low = 'low'
-
-
 class HpoPhenotypeLink(BaseModel):
     """Link between a phenotype and an HPO term."""
 
     patient_idx: int
     hpo_id: str | None
     hpo_name: str | None
-    hpo_confidence: HpoConfidence | None
     hpo_reasoning: str
 
 
@@ -58,7 +48,6 @@ class PhenotypeLinkingEntry(PhenotypeExtractionOutput):
 
     hpo_id: str | None = None
     hpo_name: str | None = None
-    hpo_confidence: HpoConfidence | None = None
     hpo_reasoning: str | None = None
     candidates: list[HpoCandidate] | None = None  # HPO candidate suggestions for agent
 
@@ -68,7 +57,6 @@ class PhenotypeLinkingEntry(PhenotypeExtractionOutput):
         extraction: PhenotypeExtractionOutput,
         hpo_id: str | None = None,
         hpo_name: str | None = None,
-        hpo_confidence: HpoConfidence | None = None,
         hpo_reasoning: str | None = None,
         candidates: list[HpoCandidate] | None = None,
     ) -> 'PhenotypeLinkingEntry':
@@ -77,7 +65,6 @@ class PhenotypeLinkingEntry(PhenotypeExtractionOutput):
             **extraction.model_dump(),
             hpo_id=hpo_id,
             hpo_name=hpo_name,
-            hpo_confidence=hpo_confidence,
             hpo_reasoning=hpo_reasoning,
             candidates=candidates,
         )

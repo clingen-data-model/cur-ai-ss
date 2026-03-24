@@ -1,7 +1,7 @@
 from lib.agents.pedigree_describer_agent import PedigreeExtractionOutput
 from lib.models import ExtractedVariantDB, PatientDB, PedigreeDB
 from lib.models.patient import Patient
-from lib.models.variant import Variant
+from lib.models.variant import ExtractedVariant
 
 
 def patient_to_db(paper_id: str, patient_idx: int, patient: Patient) -> PatientDB:
@@ -30,7 +30,7 @@ def pedigree_to_db(paper_id: str, pedigree: PedigreeExtractionOutput) -> Pedigre
 
 
 def variant_to_db(
-    paper_id: str, variant_idx: int, variant: Variant
+    paper_id: str, variant_idx: int, variant: ExtractedVariant
 ) -> ExtractedVariantDB:
     """Convert Variant to ExtractedVariantDB, extracting values and evidence from EvidenceBlocks."""
     kwargs = {

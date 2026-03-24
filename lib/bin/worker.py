@@ -15,13 +15,13 @@ from sqlalchemy.orm import joinedload
 from lib.agents.hpo_linking_agent import agent as hpo_linking_agent
 from lib.agents.paper_extraction_agent import agent as paper_extraction_agent
 from lib.agents.patient_extraction_agent import agent as patient_extraction_agent
+from lib.agents.patient_phenotype_linking_agent import (
+    agent as patient_phenotype_linking_agent,
+)
 from lib.agents.patient_variant_linking_agent import (
     agent as patient_variant_linking_agent,
 )
 from lib.agents.pedigree_describer_agent import agent as pedigree_describer_agent
-from lib.agents.phenotype_patient_linking_agent import (
-    agent as phenotype_patient_linking_agent,
-)
 from lib.agents.variant_enrichment_agent import (
     HarmonizedVariant,
     VariantEnrichmentOutput,
@@ -46,7 +46,7 @@ from lib.models import (
     PipelineStatus,
 )
 from lib.models.converters import patient_to_db, pedigree_to_db, variant_to_db
-from lib.models.variant import Variant
+from lib.models.variant import ExtractedVariant
 from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
 
 LEASE_TIMEOUT_S = 900
@@ -155,7 +155,7 @@ async def harmonize_variants_task_async(paper_db: PaperDB) -> None:
         )
         variants_output = {
             'variants': [
-                Variant(**{f: getattr(r, f) for f in Variant.model_fields})
+                ExtractedVariant(**{f: getattr(r, f) for f in ExtractedVariant.model_fields})
                 for r in rows
             ]
         }
@@ -264,7 +264,7 @@ async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
         f.write(json_response)
 
 
-async def phenotype_patient_linking_task_async(paper_db: PaperDB) -> None:
+async def patient_phenotype_linking_task_async(paper_db: PaperDB) -> None:
     with session_scope() as session:
         patient_rows = (
             session.query(PatientDB)
@@ -281,7 +281,7 @@ async def phenotype_patient_linking_task_async(paper_db: PaperDB) -> None:
             for p in patient_rows
         ]
     result = await Runner.run(
-        phenotype_patient_linking_agent,
+        patient_phenotype_linking_agent,
         f'Paper (fulltext md): {fulltext_md(paper_db.id)}\n\nStructured Patients JSON:\n{structured_patients}',
     )
 
@@ -376,7 +376,7 @@ def linking_tasks(paper_id: str) -> None:
             await asyncio.gather(
                 harmonize_variants_task_async(paper_db),
                 patient_variant_linking_task_async(paper_db),
-                phenotype_patient_linking_task_async(paper_db),
+                patient_phenotype_linking_task_async(paper_db),
             )
 
             await asyncio.gather(
