@@ -378,7 +378,6 @@ class PatientDB(Base):
 
 
 class PatientResp(BaseModel):
-    id: int
     paper_id: str
     patient_idx: int
     identifier: str

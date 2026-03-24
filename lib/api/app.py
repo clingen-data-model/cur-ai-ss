@@ -50,6 +50,10 @@ from lib.misc.pdf.paths import (
     pdf_words_json_path,
 )
 from lib.models import (
+    ExtractedPhenotype,
+    ExtractedPhenotypeDB,
+    ExtractedPhenotypeResp,
+    ExtractedPhenotypeUpdateRequest,
     ExtractedVariantDB,
     ExtractedVariantResp,
     GeneDB,
@@ -276,6 +280,125 @@ def get_variants(paper_id: str, session: Session = Depends(get_session)) -> Any:
         .all()
     )
     return variants
+
+
+@app.get(
+    '/papers/{paper_id}/patients/{patient_idx}/phenotypes',
+    response_model=list[ExtractedPhenotypeResp],
+)
+def get_phenotypes(
+    paper_id: str, patient_idx: int, session: Session = Depends(get_session)
+) -> Any:
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    patient_db = (
+        session.query(PatientDB)
+        .filter(PatientDB.paper_id == paper_id, PatientDB.patient_idx == patient_idx)
+        .one_or_none()
+    )
+    if not patient_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Patient not found'
+        )
+    phenotypes = (
+        session.query(ExtractedPhenotypeDB)
+        .filter(
+            ExtractedPhenotypeDB.paper_id == paper_id,
+            ExtractedPhenotypeDB.patient_idx == patient_idx,
+        )
+        .order_by(ExtractedPhenotypeDB.phenotype_idx)
+        .all()
+    )
+    return phenotypes
+
+
+@app.post(
+    '/papers/{paper_id}/patients/{patient_idx}/phenotypes',
+    response_model=ExtractedPhenotypeResp,
+)
+def create_phenotype(
+    paper_id: str,
+    patient_idx: int,
+    phenotype_data: ExtractedPhenotype,
+    session: Session = Depends(get_session),
+) -> Any:
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    patient_db = (
+        session.query(PatientDB)
+        .filter(PatientDB.paper_id == paper_id, PatientDB.patient_idx == patient_idx)
+        .one_or_none()
+    )
+    if not patient_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Patient not found'
+        )
+
+    # Get next phenotype_idx for this patient
+    max_phenotype_idx = (
+        session.query(func.max(ExtractedPhenotypeDB.phenotype_idx))
+        .filter(
+            ExtractedPhenotypeDB.paper_id == paper_id,
+            ExtractedPhenotypeDB.patient_idx == patient_idx,
+        )
+        .scalar()
+    ) or 0
+    next_phenotype_idx = max_phenotype_idx + 1
+
+    phenotype_db = ExtractedPhenotypeDB(
+        paper_id=paper_id,
+        patient_idx=patient_idx,
+        phenotype_idx=next_phenotype_idx,
+        concept=phenotype_data.concept.value,
+        concept_evidence=phenotype_data.concept.model_dump(),
+        negated=phenotype_data.negated,
+        uncertain=phenotype_data.uncertain,
+        family_history=phenotype_data.family_history,
+        onset=phenotype_data.onset,
+        location=phenotype_data.location,
+        severity=phenotype_data.severity,
+        modifier=phenotype_data.modifier,
+    )
+    session.add(phenotype_db)
+    session.commit()
+    session.refresh(phenotype_db)
+    return phenotype_db
+
+
+@app.patch(
+    '/papers/{paper_id}/patients/{patient_idx}/phenotypes/{phenotype_idx}',
+    response_model=ExtractedPhenotypeResp,
+)
+def update_phenotype(
+    paper_id: str,
+    patient_idx: int,
+    phenotype_idx: int,
+    patch_request: ExtractedPhenotypeUpdateRequest,
+    session: Session = Depends(get_session),
+) -> Any:
+    phenotype_db = (
+        session.query(ExtractedPhenotypeDB)
+        .filter(
+            ExtractedPhenotypeDB.paper_id == paper_id,
+            ExtractedPhenotypeDB.patient_idx == patient_idx,
+            ExtractedPhenotypeDB.phenotype_idx == phenotype_idx,
+        )
+        .one_or_none()
+    )
+    if not phenotype_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Phenotype not found'
+        )
+    patch_request.apply_to(phenotype_db)
+    session.commit()
+    session.refresh(phenotype_db)
+    return phenotype_db
 
 
 @app.patch('/papers/{paper_id}/patients/{patient_idx}', response_model=PatientResp)

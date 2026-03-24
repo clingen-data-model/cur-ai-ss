@@ -87,7 +87,6 @@ class VariantExtractionOutput(BaseModel):
 class ExtractedVariantResp(BaseModel):
     """Response model for extracted variants."""
 
-    id: int
     paper_id: str
     variant_idx: int
     gene: str

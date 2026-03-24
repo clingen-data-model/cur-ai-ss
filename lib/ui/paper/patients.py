@@ -317,40 +317,12 @@ def _render_patient_phenotypes(
         st.info('No phenotypes for this patient.')
         return
 
-    # Split into matched and unmatched
-    matched = [p for p in patient_phenotypes if p.hpo_id]
-    unmatched = [p for p in patient_phenotypes if not p.hpo_id]
-
-    matched_tab, unmatched_tab = st.tabs(
-        [
-            f'🔗 Matched to HPO ({len(matched)})',
-            f'❓ Unmatched ({len(unmatched)})',
-        ]
+    _render_phenotypes_table(
+        patient_phenotypes,
+        patient_idx,
+        key_prefix,
+        table_type='patient-phenotypes',
     )
-
-    with matched_tab:
-        if not matched:
-            st.info('No phenotypes matched to HPO terms.')
-        else:
-            _render_phenotypes_table(
-                matched,
-                patient_idx,
-                key_prefix,
-                show_hpo=True,
-                table_type='matched-phenotypes',
-            )
-
-    with unmatched_tab:
-        if not unmatched:
-            st.info('All phenotypes were successfully matched to HPO terms.')
-        else:
-            _render_phenotypes_table(
-                unmatched,
-                patient_idx,
-                key_prefix,
-                show_hpo=False,
-                table_type='unmatched-phenotypes',
-            )
 
 
 def _render_phenotypes_table(
@@ -506,7 +478,9 @@ def render_patients_tab(selected_patient_idx: int | None) -> None:
     phenotypes: list[PhenotypeLinkingEntry] | None = None
     with open(paper_resp.phenotype_linking_json_path, 'r') as f:
         phenotype_data = json.load(f)
-    phenotypes = PhenotypeLinkingOutput.model_validate(phenotype_data).phenotypes
+    phenotypes = PhenotypeLinkingOutput.model_validate(
+        phenotype_data
+    ).extracted_phenotypes
 
     # Load pedigree description
     pedigree_description = get_pedigree(paper_resp.id)

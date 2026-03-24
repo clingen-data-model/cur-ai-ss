@@ -213,6 +213,9 @@ class PaperDB(Base):
     extracted_variants: Mapped[list['ExtractedVariantDB']] = relationship(
         'ExtractedVariantDB', back_populates='paper', cascade='all, delete-orphan'
     )
+    extracted_phenotypes: Mapped[list['ExtractedPhenotypeDB']] = relationship(
+        'ExtractedPhenotypeDB', back_populates='paper', cascade='all, delete-orphan'
+    )
 
 
 class PaperExtractionOutput(BaseModel):

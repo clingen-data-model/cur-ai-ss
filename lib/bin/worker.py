@@ -155,7 +155,9 @@ async def harmonize_variants_task_async(paper_db: PaperDB) -> None:
         )
         variants_output = {
             'variants': [
-                ExtractedVariant(**{f: getattr(r, f) for f in ExtractedVariant.model_fields})
+                ExtractedVariant(
+                    **{f: getattr(r, f) for f in ExtractedVariant.model_fields}
+                )
                 for r in rows
             ]
         }
@@ -288,9 +290,10 @@ async def patient_phenotype_linking_task_async(paper_db: PaperDB) -> None:
     # Convert phenotype extraction output to combined phenotype-linking format
     phenotypes_output = result.final_output
     phenotype_links = [
-        PhenotypeLinkingEntry.from_extraction(ph) for ph in phenotypes_output.phenotypes
+        PhenotypeLinkingEntry.from_extraction(ph)
+        for ph in phenotypes_output.extracted_phenotypes
     ]
-    combined_output = PhenotypeLinkingOutput(phenotypes=phenotype_links)
+    combined_output = PhenotypeLinkingOutput(extracted_phenotypes=phenotype_links)
     json_response = combined_output.model_dump_json(indent=2)
     paper_db.phenotype_linking_json_path.parent.mkdir(parents=True, exist_ok=True)
     with open(paper_db.phenotype_linking_json_path, 'w') as f:
@@ -320,8 +323,10 @@ async def hpo_linking_task_async(paper_db: PaperDB) -> None:
     term_lookup = build_term_lookup()
 
     # Add HPO candidates to each phenotype
-    for entry in phenotype_linking.phenotypes:
-        candidates = find_matching_hpo_terms(entry.text, term_lookup=term_lookup)
+    for entry in phenotype_linking.extracted_phenotypes:
+        candidates = find_matching_hpo_terms(
+            entry.concept.value, term_lookup=term_lookup
+        )
         entry.candidates = candidates
 
     # Exclude optional fields to keep agent input clean
@@ -331,7 +336,7 @@ async def hpo_linking_task_async(paper_db: PaperDB) -> None:
     result = await Runner.run(
         hpo_linking_agent,
         f'Phenotypes JSON:\n{json.dumps(phenotype_data_filtered, indent=2)}',
-        max_turns=5 * len(phenotype_linking.phenotypes),
+        max_turns=5 * len(phenotype_linking.extracted_phenotypes),
     )
 
     json_response = result.final_output.model_dump_json(indent=2)

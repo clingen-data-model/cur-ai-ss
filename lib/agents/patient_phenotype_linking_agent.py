@@ -4,7 +4,7 @@ from agents import Agent
 from pydantic import BaseModel
 
 from lib.core.environment import env
-from lib.models import PhenotypeExtractionOutput, PhenotypeInfoExtractionOutput
+from lib.models import ExtractedPhenotype, PhenotypeInfoExtractionOutput
 
 INSTRUCTIONS = """
 You are an expert clinical data curator performing structured phenotype extraction
@@ -42,8 +42,6 @@ For every valid phenotype extraction, return:
 - location (optional)
 - severity (optional)
 - modifier (optional)
-- section (optional)
-- confidence
 
 ---------------------------------------------------
 PHENOTYPE EXTRACTION RULES
@@ -109,11 +107,6 @@ prose from the paper.
 
 9. **modifier**: Additional qualifiers
    - Example: "intermittent", "progressive", "episodic", "transient"
-
-10. **section**: Which section of paper phenotype was mentioned in
-    - Example: "case report", "results", "discussion", "family history"
-
-11. **confidence**: float (0–1) reflecting your confidence in the extraction
 
 ---------------------------------------------------
 PATIENT LINKAGE RULES
@@ -242,7 +235,6 @@ Ensure:
 - All required fields are present
 - All optional fields are either provided if mentioned in text, or null/omitted
 - Each phenotype has a valid patient_idx (integer from patient list)
-- confidence is always a float between 0 and 1
 """
 
 agent = Agent(

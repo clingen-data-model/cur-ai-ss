@@ -18,12 +18,19 @@ from lib.models.paper import (
     PedigreeResp,
     PipelineStatus,
 )
-from lib.models.patient import PatientDB, PatientResp, PatientUpdateRequest
+from lib.models.patient import (
+    PatientDB,
+    PatientResp,
+    PatientUpdateRequest,
+)
 from lib.models.phenotype import (
+    ExtractedPhenotype,
+    ExtractedPhenotypeDB,
+    ExtractedPhenotypeResp,
+    ExtractedPhenotypeUpdateRequest,
     HpoCandidate,
     HpoPhenotypeLink,
     HpoPhenotypeLinkingOutput,
-    PhenotypeExtractionOutput,
     PhenotypeInfoExtractionOutput,
     PhenotypeLinkingEntry,
     PhenotypeLinkingOutput,
@@ -33,4 +40,3 @@ from lib.models.variant import ExtractedVariantDB, ExtractedVariantResp
 Color = Literal[
     'red', 'orange', 'yellow', 'blue', 'green', 'violet', 'gray', 'grey', 'primary'
 ]
-
