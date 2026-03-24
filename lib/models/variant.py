@@ -105,7 +105,7 @@ class ExtractedVariantResp(BaseModel):
     hgvs_g: Optional[str]
     variant_type: str
     functional_evidence: bool
-    created_at: datetime
+    updated_at: datetime
     # Evidence blocks (from DB JSON columns)
     transcript_evidence: EvidenceBlock[Optional[str]]
     protein_accession_evidence: EvidenceBlock[Optional[str]]
@@ -173,8 +173,11 @@ class ExtractedVariantDB(Base):
     variant_type_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     functional_evidence_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
     )
 
     paper: Mapped[PaperDB] = relationship(

@@ -151,7 +151,7 @@ class PaperDB(Base):
         server_default=PipelineStatus.QUEUED.value,
         index=True,
     )
-    last_modified: Mapped[datetime] = mapped_column(
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
@@ -220,9 +220,6 @@ class PaperDB(Base):
     extracted_variants: Mapped[list['ExtractedVariantDB']] = relationship(
         'ExtractedVariantDB', back_populates='paper', cascade='all, delete-orphan'
     )
-    extracted_phenotypes: Mapped[list['ExtractedPhenotypeDB']] = relationship(
-        'ExtractedPhenotypeDB', back_populates='paper', cascade='all, delete-orphan'
-    )
 
 
 class PaperExtractionOutput(BaseModel):
@@ -255,7 +252,7 @@ class PaperResp(PaperExtractionOutput):
     gene_symbol: str
     filename: str
     pipeline_status: PipelineStatus
-    last_modified: datetime
+    updated_at: datetime
 
     # Override the PaperExtractionOutput to make the fields optional.
     # Handles the case when paper is QUEUED.
@@ -314,8 +311,11 @@ class PedigreeDB(Base):
     )
     image_id: Mapped[int] = mapped_column(Integer, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
     )
 
     paper: Mapped['PaperDB'] = relationship('PaperDB', back_populates='pedigree')

@@ -51,18 +51,16 @@ startxref
 %%EOF""")
 
 
-def _assert_last_modified_recent(
-    last_modified_str: str, max_age_seconds: int = 60
-) -> None:
-    """Assert that last_modified timestamp is within the last minute."""
-    last_modified = datetime.fromisoformat(last_modified_str)
+def _assert_updated_at_recent(updated_at_str: str, max_age_seconds: int = 60) -> None:
+    """Assert that updated_at timestamp is within the last minute."""
+    updated_at = datetime.fromisoformat(updated_at_str)
     # Handle naive datetimes by assuming UTC
-    if last_modified.tzinfo is None:
-        last_modified = last_modified.replace(tzinfo=timezone.utc)
+    if updated_at.tzinfo is None:
+        updated_at = updated_at.replace(tzinfo=timezone.utc)
     now = datetime.now(timezone.utc)
-    age = (now - last_modified).total_seconds()
+    age = (now - updated_at).total_seconds()
     assert 0 <= age <= max_age_seconds, (
-        f'last_modified is {age}s old, expected within {max_age_seconds}s'
+        f'updated_at is {age}s old, expected within {max_age_seconds}s'
     )
 
 
@@ -91,7 +89,7 @@ def test_queue_new_paper(client, test_pdf, db_session, seeded_genes):
     assert data['id']  # Paper ID will be generated from content
     assert data['pipeline_status'] == PipelineStatus.QUEUED.value
     assert data['filename'] == 'job-1.pdf'
-    _assert_last_modified_recent(data['last_modified'])
+    _assert_updated_at_recent(data['updated_at'])
     count = db_session.scalar(select(func.count(PaperDB.id)))
     assert count == 1
 
@@ -122,7 +120,7 @@ def test_get_paper_success(client, test_pdf, seeded_genes):
     assert upload_response.status_code == 201
     data_upload = upload_response.json()
     paper_id = data_upload['id']
-    _assert_last_modified_recent(data_upload['last_modified'])
+    _assert_updated_at_recent(data_upload['updated_at'])
     get_response = client.get(f'/papers/{paper_id}')
     assert get_response.status_code == 200
     data_get = get_response.json()
@@ -133,7 +131,7 @@ def test_get_paper_success(client, test_pdf, seeded_genes):
         'extracted_pdfs/0e487d93695f2c04d955d8b2cba27384d71aea0acd87d9748ec2abbf2e8a6a0d/thumbnail.png'
     )
     assert data_get['gene_symbol'] == 'BRCA1'
-    _assert_last_modified_recent(data_get['last_modified'])
+    _assert_updated_at_recent(data_get['updated_at'])
 
 
 def test_get_paper_not_found(client):
@@ -149,7 +147,7 @@ def test_update_paper_pipeline_status(client, test_pdf, db_session, seeded_genes
         data={'gene_symbol': 'BRCA1'},
     )
     data = response.json()
-    _assert_last_modified_recent(data['last_modified'])
+    _assert_updated_at_recent(data['updated_at'])
     db_session.execute(
         update(PaperDB)
         .where(PaperDB.id == data['id'])
@@ -162,7 +160,7 @@ def test_update_paper_pipeline_status(client, test_pdf, db_session, seeded_genes
     assert response2.status_code == 200
     data2 = response2.json()
     assert data2['pipeline_status'] == PipelineStatus.QUEUED.value
-    _assert_last_modified_recent(data2['last_modified'])
+    _assert_updated_at_recent(data2['updated_at'])
     response3 = client.patch(
         f'/papers/{response2.json()["id"]}',
         json={'pipeline_status': PipelineStatus.QUEUED.value},
@@ -199,7 +197,7 @@ def test_list_paper(client, test_pdf, seeded_genes):
     jobs = response.json()
     assert len(jobs) == 2
     for job in jobs:
-        _assert_last_modified_recent(job['last_modified'])
+        _assert_updated_at_recent(job['updated_at'])
 
 
 def test_list_papers_filtered_by_status(client, test_pdf, db_session, seeded_genes):
@@ -227,7 +225,7 @@ def test_list_papers_filtered_by_status(client, test_pdf, db_session, seeded_gen
     assert all(job['pipeline_status'] == PipelineStatus.QUEUED for job in jobs)
     assert all(job['gene_symbol'] == 'BRCA1' for job in jobs)
     for job in jobs:
-        _assert_last_modified_recent(job['last_modified'])
+        _assert_updated_at_recent(job['updated_at'])
 
 
 def test_delete_paper(client, test_pdf, db_session, seeded_genes):

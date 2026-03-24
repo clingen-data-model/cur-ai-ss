@@ -415,11 +415,11 @@ def main() -> None:
                             and_(
                                 PaperDB.pipeline_status
                                 == PipelineStatus.EXTRACTION_RUNNING,
-                                PaperDB.last_modified < expired_cutoff,
+                                PaperDB.updated_at < expired_cutoff,
                             ),
                         )
                     )
-                    .order_by(PaperDB.last_modified.asc())  # oldest first
+                    .order_by(PaperDB.updated_at.asc())  # oldest first
                     .limit(1)
                 ).first()
 
@@ -443,11 +443,11 @@ def main() -> None:
                             and_(
                                 PaperDB.pipeline_status
                                 == PipelineStatus.LINKING_RUNNING,
-                                PaperDB.last_modified < expired_cutoff,
+                                PaperDB.updated_at < expired_cutoff,
                             ),
                         )
                     )
-                    .order_by(PaperDB.last_modified.asc())
+                    .order_by(PaperDB.updated_at.asc())
                     .limit(1)
                 ).first()
 

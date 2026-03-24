@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import (
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -19,6 +20,7 @@ from lib.models.evidence_block import EvidenceBlock
 
 if TYPE_CHECKING:
     from lib.models.paper import PaperDB
+    from lib.models.patient import PatientDB
 
 
 class ExtractedPhenotype(BaseModel):
@@ -115,9 +117,6 @@ class ExtractedPhenotypeDB(Base):
     severity: Mapped[str | None] = mapped_column(String, nullable=True)
     modifier: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
-    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -125,11 +124,17 @@ class ExtractedPhenotypeDB(Base):
         onupdate=func.now(),
     )
 
-    paper: Mapped['PaperDB'] = relationship(
-        'PaperDB', back_populates='extracted_phenotypes'
+    paper: Mapped['PaperDB'] = relationship('PaperDB', overlaps='extracted_phenotypes')
+    patient: Mapped['PatientDB'] = relationship(
+        'PatientDB', back_populates='extracted_phenotypes', overlaps='paper'
     )
 
     __table_args__ = (
+        ForeignKeyConstraint(
+            ['paper_id', 'patient_idx'],
+            ['patients.paper_id', 'patients.patient_idx'],
+            ondelete='CASCADE',
+        ),
         UniqueConstraint(
             'paper_id',
             'patient_idx',
@@ -155,7 +160,6 @@ class ExtractedPhenotypeResp(BaseModel):
     location: str | None
     severity: str | None
     modifier: str | None
-    created_at: datetime
     updated_at: datetime
     # Evidence block (from DB JSON column)
     concept_evidence: EvidenceBlock[str]

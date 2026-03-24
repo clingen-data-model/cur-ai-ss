@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from pydantic import BaseModel
 from sqlalchemy import (
@@ -18,6 +18,9 @@ from sqlalchemy.types import JSON
 from lib.models.base import Base, PatchModel
 from lib.models.evidence_block import EvidenceBlock
 from lib.models.paper import PaperDB
+
+if TYPE_CHECKING:
+    from lib.models.phenotype import ExtractedPhenotypeDB
 
 
 class ProbandStatus(str, Enum):
@@ -364,11 +367,17 @@ class PatientDB(Base):
     race_ethnicity_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     affected_status_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
     )
 
     paper: Mapped[PaperDB] = relationship('PaperDB', back_populates='patients')
+    extracted_phenotypes: Mapped[list['ExtractedPhenotypeDB']] = relationship(
+        'ExtractedPhenotypeDB', back_populates='patient', cascade='all, delete-orphan'
+    )
 
     __table_args__ = (
         UniqueConstraint(
@@ -390,7 +399,7 @@ class PatientResp(BaseModel):
     country_of_origin: CountryCode
     race_ethnicity: RaceEthnicity
     affected_status: AffectedStatus
-    created_at: datetime
+    updated_at: datetime
     # Evidence blocks (from DB JSON columns)
     identifier_evidence: EvidenceBlock[str]
     proband_status_evidence: EvidenceBlock[ProbandStatus]

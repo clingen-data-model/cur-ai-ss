@@ -115,7 +115,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
                 'first_author',
                 'filename',
                 'pipeline_status',
-                'last_modified',
+                'updated_at',
             ]
         ],
         row_height=100,
@@ -144,7 +144,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
                 # Note, this is a major hack to get around the lack of a better way of doing this.
                 display_text=r'.*?#(.+)$',
             ),
-            'last_modified': st.column_config.DatetimeColumn(
+            'updated_at': st.column_config.DatetimeColumn(
                 'Last Modified',
                 format='D MMM YYYY, h:mm a',
             ),
@@ -156,7 +156,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
             'first_author',
             'filename',
             'pipeline_status',
-            'last_modified',
+            'updated_at',
         ],
         num_rows='delete',
         key=CURATIONS_DF_KEY,
