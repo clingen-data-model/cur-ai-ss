@@ -237,10 +237,6 @@ class PaperDB(Base):
     def patient_variant_links_json_path(self) -> Path:
         return env.evagg_dir / self.id / 'patient_variant_links.json'
 
-    @property
-    def pedigree_descriptions_json_path(self) -> Path:
-        return env.evagg_dir / self.id / 'pedigree_descriptions.json'
-
     patients: Mapped[list['PatientDB']] = relationship(
         'PatientDB', back_populates='paper', cascade='all, delete-orphan'
     )
@@ -296,7 +292,6 @@ class PaperResp(PaperExtractionOutput):
     harmonized_variants_json_path: Path
     variants_json_path: Path
     patient_variant_links_json_path: Path
-    pedigree_descriptions_json_path: Path
 
     @computed_field  # type: ignore
     @property
