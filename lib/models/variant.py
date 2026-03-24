@@ -3,7 +3,20 @@ from enum import Enum
 from typing import List, Optional
 
 from pydantic import BaseModel
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    func,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import JSON
 
+from lib.models.base import Base
 from lib.models.evidence_block import EvidenceBlock
 
 
@@ -28,19 +41,13 @@ class VariantType(str, Enum):
     unknown = 'unknown'
 
 
-class HgvsInferenceConfidence(str, Enum):
-    high = 'high'
-    medium = 'medium'
-    low = 'low'
-
-
 class GenomeBuild(str, Enum):
     GRCh37 = 'GRCh37'
     GRCh38 = 'GRCh38'
 
 
-class Variant(BaseModel):
-    """Variant extracted from paper by the extraction agent."""
+class ExtractedVariant(BaseModel):
+    """ExtractedVariant extracted from paper by the extraction agent."""
 
     # Core extraction fields (gene comes from human, no evidence needed)
     gene: str
@@ -74,7 +81,7 @@ class Variant(BaseModel):
 class VariantExtractionOutput(BaseModel):
     """Output from variant extraction agent."""
 
-    variants: List[Variant]
+    variants: List[ExtractedVariant]
 
 
 class ExtractedVariantResp(BaseModel):
@@ -115,3 +122,68 @@ class ExtractedVariantResp(BaseModel):
     hgvs_g_evidence: EvidenceBlock[Optional[str]]
     variant_type_evidence: EvidenceBlock[str]
     functional_evidence_evidence: EvidenceBlock[bool]
+
+
+class ExtractedVariantDB(Base):
+    __tablename__ = 'extracted_variants'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    paper_id: Mapped[str] = mapped_column(
+        String, ForeignKey('papers.id', ondelete='CASCADE'), nullable=False
+    )
+    variant_idx: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # Core fields
+    gene: Mapped[str] = mapped_column(String, nullable=False)
+    transcript: Mapped[str | None] = mapped_column(String, nullable=True)
+    protein_accession: Mapped[str | None] = mapped_column(String, nullable=True)
+    genomic_accession: Mapped[str | None] = mapped_column(String, nullable=True)
+    lrg_accession: Mapped[str | None] = mapped_column(String, nullable=True)
+    gene_accession: Mapped[str | None] = mapped_column(String, nullable=True)
+    genomic_coordinates: Mapped[str | None] = mapped_column(String, nullable=True)
+    genome_build: Mapped[str | None] = mapped_column(String, nullable=True)
+    rsid: Mapped[str | None] = mapped_column(String, nullable=True)
+    caid: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # HGVS
+    hgvs_c: Mapped[str | None] = mapped_column(String, nullable=True)
+    hgvs_p: Mapped[str | None] = mapped_column(String, nullable=True)
+    hgvs_g: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Variant type
+    variant_type: Mapped[str] = mapped_column(String, nullable=False)
+
+    # Functional evidence
+    functional_evidence: Mapped[bool] = mapped_column(Boolean, nullable=False)
+
+    # Evidence blocks (static, immutable)
+    transcript_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    protein_accession_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    genomic_accession_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    lrg_accession_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    gene_accession_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    genomic_coordinates_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    genome_build_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    rsid_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    caid_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    variant_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    hgvs_c_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    hgvs_p_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    hgvs_g_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    variant_type_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    functional_evidence_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    paper: Mapped['PaperDB'] = relationship(
+        'PaperDB', back_populates='extracted_variants'
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            'paper_id', 'variant_idx', name='uq_extracted_variants_paper_variant_idx'
+        ),
+        Index('ix_extracted_variants_paper_id', 'paper_id'),
+    )

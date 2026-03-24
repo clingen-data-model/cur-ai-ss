@@ -5,11 +5,7 @@ from agents import Agent, ModelSettings
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
 from lib.core.environment import env
 from lib.models.variant import (
-    GenomeBuild,
-    HgvsInferenceConfidence,
-    Variant,
-    VariantExtractionOutput,
-    VariantType,
+  VariantExtractionOutput,
 )
 
 VARIANT_EXTRACTION_INSTRUCTIONS = """

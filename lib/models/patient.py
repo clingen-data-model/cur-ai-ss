@@ -1,8 +1,21 @@
+from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
 from pydantic import BaseModel
+from sqlalchemy import (
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    func,
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import JSON
 
+from lib.models.base import Base, PatchModel
 from lib.models.evidence_block import EvidenceBlock
 
 
@@ -317,3 +330,86 @@ class Patient(BaseModel):
 
 class PatientExtractionOutput(BaseModel):
     patients: List[Patient]
+
+
+class PatientDB(Base):
+    __tablename__ = 'patients'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    paper_id: Mapped[str] = mapped_column(
+        String, ForeignKey('papers.id', ondelete='CASCADE'), nullable=False
+    )
+    patient_idx: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # Extracted values (updateable, strongly typed)
+    identifier: Mapped[str] = mapped_column(String, nullable=False)
+    proband_status: Mapped[str] = mapped_column(String, nullable=False)
+    sex: Mapped[str] = mapped_column(String, nullable=False)
+    age_diagnosis: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    age_report: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    age_death: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    country_of_origin: Mapped[str] = mapped_column(String, nullable=False)
+    race_ethnicity: Mapped[str] = mapped_column(String, nullable=False)
+    affected_status: Mapped[str] = mapped_column(String, nullable=False)
+
+    # Evidence blocks (static, immutable)
+    identifier_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    proband_status_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    sex_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    age_diagnosis_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    age_report_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    age_death_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    country_of_origin_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    race_ethnicity_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    affected_status_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    paper: Mapped['PaperDB'] = relationship('PaperDB', back_populates='patients')
+
+    __table_args__ = (
+        UniqueConstraint(
+            'paper_id', 'patient_idx', name='uq_patients_paper_patient_idx'
+        ),
+        Index('ix_patients_paper_id', 'paper_id'),
+    )
+
+
+class PatientResp(BaseModel):
+    id: int
+    paper_id: str
+    patient_idx: int
+    identifier: str
+    proband_status: ProbandStatus
+    sex: SexAtBirth
+    age_diagnosis: int | None
+    age_report: int | None
+    age_death: int | None
+    country_of_origin: CountryCode
+    race_ethnicity: RaceEthnicity
+    affected_status: AffectedStatus
+    created_at: datetime
+    # Evidence blocks (from DB JSON columns)
+    identifier_evidence: EvidenceBlock[str]
+    proband_status_evidence: EvidenceBlock[ProbandStatus]
+    sex_evidence: EvidenceBlock[SexAtBirth]
+    age_diagnosis_evidence: EvidenceBlock[int | None]
+    age_report_evidence: EvidenceBlock[int | None]
+    age_death_evidence: EvidenceBlock[int | None]
+    country_of_origin_evidence: EvidenceBlock[CountryCode]
+    race_ethnicity_evidence: EvidenceBlock[RaceEthnicity]
+    affected_status_evidence: EvidenceBlock[AffectedStatus]
+
+
+class PatientUpdateRequest(PatchModel):
+    identifier: str | None = None
+    proband_status: str | None = None
+    affected_status: str | None = None
+    sex: str | None = None
+    age_diagnosis: int | None = None
+    age_report: int | None = None
+    age_death: int | None = None
+    country_of_origin: str | None = None
+    race_ethnicity: str | None = None
