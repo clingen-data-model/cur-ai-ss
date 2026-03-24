@@ -7,7 +7,6 @@ import streamlit as st
 from lib.agents.variant_enrichment_agent import EnrichedVariant, VariantEnrichmentOutput
 from lib.agents.variant_extraction_agent import (
     Variant,
-    VariantExtractionOutput,
     VariantType,
 )
 from lib.agents.variant_harmonization_agent import (
@@ -15,6 +14,7 @@ from lib.agents.variant_harmonization_agent import (
     VariantHarmonizationOutput,
 )
 from lib.models import PaperResp, PipelineStatus
+from lib.ui.api import get_variants
 from lib.ui.paper.shared import (
     get_clinvar_url,
     get_gnomad_url,
@@ -44,11 +44,10 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
     if paper_resp.pipeline_status != PipelineStatus.COMPLETED:
         st.write(f'Entity Linking not yet completed...')
         st.stop()
-    with open(paper_resp.variants_json_path, 'r') as f:
-        extracted_data = json.load(f)
-        extracted_variants: list[Variant] = VariantExtractionOutput.model_validate(
-            extracted_data
-        ).variants
+    extracted_variant_rows = get_variants(paper_resp.id)
+    extracted_variants: list[Variant] = [
+        Variant.model_validate(r.model_dump()) for r in extracted_variant_rows
+    ]
     with open(paper_resp.harmonized_variants_json_path, 'r') as f:
         harmonized_data = json.load(f)
         harmonized_variants: list[HarmonizedVariant] = (
@@ -321,7 +320,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
 
                 col_dl1.download_button(
                     label='Download Extracted Variant JSON',
-                    data=json.dumps(extracted_data, indent=2),
+                    data=json.dumps({'variants': [v.model_dump() for v in extracted_variants]}, indent=2),
                     file_name='extracted_variants.json',
                     mime='application/json',
                     key=f'{i}-extract-json',

@@ -6,6 +6,7 @@ from pydantic import TypeAdapter
 from lib.core.environment import env
 from lib.misc.pdf.highlight import GrobidAnnotation
 from lib.models import (
+    ExtractedVariantResp,
     GeneResp,
     PaperResp,
     PaperUpdateRequest,
@@ -138,6 +139,12 @@ def update_patient(
     )
     resp.raise_for_status()
     return PatientResp.model_validate(resp.json())
+
+
+def get_variants(paper_id: str) -> list[ExtractedVariantResp]:
+    resp = requests.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/variants')
+    resp.raise_for_status()
+    return TypeAdapter(list[ExtractedVariantResp]).validate_python(resp.json())
 
 
 def clear_highlights(paper_id: str) -> None:

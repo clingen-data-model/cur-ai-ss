@@ -50,6 +50,8 @@ from lib.misc.pdf.paths import (
     pdf_words_json_path,
 )
 from lib.models import (
+    ExtractedVariantDB,
+    ExtractedVariantResp,
     GeneDB,
     GeneResp,
     HighlightRequest,
@@ -258,6 +260,22 @@ def get_pedigree(paper_id: str, session: Session = Depends(get_session)) -> Any:
         session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).one_or_none()
     )
     return pedigree
+
+
+@app.get('/papers/{paper_id}/variants', response_model=list[ExtractedVariantResp])
+def get_variants(paper_id: str, session: Session = Depends(get_session)) -> Any:
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    variants = (
+        session.query(ExtractedVariantDB)
+        .filter(ExtractedVariantDB.paper_id == paper_id)
+        .order_by(ExtractedVariantDB.variant_idx)
+        .all()
+    )
+    return variants
 
 
 @app.patch('/papers/{paper_id}/patients/{patient_idx}', response_model=PatientResp)

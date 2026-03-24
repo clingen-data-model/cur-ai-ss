@@ -1,5 +1,6 @@
 from lib.agents.pedigree_describer_agent import PedigreeExtractionOutput
-from lib.models import PatientDB, PedigreeDB
+from lib.agents.variant_extraction_agent import Variant
+from lib.models import ExtractedVariantDB, PatientDB, PedigreeDB
 from lib.models.patient import Patient
 
 
@@ -25,4 +26,13 @@ def pedigree_to_db(paper_id: str, pedigree: PedigreeExtractionOutput) -> Pedigre
         paper_id=paper_id,
         image_id=pedigree.image_id,
         description=pedigree.description,
+    )
+
+
+def variant_to_db(paper_id: str, variant_idx: int, variant: Variant) -> ExtractedVariantDB:
+    """Convert Variant to ExtractedVariantDB."""
+    return ExtractedVariantDB(
+        paper_id=paper_id,
+        variant_idx=variant_idx,
+        **variant.model_dump(),
     )

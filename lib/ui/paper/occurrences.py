@@ -11,7 +11,7 @@ from lib.agents.patient_variant_linking_agent import (
     TestingMethod,
     Zygosity,
 )
-from lib.agents.variant_extraction_agent import Variant, VariantExtractionOutput
+from lib.agents.variant_extraction_agent import Variant
 from lib.agents.variant_harmonization_agent import (
     HarmonizedVariant,
     VariantHarmonizationOutput,
@@ -21,7 +21,7 @@ from lib.models.patient import (
     Patient,
     PatientExtractionOutput,
 )
-from lib.ui.api import get_patients
+from lib.ui.api import get_patients, get_variants
 from lib.ui.paper.shared import (
     get_gnomad_url,
     render_highlight_controls,
@@ -83,11 +83,10 @@ def render_patient_variant_occurrences_tab() -> None:
     # Load all data sources
     patients: list[PatientResp] = get_patients(paper_resp.id)
 
-    with open(paper_resp.variants_json_path, 'r') as f:
-        extracted_data = json.load(f)
-        extracted_variants: list[Variant] = VariantExtractionOutput.model_validate(
-            extracted_data
-        ).variants
+    extracted_variant_rows = get_variants(paper_resp.id)
+    extracted_variants: list[Variant] = [
+        Variant.model_validate(r.model_dump()) for r in extracted_variant_rows
+    ]
 
     with open(paper_resp.harmonized_variants_json_path, 'r') as f:
         harmonized_data = json.load(f)

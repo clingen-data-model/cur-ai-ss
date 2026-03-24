@@ -12,6 +12,7 @@ from pydantic import (
     model_validator,
 )
 from sqlalchemy import (
+    Boolean,
     Column,
     DateTime,
     ForeignKey,
@@ -222,10 +223,6 @@ class PaperDB(Base):
         return env.evagg_dir / self.id / 'phenotype_linking.json'
 
     @property
-    def variants_json_path(self) -> Path:
-        return env.evagg_dir / self.id / 'variants.json'
-
-    @property
     def harmonized_variants_json_path(self) -> Path:
         return env.evagg_dir / self.id / 'harmonized_variants.json'
 
@@ -245,6 +242,9 @@ class PaperDB(Base):
         back_populates='paper',
         cascade='all, delete-orphan',
         uselist=False,
+    )
+    extracted_variants: Mapped[list['ExtractedVariantDB']] = relationship(
+        'ExtractedVariantDB', back_populates='paper', cascade='all, delete-orphan'
     )
 
 
@@ -290,7 +290,6 @@ class PaperResp(PaperExtractionOutput):
     phenotype_linking_json_path: Path
     enriched_variants_json_path: Path
     harmonized_variants_json_path: Path
-    variants_json_path: Path
     patient_variant_links_json_path: Path
 
     @computed_field  # type: ignore
@@ -392,6 +391,66 @@ class PedigreeDB(Base):
     __table_args__ = (Index('ix_pedigrees_paper_id', 'paper_id'),)
 
 
+class ExtractedVariantDB(Base):
+    __tablename__ = 'extracted_variants'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    paper_id: Mapped[str] = mapped_column(
+        String, ForeignKey('papers.id', ondelete='CASCADE'), nullable=False
+    )
+    variant_idx: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # Core fields
+    gene: Mapped[str] = mapped_column(String, nullable=False)
+    transcript: Mapped[str | None] = mapped_column(String, nullable=True)
+    protein_accession: Mapped[str | None] = mapped_column(String, nullable=True)
+    genomic_accession: Mapped[str | None] = mapped_column(String, nullable=True)
+    lrg_accession: Mapped[str | None] = mapped_column(String, nullable=True)
+    gene_accession: Mapped[str | None] = mapped_column(String, nullable=True)
+    genomic_coordinates: Mapped[str | None] = mapped_column(String, nullable=True)
+    genome_build: Mapped[str | None] = mapped_column(String, nullable=True)
+    rsid: Mapped[str | None] = mapped_column(String, nullable=True)
+    caid: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # Evidence
+    variant_evidence_context: Mapped[str | None] = mapped_column(Text, nullable=True)
+    variant_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # HGVS
+    hgvs_c: Mapped[str | None] = mapped_column(String, nullable=True)
+    hgvs_c_evidence_context: Mapped[str | None] = mapped_column(Text, nullable=True)
+    hgvs_c_evidence_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
+    hgvs_p: Mapped[str | None] = mapped_column(String, nullable=True)
+    hgvs_p_evidence_context: Mapped[str | None] = mapped_column(Text, nullable=True)
+    hgvs_p_evidence_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
+    hgvs_g: Mapped[str | None] = mapped_column(String, nullable=True)
+    hgvs_g_evidence_context: Mapped[str | None] = mapped_column(Text, nullable=True)
+    hgvs_g_evidence_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Variant type
+    variant_type: Mapped[str] = mapped_column(String, nullable=False)
+    variant_type_evidence_context: Mapped[str | None] = mapped_column(Text, nullable=True)
+    variant_type_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Functional evidence
+    functional_evidence: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    functional_evidence_evidence_context: Mapped[str | None] = mapped_column(Text, nullable=True)
+    functional_evidence_reasoning: Mapped[str] = mapped_column(Text, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    paper: Mapped['PaperDB'] = relationship('PaperDB', back_populates='extracted_variants')
+
+    __table_args__ = (
+        UniqueConstraint(
+            'paper_id', 'variant_idx', name='uq_extracted_variants_paper_variant_idx'
+        ),
+        Index('ix_extracted_variants_paper_id', 'paper_id'),
+    )
+
+
 class PatientResp(BaseModel):
     id: int
     paper_id: str
@@ -433,3 +492,37 @@ class PatientUpdateRequest(PatchModel):
 class PedigreeResp(BaseModel):
     image_id: int
     description: str
+
+
+class ExtractedVariantResp(BaseModel):
+    id: int
+    paper_id: str
+    variant_idx: int
+    gene: str
+    transcript: str | None
+    protein_accession: str | None
+    genomic_accession: str | None
+    lrg_accession: str | None
+    gene_accession: str | None
+    genomic_coordinates: str | None
+    genome_build: str | None
+    rsid: str | None
+    caid: str | None
+    variant_evidence_context: str | None
+    variant_reasoning: str | None
+    hgvs_c: str | None
+    hgvs_c_evidence_context: str | None
+    hgvs_c_evidence_reasoning: str | None
+    hgvs_p: str | None
+    hgvs_p_evidence_context: str | None
+    hgvs_p_evidence_reasoning: str | None
+    hgvs_g: str | None
+    hgvs_g_evidence_context: str | None
+    hgvs_g_evidence_reasoning: str | None
+    variant_type: str
+    variant_type_evidence_context: str | None
+    variant_type_reasoning: str | None
+    functional_evidence: bool
+    functional_evidence_evidence_context: str | None
+    functional_evidence_reasoning: str
+    created_at: datetime

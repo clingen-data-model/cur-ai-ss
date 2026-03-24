@@ -27,7 +27,12 @@ from lib.agents.variant_enrichment_agent import (
     VariantEnrichmentOutput,
     enrich_variants_batch,
 )
-from lib.agents.variant_extraction_agent import agent as variant_extraction_agent
+from lib.agents.variant_extraction_agent import (
+    Variant,
+)
+from lib.agents.variant_extraction_agent import (
+    agent as variant_extraction_agent,
+)
 from lib.agents.variant_harmonization_agent import agent as variant_harmonization_agent
 from lib.api.db import session_scope
 from lib.core.environment import env
@@ -35,6 +40,7 @@ from lib.core.logging import setup_logging
 from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import fulltext_md, pdf_image_caption_path, pdf_image_path
 from lib.models import (
+    ExtractedVariantDB,
     PaperDB,
     PatientDB,
     PedigreeDB,
@@ -42,7 +48,7 @@ from lib.models import (
     PhenotypeLinkingOutput,
     PipelineStatus,
 )
-from lib.models.converters import patient_to_db, pedigree_to_db
+from lib.models.converters import patient_to_db, pedigree_to_db, variant_to_db
 from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
 
 LEASE_TIMEOUT_S = 900
@@ -142,8 +148,19 @@ async def parse_patients_task_async(paper_db: PaperDB) -> None:
 
 
 async def harmonize_variants_task_async(paper_db: PaperDB) -> None:
-    with open(paper_db.variants_json_path, 'r') as f:
-        variants_output = json.load(f)
+    with session_scope() as session:
+        rows = (
+            session.query(ExtractedVariantDB)
+            .filter(ExtractedVariantDB.paper_id == paper_db.id)
+            .order_by(ExtractedVariantDB.variant_idx)
+            .all()
+        )
+        variants_output = {
+            'variants': [
+                Variant(**{f: getattr(r, f) for f in Variant.model_fields})
+                for r in rows
+            ]
+        }
 
     result = await Runner.run(
         variant_harmonization_agent,
@@ -161,10 +178,12 @@ async def extract_variants_task_async(paper_id: str, gene_symbol: str) -> None:
         variant_extraction_agent,
         f'Gene Symbol: {gene_symbol}\nPaper (fulltext md): {fulltext_md(paper_id)}',
     )
-    json_response = result.final_output.model_dump_json(indent=2)
-    PaperDB(id=paper_id).variants_json_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(PaperDB(id=paper_id).variants_json_path, 'w') as f:
-        f.write(json_response)
+    with session_scope() as session:
+        session.query(ExtractedVariantDB).filter(
+            ExtractedVariantDB.paper_id == paper_id
+        ).delete()
+        for idx, variant in enumerate(result.final_output.variants, start=1):
+            session.add(variant_to_db(paper_id, idx, variant))
 
 
 async def pedigree_describer_task_async(paper_id: str) -> None:
@@ -195,15 +214,19 @@ async def pedigree_describer_task_async(paper_id: str) -> None:
 
 
 async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
-    with open(paper_db.variants_json_path, 'r') as f:
-        variants_output = json.load(f)
-
+    with session_scope() as session:
+        variant_rows = (
+            session.query(ExtractedVariantDB)
+            .filter(ExtractedVariantDB.paper_id == paper_db.id)
+            .order_by(ExtractedVariantDB.variant_idx)
+            .all()
+        )
     structured_variants = [
         {
-            'variant_id': idx,
-            'variant_quote': variant['variant_evidence_context'],
+            'variant_id': r.variant_idx,
+            'variant_quote': r.variant_evidence_context,
         }
-        for idx, variant in enumerate(variants_output['variants'], start=1)
+        for r in variant_rows
     ]
     with session_scope() as session:
         patient_rows = (
