@@ -190,11 +190,7 @@ async def pedigree_describer_task_async(paper_id: str) -> None:
     # Only insert if both image_id and description are present
     with session_scope() as session:
         session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).delete()
-        if (
-            result.final_output
-            and result.final_output.image_id is not None
-            and result.final_output.description
-        ):
+        if result.final_output:
             session.add(pedigree_to_db(paper_id, result.final_output))
 
 

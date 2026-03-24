@@ -1,3 +1,5 @@
+from typing import Optional
+
 from agents import Agent
 from pydantic import BaseModel
 
@@ -15,6 +17,9 @@ PEDIGREE_EXTRACTION_INSTRUCTIONS = """
 Task Overview
 -------------
 Determine whether any image contains a pedigree diagram.
+
+If NO pedigree exists:
+- Return no output (None).
 
 If a pedigree exists:
 1. Identify the best pedigree image.
@@ -62,7 +67,6 @@ Using the list from Step 1, describe:
 - number of generations
 
 IMPORTANT: Always populate both image_id and description when a pedigree is found.
-If no pedigree exists in the images, indicate this clearly.
 """
 
 
@@ -71,5 +75,5 @@ agent = Agent(
     name='pedigree_describer',
     instructions=PEDIGREE_EXTRACTION_INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
-    output_type=PedigreeExtractionOutput,
+    output_type=Optional[PedigreeExtractionOutput],
 )
