@@ -7,8 +7,8 @@ import requests
 from agents import Agent, function_tool
 from pydantic import BaseModel
 
-from lib.agents.variant_extraction_agent import GenomeBuild, VariantExtractionOutput
 from lib.core.environment import env
+from lib.models.variant import GenomeBuild, VariantExtractionOutput
 
 CLINGEN_ALLELE_REGISTRY_ENDPOINT = 'https://reg.genome.network'
 EUTILS_BASE = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils'

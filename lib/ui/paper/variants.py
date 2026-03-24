@@ -5,15 +5,12 @@ import pandas as pd
 import streamlit as st
 
 from lib.agents.variant_enrichment_agent import EnrichedVariant, VariantEnrichmentOutput
-from lib.agents.variant_extraction_agent import (
-    Variant,
-    VariantType,
-)
 from lib.agents.variant_harmonization_agent import (
     HarmonizedVariant,
     VariantHarmonizationOutput,
 )
-from lib.models import PaperResp, PipelineStatus
+from lib.models import ExtractedVariantResp, PaperResp, PipelineStatus
+from lib.models.variant import VariantType
 from lib.ui.api import get_variants
 from lib.ui.paper.shared import (
     get_clinvar_url,
@@ -45,9 +42,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
         st.write(f'Entity Linking not yet completed...')
         st.stop()
     extracted_variant_rows = get_variants(paper_resp.id)
-    extracted_variants: list[Variant] = [
-        Variant.model_validate(r.model_dump()) for r in extracted_variant_rows
-    ]
+    extracted_variants: list[ExtractedVariantResp] = extracted_variant_rows
     with open(paper_resp.harmonized_variants_json_path, 'r') as f:
         harmonized_data = json.load(f)
         harmonized_variants: list[HarmonizedVariant] = (
@@ -93,7 +88,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                 or harmonized_variant.gnomad_style_coordinates
                 or harmonized_variant.rsid
                 or harmonized_variant.hgvs_p
-                or extracted_variant.variant_evidence_context
+                or extracted_variant.variant_evidence.quote
                 or f'Variant {i}',
                 expanded=(i == selected_variant_id),
             ):
@@ -126,8 +121,8 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                         render_evidence_controls(
                             paper_id=paper_resp.id,
                             label='📋 Evidence & Reasoning',
-                            quote=extracted_variant.variant_evidence_context,
-                            reasoning=extracted_variant.variant_reasoning,
+                            quote=extracted_variant.variant_evidence.quote,
+                            reasoning=extracted_variant.variant_evidence.reasoning,
                             color_key=f'{i}-var-color',
                             button_key_prefix=f'{i}-var',
                         )
@@ -155,7 +150,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                             'Variant Type',
                             [vt.value for vt in VariantType],
                             index=[vt.value for vt in VariantType].index(
-                                extracted_variant.variant_type.value
+                                extracted_variant.variant_type
                             )
                             if extracted_variant.variant_type
                             else 0,
@@ -168,8 +163,8 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                     render_evidence_controls(
                         paper_id=paper_resp.id,
                         label='📋 Evidence & Reasoning',
-                        quote=extracted_variant.variant_type_evidence_context,
-                        reasoning=extracted_variant.variant_type_reasoning,
+                        quote=extracted_variant.variant_type_evidence.quote,
+                        reasoning=extracted_variant.variant_type_evidence.reasoning,
                         color_key=f'{i}-vtype-color',
                         button_key_prefix=f'{i}-vtype',
                     )
@@ -190,8 +185,8 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                     render_evidence_controls(
                         paper_id=paper_resp.id,
                         label='📋 Evidence & Reasoning',
-                        quote=extracted_variant.functional_evidence_evidence_context,
-                        reasoning=extracted_variant.functional_evidence_reasoning,
+                        quote=extracted_variant.functional_evidence_evidence.quote,
+                        reasoning=extracted_variant.functional_evidence_evidence.reasoning,
                         color_key=f'{i}-func-ev-color',
                         button_key_prefix=f'{i}-func-ev',
                     )
@@ -320,7 +315,10 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
 
                 col_dl1.download_button(
                     label='Download Extracted Variant JSON',
-                    data=json.dumps({'variants': [v.model_dump() for v in extracted_variants]}, indent=2),
+                    data=json.dumps(
+                        {'variants': [v.model_dump() for v in extracted_variants]},
+                        indent=2,
+                    ),
                     file_name='extracted_variants.json',
                     mime='application/json',
                     key=f'{i}-extract-json',

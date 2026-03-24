@@ -8,8 +8,9 @@ from lib.core.environment import env
 
 # --- Output schema ---
 class PedigreeExtractionOutput(BaseModel):
-    image_id: int
-    description: str
+    found: bool
+    image_id: Optional[int] = None
+    description: Optional[str] = None
 
 
 # --- Agent instructions ---
@@ -19,15 +20,17 @@ Task Overview
 Determine whether any image contains a pedigree diagram.
 
 If NO pedigree exists:
-- Return no output (None).
+- Set found=False, image_id=None, description=None.
 
 If a pedigree exists:
+- Set found=True and proceed:
+
 1. Identify the best pedigree image.
 2. Enumerate all individuals.
 3. Verify completeness.
 4. Write the pedigree description.
 
-Step 1 — Identify all individuals
+Step 1 — Identify the best pedigree image and all individuals
 ---------------------------------
 Scan the pedigree and list EVERY individual visible.
 
@@ -66,7 +69,7 @@ Using the list from Step 1, describe:
 - the proband if present
 - number of generations
 
-IMPORTANT: Always populate both image_id and description when a pedigree is found.
+IMPORTANT: Always set found=True and populate both image_id and description when a pedigree is found. Set found=False with None values when no pedigree is found.
 """
 
 
@@ -75,5 +78,5 @@ agent = Agent(
     name='pedigree_describer',
     instructions=PEDIGREE_EXTRACTION_INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
-    output_type=Optional[PedigreeExtractionOutput],
+    output_type=PedigreeExtractionOutput,
 )

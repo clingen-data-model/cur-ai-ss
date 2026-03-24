@@ -11,12 +11,11 @@ from lib.agents.patient_variant_linking_agent import (
     TestingMethod,
     Zygosity,
 )
-from lib.agents.variant_extraction_agent import Variant
 from lib.agents.variant_harmonization_agent import (
     HarmonizedVariant,
     VariantHarmonizationOutput,
 )
-from lib.models import PaperResp, PatientResp, PipelineStatus
+from lib.models import ExtractedVariantResp, PaperResp, PatientResp, PipelineStatus
 from lib.models.patient import (
     Patient,
     PatientExtractionOutput,
@@ -84,9 +83,7 @@ def render_patient_variant_occurrences_tab() -> None:
     patients: list[PatientResp] = get_patients(paper_resp.id)
 
     extracted_variant_rows = get_variants(paper_resp.id)
-    extracted_variants: list[Variant] = [
-        Variant.model_validate(r.model_dump()) for r in extracted_variant_rows
-    ]
+    extracted_variants: list[ExtractedVariantResp] = extracted_variant_rows
 
     with open(paper_resp.harmonized_variants_json_path, 'r') as f:
         harmonized_data = json.load(f)
@@ -114,7 +111,7 @@ def render_patient_variant_occurrences_tab() -> None:
             or harmonized_variant.gnomad_style_coordinates
             or harmonized_variant.rsid
             or harmonized_variant.hgvs_p
-            or extracted_variant.variant_evidence_context
+            or extracted_variant.variant_evidence.quote
             or f'Variant {link.variant_id}'
         )
 

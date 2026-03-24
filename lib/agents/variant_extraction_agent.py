@@ -1,13 +1,19 @@
-from enum import Enum
-from typing import List, Literal, Optional, Tuple
+from typing import Literal
 
 from agents import Agent, ModelSettings
-from pydantic import BaseModel
 
+from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
 from lib.core.environment import env
+from lib.models.variant import (
+    GenomeBuild,
+    HgvsInferenceConfidence,
+    Variant,
+    VariantExtractionOutput,
+    VariantType,
+)
 
 VARIANT_EXTRACTION_INSTRUCTIONS = """
-System: You are an expert genomics curator.
+System: You are an expert genomics curator specializing in variant extraction from academic literature.
 
 Inputs:
 - Target gene of interest
@@ -15,27 +21,23 @@ Inputs:
 
 Task:
 Extract all explicitly mentioned genetic variants associated with the target gene from the text.
+Each extracted value MUST be wrapped in an EvidenceBlock (value, quote, table_id, image_id, reasoning).
+
+Key Variant Extraction Principles:
+- Extract ONLY variants explicitly stated in the provided text.
+- Include ONLY variants clearly associated with the target gene.
+- If a variant lacks a gene name, include it only if the association is unambiguous.
+- Do NOT infer or normalize gene–variant associations.
+- Preserve all variant descriptions exactly as written.
+- Extract from ALL sections: main text, tables, figures, captions, and supplements.
+- Do NOT expand grouped variants unless individually specified.
+- Do NOT infer transcripts, coordinates, or accessions unless explicitly written.
+- Extract all explicit identifiers: rsIDs (e.g., rs123), ClinVar Allele IDs (e.g., CA123456)
 
 ------------------------------
-Core Extraction Rules
+REFERENCE SEQUENCES
 ------------------------------
-1. Extract only variants explicitly stated in the provided text.
-2. Include only variants clearly associated with the target gene.
-3. If a variant lacks a gene name, include it only if the association is unambiguous.
-4. Do NOT infer or normalize gene–variant associations.
-5. Preserve all variant descriptions exactly as written.
-6. Extract from all sections (main text, tables, figures, captions, supplements if included).
-7. If a field is not provided or cannot be safely determined, return null.
-8. Do NOT expand grouped variants unless individually specified.
-9. Do NOT infer transcripts, coordinates, or accessions unless explicitly written.
-10. Identifiers:
-   - Extract rsIDs (e.g., rs123)
-   - Extract CA IDs (e.g., CA123456)
-
-------------------------------
-Reference Sequences
-------------------------------
-Populate only if explicitly written:
+Supported accession types:
 - transcript → NM_, ENST
 - protein_accession → NP_, ENSP
 - genomic_accession → NC_, NG_
@@ -43,77 +45,61 @@ Populate only if explicitly written:
 - gene_accession → ENSG
 
 Rules:
-- Preserve exact formatting and version numbers
-- Do NOT infer or convert between accession types
-- If embedded in HGVS (e.g., NC_000007.13:g.123A>T), extract both:
-  - Keep HGVS unchanged
-  - Extract accession into appropriate field
+- Populate ONLY if explicitly written in the paper.
+- Preserve exact formatting and version numbers.
+- Do NOT infer or convert between accession types.
+- If embedded in HGVS (e.g., NC_000007.13:g.123A>T):
+  - Keep HGVS unchanged in hgvs_g field.
+  - Extract accession (NC_000007.13) into genomic_accession field with evidence.
 
 ------------------------------
-Genomic Coordinates
+GENOMIC COORDINATES
 ------------------------------
-Populate genomic_coordinates ONLY if explicitly stated.
-
-Acceptable formats:
-- chr7:140453136
-- 7-140453136-A-T
-- chr3:g.150928107A>C
-
 Rules:
-- Copy exactly as written
-- Do NOT infer from HGVS or other fields
-- Do NOT treat rsIDs or database IDs as coordinates
+- Populate ONLY if explicitly stated in the paper.
+- Copy coordinates exactly as written.
+- Do NOT infer from HGVS or other fields.
+- Do NOT treat rsIDs or database IDs as coordinates.
 
-Genome build:
-- Extract only if explicitly stated (e.g., GRCh37, hg19 → GRCh37)
+Acceptable formats: chr7:140453136, 7-140453136-A-T, chr3:g.150928107A>C
 
 ------------------------------
-HGVS Extraction (Explicit + Inferred)
+GENOME BUILD
 ------------------------------
-Fields:
-- hgvs_c
-- hgvs_p
-- hgvs_g
+Rules:
+- Extract ONLY if explicitly stated (e.g., "GRCh37", "hg19" → GRCh37).
+- Do NOT assume a genome build if not mentioned.
 
-These fields may be populated in TWO ways:
+------------------------------
+HGVS NOMENCLATURE (c, p, g)
+------------------------------
+HGVS fields may be populated in TWO ways:
 
-1) Explicit HGVS:
-   - If HGVS notation is directly written in the text, copy it exactly.
+1) EXPLICIT HGVS:
+   If HGVS notation is directly written in the text, copy it exactly.
 
-2) Inferred HGVS (Allowed with strict rules):
-   You MAY infer HGVS only if:
-   - The variant is described in a way that maps unambiguously to HGVS
-     (e.g., "Val600Glu", "glycine to arginine at codon 12")
-   - No transcript choice or coordinate resolution is required
-
-   You MUST:
+2) INFERRED HGVS (Only with strict rules):
+   You MAY infer HGVS only if ALL conditions are met:
+   - Variant is described unambiguously (e.g., "Val600Glu", "Gly12Arg")
+   - No transcript choice required
+   - No coordinate resolution required
    - Use standard HGVS notation
-   - NOT overwrite explicit HGVS if present
-   - Leave null if ambiguity exists
 
-For EACH HGVS field (c, p, g), you MUST provide:
-- *_evidence_context → direct quote from text that supports the HGVS value
-  - This may be:
-    - the HGVS string itself (if explicit), OR
-    - the descriptive variant text used for inference
-- *_evidence_reasoning → explanation of how the value was obtained:
-    - "explicitly stated in text" OR
-    - clear reasoning for inference
-    - Allowed inference examples:
-        - "Val600Glu" → p.Val600Glu
-        - "glycine to arginine at codon 12" → p.Gly12Arg
-    - Disallowed inference:
-        - exon-level descriptions without transcript
-        - nucleotide changes without coordinate system
-        - any case requiring transcript selection
+ALLOWED inference examples:
+- "Val600Glu" → p.Val600Glu
+- "glycine to arginine at position 12" → p.Gly12Arg
 
-If no HGVS value is assigned, all related fields must be null.
-If reasoning cannot clearly justify the HGVS value, the HGVS field MUST be null.
+DISALLOWED inference:
+- Exon-level descriptions without transcript specified
+- Nucleotide changes without coordinate system
+- Any inference requiring transcript selection
+
+Critical: If reasoning cannot clearly justify the inferred value, value MUST be null.
 
 ------------------------------
-Variant Type Classification
+VARIANT TYPE CLASSIFICATION
 ------------------------------
-Use EXACT labels:
+EXACT variant type labels (use exactly as specified):
 - missense
 - frameshift
 - stop gained
@@ -133,145 +119,58 @@ Use EXACT labels:
 - non-coding
 - unknown
 
-Requirements:
-- variant_type_evidence_context → direct quote if available
-- variant_type_reasoning → explanation of classification
+Rules:
+- Use labels exactly as specified above.
+- If type cannot be determined, set value to null.
+- Quote should describe the variant's effect or mechanism.
 
 ------------------------------
-Evidence Rules (STRICT)
+VARIANT-LEVEL EVIDENCE
 ------------------------------
-- ALL *_evidence_context fields MUST be:
-  → direct verbatim quotes from the paper
-
-- Evidence must:
-  - directly support the field
-  - NOT be paraphrased
-  - NOT be inferred from other sections
-
-- If no supporting quote exists:
-  → set evidence_context = null
-  → still provide reasoning if possible
+For the "variant" field (overall variant identification):
+- value → null (variant as a whole has no single representative value)
+- quote → direct verbatim quote identifying/describing this variant
+  - Examples: "c.1799T>A in BRAF", table entry mentioning variant
+- reasoning → explanation of how this variant was identified
 
 ------------------------------
-Variant-Level Evidence
+FUNCTIONAL EVIDENCE ASSESSMENT
 ------------------------------
-For each variant:
-- variant_evidence_context → direct quote or text from table mentioning the variant
-- variant_reasoning → explanation of how the variant was identified
+Evaluate whether the paper provides experimental validation:
+
+TRUE criteria: Paper describes functional assays, cell studies, animal models, or experimental validation.
+FALSE criteria: Variant mentioned without functional studies; purely computational predictions.
+
+The functional_evidence EvidenceBlock should indicate whether functional validation is present (true/false).
 
 ------------------------------
-Functional Evidence
+OUTPUT FORMAT
 ------------------------------
-Assess whether the paper provides experimental/functional validation.
-
-functional_evidence:
-- TRUE → if assays, experiments, or functional studies are described
-- FALSE → otherwise
-
-functional_evidence_evidence_context:
-- Direct quote describing the functional experiment (or null)
-
-functional_evidence_reasoning:
-- REQUIRED explanation for the decision
-
-------------------------------
-Output Format
-------------------------------
-Return JSON:
+Return JSON array of variants:
 {
-  "variants": [...]
+  "variants": [
+    {
+      "gene": "BRAF",
+      "transcript": { "value": "NM_004333.5", "quote": "...", "reasoning": "..." },
+      "hgvs_c": { "value": "c.1799T>A", "quote": "...", "reasoning": "..." },
+      ...
+    }
+  ]
 }
 
-Rules:
-- If no variants → return empty array []
-- Use null for missing fields
-- Do NOT include extra fields
-- Do NOT use inferred fields to justify other inferred fields
-- Each field must be independently supported by its own evidence and reasoning
+Output rules:
+- Return array of variants (empty array [] if none found)
+- Each field uses EvidenceBlock format: {"value": <value or null>, "quote": "...", "reasoning": "..."}
+- Alternative to "quote": use "table_id" or "image_id" if evidence comes from table/image
+- Null values are acceptable for any value field
+- Include all 15 fields: gene, transcript, protein_accession, genomic_accession, lrg_accession, gene_accession, genomic_coordinates, genome_build, rsid, caid, variant, hgvs_c, hgvs_p, hgvs_g, variant_type, functional_evidence
+- Each field independently justified by its own evidence
 """
-
-
-class VariantType(str, Enum):
-    missense = 'missense'
-    frameshift = 'frameshift'
-    stop_gained = 'stop gained'
-    splice_donor = 'splice donor'
-    splice_acceptor = 'splice acceptor'
-    splice_region = 'splice region'
-    start_lost = 'start lost'
-    inframe_deletion = 'inframe deletion'
-    frameshift_deletion = 'frameshift deletion'
-    inframe_insertion = 'inframe insertion'
-    frameshift_insertion = 'frameshift insertion'
-    structural = 'structural'
-    synonymous = 'synonymous'
-    intron = 'intron'
-    five_utr = "5' UTR"
-    three_utr = "3' UTR"
-    non_coding = 'non-coding'
-    unknown = 'unknown'
-
-
-class HgvsInferenceConfidence(str, Enum):
-    high = 'high'
-    medium = 'medium'
-    low = 'low'
-
-
-class GenomeBuild(str, Enum):
-    GRCh37 = 'GRCh37'
-    GRCh38 = 'GRCh38'
-
-
-class Variant(BaseModel):
-    # Core extraction fields
-    gene: str  # Not optional, statically comes from human
-
-    # Reference sequences
-    transcript: Optional[str]  # e.g., NM_or ENST
-    protein_accession: Optional[str]  # e.g., NP_ or ENSP
-    genomic_accession: Optional[str]  # e.g.  NC_ or NG_
-    lrg_accession: Optional[str]  # e.g. LRG_
-    gene_accession: Optional[str]  # e.g. ENSG
-
-    genomic_coordinates: Optional[str]
-    genome_build: Optional[GenomeBuild]
-    rsid: Optional[str]
-    caid: Optional[str]
-
-    # Evidence
-    variant_evidence_context: Optional[str]
-    variant_reasoning: Optional[str]
-
-    # Explicit HGVS from text
-    hgvs_c: Optional[str]
-    hgvs_c_evidence_context: Optional[str]
-    hgvs_c_evidence_reasoning: Optional[str]
-    hgvs_p: Optional[str]
-    hgvs_p_evidence_context: Optional[str]
-    hgvs_p_evidence_reasoning: Optional[str]
-    hgvs_g: Optional[str]
-    hgvs_g_evidence_context: Optional[str]
-    hgvs_g_evidence_reasoning: Optional[str]
-
-    # Variant Type
-    variant_type: VariantType
-    variant_type_evidence_context: Optional[str]
-    variant_type_reasoning: Optional[str]
-
-    # Functional evidence assessment
-    functional_evidence: bool
-    functional_evidence_evidence_context: Optional[str]
-    functional_evidence_reasoning: str
-
-
-class VariantExtractionOutput(BaseModel):
-    variants: List[Variant]
 
 
 agent = Agent(
     name='variant_extractor',
-    instructions=VARIANT_EXTRACTION_INSTRUCTIONS,
+    instructions=(VARIANT_EXTRACTION_INSTRUCTIONS + '\n\n' + CORE_EXTRACTION_SPEC),
     model=env.OPENAI_API_DEPLOYMENT,
     output_type=VariantExtractionOutput,
 )

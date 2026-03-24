@@ -65,6 +65,7 @@ from lib.models.phenotype import (
     PhenotypeLinkingEntry,
     PhenotypeLinkingOutput,
 )
+from lib.models.variant import ExtractedVariantResp
 
 Color = Literal[
     'red', 'orange', 'yellow', 'blue', 'green', 'violet', 'gray', 'grey', 'primary'
@@ -412,36 +413,41 @@ class ExtractedVariantDB(Base):
     rsid: Mapped[str | None] = mapped_column(String, nullable=True)
     caid: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    # Evidence
-    variant_evidence_context: Mapped[str | None] = mapped_column(Text, nullable=True)
-    variant_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
-
     # HGVS
     hgvs_c: Mapped[str | None] = mapped_column(String, nullable=True)
-    hgvs_c_evidence_context: Mapped[str | None] = mapped_column(Text, nullable=True)
-    hgvs_c_evidence_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
     hgvs_p: Mapped[str | None] = mapped_column(String, nullable=True)
-    hgvs_p_evidence_context: Mapped[str | None] = mapped_column(Text, nullable=True)
-    hgvs_p_evidence_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
     hgvs_g: Mapped[str | None] = mapped_column(String, nullable=True)
-    hgvs_g_evidence_context: Mapped[str | None] = mapped_column(Text, nullable=True)
-    hgvs_g_evidence_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Variant type
     variant_type: Mapped[str] = mapped_column(String, nullable=False)
-    variant_type_evidence_context: Mapped[str | None] = mapped_column(Text, nullable=True)
-    variant_type_reasoning: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Functional evidence
     functional_evidence: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    functional_evidence_evidence_context: Mapped[str | None] = mapped_column(Text, nullable=True)
-    functional_evidence_reasoning: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # Evidence blocks (static, immutable)
+    transcript_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    protein_accession_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    genomic_accession_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    lrg_accession_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    gene_accession_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    genomic_coordinates_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    genome_build_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    rsid_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    caid_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    variant_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    hgvs_c_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    hgvs_p_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    hgvs_g_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    variant_type_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    functional_evidence_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
-    paper: Mapped['PaperDB'] = relationship('PaperDB', back_populates='extracted_variants')
+    paper: Mapped['PaperDB'] = relationship(
+        'PaperDB', back_populates='extracted_variants'
+    )
 
     __table_args__ = (
         UniqueConstraint(
@@ -492,37 +498,3 @@ class PatientUpdateRequest(PatchModel):
 class PedigreeResp(BaseModel):
     image_id: int
     description: str
-
-
-class ExtractedVariantResp(BaseModel):
-    id: int
-    paper_id: str
-    variant_idx: int
-    gene: str
-    transcript: str | None
-    protein_accession: str | None
-    genomic_accession: str | None
-    lrg_accession: str | None
-    gene_accession: str | None
-    genomic_coordinates: str | None
-    genome_build: str | None
-    rsid: str | None
-    caid: str | None
-    variant_evidence_context: str | None
-    variant_reasoning: str | None
-    hgvs_c: str | None
-    hgvs_c_evidence_context: str | None
-    hgvs_c_evidence_reasoning: str | None
-    hgvs_p: str | None
-    hgvs_p_evidence_context: str | None
-    hgvs_p_evidence_reasoning: str | None
-    hgvs_g: str | None
-    hgvs_g_evidence_context: str | None
-    hgvs_g_evidence_reasoning: str | None
-    variant_type: str
-    variant_type_evidence_context: str | None
-    variant_type_reasoning: str | None
-    functional_evidence: bool
-    functional_evidence_evidence_context: str | None
-    functional_evidence_reasoning: str
-    created_at: datetime

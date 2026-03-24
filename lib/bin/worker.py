@@ -28,9 +28,6 @@ from lib.agents.variant_enrichment_agent import (
     enrich_variants_batch,
 )
 from lib.agents.variant_extraction_agent import (
-    Variant,
-)
-from lib.agents.variant_extraction_agent import (
     agent as variant_extraction_agent,
 )
 from lib.agents.variant_harmonization_agent import agent as variant_harmonization_agent
@@ -49,6 +46,7 @@ from lib.models import (
     PipelineStatus,
 )
 from lib.models.converters import patient_to_db, pedigree_to_db, variant_to_db
+from lib.models.variant import Variant
 from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
 
 LEASE_TIMEOUT_S = 900
@@ -206,10 +204,10 @@ async def pedigree_describer_task_async(paper_id: str) -> None:
         combined_text,
     )
     # Persist pedigree to DB (idempotent: delete-then-insert)
-    # Only insert if both image_id and description are present
+    # Only insert if pedigree was found
     with session_scope() as session:
         session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).delete()
-        if result.final_output:
+        if result.final_output and result.final_output.found:
             session.add(pedigree_to_db(paper_id, result.final_output))
 
 
@@ -224,7 +222,7 @@ async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
     structured_variants = [
         {
             'variant_id': r.variant_idx,
-            'variant_quote': r.variant_evidence_context,
+            'variant_quote': r.variant_evidence['quote'],
         }
         for r in variant_rows
     ]
