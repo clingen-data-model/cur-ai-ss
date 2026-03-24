@@ -5,13 +5,6 @@ import pandas as pd
 import requests
 import streamlit as st
 
-from lib.agents.patient_extraction_agent import (
-    AffectedStatus,
-    CountryCode,
-    ProbandStatus,
-    RaceEthnicity,
-    SexAtBirth,
-)
 from lib.core.environment import env
 from lib.misc.pdf.paths import pdf_image_path
 from lib.models import (
@@ -23,8 +16,16 @@ from lib.models import (
     PhenotypeLinkingOutput,
     PipelineStatus,
 )
+from lib.models.patient import (
+    AffectedStatus,
+    CountryCode,
+    ProbandStatus,
+    RaceEthnicity,
+    SexAtBirth,
+)
 from lib.ui.api import (
     get_patients,
+    get_pedigree,
     grobid_annotations,
     update_patient,
 )
@@ -58,8 +59,8 @@ def render_patient(
             render_evidence_controls(
                 paper_resp.id,
                 label='Patient Identifier Evidence',
-                evidence_context=patient.identifier_evidence_context,
-                reasoning=patient.identifier_reasoning,
+                quote=patient.identifier_evidence.quote,
+                reasoning=patient.identifier_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-pi-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-pi-evidence',
             )
@@ -86,8 +87,8 @@ def render_patient(
             render_evidence_controls(
                 paper_resp.id,
                 label='Proband Status Evidence',
-                evidence_context=patient.proband_status_evidence_context,
-                reasoning=patient.proband_status_reasoning,
+                quote=patient.proband_status_evidence.quote,
+                reasoning=patient.proband_status_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-ps-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-ps-evidence',
             )
@@ -114,8 +115,8 @@ def render_patient(
             render_evidence_controls(
                 paper_resp.id,
                 label='Affected Status Evidence',
-                evidence_context=patient.affected_status_evidence_context,
-                reasoning=patient.affected_status_reasoning,
+                quote=patient.affected_status_evidence.quote,
+                reasoning=patient.affected_status_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-as-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-as-evidence',
             )
@@ -140,8 +141,8 @@ def render_patient(
             render_evidence_controls(
                 paper_resp.id,
                 label='Sex At Birth Evidence',
-                evidence_context=patient.sex_evidence_context,
-                reasoning=patient.sex_reasoning,
+                quote=patient.sex_evidence.quote,
+                reasoning=patient.sex_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-sex-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-sex-evidence',
             )
@@ -149,9 +150,11 @@ def render_patient(
         # --- Ages
         col1, col2 = st.columns(2)
         with col1:
-            age_diagnosis = st.text_input(
+            age_diagnosis = st.number_input(
                 'Age at Diagnosis',
-                patient.age_diagnosis or '',
+                value=patient.age_diagnosis,
+                min_value=0,
+                step=1,
                 key=f'{key_prefix}-age-diagnosis',
             )
         with col2:
@@ -159,16 +162,18 @@ def render_patient(
             render_evidence_controls(
                 paper_resp.id,
                 label='Age at Diagnosis Evidence',
-                evidence_context=patient.age_diagnosis_evidence_context,
-                reasoning=patient.age_diagnosis_reasoning,
+                quote=patient.age_diagnosis_evidence.quote,
+                reasoning=patient.age_diagnosis_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-agediag-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-agediag-evidence',
             )
         col1, col2 = st.columns(2)
         with col1:
-            age_report = st.text_input(
+            age_report = st.number_input(
                 'Age at Report',
-                patient.age_report or '',
+                value=patient.age_report,
+                min_value=0,
+                step=1,
                 key=f'{key_prefix}-age-report',
             )
         with col2:
@@ -176,16 +181,18 @@ def render_patient(
             render_evidence_controls(
                 paper_resp.id,
                 label='Age at Report Evidence',
-                evidence_context=patient.age_report_evidence_context,
-                reasoning=patient.age_report_reasoning,
+                quote=patient.age_report_evidence.quote,
+                reasoning=patient.age_report_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-agereport-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-agereport-evidence',
             )
         col1, col2 = st.columns(2)
         with col1:
-            age_death = st.text_input(
+            age_death = st.number_input(
                 'Age at Death',
-                patient.age_death or '',
+                value=patient.age_death,
+                min_value=0,
+                step=1,
                 key=f'{key_prefix}-age-death',
             )
         with col2:
@@ -193,8 +200,8 @@ def render_patient(
             render_evidence_controls(
                 paper_resp.id,
                 label='Age at Death Evidence',
-                evidence_context=patient.age_death_evidence_context,
-                reasoning=patient.age_death_reasoning,
+                quote=patient.age_death_evidence.quote,
+                reasoning=patient.age_death_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-agedeath-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-agedeath-evidence',
             )
@@ -221,8 +228,8 @@ def render_patient(
             render_evidence_controls(
                 paper_resp.id,
                 label='Country of Origin Evidence',
-                evidence_context=patient.country_of_origin_evidence_context,
-                reasoning=patient.country_of_origin_reasoning,
+                quote=patient.country_of_origin_evidence.quote,
+                reasoning=patient.country_of_origin_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-country-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-country-evidence',
             )
@@ -248,16 +255,19 @@ def render_patient(
             render_evidence_controls(
                 paper_resp.id,
                 label='Race/Ethnicity Evidence',
-                evidence_context=patient.race_ethnicity_evidence_context,
-                reasoning=patient.race_ethnicity_reasoning,
+                quote=patient.race_ethnicity_evidence.quote,
+                reasoning=patient.race_ethnicity_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-race-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-race-evidence',
             )
 
         # --- Save edits: only include changed fields so exclude_unset works
-        # Fields which can be initially empty, or later cleared from nonempty to empty,
-        # are mapped to None rather than empty string. (empty UI text fields are '')
-        changes: dict[str, str | None] = {}
+        # Age fields are numeric (int or None). Convert 0 to None for empty values.
+        age_diagnosis_val = age_diagnosis if age_diagnosis else None
+        age_report_val = age_report if age_report else None
+        age_death_val = age_death if age_death else None
+
+        changes: dict[str, str | int | None] = {}
         if identifier != patient.identifier:
             changes['identifier'] = identifier
         if proband_status != patient.proband_status:
@@ -266,17 +276,17 @@ def render_patient(
             changes['affected_status'] = affected_status.value
         if sex != patient.sex:
             changes['sex'] = sex.value
-        if (age_diagnosis or None) != patient.age_diagnosis:
-            changes['age_diagnosis'] = age_diagnosis or None
-        if (age_report or None) != patient.age_report:
-            changes['age_report'] = age_report or None
-        if (age_death or None) != patient.age_death:
-            changes['age_death'] = age_death or None
+        if age_diagnosis_val != patient.age_diagnosis:
+            changes['age_diagnosis'] = age_diagnosis_val
+        if age_report_val != patient.age_report:
+            changes['age_report'] = age_report_val
+        if age_death_val != patient.age_death:
+            changes['age_death'] = age_death_val
         if country_of_origin != patient.country_of_origin:
             changes['country_of_origin'] = country_of_origin.value
         if race_ethnicity != patient.race_ethnicity:
             changes['race_ethnicity'] = race_ethnicity.value
-        update_request = PatientUpdateRequest(**changes)
+        update_request = PatientUpdateRequest(**changes)  # type: ignore[arg-type]
 
         if changes:
             try:
@@ -512,8 +522,7 @@ def render_patients_tab(selected_patient_idx: int | None) -> None:
     phenotypes = PhenotypeLinkingOutput.model_validate(phenotype_data).phenotypes
 
     # Load pedigree description
-    with open(paper_resp.pedigree_descriptions_json_path, 'r') as f:
-        pedigree_description = json.load(f)
+    pedigree_description = get_pedigree(paper_resp.id)
 
     # -----------------------------
     # Display Patients
@@ -603,16 +612,13 @@ def render_patients_tab(selected_patient_idx: int | None) -> None:
                 phenotypes=phenotypes,
             )
     with pedigree_image_tab:
-        if (
-            not pedigree_description['description']
-            or not pedigree_description['image_id']
-        ):
+        if not pedigree_description:
             st.info('No pedigree image available')
         else:
             col1, col2, col3 = st.columns([1, 3, 1])
             with col2:
                 st.image(
-                    f'{env.PROTOCOL}{env.API_ENDPOINT}{pdf_image_path(paper_resp.id, int(pedigree_description["image_id"]))}',
+                    f'{env.PROTOCOL}{env.API_ENDPOINT}{pdf_image_path(paper_resp.id, pedigree_description.image_id)}',
                     width='content',
                 )
-                st.write(pedigree_description['description'])
+                st.write(pedigree_description.description)

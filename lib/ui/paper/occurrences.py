@@ -3,10 +3,6 @@ import json
 import pandas as pd
 import streamlit as st
 
-from lib.agents.patient_extraction_agent import (
-    PatientInfo,
-    PatientInfoExtractionOutput,
-)
 from lib.agents.patient_variant_linking_agent import (
     EvidenceBlock,
     Inheritance,
@@ -21,6 +17,10 @@ from lib.agents.variant_harmonization_agent import (
     VariantHarmonizationOutput,
 )
 from lib.models import PaperResp, PatientResp, PipelineStatus
+from lib.models.patient import (
+    Patient,
+    PatientExtractionOutput,
+)
 from lib.ui.api import get_patients
 from lib.ui.paper.shared import (
     get_gnomad_url,
@@ -36,8 +36,8 @@ def _render_evidence_block(
 
     # Display evidence sources
     evidence_sources = []
-    if evidence_block.evidence_context:
-        evidence_sources.append(('Text Evidence', evidence_block.evidence_context))
+    if evidence_block.quote:
+        evidence_sources.append(('Text Evidence', evidence_block.quote))
     if evidence_block.table_id is not None:
         evidence_sources.append(('Table', f'Table #{evidence_block.table_id}'))
     if evidence_block.image_id is not None:
@@ -59,9 +59,7 @@ def _render_evidence_block(
             ):
                 render_highlight_controls(
                     paper_id,
-                    [evidence_block.evidence_context]
-                    if evidence_block.evidence_context
-                    else [],
+                    [evidence_block.quote] if evidence_block.quote else [],
                     color_key=f'{paper_id}-{block_id}-color-evidence',
                     button_key_prefix=f'{paper_id}-{block_id}-evidence',
                     image_ids=[evidence_block.image_id]

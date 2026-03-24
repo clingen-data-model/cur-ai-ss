@@ -169,7 +169,7 @@ def render_highlight_controls(
 def render_evidence_controls(
     paper_id: str,
     label: str,
-    evidence_context: str | None,
+    quote: str | None,
     reasoning: str | None,
     color_key: str,
     button_key_prefix: str,
@@ -178,15 +178,13 @@ def render_evidence_controls(
     with st.container(
         horizontal=True, vertical_alignment='center', horizontal_alignment='right'
     ):
-        with st.popover(
-            label, type='tertiary', disabled=not evidence_context and not reasoning
-        ):
-            st.markdown('**Evidence**: ' + (evidence_context or ''))
+        with st.popover(label, type='tertiary', disabled=not quote and not reasoning):
+            st.markdown('**Evidence**: ' + (quote or ''))
             st.markdown('**Reasoning**: ' + (reasoning or ''))
         render_highlight_controls(
             paper_id,
-            [evidence_context] if evidence_context else [],
+            [quote] if quote else [],
             color_key,
             button_key_prefix,
-            disabled=not evidence_context,
+            disabled=not quote,
         )

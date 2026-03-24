@@ -1,5 +1,3 @@
-from typing import Optional
-
 from agents import Agent
 from pydantic import BaseModel
 
@@ -8,8 +6,8 @@ from lib.core.environment import env
 
 # --- Output schema ---
 class PedigreeExtractionOutput(BaseModel):
-    image_id: Optional[int]
-    description: Optional[str]
+    image_id: int
+    description: str
 
 
 # --- Agent instructions ---
@@ -63,9 +61,8 @@ Using the list from Step 1, describe:
 - the proband if present
 - number of generations
 
-If no pedigree exists:
-- image_id -> null
-- description -> null
+IMPORTANT: Always populate both image_id and description when a pedigree is found.
+If no pedigree exists in the images, indicate this clearly.
 """
 
 

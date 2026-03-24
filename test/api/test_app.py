@@ -306,6 +306,33 @@ def test_get_patients_returns_ordered_by_position(client, db_session, seeded_pap
         country_of_origin='Unknown',
         race_ethnicity='Unknown',
         affected_status='Unknown',
+        identifier_evidence=dict(
+            value='P', reasoning='test evidence', quote='test context'
+        ),
+        proband_status_evidence=dict(
+            value='Unknown', reasoning='test evidence', quote='test context'
+        ),
+        sex_evidence=dict(
+            value='Unknown', reasoning='test evidence', quote='test context'
+        ),
+        age_diagnosis_evidence=dict(
+            value=None, reasoning='test evidence', quote='test context'
+        ),
+        age_report_evidence=dict(
+            value=None, reasoning='test evidence', quote='test context'
+        ),
+        age_death_evidence=dict(
+            value=None, reasoning='test evidence', quote='test context'
+        ),
+        country_of_origin_evidence=dict(
+            value='Unknown', reasoning='test evidence', quote='test context'
+        ),
+        race_ethnicity_evidence=dict(
+            value='Unknown', reasoning='test evidence', quote='test context'
+        ),
+        affected_status_evidence=dict(
+            value='Unknown', reasoning='test evidence', quote='test context'
+        ),
     )
     # Insert patients out of position order
     db_session.add(

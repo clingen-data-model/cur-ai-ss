@@ -37,11 +37,12 @@ from lib.misc.pdf.paths import fulltext_md, pdf_image_caption_path, pdf_image_pa
 from lib.models import (
     PaperDB,
     PatientDB,
+    PedigreeDB,
     PhenotypeLinkingEntry,
     PhenotypeLinkingOutput,
     PipelineStatus,
 )
-from lib.models.converters import patient_info_to_db
+from lib.models.converters import patient_to_db, pedigree_to_db
 from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
 
 LEASE_TIMEOUT_S = 900
@@ -112,8 +113,20 @@ async def parse_paper_task_async(paper_id: str) -> None:
 
 
 async def parse_patients_task_async(paper_db: PaperDB) -> None:
-    with open(paper_db.pedigree_descriptions_json_path, 'r') as f:
-        pedigree_descriptions_output = json.load(f)
+    # Load pedigree from DB
+    with session_scope() as session:
+        pedigree_row = (
+            session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_db.id).first()
+        )
+        pedigree_descriptions_output = (
+            {
+                'image_id': pedigree_row.image_id,
+                'description': pedigree_row.description,
+            }
+            if pedigree_row
+            else None
+        )
+
     result = await Runner.run(
         patient_extraction_agent,
         f'Paper (fulltext md): {fulltext_md(paper_db.id)} Pedigree Description: \n {pedigree_descriptions_output}',
@@ -125,7 +138,7 @@ async def parse_patients_task_async(paper_db: PaperDB) -> None:
         for patient_index, patient_info in enumerate(
             result.final_output.patients, start=1
         ):
-            session.add(patient_info_to_db(paper_db.id, patient_index, patient_info))
+            session.add(patient_to_db(paper_db.id, patient_index, patient_info))
 
 
 async def harmonize_variants_task_async(paper_db: PaperDB) -> None:
@@ -173,24 +186,26 @@ async def pedigree_describer_task_async(paper_id: str) -> None:
         pedigree_describer_agent,
         combined_text,
     )
-    json_response = result.final_output.model_dump_json(indent=2)
-    PaperDB(id=paper_id).pedigree_descriptions_json_path.parent.mkdir(
-        parents=True, exist_ok=True
-    )
-    with open(PaperDB(id=paper_id).pedigree_descriptions_json_path, 'w') as f:
-        f.write(json_response)
+    # Persist pedigree to DB (idempotent: delete-then-insert)
+    # Only insert if both image_id and description are present
+    with session_scope() as session:
+        session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).delete()
+        if (
+            result.final_output
+            and result.final_output.image_id is not None
+            and result.final_output.description
+        ):
+            session.add(pedigree_to_db(paper_id, result.final_output))
 
 
 async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
     with open(paper_db.variants_json_path, 'r') as f:
         variants_output = json.load(f)
-    with open(paper_db.pedigree_descriptions_json_path, 'r') as f:
-        pedigree_descriptions_output = json.load(f)
 
     structured_variants = [
         {
             'variant_id': idx,
-            'variant_evidence_context': variant['variant_evidence_context'],
+            'variant_quote': variant['variant_evidence_context'],
         }
         for idx, variant in enumerate(variants_output['variants'], start=1)
     ]
@@ -205,10 +220,23 @@ async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
             {
                 'patient_idx': p.patient_idx,
                 'identifier': p.identifier,
-                'identifier_evidence_context': p.identifier_evidence_context,
+                'identifier_quote': p.identifier_evidence['quote'],
             }
             for p in patient_rows
         ]
+        # Load pedigree from DB
+        pedigree_row = (
+            session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_db.id).first()
+        )
+        pedigree_descriptions_output = (
+            {
+                'image_id': pedigree_row.image_id,
+                'description': pedigree_row.description,
+            }
+            if pedigree_row
+            else None
+        )
+
     result = await Runner.run(
         patient_variant_linking_agent,
         f'Variants JSON:\n{structured_variants}\n Patients JSON:\n {structured_patients} Pedigree Description: \n {pedigree_descriptions_output} Paper (fulltext md): {fulltext_md(paper_db.id)}',
@@ -231,7 +259,7 @@ async def phenotype_patient_linking_task_async(paper_db: PaperDB) -> None:
             {
                 'patient_idx': p.patient_idx,
                 'identifier': p.identifier,
-                'identifier_evidence_context': p.identifier_evidence_context,
+                'identifier_quote': p.identifier_evidence['quote'],
             }
             for p in patient_rows
         ]
