@@ -18,7 +18,6 @@ from lib.ui.api import (
 
 st.set_page_config(page_title='Papers Dashboard', layout='wide')
 left, center, right = st.columns([2, 7, 2])
-main = center.container()
 
 CURATIONS_DF_KEY = 'CURATIONS_DF_KEY'
 DIALOG_STATE_KEY = 'DIALOG_STATE_KEY'
@@ -28,8 +27,9 @@ QUEUED_EXTRACTION_TEXT = 'Pending Extraction...'
 # Global Requests
 initial_genes = search_genes('A', limit=20)
 if not initial_genes:
-    st.error('No genes found, cannot proceed.')
-    st.stop()  # stop further execution
+    with center:
+        st.error('No genes found, cannot proceed.')
+        st.stop()  # stop further execution
 
 
 def papers_df_on_change() -> None:
