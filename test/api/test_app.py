@@ -9,6 +9,12 @@ from sqlalchemy import func, select, update
 from lib.api.app import app
 from lib.api.db import get_session, session_scope
 from lib.models import GeneDB, PaperDB, PatientDB, PipelineStatus
+from lib.models import (
+    EnrichedVariantDB,
+    HarmonizedVariantDB,
+    VariantDB,
+)
+
 
 
 @pytest.fixture
@@ -367,3 +373,128 @@ def test_get_patients_paper_not_found(client):
     response = client.get('/papers/999/patients')
     assert response.status_code == 404
     assert response.json()['detail'] == 'Paper not found'
+
+
+def test_get_variants_harmonized_and_enriched(client, db_session, seeded_paper):
+    # Create a variant with evidence blocks
+    variant = VariantDB(
+        paper_id=seeded_paper.id,
+        gene='BRCA1',
+        transcript='NM_007294.3',
+        protein_accession='NP_009225.1',
+        genomic_accession='NC_000017.11',
+        lrg_accession=None,
+        gene_accession='NG_005905.2',
+        genomic_coordinates='17:41196312',
+        genome_build='GRCh38',
+        rsid='rs80357906',
+        caid='CA123456',
+        hgvs_c='c.68_69delAG',
+        hgvs_p='p.Glu23ValfsTer17',
+        hgvs_g='g.41196312_41196313delAG',
+        variant_type='Frameshift Deletion',
+        functional_evidence=True,
+        transcript_evidence={'value': 'NM_007294.3', 'reasoning': 'test', 'quote': 'test'},
+        protein_accession_evidence={'value': 'NP_009225.1', 'reasoning': 'test', 'quote': 'test'},
+        genomic_accession_evidence={
+            'value': 'NC_000017.11',
+            'reasoning': 'test',
+            'quote': 'test',
+        },
+        lrg_accession_evidence={'value': None, 'reasoning': 'test'},
+        gene_accession_evidence={'value': 'NG_005905.2', 'reasoning': 'test', 'quote': 'test'},
+        genomic_coordinates_evidence={
+            'value': '17:41196312',
+            'reasoning': 'test',
+            'quote': 'test',
+        },
+        genome_build_evidence={'value': 'GRCh38', 'reasoning': 'test', 'quote': 'test'},
+        rsid_evidence={'value': 'rs80357906', 'reasoning': 'test', 'quote': 'test'},
+        caid_evidence={'value': 'CA123456', 'reasoning': 'test', 'quote': 'test'},
+        variant_evidence={'value': 'c.68_69delAG', 'reasoning': 'test', 'quote': 'test'},
+        hgvs_c_evidence={'value': 'c.68_69delAG', 'reasoning': 'test', 'quote': 'test'},
+        hgvs_p_evidence={'value': 'p.Glu23ValfsTer17', 'reasoning': 'test', 'quote': 'test'},
+        hgvs_g_evidence={'value': 'g.41196312_41196313delAG', 'reasoning': 'test', 'quote': 'test'},
+        variant_type_evidence={'value': 'Frameshift Deletion', 'reasoning': 'test', 'quote': 'test'},
+        functional_evidence_evidence={'value': True, 'reasoning': 'test', 'quote': 'test'},
+    )
+    db_session.add(variant)
+    db_session.flush()
+
+    # Create harmonized variant
+    harmonized = HarmonizedVariantDB(
+        variant_id=variant.id,
+        gnomad_style_coordinates='17:41196312:AG:A',
+        rsid='rs80357906',
+        caid='CA123456',
+        hgvs_c='c.68_69delAG',
+        hgvs_p='p.Glu23ValfsTer17',
+        hgvs_g='g.41196312_41196313delAG',
+        reasoning='Successfully harmonized to gnomAD coordinates',
+    )
+    db_session.add(harmonized)
+    db_session.flush()
+
+    # Create enriched variant
+    enriched = EnrichedVariantDB(
+        harmonized_variant_id=harmonized.id,
+        pathogenicity='Pathogenic',
+        submissions=15,
+        stars=3,
+        exon='1/24',
+        revel=0.89,
+        alphamissense_class='likely_pathogenic',
+        alphamissense_score=0.75,
+        spliceai={'DS_AG': 0.1, 'DS_AL': 0.05, 'DS_DG': 0.2, 'DS_DL': 0.15},
+        gnomad_style_coordinates='17:41196312:AG:A',
+        rsid='rs80357906',
+        caid='CA123456',
+        gnomad_top_level_af=0.0001,
+        gnomad_popmax_af=0.0003,
+        gnomad_popmax_population='eas',
+    )
+    db_session.add(enriched)
+    db_session.commit()
+
+    # Get variants for the paper
+    response = client.get(f'/papers/{seeded_paper.id}/variants')
+    assert response.status_code == 200
+    variants = response.json()
+    assert len(variants) == 1
+
+    v = variants[0]
+    # Check basic variant data
+    assert v['gene'] == 'BRCA1'
+    assert v['transcript'] == 'NM_007294.3'
+    assert v['variant_type'] == 'Frameshift Deletion'
+
+    # Check evidence block structure
+    assert v['transcript_evidence']['value'] == 'NM_007294.3'
+    assert v['transcript_evidence']['reasoning'] == 'test'
+    assert v['transcript_evidence']['quote'] == 'test'
+
+    # Check harmonized data
+    assert v['harmonized_variant'] is not None
+    assert v['harmonized_variant']['gnomad_style_coordinates'] == '17:41196312:AG:A'
+    assert v['harmonized_variant']['rsid'] == 'rs80357906'
+    assert v['harmonized_variant']['caid'] == 'CA123456'
+    assert v['harmonized_variant']['reasoning'] == 'Successfully harmonized to gnomAD coordinates'
+
+    # Check enriched data
+    assert v['enriched_variant'] is not None
+    assert v['enriched_variant']['pathogenicity'] == 'Pathogenic'
+    assert v['enriched_variant']['submissions'] == 15
+    assert v['enriched_variant']['stars'] == 3
+    assert v['enriched_variant']['exon'] == '1/24'
+    assert v['enriched_variant']['revel'] == 0.89
+    assert v['enriched_variant']['alphamissense_class'] == 'likely_pathogenic'
+    assert v['enriched_variant']['alphamissense_score'] == 0.75
+    assert v['enriched_variant']['spliceai'] == {
+        'DS_AG': 0.1,
+        'DS_AL': 0.05,
+        'DS_DG': 0.2,
+        'DS_DL': 0.15,
+    }
+    assert v['enriched_variant']['gnomad_top_level_af'] == 0.0001
+    assert v['enriched_variant']['gnomad_popmax_af'] == 0.0003
+    assert v['enriched_variant']['gnomad_popmax_population'] == 'eas'

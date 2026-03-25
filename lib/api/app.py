@@ -351,31 +351,21 @@ def _variant_to_resp(row: VariantDB) -> VariantResp:
         variant_type=row.variant_type,
         functional_evidence=row.functional_evidence,
         updated_at=row.updated_at,
-        transcript_evidence=EvidenceBlock.model_validate(row.transcript_evidence),
-        protein_accession_evidence=EvidenceBlock.model_validate(
-            row.protein_accession_evidence
-        ),
-        genomic_accession_evidence=EvidenceBlock.model_validate(
-            row.genomic_accession_evidence
-        ),
-        lrg_accession_evidence=EvidenceBlock.model_validate(row.lrg_accession_evidence),
-        gene_accession_evidence=EvidenceBlock.model_validate(
-            row.gene_accession_evidence
-        ),
-        genomic_coordinates_evidence=EvidenceBlock.model_validate(
-            row.genomic_coordinates_evidence
-        ),
-        genome_build_evidence=EvidenceBlock.model_validate(row.genome_build_evidence),
-        rsid_evidence=EvidenceBlock.model_validate(row.rsid_evidence),
-        caid_evidence=EvidenceBlock.model_validate(row.caid_evidence),
-        variant_evidence=EvidenceBlock.model_validate(row.variant_evidence),
-        hgvs_c_evidence=EvidenceBlock.model_validate(row.hgvs_c_evidence),
-        hgvs_p_evidence=EvidenceBlock.model_validate(row.hgvs_p_evidence),
-        hgvs_g_evidence=EvidenceBlock.model_validate(row.hgvs_g_evidence),
-        variant_type_evidence=EvidenceBlock.model_validate(row.variant_type_evidence),
-        functional_evidence_evidence=EvidenceBlock.model_validate(
-            row.functional_evidence_evidence
-        ),
+        transcript_evidence=row.transcript_evidence,
+        protein_accession_evidence=row.protein_accession_evidence,
+        genomic_accession_evidence=row.genomic_accession_evidence,
+        lrg_accession_evidence=row.lrg_accession_evidence,
+        gene_accession_evidence=row.gene_accession_evidence,
+        genomic_coordinates_evidence=row.genomic_coordinates_evidence,
+        genome_build_evidence=row.genome_build_evidence,
+        rsid_evidence=row.rsid_evidence,
+        caid_evidence=row.caid_evidence,
+        variant_evidence=row.variant_evidence,
+        hgvs_c_evidence=row.hgvs_c_evidence,
+        hgvs_p_evidence=row.hgvs_p_evidence,
+        hgvs_g_evidence=row.hgvs_g_evidence,
+        variant_type_evidence=row.variant_type_evidence,
+        functional_evidence_evidence=row.functional_evidence_evidence,
         harmonized_variant=harmonized,
         enriched_variant=enriched,
     )
