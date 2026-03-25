@@ -6,7 +6,6 @@ from pydantic import TypeAdapter
 from lib.core.environment import env
 from lib.misc.pdf.highlight import GrobidAnnotation
 from lib.models import (
-    ExtractedVariantResp,
     GeneResp,
     PaperResp,
     PaperUpdateRequest,
@@ -15,6 +14,7 @@ from lib.models import (
     PatientVariantLinkResp,
     PedigreeResp,
     PipelineStatus,
+    VariantResp,
 )
 
 
@@ -132,20 +132,20 @@ def get_pedigree(paper_id: int) -> PedigreeResp | None:
 
 
 def update_patient(
-    paper_id: int, patient_idx: int, update_request: PatientUpdateRequest
+    paper_id: int, patient_id: int, update_request: PatientUpdateRequest
 ) -> PatientResp:
     resp = requests.patch(
-        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/patients/{patient_idx}',
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/patients/{patient_id}',
         json=update_request.model_dump(mode='json', exclude_unset=True),
     )
     resp.raise_for_status()
     return PatientResp.model_validate(resp.json())
 
 
-def get_variants(paper_id: int) -> list[ExtractedVariantResp]:
+def get_variants(paper_id: int) -> list[VariantResp]:
     resp = requests.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/variants')
     resp.raise_for_status()
-    return TypeAdapter(list[ExtractedVariantResp]).validate_python(resp.json())
+    return TypeAdapter(list[VariantResp]).validate_python(resp.json())
 
 
 def clear_highlights(paper_id: int) -> None:

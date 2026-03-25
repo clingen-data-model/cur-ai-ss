@@ -4,7 +4,7 @@ import re
 import pandas as pd
 import streamlit as st
 
-from lib.models import ExtractedVariantResp, PaperResp, PipelineStatus
+from lib.models import PaperResp, PipelineStatus, VariantResp
 from lib.models.variant import VariantType
 from lib.ui.api import get_variants
 from lib.ui.paper.shared import (
@@ -36,9 +36,9 @@ def render_variants_tab(selected_variant_idx: int | None) -> None:
     if paper_resp.pipeline_status != PipelineStatus.COMPLETED:
         st.write(f'Entity Linking not yet completed...')
         st.stop()
-    extracted_variant_rows = get_variants(paper_resp.id)
-    extracted_variants: list[ExtractedVariantResp] = extracted_variant_rows
-    enriched_variants = [v.enriched_variant for v in extracted_variants]
+    variant_rows = get_variants(paper_resp.id)
+    variants: list[VariantResp] = variant_rows
+    enriched_variants = [v.enriched_variant for v in variants]
 
     # Separate variants into pathogenic and other
     pathogenic_indices = [
@@ -66,8 +66,8 @@ def render_variants_tab(selected_variant_idx: int | None) -> None:
     def render_variant_list(indices: list[int]) -> None:
         for idx in indices:
             i = idx + 1  # Convert 0-based to 1-based for display
-            extracted_variant = extracted_variants[idx]
-            harmonized_variant = extracted_variant.harmonized_variant
+            variant = variants[idx]
+            harmonized_variant = variant.harmonized_variant
             enriched_variant = (
                 enriched_variants[idx] if idx < len(enriched_variants) else None
             )
@@ -79,11 +79,11 @@ def render_variants_tab(selected_variant_idx: int | None) -> None:
                     or harmonized_variant.gnomad_style_coordinates
                     or harmonized_variant.rsid
                     or harmonized_variant.hgvs_p
-                    or extracted_variant.variant_evidence.quote
+                    or variant.variant_evidence.quote
                     or f'Variant {i}'
                 )
                 if harmonized_variant
-                else (extracted_variant.variant_evidence.quote or f'Variant {i}')
+                else (variant.variant_evidence.quote or f'Variant {i}')
             )
             with st.expander(
                 expander_title,
@@ -121,8 +121,8 @@ def render_variants_tab(selected_variant_idx: int | None) -> None:
                             render_evidence_controls(
                                 paper_id=paper_resp.id,
                                 label='📋 Evidence & Reasoning',
-                                quote=extracted_variant.variant_evidence.quote,
-                                reasoning=extracted_variant.variant_evidence.reasoning,
+                                quote=variant.variant_evidence.quote,
+                                reasoning=variant.variant_evidence.reasoning,
                                 color_key=f'{i}-var-color',
                                 button_key_prefix=f'{i}-var',
                             )
@@ -147,9 +147,9 @@ def render_variants_tab(selected_variant_idx: int | None) -> None:
                             'Variant Type',
                             [vt.value for vt in VariantType],
                             index=[vt.value for vt in VariantType].index(
-                                extracted_variant.variant_type
+                                variant.variant_type
                             )
-                            if extracted_variant.variant_type
+                            if variant.variant_type
                             else 0,
                             key=f'{i}-type',
                         )
@@ -160,8 +160,8 @@ def render_variants_tab(selected_variant_idx: int | None) -> None:
                     render_evidence_controls(
                         paper_id=paper_resp.id,
                         label='📋 Evidence & Reasoning',
-                        quote=extracted_variant.variant_type_evidence.quote,
-                        reasoning=extracted_variant.variant_type_evidence.reasoning,
+                        quote=variant.variant_type_evidence.quote,
+                        reasoning=variant.variant_type_evidence.reasoning,
                         color_key=f'{i}-vtype-color',
                         button_key_prefix=f'{i}-vtype',
                     )
@@ -173,7 +173,7 @@ def render_variants_tab(selected_variant_idx: int | None) -> None:
                 with col1:
                     st.checkbox(
                         'Functional Evidence Present',
-                        value=extracted_variant.functional_evidence,
+                        value=variant.functional_evidence,
                         width='stretch',
                         key=f'{i}-func-ev',
                     )
@@ -182,8 +182,8 @@ def render_variants_tab(selected_variant_idx: int | None) -> None:
                     render_evidence_controls(
                         paper_id=paper_resp.id,
                         label='📋 Evidence & Reasoning',
-                        quote=extracted_variant.functional_evidence_evidence.quote,
-                        reasoning=extracted_variant.functional_evidence_evidence.reasoning,
+                        quote=variant.functional_evidence_evidence.quote,
+                        reasoning=variant.functional_evidence_evidence.reasoning,
                         color_key=f'{i}-func-ev-color',
                         button_key_prefix=f'{i}-func-ev',
                     )
@@ -323,10 +323,10 @@ def render_variants_tab(selected_variant_idx: int | None) -> None:
                 col_dl1.download_button(
                     label='Download Extracted Variant JSON',
                     data=json.dumps(
-                        {'variants': [v.model_dump() for v in extracted_variants]},
+                        {'variants': [v.model_dump() for v in variants]},
                         indent=2,
                     ),
-                    file_name='extracted_variants.json',
+                    file_name='variants.json',
                     mime='application/json',
                     key=f'{i}-extract-json',
                 )
@@ -334,7 +334,7 @@ def render_variants_tab(selected_variant_idx: int | None) -> None:
                 harmonized_data = {
                     'variants': [
                         v.harmonized_variant.model_dump()
-                        for v in extracted_variants
+                        for v in variants
                         if v.harmonized_variant
                     ]
                 }

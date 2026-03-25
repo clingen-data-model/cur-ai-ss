@@ -329,11 +329,10 @@ def test_get_patients_returns_ordered_by_position(client, db_session, seeded_pap
             value='Unknown', reasoning='test evidence', quote='test context'
         ),
     )
-    # Insert patients out of position order
+    # Insert patients in order (they'll get auto-incrementing IDs)
     db_session.add(
         PatientDB(
             paper_id=seeded_paper.id,
-            patient_idx=3,
             identifier='P3',
             **required,
         )
@@ -341,7 +340,6 @@ def test_get_patients_returns_ordered_by_position(client, db_session, seeded_pap
     db_session.add(
         PatientDB(
             paper_id=seeded_paper.id,
-            patient_idx=1,
             identifier='P1',
             **required,
         )
@@ -349,7 +347,6 @@ def test_get_patients_returns_ordered_by_position(client, db_session, seeded_pap
     db_session.add(
         PatientDB(
             paper_id=seeded_paper.id,
-            patient_idx=2,
             identifier='P2',
             **required,
         )
@@ -360,8 +357,10 @@ def test_get_patients_returns_ordered_by_position(client, db_session, seeded_pap
     assert response.status_code == 200
     patients = response.json()
     assert len(patients) == 3
-    assert [p['patient_idx'] for p in patients] == [1, 2, 3]
-    assert [p['identifier'] for p in patients] == ['P1', 'P2', 'P3']
+    # Verify ordering by ID (insertion order) - patients get auto-incrementing IDs
+    patient_ids = [p['id'] for p in patients]
+    assert patient_ids == sorted(patient_ids)  # IDs should be in ascending order
+    assert [p['identifier'] for p in patients] == ['P3', 'P1', 'P2']
 
 
 def test_get_patients_paper_not_found(client):

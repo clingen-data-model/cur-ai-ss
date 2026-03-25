@@ -18,7 +18,7 @@ You are given:
 1. The full academic paper text.
 2. A structured list of extracted patients described in the paper.
    Each patient includes:
-      - patient_idx (integer index in list)
+      - patient_id (database ID)
       - identifier (e.g., "Patient 1", "Proband", "II-3", etc.)
       - identifier_evidence_context (text snippet where patient is described)
 
@@ -28,11 +28,11 @@ For each mention of a human phenotypic feature (observable trait, sign, or sympt
 
 1. Extract the phenotype with full metadata
 2. Determine which patient the phenotype belongs to
-3. Return the phenotype linked to the correct patient_idx
+3. Return the phenotype linked to the correct patient_id
 
 For every valid phenotype extraction, return:
 
-- patient_idx
+- patient_id
 - concept (EvidenceBlock[str]):
   - value: the phenotype text
   - reasoning: explanation of why this is a phenotype and how it links to the patient

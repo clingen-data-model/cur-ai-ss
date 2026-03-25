@@ -34,7 +34,6 @@ from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import fulltext_md, pdf_image_caption_path, pdf_image_path
 from lib.models import (
     EnrichedVariantDB,
-    ExtractedVariantDB,
     HarmonizedVariant,
     HarmonizedVariantDB,
     PaperDB,
@@ -42,6 +41,7 @@ from lib.models import (
     PatientVariantLinkDB,
     PedigreeDB,
     PipelineStatus,
+    VariantDB,
 )
 from lib.models.converters import (
     harmonized_variant_to_db,
@@ -53,7 +53,7 @@ from lib.models.converters import (
     variant_to_db,
 )
 from lib.models.phenotype import ExtractedPhenotypeDB, HpoCandidate, HpoDB
-from lib.models.variant import ExtractedVariant
+from lib.models.variant import Variant
 from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
 
 LEASE_TIMEOUT_S = 900
@@ -146,25 +146,24 @@ async def parse_patients_task_async(paper_db: PaperDB) -> None:
     # Persist patients to DB (idempotent: delete-then-insert)
     with session_scope() as session:
         session.query(PatientDB).filter(PatientDB.paper_id == paper_db.id).delete()
-        for patient_index, patient_info in enumerate(
-            result.final_output.patients, start=1
-        ):
-            session.add(patient_to_db(paper_db.id, patient_index, patient_info))
+        for patient_info in result.final_output.patients:
+            session.add(patient_to_db(paper_db.id, patient_info))
 
 
 async def harmonize_variants_task_async(paper_db: PaperDB) -> None:
     with session_scope() as session:
         rows = (
-            session.query(ExtractedVariantDB)
-            .filter(ExtractedVariantDB.paper_id == paper_db.id)
-            .order_by(ExtractedVariantDB.variant_idx)
+            session.query(VariantDB)
+            .filter(VariantDB.paper_id == paper_db.id)
+            .order_by(VariantDB.id)
             .all()
         )
         variants_output = {
             'variants': [
-                ExtractedVariant(
-                    **{f: getattr(r, f) for f in ExtractedVariant.model_fields}
-                )
+                {
+                    'variant_id': r.id,
+                    **{f: getattr(r, f) for f in Variant.model_fields},
+                }
                 for r in rows
             ]
         }
@@ -176,11 +175,25 @@ async def harmonize_variants_task_async(paper_db: PaperDB) -> None:
     )
     # Persist harmonized variants to DB (idempotent: delete-then-insert)
     with session_scope() as session:
+        # Delete existing harmonized variants for this paper via subquery
         session.query(HarmonizedVariantDB).filter(
-            HarmonizedVariantDB.paper_id == paper_db.id
+            HarmonizedVariantDB.variant_id.in_(
+                select(VariantDB.id).where(VariantDB.paper_id == paper_db.id)
+            )
         ).delete()
-        for idx, variant in enumerate(result.final_output.variants, start=1):
-            session.add(harmonized_variant_to_db(paper_db.id, idx, variant))
+        # Re-insert harmonized variants
+        variant_rows = (
+            session.query(VariantDB)
+            .filter(VariantDB.paper_id == paper_db.id)
+            .order_by(VariantDB.id)
+            .all()
+        )
+        for variant_row, variant in zip(variant_rows, result.final_output.variants):
+            assert variant.variant_id == variant_row.id, (
+                f'Harmonized variant has variant_id={variant.variant_id}, '
+                f'expected variant_id={variant_row.id}'
+            )
+            session.add(harmonized_variant_to_db(variant))
 
 
 async def extract_variants_task_async(paper_id: int, gene_symbol: str) -> None:
@@ -189,11 +202,9 @@ async def extract_variants_task_async(paper_id: int, gene_symbol: str) -> None:
         f'Gene Symbol: {gene_symbol}\nPaper (fulltext md): {fulltext_md(paper_id)}',
     )
     with session_scope() as session:
-        session.query(ExtractedVariantDB).filter(
-            ExtractedVariantDB.paper_id == paper_id
-        ).delete()
-        for idx, variant in enumerate(result.final_output.variants, start=1):
-            session.add(variant_to_db(paper_id, idx, variant))
+        session.query(VariantDB).filter(VariantDB.paper_id == paper_id).delete()
+        for variant in result.final_output.variants:
+            session.add(variant_to_db(paper_id, variant))
 
 
 async def pedigree_describer_task_async(paper_id: int) -> None:
@@ -226,28 +237,28 @@ async def pedigree_describer_task_async(paper_id: int) -> None:
 async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
     with session_scope() as session:
         variant_rows = (
-            session.query(ExtractedVariantDB)
-            .filter(ExtractedVariantDB.paper_id == paper_db.id)
-            .order_by(ExtractedVariantDB.variant_idx)
+            session.query(VariantDB)
+            .filter(VariantDB.paper_id == paper_db.id)
+            .order_by(VariantDB.id)
             .all()
         )
     structured_variants = [
         {
-            'variant_idx': r.variant_idx,
-            'variant_quote': r.variant_evidence['quote'],
+            'variant_id': v.id,
+            'variant_quote': v.variant_evidence['quote'],
         }
-        for r in variant_rows
+        for v in variant_rows
     ]
     with session_scope() as session:
         patient_rows = (
             session.query(PatientDB)
             .filter(PatientDB.paper_id == paper_db.id)
-            .order_by(PatientDB.patient_idx)
+            .order_by(PatientDB.id)
             .all()
         )
         structured_patients = [
             {
-                'patient_idx': p.patient_idx,
+                'patient_id': p.id,
                 'identifier': p.identifier,
                 'identifier_quote': p.identifier_evidence['quote'],
             }
@@ -285,12 +296,12 @@ async def patient_phenotype_linking_task_async(paper_db: PaperDB) -> None:
         patient_rows = (
             session.query(PatientDB)
             .filter(PatientDB.paper_id == paper_db.id)
-            .order_by(PatientDB.patient_idx)
+            .order_by(PatientDB.id)
             .all()
         )
         structured_patients = [
             {
-                'patient_idx': p.patient_idx,
+                'patient_id': p.id,
                 'identifier': p.identifier,
                 'identifier_quote': p.identifier_evidence['quote'],
             }
@@ -306,22 +317,22 @@ async def patient_phenotype_linking_task_async(paper_db: PaperDB) -> None:
         session.query(ExtractedPhenotypeDB).filter(
             ExtractedPhenotypeDB.paper_id == paper_db.id
         ).delete()
-        for idx, phenotype in enumerate(
-            result.final_output.extracted_phenotypes, start=1
-        ):
-            session.add(phenotype_to_db(paper_db.id, idx, phenotype))
+        for phenotype in result.final_output.extracted_phenotypes:
+            session.add(phenotype_to_db(paper_db.id, phenotype))
 
 
 async def enrich_variants_task_async(paper_db: PaperDB) -> None:
     with session_scope() as session:
         rows = (
             session.query(HarmonizedVariantDB)
-            .filter(HarmonizedVariantDB.paper_id == paper_db.id)
-            .order_by(HarmonizedVariantDB.variant_idx)
+            .join(VariantDB, HarmonizedVariantDB.variant_id == VariantDB.id)
+            .filter(VariantDB.paper_id == paper_db.id)
+            .order_by(VariantDB.id)
             .all()
         )
         harmonized_variants = [
             HarmonizedVariant(
+                variant_id=r.variant_id,
                 gnomad_style_coordinates=r.gnomad_style_coordinates,
                 rsid=r.rsid,
                 caid=r.caid,
@@ -340,13 +351,16 @@ async def enrich_variants_task_async(paper_db: PaperDB) -> None:
     # Persist enriched variants to DB (idempotent: delete-then-insert)
     with session_scope() as session:
         session.query(EnrichedVariantDB).filter(
-            EnrichedVariantDB.paper_id == paper_db.id
+            EnrichedVariantDB.harmonized_variant_id.in_(
+                select(HarmonizedVariantDB.id)
+                .join(VariantDB, HarmonizedVariantDB.variant_id == VariantDB.id)
+                .where(VariantDB.paper_id == paper_db.id)
+            )
         ).delete()
         for r, ev in zip(rows, enriched_variants):
             session.add(
                 EnrichedVariantDB(
-                    paper_id=paper_db.id,
-                    variant_idx=r.variant_idx,
+                    harmonized_variant_id=r.id,
                     gnomad_style_coordinates=ev.gnomad_style_coordinates,
                     rsid=ev.rsid,
                     caid=ev.caid,
@@ -370,9 +384,7 @@ async def hpo_linking_task_async(paper_db: PaperDB) -> None:
         phenotype_rows = (
             session.query(ExtractedPhenotypeDB)
             .filter(ExtractedPhenotypeDB.paper_id == paper_db.id)
-            .order_by(
-                ExtractedPhenotypeDB.patient_idx, ExtractedPhenotypeDB.phenotype_idx
-            )
+            .order_by(ExtractedPhenotypeDB.patient_id, ExtractedPhenotypeDB.id)
             .all()
         )
 
@@ -385,7 +397,7 @@ async def hpo_linking_task_async(paper_db: PaperDB) -> None:
         )
         phenotype_inputs.append(
             {
-                'phenotype_idx': row.phenotype_idx,
+                'phenotype_id': row.id,
                 'concept': row.concept,
                 'negated': row.negated,
                 'uncertain': row.uncertain,
@@ -400,18 +412,19 @@ async def hpo_linking_task_async(paper_db: PaperDB) -> None:
         max_turns=5 * len(phenotype_inputs),
     )
 
-    # Build lookup: phenotype_idx → DB row
-    row_lookup = {r.phenotype_idx: r for r in phenotype_rows}
+    # Build lookup: phenotype_id → DB row
+    row_lookup = {r.id: r for r in phenotype_rows}
 
     # Persist HPO links to DB (idempotent: delete-then-insert)
     with session_scope() as session:
-        session.query(HpoDB).filter(HpoDB.paper_id == paper_db.id).delete()
+        # Delete HPO links for phenotypes in this paper
+        for row in phenotype_rows:
+            session.query(HpoDB).filter(HpoDB.phenotype_id == row.id).delete()
+
         for link in result.final_output.links:
-            row = row_lookup[link.phenotype_idx]
+            row = row_lookup[link.phenotype_id]
             if row:
-                session.add(
-                    hpo_to_db(paper_db.id, row.patient_idx, row.phenotype_idx, link.hpo)
-                )
+                session.add(hpo_to_db(row.id, link.hpo))
 
 
 def initial_extraction(paper_id: int, gene_symbol: str) -> None:

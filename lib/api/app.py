@@ -56,8 +56,6 @@ from lib.models import (
     ExtractedPhenotypeDB,
     ExtractedPhenotypeResp,
     ExtractedPhenotypeUpdateRequest,
-    ExtractedVariantDB,
-    ExtractedVariantResp,
     GeneDB,
     GeneResp,
     HarmonizedVariantDB,
@@ -76,6 +74,8 @@ from lib.models import (
     PedigreeDB,
     PedigreeResp,
     PipelineStatus,
+    VariantDB,
+    VariantResp,
 )
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 
@@ -256,7 +256,7 @@ def get_patients(paper_id: int, session: Session = Depends(get_session)) -> Any:
     patients = (
         session.query(PatientDB)
         .filter(PatientDB.paper_id == paper_id)
-        .order_by(PatientDB.patient_idx)
+        .order_by(PatientDB.id)
         .all()
     )
     return patients
@@ -275,7 +275,7 @@ def get_pedigree(paper_id: int, session: Session = Depends(get_session)) -> Any:
     return pedigree
 
 
-@app.get('/papers/{paper_id}/variants', response_model=list[ExtractedVariantResp])
+@app.get('/papers/{paper_id}/variants', response_model=list[VariantResp])
 def get_variants(paper_id: int, session: Session = Depends(get_session)) -> Any:
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
@@ -283,21 +283,21 @@ def get_variants(paper_id: int, session: Session = Depends(get_session)) -> Any:
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
     variants = (
-        session.query(ExtractedVariantDB)
+        session.query(VariantDB)
         .options(
-            joinedload(ExtractedVariantDB.harmonized_variant).joinedload(
+            joinedload(VariantDB.harmonized_variant).joinedload(
                 HarmonizedVariantDB.enriched_variant
             )
         )
-        .filter(ExtractedVariantDB.paper_id == paper_id)
-        .order_by(ExtractedVariantDB.variant_idx)
+        .filter(VariantDB.paper_id == paper_id)
+        .order_by(VariantDB.id)
         .all()
     )
     return [_variant_to_resp(v) for v in variants]
 
 
-def _variant_to_resp(row: ExtractedVariantDB) -> ExtractedVariantResp:
-    """Convert ExtractedVariantDB to ExtractedVariantResp, including harmonized and enriched data."""
+def _variant_to_resp(row: VariantDB) -> VariantResp:
+    """Convert VariantDB to VariantResp, including harmonized and enriched data."""
     hv = row.harmonized_variant
     harmonized = (
         HarmonizedVariantResp(
@@ -332,9 +332,9 @@ def _variant_to_resp(row: ExtractedVariantDB) -> ExtractedVariantResp:
         if hv and hv.enriched_variant
         else None
     )
-    return ExtractedVariantResp(
+    return VariantResp(
+        id=row.id,
         paper_id=row.paper_id,
-        variant_idx=row.variant_idx,
         gene=row.gene,
         transcript=row.transcript,
         protein_accession=row.protein_accession,
@@ -388,9 +388,9 @@ def _phenotype_to_resp(row: ExtractedPhenotypeDB) -> ExtractedPhenotypeResp:
         else None
     )
     return ExtractedPhenotypeResp(
+        id=row.id,
         paper_id=row.paper_id,
-        patient_idx=row.patient_idx,
-        phenotype_idx=row.phenotype_idx,
+        patient_id=row.patient_id,
         concept=row.concept,
         concept_evidence=EvidenceBlock.model_validate(row.concept_evidence),
         negated=row.negated,
@@ -420,7 +420,7 @@ def get_patient_variant_links(
     links = (
         session.query(PatientVariantLinkDB)
         .filter(PatientVariantLinkDB.paper_id == paper_id)
-        .order_by(PatientVariantLinkDB.patient_idx, PatientVariantLinkDB.variant_idx)
+        .order_by(PatientVariantLinkDB.patient_id, PatientVariantLinkDB.variant_id)
         .all()
     )
     return [_patient_variant_link_to_resp(link) for link in links]
@@ -434,23 +434,26 @@ def _patient_variant_link_to_resp(
 
     return PatientVariantLinkResp(
         paper_id=row.paper_id,
-        patient_idx=row.patient_idx,
-        variant_idx=row.variant_idx,
+        patient_id=row.patient_id,
+        variant_id=row.variant_id,
         zygosity=Zygosity(row.zygosity),
         zygosity_evidence=EvidenceBlock.model_validate(row.zygosity_evidence),
         inheritance=Inheritance(row.inheritance),
         inheritance_evidence=EvidenceBlock.model_validate(row.inheritance_evidence),
-        testing_methods=[EvidenceBlock.model_validate(m) for m in row.testing_methods],
+        testing_methods=[TestingMethod(m) for m in row.testing_methods],
+        testing_methods_evidence=[
+            EvidenceBlock.model_validate(m) for m in row.testing_methods_evidence
+        ],
         updated_at=row.updated_at,
     )
 
 
 @app.get(
-    '/papers/{paper_id}/patients/{patient_idx}/phenotypes',
+    '/papers/{paper_id}/patients/{patient_id}/phenotypes',
     response_model=list[ExtractedPhenotypeResp],
 )
 def get_phenotypes(
-    paper_id: int, patient_idx: int, session: Session = Depends(get_session)
+    paper_id: int, patient_id: int, session: Session = Depends(get_session)
 ) -> Any:
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
@@ -458,9 +461,7 @@ def get_phenotypes(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
     patient_db = (
-        session.query(PatientDB)
-        .filter(PatientDB.paper_id == paper_id, PatientDB.patient_idx == patient_idx)
-        .one_or_none()
+        session.query(PatientDB).filter(PatientDB.id == patient_id).one_or_none()
     )
     if not patient_db:
         raise HTTPException(
@@ -470,22 +471,21 @@ def get_phenotypes(
         session.query(ExtractedPhenotypeDB)
         .options(joinedload(ExtractedPhenotypeDB.hpo))
         .filter(
-            ExtractedPhenotypeDB.paper_id == paper_id,
-            ExtractedPhenotypeDB.patient_idx == patient_idx,
+            ExtractedPhenotypeDB.patient_id == patient_id,
         )
-        .order_by(ExtractedPhenotypeDB.phenotype_idx)
+        .order_by(ExtractedPhenotypeDB.id)
         .all()
     )
     return [_phenotype_to_resp(p) for p in phenotypes]
 
 
 @app.post(
-    '/papers/{paper_id}/patients/{patient_idx}/phenotypes',
+    '/papers/{paper_id}/patients/{patient_id}/phenotypes',
     response_model=ExtractedPhenotypeResp,
 )
 def create_phenotype(
     paper_id: int,
-    patient_idx: int,
+    patient_id: int,
     phenotype_data: ExtractedPhenotype,
     session: Session = Depends(get_session),
 ) -> Any:
@@ -495,30 +495,16 @@ def create_phenotype(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
     patient_db = (
-        session.query(PatientDB)
-        .filter(PatientDB.paper_id == paper_id, PatientDB.patient_idx == patient_idx)
-        .one_or_none()
+        session.query(PatientDB).filter(PatientDB.id == patient_id).one_or_none()
     )
     if not patient_db:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Patient not found'
         )
 
-    # Get next phenotype_idx for this patient
-    max_phenotype_idx = (
-        session.query(func.max(ExtractedPhenotypeDB.phenotype_idx))
-        .filter(
-            ExtractedPhenotypeDB.paper_id == paper_id,
-            ExtractedPhenotypeDB.patient_idx == patient_idx,
-        )
-        .scalar()
-    ) or 0
-    next_phenotype_idx = max_phenotype_idx + 1
-
     phenotype_db = ExtractedPhenotypeDB(
         paper_id=paper_id,
-        patient_idx=patient_idx,
-        phenotype_idx=next_phenotype_idx,
+        patient_id=patient_id,
         concept=phenotype_data.concept.value,
         concept_evidence=phenotype_data.concept.model_dump(),
         negated=phenotype_data.negated,
@@ -536,23 +522,19 @@ def create_phenotype(
 
 
 @app.patch(
-    '/papers/{paper_id}/patients/{patient_idx}/phenotypes/{phenotype_idx}',
+    '/papers/{paper_id}/patients/{patient_id}/phenotypes/{phenotype_id}',
     response_model=ExtractedPhenotypeResp,
 )
 def update_phenotype(
     paper_id: int,
-    patient_idx: int,
-    phenotype_idx: int,
+    patient_id: int,
+    phenotype_id: int,
     patch_request: ExtractedPhenotypeUpdateRequest,
     session: Session = Depends(get_session),
 ) -> Any:
     phenotype_db = (
         session.query(ExtractedPhenotypeDB)
-        .filter(
-            ExtractedPhenotypeDB.paper_id == paper_id,
-            ExtractedPhenotypeDB.patient_idx == patient_idx,
-            ExtractedPhenotypeDB.phenotype_idx == phenotype_idx,
-        )
+        .filter(ExtractedPhenotypeDB.id == phenotype_id)
         .one_or_none()
     )
     if not phenotype_db:
@@ -565,17 +547,15 @@ def update_phenotype(
     return phenotype_db
 
 
-@app.patch('/papers/{paper_id}/patients/{patient_idx}', response_model=PatientResp)
+@app.patch('/papers/{paper_id}/patients/{patient_id}', response_model=PatientResp)
 def update_patient(
     paper_id: int,
-    patient_idx: int,
+    patient_id: int,
     patch_request: PatientUpdateRequest,
     session: Session = Depends(get_session),
 ) -> Any:
     patient_db = (
-        session.query(PatientDB)
-        .filter(PatientDB.patient_idx == patient_idx, PatientDB.paper_id == paper_id)
-        .one_or_none()
+        session.query(PatientDB).filter(PatientDB.id == patient_id).one_or_none()
     )
     if not patient_db:
         raise HTTPException(

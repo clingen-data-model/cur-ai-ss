@@ -80,10 +80,9 @@ def upgrade() -> None:
         )
 
     op.create_table(
-        'extracted_variants',
+        'variants',
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
         sa.Column('paper_id', sa.Integer(), nullable=False),
-        sa.Column('variant_idx', sa.Integer(), nullable=False),
         sa.Column('gene', sa.String(), nullable=False),
         sa.Column('transcript', sa.String(), nullable=True),
         sa.Column('protein_accession', sa.String(), nullable=True),
@@ -122,26 +121,22 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(['paper_id'], ['papers.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint(
-            'paper_id', 'variant_idx', name='uq_extracted_variants_paper_variant_idx'
-        ),
     )
-    with op.batch_alter_table('extracted_variants', schema=None) as batch_op:
-        batch_op.create_index(
-            'ix_extracted_variants_paper_id', ['paper_id'], unique=False
-        )
+    with op.batch_alter_table('variants', schema=None) as batch_op:
+        batch_op.create_index('ix_variants_paper_id', ['paper_id'], unique=False)
 
     op.create_table(
         'patient_variant_links',
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
         sa.Column('paper_id', sa.Integer(), nullable=False),
-        sa.Column('patient_idx', sa.Integer(), nullable=False),
-        sa.Column('variant_idx', sa.Integer(), nullable=False),
+        sa.Column('patient_id', sa.Integer(), nullable=False),
+        sa.Column('variant_id', sa.Integer(), nullable=False),
         sa.Column('zygosity', sa.String(), nullable=False),
         sa.Column('inheritance', sa.String(), nullable=False),
+        sa.Column('testing_methods', sa.JSON(), nullable=False),
         sa.Column('zygosity_evidence', sa.JSON(), nullable=False),
         sa.Column('inheritance_evidence', sa.JSON(), nullable=False),
-        sa.Column('testing_methods', sa.JSON(), nullable=False),
+        sa.Column('testing_methods_evidence', sa.JSON(), nullable=False),
         sa.Column(
             'updated_at',
             sa.DateTime(timezone=True),
@@ -149,24 +144,35 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.ForeignKeyConstraint(['paper_id'], ['papers.id'], ondelete='CASCADE'),
+        sa.ForeignKeyConstraint(
+            ['patient_id'],
+            ['patients.id'],
+            ondelete='CASCADE',
+        ),
+        sa.ForeignKeyConstraint(
+            ['variant_id'],
+            ['variants.id'],
+            ondelete='CASCADE',
+        ),
         sa.PrimaryKeyConstraint('id'),
         sa.UniqueConstraint(
-            'paper_id',
-            'patient_idx',
-            'variant_idx',
-            name='uq_patient_variant_links_paper_patient_variant',
+            'patient_id',
+            'variant_id',
+            name='uq_patient_variant_links_patient_variant',
         ),
     )
     with op.batch_alter_table('patient_variant_links', schema=None) as batch_op:
         batch_op.create_index(
-            'ix_patient_variant_links_paper_id', ['paper_id'], unique=False
+            'ix_patient_variant_links_patient_id', ['patient_id'], unique=False
+        )
+        batch_op.create_index(
+            'ix_patient_variant_links_variant_id', ['variant_id'], unique=False
         )
 
     op.create_table(
         'patients',
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
         sa.Column('paper_id', sa.Integer(), nullable=False),
-        sa.Column('patient_idx', sa.Integer(), nullable=False),
         sa.Column('identifier', sa.String(), nullable=False),
         sa.Column('proband_status', sa.String(), nullable=False),
         sa.Column('sex', sa.String(), nullable=False),
@@ -193,9 +199,6 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(['paper_id'], ['papers.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint(
-            'paper_id', 'patient_idx', name='uq_patients_paper_patient_idx'
-        ),
     )
     with op.batch_alter_table('patients', schema=None) as batch_op:
         batch_op.create_index('ix_patients_paper_id', ['paper_id'], unique=False)
@@ -224,8 +227,7 @@ def upgrade() -> None:
         'extracted_phenotypes',
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
         sa.Column('paper_id', sa.Integer(), nullable=False),
-        sa.Column('patient_idx', sa.Integer(), nullable=False),
-        sa.Column('phenotype_idx', sa.Integer(), nullable=False),
+        sa.Column('patient_id', sa.Integer(), nullable=False),
         sa.Column('concept', sa.String(), nullable=False),
         sa.Column('concept_evidence', sa.JSON(), nullable=False),
         sa.Column('negated', sa.Boolean(), nullable=False),
@@ -241,35 +243,28 @@ def upgrade() -> None:
             server_default=sa.text('(CURRENT_TIMESTAMP)'),
             nullable=False,
         ),
+        sa.ForeignKeyConstraint(['paper_id'], ['papers.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(
-            ['paper_id', 'patient_idx'],
-            ['patients.paper_id', 'patients.patient_idx'],
+            ['patient_id'],
+            ['patients.id'],
             ondelete='CASCADE',
         ),
-        sa.ForeignKeyConstraint(['paper_id'], ['papers.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint(
-            'paper_id',
-            'patient_idx',
-            'phenotype_idx',
-            name='uq_extracted_phenotypes_paper_patient_phenotype_idx',
-        ),
     )
     with op.batch_alter_table('extracted_phenotypes', schema=None) as batch_op:
         batch_op.create_index(
             'ix_extracted_phenotypes_paper_id', ['paper_id'], unique=False
         )
         batch_op.create_index(
-            'ix_extracted_phenotypes_paper_patient',
-            ['paper_id', 'patient_idx'],
+            'ix_extracted_phenotypes_patient_id',
+            ['patient_id'],
             unique=False,
         )
 
     op.create_table(
         'harmonized_variants',
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column('paper_id', sa.Integer(), nullable=False),
-        sa.Column('variant_idx', sa.Integer(), nullable=False),
+        sa.Column('variant_id', sa.Integer(), nullable=False),
         sa.Column('gnomad_style_coordinates', sa.String(), nullable=True),
         sa.Column('rsid', sa.String(), nullable=True),
         sa.Column('caid', sa.String(), nullable=True),
@@ -284,25 +279,22 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.ForeignKeyConstraint(
-            ['paper_id', 'variant_idx'],
-            ['extracted_variants.paper_id', 'extracted_variants.variant_idx'],
+            ['variant_id'],
+            ['variants.id'],
             ondelete='CASCADE',
         ),
         sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint(
-            'paper_id', 'variant_idx', name='uq_harmonized_variants_paper_variant_idx'
-        ),
+        sa.UniqueConstraint('variant_id', name='uq_harmonized_variants_variant_id'),
     )
     with op.batch_alter_table('harmonized_variants', schema=None) as batch_op:
         batch_op.create_index(
-            'ix_harmonized_variants_paper_id', ['paper_id'], unique=False
+            'ix_harmonized_variants_variant_id', ['variant_id'], unique=False
         )
 
     op.create_table(
         'enriched_variants',
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column('paper_id', sa.Integer(), nullable=False),
-        sa.Column('variant_idx', sa.Integer(), nullable=False),
+        sa.Column('harmonized_variant_id', sa.Integer(), nullable=False),
         sa.Column('pathogenicity', sa.String(), nullable=True),
         sa.Column('submissions', sa.Integer(), nullable=True),
         sa.Column('stars', sa.Integer(), nullable=True),
@@ -324,26 +316,26 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.ForeignKeyConstraint(
-            ['paper_id', 'variant_idx'],
-            ['harmonized_variants.paper_id', 'harmonized_variants.variant_idx'],
+            ['harmonized_variant_id'],
+            ['harmonized_variants.id'],
             ondelete='CASCADE',
         ),
         sa.PrimaryKeyConstraint('id'),
         sa.UniqueConstraint(
-            'paper_id', 'variant_idx', name='uq_enriched_variants_paper_variant_idx'
+            'harmonized_variant_id', name='uq_enriched_variants_harmonized_variant_id'
         ),
     )
     with op.batch_alter_table('enriched_variants', schema=None) as batch_op:
         batch_op.create_index(
-            'ix_enriched_variants_paper_id', ['paper_id'], unique=False
+            'ix_enriched_variants_harmonized_variant_id',
+            ['harmonized_variant_id'],
+            unique=False,
         )
 
     op.create_table(
         'hpos',
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column('paper_id', sa.Integer(), nullable=False),
-        sa.Column('patient_idx', sa.Integer(), nullable=False),
-        sa.Column('phenotype_idx', sa.Integer(), nullable=False),
+        sa.Column('phenotype_id', sa.Integer(), nullable=False),
         sa.Column('hpo_term', sa.JSON(), nullable=True),
         sa.Column('hpo_evidence', sa.JSON(), nullable=False),
         sa.Column(
@@ -353,44 +345,35 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.ForeignKeyConstraint(
-            ['paper_id', 'patient_idx', 'phenotype_idx'],
-            [
-                'extracted_phenotypes.paper_id',
-                'extracted_phenotypes.patient_idx',
-                'extracted_phenotypes.phenotype_idx',
-            ],
+            ['phenotype_id'],
+            ['extracted_phenotypes.id'],
             ondelete='CASCADE',
         ),
         sa.PrimaryKeyConstraint('id'),
         sa.UniqueConstraint(
-            'paper_id',
-            'patient_idx',
-            'phenotype_idx',
-            name='uq_hpos_paper_patient_phenotype',
+            'phenotype_id',
+            name='uq_hpos_phenotype_id',
         ),
     )
     with op.batch_alter_table('hpos', schema=None) as batch_op:
-        batch_op.create_index('ix_hpos_paper_id', ['paper_id'], unique=False)
+        pass
 
     # ### end Alembic commands ###
 
 
 def downgrade() -> None:
     # ### commands auto generated by Alembic - please adjust! ###
-    with op.batch_alter_table('hpos', schema=None) as batch_op:
-        batch_op.drop_index('ix_hpos_paper_id')
-
     op.drop_table('hpos')
     with op.batch_alter_table('enriched_variants', schema=None) as batch_op:
-        batch_op.drop_index('ix_enriched_variants_paper_id')
+        batch_op.drop_index('ix_enriched_variants_harmonized_variant_id')
 
     op.drop_table('enriched_variants')
     with op.batch_alter_table('harmonized_variants', schema=None) as batch_op:
-        batch_op.drop_index('ix_harmonized_variants_paper_id')
+        batch_op.drop_index('ix_harmonized_variants_variant_id')
 
     op.drop_table('harmonized_variants')
     with op.batch_alter_table('extracted_phenotypes', schema=None) as batch_op:
-        batch_op.drop_index('ix_extracted_phenotypes_paper_patient')
+        batch_op.drop_index('ix_extracted_phenotypes_patient_id')
         batch_op.drop_index('ix_extracted_phenotypes_paper_id')
 
     op.drop_table('extracted_phenotypes')
@@ -403,13 +386,14 @@ def downgrade() -> None:
 
     op.drop_table('patients')
     with op.batch_alter_table('patient_variant_links', schema=None) as batch_op:
-        batch_op.drop_index('ix_patient_variant_links_paper_id')
+        batch_op.drop_index('ix_patient_variant_links_variant_id')
+        batch_op.drop_index('ix_patient_variant_links_patient_id')
 
     op.drop_table('patient_variant_links')
-    with op.batch_alter_table('extracted_variants', schema=None) as batch_op:
-        batch_op.drop_index('ix_extracted_variants_paper_id')
+    with op.batch_alter_table('variants', schema=None) as batch_op:
+        batch_op.drop_index('ix_variants_paper_id')
 
-    op.drop_table('extracted_variants')
+    op.drop_table('variants')
     with op.batch_alter_table('papers', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_papers_pipeline_status'))
         batch_op.drop_index(batch_op.f('ix_papers_gene_id'))

@@ -34,7 +34,7 @@ def test_apply_to_maps_all_fields():
     assert paper_db.doi == '10.1234/ng.5678'
     assert paper_db.pmid == '12345678'
     assert paper_db.pmcid == 'PMC9999999'
-    assert paper_db.paper_types == ['Research', 'Case_study']
+    assert paper_db.paper_types == ['Research', 'Case Study']
 
 
 def test_apply_to_handles_none_fields():
@@ -105,10 +105,9 @@ def test_patient_to_db_maps_all_fields():
             reasoning='clearly affected',
         ),
     )
-    row = patient_to_db('paper123', 1, patient)
+    row = patient_to_db('paper123', patient)
 
     assert row.paper_id == 'paper123'
-    assert row.patient_idx == 1
     # Values
     assert row.identifier == 'P1'
     assert row.proband_status == 'Proband'
@@ -170,7 +169,7 @@ def test_patient_to_db_handles_optional_none_values():
             reasoning='phenotype not detailed',
         ),
     )
-    row = patient_to_db('paper456', 3, patient)
+    row = patient_to_db('paper456', patient)
 
     assert row.identifier == 'II-2'
     assert row.proband_status == 'Unknown'

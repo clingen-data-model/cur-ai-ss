@@ -117,7 +117,7 @@ Use similarity scores only as a weak signal.
 INPUT FORMAT
 
 You will receive a JSON array of phenotype entries, each containing:
-    - phenotype_idx (int): identifier to include in your output
+    - phenotype_id (int): identifier to include in your output
     - concept (str): phenotype description from the paper
     - negated, uncertain, family_history (boolean)
     - candidates (list): HPO term suggestions
@@ -131,7 +131,7 @@ OUTPUT FORMAT
 
 Return a `links` array. Each entry must have:
 
-    - phenotype_idx (int): copied from the input entry
+    - phenotype_id (int): copied from the input entry
     - hpo (object): always required, with fields:
         - value (object or null): the matched HPO term, with:
             - id (str): e.g. "HP:0001250"

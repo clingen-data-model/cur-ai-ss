@@ -343,7 +343,6 @@ class PatientDB(Base):
     paper_id: Mapped[int] = mapped_column(
         Integer, ForeignKey('papers.id', ondelete='CASCADE'), nullable=False
     )
-    patient_idx: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # Extracted values (updateable, strongly typed)
     identifier: Mapped[str] = mapped_column(String, nullable=False)
@@ -379,17 +378,12 @@ class PatientDB(Base):
         'ExtractedPhenotypeDB', back_populates='patient', cascade='all, delete-orphan'
     )
 
-    __table_args__ = (
-        UniqueConstraint(
-            'paper_id', 'patient_idx', name='uq_patients_paper_patient_idx'
-        ),
-        Index('ix_patients_paper_id', 'paper_id'),
-    )
+    __table_args__ = (Index('ix_patients_paper_id', 'paper_id'),)
 
 
 class PatientResp(BaseModel):
+    id: int
     paper_id: int
-    patient_idx: int
     identifier: str
     proband_status: ProbandStatus
     sex: SexAtBirth

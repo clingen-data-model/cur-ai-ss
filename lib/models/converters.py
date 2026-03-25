@@ -1,5 +1,5 @@
 from lib.agents.pedigree_describer_agent import PedigreeExtractionOutput
-from lib.models import ExtractedVariantDB, PatientDB, PedigreeDB
+from lib.models import PatientDB, PedigreeDB, VariantDB
 from lib.models.evidence_block import ReasoningBlock
 from lib.models.patient import Patient
 from lib.models.patient_variant_link import PatientVariantLink, PatientVariantLinkDB
@@ -9,14 +9,13 @@ from lib.models.phenotype import (
     HpoDB,
     HPOTerm,
 )
-from lib.models.variant import ExtractedVariant, HarmonizedVariant, HarmonizedVariantDB
+from lib.models.variant import HarmonizedVariant, HarmonizedVariantDB, Variant
 
 
-def patient_to_db(paper_id: int, patient_idx: int, patient: Patient) -> PatientDB:
+def patient_to_db(paper_id: int, patient: Patient) -> PatientDB:
     """Convert a Patient to PatientDB, splitting values from evidence."""
     kwargs = {
         'paper_id': paper_id,
-        'patient_idx': patient_idx,
     }
 
     # Extract values and evidence blocks for each field
@@ -38,13 +37,12 @@ def pedigree_to_db(paper_id: int, pedigree: PedigreeExtractionOutput) -> Pedigre
 
 
 def phenotype_to_db(
-    paper_id: int, phenotype_idx: int, phenotype: ExtractedPhenotype
+    paper_id: int, phenotype: ExtractedPhenotype
 ) -> ExtractedPhenotypeDB:
     """Convert ExtractedPhenotype to ExtractedPhenotypeDB, extracting values and evidence from EvidenceBlock."""
     return ExtractedPhenotypeDB(
         paper_id=paper_id,
-        patient_idx=phenotype.patient_idx,
-        phenotype_idx=phenotype_idx,
+        patient_id=phenotype.patient_id,
         concept=phenotype.concept.value,
         concept_evidence=phenotype.concept.model_dump(),
         negated=phenotype.negated,
@@ -58,28 +56,21 @@ def phenotype_to_db(
 
 
 def hpo_to_db(
-    paper_id: int,
-    patient_idx: int,
-    phenotype_idx: int,
+    phenotype_id: int,
     hpo: ReasoningBlock[HPOTerm | None],
 ) -> HpoDB:
     """Convert an HPO EvidenceBlock to HpoDB, storing the HPOTerm atomically and the full evidence block."""
     return HpoDB(
-        paper_id=paper_id,
-        patient_idx=patient_idx,
-        phenotype_idx=phenotype_idx,
+        phenotype_id=phenotype_id,
         hpo_term=hpo.value.model_dump() if hpo.value else None,
         hpo_evidence=hpo.model_dump(),
     )
 
 
-def variant_to_db(
-    paper_id: int, variant_idx: int, variant: ExtractedVariant
-) -> ExtractedVariantDB:
-    """Convert Variant to ExtractedVariantDB, extracting values and evidence from EvidenceBlocks."""
+def variant_to_db(paper_id: int, variant: Variant) -> VariantDB:
+    """Convert Variant to VariantDB, extracting values and evidence from EvidenceBlocks."""
     kwargs = {
         'paper_id': paper_id,
-        'variant_idx': variant_idx,
         'gene': variant.gene,
     }
 
@@ -107,16 +98,13 @@ def variant_to_db(
         kwargs[field_name] = field_value.value
         kwargs[f'{field_name}_evidence'] = field_value.model_dump()
 
-    return ExtractedVariantDB(**kwargs)
+    return VariantDB(**kwargs)
 
 
-def harmonized_variant_to_db(
-    paper_id: int, variant_idx: int, variant: HarmonizedVariant
-) -> HarmonizedVariantDB:
+def harmonized_variant_to_db(variant: HarmonizedVariant) -> HarmonizedVariantDB:
     """Convert HarmonizedVariant to HarmonizedVariantDB."""
     return HarmonizedVariantDB(
-        paper_id=paper_id,
-        variant_idx=variant_idx,
+        variant_id=variant.variant_id,
         gnomad_style_coordinates=variant.gnomad_style_coordinates,
         rsid=variant.rsid,
         caid=variant.caid,
@@ -133,11 +121,12 @@ def patient_variant_link_to_db(
     """Convert PatientVariantLink to PatientVariantLinkDB, extracting values and evidence."""
     return PatientVariantLinkDB(
         paper_id=paper_id,
-        patient_idx=link.patient_idx,
-        variant_idx=link.variant_idx,
+        patient_id=link.patient_id,
+        variant_id=link.variant_id,
         zygosity=link.zygosity.value.value,
         zygosity_evidence=link.zygosity.model_dump(),
         inheritance=link.inheritance.value.value,
         inheritance_evidence=link.inheritance.model_dump(),
-        testing_methods=[m.model_dump() for m in link.testing_methods],
+        testing_methods=[m.value.value for m in link.testing_methods],
+        testing_methods_evidence=[m.model_dump() for m in link.testing_methods],
     )

@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 
 class ExtractedPhenotype(BaseModel):
-    patient_idx: int
+    patient_id: int
     concept: EvidenceBlock[str]
     negated: bool = False
     uncertain: bool = False
@@ -57,7 +57,7 @@ class HPOTerm(BaseModel):
 class HpoLinkingEntry(BaseModel):
     """HPO linking result for a single phenotype."""
 
-    phenotype_idx: int
+    phenotype_id: int
     hpo: ReasoningBlock[HPOTerm | None]
 
 
@@ -74,8 +74,9 @@ class ExtractedPhenotypeDB(Base):
     paper_id: Mapped[int] = mapped_column(
         Integer, ForeignKey('papers.id', ondelete='CASCADE'), nullable=False
     )
-    patient_idx: Mapped[int] = mapped_column(Integer, nullable=False)
-    phenotype_idx: Mapped[int] = mapped_column(Integer, nullable=False)
+    patient_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey('patients.id', ondelete='CASCADE'), nullable=False
+    )
 
     # Phenotype concept (value + evidence block)
     concept: Mapped[str] = mapped_column(String, nullable=False)
@@ -105,19 +106,8 @@ class ExtractedPhenotypeDB(Base):
     )
 
     __table_args__ = (
-        ForeignKeyConstraint(
-            ['paper_id', 'patient_idx'],
-            ['patients.paper_id', 'patients.patient_idx'],
-            ondelete='CASCADE',
-        ),
-        UniqueConstraint(
-            'paper_id',
-            'patient_idx',
-            'phenotype_idx',
-            name='uq_extracted_phenotypes_paper_patient_phenotype_idx',
-        ),
         Index('ix_extracted_phenotypes_paper_id', 'paper_id'),
-        Index('ix_extracted_phenotypes_paper_patient', 'paper_id', 'patient_idx'),
+        Index('ix_extracted_phenotypes_patient_id', 'patient_id'),
     )
 
 
@@ -125,9 +115,11 @@ class HpoDB(Base):
     __tablename__ = 'hpos'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    paper_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    patient_idx: Mapped[int] = mapped_column(Integer, nullable=False)
-    phenotype_idx: Mapped[int] = mapped_column(Integer, nullable=False)
+    phenotype_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey('extracted_phenotypes.id', ondelete='CASCADE'),
+        nullable=False,
+    )
 
     hpo_term: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     hpo_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
@@ -144,29 +136,17 @@ class HpoDB(Base):
     )
 
     __table_args__ = (
-        ForeignKeyConstraint(
-            ['paper_id', 'patient_idx', 'phenotype_idx'],
-            [
-                'extracted_phenotypes.paper_id',
-                'extracted_phenotypes.patient_idx',
-                'extracted_phenotypes.phenotype_idx',
-            ],
-            ondelete='CASCADE',
-        ),
         UniqueConstraint(
-            'paper_id',
-            'patient_idx',
-            'phenotype_idx',
-            name='uq_hpos_paper_patient_phenotype',
+            'phenotype_id',
+            name='uq_hpos_phenotype_id',
         ),
-        Index('ix_hpos_paper_id', 'paper_id'),
     )
 
 
 class ExtractedPhenotypeResp(BaseModel):
+    id: int
     paper_id: int
-    patient_idx: int
-    phenotype_idx: int
+    patient_id: int
     concept: str
     negated: bool
     uncertain: bool

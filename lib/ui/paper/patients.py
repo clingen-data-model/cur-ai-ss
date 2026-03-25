@@ -37,7 +37,7 @@ def render_patient(
     patient: PatientResp,
     expanded: bool,
     key_prefix: str,
-    patient_idx: int,
+    patient_id: int,
 ) -> None:
     with st.expander(
         f'{patient.identifier or "N/A"}',
@@ -286,7 +286,7 @@ def render_patient(
 
         if changes:
             try:
-                update_patient(paper_resp.id, patient.patient_idx, update_request)
+                update_patient(paper_resp.id, patient.id, update_request)
                 st.toast('Saved!', icon=':material/check:')
             except Exception as e:
                 st.toast(f'Failed to save: {str(e)}', icon='❌')
@@ -295,7 +295,7 @@ def render_patient(
         # Phenotypes are now stored in the database and accessed through the API
 
 
-def render_patients_tab(selected_patient_idx: int | None) -> None:
+def render_patients_tab(selected_patient_id: int | None) -> None:
     paper_resp: PaperResp = st.session_state['paper_resp']
     if not paper_resp.title:
         st.write(f'{paper_resp.filename} not yet extracted...')
@@ -314,7 +314,7 @@ def render_patients_tab(selected_patient_idx: int | None) -> None:
     # -----------------------------
     # Display Patients
     # -----------------------------
-    indexed_patients = [(p.patient_idx, p) for p in patients]
+    indexed_patients = [(p.id, p) for p in patients]
     probands = [
         (i, p) for i, p in indexed_patients if p.proband_status == ProbandStatus.Proband
     ]
@@ -342,57 +342,57 @@ def render_patients_tab(selected_patient_idx: int | None) -> None:
         st.tabs(
             tabs,
             default=tabs[1]
-            if selected_patient_idx in {p[0] for p in non_probands}
+            if selected_patient_id in {p[0] for p in non_probands}
             else tabs[0],
         )
     )
     with proband_tab:
         if not probands:
             st.info('No probands detected.')
-        for original_idx, patient in probands:
-            st.markdown(f'### Patient {original_idx}')
+        for original_id, patient in probands:
+            st.markdown(f'### Patient {original_id}')
             render_patient(
                 paper_resp,
                 patient,
-                expanded=(original_idx == selected_patient_idx),
-                key_prefix=f'patient-proband-{original_idx}',
-                patient_idx=original_idx,
+                expanded=(original_id == selected_patient_id),
+                key_prefix=f'patient-proband-{original_id}',
+                patient_id=original_id,
             )
     with non_proband_tab:
         if not non_probands:
             st.info('No non-probands detected.')
-        for original_idx, patient in non_probands:
-            st.markdown(f'### Patient {original_idx}')
+        for original_id, patient in non_probands:
+            st.markdown(f'### Patient {original_id}')
             render_patient(
                 paper_resp,
                 patient,
-                expanded=(original_idx == selected_patient_idx),
-                key_prefix=f'patient-non-proband-{original_idx}',
-                patient_idx=original_idx,
+                expanded=(original_id == selected_patient_id),
+                key_prefix=f'patient-non-proband-{original_id}',
+                patient_id=original_id,
             )
     with affecteds_tab:
         if not affecteds:
             st.info('No affected patients detected.')
-        for original_idx, patient in affecteds:
-            st.markdown(f'### Patient {original_idx}')
+        for original_id, patient in affecteds:
+            st.markdown(f'### Patient {original_id}')
             render_patient(
                 paper_resp,
                 patient,
-                expanded=(original_idx == selected_patient_idx),
-                key_prefix=f'patient-affected-{original_idx}',
-                patient_idx=original_idx,
+                expanded=(original_id == selected_patient_id),
+                key_prefix=f'patient-affected-{original_id}',
+                patient_id=original_id,
             )
     with unaffecteds_tab:
         if not unaffecteds:
             st.info('No affected patients detected.')
-        for original_idx, patient in unaffecteds:
-            st.markdown(f'### Patient {original_idx}')
+        for original_id, patient in unaffecteds:
+            st.markdown(f'### Patient {original_id}')
             render_patient(
                 paper_resp,
                 patient,
-                expanded=(original_idx == selected_patient_idx),
-                key_prefix=f'patient-unaffected-{original_idx}',
-                patient_idx=original_idx,
+                expanded=(original_id == selected_patient_id),
+                key_prefix=f'patient-unaffected-{original_id}',
+                patient_id=original_id,
             )
     with pedigree_image_tab:
         if not pedigree_description:

@@ -1,7 +1,7 @@
 import pandas as pd
 import streamlit as st
 
-from lib.models import ExtractedVariantResp, PaperResp, PatientResp, PipelineStatus
+from lib.models import PaperResp, PatientResp, PipelineStatus, VariantResp
 from lib.models.evidence_block import EvidenceBlock
 from lib.models.patient_variant_link import Inheritance, TestingMethod, Zygosity
 from lib.ui.api import (
@@ -69,15 +69,19 @@ def render_patient_variant_occurrences_tab() -> None:
 
     # Load all data sources via API
     patients: list[PatientResp] = get_patients(paper_resp.id)
-    extracted_variants: list[ExtractedVariantResp] = get_variants(paper_resp.id)
+    variants: list[VariantResp] = get_variants(paper_resp.id)
     links = get_patient_variant_links(paper_resp.id)
+
+    # Create lookup maps by ID
+    patients_by_id = {p.id: p for p in patients}
+    variants_by_id = {v.id: v for v in variants}
 
     # Build a list of rows for the DataFrame
     rows = []
     for link in links:
-        patient = patients[link.patient_idx - 1]
-        extracted_variant = extracted_variants[link.variant_idx - 1]
-        harmonized_variant = extracted_variant.harmonized_variant
+        patient = patients_by_id[link.patient_id]
+        variant = variants_by_id[link.variant_id]
+        harmonized_variant = variant.harmonized_variant
 
         # Determine the variant description
         variant_desc = (
@@ -90,16 +94,16 @@ def render_patient_variant_occurrences_tab() -> None:
             )
             or (harmonized_variant.rsid if harmonized_variant else None)
             or (harmonized_variant.hgvs_p if harmonized_variant else None)
-            or extracted_variant.variant_evidence.quote
-            or f'Variant {link.variant_idx}'
+            or variant.variant_evidence.quote
+            or f'Variant {link.variant_id}'
         )
 
-        # Format testing methods as a list from EvidenceBlocks
-        testing_methods_list = [m.value.value for m in link.testing_methods]
+        # Format testing methods as a list of values
+        testing_methods_list = link.testing_methods
 
-        patient_display = patient.identifier or f'Patient {link.patient_idx}'
-        patient_link = f'/paper?paper_id={paper_resp.id}&patient_idx={link.patient_idx}#{patient_display}'
-        variant_link = f'/paper?paper_id={paper_resp.id}&variant_idx={link.variant_idx}#{variant_desc}'
+        patient_display = patient.identifier or f'Patient {link.patient_id}'
+        patient_link = f'/paper?paper_id={paper_resp.id}&patient_id={link.patient_id}#{patient_display}'
+        variant_link = f'/paper?paper_id={paper_resp.id}&variant_id={link.variant_id}#{variant_desc}'
         rows.append(
             {
                 'Select': False,
@@ -111,7 +115,7 @@ def render_patient_variant_occurrences_tab() -> None:
                 # Store full objects for detail panel
                 '_link': link,
                 '_patient': patient,
-                '_extracted_variant': extracted_variant,
+                '_variant': variant,
                 '_harmonized_variant': harmonized_variant,
             }
         )
@@ -174,8 +178,8 @@ def render_patient_variant_occurrences_tab() -> None:
     if selected_rows:
         idx = selected_rows[0]
         link = rows[idx]['_link']
-        patient = rows[idx].get('_patient') or patients[link.patient_idx - 1]
-        extracted_variant = rows[idx]['_extracted_variant']
+        patient = rows[idx].get('_patient') or patients_by_id[link.patient_id]
+        variant = rows[idx]['_variant']
         harmonized_variant = rows[idx]['_harmonized_variant']
 
         st.divider()
@@ -256,11 +260,11 @@ def render_patient_variant_occurrences_tab() -> None:
             )
 
         # Display testing methods evidence
-        if link.testing_methods:
+        if link.testing_methods_evidence:
             st.markdown('#### Testing Methods Evidence')
-            for i, method_block in enumerate(link.testing_methods, start=1):
+            for i, method_block in enumerate(link.testing_methods_evidence, start=1):
                 with st.expander(
-                    f'Method {i}: {method_block.value.value}',
+                    f'Method {i}: {method_block.value}',
                     expanded=False,
                 ):
                     _render_evidence_block(method_block, paper_resp.id, f'method_{i}')

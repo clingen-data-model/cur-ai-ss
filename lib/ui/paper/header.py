@@ -22,16 +22,16 @@ from lib.ui.paper.variants import render_variants_tab
 
 class PaperQueryParams(BaseModel):
     paper_id: int
-    patient_idx: Optional[int] = None
-    variant_idx: Optional[int] = None
+    patient_id: Optional[int] = None
+    variant_id: Optional[int] = None
     tab_id: Optional[int] = None
 
     @classmethod
     def from_query_params(cls) -> 'PaperQueryParams':
         raw_params = {
             'paper_id': st.query_params.get('paper_id'),
-            'patient_idx': st.query_params.get('patient_idx'),
-            'variant_idx': st.query_params.get('variant_idx'),
+            'patient_id': st.query_params.get('patient_id'),
+            'variant_id': st.query_params.get('variant_id'),
             'tab_id': st.query_params.get('tab_id'),
         }
 
@@ -45,8 +45,8 @@ class PaperQueryParams(BaseModel):
             # If ints fail to parse, fall back to None instead of crashing
             return cls(
                 paper_id=int(raw_params['paper_id']),
-                patient_idx=None,
-                variant_idx=None,
+                patient_id=None,
+                variant_id=None,
             )
 
 
@@ -134,9 +134,9 @@ with center:
         with st.container(horizontal=True, vertical_alignment='center'):
             if paper_query_params.tab_id:
                 default_tab = HEADER_TABS[paper_query_params.tab_id]
-            elif paper_query_params.patient_idx:
+            elif paper_query_params.patient_id:
                 default_tab = '👤 Patients'
-            elif paper_query_params.variant_idx:
+            elif paper_query_params.variant_id:
                 default_tab = '🧬 Variants'
             else:
                 default_tab = '📝 Metadata'
@@ -150,9 +150,9 @@ with center:
                 if metadata_tab.open:
                     render_metadata_tab()
                 elif patients_tab.open:
-                    render_patients_tab(paper_query_params.patient_idx)
+                    render_patients_tab(paper_query_params.patient_id)
                 elif variants_tab.open:
-                    render_variants_tab(paper_query_params.variant_idx)
+                    render_variants_tab(paper_query_params.variant_id)
                 elif occurrences_tab.open:
                     render_patient_variant_occurrences_tab()
 

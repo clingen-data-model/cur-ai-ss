@@ -17,10 +17,10 @@ You are given:
 1. The target gene of interest.
 2. The full academic paper text.
 3. A structured list of extracted variants. Each variant includes:
-   - variant_idx (integer index)
+   - variant_id (database ID)
    - variant_quote (text snippet from the paper mentioning the variant)
 4. A structured list of extracted patients. Each patient includes:
-   - patient_idx (integer index)
+   - patient_id (database ID)
    - identifier (e.g., "Patient 1", "Proband", "II-3")
    - identifier_quote (text snippet or "Pedigree Image")
 5. Any pedigree description. Includes:
@@ -32,8 +32,8 @@ Your task:
 For each patient, determine whether they carry one or more variants.
 Return **exactly** the following for each link:
 
-- patient_idx
-- variant_idx
+- patient_id
+- variant_id
 - zygosity: a single EvidenceBlock[Zygosity]
 - inheritance: a single EvidenceBlock[Inheritance]
 - testing_methods: a list of EvidenceBlock[TestingMethod] (max 2 items)

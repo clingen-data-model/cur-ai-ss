@@ -24,24 +24,24 @@ from lib.models.paper import PaperDB
 
 
 class VariantType(str, Enum):
-    missense = 'missense'
-    frameshift = 'frameshift'
-    stop_gained = 'stop gained'
-    splice_donor = 'splice donor'
-    splice_acceptor = 'splice acceptor'
-    splice_region = 'splice region'
-    start_lost = 'start lost'
-    inframe_deletion = 'inframe deletion'
-    frameshift_deletion = 'frameshift deletion'
-    inframe_insertion = 'inframe insertion'
-    frameshift_insertion = 'frameshift insertion'
-    structural = 'structural'
-    synonymous = 'synonymous'
-    intron = 'intron'
+    missense = 'Missense'
+    frameshift = 'Frameshift'
+    stop_gained = 'Stop Gained'
+    splice_donor = 'Splice Donor'
+    splice_acceptor = 'Splice Acceptor'
+    splice_region = 'Splice Region'
+    start_lost = 'Start Lost'
+    inframe_deletion = 'Inframe Deletion'
+    frameshift_deletion = 'Frameshift Deletion'
+    inframe_insertion = 'Inframe Insertion'
+    frameshift_insertion = 'Frameshift Insertion'
+    structural = 'Structural'
+    synonymous = 'Synonymous'
+    intron = 'Intron'
     five_utr = "5' UTR"
     three_utr = "3' UTR"
-    non_coding = 'non-coding'
-    unknown = 'unknown'
+    non_coding = 'Non-Coding'
+    unknown = 'Unknown'
 
 
 class GenomeBuild(str, Enum):
@@ -49,8 +49,8 @@ class GenomeBuild(str, Enum):
     GRCh38 = 'GRCh38'
 
 
-class ExtractedVariant(BaseModel):
-    """ExtractedVariant extracted from paper by the extraction agent."""
+class Variant(BaseModel):
+    """Variant extracted from paper by the extraction agent."""
 
     # Core extraction fields (gene comes from human, no evidence needed)
     gene: str
@@ -84,12 +84,13 @@ class ExtractedVariant(BaseModel):
 class VariantExtractionOutput(BaseModel):
     """Output from variant extraction agent."""
 
-    variants: List[ExtractedVariant]
+    variants: List[Variant]
 
 
 class HarmonizedVariant(BaseModel):
     """HarmonizedVariant output from the harmonization agent."""
 
+    variant_id: int  # 1-based index matching input variant position
     gnomad_style_coordinates: Optional[str] = None
     rsid: Optional[str] = None
     caid: Optional[str] = None
@@ -117,11 +118,11 @@ class HarmonizedVariantResp(BaseModel):
     reasoning: Optional[str] = None
 
 
-class ExtractedVariantResp(BaseModel):
+class VariantResp(BaseModel):
     """Response model for extracted variants."""
 
+    id: int
     paper_id: int
-    variant_idx: int
     gene: str
     transcript: Optional[str]
     protein_accession: Optional[str]
@@ -160,14 +161,13 @@ class ExtractedVariantResp(BaseModel):
     enriched_variant: Optional['EnrichedVariantResp'] = None
 
 
-class ExtractedVariantDB(Base):
-    __tablename__ = 'extracted_variants'
+class VariantDB(Base):
+    __tablename__ = 'variants'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     paper_id: Mapped[int] = mapped_column(
         Integer, ForeignKey('papers.id', ondelete='CASCADE'), nullable=False
     )
-    variant_idx: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # Core fields
     gene: Mapped[str] = mapped_column(String, nullable=False)
@@ -216,27 +216,21 @@ class ExtractedVariantDB(Base):
         onupdate=func.now(),
     )
 
-    paper: Mapped[PaperDB] = relationship(
-        'PaperDB', back_populates='extracted_variants'
-    )
+    paper: Mapped[PaperDB] = relationship('PaperDB', back_populates='variants')
     harmonized_variant: Mapped['HarmonizedVariantDB | None'] = relationship(
-        'HarmonizedVariantDB', back_populates='extracted_variant', uselist=False
+        'HarmonizedVariantDB', back_populates='variant', uselist=False
     )
 
-    __table_args__ = (
-        UniqueConstraint(
-            'paper_id', 'variant_idx', name='uq_extracted_variants_paper_variant_idx'
-        ),
-        Index('ix_extracted_variants_paper_id', 'paper_id'),
-    )
+    __table_args__ = (Index('ix_variants_paper_id', 'paper_id'),)
 
 
 class HarmonizedVariantDB(Base):
     __tablename__ = 'harmonized_variants'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    paper_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    variant_idx: Mapped[int] = mapped_column(Integer, nullable=False)
+    variant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey('variants.id', ondelete='CASCADE'), nullable=False
+    )
 
     # Harmonized fields
     gnomad_style_coordinates: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -254,23 +248,16 @@ class HarmonizedVariantDB(Base):
         onupdate=func.now(),
     )
 
-    extracted_variant: Mapped['ExtractedVariantDB'] = relationship(
-        'ExtractedVariantDB', back_populates='harmonized_variant'
+    variant: Mapped['VariantDB'] = relationship(
+        'VariantDB', back_populates='harmonized_variant', foreign_keys=[variant_id]
     )
     enriched_variant: Mapped['EnrichedVariantDB | None'] = relationship(
         'EnrichedVariantDB', back_populates='harmonized_variant', uselist=False
     )
 
     __table_args__ = (
-        ForeignKeyConstraint(
-            ['paper_id', 'variant_idx'],
-            ['extracted_variants.paper_id', 'extracted_variants.variant_idx'],
-            ondelete='CASCADE',
-        ),
-        UniqueConstraint(
-            'paper_id', 'variant_idx', name='uq_harmonized_variants_paper_variant_idx'
-        ),
-        Index('ix_harmonized_variants_paper_id', 'paper_id'),
+        UniqueConstraint('variant_id', name='uq_harmonized_variants_variant_id'),
+        Index('ix_harmonized_variants_variant_id', 'variant_id'),
     )
 
 
@@ -354,8 +341,11 @@ class EnrichedVariantDB(Base):
     __tablename__ = 'enriched_variants'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    paper_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    variant_idx: Mapped[int] = mapped_column(Integer, nullable=False)
+    harmonized_variant_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey('harmonized_variants.id', ondelete='CASCADE'),
+        nullable=False,
+    )
 
     # ClinVar
     pathogenicity: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -387,17 +377,14 @@ class EnrichedVariantDB(Base):
     )
 
     harmonized_variant: Mapped[HarmonizedVariantDB] = relationship(
-        'HarmonizedVariantDB', back_populates='enriched_variant'
+        'HarmonizedVariantDB',
+        back_populates='enriched_variant',
+        foreign_keys=[harmonized_variant_id],
     )
 
     __table_args__ = (
-        ForeignKeyConstraint(
-            ['paper_id', 'variant_idx'],
-            ['harmonized_variants.paper_id', 'harmonized_variants.variant_idx'],
-            ondelete='CASCADE',
-        ),
         UniqueConstraint(
-            'paper_id', 'variant_idx', name='uq_enriched_variants_paper_variant_idx'
+            'harmonized_variant_id', name='uq_enriched_variants_harmonized_variant_id'
         ),
-        Index('ix_enriched_variants_paper_id', 'paper_id'),
+        Index('ix_enriched_variants_harmonized_variant_id', 'harmonized_variant_id'),
     )

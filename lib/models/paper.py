@@ -12,8 +12,9 @@ from pydantic import (
 
 if TYPE_CHECKING:
     from lib.models.patient import PatientDB
+    from lib.models.patient_variant_link import PatientVariantLinkDB
     from lib.models.phenotype import ExtractedPhenotypeDB
-    from lib.models.variant import ExtractedVariantDB
+    from lib.models.variant import VariantDB
 
 from typing import Literal, TypeAlias
 
@@ -122,10 +123,10 @@ class GeneResp(BaseModel):
 class PaperType(StrEnum):
     Letter = 'Letter'
     Research = 'Research'
-    Case_series = 'Case_series'
-    Case_study = 'Case_study'
-    Cohort_analysis = 'Cohort_analysis'
-    Case_control = 'Case_control'
+    Case_series = 'Case Series'
+    Case_study = 'Case Study'
+    Cohort_analysis = 'Cohort Analysis'
+    Case_control = 'Case Control'
     Unknown = 'Unknown'
     Other = 'Other'
 
@@ -207,8 +208,11 @@ class PaperDB(Base):
         cascade='all, delete-orphan',
         uselist=False,
     )
-    extracted_variants: Mapped[list['ExtractedVariantDB']] = relationship(
-        'ExtractedVariantDB', back_populates='paper', cascade='all, delete-orphan'
+    variants: Mapped[list['VariantDB']] = relationship(
+        'VariantDB', back_populates='paper', cascade='all, delete-orphan'
+    )
+    patient_variant_links: Mapped[list['PatientVariantLinkDB']] = relationship(
+        'PatientVariantLinkDB', back_populates='paper', cascade='all, delete-orphan'
     )
 
 

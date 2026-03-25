@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import List
+from typing import TYPE_CHECKING, List
 
 from pydantic import BaseModel, model_validator
 from sqlalchemy import (
@@ -12,12 +12,15 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 from typing_extensions import Self
 
 from lib.models.base import Base
 from lib.models.evidence_block import EvidenceBlock
+
+if TYPE_CHECKING:
+    from lib.models.paper import PaperDB
 
 # ==============================
 # Enums
@@ -25,40 +28,40 @@ from lib.models.evidence_block import EvidenceBlock
 
 
 class Zygosity(str, Enum):
-    homozygous = 'homozygous'
-    hemizygous = 'hemizygous'
-    heterozygous = 'heterozygous'
-    compound_heterozygous = 'compound heterozygous'
-    unknown = 'unknown'
+    homozygous = 'Homozygous'
+    hemizygous = 'Hemizygous'
+    heterozygous = 'Heterozygous'
+    compound_heterozygous = 'Compound Heterozygous'
+    unknown = 'Unknown'
 
 
 class Inheritance(str, Enum):
-    dominant = 'dominant'
-    recessive = 'recessive'
-    semi_dominant = 'semi-dominant'
+    dominant = 'Dominant'
+    recessive = 'Recessive'
+    semi_dominant = 'Semi-dominant'
     x_linked = 'X-linked'
-    de_novo = 'de novo'
-    somatic_mosaicism = 'somatic mosaicism'
-    mitochondrial = 'mitochondrial'
-    unknown = 'unknown'
+    de_novo = 'De Novo'
+    somatic_mosaicism = 'Somatic Mosaicism'
+    mitochondrial = 'Mitochondrial'
+    unknown = 'Unknown'
 
 
 class TestingMethod(str, Enum):
-    Chromosomal_microarray = 'Chromosomal_microarray'
-    Next_generation_sequencing_panels = 'Next_generation_sequencing_panels'
-    Exome_sequencing = 'Exome_sequencing'
-    Genome_sequencing = 'Genome_sequencing'
-    Sanger_sequencing = 'Sanger_sequencing'
-    Pcr = 'PCR'
-    Homozygosity_mapping = 'Homozygosity_mapping'
-    Linkage_analysis = 'Linkage_analysis'
-    Genotyping = 'Genotyping'
-    Denaturing_gradient_gel = 'Denaturing_gradient_gel'
-    High_resolution_melting = 'High_resolution_melting'
-    Restriction_digest = 'Restriction_digest'
-    Single_strand_conformation_polymorphism = 'Single_strand_conformation_polymorphism'
-    Unknown = 'Unknown'
-    Other = 'Other'
+    chromosomal_microarray = 'Chromosomal Microarray'
+    next_generation_sequencing_panels = 'Next-generation Sequencing Panels'
+    exome_sequencing = 'Exome Sequencing'
+    genome_sequencing = 'Genome Sequencing'
+    sanger_sequencing = 'Sanger Sequencing'
+    pcr = 'PCR'
+    homozygosity_mapping = 'Homozygosity Mapping'
+    linkage_analysis = 'Linkage Analysis'
+    genotyping = 'Genotyping'
+    denaturing_gradient_gel = 'Denaturing Gradient Gel'
+    high_resolution_melting = 'High-resolution Melting'
+    restriction_digest = 'Restriction Digest'
+    single_strand_conformation_polymorphism = 'Single-strand Conformation Polymorphism'
+    unknown = 'Unknown'
+    other = 'Other'
 
 
 # ==============================
@@ -67,8 +70,8 @@ class TestingMethod(str, Enum):
 
 
 class PatientVariantLink(BaseModel):
-    patient_idx: int
-    variant_idx: int
+    patient_id: int
+    variant_id: int
     zygosity: EvidenceBlock[Zygosity]
     inheritance: EvidenceBlock[Inheritance]
     testing_methods: List[EvidenceBlock[TestingMethod]]
@@ -96,17 +99,22 @@ class PatientVariantLinkDB(Base):
     paper_id: Mapped[int] = mapped_column(
         Integer, ForeignKey('papers.id', ondelete='CASCADE'), nullable=False
     )
-    patient_idx: Mapped[int] = mapped_column(Integer, nullable=False)
-    variant_idx: Mapped[int] = mapped_column(Integer, nullable=False)
+    patient_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey('patients.id', ondelete='CASCADE'), nullable=False
+    )
+    variant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey('variants.id', ondelete='CASCADE'), nullable=False
+    )
 
     # Values (updateable)
     zygosity: Mapped[str] = mapped_column(String, nullable=False)
     inheritance: Mapped[str] = mapped_column(String, nullable=False)
+    testing_methods: Mapped[list[str]] = mapped_column(JSON, nullable=False)
 
     # Evidence blocks (static, JSON)
     zygosity_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     inheritance_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
-    testing_methods: Mapped[list] = mapped_column(JSON, nullable=False)
+    testing_methods_evidence: Mapped[list] = mapped_column(JSON, nullable=False)
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -115,14 +123,18 @@ class PatientVariantLinkDB(Base):
         onupdate=func.now(),
     )
 
+    paper: Mapped['PaperDB'] = relationship(
+        'PaperDB', back_populates='patient_variant_links'
+    )
+
     __table_args__ = (
         UniqueConstraint(
-            'paper_id',
-            'patient_idx',
-            'variant_idx',
-            name='uq_patient_variant_links_paper_patient_variant',
+            'patient_id',
+            'variant_id',
+            name='uq_patient_variant_links_patient_variant',
         ),
-        Index('ix_patient_variant_links_paper_id', 'paper_id'),
+        Index('ix_patient_variant_links_patient_id', 'patient_id'),
+        Index('ix_patient_variant_links_variant_id', 'variant_id'),
     )
 
 
@@ -133,11 +145,12 @@ class PatientVariantLinkDB(Base):
 
 class PatientVariantLinkResp(BaseModel):
     paper_id: int
-    patient_idx: int
-    variant_idx: int
+    patient_id: int
+    variant_id: int
     zygosity: Zygosity
     zygosity_evidence: EvidenceBlock[Zygosity]
     inheritance: Inheritance
     inheritance_evidence: EvidenceBlock[Inheritance]
-    testing_methods: List[EvidenceBlock[TestingMethod]]
+    testing_methods: list[TestingMethod]
+    testing_methods_evidence: List[EvidenceBlock[TestingMethod]]
     updated_at: datetime

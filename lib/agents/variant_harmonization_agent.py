@@ -573,6 +573,8 @@ You must return exactly one output object for each input variant.
     - The number of output variants must equal the number of input variants.
     - The order of variants must remain unchanged.
     - You must not add or remove variants.
+    - Each output variant must include a variant_id field that echoes the variant_id from the input.
+      This is used to track which output corresponds to which input.
 
 If VariantValidator successfully produces a gnomAD-style ID at any stage:
     - This defines the canonical genomic representation.
@@ -844,6 +846,10 @@ You may NOT call clinvar_lookup again while resolving this variant.
 STATE 6 — FINALIZATION
 ============================================================
 
+For each output variant, you MUST include:
+    variant_id: the variant_id from the corresponding input variant (echo it back as-is)
+    reasoning: clear summary of normalization path
+
 If allele_registry_resolver returned:
     gnomad_style_coordinates
     rsid
@@ -852,7 +858,7 @@ If allele_registry_resolver returned:
     hgvs_g
     hgvs_p
 
-Return those fields.
+Return those fields along with variant_id and reasoning.
 
 Confidence Levels:
 
