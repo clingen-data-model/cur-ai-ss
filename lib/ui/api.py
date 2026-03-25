@@ -12,6 +12,7 @@ from lib.models import (
     PaperUpdateRequest,
     PatientResp,
     PatientUpdateRequest,
+    PatientVariantLinkResp,
     PedigreeResp,
     PipelineStatus,
 )
@@ -152,3 +153,11 @@ def clear_highlights(paper_id: str) -> None:
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/clear-highlights',
     )
     resp.raise_for_status()
+
+
+def get_patient_variant_links(paper_id: str) -> list[PatientVariantLinkResp]:
+    resp = requests.get(
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/patient-variant-links'
+    )
+    resp.raise_for_status()
+    return TypeAdapter(list[PatientVariantLinkResp]).validate_python(resp.json())

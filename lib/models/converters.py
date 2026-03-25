@@ -2,6 +2,7 @@ from lib.agents.pedigree_describer_agent import PedigreeExtractionOutput
 from lib.models import ExtractedVariantDB, PatientDB, PedigreeDB
 from lib.models.evidence_block import ReasoningBlock
 from lib.models.patient import Patient
+from lib.models.patient_variant_link import PatientVariantLink, PatientVariantLinkDB
 from lib.models.phenotype import (
     ExtractedPhenotype,
     ExtractedPhenotypeDB,
@@ -123,4 +124,20 @@ def harmonized_variant_to_db(
         hgvs_p=variant.hgvs_p,
         hgvs_g=variant.hgvs_g,
         reasoning=variant.reasoning,
+    )
+
+
+def patient_variant_link_to_db(
+    paper_id: str, link: PatientVariantLink
+) -> PatientVariantLinkDB:
+    """Convert PatientVariantLink to PatientVariantLinkDB, extracting values and evidence."""
+    return PatientVariantLinkDB(
+        paper_id=paper_id,
+        patient_idx=link.patient_idx,
+        variant_idx=link.variant_idx,
+        zygosity=link.zygosity.value.value,
+        zygosity_evidence=link.zygosity.model_dump(),
+        inheritance=link.inheritance.value.value,
+        inheritance_evidence=link.inheritance.model_dump(),
+        testing_methods=[m.model_dump() for m in link.testing_methods],
     )

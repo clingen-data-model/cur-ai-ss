@@ -23,6 +23,15 @@ from lib.models.patient import (
     PatientResp,
     PatientUpdateRequest,
 )
+from lib.models.patient_variant_link import (
+    Inheritance,
+    PatientVariantLink,
+    PatientVariantLinkDB,
+    PatientVariantLinkResp,
+    PatientVariantLinkerOutput,
+    TestingMethod,
+    Zygosity,
+)
 from lib.models.phenotype import (
     ExtractedPhenotype,
     ExtractedPhenotypeDB,

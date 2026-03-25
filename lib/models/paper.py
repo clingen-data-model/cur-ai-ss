@@ -192,22 +192,6 @@ class PaperDB(Base):
             self.content = f.read()
         return self
 
-    @property
-    def phenotype_linking_json_path(self) -> Path:
-        return env.evagg_dir / self.id / 'phenotype_linking.json'
-
-    @property
-    def harmonized_variants_json_path(self) -> Path:
-        return env.evagg_dir / self.id / 'harmonized_variants.json'
-
-    @property
-    def enriched_variants_json_path(self) -> Path:
-        return env.evagg_dir / self.id / 'enriched_variants.json'
-
-    @property
-    def patient_variant_links_json_path(self) -> Path:
-        return env.evagg_dir / self.id / 'patient_variant_links.json'
-
     patients: Mapped[list['PatientDB']] = relationship(
         'PatientDB', back_populates='paper', cascade='all, delete-orphan'
     )
@@ -260,11 +244,6 @@ class PaperResp(PaperExtractionOutput):
     # just fine in practice.
     title: str | None = None  # type: ignore
     first_author: str | None = None  # type: ignore
-
-    phenotype_linking_json_path: Path
-    enriched_variants_json_path: Path
-    harmonized_variants_json_path: Path
-    patient_variant_links_json_path: Path
 
     @computed_field  # type: ignore
     @property

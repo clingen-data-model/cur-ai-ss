@@ -71,6 +71,8 @@ from lib.models import (
     PatientDB,
     PatientResp,
     PatientUpdateRequest,
+    PatientVariantLinkDB,
+    PatientVariantLinkResp,
     PedigreeDB,
     PedigreeResp,
     PipelineStatus,
@@ -400,6 +402,48 @@ def _phenotype_to_resp(row: ExtractedPhenotypeDB) -> ExtractedPhenotypeResp:
         modifier=row.modifier,
         updated_at=row.updated_at,
         hpo=hpo,
+    )
+
+
+@app.get(
+    '/papers/{paper_id}/patient-variant-links',
+    response_model=list[PatientVariantLinkResp],
+)
+def get_patient_variant_links(
+    paper_id: str, session: Session = Depends(get_session)
+) -> Any:
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    links = (
+        session.query(PatientVariantLinkDB)
+        .filter(PatientVariantLinkDB.paper_id == paper_id)
+        .order_by(PatientVariantLinkDB.patient_idx, PatientVariantLinkDB.variant_idx)
+        .all()
+    )
+    return [_patient_variant_link_to_resp(link) for link in links]
+
+
+def _patient_variant_link_to_resp(
+    row: PatientVariantLinkDB,
+) -> PatientVariantLinkResp:
+    """Convert PatientVariantLinkDB to PatientVariantLinkResp."""
+    from lib.models import Inheritance, TestingMethod, Zygosity
+
+    return PatientVariantLinkResp(
+        paper_id=row.paper_id,
+        patient_idx=row.patient_idx,
+        variant_idx=row.variant_idx,
+        zygosity=Zygosity(row.zygosity),
+        zygosity_evidence=EvidenceBlock.model_validate(row.zygosity_evidence),
+        inheritance=Inheritance(row.inheritance),
+        inheritance_evidence=EvidenceBlock.model_validate(row.inheritance_evidence),
+        testing_methods=[
+            EvidenceBlock.model_validate(m) for m in row.testing_methods
+        ],
+        updated_at=row.updated_at,
     )
 
 

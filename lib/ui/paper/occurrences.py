@@ -1,23 +1,14 @@
-import json
-
 import pandas as pd
 import streamlit as st
 
-from lib.agents.patient_variant_linking_agent import (
-    EvidenceBlock,
-    Inheritance,
-    PatientVariantLink,
-    PatientVariantLinkerOutput,
-    TestingMethod,
-    Zygosity,
-)
 from lib.models import ExtractedVariantResp, PaperResp, PatientResp, PipelineStatus
-from lib.models.patient import (
-    Patient,
-    PatientExtractionOutput,
+from lib.models.evidence_block import EvidenceBlock
+from lib.models.patient_variant_link import Inheritance, TestingMethod, Zygosity
+from lib.ui.api import (
+    get_patient_variant_links,
+    get_patients,
+    get_variants,
 )
-from lib.models.variant import HarmonizedVariant, VariantHarmonizationOutput
-from lib.ui.api import get_patients, get_variants
 from lib.ui.paper.shared import (
     get_gnomad_url,
     render_highlight_controls,
@@ -76,40 +67,27 @@ def render_patient_variant_occurrences_tab() -> None:
         st.write(f'Entity Linking not yet completed...')
         st.stop()
 
-    # Load all data sources
+    # Load all data sources via API
     patients: list[PatientResp] = get_patients(paper_resp.id)
-
-    extracted_variant_rows = get_variants(paper_resp.id)
-    extracted_variants: list[ExtractedVariantResp] = extracted_variant_rows
-
-    with open(paper_resp.harmonized_variants_json_path, 'r') as f:
-        harmonized_data = json.load(f)
-        harmonized_variants: list[HarmonizedVariant] = (
-            VariantHarmonizationOutput.model_validate(harmonized_data).variants
-        )
-
-    with open(paper_resp.patient_variant_links_json_path, 'r') as f:
-        link_data = json.load(f)
-    links: list[PatientVariantLink] = PatientVariantLinkerOutput.model_validate(
-        link_data
-    ).links
+    extracted_variants: list[ExtractedVariantResp] = get_variants(paper_resp.id)
+    links = get_patient_variant_links(paper_resp.id)
 
     # Build a list of rows for the DataFrame
     rows = []
     for link in links:
         patient = patients[link.patient_idx - 1]
-        extracted_variant = extracted_variants[link.variant_id - 1]
-        harmonized_variant = harmonized_variants[link.variant_id - 1]
+        extracted_variant = extracted_variants[link.variant_idx - 1]
+        harmonized_variant = extracted_variant.harmonized_variant
 
         # Determine the variant description
         variant_desc = (
-            harmonized_variant.hgvs_g
-            or harmonized_variant.hgvs_c
-            or harmonized_variant.gnomad_style_coordinates
-            or harmonized_variant.rsid
-            or harmonized_variant.hgvs_p
+            (harmonized_variant.hgvs_g if harmonized_variant else None)
+            or (harmonized_variant.hgvs_c if harmonized_variant else None)
+            or (harmonized_variant.gnomad_style_coordinates if harmonized_variant else None)
+            or (harmonized_variant.rsid if harmonized_variant else None)
+            or (harmonized_variant.hgvs_p if harmonized_variant else None)
             or extracted_variant.variant_evidence.quote
-            or f'Variant {link.variant_id}'
+            or f'Variant {link.variant_idx}'
         )
 
         # Format testing methods as a list from EvidenceBlocks
@@ -117,15 +95,14 @@ def render_patient_variant_occurrences_tab() -> None:
 
         patient_display = patient.identifier or f'Patient {link.patient_idx}'
         patient_link = f'/paper?paper_id={paper_resp.id}&patient_idx={link.patient_idx}#{patient_display}'
-        variant_link = f'/paper?paper_id={paper_resp.id}&variant_id={link.variant_id}#{variant_desc}'
+        variant_link = f'/paper?paper_id={paper_resp.id}&variant_id={link.variant_idx}#{variant_desc}'
         rows.append(
             {
                 'Select': False,
                 'Patient': patient_link,
                 'Variant': variant_link,
-                'Zygosity': link.zygosity.value.value,
-                'Inheritance': link.inheritance.value.value,
-                'Confidence': link.confidence,
+                'Zygosity': link.zygosity.value,
+                'Inheritance': link.inheritance.value,
                 'Testing Methods': testing_methods_list,
                 # Store full objects for detail panel
                 '_link': link,
@@ -153,7 +130,6 @@ def render_patient_variant_occurrences_tab() -> None:
     zygosity_options = [e.value for e in Zygosity]
     inheritance_options = [e.value for e in Inheritance]
     testing_method_options = [e.value for e in TestingMethod]
-    confidence_options = ['high', 'moderate', 'low']
 
     editted_df = st.data_editor(
         df,
@@ -178,11 +154,6 @@ def render_patient_variant_occurrences_tab() -> None:
             'Inheritance': st.column_config.SelectboxColumn(
                 'Inheritance',
                 options=inheritance_options,
-                width='small',
-            ),
-            'Confidence': st.column_config.SelectboxColumn(
-                'Confidence',
-                options=confidence_options,
                 width='small',
             ),
             'Testing Methods': st.column_config.MultiselectColumn(
@@ -239,28 +210,31 @@ def render_patient_variant_occurrences_tab() -> None:
 
         with col2:
             st.markdown('#### Harmonized Variant Info')
-            gnomad_coords = (
-                f'[{harmonized_variant.gnomad_style_coordinates}]({get_gnomad_url(harmonized_variant.gnomad_style_coordinates)})'
-                if harmonized_variant.gnomad_style_coordinates
-                else 'N/A'
-            )
-            variant_data = {
-                'Field': [
-                    '**HGVS g.**',
-                    '**HGVS c.**',
-                    '**HGVS p.**',
-                    '**rsID**',
-                    '**gnomAD-style**',
-                ],
-                'Value': [
-                    harmonized_variant.hgvs_g or 'N/A',
-                    harmonized_variant.hgvs_c or 'N/A',
-                    harmonized_variant.hgvs_p or 'N/A',
-                    harmonized_variant.rsid or 'N/A',
-                    gnomad_coords,
-                ],
-            }
-            st.table(pd.DataFrame(variant_data))
+            if harmonized_variant:
+                gnomad_coords = (
+                    f'[{harmonized_variant.gnomad_style_coordinates}]({get_gnomad_url(harmonized_variant.gnomad_style_coordinates)})'
+                    if harmonized_variant.gnomad_style_coordinates
+                    else 'N/A'
+                )
+                variant_data = {
+                    'Field': [
+                        '**HGVS g.**',
+                        '**HGVS c.**',
+                        '**HGVS p.**',
+                        '**rsID**',
+                        '**gnomAD-style**',
+                    ],
+                    'Value': [
+                        harmonized_variant.hgvs_g or 'N/A',
+                        harmonized_variant.hgvs_c or 'N/A',
+                        harmonized_variant.hgvs_p or 'N/A',
+                        harmonized_variant.rsid or 'N/A',
+                        gnomad_coords,
+                    ],
+                }
+                st.table(pd.DataFrame(variant_data))
+            else:
+                st.info('Harmonized variant data not available')
 
         st.divider()
 
@@ -269,11 +243,11 @@ def render_patient_variant_occurrences_tab() -> None:
 
         with col1:
             st.markdown('#### Zygosity Evidence')
-            _render_evidence_block(link.zygosity, paper_resp.id, 'zygosity')
+            _render_evidence_block(link.zygosity_evidence, paper_resp.id, 'zygosity')
 
         with col2:
             st.markdown('#### Inheritance Evidence')
-            _render_evidence_block(link.inheritance, paper_resp.id, 'inheritance')
+            _render_evidence_block(link.inheritance_evidence, paper_resp.id, 'inheritance')
 
         # Display testing methods evidence
         if link.testing_methods:

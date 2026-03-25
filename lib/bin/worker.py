@@ -39,6 +39,7 @@ from lib.models import (
     HarmonizedVariantDB,
     PaperDB,
     PatientDB,
+    PatientVariantLinkDB,
     PedigreeDB,
     PipelineStatus,
 )
@@ -46,6 +47,7 @@ from lib.models.converters import (
     harmonized_variant_to_db,
     hpo_to_db,
     patient_to_db,
+    patient_variant_link_to_db,
     pedigree_to_db,
     phenotype_to_db,
     variant_to_db,
@@ -231,7 +233,7 @@ async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
         )
     structured_variants = [
         {
-            'variant_id': r.variant_idx,
+            'variant_idx': r.variant_idx,
             'variant_quote': r.variant_evidence['quote'],
         }
         for r in variant_rows
@@ -268,10 +270,14 @@ async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
         patient_variant_linking_agent,
         f'Variants JSON:\n{structured_variants}\n Patients JSON:\n {structured_patients} Pedigree Description: \n {pedigree_descriptions_output} Paper (fulltext md): {fulltext_md(paper_db.id)}',
     )
-    json_response = result.final_output.model_dump_json(indent=2)
-    paper_db.patient_variant_links_json_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(paper_db.patient_variant_links_json_path, 'w') as f:
-        f.write(json_response)
+    # Persist patient-variant links to DB (idempotent: delete then insert)
+    links = result.final_output.links
+    with session_scope() as session:
+        session.query(PatientVariantLinkDB).filter(
+            PatientVariantLinkDB.paper_id == paper_db.id
+        ).delete()
+        for link in links:
+            session.add(patient_variant_link_to_db(paper_db.id, link))
 
 
 async def patient_phenotype_linking_task_async(paper_db: PaperDB) -> None:
