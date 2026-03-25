@@ -16,7 +16,7 @@ from lib.ui.paper.shared import (
 
 
 def _render_evidence_block(
-    evidence_block: EvidenceBlock, paper_id: str, block_id: str
+    evidence_block: EvidenceBlock, paper_id: int, block_id: str
 ) -> None:
     """Render an EvidenceBlock with reasoning and evidence sources."""
     st.text_area('Reasoning', evidence_block.reasoning, height=20, disabled=True)
@@ -83,7 +83,11 @@ def render_patient_variant_occurrences_tab() -> None:
         variant_desc = (
             (harmonized_variant.hgvs_g if harmonized_variant else None)
             or (harmonized_variant.hgvs_c if harmonized_variant else None)
-            or (harmonized_variant.gnomad_style_coordinates if harmonized_variant else None)
+            or (
+                harmonized_variant.gnomad_style_coordinates
+                if harmonized_variant
+                else None
+            )
             or (harmonized_variant.rsid if harmonized_variant else None)
             or (harmonized_variant.hgvs_p if harmonized_variant else None)
             or extracted_variant.variant_evidence.quote
@@ -95,7 +99,7 @@ def render_patient_variant_occurrences_tab() -> None:
 
         patient_display = patient.identifier or f'Patient {link.patient_idx}'
         patient_link = f'/paper?paper_id={paper_resp.id}&patient_idx={link.patient_idx}#{patient_display}'
-        variant_link = f'/paper?paper_id={paper_resp.id}&variant_id={link.variant_idx}#{variant_desc}'
+        variant_link = f'/paper?paper_id={paper_resp.id}&variant_idx={link.variant_idx}#{variant_desc}'
         rows.append(
             {
                 'Select': False,
@@ -247,7 +251,9 @@ def render_patient_variant_occurrences_tab() -> None:
 
         with col2:
             st.markdown('#### Inheritance Evidence')
-            _render_evidence_block(link.inheritance_evidence, paper_resp.id, 'inheritance')
+            _render_evidence_block(
+                link.inheritance_evidence, paper_resp.id, 'inheritance'
+            )
 
         # Display testing methods evidence
         if link.testing_methods:

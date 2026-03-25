@@ -133,7 +133,13 @@ class PaperType(StrEnum):
 class PaperDB(Base):
     __tablename__ = 'papers'
 
-    id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    content_hash: Mapped[str] = mapped_column(
+        String,
+        nullable=False,
+        unique=True,
+        index=True,
+    )
     gene_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey('genes.id', ondelete='CASCADE'),
@@ -182,7 +188,7 @@ class PaperDB(Base):
         h = hashlib.sha256()
         h.update(content)
         return cls(
-            id=h.hexdigest(),
+            content_hash=h.hexdigest(),
         )
 
     def with_content(self) -> 'PaperDB':
@@ -232,7 +238,8 @@ class PaperExtractionOutput(BaseModel):
 
 class PaperResp(PaperExtractionOutput):
     # From DB
-    id: str
+    id: int
+    content_hash: str
     gene_symbol: str
     filename: str
     pipeline_status: PipelineStatus
@@ -244,21 +251,6 @@ class PaperResp(PaperExtractionOutput):
     # just fine in practice.
     title: str | None = None  # type: ignore
     first_author: str | None = None  # type: ignore
-
-    @computed_field  # type: ignore
-    @property
-    def pdf_raw_path(self) -> Path:
-        return pdf_raw_path(self.id)
-
-    @computed_field  # type: ignore
-    @property
-    def pdf_thumbnail_path(self) -> Path:
-        return pdf_thumbnail_path(self.id)
-
-    @computed_field  # type: ignore
-    @property
-    def pdf_highlighted_path(self) -> Path:
-        return pdf_highlighted_path(self.id)
 
 
 class PaperUpdateRequest(PatchModel):
@@ -285,8 +277,11 @@ class PedigreeDB(Base):
     __tablename__ = 'pedigrees'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    paper_id: Mapped[str] = mapped_column(
-        String, ForeignKey('papers.id', ondelete='CASCADE'), nullable=False, unique=True
+    paper_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey('papers.id', ondelete='CASCADE'),
+        nullable=False,
+        unique=True,
     )
     image_id: Mapped[int] = mapped_column(Integer, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)

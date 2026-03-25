@@ -44,7 +44,7 @@ def search_genes(prefix: str, limit: int = 10) -> list[GeneResp]:
     return TypeAdapter(list[GeneResp]).validate_python(resp.json())
 
 
-def get_paper(paper_id: str) -> PaperResp:
+def get_paper(paper_id: int) -> PaperResp:
     resp = requests.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}')
     resp.raise_for_status()
     return PaperResp.model_validate(resp.json())
@@ -79,7 +79,7 @@ def put_paper(
     return PaperResp.model_validate(resp.json())
 
 
-def update_paper(paper_id: str, update_request: PaperUpdateRequest) -> PaperResp:
+def update_paper(paper_id: int, update_request: PaperUpdateRequest) -> PaperResp:
     resp = requests.patch(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}',
         json=update_request.model_dump(mode='json', exclude_unset=True),
@@ -88,7 +88,7 @@ def update_paper(paper_id: str, update_request: PaperUpdateRequest) -> PaperResp
     return PaperResp.model_validate(resp.json())
 
 
-def delete_paper(paper_id: str) -> None:
+def delete_paper(paper_id: int) -> None:
     resp = requests.delete(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}',
     )
@@ -96,7 +96,7 @@ def delete_paper(paper_id: str) -> None:
 
 
 def highlight_pdf(
-    paper_id: str, queries: list[str], image_ids: list[int], color: str
+    paper_id: int, queries: list[str], image_ids: list[int], color: str
 ) -> None:
     if isinstance(queries, str):
         queries = [queries]
@@ -108,7 +108,7 @@ def highlight_pdf(
 
 
 def grobid_annotations(
-    paper_id: str, queries: list[str], image_ids: list[int], color: str
+    paper_id: int, queries: list[str], image_ids: list[int], color: str
 ) -> list[GrobidAnnotation]:
     resp = requests.post(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/grobid-annotation',
@@ -118,13 +118,13 @@ def grobid_annotations(
     return TypeAdapter(list[GrobidAnnotation]).validate_python(resp.json())
 
 
-def get_patients(paper_id: str) -> list[PatientResp]:
+def get_patients(paper_id: int) -> list[PatientResp]:
     resp = requests.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/patients')
     resp.raise_for_status()
     return TypeAdapter(list[PatientResp]).validate_python(resp.json())
 
 
-def get_pedigree(paper_id: str) -> PedigreeResp | None:
+def get_pedigree(paper_id: int) -> PedigreeResp | None:
     resp = requests.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/pedigree')
     resp.raise_for_status()
     data = resp.json()
@@ -132,7 +132,7 @@ def get_pedigree(paper_id: str) -> PedigreeResp | None:
 
 
 def update_patient(
-    paper_id: str, patient_idx: int, update_request: PatientUpdateRequest
+    paper_id: int, patient_idx: int, update_request: PatientUpdateRequest
 ) -> PatientResp:
     resp = requests.patch(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/patients/{patient_idx}',
@@ -142,20 +142,20 @@ def update_patient(
     return PatientResp.model_validate(resp.json())
 
 
-def get_variants(paper_id: str) -> list[ExtractedVariantResp]:
+def get_variants(paper_id: int) -> list[ExtractedVariantResp]:
     resp = requests.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/variants')
     resp.raise_for_status()
     return TypeAdapter(list[ExtractedVariantResp]).validate_python(resp.json())
 
 
-def clear_highlights(paper_id: str) -> None:
+def clear_highlights(paper_id: int) -> None:
     resp = requests.post(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/clear-highlights',
     )
     resp.raise_for_status()
 
 
-def get_patient_variant_links(paper_id: str) -> list[PatientVariantLinkResp]:
+def get_patient_variant_links(paper_id: int) -> list[PatientVariantLinkResp]:
     resp = requests.get(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/patient-variant-links'
     )

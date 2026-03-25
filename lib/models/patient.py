@@ -340,8 +340,8 @@ class PatientDB(Base):
     __tablename__ = 'patients'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    paper_id: Mapped[str] = mapped_column(
-        String, ForeignKey('papers.id', ondelete='CASCADE'), nullable=False
+    paper_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey('papers.id', ondelete='CASCADE'), nullable=False
     )
     patient_idx: Mapped[int] = mapped_column(Integer, nullable=False)
 
@@ -388,7 +388,7 @@ class PatientDB(Base):
 
 
 class PatientResp(BaseModel):
-    paper_id: str
+    paper_id: int
     patient_idx: int
     identifier: str
     proband_status: ProbandStatus

@@ -27,8 +27,8 @@ from lib.models.patient_variant_link import (
     Inheritance,
     PatientVariantLink,
     PatientVariantLinkDB,
-    PatientVariantLinkResp,
     PatientVariantLinkerOutput,
+    PatientVariantLinkResp,
     TestingMethod,
     Zygosity,
 )

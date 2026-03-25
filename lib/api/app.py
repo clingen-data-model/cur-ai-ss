@@ -175,7 +175,7 @@ def put_paper(
         existing = (
             session.query(PaperDB)
             .options(selectinload(PaperDB.gene))
-            .filter(PaperDB.id == paper_db.id)
+            .filter(PaperDB.content_hash == paper_db.content_hash)
             .one()
         )
         raise HTTPException(
@@ -185,7 +185,7 @@ def put_paper(
 
 
 @app.get('/papers/{paper_id}', response_model=PaperResp)
-def get_paper(paper_id: str, session: Session = Depends(get_session)) -> Any:
+def get_paper(paper_id: int, session: Session = Depends(get_session)) -> Any:
     paper_db = (
         session.query(PaperDB)
         .options(selectinload(PaperDB.gene))
@@ -200,7 +200,7 @@ def get_paper(paper_id: str, session: Session = Depends(get_session)) -> Any:
 
 
 @app.delete('/papers/{paper_id}', status_code=status.HTTP_204_NO_CONTENT)
-def delete_paper(paper_id: str, session: Session = Depends(get_session)) -> None:
+def delete_paper(paper_id: int, session: Session = Depends(get_session)) -> None:
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
         return
@@ -210,7 +210,7 @@ def delete_paper(paper_id: str, session: Session = Depends(get_session)) -> None
 
 @app.patch('/papers/{paper_id}', response_model=PaperResp)
 def update_status(
-    paper_id: str,
+    paper_id: int,
     patch_request: PaperUpdateRequest,
     session: Session = Depends(get_session),
 ) -> Any:
@@ -247,7 +247,7 @@ def list_papers(
 
 
 @app.get('/papers/{paper_id}/patients', response_model=list[PatientResp])
-def get_patients(paper_id: str, session: Session = Depends(get_session)) -> Any:
+def get_patients(paper_id: int, session: Session = Depends(get_session)) -> Any:
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
         raise HTTPException(
@@ -263,7 +263,7 @@ def get_patients(paper_id: str, session: Session = Depends(get_session)) -> Any:
 
 
 @app.get('/papers/{paper_id}/pedigree', response_model=PedigreeResp | None)
-def get_pedigree(paper_id: str, session: Session = Depends(get_session)) -> Any:
+def get_pedigree(paper_id: int, session: Session = Depends(get_session)) -> Any:
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
         raise HTTPException(
@@ -276,7 +276,7 @@ def get_pedigree(paper_id: str, session: Session = Depends(get_session)) -> Any:
 
 
 @app.get('/papers/{paper_id}/variants', response_model=list[ExtractedVariantResp])
-def get_variants(paper_id: str, session: Session = Depends(get_session)) -> Any:
+def get_variants(paper_id: int, session: Session = Depends(get_session)) -> Any:
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
         raise HTTPException(
@@ -410,7 +410,7 @@ def _phenotype_to_resp(row: ExtractedPhenotypeDB) -> ExtractedPhenotypeResp:
     response_model=list[PatientVariantLinkResp],
 )
 def get_patient_variant_links(
-    paper_id: str, session: Session = Depends(get_session)
+    paper_id: int, session: Session = Depends(get_session)
 ) -> Any:
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
@@ -440,9 +440,7 @@ def _patient_variant_link_to_resp(
         zygosity_evidence=EvidenceBlock.model_validate(row.zygosity_evidence),
         inheritance=Inheritance(row.inheritance),
         inheritance_evidence=EvidenceBlock.model_validate(row.inheritance_evidence),
-        testing_methods=[
-            EvidenceBlock.model_validate(m) for m in row.testing_methods
-        ],
+        testing_methods=[EvidenceBlock.model_validate(m) for m in row.testing_methods],
         updated_at=row.updated_at,
     )
 
@@ -452,7 +450,7 @@ def _patient_variant_link_to_resp(
     response_model=list[ExtractedPhenotypeResp],
 )
 def get_phenotypes(
-    paper_id: str, patient_idx: int, session: Session = Depends(get_session)
+    paper_id: int, patient_idx: int, session: Session = Depends(get_session)
 ) -> Any:
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
@@ -486,7 +484,7 @@ def get_phenotypes(
     response_model=ExtractedPhenotypeResp,
 )
 def create_phenotype(
-    paper_id: str,
+    paper_id: int,
     patient_idx: int,
     phenotype_data: ExtractedPhenotype,
     session: Session = Depends(get_session),
@@ -542,7 +540,7 @@ def create_phenotype(
     response_model=ExtractedPhenotypeResp,
 )
 def update_phenotype(
-    paper_id: str,
+    paper_id: int,
     patient_idx: int,
     phenotype_idx: int,
     patch_request: ExtractedPhenotypeUpdateRequest,
@@ -569,7 +567,7 @@ def update_phenotype(
 
 @app.patch('/papers/{paper_id}/patients/{patient_idx}', response_model=PatientResp)
 def update_patient(
-    paper_id: str,
+    paper_id: int,
     patient_idx: int,
     patch_request: PatientUpdateRequest,
     session: Session = Depends(get_session),
@@ -613,7 +611,7 @@ def list_genes(
 
 @app.post('/papers/{paper_id}/highlight', status_code=status.HTTP_204_NO_CONTENT)
 def highlight_pdf(
-    paper_id: str,
+    paper_id: int,
     request: HighlightRequest,
     session: Session = Depends(get_session),
 ) -> None:
@@ -666,7 +664,7 @@ def highlight_pdf(
 
 @app.post('/papers/{paper_id}/grobid-annotation', response_model=list[GrobidAnnotation])
 def grobid_annotation(
-    paper_id: str,
+    paper_id: int,
     request: HighlightRequest,
     session: Session = Depends(get_session),
 ) -> list[GrobidAnnotation]:
@@ -730,7 +728,7 @@ def grobid_annotation(
 
 @app.post('/papers/{paper_id}/clear-highlights', status_code=status.HTTP_204_NO_CONTENT)
 def clear_highlights(
-    paper_id: str,
+    paper_id: int,
     session: Session = Depends(get_session),
 ) -> None:
     """

@@ -140,7 +140,7 @@ def split_by_sections(
     return sections, image_captions
 
 
-def parse_content(paper_id: str, force: bool = False) -> None:
+def parse_content(paper_id: int, force: bool = False) -> None:
     if not force and pdf_extraction_success_path(paper_id).exists():
         return
 

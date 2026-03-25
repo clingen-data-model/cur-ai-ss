@@ -19,7 +19,6 @@ from typing_extensions import Self
 from lib.models.base import Base
 from lib.models.evidence_block import EvidenceBlock
 
-
 # ==============================
 # Enums
 # ==============================
@@ -94,8 +93,8 @@ class PatientVariantLinkDB(Base):
     __tablename__ = 'patient_variant_links'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    paper_id: Mapped[str] = mapped_column(
-        String, ForeignKey('papers.id', ondelete='CASCADE'), nullable=False
+    paper_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey('papers.id', ondelete='CASCADE'), nullable=False
     )
     patient_idx: Mapped[int] = mapped_column(Integer, nullable=False)
     variant_idx: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -118,8 +117,10 @@ class PatientVariantLinkDB(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            'paper_id', 'patient_idx', 'variant_idx',
-            name='uq_patient_variant_links_paper_patient_variant'
+            'paper_id',
+            'patient_idx',
+            'variant_idx',
+            name='uq_patient_variant_links_paper_patient_variant',
         ),
         Index('ix_patient_variant_links_paper_id', 'paper_id'),
     )
@@ -131,7 +132,7 @@ class PatientVariantLinkDB(Base):
 
 
 class PatientVariantLinkResp(BaseModel):
-    paper_id: str
+    paper_id: int
     patient_idx: int
     variant_idx: int
     zygosity: Zygosity

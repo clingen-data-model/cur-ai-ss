@@ -71,8 +71,8 @@ class ExtractedPhenotypeDB(Base):
     __tablename__ = 'extracted_phenotypes'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    paper_id: Mapped[str] = mapped_column(
-        String, ForeignKey('papers.id', ondelete='CASCADE'), nullable=False
+    paper_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey('papers.id', ondelete='CASCADE'), nullable=False
     )
     patient_idx: Mapped[int] = mapped_column(Integer, nullable=False)
     phenotype_idx: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -125,7 +125,7 @@ class HpoDB(Base):
     __tablename__ = 'hpos'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    paper_id: Mapped[str] = mapped_column(String, nullable=False)
+    paper_id: Mapped[int] = mapped_column(Integer, nullable=False)
     patient_idx: Mapped[int] = mapped_column(Integer, nullable=False)
     phenotype_idx: Mapped[int] = mapped_column(Integer, nullable=False)
 
@@ -164,7 +164,7 @@ class HpoDB(Base):
 
 
 class ExtractedPhenotypeResp(BaseModel):
-    paper_id: str
+    paper_id: int
     patient_idx: int
     phenotype_idx: int
     concept: str

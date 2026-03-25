@@ -6,6 +6,7 @@ import streamlit as st
 from streamlit_searchbox import st_searchbox
 
 from lib.core.environment import env
+from lib.misc.pdf.paths import pdf_thumbnail_path
 from lib.models import PaperResp, PipelineStatus
 from lib.ui.api import (
     delete_paper,
@@ -92,7 +93,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
     papers_by_id = {p.id: p for p in paper_resps}
     df = pd.DataFrame([p.model_dump() for p in paper_resps])
     df['thumbnail_path'] = df['id'].map(
-        lambda paper_id: f'{env.PROTOCOL}{env.API_ENDPOINT}{papers_by_id[paper_id].pdf_thumbnail_path}'  # note the leading slash
+        lambda paper_id: f'{env.PROTOCOL}{env.API_ENDPOINT}{pdf_thumbnail_path(paper_id)}'  # note the leading slash
     )
     df['title'] = df.apply(
         lambda row: f'/paper?paper_id={row["id"]}#{papers_by_id[row["id"]].title or QUEUED_EXTRACTION_TEXT}',

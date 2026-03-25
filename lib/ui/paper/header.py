@@ -21,9 +21,9 @@ from lib.ui.paper.variants import render_variants_tab
 
 
 class PaperQueryParams(BaseModel):
-    paper_id: str
+    paper_id: int
     patient_idx: Optional[int] = None
-    variant_id: Optional[int] = None
+    variant_idx: Optional[int] = None
     tab_id: Optional[int] = None
 
     @classmethod
@@ -31,7 +31,7 @@ class PaperQueryParams(BaseModel):
         raw_params = {
             'paper_id': st.query_params.get('paper_id'),
             'patient_idx': st.query_params.get('patient_idx'),
-            'variant_id': st.query_params.get('variant_id'),
+            'variant_idx': st.query_params.get('variant_idx'),
             'tab_id': st.query_params.get('tab_id'),
         }
 
@@ -44,9 +44,9 @@ class PaperQueryParams(BaseModel):
         except ValidationError:
             # If ints fail to parse, fall back to None instead of crashing
             return cls(
-                paper_id=raw_params['paper_id'],
+                paper_id=int(raw_params['paper_id']),
                 patient_idx=None,
-                variant_id=None,
+                variant_idx=None,
             )
 
 
@@ -136,7 +136,7 @@ with center:
                 default_tab = HEADER_TABS[paper_query_params.tab_id]
             elif paper_query_params.patient_idx:
                 default_tab = '👤 Patients'
-            elif paper_query_params.variant_id:
+            elif paper_query_params.variant_idx:
                 default_tab = '🧬 Variants'
             else:
                 default_tab = '📝 Metadata'
@@ -152,7 +152,7 @@ with center:
                 elif patients_tab.open:
                     render_patients_tab(paper_query_params.patient_idx)
                 elif variants_tab.open:
-                    render_variants_tab(paper_query_params.variant_id)
+                    render_variants_tab(paper_query_params.variant_idx)
                 elif occurrences_tab.open:
                     render_patient_variant_occurrences_tab()
 

@@ -1,3 +1,4 @@
+import json
 import re
 
 import pandas as pd
@@ -27,7 +28,7 @@ def _is_pathogenic(pathogenicity: str | None) -> bool:
     return bool(re.search(r'pathogenic', pathogenicity, re.IGNORECASE))
 
 
-def render_variants_tab(selected_variant_id: int | None) -> None:
+def render_variants_tab(selected_variant_idx: int | None) -> None:
     paper_resp: PaperResp = st.session_state['paper_resp']
     if not paper_resp.title:
         st.write(f'{paper_resp.filename} not yet extracted...')
@@ -46,9 +47,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
         if ev and _is_pathogenic(ev.pathogenicity)
     ]
     other_indices = [
-        i
-        for i in range(len(enriched_variants))
-        if i not in pathogenic_indices
+        i for i in range(len(enriched_variants)) if i not in pathogenic_indices
     ]
 
     # Create tabs
@@ -59,7 +58,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
     tab_pathogenic, tab_other = st.tabs(
         tabs,
         default=tabs[1]
-        if selected_variant_id and (selected_variant_id - 1) in other_indices
+        if selected_variant_idx and (selected_variant_idx - 1) in other_indices
         else tabs[0],
     )
 
@@ -69,7 +68,9 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
             i = idx + 1  # Convert 0-based to 1-based for display
             extracted_variant = extracted_variants[idx]
             harmonized_variant = extracted_variant.harmonized_variant
-            enriched_variant = enriched_variants[idx] if idx < len(enriched_variants) else None
+            enriched_variant = (
+                enriched_variants[idx] if idx < len(enriched_variants) else None
+            )
             st.markdown(f'### Variant {i}')
             expander_title = (
                 (
@@ -86,7 +87,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
             )
             with st.expander(
                 expander_title,
-                expanded=(i == selected_variant_id),
+                expanded=(i == selected_variant_idx),
             ):
                 # ======================================================
                 # Harmonized Variant (PRIMARY DISPLAY)
@@ -259,12 +260,12 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                                 f'{ev.spliceai.get("max_score", 0):.3f}'
                                 + (
                                     f' | {ev.spliceai.get("effect_type")}'
-                                    if ev.spliceai.get("effect_type")
+                                    if ev.spliceai.get('effect_type')
                                     else ''
                                 )
                                 + (
                                     f' @ {ev.spliceai.get("position")}'
-                                    if ev.spliceai.get("position") is not None
+                                    if ev.spliceai.get('position') is not None
                                     else ''
                                 )
                             )
@@ -277,8 +278,11 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                                     'REVEL': round(ev.revel, 3)
                                     if ev.revel is not None
                                     else 'N/A',
-                                    'AlphaMissense Class': ev.alphamissense_class or 'N/A',
-                                    'AlphaMissense Score': round(ev.alphamissense_score, 3)
+                                    'AlphaMissense Class': ev.alphamissense_class
+                                    or 'N/A',
+                                    'AlphaMissense Score': round(
+                                        ev.alphamissense_score, 3
+                                    )
                                     if ev.alphamissense_score is not None
                                     else 'N/A',
                                     'SpliceAI': spliceai_display,

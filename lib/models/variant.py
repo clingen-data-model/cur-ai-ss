@@ -120,7 +120,7 @@ class HarmonizedVariantResp(BaseModel):
 class ExtractedVariantResp(BaseModel):
     """Response model for extracted variants."""
 
-    paper_id: str
+    paper_id: int
     variant_idx: int
     gene: str
     transcript: Optional[str]
@@ -164,8 +164,8 @@ class ExtractedVariantDB(Base):
     __tablename__ = 'extracted_variants'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    paper_id: Mapped[str] = mapped_column(
-        String, ForeignKey('papers.id', ondelete='CASCADE'), nullable=False
+    paper_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey('papers.id', ondelete='CASCADE'), nullable=False
     )
     variant_idx: Mapped[int] = mapped_column(Integer, nullable=False)
 
@@ -235,7 +235,7 @@ class HarmonizedVariantDB(Base):
     __tablename__ = 'harmonized_variants'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    paper_id: Mapped[str] = mapped_column(String, nullable=False)
+    paper_id: Mapped[int] = mapped_column(Integer, nullable=False)
     variant_idx: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # Harmonized fields
@@ -354,7 +354,7 @@ class EnrichedVariantDB(Base):
     __tablename__ = 'enriched_variants'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    paper_id: Mapped[str] = mapped_column(String, nullable=False)
+    paper_id: Mapped[int] = mapped_column(Integer, nullable=False)
     variant_idx: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # ClinVar

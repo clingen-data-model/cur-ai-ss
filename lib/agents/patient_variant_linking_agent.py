@@ -6,7 +6,6 @@ from lib.models.patient_variant_link import (
     PatientVariantLinkerOutput,
 )
 
-
 INSTRUCTIONS = """
 You are an expert clinical genetic data curator performing structured evidence extraction
 from biomedical literature.

@@ -65,7 +65,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_with_retries(
-    paper_id: str,
+    paper_id: int,
     run_fn: Callable,
     running_status: PipelineStatus,
     success_status: PipelineStatus,
@@ -111,7 +111,7 @@ def run_with_retries(
                 return
 
 
-async def parse_paper_task_async(paper_id: str) -> None:
+async def parse_paper_task_async(paper_id: int) -> None:
     result = await Runner.run(
         paper_extraction_agent,
         f'Paper (fulltext md): {fulltext_md(paper_id)}',
@@ -183,7 +183,7 @@ async def harmonize_variants_task_async(paper_db: PaperDB) -> None:
             session.add(harmonized_variant_to_db(paper_db.id, idx, variant))
 
 
-async def extract_variants_task_async(paper_id: str, gene_symbol: str) -> None:
+async def extract_variants_task_async(paper_id: int, gene_symbol: str) -> None:
     result = await Runner.run(
         variant_extraction_agent,
         f'Gene Symbol: {gene_symbol}\nPaper (fulltext md): {fulltext_md(paper_id)}',
@@ -196,7 +196,7 @@ async def extract_variants_task_async(paper_id: str, gene_symbol: str) -> None:
             session.add(variant_to_db(paper_id, idx, variant))
 
 
-async def pedigree_describer_task_async(paper_id: str) -> None:
+async def pedigree_describer_task_async(paper_id: int) -> None:
     image_id, combined_text = 0, ''
     while True:
         pdf_image = pdf_image_path(paper_id, image_id)
@@ -414,7 +414,7 @@ async def hpo_linking_task_async(paper_db: PaperDB) -> None:
                 )
 
 
-def initial_extraction(paper_id: str, gene_symbol: str) -> None:
+def initial_extraction(paper_id: int, gene_symbol: str) -> None:
     def run() -> None:
         async def _run1() -> None:
             await asyncio.gather(
@@ -443,7 +443,7 @@ def initial_extraction(paper_id: str, gene_symbol: str) -> None:
     )
 
 
-def linking_tasks(paper_id: str) -> None:
+def linking_tasks(paper_id: int) -> None:
     def run() -> None:
         async def _run() -> None:
             paper_db = PaperDB(id=paper_id).with_content()

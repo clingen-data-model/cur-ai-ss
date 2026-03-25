@@ -5,6 +5,7 @@ import requests
 import streamlit as st
 from streamlit_pdf_viewer import pdf_viewer
 
+from lib.misc.pdf.paths import pdf_highlighted_path
 from lib.ui.api import (
     clear_highlights,
     get_http_error_detail,
@@ -71,7 +72,7 @@ def pdf_focus_modal() -> None:
     paper_resp = st.session_state['paper_resp']
     annotations = st.session_state.get(CURRENT_ANNOTATIONS_KEY, [])
     pdf_viewer(
-        paper_resp.pdf_highlighted_path,
+        pdf_highlighted_path(paper_resp.id),
         width=1000,
         height=800,
         zoom_level=1.5,
@@ -94,7 +95,7 @@ def pdf_focus_modal() -> None:
     with col2:
         st.download_button(
             label='Download PDF',
-            data=open(paper_resp.pdf_highlighted_path, 'rb').read(),
+            data=open(pdf_highlighted_path(paper_resp.id), 'rb').read(),
             icon=':material/download:',
             mime='application/pdf',
             width='stretch',
@@ -102,7 +103,7 @@ def pdf_focus_modal() -> None:
 
 
 def focus_and_show_dialog(
-    paper_id: str, queries: list[str], image_ids: list[int], color: str
+    paper_id: int, queries: list[str], image_ids: list[int], color: str
 ) -> None:
     try:
         current_annotations = grobid_annotations(
@@ -118,7 +119,7 @@ def focus_and_show_dialog(
 
 
 def highlight_evidence(
-    paper_id: str, queries: list[str], image_ids: list[int], color: str
+    paper_id: int, queries: list[str], image_ids: list[int], color: str
 ) -> None:
     try:
         highlight_pdf(
@@ -133,7 +134,7 @@ def highlight_evidence(
 
 
 def render_highlight_controls(
-    paper_id: str,
+    paper_id: int,
     queries: list[str],
     color_key: str,
     button_key_prefix: str,
@@ -167,7 +168,7 @@ def render_highlight_controls(
 
 
 def render_evidence_controls(
-    paper_id: str,
+    paper_id: int,
     label: str,
     quote: str | None,
     reasoning: str | None,

@@ -127,15 +127,12 @@ def test_get_paper_success(client, test_pdf, seeded_genes):
     assert data_get['id'] == paper_id
     assert data_get['pipeline_status'] == PipelineStatus.QUEUED.value
     assert data_get['filename'] == 'job-1.pdf'
-    assert data_get['pdf_thumbnail_path'].endswith(
-        'extracted_pdfs/0e487d93695f2c04d955d8b2cba27384d71aea0acd87d9748ec2abbf2e8a6a0d/thumbnail.png'
-    )
     assert data_get['gene_symbol'] == 'BRCA1'
     _assert_updated_at_recent(data_get['updated_at'])
 
 
 def test_get_paper_not_found(client):
-    response = client.get('/papers/missing')
+    response = client.get('/papers/999')
     assert response.status_code == 404
     assert response.json()['detail'] == 'Paper not found'
 
@@ -167,7 +164,7 @@ def test_update_paper_pipeline_status(client, test_pdf, db_session, seeded_genes
     )
     assert response3.status_code == 409
     response4 = client.patch(
-        f'/papers/abcd',
+        f'/papers/999',
         json={
             'pipeline_status': PipelineStatus.QUEUED.value,
         },
@@ -230,7 +227,7 @@ def test_list_papers_filtered_by_status(client, test_pdf, db_session, seeded_gen
 
 def test_delete_paper(client, test_pdf, db_session, seeded_genes):
     response = client.delete(
-        f'/papers/abcd',
+        f'/papers/999',
     )
     assert response.status_code == 204
 
@@ -281,7 +278,7 @@ def seeded_paper(db_session):
     db_session.add(gene)
     db_session.flush()
     paper = PaperDB(
-        id='abc123',
+        content_hash='abc123',
         gene_id=gene.id,
         filename='test.pdf',
         pipeline_status=PipelineStatus.QUEUED,
@@ -368,6 +365,6 @@ def test_get_patients_returns_ordered_by_position(client, db_session, seeded_pap
 
 
 def test_get_patients_paper_not_found(client):
-    response = client.get('/papers/nonexistent/patients')
+    response = client.get('/papers/999/patients')
     assert response.status_code == 404
     assert response.json()['detail'] == 'Paper not found'

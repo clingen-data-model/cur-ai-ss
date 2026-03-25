@@ -12,7 +12,7 @@ from lib.models.phenotype import (
 from lib.models.variant import ExtractedVariant, HarmonizedVariant, HarmonizedVariantDB
 
 
-def patient_to_db(paper_id: str, patient_idx: int, patient: Patient) -> PatientDB:
+def patient_to_db(paper_id: int, patient_idx: int, patient: Patient) -> PatientDB:
     """Convert a Patient to PatientDB, splitting values from evidence."""
     kwargs = {
         'paper_id': paper_id,
@@ -28,7 +28,7 @@ def patient_to_db(paper_id: str, patient_idx: int, patient: Patient) -> PatientD
     return PatientDB(**kwargs)
 
 
-def pedigree_to_db(paper_id: str, pedigree: PedigreeExtractionOutput) -> PedigreeDB:
+def pedigree_to_db(paper_id: int, pedigree: PedigreeExtractionOutput) -> PedigreeDB:
     """Convert PedigreeExtractionOutput to PedigreeDB."""
     return PedigreeDB(
         paper_id=paper_id,
@@ -38,7 +38,7 @@ def pedigree_to_db(paper_id: str, pedigree: PedigreeExtractionOutput) -> Pedigre
 
 
 def phenotype_to_db(
-    paper_id: str, phenotype_idx: int, phenotype: ExtractedPhenotype
+    paper_id: int, phenotype_idx: int, phenotype: ExtractedPhenotype
 ) -> ExtractedPhenotypeDB:
     """Convert ExtractedPhenotype to ExtractedPhenotypeDB, extracting values and evidence from EvidenceBlock."""
     return ExtractedPhenotypeDB(
@@ -58,7 +58,7 @@ def phenotype_to_db(
 
 
 def hpo_to_db(
-    paper_id: str,
+    paper_id: int,
     patient_idx: int,
     phenotype_idx: int,
     hpo: ReasoningBlock[HPOTerm | None],
@@ -74,7 +74,7 @@ def hpo_to_db(
 
 
 def variant_to_db(
-    paper_id: str, variant_idx: int, variant: ExtractedVariant
+    paper_id: int, variant_idx: int, variant: ExtractedVariant
 ) -> ExtractedVariantDB:
     """Convert Variant to ExtractedVariantDB, extracting values and evidence from EvidenceBlocks."""
     kwargs = {
@@ -111,7 +111,7 @@ def variant_to_db(
 
 
 def harmonized_variant_to_db(
-    paper_id: str, variant_idx: int, variant: HarmonizedVariant
+    paper_id: int, variant_idx: int, variant: HarmonizedVariant
 ) -> HarmonizedVariantDB:
     """Convert HarmonizedVariant to HarmonizedVariantDB."""
     return HarmonizedVariantDB(
@@ -128,7 +128,7 @@ def harmonized_variant_to_db(
 
 
 def patient_variant_link_to_db(
-    paper_id: str, link: PatientVariantLink
+    paper_id: int, link: PatientVariantLink
 ) -> PatientVariantLinkDB:
     """Convert PatientVariantLink to PatientVariantLinkDB, extracting values and evidence."""
     return PatientVariantLinkDB(

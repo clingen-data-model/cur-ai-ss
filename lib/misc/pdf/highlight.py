@@ -143,7 +143,7 @@ def find_best_match(query: str, words: list[WordLoc]) -> list[WordLoc] | None:
 
 
 def images_to_grobid_annotations(
-    paper_id: str,
+    paper_id: int,
     image_ids: list[int],
     color: tuple[float, float, float],
 ) -> list[GrobidAnnotation]:
@@ -192,7 +192,7 @@ def images_to_grobid_annotations(
 
 
 def words_to_grobid_annotations(
-    paper_id: str,
+    paper_id: int,
     words: list[WordLoc],
     color: tuple[float, float, float],
 ) -> list[GrobidAnnotation]:
@@ -236,7 +236,7 @@ def words_to_grobid_annotations(
 
 
 def highlight_images_in_pdf(
-    paper_id: str,
+    paper_id: int,
     image_ids: list[int],
     rgb_color: tuple[float, float, float],
 ) -> None:
@@ -281,7 +281,7 @@ def highlight_images_in_pdf(
 
 
 def highlight_words_in_pdf(
-    paper_id: str,
+    paper_id: int,
     words: list[WordLoc],
     rgb_color: tuple[float, float, float],
 ) -> None:
