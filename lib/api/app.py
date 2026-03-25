@@ -335,7 +335,6 @@ def _variant_to_resp(row: VariantDB) -> VariantResp:
     return VariantResp(
         id=row.id,
         paper_id=row.paper_id,
-        gene=row.gene,
         transcript=row.transcript,
         protein_accession=row.protein_accession,
         genomic_accession=row.genomic_accession,

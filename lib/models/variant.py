@@ -19,7 +19,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
 from lib.models.base import Base
-from lib.models.evidence_block import EvidenceBlock
+from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.paper import PaperDB
 
 
@@ -52,9 +52,6 @@ class GenomeBuild(str, Enum):
 class Variant(BaseModel):
     """Variant extracted from paper by the extraction agent."""
 
-    # Core extraction fields (gene comes from human, no evidence needed)
-    gene: str
-
     # Variant-level evidence
     variant: EvidenceBlock[Optional[str]]
 
@@ -78,7 +75,7 @@ class Variant(BaseModel):
     variant_type: EvidenceBlock[VariantType]
 
     # Functional evidence assessment with evidence block
-    functional_evidence: EvidenceBlock[bool]
+    functional_evidence: ReasoningBlock[bool]
 
 
 class VariantExtractionOutput(BaseModel):
@@ -123,7 +120,6 @@ class VariantResp(BaseModel):
 
     id: int
     paper_id: int
-    gene: str
     transcript: Optional[str]
     protein_accession: Optional[str]
     genomic_accession: Optional[str]
@@ -170,7 +166,6 @@ class VariantDB(Base):
     )
 
     # Core fields
-    gene: Mapped[str] = mapped_column(String, nullable=False)
     transcript: Mapped[str | None] = mapped_column(String, nullable=True)
     protein_accession: Mapped[str | None] = mapped_column(String, nullable=True)
     genomic_accession: Mapped[str | None] = mapped_column(String, nullable=True)

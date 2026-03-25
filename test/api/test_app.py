@@ -16,7 +16,6 @@ from lib.models import (
 )
 
 
-
 @pytest.fixture
 def client(db_session):
     def override_get_session():
@@ -379,7 +378,6 @@ def test_get_variants_harmonized_and_enriched(client, db_session, seeded_paper):
     # Create a variant with evidence blocks
     variant = VariantDB(
         paper_id=seeded_paper.id,
-        gene='BRCA1',
         transcript='NM_007294.3',
         protein_accession='NP_009225.1',
         genomic_accession='NC_000017.11',
@@ -394,15 +392,27 @@ def test_get_variants_harmonized_and_enriched(client, db_session, seeded_paper):
         hgvs_g='g.41196312_41196313delAG',
         variant_type='Frameshift Deletion',
         functional_evidence=True,
-        transcript_evidence={'value': 'NM_007294.3', 'reasoning': 'test', 'quote': 'test'},
-        protein_accession_evidence={'value': 'NP_009225.1', 'reasoning': 'test', 'quote': 'test'},
+        transcript_evidence={
+            'value': 'NM_007294.3',
+            'reasoning': 'test',
+            'quote': 'test',
+        },
+        protein_accession_evidence={
+            'value': 'NP_009225.1',
+            'reasoning': 'test',
+            'quote': 'test',
+        },
         genomic_accession_evidence={
             'value': 'NC_000017.11',
             'reasoning': 'test',
             'quote': 'test',
         },
         lrg_accession_evidence={'value': None, 'reasoning': 'test'},
-        gene_accession_evidence={'value': 'NG_005905.2', 'reasoning': 'test', 'quote': 'test'},
+        gene_accession_evidence={
+            'value': 'NG_005905.2',
+            'reasoning': 'test',
+            'quote': 'test',
+        },
         genomic_coordinates_evidence={
             'value': '17:41196312',
             'reasoning': 'test',
@@ -411,12 +421,32 @@ def test_get_variants_harmonized_and_enriched(client, db_session, seeded_paper):
         genome_build_evidence={'value': 'GRCh38', 'reasoning': 'test', 'quote': 'test'},
         rsid_evidence={'value': 'rs80357906', 'reasoning': 'test', 'quote': 'test'},
         caid_evidence={'value': 'CA123456', 'reasoning': 'test', 'quote': 'test'},
-        variant_evidence={'value': 'c.68_69delAG', 'reasoning': 'test', 'quote': 'test'},
+        variant_evidence={
+            'value': 'c.68_69delAG',
+            'reasoning': 'test',
+            'quote': 'test',
+        },
         hgvs_c_evidence={'value': 'c.68_69delAG', 'reasoning': 'test', 'quote': 'test'},
-        hgvs_p_evidence={'value': 'p.Glu23ValfsTer17', 'reasoning': 'test', 'quote': 'test'},
-        hgvs_g_evidence={'value': 'g.41196312_41196313delAG', 'reasoning': 'test', 'quote': 'test'},
-        variant_type_evidence={'value': 'Frameshift Deletion', 'reasoning': 'test', 'quote': 'test'},
-        functional_evidence_evidence={'value': True, 'reasoning': 'test', 'quote': 'test'},
+        hgvs_p_evidence={
+            'value': 'p.Glu23ValfsTer17',
+            'reasoning': 'test',
+            'quote': 'test',
+        },
+        hgvs_g_evidence={
+            'value': 'g.41196312_41196313delAG',
+            'reasoning': 'test',
+            'quote': 'test',
+        },
+        variant_type_evidence={
+            'value': 'Frameshift Deletion',
+            'reasoning': 'test',
+            'quote': 'test',
+        },
+        functional_evidence_evidence={
+            'value': True,
+            'reasoning': 'test',
+            'quote': 'test',
+        },
     )
     db_session.add(variant)
     db_session.flush()
@@ -464,7 +494,6 @@ def test_get_variants_harmonized_and_enriched(client, db_session, seeded_paper):
 
     v = variants[0]
     # Check basic variant data
-    assert v['gene'] == 'BRCA1'
     assert v['transcript'] == 'NM_007294.3'
     assert v['variant_type'] == 'Frameshift Deletion'
 
@@ -478,7 +507,10 @@ def test_get_variants_harmonized_and_enriched(client, db_session, seeded_paper):
     assert v['harmonized_variant']['gnomad_style_coordinates'] == '17:41196312:AG:A'
     assert v['harmonized_variant']['rsid'] == 'rs80357906'
     assert v['harmonized_variant']['caid'] == 'CA123456'
-    assert v['harmonized_variant']['reasoning'] == 'Successfully harmonized to gnomAD coordinates'
+    assert (
+        v['harmonized_variant']['reasoning']
+        == 'Successfully harmonized to gnomAD coordinates'
+    )
 
     # Check enriched data
     assert v['enriched_variant'] is not None
