@@ -26,13 +26,13 @@ from lib.models.patient import (
 from lib.models.phenotype import (
     ExtractedPhenotype,
     ExtractedPhenotypeDB,
+    ExtractedPhenotypeOutput,
     ExtractedPhenotypeResp,
     ExtractedPhenotypeUpdateRequest,
     HpoCandidate,
-    HpoPhenotypeLink,
-    HpoPhenotypeLinkingOutput,
-    PhenotypeInfoExtractionOutput,
-    PhenotypeLinkingEntry,
-    PhenotypeLinkingOutput,
+    HpoDB,
+    HpoLinkingEntry,
+    HpoLinkingOutput,
+    HPOTerm,
 )
 from lib.models.variant import ExtractedVariantDB, ExtractedVariantResp

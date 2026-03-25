@@ -2,7 +2,7 @@ import hpotk
 from agents import Agent, function_tool
 
 from lib.core.environment import env
-from lib.models import PhenotypeLinkingOutput
+from lib.models.phenotype import HpoLinkingOutput
 from lib.reference_data.hpo import find_matching_hpo_terms, get_ontology
 
 
@@ -101,7 +101,8 @@ scores are only used to ensure relevant candidates appear in the list.
 They should NOT be treated as authoritative rankings.
 
 Your task is to select the HPO term that best represents the meaning of each
-phenotype description and return the enriched phenotype data with HPO links.
+phenotype description and return a links list mapping each phenotype to its
+HPO term.
 
 Prioritize:
 - semantic meaning of the phenotype text
@@ -115,16 +116,28 @@ Use similarity scores only as a weak signal.
 
 INPUT FORMAT
 
-You will receive a JSON object with:
-
-- phenotypes: array of phenotype entries containing:
-    - patient_idx (int)
-    - text (str): phenotype description from the paper
+You will receive a JSON array of phenotype entries, each containing:
+    - phenotype_idx (int): identifier to include in your output
+    - concept (str): phenotype description from the paper
     - negated, uncertain, family_history (boolean)
     - candidates (list): HPO term suggestions
         - hpo_id (str)
         - hpo_name (str)
         - similarity_score (float 0–100)
+
+---------------------------------------------------------------------
+
+OUTPUT FORMAT
+
+Return a `links` array. Each entry must have:
+
+    - phenotype_idx (int): copied from the input entry
+    - hpo (object): always required, with fields:
+        - value (object or null): the matched HPO term, with:
+            - id (str): e.g. "HP:0001250"
+            - name (str): e.g. "Seizure"
+          Set to null if no match found or phenotype is excluded (see STEP 0).
+        - reasoning (str): always required — explain your decision or exclusion
 
 ---------------------------------------------------------------------
 STEP 0 — Exclusion criteria (MANDATORY)
@@ -140,13 +153,8 @@ Then:
 - DO NOT map to any HPO term
 - DO NOT call any tools
 - Return:
-    - hpo_id: null
-    - hpo_name: null
-    - hpo_confidence: null
-    - hpo_reasoning: null
-
-In hpo_reasoning, briefly state why the phenotype was excluded
-(e.g., "negated phenotype", "uncertain finding", "family history only").
+    - hpo.value: null
+    - hpo.reasoning: brief explanation (e.g., "negated phenotype", "uncertain finding", "family history only")
 
 These entries represent absence, uncertainty, or non-proband information
 and must not be encoded as HPO terms.
@@ -276,7 +284,7 @@ Choose the HPO term that:
 If multiple terms could apply, prefer the term that best matches
 the wording and specificity of the phenotype.
 
-Before assigning **high confidence**, you MUST call get_hpo_term()
+Before finalizing your selection, you MUST call get_hpo_term()
 to confirm the definition and scope of the selected term.
 
 Prefer the most specific HPO term that is fully supported by
@@ -286,7 +294,7 @@ the phenotype text, but do not infer details that are not stated.
 
 STEP 6 — If no match exists
 
-Return null ONLY after:
+Return hpo.value = null ONLY after:
 
 - reviewing candidate terms
 - searching the ontology with alternative phrasings
@@ -307,11 +315,7 @@ If none of the candidate terms represent the phenotype meaning:
 3. Use get_hpo_term() to inspect promising results
 4. Use hierarchy tools (get_hpo_parents/children) to find related terms
 
-Only return null after tool exploration reveals no suitable match:
-- hpo_id: null
-- hpo_name: null
-- hpo_confidence: null
-- hpo_reasoning: null
+Only return null after tool exploration reveals no suitable match.
 
 Return null when:
 - the phenotype is too vague (e.g., "symptom", "finding")
@@ -324,28 +328,9 @@ actively use tools before giving up.
 
 ---------------------------------------------------------------------
 
-CONFIDENCE LEVELS
+HPO REASONING REQUIREMENTS (STEP-BY-STEP JUSTIFICATION)
 
-Only assign hpo_confidence when an HPO term is selected.
-
-high
-    Clear semantic match between phenotype and HPO term.
-
-moderate
-    Reasonable match with some ambiguity or minor mismatch
-    in specificity.
-
-low
-    Approximate match but still clinically related.
-
-If no HPO term is selected, hpo_confidence must be null.  hpo_reasoning
-should still be populated with a description of why it is null.
-
----------------------------------------------------------------------
-
-HPO_REASONING REQUIREMENTS (STEP-BY-STEP JUSTIFICATION)
-
-The `hpo_reasoning` field MUST summarize the reasoning process
+The `hpo.reasoning` field MUST summarize the reasoning process
 using the HPO TERM SELECTION FRAMEWORK.
 
 The explanation should document the resolution process in a concise
@@ -367,6 +352,6 @@ agent = Agent(
     name='hpo_linker',
     instructions=INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
-    output_type=PhenotypeLinkingOutput,
+    output_type=HpoLinkingOutput,
     tools=[search_hpo_terms, get_hpo_term, get_hpo_parents, get_hpo_children],
 )

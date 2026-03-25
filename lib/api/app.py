@@ -59,6 +59,8 @@ from lib.models import (
     GeneDB,
     GeneResp,
     HighlightRequest,
+    HpoDB,
+    HPOTerm,
     PaperDB,
     PaperResp,
     PaperUpdateRequest,
@@ -69,6 +71,7 @@ from lib.models import (
     PedigreeResp,
     PipelineStatus,
 )
+from lib.models.evidence_block import ReasoningBlock
 
 logger = logging.getLogger(__name__)
 
@@ -282,6 +285,30 @@ def get_variants(paper_id: str, session: Session = Depends(get_session)) -> Any:
     return variants
 
 
+def _phenotype_to_resp(row: ExtractedPhenotypeDB) -> ExtractedPhenotypeResp:
+    hpo = (
+        ReasoningBlock[HPOTerm | None].model_validate(row.hpo.hpo_evidence)
+        if row.hpo
+        else None
+    )
+    return ExtractedPhenotypeResp(
+        paper_id=row.paper_id,
+        patient_idx=row.patient_idx,
+        phenotype_idx=row.phenotype_idx,
+        concept=row.concept,
+        concept_evidence=row.concept_evidence,
+        negated=row.negated,
+        uncertain=row.uncertain,
+        family_history=row.family_history,
+        onset=row.onset,
+        location=row.location,
+        severity=row.severity,
+        modifier=row.modifier,
+        updated_at=row.updated_at,
+        hpo=hpo,
+    )
+
+
 @app.get(
     '/papers/{paper_id}/patients/{patient_idx}/phenotypes',
     response_model=list[ExtractedPhenotypeResp],
@@ -305,6 +332,7 @@ def get_phenotypes(
         )
     phenotypes = (
         session.query(ExtractedPhenotypeDB)
+        .options(joinedload(ExtractedPhenotypeDB.hpo))
         .filter(
             ExtractedPhenotypeDB.paper_id == paper_id,
             ExtractedPhenotypeDB.patient_idx == patient_idx,
@@ -312,7 +340,7 @@ def get_phenotypes(
         .order_by(ExtractedPhenotypeDB.phenotype_idx)
         .all()
     )
-    return phenotypes
+    return [_phenotype_to_resp(p) for p in phenotypes]
 
 
 @app.post(

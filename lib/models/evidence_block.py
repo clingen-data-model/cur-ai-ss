@@ -5,12 +5,15 @@ from pydantic import BaseModel, model_validator
 T = TypeVar('T')
 
 
-class EvidenceBlock(BaseModel, Generic[T]):
+class ReasoningBlock(BaseModel, Generic[T]):
     value: T
+    reasoning: str  # human-readable summary (always required)
+
+
+class EvidenceBlock(ReasoningBlock[T]):
     quote: str | None = None  # verbatim quote from text
     table_id: int | None = None  # table-based evidence
     image_id: int | None = None  # figure/pedigree evidence
-    reasoning: str  # human-readable summary (always required)
 
     @model_validator(mode='after')
     def validate_sources(self) -> Self:

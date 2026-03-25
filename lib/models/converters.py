@@ -1,6 +1,13 @@
 from lib.agents.pedigree_describer_agent import PedigreeExtractionOutput
 from lib.models import ExtractedVariantDB, PatientDB, PedigreeDB
+from lib.models.evidence_block import ReasoningBlock
 from lib.models.patient import Patient
+from lib.models.phenotype import (
+    ExtractedPhenotype,
+    ExtractedPhenotypeDB,
+    HpoDB,
+    HPOTerm,
+)
 from lib.models.variant import ExtractedVariant
 
 
@@ -26,6 +33,42 @@ def pedigree_to_db(paper_id: str, pedigree: PedigreeExtractionOutput) -> Pedigre
         paper_id=paper_id,
         image_id=pedigree.image_id,
         description=pedigree.description,
+    )
+
+
+def phenotype_to_db(
+    paper_id: str, phenotype_idx: int, phenotype: ExtractedPhenotype
+) -> ExtractedPhenotypeDB:
+    """Convert ExtractedPhenotype to ExtractedPhenotypeDB, extracting values and evidence from EvidenceBlock."""
+    return ExtractedPhenotypeDB(
+        paper_id=paper_id,
+        patient_idx=phenotype.patient_idx,
+        phenotype_idx=phenotype_idx,
+        concept=phenotype.concept.value,
+        concept_evidence=phenotype.concept.model_dump(),
+        negated=phenotype.negated,
+        uncertain=phenotype.uncertain,
+        family_history=phenotype.family_history,
+        onset=phenotype.onset,
+        location=phenotype.location,
+        severity=phenotype.severity,
+        modifier=phenotype.modifier,
+    )
+
+
+def hpo_to_db(
+    paper_id: str,
+    patient_idx: int,
+    phenotype_idx: int,
+    hpo: ReasoningBlock[HPOTerm | None],
+) -> HpoDB:
+    """Convert an HPO EvidenceBlock to HpoDB, storing the HPOTerm atomically and the full evidence block."""
+    return HpoDB(
+        paper_id=paper_id,
+        patient_idx=patient_idx,
+        phenotype_idx=phenotype_idx,
+        hpo_term=hpo.value.model_dump() if hpo.value else None,
+        hpo_evidence=hpo.model_dump(),
     )
 
 

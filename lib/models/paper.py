@@ -320,7 +320,10 @@ class PedigreeDB(Base):
 
     paper: Mapped['PaperDB'] = relationship('PaperDB', back_populates='pedigree')
 
-    __table_args__ = (Index('ix_pedigrees_paper_id', 'paper_id'),)
+    __table_args__ = (
+        UniqueConstraint('paper_id', 'image_id'),
+        Index('ix_pedigrees_paper_id', 'paper_id'),
+    )
 
 
 class PedigreeResp(BaseModel):

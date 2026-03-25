@@ -16,7 +16,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
 from lib.models.base import Base, PatchModel
-from lib.models.evidence_block import EvidenceBlock
+from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 
 if TYPE_CHECKING:
     from lib.models.paper import PaperDB
@@ -35,23 +35,8 @@ class ExtractedPhenotype(BaseModel):
     modifier: str | None
 
 
-class PhenotypeInfoExtractionOutput(BaseModel):
+class ExtractedPhenotypeOutput(BaseModel):
     extracted_phenotypes: List[ExtractedPhenotype]
-
-
-class HpoPhenotypeLink(BaseModel):
-    """Link between a phenotype and an HPO term."""
-
-    patient_idx: int
-    hpo_id: str | None
-    hpo_name: str | None
-    hpo_reasoning: str
-
-
-class HpoPhenotypeLinkingOutput(BaseModel):
-    """Output from HPO phenotype linking agent."""
-
-    links: List[HpoPhenotypeLink]
 
 
 class HpoCandidate(BaseModel):
@@ -62,37 +47,24 @@ class HpoCandidate(BaseModel):
     similarity_score: float
 
 
-class PhenotypeLinkingEntry(ExtractedPhenotype):
-    """Combined phenotype extraction + HPO linking for one phenotype."""
+class HPOTerm(BaseModel):
+    """An HPO ontology term."""
 
-    hpo_id: str | None = None
-    hpo_name: str | None = None
-    hpo_reasoning: str | None = None
-    candidates: list[HpoCandidate] | None = None  # HPO candidate suggestions for agent
-
-    @classmethod
-    def from_extraction(
-        cls,
-        extraction: ExtractedPhenotype,
-        hpo_id: str | None = None,
-        hpo_name: str | None = None,
-        hpo_reasoning: str | None = None,
-        candidates: list[HpoCandidate] | None = None,
-    ) -> 'PhenotypeLinkingEntry':
-        """Create a PhenotypeLinkingEntry from a ExtractedPhenotype."""
-        return cls(
-            **extraction.model_dump(),
-            hpo_id=hpo_id,
-            hpo_name=hpo_name,
-            hpo_reasoning=hpo_reasoning,
-            candidates=candidates,
-        )
+    id: str
+    name: str
 
 
-class PhenotypeLinkingOutput(BaseModel):
-    """Combined phenotype extraction + HPO linking output."""
+class HpoLinkingEntry(BaseModel):
+    """HPO linking result for a single phenotype."""
 
-    extracted_phenotypes: List[PhenotypeLinkingEntry]
+    phenotype_idx: int
+    hpo: ReasoningBlock[HPOTerm | None]
+
+
+class HpoLinkingOutput(BaseModel):
+    """Output from the HPO linking agent."""
+
+    links: List[HpoLinkingEntry]
 
 
 class ExtractedPhenotypeDB(Base):
@@ -128,6 +100,9 @@ class ExtractedPhenotypeDB(Base):
     patient: Mapped['PatientDB'] = relationship(
         'PatientDB', back_populates='extracted_phenotypes', overlaps='paper'
     )
+    hpo: Mapped['HpoDB | None'] = relationship(
+        'HpoDB', back_populates='phenotype', uselist=False
+    )
 
     __table_args__ = (
         ForeignKeyConstraint(
@@ -146,9 +121,49 @@ class ExtractedPhenotypeDB(Base):
     )
 
 
-class ExtractedPhenotypeResp(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+class HpoDB(Base):
+    __tablename__ = 'hpos'
 
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    paper_id: Mapped[str] = mapped_column(String, nullable=False)
+    patient_idx: Mapped[int] = mapped_column(Integer, nullable=False)
+    phenotype_idx: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    hpo_term: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    hpo_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    phenotype: Mapped['ExtractedPhenotypeDB'] = relationship(
+        'ExtractedPhenotypeDB', back_populates='hpo'
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ['paper_id', 'patient_idx', 'phenotype_idx'],
+            [
+                'extracted_phenotypes.paper_id',
+                'extracted_phenotypes.patient_idx',
+                'extracted_phenotypes.phenotype_idx',
+            ],
+            ondelete='CASCADE',
+        ),
+        UniqueConstraint(
+            'paper_id',
+            'patient_idx',
+            'phenotype_idx',
+            name='uq_hpos_paper_patient_phenotype',
+        ),
+        Index('ix_hpos_paper_id', 'paper_id'),
+    )
+
+
+class ExtractedPhenotypeResp(BaseModel):
     paper_id: str
     patient_idx: int
     phenotype_idx: int
@@ -163,6 +178,8 @@ class ExtractedPhenotypeResp(BaseModel):
     updated_at: datetime
     # Evidence block (from DB JSON column)
     concept_evidence: EvidenceBlock[str]
+    # HPO link (from hpos table, None if HPO linking not yet run)
+    hpo: ReasoningBlock[HPOTerm | None] | None = None
 
 
 class ExtractedPhenotypeUpdateRequest(PatchModel):

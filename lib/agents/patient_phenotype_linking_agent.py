@@ -4,7 +4,7 @@ from agents import Agent
 from pydantic import BaseModel
 
 from lib.core.environment import env
-from lib.models import ExtractedPhenotype, PhenotypeInfoExtractionOutput
+from lib.models import ExtractedPhenotype, ExtractedPhenotypeOutput
 
 INSTRUCTIONS = """
 You are an expert clinical data curator performing structured phenotype extraction
@@ -241,5 +241,5 @@ agent = Agent(
     name='phenotype_patient_linker',
     instructions=INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
-    output_type=PhenotypeInfoExtractionOutput,
+    output_type=ExtractedPhenotypeOutput,
 )

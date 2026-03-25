@@ -41,11 +41,16 @@ from lib.models import (
     PaperDB,
     PatientDB,
     PedigreeDB,
-    PhenotypeLinkingEntry,
-    PhenotypeLinkingOutput,
     PipelineStatus,
 )
-from lib.models.converters import patient_to_db, pedigree_to_db, variant_to_db
+from lib.models.converters import (
+    hpo_to_db,
+    patient_to_db,
+    pedigree_to_db,
+    phenotype_to_db,
+    variant_to_db,
+)
+from lib.models.phenotype import ExtractedPhenotypeDB, HpoCandidate, HpoDB
 from lib.models.variant import ExtractedVariant
 from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
 
@@ -287,17 +292,15 @@ async def patient_phenotype_linking_task_async(paper_db: PaperDB) -> None:
         f'Paper (fulltext md): {fulltext_md(paper_db.id)}\n\nStructured Patients JSON:\n{structured_patients}',
     )
 
-    # Convert phenotype extraction output to combined phenotype-linking format
-    phenotypes_output = result.final_output
-    phenotype_links = [
-        PhenotypeLinkingEntry.from_extraction(ph)
-        for ph in phenotypes_output.extracted_phenotypes
-    ]
-    combined_output = PhenotypeLinkingOutput(extracted_phenotypes=phenotype_links)
-    json_response = combined_output.model_dump_json(indent=2)
-    paper_db.phenotype_linking_json_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(paper_db.phenotype_linking_json_path, 'w') as f:
-        f.write(json_response)
+    # Persist extracted phenotypes to DB (idempotent: delete-then-insert)
+    with session_scope() as session:
+        session.query(ExtractedPhenotypeDB).filter(
+            ExtractedPhenotypeDB.paper_id == paper_db.id
+        ).delete()
+        for idx, phenotype in enumerate(
+            result.final_output.extracted_phenotypes, start=1
+        ):
+            session.add(phenotype_to_db(paper_db.id, idx, phenotype))
 
 
 async def enrich_variants_task_async(paper_db: PaperDB) -> None:
@@ -316,32 +319,52 @@ async def enrich_variants_task_async(paper_db: PaperDB) -> None:
 
 
 async def hpo_linking_task_async(paper_db: PaperDB) -> None:
-    with open(paper_db.phenotype_linking_json_path, 'r') as f:
-        phenotype_data = json.load(f)
+    with session_scope() as session:
+        phenotype_rows = (
+            session.query(ExtractedPhenotypeDB)
+            .filter(ExtractedPhenotypeDB.paper_id == paper_db.id)
+            .order_by(
+                ExtractedPhenotypeDB.patient_idx, ExtractedPhenotypeDB.phenotype_idx
+            )
+            .all()
+        )
 
-    phenotype_linking = PhenotypeLinkingOutput(**phenotype_data)
     term_lookup = build_term_lookup()
 
-    # Add HPO candidates to each phenotype
-    for entry in phenotype_linking.extracted_phenotypes:
-        candidates = find_matching_hpo_terms(
-            entry.concept.value, term_lookup=term_lookup
+    phenotype_inputs = []
+    for row in phenotype_rows:
+        candidates: list[HpoCandidate] = find_matching_hpo_terms(
+            row.concept, term_lookup=term_lookup
         )
-        entry.candidates = candidates
+        phenotype_inputs.append(
+            {
+                'phenotype_idx': row.phenotype_idx,
+                'concept': row.concept,
+                'negated': row.negated,
+                'uncertain': row.uncertain,
+                'family_history': row.family_history,
+                'candidates': [c.model_dump() for c in candidates],
+            }
+        )
 
-    # Exclude optional fields to keep agent input clean
-    phenotype_data_filtered = phenotype_linking.model_dump(
-        exclude={'onset', 'location', 'severity', 'modifier'}
-    )
     result = await Runner.run(
         hpo_linking_agent,
-        f'Phenotypes JSON:\n{json.dumps(phenotype_data_filtered, indent=2)}',
-        max_turns=5 * len(phenotype_linking.extracted_phenotypes),
+        f'Phenotypes JSON:\n{json.dumps(phenotype_inputs, indent=2)}',
+        max_turns=5 * len(phenotype_inputs),
     )
 
-    json_response = result.final_output.model_dump_json(indent=2)
-    with open(paper_db.phenotype_linking_json_path, 'w') as f:
-        f.write(json_response)
+    # Build lookup: phenotype_idx → DB row
+    row_lookup = {r.phenotype_idx: r for r in phenotype_rows}
+
+    # Persist HPO links to DB (idempotent: delete-then-insert)
+    with session_scope() as session:
+        session.query(HpoDB).filter(HpoDB.paper_id == paper_db.id).delete()
+        for link in result.final_output.links:
+            row = row_lookup[link.phenotype_idx]
+            if row:
+                session.add(
+                    hpo_to_db(paper_db.id, row.patient_idx, row.phenotype_idx, link.hpo)
+                )
 
 
 def initial_extraction(paper_id: str, gene_symbol: str) -> None:
