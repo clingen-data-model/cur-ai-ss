@@ -35,4 +35,11 @@ from lib.models.phenotype import (
     HpoLinkingOutput,
     HPOTerm,
 )
-from lib.models.variant import ExtractedVariantDB, ExtractedVariantResp
+from lib.models.variant import (
+    ExtractedVariantDB,
+    ExtractedVariantResp,
+    HarmonizedVariant,
+    HarmonizedVariantDB,
+    HarmonizedVariantResp,
+    VariantHarmonizationOutput,
+)

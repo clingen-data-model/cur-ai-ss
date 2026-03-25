@@ -8,7 +8,7 @@ from lib.models.phenotype import (
     HpoDB,
     HPOTerm,
 )
-from lib.models.variant import ExtractedVariant
+from lib.models.variant import ExtractedVariant, HarmonizedVariant, HarmonizedVariantDB
 
 
 def patient_to_db(paper_id: str, patient_idx: int, patient: Patient) -> PatientDB:
@@ -107,3 +107,20 @@ def variant_to_db(
         kwargs[f'{field_name}_evidence'] = field_value.model_dump()
 
     return ExtractedVariantDB(**kwargs)
+
+
+def harmonized_variant_to_db(
+    paper_id: str, variant_idx: int, variant: HarmonizedVariant
+) -> HarmonizedVariantDB:
+    """Convert HarmonizedVariant to HarmonizedVariantDB."""
+    return HarmonizedVariantDB(
+        paper_id=paper_id,
+        variant_idx=variant_idx,
+        gnomad_style_coordinates=variant.gnomad_style_coordinates,
+        rsid=variant.rsid,
+        caid=variant.caid,
+        hgvs_c=variant.hgvs_c,
+        hgvs_p=variant.hgvs_p,
+        hgvs_g=variant.hgvs_g,
+        reasoning=variant.reasoning,
+    )

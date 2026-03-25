@@ -38,12 +38,14 @@ from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import fulltext_md, pdf_image_caption_path, pdf_image_path
 from lib.models import (
     ExtractedVariantDB,
+    HarmonizedVariantDB,
     PaperDB,
     PatientDB,
     PedigreeDB,
     PipelineStatus,
 )
 from lib.models.converters import (
+    harmonized_variant_to_db,
     hpo_to_db,
     patient_to_db,
     pedigree_to_db,
@@ -172,10 +174,13 @@ async def harmonize_variants_task_async(paper_db: PaperDB) -> None:
         f'Variants JSON:\n{json.dumps(variants_output, indent=2)}',
         max_turns=10 * len(variants_output['variants']),
     )
-    json_response = result.final_output.model_dump_json(indent=2)
-    paper_db.harmonized_variants_json_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(paper_db.harmonized_variants_json_path, 'w') as f:
-        f.write(json_response)
+    # Persist harmonized variants to DB (idempotent: delete-then-insert)
+    with session_scope() as session:
+        session.query(HarmonizedVariantDB).filter(
+            HarmonizedVariantDB.paper_id == paper_db.id
+        ).delete()
+        for idx, variant in enumerate(result.final_output.variants, start=1):
+            session.add(harmonized_variant_to_db(paper_db.id, idx, variant))
 
 
 async def extract_variants_task_async(paper_id: str, gene_symbol: str) -> None:
@@ -304,9 +309,25 @@ async def patient_phenotype_linking_task_async(paper_db: PaperDB) -> None:
 
 
 async def enrich_variants_task_async(paper_db: PaperDB) -> None:
-    with open(paper_db.harmonized_variants_json_path, 'r') as f:
-        harmonized_data = json.load(f)
-    harmonized_variants = [HarmonizedVariant(**v) for v in harmonized_data['variants']]
+    with session_scope() as session:
+        rows = (
+            session.query(HarmonizedVariantDB)
+            .filter(HarmonizedVariantDB.paper_id == paper_db.id)
+            .order_by(HarmonizedVariantDB.variant_idx)
+            .all()
+        )
+        harmonized_variants = [
+            HarmonizedVariant(
+                gnomad_style_coordinates=r.gnomad_style_coordinates,
+                rsid=r.rsid,
+                caid=r.caid,
+                hgvs_c=r.hgvs_c,
+                hgvs_p=r.hgvs_p,
+                hgvs_g=r.hgvs_g,
+                reasoning=r.reasoning,
+            )
+            for r in rows
+        ]
     # Offload blocking enrichment to thread
     enriched_variants = await asyncio.to_thread(
         enrich_variants_batch,

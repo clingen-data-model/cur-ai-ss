@@ -11,8 +11,6 @@ from lib.models import (
     PaperResp,
     PatientResp,
     PatientUpdateRequest,
-    PhenotypeLinkingEntry,
-    PhenotypeLinkingOutput,
     PipelineStatus,
 )
 from lib.models.patient import (
@@ -40,7 +38,6 @@ def render_patient(
     expanded: bool,
     key_prefix: str,
     patient_idx: int,
-    phenotypes: list[PhenotypeLinkingEntry] | None = None,
 ) -> None:
     with st.expander(
         f'{patient.identifier or "N/A"}',
@@ -294,171 +291,8 @@ def render_patient(
             except Exception as e:
                 st.toast(f'Failed to save: {str(e)}', icon='❌')
 
-        # --- Phenotypes Section
-        if phenotypes:
-            st.divider()
-            _render_patient_phenotypes(
-                phenotypes,
-                patient_idx,
-                key_prefix,
-            )
-
-
-def _render_patient_phenotypes(
-    all_phenotypes: list[PhenotypeLinkingEntry],
-    patient_idx: int,
-    key_prefix: str,
-) -> None:
-    """Render phenotypes for a specific patient with matched/unmatched tabs."""
-    # Filter phenotypes for this patient
-    patient_phenotypes = [p for p in all_phenotypes if p.patient_idx == patient_idx]
-
-    if not patient_phenotypes:
-        st.info('No phenotypes for this patient.')
-        return
-
-    _render_phenotypes_table(
-        patient_phenotypes,
-        patient_idx,
-        key_prefix,
-        table_type='patient-phenotypes',
-    )
-
-
-def _render_phenotypes_table(
-    phenotypes: list[PhenotypeLinkingEntry],
-    patient_idx: int,
-    key_prefix: str,
-    show_hpo: bool,
-    table_type: str,
-) -> None:
-    """Render phenotypes table with detail panel."""
-    paper_resp = st.session_state.get('paper_resp')
-    # Build table rows
-    rows = []
-    for phenotype in phenotypes:
-        row = {
-            'Select': False,
-            'Phenotype': phenotype.text,
-            'Evidence Context': '\n '.join(phenotype.evidence_contexts)
-            if phenotype.evidence_contexts
-            else '',
-            '_phenotype': phenotype,
-        }
-
-        if show_hpo:
-            hpo_id_link = (
-                f'https://hpo.jax.org/app/browse/term/{phenotype.hpo_id}#{phenotype.hpo_id}'
-                if phenotype.hpo_id
-                else None
-            )
-            hpo_term_link = (
-                f'https://hpo.jax.org/app/browse/term/{phenotype.hpo_id}#{phenotype.hpo_name}'
-                if phenotype.hpo_id
-                else None
-            )
-            row.update(
-                {
-                    'HPO ID': hpo_id_link,
-                    'HPO Term': hpo_term_link,
-                }
-            )
-
-        rows.append(row)
-
-    # Create DataFrame for display (exclude internal columns)
-    display_rows = [
-        {k: v for k, v in row.items() if not k.startswith('_')} for row in rows
-    ]
-    df = pd.DataFrame(display_rows)
-
-    # Display table
-    column_config = {
-        'Select': st.column_config.CheckboxColumn('Select', width='small'),
-        'Phenotype': st.column_config.TextColumn(
-            'Phenotype',
-            width='large',
-        ),
-    }
-    if show_hpo:
-        column_config.update(
-            {
-                'HPO ID': st.column_config.LinkColumn(
-                    'HPO ID',
-                    width='small',
-                    display_text=r'.*?#(.+)$',
-                ),
-                'HPO Term': st.column_config.LinkColumn(
-                    'HPO Term',
-                    width='medium',
-                    display_text=r'.*?#(.+)$',
-                ),
-            }
-        )
-
-    editted_df = st.data_editor(
-        df,
-        width='stretch',
-        hide_index=True,
-        disabled=['Phenotype'] + (['HPO ID', 'HPO Term'] if show_hpo else []),
-        column_config=column_config,
-        key=f'{key_prefix}-{table_type}-editor',
-    )
-
-    # Show detail panel when a row is selected
-    selected_rows = editted_df[editted_df['Select']].index.tolist()
-    if selected_rows:
-        idx = selected_rows[0]
-        phenotype = rows[idx]['_phenotype']
-
-        st.divider()
-        st.markdown('##### Phenotype Details')
-
-        details_data = {
-            'Field': [
-                '**Text**',
-                '**HPO ID**',
-                '**HPO Term**',
-            ],
-            'Value': [
-                phenotype.text,
-                phenotype.hpo_id or 'N/A',
-                phenotype.hpo_name or 'N/A',
-            ],
-        }
-        st.table(pd.DataFrame(details_data))
-
-        # Create three horizontal columns
-        col1, col2, col3 = st.columns(3)
-
-        # Evidence context
-        with col1:
-            if phenotype.evidence_contexts:
-                with st.expander('Evidence Context', expanded=False):
-                    for i, note in enumerate(phenotype.evidence_contexts, 1):
-                        st.markdown(f'**Note {i}:** {note}')
-
-        # HPO matching notes
-        with col2:
-            if phenotype.hpo_reasoning:
-                with st.expander('HPO Reasoning', expanded=False):
-                    st.text(phenotype.hpo_reasoning)
-
-        # Highlight button with popover
-        with col3:
-            if paper_resp:
-                with st.container(
-                    horizontal=True,
-                    vertical_alignment='center',
-                    horizontal_alignment='right',
-                ):
-                    render_highlight_controls(
-                        paper_resp.id,
-                        phenotype.evidence_contexts or [],
-                        color_key=f'{key_prefix}-highlight-color-{phenotype.text}',
-                        button_key_prefix=f'{key_prefix}-highlight-confirm-{phenotype.text}',
-                        disabled=not phenotype.evidence_contexts,
-                    )
+        # --- Phenotypes Section (loaded via API in patients.py module)
+        # Phenotypes are now stored in the database and accessed through the API
 
 
 def render_patients_tab(selected_patient_idx: int | None) -> None:
@@ -473,14 +307,6 @@ def render_patients_tab(selected_patient_idx: int | None) -> None:
     # Load patients
     # ---------------
     patients: list[PatientResp] = get_patients(paper_resp.id)
-
-    # Load phenotype linking data
-    phenotypes: list[PhenotypeLinkingEntry] | None = None
-    with open(paper_resp.phenotype_linking_json_path, 'r') as f:
-        phenotype_data = json.load(f)
-    phenotypes = PhenotypeLinkingOutput.model_validate(
-        phenotype_data
-    ).extracted_phenotypes
 
     # Load pedigree description
     pedigree_description = get_pedigree(paper_resp.id)
@@ -531,7 +357,6 @@ def render_patients_tab(selected_patient_idx: int | None) -> None:
                 expanded=(original_idx == selected_patient_idx),
                 key_prefix=f'patient-proband-{original_idx}',
                 patient_idx=original_idx,
-                phenotypes=phenotypes,
             )
     with non_proband_tab:
         if not non_probands:
@@ -544,7 +369,6 @@ def render_patients_tab(selected_patient_idx: int | None) -> None:
                 expanded=(original_idx == selected_patient_idx),
                 key_prefix=f'patient-non-proband-{original_idx}',
                 patient_idx=original_idx,
-                phenotypes=phenotypes,
             )
     with affecteds_tab:
         if not affecteds:
@@ -557,7 +381,6 @@ def render_patients_tab(selected_patient_idx: int | None) -> None:
                 expanded=(original_idx == selected_patient_idx),
                 key_prefix=f'patient-affected-{original_idx}',
                 patient_idx=original_idx,
-                phenotypes=phenotypes,
             )
     with unaffecteds_tab:
         if not unaffecteds:
@@ -570,7 +393,6 @@ def render_patients_tab(selected_patient_idx: int | None) -> None:
                 expanded=(original_idx == selected_patient_idx),
                 key_prefix=f'patient-unaffected-{original_idx}',
                 patient_idx=original_idx,
-                phenotypes=phenotypes,
             )
     with pedigree_image_tab:
         if not pedigree_description:

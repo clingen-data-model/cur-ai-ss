@@ -5,10 +5,14 @@ from urllib.parse import quote
 
 import requests
 from agents import Agent, function_tool
-from pydantic import BaseModel
 
 from lib.core.environment import env
-from lib.models.variant import GenomeBuild, VariantExtractionOutput
+from lib.models.variant import (
+    GenomeBuild,
+    HarmonizedVariant,
+    VariantExtractionOutput,
+    VariantHarmonizationOutput,
+)
 
 CLINGEN_ALLELE_REGISTRY_ENDPOINT = 'https://reg.genome.network'
 EUTILS_BASE = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils'
@@ -684,7 +688,7 @@ If hgvs_c available:
     1. If transcript missing OR transcript lacks a version:
         Call select_canonical_transcript(gene, genome_build or GRCh38 default)
         Replace transcript with returned versioned transcript.
-        Record selected transcript in normalization_notes.
+        Record selected transcript in reasoning.
 
     2. Construct:
            transcript + ":" + hgvs_c
@@ -703,11 +707,9 @@ If hgvs_c available:
 
         If allele_registry_resolver returns a match:
             RETURN result.
-            normalization_confidence = high
 
         If allele_registry_resolver returns no match:
             RETURN result using the projected gnomAD-style coordinates.
-            normalization_confidence = high
 
         This is a terminal state.
         Do NOT proceed to Step 4B or State 5.
@@ -729,7 +731,7 @@ If hgvs_p available:
            If transcript missing OR transcript lacks a version:
                Call select_canonical_transcript(gene, genome_build or GRCh38 default)
                Replace transcript with returned versioned transcript.
-               Record selected transcript in normalization_notes.
+               Record selected transcript in reasoning.
 
            If transcript available:
                Construct:
@@ -798,7 +800,6 @@ If multiple ClinVar records returned:
 Case A — rsid OR caid returned:
     Call allele_registry_resolver using identifier.
     RETURN result.
-    normalization_confidence = medium
 
 Case B — Only hgvs returned:
     Extract transcript and hgvs_c from hgvs.
@@ -811,11 +812,9 @@ Case B — Only hgvs returned:
     If successful:
         → Call allele_registry_resolver
         → RETURN result.
-        normalization_confidence = medium
 
     If unsuccessful:
         → RETURN None outputs.
-        normalization_confidence = low
 
 Case C — ClinVar returns an empty list:
 
@@ -834,11 +833,9 @@ Case C — ClinVar returns an empty list:
             If successful:
                 Call allele_registry_resolver
                 RETURN result.
-                normalization_confidence = medium
 
     If dbsnp_lookup returns no usable results:
         RETURN None outputs.
-        normalization_confidence = low
 
 
 You may NOT call clinvar_lookup again while resolving this variant.
@@ -872,10 +869,10 @@ low:
     - No resolution possible
 
 ============================================================
-NORMALIZATION NOTES REQUIREMENT
+REASONING REQUIREMENT
 ============================================================
 
-You must populate normalization_notes with a clear, human-readable
+You must populate reasoning with a clear, human-readable
 summary of the normalization path taken.
 
 Rules:
@@ -891,21 +888,6 @@ Rules:
 - If ClinVar or dbSNP were used, explicitly state this.
 - If resolution failed, clearly state that no registry match was found.
 """
-
-
-class HarmonizedVariant(BaseModel):
-    gnomad_style_coordinates: Optional[str]
-    rsid: Optional[str]
-    caid: Optional[str]
-    hgvs_c: Optional[str]
-    hgvs_p: Optional[str]
-    hgvs_g: Optional[str]
-    normalization_confidence: Literal['high', 'medium', 'low']
-    normalization_notes: Optional[str]
-
-
-class VariantHarmonizationOutput(BaseModel):
-    variants: List[HarmonizedVariant]
 
 
 agent = Agent(

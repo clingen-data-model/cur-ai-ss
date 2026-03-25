@@ -11,15 +11,12 @@ from lib.agents.patient_variant_linking_agent import (
     TestingMethod,
     Zygosity,
 )
-from lib.agents.variant_harmonization_agent import (
-    HarmonizedVariant,
-    VariantHarmonizationOutput,
-)
 from lib.models import ExtractedVariantResp, PaperResp, PatientResp, PipelineStatus
 from lib.models.patient import (
     Patient,
     PatientExtractionOutput,
 )
+from lib.models.variant import HarmonizedVariant, VariantHarmonizationOutput
 from lib.ui.api import get_patients, get_variants
 from lib.ui.paper.shared import (
     get_gnomad_url,
@@ -254,7 +251,6 @@ def render_patient_variant_occurrences_tab() -> None:
                     '**HGVS p.**',
                     '**rsID**',
                     '**gnomAD-style**',
-                    '**Normalization Confidence**',
                 ],
                 'Value': [
                     harmonized_variant.hgvs_g or 'N/A',
@@ -262,7 +258,6 @@ def render_patient_variant_occurrences_tab() -> None:
                     harmonized_variant.hgvs_p or 'N/A',
                     harmonized_variant.rsid or 'N/A',
                     gnomad_coords,
-                    harmonized_variant.normalization_confidence or 'N/A',
                 ],
             }
             st.table(pd.DataFrame(variant_data))

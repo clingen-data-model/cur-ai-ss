@@ -4,8 +4,8 @@ from typing import Any, Dict, List, Optional, Tuple, cast
 import requests
 from pydantic import BaseModel
 
-from lib.agents.variant_harmonization_agent import HarmonizedVariant
 from lib.core.environment import env
+from lib.models.variant import HarmonizedVariant
 
 GNOMAD_BASE = 'https://gnomad.broadinstitute.org/api'
 EUTILS_BASE = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils'

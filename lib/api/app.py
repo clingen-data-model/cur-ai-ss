@@ -24,7 +24,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, joinedload, selectinload
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
@@ -58,6 +58,8 @@ from lib.models import (
     ExtractedVariantResp,
     GeneDB,
     GeneResp,
+    HarmonizedVariantDB,
+    HarmonizedVariantResp,
     HighlightRequest,
     HpoDB,
     HPOTerm,
@@ -71,7 +73,7 @@ from lib.models import (
     PedigreeResp,
     PipelineStatus,
 )
-from lib.models.evidence_block import ReasoningBlock
+from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 
 logger = logging.getLogger(__name__)
 
@@ -278,11 +280,76 @@ def get_variants(paper_id: str, session: Session = Depends(get_session)) -> Any:
         )
     variants = (
         session.query(ExtractedVariantDB)
+        .options(joinedload(ExtractedVariantDB.harmonized_variant))
         .filter(ExtractedVariantDB.paper_id == paper_id)
         .order_by(ExtractedVariantDB.variant_idx)
         .all()
     )
-    return variants
+    return [_variant_to_resp(v) for v in variants]
+
+
+def _variant_to_resp(row: ExtractedVariantDB) -> ExtractedVariantResp:
+    """Convert ExtractedVariantDB to ExtractedVariantResp, including harmonized data."""
+    hv = row.harmonized_variant
+    harmonized = (
+        HarmonizedVariantResp(
+            gnomad_style_coordinates=hv.gnomad_style_coordinates,
+            rsid=hv.rsid,
+            caid=hv.caid,
+            hgvs_c=hv.hgvs_c,
+            hgvs_p=hv.hgvs_p,
+            hgvs_g=hv.hgvs_g,
+            reasoning=hv.reasoning,
+        )
+        if hv
+        else None
+    )
+    return ExtractedVariantResp(
+        paper_id=row.paper_id,
+        variant_idx=row.variant_idx,
+        gene=row.gene,
+        transcript=row.transcript,
+        protein_accession=row.protein_accession,
+        genomic_accession=row.genomic_accession,
+        lrg_accession=row.lrg_accession,
+        gene_accession=row.gene_accession,
+        genomic_coordinates=row.genomic_coordinates,
+        genome_build=row.genome_build,
+        rsid=row.rsid,
+        caid=row.caid,
+        hgvs_c=row.hgvs_c,
+        hgvs_p=row.hgvs_p,
+        hgvs_g=row.hgvs_g,
+        variant_type=row.variant_type,
+        functional_evidence=row.functional_evidence,
+        updated_at=row.updated_at,
+        transcript_evidence=EvidenceBlock.model_validate(row.transcript_evidence),
+        protein_accession_evidence=EvidenceBlock.model_validate(
+            row.protein_accession_evidence
+        ),
+        genomic_accession_evidence=EvidenceBlock.model_validate(
+            row.genomic_accession_evidence
+        ),
+        lrg_accession_evidence=EvidenceBlock.model_validate(row.lrg_accession_evidence),
+        gene_accession_evidence=EvidenceBlock.model_validate(
+            row.gene_accession_evidence
+        ),
+        genomic_coordinates_evidence=EvidenceBlock.model_validate(
+            row.genomic_coordinates_evidence
+        ),
+        genome_build_evidence=EvidenceBlock.model_validate(row.genome_build_evidence),
+        rsid_evidence=EvidenceBlock.model_validate(row.rsid_evidence),
+        caid_evidence=EvidenceBlock.model_validate(row.caid_evidence),
+        variant_evidence=EvidenceBlock.model_validate(row.variant_evidence),
+        hgvs_c_evidence=EvidenceBlock.model_validate(row.hgvs_c_evidence),
+        hgvs_p_evidence=EvidenceBlock.model_validate(row.hgvs_p_evidence),
+        hgvs_g_evidence=EvidenceBlock.model_validate(row.hgvs_g_evidence),
+        variant_type_evidence=EvidenceBlock.model_validate(row.variant_type_evidence),
+        functional_evidence_evidence=EvidenceBlock.model_validate(
+            row.functional_evidence_evidence
+        ),
+        harmonized_variant=harmonized,
+    )
 
 
 def _phenotype_to_resp(row: ExtractedPhenotypeDB) -> ExtractedPhenotypeResp:
@@ -296,7 +363,7 @@ def _phenotype_to_resp(row: ExtractedPhenotypeDB) -> ExtractedPhenotypeResp:
         patient_idx=row.patient_idx,
         phenotype_idx=row.phenotype_idx,
         concept=row.concept,
-        concept_evidence=row.concept_evidence,
+        concept_evidence=EvidenceBlock.model_validate(row.concept_evidence),
         negated=row.negated,
         uncertain=row.uncertain,
         family_history=row.family_history,

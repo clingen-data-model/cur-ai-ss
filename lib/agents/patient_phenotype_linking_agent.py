@@ -33,11 +33,16 @@ For each mention of a human phenotypic feature (observable trait, sign, or sympt
 For every valid phenotype extraction, return:
 
 - patient_idx
-- text
+- concept (EvidenceBlock[str]):
+  - value: the phenotype text
+  - reasoning: explanation of why this is a phenotype and how it links to the patient
+  - quote: verbatim quote from the paper (required unless value is null)
+  - table_id: if evidence comes from a table (optional)
+  - image_id: if evidence comes from a figure/pedigree (optional)
+  At least one of quote, table_id, or image_id must be provided.
 - negated
 - uncertain
 - family_history
-- evidence_contexts
 - onset (optional)
 - location (optional)
 - severity (optional)
@@ -70,7 +75,17 @@ A phenotype is an observable trait, sign, or symptom that a patient exhibits or 
 PHENOTYPE FIELD DEFINITIONS
 ---------------------------------------------------
 
-1. **text**: The exact phrase from the text describing the phenotype
+1. **concept** (EvidenceBlock[str]):
+   - **value**: The exact phenotype text (observable trait, sign, or symptom).
+     Can be directly quoted or a close paraphrase of the text.
+   - **reasoning**: Explain WHY this is a phenotype (not a diagnosis) and HOW you determined
+     which patient it belongs to. Reference specific text locations and patient context.
+   - **quote**: Verbatim quote from the paper containing or describing the phenotype.
+     This is the primary evidence source.
+   - **table_id**: If the phenotype information comes from a table, provide the table index.
+   - **image_id**: If the phenotype information comes from a figure/pedigree, provide the image index.
+
+   At least one of quote, table_id, or image_id MUST be provided (unless value is null).
 
 2. **negated**: true if the text explicitly states the patient does NOT have the phenotype
    - Example: "no tremor was observed"
@@ -88,24 +103,16 @@ PHENOTYPE FIELD DEFINITIONS
      - One for proband with family_history=false
      - One for "mother" as patient with family_history=false
 
-5. **evidence_contexts**: Additional context from the text (sentence or paragraph containing phenotype).
-
-If there are multiple mentions that provide evidence context, include them as
-separate elements of the list.
-
-Each evidence_contexts entry MUST normally be a single contiguous span of
-prose from the paper.
-
-6. **onset**: Age or disease stage when phenotype occurred
+5. **onset**: Age or disease stage when phenotype occurred
    - Example: "infancy", "early childhood", "adult onset", "age 5"
 
-7. **location**: Body site or laterality if specified
+6. **location**: Body site or laterality if specified
    - Example: "left arm", "bilateral", "heart"
 
-8. **severity**: Severity level if mentioned
+7. **severity**: Severity level if mentioned
    - Example: "mild", "moderate", "severe", "profound"
 
-9. **modifier**: Additional qualifiers
+8. **modifier**: Additional qualifiers
    - Example: "intermittent", "progressive", "episodic", "transient"
 
 ---------------------------------------------------
@@ -222,7 +229,10 @@ For each extracted phenotype:
 - Confirm the patient linkage is justified by the text
 - Confirm patient_idx matches one of the patient IDs in the provided patient list
 - Confirm all boolean fields are true/false (not "yes"/"no" or strings)
-- Confirm text is verbatim from paper or very close paraphrase
+- Confirm concept.value is verbatim from paper or very close paraphrase
+- Confirm concept.reasoning clearly explains the phenotype and patient linkage
+- Confirm concept.quote contains a verbatim excerpt from the paper
+- Confirm at least one evidence source is provided: quote, table_id, or image_id
 - If any check fails, adjust or skip the extraction
 
 ---------------------------------------------------
@@ -231,10 +241,35 @@ OUTPUT
 
 Return a **list of JSON objects**, one per extracted phenotype.
 
+Example structure:
+{
+  "extracted_phenotypes": [
+    {
+      "patient_idx": 0,
+      "concept": {
+        "value": "developmental delay",
+        "reasoning": "The proband is described as having delayed milestones in the clinical summary.",
+        "quote": "The proband showed global developmental delay",
+        "table_id": null,
+        "image_id": null
+      },
+      "negated": false,
+      "uncertain": false,
+      "family_history": false,
+      "onset": "infancy",
+      "location": null,
+      "severity": "moderate",
+      "modifier": null
+    }
+  ]
+}
+
 Ensure:
-- All required fields are present
+- All required fields are present (patient_idx, concept with value/reasoning/quote or table_id or image_id)
 - All optional fields are either provided if mentioned in text, or null/omitted
 - Each phenotype has a valid patient_idx (integer from patient list)
+- concept.quote contains actual text from the paper (not paraphrased)
+- concept.reasoning explains the extraction and linkage decision
 """
 
 agent = Agent(

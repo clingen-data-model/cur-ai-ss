@@ -7,6 +7,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -85,6 +86,36 @@ class VariantExtractionOutput(BaseModel):
     variants: List[ExtractedVariant]
 
 
+class HarmonizedVariant(BaseModel):
+    """HarmonizedVariant output from the harmonization agent."""
+
+    gnomad_style_coordinates: Optional[str] = None
+    rsid: Optional[str] = None
+    caid: Optional[str] = None
+    hgvs_c: Optional[str] = None
+    hgvs_p: Optional[str] = None
+    hgvs_g: Optional[str] = None
+    reasoning: Optional[str] = None
+
+
+class VariantHarmonizationOutput(BaseModel):
+    """Output from variant harmonization agent."""
+
+    variants: List[HarmonizedVariant]
+
+
+class HarmonizedVariantResp(BaseModel):
+    """Response model for harmonized variants."""
+
+    gnomad_style_coordinates: Optional[str] = None
+    rsid: Optional[str] = None
+    caid: Optional[str] = None
+    hgvs_c: Optional[str] = None
+    hgvs_p: Optional[str] = None
+    hgvs_g: Optional[str] = None
+    reasoning: Optional[str] = None
+
+
 class ExtractedVariantResp(BaseModel):
     """Response model for extracted variants."""
 
@@ -122,6 +153,8 @@ class ExtractedVariantResp(BaseModel):
     hgvs_g_evidence: EvidenceBlock[Optional[str]]
     variant_type_evidence: EvidenceBlock[str]
     functional_evidence_evidence: EvidenceBlock[bool]
+    # Harmonized variant (optional, may not yet be harmonized)
+    harmonized_variant: Optional[HarmonizedVariantResp] = None
 
 
 class ExtractedVariantDB(Base):
@@ -183,10 +216,53 @@ class ExtractedVariantDB(Base):
     paper: Mapped[PaperDB] = relationship(
         'PaperDB', back_populates='extracted_variants'
     )
+    harmonized_variant: Mapped['HarmonizedVariantDB | None'] = relationship(
+        'HarmonizedVariantDB', back_populates='extracted_variant', uselist=False
+    )
 
     __table_args__ = (
         UniqueConstraint(
             'paper_id', 'variant_idx', name='uq_extracted_variants_paper_variant_idx'
         ),
         Index('ix_extracted_variants_paper_id', 'paper_id'),
+    )
+
+
+class HarmonizedVariantDB(Base):
+    __tablename__ = 'harmonized_variants'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    paper_id: Mapped[str] = mapped_column(String, nullable=False)
+    variant_idx: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # Harmonized fields
+    gnomad_style_coordinates: Mapped[str | None] = mapped_column(String, nullable=True)
+    rsid: Mapped[str | None] = mapped_column(String, nullable=True)
+    caid: Mapped[str | None] = mapped_column(String, nullable=True)
+    hgvs_c: Mapped[str | None] = mapped_column(String, nullable=True)
+    hgvs_p: Mapped[str | None] = mapped_column(String, nullable=True)
+    hgvs_g: Mapped[str | None] = mapped_column(String, nullable=True)
+    reasoning: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    extracted_variant: Mapped['ExtractedVariantDB'] = relationship(
+        'ExtractedVariantDB', back_populates='harmonized_variant'
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ['paper_id', 'variant_idx'],
+            ['extracted_variants.paper_id', 'extracted_variants.variant_idx'],
+            ondelete='CASCADE',
+        ),
+        UniqueConstraint(
+            'paper_id', 'variant_idx', name='uq_harmonized_variants_paper_variant_idx'
+        ),
+        Index('ix_harmonized_variants_paper_id', 'paper_id'),
     )
