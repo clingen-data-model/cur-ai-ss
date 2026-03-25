@@ -653,7 +653,7 @@ B) If genomic_accession missing:
     the provided or the selected transcript.
 
     If genomic accession still unavailable:
-        FAIL → return None outputs (low confidence).
+        FAIL → return None.
 
 C) Construct:
     genomic_accession + ":" + hgvs_g
@@ -765,7 +765,7 @@ You may call clinvar_lookup EXACTLY ONCE per variant.
 Step 5A — Construct Query
 
 If hgvs_p is missing:
-    Skip ClinVar lookup and return low confidence.
+    Skip ClinVar and DBSNP lookup
 
 Query must include:
     gene AND (

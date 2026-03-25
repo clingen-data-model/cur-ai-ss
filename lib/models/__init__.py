@@ -36,10 +36,15 @@ from lib.models.phenotype import (
     HPOTerm,
 )
 from lib.models.variant import (
+    EnrichedVariant,
+    EnrichedVariantDB,
+    EnrichedVariantResp,
     ExtractedVariantDB,
     ExtractedVariantResp,
     HarmonizedVariant,
     HarmonizedVariantDB,
     HarmonizedVariantResp,
+    SpliceAI,
+    VariantEnrichmentOutput,
     VariantHarmonizationOutput,
 )

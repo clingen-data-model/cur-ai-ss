@@ -22,11 +22,7 @@ from lib.agents.patient_variant_linking_agent import (
     agent as patient_variant_linking_agent,
 )
 from lib.agents.pedigree_describer_agent import agent as pedigree_describer_agent
-from lib.agents.variant_enrichment_agent import (
-    HarmonizedVariant,
-    VariantEnrichmentOutput,
-    enrich_variants_batch,
-)
+from lib.agents.variant_enrichment_agent import enrich_variants_batch
 from lib.agents.variant_extraction_agent import (
     agent as variant_extraction_agent,
 )
@@ -37,7 +33,9 @@ from lib.core.logging import setup_logging
 from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import fulltext_md, pdf_image_caption_path, pdf_image_path
 from lib.models import (
+    EnrichedVariantDB,
     ExtractedVariantDB,
+    HarmonizedVariant,
     HarmonizedVariantDB,
     PaperDB,
     PatientDB,
@@ -333,10 +331,32 @@ async def enrich_variants_task_async(paper_db: PaperDB) -> None:
         enrich_variants_batch,
         harmonized_variants,
     )
-    output = VariantEnrichmentOutput(variants=enriched_variants)
-    paper_db.enriched_variants_json_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(paper_db.enriched_variants_json_path, 'w') as f:
-        f.write(output.model_dump_json(indent=2))
+    # Persist enriched variants to DB (idempotent: delete-then-insert)
+    with session_scope() as session:
+        session.query(EnrichedVariantDB).filter(
+            EnrichedVariantDB.paper_id == paper_db.id
+        ).delete()
+        for r, ev in zip(rows, enriched_variants):
+            session.add(
+                EnrichedVariantDB(
+                    paper_id=paper_db.id,
+                    variant_idx=r.variant_idx,
+                    gnomad_style_coordinates=ev.gnomad_style_coordinates,
+                    rsid=ev.rsid,
+                    caid=ev.caid,
+                    pathogenicity=ev.pathogenicity,
+                    submissions=ev.submissions,
+                    stars=ev.stars,
+                    exon=ev.exon,
+                    revel=ev.revel,
+                    alphamissense_class=ev.alphamissense_class,
+                    alphamissense_score=ev.alphamissense_score,
+                    spliceai=ev.spliceai.model_dump() if ev.spliceai else None,
+                    gnomad_top_level_af=ev.gnomad_top_level_af,
+                    gnomad_popmax_af=ev.gnomad_popmax_af,
+                    gnomad_popmax_population=ev.gnomad_popmax_population,
+                )
+            )
 
 
 async def hpo_linking_task_async(paper_db: PaperDB) -> None:

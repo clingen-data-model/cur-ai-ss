@@ -50,6 +50,8 @@ from lib.misc.pdf.paths import (
     pdf_words_json_path,
 )
 from lib.models import (
+    EnrichedVariantDB,
+    EnrichedVariantResp,
     ExtractedPhenotype,
     ExtractedPhenotypeDB,
     ExtractedPhenotypeResp,
@@ -280,7 +282,11 @@ def get_variants(paper_id: str, session: Session = Depends(get_session)) -> Any:
         )
     variants = (
         session.query(ExtractedVariantDB)
-        .options(joinedload(ExtractedVariantDB.harmonized_variant))
+        .options(
+            joinedload(ExtractedVariantDB.harmonized_variant).joinedload(
+                HarmonizedVariantDB.enriched_variant
+            )
+        )
         .filter(ExtractedVariantDB.paper_id == paper_id)
         .order_by(ExtractedVariantDB.variant_idx)
         .all()
@@ -289,7 +295,7 @@ def get_variants(paper_id: str, session: Session = Depends(get_session)) -> Any:
 
 
 def _variant_to_resp(row: ExtractedVariantDB) -> ExtractedVariantResp:
-    """Convert ExtractedVariantDB to ExtractedVariantResp, including harmonized data."""
+    """Convert ExtractedVariantDB to ExtractedVariantResp, including harmonized and enriched data."""
     hv = row.harmonized_variant
     harmonized = (
         HarmonizedVariantResp(
@@ -302,6 +308,26 @@ def _variant_to_resp(row: ExtractedVariantDB) -> ExtractedVariantResp:
             reasoning=hv.reasoning,
         )
         if hv
+        else None
+    )
+    enriched = (
+        EnrichedVariantResp(
+            gnomad_style_coordinates=hv.enriched_variant.gnomad_style_coordinates,
+            rsid=hv.enriched_variant.rsid,
+            caid=hv.enriched_variant.caid,
+            pathogenicity=hv.enriched_variant.pathogenicity,
+            submissions=hv.enriched_variant.submissions,
+            stars=hv.enriched_variant.stars,
+            exon=hv.enriched_variant.exon,
+            revel=hv.enriched_variant.revel,
+            alphamissense_class=hv.enriched_variant.alphamissense_class,
+            alphamissense_score=hv.enriched_variant.alphamissense_score,
+            spliceai=hv.enriched_variant.spliceai,
+            gnomad_top_level_af=hv.enriched_variant.gnomad_top_level_af,
+            gnomad_popmax_af=hv.enriched_variant.gnomad_popmax_af,
+            gnomad_popmax_population=hv.enriched_variant.gnomad_popmax_population,
+        )
+        if hv and hv.enriched_variant
         else None
     )
     return ExtractedVariantResp(
@@ -349,6 +375,7 @@ def _variant_to_resp(row: ExtractedVariantDB) -> ExtractedVariantResp:
             row.functional_evidence_evidence
         ),
         harmonized_variant=harmonized,
+        enriched_variant=enriched,
     )
 
 

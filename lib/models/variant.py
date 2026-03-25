@@ -1,11 +1,12 @@
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 from sqlalchemy import (
     Boolean,
     DateTime,
+    Float,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
@@ -155,6 +156,8 @@ class ExtractedVariantResp(BaseModel):
     functional_evidence_evidence: EvidenceBlock[bool]
     # Harmonized variant (optional, may not yet be harmonized)
     harmonized_variant: Optional[HarmonizedVariantResp] = None
+    # Enriched variant (optional, may not yet be enriched)
+    enriched_variant: Optional['EnrichedVariantResp'] = None
 
 
 class ExtractedVariantDB(Base):
@@ -254,6 +257,9 @@ class HarmonizedVariantDB(Base):
     extracted_variant: Mapped['ExtractedVariantDB'] = relationship(
         'ExtractedVariantDB', back_populates='harmonized_variant'
     )
+    enriched_variant: Mapped['EnrichedVariantDB | None'] = relationship(
+        'EnrichedVariantDB', back_populates='harmonized_variant', uselist=False
+    )
 
     __table_args__ = (
         ForeignKeyConstraint(
@@ -265,4 +271,133 @@ class HarmonizedVariantDB(Base):
             'paper_id', 'variant_idx', name='uq_harmonized_variants_paper_variant_idx'
         ),
         Index('ix_harmonized_variants_paper_id', 'paper_id'),
+    )
+
+
+class SpliceAI(BaseModel):
+    """SpliceAI prediction data from VEP."""
+
+    max_score: float = 0.0
+    effect_type: Optional[str] = None
+    position: Optional[int] = None
+
+    @classmethod
+    def from_raw(cls, raw: Dict[str, Any]) -> 'SpliceAI':
+        """Convert raw SpliceAI dict into max_score, effect_type, position."""
+        ds_keys = ['DS_AG', 'DS_AL', 'DS_DG', 'DS_DL']
+        dp_keys = ['DP_AG', 'DP_AL', 'DP_DG', 'DP_DL']
+
+        max_score = 0.0
+        effect_type = None
+        position = None
+
+        for ds, dp in zip(ds_keys, dp_keys):
+            score = raw.get(ds, 0)
+            if score > max_score:
+                max_score = score
+                effect_type = ds
+                position = raw.get(dp)
+
+        return cls(max_score=max_score, effect_type=effect_type, position=position)
+
+
+class EnrichedVariant(BaseModel):
+    """Enriched variant data from ClinVar, VEP, and gnomAD."""
+
+    gnomad_style_coordinates: Optional[str] = None
+    rsid: Optional[str] = None
+    caid: Optional[str] = None
+    pathogenicity: Optional[str] = None
+    submissions: Optional[int] = None
+    stars: Optional[int] = None
+    exon: Optional[str] = None
+    revel: Optional[float] = None
+    alphamissense_class: Optional[str] = None
+    alphamissense_score: Optional[float] = None
+    spliceai: Optional[SpliceAI] = None
+
+    # gnomAD
+    gnomad_top_level_af: Optional[float] = None
+    gnomad_popmax_af: Optional[float] = None
+    gnomad_popmax_population: Optional[str] = None
+
+
+class VariantEnrichmentOutput(BaseModel):
+    """Output from variant enrichment agent."""
+
+    variants: List[EnrichedVariant]
+
+
+class EnrichedVariantResp(BaseModel):
+    """Response model for enriched variants."""
+
+    gnomad_style_coordinates: Optional[str] = None
+    rsid: Optional[str] = None
+    caid: Optional[str] = None
+    pathogenicity: Optional[str] = None
+    submissions: Optional[int] = None
+    stars: Optional[int] = None
+    exon: Optional[str] = None
+    revel: Optional[float] = None
+    alphamissense_class: Optional[str] = None
+    alphamissense_score: Optional[float] = None
+    spliceai: Optional[dict] = None  # Serialized SpliceAI
+
+    gnomad_top_level_af: Optional[float] = None
+    gnomad_popmax_af: Optional[float] = None
+    gnomad_popmax_population: Optional[str] = None
+
+
+class EnrichedVariantDB(Base):
+    """Enriched variant data persisted to database."""
+
+    __tablename__ = 'enriched_variants'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    paper_id: Mapped[str] = mapped_column(String, nullable=False)
+    variant_idx: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    # ClinVar
+    pathogenicity: Mapped[str | None] = mapped_column(String, nullable=True)
+    submissions: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    stars: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # VEP
+    exon: Mapped[str | None] = mapped_column(String, nullable=True)
+    revel: Mapped[float | None] = mapped_column(Float, nullable=True)
+    alphamissense_class: Mapped[str | None] = mapped_column(String, nullable=True)
+    alphamissense_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    spliceai: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    # Harmonized variant references
+    gnomad_style_coordinates: Mapped[str | None] = mapped_column(String, nullable=True)
+    rsid: Mapped[str | None] = mapped_column(String, nullable=True)
+    caid: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    # gnomAD
+    gnomad_top_level_af: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gnomad_popmax_af: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gnomad_popmax_population: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    harmonized_variant: Mapped[HarmonizedVariantDB] = relationship(
+        'HarmonizedVariantDB', back_populates='enriched_variant'
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ['paper_id', 'variant_idx'],
+            ['harmonized_variants.paper_id', 'harmonized_variants.variant_idx'],
+            ondelete='CASCADE',
+        ),
+        UniqueConstraint(
+            'paper_id', 'variant_idx', name='uq_enriched_variants_paper_variant_idx'
+        ),
+        Index('ix_enriched_variants_paper_id', 'paper_id'),
     )

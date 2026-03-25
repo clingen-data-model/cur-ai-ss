@@ -1,11 +1,10 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import List, Optional, Tuple, cast
 
 import requests
-from pydantic import BaseModel
 
 from lib.core.environment import env
-from lib.models.variant import HarmonizedVariant
+from lib.models.variant import EnrichedVariant, HarmonizedVariant, SpliceAI
 
 GNOMAD_BASE = 'https://gnomad.broadinstitute.org/api'
 EUTILS_BASE = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils'
@@ -22,54 +21,6 @@ CLINVAR_GOLD_STARS_LOOKUP = {
     'reviewed by expert panel': 3,
     'practice guideline': 4,
 }
-
-
-class SpliceAI(BaseModel):
-    max_score: float = 0.0
-    effect_type: Optional[str] = None
-    position: Optional[int] = None
-
-    @classmethod
-    def from_raw(cls, raw: Dict[str, Any]) -> 'SpliceAI':
-        """Convert raw SpliceAI dict into max_score, effect_type, position"""
-        ds_keys = ['DS_AG', 'DS_AL', 'DS_DG', 'DS_DL']
-        dp_keys = ['DP_AG', 'DP_AL', 'DP_DG', 'DP_DL']
-
-        max_score = 0.0
-        effect_type = None
-        position = None
-
-        for ds, dp in zip(ds_keys, dp_keys):
-            score = raw.get(ds, 0)
-            if score > max_score:
-                max_score = score
-                effect_type = ds
-                position = raw.get(dp)
-
-        return cls(max_score=max_score, effect_type=effect_type, position=position)
-
-
-class EnrichedVariant(BaseModel):
-    gnomad_style_coordinates: Optional[str] = None
-    rsid: Optional[str] = None
-    caid: Optional[str] = None
-    pathogenicity: Optional[str] = None
-    submissions: Optional[int] = None
-    stars: Optional[int] = None
-    exon: Optional[str] = None
-    revel: Optional[float] = None
-    alphamissense_class: Optional[str] = None
-    alphamissense_score: Optional[float] = None
-    spliceai: Optional[SpliceAI] = None
-
-    # --- gnomAD ---
-    gnomad_top_level_af: Optional[float] = None
-    gnomad_popmax_af: Optional[float] = None
-    gnomad_popmax_population: Optional[str] = None
-
-
-class VariantEnrichmentOutput(BaseModel):
-    variants: List[EnrichedVariant]
 
 
 def clinvar_lookup(

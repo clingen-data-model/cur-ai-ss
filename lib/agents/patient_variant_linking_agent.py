@@ -59,7 +59,6 @@ class PatientVariantLink(BaseModel):
     zygosity: EvidenceBlock[Zygosity]
     inheritance: EvidenceBlock[Inheritance]
     testing_methods: List[EvidenceBlock[TestingMethod]]
-    confidence: Literal['high', 'moderate', 'low']
 
     @model_validator(mode='after')
     def max_two_methods(self) -> Self:
@@ -106,7 +105,6 @@ Return **exactly** the following for each link:
 - zygosity: a single EvidenceBlock[Zygosity]
 - inheritance: a single EvidenceBlock[Inheritance]
 - testing_methods: a list of EvidenceBlock[TestingMethod] (max 2 items)
-- confidence: "high", "moderate", or "low"
 
 **Linking rules:**
 

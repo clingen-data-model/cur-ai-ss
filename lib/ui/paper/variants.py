@@ -1,10 +1,8 @@
-import json
 import re
 
 import pandas as pd
 import streamlit as st
 
-from lib.agents.variant_enrichment_agent import EnrichedVariant, VariantEnrichmentOutput
 from lib.models import ExtractedVariantResp, PaperResp, PipelineStatus
 from lib.models.variant import VariantType
 from lib.ui.api import get_variants
@@ -39,18 +37,18 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
         st.stop()
     extracted_variant_rows = get_variants(paper_resp.id)
     extracted_variants: list[ExtractedVariantResp] = extracted_variant_rows
-    with open(paper_resp.enriched_variants_json_path, 'r') as f:
-        enriched_data = json.load(f)
-        enriched_variants: list[EnrichedVariant] = (
-            VariantEnrichmentOutput.model_validate(enriched_data).variants
-        )
+    enriched_variants = [v.enriched_variant for v in extracted_variants]
 
     # Separate variants into pathogenic and other
     pathogenic_indices = [
-        i for i, ev in enumerate(enriched_variants) if _is_pathogenic(ev.pathogenicity)
+        i
+        for i, ev in enumerate(enriched_variants)
+        if ev and _is_pathogenic(ev.pathogenicity)
     ]
     other_indices = [
-        i for i in range(len(enriched_variants)) if i not in pathogenic_indices
+        i
+        for i in range(len(enriched_variants))
+        if i not in pathogenic_indices
     ]
 
     # Create tabs
@@ -71,7 +69,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
             i = idx + 1  # Convert 0-based to 1-based for display
             extracted_variant = extracted_variants[idx]
             harmonized_variant = extracted_variant.harmonized_variant
-            enriched_variant = enriched_variants[idx]
+            enriched_variant = enriched_variants[idx] if idx < len(enriched_variants) else None
             st.markdown(f'### Variant {i}')
             expander_title = (
                 (
@@ -198,117 +196,120 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                 with st.container():
                     st.subheader('Annotations')
 
-                    ev = enriched_variant
-
-                    # ----------------------------
-                    # ClinVar
-                    # ----------------------------
-                    st.markdown('#### ClinVar')
-
-                    stars_display = (
-                        '⭐' * ev.stars
-                        if ev.stars is not None and ev.stars > 0
-                        else ('0⭐' if ev.stars == 0 else 'N/A')
-                    )
-
-                    clinvar_url = (
-                        get_clinvar_url(
-                            harmonized_variant.hgvs_g,
-                            harmonized_variant.hgvs_c,
-                            harmonized_variant.rsid,
-                        )
-                        if harmonized_variant
-                        else None
-                    )
-                    clinvar_df = pd.DataFrame(
-                        [
-                            {
-                                'Pathogenicity': (
-                                    f'{clinvar_url}#{ev.pathogenicity}'
-                                    if clinvar_url and ev.pathogenicity
-                                    else (ev.pathogenicity or 'N/A')
-                                ),
-                                'Submissions': ev.submissions or 'N/A',
-                                'Review Status': stars_display,
-                            }
-                        ]
-                    )
-
-                    st.dataframe(
-                        clinvar_df,
-                        width='stretch',
-                        hide_index=True,
-                        column_config={
-                            'Pathogenicity': st.column_config.LinkColumn(
-                                'Pathogenicity',
-                                display_text=r'.*?#(.+)$',
-                            )
-                        },
-                    )
-
-                    # ----------------------------
-                    # In Silico Predictors
-                    # ----------------------------
-                    st.markdown(
-                        '#### In Silico Scores',
-                    )
-
-                    if ev.spliceai:
-                        spliceai_display = (
-                            f'{ev.spliceai.max_score:.3f}'
-                            + (
-                                f' | {ev.spliceai.effect_type}'
-                                if ev.spliceai.effect_type
-                                else ''
-                            )
-                            + (
-                                f' @ {ev.spliceai.position}'
-                                if ev.spliceai.position is not None
-                                else ''
-                            )
-                        )
+                    if not enriched_variant:
+                        st.info('Enrichment not yet completed for this variant')
                     else:
-                        spliceai_display = 'N/A'
+                        ev = enriched_variant
 
-                    in_silico_df = pd.DataFrame(
-                        [
-                            {
-                                'REVEL': round(ev.revel, 3)
-                                if ev.revel is not None
-                                else 'N/A',
-                                'AlphaMissense Class': ev.alphamissense_class or 'N/A',
-                                'AlphaMissense Score': round(ev.alphamissense_score, 3)
-                                if ev.alphamissense_score is not None
-                                else 'N/A',
-                                'SpliceAI': spliceai_display,
-                                'Exon': ev.exon or 'N/A',
-                            }
-                        ]
-                    )
+                        # ----------------------------
+                        # ClinVar
+                        # ----------------------------
+                        st.markdown('#### ClinVar')
 
-                    st.dataframe(in_silico_df, width='stretch', hide_index=True)
+                        stars_display = (
+                            '⭐' * ev.stars
+                            if ev.stars is not None and ev.stars > 0
+                            else ('0⭐' if ev.stars == 0 else 'N/A')
+                        )
 
-                    # ----------------------------
-                    # gnomAD
-                    # ----------------------------
-                    st.markdown('#### gnomAD')
+                        clinvar_url = (
+                            get_clinvar_url(
+                                harmonized_variant.hgvs_g,
+                                harmonized_variant.hgvs_c,
+                                harmonized_variant.rsid,
+                            )
+                            if harmonized_variant
+                            else None
+                        )
+                        clinvar_df = pd.DataFrame(
+                            [
+                                {
+                                    'Pathogenicity': (
+                                        f'{clinvar_url}#{ev.pathogenicity}'
+                                        if clinvar_url and ev.pathogenicity
+                                        else (ev.pathogenicity or 'N/A')
+                                    ),
+                                    'Submissions': ev.submissions or 'N/A',
+                                    'Review Status': stars_display,
+                                }
+                            ]
+                        )
 
-                    gnomad_df = pd.DataFrame(
-                        [
-                            {
-                                'Top-level AF': ev.gnomad_top_level_af
-                                if ev.gnomad_top_level_af is not None
-                                else 'N/A',
-                                'Popmax AF': ev.gnomad_popmax_af
-                                if ev.gnomad_popmax_af is not None
-                                else 'N/A',
-                                'Popmax Population': ev.gnomad_popmax_population
-                                or 'N/A',
-                            }
-                        ]
-                    )
+                        st.dataframe(
+                            clinvar_df,
+                            width='stretch',
+                            hide_index=True,
+                            column_config={
+                                'Pathogenicity': st.column_config.LinkColumn(
+                                    'Pathogenicity',
+                                    display_text=r'.*?#(.+)$',
+                                )
+                            },
+                        )
 
-                    st.dataframe(gnomad_df, width='stretch', hide_index=True)
+                        # ----------------------------
+                        # In Silico Predictors
+                        # ----------------------------
+                        st.markdown(
+                            '#### In Silico Scores',
+                        )
+
+                        if ev.spliceai:
+                            spliceai_display = (
+                                f'{ev.spliceai.get("max_score", 0):.3f}'
+                                + (
+                                    f' | {ev.spliceai.get("effect_type")}'
+                                    if ev.spliceai.get("effect_type")
+                                    else ''
+                                )
+                                + (
+                                    f' @ {ev.spliceai.get("position")}'
+                                    if ev.spliceai.get("position") is not None
+                                    else ''
+                                )
+                            )
+                        else:
+                            spliceai_display = 'N/A'
+
+                        in_silico_df = pd.DataFrame(
+                            [
+                                {
+                                    'REVEL': round(ev.revel, 3)
+                                    if ev.revel is not None
+                                    else 'N/A',
+                                    'AlphaMissense Class': ev.alphamissense_class or 'N/A',
+                                    'AlphaMissense Score': round(ev.alphamissense_score, 3)
+                                    if ev.alphamissense_score is not None
+                                    else 'N/A',
+                                    'SpliceAI': spliceai_display,
+                                    'Exon': ev.exon or 'N/A',
+                                }
+                            ]
+                        )
+
+                        st.dataframe(in_silico_df, width='stretch', hide_index=True)
+
+                        # ----------------------------
+                        # gnomAD
+                        # ----------------------------
+                        st.markdown('#### gnomAD')
+
+                        gnomad_df = pd.DataFrame(
+                            [
+                                {
+                                    'Top-level AF': ev.gnomad_top_level_af
+                                    if ev.gnomad_top_level_af is not None
+                                    else 'N/A',
+                                    'Popmax AF': ev.gnomad_popmax_af
+                                    if ev.gnomad_popmax_af is not None
+                                    else 'N/A',
+                                    'Popmax Population': ev.gnomad_popmax_population
+                                    or 'N/A',
+                                }
+                            ]
+                        )
+
+                        st.dataframe(gnomad_df, width='stretch', hide_index=True)
 
                 # ======================================================
                 # Downloads
