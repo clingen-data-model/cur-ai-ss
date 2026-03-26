@@ -19,7 +19,6 @@ def _render_evidence_block(
     evidence_block: EvidenceBlock, paper_id: int, block_id: str
 ) -> None:
     """Render an EvidenceBlock with reasoning and evidence sources."""
-    st.text_area('Reasoning', evidence_block.reasoning, height=20, disabled=True)
 
     # Display evidence sources
     evidence_sources = []
@@ -55,6 +54,8 @@ def _render_evidence_block(
                 )
     else:
         st.text('No evidence provided')
+
+    st.text_area('Reasoning', evidence_block.reasoning, height=20, disabled=True)
 
 
 def render_patient_variant_occurrences_tab() -> None:
@@ -262,9 +263,9 @@ def render_patient_variant_occurrences_tab() -> None:
         # Display testing methods evidence
         if link.testing_methods_evidence:
             st.markdown('#### Testing Methods Evidence')
-            for i, method_block in enumerate(link.testing_methods_evidence, start=1):
+            for i, testing_method_evidence_block in enumerate(link.testing_methods_evidence, start=1):
                 with st.expander(
-                    f'Method {i}: {method_block.value}',
+                    f'Method {i}: {testing_method_evidence_block.value.value}',
                     expanded=False,
                 ):
-                    _render_evidence_block(method_block, paper_resp.id, f'method_{i}')
+                    _render_evidence_block(testing_method_evidence_block, paper_resp.id, f'method_{i}')
