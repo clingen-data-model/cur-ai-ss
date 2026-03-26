@@ -16,7 +16,7 @@ from lib.core.environment import env
 
 # revision identifiers, used by Alembic.
 revision: str = 'eb6bb798b30f'
-down_revision: Union[str, None] = 'a67ad1f5c9b7'
+down_revision: Union[str, None] = '1b59c56b7902'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

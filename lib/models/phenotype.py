@@ -42,8 +42,8 @@ class ExtractedPhenotypeOutput(BaseModel):
 class HpoCandidate(BaseModel):
     """HPO candidate suggestion from fuzzy matching."""
 
-    hpo_id: str
-    hpo_name: str
+    id: str
+    name: str
     similarity_score: float
 
 
@@ -121,8 +121,9 @@ class HpoDB(Base):
         nullable=False,
     )
 
-    hpo_term: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    hpo_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    hpo_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    hpo_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    hpo_reasoning: Mapped[str | None] = mapped_column(String, nullable=True)
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

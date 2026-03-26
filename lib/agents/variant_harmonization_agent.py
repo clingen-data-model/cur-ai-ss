@@ -9,7 +9,6 @@ from agents import Agent, function_tool
 from lib.core.environment import env
 from lib.models.variant import (
     GenomeBuild,
-    HarmonizedVariant,
     VariantExtractionOutput,
     VariantHarmonizationOutput,
 )

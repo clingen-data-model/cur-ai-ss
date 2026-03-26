@@ -1,6 +1,6 @@
 from lib.models import PaperDB, PaperExtractionOutput, PaperType
-from lib.models.converters import patient_to_db
-from lib.models.evidence_block import EvidenceBlock
+from lib.models.converters import harmonized_variant_to_db, patient_to_db
+from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.patient import (
     AffectedStatus,
     CountryCode,
@@ -8,6 +8,10 @@ from lib.models.patient import (
     ProbandStatus,
     RaceEthnicity,
     SexAtBirth,
+)
+from lib.models.variant import (
+    HarmonizedVariant,
+    HarmonizedVariantLinkingEntry,
 )
 
 
@@ -183,3 +187,88 @@ def test_patient_to_db_handles_optional_none_values():
     # Evidence always present
     assert row.identifier_evidence is not None
     assert row.proband_status_evidence is not None
+
+
+def test_harmonized_variant_to_db_with_all_fields():
+    """Test converting HarmonizedVariantLinkingEntry with all fields populated."""
+    harmonized_data = HarmonizedVariant(
+        gnomad_style_coordinates='1-55051215-G-A',
+        rsid='rs80356779',
+        caid='CA123456',
+        hgvs_c='NM_007294.3:c.4675G>A',
+        hgvs_p='NP_007295.3:p.Arg1559Lys',
+        hgvs_g='NC_000017.11:g.41197819G>A',
+    )
+    entry = HarmonizedVariantLinkingEntry(
+        variant_id=42,
+        harmonized_variant=ReasoningBlock(
+            value=harmonized_data,
+            reasoning='Successfully normalized via VariantValidator and allele registry lookup.',
+        ),
+    )
+
+    result = harmonized_variant_to_db(entry)
+
+    assert result.variant_id == 42
+    assert result.gnomad_style_coordinates == '1-55051215-G-A'
+    assert result.rsid == 'rs80356779'
+    assert result.caid == 'CA123456'
+    assert result.hgvs_c == 'NM_007294.3:c.4675G>A'
+    assert result.hgvs_p == 'NP_007295.3:p.Arg1559Lys'
+    assert result.hgvs_g == 'NC_000017.11:g.41197819G>A'
+    assert (
+        result.reasoning
+        == 'Successfully normalized via VariantValidator and allele registry lookup.'
+    )
+
+
+def test_harmonized_variant_to_db_with_none_value():
+    """Test converting HarmonizedVariantLinkingEntry with None harmonized_variant."""
+    entry = HarmonizedVariantLinkingEntry(
+        variant_id=99,
+        harmonized_variant=ReasoningBlock(
+            value=None,
+            reasoning='Could not normalize variant: insufficient data',
+        ),
+    )
+
+    result = harmonized_variant_to_db(entry)
+
+    assert result.variant_id == 99
+    assert result.gnomad_style_coordinates is None
+    assert result.rsid is None
+    assert result.caid is None
+    assert result.hgvs_c is None
+    assert result.hgvs_p is None
+    assert result.hgvs_g is None
+    assert result.reasoning == 'Could not normalize variant: insufficient data'
+
+
+def test_harmonized_variant_to_db_with_partial_fields():
+    """Test converting HarmonizedVariantLinkingEntry with only some fields populated."""
+    harmonized_data = HarmonizedVariant(
+        gnomad_style_coordinates='12-25389391-C-T',
+        rsid='rs1003702',
+        caid=None,  # Explicitly None
+        hgvs_c='NM_001267550.1:c.7271C>T',
+        hgvs_p=None,  # Missing
+        hgvs_g=None,
+    )
+    entry = HarmonizedVariantLinkingEntry(
+        variant_id=5,
+        harmonized_variant=ReasoningBlock(
+            value=harmonized_data,
+            reasoning='Normalized via transcript-based projection.',
+        ),
+    )
+
+    result = harmonized_variant_to_db(entry)
+
+    assert result.variant_id == 5
+    assert result.gnomad_style_coordinates == '12-25389391-C-T'
+    assert result.rsid == 'rs1003702'
+    assert result.caid is None
+    assert result.hgvs_c == 'NM_001267550.1:c.7271C>T'
+    assert result.hgvs_p is None
+    assert result.hgvs_g is None
+    assert result.reasoning == 'Normalized via transcript-based projection.'

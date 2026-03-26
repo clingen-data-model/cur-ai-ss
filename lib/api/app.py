@@ -355,19 +355,17 @@ def get_variants(paper_id: int, session: Session = Depends(get_session)) -> Any:
 
 def _variant_to_resp(row: VariantDB) -> VariantResp:
     """Convert VariantDB to VariantResp, including harmonized and enriched data."""
-    hv = row.harmonized_variant
-    harmonized = (
-        HarmonizedVariantResp(
+    hv = row.harmonized_variant  # Always present (harmonization agent guarantees one per variant)
+    harmonized = ReasoningBlock[HarmonizedVariantResp | None](
+        value=HarmonizedVariantResp(
             gnomad_style_coordinates=hv.gnomad_style_coordinates,
             rsid=hv.rsid,
             caid=hv.caid,
             hgvs_c=hv.hgvs_c,
             hgvs_p=hv.hgvs_p,
             hgvs_g=hv.hgvs_g,
-            reasoning=hv.reasoning,
-        )
-        if hv
-        else None
+        ),
+        reasoning=hv.reasoning,
     )
     enriched = (
         EnrichedVariantResp(
@@ -429,11 +427,17 @@ def _variant_to_resp(row: VariantDB) -> VariantResp:
 
 
 def _phenotype_to_resp(row: ExtractedPhenotypeDB) -> ExtractedPhenotypeResp:
-    hpo = (
-        ReasoningBlock[HPOTerm | None].model_validate(row.hpo.hpo_evidence)
-        if row.hpo
-        else None
-    )
+    hpo = None
+    if row.hpo:
+        hpo_value = (
+            HPOTerm(id=row.hpo.hpo_id, name=row.hpo.hpo_name)
+            if row.hpo.hpo_id and row.hpo.hpo_name
+            else None
+        )
+        hpo = ReasoningBlock[HPOTerm | None](
+            value=hpo_value,
+            reasoning=row.hpo.hpo_reasoning or '',
+        )
     return ExtractedPhenotypeResp(
         id=row.id,
         paper_id=row.paper_id,

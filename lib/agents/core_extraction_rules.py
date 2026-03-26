@@ -38,6 +38,9 @@ TABLE EVIDENCE RULES:
 
 - When a field is derived from a table:
   - table_id MUST be provided.
+  - table_id is a 0-based index representing the sequential position of tables in the document as they are processed by the extraction system (not the table number shown in the markdown).
+    - Example: If the markdown shows "Table 1", "Table 3", "Table 5", these correspond to table_id 0, 1, 2 respectively.
+    - Count only tables that appear in the markdown, in order from first to last.
 
   - quote MUST contain a verbatim quote from the table WHEN POSSIBLE.
     - This should be either:
@@ -52,4 +55,5 @@ TABLE EVIDENCE RULES:
 - Do NOT fabricate or approximate quote when the exact text is not available.
 
 - Do NOT paraphrase table content into quote as a substitute for a verbatim quote.
+- Do NOT use markdown table numbers (e.g., "Table 3") as table_id; always use 0-based sequential indexing.
 """

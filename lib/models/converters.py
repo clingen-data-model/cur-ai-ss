@@ -9,7 +9,12 @@ from lib.models.phenotype import (
     HpoDB,
     HPOTerm,
 )
-from lib.models.variant import HarmonizedVariant, HarmonizedVariantDB, Variant
+from lib.models.variant import (
+    HarmonizedVariant,
+    HarmonizedVariantDB,
+    HarmonizedVariantLinkingEntry,
+    Variant,
+)
 
 
 def patient_to_db(paper_id: int, patient: Patient) -> PatientDB:
@@ -59,11 +64,12 @@ def hpo_to_db(
     phenotype_id: int,
     hpo: ReasoningBlock[HPOTerm | None],
 ) -> HpoDB:
-    """Convert an HPO EvidenceBlock to HpoDB, storing the HPOTerm atomically and the full evidence block."""
+    """Convert an HPO ReasoningBlock to HpoDB, storing ID, name, and reasoning separately."""
     return HpoDB(
         phenotype_id=phenotype_id,
-        hpo_term=hpo.value.model_dump() if hpo.value else None,
-        hpo_evidence=hpo.model_dump(),
+        hpo_id=hpo.value.id if hpo.value else None,
+        hpo_name=hpo.value.name if hpo.value else None,
+        hpo_reasoning=hpo.reasoning,
     )
 
 
@@ -100,17 +106,20 @@ def variant_to_db(paper_id: int, variant: Variant) -> VariantDB:
     return VariantDB(**kwargs)
 
 
-def harmonized_variant_to_db(variant: HarmonizedVariant) -> HarmonizedVariantDB:
-    """Convert HarmonizedVariant to HarmonizedVariantDB."""
+def harmonized_variant_to_db(
+    variant: HarmonizedVariantLinkingEntry,
+) -> HarmonizedVariantDB:
+    """Convert HarmonizedVariantLinkingEntry to HarmonizedVariantDB."""
+    data = variant.harmonized_variant.value
     return HarmonizedVariantDB(
         variant_id=variant.variant_id,
-        gnomad_style_coordinates=variant.gnomad_style_coordinates,
-        rsid=variant.rsid,
-        caid=variant.caid,
-        hgvs_c=variant.hgvs_c,
-        hgvs_p=variant.hgvs_p,
-        hgvs_g=variant.hgvs_g,
-        reasoning=variant.reasoning,
+        gnomad_style_coordinates=data.gnomad_style_coordinates if data else None,
+        rsid=data.rsid if data else None,
+        caid=data.caid if data else None,
+        hgvs_c=data.hgvs_c if data else None,
+        hgvs_p=data.hgvs_p if data else None,
+        hgvs_g=data.hgvs_g if data else None,
+        reasoning=variant.harmonized_variant.reasoning,
     )
 
 

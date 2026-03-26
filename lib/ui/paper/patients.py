@@ -79,6 +79,7 @@ def _render_phenotypes_table(
             'Select': False,
             'Phenotype': phenotype.concept,
             'Evidence': phenotype.concept_evidence.quote or '',
+            'Reasoning': phenotype.hpo.reasoning or '' if phenotype.hpo else '',
             '_phenotype': phenotype,
         }
 
@@ -110,6 +111,7 @@ def _render_phenotypes_table(
         'Select': st.column_config.CheckboxColumn('Select', width='small'),
         'Phenotype': st.column_config.TextColumn('Phenotype', width='large'),
         'Evidence': st.column_config.TextColumn('Evidence', width='medium'),
+        'Reasoning': st.column_config.TextColumn('Reasoning', width='medium'),
     }
     if show_hpo:
         column_config.update(
@@ -131,7 +133,7 @@ def _render_phenotypes_table(
         df,
         width='stretch',
         hide_index=True,
-        disabled=['Phenotype', 'Evidence']
+        disabled=['Phenotype', 'Evidence', 'Reasoning']
         + (['HPO ID', 'HPO Term'] if show_hpo else []),
         column_config=column_config,
         key=f'{key_prefix}-phenotypes-editor',

@@ -34,7 +34,6 @@ from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import fulltext_md, pdf_image_caption_path, pdf_image_path
 from lib.models import (
     EnrichedVariantDB,
-    HarmonizedVariant,
     HarmonizedVariantDB,
     PaperDB,
     PatientDB,
@@ -52,8 +51,9 @@ from lib.models.converters import (
     phenotype_to_db,
     variant_to_db,
 )
+from lib.models.evidence_block import ReasoningBlock
 from lib.models.phenotype import ExtractedPhenotypeDB, HpoCandidate, HpoDB
-from lib.models.variant import Variant
+from lib.models.variant import HarmonizedVariant, HarmonizedVariantLinkingEntry, Variant
 from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
 
 LEASE_TIMEOUT_S = 900
@@ -331,14 +331,12 @@ async def enrich_variants_task_async(paper_db: PaperDB) -> None:
         )
         harmonized_variants = [
             HarmonizedVariant(
-                variant_id=r.variant_id,
                 gnomad_style_coordinates=r.gnomad_style_coordinates,
                 rsid=r.rsid,
                 caid=r.caid,
                 hgvs_c=r.hgvs_c,
                 hgvs_p=r.hgvs_p,
                 hgvs_g=r.hgvs_g,
-                reasoning=r.reasoning,
             )
             for r in rows
         ]

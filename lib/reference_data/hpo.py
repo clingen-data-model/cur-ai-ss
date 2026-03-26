@@ -112,8 +112,8 @@ def find_matching_hpo_terms(
         hpo_id = str(term_lookup[name][0])
 
         candidate = HpoCandidate(
-            hpo_id=hpo_id,
-            hpo_name=name,
+            id=hpo_id,
+            name=name,
             similarity_score=float(score),
         )
 
@@ -129,8 +129,8 @@ def find_matching_hpo_terms(
     if not candidates:
         candidates.append(
             HpoCandidate(
-                hpo_id='HP:0000118',
-                hpo_name='Phenotypic abnormality',
+                id='HP:0000118',
+                name='Phenotypic abnormality',
                 similarity_score=0.0,
             )
         )

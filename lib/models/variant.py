@@ -85,22 +85,27 @@ class VariantExtractionOutput(BaseModel):
 
 
 class HarmonizedVariant(BaseModel):
-    """HarmonizedVariant output from the harmonization agent."""
+    """Harmonized variant data fields."""
 
-    variant_id: int  # 1-based index matching input variant position
     gnomad_style_coordinates: Optional[str] = None
     rsid: Optional[str] = None
     caid: Optional[str] = None
     hgvs_c: Optional[str] = None
     hgvs_p: Optional[str] = None
     hgvs_g: Optional[str] = None
-    reasoning: Optional[str] = None
+
+
+class HarmonizedVariantLinkingEntry(BaseModel):
+    """Output from the harmonization agent for a single variant."""
+
+    variant_id: int  # 1-based index matching input variant position
+    harmonized_variant: ReasoningBlock[HarmonizedVariant | None]
 
 
 class VariantHarmonizationOutput(BaseModel):
     """Output from variant harmonization agent."""
 
-    variants: List[HarmonizedVariant]
+    variants: List[HarmonizedVariantLinkingEntry]
 
 
 class HarmonizedVariantResp(BaseModel):
@@ -112,7 +117,6 @@ class HarmonizedVariantResp(BaseModel):
     hgvs_c: Optional[str] = None
     hgvs_p: Optional[str] = None
     hgvs_g: Optional[str] = None
-    reasoning: Optional[str] = None
 
 
 class VariantResp(BaseModel):
@@ -152,8 +156,8 @@ class VariantResp(BaseModel):
     hgvs_g_evidence: EvidenceBlock[Optional[str]]
     variant_type_evidence: EvidenceBlock[str]
     functional_evidence_evidence: EvidenceBlock[bool]
-    # Harmonized variant (optional, may not yet be harmonized)
-    harmonized_variant: Optional[HarmonizedVariantResp] = None
+    # Harmonized variant (always present with ReasoningBlock, but value may be None if not yet harmonized)
+    harmonized_variant: ReasoningBlock[HarmonizedVariantResp | None]
     # Enriched variant (optional, may not yet be enriched)
     enriched_variant: Optional['EnrichedVariantResp'] = None
 
@@ -214,7 +218,7 @@ class VariantDB(Base):
     )
 
     paper: Mapped[PaperDB] = relationship('PaperDB', back_populates='variants')
-    harmonized_variant: Mapped['HarmonizedVariantDB | None'] = relationship(
+    harmonized_variant: Mapped['HarmonizedVariantDB'] = relationship(
         'HarmonizedVariantDB', back_populates='variant', uselist=False
     )
 
