@@ -171,8 +171,8 @@ def render_highlight_controls(
         image_id = block.image_id
 
     queries = [quote] if quote else []
-    image_ids = [image_id] if image_id else []
-    table_ids = [table_id] if table_id else []
+    image_ids = [image_id] if image_id is not None else []
+    table_ids = [table_id] if table_id is not None else []
     if color_key not in st.session_state:
         st.session_state[color_key] = random.choice(COLORS)
     color = st.color_picker(

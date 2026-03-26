@@ -46,8 +46,8 @@ def _render_evidence_block(
                 render_highlight_controls(
                     paper_id,
                     block=evidence_block,
-                    color_key=f'{paper_id}-{block_id}-color-evidence',
-                    button_key_prefix=f'{paper_id}-{block_id}-evidence',
+                    color_key=f'{paper_id}-{block_id}-{source_type}-color-evidence',
+                    button_key_prefix=f'{paper_id}-{block_id}-{source_type}-evidence',
                 )
     else:
         st.text('No evidence provided')
