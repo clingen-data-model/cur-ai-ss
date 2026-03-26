@@ -119,9 +119,11 @@ def render_variants_tab(selected_variant_idx: int | None) -> None:
                             )
                         with col3:
                             render_evidence_controls(
-                                paper_id=paper_resp.id,
+                                paper_resp.id,
+                                quote=variant.variant_evidence.quote,
+                                table_id=variant.variant_evidence.table_id,
+                                image_id=variant.variant_evidence.image_id,
                                 label='📋 Evidence & Reasoning',
-                                quote=variant.variant_evidence.value,
                                 reasoning=variant.variant_evidence.reasoning,
                                 color_key=f'{i}-var-color',
                                 button_key_prefix=f'{i}-var',
@@ -158,9 +160,11 @@ def render_variants_tab(selected_variant_idx: int | None) -> None:
                 with col2:
                     st.space()
                     render_evidence_controls(
-                        paper_id=paper_resp.id,
-                        label='📋 Evidence & Reasoning',
+                        paper_resp.id,
                         quote=variant.variant_type_evidence.quote,
+                        table_id=variant.variant_type_evidence.table_id,
+                        image_id=variant.variant_type_evidence.image_id,
+                        label='📋 Evidence & Reasoning',
                         reasoning=variant.variant_type_evidence.reasoning,
                         color_key=f'{i}-vtype-color',
                         button_key_prefix=f'{i}-vtype',
@@ -180,9 +184,11 @@ def render_variants_tab(selected_variant_idx: int | None) -> None:
                 with col2:
                     st.space()
                     render_evidence_controls(
-                        paper_id=paper_resp.id,
+                        paper_resp.id,
+                        quote=variant.functional_evidence_evidence.quote,
+                        table_id=variant.functional_evidence_evidence.table_id,
+                        image_id=variant.functional_evidence_evidence.image_id,
                         label='📋 Evidence & Reasoning',
-                        quote=str(variant.functional_evidence_evidence.value),
                         reasoning=variant.functional_evidence_evidence.reasoning,
                         color_key=f'{i}-func-ev-color',
                         button_key_prefix=f'{i}-func-ev',

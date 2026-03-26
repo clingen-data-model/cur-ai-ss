@@ -427,6 +427,7 @@ def test_get_variants_harmonized_and_enriched(client, db_session, seeded_paper):
         variant_evidence={
             'value': 'c.68_69delAG',
             'reasoning': 'test',
+            'quote': 'test',
         },
         hgvs_c_evidence={'value': 'c.68_69delAG', 'reasoning': 'test', 'quote': 'test'},
         hgvs_p_evidence={

@@ -45,12 +45,11 @@ def _render_evidence_block(
             ):
                 render_highlight_controls(
                     paper_id,
-                    [evidence_block.quote] if evidence_block.quote else [],
+                    quote=evidence_block.quote,
+                    table_id=evidence_block.table_id,
+                    image_id=evidence_block.image_id,
                     color_key=f'{paper_id}-{block_id}-color-evidence',
                     button_key_prefix=f'{paper_id}-{block_id}-evidence',
-                    image_ids=[evidence_block.image_id]
-                    if evidence_block.image_id
-                    else [],
                 )
     else:
         st.text('No evidence provided')
@@ -263,9 +262,13 @@ def render_patient_variant_occurrences_tab() -> None:
         # Display testing methods evidence
         if link.testing_methods_evidence:
             st.markdown('#### Testing Methods Evidence')
-            for i, testing_method_evidence_block in enumerate(link.testing_methods_evidence, start=1):
+            for i, testing_method_evidence_block in enumerate(
+                link.testing_methods_evidence, start=1
+            ):
                 with st.expander(
                     f'Method {i}: {testing_method_evidence_block.value.value}',
                     expanded=False,
                 ):
-                    _render_evidence_block(testing_method_evidence_block, paper_resp.id, f'method_{i}')
+                    _render_evidence_block(
+                        testing_method_evidence_block, paper_resp.id, f'method_{i}'
+                    )

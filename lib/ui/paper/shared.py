@@ -103,13 +103,18 @@ def pdf_focus_modal() -> None:
 
 
 def focus_and_show_dialog(
-    paper_id: int, queries: list[str], image_ids: list[int], color: str
+    paper_id: int,
+    queries: list[str],
+    image_ids: list[int],
+    table_ids: list[int],
+    color: str,
 ) -> None:
     try:
         current_annotations = grobid_annotations(
             paper_id,
             queries,
             image_ids,
+            table_ids,
             color,
         )
         st.session_state[CURRENT_ANNOTATIONS_KEY] = current_annotations
@@ -119,13 +124,18 @@ def focus_and_show_dialog(
 
 
 def highlight_evidence(
-    paper_id: int, queries: list[str], image_ids: list[int], color: str
+    paper_id: int,
+    queries: list[str],
+    image_ids: list[int],
+    table_ids: list[int],
+    color: str,
 ) -> None:
     try:
         highlight_pdf(
             paper_id,
             queries,
             image_ids,
+            table_ids,
             color,
         )
         st.toast('PDF Highlighted!')
@@ -135,15 +145,17 @@ def highlight_evidence(
 
 def render_highlight_controls(
     paper_id: int,
-    queries: list[str],
-    color_key: str,
-    button_key_prefix: str,
+    quote: str | None = None,
+    table_id: int | None = None,
+    image_id: int | None = None,
+    color_key: str | None = None,
+    button_key_prefix: str | None = None,
     disabled: bool = False,
-    image_ids: list[int] | None = None,
 ) -> None:
     """Render color picker + Highlight + Focus & Switch Tab buttons."""
-    if image_ids is None:
-        image_ids = []
+    queries = [quote] if quote else []
+    image_ids = [image_id] if image_id else []
+    table_ids = [table_id] if table_id else []
     if color_key not in st.session_state:
         st.session_state[color_key] = random.choice(COLORS)
     color = st.color_picker(
@@ -154,7 +166,7 @@ def render_highlight_controls(
         key=f'{button_key_prefix}-highlight',
         type='secondary',
         on_click=highlight_evidence,
-        args=(paper_id, queries, image_ids, color),
+        args=(paper_id, queries, image_ids, table_ids, color),
         disabled=disabled,
     )
     st.button(
@@ -162,18 +174,20 @@ def render_highlight_controls(
         key=f'{button_key_prefix}-focus',
         type='secondary',
         on_click=focus_and_show_dialog,
-        args=(paper_id, queries, image_ids, color),
+        args=(paper_id, queries, image_ids, table_ids, color),
         disabled=disabled,
     )
 
 
 def render_evidence_controls(
     paper_id: int,
-    label: str,
-    quote: str | None,
-    reasoning: str | None,
-    color_key: str,
-    button_key_prefix: str,
+    quote: str | None = None,
+    table_id: int | None = None,
+    image_id: int | None = None,
+    label: str | None = None,
+    reasoning: str | None = None,
+    color_key: str | None = None,
+    button_key_prefix: str | None = None,
 ) -> None:
     """Render popover + color picker + Highlight + Focus & Switch Tab buttons."""
     with st.container(
@@ -184,8 +198,10 @@ def render_evidence_controls(
             st.markdown('**Reasoning**: ' + (reasoning or ''))
         render_highlight_controls(
             paper_id,
-            [quote] if quote else [],
-            color_key,
-            button_key_prefix,
+            quote=quote,
+            table_id=table_id,
+            image_id=image_id,
+            color_key=color_key,
+            button_key_prefix=button_key_prefix,
             disabled=not quote,
         )

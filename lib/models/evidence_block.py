@@ -25,8 +25,12 @@ class EvidenceBlock(ReasoningBlock[T]):
             hasattr(self.value, 'value') and self.value.value in ('unknown', 'Unknown')
         )
 
+        # For boolean values, skip validation if value is falsy (no evidence required for False)
+        is_falsy_bool = isinstance(self.value, bool) and not self.value
+
         if (
             not is_unknown
+            and not is_falsy_bool
             and not self.quote
             and not self.table_id
             and not self.image_id

@@ -127,6 +127,8 @@ For the "variant" field (overall variant identification):
 - value → the variant as described in the paper (e.g., "c.1799T>A", "p.Val600Glu", "rs80357906")
   - Use the most concise, canonical form mentioned in the paper
   - null only if no clear variant identifier is present
+- quote → verbatim text from the paper that identifies this variant (required if value is non-null)
+- table_id/image_id → optional table or figure number if the variant is presented in a table or pedigree
 - reasoning → explanation of how this variant was identified (which section, context, data type, etc.)
 
 ------------------------------
@@ -137,7 +139,11 @@ Evaluate whether the paper provides experimental validation:
 TRUE criteria: Paper describes functional assays, cell studies, animal models, or experimental validation.
 FALSE criteria: Variant mentioned without functional studies; purely computational predictions.
 
-The functional_evidence EvidenceBlock should indicate whether functional validation is present (true/false).
+For the "functional_evidence" field:
+- value → boolean indicating whether functional validation is present (true/false)
+- quote → verbatim text describing the functional evidence (required if value is true)
+- table_id/image_id → optional table or figure number if functional data is presented in a table or figure
+- reasoning → explanation of how functional evidence was determined
 
 ------------------------------
 OUTPUT FORMAT
@@ -156,10 +162,8 @@ Return JSON array of variants:
 
 Output rules:
 - Return array of variants (empty array [] if none found)
-- Most fields use EvidenceBlock format: {"value": <value or null>, "quote": "...", "reasoning": "..."}
+- All fields use EvidenceBlock format: {"value": <value or null>, "quote": "...", "reasoning": "..."}
 - Alternative to "quote": use "table_id" or "image_id" if evidence comes from table/image
-- SPECIAL CASE - "variant" and "functional_evidence" use ReasoningBlock format: {"value": <value or null>, "reasoning": "..."}
-  - No quote/table_id/image_id needed for these fields
 - Null values are acceptable for any value field
 - Include all 15 fields: gene, transcript, protein_accession, genomic_accession, lrg_accession, gene_accession, genomic_coordinates, genome_build, rsid, caid, variant, hgvs_c, hgvs_p, hgvs_g, variant_type, functional_evidence
 - Each field independently justified by its own evidence

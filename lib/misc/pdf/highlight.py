@@ -142,9 +142,10 @@ def find_best_match(query: str, words: list[WordLoc]) -> list[WordLoc] | None:
     return get_words_from_alignment(alignments[0].aligned[1], word_to_offset, words)
 
 
-def images_to_grobid_annotations(
+def figures_to_grobid_annotations(
     paper_id: int,
     image_ids: list[int],
+    table_ids: list[int],
     color: tuple[float, float, float],
 ) -> list[GrobidAnnotation]:
     pdf_path = pdf_highlighted_path(paper_id)
@@ -155,36 +156,35 @@ def images_to_grobid_annotations(
         docling_json = json.load(f)
 
     annotations = []
-    for image_id in image_ids:
-        bounding_boxes = docling_json['pictures'][image_id]['prov']
-        for bounding_box in bounding_boxes:
-            page = pdf_doc[bounding_box['page_no'] - 1]
-            page_height = page.rect.height
-            l, t, r, b = (
-                bounding_box['bbox']['l'],
-                bounding_box['bbox']['t'],
-                bounding_box['bbox']['r'],
-                bounding_box['bbox']['b'],
-            )
+    for key, ids in (('pictures', image_ids), ('tables', table_ids)):
+        for item_id in ids:
+            for prov in docling_json[key][item_id]['prov']:
+                page = pdf_doc[prov['page_no'] - 1]
+                h = page.rect.height
 
-            x = l
-            y = (
-                page_height - t
-            )  # NB: I am confused by the 't' here, as below it is the opposite.
-            width = r - l
-            height = t - b
-
-            annotations.append(
-                GrobidAnnotation(
-                    page=bounding_box['page_no'],
-                    x=x,
-                    y=y,
-                    width=width,
-                    height=height,
-                    color=f'rgb({color[0] * 255.0},{color[1] * 255.0},{color[2] * 255.0})',
-                    border='solid',
+                l, t, r, b = (
+                    prov['bbox']['l'],
+                    prov['bbox']['t'],
+                    prov['bbox']['r'],
+                    prov['bbox']['b'],
                 )
-            )
+
+                x = l
+                y = h - t
+                width = r - l
+                height = t - b  # docling's inverted Y axis
+
+                annotations.append(
+                    GrobidAnnotation(
+                        page=prov['page_no'],
+                        x=x,
+                        y=y,
+                        width=width,
+                        height=height,
+                        color=f'rgb({color[0] * 255.0},{color[1] * 255.0},{color[2] * 255.0})',
+                        border='solid',
+                    )
+                )
 
     pdf_doc.close()
 
@@ -235,9 +235,10 @@ def words_to_grobid_annotations(
     return annotations
 
 
-def highlight_images_in_pdf(
+def highlight_figures_in_pdf(
     paper_id: int,
     image_ids: list[int],
+    table_ids: list[int],
     rgb_color: tuple[float, float, float],
 ) -> None:
     if not image_ids:
@@ -251,26 +252,29 @@ def highlight_images_in_pdf(
     with open(docling_json_file, 'r') as f:
         docling_json = json.load(f)
 
-    for image_id in image_ids:
-        bounding_boxes = docling_json['pictures'][image_id]['prov']
-        for bounding_box in bounding_boxes:
-            page = pdf_doc[bounding_box['page_no'] - 1]
-            page_height = page.rect.height
-            l, t, r, b = (
-                bounding_box['bbox']['l'],
-                bounding_box['bbox']['t'],
-                bounding_box['bbox']['r'],
-                bounding_box['bbox']['b'],
-            )
-            bounding_box = [
-                (l, page_height - t),  # top-left
-                (r, page_height - t),  # top-right
-                (r, page_height - b),  # bottom-right
-                (l, page_height - b),  # bottom-left
-            ]
-            page.draw_polyline(
-                bounding_box, color=rgb_color, fill=rgb_color, fill_opacity=0.3
-            )
+    for key, ids in (('pictures', image_ids), ('tables', table_ids)):
+        for item_id in ids:
+            for prov in docling_json[key][item_id]['prov']:
+                page = pdf_doc[prov['page_no'] - 1]
+                h = page.rect.height
+                l, t, r, b = (
+                    prov['bbox']['l'],
+                    prov['bbox']['t'],
+                    prov['bbox']['r'],
+                    prov['bbox']['b'],
+                )
+                poly = [
+                    (l, h - t),
+                    (r, h - t),
+                    (r, h - b),
+                    (l, h - b),
+                ]
+                page.draw_polyline(
+                    poly,
+                    color=rgb_color,
+                    fill=rgb_color,
+                    fill_opacity=0.3,
+                )
 
     # Save highlighted PDF
     output_path = pdf_highlighted_path(paper_id)

@@ -97,7 +97,11 @@ def delete_paper(paper_id: int) -> None:
 
 
 def highlight_pdf(
-    paper_id: int, queries: list[str], image_ids: list[int], color: str
+    paper_id: int,
+    queries: list[str],
+    image_ids: list[int],
+    table_ids: list[int],
+    color: str,
 ) -> None:
     if isinstance(queries, str):
         queries = [queries]
@@ -109,11 +113,20 @@ def highlight_pdf(
 
 
 def grobid_annotations(
-    paper_id: int, queries: list[str], image_ids: list[int], color: str
+    paper_id: int,
+    queries: list[str],
+    image_ids: list[int],
+    table_ids: list[int],
+    color: str,
 ) -> list[GrobidAnnotation]:
     resp = requests.post(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/grobid-annotation',
-        json={'queries': queries, 'image_ids': image_ids, 'color': color},
+        json={
+            'queries': queries,
+            'image_ids': image_ids,
+            'table_ids': table_ids,
+            'color': color,
+        },
     )
     resp.raise_for_status()
     return TypeAdapter(list[GrobidAnnotation]).validate_python(resp.json())

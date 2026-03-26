@@ -53,7 +53,7 @@ class Variant(BaseModel):
     """Variant extracted from paper by the extraction agent."""
 
     # Variant-level evidence
-    variant: ReasoningBlock[Optional[str]]
+    variant: EvidenceBlock[Optional[str]]
 
     # Reference sequences with evidence blocks
     transcript: EvidenceBlock[Optional[str]]
@@ -75,7 +75,7 @@ class Variant(BaseModel):
     variant_type: EvidenceBlock[VariantType]
 
     # Functional evidence assessment with evidence block
-    functional_evidence: ReasoningBlock[bool]
+    functional_evidence: EvidenceBlock[bool]
 
 
 class VariantExtractionOutput(BaseModel):
@@ -146,12 +146,12 @@ class VariantResp(BaseModel):
     genome_build_evidence: EvidenceBlock[Optional[str]]
     rsid_evidence: EvidenceBlock[Optional[str]]
     caid_evidence: EvidenceBlock[Optional[str]]
-    variant_evidence: ReasoningBlock[Optional[str]]
+    variant_evidence: EvidenceBlock[Optional[str]]
     hgvs_c_evidence: EvidenceBlock[Optional[str]]
     hgvs_p_evidence: EvidenceBlock[Optional[str]]
     hgvs_g_evidence: EvidenceBlock[Optional[str]]
     variant_type_evidence: EvidenceBlock[str]
-    functional_evidence_evidence: ReasoningBlock[bool]
+    functional_evidence_evidence: EvidenceBlock[bool]
     # Harmonized variant (optional, may not yet be harmonized)
     harmonized_variant: Optional[HarmonizedVariantResp] = None
     # Enriched variant (optional, may not yet be enriched)
