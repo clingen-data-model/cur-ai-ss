@@ -19,6 +19,7 @@ from lib.models.paper import (
     PipelineStatus,
 )
 from lib.models.patient import (
+    PatientCreateRequest,
     PatientDB,
     PatientResp,
     PatientUpdateRequest,

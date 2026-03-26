@@ -406,6 +406,18 @@ class PatientResp(BaseModel):
     affected_status_evidence: EvidenceBlock[AffectedStatus]
 
 
+class PatientCreateRequest(BaseModel):
+    identifier: str
+    proband_status: str
+    sex: str
+    age_diagnosis: int | None = None
+    age_report: int | None = None
+    age_death: int | None = None
+    country_of_origin: str
+    race_ethnicity: str
+    affected_status: str
+
+
 class PatientUpdateRequest(PatchModel):
     identifier: str | None = None
     proband_status: str | None = None

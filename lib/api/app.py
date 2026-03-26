@@ -66,6 +66,7 @@ from lib.models import (
     PaperDB,
     PaperResp,
     PaperUpdateRequest,
+    PatientCreateRequest,
     PatientDB,
     PatientResp,
     PatientUpdateRequest,
@@ -260,6 +261,62 @@ def get_patients(paper_id: int, session: Session = Depends(get_session)) -> Any:
         .all()
     )
     return patients
+
+
+@app.post(
+    '/papers/{paper_id}/patients',
+    response_model=PatientResp,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_patient(
+    paper_id: int,
+    patient_data: PatientCreateRequest,
+    session: Session = Depends(get_session),
+) -> Any:
+    from lib.models.evidence_block import EvidenceBlock
+
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+
+    def create_evidence_block(value: Any) -> dict:
+        """Create an evidence block for human-created data."""
+        block = EvidenceBlock(
+            value=value,
+            reasoning='Created by human',
+            quote='Created manually',
+        )
+        return block.model_dump()
+
+    patient_db = PatientDB(
+        paper_id=paper_id,
+        identifier=patient_data.identifier,
+        identifier_evidence=create_evidence_block(patient_data.identifier),
+        proband_status=patient_data.proband_status,
+        proband_status_evidence=create_evidence_block(patient_data.proband_status),
+        sex=patient_data.sex,
+        sex_evidence=create_evidence_block(patient_data.sex),
+        age_diagnosis=patient_data.age_diagnosis,
+        age_diagnosis_evidence=create_evidence_block(patient_data.age_diagnosis),
+        age_report=patient_data.age_report,
+        age_report_evidence=create_evidence_block(patient_data.age_report),
+        age_death=patient_data.age_death,
+        age_death_evidence=create_evidence_block(patient_data.age_death),
+        country_of_origin=patient_data.country_of_origin,
+        country_of_origin_evidence=create_evidence_block(
+            patient_data.country_of_origin
+        ),
+        race_ethnicity=patient_data.race_ethnicity,
+        race_ethnicity_evidence=create_evidence_block(patient_data.race_ethnicity),
+        affected_status=patient_data.affected_status,
+        affected_status_evidence=create_evidence_block(patient_data.affected_status),
+    )
+    session.add(patient_db)
+    session.commit()
+    session.refresh(patient_db)
+    return patient_db
 
 
 @app.get('/papers/{paper_id}/pedigree', response_model=PedigreeResp | None)
