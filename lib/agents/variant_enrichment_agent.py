@@ -309,8 +309,10 @@ def enrich_variant(hv: HarmonizedVariant) -> EnrichedVariant:
     # Deterministic merge phase
     # (merge after all threads complete to avoid race conditions)
     for result in results:
-        enriched = enriched.model_copy(update=result.model_dump(exclude_none=True))
-
+        for field_name, field_info in result.model_fields.items():
+            value = getattr(result, field_name, None)
+            if value is not None:
+                setattr(enriched, field_name, value)
     return enriched
 
 
