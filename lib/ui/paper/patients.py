@@ -8,6 +8,7 @@ import streamlit as st
 from lib.core.environment import env
 from lib.misc.pdf.paths import pdf_image_path
 from lib.models import (
+    ExtractedPhenotypeResp,
     PaperResp,
     PatientResp,
     PatientUpdateRequest,
@@ -23,6 +24,7 @@ from lib.models.patient import (
 from lib.ui.api import (
     get_patients,
     get_pedigree,
+    get_phenotypes,
     grobid_annotations,
     update_patient,
 )
@@ -30,6 +32,165 @@ from lib.ui.paper.shared import (
     render_evidence_controls,
     render_highlight_controls,
 )
+
+
+def _render_patient_phenotypes(
+    phenotypes: list[ExtractedPhenotypeResp],
+    paper_resp: PaperResp,
+    key_prefix: str,
+) -> None:
+    """Render phenotypes for a specific patient with matched/unmatched tabs."""
+    if not phenotypes:
+        st.info('No phenotypes for this patient.')
+        return
+
+    # Split into matched and unmatched
+    matched = [p for p in phenotypes if p.hpo is not None]
+    unmatched = [p for p in phenotypes if p.hpo is None]
+
+    tab1, tab2 = st.tabs(
+        [f'🔗 Matched to HPO ({len(matched)})', f'❓ Unmatched ({len(unmatched)})']
+    )
+
+    with tab1:
+        if matched:
+            _render_phenotypes_table(matched, paper_resp, key_prefix, show_hpo=True)
+        else:
+            st.info('No phenotypes matched to HPO.')
+
+    with tab2:
+        if unmatched:
+            _render_phenotypes_table(unmatched, paper_resp, key_prefix, show_hpo=False)
+        else:
+            st.info('All phenotypes have been matched to HPO.')
+
+
+def _render_phenotypes_table(
+    phenotypes: list[ExtractedPhenotypeResp],
+    paper_resp: PaperResp,
+    key_prefix: str,
+    show_hpo: bool,
+) -> None:
+    """Render phenotypes table with detail panel."""
+    # Build table rows
+    rows = []
+    for phenotype in phenotypes:
+        row = {
+            'Select': False,
+            'Phenotype': phenotype.concept,
+            'Evidence': phenotype.concept_evidence.quote or '',
+            '_phenotype': phenotype,
+        }
+
+        if (
+            show_hpo
+            and phenotype.hpo
+            and phenotype.hpo.value
+            and phenotype.hpo.value.id
+        ):
+            hpo_id_link = f'https://hpo.jax.org/app/browse/term/{phenotype.hpo.value.id}#{phenotype.hpo.value.id}'
+            hpo_term_link = f'https://hpo.jax.org/app/browse/term/{phenotype.hpo.value.id}#{phenotype.hpo.value.name}'
+            row.update(
+                {
+                    'HPO ID': hpo_id_link,
+                    'HPO Term': hpo_term_link,
+                }
+            )
+
+        rows.append(row)
+
+    # Create DataFrame for display (exclude internal columns)
+    display_rows = [
+        {k: v for k, v in row.items() if not k.startswith('_')} for row in rows
+    ]
+    df = pd.DataFrame(display_rows)
+
+    # Display table
+    column_config = {
+        'Select': st.column_config.CheckboxColumn('Select', width='small'),
+        'Phenotype': st.column_config.TextColumn('Phenotype', width='large'),
+        'Evidence': st.column_config.TextColumn('Evidence', width='medium'),
+    }
+    if show_hpo:
+        column_config.update(
+            {
+                'HPO ID': st.column_config.LinkColumn(
+                    'HPO ID',
+                    width='small',
+                    display_text=r'.*?#(.+)$',
+                ),
+                'HPO Term': st.column_config.LinkColumn(
+                    'HPO Term',
+                    width='medium',
+                    display_text=r'.*?#(.+)$',
+                ),
+            }
+        )
+
+    editted_df = st.data_editor(
+        df,
+        width='stretch',
+        hide_index=True,
+        disabled=['Phenotype', 'Evidence']
+        + (['HPO ID', 'HPO Term'] if show_hpo else []),
+        column_config=column_config,
+        key=f'{key_prefix}-phenotypes-editor',
+    )
+
+    # Show detail panel when a row is selected
+    selected_rows = editted_df[editted_df['Select']].index.tolist()
+    if selected_rows:
+        idx = selected_rows[0]
+        phenotype = rows[idx]['_phenotype']
+
+        st.divider()
+        st.markdown('##### Phenotype Details')
+
+        details_data = {
+            'Field': [
+                '**Concept**',
+                '**HPO ID**',
+                '**HPO Term**',
+            ],
+            'Value': [
+                phenotype.concept,
+                phenotype.hpo.value.id
+                if phenotype.hpo and phenotype.hpo.value and phenotype.hpo.value.id
+                else 'N/A',
+                phenotype.hpo.value.name
+                if phenotype.hpo and phenotype.hpo.value and phenotype.hpo.value.name
+                else 'N/A',
+            ],
+        }
+        st.table(pd.DataFrame(details_data))
+
+        (
+            col1,
+            col2,
+        ) = st.columns(2)
+
+        # Concept evidence reasoning
+        with col1:
+            if phenotype.concept_evidence.reasoning:
+                with st.expander('Extracted Phenotype Reasoning', expanded=False):
+                    st.text(phenotype.concept_evidence.reasoning)
+
+        # HPO matching reasoning
+        with col2:
+            if phenotype.hpo and phenotype.hpo.reasoning:
+                with st.expander('HPO Match Reasoning', expanded=False):
+                    st.text(phenotype.hpo.reasoning)
+
+        # Highlight button with popover
+        st.divider()
+        if phenotype.concept_evidence.quote:
+            render_highlight_controls(
+                paper_resp.id,
+                [phenotype.concept_evidence.quote],
+                color_key=f'{key_prefix}-highlight-color-{phenotype.concept}',
+                button_key_prefix=f'{key_prefix}-highlight-confirm-{phenotype.concept}',
+                disabled=False,
+            )
 
 
 def render_patient(
@@ -291,8 +452,14 @@ def render_patient(
             except Exception as e:
                 st.toast(f'Failed to save: {str(e)}', icon='❌')
 
-        # --- Phenotypes Section (loaded via API in patients.py module)
-        # Phenotypes are now stored in the database and accessed through the API
+        # --- Phenotypes Section
+        st.divider()
+        st.markdown('### Phenotypes')
+        try:
+            phenotypes = get_phenotypes(paper_resp.id, patient.id)
+            _render_patient_phenotypes(phenotypes, paper_resp, key_prefix)
+        except Exception as e:
+            st.error(f'Failed to load phenotypes: {str(e)}')
 
 
 def render_patients_tab(selected_patient_id: int | None) -> None:

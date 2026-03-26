@@ -6,6 +6,7 @@ from pydantic import TypeAdapter
 from lib.core.environment import env
 from lib.misc.pdf.highlight import GrobidAnnotation
 from lib.models import (
+    ExtractedPhenotypeResp,
     GeneResp,
     PaperResp,
     PaperUpdateRequest,
@@ -161,3 +162,11 @@ def get_patient_variant_links(paper_id: int) -> list[PatientVariantLinkResp]:
     )
     resp.raise_for_status()
     return TypeAdapter(list[PatientVariantLinkResp]).validate_python(resp.json())
+
+
+def get_phenotypes(paper_id: int, patient_id: int) -> list[ExtractedPhenotypeResp]:
+    resp = requests.get(
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/patients/{patient_id}/phenotypes'
+    )
+    resp.raise_for_status()
+    return TypeAdapter(list[ExtractedPhenotypeResp]).validate_python(resp.json())
