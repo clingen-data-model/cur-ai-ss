@@ -124,10 +124,10 @@ Rules:
 VARIANT-LEVEL EVIDENCE
 ------------------------------
 For the "variant" field (overall variant identification):
-- value → null (variant as a whole has no single representative value)
-- quote → direct verbatim quote identifying/describing this variant
-  - Examples: "c.1799T>A in BRAF", table entry mentioning variant
-- reasoning → explanation of how this variant was identified
+- value → the variant as described in the paper (e.g., "c.1799T>A", "p.Val600Glu", "rs80357906")
+  - Use the most concise, canonical form mentioned in the paper
+  - null only if no clear variant identifier is present
+- reasoning → explanation of how this variant was identified (which section, context, data type, etc.)
 
 ------------------------------
 FUNCTIONAL EVIDENCE ASSESSMENT
@@ -156,8 +156,10 @@ Return JSON array of variants:
 
 Output rules:
 - Return array of variants (empty array [] if none found)
-- Each field uses EvidenceBlock format: {"value": <value or null>, "quote": "...", "reasoning": "..."}
+- Most fields use EvidenceBlock format: {"value": <value or null>, "quote": "...", "reasoning": "..."}
 - Alternative to "quote": use "table_id" or "image_id" if evidence comes from table/image
+- SPECIAL CASE - "variant" and "functional_evidence" use ReasoningBlock format: {"value": <value or null>, "reasoning": "..."}
+  - No quote/table_id/image_id needed for these fields
 - Null values are acceptable for any value field
 - Include all 15 fields: gene, transcript, protein_accession, genomic_accession, lrg_accession, gene_accession, genomic_coordinates, genome_build, rsid, caid, variant, hgvs_c, hgvs_p, hgvs_g, variant_type, functional_evidence
 - Each field independently justified by its own evidence

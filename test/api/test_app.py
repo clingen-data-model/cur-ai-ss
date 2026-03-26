@@ -8,10 +8,13 @@ from sqlalchemy import func, select, update
 
 from lib.api.app import app
 from lib.api.db import get_session, session_scope
-from lib.models import GeneDB, PaperDB, PatientDB, PipelineStatus
 from lib.models import (
     EnrichedVariantDB,
+    GeneDB,
     HarmonizedVariantDB,
+    PaperDB,
+    PatientDB,
+    PipelineStatus,
     VariantDB,
 )
 
@@ -424,7 +427,6 @@ def test_get_variants_harmonized_and_enriched(client, db_session, seeded_paper):
         variant_evidence={
             'value': 'c.68_69delAG',
             'reasoning': 'test',
-            'quote': 'test',
         },
         hgvs_c_evidence={'value': 'c.68_69delAG', 'reasoning': 'test', 'quote': 'test'},
         hgvs_p_evidence={

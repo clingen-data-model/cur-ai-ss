@@ -335,6 +335,7 @@ def _variant_to_resp(row: VariantDB) -> VariantResp:
     return VariantResp(
         id=row.id,
         paper_id=row.paper_id,
+        variant=row.variant,
         transcript=row.transcript,
         protein_accession=row.protein_accession,
         genomic_accession=row.genomic_accession,
@@ -350,21 +351,21 @@ def _variant_to_resp(row: VariantDB) -> VariantResp:
         variant_type=row.variant_type,
         functional_evidence=row.functional_evidence,
         updated_at=row.updated_at,
-        transcript_evidence=row.transcript_evidence,
-        protein_accession_evidence=row.protein_accession_evidence,
-        genomic_accession_evidence=row.genomic_accession_evidence,
-        lrg_accession_evidence=row.lrg_accession_evidence,
-        gene_accession_evidence=row.gene_accession_evidence,
-        genomic_coordinates_evidence=row.genomic_coordinates_evidence,
-        genome_build_evidence=row.genome_build_evidence,
-        rsid_evidence=row.rsid_evidence,
-        caid_evidence=row.caid_evidence,
-        variant_evidence=row.variant_evidence,
-        hgvs_c_evidence=row.hgvs_c_evidence,
-        hgvs_p_evidence=row.hgvs_p_evidence,
-        hgvs_g_evidence=row.hgvs_g_evidence,
-        variant_type_evidence=row.variant_type_evidence,
-        functional_evidence_evidence=row.functional_evidence_evidence,
+        transcript_evidence=row.transcript_evidence,  # type: ignore[arg-type]
+        protein_accession_evidence=row.protein_accession_evidence,  # type: ignore[arg-type]
+        genomic_accession_evidence=row.genomic_accession_evidence,  # type: ignore[arg-type]
+        lrg_accession_evidence=row.lrg_accession_evidence,  # type: ignore[arg-type]
+        gene_accession_evidence=row.gene_accession_evidence,  # type: ignore[arg-type]
+        genomic_coordinates_evidence=row.genomic_coordinates_evidence,  # type: ignore[arg-type]
+        genome_build_evidence=row.genome_build_evidence,  # type: ignore[arg-type]
+        rsid_evidence=row.rsid_evidence,  # type: ignore[arg-type]
+        caid_evidence=row.caid_evidence,  # type: ignore[arg-type]
+        variant_evidence=row.variant_evidence,  # type: ignore[arg-type]
+        hgvs_c_evidence=row.hgvs_c_evidence,  # type: ignore[arg-type]
+        hgvs_p_evidence=row.hgvs_p_evidence,  # type: ignore[arg-type]
+        hgvs_g_evidence=row.hgvs_g_evidence,  # type: ignore[arg-type]
+        variant_type_evidence=row.variant_type_evidence,  # type: ignore[arg-type]
+        functional_evidence_evidence=row.functional_evidence_evidence,  # type: ignore[arg-type]
         harmonized_variant=harmonized,
         enriched_variant=enriched,
     )

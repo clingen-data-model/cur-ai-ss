@@ -53,7 +53,7 @@ class Variant(BaseModel):
     """Variant extracted from paper by the extraction agent."""
 
     # Variant-level evidence
-    variant: EvidenceBlock[Optional[str]]
+    variant: ReasoningBlock[Optional[str]]
 
     # Reference sequences with evidence blocks
     transcript: EvidenceBlock[Optional[str]]
@@ -120,6 +120,7 @@ class VariantResp(BaseModel):
 
     id: int
     paper_id: int
+    variant: Optional[str]
     transcript: Optional[str]
     protein_accession: Optional[str]
     genomic_accession: Optional[str]
@@ -145,7 +146,7 @@ class VariantResp(BaseModel):
     genome_build_evidence: EvidenceBlock[Optional[str]]
     rsid_evidence: EvidenceBlock[Optional[str]]
     caid_evidence: EvidenceBlock[Optional[str]]
-    variant_evidence: EvidenceBlock[Optional[str]]
+    variant_evidence: ReasoningBlock[Optional[str]]
     hgvs_c_evidence: EvidenceBlock[Optional[str]]
     hgvs_p_evidence: EvidenceBlock[Optional[str]]
     hgvs_g_evidence: EvidenceBlock[Optional[str]]
@@ -166,6 +167,7 @@ class VariantDB(Base):
     )
 
     # Core fields
+    variant: Mapped[str | None] = mapped_column(String, nullable=True)
     transcript: Mapped[str | None] = mapped_column(String, nullable=True)
     protein_accession: Mapped[str | None] = mapped_column(String, nullable=True)
     genomic_accession: Mapped[str | None] = mapped_column(String, nullable=True)

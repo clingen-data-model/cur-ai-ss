@@ -79,11 +79,11 @@ def render_variants_tab(selected_variant_idx: int | None) -> None:
                     or harmonized_variant.gnomad_style_coordinates
                     or harmonized_variant.rsid
                     or harmonized_variant.hgvs_p
-                    or variant.variant_evidence.quote
+                    or variant.variant_evidence.value
                     or f'Variant {i}'
                 )
                 if harmonized_variant
-                else (variant.variant_evidence.quote or f'Variant {i}')
+                else (variant.variant_evidence.value or f'Variant {i}')
             )
             with st.expander(
                 expander_title,
@@ -121,7 +121,7 @@ def render_variants_tab(selected_variant_idx: int | None) -> None:
                             render_evidence_controls(
                                 paper_id=paper_resp.id,
                                 label='📋 Evidence & Reasoning',
-                                quote=variant.variant_evidence.quote,
+                                quote=None,
                                 reasoning=variant.variant_evidence.reasoning,
                                 color_key=f'{i}-var-color',
                                 button_key_prefix=f'{i}-var',

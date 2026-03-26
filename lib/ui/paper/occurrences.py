@@ -94,7 +94,7 @@ def render_patient_variant_occurrences_tab() -> None:
             )
             or (harmonized_variant.rsid if harmonized_variant else None)
             or (harmonized_variant.hgvs_p if harmonized_variant else None)
-            or variant.variant_evidence.quote
+            or variant.variant_evidence.value
             or f'Variant {link.variant_id}'
         )
 

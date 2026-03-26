@@ -75,6 +75,7 @@ def variant_to_db(paper_id: int, variant: Variant) -> VariantDB:
 
     # All fields except gene have evidence blocks
     evidence_fields = [
+        'variant',
         'transcript',
         'protein_accession',
         'genomic_accession',
@@ -84,7 +85,6 @@ def variant_to_db(paper_id: int, variant: Variant) -> VariantDB:
         'genome_build',
         'rsid',
         'caid',
-        'variant',
         'hgvs_c',
         'hgvs_p',
         'hgvs_g',
