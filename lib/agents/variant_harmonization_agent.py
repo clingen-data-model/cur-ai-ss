@@ -897,7 +897,7 @@ Rules:
 
 
 agent = Agent(
-    name='variant_canonicalizer',
+    name='variant_harmonizer',
     instructions=VARIANT_HARMONIZATION_INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
     output_type=VariantHarmonizationOutput,

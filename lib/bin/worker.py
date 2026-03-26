@@ -242,14 +242,13 @@ async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
             .order_by(VariantDB.id)
             .all()
         )
-    structured_variants = [
-        {
-            'variant_id': v.id,
-            'variant_quote': v.variant_evidence['quote'],
-        }
-        for v in variant_rows
-    ]
-    with session_scope() as session:
+        structured_variants = [
+            {
+                'variant_id': v.id,
+                'variant_quote': v.variant_evidence['quote'],
+            }
+            for v in variant_rows
+        ]
         patient_rows = (
             session.query(PatientDB)
             .filter(PatientDB.paper_id == paper_db.id)
@@ -343,6 +342,8 @@ async def enrich_variants_task_async(paper_db: PaperDB) -> None:
             )
             for r in rows
         ]
+        # Extract harmonized_variant IDs while session is active
+        harmonized_variant_ids = [r.id for r in rows]
     # Offload blocking enrichment to thread
     enriched_variants = await asyncio.to_thread(
         enrich_variants_batch,
@@ -357,10 +358,10 @@ async def enrich_variants_task_async(paper_db: PaperDB) -> None:
                 .where(VariantDB.paper_id == paper_db.id)
             )
         ).delete()
-        for r, ev in zip(rows, enriched_variants):
+        for hv_id, ev in zip(harmonized_variant_ids, enriched_variants):
             session.add(
                 EnrichedVariantDB(
-                    harmonized_variant_id=r.id,
+                    harmonized_variant_id=hv_id,
                     gnomad_style_coordinates=ev.gnomad_style_coordinates,
                     rsid=ev.rsid,
                     caid=ev.caid,
@@ -387,21 +388,33 @@ async def hpo_linking_task_async(paper_db: PaperDB) -> None:
             .order_by(ExtractedPhenotypeDB.patient_id, ExtractedPhenotypeDB.id)
             .all()
         )
-
-    term_lookup = build_term_lookup()
-
-    phenotype_inputs = []
-    for row in phenotype_rows:
-        candidates: list[HpoCandidate] = find_matching_hpo_terms(
-            row.concept, term_lookup=term_lookup
-        )
-        phenotype_inputs.append(
+        # Extract all data while session is active
+        phenotype_data = [
             {
-                'phenotype_id': row.id,
+                'id': row.id,
                 'concept': row.concept,
                 'negated': row.negated,
                 'uncertain': row.uncertain,
                 'family_history': row.family_history,
+            }
+            for row in phenotype_rows
+        ]
+
+    term_lookup = build_term_lookup()
+
+    phenotype_inputs = []
+    phenotype_id_set = {pd['id'] for pd in phenotype_data}
+    for row_data in phenotype_data:
+        candidates: list[HpoCandidate] = find_matching_hpo_terms(
+            row_data['concept'], term_lookup=term_lookup
+        )
+        phenotype_inputs.append(
+            {
+                'phenotype_id': row_data['id'],
+                'concept': row_data['concept'],
+                'negated': row_data['negated'],
+                'uncertain': row_data['uncertain'],
+                'family_history': row_data['family_history'],
                 'candidates': [c.model_dump() for c in candidates],
             }
         )
@@ -412,19 +425,15 @@ async def hpo_linking_task_async(paper_db: PaperDB) -> None:
         max_turns=5 * len(phenotype_inputs),
     )
 
-    # Build lookup: phenotype_id → DB row
-    row_lookup = {r.id: r for r in phenotype_rows}
-
     # Persist HPO links to DB (idempotent: delete-then-insert)
     with session_scope() as session:
         # Delete HPO links for phenotypes in this paper
-        for row in phenotype_rows:
-            session.query(HpoDB).filter(HpoDB.phenotype_id == row.id).delete()
+        for phenotype_id in phenotype_id_set:
+            session.query(HpoDB).filter(HpoDB.phenotype_id == phenotype_id).delete()
 
         for link in result.final_output.links:
-            row = row_lookup[link.phenotype_id]
-            if row:
-                session.add(hpo_to_db(row.id, link.hpo))
+            if link.phenotype_id in phenotype_id_set:
+                session.add(hpo_to_db(link.phenotype_id, link.hpo))
 
 
 def initial_extraction(paper_id: int, gene_symbol: str) -> None:
