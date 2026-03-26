@@ -167,30 +167,37 @@ def _render_phenotypes_table(
         (
             col1,
             col2,
-        ) = st.columns(2)
+            col3,
+        ) = st.columns(3)
+
+        with col1:
+            if phenotype.concept_evidence.quote:
+                with st.expander('Extracted Phenotype Evidence', expanded=False):
+                    st.text(phenotype.concept_evidence.quote)
+                with st.container(
+                    horizontal=True,
+                    vertical_alignment='center',
+                    horizontal_alignment='right',
+                ):
+                    render_highlight_controls(
+                        paper_resp.id,
+                        [phenotype.concept_evidence.quote],
+                        color_key=f'{key_prefix}-highlight-color-{phenotype.concept}',
+                        button_key_prefix=f'{key_prefix}-highlight-confirm-{phenotype.concept}',
+                        disabled=False,
+                    )
 
         # Concept evidence reasoning
-        with col1:
+        with col2:
             if phenotype.concept_evidence.reasoning:
                 with st.expander('Extracted Phenotype Reasoning', expanded=False):
                     st.text(phenotype.concept_evidence.reasoning)
 
         # HPO matching reasoning
-        with col2:
+        with col3:
             if phenotype.hpo and phenotype.hpo.reasoning:
                 with st.expander('HPO Match Reasoning', expanded=False):
                     st.text(phenotype.hpo.reasoning)
-
-        # Highlight button with popover
-        st.divider()
-        if phenotype.concept_evidence.quote:
-            render_highlight_controls(
-                paper_resp.id,
-                [phenotype.concept_evidence.quote],
-                color_key=f'{key_prefix}-highlight-color-{phenotype.concept}',
-                button_key_prefix=f'{key_prefix}-highlight-confirm-{phenotype.concept}',
-                disabled=False,
-            )
 
 
 def render_patient(
