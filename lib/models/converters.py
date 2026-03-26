@@ -67,11 +67,10 @@ def hpo_to_db(
     )
 
 
-def variant_to_db(paper_id: int, gene_symbol: str, variant: Variant) -> VariantDB:
+def variant_to_db(paper_id: int, variant: Variant) -> VariantDB:
     """Convert Variant to VariantDB, extracting values and evidence from EvidenceBlocks."""
     kwargs = {
         'paper_id': paper_id,
-        'gene_symbol': gene_symbol,
     }
 
     # All fields except gene have evidence blocks

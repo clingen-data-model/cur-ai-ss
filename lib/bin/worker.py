@@ -204,7 +204,7 @@ async def extract_variants_task_async(paper_id: int, gene_symbol: str) -> None:
     with session_scope() as session:
         session.query(VariantDB).filter(VariantDB.paper_id == paper_id).delete()
         for variant in result.final_output.variants:
-            session.add(variant_to_db(paper_id, gene_symbol, variant))
+            session.add(variant_to_db(paper_id, variant))
 
 
 async def pedigree_describer_task_async(paper_id: int) -> None:
