@@ -25,14 +25,14 @@ def _render_evidence_block(
     if evidence_block.quote:
         evidence_sources.append(('Text Evidence', evidence_block.quote))
     if evidence_block.table_id is not None:
-        evidence_sources.append(('Table', f'Table #{evidence_block.table_id}'))
+        evidence_sources.append(('Table', f'Table #{evidence_block.table_id + 1}')) # note table indexes are extracted as zero-indexed, but displayed to user here.
     if evidence_block.image_id is not None:
         evidence_sources.append(('Pedigree', f'Image #{evidence_block.image_id}'))
 
     if evidence_sources:
         st.markdown('**Evidence Sources:**')
         for source_type, source_value in evidence_sources:
-            col1, col2 = st.columns([0.2, 0.8])
+            col1, col2 = st.columns([2, 8])
             with col1:
                 st.markdown(f'*{source_type}*')
             with col2:
@@ -45,9 +45,7 @@ def _render_evidence_block(
             ):
                 render_highlight_controls(
                     paper_id,
-                    quote=evidence_block.quote,
-                    table_id=evidence_block.table_id,
-                    image_id=evidence_block.image_id,
+                    block=evidence_block,
                     color_key=f'{paper_id}-{block_id}-color-evidence',
                     button_key_prefix=f'{paper_id}-{block_id}-evidence',
                 )
@@ -82,21 +80,7 @@ def render_patient_variant_occurrences_tab() -> None:
         patient = patients_by_id[link.patient_id]
         variant = variants_by_id[link.variant_id]
         harmonized_variant = variant.harmonized_variant
-
-        # Determine the variant description
-        variant_desc = (
-            (harmonized_variant.hgvs_g if harmonized_variant else None)
-            or (harmonized_variant.hgvs_c if harmonized_variant else None)
-            or (
-                harmonized_variant.gnomad_style_coordinates
-                if harmonized_variant
-                else None
-            )
-            or (harmonized_variant.rsid if harmonized_variant else None)
-            or (harmonized_variant.hgvs_p if harmonized_variant else None)
-            or variant.variant_evidence.value
-            or f'Variant {link.variant_id}'
-        )
+        variant_desc = variant.variant_description
 
         # Format testing methods as a list of values
         testing_methods_list = link.testing_methods
@@ -218,10 +202,10 @@ def render_patient_variant_occurrences_tab() -> None:
 
         with col2:
             st.markdown('#### Harmonized Variant Info')
-            if harmonized_variant:
+            if harmonized_variant and harmonized_variant.value:
                 gnomad_coords = (
-                    f'[{harmonized_variant.gnomad_style_coordinates}]({get_gnomad_url(harmonized_variant.gnomad_style_coordinates)})'
-                    if harmonized_variant.gnomad_style_coordinates
+                    f'[{harmonized_variant.value.gnomad_style_coordinates}]({get_gnomad_url(harmonized_variant.value.gnomad_style_coordinates)})'
+                    if harmonized_variant.value.gnomad_style_coordinates
                     else 'N/A'
                 )
                 variant_data = {
@@ -233,10 +217,10 @@ def render_patient_variant_occurrences_tab() -> None:
                         '**gnomAD-style**',
                     ],
                     'Value': [
-                        harmonized_variant.hgvs_g or 'N/A',
-                        harmonized_variant.hgvs_c or 'N/A',
-                        harmonized_variant.hgvs_p or 'N/A',
-                        harmonized_variant.rsid or 'N/A',
+                        harmonized_variant.value.hgvs_g or 'N/A',
+                        harmonized_variant.value.hgvs_c or 'N/A',
+                        harmonized_variant.value.hgvs_p or 'N/A',
+                        harmonized_variant.value.rsid or 'N/A',
                         gnomad_coords,
                     ],
                 }

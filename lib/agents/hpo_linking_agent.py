@@ -84,8 +84,8 @@ def search_hpo_terms(phenotype_text: str, limit: int = 10) -> list[dict]:
     candidates = find_matching_hpo_terms(phenotype_text, limit=limit)
     return [
         {
-            'hpo_id': c.hpo_id,
-            'hpo_name': c.hpo_name,
+            'id': c.id,
+            'name': c.name,
             'similarity_score': c.similarity_score,
         }
         for c in candidates
@@ -121,8 +121,8 @@ You will receive a JSON array of phenotype entries, each containing:
     - concept (str): phenotype description from the paper
     - negated, uncertain, family_history (boolean)
     - candidates (list): HPO term suggestions
-        - hpo_id (str)
-        - hpo_name (str)
+        - id (str)
+        - name (str)
         - similarity_score (float 0–100)
 
 ---------------------------------------------------------------------

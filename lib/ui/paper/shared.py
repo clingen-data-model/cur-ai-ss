@@ -1,4 +1,5 @@
 import random
+from typing import Any
 from urllib.parse import quote
 
 import requests
@@ -6,6 +7,7 @@ import streamlit as st
 from streamlit_pdf_viewer import pdf_viewer
 
 from lib.misc.pdf.paths import pdf_highlighted_path
+from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.ui.api import (
     clear_highlights,
     get_http_error_detail,
@@ -145,14 +147,29 @@ def highlight_evidence(
 
 def render_highlight_controls(
     paper_id: int,
-    quote: str | None = None,
-    table_id: int | None = None,
-    image_id: int | None = None,
+    block: EvidenceBlock[Any] | None = None,
     color_key: str | None = None,
     button_key_prefix: str | None = None,
     disabled: bool = False,
 ) -> None:
-    """Render color picker + Highlight + Focus & Switch Tab buttons."""
+    """Render color picker + Highlight + Focus & Switch Tab buttons.
+
+    Args:
+        paper_id: Paper ID for highlighting/focusing.
+        block: EvidenceBlock containing quote and evidence sources.
+        color_key: Session state key for color picker.
+        button_key_prefix: Prefix for highlight/focus button keys.
+        disabled: Whether to disable the controls.
+    """
+    # Extract fields from block
+    quote: str | None = None
+    table_id: int | None = None
+    image_id: int | None = None
+    if block is not None:
+        quote = block.quote
+        table_id = block.table_id
+        image_id = block.image_id
+
     queries = [quote] if quote else []
     image_ids = [image_id] if image_id else []
     table_ids = [table_id] if table_id else []
@@ -181,26 +198,39 @@ def render_highlight_controls(
 
 def render_evidence_controls(
     paper_id: int,
-    quote: str | None = None,
-    table_id: int | None = None,
-    image_id: int | None = None,
+    block: EvidenceBlock[Any] | ReasoningBlock[Any] | None = None,
     label: str | None = None,
-    reasoning: str | None = None,
     color_key: str | None = None,
     button_key_prefix: str | None = None,
 ) -> None:
-    """Render popover + color picker + Highlight + Focus & Switch Tab buttons."""
+    """Render popover + color picker + Highlight + Focus & Switch Tab buttons.
+
+    Args:
+        paper_id: Paper ID for highlighting/focusing.
+        block: EvidenceBlock or ReasoningBlock containing quote, reasoning, and evidence sources.
+        label: Label for the popover button.
+        color_key: Session state key for color picker.
+        button_key_prefix: Prefix for highlight/focus button keys.
+    """
+    # Extract fields from block if provided
+    quote: str | None = None
+    reasoning: str | None = None
+    if block is not None:
+        reasoning = block.reasoning
+        if isinstance(block, EvidenceBlock):
+            quote = block.quote
+
     with st.container(
         horizontal=True, vertical_alignment='center', horizontal_alignment='right'
     ):
         with st.popover(label, type='tertiary', disabled=not quote and not reasoning):
             st.markdown('**Evidence**: ' + (quote or ''))
             st.markdown('**Reasoning**: ' + (reasoning or ''))
+        # Only pass EvidenceBlock to highlight controls (ReasoningBlock has no evidence sources)
+        highlight_block = block if isinstance(block, EvidenceBlock) else None
         render_highlight_controls(
             paper_id,
-            quote=quote,
-            table_id=table_id,
-            image_id=image_id,
+            block=highlight_block,
             color_key=color_key,
             button_key_prefix=button_key_prefix,
             disabled=not quote,

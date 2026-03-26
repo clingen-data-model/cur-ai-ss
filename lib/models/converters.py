@@ -69,7 +69,7 @@ def hpo_to_db(
         phenotype_id=phenotype_id,
         hpo_id=hpo.value.id if hpo.value else None,
         hpo_name=hpo.value.name if hpo.value else None,
-        hpo_reasoning=hpo.reasoning,
+        reasoning=hpo.reasoning,
     )
 
 

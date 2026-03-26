@@ -123,7 +123,7 @@ class HpoDB(Base):
 
     hpo_id: Mapped[str | None] = mapped_column(String, nullable=True)
     hpo_name: Mapped[str | None] = mapped_column(String, nullable=True)
-    hpo_reasoning: Mapped[str | None] = mapped_column(String, nullable=True)
+    reasoning: Mapped[str] = mapped_column(String, nullable=False)
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -159,8 +159,8 @@ class ExtractedPhenotypeResp(BaseModel):
     updated_at: datetime
     # Evidence block (from DB JSON column)
     concept_evidence: EvidenceBlock[str]
-    # HPO link (from hpos table, None if HPO linking not yet run)
-    hpo: ReasoningBlock[HPOTerm | None] | None = None
+    # HPO link (always present with ReasoningBlock, value may be None if not yet linked or excluded)
+    hpo: ReasoningBlock[HPOTerm | None]
 
 
 class ExtractedPhenotypeUpdateRequest(PatchModel):

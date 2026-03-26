@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 from sqlalchemy import (
     Boolean,
     DateTime,
@@ -161,6 +161,23 @@ class VariantResp(BaseModel):
     # Enriched variant (optional, may not yet be enriched)
     enriched_variant: Optional['EnrichedVariantResp'] = None
 
+    @computed_field  # type: ignore[misc]
+    @property
+    def variant_description(self) -> str:
+        """Generate a human-readable description of the variant, prioritizing harmonized fields."""
+        if self.harmonized_variant and self.harmonized_variant.value:
+            hv = self.harmonized_variant.value
+            return (
+                hv.hgvs_g
+                or hv.hgvs_c
+                or hv.gnomad_style_coordinates
+                or hv.rsid
+                or hv.hgvs_p
+                or self.variant_evidence.value
+                or f'Variant {self.id}'
+            )
+        return self.variant_evidence.value or f'Variant {self.id}'
+
 
 class VariantDB(Base):
     __tablename__ = 'variants'
@@ -218,7 +235,7 @@ class VariantDB(Base):
     )
 
     paper: Mapped[PaperDB] = relationship('PaperDB', back_populates='variants')
-    harmonized_variant: Mapped['HarmonizedVariantDB'] = relationship(
+    harmonized_variant: Mapped['HarmonizedVariantDB | None'] = relationship(
         'HarmonizedVariantDB', back_populates='variant', uselist=False
     )
 
@@ -240,7 +257,7 @@ class HarmonizedVariantDB(Base):
     hgvs_c: Mapped[str | None] = mapped_column(String, nullable=True)
     hgvs_p: Mapped[str | None] = mapped_column(String, nullable=True)
     hgvs_g: Mapped[str | None] = mapped_column(String, nullable=True)
-    reasoning: Mapped[str | None] = mapped_column(String, nullable=True)
+    reasoning: Mapped[str] = mapped_column(String, nullable=False)
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

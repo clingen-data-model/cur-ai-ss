@@ -74,15 +74,15 @@ def render_variants_tab(selected_variant_idx: int | None) -> None:
             st.markdown(f'### Variant {i}')
             expander_title = (
                 (
-                    harmonized_variant.hgvs_g
-                    or harmonized_variant.hgvs_c
-                    or harmonized_variant.gnomad_style_coordinates
-                    or harmonized_variant.rsid
-                    or harmonized_variant.hgvs_p
+                    harmonized_variant.value.hgvs_g
+                    or harmonized_variant.value.hgvs_c
+                    or harmonized_variant.value.gnomad_style_coordinates
+                    or harmonized_variant.value.rsid
+                    or harmonized_variant.value.hgvs_p
                     or variant.variant_evidence.value
                     or f'Variant {i}'
                 )
-                if harmonized_variant
+                if harmonized_variant and harmonized_variant.value
                 else (variant.variant_evidence.value or f'Variant {i}')
             )
             with st.expander(
@@ -94,44 +94,41 @@ def render_variants_tab(selected_variant_idx: int | None) -> None:
                 # ======================================================
                 with st.container():
                     st.subheader('Harmonized Variant Info')
-                    if harmonized_variant:
+                    if harmonized_variant and harmonized_variant.value:
                         col1, col2, col3 = st.columns([1, 1, 2])
                         gnomad_coords = (
-                            f'[{harmonized_variant.gnomad_style_coordinates}]({get_gnomad_url(harmonized_variant.gnomad_style_coordinates)})'
-                            if harmonized_variant.gnomad_style_coordinates
+                            f'[{harmonized_variant.value.gnomad_style_coordinates}]({get_gnomad_url(harmonized_variant.value.gnomad_style_coordinates)})'
+                            if harmonized_variant.value.gnomad_style_coordinates
                             else 'N/A'
                         )
                         with col1:
                             st.markdown(
                                 f'**gnomAD-style coordinates:** {gnomad_coords}'
                             )
-                            st.markdown(f'**rsID:** {harmonized_variant.rsid or "N/A"}')
-                            st.markdown(f'**CAID:** {harmonized_variant.caid or "N/A"}')
+                            st.markdown(f'**rsID:** {harmonized_variant.value.rsid or "N/A"}')
+                            st.markdown(f'**CAID:** {harmonized_variant.value.caid or "N/A"}')
                         with col2:
                             col2.markdown(
-                                f'**HGVS c.:** {harmonized_variant.hgvs_c or "N/A"}'
+                                f'**HGVS c.:** {harmonized_variant.value.hgvs_c or "N/A"}'
                             )
                             col2.markdown(
-                                f'**HGVS p.:** {harmonized_variant.hgvs_p or "N/A"}'
+                                f'**HGVS p.:** {harmonized_variant.value.hgvs_p or "N/A"}'
                             )
                             col2.markdown(
-                                f'**HGVS g.:** {harmonized_variant.hgvs_g or "N/A"}'
+                                f'**HGVS g.:** {harmonized_variant.value.hgvs_g or "N/A"}'
                             )
                         with col3:
                             render_evidence_controls(
                                 paper_resp.id,
-                                quote=variant.variant_evidence.quote,
-                                table_id=variant.variant_evidence.table_id,
-                                image_id=variant.variant_evidence.image_id,
+                                block=variant.variant_evidence,
                                 label='📋 Evidence & Reasoning',
-                                reasoning=variant.variant_evidence.reasoning,
                                 color_key=f'{i}-var-color',
                                 button_key_prefix=f'{i}-var',
                             )
 
                         st.text_area(
                             'Harmonization Reasoning',
-                            harmonized_variant.reasoning or '',
+                            harmonized_variant.reasoning if harmonized_variant else '',
                             height=140,
                             disabled=True,
                             key=f'{i}-norm-notes',
@@ -161,11 +158,8 @@ def render_variants_tab(selected_variant_idx: int | None) -> None:
                     st.space()
                     render_evidence_controls(
                         paper_resp.id,
-                        quote=variant.variant_type_evidence.quote,
-                        table_id=variant.variant_type_evidence.table_id,
-                        image_id=variant.variant_type_evidence.image_id,
+                        block=variant.variant_type_evidence,
                         label='📋 Evidence & Reasoning',
-                        reasoning=variant.variant_type_evidence.reasoning,
                         color_key=f'{i}-vtype-color',
                         button_key_prefix=f'{i}-vtype',
                     )
@@ -185,11 +179,8 @@ def render_variants_tab(selected_variant_idx: int | None) -> None:
                     st.space()
                     render_evidence_controls(
                         paper_resp.id,
-                        quote=variant.functional_evidence_evidence.quote,
-                        table_id=variant.functional_evidence_evidence.table_id,
-                        image_id=variant.functional_evidence_evidence.image_id,
+                        block=variant.functional_evidence_evidence,
                         label='📋 Evidence & Reasoning',
-                        reasoning=variant.functional_evidence_evidence.reasoning,
                         color_key=f'{i}-func-ev-color',
                         button_key_prefix=f'{i}-func-ev',
                     )
@@ -221,11 +212,11 @@ def render_variants_tab(selected_variant_idx: int | None) -> None:
 
                         clinvar_url = (
                             get_clinvar_url(
-                                harmonized_variant.hgvs_g,
-                                harmonized_variant.hgvs_c,
-                                harmonized_variant.rsid,
+                                harmonized_variant.value.hgvs_g,
+                                harmonized_variant.value.hgvs_c,
+                                harmonized_variant.value.rsid,
                             )
-                            if harmonized_variant
+                            if harmonized_variant and harmonized_variant.value
                             else None
                         )
                         clinvar_df = pd.DataFrame(

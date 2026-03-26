@@ -78,8 +78,6 @@ def _render_phenotypes_table(
         row = {
             'Select': False,
             'Phenotype': phenotype.concept,
-            'Evidence': phenotype.concept_evidence.quote or '',
-            'Reasoning': phenotype.hpo.reasoning or '' if phenotype.hpo else '',
             '_phenotype': phenotype,
         }
 
@@ -110,8 +108,6 @@ def _render_phenotypes_table(
     column_config = {
         'Select': st.column_config.CheckboxColumn('Select', width='small'),
         'Phenotype': st.column_config.TextColumn('Phenotype', width='large'),
-        'Evidence': st.column_config.TextColumn('Evidence', width='medium'),
-        'Reasoning': st.column_config.TextColumn('Reasoning', width='medium'),
     }
     if show_hpo:
         column_config.update(
@@ -133,7 +129,7 @@ def _render_phenotypes_table(
         df,
         width='stretch',
         hide_index=True,
-        disabled=['Phenotype', 'Evidence', 'Reasoning']
+        disabled=['Phenotype']
         + (['HPO ID', 'HPO Term'] if show_hpo else []),
         column_config=column_config,
         key=f'{key_prefix}-phenotypes-editor',
@@ -183,9 +179,7 @@ def _render_phenotypes_table(
                 ):
                     render_highlight_controls(
                         paper_resp.id,
-                        quote=phenotype.concept_evidence.quote,
-                        table_id=phenotype.concept_evidence.table_id,
-                        image_id=phenotype.concept_evidence.image_id,
+                        block=phenotype.concept_evidence,
                         color_key=f'{key_prefix}-highlight-color-{phenotype.concept}',
                         button_key_prefix=f'{key_prefix}-highlight-confirm-{phenotype.concept}',
                         disabled=False,
@@ -226,11 +220,8 @@ def render_patient(
             st.space()
             render_evidence_controls(
                 paper_resp.id,
-                quote=patient.identifier_evidence.quote,
-                table_id=patient.identifier_evidence.table_id,
-                image_id=patient.identifier_evidence.image_id,
+                block=patient.identifier_evidence,
                 label='Patient Identifier Evidence',
-                reasoning=patient.identifier_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-pi-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-pi-evidence',
             )
@@ -256,11 +247,8 @@ def render_patient(
             st.space()
             render_evidence_controls(
                 paper_resp.id,
-                quote=patient.proband_status_evidence.quote,
-                table_id=patient.proband_status_evidence.table_id,
-                image_id=patient.proband_status_evidence.image_id,
+                block=patient.proband_status_evidence,
                 label='Proband Status Evidence',
-                reasoning=patient.proband_status_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-ps-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-ps-evidence',
             )
@@ -286,11 +274,8 @@ def render_patient(
             st.space()
             render_evidence_controls(
                 paper_resp.id,
-                quote=patient.affected_status_evidence.quote,
-                table_id=patient.affected_status_evidence.table_id,
-                image_id=patient.affected_status_evidence.image_id,
+                block=patient.affected_status_evidence,
                 label='Affected Status Evidence',
-                reasoning=patient.affected_status_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-as-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-as-evidence',
             )
@@ -314,11 +299,8 @@ def render_patient(
             st.space()
             render_evidence_controls(
                 paper_resp.id,
-                quote=patient.sex_evidence.quote,
-                table_id=patient.sex_evidence.table_id,
-                image_id=patient.sex_evidence.image_id,
+                block=patient.sex_evidence,
                 label='Sex At Birth Evidence',
-                reasoning=patient.sex_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-sex-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-sex-evidence',
             )
@@ -337,11 +319,8 @@ def render_patient(
             st.space()
             render_evidence_controls(
                 paper_resp.id,
-                quote=patient.age_diagnosis_evidence.quote,
-                table_id=patient.age_diagnosis_evidence.table_id,
-                image_id=patient.age_diagnosis_evidence.image_id,
+                block=patient.age_diagnosis_evidence,
                 label='Age at Diagnosis Evidence',
-                reasoning=patient.age_diagnosis_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-agediag-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-agediag-evidence',
             )
@@ -358,11 +337,8 @@ def render_patient(
             st.space()
             render_evidence_controls(
                 paper_resp.id,
-                quote=patient.age_report_evidence.quote,
-                table_id=patient.age_report_evidence.table_id,
-                image_id=patient.age_report_evidence.image_id,
+                block=patient.age_report_evidence,
                 label='Age at Report Evidence',
-                reasoning=patient.age_report_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-agereport-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-agereport-evidence',
             )
@@ -379,11 +355,8 @@ def render_patient(
             st.space()
             render_evidence_controls(
                 paper_resp.id,
-                quote=patient.age_death_evidence.quote,
-                table_id=patient.age_death_evidence.table_id,
-                image_id=patient.age_death_evidence.image_id,
+                block=patient.age_death_evidence,
                 label='Age at Death Evidence',
-                reasoning=patient.age_death_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-agedeath-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-agedeath-evidence',
             )
@@ -409,11 +382,8 @@ def render_patient(
             st.space()
             render_evidence_controls(
                 paper_resp.id,
-                quote=patient.country_of_origin_evidence.quote,
-                table_id=patient.country_of_origin_evidence.table_id,
-                image_id=patient.country_of_origin_evidence.image_id,
+                block=patient.country_of_origin_evidence,
                 label='Country of Origin Evidence',
-                reasoning=patient.country_of_origin_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-country-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-country-evidence',
             )
@@ -438,11 +408,8 @@ def render_patient(
             st.space()
             render_evidence_controls(
                 paper_resp.id,
-                quote=patient.race_ethnicity_evidence.quote,
-                table_id=patient.race_ethnicity_evidence.table_id,
-                image_id=patient.race_ethnicity_evidence.image_id,
+                block=patient.race_ethnicity_evidence,
                 label='Race/Ethnicity Evidence',
-                reasoning=patient.race_ethnicity_evidence.reasoning,
                 color_key=f'{key_prefix}-{patient.identifier}-color-race-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-race-evidence',
             )

@@ -508,7 +508,10 @@ def test_get_variants_harmonized_and_enriched(client, db_session, seeded_paper):
     # Check harmonized data (wrapped in ReasoningBlock)
     assert v['harmonized_variant'] is not None
     assert v['harmonized_variant']['value'] is not None
-    assert v['harmonized_variant']['value']['gnomad_style_coordinates'] == '17:41196312:AG:A'
+    assert (
+        v['harmonized_variant']['value']['gnomad_style_coordinates']
+        == '17:41196312:AG:A'
+    )
     assert v['harmonized_variant']['value']['rsid'] == 'rs80357906'
     assert v['harmonized_variant']['value']['caid'] == 'CA123456'
     assert (

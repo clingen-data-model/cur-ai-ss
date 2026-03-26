@@ -355,18 +355,24 @@ def get_variants(paper_id: int, session: Session = Depends(get_session)) -> Any:
 
 def _variant_to_resp(row: VariantDB) -> VariantResp:
     """Convert VariantDB to VariantResp, including harmonized and enriched data."""
-    hv = row.harmonized_variant  # Always present (harmonization agent guarantees one per variant)
-    harmonized = ReasoningBlock[HarmonizedVariantResp | None](
-        value=HarmonizedVariantResp(
-            gnomad_style_coordinates=hv.gnomad_style_coordinates,
-            rsid=hv.rsid,
-            caid=hv.caid,
-            hgvs_c=hv.hgvs_c,
-            hgvs_p=hv.hgvs_p,
-            hgvs_g=hv.hgvs_g,
-        ),
-        reasoning=hv.reasoning,
-    )
+    hv = row.harmonized_variant
+    if hv:
+        harmonized = ReasoningBlock[HarmonizedVariantResp | None](
+            value=HarmonizedVariantResp(
+                gnomad_style_coordinates=hv.gnomad_style_coordinates,
+                rsid=hv.rsid,
+                caid=hv.caid,
+                hgvs_c=hv.hgvs_c,
+                hgvs_p=hv.hgvs_p,
+                hgvs_g=hv.hgvs_g,
+            ),
+            reasoning=hv.reasoning,
+        )
+    else:
+        harmonized = ReasoningBlock[HarmonizedVariantResp | None](
+            value=None,
+            reasoning='Harmonization not yet performed',
+        )
     enriched = (
         EnrichedVariantResp(
             gnomad_style_coordinates=hv.enriched_variant.gnomad_style_coordinates,
@@ -427,7 +433,6 @@ def _variant_to_resp(row: VariantDB) -> VariantResp:
 
 
 def _phenotype_to_resp(row: ExtractedPhenotypeDB) -> ExtractedPhenotypeResp:
-    hpo = None
     if row.hpo:
         hpo_value = (
             HPOTerm(id=row.hpo.hpo_id, name=row.hpo.hpo_name)
@@ -436,7 +441,12 @@ def _phenotype_to_resp(row: ExtractedPhenotypeDB) -> ExtractedPhenotypeResp:
         )
         hpo = ReasoningBlock[HPOTerm | None](
             value=hpo_value,
-            reasoning=row.hpo.hpo_reasoning or '',
+            reasoning=row.hpo.reasoning,
+        )
+    else:
+        hpo = ReasoningBlock[HPOTerm | None](
+            value=None,
+            reasoning='HPO linking not yet performed',
         )
     return ExtractedPhenotypeResp(
         id=row.id,
