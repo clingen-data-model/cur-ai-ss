@@ -406,7 +406,7 @@ async def hpo_linking_task_async(paper_db: PaperDB) -> None:
     phenotype_id_set = {pd['id'] for pd in phenotype_data}
     for row_data in phenotype_data:
         candidates: list[HpoCandidate] = find_matching_hpo_terms(
-            row_data['concept'], term_lookup=term_lookup
+            str(row_data['concept']), term_lookup=term_lookup
         )
         phenotype_inputs.append(
             {

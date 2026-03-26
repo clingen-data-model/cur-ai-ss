@@ -121,7 +121,7 @@ def render_variants_tab(selected_variant_idx: int | None) -> None:
                             render_evidence_controls(
                                 paper_id=paper_resp.id,
                                 label='📋 Evidence & Reasoning',
-                                quote=None,
+                                quote=variant.variant_evidence.value,
                                 reasoning=variant.variant_evidence.reasoning,
                                 color_key=f'{i}-var-color',
                                 button_key_prefix=f'{i}-var',
@@ -182,7 +182,7 @@ def render_variants_tab(selected_variant_idx: int | None) -> None:
                     render_evidence_controls(
                         paper_id=paper_resp.id,
                         label='📋 Evidence & Reasoning',
-                        quote=variant.functional_evidence_evidence.quote,
+                        quote=str(variant.functional_evidence_evidence.value),
                         reasoning=variant.functional_evidence_evidence.reasoning,
                         color_key=f'{i}-func-ev-color',
                         button_key_prefix=f'{i}-func-ev',
@@ -314,37 +314,6 @@ def render_variants_tab(selected_variant_idx: int | None) -> None:
                         )
 
                         st.dataframe(gnomad_df, width='stretch', hide_index=True)
-
-                # ======================================================
-                # Downloads
-                # ======================================================
-                col_dl1, col_dl2 = st.columns(2)
-
-                col_dl1.download_button(
-                    label='Download Extracted Variant JSON',
-                    data=json.dumps(
-                        {'variants': [v.model_dump() for v in variants]},
-                        indent=2,
-                    ),
-                    file_name='variants.json',
-                    mime='application/json',
-                    key=f'{i}-extract-json',
-                )
-
-                harmonized_data = {
-                    'variants': [
-                        v.harmonized_variant.model_dump()
-                        for v in variants
-                        if v.harmonized_variant
-                    ]
-                }
-                col_dl2.download_button(
-                    label='Download Harmonized Variant JSON',
-                    data=json.dumps(harmonized_data, indent=2),
-                    file_name='harmonized_variants.json',
-                    mime='application/json',
-                    key=f'{i}-harm-json',
-                )
 
     # Render variants in tabs
     with tab_pathogenic:

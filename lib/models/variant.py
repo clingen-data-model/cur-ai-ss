@@ -151,7 +151,7 @@ class VariantResp(BaseModel):
     hgvs_p_evidence: EvidenceBlock[Optional[str]]
     hgvs_g_evidence: EvidenceBlock[Optional[str]]
     variant_type_evidence: EvidenceBlock[str]
-    functional_evidence_evidence: EvidenceBlock[bool]
+    functional_evidence_evidence: ReasoningBlock[bool]
     # Harmonized variant (optional, may not yet be harmonized)
     harmonized_variant: Optional[HarmonizedVariantResp] = None
     # Enriched variant (optional, may not yet be enriched)
