@@ -44,3 +44,7 @@ class EvidenceBlock(ReasoningBlock[T]):
             raise ValueError('Only one of table_id or image_id may be provided')
 
         return self
+
+
+class HumanEvidenceBlock(EvidenceBlock[T]):
+    human_edit_note: str | None = None  # optional annotation by human curator

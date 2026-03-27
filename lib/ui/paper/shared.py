@@ -7,7 +7,7 @@ import streamlit as st
 from streamlit_pdf_viewer import pdf_viewer
 
 from lib.misc.pdf.paths import pdf_highlighted_path
-from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
+from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock, ReasoningBlock
 from lib.ui.api import (
     clear_highlights,
     get_http_error_detail,
@@ -18,6 +18,7 @@ from lib.ui.api import (
 CURRENT_ANNOTATIONS_KEY = 'CURRENT_ANNOTATIONS_KEY'
 HEADER_TABS = ['📝 Metadata', '👤 Patients', '🧬 Variants', '🔗 Occurrences']
 HEADER_TABS_KEY = 'HEADER_TABS_KEY'
+HUMAN_EDIT_NOTE_DEFAULT = 'Edited by Human'
 
 COLORS = [
     '#FFF59D',  # soft yellow
@@ -198,11 +199,12 @@ def render_highlight_controls(
 
 def render_evidence_controls(
     paper_id: int,
+    label: str,
     block: EvidenceBlock[Any] | ReasoningBlock[Any] | None = None,
-    label: str | None = None,
     color_key: str | None = None,
     button_key_prefix: str | None = None,
-) -> None:
+    human_edit_note_key: str | None = None,
+) -> str | None:
     """Render popover + color picker + Highlight + Focus & Switch Tab buttons.
 
     Args:
@@ -211,21 +213,44 @@ def render_evidence_controls(
         label: Label for the popover button.
         color_key: Session state key for color picker.
         button_key_prefix: Prefix for highlight/focus button keys.
+        human_edit_note_key: Session state key for human edit note text area.
+
+    Returns:
+        The edited human edit note value if present, otherwise None.
     """
     # Extract fields from block if provided
     quote: str | None = None
     reasoning: str | None = None
+    human_edit_note: str | None = None
     if block is not None:
         reasoning = block.reasoning
-        if isinstance(block, EvidenceBlock):
+        if isinstance(block, EvidenceBlock) and not isinstance(
+            block, HumanEvidenceBlock
+        ):
             quote = block.quote
+        if isinstance(block, HumanEvidenceBlock):
+            human_edit_note = block.human_edit_note
 
+    edited_note: str | None = None
     with st.container(
         horizontal=True, vertical_alignment='center', horizontal_alignment='right'
     ):
-        with st.popover(label, type='tertiary', disabled=not quote and not reasoning):
+        with st.popover(
+            label,
+            type='tertiary',
+            disabled=not quote and not reasoning and not human_edit_note,
+        ):
             st.markdown('**Evidence**: ' + (quote or ''))
             st.markdown('**Reasoning**: ' + (reasoning or ''))
+            if human_edit_note and human_edit_note_key:
+                edited_note = st.text_area(
+                    'Human Edit Note',
+                    label_visibility='collapsed',
+                    value=human_edit_note,
+                    key=human_edit_note_key,
+                    height=20,
+                    max_chars=120,
+                )
         # Only pass EvidenceBlock to highlight controls (ReasoningBlock has no evidence sources)
         highlight_block = block if isinstance(block, EvidenceBlock) else None
         render_highlight_controls(
@@ -235,3 +260,5 @@ def render_evidence_controls(
             button_key_prefix=button_key_prefix,
             disabled=not quote,
         )
+
+    return edited_note

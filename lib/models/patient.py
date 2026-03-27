@@ -16,7 +16,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
 from lib.models.base import Base, PatchModel
-from lib.models.evidence_block import EvidenceBlock
+from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock
 from lib.models.paper import PaperDB
 
 if TYPE_CHECKING:
@@ -395,15 +395,15 @@ class PatientResp(BaseModel):
     affected_status: AffectedStatus
     updated_at: datetime
     # Evidence blocks (from DB JSON columns)
-    identifier_evidence: EvidenceBlock[str]
-    proband_status_evidence: EvidenceBlock[ProbandStatus]
-    sex_evidence: EvidenceBlock[SexAtBirth]
-    age_diagnosis_evidence: EvidenceBlock[int | None]
-    age_report_evidence: EvidenceBlock[int | None]
-    age_death_evidence: EvidenceBlock[int | None]
-    country_of_origin_evidence: EvidenceBlock[CountryCode]
-    race_ethnicity_evidence: EvidenceBlock[RaceEthnicity]
-    affected_status_evidence: EvidenceBlock[AffectedStatus]
+    identifier_evidence: HumanEvidenceBlock[str]
+    proband_status_evidence: HumanEvidenceBlock[ProbandStatus]
+    sex_evidence: HumanEvidenceBlock[SexAtBirth]
+    age_diagnosis_evidence: HumanEvidenceBlock[int | None]
+    age_report_evidence: HumanEvidenceBlock[int | None]
+    age_death_evidence: HumanEvidenceBlock[int | None]
+    country_of_origin_evidence: HumanEvidenceBlock[CountryCode]
+    race_ethnicity_evidence: HumanEvidenceBlock[RaceEthnicity]
+    affected_status_evidence: HumanEvidenceBlock[AffectedStatus]
 
 
 class PatientCreateRequest(BaseModel):
@@ -428,3 +428,18 @@ class PatientUpdateRequest(PatchModel):
     age_death: int | None = None
     country_of_origin: str | None = None
     race_ethnicity: str | None = None
+    # Human edit notes for evidence blocks
+    identifier_human_edit_note: str | None = None
+    proband_status_human_edit_note: str | None = None
+    sex_human_edit_note: str | None = None
+    age_diagnosis_human_edit_note: str | None = None
+    age_report_human_edit_note: str | None = None
+    age_death_human_edit_note: str | None = None
+    country_of_origin_human_edit_note: str | None = None
+    race_ethnicity_human_edit_note: str | None = None
+    affected_status_human_edit_note: str | None = None
+
+    def apply_to(self, obj: PatientDB) -> None:  # type: ignore[override]
+        """Apply scalar updates and evidence note updates to patient."""
+        super().apply_to(obj)
+        self.apply_human_edit_notes(obj)

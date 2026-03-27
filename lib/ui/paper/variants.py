@@ -105,8 +105,12 @@ def render_variants_tab(selected_variant_idx: int | None) -> None:
                             st.markdown(
                                 f'**gnomAD-style coordinates:** {gnomad_coords}'
                             )
-                            st.markdown(f'**rsID:** {harmonized_variant.value.rsid or "N/A"}')
-                            st.markdown(f'**CAID:** {harmonized_variant.value.caid or "N/A"}')
+                            st.markdown(
+                                f'**rsID:** {harmonized_variant.value.rsid or "N/A"}'
+                            )
+                            st.markdown(
+                                f'**CAID:** {harmonized_variant.value.caid or "N/A"}'
+                            )
                         with col2:
                             col2.markdown(
                                 f'**HGVS c.:** {harmonized_variant.value.hgvs_c or "N/A"}'

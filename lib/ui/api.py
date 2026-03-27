@@ -107,7 +107,12 @@ def highlight_pdf(
         queries = [queries]
     resp = requests.post(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/highlight',
-        json={'queries': queries, 'image_ids': image_ids, 'color': color},
+        json={
+            'queries': queries,
+            'image_ids': image_ids,
+            'table_ids': table_ids,
+            'color': color,
+        },
     )
     resp.raise_for_status()
 

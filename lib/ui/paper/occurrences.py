@@ -25,7 +25,9 @@ def _render_evidence_block(
     if evidence_block.quote:
         evidence_sources.append(('Text Evidence', evidence_block.quote))
     if evidence_block.table_id is not None:
-        evidence_sources.append(('Table', f'Table #{evidence_block.table_id + 1}')) # note table indexes are extracted as zero-indexed, but displayed to user here.
+        evidence_sources.append(
+            ('Table', f'Table #{evidence_block.table_id + 1}')
+        )  # note table indexes are extracted as zero-indexed, but displayed to user here.
     if evidence_block.image_id is not None:
         evidence_sources.append(('Pedigree', f'Image #{evidence_block.image_id}'))
 

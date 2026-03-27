@@ -29,9 +29,12 @@ from lib.ui.api import (
     update_patient,
 )
 from lib.ui.paper.shared import (
+    HUMAN_EDIT_NOTE_DEFAULT,
     render_evidence_controls,
     render_highlight_controls,
 )
+
+PATIENTS_KEY = 'patients'
 
 
 def _render_patient_phenotypes(
@@ -129,8 +132,7 @@ def _render_phenotypes_table(
         df,
         width='stretch',
         hide_index=True,
-        disabled=['Phenotype']
-        + (['HPO ID', 'HPO Term'] if show_hpo else []),
+        disabled=['Phenotype'] + (['HPO ID', 'HPO Term'] if show_hpo else []),
         column_config=column_config,
         key=f'{key_prefix}-phenotypes-editor',
     )
@@ -218,12 +220,13 @@ def render_patient(
             )
         with col2:
             st.space()
-            render_evidence_controls(
+            identifier_note = render_evidence_controls(
                 paper_resp.id,
                 block=patient.identifier_evidence,
                 label='Patient Identifier Evidence',
                 color_key=f'{key_prefix}-{patient.identifier}-color-pi-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-pi-evidence',
+                human_edit_note_key=f'{key_prefix}-identifier-note',
             )
 
         col1, col2 = st.columns(2)
@@ -245,12 +248,13 @@ def render_patient(
             )
         with col2:
             st.space()
-            render_evidence_controls(
+            proband_status_note = render_evidence_controls(
                 paper_resp.id,
                 block=patient.proband_status_evidence,
                 label='Proband Status Evidence',
                 color_key=f'{key_prefix}-{patient.identifier}-color-ps-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-ps-evidence',
+                human_edit_note_key=f'{key_prefix}-proband-status-note',
             )
 
         # --- Affected Status
@@ -272,12 +276,13 @@ def render_patient(
             )
         with col2:
             st.space()
-            render_evidence_controls(
+            affected_status_note = render_evidence_controls(
                 paper_resp.id,
                 block=patient.affected_status_evidence,
                 label='Affected Status Evidence',
                 color_key=f'{key_prefix}-{patient.identifier}-color-as-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-as-evidence',
+                human_edit_note_key=f'{key_prefix}-affected-status-note',
             )
 
         # --- Sex At Birth
@@ -297,12 +302,13 @@ def render_patient(
             )
         with col2:
             st.space()
-            render_evidence_controls(
+            sex_note = render_evidence_controls(
                 paper_resp.id,
                 block=patient.sex_evidence,
                 label='Sex At Birth Evidence',
                 color_key=f'{key_prefix}-{patient.identifier}-color-sex-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-sex-evidence',
+                human_edit_note_key=f'{key_prefix}-sex-note',
             )
 
         # --- Ages
@@ -317,12 +323,13 @@ def render_patient(
             )
         with col2:
             st.space()
-            render_evidence_controls(
+            age_diagnosis_note = render_evidence_controls(
                 paper_resp.id,
                 block=patient.age_diagnosis_evidence,
                 label='Age at Diagnosis Evidence',
                 color_key=f'{key_prefix}-{patient.identifier}-color-agediag-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-agediag-evidence',
+                human_edit_note_key=f'{key_prefix}-age-diagnosis-note',
             )
         col1, col2 = st.columns(2)
         with col1:
@@ -335,12 +342,13 @@ def render_patient(
             )
         with col2:
             st.space()
-            render_evidence_controls(
+            age_report_note = render_evidence_controls(
                 paper_resp.id,
                 block=patient.age_report_evidence,
                 label='Age at Report Evidence',
                 color_key=f'{key_prefix}-{patient.identifier}-color-agereport-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-agereport-evidence',
+                human_edit_note_key=f'{key_prefix}-age-report-note',
             )
         col1, col2 = st.columns(2)
         with col1:
@@ -353,12 +361,13 @@ def render_patient(
             )
         with col2:
             st.space()
-            render_evidence_controls(
+            age_death_note = render_evidence_controls(
                 paper_resp.id,
                 block=patient.age_death_evidence,
                 label='Age at Death Evidence',
                 color_key=f'{key_prefix}-{patient.identifier}-color-agedeath-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-agedeath-evidence',
+                human_edit_note_key=f'{key_prefix}-age-death-note',
             )
 
         # --- Country + Ethnicity
@@ -380,12 +389,13 @@ def render_patient(
             )
         with col2:
             st.space()
-            render_evidence_controls(
+            country_of_origin_note = render_evidence_controls(
                 paper_resp.id,
                 block=patient.country_of_origin_evidence,
                 label='Country of Origin Evidence',
                 color_key=f'{key_prefix}-{patient.identifier}-color-country-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-country-evidence',
+                human_edit_note_key=f'{key_prefix}-country-note',
             )
 
         col1, col2 = st.columns(2)
@@ -406,12 +416,13 @@ def render_patient(
             )
         with col2:
             st.space()
-            render_evidence_controls(
+            race_ethnicity_note = render_evidence_controls(
                 paper_resp.id,
                 block=patient.race_ethnicity_evidence,
                 label='Race/Ethnicity Evidence',
                 color_key=f'{key_prefix}-{patient.identifier}-color-race-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-race-evidence',
+                human_edit_note_key=f'{key_prefix}-race-note',
             )
 
         # --- Save edits: only include changed fields so exclude_unset works
@@ -423,28 +434,109 @@ def render_patient(
         changes: dict[str, str | int | None] = {}
         if identifier != patient.identifier:
             changes['identifier'] = identifier
+            # Set note to default if no existing note
+            if not patient.identifier_evidence.human_edit_note:
+                changes['identifier_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
+        if (
+            identifier_note
+            and identifier_note != patient.identifier_evidence.human_edit_note
+        ):
+            changes['identifier_human_edit_note'] = identifier_note
+
         if proband_status != patient.proband_status:
             changes['proband_status'] = proband_status.value
+            if not patient.proband_status_evidence.human_edit_note:
+                changes['proband_status_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
+        if (
+            proband_status_note
+            and proband_status_note != patient.proband_status_evidence.human_edit_note
+        ):
+            changes['proband_status_human_edit_note'] = proband_status_note
+
         if affected_status != patient.affected_status:
             changes['affected_status'] = affected_status.value
+            if not patient.affected_status_evidence.human_edit_note:
+                changes['affected_status_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
+        if (
+            affected_status_note
+            and affected_status_note != patient.affected_status_evidence.human_edit_note
+        ):
+            changes['affected_status_human_edit_note'] = affected_status_note
+
         if sex != patient.sex:
             changes['sex'] = sex.value
+            if not patient.sex_evidence.human_edit_note:
+                changes['sex_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
+        if sex_note and sex_note != patient.sex_evidence.human_edit_note:
+            changes['sex_human_edit_note'] = sex_note
+
         if age_diagnosis_val != patient.age_diagnosis:
             changes['age_diagnosis'] = age_diagnosis_val
+            if not patient.age_diagnosis_evidence.human_edit_note:
+                changes['age_diagnosis_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
+        if (
+            age_diagnosis_note
+            and age_diagnosis_note != patient.age_diagnosis_evidence.human_edit_note
+        ):
+            changes['age_diagnosis_human_edit_note'] = age_diagnosis_note
+
         if age_report_val != patient.age_report:
             changes['age_report'] = age_report_val
+            if not patient.age_report_evidence.human_edit_note:
+                changes['age_report_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
+        if (
+            age_report_note
+            and age_report_note != patient.age_report_evidence.human_edit_note
+        ):
+            changes['age_report_human_edit_note'] = age_report_note
+
         if age_death_val != patient.age_death:
             changes['age_death'] = age_death_val
+            if not patient.age_death_evidence.human_edit_note:
+                changes['age_death_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
+        if (
+            age_death_note
+            and age_death_note != patient.age_death_evidence.human_edit_note
+        ):
+            changes['age_death_human_edit_note'] = age_death_note
+
         if country_of_origin != patient.country_of_origin:
             changes['country_of_origin'] = country_of_origin.value
+            if not patient.country_of_origin_evidence.human_edit_note:
+                changes['country_of_origin_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
+        if (
+            country_of_origin_note
+            and country_of_origin_note
+            != patient.country_of_origin_evidence.human_edit_note
+        ):
+            changes['country_of_origin_human_edit_note'] = country_of_origin_note
+
         if race_ethnicity != patient.race_ethnicity:
             changes['race_ethnicity'] = race_ethnicity.value
+            if not patient.race_ethnicity_evidence.human_edit_note:
+                changes['race_ethnicity_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
+        if (
+            race_ethnicity_note
+            and race_ethnicity_note != patient.race_ethnicity_evidence.human_edit_note
+        ):
+            changes['race_ethnicity_human_edit_note'] = race_ethnicity_note
+
         update_request = PatientUpdateRequest(**changes)  # type: ignore[arg-type]
 
         if changes:
             try:
-                update_patient(paper_resp.id, patient.id, update_request)
+                updated = update_patient(paper_resp.id, patient.id, update_request)
+                # Update patients in session_state
+                if PATIENTS_KEY in st.session_state:
+                    patients_list: list[PatientResp] = st.session_state[PATIENTS_KEY]
+                    for i, p in enumerate(patients_list):
+                        if p.id == updated.id:
+                            patients_list[i] = updated
+                            st.session_state[PATIENTS_KEY] = patients_list
+                            break
                 st.toast('Saved!', icon=':material/check:')
+                time.sleep(0.5)
+                st.rerun()
             except Exception as e:
                 st.toast(f'Failed to save: {str(e)}', icon='❌')
 
@@ -469,7 +561,9 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
     # -----------------------------
     # Load patients
     # ---------------
-    patients: list[PatientResp] = get_patients(paper_resp.id)
+    if PATIENTS_KEY not in st.session_state:
+        st.session_state[PATIENTS_KEY] = get_patients(paper_resp.id)
+    patients: list[PatientResp] = st.session_state[PATIENTS_KEY]
 
     # Load pedigree description
     pedigree_description = get_pedigree(paper_resp.id)

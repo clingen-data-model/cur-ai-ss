@@ -377,6 +377,76 @@ def test_get_patients_paper_not_found(client):
     assert response.json()['detail'] == 'Paper not found'
 
 
+def test_update_patient_with_human_edit_note(client, db_session, seeded_paper):
+    """Test updating a patient with human_edit_note on evidence."""
+    required = dict(
+        proband_status='Unknown',
+        sex='Unknown',
+        country_of_origin='Unknown',
+        race_ethnicity='Unknown',
+        affected_status='Unknown',
+        identifier_evidence=dict(
+            value='P1', reasoning='test evidence', quote='test context'
+        ),
+        proband_status_evidence=dict(
+            value='Unknown', reasoning='test evidence', quote='test context'
+        ),
+        sex_evidence=dict(
+            value='Unknown', reasoning='test evidence', quote='test context'
+        ),
+        age_diagnosis_evidence=dict(
+            value=None, reasoning='test evidence', quote='test context'
+        ),
+        age_report_evidence=dict(
+            value=None, reasoning='test evidence', quote='test context'
+        ),
+        age_death_evidence=dict(
+            value=None, reasoning='test evidence', quote='test context'
+        ),
+        country_of_origin_evidence=dict(
+            value='Unknown', reasoning='test evidence', quote='test context'
+        ),
+        race_ethnicity_evidence=dict(
+            value='Unknown', reasoning='test evidence', quote='test context'
+        ),
+        affected_status_evidence=dict(
+            value='Unknown', reasoning='test evidence', quote='test context'
+        ),
+    )
+    # Create a patient
+    patient = PatientDB(
+        paper_id=seeded_paper.id,
+        identifier='P1',
+        **required,
+    )
+    db_session.add(patient)
+    db_session.flush()
+    patient_id = patient.id
+
+    # Update patient with evidence notes
+    response = client.patch(
+        f'/papers/{seeded_paper.id}/patients/{patient_id}',
+        json={
+            'identifier_human_edit_note': 'This is a human note about identifier',
+            'proband_status_human_edit_note': 'Proband confirmed by clinician',
+        },
+    )
+    assert response.status_code == 200
+    resp_json = response.json()
+
+    # Verify the evidence notes were set in the response
+    assert (
+        resp_json['identifier_evidence']['human_edit_note']
+        == 'This is a human note about identifier'
+    )
+    assert (
+        resp_json['proband_status_evidence']['human_edit_note']
+        == 'Proband confirmed by clinician'
+    )
+    # Other evidence should have null notes (only the specified ones were updated)
+    assert resp_json['sex_evidence']['human_edit_note'] is None
+
+
 def test_get_variants_harmonized_and_enriched(client, db_session, seeded_paper):
     # Create a variant with evidence blocks
     variant = VariantDB(
