@@ -150,7 +150,7 @@ async def parse_patients_task_async(paper_db: PaperDB) -> None:
             session.add(patient_to_db(paper_db.id, patient_info))
 
 
-async def harmonize_variants_task_async(paper_db: PaperDB) -> None:
+async def harmonize_variants_task_async(paper_db: PaperDB, gene_symbol: str) -> None:
     with session_scope() as session:
         rows = (
             session.query(VariantDB)
@@ -162,6 +162,7 @@ async def harmonize_variants_task_async(paper_db: PaperDB) -> None:
             'variants': [
                 {
                     'variant_id': r.id,
+                    'gene_symbol': gene_symbol,
                     **{f: getattr(r, f) for f in Variant.model_fields},
                 }
                 for r in rows
@@ -463,13 +464,13 @@ def initial_extraction(paper_id: int, gene_symbol: str) -> None:
     )
 
 
-def linking_tasks(paper_id: int) -> None:
+def linking_tasks(paper_id: int, gene_symbol: str) -> None:
     def run() -> None:
         async def _run() -> None:
             paper_db = PaperDB(id=paper_id).with_content()
 
             await asyncio.gather(
-                harmonize_variants_task_async(paper_db),
+                harmonize_variants_task_async(paper_db, gene_symbol),
                 patient_variant_linking_task_async(paper_db),
                 patient_phenotype_linking_task_async(paper_db),
             )
@@ -543,10 +544,11 @@ def main() -> None:
 
                 if linking_job:
                     paper_id = linking_job.id
+                    gene_symbol = linking_job.gene.symbol
                     logger.info(f'Dequeued paper {paper_id} for linking')
 
             if linking_job:
-                linking_tasks(paper_id)
+                linking_tasks(paper_id, gene_symbol)
                 continue
 
         except KeyboardInterrupt:
