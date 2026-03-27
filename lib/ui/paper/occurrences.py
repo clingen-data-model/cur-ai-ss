@@ -62,10 +62,10 @@ def render_patient_variant_occurrences_tab() -> None:
     paper_resp: PaperResp = st.session_state['paper_resp']
     if not paper_resp.title:
         st.write(f'{paper_resp.filename} not yet extracted...')
-        st.stop()
-    if paper_resp.pipeline_status != PipelineStatus.COMPLETED:
+        return
+    elif paper_resp.pipeline_status != PipelineStatus.COMPLETED:
         st.write(f'Entity Linking not yet completed...')
-        st.stop()
+        return
 
     # Load all data sources via API
     patients: list[PatientResp] = get_patients(paper_resp.id)

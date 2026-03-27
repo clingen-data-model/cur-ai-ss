@@ -25,7 +25,7 @@ dependencies = [
     "ipython",    
 
     # pdf parsing
-    "docling==2.64.1",
+    "docling==2.82.0",
     "biopython>=1.86",
     "pymupdf>=1.26.7",
 

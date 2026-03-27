@@ -10,7 +10,7 @@ def render_metadata_tab() -> None:
     paper_resp: PaperResp = st.session_state['paper_resp']
     if not paper_resp.title:
         st.write(f'{paper_resp.filename} not yet extracted...')
-        st.stop()
+        return
     title = st.text_input('Title', paper_resp.title)
     first_author = st.text_input('First Author', paper_resp.first_author)
     publication_year = st.number_input(

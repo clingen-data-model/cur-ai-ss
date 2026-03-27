@@ -32,10 +32,10 @@ def render_variants_tab(selected_variant_idx: int | None) -> None:
     paper_resp: PaperResp = st.session_state['paper_resp']
     if not paper_resp.title:
         st.write(f'{paper_resp.filename} not yet extracted...')
-        st.stop()
-    if paper_resp.pipeline_status != PipelineStatus.COMPLETED:
+        return
+    elif paper_resp.pipeline_status != PipelineStatus.COMPLETED:
         st.write(f'Entity Linking not yet completed...')
-        st.stop()
+        return
     variant_rows = get_variants(paper_resp.id)
     variants: list[VariantResp] = variant_rows
     enriched_variants = [v.enriched_variant for v in variants]
