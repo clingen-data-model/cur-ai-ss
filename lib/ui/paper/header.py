@@ -173,8 +173,6 @@ with center:
                 disabled=(
                     paper_resp.pipeline_status
                     in {
-                        PipelineStatus.EXTRACTION_FAILED,
-                        PipelineStatus.LINKING_FAILED,
                         PipelineStatus.QUEUED,
                         PipelineStatus.EXTRACTION_RUNNING,
                         PipelineStatus.LINKING_RUNNING,
