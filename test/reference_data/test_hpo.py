@@ -37,8 +37,8 @@ def test_find_matching_hpo_terms_exact_match(
     )
 
     assert len(result) > 0
-    assert result[0].hpo_id == 'HP:0000001'
-    assert result[0].hpo_name == 'abnormality of the skeletal system'
+    assert result[0].id == 'HP:0000001'
+    assert result[0].name == 'abnormality of the skeletal system'
     assert result[0].similarity_score == 100.0
 
 
@@ -54,10 +54,10 @@ def test_find_matching_hpo_terms_partial_match(
     assert scores == sorted(scores, reverse=True)
 
     # Verify specific term matches and score ranges
-    assert result[0].hpo_id == 'HP:0000001'
+    assert result[0].id == 'HP:0000001'
     assert int(result[0].similarity_score) == 59
 
-    assert result[2].hpo_id == 'HP:0000004'
+    assert result[2].id == 'HP:0000004'
     assert int(result[2].similarity_score) == 44
 
     # Scores should be different between top and third match
@@ -78,8 +78,8 @@ def test_find_matching_hpo_terms_case_insensitive(
         'InTeLLeCtUaL dIsAbIlItY', term_lookup=mock_term_lookup
     )
 
-    assert result_lower[0].hpo_id == result_upper[0].hpo_id
-    assert result_lower[0].hpo_id == result_mixed[0].hpo_id
+    assert result_lower[0].id == result_upper[0].id
+    assert result_lower[0].id == result_mixed[0].id
 
 
 def test_find_matching_hpo_terms_limit(
@@ -109,11 +109,11 @@ def test_find_matching_hpo_terms_result_structure(
     assert len(result) > 0
 
     for item in result:
-        assert hasattr(item, 'hpo_id')
-        assert hasattr(item, 'hpo_name')
+        assert hasattr(item, 'id')
+        assert hasattr(item, 'name')
         assert hasattr(item, 'similarity_score')
-        assert isinstance(item.hpo_id, str)
-        assert isinstance(item.hpo_name, str)
+        assert isinstance(item.id, str)
+        assert isinstance(item.name, str)
         assert isinstance(item.similarity_score, float)
         assert 0 <= item.similarity_score <= 100
 

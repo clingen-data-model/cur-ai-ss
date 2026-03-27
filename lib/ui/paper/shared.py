@@ -148,9 +148,9 @@ def highlight_evidence(
 
 def render_highlight_controls(
     paper_id: int,
+    color_key: str,
+    button_key_prefix: str,
     block: EvidenceBlock[Any] | None = None,
-    color_key: str | None = None,
-    button_key_prefix: str | None = None,
     disabled: bool = False,
 ) -> None:
     """Render color picker + Highlight + Focus & Switch Tab buttons.
@@ -162,6 +162,7 @@ def render_highlight_controls(
         button_key_prefix: Prefix for highlight/focus button keys.
         disabled: Whether to disable the controls.
     """
+
     # Extract fields from block
     quote: str | None = None
     table_id: int | None = None
@@ -200,9 +201,9 @@ def render_highlight_controls(
 def render_evidence_controls(
     paper_id: int,
     label: str,
+    color_key: str,
+    button_key_prefix: str,
     block: EvidenceBlock[Any] | ReasoningBlock[Any] | None = None,
-    color_key: str | None = None,
-    button_key_prefix: str | None = None,
     human_edit_note_key: str | None = None,
 ) -> str | None:
     """Render popover + color picker + Highlight + Focus & Switch Tab buttons.
