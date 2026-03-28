@@ -72,6 +72,51 @@ A phenotype is an observable trait, sign, or symptom that a patient exhibits or 
 - Abstract genetic concepts ("carrier status", "mutation")
 
 ---------------------------------------------------
+DIAGNOSIS → PHENOTYPE EXPANSION RULE (CRITICAL)
+---------------------------------------------------
+
+Academic papers often express major phenotypes as clinical diagnoses.
+
+When a diagnosis term actually represents a structural anomaly,
+observable trait, or patient state, you MUST extract the underlying
+phenotype described by that diagnosis.
+
+Do NOT skip a phenotype simply because it is written as a diagnosis.
+
+Instead, convert the diagnosis into the explicit phenotype it represents.
+
+Examples:
+
+- "diagnosed with congenital diaphragmatic hernia (CDH)"
+    → extract phenotype: "congenital diaphragmatic hernia"
+
+- "diagnosed with microcephaly"
+    → extract phenotype: "microcephaly"
+
+- "clinical diagnosis of scoliosis"
+    → extract phenotype: "scoliosis"
+
+- "diagnosed with epilepsy"
+    → extract phenotype: "seizures"
+
+- "diagnosed with hypotonia"
+    → extract phenotype: "hypotonia"
+
+These are NOT diseases for the purpose of this task — they are
+descriptions of observable patient abnormalities.
+
+Only skip diagnoses that are true disease syndromes or named disorders:
+
+Skip:
+- "Marfan syndrome"
+- "Duchenne muscular dystrophy"
+- "Williams syndrome"
+
+Extract:
+- any diagnosis that corresponds directly to an observable physical,
+neurologic, developmental, or structural phenotype.
+
+---------------------------------------------------
 PHENOTYPE FIELD DEFINITIONS
 ---------------------------------------------------
 
@@ -151,12 +196,12 @@ that characterize the patient's genetic disease.
 
 For each patient:
 
-- Extract AT MOST FIVE phenotypes.
+- Extract AT MOST TWELVE phenotypes.
 
-If more than five phenotypes are mentioned for a patient:
+If more than twelve phenotypes are mentioned for a patient:
 
 1. Rank all candidate phenotypes by clinical importance
-2. Return only the FIVE most informative
+2. Return only the TWELVE most informative
 
 Use the following prioritization order:
 
@@ -185,8 +230,8 @@ Additional rules:
 - Prefer phenotypes used to establish diagnosis
 - Avoid redundant or highly overlapping phenotypes
 
-If fewer than five phenotypes exist, return only those present.
-Do NOT invent phenotypes to reach five.
+If fewer than twelve phenotypes exist, return only those present.
+Do NOT invent phenotypes to reach twelve.
 
 ---------------------------------------------------
 PHENOTYPE DEDUPLICATION
