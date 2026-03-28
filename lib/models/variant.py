@@ -236,7 +236,10 @@ class VariantDB(Base):
 
     paper: Mapped[PaperDB] = relationship('PaperDB', back_populates='variants')
     harmonized_variant: Mapped['HarmonizedVariantDB | None'] = relationship(
-        'HarmonizedVariantDB', back_populates='variant', uselist=False, cascade='all, delete-orphan'
+        'HarmonizedVariantDB',
+        back_populates='variant',
+        uselist=False,
+        cascade='all, delete-orphan',
     )
 
     __table_args__ = (Index('ix_variants_paper_id', 'paper_id'),)
@@ -270,7 +273,10 @@ class HarmonizedVariantDB(Base):
         'VariantDB', back_populates='harmonized_variant', foreign_keys=[variant_id]
     )
     enriched_variant: Mapped['EnrichedVariantDB | None'] = relationship(
-        'EnrichedVariantDB', back_populates='harmonized_variant', uselist=False, cascade='all, delete-orphan'
+        'EnrichedVariantDB',
+        back_populates='harmonized_variant',
+        uselist=False,
+        cascade='all, delete-orphan',
     )
 
     __table_args__ = (

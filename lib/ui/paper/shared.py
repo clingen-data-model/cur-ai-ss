@@ -225,11 +225,9 @@ def render_evidence_controls(
     human_edit_note: str | None = None
     if block is not None:
         reasoning = block.reasoning
-        if isinstance(block, EvidenceBlock) and not isinstance(
-            block, HumanEvidenceBlock
-        ):
+        if hasattr(block, 'quote'):
             quote = block.quote
-        if isinstance(block, HumanEvidenceBlock):
+        if hasattr(block, 'human_edit_note'):
             human_edit_note = block.human_edit_note
 
     edited_note: str | None = None

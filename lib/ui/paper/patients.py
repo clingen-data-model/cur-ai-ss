@@ -57,13 +57,17 @@ def _render_patient_phenotypes(
 
     with tab1:
         if matched:
-            _render_phenotypes_table(matched, paper_resp, f'{key_prefix}-matched', show_hpo=True)
+            _render_phenotypes_table(
+                matched, paper_resp, f'{key_prefix}-matched', show_hpo=True
+            )
         else:
             st.info('No phenotypes matched to HPO.')
 
     with tab2:
         if unmatched:
-            _render_phenotypes_table(unmatched, paper_resp, f'{key_prefix}-unmatched', show_hpo=False)
+            _render_phenotypes_table(
+                unmatched, paper_resp, f'{key_prefix}-unmatched', show_hpo=False
+            )
         else:
             st.info('All phenotypes have been matched to HPO.')
 
@@ -208,7 +212,7 @@ def render_patient(
     patient_id: int,
 ) -> None:
     with st.expander(
-        f'{patient.identifier or "N/A"}',
+        'View Metadata',
         expanded=expanded,
     ):
         col1, col2 = st.columns(2)
@@ -607,7 +611,7 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
         if not probands:
             st.info('No probands detected.')
         for original_id, patient in probands:
-            st.markdown(f'### Patient {patient.identifier}')
+            st.markdown(f'### {patient.identifier}')
             render_patient(
                 paper_resp,
                 patient,
@@ -619,7 +623,7 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
         if not non_probands:
             st.info('No non-probands detected.')
         for original_id, patient in non_probands:
-            st.markdown(f'### Patient {patient.identifier}')
+            st.markdown(f'### {patient.identifier}')
             render_patient(
                 paper_resp,
                 patient,
@@ -631,7 +635,7 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
         if not affecteds:
             st.info('No affected patients detected.')
         for original_id, patient in affecteds:
-            st.markdown(f'### Patient {patient.identifier}')
+            st.markdown(f'### {patient.identifier}')
             render_patient(
                 paper_resp,
                 patient,
@@ -643,7 +647,7 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
         if not unaffecteds:
             st.info('No affected patients detected.')
         for original_id, patient in unaffecteds:
-            st.markdown(f'### Patient {patient.identifier}')
+            st.markdown(f'### {patient.identifier}')
             render_patient(
                 paper_resp,
                 patient,
