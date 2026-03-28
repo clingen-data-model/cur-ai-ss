@@ -60,6 +60,7 @@ Each field is an EvidenceBlock containing:
 
 - age_diagnosis, age_report, age_death (EvidenceBlock[int | None]):
   - Extract ages as reported in text, tables, or pedigrees
+  - Report the age in months as an integer.
   - None if not stated
 
 - country_of_origin (EvidenceBlock[enum of valid country names]):
