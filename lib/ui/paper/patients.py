@@ -607,7 +607,7 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
         if not probands:
             st.info('No probands detected.')
         for original_id, patient in probands:
-            st.markdown(f'### Patient {original_id}')
+            st.markdown(f'### Patient {patient.identifier}')
             render_patient(
                 paper_resp,
                 patient,
@@ -619,7 +619,7 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
         if not non_probands:
             st.info('No non-probands detected.')
         for original_id, patient in non_probands:
-            st.markdown(f'### Patient {original_id}')
+            st.markdown(f'### Patient {patient.identifier}')
             render_patient(
                 paper_resp,
                 patient,
@@ -631,7 +631,7 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
         if not affecteds:
             st.info('No affected patients detected.')
         for original_id, patient in affecteds:
-            st.markdown(f'### Patient {original_id}')
+            st.markdown(f'### Patient {patient.identifier}')
             render_patient(
                 paper_resp,
                 patient,
@@ -643,7 +643,7 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
         if not unaffecteds:
             st.info('No affected patients detected.')
         for original_id, patient in unaffecteds:
-            st.markdown(f'### Patient {original_id}')
+            st.markdown(f'### Patient {patient.identifier}')
             render_patient(
                 paper_resp,
                 patient,
