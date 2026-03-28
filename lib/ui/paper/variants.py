@@ -28,7 +28,7 @@ def _is_pathogenic(pathogenicity: str | None) -> bool:
     return bool(re.search(r'pathogenic', pathogenicity, re.IGNORECASE))
 
 
-def render_variants_tab(selected_variant_idx: int | None) -> None:
+def render_variants_tab(selected_variant_id: int | None) -> None:
     paper_resp: PaperResp = st.session_state['paper_resp']
     if not paper_resp.title:
         st.write(f'{paper_resp.filename} not yet extracted...')
@@ -40,7 +40,7 @@ def render_variants_tab(selected_variant_idx: int | None) -> None:
     variants: list[VariantResp] = variant_rows
     enriched_variants = [v.enriched_variant for v in variants]
 
-    # Separate variants into pathogenic and other
+    # Separate variants into pathogenic and other by index
     pathogenic_indices = [
         i
         for i, ev in enumerate(enriched_variants)
@@ -50,16 +50,29 @@ def render_variants_tab(selected_variant_idx: int | None) -> None:
         i for i in range(len(enriched_variants)) if i not in pathogenic_indices
     ]
 
+    # Create mapping from variant ID to index for quick lookup
+    variant_id_to_index: dict[int, int] = {
+        variants[i].id: i for i in range(len(variants))
+    }
+
+    # Determine which tab should be open and if variant should be expanded
+    selected_variant_index: int | None = None
+    if selected_variant_id is not None:
+        selected_variant_index = variant_id_to_index.get(selected_variant_id)
+
     # Create tabs
     tabs = [
         f'🔴 Pathogenic ({len(pathogenic_indices)})',
         f'⚪ Other ({len(other_indices)})',
     ]
+    default_tab = tabs[0]  # Default to Pathogenic
+    if selected_variant_index is not None:
+        if selected_variant_index in other_indices:
+            default_tab = tabs[1]
+
     tab_pathogenic, tab_other = st.tabs(
         tabs,
-        default=tabs[1]
-        if selected_variant_idx and (selected_variant_idx - 1) in other_indices
-        else tabs[0],
+        default=default_tab,
     )
 
     # Helper function to render variants for a given set of indices
@@ -87,7 +100,7 @@ def render_variants_tab(selected_variant_idx: int | None) -> None:
             )
             with st.expander(
                 expander_title,
-                expanded=(i == selected_variant_idx),
+                expanded=(variant.id == selected_variant_id),
             ):
                 # ======================================================
                 # Harmonized Variant (PRIMARY DISPLAY)
