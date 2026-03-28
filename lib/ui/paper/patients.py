@@ -48,8 +48,8 @@ def _render_patient_phenotypes(
         return
 
     # Split into matched and unmatched
-    matched = [p for p in phenotypes if p.hpo is not None]
-    unmatched = [p for p in phenotypes if p.hpo is None]
+    matched = [p for p in phenotypes if p.hpo.id is not None]
+    unmatched = [p for p in phenotypes if p.hpo.id is None]
 
     tab1, tab2 = st.tabs(
         [f'🔗 Matched to HPO ({len(matched)})', f'❓ Unmatched ({len(unmatched)})']
