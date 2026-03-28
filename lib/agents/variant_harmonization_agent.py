@@ -341,9 +341,9 @@ def allele_registry_resolver(
                     resolved_hgvsp = protein_hgvs
 
     return {
-        'gnomad_style_coordinates': resolved_gnomad,
-        'rsid': resolved_rsid,
-        'caid': resolved_caid,
+        'gnomad_style_coordinates': resolved_gnomad or gnomad_style_coordinates,
+        'rsid': resolved_rsid or rsid,
+        'caid': resolved_caid or caid,
         'hgvs_c': resolved_hgvsc,
         'hgvs_g': resolved_hgvsg,
         'hgvs_p': resolved_hgvsp,
