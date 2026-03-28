@@ -30,7 +30,6 @@ class Env(BaseSettings):
     # Directories
     CAA_ROOT: str = '/var/caa'
     SQLLITE_DIR: str = 'sqllite'
-    EVAGG_DIR: str = 'evagg'
     EXTRACTED_PDF_DIR: str = 'extracted_pdfs'
     LOG_DIR: str = 'logs'
     REFERENCE_DATA_DIR: str = 'reference_data'
@@ -59,10 +58,6 @@ class Env(BaseSettings):
     @property
     def sqlite_dir(self) -> Path:
         return Path(self.CAA_ROOT) / self.SQLLITE_DIR
-
-    @property
-    def evagg_dir(self) -> Path:
-        return Path(self.CAA_ROOT) / self.EVAGG_DIR
 
     @property
     def extracted_pdf_dir(self) -> Path:
