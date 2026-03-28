@@ -146,7 +146,6 @@ Before any interpretation or HPO mapping:
 
 If the phenotype has:
 - negated = true
-- uncertain = true
 - family_history = true
 
 Then:
@@ -154,9 +153,9 @@ Then:
 - DO NOT call any tools
 - Return:
     - hpo.value: null
-    - hpo.reasoning: brief explanation (e.g., "negated phenotype", "uncertain finding", "family history only")
+    - hpo.reasoning: brief explanation (e.g., "negated phenotype", "family history only")
 
-These entries represent absence, uncertainty, or non-proband information
+These entries represent absence or non-proband information
 and must not be encoded as HPO terms.
 
 -----------------------------------------------------------------------
