@@ -1,4 +1,6 @@
 from enum import Enum
+from html import unescape
+from re import sub
 from typing import List, Optional
 
 import requests
@@ -76,7 +78,13 @@ def pubmed_fetch_xml(pmid: str) -> str:
         timeout=10,
     )
     r.raise_for_status()
-    return r.text
+
+    # Strip formatting html out of response.
+    # NB: there might be better ways to do this going forwards, especially
+    # if we want to preserve subscripts!
+    xml_text = unescape(r.text)
+    xml_text = sub(r'</?(?:i|b|strong|sup|sub)>', '', xml_text)
+    return xml_text
 
 
 PAPER_EXTRACTION_INSTRUCTIONS = """
