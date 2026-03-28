@@ -57,13 +57,13 @@ def _render_patient_phenotypes(
 
     with tab1:
         if matched:
-            _render_phenotypes_table(matched, paper_resp, key_prefix, show_hpo=True)
+            _render_phenotypes_table(matched, paper_resp, f'{key_prefix}-matched', show_hpo=True)
         else:
             st.info('No phenotypes matched to HPO.')
 
     with tab2:
         if unmatched:
-            _render_phenotypes_table(unmatched, paper_resp, key_prefix, show_hpo=False)
+            _render_phenotypes_table(unmatched, paper_resp, f'{key_prefix}-unmatched', show_hpo=False)
         else:
             st.info('All phenotypes have been matched to HPO.')
 
