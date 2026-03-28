@@ -315,7 +315,7 @@ def render_patient(
         col1, col2 = st.columns(2)
         with col1:
             age_diagnosis = st.number_input(
-                'Age at Diagnosis',
+                'Age at Diagnosis (years)',
                 value=patient.age_diagnosis,
                 min_value=0,
                 step=1,
@@ -334,7 +334,7 @@ def render_patient(
         col1, col2 = st.columns(2)
         with col1:
             age_report = st.number_input(
-                'Age at Report',
+                'Age at Report (years)',
                 value=patient.age_report,
                 min_value=0,
                 step=1,
@@ -353,7 +353,7 @@ def render_patient(
         col1, col2 = st.columns(2)
         with col1:
             age_death = st.number_input(
-                'Age at Death',
+                'Age at Death (years)',
                 value=patient.age_death,
                 min_value=0,
                 step=1,
