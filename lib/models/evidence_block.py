@@ -21,8 +21,8 @@ class EvidenceBlock(ReasoningBlock[T]):
             raise ValueError('reasoning must be non-empty')
 
         # Skip evidence source requirement if value is None or UNKNOWN
-        is_unknown = self.value is None or (
-            hasattr(self.value, 'value') and self.value.value in ('unknown', 'Unknown')
+        is_unknown = self.value is None or self.value == 'Unknown' or (
+            hasattr(self.value, 'value') and self.value.value == 'Unknown'
         )
 
         # For boolean values, skip validation if value is falsy (no evidence required for False)
