@@ -168,13 +168,14 @@ For each phenotype mention in the text, determine which patient it belongs to:
 
 **Explicit attribution:**
 - The patient identifier explicitly appears with or near the phenotype description
-- Example: "Patient 1 experienced tremor" → patient_idx = 1
-- Example: "II-3 had hearing loss" → patient_idx = 2 (if II-3 is the second patient in list)
+- Match the identifier to the patient in the provided list and use their patient_id
+- Example: "Patient 1 experienced tremor" → use the patient_id for Patient 1
+- Example: "II-3 had hearing loss" → use the patient_id for II-3
 
 **Unambiguous pronoun reference:**
 - Pronouns ("he", "she", "the patient", "the proband") unambiguously refer to one patient in context
 - Only use if context makes clear which patient is referenced
-- Example: "Patient 1 presented with tremor. He also had seizures." → both to patient_idx = 1
+- Example: "Patient 1 presented with tremor. He also had seizures." → use the same patient_id for both phenotypes
 
 **Family member phenotypes:**
 - If describing a family member's phenotype, create a separate extraction for that family member
@@ -184,7 +185,7 @@ For each phenotype mention in the text, determine which patient it belongs to:
 - If family member is NOT in the patient list, skip their phenotypes
 
 **Ambiguous cases:**
-- If unsure which patient a phenotype belongs to, use patient_idx=1 (first/primary patient)
+- If unsure which patient a phenotype belongs to, use the patient_id of the first/primary patient in the list
 - Or skip the extraction if ambiguity is too severe
 
 ---------------------------------------------------
@@ -272,7 +273,7 @@ For each extracted phenotype:
 
 - Confirm the phenotype is clearly a phenotype, not a diagnosis
 - Confirm the patient linkage is justified by the text
-- Confirm patient_idx matches one of the patient IDs in the provided patient list
+- Confirm patient_id matches one of the patient IDs in the provided patient list
 - Confirm all boolean fields are true/false (not "yes"/"no" or strings)
 - Confirm concept.value is verbatim from paper or very close paraphrase
 - Confirm concept.reasoning clearly explains the phenotype and patient linkage
@@ -290,7 +291,7 @@ Example structure:
 {
   "extracted_phenotypes": [
     {
-      "patient_idx": 0,
+      "patient_id": "uuid-or-db-id",
       "concept": {
         "value": "developmental delay",
         "reasoning": "The proband is described as having delayed milestones in the clinical summary.",
@@ -310,9 +311,9 @@ Example structure:
 }
 
 Ensure:
-- All required fields are present (patient_idx, concept with value/reasoning/quote or table_id or image_id)
+- All required fields are present (patient_id, concept with value/reasoning/quote or table_id or image_id)
 - All optional fields are either provided if mentioned in text, or null/omitted
-- Each phenotype has a valid patient_idx (integer from patient list)
+- Each phenotype has a valid patient_id (matching one from the provided patient list)
 - concept.quote contains actual text from the paper (not paraphrased)
 - concept.reasoning explains the extraction and linkage decision
 """
