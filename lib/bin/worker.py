@@ -158,43 +158,29 @@ async def harmonize_variants_task_async(paper_db: PaperDB, gene_symbol: str) -> 
             .order_by(VariantDB.id)
             .all()
         )
-        variants_output = {
-            'variants': [
-                {
-                    'variant_id': r.id,
-                    'gene_symbol': gene_symbol,
-                    **{f: getattr(r, f) for f in Variant.model_fields},
-                }
-                for r in rows
-            ]
+
+    async def harmonize_single_variant(variant_row: VariantDB):
+        variant_input = {
+            'gene_symbol': gene_symbol,
+            **{f: getattr(variant_row, f) for f in Variant.model_fields},
         }
 
-    result = await Runner.run(
-        variant_harmonization_agent,
-        f'Variants JSON:\n{json.dumps(variants_output, indent=2)}',
-        max_turns=10 * len(variants_output['variants']),
-    )
-    # Persist harmonized variants to DB (idempotent: delete-then-insert)
-    with session_scope() as session:
-        # Delete existing harmonized variants for this paper via subquery
-        session.query(HarmonizedVariantDB).filter(
-            HarmonizedVariantDB.variant_id.in_(
-                select(VariantDB.id).where(VariantDB.paper_id == paper_db.id)
-            )
-        ).delete()
-        # Re-insert harmonized variants
-        variant_rows = (
-            session.query(VariantDB)
-            .filter(VariantDB.paper_id == paper_db.id)
-            .order_by(VariantDB.id)
-            .all()
+        result = await Runner.run(
+            variant_harmonization_agent,
+            f'Variant JSON:\n{json.dumps(variant_input, indent=2)}',
+            max_turns=10,
         )
-        for variant_row, variant in zip(variant_rows, result.final_output.variants):
-            assert variant.variant_id == variant_row.id, (
-                f'Harmonized variant has variant_id={variant.variant_id}, '
-                f'expected variant_id={variant_row.id}'
-            )
-            session.add(harmonized_variant_to_db(variant))
+        return variant_row.id, result.final_output
+
+    # Run all harmonization calls concurrently
+    results = await asyncio.gather(
+        *[harmonize_single_variant(variant_row) for variant_row in rows]
+    )
+
+    # Persist all harmonized variants to DB
+    with session_scope() as session:
+        for variant_id, harmonized_output in results:
+            session.add(harmonized_variant_to_db(variant_id, harmonized_output))
 
 
 async def extract_variants_task_async(paper_id: int, gene_symbol: str) -> None:
