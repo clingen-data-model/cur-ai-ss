@@ -690,9 +690,9 @@ B) If genomic_accession missing:
 C) Construct:
     genomic_accession + ":" + hgvs_g
 
-Call gnomad_style_ids_from_variant_validator (may return multiple gnomAD-style IDs).
-If multiple IDs returned:
-    Select the ID most compatible with input variant context (hgvs_c, hgvs_p, transcript, genomic coordinates).
+    Call gnomad_style_ids_from_variant_validator (may return multiple gnomAD-style IDs).
+    If multiple IDs returned:
+        Select the ID most compatible with input variant context (hgvs_c, hgvs_p, transcript, genomic coordinates).
 
 If successful:
     → Call allele_registry_resolver
@@ -734,6 +734,8 @@ If hgvs_c available:
 
     5. If projection succeeds:
         Call allele_registry_resolver using gnomad_style_coordinates.
+            - If multiple results returned:
+                - Select the result most compatible with input variant context (hgvs_c, hgvs_p, transcript, genomic coordinates).
         RETURN result.
 
     6. If projection still fails:
@@ -762,6 +764,8 @@ If hgvs_p available:
 
     4. If ClinVar returns rsid or caid:
         Call allele_registry_resolver.
+            - If multiple IDs returned:
+                - Select the result most compatible with input variant context (hgvs_c, hgvs_p, transcript, genomic coordinates).
         RETURN result.
 
     5. If ClinVar fails:
@@ -796,6 +800,8 @@ Step 5C — Interpret Results
 
 Case A — rsid OR caid returned:
     Call allele_registry_resolver.
+        - If multiple IDs returned:
+            - Select the ID most compatible with input variant context (hgvs_c, hgvs_p, transcript, genomic coordinates).
     RETURN result.
 
 Case B — Only hgvs returned:
@@ -804,6 +810,8 @@ Case B — Only hgvs returned:
     If multiple IDs returned:
         - Select the ID most compatible with input variant context (hgvs_c, hgvs_p, transcript, genomic coordinates).
         - Call allele_registry_resolver using selected gnomAD-style ID.
+            - If multiple IDs returned:
+                - Select the ID most compatible with input variant context (hgvs_c, hgvs_p, transcript, genomic coordinates).
         - RETURN selected record.
 
 Case C — ClinVar empty:
@@ -815,6 +823,8 @@ Case C — ClinVar empty:
         If multiple IDs returned:
             - Select the ID most compatible with input variant context (hgvs_c, hgvs_p, transcript, genomic coordinates).
             - Call allele_registry_resolver using selected gnomAD-style ID.
+                - If multiple IDs returned:
+                    - Select the ID most compatible with input variant context (hgvs_c, hgvs_p, transcript, genomic coordinates).
             - RETURN selected record.
 
     If dbsnp_lookup returns no usable results:
