@@ -6,7 +6,7 @@ import streamlit as st
 
 from lib.models import PaperResp, PipelineStatus, VariantResp
 from lib.models.variant import VariantType
-from lib.ui.api import get_variants
+from lib.ui.api import get_patient_variant_links, get_variants
 from lib.ui.paper.shared import (
     get_clinvar_url,
     get_gnomad_url,
@@ -39,6 +39,15 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
     variant_rows = get_variants(paper_resp.id)
     variants: list[VariantResp] = variant_rows
     enriched_variants = [v.enriched_variant for v in variants]
+
+    # Fetch patient-variant links
+    patient_variant_links = get_patient_variant_links(paper_resp.id)
+    # Create mapping from variant_id to list of links
+    links_by_variant: dict[int, list] = {}
+    for link in patient_variant_links:
+        if link.variant_id not in links_by_variant:
+            links_by_variant[link.variant_id] = []
+        links_by_variant[link.variant_id].append(link)
 
     # Separate variants into pathogenic and other by index
     pathogenic_indices = [
@@ -328,6 +337,17 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                         )
 
                         st.dataframe(gnomad_df, width='stretch', hide_index=True)
+
+                # ======================================================
+                # Associated Patients
+                # ======================================================
+                variant_links = links_by_variant.get(variant.id, [])
+                if variant_links:
+                    st.markdown('#### Associated Patients')
+                    for link in variant_links:
+                        st.markdown(
+                            f'• Patient {link.patient_id}: {link.zygosity.value} | {link.inheritance.value}'
+                        )
 
     # Render variants in tabs
     with tab_pathogenic:
