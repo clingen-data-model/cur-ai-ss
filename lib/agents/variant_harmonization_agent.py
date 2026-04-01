@@ -209,9 +209,6 @@ def allele_registry_resolver(
     gnomad_style_coordinates: str | None,
     rsid: str | None,
     caid: str | None,
-    hgvs_c: str | None,
-    hgvs_g: str | None,
-    hgvs_p: str | None,
 ) -> Optional[list[dict[str, str | None]]]:
     """
     Resolve variant identifiers to comprehensive allele information.
@@ -366,9 +363,9 @@ def allele_registry_resolver(
                 'gnomad_style_coordinates': resolved_gnomad or gnomad_style_coordinates,
                 'rsid': resolved_rsid or rsid,
                 'caid': resolved_caid or caid,
-                'hgvs_c': resolved_hgvsc or hgvs_c,
-                'hgvs_g': resolved_hgvsg or hgvs_g,
-                'hgvs_p': resolved_hgvsp or hgvs_p,
+                'hgvs_c': resolved_hgvsc,
+                'hgvs_g': resolved_hgvsg,
+                'hgvs_p': resolved_hgvsp,
             }
         )
 
@@ -849,7 +846,7 @@ Case B — Only hgvs returned:
         → RETURN result.
 
     If unsuccessful:
-        → RETURN outputs with all normalized fields as None, but preserve any original hgvs_p, hgvs_c, or hgvs_g provided in the input.
+        → RETURN outputs with all normalized fields as None.
 
 Case C — ClinVar returns an empty list:
 
@@ -875,7 +872,7 @@ Case C — ClinVar returns an empty list:
                 RETURN result.
 
     If dbsnp_lookup returns no usable results:
-        RETURN outputs with all normalized fields as None, but preserve any original hgvs_p, hgvs_c, or hgvs_g provided in the input.
+        RETURN outputs with all normalized fields as None.
 
 
 You may NOT call clinvar_lookup again while resolving this variant.
