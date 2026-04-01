@@ -151,6 +151,7 @@ async def parse_patients_task_async(paper_db: PaperDB) -> None:
 
 
 async def harmonize_variants_task_async(paper_db: PaperDB, gene_symbol: str) -> None:
+    # ---- Phase 1: load rows and DETACH DATA, not ORM objects ----
     with session_scope() as session:
         rows = (
             session.query(VariantDB)
@@ -159,29 +160,40 @@ async def harmonize_variants_task_async(paper_db: PaperDB, gene_symbol: str) -> 
             .all()
         )
 
-    async def harmonize_single_variant(variant_row: VariantDB):
-        variant_input = {
-            'gene_symbol': gene_symbol,
-            **{f: getattr(variant_row, f) for f in Variant.model_fields},
-        }
+        # Extract everything we will ever need while session is alive
+        variant_payloads = [
+            (
+                row.id,
+                {
+                    'gene_symbol': gene_symbol,
+                    **{f: getattr(row, f) for f in Variant.model_fields},
+                },
+            )
+            for row in rows
+        ]
 
+    # ---- Phase 2: async work on PURE DATA ----
+    async def harmonize_single_variant(variant_id: int, variant_input: dict):
         result = await Runner.run(
             variant_harmonization_agent,
             f'Variant JSON:\n{json.dumps(variant_input, indent=2)}',
             max_turns=10,
         )
-        return variant_row.id, result.final_output
+        return variant_id, result.final_output
 
-    # Run all harmonization calls concurrently
     results = await asyncio.gather(
-        *[harmonize_single_variant(variant_row) for variant_row in rows]
+        *[
+            harmonize_single_variant(variant_id, variant_input)
+            for variant_id, variant_input in variant_payloads
+        ]
     )
 
-    # Persist all harmonized variants to DB
+    # ---- Phase 3: write results in a new session ----
     with session_scope() as session:
         for variant_id, harmonized_output in results:
-            session.add(harmonized_variant_to_db(variant_id, harmonized_output))
-
+            session.add(
+                harmonized_variant_to_db(variant_id, harmonized_output)
+            )
 
 async def extract_variants_task_async(paper_id: int, gene_symbol: str) -> None:
     result = await Runner.run(
