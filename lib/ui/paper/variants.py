@@ -343,10 +343,11 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                 # ======================================================
                 variant_links = links_by_variant.get(variant.id, [])
                 if variant_links:
-                    st.markdown('#### Associated Patients')
+                    with st.container():
+                    st.subheader('Associated Patients')
                     for link in variant_links:
                         st.markdown(
-                            f'• Patient {link.patient_id}: {link.zygosity.value} | {link.inheritance.value}'
+                            f'- Patient {link.patient_id} w/ Zygosity {link.zygosity.value}'
                         )
 
     # Render variants in tabs
