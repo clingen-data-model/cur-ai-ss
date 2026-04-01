@@ -209,6 +209,9 @@ def allele_registry_resolver(
     gnomad_style_coordinates: str | None,
     rsid: str | None,
     caid: str | None,
+    hgvs_c: str | None,
+    hgvs_g: str | None,
+    hgvs_p: str | None,
 ) -> Optional[list[dict[str, str | None]]]:
     """
     Resolve variant identifiers to comprehensive allele information.
@@ -363,9 +366,9 @@ def allele_registry_resolver(
                 'gnomad_style_coordinates': resolved_gnomad or gnomad_style_coordinates,
                 'rsid': resolved_rsid or rsid,
                 'caid': resolved_caid or caid,
-                'hgvs_c': resolved_hgvsc,
-                'hgvs_g': resolved_hgvsg,
-                'hgvs_p': resolved_hgvsp,
+                'hgvs_c': resolved_hgvsc or hgvs_c,
+                'hgvs_g': resolved_hgvsg or hgvs_g,
+                'hgvs_p': resolved_hgvsp or hgvs_p,
             }
         )
 
