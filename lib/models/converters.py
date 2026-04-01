@@ -12,7 +12,6 @@ from lib.models.phenotype import (
 from lib.models.variant import (
     HarmonizedVariant,
     HarmonizedVariantDB,
-    HarmonizedVariantLinkingEntry,
     Variant,
 )
 
