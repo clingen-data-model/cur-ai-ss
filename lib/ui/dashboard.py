@@ -103,6 +103,10 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
         lambda row: f'/paper?paper_id={row["id"]}#{papers_by_id[row["id"]].first_author or QUEUED_EXTRACTION_TEXT}',
         axis=1,
     )
+    df['pmid'] = df.apply(
+        lambda row: f'/paper?paper_id={row["id"]}#{papers_by_id[row["id"]].pmid or QUEUED_EXTRACTION_TEXT}',
+        axis=1,
+    )
     df['pipeline_status'] = df.apply(
         lambda row: f'/paper?paper_id={row["id"]}#{PipelineStatus(row["pipeline_status"]).value + PipelineStatus(row["pipeline_status"]).icon}',
         axis=1,
@@ -114,6 +118,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
                 'thumbnail_path',
                 'title',
                 'first_author',
+                'pmid',
                 'filename',
                 'pipeline_status',
                 'updated_at',
@@ -138,6 +143,12 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
                 # Note, this is a major hack to get around the lack of a better way of doing this.
                 display_text=r'.*?#(.+)$',
             ),
+            'pmid': st.column_config.LinkColumn(
+                'PMID',
+                # Regex to extract text after the '#'
+                # Note, this is a major hack to get around the lack of a better way of doing this.
+                display_text=r'.*?#(.+)$',
+            ),
             'filename': st.column_config.Column('Filename'),
             'pipeline_status': st.column_config.LinkColumn(
                 'Extraction Status',
@@ -155,6 +166,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
             'thumbnail_path',
             'title',
             'first_author',
+            'pmid',
             'filename',
             'pipeline_status',
             'updated_at',
