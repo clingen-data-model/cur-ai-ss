@@ -494,7 +494,8 @@ def get_patient_variant_links(
 
 
 def _patient_variant_link_to_resp(
-    row: PatientVariantLinkDB, patient_identifier: str,
+    row: PatientVariantLinkDB,
+    patient_identifier: str,
 ) -> PatientVariantLinkResp:
     """Convert PatientVariantLinkDB to PatientVariantLinkResp."""
     from lib.models import Inheritance, TestingMethod, Zygosity
