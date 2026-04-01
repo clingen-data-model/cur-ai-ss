@@ -87,7 +87,7 @@ def render_patient_variant_occurrences_tab() -> None:
         # Format testing methods as a list of values
         testing_methods_list = link.testing_methods
 
-        patient_display = patient.identifier or f'Patient {link.patient_id}'
+        patient_display = link.patient_identifier
         patient_link = f'/paper?paper_id={paper_resp.id}&patient_id={link.patient_id}#{patient_display}'
         variant_link = f'/paper?paper_id={paper_resp.id}&variant_id={link.variant_id}#{variant_desc}'
         rows.append(

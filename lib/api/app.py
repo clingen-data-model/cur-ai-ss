@@ -478,17 +478,23 @@ def get_patient_variant_links(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
+    from lib.models.patient import PatientDB
+
     links = (
-        session.query(PatientVariantLinkDB)
+        session.query(PatientVariantLinkDB, PatientDB.identifier)
+        .join(PatientDB, PatientVariantLinkDB.patient_id == PatientDB.id)
         .filter(PatientVariantLinkDB.paper_id == paper_id)
         .order_by(PatientVariantLinkDB.patient_id, PatientVariantLinkDB.variant_id)
         .all()
     )
-    return [_patient_variant_link_to_resp(link) for link in links]
+    return [
+        _patient_variant_link_to_resp(link[0], patient_identifier=link[1])
+        for link in links
+    ]
 
 
 def _patient_variant_link_to_resp(
-    row: PatientVariantLinkDB,
+    row: PatientVariantLinkDB, patient_identifier: str,
 ) -> PatientVariantLinkResp:
     """Convert PatientVariantLinkDB to PatientVariantLinkResp."""
     from lib.models import Inheritance, TestingMethod, Zygosity
@@ -496,6 +502,7 @@ def _patient_variant_link_to_resp(
     return PatientVariantLinkResp(
         paper_id=row.paper_id,
         patient_id=row.patient_id,
+        patient_identifier=patient_identifier,
         variant_id=row.variant_id,
         zygosity=Zygosity(row.zygosity),
         zygosity_evidence=EvidenceBlock.model_validate(row.zygosity_evidence),

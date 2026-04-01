@@ -146,6 +146,7 @@ class PatientVariantLinkDB(Base):
 class PatientVariantLinkResp(BaseModel):
     paper_id: int
     patient_id: int
+    patient_identifier: str
     variant_id: int
     zygosity: Zygosity
     zygosity_evidence: EvidenceBlock[Zygosity]
