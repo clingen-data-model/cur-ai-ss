@@ -53,7 +53,7 @@ from lib.models.converters import (
 )
 from lib.models.evidence_block import ReasoningBlock
 from lib.models.phenotype import ExtractedPhenotypeDB, HpoCandidate, HpoDB
-from lib.models.variant import HarmonizedVariant, HarmonizedVariantLinkingEntry, Variant
+from lib.models.variant import HarmonizedVariant, Variant
 from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
 
 LEASE_TIMEOUT_S = 900
