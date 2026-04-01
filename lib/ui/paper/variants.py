@@ -126,13 +126,13 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                             )
                         with col2:
                             col2.markdown(
-                                f'**HGVS c.:** {harmonized_variant.value.hgvs_c or variant.hgvs_c.value or "N/A"}'
+                                f'**HGVS c.:** {harmonized_variant.value.hgvs_c or variant.hgvs_c or "N/A"}'
                             )
                             col2.markdown(
-                                f'**HGVS p.:** {harmonized_variant.value.hgvs_p or variant.hgvs_p.value or "N/A"}'
+                                f'**HGVS p.:** {harmonized_variant.value.hgvs_p or variant.hgvs_p or "N/A"}'
                             )
                             col2.markdown(
-                                f'**HGVS g.:** {harmonized_variant.value.hgvs_g or variant.hgvs_g.value or "N/A"}'
+                                f'**HGVS g.:** {harmonized_variant.value.hgvs_g or variant.hgvs_g or "N/A"}'
                             )
                         with col3:
                             render_evidence_controls(
