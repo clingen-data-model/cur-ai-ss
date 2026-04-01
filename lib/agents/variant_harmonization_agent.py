@@ -209,7 +209,22 @@ def allele_registry_resolver(
     gnomad_style_coordinates: str | None,
     rsid: str | None,
     caid: str | None,
-) -> Optional[dict[str, str | None]]:
+) -> Optional[list[dict[str, str | None]]]:
+    """
+    Resolve variant identifiers to comprehensive allele information.
+
+    Returns a list of resolved allele records (one per unique allele in the response).
+    When multiple results are returned, inspect each and select the most appropriate
+    based on the context of your variant investigation.
+
+    Each record includes:
+    - gnomad_style_coordinates: GRCh38 gnomAD-style ID (chrom-pos-ref-alt)
+    - rsid: dbSNP identifier if available
+    - caid: ClinGen Allele ID if available
+    - hgvs_c: Coding HGVS (prefer MANE Select)
+    - hgvs_g: Genomic HGVS (prefer GRCh38)
+    - hgvs_p: Protein HGVS (prefer MANE Select)
+    """
     if caid:
         suffix = f'allele/{quote(caid)}'
     elif gnomad_style_coordinates:
@@ -229,125 +244,132 @@ def allele_registry_resolver(
     if not data:
         return None
 
-    if isinstance(data, list):
-        data = data[0]
+    # Normalize to list of records
+    records_to_process = data if isinstance(data, list) else [data]
 
-    # -----------------------
-    # CAID
-    # -----------------------
-    resolved_caid = None
-    allele_id_url = data.get('@id')
-    if allele_id_url:
-        resolved_caid = allele_id_url.rstrip('/').split('/')[-1]
+    results: list[dict[str, str | None]] = []
 
-    # -----------------------
-    # gnomAD-style (derived from genomicAlleles)
-    # -----------------------
-    resolved_gnomad = None
+    for data in records_to_process:
+        # -----------------------
+        # CAID
+        # -----------------------
+        resolved_caid = None
+        allele_id_url = data.get('@id')
+        if allele_id_url:
+            resolved_caid = allele_id_url.rstrip('/').split('/')[-1]
 
-    genomic_alleles = data.get('genomicAlleles', [])
+        # -----------------------
+        # gnomAD-style (derived from genomicAlleles)
+        # -----------------------
+        resolved_gnomad = None
 
-    def build_gnomad_id(g: dict[str, Any]) -> str | None:
-        coords = g.get('coordinates', [])
-        if not coords:
-            return None
+        genomic_alleles = data.get('genomicAlleles', [])
 
-        coord = coords[0]
+        def build_gnomad_id(g: dict[str, Any]) -> str | None:
+            coords = g.get('coordinates', [])
+            if not coords:
+                return None
 
-        chrom = g.get('chromosome')
-        pos = coord.get('end')  # 1-based position
-        ref = coord.get('referenceAllele')
-        alt = coord.get('allele')
+            coord = coords[0]
 
-        if not all([chrom, pos, ref, alt]):
-            return None
+            chrom = g.get('chromosome')
+            pos = coord.get('end')  # 1-based position
+            ref = coord.get('referenceAllele')
+            alt = coord.get('allele')
 
-        return f'{chrom}-{pos}-{ref}-{alt}'
+            if not all([chrom, pos, ref, alt]):
+                return None
 
-    # Prefer GRCh38
-    for g in genomic_alleles:
-        if g.get('referenceGenome') == 'GRCh38':
-            resolved_gnomad = build_gnomad_id(g)
-            if resolved_gnomad:
-                break
+            return f'{chrom}-{pos}-{ref}-{alt}'
 
-    # Fallback to first available genome
-    if not resolved_gnomad:
+        # Prefer GRCh38
         for g in genomic_alleles:
-            resolved_gnomad = build_gnomad_id(g)
-            if resolved_gnomad:
-                break
+            if g.get('referenceGenome') == 'GRCh38':
+                resolved_gnomad = build_gnomad_id(g)
+                if resolved_gnomad:
+                    break
 
-    # -----------------------
-    # rsID
-    # -----------------------
-    resolved_rsid = None
-    dbsnp_records = data.get('externalRecords', {}).get('dbSNP', [])
-    if dbsnp_records:
-        rs_value = dbsnp_records[0].get('rs')
-        if rs_value is not None:
-            resolved_rsid = f'rs{rs_value}'
+        # Fallback to first available genome
+        if not resolved_gnomad:
+            for g in genomic_alleles:
+                resolved_gnomad = build_gnomad_id(g)
+                if resolved_gnomad:
+                    break
 
-    # -----------------------
-    # Genomic HGVS (prefer GRCh38)
-    # -----------------------
-    resolved_hgvsg = None
+        # -----------------------
+        # rsID
+        # -----------------------
+        resolved_rsid = None
+        dbsnp_records = data.get('externalRecords', {}).get('dbSNP', [])
+        if dbsnp_records:
+            rs_value = dbsnp_records[0].get('rs')
+            if rs_value is not None:
+                resolved_rsid = f'rs{rs_value}'
 
-    for g in genomic_alleles:
-        if g.get('referenceGenome') == 'GRCh38':
-            hgvs_list = g.get('hgvs', [])
-            if hgvs_list:
-                resolved_hgvsg = hgvs_list[0]
-                break
+        # -----------------------
+        # Genomic HGVS (prefer GRCh38)
+        # -----------------------
+        resolved_hgvsg = None
 
-    if not resolved_hgvsg:
         for g in genomic_alleles:
-            hgvs_list = g.get('hgvs', [])
-            if hgvs_list:
-                resolved_hgvsg = hgvs_list[0]
-                break
+            if g.get('referenceGenome') == 'GRCh38':
+                hgvs_list = g.get('hgvs', [])
+                if hgvs_list:
+                    resolved_hgvsg = hgvs_list[0]
+                    break
 
-    # -----------------------
-    # Transcript HGVS (prefer MANE Select RefSeq)
-    # -----------------------
-    resolved_hgvsc = None
-    resolved_hgvsp = None
-    found_mane = False
+        if not resolved_hgvsg:
+            for g in genomic_alleles:
+                hgvs_list = g.get('hgvs', [])
+                if hgvs_list:
+                    resolved_hgvsg = hgvs_list[0]
+                    break
 
-    for t in data.get('transcriptAlleles', []):
-        mane = t.get('MANE')
-        if mane and mane.get('maneStatus') == 'MANE Select':
-            refseq_nuc = mane.get('nucleotide', {}).get('RefSeq', {}).get('hgvs')
-            refseq_pro = mane.get('protein', {}).get('RefSeq', {}).get('hgvs')
+        # -----------------------
+        # Transcript HGVS (prefer MANE Select RefSeq)
+        # -----------------------
+        resolved_hgvsc = None
+        resolved_hgvsp = None
+        found_mane = False
 
-            if refseq_nuc:
-                resolved_hgvsc = refseq_nuc
-            if refseq_pro:
-                resolved_hgvsp = refseq_pro
+        for t in data.get('transcriptAlleles', []):
+            mane = t.get('MANE')
+            if mane and mane.get('maneStatus') == 'MANE Select':
+                refseq_nuc = mane.get('nucleotide', {}).get('RefSeq', {}).get('hgvs')
+                refseq_pro = mane.get('protein', {}).get('RefSeq', {}).get('hgvs')
 
-            found_mane = True
-            continue
+                if refseq_nuc:
+                    resolved_hgvsc = refseq_nuc
+                if refseq_pro:
+                    resolved_hgvsp = refseq_pro
 
-        if not found_mane:
-            if not resolved_hgvsc:
-                for h in t.get('hgvs', []):
-                    if ':c.' in h:
-                        resolved_hgvsc = h
-                        break
+                found_mane = True
+                continue
 
-            if not resolved_hgvsp:
-                protein_hgvs = t.get('proteinEffect', {}).get('hgvs')
-                if protein_hgvs:
-                    resolved_hgvsp = protein_hgvs
+            if not found_mane:
+                if not resolved_hgvsc:
+                    for h in t.get('hgvs', []):
+                        if ':c.' in h:
+                            resolved_hgvsc = h
+                            break
 
-    return {
-        'gnomad_style_coordinates': resolved_gnomad or gnomad_style_coordinates,
-        'rsid': resolved_rsid or rsid,
-        'caid': resolved_caid or caid,
-        'hgvs_c': resolved_hgvsc,
-        'hgvs_g': resolved_hgvsg,
-        'hgvs_p': resolved_hgvsp,
-    }
+                if not resolved_hgvsp:
+                    protein_hgvs = t.get('proteinEffect', {}).get('hgvs')
+                    if protein_hgvs:
+                        resolved_hgvsp = protein_hgvs
+
+        results.append(
+            {
+                'gnomad_style_coordinates': resolved_gnomad or gnomad_style_coordinates,
+                'rsid': resolved_rsid or rsid,
+                'caid': resolved_caid or caid,
+                'hgvs_c': resolved_hgvsc,
+                'hgvs_g': resolved_hgvsg,
+                'hgvs_p': resolved_hgvsp,
+            }
+        )
+
+    return results if results else None
 
 
 @function_tool
@@ -596,7 +618,6 @@ Use the following fields of the provided structured input:
 - hgvs_c
 - hgvs_p
 - hgvs_g
-- variant_evidence_context
 
 Proceed to State 1.
 
@@ -617,7 +638,12 @@ Action:
 2. Call allele_registry_resolver using:
     gnomad_style_coordinates
 
-3. RETURN result.
+3. If multiple results returned:
+    Select the result that is most compatible with input context.
+    Compare resolved values (hgvs_c, transcript annotations, gnomad_style_coordinates) against
+    the input variant data to ensure they represent the same variant without contradiction.
+
+4. RETURN result.
 
 If not eligible → proceed to State 2.
 
@@ -631,7 +657,12 @@ rsid OR caid present in input.
 Action:
 Call allele_registry_resolver using available identifier.
 
-RETURN result.
+If multiple results returned:
+    Select the result that is most compatible with input context.
+    Compare resolved values (hgvs_c, transcript annotations, gnomad_style_coordinates) against
+    the input variant data to ensure they represent the same variant without contradiction.
+
+RETURN selected result.
 
 If neither present → proceed to State 3.
 
@@ -791,12 +822,12 @@ Step 5C — Interpret Results
 
 If multiple ClinVar records returned:
     1. Ensure the hgvs of the record matches the query gene.
-    2. Sometimes multiple variants with different nucleotide substitutions will exist (A>C and A>T).  Prefer
-    one that aligns with the free-text description in the `variant_evidence_context` field (e.g. a 12939 A-C transversion).
-    2. Prefer record with both caid AND rsid
-    3. Else prefer record with caid
-    4. Else prefer record with rsid
-    5. Else use first record
+    2. Sometimes multiple variants with different nucleotide substitutions will exist (A>C and A>T). Prefer
+    one that is compatible with the input variant context (e.g., if input suggests A-C transversion, prefer the A>C record).
+    3. Else prefer record with both caid AND rsid
+    4. Else prefer record with caid
+    5. Else prefer record with rsid
+    6. Else use first record
 
 Case A — rsid OR caid returned:
     Call allele_registry_resolver using identifier.
@@ -827,12 +858,17 @@ Case C — ClinVar returns an empty list:
     Immediately proceed to dbSNP lookup, calling dbsnp_lookup using the EXACT SAME query string.
 
     If dbsnp_lookup returns genomic HGVS (hgvs_g):
-        For each returned hgvs_g:
+        Prefer hgvs_g values that are compatible with input variant context.
+        For each returned hgvs_g (in order of preference):
             Call gnomad_style_id_from_variant_validator
             using hgvs_g directly.
 
             If successful:
-                Call allele_registry_resolver
+                Call allele_registry_resolver.
+
+                If multiple results returned:
+                    Select the result most compatible with input context.
+
                 RETURN result.
 
     If dbsnp_lookup returns no usable results:
