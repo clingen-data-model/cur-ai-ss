@@ -846,7 +846,7 @@ Case B — Only hgvs returned:
         → RETURN result.
 
     If unsuccessful:
-        → RETURN None outputs.
+        → RETURN outputs with all normalized fields as None, but preserve any original hgvs_p, hgvs_c, or hgvs_g provided in the input.
 
 Case C — ClinVar returns an empty list:
 
@@ -872,7 +872,7 @@ Case C — ClinVar returns an empty list:
                 RETURN result.
 
     If dbsnp_lookup returns no usable results:
-        RETURN None outputs.
+        RETURN outputs with all normalized fields as None, but preserve any original hgvs_p, hgvs_c, or hgvs_g provided in the input.
 
 
 You may NOT call clinvar_lookup again while resolving this variant.
