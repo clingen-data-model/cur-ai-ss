@@ -95,8 +95,6 @@ class HarmonizedVariant(BaseModel):
     hgvs_g: Optional[str] = None
 
 
-
-
 class HarmonizedVariantResp(BaseModel):
     """Response model for harmonized variants."""
 

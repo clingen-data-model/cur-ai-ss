@@ -151,7 +151,6 @@ async def parse_patients_task_async(paper_db: PaperDB) -> None:
 
 
 async def harmonize_variants_task_async(paper_db: PaperDB, gene_symbol: str) -> None:
-    # ---- Phase 1: load rows and DETACH DATA, not ORM objects ----
     with session_scope() as session:
         rows = (
             session.query(VariantDB)
@@ -172,8 +171,9 @@ async def harmonize_variants_task_async(paper_db: PaperDB, gene_symbol: str) -> 
             for row in rows
         ]
 
-    # ---- Phase 2: async work on PURE DATA ----
-    async def harmonize_single_variant(variant_id: int, variant_input: dict):
+    async def harmonize_single_variant(
+        variant_id: int, variant_input: dict
+    ) -> tuple[int, ReasoningBlock[HarmonizedVariant]]:
         result = await Runner.run(
             variant_harmonization_agent,
             f'Variant JSON:\n{json.dumps(variant_input, indent=2)}',
@@ -188,12 +188,10 @@ async def harmonize_variants_task_async(paper_db: PaperDB, gene_symbol: str) -> 
         ]
     )
 
-    # ---- Phase 3: write results in a new session ----
     with session_scope() as session:
         for variant_id, harmonized_output in results:
-            session.add(
-                harmonized_variant_to_db(variant_id, harmonized_output)
-            )
+            session.add(harmonized_variant_to_db(variant_id, harmonized_output))
+
 
 async def extract_variants_task_async(paper_id: int, gene_symbol: str) -> None:
     result = await Runner.run(
