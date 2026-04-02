@@ -174,6 +174,7 @@ async def harmonize_variants_task_async(
         ]
 
     sem = asyncio.Semaphore(3)  # <- your max parallelism
+
     async def harmonize_single_variant(
         variant_id: int, variant_input: dict
     ) -> tuple[int, ReasoningBlock[HarmonizedVariant]]:
