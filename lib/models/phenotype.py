@@ -57,7 +57,7 @@ class HpoLinkingEntry(BaseModel):
     hpo: ReasoningBlock[HPOTerm | None]
 
 
-class ExtractedPhenotypeDB(Base):
+class PhenotypeDB(Base):
     __tablename__ = 'extracted_phenotypes'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -122,9 +122,7 @@ class HpoDB(Base):
         onupdate=func.now(),
     )
 
-    phenotype: Mapped['ExtractedPhenotypeDB'] = relationship(
-        'ExtractedPhenotypeDB', back_populates='hpo'
-    )
+    phenotype: Mapped['PhenotypeDB'] = relationship('PhenotypeDB', back_populates='hpo')
 
     __table_args__ = (
         UniqueConstraint(
@@ -134,7 +132,7 @@ class HpoDB(Base):
     )
 
 
-class ExtractedPhenotypeResp(BaseModel):
+class PhenotypeResp(BaseModel):
     id: int
     paper_id: int
     patient_id: int
@@ -153,7 +151,7 @@ class ExtractedPhenotypeResp(BaseModel):
     hpo: ReasoningBlock[HPOTerm | None]
 
 
-class ExtractedPhenotypeUpdateRequest(PatchModel):
+class PhenotypeUpdateRequest(PatchModel):
     negated: bool | None = None
     uncertain: bool | None = None
     family_history: bool | None = None

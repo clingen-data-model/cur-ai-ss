@@ -52,7 +52,7 @@ from lib.models.converters import (
     variant_to_db,
 )
 from lib.models.evidence_block import ReasoningBlock
-from lib.models.phenotype import ExtractedPhenotypeDB, HpoCandidate, HpoDB
+from lib.models.phenotype import HpoCandidate, HpoDB, PhenotypeDB
 from lib.models.variant import HarmonizedVariant, Variant
 from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
 
@@ -345,13 +345,11 @@ async def patient_phenotype_linking_task_async(
 
     # Persist extracted phenotypes to DB (idempotent: delete-then-insert)
     with session_scope() as session:
-        delete_query = session.query(ExtractedPhenotypeDB).filter(
-            ExtractedPhenotypeDB.paper_id == paper_db.id
+        delete_query = session.query(PhenotypeDB).filter(
+            PhenotypeDB.paper_id == paper_db.id
         )
         if patient_id is not None:
-            delete_query = delete_query.filter(
-                ExtractedPhenotypeDB.patient_id == patient_id
-            )
+            delete_query = delete_query.filter(PhenotypeDB.patient_id == patient_id)
         delete_query.delete()
 
         for pid, phenotypes in results:
@@ -421,16 +419,12 @@ async def hpo_linking_task_async(
     paper_db: PaperDB, phenotype_id: int | None = None
 ) -> None:
     with session_scope() as session:
-        query = session.query(ExtractedPhenotypeDB).filter(
-            ExtractedPhenotypeDB.paper_id == paper_db.id
-        )
+        query = session.query(PhenotypeDB).filter(PhenotypeDB.paper_id == paper_db.id)
 
         if phenotype_id is not None:
-            query = query.filter(ExtractedPhenotypeDB.id == phenotype_id)
+            query = query.filter(PhenotypeDB.id == phenotype_id)
 
-        phenotype_rows = query.order_by(
-            ExtractedPhenotypeDB.patient_id, ExtractedPhenotypeDB.id
-        ).all()
+        phenotype_rows = query.order_by(PhenotypeDB.patient_id, PhenotypeDB.id).all()
 
         # Extract all data while session is active
         phenotype_id_set = {row.id for row in phenotype_rows}
