@@ -585,6 +585,7 @@ You may not call clinvar_lookup more than once per variant.
 You may not call dbsnp_lookup more than once per variant.
 You should not need to call select_canonical_transcript for the gene more than once per genome build.
 You should not need to call genomic_accession_for_gene_and_transcript more than once per gene and transcript.
+The pipeline MUST terminate after a single call to allele_registry_resolver.
 
 Goal:
 Normalize each of the provided variants to a GRCh38 gnomAD-style identifier and resolve via
@@ -599,7 +600,7 @@ You must return exactly one output object for each input variant.
 
 If VariantValidator successfully produces a gnomAD-style ID at any stage:
     - This defines the canonical genomic representation.
-    - The pipeline MUST terminate after a single call to allele_registry_resolver.
+    - Proceed directly to the allele_registry_resolver.
     - No further discovery steps (including ClinVar or dbSNP lookup) are allowed.
 
 ============================================================
