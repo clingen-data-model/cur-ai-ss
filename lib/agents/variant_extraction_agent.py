@@ -149,12 +149,29 @@ For the "functional_evidence" field:
 MAIN VARIANT FOCUS
 ------------------------------
 For the "main_focus" field:
-- value → boolean indicating whether this variant is one of the principal variants discussed in the paper.
-  - TRUE: Variant is central to the study, mentioned in abstract, main results, or key figures/tables.
-  - FALSE: Variant is only mentioned in passing, background, or as being dicussed previously or in other studies.
-- quote → verbatim text indicating its role or focus in the study.
-- table_id/image_id → optional if the focus is illustrated in tables or figures.
-- reasoning → explanation of why this variant is considered primary or secondary (e.g., location in paper, emphasis, frequency of mention, experimental analysis).
+- value → boolean indicating whether this variant is one of the principal variants the paper is focused on.
+
+TRUE indicators (any of these):
+- Variant is described as novel or newly identified
+- Variant is discussed in the abstract, results, or conclusions
+- Variant is experimentally characterized or analyzed
+- Variant appears in key figures or primary results tables
+
+FALSE indicators (any of these):
+- Variant is labeled as "previously reported"
+- Variant appears only for comparison or background context
+- Variant is listed in tables summarizing known variants from literature
+- Variant is mentioned only in introduction or discussion of prior studies
+
+Rules:
+- Use author-provided labels like "novel" or "previously reported" as strong evidence.
+- Do NOT infer focus from how important the variant seems biologically.
+- Determine focus strictly from how the paper treats the variant.
+
+Evidence:
+- quote → text or table cell demonstrating how the paper treats the variant
+- table_id/image_id → if evidence comes from table/figure
+- reasoning → explain why the variant is considered primary or secondary
 
 ------------------------------
 OUTPUT FORMAT
