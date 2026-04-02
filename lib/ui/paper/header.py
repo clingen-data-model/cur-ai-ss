@@ -52,7 +52,6 @@ class PaperQueryParams(BaseModel):
             )
 
 
-@st.fragment
 def render_rerun_evagg_fragment(paper_query_params: PaperQueryParams) -> None:
     rerun_mode = st.radio(
         'What would you like to rerun?',
