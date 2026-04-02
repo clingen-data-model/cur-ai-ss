@@ -412,40 +412,36 @@ async def hpo_linking_task_async(paper_db: PaperDB) -> None:
             .all()
         )
         # Extract all data while session is active
-        phenotype_data = [
-            {
-                'id': row.id,
-                'concept': row.concept,
-                'negated': row.negated,
-                'uncertain': row.uncertain,
-                'family_history': row.family_history,
-            }
-            for row in phenotype_rows
-        ]
+        phenotype_id_set = {row.id for row in phenotype_rows}
 
-    term_lookup = build_term_lookup()
+        term_lookup = build_term_lookup()
 
-    phenotype_inputs = []
-    phenotype_id_set = {pd['id'] for pd in phenotype_data}
-    for row_data in phenotype_data:
-        candidates: list[HpoCandidate] = find_matching_hpo_terms(
-            str(row_data['concept']), term_lookup=term_lookup
+        phenotype_inputs = []
+        for row in phenotype_rows:
+            candidates: list[HpoCandidate] = find_matching_hpo_terms(
+                str(row.concept), term_lookup=term_lookup
+            )
+            phenotype_inputs.append(
+                {
+                    'phenotype_id': row.id,
+                    'concept': row.concept,
+                    'negated': row.negated,
+                    'uncertain': row.uncertain,
+                    'family_history': row.family_history,
+                    'candidates': [c.model_dump() for c in candidates],
+                }
+            )
+
+    async def link_phenotype_to_hpo(phenotype_data: dict) -> list:
+        result = await Runner.run(
+            hpo_linking_agent,
+            f'Phenotypes JSON:\n{json.dumps([phenotype_data], indent=2)}',
+            max_turns=5,
         )
-        phenotype_inputs.append(
-            {
-                'phenotype_id': row_data['id'],
-                'concept': row_data['concept'],
-                'negated': row_data['negated'],
-                'uncertain': row_data['uncertain'],
-                'family_history': row_data['family_history'],
-                'candidates': [c.model_dump() for c in candidates],
-            }
-        )
+        return result.final_output.links
 
-    result = await Runner.run(
-        hpo_linking_agent,
-        f'Phenotypes JSON:\n{json.dumps(phenotype_inputs, indent=2)}',
-        max_turns=5 * len(phenotype_inputs),
+    results = await asyncio.gather(
+        *[link_phenotype_to_hpo(phenotype_data) for phenotype_data in phenotype_inputs]
     )
 
     # Persist HPO links to DB (idempotent: delete-then-insert)
@@ -454,9 +450,10 @@ async def hpo_linking_task_async(paper_db: PaperDB) -> None:
         for phenotype_id in phenotype_id_set:
             session.query(HpoDB).filter(HpoDB.phenotype_id == phenotype_id).delete()
 
-        for link in result.final_output.links:
-            if link.phenotype_id in phenotype_id_set:
-                session.add(hpo_to_db(link.phenotype_id, link.hpo))
+        for links in results:
+            for link in links:
+                if link.phenotype_id in phenotype_id_set:
+                    session.add(hpo_to_db(link.phenotype_id, link.hpo))
 
 
 def initial_extraction(paper_id: int, gene_symbol: str) -> None:
