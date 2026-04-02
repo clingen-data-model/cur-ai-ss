@@ -172,6 +172,7 @@ with center:
             with st.popover(
                 '🔄 Rerun Agents',
                 type='tertiary',
+                on_change='rerun',
                 disabled=(
                     paper_resp.pipeline_status
                     in {
