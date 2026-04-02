@@ -78,7 +78,7 @@ def render_rerun_evagg_fragment(paper_query_params: PaperQueryParams) -> None:
                 ),
             )
             st.toast('EvAGG Job Queued', icon=':material/thumb_up:')
-            st.session_state[RERUN_POPOVER_STATE_KEY] = False
+            st.session_state.RERUN_POPOVER_STATE_KEY = False
         except Exception as e:
             st.toast(f'Failed to requeue: {str(e)}', icon='❌')
 
