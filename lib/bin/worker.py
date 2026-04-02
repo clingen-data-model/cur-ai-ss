@@ -450,20 +450,23 @@ async def hpo_linking_task_async(
                 }
             )
 
+    sem = asyncio.Semaphore(2)
+
     async def link_phenotype_to_hpo(phenotype_data: dict) -> list:
-        result = await Runner.run(
-            hpo_linking_agent,
-            f'Phenotype JSON:\n{json.dumps(phenotype_data, indent=2)}',
-            max_turns=20,
-            run_config=RunConfig(
-                trace_metadata={
-                    'paper_id': paper_db.id,
-                    'phenotype_id': phenotype_data['phenotype_id'],
-                    'concept': phenotype_data['concept'],
-                },
-            ),
-        )
-        return result.final_output
+        async with sem:
+            result = await Runner.run(
+                hpo_linking_agent,
+                f'Phenotype JSON:\n{json.dumps(phenotype_data, indent=2)}',
+                max_turns=20,
+                run_config=RunConfig(
+                    trace_metadata={
+                        'paper_id': paper_db.id,
+                        'phenotype_id': phenotype_data['phenotype_id'],
+                        'concept': phenotype_data['concept'],
+                    },
+                ),
+            )
+            return result.final_output
 
     results = await asyncio.gather(
         *[link_phenotype_to_hpo(phenotype_data) for phenotype_data in phenotype_inputs]
