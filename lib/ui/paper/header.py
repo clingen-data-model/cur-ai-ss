@@ -22,6 +22,7 @@ from lib.ui.paper.variants import render_variants_tab
 
 RERUN_POPOVER_STATE_KEY = 'RERUN_POPOVER_STATE_KEY'
 
+
 class PaperQueryParams(BaseModel):
     paper_id: int
     patient_id: Optional[int] = None
@@ -50,6 +51,7 @@ class PaperQueryParams(BaseModel):
                 patient_id=None,
                 variant_id=None,
             )
+
 
 @st.fragment
 def render_rerun_evagg_fragment(paper_query_params: PaperQueryParams) -> None:
