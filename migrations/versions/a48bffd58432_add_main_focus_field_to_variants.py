@@ -5,11 +5,11 @@ Revises: c6f7ab602a6f
 Create Date: 2026-04-02 15:33:15.979960
 
 """
+
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = 'a48bffd58432'
@@ -27,7 +27,7 @@ def upgrade() -> None:
                 'main_focus',
                 sa.Boolean(),
                 nullable=False,
-                server_default=sa.text('0')  # False
+                server_default=sa.text('0'),  # False
             )
         )
         batch_op.add_column(
@@ -35,7 +35,7 @@ def upgrade() -> None:
                 'main_focus_evidence',
                 sa.JSON(),
                 nullable=False,
-                server_default=sa.text("'{}'")  # empty JSON object
+                server_default=sa.text("'{}'"),  # empty JSON object
             )
         )
 
