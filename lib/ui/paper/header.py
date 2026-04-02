@@ -80,8 +80,8 @@ def render_rerun_evagg_fragment(paper_query_params: PaperQueryParams) -> None:
                 ),
             )
             st.toast('EvAGG Job Queued', icon=':material/thumb_up:')
-            st.session_state.pop(RERUN_POPOVER_STATE_KEY, None)
-            st.rerun()
+            time.sleep(0.5)
+            st.session_state[RERUN_POPOVER_STATE_KEY] = False
         except Exception as e:
             st.toast(f'Failed to requeue: {str(e)}', icon='❌')
 
@@ -181,10 +181,9 @@ with center:
                         PipelineStatus.LINKING_RUNNING,
                     }
                 ),
+                key=RERUN_POPOVER_STATE_KEY,
             ):
-                st.session_state[RERUN_POPOVER_STATE_KEY] = True
-                if st.session_state.get(RERUN_POPOVER_STATE_KEY):
-                    render_rerun_evagg_fragment(paper_query_params)
+                render_rerun_evagg_fragment(paper_query_params)
             if st.button('🗑️ Delete Paper', type='tertiary', width='content'):
                 try:
                     delete_paper(paper_query_params.paper_id)
