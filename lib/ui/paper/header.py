@@ -20,6 +20,8 @@ from lib.ui.paper.shared import CURRENT_ANNOTATIONS_KEY, HEADER_TABS, HEADER_TAB
 from lib.ui.paper.variants import render_variants_tab
 
 
+RERUN_POPOVER_STATE_KEY = 'RERUN_POPOVER_STATE_KEY'
+
 class PaperQueryParams(BaseModel):
     paper_id: int
     patient_id: Optional[int] = None
@@ -49,7 +51,6 @@ class PaperQueryParams(BaseModel):
                 variant_id=None,
             )
 
-
 @st.fragment
 def render_rerun_evagg_fragment(paper_query_params: PaperQueryParams) -> None:
     rerun_mode = st.radio(
@@ -78,6 +79,7 @@ def render_rerun_evagg_fragment(paper_query_params: PaperQueryParams) -> None:
                 ),
             )
             st.toast('EvAGG Job Queued', icon=':material/thumb_up:')
+            st.session_state.pop(RERUN_POPOVER_STATE_KEY, None)
             st.rerun()
         except Exception as e:
             st.toast(f'Failed to requeue: {str(e)}', icon='❌')
@@ -167,7 +169,7 @@ with center:
                 icon=paper_resp.pipeline_status.icon,
                 color=paper_resp.pipeline_status.color,
             )
-            with st.popover(
+            if st.button(
                 '🔄 Rerun Agents',
                 type='tertiary',
                 disabled=(
@@ -179,7 +181,13 @@ with center:
                     }
                 ),
             ):
-                render_rerun_evagg_fragment(paper_query_params)
+                st.session_state[RERUN_POPOVER_STATE_KEY] = True
+            if st.session_state.get(RERUN_POPOVER_STATE_KEY):
+                with st.popover(
+                    '🔄 Rerun Agents',
+                    type='tertiary',
+                ):
+                    render_rerun_evagg_fragment(paper_query_params)
             if st.button('🗑️ Delete Paper', type='tertiary', width='content'):
                 try:
                     delete_paper(paper_query_params.paper_id)
