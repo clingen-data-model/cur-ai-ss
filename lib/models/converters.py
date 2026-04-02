@@ -5,9 +5,9 @@ from lib.models.patient import Patient
 from lib.models.patient_variant_link import PatientVariantLink, PatientVariantLinkDB
 from lib.models.phenotype import (
     ExtractedPhenotype,
-    ExtractedPhenotypeDB,
     HpoDB,
     HPOTerm,
+    PhenotypeDB,
 )
 from lib.models.variant import (
     HarmonizedVariant,
@@ -40,11 +40,9 @@ def pedigree_to_db(paper_id: int, pedigree: PedigreeExtractionOutput) -> Pedigre
     )
 
 
-def phenotype_to_db(
-    paper_id: int, phenotype: ExtractedPhenotype
-) -> ExtractedPhenotypeDB:
-    """Convert ExtractedPhenotype to ExtractedPhenotypeDB, extracting values and evidence from EvidenceBlock."""
-    return ExtractedPhenotypeDB(
+def phenotype_to_db(paper_id: int, phenotype: ExtractedPhenotype) -> PhenotypeDB:
+    """Convert ExtractedPhenotype to PhenotypeDB, extracting values and evidence from EvidenceBlock."""
+    return PhenotypeDB(
         paper_id=paper_id,
         patient_id=phenotype.patient_id,
         concept=phenotype.concept.value,
