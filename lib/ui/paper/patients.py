@@ -8,10 +8,10 @@ import streamlit as st
 from lib.core.environment import env
 from lib.misc.pdf.paths import pdf_image_path
 from lib.models import (
-    ExtractedPhenotypeResp,
     PaperResp,
     PatientResp,
     PatientUpdateRequest,
+    PhenotypeResp,
     PipelineStatus,
 )
 from lib.models.patient import (
@@ -38,7 +38,7 @@ PATIENTS_KEY = 'patients'
 
 
 def _render_patient_phenotypes(
-    phenotypes: list[ExtractedPhenotypeResp],
+    phenotypes: list[PhenotypeResp],
     paper_resp: PaperResp,
     key_prefix: str,
 ) -> None:
@@ -73,7 +73,7 @@ def _render_patient_phenotypes(
 
 
 def _render_phenotypes_table(
-    phenotypes: list[ExtractedPhenotypeResp],
+    phenotypes: list[PhenotypeResp],
     paper_resp: PaperResp,
     key_prefix: str,
     show_hpo: bool,

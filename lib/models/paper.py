@@ -13,7 +13,7 @@ from pydantic import (
 if TYPE_CHECKING:
     from lib.models.patient import PatientDB
     from lib.models.patient_variant_link import PatientVariantLinkDB
-    from lib.models.phenotype import ExtractedPhenotypeDB
+    from lib.models.phenotype import PhenotypeDB
     from lib.models.variant import VariantDB
 
 from typing import Literal, TypeAlias

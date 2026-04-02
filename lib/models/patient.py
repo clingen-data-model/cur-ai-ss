@@ -20,7 +20,7 @@ from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock
 from lib.models.paper import PaperDB
 
 if TYPE_CHECKING:
-    from lib.models.phenotype import ExtractedPhenotypeDB
+    from lib.models.phenotype import PhenotypeDB
 
 
 class ProbandStatus(str, Enum):
@@ -374,8 +374,8 @@ class PatientDB(Base):
     )
 
     paper: Mapped[PaperDB] = relationship('PaperDB', back_populates='patients')
-    extracted_phenotypes: Mapped[list['ExtractedPhenotypeDB']] = relationship(
-        'ExtractedPhenotypeDB', back_populates='patient', cascade='all, delete-orphan'
+    extracted_phenotypes: Mapped[list['PhenotypeDB']] = relationship(
+        'PhenotypeDB', back_populates='patient', cascade='all, delete-orphan'
     )
 
     __table_args__ = (Index('ix_patients_paper_id', 'paper_id'),)

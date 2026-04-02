@@ -53,9 +53,6 @@ from lib.models import (
     EnrichedVariantDB,
     EnrichedVariantResp,
     ExtractedPhenotype,
-    ExtractedPhenotypeDB,
-    ExtractedPhenotypeResp,
-    ExtractedPhenotypeUpdateRequest,
     GeneDB,
     GeneResp,
     HarmonizedVariantDB,
@@ -74,6 +71,9 @@ from lib.models import (
     PatientVariantLinkResp,
     PedigreeDB,
     PedigreeResp,
+    PhenotypeDB,
+    PhenotypeResp,
+    PhenotypeUpdateRequest,
     PipelineStatus,
     VariantDB,
     VariantResp,
@@ -432,7 +432,7 @@ def _variant_to_resp(row: VariantDB) -> VariantResp:
     )
 
 
-def _phenotype_to_resp(row: ExtractedPhenotypeDB) -> ExtractedPhenotypeResp:
+def _phenotype_to_resp(row: PhenotypeDB) -> PhenotypeResp:
     if row.hpo:
         hpo_value = (
             HPOTerm(id=row.hpo.hpo_id, name=row.hpo.hpo_name)
@@ -448,7 +448,7 @@ def _phenotype_to_resp(row: ExtractedPhenotypeDB) -> ExtractedPhenotypeResp:
             value=None,
             reasoning='HPO linking not yet performed',
         )
-    return ExtractedPhenotypeResp(
+    return PhenotypeResp(
         id=row.id,
         paper_id=row.paper_id,
         patient_id=row.patient_id,
@@ -519,7 +519,7 @@ def _patient_variant_link_to_resp(
 
 @app.get(
     '/papers/{paper_id}/patients/{patient_id}/phenotypes',
-    response_model=list[ExtractedPhenotypeResp],
+    response_model=list[PhenotypeResp],
 )
 def get_phenotypes(
     paper_id: int, patient_id: int, session: Session = Depends(get_session)
@@ -537,12 +537,12 @@ def get_phenotypes(
             status_code=status.HTTP_404_NOT_FOUND, detail='Patient not found'
         )
     phenotypes = (
-        session.query(ExtractedPhenotypeDB)
-        .options(joinedload(ExtractedPhenotypeDB.hpo))
+        session.query(PhenotypeDB)
+        .options(joinedload(PhenotypeDB.hpo))
         .filter(
-            ExtractedPhenotypeDB.patient_id == patient_id,
+            PhenotypeDB.patient_id == patient_id,
         )
-        .order_by(ExtractedPhenotypeDB.id)
+        .order_by(PhenotypeDB.id)
         .all()
     )
     return [_phenotype_to_resp(p) for p in phenotypes]
@@ -550,7 +550,7 @@ def get_phenotypes(
 
 @app.post(
     '/papers/{paper_id}/patients/{patient_id}/phenotypes',
-    response_model=ExtractedPhenotypeResp,
+    response_model=PhenotypeResp,
 )
 def create_phenotype(
     paper_id: int,
@@ -571,7 +571,7 @@ def create_phenotype(
             status_code=status.HTTP_404_NOT_FOUND, detail='Patient not found'
         )
 
-    phenotype_db = ExtractedPhenotypeDB(
+    phenotype_db = PhenotypeDB(
         paper_id=paper_id,
         patient_id=patient_id,
         concept=phenotype_data.concept.value,
@@ -592,19 +592,17 @@ def create_phenotype(
 
 @app.patch(
     '/papers/{paper_id}/patients/{patient_id}/phenotypes/{phenotype_id}',
-    response_model=ExtractedPhenotypeResp,
+    response_model=PhenotypeResp,
 )
 def update_phenotype(
     paper_id: int,
     patient_id: int,
     phenotype_id: int,
-    patch_request: ExtractedPhenotypeUpdateRequest,
+    patch_request: PhenotypeUpdateRequest,
     session: Session = Depends(get_session),
 ) -> Any:
     phenotype_db = (
-        session.query(ExtractedPhenotypeDB)
-        .filter(ExtractedPhenotypeDB.id == phenotype_id)
-        .one_or_none()
+        session.query(PhenotypeDB).filter(PhenotypeDB.id == phenotype_id).one_or_none()
     )
     if not phenotype_db:
         raise HTTPException(

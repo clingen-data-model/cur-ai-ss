@@ -35,13 +35,13 @@ from lib.models.patient_variant_link import (
 )
 from lib.models.phenotype import (
     ExtractedPhenotype,
-    ExtractedPhenotypeDB,
-    ExtractedPhenotypeResp,
-    ExtractedPhenotypeUpdateRequest,
     HpoCandidate,
     HpoDB,
     HpoLinkingEntry,
     HPOTerm,
+    PhenotypeDB,
+    PhenotypeResp,
+    PhenotypeUpdateRequest,
 )
 from lib.models.variant import (
     EnrichedVariant,
