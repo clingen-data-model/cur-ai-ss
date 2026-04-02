@@ -191,6 +191,15 @@ async def harmonize_variants_task_async(
     )
 
     with session_scope() as session:
+        # Delete existing harmonized variants for this paper (idempotent: delete-then-insert)
+        delete_query = session.query(HarmonizedVariantDB).filter(
+            HarmonizedVariantDB.variant_id.in_(
+                select(VariantDB.id).where(VariantDB.paper_id == paper_db.id)
+            )
+        )
+        if variant_id is not None:
+            delete_query = delete_query.filter(HarmonizedVariantDB.variant_id == variant_id)
+        delete_query.delete()
         for variant_id, harmonized_output in results:
             session.add(harmonized_variant_to_db(variant_id, harmonized_output))
 
@@ -403,14 +412,21 @@ async def enrich_variants_task_async(paper_db: PaperDB) -> None:
             )
 
 
-async def hpo_linking_task_async(paper_db: PaperDB) -> None:
+async def hpo_linking_task_async(
+    paper_db: PaperDB, phenotype_id: int | None = None
+) -> None:
     with session_scope() as session:
-        phenotype_rows = (
-            session.query(ExtractedPhenotypeDB)
-            .filter(ExtractedPhenotypeDB.paper_id == paper_db.id)
-            .order_by(ExtractedPhenotypeDB.patient_id, ExtractedPhenotypeDB.id)
-            .all()
+        query = session.query(ExtractedPhenotypeDB).filter(
+            ExtractedPhenotypeDB.paper_id == paper_db.id
         )
+
+        if phenotype_id is not None:
+            query = query.filter(ExtractedPhenotypeDB.id == phenotype_id)
+
+        phenotype_rows = query.order_by(
+            ExtractedPhenotypeDB.patient_id, ExtractedPhenotypeDB.id
+        ).all()
+
         # Extract all data while session is active
         phenotype_id_set = {row.id for row in phenotype_rows}
 
@@ -436,7 +452,7 @@ async def hpo_linking_task_async(paper_db: PaperDB) -> None:
         result = await Runner.run(
             hpo_linking_agent,
             f'Phenotype JSON:\n{json.dumps(phenotype_data, indent=2)}',
-            max_turns=5,
+            max_turns=15,
         )
         return result.final_output
 
@@ -447,8 +463,10 @@ async def hpo_linking_task_async(paper_db: PaperDB) -> None:
     # Persist HPO links to DB (idempotent: delete-then-insert)
     with session_scope() as session:
         # Delete HPO links for phenotypes in this paper
-        for phenotype_id in phenotype_id_set:
-            session.query(HpoDB).filter(HpoDB.phenotype_id == phenotype_id).delete()
+        delete_query = session.query(HpoDB).filter(
+            HpoDB.phenotype_id.in_(phenotype_id_set)
+        )
+        delete_query.delete()
 
         for links in results:
             for link in links:
