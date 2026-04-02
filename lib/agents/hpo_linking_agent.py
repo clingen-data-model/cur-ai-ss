@@ -128,9 +128,9 @@ You will receive a JSON object for a single phenotype with:
 
 OUTPUT FORMAT
 
-Return a `links` array with a single entry (the link for the provided phenotype):
+Return a list containing a SINGLE HpoLinkingEntry object for the provided phenotype.
 
-Each entry must have:
+The entry must have:
     - phenotype_id (int): copied from the input phenotype
     - hpo (object): always required, with fields:
         - value (object or null): the matched HPO term, with:
@@ -139,31 +139,45 @@ Each entry must have:
           Set to null if no match found or phenotype is excluded (see STEP 0).
         - reasoning (str): always required — explain your decision or exclusion
 
+Example:
+[
+  {
+    "phenotype_id": 42,
+    "hpo": {
+      "value": {
+        "id": "HP:0001250",
+        "name": "Seizure"
+      },
+      "reasoning": "..."
+    }
+  }
+]
+
 ---------------------------------------------------------------------
 STEP 0 — Exclusion criteria (MANDATORY)
 
 Before any interpretation or HPO mapping:
 
-If the phenotype has:
+If the single phenotype has:
 - negated = true
 - family_history = true
 
 Then:
 - DO NOT map to any HPO term
 - DO NOT call any tools
-- Return:
+- Return the entry with:
     - hpo.value: null
     - hpo.reasoning: brief explanation (e.g., "negated phenotype", "family history only")
 
-These entries represent absence or non-proband information
+These represent absence or non-proband information
 and must not be encoded as HPO terms.
 
 -----------------------------------------------------------------------
 
 HPO TERM SELECTION FRAMEWORK
 
-For each phenotype, follow this structured decision process before
-selecting an HPO term.
+For the single provided phenotype, follow this structured decision process
+to select an appropriate HPO term.
 
 STEP 1 — Interpret the phenotype
 
@@ -186,7 +200,7 @@ Distinguish between:
 - true negation (e.g., "no seizures", "absence of fever") → EXCLUDE (STEP 0)
 - abnormality phrasing (e.g., "not normal gait", "abnormal ear shape") → VALID phenotype
 
-Only explicit absence or negation should trigger exclusion.
+Only explicit absence or negation of the phenotype should trigger exclusion.
 
 ---------------------------------------------------------------------
 
@@ -305,10 +319,10 @@ Never return null without tool exploration.
 
 WHEN NO HPO MATCH EXISTS
 
-It is acceptable that a phenotype has no appropriate HPO match, but only AFTER
-exhausting tool-based exploration.
+It is acceptable that the provided phenotype has no appropriate HPO match,
+but only AFTER exhausting tool-based exploration.
 
-If none of the candidate terms represent the phenotype meaning:
+If the candidate terms do not represent the phenotype meaning:
 1. Use search_hpo_terms() with different phrasings, clinical synonyms, or morphological variants of the words in the phenotype.
 2. Break multi-word phenotypes into core concepts and search those individually.
 3. Use get_hpo_term() to inspect promising results
@@ -316,32 +330,32 @@ If none of the candidate terms represent the phenotype meaning:
 
 Only return null after tool exploration reveals no suitable match.
 
-Return null when:
+Return null with hpo.value when:
 - the phenotype is too vague (e.g., "symptom", "finding")
 - the phenotype is genuinely not represented in HPO
 - search attempts with multiple phrasings yield no meaningful matches
 - selecting any term would require significant guessing
 
-It is better to return null than to select an incorrect HPO term, but
-actively use tools before giving up.
+It is better to return null than to select an incorrect HPO term,
+but actively use tools before giving up.
 
 ---------------------------------------------------------------------
 
 HPO REASONING REQUIREMENTS (STEP-BY-STEP JUSTIFICATION)
 
-The `hpo.reasoning` field MUST summarize the reasoning process
-using the HPO TERM SELECTION FRAMEWORK.
+The `hpo.reasoning` field MUST summarize your reasoning process
+for the single phenotype using the HPO TERM SELECTION FRAMEWORK.
 
 The explanation should document the resolution process in a concise
 step-by-step format.
 
 Include:
 
-1. Phenotype interpretation
-2. Candidate evaluation
-3. Tool usage
-4. Hierarchy reasoning
-5. Final selection
+1. How you interpreted the phenotype
+2. Which candidates you evaluated and why
+3. Tool usage (searches, hierarchy exploration, etc.)
+4. Why you selected (or rejected) specific terms
+5. Final selection or null reasoning
 
 Do not omit tool calls if they were used.
 
