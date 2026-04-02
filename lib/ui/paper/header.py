@@ -1,5 +1,4 @@
 import json
-import time
 from typing import Optional
 
 import requests
@@ -64,8 +63,8 @@ def render_rerun_evagg_fragment(paper_query_params: PaperQueryParams) -> None:
         'Optional override instructions for the backend agent:',
         placeholder='Give context to the agent about the mistake.',
     )
-    confirm = st.button('Confirm Rerun', type='secondary')
-    if confirm:
+
+    def on_confirm() -> None:
         try:
             st.session_state['paper_resp'] = update_paper(
                 paper_id=paper_query_params.paper_id,
@@ -79,11 +78,11 @@ def render_rerun_evagg_fragment(paper_query_params: PaperQueryParams) -> None:
                 ),
             )
             st.toast('EvAGG Job Queued', icon=':material/thumb_up:')
-            time.sleep(0.5)
             st.session_state[RERUN_POPOVER_STATE_KEY] = False
-            st.rerun()
         except Exception as e:
             st.toast(f'Failed to requeue: {str(e)}', icon='❌')
+
+    st.button('Confirm Rerun', type='secondary', on_click=on_confirm)
 
 
 st.set_page_config(layout='wide')
