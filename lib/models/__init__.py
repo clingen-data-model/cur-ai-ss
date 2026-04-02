@@ -36,7 +36,6 @@ from lib.models.patient_variant_link import (
 from lib.models.phenotype import (
     ExtractedPhenotype,
     ExtractedPhenotypeDB,
-    ExtractedPhenotypeOutput,
     ExtractedPhenotypeResp,
     ExtractedPhenotypeUpdateRequest,
     HpoCandidate,

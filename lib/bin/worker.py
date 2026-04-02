@@ -150,14 +150,16 @@ async def parse_patients_task_async(paper_db: PaperDB) -> None:
             session.add(patient_to_db(paper_db.id, patient_info))
 
 
-async def harmonize_variants_task_async(paper_db: PaperDB, gene_symbol: str) -> None:
+async def harmonize_variants_task_async(
+    paper_db: PaperDB, gene_symbol: str, variant_id: int | None = None
+) -> None:
     with session_scope() as session:
-        rows = (
-            session.query(VariantDB)
-            .filter(VariantDB.paper_id == paper_db.id)
-            .order_by(VariantDB.id)
-            .all()
-        )
+        query = session.query(VariantDB).filter(VariantDB.paper_id == paper_db.id)
+
+        if variant_id is not None:
+            query = query.filter(VariantDB.id == variant_id)
+
+        rows = query.order_by(VariantDB.id).all()
 
         # Extract everything we will ever need while session is alive
         variant_payloads = [
@@ -287,34 +289,60 @@ async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
             session.add(patient_variant_link_to_db(paper_db.id, link))
 
 
-async def patient_phenotype_linking_task_async(paper_db: PaperDB) -> None:
+async def patient_phenotype_linking_task_async(
+    paper_db: PaperDB, patient_id: int | None = None
+) -> None:
     with session_scope() as session:
-        patient_rows = (
-            session.query(PatientDB)
-            .filter(PatientDB.paper_id == paper_db.id)
-            .order_by(PatientDB.id)
-            .all()
-        )
-        structured_patients = [
-            {
-                'patient_id': p.id,
-                'identifier': p.identifier,
-                'identifier_quote': p.identifier_evidence['quote'],
-            }
+        query = session.query(PatientDB).filter(PatientDB.paper_id == paper_db.id)
+
+        if patient_id is not None:
+            query = query.filter(PatientDB.id == patient_id)
+
+        patient_rows = query.order_by(PatientDB.id).all()
+
+        # Extract all data while session is active
+        patient_payloads = [
+            (
+                p.id,
+                {
+                    'patient_id': p.id,
+                    'identifier': p.identifier,
+                    'identifier_quote': p.identifier_evidence['quote'],
+                },
+            )
             for p in patient_rows
         ]
-    result = await Runner.run(
-        patient_phenotype_linking_agent,
-        f'Paper (fulltext md): {fulltext_md(paper_db.id)}\n\nStructured Patients JSON:\n{structured_patients}',
+
+    async def extract_phenotypes_for_patient(
+        pid: int, patient_data: dict
+    ) -> tuple[int, list]:
+        result = await Runner.run(
+            patient_phenotype_linking_agent,
+            f'Paper (fulltext md): {fulltext_md(paper_db.id)}\n\nStructured Patient JSON:\n{[patient_data]}',
+        )
+        return pid, result.final_output
+
+    results = await asyncio.gather(
+        *[
+            extract_phenotypes_for_patient(pid, patient_data)
+            for pid, patient_data in patient_payloads
+        ]
     )
 
     # Persist extracted phenotypes to DB (idempotent: delete-then-insert)
     with session_scope() as session:
-        session.query(ExtractedPhenotypeDB).filter(
+        delete_query = session.query(ExtractedPhenotypeDB).filter(
             ExtractedPhenotypeDB.paper_id == paper_db.id
-        ).delete()
-        for phenotype in result.final_output.extracted_phenotypes:
-            session.add(phenotype_to_db(paper_db.id, phenotype))
+        )
+        if patient_id is not None:
+            delete_query = delete_query.filter(
+                ExtractedPhenotypeDB.patient_id == patient_id
+            )
+        delete_query.delete()
+
+        for pid, phenotypes in results:
+            for phenotype in phenotypes:
+                session.add(phenotype_to_db(paper_db.id, phenotype))
 
 
 async def enrich_variants_task_async(paper_db: PaperDB) -> None:

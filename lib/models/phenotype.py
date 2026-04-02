@@ -35,10 +35,6 @@ class ExtractedPhenotype(BaseModel):
     modifier: str | None
 
 
-class ExtractedPhenotypeOutput(BaseModel):
-    extracted_phenotypes: List[ExtractedPhenotype]
-
-
 class HpoCandidate(BaseModel):
     """HPO candidate suggestion from fuzzy matching."""
 
