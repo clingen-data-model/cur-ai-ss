@@ -57,12 +57,6 @@ class HpoLinkingEntry(BaseModel):
     hpo: ReasoningBlock[HPOTerm | None]
 
 
-class HpoLinkingOutput(BaseModel):
-    """Output from the HPO linking agent."""
-
-    links: List[HpoLinkingEntry]
-
-
 class ExtractedPhenotypeDB(Base):
     __tablename__ = 'extracted_phenotypes'
 

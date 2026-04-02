@@ -41,7 +41,6 @@ from lib.models.phenotype import (
     HpoCandidate,
     HpoDB,
     HpoLinkingEntry,
-    HpoLinkingOutput,
     HPOTerm,
 )
 from lib.models.variant import (

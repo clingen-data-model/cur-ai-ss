@@ -2,7 +2,7 @@ import hpotk
 from agents import Agent, function_tool
 
 from lib.core.environment import env
-from lib.models.phenotype import HpoLinkingOutput
+from lib.models.phenotype import HpoLinkingEntry
 from lib.reference_data.hpo import find_matching_hpo_terms, get_ontology
 
 
@@ -100,9 +100,8 @@ Candidate terms were generated using fuzzy text matching. The similarity
 scores are only used to ensure relevant candidates appear in the list.
 They should NOT be treated as authoritative rankings.
 
-Your task is to select the HPO term that best represents the meaning of each
-phenotype description and return a links list mapping each phenotype to its
-HPO term.
+Your task is to select the HPO term that best represents the meaning of the
+single phenotype provided and return a links list with the HPO term mapping.
 
 Prioritize:
 - semantic meaning of the phenotype text
@@ -116,7 +115,7 @@ Use similarity scores only as a weak signal.
 
 INPUT FORMAT
 
-You will receive a JSON array of phenotype entries, each containing:
+You will receive a JSON object for a single phenotype with:
     - phenotype_id (int): identifier to include in your output
     - concept (str): phenotype description from the paper
     - negated, uncertain, family_history (boolean)
@@ -129,9 +128,10 @@ You will receive a JSON array of phenotype entries, each containing:
 
 OUTPUT FORMAT
 
-Return a `links` array. Each entry must have:
+Return a `links` array with a single entry (the link for the provided phenotype):
 
-    - phenotype_id (int): copied from the input entry
+Each entry must have:
+    - phenotype_id (int): copied from the input phenotype
     - hpo (object): always required, with fields:
         - value (object or null): the matched HPO term, with:
             - id (str): e.g. "HP:0001250"
@@ -351,6 +351,6 @@ agent = Agent(
     name='hpo_linker',
     instructions=INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
-    output_type=HpoLinkingOutput,
+    output_type=list[HpoLinkingEntry],
     tools=[search_hpo_terms, get_hpo_term, get_hpo_parents, get_hpo_children],
 )

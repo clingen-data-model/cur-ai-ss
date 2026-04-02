@@ -435,10 +435,10 @@ async def hpo_linking_task_async(paper_db: PaperDB) -> None:
     async def link_phenotype_to_hpo(phenotype_data: dict) -> list:
         result = await Runner.run(
             hpo_linking_agent,
-            f'Phenotypes JSON:\n{json.dumps([phenotype_data], indent=2)}',
+            f'Phenotype JSON:\n{json.dumps(phenotype_data, indent=2)}',
             max_turns=5,
         )
-        return result.final_output.links
+        return result.final_output
 
     results = await asyncio.gather(
         *[link_phenotype_to_hpo(phenotype_data) for phenotype_data in phenotype_inputs]
