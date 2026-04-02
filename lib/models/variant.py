@@ -77,6 +77,8 @@ class Variant(BaseModel):
     # Functional evidence assessment with evidence block
     functional_evidence: EvidenceBlock[bool]
 
+    main_focus: EvidenceBlock[bool]
+
 
 class VariantExtractionOutput(BaseModel):
     """Output from variant extraction agent."""
@@ -126,6 +128,7 @@ class VariantResp(BaseModel):
     hgvs_g: Optional[str]
     variant_type: str
     functional_evidence: bool
+    main_focus: bool
     updated_at: datetime
     # Evidence blocks (from DB JSON columns)
     transcript_evidence: EvidenceBlock[Optional[str]]
@@ -143,6 +146,7 @@ class VariantResp(BaseModel):
     hgvs_g_evidence: EvidenceBlock[Optional[str]]
     variant_type_evidence: EvidenceBlock[str]
     functional_evidence_evidence: EvidenceBlock[bool]
+    main_focus_evidence: EvidenceBlock[bool]
     # Harmonized variant (always present with ReasoningBlock, but value may be None if not yet harmonized)
     harmonized_variant: ReasoningBlock[HarmonizedVariantResp | None]
     # Enriched variant (optional, may not yet be enriched)
@@ -197,6 +201,9 @@ class VariantDB(Base):
     # Functional evidence
     functional_evidence: Mapped[bool] = mapped_column(Boolean, nullable=False)
 
+    # Main focus
+    main_focus: Mapped[bool] = mapped_column(Boolean, nullable=False)
+
     # Evidence blocks (static, immutable)
     transcript_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     protein_accession_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
@@ -213,6 +220,7 @@ class VariantDB(Base):
     hgvs_g_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     variant_type_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     functional_evidence_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    main_focus_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

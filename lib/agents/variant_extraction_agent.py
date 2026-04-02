@@ -146,6 +146,17 @@ For the "functional_evidence" field:
 - reasoning → explanation of how functional evidence was determined
 
 ------------------------------
+MAIN VARIANT FOCUS
+------------------------------
+For the "main_focus" field:
+- value → boolean indicating whether this variant is one of the principal variants discussed in the paper.
+  - TRUE: Variant is central to the study, mentioned in abstract, main results, or key figures/tables.
+  - FALSE: Variant is only mentioned in passing, background, or as being dicussed previously or in other studies.
+- quote → verbatim text indicating its role or focus in the study.
+- table_id/image_id → optional if the focus is illustrated in tables or figures.
+- reasoning → explanation of why this variant is considered primary or secondary (e.g., location in paper, emphasis, frequency of mention, experimental analysis).
+
+------------------------------
 OUTPUT FORMAT
 ------------------------------
 Return JSON array of variants:
