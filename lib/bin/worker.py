@@ -198,7 +198,9 @@ async def harmonize_variants_task_async(
             )
         )
         if variant_id is not None:
-            delete_query = delete_query.filter(HarmonizedVariantDB.variant_id == variant_id)
+            delete_query = delete_query.filter(
+                HarmonizedVariantDB.variant_id == variant_id
+            )
         delete_query.delete()
         for variant_id, harmonized_output in results:
             session.add(harmonized_variant_to_db(variant_id, harmonized_output))
