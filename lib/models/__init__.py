@@ -51,12 +51,10 @@ from lib.models.variant import (
     EnrichedVariantResp,
     HarmonizedVariant,
     HarmonizedVariantDB,
-    HarmonizedVariantLinkingEntry,
     HarmonizedVariantResp,
     SpliceAI,
     Variant,
     VariantDB,
     VariantEnrichmentOutput,
-    VariantHarmonizationOutput,
     VariantResp,
 )

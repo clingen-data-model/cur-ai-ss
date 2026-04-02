@@ -53,7 +53,7 @@ from lib.models.converters import (
 )
 from lib.models.evidence_block import ReasoningBlock
 from lib.models.phenotype import ExtractedPhenotypeDB, HpoCandidate, HpoDB
-from lib.models.variant import HarmonizedVariant, HarmonizedVariantLinkingEntry, Variant
+from lib.models.variant import HarmonizedVariant, Variant
 from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
 
 LEASE_TIMEOUT_S = 900
@@ -158,43 +158,39 @@ async def harmonize_variants_task_async(paper_db: PaperDB, gene_symbol: str) -> 
             .order_by(VariantDB.id)
             .all()
         )
-        variants_output = {
-            'variants': [
-                {
-                    'variant_id': r.id,
-                    'gene_symbol': gene_symbol,
-                    **{f: getattr(r, f) for f in Variant.model_fields},
-                }
-                for r in rows
-            ]
-        }
 
-    result = await Runner.run(
-        variant_harmonization_agent,
-        f'Variants JSON:\n{json.dumps(variants_output, indent=2)}',
-        max_turns=10 * len(variants_output['variants']),
-    )
-    # Persist harmonized variants to DB (idempotent: delete-then-insert)
-    with session_scope() as session:
-        # Delete existing harmonized variants for this paper via subquery
-        session.query(HarmonizedVariantDB).filter(
-            HarmonizedVariantDB.variant_id.in_(
-                select(VariantDB.id).where(VariantDB.paper_id == paper_db.id)
+        # Extract everything we will ever need while session is alive
+        variant_payloads = [
+            (
+                row.id,
+                {
+                    'gene_symbol': gene_symbol,
+                    **{f: getattr(row, f) for f in Variant.model_fields},
+                },
             )
-        ).delete()
-        # Re-insert harmonized variants
-        variant_rows = (
-            session.query(VariantDB)
-            .filter(VariantDB.paper_id == paper_db.id)
-            .order_by(VariantDB.id)
-            .all()
+            for row in rows
+        ]
+
+    async def harmonize_single_variant(
+        variant_id: int, variant_input: dict
+    ) -> tuple[int, ReasoningBlock[HarmonizedVariant]]:
+        result = await Runner.run(
+            variant_harmonization_agent,
+            f'Variant JSON:\n{json.dumps(variant_input, indent=2)}',
+            max_turns=10,
         )
-        for variant_row, variant in zip(variant_rows, result.final_output.variants):
-            assert variant.variant_id == variant_row.id, (
-                f'Harmonized variant has variant_id={variant.variant_id}, '
-                f'expected variant_id={variant_row.id}'
-            )
-            session.add(harmonized_variant_to_db(variant))
+        return variant_id, result.final_output
+
+    results = await asyncio.gather(
+        *[
+            harmonize_single_variant(variant_id, variant_input)
+            for variant_id, variant_input in variant_payloads
+        ]
+    )
+
+    with session_scope() as session:
+        for variant_id, harmonized_output in results:
+            session.add(harmonized_variant_to_db(variant_id, harmonized_output))
 
 
 async def extract_variants_task_async(paper_id: int, gene_symbol: str) -> None:
