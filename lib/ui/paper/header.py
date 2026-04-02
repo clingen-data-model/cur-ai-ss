@@ -170,7 +170,7 @@ with center:
                 icon=paper_resp.pipeline_status.icon,
                 color=paper_resp.pipeline_status.color,
             )
-            if st.button(
+            with st.popover(
                 '🔄 Rerun Agents',
                 type='tertiary',
                 disabled=(
@@ -183,11 +183,7 @@ with center:
                 ),
             ):
                 st.session_state[RERUN_POPOVER_STATE_KEY] = True
-            if st.session_state.get(RERUN_POPOVER_STATE_KEY):
-                with st.popover(
-                    '🔄 Rerun Agents',
-                    type='tertiary',
-                ):
+                if st.session_state.get(RERUN_POPOVER_STATE_KEY):
                     render_rerun_evagg_fragment(paper_query_params)
             if st.button('🗑️ Delete Paper', type='tertiary', width='content'):
                 try:
