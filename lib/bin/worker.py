@@ -154,12 +154,21 @@ async def harmonize_variants_task_async(
     paper_db: PaperDB, gene_symbol: str, variant_id: int | None = None
 ) -> None:
     with session_scope() as session:
+<<<<<<< benb/phenotype_extract_single_patient
         query = session.query(VariantDB).filter(VariantDB.paper_id == paper_db.id)
 
         if variant_id is not None:
             query = query.filter(VariantDB.id == variant_id)
 
         rows = query.order_by(VariantDB.id).all()
+=======
+        rows = (
+            session.query(VariantDB)
+            .filter(VariantDB.paper_id == paper_db.id)
+            .order_by(VariantDB.id)
+            .all()
+        )
+>>>>>>> main
 
         # Extract everything we will ever need while session is alive
         variant_payloads = [
@@ -173,6 +182,7 @@ async def harmonize_variants_task_async(
             for row in rows
         ]
 
+<<<<<<< benb/phenotype_extract_single_patient
     sem = asyncio.Semaphore(3)  # <- your max parallelism
 
     async def harmonize_single_variant(
@@ -185,6 +195,17 @@ async def harmonize_variants_task_async(
                 max_turns=10,
             )
             return variant_id, result.final_output
+=======
+    async def harmonize_single_variant(
+        variant_id: int, variant_input: dict
+    ) -> tuple[int, ReasoningBlock[HarmonizedVariant]]:
+        result = await Runner.run(
+            variant_harmonization_agent,
+            f'Variant JSON:\n{json.dumps(variant_input, indent=2)}',
+            max_turns=10,
+        )
+        return variant_id, result.final_output
+>>>>>>> main
 
     results = await asyncio.gather(
         *[
@@ -194,6 +215,7 @@ async def harmonize_variants_task_async(
     )
 
     with session_scope() as session:
+<<<<<<< benb/phenotype_extract_single_patient
         # Delete existing harmonized variants for this paper (idempotent: delete-then-insert)
         delete_query = session.query(HarmonizedVariantDB).filter(
             HarmonizedVariantDB.variant_id.in_(
@@ -205,6 +227,8 @@ async def harmonize_variants_task_async(
                 HarmonizedVariantDB.variant_id == variant_id
             )
         delete_query.delete()
+=======
+>>>>>>> main
         for variant_id, harmonized_output in results:
             session.add(harmonized_variant_to_db(variant_id, harmonized_output))
 
