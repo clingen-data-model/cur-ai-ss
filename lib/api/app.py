@@ -427,6 +427,8 @@ def _variant_to_resp(row: VariantDB) -> VariantResp:
         hgvs_g_evidence=row.hgvs_g_evidence,  # type: ignore[arg-type]
         variant_type_evidence=row.variant_type_evidence,  # type: ignore[arg-type]
         functional_evidence_evidence=row.functional_evidence_evidence,  # type: ignore[arg-type]
+        main_focus=row.main_focus,
+        main_focus_evidence=row.main_focus_evidence,  # type: ignore[arg-type]
         harmonized_variant=harmonized,
         enriched_variant=enriched,
     )

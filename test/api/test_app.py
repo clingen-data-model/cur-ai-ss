@@ -465,6 +465,7 @@ def test_get_variants_harmonized_and_enriched(client, db_session, seeded_paper):
         hgvs_g='g.41196312_41196313delAG',
         variant_type='Frameshift Deletion',
         functional_evidence=True,
+        main_focus=True,
         transcript_evidence={
             'value': 'NM_007294.3',
             'reasoning': 'test',
@@ -520,6 +521,11 @@ def test_get_variants_harmonized_and_enriched(client, db_session, seeded_paper):
             'reasoning': 'test',
             'quote': 'test',
         },
+        main_focus_evidence={
+            'value': True,
+            'reasoning': 'test',
+            'quote': 'test',
+        },
     )
     db_session.add(variant)
     db_session.flush()
@@ -569,11 +575,17 @@ def test_get_variants_harmonized_and_enriched(client, db_session, seeded_paper):
     # Check basic variant data
     assert v['transcript'] == 'NM_007294.3'
     assert v['variant_type'] == 'Frameshift Deletion'
+    assert v['main_focus'] is True
 
     # Check evidence block structure
     assert v['transcript_evidence']['value'] == 'NM_007294.3'
     assert v['transcript_evidence']['reasoning'] == 'test'
     assert v['transcript_evidence']['quote'] == 'test'
+
+    # Check main_focus evidence
+    assert v['main_focus_evidence']['value'] is True
+    assert v['main_focus_evidence']['reasoning'] == 'test'
+    assert v['main_focus_evidence']['quote'] == 'test'
 
     # Check harmonized data (wrapped in ReasoningBlock)
     assert v['harmonized_variant'] is not None
