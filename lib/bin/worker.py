@@ -182,7 +182,7 @@ async def harmonize_variants_task_async(
             result = await Runner.run(
                 variant_harmonization_agent,
                 f'Variant JSON:\n{json.dumps(variant_input, indent=2)}',
-                max_turns=10,
+                max_turns=15,
             )
             return variant_id, result.final_output
 
