@@ -173,15 +173,17 @@ async def harmonize_variants_task_async(
             for row in rows
         ]
 
+    sem = asyncio.Semaphore(3)  # <- your max parallelism
     async def harmonize_single_variant(
         variant_id: int, variant_input: dict
     ) -> tuple[int, ReasoningBlock[HarmonizedVariant]]:
-        result = await Runner.run(
-            variant_harmonization_agent,
-            f'Variant JSON:\n{json.dumps(variant_input, indent=2)}',
-            max_turns=10,
-        )
-        return variant_id, result.final_output
+        async with sem:
+            result = await Runner.run(
+                variant_harmonization_agent,
+                f'Variant JSON:\n{json.dumps(variant_input, indent=2)}',
+                max_turns=10,
+            )
+            return variant_id, result.final_output
 
     results = await asyncio.gather(
         *[
