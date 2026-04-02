@@ -37,8 +37,7 @@ For every valid phenotype extraction, return:
   - reasoning: explanation of why this is a phenotype and how it links to the patient
   - quote: verbatim quote from the paper (required unless value is null)
   - table_id: if evidence comes from a table (optional)
-  - image_id: if evidence comes from a figure/pedigree (optional)
-  At least one of quote, table_id, or image_id must be provided.
+  At least one of quote or table_id must be provided.
 - negated
 - uncertain
 - family_history
@@ -127,9 +126,10 @@ PHENOTYPE FIELD DEFINITIONS
    - **quote**: Verbatim quote from the paper containing or describing the phenotype.
      This is the primary evidence source.
    - **table_id**: If the phenotype information comes from a table, provide the table index.
-   - **image_id**: If the phenotype information comes from a figure/pedigree, provide the image index.
 
-   At least one of quote, table_id, or image_id MUST be provided (unless value is null).
+   At least one of quote or table_id MUST be provided (unless value is null).
+
+   **IMPORTANT**: image_id provides pedigree descriptions only and should not be used here.
 
 2. **negated**: true if the text explicitly states the patient does NOT have the phenotype
    - Example: "no tremor was observed"
@@ -247,6 +247,44 @@ Examples:
 Avoid returning redundant phenotypes for the same patient.
 
 ---------------------------------------------------
+SPLITTING MULTIPLE PHENOTYPES FROM A SINGLE QUOTE
+---------------------------------------------------
+
+When a single quote contains multiple distinct phenotypes,
+you MUST split them into individual extraction entries.
+
+DO NOT combine multiple phenotypes into a single list.
+
+Example:
+
+Quote: "The patient presented with tremor, seizures, and developmental delay."
+
+DO NOT return:
+{
+  "value": ["tremor", "seizures", "developmental delay"],  ❌ WRONG
+  "quote": "The patient presented with tremor, seizures, and developmental delay."
+}
+
+DO return THREE separate entries:
+[
+  {
+    "value": "tremor",
+    "quote": "The patient presented with tremor, seizures, and developmental delay."
+  },
+  {
+    "value": "seizures",
+    "quote": "The patient presented with tremor, seizures, and developmental delay."
+  },
+  {
+    "value": "developmental delay",
+    "quote": "The patient presented with tremor, seizures, and developmental delay."
+  }
+]
+
+Each phenotype gets its own entry with the SAME quote as the source,
+but individual value and reasoning fields.
+
+---------------------------------------------------
 GENETIC DISEASE RELEVANCE FILTER
 ---------------------------------------------------
 
@@ -269,11 +307,16 @@ For each extracted phenotype:
 - Confirm the phenotype is clearly a phenotype, not a diagnosis
 - Confirm the patient linkage is justified by the text
 - Confirm patient_id matches one of the patient IDs in the provided patient list
+- Confirm the phenotype is clearly a phenotype, not a diagnosis
+- Confirm the patient linkage is justified by the text
+- Confirm patient_id matches one of the patient IDs in the provided patient list
 - Confirm all boolean fields are true/false (not "yes"/"no" or strings)
-- Confirm concept.value is verbatim from paper or very close paraphrase
+- Confirm concept.value is a SINGLE phenotype string (not a list)
 - Confirm concept.reasoning clearly explains the phenotype and patient linkage
 - Confirm concept.quote contains a verbatim excerpt from the paper
-- Confirm at least one evidence source is provided: quote, table_id, or image_id
+- Confirm at least one evidence source is provided: quote or table_id
+- Confirm image_id is not used (image_id provides pedigree descriptions only)
+- If multiple phenotypes are mentioned in a quote, split them into separate entries
 - If any check fails, adjust or skip the extraction
 
 ---------------------------------------------------
@@ -285,13 +328,12 @@ Return a **list of JSON objects**, one per extracted phenotype for the provided 
 Example structure:
 [
   {
-    "patient_id": "uuid-or-db-id",
+    "patient_id": 123,
     "concept": {
       "value": "developmental delay",
       "reasoning": "The patient is described as having delayed milestones in the clinical summary.",
       "quote": "The patient showed global developmental delay",
-      "table_id": null,
-      "image_id": null
+      "table_id": null
     },
     "negated": false,
     "uncertain": false,
@@ -300,15 +342,34 @@ Example structure:
     "location": null,
     "severity": "moderate",
     "modifier": null
+  },
+  {
+    "patient_id": 123,
+    "concept": {
+      "value": "seizures",
+      "reasoning": "Seizures are explicitly mentioned as a key clinical feature of this patient.",
+      "quote": "The patient experienced recurrent seizures starting in early childhood",
+      "table_id": null
+    },
+    "negated": false,
+    "uncertain": false,
+    "family_history": false,
+    "onset": "early childhood",
+    "location": null,
+    "severity": null,
+    "modifier": "recurrent"
   }
 ]
 
 Ensure:
-- All required fields are present (patient_id, concept with value/reasoning/quote or table_id or image_id)
+- All required fields are present (patient_id, concept with value/reasoning and quote or table_id)
 - All optional fields are either provided if mentioned in text, or null/omitted
 - Each phenotype has the patient_id of the provided patient
+- concept.value is a SINGLE phenotype string (never a list)
 - concept.quote contains actual text from the paper (not paraphrased)
 - concept.reasoning explains the extraction and why it applies to this patient
+- Each distinct phenotype is extracted as a separate entry (no lists in concept.value)
+- image_id provides pedigree descriptions only and should not be used here
 """
 
 agent = Agent(
