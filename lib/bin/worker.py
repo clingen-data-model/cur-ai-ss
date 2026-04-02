@@ -7,7 +7,7 @@ import time
 import traceback
 from typing import Callable
 
-from agents import Runner
+from agents import RunConfig, Runner
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
@@ -452,11 +452,13 @@ async def hpo_linking_task_async(
             hpo_linking_agent,
             f'Phenotype JSON:\n{json.dumps(phenotype_data, indent=2)}',
             max_turns=20,
-            metadata={
-                'paper_id': paper_db.id,
-                'phenotype_id': phenotype_data['phenotype_id'],
-                'concept': phenotype_data['concept'],
-            },
+            run_config=RunConfig(
+                trace_metadata={
+                    'paper_id': paper_db.id,
+                    'phenotype_id': phenotype_data['phenotype_id'],
+                    'concept': phenotype_data['concept'],
+                },
+            ),
         )
         return result.final_output
 

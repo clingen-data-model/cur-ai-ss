@@ -19,7 +19,6 @@ from lib.ui.paper.patients import render_patients_tab
 from lib.ui.paper.shared import CURRENT_ANNOTATIONS_KEY, HEADER_TABS, HEADER_TABS_KEY
 from lib.ui.paper.variants import render_variants_tab
 
-
 RERUN_POPOVER_STATE_KEY = 'RERUN_POPOVER_STATE_KEY'
 
 
