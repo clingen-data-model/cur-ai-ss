@@ -457,7 +457,12 @@ async def hpo_linking_task_async(
         result = await Runner.run(
             hpo_linking_agent,
             f'Phenotype JSON:\n{json.dumps(phenotype_data, indent=2)}',
-            max_turns=15,
+            max_turns=20,
+            metadata={
+                "paper_id": paper_db.id,
+                "phenotype_id": phenotype_data['phenotype_id'],
+                "concept": phenotype_data['concept'],
+            },
         )
         return result.final_output
 
