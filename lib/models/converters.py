@@ -12,7 +12,6 @@ from lib.models.phenotype import (
 from lib.models.variant import (
     HarmonizedVariant,
     HarmonizedVariantDB,
-    HarmonizedVariantLinkingEntry,
     Variant,
 )
 
@@ -107,19 +106,19 @@ def variant_to_db(paper_id: int, variant: Variant) -> VariantDB:
 
 
 def harmonized_variant_to_db(
-    variant: HarmonizedVariantLinkingEntry,
+    variant_id: int, harmonized_variant: ReasoningBlock[HarmonizedVariant]
 ) -> HarmonizedVariantDB:
-    """Convert HarmonizedVariantLinkingEntry to HarmonizedVariantDB."""
-    data = variant.harmonized_variant.value
+    """Convert ReasoningBlock[HarmonizedVariant] to HarmonizedVariantDB."""
+    data = harmonized_variant.value
     return HarmonizedVariantDB(
-        variant_id=variant.variant_id,
+        variant_id=variant_id,
         gnomad_style_coordinates=data.gnomad_style_coordinates if data else None,
         rsid=data.rsid if data else None,
         caid=data.caid if data else None,
         hgvs_c=data.hgvs_c if data else None,
         hgvs_p=data.hgvs_p if data else None,
         hgvs_g=data.hgvs_g if data else None,
-        reasoning=variant.harmonized_variant.reasoning,
+        reasoning=harmonized_variant.reasoning,
     )
 
 

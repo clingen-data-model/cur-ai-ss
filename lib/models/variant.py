@@ -95,19 +95,6 @@ class HarmonizedVariant(BaseModel):
     hgvs_g: Optional[str] = None
 
 
-class HarmonizedVariantLinkingEntry(BaseModel):
-    """Output from the harmonization agent for a single variant."""
-
-    variant_id: int  # 1-based index matching input variant position
-    harmonized_variant: ReasoningBlock[HarmonizedVariant | None]
-
-
-class VariantHarmonizationOutput(BaseModel):
-    """Output from variant harmonization agent."""
-
-    variants: List[HarmonizedVariantLinkingEntry]
-
-
 class HarmonizedVariantResp(BaseModel):
     """Response model for harmonized variants."""
 

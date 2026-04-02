@@ -53,7 +53,7 @@ from lib.models.converters import (
 )
 from lib.models.evidence_block import ReasoningBlock
 from lib.models.phenotype import ExtractedPhenotypeDB, HpoCandidate, HpoDB
-from lib.models.variant import HarmonizedVariant, HarmonizedVariantLinkingEntry, Variant
+from lib.models.variant import HarmonizedVariant, Variant
 from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
 
 LEASE_TIMEOUT_S = 900
@@ -150,51 +150,87 @@ async def parse_patients_task_async(paper_db: PaperDB) -> None:
             session.add(patient_to_db(paper_db.id, patient_info))
 
 
-async def harmonize_variants_task_async(paper_db: PaperDB, gene_symbol: str) -> None:
+async def harmonize_variants_task_async(
+    paper_db: PaperDB, gene_symbol: str, variant_id: int | None = None
+) -> None:
     with session_scope() as session:
+<<<<<<< benb/phenotype_extract_single_patient
+        query = session.query(VariantDB).filter(VariantDB.paper_id == paper_db.id)
+
+        if variant_id is not None:
+            query = query.filter(VariantDB.id == variant_id)
+
+        rows = query.order_by(VariantDB.id).all()
+=======
         rows = (
             session.query(VariantDB)
             .filter(VariantDB.paper_id == paper_db.id)
             .order_by(VariantDB.id)
             .all()
         )
-        variants_output = {
-            'variants': [
-                {
-                    'variant_id': r.id,
-                    'gene_symbol': gene_symbol,
-                    **{f: getattr(r, f) for f in Variant.model_fields},
-                }
-                for r in rows
-            ]
-        }
+>>>>>>> main
 
-    result = await Runner.run(
-        variant_harmonization_agent,
-        f'Variants JSON:\n{json.dumps(variants_output, indent=2)}',
-        max_turns=10 * len(variants_output['variants']),
+        # Extract everything we will ever need while session is alive
+        variant_payloads = [
+            (
+                row.id,
+                {
+                    'gene_symbol': gene_symbol,
+                    **{f: getattr(row, f) for f in Variant.model_fields},
+                },
+            )
+            for row in rows
+        ]
+
+<<<<<<< benb/phenotype_extract_single_patient
+    sem = asyncio.Semaphore(3)  # <- your max parallelism
+
+    async def harmonize_single_variant(
+        variant_id: int, variant_input: dict
+    ) -> tuple[int, ReasoningBlock[HarmonizedVariant]]:
+        async with sem:
+            result = await Runner.run(
+                variant_harmonization_agent,
+                f'Variant JSON:\n{json.dumps(variant_input, indent=2)}',
+                max_turns=10,
+            )
+            return variant_id, result.final_output
+=======
+    async def harmonize_single_variant(
+        variant_id: int, variant_input: dict
+    ) -> tuple[int, ReasoningBlock[HarmonizedVariant]]:
+        result = await Runner.run(
+            variant_harmonization_agent,
+            f'Variant JSON:\n{json.dumps(variant_input, indent=2)}',
+            max_turns=10,
+        )
+        return variant_id, result.final_output
+>>>>>>> main
+
+    results = await asyncio.gather(
+        *[
+            harmonize_single_variant(variant_id, variant_input)
+            for variant_id, variant_input in variant_payloads
+        ]
     )
-    # Persist harmonized variants to DB (idempotent: delete-then-insert)
+
     with session_scope() as session:
-        # Delete existing harmonized variants for this paper via subquery
-        session.query(HarmonizedVariantDB).filter(
+<<<<<<< benb/phenotype_extract_single_patient
+        # Delete existing harmonized variants for this paper (idempotent: delete-then-insert)
+        delete_query = session.query(HarmonizedVariantDB).filter(
             HarmonizedVariantDB.variant_id.in_(
                 select(VariantDB.id).where(VariantDB.paper_id == paper_db.id)
             )
-        ).delete()
-        # Re-insert harmonized variants
-        variant_rows = (
-            session.query(VariantDB)
-            .filter(VariantDB.paper_id == paper_db.id)
-            .order_by(VariantDB.id)
-            .all()
         )
-        for variant_row, variant in zip(variant_rows, result.final_output.variants):
-            assert variant.variant_id == variant_row.id, (
-                f'Harmonized variant has variant_id={variant.variant_id}, '
-                f'expected variant_id={variant_row.id}'
+        if variant_id is not None:
+            delete_query = delete_query.filter(
+                HarmonizedVariantDB.variant_id == variant_id
             )
-            session.add(harmonized_variant_to_db(variant))
+        delete_query.delete()
+=======
+>>>>>>> main
+        for variant_id, harmonized_output in results:
+            session.add(harmonized_variant_to_db(variant_id, harmonized_output))
 
 
 async def extract_variants_task_async(paper_id: int, gene_symbol: str) -> None:
@@ -291,34 +327,60 @@ async def patient_variant_linking_task_async(paper_db: PaperDB) -> None:
             session.add(patient_variant_link_to_db(paper_db.id, link))
 
 
-async def patient_phenotype_linking_task_async(paper_db: PaperDB) -> None:
+async def patient_phenotype_linking_task_async(
+    paper_db: PaperDB, patient_id: int | None = None
+) -> None:
     with session_scope() as session:
-        patient_rows = (
-            session.query(PatientDB)
-            .filter(PatientDB.paper_id == paper_db.id)
-            .order_by(PatientDB.id)
-            .all()
-        )
-        structured_patients = [
-            {
-                'patient_id': p.id,
-                'identifier': p.identifier,
-                'identifier_quote': p.identifier_evidence['quote'],
-            }
+        query = session.query(PatientDB).filter(PatientDB.paper_id == paper_db.id)
+
+        if patient_id is not None:
+            query = query.filter(PatientDB.id == patient_id)
+
+        patient_rows = query.order_by(PatientDB.id).all()
+
+        # Extract all data while session is active
+        patient_payloads = [
+            (
+                p.id,
+                {
+                    'patient_id': p.id,
+                    'identifier': p.identifier,
+                    'identifier_quote': p.identifier_evidence['quote'],
+                },
+            )
             for p in patient_rows
         ]
-    result = await Runner.run(
-        patient_phenotype_linking_agent,
-        f'Paper (fulltext md): {fulltext_md(paper_db.id)}\n\nStructured Patients JSON:\n{structured_patients}',
+
+    async def extract_phenotypes_for_patient(
+        pid: int, patient_data: dict
+    ) -> tuple[int, list]:
+        result = await Runner.run(
+            patient_phenotype_linking_agent,
+            f'Paper (fulltext md): {fulltext_md(paper_db.id)}\n\nStructured Patient JSON:\n{[patient_data]}',
+        )
+        return pid, result.final_output
+
+    results = await asyncio.gather(
+        *[
+            extract_phenotypes_for_patient(pid, patient_data)
+            for pid, patient_data in patient_payloads
+        ]
     )
 
     # Persist extracted phenotypes to DB (idempotent: delete-then-insert)
     with session_scope() as session:
-        session.query(ExtractedPhenotypeDB).filter(
+        delete_query = session.query(ExtractedPhenotypeDB).filter(
             ExtractedPhenotypeDB.paper_id == paper_db.id
-        ).delete()
-        for phenotype in result.final_output.extracted_phenotypes:
-            session.add(phenotype_to_db(paper_db.id, phenotype))
+        )
+        if patient_id is not None:
+            delete_query = delete_query.filter(
+                ExtractedPhenotypeDB.patient_id == patient_id
+            )
+        delete_query.delete()
+
+        for pid, phenotypes in results:
+            for phenotype in phenotypes:
+                session.add(phenotype_to_db(paper_db.id, phenotype))
 
 
 async def enrich_variants_task_async(paper_db: PaperDB) -> None:
@@ -379,60 +441,66 @@ async def enrich_variants_task_async(paper_db: PaperDB) -> None:
             )
 
 
-async def hpo_linking_task_async(paper_db: PaperDB) -> None:
+async def hpo_linking_task_async(
+    paper_db: PaperDB, phenotype_id: int | None = None
+) -> None:
     with session_scope() as session:
-        phenotype_rows = (
-            session.query(ExtractedPhenotypeDB)
-            .filter(ExtractedPhenotypeDB.paper_id == paper_db.id)
-            .order_by(ExtractedPhenotypeDB.patient_id, ExtractedPhenotypeDB.id)
-            .all()
+        query = session.query(ExtractedPhenotypeDB).filter(
+            ExtractedPhenotypeDB.paper_id == paper_db.id
         )
+
+        if phenotype_id is not None:
+            query = query.filter(ExtractedPhenotypeDB.id == phenotype_id)
+
+        phenotype_rows = query.order_by(
+            ExtractedPhenotypeDB.patient_id, ExtractedPhenotypeDB.id
+        ).all()
+
         # Extract all data while session is active
-        phenotype_data = [
-            {
-                'id': row.id,
-                'concept': row.concept,
-                'negated': row.negated,
-                'uncertain': row.uncertain,
-                'family_history': row.family_history,
-            }
-            for row in phenotype_rows
-        ]
+        phenotype_id_set = {row.id for row in phenotype_rows}
 
-    term_lookup = build_term_lookup()
+        term_lookup = build_term_lookup()
 
-    phenotype_inputs = []
-    phenotype_id_set = {pd['id'] for pd in phenotype_data}
-    for row_data in phenotype_data:
-        candidates: list[HpoCandidate] = find_matching_hpo_terms(
-            str(row_data['concept']), term_lookup=term_lookup
+        phenotype_inputs = []
+        for row in phenotype_rows:
+            candidates: list[HpoCandidate] = find_matching_hpo_terms(
+                str(row.concept), term_lookup=term_lookup
+            )
+            phenotype_inputs.append(
+                {
+                    'phenotype_id': row.id,
+                    'concept': row.concept,
+                    'negated': row.negated,
+                    'uncertain': row.uncertain,
+                    'family_history': row.family_history,
+                    'candidates': [c.model_dump() for c in candidates],
+                }
+            )
+
+    async def link_phenotype_to_hpo(phenotype_data: dict) -> list:
+        result = await Runner.run(
+            hpo_linking_agent,
+            f'Phenotype JSON:\n{json.dumps(phenotype_data, indent=2)}',
+            max_turns=15,
         )
-        phenotype_inputs.append(
-            {
-                'phenotype_id': row_data['id'],
-                'concept': row_data['concept'],
-                'negated': row_data['negated'],
-                'uncertain': row_data['uncertain'],
-                'family_history': row_data['family_history'],
-                'candidates': [c.model_dump() for c in candidates],
-            }
-        )
+        return result.final_output
 
-    result = await Runner.run(
-        hpo_linking_agent,
-        f'Phenotypes JSON:\n{json.dumps(phenotype_inputs, indent=2)}',
-        max_turns=5 * len(phenotype_inputs),
+    results = await asyncio.gather(
+        *[link_phenotype_to_hpo(phenotype_data) for phenotype_data in phenotype_inputs]
     )
 
     # Persist HPO links to DB (idempotent: delete-then-insert)
     with session_scope() as session:
         # Delete HPO links for phenotypes in this paper
-        for phenotype_id in phenotype_id_set:
-            session.query(HpoDB).filter(HpoDB.phenotype_id == phenotype_id).delete()
+        delete_query = session.query(HpoDB).filter(
+            HpoDB.phenotype_id.in_(phenotype_id_set)
+        )
+        delete_query.delete()
 
-        for link in result.final_output.links:
-            if link.phenotype_id in phenotype_id_set:
-                session.add(hpo_to_db(link.phenotype_id, link.hpo))
+        for links in results:
+            for link in links:
+                if link.phenotype_id in phenotype_id_set:
+                    session.add(hpo_to_db(link.phenotype_id, link.hpo))
 
 
 def initial_extraction(paper_id: int, gene_symbol: str) -> None:

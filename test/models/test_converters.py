@@ -9,10 +9,7 @@ from lib.models.patient import (
     RaceEthnicity,
     SexAtBirth,
 )
-from lib.models.variant import (
-    HarmonizedVariant,
-    HarmonizedVariantLinkingEntry,
-)
+from lib.models.variant import HarmonizedVariant
 
 
 def test_apply_to_maps_all_fields():
@@ -190,7 +187,7 @@ def test_patient_to_db_handles_optional_none_values():
 
 
 def test_harmonized_variant_to_db_with_all_fields():
-    """Test converting HarmonizedVariantLinkingEntry with all fields populated."""
+    """Test converting HarmonizedVariant with all fields populated."""
     harmonized_data = HarmonizedVariant(
         gnomad_style_coordinates='1-55051215-G-A',
         rsid='rs80356779',
@@ -199,15 +196,12 @@ def test_harmonized_variant_to_db_with_all_fields():
         hgvs_p='NP_007295.3:p.Arg1559Lys',
         hgvs_g='NC_000017.11:g.41197819G>A',
     )
-    entry = HarmonizedVariantLinkingEntry(
-        variant_id=42,
-        harmonized_variant=ReasoningBlock(
-            value=harmonized_data,
-            reasoning='Successfully normalized via VariantValidator and allele registry lookup.',
-        ),
+    reasoning_block = ReasoningBlock(
+        value=harmonized_data,
+        reasoning='Successfully normalized via VariantValidator and allele registry lookup.',
     )
 
-    result = harmonized_variant_to_db(entry)
+    result = harmonized_variant_to_db(42, reasoning_block)
 
     assert result.variant_id == 42
     assert result.gnomad_style_coordinates == '1-55051215-G-A'
@@ -223,16 +217,13 @@ def test_harmonized_variant_to_db_with_all_fields():
 
 
 def test_harmonized_variant_to_db_with_none_value():
-    """Test converting HarmonizedVariantLinkingEntry with None harmonized_variant."""
-    entry = HarmonizedVariantLinkingEntry(
-        variant_id=99,
-        harmonized_variant=ReasoningBlock(
-            value=None,
-            reasoning='Could not normalize variant: insufficient data',
-        ),
+    """Test converting HarmonizedVariant with None value."""
+    reasoning_block = ReasoningBlock(
+        value=None,
+        reasoning='Could not normalize variant: insufficient data',
     )
 
-    result = harmonized_variant_to_db(entry)
+    result = harmonized_variant_to_db(99, reasoning_block)
 
     assert result.variant_id == 99
     assert result.gnomad_style_coordinates is None
@@ -245,7 +236,7 @@ def test_harmonized_variant_to_db_with_none_value():
 
 
 def test_harmonized_variant_to_db_with_partial_fields():
-    """Test converting HarmonizedVariantLinkingEntry with only some fields populated."""
+    """Test converting HarmonizedVariant with only some fields populated."""
     harmonized_data = HarmonizedVariant(
         gnomad_style_coordinates='12-25389391-C-T',
         rsid='rs1003702',
@@ -254,15 +245,12 @@ def test_harmonized_variant_to_db_with_partial_fields():
         hgvs_p=None,  # Missing
         hgvs_g=None,
     )
-    entry = HarmonizedVariantLinkingEntry(
-        variant_id=5,
-        harmonized_variant=ReasoningBlock(
-            value=harmonized_data,
-            reasoning='Normalized via transcript-based projection.',
-        ),
+    reasoning_block = ReasoningBlock(
+        value=harmonized_data,
+        reasoning='Normalized via transcript-based projection.',
     )
 
-    result = harmonized_variant_to_db(entry)
+    result = harmonized_variant_to_db(5, reasoning_block)
 
     assert result.variant_id == 5
     assert result.gnomad_style_coordinates == '12-25389391-C-T'

@@ -35,10 +35,6 @@ class ExtractedPhenotype(BaseModel):
     modifier: str | None
 
 
-class ExtractedPhenotypeOutput(BaseModel):
-    extracted_phenotypes: List[ExtractedPhenotype]
-
-
 class HpoCandidate(BaseModel):
     """HPO candidate suggestion from fuzzy matching."""
 
@@ -59,12 +55,6 @@ class HpoLinkingEntry(BaseModel):
 
     phenotype_id: int
     hpo: ReasoningBlock[HPOTerm | None]
-
-
-class HpoLinkingOutput(BaseModel):
-    """Output from the HPO linking agent."""
-
-    links: List[HpoLinkingEntry]
 
 
 class ExtractedPhenotypeDB(Base):

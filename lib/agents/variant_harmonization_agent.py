@@ -7,10 +7,11 @@ import requests
 from agents import Agent, function_tool
 
 from lib.core.environment import env
+from lib.models.evidence_block import ReasoningBlock
 from lib.models.variant import (
     GenomeBuild,
+    HarmonizedVariant,
     VariantExtractionOutput,
-    VariantHarmonizationOutput,
 )
 
 CLINGEN_ALLELE_REGISTRY_ENDPOINT = 'https://reg.genome.network'
@@ -581,22 +582,15 @@ System: You are an expert genomics curator and deterministic variant normalizer.
 You must follow the state machine below strictly.
 You may not skip states.
 You may not revisit a previous state except where explicitly allowed.
-You may not call clinvar_lookup more than once per variant.
-You may not call dbsnp_lookup more than once per variant.
+You may not call clinvar_lookup more than once.
+You may not call dbsnp_lookup more than once.
 You should not need to call select_canonical_transcript for the gene more than once per genome build.
 You should not need to call genomic_accession_for_gene_and_transcript more than once per gene and transcript.
 The pipeline MUST terminate after a single call to allele_registry_resolver.
 
 Goal:
-Normalize each of the provided variants to a GRCh38 gnomAD-style identifier and resolve via
+Normalize the provided variant to a GRCh38 gnomAD-style identifier and resolve via
 allele_registry_resolver as the final step whenever possible.
-
-You must return exactly one output object for each input variant.
-    - The number of output variants must equal the number of input variants.
-    - The order of variants must remain unchanged.
-    - You must not add or remove variants.
-    - Each output variant must include a variant_id field that echoes the variant_id from the input.
-      This is used to track which output corresponds to which input.
 
 If VariantValidator successfully produces a gnomAD-style ID at any stage:
     - This defines the canonical genomic representation.
@@ -837,8 +831,7 @@ You may NOT call clinvar_lookup again.
 STATE 6 — FINALIZATION
 ============================================================
 
-For each output variant, include:
-- variant_id (echo input)
+Return a single harmonized variant object with:
 - reasoning (clear human-readable summary)
 - allele_registry_resolver fields if available: gnomad_style_coordinates, rsid, caid, hgvs_c, hgvs_g, hgvs_p
 
@@ -874,7 +867,7 @@ agent = Agent(
     name='variant_harmonizer',
     instructions=VARIANT_HARMONIZATION_INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
-    output_type=VariantHarmonizationOutput,
+    output_type=ReasoningBlock[HarmonizedVariant],
     tools=[
         select_canonical_transcript,
         genomic_accession_for_gene_and_transcript,

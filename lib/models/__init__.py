@@ -36,13 +36,11 @@ from lib.models.patient_variant_link import (
 from lib.models.phenotype import (
     ExtractedPhenotype,
     ExtractedPhenotypeDB,
-    ExtractedPhenotypeOutput,
     ExtractedPhenotypeResp,
     ExtractedPhenotypeUpdateRequest,
     HpoCandidate,
     HpoDB,
     HpoLinkingEntry,
-    HpoLinkingOutput,
     HPOTerm,
 )
 from lib.models.variant import (
@@ -51,12 +49,10 @@ from lib.models.variant import (
     EnrichedVariantResp,
     HarmonizedVariant,
     HarmonizedVariantDB,
-    HarmonizedVariantLinkingEntry,
     HarmonizedVariantResp,
     SpliceAI,
     Variant,
     VariantDB,
     VariantEnrichmentOutput,
-    VariantHarmonizationOutput,
     VariantResp,
 )
