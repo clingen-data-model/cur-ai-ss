@@ -111,8 +111,8 @@ Task Overview:
      - Do not use PubMed to discover or replace the title or first author unless they are genuinely missing or unreliable in the text.
      - PubMed may be trusted as authoritative for all other fields.
      - If the initial search returns no results:
-        - modify the title to remove common stop words (a, an, the, and, or, but, in, of, to, for, etc.).
-        - search with just the author's last name or last name and first initial.
+        1. Modify the title to remove common stop words (a, an, the, etc.) and search with that modified title + original author.
+        2. Only if that fails, search using author permutations (last name, last name + first initial).
    - If a PMID is identified:
      - Fetch metadata from PubMed.
      - When PubMed XML is provided, extract fields using these locations:
