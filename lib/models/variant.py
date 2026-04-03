@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from pydantic import BaseModel, computed_field
 from sqlalchemy import (
@@ -21,6 +21,9 @@ from sqlalchemy.types import JSON
 from lib.models.base import Base
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.paper import PaperDB
+
+if TYPE_CHECKING:
+    from lib.models.patient_variant_link import PatientVariantLinkDB
 
 
 class VariantType(str, Enum):
@@ -227,6 +230,9 @@ class VariantDB(Base):
         back_populates='variant',
         uselist=False,
         cascade='all, delete-orphan',
+    )
+    patient_variant_links: Mapped[list['PatientVariantLinkDB']] = relationship(
+        'PatientVariantLinkDB', back_populates='variant', cascade='all, delete-orphan'
     )
 
     __table_args__ = (Index('ix_variants_paper_id', 'paper_id'),)

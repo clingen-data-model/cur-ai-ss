@@ -21,6 +21,7 @@ from lib.models.paper import PaperDB
 
 if TYPE_CHECKING:
     from lib.models.phenotype import PhenotypeDB
+    from lib.models.patient_variant_link import PatientVariantLinkDB
 
 
 class ProbandStatus(str, Enum):
@@ -376,6 +377,9 @@ class PatientDB(Base):
     paper: Mapped[PaperDB] = relationship('PaperDB', back_populates='patients')
     extracted_phenotypes: Mapped[list['PhenotypeDB']] = relationship(
         'PhenotypeDB', back_populates='patient', cascade='all, delete-orphan'
+    )
+    patient_variant_links: Mapped[list['PatientVariantLinkDB']] = relationship(
+        'PatientVariantLinkDB', back_populates='patient', cascade='all, delete-orphan'
     )
 
     __table_args__ = (Index('ix_patients_paper_id', 'paper_id'),)

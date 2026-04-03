@@ -21,6 +21,8 @@ from lib.models.evidence_block import EvidenceBlock
 
 if TYPE_CHECKING:
     from lib.models.paper import PaperDB
+    from lib.models.patient import PatientDB
+    from lib.models.variant import VariantDB
 
 # ==============================
 # Enums
@@ -125,6 +127,12 @@ class PatientVariantLinkDB(Base):
 
     paper: Mapped['PaperDB'] = relationship(
         'PaperDB', back_populates='patient_variant_links'
+    )
+    patient: Mapped['PatientDB'] = relationship(
+        'PatientDB', back_populates='patient_variant_links'
+    )
+    variant: Mapped['VariantDB'] = relationship(
+        'VariantDB', back_populates='patient_variant_links'
     )
 
     __table_args__ = (
