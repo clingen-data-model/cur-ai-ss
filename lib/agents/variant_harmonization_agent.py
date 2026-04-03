@@ -69,11 +69,6 @@ def call_once_success_only(
                 json.dumps(key_payload, sort_keys=True, default=str).encode()
             ).hexdigest()
 
-            # Return cached result if exists
-            if key in cache:
-                call_counts[key] += 1
-                return cache[key]
-
             # Check max attempts
             count = call_counts.get(key, 0)
             if count >= max_calls_per_args:
@@ -81,6 +76,11 @@ def call_once_success_only(
                     f'[TOOL LOOP DETECTED] {fn.__name__} called {count} times '
                     f'with same arguments: args={args}, kwargs={kwargs}'
                 )
+
+            # Return cached result if exists
+            if key in cache:
+                call_counts[key] += 1
+                return cache[key]
 
             # Attempt to call the tool
             try:
