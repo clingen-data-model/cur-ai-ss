@@ -92,8 +92,7 @@ class PhenotypeDB(Base):
         'PatientDB', back_populates='extracted_phenotypes', overlaps='paper'
     )
     hpo: Mapped['HpoDB | None'] = relationship(
-        'HpoDB', back_populates='phenotype', uselist=False,
-        cascade='all, delete-orphan'
+        'HpoDB', back_populates='phenotype', uselist=False, cascade='all, delete-orphan'
     )
 
     __table_args__ = (

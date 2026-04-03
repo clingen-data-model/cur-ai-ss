@@ -17,13 +17,11 @@ EFETCH_ENDPOINT = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
 @function_tool
 def pubmed_search(title: str, first_author: str | None = None) -> List[str]:
     """
-    Search PubMed using the esearch API.
-    Returns:
-    - A list of candidate PMIDs ordered by relevance.
-    - Returns an empty list if no confident matches are found.
-    - Does NOT return metadata.
+    Minimal deterministic PubMed title search.
     """
-    terms = [f'{title}[ti]']
+    tokens = re.split(r'\s+', title.strip())
+
+    terms = [f'{t}[ti]' for t in tokens if t]
 
     if first_author:
         terms.append(f'{first_author}[au]')
@@ -41,11 +39,7 @@ def pubmed_search(title: str, first_author: str | None = None) -> List[str]:
     if env.NCBI_EMAIL:
         params['email'] = env.NCBI_EMAIL
 
-    r = requests.get(
-        ESEARCH_ENDPOINT,
-        params=params,
-        timeout=10,
-    )
+    r = requests.get(ESEARCH_ENDPOINT, params=params, timeout=10)
     r.raise_for_status()
 
     data = r.json()
@@ -111,7 +105,7 @@ Task Overview:
      - Do not use PubMed to discover or replace the title or first author unless they are genuinely missing or unreliable in the text.
      - PubMed may be trusted as authoritative for all other fields.
      - If the initial search returns no results:
-        1. Modify the title to remove common stop words (a, an, the, etc.) and search with that modified title + original author.
+        1. Modify the title to remove common stop words (a, an, the, etc.) and search with that modified title + last name of the original author.
         2. Only if that fails, search using author permutations (last name, last name + first initial).
    - If a PMID is identified:
      - Fetch metadata from PubMed.
