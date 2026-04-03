@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import shutil
 import time
 import traceback
 from contextlib import asynccontextmanager
@@ -44,6 +45,7 @@ from lib.misc.pdf.highlight import (
 from lib.misc.pdf.misc import merge_pdfs, pdf_first_page_to_thumbnail_pymupdf_bytes
 from lib.misc.pdf.parse import WordLoc
 from lib.misc.pdf.paths import (
+    pdf_dir,
     pdf_highlighted_path,
     pdf_raw_path,
     pdf_thumbnail_path,
@@ -205,6 +207,12 @@ def delete_paper(paper_id: int, session: Session = Depends(get_session)) -> None
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
         return
+
+    # Delete extracted PDF directory
+    pdf_directory = pdf_dir(paper_id)
+    if pdf_directory.exists():
+        shutil.rmtree(pdf_directory)
+
     session.delete(paper_db)
     session.flush()
 
