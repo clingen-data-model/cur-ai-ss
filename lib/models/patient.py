@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from sqlalchemy import (
     DateTime,
     ForeignKey,
@@ -12,6 +12,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
@@ -34,6 +35,12 @@ class AffectedStatus(str, Enum):
     Affected = 'Affected'
     Unaffected = 'Unaffected'
     Unknown = 'Unknown'
+
+
+class AgeUnit(str, Enum):
+    Years = 'Years'
+    Months = 'Months'
+    Days = 'Days'
 
 
 class SexAtBirth(str, Enum):
@@ -326,11 +333,31 @@ class Patient(BaseModel):
     proband_status: EvidenceBlock[ProbandStatus]
     sex: EvidenceBlock[SexAtBirth]
     age_diagnosis: EvidenceBlock[int | None]
+    age_diagnosis_unit: AgeUnit | None = None
     age_report: EvidenceBlock[int | None]
+    age_report_unit: AgeUnit | None = None
     age_death: EvidenceBlock[int | None]
+    age_death_unit: AgeUnit | None = None
     country_of_origin: EvidenceBlock[CountryCode]
     race_ethnicity: EvidenceBlock[RaceEthnicity]
     affected_status: EvidenceBlock[AffectedStatus]
+
+    @model_validator(mode='after')
+    def validate_age_units(self) -> 'Patient':
+        """Ensure age fields and their units are both populated or both null."""
+        age_pairs = [
+            ('age_diagnosis', 'age_diagnosis_unit'),
+            ('age_report', 'age_report_unit'),
+            ('age_death', 'age_death_unit'),
+        ]
+        for age_field, unit_field in age_pairs:
+            age_value = getattr(self, age_field).value
+            unit_value = getattr(self, unit_field)
+            if (age_value is None) != (unit_value is None):
+                raise ValueError(
+                    f'{age_field} and {unit_field} must both be populated or both null'
+                )
+        return self
 
 
 class PatientExtractionOutput(BaseModel):
@@ -350,8 +377,17 @@ class PatientDB(Base):
     proband_status: Mapped[str] = mapped_column(String, nullable=False)
     sex: Mapped[str] = mapped_column(String, nullable=False)
     age_diagnosis: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    age_diagnosis_unit: Mapped[AgeUnit | None] = mapped_column(
+        SQLEnum(AgeUnit), nullable=True
+    )
     age_report: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    age_report_unit: Mapped[AgeUnit | None] = mapped_column(
+        SQLEnum(AgeUnit), nullable=True
+    )
     age_death: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    age_death_unit: Mapped[AgeUnit | None] = mapped_column(
+        SQLEnum(AgeUnit), nullable=True
+    )
     country_of_origin: Mapped[str] = mapped_column(String, nullable=False)
     race_ethnicity: Mapped[str] = mapped_column(String, nullable=False)
     affected_status: Mapped[str] = mapped_column(String, nullable=False)
@@ -392,8 +428,11 @@ class PatientResp(BaseModel):
     proband_status: ProbandStatus
     sex: SexAtBirth
     age_diagnosis: int | None
+    age_diagnosis_unit: AgeUnit | None = None
     age_report: int | None
+    age_report_unit: AgeUnit | None = None
     age_death: int | None
+    age_death_unit: AgeUnit | None = None
     country_of_origin: CountryCode
     race_ethnicity: RaceEthnicity
     affected_status: AffectedStatus
@@ -415,8 +454,11 @@ class PatientCreateRequest(BaseModel):
     proband_status: str
     sex: str
     age_diagnosis: int | None = None
+    age_diagnosis_unit: str | None = None
     age_report: int | None = None
+    age_report_unit: str | None = None
     age_death: int | None = None
+    age_death_unit: str | None = None
     country_of_origin: str
     race_ethnicity: str
     affected_status: str
@@ -428,8 +470,11 @@ class PatientUpdateRequest(PatchModel):
     affected_status: str | None = None
     sex: str | None = None
     age_diagnosis: int | None = None
+    age_diagnosis_unit: str | None = None
     age_report: int | None = None
+    age_report_unit: str | None = None
     age_death: int | None = None
+    age_death_unit: str | None = None
     country_of_origin: str | None = None
     race_ethnicity: str | None = None
     # Human edit notes for evidence blocks
