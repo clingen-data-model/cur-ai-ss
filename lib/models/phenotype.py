@@ -92,7 +92,8 @@ class PhenotypeDB(Base):
         'PatientDB', back_populates='extracted_phenotypes', overlaps='paper'
     )
     hpo: Mapped['HpoDB | None'] = relationship(
-        'HpoDB', back_populates='phenotype', uselist=False
+        'HpoDB', back_populates='phenotype', uselist=False,
+        cascade='all, delete-orphan'
     )
 
     __table_args__ = (
@@ -122,7 +123,11 @@ class HpoDB(Base):
         onupdate=func.now(),
     )
 
-    phenotype: Mapped['PhenotypeDB'] = relationship('PhenotypeDB', back_populates='hpo')
+    phenotype: Mapped['PhenotypeDB'] = relationship(
+        'PhenotypeDB',
+        back_populates='hpo',
+        uselist=False,
+    )
 
     __table_args__ = (
         UniqueConstraint(
