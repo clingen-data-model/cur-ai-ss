@@ -1,6 +1,6 @@
 from enum import Enum
 from html import unescape
-from re import sub
+from re import split, sub
 from typing import List, Optional
 
 import requests
@@ -19,7 +19,7 @@ def pubmed_search(title: str, first_author: str | None = None) -> List[str]:
     """
     Minimal deterministic PubMed title search.
     """
-    tokens = re.split(r'\s+', title.strip())
+    tokens = split(r'\s+', title.strip())
 
     terms = [f'{t}[ti]' for t in tokens if t]
 
