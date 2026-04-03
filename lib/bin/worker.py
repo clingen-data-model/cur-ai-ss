@@ -173,7 +173,7 @@ async def harmonize_variants_task_async(
             for row in rows
         ]
 
-    sem = asyncio.Semaphore(3)  # <- your max parallelism
+    sem = asyncio.Semaphore(2)  # <- your max parallelism
 
     async def harmonize_single_variant(
         variant_id: int, variant_input: dict
@@ -327,7 +327,7 @@ async def patient_phenotype_linking_task_async(
             for p in patient_rows
         ]
 
-    sem = asyncio.Semaphore(3)  # <- your max parallelism
+    sem = asyncio.Semaphore(4)  # <- your max parallelism
 
     async def extract_phenotypes_for_patient(
         pid: int, patient_data: dict
@@ -450,7 +450,7 @@ async def hpo_linking_task_async(
                 }
             )
 
-    sem = asyncio.Semaphore(3)
+    sem = asyncio.Semaphore(4)
 
     async def link_phenotype_to_hpo(phenotype_data: dict) -> list:
         async with sem:
