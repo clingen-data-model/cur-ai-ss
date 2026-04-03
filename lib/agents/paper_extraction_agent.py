@@ -1,6 +1,6 @@
 from enum import Enum
 from html import unescape
-from re import split, sub
+from re import split, sub, findall
 from typing import List, Optional
 
 import requests
@@ -13,14 +13,53 @@ from lib.models import PaperExtractionOutput
 ESEARCH_ENDPOINT = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
 EFETCH_ENDPOINT = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
 
+STOP = {
+    'a',
+    'an',
+    'the',
+    'and',
+    'or',
+    'but',
+    'if',
+    'while',
+    'with',
+    'of',
+    'at',
+    'by',
+    'for',
+    'to',
+    'in',
+    'on',
+    'from',
+    'as',
+    'is',
+    'are',
+    'was',
+    'were',
+    'be',
+    'been',
+    'being',
+    'this',
+    'that',
+    'these',
+    'those',
+    'it',
+    'its',
+}
+
+
+def remove_stopwords(text: str) -> str:
+    tokens = findall(r'[A-Za-z0-9\-\/]+', text)
+    return ' '.join(t for t in tokens if t.lower() not in STOP)
+
 
 @function_tool
 def pubmed_search(title: str, first_author: str | None = None) -> List[str]:
     """
     Minimal deterministic PubMed title search.
     """
-    tokens = split(r'\s+', title.strip())
-
+    cleaned = remove_stopwords(title)
+    tokens = split(r'\s+', cleaned.strip())
     terms = [f'{t}[ti]' for t in tokens if t]
 
     if first_author:
