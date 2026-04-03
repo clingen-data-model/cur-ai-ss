@@ -110,8 +110,9 @@ Task Overview:
    - Use PubMed search to find candidate PMIDs using the title and first author extracted from the text.
      - Do not use PubMed to discover or replace the title or first author unless they are genuinely missing or unreliable in the text.
      - PubMed may be trusted as authoritative for all other fields.
-     - If the initial search returns no results, modify the title to remove common stop words (a, an, the, and, or, but, in, of, to, for, etc.).
-     - Then attempt with permutations of the author's last name, then last name and first initial.
+     - If the initial search returns no results:
+        - modify the title to remove common stop words (a, an, the, and, or, but, in, of, to, for, etc.).
+        - search with just the author's last name or last name and first initial.
    - If a PMID is identified:
      - Fetch metadata from PubMed.
      - When PubMed XML is provided, extract fields using these locations:
@@ -123,6 +124,7 @@ Task Overview:
        - doi: PubmedData/ArticleIdList/ArticleId with IdType="doi"
        - pmcid: PubmedData/ArticleIdList/ArticleId with IdType="pmc"
      - Do not invent values.
+     - Return and do not try to search further.
 
 2. **Paper Type Selection**
  - Classify the paper into at MOST two of the following types:
@@ -135,7 +137,6 @@ Task Overview:
    - Unknown: The paper type cannot be confidently determined from the provided text.
    - Other: Does not fit the above categories (e.g., review, meta-analysis, guideline, methods, or database/resource paper).
 
-Retry any tool requests (PubMed fetch or search) up to 3 times on an exponential delay.
 """
 
 # --- Agent definition
