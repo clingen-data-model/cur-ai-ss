@@ -20,8 +20,8 @@ from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock
 from lib.models.paper import PaperDB
 
 if TYPE_CHECKING:
-    from lib.models.phenotype import PhenotypeDB
     from lib.models.patient_variant_link import PatientVariantLinkDB
+    from lib.models.phenotype import PhenotypeDB
 
 
 class ProbandStatus(str, Enum):

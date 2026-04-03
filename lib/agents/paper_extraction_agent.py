@@ -1,6 +1,6 @@
 from enum import Enum
 from html import unescape
-from re import split, sub, findall
+from re import findall, split, sub
 from typing import List, Optional
 
 import requests
