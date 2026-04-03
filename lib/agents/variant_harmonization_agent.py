@@ -615,7 +615,6 @@ STATE 0 — INITIAL DATA ASSESSMENT
 Use the following fields of the provided structured input:
 - gene (required)
 - transcript
-- protein_accession
 - genomic_accession
 - genomic_coordinates
 - genome_build
@@ -752,16 +751,18 @@ You may call dbsnp_lookup EXACTLY ONCE.
 
 Step 5A — Construct Query
 
-If protein_accession is missing:
-    Call select_canonical_transcript to populate it.
-    Construct protein_accession + ":" + hgvs_p
-
 Query includes:
     gene AND all protein representations:
         hgvs_p
         3-letter format (p.Arg157Ser)
         1-letter format (p.R157S)
         Without "p." prefix
+
+Examples:
+    "BRCA1 AND (Arg157Ser OR p.Arg157Ser OR R157S)"
+    "TP53 AND (Arg175His OR p.Arg175His OR R175H OR p.R175H)"
+    "CFTR AND (Phe508del OR p.Phe508del OR F508del OR p.F508del)"
+
 
 Step 5B — Call clinvar_lookup(query)
 
