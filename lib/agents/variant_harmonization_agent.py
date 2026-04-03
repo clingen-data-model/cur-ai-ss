@@ -745,14 +745,12 @@ STATE 5 — CLINVAR & DBSNP LOOKUP
 ============================================================
 
 Condition:
-Previous projections failed.
+Previous projections failed but hgvs_p is present.
 
-You may call clinvar_lookup EXACTLY ONCE per variant.
+You may call clinvar_lookup EXACTLY ONCE.
+You may call dbsnp_lookup EXACTLY ONCE.
 
 Step 5A — Construct Query
-
-If hgvs_p is missing:
-    Skip ClinVar and DBSNP lookup
 
 If protein_accession is missing:
     Call select_canonical_transcript to populate it.
@@ -801,7 +799,7 @@ Case C — ClinVar empty:
     If dbsnp_lookup returns no usable results:
         RETURN outputs with all normalized fields as None.
 
-You may NOT call clinvar_lookup again.
+If EITHER clinvar_lookup OR dbnsp_lookup returns no results RETURN outputs with all normalized fields as None.
 
 ============================================================
 STATE 6 — FINALIZATION
