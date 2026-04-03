@@ -31,7 +31,6 @@ class Env(BaseSettings):
     CAA_ROOT: str = '/var/caa'
     SQLLITE_DIR: str = 'sqllite'
     EXTRACTED_PDF_DIR: str = 'extracted_pdfs'
-    LOG_DIR: str = 'logs'
     REFERENCE_DATA_DIR: str = 'reference_data'
 
     # UI->API
@@ -62,10 +61,6 @@ class Env(BaseSettings):
     @property
     def extracted_pdf_dir(self) -> Path:
         return Path(self.CAA_ROOT) / self.EXTRACTED_PDF_DIR
-
-    @property
-    def log_dir(self) -> Path:
-        return Path(self.CAA_ROOT) / self.LOG_DIR
 
     @property
     def reference_data_dir(self) -> Path:
