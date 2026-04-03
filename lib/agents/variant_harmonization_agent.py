@@ -1,6 +1,19 @@
+import hashlib
+import json
 import re
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from functools import wraps
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    ParamSpec,
+    Tuple,
+    TypeVar,
+)
 from urllib.parse import quote
 
 import requests
@@ -31,7 +44,64 @@ VV_VARIANT_VALIDATOR_ENSEMBL_ENDPOINT = (
 )
 
 
+T = TypeVar('T')  # return type of the wrapped function
+P = ParamSpec('P')
+
+
+class ToolCallLoopError(Exception):
+    """Raised when a tool is called too many times with the same arguments."""
+
+    pass
+
+
+def call_once_success_only(
+    max_calls_per_args: int = 1,
+) -> Callable[[Callable[P, T]], Callable[P, T]]:
+    def decorator(fn: Callable[P, T]) -> Callable[P, T]:
+        cache: dict[str, T] = {}
+        call_counts: dict[str, int] = {}
+
+        @wraps(fn)
+        def wrapper(*args: Any, **kwargs: Any) -> T:
+            # Create stable key for args+kwargs
+            key_payload = {'args': args, 'kwargs': kwargs}
+            key = hashlib.sha256(
+                json.dumps(key_payload, sort_keys=True, default=str).encode()
+            ).hexdigest()
+
+            # Return cached result if exists
+            if key in cache:
+                call_counts[key] += 1
+                return cache[key]
+
+            # Check max attempts
+            count = call_counts.get(key, 0)
+            if count >= max_calls_per_args:
+                raise ToolCallLoopError(
+                    f'[TOOL LOOP DETECTED] {fn.__name__} called {count} times '
+                    f'with same arguments: args={args}, kwargs={kwargs}'
+                )
+
+            # Attempt to call the tool
+            try:
+                result: T = fn(*args, **kwargs)
+            except Exception as e:
+                # Do NOT cache failures
+                call_counts[key] = count + 1
+                raise e
+
+            # Cache any successful result, even empty lists/dicts/None
+            cache[key] = result
+            call_counts[key] = count + 1
+            return result
+
+        return wrapper
+
+    return decorator
+
+
 @function_tool
+@call_once_success_only()
 def clinvar_lookup(query: str) -> List[Dict[str, Any]]:
     """
     Search ClinVar and return structured info for each matching record:
@@ -123,6 +193,7 @@ def clinvar_lookup(query: str) -> List[Dict[str, Any]]:
 
 
 @function_tool
+@call_once_success_only()
 def dbsnp_lookup(query: str) -> List[str]:
     """
     Search dbSNP and return genomic HGVS (HGVSg) strings
@@ -206,6 +277,7 @@ def dbsnp_lookup(query: str) -> List[str]:
 
 
 @function_tool
+@call_once_success_only()
 def allele_registry_resolver(
     gnomad_style_coordinates: str | None,
     rsid: str | None,
@@ -374,6 +446,7 @@ def allele_registry_resolver(
 
 
 @function_tool
+@call_once_success_only()
 def gnomad_style_ids_from_variant_validator(variant_description: str) -> list[str]:
     """
     Given an arbitrary variant_description (hgvsg, hgvsc, hgvsp), use VariantValidator
@@ -431,6 +504,7 @@ def gnomad_style_ids_from_variant_validator(variant_description: str) -> list[st
 
 
 @function_tool
+@call_once_success_only()
 def genomic_accession_for_gene_and_transcript(
     gene_symbol: str, transcript: str
 ) -> Optional[dict[GenomeBuild, str]]:
@@ -492,6 +566,7 @@ def genomic_accession_for_gene_and_transcript(
 
 
 @function_tool
+@call_once_success_only()
 def select_canonical_transcript(
     gene_symbol: str,
     genome_build: GenomeBuild | None,
