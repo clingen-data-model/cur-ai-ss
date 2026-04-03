@@ -327,7 +327,7 @@ async def patient_phenotype_linking_task_async(
             for p in patient_rows
         ]
 
-    sem = asyncio.Semaphore(4)  # <- your max parallelism
+    sem = asyncio.Semaphore(5)  # <- your max parallelism
 
     async def extract_phenotypes_for_patient(
         pid: int, patient_data: dict
@@ -450,7 +450,7 @@ async def hpo_linking_task_async(
                 }
             )
 
-    sem = asyncio.Semaphore(4)
+    sem = asyncio.Semaphore(10)
 
     async def link_phenotype_to_hpo(phenotype_data: dict) -> list:
         async with sem:
