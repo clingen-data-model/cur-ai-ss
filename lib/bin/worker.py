@@ -461,7 +461,7 @@ async def hpo_linking_task_async(
                 run_config=RunConfig(
                     trace_metadata={
                         'paper_id': str(paper_db.id),
-                        'phenotype_id': phenotype_data['phenotype_id'],
+                        'phenotype_id': str(phenotype_data['phenotype_id']),
                         'concept': phenotype_data['concept'],
                     },
                 ),
