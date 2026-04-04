@@ -51,7 +51,7 @@ class HPOTerm(BaseModel):
 
 
 class PhenotypeDB(Base):
-    __tablename__ = 'extracted_phenotypes'
+    __tablename__ = 'phenotypes'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     paper_id: Mapped[int] = mapped_column(
@@ -89,8 +89,8 @@ class PhenotypeDB(Base):
     )
 
     __table_args__ = (
-        Index('ix_extracted_phenotypes_paper_id', 'paper_id'),
-        Index('ix_extracted_phenotypes_patient_id', 'patient_id'),
+        Index('ix_phenotypes_paper_id', 'paper_id'),
+        Index('ix_phenotypes_patient_id', 'patient_id'),
     )
 
 
@@ -100,7 +100,7 @@ class HpoDB(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     phenotype_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey('extracted_phenotypes.id', ondelete='CASCADE'),
+        ForeignKey('phenotypes.id', ondelete='CASCADE'),
         nullable=False,
     )
 

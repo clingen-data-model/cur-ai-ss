@@ -43,6 +43,7 @@ def upgrade() -> None:
         ),
         sa.Column('patient_id', sa.Integer(), nullable=True),
         sa.Column('variant_id', sa.Integer(), nullable=True),
+        sa.Column('phenotype_id', sa.Integer(), nullable=True),
         sa.Column(
             'status',
             sa.Enum('Pending', 'Running', 'Completed', 'Failed', name='taskstatus'),
@@ -59,10 +60,12 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(['paper_id'], ['papers.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['patient_id'], ['patients.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['variant_id'], ['variants.id'], ondelete='CASCADE'),
+        sa.ForeignKeyConstraint(['phenotype_id'], ['phenotypes.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id'),
     )
     op.create_index('ix_tasks_paper_id', 'tasks', ['paper_id'], unique=False)
     op.create_index('ix_tasks_patient_id', 'tasks', ['patient_id'], unique=False)
+    op.create_index('ix_tasks_phenotype_id', 'tasks', ['phenotype_id'], unique=False)
     op.create_index('ix_tasks_status', 'tasks', ['status'], unique=False)
     op.create_index('ix_tasks_type', 'tasks', ['type'], unique=False)
     op.create_index('ix_tasks_variant_id', 'tasks', ['variant_id'], unique=False)
@@ -72,7 +75,7 @@ def upgrade() -> None:
     op.create_index(
         'ix_tasks_dedup',
         'tasks',
-        ['type', 'paper_id', 'patient_id', 'variant_id'],
+        ['type', 'paper_id', 'patient_id', 'variant_id', 'phenotype_id'],
         unique=True,
     )
     # ### end Alembic commands ###
@@ -85,6 +88,7 @@ def downgrade() -> None:
     op.drop_index('ix_tasks_variant_id', table_name='tasks')
     op.drop_index('ix_tasks_type', table_name='tasks')
     op.drop_index('ix_tasks_status', table_name='tasks')
+    op.drop_index('ix_tasks_phenotype_id', table_name='tasks')
     op.drop_index('ix_tasks_patient_id', table_name='tasks')
     op.drop_index('ix_tasks_paper_id', table_name='tasks')
     op.drop_table('tasks')

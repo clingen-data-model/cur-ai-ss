@@ -180,7 +180,7 @@ def upgrade() -> None:
         batch_op.create_index('ix_variants_paper_id', ['paper_id'], unique=False)
 
     op.create_table(
-        'extracted_phenotypes',
+        'phenotypes',
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
         sa.Column('paper_id', sa.Integer(), nullable=False),
         sa.Column('patient_id', sa.Integer(), nullable=False),
@@ -203,12 +203,12 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(['patient_id'], ['patients.id'], ondelete='CASCADE'),
         sa.PrimaryKeyConstraint('id'),
     )
-    with op.batch_alter_table('extracted_phenotypes', schema=None) as batch_op:
+    with op.batch_alter_table('phenotypes', schema=None) as batch_op:
         batch_op.create_index(
-            'ix_extracted_phenotypes_paper_id', ['paper_id'], unique=False
+            'ix_phenotypes_paper_id', ['paper_id'], unique=False
         )
         batch_op.create_index(
-            'ix_extracted_phenotypes_patient_id', ['patient_id'], unique=False
+            'ix_phenotypes_patient_id', ['patient_id'], unique=False
         )
 
     op.create_table(
@@ -324,7 +324,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.ForeignKeyConstraint(
-            ['phenotype_id'], ['extracted_phenotypes.id'], ondelete='CASCADE'
+            ['phenotype_id'], ['phenotypes.id'], ondelete='CASCADE'
         ),
         sa.PrimaryKeyConstraint('id'),
         sa.UniqueConstraint('phenotype_id', name='uq_hpos_phenotype_id'),
@@ -348,11 +348,11 @@ def downgrade() -> None:
         batch_op.drop_index('ix_harmonized_variants_variant_id')
 
     op.drop_table('harmonized_variants')
-    with op.batch_alter_table('extracted_phenotypes', schema=None) as batch_op:
-        batch_op.drop_index('ix_extracted_phenotypes_patient_id')
-        batch_op.drop_index('ix_extracted_phenotypes_paper_id')
+    with op.batch_alter_table('phenotypes', schema=None) as batch_op:
+        batch_op.drop_index('ix_phenotypes_patient_id')
+        batch_op.drop_index('ix_phenotypes_paper_id')
 
-    op.drop_table('extracted_phenotypes')
+    op.drop_table('phenotypes')
     with op.batch_alter_table('variants', schema=None) as batch_op:
         batch_op.drop_index('ix_variants_paper_id')
 

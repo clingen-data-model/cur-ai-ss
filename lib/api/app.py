@@ -288,6 +288,7 @@ def create_task(
         task_type=request.type,
         patient_id=request.patient_id,
         variant_id=request.variant_id,
+        phenotype_id=request.phenotype_id,
     )
     return task
 

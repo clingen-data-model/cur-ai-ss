@@ -13,6 +13,7 @@ def enqueue_task(
     task_type: TaskType,
     patient_id: int | None = None,
     variant_id: int | None = None,
+    phenotype_id: int | None = None,
 ) -> TaskDB:
     """Create or reset a task to PENDING status.
 
@@ -26,10 +27,11 @@ def enqueue_task(
             type=task_type,
             patient_id=patient_id,
             variant_id=variant_id,
+            phenotype_id=phenotype_id,
             status=TaskStatus.PENDING,
         )
         .on_conflict_do_update(
-            index_elements=['type', 'paper_id', 'patient_id', 'variant_id'],
+            index_elements=['type', 'paper_id', 'patient_id', 'variant_id', 'phenotype_id'],
             set_={
                 'status': TaskStatus.PENDING,
                 'tries': 0,
@@ -47,6 +49,7 @@ def enqueue_task(
             TaskDB.type == task_type,
             TaskDB.patient_id == patient_id,
             TaskDB.variant_id == variant_id,
+            TaskDB.phenotype_id == phenotype_id,
         )
         .one()
     )
@@ -57,7 +60,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
     """Create successor tasks when a task completes.
 
     For each successor task type, enqueues a task with the same paper_id,
-    patient_id, and variant_id.
+    patient_id, variant_id, and phenotype_id.
     """
     successors = TASK_SUCCESSORS.get(task.type, [])
 
@@ -68,6 +71,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
             task_type=successor_type,
             patient_id=task.patient_id,
             variant_id=task.variant_id,
+            phenotype_id=task.phenotype_id,
         )
 
 

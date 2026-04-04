@@ -349,10 +349,12 @@ async def handle_phenotype_extraction(session: Session, task: TaskDB) -> None:
 
 async def handle_hpo_linking(session: Session, task: TaskDB) -> None:
     """Link phenotypes to HPO terms."""
-    # Get phenotypes for this paper (optionally filtered by patient)
+    # Get phenotypes for this paper (optionally filtered by patient or phenotype)
     query = session.query(PhenotypeDB).filter(PhenotypeDB.paper_id == task.paper_id)
     if task.patient_id is not None:
         query = query.filter(PhenotypeDB.patient_id == task.patient_id)
+    if task.phenotype_id is not None:
+        query = query.filter(PhenotypeDB.id == task.phenotype_id)
 
     phenotype_rows = query.order_by(PhenotypeDB.patient_id, PhenotypeDB.id).all()
     phenotype_id_set = {row.id for row in phenotype_rows}
