@@ -5,12 +5,20 @@ import requests
 import streamlit as st
 from pydantic import BaseModel, ValidationError
 
-from lib.models import PaperResp, PaperUpdateRequest, PipelineStatus
+from lib.models import PaperResp
+from lib.tasks import (
+    TaskStatus,
+    TaskType,
+    get_status_badge_color,
+    get_status_badge_icon,
+    infer_paper_status,
+    is_task_completed,
+)
 from lib.ui.api import (
     delete_paper,
+    enqueue_paper_task,
     get_http_error_detail,
     get_paper,
-    update_paper,
 )
 from lib.ui.paper.metadata import render_metadata_tab
 from lib.ui.paper.occurrences import render_patient_variant_occurrences_tab
@@ -51,7 +59,7 @@ class PaperQueryParams(BaseModel):
             )
 
 
-def render_rerun_evagg_fragment(paper_query_params: PaperQueryParams) -> None:
+def render_queue_tasks_fragment(paper_query_params: PaperQueryParams) -> None:
     rerun_mode = st.radio(
         'What would you like to rerun?',
         options=[
@@ -59,28 +67,22 @@ def render_rerun_evagg_fragment(paper_query_params: PaperQueryParams) -> None:
             'Linking only (reuse existing initial extraction)',
         ],
     )
-    prompt_override = st.text_area(
-        'Optional override instructions for the backend agent:',
-        placeholder='Give context to the agent about the mistake.',
-    )
 
     def on_confirm() -> None:
         try:
-            st.session_state['paper_resp'] = update_paper(
-                paper_id=paper_query_params.paper_id,
-                update_request=PaperUpdateRequest(
-                    pipeline_status=(
-                        PipelineStatus.QUEUED
-                        if rerun_mode == 'Full pipeline (initial extraction + linking)'
-                        else PipelineStatus.EXTRACTION_COMPLETED
-                    ),
-                    prompt_override=prompt_override or None,
-                ),
+            task_type = (
+                TaskType.PDF_PARSING
+                if rerun_mode == 'Full pipeline (initial extraction + linking)'
+                else TaskType.PHENOTYPE_EXTRACTION
             )
-            st.toast('EvAGG Job Queued', icon=':material/thumb_up:')
+            enqueue_paper_task(
+                paper_id=paper_query_params.paper_id,
+                task_type=task_type,
+            )
+            st.toast('Task Queued', icon=':material/thumb_up:')
             st.session_state.RERUN_POPOVER_STATE_KEY = False
         except Exception as e:
-            st.toast(f'Failed to requeue: {str(e)}', icon='❌')
+            st.toast(f'Failed to enqueue task: {str(e)}', icon='❌')
 
     st.button('Confirm Rerun', type='secondary', on_click=on_confirm)
 
@@ -110,12 +112,7 @@ with left:
     with st.container(horizontal=True, vertical_alignment='center'):
         st.page_link('dashboard.py', label='Dashboard', icon='🏠')
 with center:
-    if paper_resp.pipeline_status in {
-        PipelineStatus.EXTRACTION_COMPLETED,
-        PipelineStatus.LINKING_RUNNING,
-        PipelineStatus.LINKING_FAILED,
-        PipelineStatus.COMPLETED,
-    }:
+    if is_task_completed(paper_resp.tasks, TaskType.PAPER_METADATA):
         st.markdown(f'# {paper_resp.title}')
         parts = [f'{paper_resp.first_author} et al. {paper_resp.publication_year}']
         if paper_resp.pmid:
@@ -164,26 +161,20 @@ with center:
             vertical_alignment='center',
             horizontal_alignment='center',
         ):
+            status = infer_paper_status(paper_resp.tasks)
             st.badge(
-                paper_resp.pipeline_status.value,
-                icon=paper_resp.pipeline_status.icon,
-                color=paper_resp.pipeline_status.color,
+                status,
+                icon=get_status_badge_icon(paper_resp.tasks),
+                color=get_status_badge_color(paper_resp.tasks),
             )
             with st.popover(
                 '🔄 Rerun Agents',
                 type='tertiary',
                 on_change='rerun',
-                disabled=(
-                    paper_resp.pipeline_status
-                    in {
-                        PipelineStatus.QUEUED,
-                        PipelineStatus.EXTRACTION_RUNNING,
-                        PipelineStatus.LINKING_RUNNING,
-                    }
-                ),
+                disabled=any(t.status == TaskStatus.RUNNING for t in paper_resp.tasks),
                 key=RERUN_POPOVER_STATE_KEY,
             ):
-                render_rerun_evagg_fragment(paper_query_params)
+                render_queue_tasks_fragment(paper_query_params)
             if st.button('🗑️ Delete Paper', type='tertiary', width='content'):
                 try:
                     delete_paper(paper_query_params.paper_id)

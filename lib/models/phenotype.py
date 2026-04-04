@@ -46,15 +46,8 @@ class HpoCandidate(BaseModel):
 class HPOTerm(BaseModel):
     """An HPO ontology term."""
 
-    id: str
-    name: str
-
-
-class HpoLinkingEntry(BaseModel):
-    """HPO linking result for a single phenotype."""
-
-    phenotype_id: int
-    hpo: ReasoningBlock[HPOTerm | None]
+    id: str | None
+    name: str | None
 
 
 class PhenotypeDB(Base):
@@ -87,9 +80,9 @@ class PhenotypeDB(Base):
         onupdate=func.now(),
     )
 
-    paper: Mapped['PaperDB'] = relationship('PaperDB', overlaps='extracted_phenotypes')
+    paper: Mapped['PaperDB'] = relationship('PaperDB', overlaps='phenotypes')
     patient: Mapped['PatientDB'] = relationship(
-        'PatientDB', back_populates='extracted_phenotypes', overlaps='paper'
+        'PatientDB', back_populates='phenotypes', overlaps='paper'
     )
     hpo: Mapped['HpoDB | None'] = relationship(
         'HpoDB', back_populates='phenotype', uselist=False, cascade='all, delete-orphan'

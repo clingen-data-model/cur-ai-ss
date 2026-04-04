@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from lib.models.patient_variant_link import PatientVariantLinkDB
     from lib.models.phenotype import PhenotypeDB
     from lib.models.variant import VariantDB
+    from lib.tasks.models import TaskDB
 
 from typing import Literal, TypeAlias
 
@@ -50,48 +51,11 @@ from lib.misc.pdf.paths import (
     pdf_thumbnail_path,
 )
 from lib.models.base import Base, PatchModel
+from lib.tasks.models import TaskResp
 
 Color: TypeAlias = Literal[
     'red', 'orange', 'yellow', 'blue', 'green', 'violet', 'gray', 'grey', 'primary'
 ]
-
-
-class PipelineStatus(StrEnum):
-    QUEUED = 'Queued'
-
-    EXTRACTION_RUNNING = 'Extraction Running...'
-    EXTRACTION_FAILED = 'Extraction Failed'
-    EXTRACTION_COMPLETED = 'Extraction Completed'
-
-    LINKING_RUNNING = 'Linking Running...'
-    LINKING_FAILED = 'Linking Failed'
-
-    COMPLETED = 'Completed'
-
-    @property
-    def icon(self) -> str:
-        return {
-            PipelineStatus.QUEUED: '⏳',
-            PipelineStatus.EXTRACTION_RUNNING: '🟡',
-            PipelineStatus.EXTRACTION_FAILED: '❌',
-            PipelineStatus.EXTRACTION_COMPLETED: '✔️',
-            PipelineStatus.LINKING_RUNNING: '🟡',
-            PipelineStatus.LINKING_FAILED: '❌',
-            PipelineStatus.COMPLETED: '🎉',
-        }[self]
-
-    @property
-    def color(self) -> Color:
-        color_map: dict[PipelineStatus, Color] = {
-            PipelineStatus.QUEUED: 'yellow',
-            PipelineStatus.EXTRACTION_RUNNING: 'yellow',
-            PipelineStatus.EXTRACTION_FAILED: 'red',
-            PipelineStatus.EXTRACTION_COMPLETED: 'violet',
-            PipelineStatus.LINKING_RUNNING: 'yellow',
-            PipelineStatus.LINKING_FAILED: 'red',
-            PipelineStatus.COMPLETED: 'green',
-        }
-        return color_map[self]
 
 
 class GeneDB(Base):
@@ -152,12 +116,6 @@ class PaperDB(Base):
         back_populates='papers',
     )
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
-    pipeline_status: Mapped[PipelineStatus] = mapped_column(
-        SQLEnum(PipelineStatus),
-        nullable=False,
-        server_default=PipelineStatus.QUEUED.value,
-        index=True,
-    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -214,6 +172,9 @@ class PaperDB(Base):
     patient_variant_links: Mapped[list['PatientVariantLinkDB']] = relationship(
         'PatientVariantLinkDB', back_populates='paper', cascade='all, delete-orphan'
     )
+    tasks: Mapped[list['TaskDB']] = relationship(
+        'TaskDB', back_populates='paper', cascade='all, delete-orphan'
+    )
 
 
 class PaperExtractionOutput(BaseModel):
@@ -246,11 +207,10 @@ class PaperResp(PaperExtractionOutput):
     content_hash: str
     gene_symbol: str
     filename: str
-    pipeline_status: PipelineStatus
     updated_at: datetime
+    tasks: list['TaskResp'] = []
 
     # Override the PaperExtractionOutput to make the fields optional.
-    # Handles the case when paper is QUEUED.
     # Note that mypy does not approve of the override, though Pydantic functions
     # just fine in practice.
     title: str | None = None  # type: ignore
@@ -258,7 +218,6 @@ class PaperResp(PaperExtractionOutput):
 
 
 class PaperUpdateRequest(PatchModel):
-    pipeline_status: PipelineStatus | None = None
     title: str | None = None
     first_author: str | None = None
     journal_name: str | None = None
@@ -268,7 +227,6 @@ class PaperUpdateRequest(PatchModel):
     pmid: str | None = None
     pmcid: str | None = None
     paper_types: list[PaperType] | None = None
-    prompt_override: str | None = None
 
 
 class HighlightRequest(BaseModel):

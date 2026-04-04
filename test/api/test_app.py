@@ -14,9 +14,10 @@ from lib.models import (
     HarmonizedVariantDB,
     PaperDB,
     PatientDB,
-    PipelineStatus,
+    TaskDB,
     VariantDB,
 )
+from lib.tasks.models import TaskStatus, TaskType
 
 
 @pytest.fixture
@@ -95,8 +96,10 @@ def test_queue_new_paper(client, test_pdf, db_session, seeded_genes):
     assert response.status_code == 201
     data = response.json()
     assert data['id']  # Paper ID will be generated from content
-    assert data['pipeline_status'] == PipelineStatus.QUEUED.value
     assert data['filename'] == 'job-1.pdf'
+    assert 'tasks' in data
+    assert len(data['tasks']) > 0
+    assert all(task['status'] == TaskStatus.PENDING.value for task in data['tasks'])
     _assert_updated_at_recent(data['updated_at'])
     count = db_session.scalar(select(func.count(PaperDB.id)))
     assert count == 1
@@ -116,7 +119,7 @@ def test_queue_existing_paper_fails(client, db_session, test_pdf, seeded_genes):
         data={'gene_symbol': 'BRCA1'},
     )
     assert response2.status_code == 409
-    assert response2.json()['detail'] == 'Paper extraction already queued'
+    assert response2.json()['detail'] == 'Paper with this content already exists'
 
 
 def test_get_paper_success(client, test_pdf, seeded_genes):
@@ -133,9 +136,10 @@ def test_get_paper_success(client, test_pdf, seeded_genes):
     assert get_response.status_code == 200
     data_get = get_response.json()
     assert data_get['id'] == paper_id
-    assert data_get['pipeline_status'] == PipelineStatus.QUEUED.value
     assert data_get['filename'] == 'job-1.pdf'
     assert data_get['gene_symbol'] == 'BRCA1'
+    assert 'tasks' in data_get
+    assert len(data_get['tasks']) > 0
     _assert_updated_at_recent(data_get['updated_at'])
 
 
@@ -145,39 +149,29 @@ def test_get_paper_not_found(client):
     assert response.json()['detail'] == 'Paper not found'
 
 
-def test_update_paper_pipeline_status(client, test_pdf, db_session, seeded_genes):
+def test_update_paper_metadata(client, test_pdf, db_session, seeded_genes):
     response = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
         data={'gene_symbol': 'BRCA1'},
     )
     data = response.json()
+    paper_id = data['id']
     _assert_updated_at_recent(data['updated_at'])
-    db_session.execute(
-        update(PaperDB)
-        .where(PaperDB.id == data['id'])
-        .values(pipeline_status=PipelineStatus.EXTRACTION_FAILED)
-    )
     response2 = client.patch(
-        f'/papers/{data["id"]}',
-        json={'pipeline_status': PipelineStatus.QUEUED.value},
+        f'/papers/{paper_id}',
+        json={'title': 'Updated Title', 'first_author': 'John Doe'},
     )
     assert response2.status_code == 200
     data2 = response2.json()
-    assert data2['pipeline_status'] == PipelineStatus.QUEUED.value
+    assert data2['title'] == 'Updated Title'
+    assert data2['first_author'] == 'John Doe'
     _assert_updated_at_recent(data2['updated_at'])
     response3 = client.patch(
-        f'/papers/{response2.json()["id"]}',
-        json={'pipeline_status': PipelineStatus.QUEUED.value},
-    )
-    assert response3.status_code == 409
-    response4 = client.patch(
         f'/papers/999',
-        json={
-            'pipeline_status': PipelineStatus.QUEUED.value,
-        },
+        json={'title': 'Another Title'},
     )
-    assert response4.status_code == 404
+    assert response3.status_code == 404
 
 
 def test_list_paper(client, test_pdf, seeded_genes):
@@ -205,7 +199,7 @@ def test_list_paper(client, test_pdf, seeded_genes):
         _assert_updated_at_recent(job['updated_at'])
 
 
-def test_list_papers_filtered_by_status(client, test_pdf, db_session, seeded_genes):
+def test_list_papers_with_tasks(client, test_pdf, db_session, seeded_genes):
     response = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
@@ -222,13 +216,12 @@ def test_list_papers_filtered_by_status(client, test_pdf, db_session, seeded_gen
         },
         data={'gene_symbol': 'BRCA1'},
     )
-    response = client.get(
-        '/papers', params={'pipeline_status': PipelineStatus.QUEUED.value}
-    )
+    response = client.get('/papers')
     assert response.status_code == 200
     jobs = response.json()
-    assert all(job['pipeline_status'] == PipelineStatus.QUEUED for job in jobs)
+    assert len(jobs) == 2
     assert all(job['gene_symbol'] == 'BRCA1' for job in jobs)
+    assert all('tasks' in job and len(job['tasks']) > 0 for job in jobs)
     for job in jobs:
         _assert_updated_at_recent(job['updated_at'])
 
@@ -289,7 +282,6 @@ def seeded_paper(db_session):
         content_hash='abc123',
         gene_id=gene.id,
         filename='test.pdf',
-        pipeline_status=PipelineStatus.QUEUED,
     )
     db_session.add(paper)
     db_session.flush()

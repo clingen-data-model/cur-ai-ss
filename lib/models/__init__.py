@@ -16,7 +16,6 @@ from lib.models.paper import (
     PaperUpdateRequest,
     PedigreeDB,
     PedigreeResp,
-    PipelineStatus,
 )
 from lib.models.patient import (
     PatientCreateRequest,
@@ -37,7 +36,6 @@ from lib.models.phenotype import (
     ExtractedPhenotype,
     HpoCandidate,
     HpoDB,
-    HpoLinkingEntry,
     HPOTerm,
     PhenotypeDB,
     PhenotypeResp,
@@ -56,3 +54,4 @@ from lib.models.variant import (
     VariantEnrichmentOutput,
     VariantResp,
 )
+from lib.tasks.models import TaskDB, TaskResp

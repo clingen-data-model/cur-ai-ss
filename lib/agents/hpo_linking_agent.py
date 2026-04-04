@@ -2,7 +2,8 @@ import hpotk
 from agents import Agent, function_tool
 
 from lib.core.environment import env
-from lib.models.phenotype import HpoLinkingEntry
+from lib.models.evidence_block import ReasoningBlock
+from lib.models.phenotype import HPOTerm
 from lib.reference_data.hpo import find_matching_hpo_terms, get_ontology
 
 
@@ -116,7 +117,7 @@ Use similarity scores only as a weak signal.
 INPUT FORMAT
 
 You will receive a JSON object for a single phenotype with:
-    - phenotype_id (int): identifier to include in your output
+    - phenotype_id (int): identifier (for reference only, do not include in output)
     - concept (str): phenotype description from the paper
     - negated, uncertain, family_history (boolean)
     - candidates (list): HPO term suggestions
@@ -128,30 +129,25 @@ You will receive a JSON object for a single phenotype with:
 
 OUTPUT FORMAT
 
-Return a list containing a SINGLE HpoLinkingEntry object for the provided phenotype.
+Always return an HPOTerm object with:
+    - id (str or null): HPO identifier e.g. "HP:0001250", or null if no match found
+    - name (str or null): HPO term name e.g. "Seizure", or null if no match found
 
-The entry must have:
-    - phenotype_id (int): copied from the input phenotype
-    - hpo (object): always required, with fields:
-        - value (object or null): the matched HPO term, with:
-            - id (str): e.g. "HP:0001250"
-            - name (str): e.g. "Seizure"
-          Set to null if no match found or phenotype is excluded (see STEP 0).
-        - reasoning (str): always required — explain your decision or exclusion
+Your reasoning about the decision is captured separately in the framework's reasoning field.
 
-Example:
-[
-  {
-    "phenotype_id": 42,
-    "hpo": {
-      "value": {
-        "id": "HP:0001250",
-        "name": "Seizure"
-      },
-      "reasoning": "..."
-    }
-  }
-]
+Examples:
+
+When a match is found:
+{
+  "id": "HP:0001250",
+  "name": "Seizure"
+}
+
+When no match is found or phenotype is excluded:
+{
+  "id": null,
+  "name": null
+}
 
 ---------------------------------------------------------------------
 STEP 0 — Exclusion criteria (MANDATORY)
@@ -165,9 +161,7 @@ If the single phenotype has:
 Then:
 - DO NOT map to any HPO term
 - DO NOT call any tools
-- Return the entry with:
-    - hpo.value: null
-    - hpo.reasoning: brief explanation (e.g., "negated phenotype", "family history only")
+- Return an HPOTerm object with id: null and name: null
 
 These represent absence or non-proband information
 and must not be encoded as HPO terms.
@@ -307,13 +301,13 @@ the phenotype text, but do not infer details that are not stated.
 
 STEP 6 — If no match exists
 
-Return hpo.value = null ONLY after:
+Return an HPOTerm with id: null and name: null ONLY after:
 
 - reviewing candidate terms
 - searching the ontology with alternative phrasings
 - inspecting promising results with tools
 
-Never return null without tool exploration.
+Never return null values without tool exploration.
 
 ---------------------------------------------------------------------
 
@@ -328,15 +322,15 @@ If the candidate terms do not represent the phenotype meaning:
 3. Use get_hpo_term() to inspect promising results
 4. Use hierarchy tools (get_hpo_parents/children) to find related terms
 
-Only return null after tool exploration reveals no suitable match.
+Only return id: null and name: null after tool exploration reveals no suitable match.
 
-Return null with hpo.value when:
+Return an HPOTerm with id: null and name: null when:
 - the phenotype is too vague (e.g., "symptom", "finding")
 - the phenotype is genuinely not represented in HPO
 - search attempts with multiple phrasings yield no meaningful matches
 - selecting any term would require significant guessing
 
-It is better to return null than to select an incorrect HPO term,
+It is better to return null values than to select an incorrect HPO term,
 but actively use tools before giving up.
 
 ---------------------------------------------------------------------
@@ -365,6 +359,6 @@ agent = Agent(
     name='hpo_linker',
     instructions=INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
-    output_type=list[HpoLinkingEntry],
+    output_type=ReasoningBlock[HPOTerm],
     tools=[search_hpo_terms, get_hpo_term, get_hpo_parents, get_hpo_children],
 )

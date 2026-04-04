@@ -1,9 +1,10 @@
 import pandas as pd
 import streamlit as st
 
-from lib.models import PaperResp, PatientResp, PipelineStatus, VariantResp
+from lib.models import PaperResp, PatientResp, VariantResp
 from lib.models.evidence_block import EvidenceBlock
 from lib.models.patient_variant_link import Inheritance, TestingMethod, Zygosity
+from lib.tasks import TaskType, is_task_completed
 from lib.ui.api import (
     get_patient_variant_links,
     get_patients,
@@ -63,7 +64,7 @@ def render_patient_variant_occurrences_tab() -> None:
     if not paper_resp.title:
         st.write(f'{paper_resp.filename} not yet extracted...')
         return
-    elif paper_resp.pipeline_status != PipelineStatus.COMPLETED:
+    elif not is_task_completed(paper_resp.tasks, TaskType.PATIENT_VARIANT_LINKING):
         st.write(f'Entity Linking not yet completed...')
         return
 

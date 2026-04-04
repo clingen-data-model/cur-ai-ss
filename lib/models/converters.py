@@ -59,13 +59,13 @@ def phenotype_to_db(paper_id: int, phenotype: ExtractedPhenotype) -> PhenotypeDB
 
 def hpo_to_db(
     phenotype_id: int,
-    hpo: ReasoningBlock[HPOTerm | None],
+    hpo: ReasoningBlock[HPOTerm],
 ) -> HpoDB:
     """Convert an HPO ReasoningBlock to HpoDB, storing ID, name, and reasoning separately."""
     return HpoDB(
         phenotype_id=phenotype_id,
-        hpo_id=hpo.value.id if hpo.value else None,
-        hpo_name=hpo.value.name if hpo.value else None,
+        hpo_id=hpo.value.id,
+        hpo_name=hpo.value.name,
         reasoning=hpo.reasoning,
     )
 

@@ -7,7 +7,8 @@ from streamlit_searchbox import st_searchbox
 
 from lib.core.environment import env
 from lib.misc.pdf.paths import pdf_thumbnail_path
-from lib.models import PaperResp, PipelineStatus
+from lib.models import PaperResp
+from lib.tasks import infer_paper_status
 from lib.ui.api import (
     delete_paper,
     get_http_error_detail,
@@ -91,7 +92,7 @@ def upload_paper_modal() -> None:
 
 def render_papers_df(papers_resps: list[PaperResp]) -> None:
     papers_by_id = {p.id: p for p in paper_resps}
-    df = pd.DataFrame([p.model_dump() for p in paper_resps])
+    df = pd.DataFrame([p.model_dump(exclude={'tasks'}) for p in paper_resps])
     df['thumbnail_path'] = df['id'].map(
         lambda paper_id: f'{env.PROTOCOL}{env.API_ENDPOINT}{pdf_thumbnail_path(paper_id)}'  # note the leading slash
     )
@@ -107,9 +108,8 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
         lambda row: f'/paper?paper_id={row["id"]}#{papers_by_id[row["id"]].pmid or QUEUED_EXTRACTION_TEXT}',
         axis=1,
     )
-    df['pipeline_status'] = df.apply(
-        lambda row: f'/paper?paper_id={row["id"]}#{PipelineStatus(row["pipeline_status"]).value + PipelineStatus(row["pipeline_status"]).icon}',
-        axis=1,
+    df['pipeline_status'] = df['id'].map(
+        lambda paper_id: f'/paper?paper_id={paper_id}#{infer_paper_status(papers_by_id[paper_id].tasks)}'
     )
     st.data_editor(
         df[

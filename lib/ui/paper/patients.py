@@ -12,7 +12,6 @@ from lib.models import (
     PatientResp,
     PatientUpdateRequest,
     PhenotypeResp,
-    PipelineStatus,
 )
 from lib.models.patient import (
     AffectedStatus,
@@ -21,6 +20,7 @@ from lib.models.patient import (
     RaceEthnicity,
     SexAtBirth,
 )
+from lib.tasks import TaskType, is_task_completed
 from lib.ui.api import (
     get_patients,
     get_pedigree,
@@ -559,7 +559,7 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
     if not paper_resp.title:
         st.write(f'{paper_resp.filename} not yet extracted...')
         return
-    elif paper_resp.pipeline_status != PipelineStatus.COMPLETED:
+    if not is_task_completed(paper_resp.tasks, TaskType.PATIENT_EXTRACTION):
         st.write(f'Entity Linking not yet completed...')
         return
     # -----------------------------
