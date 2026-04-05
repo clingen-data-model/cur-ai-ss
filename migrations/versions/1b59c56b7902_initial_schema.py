@@ -204,12 +204,8 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint('id'),
     )
     with op.batch_alter_table('phenotypes', schema=None) as batch_op:
-        batch_op.create_index(
-            'ix_phenotypes_paper_id', ['paper_id'], unique=False
-        )
-        batch_op.create_index(
-            'ix_phenotypes_patient_id', ['patient_id'], unique=False
-        )
+        batch_op.create_index('ix_phenotypes_paper_id', ['paper_id'], unique=False)
+        batch_op.create_index('ix_phenotypes_patient_id', ['patient_id'], unique=False)
 
     op.create_table(
         'harmonized_variants',

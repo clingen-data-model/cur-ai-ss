@@ -60,7 +60,9 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(['paper_id'], ['papers.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['patient_id'], ['patients.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['variant_id'], ['variants.id'], ondelete='CASCADE'),
-        sa.ForeignKeyConstraint(['phenotype_id'], ['phenotypes.id'], ondelete='CASCADE'),
+        sa.ForeignKeyConstraint(
+            ['phenotype_id'], ['phenotypes.id'], ondelete='CASCADE'
+        ),
         sa.PrimaryKeyConstraint('id'),
     )
     op.create_index('ix_tasks_paper_id', 'tasks', ['paper_id'], unique=False)

@@ -60,21 +60,14 @@ class PaperQueryParams(BaseModel):
 
 
 def render_queue_tasks_fragment(paper_query_params: PaperQueryParams) -> None:
-    rerun_mode = st.radio(
-        'What would you like to rerun?',
-        options=[
-            'Full pipeline (initial extraction + linking)',
-            'Linking only (reuse existing initial extraction)',
-        ],
+    task_type = st.selectbox(
+        'Select task to rerun:',
+        options=[t for t in TaskType],
+        format_func=lambda t: t.value,
     )
 
     def on_confirm() -> None:
         try:
-            task_type = (
-                TaskType.PDF_PARSING
-                if rerun_mode == 'Full pipeline (initial extraction + linking)'
-                else TaskType.PHENOTYPE_EXTRACTION
-            )
             enqueue_paper_task(
                 paper_id=paper_query_params.paper_id,
                 task_type=task_type,

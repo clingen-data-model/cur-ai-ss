@@ -1,10 +1,15 @@
 from typing import Literal
 
-from sqlalchemy import insert
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
-from lib.tasks.models import TASK_SUCCESSORS, TaskDB, TaskResp, TaskStatus, TaskType
+from lib.tasks.models import (
+    TASK_PREDECESSORS,
+    TASK_SUCCESSORS,
+    TaskDB,
+    TaskResp,
+    TaskStatus,
+    TaskType,
+)
 
 
 def enqueue_task(
@@ -17,62 +22,84 @@ def enqueue_task(
 ) -> TaskDB:
     """Create or reset a task to PENDING status.
 
-    Uses on_conflict_do_update to handle the case where a task already exists.
+    Checks for existing task and updates it, or creates new one.
     Returns the task (either newly created or reset).
     """
-    stmt = (
-        sqlite_insert(TaskDB)
-        .values(
-            paper_id=paper_id,
+    # Check if task exists (SQLAlchemy converts == None to IS NULL)
+    existing_task = (
+        session.query(TaskDB)
+        .filter(
+            TaskDB.type == task_type,
+            TaskDB.paper_id == paper_id,
+            TaskDB.patient_id == patient_id,
+            TaskDB.variant_id == variant_id,
+            TaskDB.phenotype_id == phenotype_id,
+        )
+        .first()
+    )
+
+    if existing_task:
+        # Reset existing task
+        existing_task.status = TaskStatus.PENDING
+        existing_task.tries = 0
+        existing_task.error_message = None
+        session.flush()
+        return existing_task
+    else:
+        # Create new task
+        new_task = TaskDB(
             type=task_type,
+            paper_id=paper_id,
             patient_id=patient_id,
             variant_id=variant_id,
             phenotype_id=phenotype_id,
             status=TaskStatus.PENDING,
         )
-        .on_conflict_do_update(
-            index_elements=['type', 'paper_id', 'patient_id', 'variant_id', 'phenotype_id'],
-            set_={
-                'status': TaskStatus.PENDING,
-                'tries': 0,
-                'error_message': None,
-            },
-        )
-    )
-    session.execute(stmt)
-
-    # Fetch and return the task
-    task = (
-        session.query(TaskDB)
-        .filter(
-            TaskDB.paper_id == paper_id,
-            TaskDB.type == task_type,
-            TaskDB.patient_id == patient_id,
-            TaskDB.variant_id == variant_id,
-            TaskDB.phenotype_id == phenotype_id,
-        )
-        .one()
-    )
-    return task
+        session.add(new_task)
+        session.flush()
+        return new_task
 
 
 def enqueue_successors(session: Session, task: TaskDB) -> None:
     """Create successor tasks when a task completes.
 
-    For each successor task type, enqueues a task with the same paper_id,
-    patient_id, variant_id, and phenotype_id.
+    For each successor task type, checks that ALL predecessor tasks are
+    completed before enqueueing. Enqueues with the same paper_id, patient_id,
+    variant_id, and phenotype_id.
     """
     successors = TASK_SUCCESSORS.get(task.type, [])
 
     for successor_type in successors:
-        enqueue_task(
-            session,
-            paper_id=task.paper_id,
-            task_type=successor_type,
-            patient_id=task.patient_id,
-            variant_id=task.variant_id,
-            phenotype_id=task.phenotype_id,
-        )
+        # Check that all predecessors for this successor are completed
+        predecessor_types = TASK_PREDECESSORS.get(successor_type, [])
+        all_predecessors_done = True
+
+        for pred_type in predecessor_types:
+            pred_task = (
+                session.query(TaskDB)
+                .filter(
+                    TaskDB.paper_id == task.paper_id,
+                    TaskDB.type == pred_type,
+                    TaskDB.patient_id == task.patient_id,
+                    TaskDB.variant_id == task.variant_id,
+                    TaskDB.phenotype_id == task.phenotype_id,
+                )
+                .first()
+            )
+            # If predecessor doesn't exist or isn't completed, skip this successor
+            if not pred_task or pred_task.status != TaskStatus.COMPLETED:
+                all_predecessors_done = False
+                break
+
+        if all_predecessors_done:
+            enqueue_task(
+                session,
+                paper_id=task.paper_id,
+                task_type=successor_type,
+                patient_id=task.patient_id,
+                variant_id=task.variant_id,
+                phenotype_id=task.phenotype_id,
+            )
 
 
 def infer_paper_status(tasks: list[TaskResp]) -> str:

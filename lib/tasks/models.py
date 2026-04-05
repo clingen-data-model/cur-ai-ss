@@ -61,6 +61,19 @@ TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
 }
 
 
+def _build_task_predecessors() -> dict[TaskType, list[TaskType]]:
+    """Build reverse mapping: which tasks must complete before each task."""
+    predecessors: dict[TaskType, list[TaskType]] = {t: [] for t in TaskType}
+    for task_type, successors in TASK_SUCCESSORS.items():
+        for successor in successors:
+            predecessors[successor].append(task_type)
+    return predecessors
+
+
+# Cache the predecessors mapping
+TASK_PREDECESSORS: dict[TaskType, list[TaskType]] = _build_task_predecessors()
+
+
 class TaskDB(Base):
     __tablename__ = 'tasks'
 

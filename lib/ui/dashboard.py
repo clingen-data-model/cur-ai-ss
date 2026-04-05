@@ -8,7 +8,7 @@ from streamlit_searchbox import st_searchbox
 from lib.core.environment import env
 from lib.misc.pdf.paths import pdf_thumbnail_path
 from lib.models import PaperResp
-from lib.tasks import infer_paper_status
+from lib.tasks import get_status_badge_icon, infer_paper_status
 from lib.ui.api import (
     delete_paper,
     get_http_error_detail,
@@ -108,8 +108,8 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
         lambda row: f'/paper?paper_id={row["id"]}#{papers_by_id[row["id"]].pmid or QUEUED_EXTRACTION_TEXT}',
         axis=1,
     )
-    df['pipeline_status'] = df['id'].map(
-        lambda paper_id: f'/paper?paper_id={paper_id}#{infer_paper_status(papers_by_id[paper_id].tasks)}'
+    df['agent_status'] = df['id'].map(
+        lambda paper_id: f'{get_status_badge_icon(papers_by_id[paper_id].tasks)} {infer_paper_status(papers_by_id[paper_id].tasks)}'
     )
     st.data_editor(
         df[
@@ -120,7 +120,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
                 'first_author',
                 'pmid',
                 'filename',
-                'pipeline_status',
+                'agent_status',
                 'updated_at',
             ]
         ],
@@ -150,12 +150,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
                 display_text=r'.*?#(.+)$',
             ),
             'filename': st.column_config.Column('Filename'),
-            'pipeline_status': st.column_config.LinkColumn(
-                'Extraction Status',
-                # Regex to extract text after the '#'
-                # Note, this is a major hack to get around the lack of a better way of doing this.
-                display_text=r'.*?#(.+)$',
-            ),
+            'agent_status': st.column_config.Column('Agent Status'),
             'updated_at': st.column_config.DatetimeColumn(
                 'Last Modified',
                 format='D MMM YYYY, h:mm a',
@@ -168,7 +163,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
             'first_author',
             'pmid',
             'filename',
-            'pipeline_status',
+            'agent_status',
             'updated_at',
         ],
         num_rows='delete',
