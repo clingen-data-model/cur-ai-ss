@@ -22,6 +22,7 @@ from lib.models.patient import (
 )
 from lib.tasks import TaskType, is_task_completed
 from lib.ui.api import (
+    enqueue_paper_task,
     get_patients,
     get_pedigree,
     get_phenotypes,
@@ -41,6 +42,7 @@ def _render_patient_phenotypes(
     phenotypes: list[PhenotypeResp],
     paper_resp: PaperResp,
     key_prefix: str,
+    patient_id: int,
 ) -> None:
     """Render phenotypes for a specific patient with matched/unmatched tabs."""
     if not phenotypes:
@@ -58,7 +60,7 @@ def _render_patient_phenotypes(
     with tab1:
         if matched:
             _render_phenotypes_table(
-                matched, paper_resp, f'{key_prefix}-matched', show_hpo=True
+                matched, paper_resp, f'{key_prefix}-matched', show_hpo=True, patient_id=patient_id
             )
         else:
             st.info('No phenotypes matched to HPO.')
@@ -66,7 +68,7 @@ def _render_patient_phenotypes(
     with tab2:
         if unmatched:
             _render_phenotypes_table(
-                unmatched, paper_resp, f'{key_prefix}-unmatched', show_hpo=False
+                unmatched, paper_resp, f'{key_prefix}-unmatched', show_hpo=False, patient_id=patient_id
             )
         else:
             st.info('All phenotypes have been matched to HPO.')
@@ -77,6 +79,7 @@ def _render_phenotypes_table(
     paper_resp: PaperResp,
     key_prefix: str,
     show_hpo: bool,
+    patient_id: int,
 ) -> None:
     """Render phenotypes table with detail panel."""
     # Build table rows
@@ -202,6 +205,17 @@ def _render_phenotypes_table(
             if phenotype.hpo and phenotype.hpo.reasoning:
                 with st.expander('HPO Match Reasoning', expanded=False):
                     st.text(phenotype.hpo.reasoning)
+            if st.button(
+                '🔄 Re-link HPO',
+                key=f'{key_prefix}-relink-hpo-{phenotype.id}',
+            ):
+                enqueue_paper_task(
+                    paper_resp.id,
+                    TaskType.HPO_LINKING,
+                    patient_id=patient_id,
+                    phenotype_id=phenotype.id,
+                )
+                st.success('HPO linking task enqueued')
 
 
 def render_patient(
@@ -549,7 +563,7 @@ def render_patient(
         st.markdown('### Phenotypes')
         try:
             phenotypes = get_phenotypes(paper_resp.id, patient.id)
-            _render_patient_phenotypes(phenotypes, paper_resp, key_prefix)
+            _render_patient_phenotypes(phenotypes, paper_resp, key_prefix, patient.id)
         except Exception as e:
             st.error(f'Failed to load phenotypes: {str(e)}')
 

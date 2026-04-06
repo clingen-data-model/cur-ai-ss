@@ -202,11 +202,15 @@ def enqueue_paper_task(
     task_type: TaskType,
     patient_id: int | None = None,
     variant_id: int | None = None,
+    phenotype_id: int | None = None,
 ) -> TaskResp:
     resp = requests.post(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/tasks',
         json=TaskCreateRequest(
-            type=task_type, patient_id=patient_id, variant_id=variant_id
+            type=task_type,
+            patient_id=patient_id,
+            variant_id=variant_id,
+            phenotype_id=phenotype_id,
         ).model_dump(),
     )
     resp.raise_for_status()
