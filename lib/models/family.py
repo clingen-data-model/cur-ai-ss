@@ -37,7 +37,6 @@ class FamilyDB(Base):
     )
 
     paper: Mapped[PaperDB] = relationship('PaperDB', back_populates='families')
-    # No cascade='all, delete-orphan' here — patient FK uses SET NULL, not CASCADE
     patients: Mapped[list[PatientDB]] = relationship(
         'PatientDB', back_populates='family'
     )

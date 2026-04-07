@@ -10,6 +10,7 @@ from lib.api.app import app
 from lib.api.db import get_session, session_scope
 from lib.models import (
     EnrichedVariantDB,
+    FamilyDB,
     GeneDB,
     HarmonizedVariantDB,
     PaperDB,
@@ -285,6 +286,17 @@ def seeded_paper(db_session):
     )
     db_session.add(paper)
     db_session.flush()
+    # Create default family for tests
+    family = FamilyDB(
+        paper_id=paper.id,
+        identifier='Family 1',
+        identifier_evidence=dict(
+            value='Family 1', reasoning='test family', quote='Family 1'
+        ),
+    )
+    db_session.add(family)
+    db_session.flush()
+    paper.default_family_id = family.id
     return paper
 
 
@@ -329,10 +341,13 @@ def test_get_patients_returns_ordered_by_position(client, db_session, seeded_pap
             value='Unknown', reasoning='test evidence', quote='test context'
         ),
     )
+    # Get the default family created in seeded_paper fixture
+    family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
     # Insert patients in order (they'll get auto-incrementing IDs)
     db_session.add(
         PatientDB(
             paper_id=seeded_paper.id,
+            family_id=family.id,
             identifier='P3',
             **required,
         )
@@ -340,6 +355,7 @@ def test_get_patients_returns_ordered_by_position(client, db_session, seeded_pap
     db_session.add(
         PatientDB(
             paper_id=seeded_paper.id,
+            family_id=family.id,
             identifier='P1',
             **required,
         )
@@ -347,6 +363,7 @@ def test_get_patients_returns_ordered_by_position(client, db_session, seeded_pap
     db_session.add(
         PatientDB(
             paper_id=seeded_paper.id,
+            family_id=family.id,
             identifier='P2',
             **required,
         )
@@ -405,9 +422,12 @@ def test_update_patient_with_human_edit_note(client, db_session, seeded_paper):
             value='Unknown', reasoning='test evidence', quote='test context'
         ),
     )
+    # Get the default family created in seeded_paper fixture
+    family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
     # Create a patient
     patient = PatientDB(
         paper_id=seeded_paper.id,
+        family_id=family.id,
         identifier='P1',
         **required,
     )

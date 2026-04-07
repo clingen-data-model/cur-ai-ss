@@ -298,18 +298,8 @@ def create_task(
 
 
 def _patient_to_resp(row: PatientDB) -> PatientResp:
-    """Convert PatientDB to PatientResp, including optional family fields."""
+    """Convert PatientDB to PatientResp, including family fields."""
     from lib.models.evidence_block import HumanEvidenceBlock
-
-    family_id = None
-    family_identifier = None
-    family_identifier_evidence = None
-    if row.family is not None:
-        family_id = row.family.id
-        family_identifier = row.family.identifier
-        family_identifier_evidence = HumanEvidenceBlock[str].model_validate(
-            row.family.identifier_evidence
-        )
 
     return PatientResp(
         id=row.id,
@@ -333,9 +323,11 @@ def _patient_to_resp(row: PatientDB) -> PatientResp:
         affected_status=row.affected_status,  # type: ignore[arg-type]
         affected_status_evidence=row.affected_status_evidence,  # type: ignore[arg-type]
         updated_at=row.updated_at,
-        family_id=family_id,
-        family_identifier=family_identifier,
-        family_identifier_evidence=family_identifier_evidence,
+        family_id=row.family.id,
+        family_identifier=row.family.identifier,
+        family_identifier_evidence=HumanEvidenceBlock[str].model_validate(
+            row.family.identifier_evidence
+        ),
     )
 
 
@@ -385,6 +377,7 @@ def create_patient(
 
     patient_db = PatientDB(
         paper_id=paper_id,
+        family_id=patient_data.family_id,
         identifier=patient_data.identifier,
         identifier_evidence=create_evidence_block(patient_data.identifier),
         proband_status=patient_data.proband_status,

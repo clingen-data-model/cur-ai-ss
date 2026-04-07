@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from sqlalchemy import (
     DateTime,
     ForeignKey,
@@ -17,6 +17,7 @@ from sqlalchemy.types import JSON
 
 from lib.models.base import Base, PatchModel
 from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock
+from lib.models.family import Family
 from lib.models.paper import PaperDB
 
 if TYPE_CHECKING:
@@ -334,8 +335,36 @@ class Patient(BaseModel):
     affected_status: EvidenceBlock[AffectedStatus]
 
 
+class FamilyEntry(BaseModel):
+    """Family grouping with references to patients by their identifier."""
+
+    family: Family
+    patient_identifiers: List[str]
+
+
 class PatientExtractionOutput(BaseModel):
     patients: List[Patient]
+    families: List[FamilyEntry]
+
+    @model_validator(mode='after')
+    def validate_family_coverage(self) -> 'PatientExtractionOutput':
+        """Ensure every patient is assigned to exactly one family."""
+        patient_identifiers = {p.identifier.value for p in self.patients}
+        assigned_identifiers = set()
+        for entry in self.families:
+            assigned_identifiers.update(entry.patient_identifiers)
+
+        missing = patient_identifiers - assigned_identifiers
+        if missing:
+            raise ValueError(f'Patients not assigned to any family: {missing}')
+
+        extra = assigned_identifiers - patient_identifiers
+        if extra:
+            raise ValueError(
+                f'Family assignments reference non-existent patients: {extra}'
+            )
+
+        return self
 
 
 class PatientDB(Base):
@@ -345,8 +374,8 @@ class PatientDB(Base):
     paper_id: Mapped[int] = mapped_column(
         Integer, ForeignKey('papers.id', ondelete='CASCADE'), nullable=False
     )
-    family_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey('families.id', ondelete='SET NULL'), nullable=True
+    family_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey('families.id', ondelete='CASCADE'), nullable=False
     )
 
     # Extracted values (updateable, strongly typed)
@@ -379,9 +408,7 @@ class PatientDB(Base):
     )
 
     paper: Mapped[PaperDB] = relationship('PaperDB', back_populates='patients')
-    family: Mapped['FamilyDB | None'] = relationship(
-        'FamilyDB', back_populates='patients'
-    )
+    family: Mapped['FamilyDB'] = relationship('FamilyDB', back_populates='patients')
     phenotypes: Mapped[list['PhenotypeDB']] = relationship(
         'PhenotypeDB', back_populates='patient', cascade='all, delete-orphan'
     )
@@ -418,9 +445,9 @@ class PatientResp(BaseModel):
     country_of_origin_evidence: HumanEvidenceBlock[CountryCode]
     race_ethnicity_evidence: HumanEvidenceBlock[RaceEthnicity]
     affected_status_evidence: HumanEvidenceBlock[AffectedStatus]
-    family_id: int | None = None
-    family_identifier: str | None = None
-    family_identifier_evidence: HumanEvidenceBlock[str] | None = None
+    family_id: int
+    family_identifier: str
+    family_identifier_evidence: HumanEvidenceBlock[str]
 
 
 class PatientCreateRequest(BaseModel):
@@ -433,6 +460,7 @@ class PatientCreateRequest(BaseModel):
     country_of_origin: str
     race_ethnicity: str
     affected_status: str
+    family_id: int
 
 
 class PatientUpdateRequest(PatchModel):
