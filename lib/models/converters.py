@@ -1,6 +1,7 @@
 from lib.agents.pedigree_describer_agent import PedigreeExtractionOutput
 from lib.models import PatientDB, PedigreeDB, VariantDB
 from lib.models.evidence_block import ReasoningBlock
+from lib.models.family import Family, FamilyDB
 from lib.models.patient import Patient
 from lib.models.patient_variant_link import PatientVariantLink, PatientVariantLinkDB
 from lib.models.phenotype import (
@@ -14,6 +15,15 @@ from lib.models.variant import (
     HarmonizedVariantDB,
     Variant,
 )
+
+
+def family_to_db(paper_id: int, family: Family) -> FamilyDB:
+    """Convert a Family to FamilyDB, splitting values from evidence."""
+    return FamilyDB(
+        paper_id=paper_id,
+        identifier=family.identifier.value,
+        identifier_evidence=family.identifier.model_dump(),
+    )
 
 
 def patient_to_db(paper_id: int, patient: Patient) -> PatientDB:

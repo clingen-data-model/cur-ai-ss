@@ -11,6 +11,7 @@ from pydantic import (
 )
 
 if TYPE_CHECKING:
+    from lib.models.family import FamilyDB
     from lib.models.patient import PatientDB
     from lib.models.patient_variant_link import PatientVariantLinkDB
     from lib.models.phenotype import PhenotypeDB
@@ -159,6 +160,9 @@ class PaperDB(Base):
 
     patients: Mapped[list['PatientDB']] = relationship(
         'PatientDB', back_populates='paper', cascade='all, delete-orphan'
+    )
+    families: Mapped[list['FamilyDB']] = relationship(
+        'FamilyDB', back_populates='paper', cascade='all, delete-orphan'
     )
     pedigree: Mapped['PedigreeDB | None'] = relationship(
         'PedigreeDB',

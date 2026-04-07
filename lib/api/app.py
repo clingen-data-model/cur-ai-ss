@@ -55,6 +55,10 @@ from lib.models import (
     EnrichedVariantDB,
     EnrichedVariantResp,
     ExtractedPhenotype,
+    FamilyCreateRequest,
+    FamilyDB,
+    FamilyResp,
+    FamilyUpdateRequest,
     GeneDB,
     GeneResp,
     HarmonizedVariantDB,
@@ -293,6 +297,48 @@ def create_task(
     return task
 
 
+def _patient_to_resp(row: PatientDB) -> PatientResp:
+    """Convert PatientDB to PatientResp, including optional family fields."""
+    from lib.models.evidence_block import HumanEvidenceBlock
+
+    family_id = None
+    family_identifier = None
+    family_identifier_evidence = None
+    if row.family is not None:
+        family_id = row.family.id
+        family_identifier = row.family.identifier
+        family_identifier_evidence = HumanEvidenceBlock[str].model_validate(
+            row.family.identifier_evidence
+        )
+
+    return PatientResp(
+        id=row.id,
+        paper_id=row.paper_id,
+        identifier=row.identifier,
+        identifier_evidence=row.identifier_evidence,  # type: ignore[arg-type]
+        proband_status=row.proband_status,  # type: ignore[arg-type]
+        proband_status_evidence=row.proband_status_evidence,  # type: ignore[arg-type]
+        sex=row.sex,  # type: ignore[arg-type]
+        sex_evidence=row.sex_evidence,  # type: ignore[arg-type]
+        age_diagnosis=row.age_diagnosis,
+        age_diagnosis_evidence=row.age_diagnosis_evidence,  # type: ignore[arg-type]
+        age_report=row.age_report,
+        age_report_evidence=row.age_report_evidence,  # type: ignore[arg-type]
+        age_death=row.age_death,
+        age_death_evidence=row.age_death_evidence,  # type: ignore[arg-type]
+        country_of_origin=row.country_of_origin,  # type: ignore[arg-type]
+        country_of_origin_evidence=row.country_of_origin_evidence,  # type: ignore[arg-type]
+        race_ethnicity=row.race_ethnicity,  # type: ignore[arg-type]
+        race_ethnicity_evidence=row.race_ethnicity_evidence,  # type: ignore[arg-type]
+        affected_status=row.affected_status,  # type: ignore[arg-type]
+        affected_status_evidence=row.affected_status_evidence,  # type: ignore[arg-type]
+        updated_at=row.updated_at,
+        family_id=family_id,
+        family_identifier=family_identifier,
+        family_identifier_evidence=family_identifier_evidence,
+    )
+
+
 @app.get('/papers/{paper_id}/patients', response_model=list[PatientResp])
 def get_patients(paper_id: int, session: Session = Depends(get_session)) -> Any:
     paper_db = session.get(PaperDB, paper_id)
@@ -302,11 +348,12 @@ def get_patients(paper_id: int, session: Session = Depends(get_session)) -> Any:
         )
     patients = (
         session.query(PatientDB)
+        .options(selectinload(PatientDB.family))
         .filter(PatientDB.paper_id == paper_id)
         .order_by(PatientDB.id)
         .all()
     )
-    return patients
+    return [_patient_to_resp(p) for p in patients]
 
 
 @app.post(
@@ -361,6 +408,21 @@ def create_patient(
     )
     session.add(patient_db)
     return patient_db
+
+
+@app.get('/papers/{paper_id}/families', response_model=list[FamilyResp])
+def get_families(paper_id: int, session: Session = Depends(get_session)) -> Any:
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    return (
+        session.query(FamilyDB)
+        .filter(FamilyDB.paper_id == paper_id)
+        .order_by(FamilyDB.id)
+        .all()
+    )
 
 
 @app.get('/papers/{paper_id}/pedigree', response_model=PedigreeResp | None)
@@ -662,14 +724,17 @@ def update_patient(
     session: Session = Depends(get_session),
 ) -> Any:
     patient_db = (
-        session.query(PatientDB).filter(PatientDB.id == patient_id).one_or_none()
+        session.query(PatientDB)
+        .options(selectinload(PatientDB.family))
+        .filter(PatientDB.id == patient_id)
+        .one_or_none()
     )
     if not patient_db:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Patient not found'
         )
     patch_request.apply_to(patient_db)
-    return patient_db
+    return _patient_to_resp(patient_db)
 
 
 @app.get('/genes/search', response_model=list[GeneResp])
