@@ -1,6 +1,8 @@
 import time
+from datetime import datetime
 
 import pandas as pd
+import pytz  # type: ignore[import-untyped]
 import requests
 import streamlit as st
 from streamlit_searchbox import st_searchbox
@@ -93,6 +95,8 @@ def upload_paper_modal() -> None:
 def render_papers_df(papers_resps: list[PaperResp]) -> None:
     papers_by_id = {p.id: p for p in paper_resps}
     df = pd.DataFrame([p.model_dump(exclude={'tasks'}) for p in paper_resps])
+    eastern = pytz.timezone('America/New_York')
+    df['updated_at'] = pd.to_datetime(df['updated_at'], utc=True).dt.tz_convert(eastern)
     df['thumbnail_path'] = df['id'].map(
         lambda paper_id: f'{env.PROTOCOL}{env.API_ENDPOINT}{pdf_thumbnail_path(paper_id)}'  # note the leading slash
     )
