@@ -76,11 +76,13 @@ from lib.models import (
     PhenotypeDB,
     PhenotypeResp,
     PhenotypeUpdateRequest,
-    PipelineStatus,
+    TaskDB,
     VariantDB,
     VariantResp,
 )
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
+from lib.tasks import TaskCreateRequest, TaskResp, enqueue_task
+from lib.tasks.models import TaskStatus, TaskType
 
 logger = logging.getLogger(__name__)
 
@@ -161,10 +163,17 @@ def put_paper(
     paper_db = PaperDB.from_content(content)
     paper_db.gene_id = gene.id
     paper_db.filename = uploaded_file.filename or ''
-    paper_db.pipeline_status = PipelineStatus.QUEUED
     session.add(paper_db)
     try:
+        # Create initial PDF_PARSING task
+        task = TaskDB(
+            paper_id=paper_db.id,
+            type=TaskType.PDF_PARSING,
+            status=TaskStatus.PENDING,
+        )
+        paper_db.tasks.append(task)
         session.flush()
+
         pdf_raw_path(paper_db.id).parent.mkdir(parents=True, exist_ok=True)
         with open(pdf_raw_path(paper_db.id), 'wb') as f:
             f.write(content)
@@ -175,15 +184,9 @@ def put_paper(
         return paper_db
     except IntegrityError:
         session.rollback()
-        existing = (
-            session.query(PaperDB)
-            .options(selectinload(PaperDB.gene))
-            .filter(PaperDB.content_hash == paper_db.content_hash)
-            .one()
-        )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f'Paper extraction already {existing.pipeline_status.value.lower()}',
+            detail='Paper with this content already exists',
         )
 
 
@@ -218,7 +221,7 @@ def delete_paper(paper_id: int, session: Session = Depends(get_session)) -> None
 
 
 @app.patch('/papers/{paper_id}', response_model=PaperResp)
-def update_status(
+def update_paper(
     paper_id: int,
     patch_request: PaperUpdateRequest,
     session: Session = Depends(get_session),
@@ -234,25 +237,60 @@ def update_status(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
-    if paper_db.pipeline_status == patch_request.pipeline_status:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f'Status is already {patch_request.pipeline_status.value}',
-        )
     patch_request.apply_to(paper_db)
     return paper_db
 
 
 @app.get('/papers', response_model=list[PaperResp])
 def list_papers(
-    pipeline_status: PipelineStatus | None = None,
     session: Session = Depends(get_session),
 ) -> Any:
-    query = session.query(PaperDB).options(selectinload(PaperDB.gene))
-
-    if pipeline_status is not None:
-        query = query.filter(PaperDB.pipeline_status == pipeline_status)
+    query = session.query(PaperDB).options(
+        selectinload(PaperDB.gene), selectinload(PaperDB.tasks)
+    )
     return query.all()
+
+
+@app.get('/papers/{paper_id}/tasks', response_model=list[TaskResp])
+def list_tasks(
+    paper_id: int,
+    session: Session = Depends(get_session),
+) -> Any:
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    tasks = (
+        session.query(TaskDB)
+        .filter(TaskDB.paper_id == paper_id)
+        .order_by(TaskDB.id)
+        .all()
+    )
+    return tasks
+
+
+@app.post('/papers/{paper_id}/tasks', response_model=TaskResp)
+def create_task(
+    paper_id: int,
+    request: TaskCreateRequest,
+    session: Session = Depends(get_session),
+) -> Any:
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+
+    task = enqueue_task(
+        session,
+        paper_id=paper_id,
+        task_type=request.type,
+        patient_id=request.patient_id,
+        variant_id=request.variant_id,
+        phenotype_id=request.phenotype_id,
+    )
+    return task
 
 
 @app.get('/papers/{paper_id}/patients', response_model=list[PatientResp])
@@ -322,8 +360,6 @@ def create_patient(
         affected_status_evidence=create_evidence_block(patient_data.affected_status),
     )
     session.add(patient_db)
-    session.commit()
-    session.refresh(patient_db)
     return patient_db
 
 
@@ -595,8 +631,6 @@ def create_phenotype(
         modifier=phenotype_data.modifier,
     )
     session.add(phenotype_db)
-    session.commit()
-    session.refresh(phenotype_db)
     return phenotype_db
 
 
@@ -619,8 +653,6 @@ def update_phenotype(
             status_code=status.HTTP_404_NOT_FOUND, detail='Phenotype not found'
         )
     patch_request.apply_to(phenotype_db)
-    session.commit()
-    session.refresh(phenotype_db)
     return phenotype_db
 
 

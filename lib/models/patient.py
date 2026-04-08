@@ -375,7 +375,7 @@ class PatientDB(Base):
     )
 
     paper: Mapped[PaperDB] = relationship('PaperDB', back_populates='patients')
-    extracted_phenotypes: Mapped[list['PhenotypeDB']] = relationship(
+    phenotypes: Mapped[list['PhenotypeDB']] = relationship(
         'PhenotypeDB', back_populates='patient', cascade='all, delete-orphan'
     )
     patient_variant_links: Mapped[list['PatientVariantLinkDB']] = relationship(

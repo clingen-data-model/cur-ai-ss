@@ -14,9 +14,10 @@ from lib.models import (
     PatientVariantLinkResp,
     PedigreeResp,
     PhenotypeResp,
-    PipelineStatus,
+    TaskResp,
     VariantResp,
 )
+from lib.tasks import TaskCreateRequest, TaskType, infer_paper_status
 
 
 def get_http_error_detail(e: requests.HTTPError) -> str:
@@ -188,3 +189,29 @@ def get_phenotypes(paper_id: int, patient_id: int) -> list[PhenotypeResp]:
     )
     resp.raise_for_status()
     return TypeAdapter(list[PhenotypeResp]).validate_python(resp.json())
+
+
+def get_paper_tasks(paper_id: int) -> list[TaskResp]:
+    resp = requests.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/tasks')
+    resp.raise_for_status()
+    return TypeAdapter(list[TaskResp]).validate_python(resp.json())
+
+
+def enqueue_paper_task(
+    paper_id: int,
+    task_type: TaskType,
+    patient_id: int | None = None,
+    variant_id: int | None = None,
+    phenotype_id: int | None = None,
+) -> TaskResp:
+    resp = requests.post(
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/tasks',
+        json=TaskCreateRequest(
+            type=task_type,
+            patient_id=patient_id,
+            variant_id=variant_id,
+            phenotype_id=phenotype_id,
+        ).model_dump(),
+    )
+    resp.raise_for_status()
+    return TaskResp.model_validate(resp.json())

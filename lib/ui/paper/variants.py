@@ -4,8 +4,9 @@ import re
 import pandas as pd
 import streamlit as st
 
-from lib.models import PaperResp, PipelineStatus, VariantResp
+from lib.models import PaperResp, VariantResp
 from lib.models.variant import VariantType
+from lib.tasks import TaskType, is_task_completed
 from lib.ui.api import get_patient_variant_links, get_variants
 from lib.ui.paper.shared import (
     get_clinvar_url,
@@ -33,7 +34,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
     if not paper_resp.title:
         st.write(f'{paper_resp.filename} not yet extracted...')
         return
-    elif paper_resp.pipeline_status != PipelineStatus.COMPLETED:
+    elif not is_task_completed(paper_resp.tasks, TaskType.VARIANT_ENRICHMENT):
         st.write(f'Entity Linking not yet completed...')
         return
     variant_rows = get_variants(paper_resp.id)
