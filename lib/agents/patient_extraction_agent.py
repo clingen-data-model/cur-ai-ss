@@ -60,14 +60,8 @@ Each field is an EvidenceBlock containing:
 
 - age_diagnosis, age_report, age_death (EvidenceBlock[int | None]):
   - Extract ages as reported in text, tables, or pedigrees
-  - Report the numeric value as an integer
+  - Report the age in months as an integer.
   - None if not stated
-
-- age_diagnosis_unit, age_report_unit, age_death_unit (enum: Years, Months, Days):
-  - Extract the unit of measurement for the corresponding age field
-  - Match the unit as stated in the source text
-  - Must be populated if the corresponding age field is populated; must be null if age is null
-  - Prefer the unit as explicitly stated; if ambiguous or missing, infer from context (e.g., decimal ages typically indicate years)
 
 - country_of_origin (EvidenceBlock[enum of valid country names]):
   - Extract from explicit geographic references

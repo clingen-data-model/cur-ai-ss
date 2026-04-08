@@ -3,7 +3,6 @@ from lib.models.converters import harmonized_variant_to_db, patient_to_db
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.patient import (
     AffectedStatus,
-    AgeUnit,
     CountryCode,
     Patient,
     ProbandStatus,
@@ -82,11 +81,9 @@ def test_patient_to_db_maps_all_fields():
             quote='diagnosed at 5',
             reasoning='age at diagnosis noted',
         ),
-        age_diagnosis_unit=AgeUnit.Years,
         age_report=EvidenceBlock(
             value=10, quote='reported at 10', reasoning='age at report noted'
         ),
-        age_report_unit=AgeUnit.Years,
         age_death=EvidenceBlock(
             value=None,
             quote=None,
@@ -117,11 +114,8 @@ def test_patient_to_db_maps_all_fields():
     assert row.proband_status == 'Proband'
     assert row.sex == 'Female'
     assert row.age_diagnosis == 5
-    assert row.age_diagnosis_unit == 'Years'
     assert row.age_report == 10
-    assert row.age_report_unit == 'Years'
     assert row.age_death is None
-    assert row.age_death_unit is None
     assert row.country_of_origin == 'Japan'
     assert row.race_ethnicity == 'East Asian'
     assert row.affected_status == 'Affected'

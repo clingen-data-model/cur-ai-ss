@@ -16,7 +16,6 @@ from lib.models import (
 )
 from lib.models.patient import (
     AffectedStatus,
-    AgeUnit,
     CountryCode,
     ProbandStatus,
     RaceEthnicity,
@@ -319,33 +318,13 @@ def render_patient(
         # --- Ages
         col1, col2 = st.columns(2)
         with col1:
-            age_col, unit_col = st.columns([2, 1])
-            with age_col:
-                age_diagnosis = st.number_input(
-                    'Age at Diagnosis',
-                    value=patient.age_diagnosis,
-                    min_value=0,
-                    step=1,
-                    key=f'{key_prefix}-age-diagnosis',
-                )
-            with unit_col:
-                age_unit_options = [None] + [u.value for u in AgeUnit]
-                age_diagnosis_current = (
-                    patient.age_diagnosis_unit.value
-                    if patient.age_diagnosis_unit
-                    else None
-                )
-                age_diagnosis_idx = (
-                    age_unit_options.index(age_diagnosis_current)
-                    if age_diagnosis_current in age_unit_options
-                    else 0
-                )
-                age_diagnosis_unit = st.selectbox(
-                    'Unit',
-                    options=age_unit_options,
-                    index=age_diagnosis_idx,
-                    key=f'{key_prefix}-age-diagnosis-unit',
-                )
+            age_diagnosis = st.number_input(
+                'Age at Diagnosis (months)',
+                value=patient.age_diagnosis,
+                min_value=0,
+                step=1,
+                key=f'{key_prefix}-age-diagnosis',
+            )
         with col2:
             st.space()
             age_diagnosis_note = render_evidence_controls(
@@ -358,31 +337,13 @@ def render_patient(
             )
         col1, col2 = st.columns(2)
         with col1:
-            age_col, unit_col = st.columns([2, 1])
-            with age_col:
-                age_report = st.number_input(
-                    'Age at Report',
-                    value=patient.age_report,
-                    min_value=0,
-                    step=1,
-                    key=f'{key_prefix}-age-report',
-                )
-            with unit_col:
-                age_unit_options = [None] + [u.value for u in AgeUnit]
-                age_report_current = (
-                    patient.age_report_unit.value if patient.age_report_unit else None
-                )
-                age_report_idx = (
-                    age_unit_options.index(age_report_current)
-                    if age_report_current in age_unit_options
-                    else 0
-                )
-                age_report_unit = st.selectbox(
-                    'Unit',
-                    options=age_unit_options,
-                    index=age_report_idx,
-                    key=f'{key_prefix}-age-report-unit',
-                )
+            age_report = st.number_input(
+                'Age at Report (months)',
+                value=patient.age_report,
+                min_value=0,
+                step=1,
+                key=f'{key_prefix}-age-report',
+            )
         with col2:
             st.space()
             age_report_note = render_evidence_controls(
@@ -395,31 +356,13 @@ def render_patient(
             )
         col1, col2 = st.columns(2)
         with col1:
-            age_col, unit_col = st.columns([2, 1])
-            with age_col:
-                age_death = st.number_input(
-                    'Age at Death',
-                    value=patient.age_death,
-                    min_value=0,
-                    step=1,
-                    key=f'{key_prefix}-age-death',
-                )
-            with unit_col:
-                age_unit_options = [None] + [u.value for u in AgeUnit]
-                age_death_current = (
-                    patient.age_death_unit.value if patient.age_death_unit else None
-                )
-                age_death_idx = (
-                    age_unit_options.index(age_death_current)
-                    if age_death_current in age_unit_options
-                    else 0
-                )
-                age_death_unit = st.selectbox(
-                    'Unit',
-                    options=age_unit_options,
-                    index=age_death_idx,
-                    key=f'{key_prefix}-age-death-unit',
-                )
+            age_death = st.number_input(
+                'Age at Death (months)',
+                value=patient.age_death,
+                min_value=0,
+                step=1,
+                key=f'{key_prefix}-age-death',
+            )
         with col2:
             st.space()
             age_death_note = render_evidence_controls(
@@ -541,12 +484,6 @@ def render_patient(
         ):
             changes['age_diagnosis_human_edit_note'] = age_diagnosis_note
 
-        age_diagnosis_current_unit = (
-            patient.age_diagnosis_unit.value if patient.age_diagnosis_unit else None
-        )
-        if age_diagnosis_unit != age_diagnosis_current_unit:
-            changes['age_diagnosis_unit'] = age_diagnosis_unit
-
         if age_report_val != patient.age_report:
             changes['age_report'] = age_report_val
             if not patient.age_report_evidence.human_edit_note:
@@ -557,12 +494,6 @@ def render_patient(
         ):
             changes['age_report_human_edit_note'] = age_report_note
 
-        age_report_current_unit = (
-            patient.age_report_unit.value if patient.age_report_unit else None
-        )
-        if age_report_unit != age_report_current_unit:
-            changes['age_report_unit'] = age_report_unit
-
         if age_death_val != patient.age_death:
             changes['age_death'] = age_death_val
             if not patient.age_death_evidence.human_edit_note:
@@ -572,12 +503,6 @@ def render_patient(
             and age_death_note != patient.age_death_evidence.human_edit_note
         ):
             changes['age_death_human_edit_note'] = age_death_note
-
-        age_death_current_unit = (
-            patient.age_death_unit.value if patient.age_death_unit else None
-        )
-        if age_death_unit != age_death_current_unit:
-            changes['age_death_unit'] = age_death_unit
 
         if country_of_origin != patient.country_of_origin:
             changes['country_of_origin'] = country_of_origin.value
