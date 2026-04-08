@@ -20,10 +20,18 @@ def patient_to_db(paper_id: int, patient: Patient) -> PatientDB:
     """Convert a Patient to PatientDB, splitting values from evidence."""
     kwargs = {
         'paper_id': paper_id,
+        'age_diagnosis_unit': patient.age_diagnosis_unit,
+        'age_report_unit': patient.age_report_unit,
+        'age_death_unit': patient.age_death_unit,
     }
 
-    # Extract values and evidence blocks for each field
-    for field_name in Patient.model_fields:
+    # Extract values and evidence blocks for evidence block fields
+    evidence_fields = [
+        name
+        for name in Patient.model_fields
+        if name not in {'age_diagnosis_unit', 'age_report_unit', 'age_death_unit'}
+    ]
+    for field_name in evidence_fields:
         field_value = getattr(patient, field_name)
         kwargs[field_name] = field_value.value
         kwargs[f'{field_name}_evidence'] = field_value.model_dump()
