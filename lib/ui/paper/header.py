@@ -14,6 +14,7 @@ from lib.tasks import (
     infer_paper_status,
     is_task_completed,
 )
+from lib.tasks.models import TASK_SUCCESSORS
 from lib.ui.api import (
     delete_paper,
     enqueue_paper_task,
@@ -65,6 +66,14 @@ def render_queue_tasks_fragment(paper_query_params: PaperQueryParams) -> None:
         options=[t for t in TaskType],
         format_func=lambda t: t.value,
     )
+
+    # Show what comes next
+    successors = TASK_SUCCESSORS.get(task_type, [])
+    if successors:
+        successors_text = ', '.join([s.value for s in successors])
+        st.caption(f'↳ Will trigger: {successors_text}')
+    else:
+        st.caption('↳ Terminal task (no successors)')
 
     def on_confirm() -> None:
         try:
