@@ -326,9 +326,7 @@ def _patient_to_resp(row: PatientDB) -> PatientResp:
         updated_at=row.updated_at,
         family_id=row.family.id,
         family_identifier=row.family.identifier,
-        family_identifier_evidence=HumanEvidenceBlock[str].model_validate(
-            row.family.identifier_evidence
-        ),
+        family_assignment_evidence=row.family_assignment_evidence,  # type: ignore[arg-type]
     )
 
 

@@ -366,7 +366,7 @@ class FamilyEntry(BaseModel):
     """Family grouping with references to patients by their identifier."""
 
     family: Family
-    patient_identifiers: List[str]
+    patient_identifiers: List[EvidenceBlock[str]]
 
 
 class PatientExtractionOutput(BaseModel):
@@ -377,9 +377,11 @@ class PatientExtractionOutput(BaseModel):
     def validate_family_coverage(self) -> 'PatientExtractionOutput':
         """Ensure every patient is assigned to exactly one family."""
         patient_identifiers = {p.identifier.value for p in self.patients}
-        assigned_identifiers = set()
+        assigned_identifiers: set[str] = set()
         for entry in self.families:
-            assigned_identifiers.update(entry.patient_identifiers)
+            assigned_identifiers.update(
+                id_block.value for id_block in entry.patient_identifiers
+            )
 
         missing = patient_identifiers - assigned_identifiers
         if missing:
@@ -435,6 +437,7 @@ class PatientDB(Base):
     country_of_origin_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     race_ethnicity_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     affected_status_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    family_assignment_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -486,7 +489,7 @@ class PatientResp(BaseModel):
     affected_status_evidence: HumanEvidenceBlock[AffectedStatus]
     family_id: int
     family_identifier: str
-    family_identifier_evidence: HumanEvidenceBlock[str]
+    family_assignment_evidence: HumanEvidenceBlock[str]
 
 
 class PatientCreateRequest(BaseModel):

@@ -180,11 +180,13 @@ async def handle_patient_extraction(task_id: int) -> None:
             db_patient = patient_to_db(task.paper_id, patient_info)
             # Find which family this patient belongs to
             for entry in result.final_output.families:
-                if patient_info.identifier.value in entry.patient_identifiers:
-                    db_patient.family_id = family_entries_by_id[
-                        entry.family.identifier.value
-                    ]
-                    break
+                for id_block in entry.patient_identifiers:
+                    if id_block.value == patient_info.identifier.value:
+                        db_patient.family_id = family_entries_by_id[
+                            entry.family.identifier.value
+                        ]
+                        db_patient.family_assignment_evidence = id_block.model_dump()
+                        break
             session.add(db_patient)
 
 
