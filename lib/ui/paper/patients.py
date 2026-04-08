@@ -1,5 +1,6 @@
 import json
 import time
+from collections import defaultdict
 
 import pandas as pd
 import requests
@@ -8,6 +9,7 @@ import streamlit as st
 from lib.core.environment import env
 from lib.misc.pdf.paths import pdf_image_path
 from lib.models import (
+    FamilyResp,
     PaperResp,
     PatientResp,
     PatientUpdateRequest,
@@ -24,6 +26,7 @@ from lib.models.patient import (
 from lib.tasks import TaskType, is_task_completed
 from lib.ui.api import (
     enqueue_paper_task,
+    get_families,
     get_patients,
     get_pedigree,
     get_phenotypes,
@@ -37,6 +40,7 @@ from lib.ui.paper.shared import (
 )
 
 PATIENTS_KEY = 'patients'
+FAMILIES_KEY = 'families'
 
 
 def _render_patient_phenotypes(
@@ -227,6 +231,83 @@ def _render_phenotypes_table(
                 st.success('HPO linking task enqueued')
 
 
+def _render_family_group(
+    paper_resp: PaperResp,
+    family: FamilyResp,
+    patients_in_family: list[tuple[int, PatientResp]],
+    selected_patient_id: int | None,
+    tab_key: str,
+) -> None:
+    """Render a family with multiple patients."""
+    st.markdown(f'### {family.identifier}')
+    with st.expander(
+        'View Family',
+        expanded=any(pid == selected_patient_id for pid, _ in patients_in_family),
+    ):
+        # Family identifier + evidence
+        col1, col2 = st.columns(2)
+        with col1:
+            st.text_input(
+                'Family Identifier',
+                family.identifier,
+                disabled=True,
+                key=f'{tab_key}-fam-{family.id}-identifier',
+            )
+        with col2:
+            st.space()
+            render_evidence_controls(
+                paper_resp.id,
+                block=family.identifier_evidence,
+                label='Family Identifier Evidence',
+                color_key=f'{tab_key}-fam-{family.id}-color',
+                button_key_prefix=f'{tab_key}-fam-{family.id}-btn',
+            )
+
+        # Patients
+        for patient_id, patient in patients_in_family:
+            st.markdown(f'#### {patient.identifier}')
+            render_patient(
+                paper_resp,
+                patient,
+                expanded=(patient_id == selected_patient_id),
+                key_prefix=f'{tab_key}-{patient_id}',
+                patient_id=patient_id,
+            )
+
+
+def _render_patients_grouped_by_family(
+    paper_resp: PaperResp,
+    families: list[FamilyResp],
+    patients: list[tuple[int, PatientResp]],
+    selected_patient_id: int | None,
+    tab_key: str,
+) -> None:
+    """Render patients grouped by family."""
+    family_map = {f.id: f for f in families}
+    # Group patients by family_id
+    by_family: dict[int, list[tuple[int, PatientResp]]] = defaultdict(list)
+    for patient_id, patient in patients:
+        by_family[patient.family_id].append((patient_id, patient))
+
+    for family_id, group in sorted(by_family.items()):
+        family = family_map.get(family_id)
+        if len(group) > 1 and family:
+            _render_family_group(
+                paper_resp, family, group, selected_patient_id, tab_key
+            )
+        else:
+            # Single patient: render as-is (family assignment evidence already in render_patient)
+            patient_id, patient = group[0]
+            st.markdown(f'### {patient.identifier}')
+            render_patient(
+                paper_resp,
+                patient,
+                expanded=(patient_id == selected_patient_id),
+                key_prefix=f'{tab_key}-{patient_id}',
+                patient_id=patient_id,
+            )
+
+
 def render_patient(
     paper_resp: PaperResp,
     patient: PatientResp,
@@ -254,6 +335,24 @@ def render_patient(
                 color_key=f'{key_prefix}-{patient.identifier}-color-pi-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-pi-evidence',
                 human_edit_note_key=f'{key_prefix}-identifier-note',
+            )
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.text_input(
+                'Family Identifier',
+                patient.family_identifier,
+                disabled=True,
+                key=f'{key_prefix}-family-identifier',
+            )
+        with col2:
+            st.space()
+            render_evidence_controls(
+                paper_resp.id,
+                block=patient.family_assignment_evidence,
+                label='Family Assignment Evidence',
+                color_key=f'{key_prefix}-{patient.identifier}-color-fam-evidence',
+                button_key_prefix=f'{key_prefix}-{patient.identifier}-fam-evidence',
             )
 
         col1, col2 = st.columns(2)
@@ -674,19 +773,23 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
     # -----------------------------
     indexed_patients = [(p.id, p) for p in patients]
     probands = [
-        (i, p) for i, p in indexed_patients if p.proband_status == ProbandStatus.Proband
+        (patient_id, p)
+        for patient_id, p in indexed_patients
+        if p.proband_status == ProbandStatus.Proband
     ]
     non_probands = [
-        (i, p) for i, p in indexed_patients if p.proband_status != ProbandStatus.Proband
+        (patient_id, p)
+        for patient_id, p in indexed_patients
+        if p.proband_status != ProbandStatus.Proband
     ]
     affecteds = [
-        (i, p)
-        for i, p in indexed_patients
+        (patient_id, p)
+        for patient_id, p in indexed_patients
         if p.affected_status == AffectedStatus.Affected
     ]
     unaffecteds = [
-        (i, p)
-        for i, p in indexed_patients
+        (patient_id, p)
+        for patient_id, p in indexed_patients
         if p.affected_status != AffectedStatus.Affected
     ]
     tabs = [
@@ -704,53 +807,46 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
             else tabs[0],
         )
     )
+    # Load families
+    if FAMILIES_KEY not in st.session_state:
+        st.session_state[FAMILIES_KEY] = get_families(paper_resp.id)
+    families: list[FamilyResp] = st.session_state[FAMILIES_KEY]
+
     with proband_tab:
         if not probands:
             st.info('No probands detected.')
-        for original_id, patient in probands:
-            st.markdown(f'### {patient.identifier}')
-            render_patient(
-                paper_resp,
-                patient,
-                expanded=(original_id == selected_patient_id),
-                key_prefix=f'patient-proband-{original_id}',
-                patient_id=original_id,
+        else:
+            _render_patients_grouped_by_family(
+                paper_resp, families, probands, selected_patient_id, 'patient-proband'
             )
     with non_proband_tab:
         if not non_probands:
             st.info('No non-probands detected.')
-        for original_id, patient in non_probands:
-            st.markdown(f'### {patient.identifier}')
-            render_patient(
+        else:
+            _render_patients_grouped_by_family(
                 paper_resp,
-                patient,
-                expanded=(original_id == selected_patient_id),
-                key_prefix=f'patient-non-proband-{original_id}',
-                patient_id=original_id,
+                families,
+                non_probands,
+                selected_patient_id,
+                'patient-non-proband',
             )
     with affecteds_tab:
         if not affecteds:
             st.info('No affected patients detected.')
-        for original_id, patient in affecteds:
-            st.markdown(f'### {patient.identifier}')
-            render_patient(
-                paper_resp,
-                patient,
-                expanded=(original_id == selected_patient_id),
-                key_prefix=f'patient-affected-{original_id}',
-                patient_id=original_id,
+        else:
+            _render_patients_grouped_by_family(
+                paper_resp, families, affecteds, selected_patient_id, 'patient-affected'
             )
     with unaffecteds_tab:
         if not unaffecteds:
-            st.info('No affected patients detected.')
-        for original_id, patient in unaffecteds:
-            st.markdown(f'### {patient.identifier}')
-            render_patient(
+            st.info('No unaffected patients detected.')
+        else:
+            _render_patients_grouped_by_family(
                 paper_resp,
-                patient,
-                expanded=(original_id == selected_patient_id),
-                key_prefix=f'patient-unaffected-{original_id}',
-                patient_id=original_id,
+                families,
+                unaffecteds,
+                selected_patient_id,
+                'patient-unaffected',
             )
     with pedigree_image_tab:
         if not pedigree_description:
