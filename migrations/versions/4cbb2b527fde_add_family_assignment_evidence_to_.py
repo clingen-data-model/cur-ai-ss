@@ -31,9 +31,8 @@ def upgrade() -> None:
     connection = op.get_bind()
     dummy_evidence = json.dumps(
         {
-            'value': 'unknown',
+            'value': 'Unknown',
             'reasoning': 'Auto-populated during migration',
-            'quote': None,
         }
     )
     connection.execute(

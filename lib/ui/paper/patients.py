@@ -316,7 +316,7 @@ def render_patient(
     patient_id: int,
 ) -> None:
     with st.expander(
-        'View Metadata',
+        'View Patient Metadata',
         expanded=expanded,
     ):
         col1, col2 = st.columns(2)

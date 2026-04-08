@@ -177,3 +177,31 @@ def get_status_badge_icon(tasks: list[TaskResp]) -> str:
     if all(t.status == TaskStatus.COMPLETED for t in tasks) and tasks:
         return '✅'
     return '⏹️'
+
+
+def get_all_successor_levels(task_type: TaskType) -> list[list[TaskType]]:
+    """Get all successors organized by level (breadth-first).
+
+    Returns a list of lists, where each inner list contains tasks at that level
+    in the dependency chain. For example, if PDF_PARSING triggers PAPER_METADATA
+    and VARIANT_EXTRACTION, which then trigger their own successors, this returns
+    [[PAPER_METADATA, VARIANT_EXTRACTION], [next level...]].
+    """
+    levels: list[list[TaskType]] = []
+    current_level = [task_type]
+    seen = {task_type}
+
+    while current_level:
+        next_level: list[TaskType] = []
+        for task in current_level:
+            successors = TASK_SUCCESSORS.get(task, [])
+            for successor in successors:
+                if successor not in seen:
+                    next_level.append(successor)
+                    seen.add(successor)
+
+        if next_level:
+            levels.append(next_level)
+        current_level = next_level
+
+    return levels
