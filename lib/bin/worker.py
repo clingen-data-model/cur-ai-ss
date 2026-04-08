@@ -115,6 +115,7 @@ async def parse_paper_task_async(paper_id: int) -> None:
     result = await Runner.run(
         paper_extraction_agent,
         f'Paper (fulltext md): {fulltext_md(paper_id)}',
+        max_turns=20,
     )
     with session_scope() as session:
         fetched_paper = session.get(PaperDB, paper_id)
