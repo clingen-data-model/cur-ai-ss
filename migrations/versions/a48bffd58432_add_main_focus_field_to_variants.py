@@ -27,7 +27,7 @@ def upgrade() -> None:
         UPDATE variants
         SET
             main_focus = TRUE,
-            main_focus_evidence = '{"value": true, "reason": "set by migration"}'
+            main_focus_evidence = '{"value": true, "reasoning": "set by migration", "quote": "set by migration"}'
         """
     )
 
