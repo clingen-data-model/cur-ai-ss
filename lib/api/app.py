@@ -84,6 +84,7 @@ from lib.models import (
     TaskDB,
     VariantDB,
     VariantResp,
+    VariantUpdateRequest,
 )
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.tasks import TaskCreateRequest, TaskResp, enqueue_task
@@ -529,6 +530,32 @@ def _variant_to_resp(row: VariantDB) -> VariantResp:
         harmonized_variant=harmonized,
         enriched_variant=enriched,
     )
+
+
+@app.patch('/papers/{paper_id}/variants/{variant_id}', response_model=VariantResp)
+def update_variant(
+    paper_id: int,
+    variant_id: int,
+    patch_request: VariantUpdateRequest,
+    session: Session = Depends(get_session),
+) -> Any:
+    variant_db = (
+        session.query(VariantDB)
+        .options(
+            joinedload(VariantDB.harmonized_variant).joinedload(
+                HarmonizedVariantDB.enriched_variant
+            )
+        )
+        .filter(VariantDB.id == variant_id, VariantDB.paper_id == paper_id)
+        .one_or_none()
+    )
+    if not variant_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Variant not found'
+        )
+    patch_request.apply_to(variant_db, variant_db.harmonized_variant)
+    session.flush()
+    return _variant_to_resp(variant_db)
 
 
 def _phenotype_to_resp(row: PhenotypeDB) -> PhenotypeResp:
