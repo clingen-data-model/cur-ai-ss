@@ -63,6 +63,7 @@ from lib.models import (
     GeneResp,
     HarmonizedVariantDB,
     HarmonizedVariantResp,
+    HumanEvidenceBlock,
     HighlightRequest,
     HpoDB,
     HPOTerm,
@@ -298,9 +299,6 @@ def create_task(
 
 
 def _patient_to_resp(row: PatientDB) -> PatientResp:
-    """Convert PatientDB to PatientResp, including family fields."""
-    from lib.models.evidence_block import HumanEvidenceBlock
-
     return PatientResp(
         id=row.id,
         paper_id=row.paper_id,
@@ -526,6 +524,8 @@ def _variant_to_resp(row: VariantDB) -> VariantResp:
         hgvs_g_evidence=row.hgvs_g_evidence,  # type: ignore[arg-type]
         variant_type_evidence=row.variant_type_evidence,  # type: ignore[arg-type]
         functional_evidence_evidence=row.functional_evidence_evidence,  # type: ignore[arg-type]
+        main_focus=row.main_focus,
+        main_focus_evidence=row.main_focus_evidence,  # type: ignore[arg-type]
         harmonized_variant=harmonized,
         enriched_variant=enriched,
     )

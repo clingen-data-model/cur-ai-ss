@@ -28,7 +28,10 @@ from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import fulltext_md, pdf_image_caption_path, pdf_image_path
 from lib.models import (
     EnrichedVariantDB,
+<<<<<<< HEAD
     FamilyDB,
+=======
+>>>>>>> e51b6ffc538a4240e04425c512768a0815cc97a7
     HarmonizedVariantDB,
     HpoDB,
     PaperDB,
@@ -40,7 +43,10 @@ from lib.models import (
     VariantDB,
 )
 from lib.models.converters import (
+<<<<<<< HEAD
     family_to_db,
+=======
+>>>>>>> e51b6ffc538a4240e04425c512768a0815cc97a7
     harmonized_variant_to_db,
     hpo_to_db,
     patient_to_db,
