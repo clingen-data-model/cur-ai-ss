@@ -170,10 +170,10 @@ def get_status_badge_color(
 
 def get_status_badge_icon(tasks: list[TaskResp]) -> str:
     """Get icon for status badge based on task states."""
-    if any(t.status == TaskStatus.FAILED for t in tasks):
-        return '❌'
     if any(t.status == TaskStatus.RUNNING for t in tasks):
         return '⏳'
+    if any(t.status == TaskStatus.FAILED for t in tasks):
+        return '❌'
     if all(t.status == TaskStatus.COMPLETED for t in tasks) and tasks:
         return '✅'
     return '⏹️'
