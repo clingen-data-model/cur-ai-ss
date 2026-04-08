@@ -146,6 +146,34 @@ For the "functional_evidence" field:
 - reasoning → explanation of how functional evidence was determined
 
 ------------------------------
+MAIN VARIANT FOCUS
+------------------------------
+For the "main_focus" field:
+- value → boolean indicating whether this variant is one of the principal variants the paper is focused on.
+
+TRUE indicators (any of these):
+- Variant is described as novel or newly identified
+- Variant is discussed in the abstract, results, or conclusions
+- Variant is experimentally characterized or analyzed
+- Variant appears in key figures or primary results tables
+
+FALSE indicators (any of these):
+- Variant is labeled as "previously reported"
+- Variant appears only for comparison or background context
+- Variant is listed in tables summarizing known variants from literature
+- Variant is mentioned only in introduction or discussion of prior studies
+
+Rules:
+- Use author-provided labels like "novel" or "previously reported" as strong evidence.
+- Do NOT infer focus from how important the variant seems biologically.
+- Determine focus strictly from how the paper treats the variant.
+
+Evidence:
+- quote → text or table cell demonstrating how the paper treats the variant
+- table_id/image_id → if evidence comes from table/figure
+- reasoning → explain why the variant is considered primary or secondary
+
+------------------------------
 OUTPUT FORMAT
 ------------------------------
 Return JSON array of variants:
