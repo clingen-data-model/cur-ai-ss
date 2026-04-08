@@ -68,6 +68,7 @@ Each field is an EvidenceBlock containing:
   - Match the unit as stated in the source text
   - Must be populated if the corresponding age field is populated; must be null if age is null
   - Prefer the unit as explicitly stated; if ambiguous or missing, infer from context (e.g., decimal ages typically indicate years)
+  - Note that these are not EvidenceBlocks, we only expect the raw enum!
 
 - country_of_origin (EvidenceBlock[enum of valid country names]):
   - Extract from explicit geographic references
