@@ -554,6 +554,19 @@ def update_variant(
             status_code=status.HTTP_404_NOT_FOUND, detail='Variant not found'
         )
     patch_request.apply_to(variant_db, variant_db.harmonized_variant)
+    # Editing any harmonized field invalidates the LLM-generated reasoning
+    # (which describes the pre-edit values) and the downstream enrichment row
+    # (which was computed from them). Treat all harmonized siblings uniformly
+    # so that a future enrichment lookup added for e.g. hgvs_p cannot silently
+    # produce stale annotations.
+    harmonized_edited = any(
+        k.startswith('harmonized_')
+        for k in patch_request.model_dump(exclude_unset=True)
+    )
+    if harmonized_edited and variant_db.harmonized_variant is not None:
+        hv = variant_db.harmonized_variant
+        hv.reasoning = 'Edited by curator'
+        hv.enriched_variant = None  # delete-orphan cascade handles the row
     session.flush()
     return _variant_to_resp(variant_db)
 
