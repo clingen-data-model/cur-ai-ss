@@ -28,6 +28,7 @@ from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import fulltext_md, pdf_image_caption_path, pdf_image_path
 from lib.models import (
     EnrichedVariantDB,
+    FamilyDB,
     HarmonizedVariantDB,
     HpoDB,
     PaperDB,
@@ -39,6 +40,7 @@ from lib.models import (
     VariantDB,
 )
 from lib.models.converters import (
+    family_to_db,
     harmonized_variant_to_db,
     hpo_to_db,
     patient_to_db,
@@ -161,10 +163,29 @@ async def handle_patient_extraction(task_id: int) -> None:
             f'Paper (fulltext md): {fulltext_md(task.paper_id)}\nPedigree Description: \n {pedigree_descriptions_output}',
         )
 
-        # Idempotent: delete-then-insert
-        session.query(PatientDB).filter(PatientDB.paper_id == task.paper_id).delete()
+        # Idempotent: delete families (CASCADE deletes patients), then re-insert both
+        session.query(FamilyDB).filter(FamilyDB.paper_id == task.paper_id).delete()
+        session.flush()
+
+        # Insert families first so we have family IDs for patient assignment
+        family_entries_by_id: dict[str, int] = {}
+        for entry in result.final_output.families:
+            db_family = family_to_db(task.paper_id, entry.family)
+            session.add(db_family)
+            session.flush()
+            family_entries_by_id[entry.family.identifier.value] = db_family.id
+
+        # Insert patients with family assignments
         for patient_info in result.final_output.patients:
-            session.add(patient_to_db(task.paper_id, patient_info))
+            db_patient = patient_to_db(task.paper_id, patient_info)
+            # Find which family this patient belongs to
+            for entry in result.final_output.families:
+                if patient_info.identifier.value in entry.patient_identifiers:
+                    db_patient.family_id = family_entries_by_id[
+                        entry.family.identifier.value
+                    ]
+                    break
+            session.add(db_patient)
 
 
 async def handle_variant_harmonization(task_id: int) -> None:

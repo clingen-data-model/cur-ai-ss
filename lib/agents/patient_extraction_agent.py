@@ -18,7 +18,7 @@ Inputs:
 
    If the description is null, there was no pedigree image included in the paper.
 
-Task: Extract patient-level demographic information for each individual human patient explicitly described in the text, distinguishing clearly between probands and non-probands.
+Task: Extract patient-level demographic information for each individual human patient explicitly described in the text, distinguishing clearly between probands and non-probands. ALSO group extracted patients into biological families.
 
 Definitions:
 - Proband: The primary affected individual(s) through whom a family was ascertained for the study.
@@ -90,6 +90,43 @@ Guidelines:
 9. Do not extract authors, non-clinical mentions, or animal models.
 10. Use enum values when possible; otherwise use "Other" or "Unknown".
 11. Missing fields should be returned as null (not omitted from the structured output).
+
+FAMILY GROUPING:
+
+After extracting all patients, group them into biological families based on:
+
+1. Explicit family labels in the paper (e.g., "Family 1", "Family A", "FAM-001").
+2. Pedigree structure — individuals in the same pedigree belong to the same family.
+3. Relational language (e.g., "proband's mother", "affected sibling").
+4. Shared family history or co-segregation descriptions.
+5. Paper organization (e.g., multi-family cohort studies separate by family).
+
+Critical rules:
+- EVERY extracted patient must be assigned to exactly one family.
+- If a patient has no identified biological relatives among the extracted patients,
+  assign them to their own singleton family (a family containing only that patient).
+- Do NOT leave any patient unassigned or in an "unknown family".
+- Do NOT merge unrelated patients into the same family.
+- Do NOT split patients from the same family into different families.
+
+Family identifier rules:
+- Use the paper's own family label if provided (e.g., "Family 1", "FAM-001").
+  Preserve exact capitalization and punctuation.
+- If the paper uses no explicit label but there is only one family (all patients related),
+  use "Family 1".
+- If multiple patients/families exist with no paper-provided labels:
+  - For unrelated individual patients: create a singleton family for each.
+    Label it using the patient's identifier (e.g., "Patient 1", "proband", "Case 2").
+  - For related patient groups without labels: assign a generic label like "Family 1",
+    "Family 2", etc. in the order they appear in the paper.
+
+Output format:
+- Return a "families" list where each entry contains:
+  - family: a Family object with an identifier EvidenceBlock (same pattern as patient fields)
+  - patient_identifiers: list of strings matching the patient identifier values extracted above
+- The families list must contain at least one family.
+- The union of all patient_identifiers across all families must equal the complete set
+  of patient identifiers extracted above.
 """
 
 agent = Agent(
