@@ -211,6 +211,27 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                         button_key_prefix=f'{i}-func-ev',
                     )
 
+                # ======================================================
+                # Main Focus
+                # ======================================================
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.checkbox(
+                        'Main Focus of Study',
+                        value=variant.main_focus,
+                        width='stretch',
+                        key=f'{i}-main-focus',
+                    )
+                with col2:
+                    st.space()
+                    render_evidence_controls(
+                        paper_resp.id,
+                        block=variant.main_focus_evidence,
+                        label='📋 Evidence & Reasoning',
+                        color_key=f'{i}-main-focus-color',
+                        button_key_prefix=f'{i}-main-focus',
+                    )
+
                 #
                 # Annotations
                 #

@@ -101,6 +101,7 @@ def variant_to_db(paper_id: int, variant: Variant) -> VariantDB:
         'hgvs_g',
         'variant_type',
         'functional_evidence',
+        'main_focus',
     ]
 
     for field_name in evidence_fields:
