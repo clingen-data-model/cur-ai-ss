@@ -309,10 +309,13 @@ def _patient_to_resp(row: PatientDB) -> PatientResp:
         sex=row.sex,  # type: ignore[arg-type]
         sex_evidence=row.sex_evidence,  # type: ignore[arg-type]
         age_diagnosis=row.age_diagnosis,
+        age_diagnosis_unit=row.age_diagnosis_unit,
         age_diagnosis_evidence=row.age_diagnosis_evidence,  # type: ignore[arg-type]
         age_report=row.age_report,
+        age_report_unit=row.age_report_unit,
         age_report_evidence=row.age_report_evidence,  # type: ignore[arg-type]
         age_death=row.age_death,
+        age_death_unit=row.age_death_unit,
         age_death_evidence=row.age_death_evidence,  # type: ignore[arg-type]
         country_of_origin=row.country_of_origin,  # type: ignore[arg-type]
         country_of_origin_evidence=row.country_of_origin_evidence,  # type: ignore[arg-type]
