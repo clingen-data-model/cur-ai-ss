@@ -657,7 +657,7 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
         st.write(f'{paper_resp.filename} not yet extracted...')
         return
     if not is_task_completed(paper_resp.tasks, TaskType.PATIENT_EXTRACTION):
-        st.write(f'Entity Linking not yet completed...')
+        st.write(f'Patient Extraction not yet completed...')
         return
     # -----------------------------
     # Load patients
