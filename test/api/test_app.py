@@ -816,16 +816,22 @@ def test_update_variant_edit_harmonized_hgvs_p_also_clears_enrichment(
     assert response.json()['enriched_variant'] is None
 
 
-def test_update_variant_edit_harmonized_stamps_reasoning(
+def test_update_variant_edit_harmonized_preserves_reasoning(
     client, seeded_paper, seeded_variant
 ):
-    """Any harmonized-field edit replaces the LLM reasoning with a sentinel."""
+    """A harmonized-field edit leaves the LLM reasoning untouched: it is the
+    agent's explanation of its original choices and must remain auditable.
+    The curator's rationale goes into human_edit_note fields instead.
+    """
     response = client.patch(
         f'/papers/{seeded_paper.id}/variants/{seeded_variant.id}',
         json={'harmonized_caid': 'CA999999'},
     )
     assert response.status_code == 200
-    assert response.json()['harmonized_variant']['reasoning'] == 'Edited by curator'
+    assert (
+        response.json()['harmonized_variant']['reasoning']
+        == 'Harmonized via VariantValidator'
+    )
 
 
 def test_update_variant_edit_extracted_only_preserves_derived(
