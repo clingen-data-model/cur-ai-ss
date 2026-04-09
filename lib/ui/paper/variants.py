@@ -108,8 +108,8 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
             st.markdown(f'### Variant {i}')
             expander_title = (
                 (
-                    harmonized_variant.value.hgvs_g
-                    or harmonized_variant.value.hgvs_c
+                    harmonized_variant.value.hgvs_c
+                    or harmonized_variant.value.hgvs_g
                     or harmonized_variant.value.gnomad_style_coordinates
                     or harmonized_variant.value.rsid
                     or harmonized_variant.value.hgvs_p
