@@ -1,6 +1,7 @@
 from html import unescape
 from re import sub
 from typing import List, Tuple
+from xml.etree import ElementTree as ET
 
 import requests
 from agents import Agent, function_tool
@@ -51,13 +52,9 @@ def pubmed_search_and_titles(first_author: str) -> List[Tuple[str, str]]:
 
     r = requests.get(EFETCH_ENDPOINT, params=fetch_params, timeout=30)
     r.raise_for_status()
-    xml_text = unescape(r.text)
-    xml_text = sub(r'</?(?:i|b|strong|sup|sub)>', '', xml_text)
 
     # Extract PMIDs and titles
-    from xml.etree import ElementTree as ET
-
-    root = ET.fromstring(xml_text)
+    root = ET.fromstring(r.text)
     results = []
     for article in root.findall('.//PubmedArticle'):
         pmid_elem = article.find('./MedlineCitation/PMID')
