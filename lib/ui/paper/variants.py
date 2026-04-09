@@ -96,7 +96,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
     )
 
     # Helper function to render variants for a given set of indices
-    def render_variant_list(indices: list[int]) -> None:
+    def render_variant_list(indices: list[int], tab_name: str) -> None:
         for idx in indices:
             i = idx + 1  # Convert 0-based to 1-based for display
             variant = variants[idx]
@@ -104,6 +104,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
             enriched_variant = (
                 enriched_variants[idx] if idx < len(enriched_variants) else None
             )
+            key_prefix = f'{tab_name}-variant-{variant.id}'
             st.markdown(f'### Variant {i}')
             expander_title = (
                 (
@@ -159,8 +160,8 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                                 paper_resp.id,
                                 block=variant.variant_evidence,
                                 label='📋 Evidence & Reasoning',
-                                color_key=f'{i}-var-color',
-                                button_key_prefix=f'{i}-var',
+                                color_key=f'{key_prefix}-var-color',
+                                button_key_prefix=f'{key_prefix}-var',
                             )
 
                         st.text_area(
@@ -168,7 +169,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                             harmonized_variant.reasoning if harmonized_variant else '',
                             height=140,
                             disabled=True,
-                            key=f'{i}-norm-notes',
+                            key=f'{key_prefix}-norm-notes',
                         )
                     else:
                         st.info('Harmonization not yet completed for this variant')
@@ -187,7 +188,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                             )
                             if variant.variant_type
                             else 0,
-                            key=f'{i}-type',
+                            key=f'{key_prefix}-type',
                         )
                     )
 
@@ -197,8 +198,8 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                         paper_resp.id,
                         block=variant.variant_type_evidence,
                         label='📋 Evidence & Reasoning',
-                        color_key=f'{i}-vtype-color',
-                        button_key_prefix=f'{i}-vtype',
+                        color_key=f'{key_prefix}-vtype-color',
+                        button_key_prefix=f'{key_prefix}-vtype',
                     )
 
                 # ======================================================
@@ -210,7 +211,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                         'Functional Evidence Present',
                         value=variant.functional_evidence,
                         width='stretch',
-                        key=f'{i}-func-ev',
+                        key=f'{key_prefix}-func-ev',
                     )
                 with col2:
                     st.space()
@@ -218,8 +219,8 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                         paper_resp.id,
                         block=variant.functional_evidence_evidence,
                         label='📋 Evidence & Reasoning',
-                        color_key=f'{i}-func-ev-color',
-                        button_key_prefix=f'{i}-func-ev',
+                        color_key=f'{key_prefix}-func-ev-color',
+                        button_key_prefix=f'{key_prefix}-func-ev',
                     )
 
                 # ======================================================
@@ -231,7 +232,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                         'Main Focus of Study',
                         value=variant.main_focus,
                         width='stretch',
-                        key=f'{i}-main-focus',
+                        key=f'{key_prefix}-main-focus',
                     )
                 with col2:
                     st.space()
@@ -239,8 +240,8 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                         paper_resp.id,
                         block=variant.main_focus_evidence,
                         label='📋 Evidence & Reasoning',
-                        color_key=f'{i}-main-focus-color',
-                        button_key_prefix=f'{i}-main-focus',
+                        color_key=f'{key_prefix}-main-focus-color',
+                        button_key_prefix=f'{key_prefix}-main-focus',
                     )
 
                 #
@@ -385,24 +386,24 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
     # Render variants in tabs
     with tab_pathogenic:
         if pathogenic_indices:
-            render_variant_list(pathogenic_indices)
+            render_variant_list(pathogenic_indices, 'pathogenic')
         else:
             st.info('No pathogenic variants found.')
 
     with tab_other:
         if other_indices:
-            render_variant_list(other_indices)
+            render_variant_list(other_indices, 'other')
         else:
             st.info('No other variants found.')
 
     with tab_main_focus:
         if main_focus_indices:
-            render_variant_list(main_focus_indices)
+            render_variant_list(main_focus_indices, 'main-focus')
         else:
             st.info('No main focus variants found.')
 
     with tab_contextual:
         if contextual_indices:
-            render_variant_list(contextual_indices)
+            render_variant_list(contextual_indices, 'contextual')
         else:
             st.info('No contextual variants found.')
