@@ -15,6 +15,7 @@ Inputs:
       - description
 
    The description summarizes pedigree structure including relationships, affected status, and any genotype or segregation information visible in the figure.
+   Use this description along with the text to help identify patients, their proband status, and family relationships.
 
    If the description is null, there was no pedigree image included in the paper.
 
@@ -27,6 +28,7 @@ Definitions:
 Notes:
 - Some papers may contain multiple unrelated probands; extract each separately.
 - Extract only individuals with explicitly stated demographic or clinical information.
+- When available, pedigree descriptions should guide identification, proband designation, and family grouping.
 
 Fields to extract (for each patient):
 
