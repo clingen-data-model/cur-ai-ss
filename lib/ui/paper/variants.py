@@ -60,6 +60,10 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
         i for i in range(len(enriched_variants)) if i not in pathogenic_indices
     ]
 
+    # Separate variants into main focus and contextual by index
+    main_focus_indices = [i for i in range(len(variants)) if variants[i].main_focus]
+    contextual_indices = [i for i in range(len(variants)) if not variants[i].main_focus]
+
     # Create mapping from variant ID to index for quick lookup
     variant_id_to_index: dict[int, int] = {
         variants[i].id: i for i in range(len(variants))
@@ -74,13 +78,19 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
     tabs = [
         f'🔴 Pathogenic ({len(pathogenic_indices)})',
         f'⚪ Other ({len(other_indices)})',
+        f'📍 Main Focus ({len(main_focus_indices)})',
+        f'📌 Contextual ({len(contextual_indices)})',
     ]
     default_tab = tabs[0]  # Default to Pathogenic
     if selected_variant_index is not None:
         if selected_variant_index in other_indices:
             default_tab = tabs[1]
+        elif selected_variant_index in main_focus_indices:
+            default_tab = tabs[2]
+        elif selected_variant_index in contextual_indices:
+            default_tab = tabs[3]
 
-    tab_pathogenic, tab_other = st.tabs(
+    tab_pathogenic, tab_other, tab_main_focus, tab_contextual = st.tabs(
         tabs,
         default=default_tab,
     )
@@ -384,3 +394,15 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
             render_variant_list(other_indices)
         else:
             st.info('No other variants found.')
+
+    with tab_main_focus:
+        if main_focus_indices:
+            render_variant_list(main_focus_indices)
+        else:
+            st.info('No main focus variants found.')
+
+    with tab_contextual:
+        if contextual_indices:
+            render_variant_list(contextual_indices)
+        else:
+            st.info('No contextual variants found.')
