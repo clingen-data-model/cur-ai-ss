@@ -863,3 +863,50 @@ def test_update_variant_edit_only_note_preserves_derived(
     data = response.json()
     assert data['enriched_variant'] is not None
     assert data['harmonized_variant']['reasoning'] == 'Harmonized via VariantValidator'
+
+
+def test_update_variant_clear_human_edit_note(client, seeded_paper, seeded_variant):
+    """A curator can clear a previously-set human edit note by PATCHing None."""
+    # First, set a note.
+    response = client.patch(
+        f'/papers/{seeded_paper.id}/variants/{seeded_variant.id}',
+        json={'variant_type_human_edit_note': 'temporary annotation'},
+    )
+    assert response.status_code == 200
+    assert (
+        response.json()['variant_type_evidence']['human_edit_note']
+        == 'temporary annotation'
+    )
+    # Now clear it.
+    response = client.patch(
+        f'/papers/{seeded_paper.id}/variants/{seeded_variant.id}',
+        json={'variant_type_human_edit_note': None},
+    )
+    assert response.status_code == 200
+    assert response.json()['variant_type_evidence']['human_edit_note'] is None
+
+
+def test_update_variant_value_and_default_note_simultaneously(
+    client, seeded_paper, seeded_variant
+):
+    """Simulates the UI's reset-on-value-edit behavior: when a value is edited
+    and the curator cleared any custom note in the same interaction, the UI
+    sends the value change plus the default audit mark as the note.
+    """
+    # Prime with a custom note.
+    client.patch(
+        f'/papers/{seeded_paper.id}/variants/{seeded_variant.id}',
+        json={'variant_type_human_edit_note': 'custom note'},
+    )
+    # UI-style payload for a value edit that cleared the custom note.
+    response = client.patch(
+        f'/papers/{seeded_paper.id}/variants/{seeded_variant.id}',
+        json={
+            'variant_type': 'Missense',
+            'variant_type_human_edit_note': 'Edited by Human',
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data['variant_type'] == 'Missense'
+    assert data['variant_type_evidence']['human_edit_note'] == 'Edited by Human'

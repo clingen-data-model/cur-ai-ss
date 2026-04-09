@@ -16,6 +16,35 @@ from lib.ui.paper.shared import (
 )
 
 
+def _note_changes(
+    field_name: str,
+    new_value: object,
+    current_value: object,
+    edited_note: str | None,
+    current_note: str | None,
+) -> dict[str, object]:
+    """Build the change dict entries for a value field and its human_edit_note.
+
+    Behavior:
+    - If the value changed: emit the value change. If the curator cleared the
+      note in the same interaction (or none existed), seed HUMAN_EDIT_NOTE_DEFAULT
+      so every value edit leaves at least the default audit mark.
+    - If only the note changed (including a clear to None): emit the note change.
+    - Empty string from a text area is normalized to None so clears are persisted.
+    """
+    out: dict[str, object] = {}
+    value_changed = new_value != current_value
+    normalized_note = edited_note or None
+    if value_changed:
+        out[field_name] = new_value
+        desired_note = normalized_note or HUMAN_EDIT_NOTE_DEFAULT
+        if desired_note != current_note:
+            out[f'{field_name}_human_edit_note'] = desired_note
+    elif normalized_note != current_note:
+        out[f'{field_name}_human_edit_note'] = normalized_note
+    return out
+
+
 def _is_pathogenic(pathogenicity: str | None) -> bool:
     """Check if pathogenicity matches 'pathogenic' (case-insensitive), excluding 'conflicting' and 'No_pathogenic_assertion'."""
     if not pathogenicity:
@@ -271,40 +300,33 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                 changes: dict = {}
 
                 # Extracted fields
-                if variant_type_val.value != variant.variant_type:
-                    changes['variant_type'] = variant_type_val.value
-                    if not variant.variant_type_evidence.human_edit_note:
-                        changes['variant_type_human_edit_note'] = (
-                            HUMAN_EDIT_NOTE_DEFAULT
-                        )
-                if (
-                    vtype_note
-                    and vtype_note != variant.variant_type_evidence.human_edit_note
-                ):
-                    changes['variant_type_human_edit_note'] = vtype_note
-
-                if functional_evidence_val != variant.functional_evidence:
-                    changes['functional_evidence'] = functional_evidence_val
-                    if not variant.functional_evidence_evidence.human_edit_note:
-                        changes['functional_evidence_human_edit_note'] = (
-                            HUMAN_EDIT_NOTE_DEFAULT
-                        )
-                if (
-                    func_ev_note
-                    and func_ev_note
-                    != variant.functional_evidence_evidence.human_edit_note
-                ):
-                    changes['functional_evidence_human_edit_note'] = func_ev_note
-
-                if main_focus_val != variant.main_focus:
-                    changes['main_focus'] = main_focus_val
-                    if not variant.main_focus_evidence.human_edit_note:
-                        changes['main_focus_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
-                if (
-                    main_focus_note
-                    and main_focus_note != variant.main_focus_evidence.human_edit_note
-                ):
-                    changes['main_focus_human_edit_note'] = main_focus_note
+                changes.update(
+                    _note_changes(
+                        'variant_type',
+                        variant_type_val.value,
+                        variant.variant_type,
+                        vtype_note,
+                        variant.variant_type_evidence.human_edit_note,
+                    )
+                )
+                changes.update(
+                    _note_changes(
+                        'functional_evidence',
+                        functional_evidence_val,
+                        variant.functional_evidence,
+                        func_ev_note,
+                        variant.functional_evidence_evidence.human_edit_note,
+                    )
+                )
+                changes.update(
+                    _note_changes(
+                        'main_focus',
+                        main_focus_val,
+                        variant.main_focus,
+                        main_focus_note,
+                        variant.main_focus_evidence.human_edit_note,
+                    )
+                )
 
                 # Harmonized fields (no per-field evidence, no human_edit_note).
                 if harmonized_variant and harmonized_variant.value:
