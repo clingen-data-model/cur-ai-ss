@@ -17,6 +17,7 @@ from lib.models import (
     PhenotypeResp,
     TaskResp,
     VariantResp,
+    VariantUpdateRequest,
 )
 from lib.tasks import TaskCreateRequest, TaskType, infer_paper_status
 
@@ -173,6 +174,17 @@ def get_variants(paper_id: int) -> list[VariantResp]:
     resp = requests.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/variants')
     resp.raise_for_status()
     return TypeAdapter(list[VariantResp]).validate_python(resp.json())
+
+
+def update_variant(
+    paper_id: int, variant_id: int, update_request: VariantUpdateRequest
+) -> VariantResp:
+    resp = requests.patch(
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/variants/{variant_id}',
+        json=update_request.model_dump(mode='json', exclude_unset=True),
+    )
+    resp.raise_for_status()
+    return VariantResp.model_validate(resp.json())
 
 
 def clear_highlights(paper_id: int) -> None:

@@ -637,3 +637,276 @@ def test_get_variants_harmonized_and_enriched(client, db_session, seeded_paper):
     assert v['enriched_variant']['gnomad_top_level_af'] == 0.0001
     assert v['enriched_variant']['gnomad_popmax_af'] == 0.0003
     assert v['enriched_variant']['gnomad_popmax_population'] == 'eas'
+
+
+def _ev(value: object = None, quote: str | None = 'test') -> dict:
+    """Minimal evidence_block JSON stub for the variant fixture."""
+    d: dict = {'value': value, 'reasoning': 'test'}
+    if quote is not None and value is not None:
+        d['quote'] = quote
+    return d
+
+
+@pytest.fixture
+def seeded_variant(db_session, seeded_paper):
+    """Create a variant with a harmonized variant for PATCH tests."""
+    variant = VariantDB(
+        paper_id=seeded_paper.id,
+        variant='c.68_69delAG',
+        transcript='NM_007294.3',
+        genome_build='GRCh38',
+        rsid='rs80357906',
+        hgvs_c='c.68_69delAG',
+        hgvs_p='p.Glu23ValfsTer17',
+        variant_type='Frameshift Deletion',
+        functional_evidence=True,
+        main_focus=False,
+        transcript_evidence=_ev('NM_007294.3'),
+        protein_accession_evidence=_ev(),
+        genomic_accession_evidence=_ev(),
+        lrg_accession_evidence=_ev(),
+        gene_accession_evidence=_ev(),
+        genomic_coordinates_evidence=_ev(),
+        genome_build_evidence=_ev('GRCh38'),
+        rsid_evidence=_ev('rs80357906'),
+        caid_evidence=_ev(),
+        variant_evidence=_ev('c.68_69delAG'),
+        hgvs_c_evidence=_ev('c.68_69delAG'),
+        hgvs_p_evidence=_ev('p.Glu23ValfsTer17'),
+        hgvs_g_evidence=_ev(),
+        variant_type_evidence=_ev('Frameshift Deletion'),
+        functional_evidence_evidence=_ev(True),
+        main_focus_evidence=_ev(False),
+    )
+    db_session.add(variant)
+    db_session.flush()
+    harmonized = HarmonizedVariantDB(
+        variant_id=variant.id,
+        gnomad_style_coordinates='17:41196312:AG:A',
+        rsid='rs80357906',
+        hgvs_c='c.68_69delAG',
+        hgvs_p='p.Glu23ValfsTer17',
+        reasoning='Harmonized via VariantValidator',
+    )
+    db_session.add(harmonized)
+    db_session.flush()
+    db_session.add(
+        EnrichedVariantDB(
+            harmonized_variant_id=harmonized.id,
+            pathogenicity='Pathogenic',
+            submissions=3,
+            stars=2,
+            gnomad_top_level_af=0.0001,
+        )
+    )
+    db_session.flush()
+    return variant
+
+
+def test_update_variant_extracted_fields(client, seeded_paper, seeded_variant):
+    """PATCH variant_type, functional_evidence, and main_focus."""
+    response = client.patch(
+        f'/papers/{seeded_paper.id}/variants/{seeded_variant.id}',
+        json={
+            'variant_type': 'Frameshift',
+            'functional_evidence': False,
+            'main_focus': True,
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data['variant_type'] == 'Frameshift'
+    assert data['functional_evidence'] is False
+    assert data['main_focus'] is True
+    # Untouched fields remain
+    assert data['transcript'] == 'NM_007294.3'
+
+
+def test_update_variant_harmonized_fields(client, seeded_paper, seeded_variant):
+    """PATCH harmonized variant fields through the variant endpoint."""
+    response = client.patch(
+        f'/papers/{seeded_paper.id}/variants/{seeded_variant.id}',
+        json={
+            'harmonized_hgvs_g': 'g.41196312_41196313del',
+            'harmonized_caid': 'CA999999',
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    hv = data['harmonized_variant']['value']
+    assert hv['hgvs_g'] == 'g.41196312_41196313del'
+    assert hv['caid'] == 'CA999999'
+    # Other harmonized fields preserved
+    assert hv['rsid'] == 'rs80357906'
+    assert hv['hgvs_c'] == 'c.68_69delAG'
+
+
+def test_update_variant_human_edit_note(client, seeded_paper, seeded_variant):
+    """PATCH with a human edit note on an evidence block."""
+    response = client.patch(
+        f'/papers/{seeded_paper.id}/variants/{seeded_variant.id}',
+        json={
+            'variant_type': 'Frameshift',
+            'variant_type_human_edit_note': 'Reclassified by curator',
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data['variant_type'] == 'Frameshift'
+    assert data['variant_type_evidence']['human_edit_note'] == 'Reclassified by curator'
+
+
+def test_update_variant_not_found(client, seeded_paper):
+    """404 for nonexistent variant id."""
+    response = client.patch(
+        f'/papers/{seeded_paper.id}/variants/999',
+        json={'variant_type': 'Missense'},
+    )
+    assert response.status_code == 404
+
+
+def test_update_variant_partial(client, seeded_paper, seeded_variant):
+    """Partial PATCH only changes the specified fields."""
+    response = client.patch(
+        f'/papers/{seeded_paper.id}/variants/{seeded_variant.id}',
+        json={'main_focus': True},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data['main_focus'] is True
+    assert data['variant_type'] == 'Frameshift Deletion'
+    assert data['functional_evidence'] is True
+
+
+def test_update_variant_edit_harmonized_clears_enrichment(
+    client, db_session, seeded_paper, seeded_variant
+):
+    """Editing a harmonized field deletes the downstream enriched row."""
+    response = client.patch(
+        f'/papers/{seeded_paper.id}/variants/{seeded_variant.id}',
+        json={'harmonized_hgvs_g': 'g.41196312_41196313del'},
+    )
+    assert response.status_code == 200
+    assert response.json()['enriched_variant'] is None
+    # Row is actually gone, not just hidden from the response.
+    remaining = (
+        db_session.query(EnrichedVariantDB)
+        .join(
+            HarmonizedVariantDB,
+            EnrichedVariantDB.harmonized_variant_id == HarmonizedVariantDB.id,
+        )
+        .filter(HarmonizedVariantDB.variant_id == seeded_variant.id)
+        .count()
+    )
+    assert remaining == 0
+
+
+def test_update_variant_edit_harmonized_hgvs_p_also_clears_enrichment(
+    client, seeded_paper, seeded_variant
+):
+    """Uniform sibling treatment: editing hgvs_p (currently not an enrichment
+    lookup input) still clears enrichment, so a future lookup that starts
+    reading hgvs_p cannot silently produce stale annotations.
+    """
+    response = client.patch(
+        f'/papers/{seeded_paper.id}/variants/{seeded_variant.id}',
+        json={'harmonized_hgvs_p': 'p.Glu23Ter'},
+    )
+    assert response.status_code == 200
+    assert response.json()['enriched_variant'] is None
+
+
+def test_update_variant_edit_harmonized_preserves_reasoning(
+    client, seeded_paper, seeded_variant
+):
+    """A harmonized-field edit leaves the LLM reasoning untouched: it is the
+    agent's explanation of its original choices and must remain auditable.
+    The curator's rationale goes into human_edit_note fields instead.
+    """
+    response = client.patch(
+        f'/papers/{seeded_paper.id}/variants/{seeded_variant.id}',
+        json={'harmonized_caid': 'CA999999'},
+    )
+    assert response.status_code == 200
+    assert (
+        response.json()['harmonized_variant']['reasoning']
+        == 'Harmonized via VariantValidator'
+    )
+
+
+def test_update_variant_edit_extracted_only_preserves_derived(
+    client, seeded_paper, seeded_variant
+):
+    """Editing variant_type / functional_evidence / main_focus leaves
+    harmonized reasoning and enrichment untouched (assumption A1).
+    """
+    response = client.patch(
+        f'/papers/{seeded_paper.id}/variants/{seeded_variant.id}',
+        json={'variant_type': 'Frameshift', 'main_focus': True},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data['enriched_variant'] is not None
+    assert data['enriched_variant']['pathogenicity'] == 'Pathogenic'
+    assert data['harmonized_variant']['reasoning'] == 'Harmonized via VariantValidator'
+
+
+def test_update_variant_edit_only_note_preserves_derived(
+    client, seeded_paper, seeded_variant
+):
+    """PATCHing only a human_edit_note does not invalidate any derived data."""
+    response = client.patch(
+        f'/papers/{seeded_paper.id}/variants/{seeded_variant.id}',
+        json={'variant_type_human_edit_note': 'Reviewed'},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data['enriched_variant'] is not None
+    assert data['harmonized_variant']['reasoning'] == 'Harmonized via VariantValidator'
+
+
+def test_update_variant_clear_human_edit_note(client, seeded_paper, seeded_variant):
+    """A curator can clear a previously-set human edit note by PATCHing None."""
+    # First, set a note.
+    response = client.patch(
+        f'/papers/{seeded_paper.id}/variants/{seeded_variant.id}',
+        json={'variant_type_human_edit_note': 'temporary annotation'},
+    )
+    assert response.status_code == 200
+    assert (
+        response.json()['variant_type_evidence']['human_edit_note']
+        == 'temporary annotation'
+    )
+    # Now clear it.
+    response = client.patch(
+        f'/papers/{seeded_paper.id}/variants/{seeded_variant.id}',
+        json={'variant_type_human_edit_note': None},
+    )
+    assert response.status_code == 200
+    assert response.json()['variant_type_evidence']['human_edit_note'] is None
+
+
+def test_update_variant_value_and_default_note_simultaneously(
+    client, seeded_paper, seeded_variant
+):
+    """Simulates the UI's reset-on-value-edit behavior: when a value is edited
+    and the curator cleared any custom note in the same interaction, the UI
+    sends the value change plus the default audit mark as the note.
+    """
+    # Prime with a custom note.
+    client.patch(
+        f'/papers/{seeded_paper.id}/variants/{seeded_variant.id}',
+        json={'variant_type_human_edit_note': 'custom note'},
+    )
+    # UI-style payload for a value edit that cleared the custom note.
+    response = client.patch(
+        f'/papers/{seeded_paper.id}/variants/{seeded_variant.id}',
+        json={
+            'variant_type': 'Missense',
+            'variant_type_human_edit_note': 'Edited by Human',
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data['variant_type'] == 'Missense'
+    assert data['variant_type_evidence']['human_edit_note'] == 'Edited by Human'
