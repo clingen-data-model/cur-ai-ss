@@ -20,7 +20,7 @@ def pubmed_search_and_titles(first_author: str) -> List[Tuple[str, str]]:
     Returns a list of (pmid, title) tuples for candidate selection.
     """
     # Phase 1: search by author
-    params = {
+    params: dict[str, str | int] = {
         'db': 'pubmed',
         'term': f'{first_author}[au]',
         'retmode': 'json',
@@ -56,13 +56,21 @@ def pubmed_search_and_titles(first_author: str) -> List[Tuple[str, str]]:
 
     # Extract PMIDs and titles
     from xml.etree import ElementTree as ET
+
     root = ET.fromstring(xml_text)
     results = []
     for article in root.findall('.//PubmedArticle'):
         pmid_elem = article.find('./MedlineCitation/PMID')
         title_elem = article.find('./MedlineCitation/Article/ArticleTitle')
-        if pmid_elem is not None and title_elem is not None:
-            results.append((pmid_elem.text, ''.join(title_elem.itertext())))
+
+        # Skip if no PMID or empty
+        if pmid_elem is None or not pmid_elem.text:
+            continue
+
+        pmid_text: str = pmid_elem.text
+        title_text = ''.join(title_elem.itertext()) if title_elem is not None else ''
+        results.append((pmid_text, title_text))
+
     return results
 
 
@@ -91,6 +99,7 @@ def pubmed_fetch_one(pmid: str) -> str:
     xml_text = unescape(r.text)
     xml_text = sub(r'</?(?:i|b|strong|sup|sub)>', '', xml_text)
     return xml_text
+
 
 PAPER_EXTRACTION_INSTRUCTIONS = """
 You are an expert clinical data curator.
