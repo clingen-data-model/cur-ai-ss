@@ -3,9 +3,9 @@ from typing import List
 from agents import Agent
 from pydantic import BaseModel
 
+from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
 from lib.core.environment import env
 from lib.models import ExtractedPhenotype
-from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
 
 INSTRUCTIONS = """
 You are an expert clinical data curator performing structured phenotype extraction
