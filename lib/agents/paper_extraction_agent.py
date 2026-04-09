@@ -1,6 +1,6 @@
 from html import unescape
 from re import sub
-from typing import List
+from typing import List, Tuple
 
 import requests
 from agents import Agent, function_tool
@@ -14,19 +14,19 @@ EFETCH_ENDPOINT = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
 
 
 @function_tool
-def pubmed_search(first_author: str) -> List[str]:
+def pubmed_search_and_titles(first_author: str) -> List[Tuple[str, str]]:
     """
-    Broad PubMed search by first author only.
-    Returns many candidate PMIDs for the agent to evaluate.
+    Search PubMed by first author, then fetch the titles for all PMIDs.
+    Returns a list of (pmid, title) tuples for candidate selection.
     """
-    params: dict[str, str | int] = {
+    # Phase 1: search by author
+    params = {
         'db': 'pubmed',
         'term': f'{first_author}[au]',
         'retmode': 'json',
         'sort': 'relevance',
-        'retmax': 100,
+        'retmax': 50,
     }
-
     if env.NCBI_API_KEY:
         params['api_key'] = env.NCBI_API_KEY
     if env.NCBI_EMAIL:
@@ -34,25 +34,52 @@ def pubmed_search(first_author: str) -> List[str]:
 
     r = requests.get(ESEARCH_ENDPOINT, params=params, timeout=10)
     r.raise_for_status()
-
-    return r.json().get('esearchresult', {}).get('idlist', [])
-
-
-@function_tool
-def pubmed_fetch_xml(pmids: List[str]) -> str:
-    """
-    Fetch multiple PubMed records by PMID using efetch.
-    Returns a single XML document containing all records.
-    """
+    pmids = r.json().get('esearchresult', {}).get('idlist', [])
     if not pmids:
-        return ''
+        return []
 
-    params = {
+    # Phase 2: fetch titles
+    fetch_params = {
         'db': 'pubmed',
         'id': ','.join(pmids),
         'retmode': 'xml',
     }
+    if env.NCBI_API_KEY:
+        fetch_params['api_key'] = env.NCBI_API_KEY
+    if env.NCBI_EMAIL:
+        fetch_params['email'] = env.NCBI_EMAIL
 
+    r = requests.get(EFETCH_ENDPOINT, params=fetch_params, timeout=30)
+    r.raise_for_status()
+    xml_text = unescape(r.text)
+    xml_text = sub(r'</?(?:i|b|strong|sup|sub)>', '', xml_text)
+
+    # Extract PMIDs and titles
+    from xml.etree import ElementTree as ET
+    root = ET.fromstring(xml_text)
+    results = []
+    for article in root.findall('.//PubmedArticle'):
+        pmid_elem = article.find('./MedlineCitation/PMID')
+        title_elem = article.find('./MedlineCitation/Article/ArticleTitle')
+        if pmid_elem is not None and title_elem is not None:
+            results.append((pmid_elem.text, ''.join(title_elem.itertext())))
+    return results
+
+
+@function_tool
+def pubmed_fetch_one(pmid: str) -> str:
+    """
+    Fetch a single PubMed record by PMID using efetch.
+    Returns XML text for that record.
+    """
+    if not pmid:
+        return ''
+
+    params = {
+        'db': 'pubmed',
+        'id': pmid,
+        'retmode': 'xml',
+    }
     if env.NCBI_API_KEY:
         params['api_key'] = env.NCBI_API_KEY
     if env.NCBI_EMAIL:
@@ -64,7 +91,6 @@ def pubmed_fetch_xml(pmids: List[str]) -> str:
     xml_text = unescape(r.text)
     xml_text = sub(r'</?(?:i|b|strong|sup|sub)>', '', xml_text)
     return xml_text
-
 
 PAPER_EXTRACTION_INSTRUCTIONS = """
 You are an expert clinical data curator.
@@ -85,19 +111,21 @@ Task Overview:
   - doi
   - pmid
   - pmcid
-- When a field cannot be confidently identified, fail rather than guessing.
-- Use PubMed in two phases: candidate generation and selection.
 
-Candidate Generation:
-- Call pubmed_search using ONLY the first_author extracted from the text.
-- This will return many PMIDs for papers by this author.
+Candidate Generation & Selection Workflow:
 
-Candidate Selection:
-- Call pubmed_fetch_xml with all returned PMIDs in a single call.
-- Compare the PubMed ArticleTitle of each record to the title extracted from the text.
-- Select the PMID whose title best semantically matches the extracted title.
+1️⃣ Candidate Generation:
+- Call `pubmed_search_and_titles` using ONLY the `first_author` extracted from the text.
+- This will return a list of `(pmid, title)` tuples for candidate papers by this author.
+
+2️⃣ Candidate Selection:
+- Compare each returned title to the `title` extracted from the text.
+- Determine the PMID whose title is most closely aligned (semantic match or exact match).
 - Do NOT assume the first result is correct.
-- Once the correct PMID is identified, extract all remaining metadata from that PubMed record.
+
+3️⃣ Metadata Fetching:
+- Call `pubmed_fetch_one` on the selected PMID to fetch the full PubMed XML.
+- Extract all remaining metadata from that PubMed record:
     - title: MedlineCitation/Article/ArticleTitle 
     - first_author: MedlineCitation/Article/AuthorList/Author[1]/LastName 
     - journal: MedlineCitation/Article/Journal/ISOAbbreviation 
@@ -106,24 +134,28 @@ Candidate Selection:
     - doi: PubmedData/ArticleIdList/ArticleId with IdType="doi" 
     - pmcid: PubmedData/ArticleIdList/ArticleId with IdType="pmc"
 
-2. **Paper Type Selection** - 
-Classify the paper into at MOST two of the following types: 
-    - Letter: Short correspondence or “Letter to the Editor”; brief report or commentary with limited data and minimal methodological detail. 
-    - Research: Full original research article presenting novel experimental, computational, or clinical findings with complete methods, results, and discussion. 
-    - Case_series: Descriptive report of multiple patients or families with shared phenotypes or variants, without a control group or formal statistical comparison. 
-    - Case_study: Detailed report of a single patient or a single family, often describing a rare phenotype or novel genetic variant. 
-    - Cohort_analysis: Observational analysis of a defined group of individuals selected by shared criteria, focusing on frequencies, outcomes, or genotype–phenotype correlations. 
-    - Case_control: Observational study comparing affected individuals (cases) to unaffected individuals (controls) to test genetic association or variant enrichment. 
-    - Unknown: The paper type cannot be confidently determined from the provided text. 
+-2. **Paper Type Selection** -
+Classify the paper into at MOST two of the following types:
+    - Letter: Short correspondence or “Letter to the Editor”; brief report or commentary with limited data and minimal methodological detail.
+    - Research: Full original research article presenting novel experimental, computational, or clinical findings with complete methods, results, and discussion.
+    - Case_series: Descriptive report of multiple patients or families with shared phenotypes or variants, without a control group or formal statistical comparison.
+    - Case_study: Detailed report of a single patient or a single family, often describing a rare phenotype or novel genetic variant.
+    - Cohort_analysis: Observational analysis of a defined group of individuals selected by shared criteria, focusing on frequencies, outcomes, or genotype–phenotype correlations.
+    - Case_control: Observational study comparing affected individuals (cases) to unaffected individuals (controls) to test genetic association or variant enrichment.
+    - Unknown: The paper type cannot be confidently determined from the provided text.
     - Other: Does not fit the above categories (e.g., review, meta-analysis, guideline, methods, or database/resource paper).
+
+Important Guidelines:
+- When a field cannot be confidently identified, fail rather than guess.
+- Always use the `(pmid, title)` pairs to deterministically select the correct PubMed record.
+- Only fetch full records for the chosen PMID.
 """
 
 # --- Agent definition
-
 agent = Agent(
     name='paper_extractor',
     instructions=PAPER_EXTRACTION_INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
     output_type=PaperExtractionOutput,
-    tools=[pubmed_search, pubmed_fetch_xml],
+    tools=[pubmed_search_and_titles, pubmed_fetch_one],
 )
