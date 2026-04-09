@@ -1,5 +1,4 @@
 import asyncio
-import base64
 import json
 import logging
 from typing import Any, Awaitable, Callable, Union
@@ -123,9 +122,9 @@ async def handle_pedigree_description(task_id: int) -> None:
             caption_text = (
                 caption_path.read_text() if caption_path.exists() else 'No caption'
             )
-            image_base64 = base64.b64encode(pdf_image.read_bytes()).decode('utf-8')
+            image_url = f'{env.PROTOCOL}{env.API_ENDPOINT}{pdf_image}'
             combined_text += f'[Processing Pipeline Figure {image_id}]\n'
-            combined_text += f'Image (base64): {image_base64}\n'
+            combined_text += f'URL: {image_url}\n'
             combined_text += f'Caption: {caption_text}\n\n'
             image_id += 1
 
