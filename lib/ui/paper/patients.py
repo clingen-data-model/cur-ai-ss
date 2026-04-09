@@ -1,5 +1,6 @@
 import json
 import time
+from collections import defaultdict
 
 import pandas as pd
 import requests
@@ -8,6 +9,7 @@ import streamlit as st
 from lib.core.environment import env
 from lib.misc.pdf.paths import pdf_image_path
 from lib.models import (
+    FamilyResp,
     PaperResp,
     PatientResp,
     PatientUpdateRequest,
@@ -15,6 +17,7 @@ from lib.models import (
 )
 from lib.models.patient import (
     AffectedStatus,
+    AgeUnit,
     CountryCode,
     ProbandStatus,
     RaceEthnicity,
@@ -23,6 +26,7 @@ from lib.models.patient import (
 from lib.tasks import TaskType, is_task_completed
 from lib.ui.api import (
     enqueue_paper_task,
+    get_families,
     get_patients,
     get_pedigree,
     get_phenotypes,
@@ -36,6 +40,7 @@ from lib.ui.paper.shared import (
 )
 
 PATIENTS_KEY = 'patients'
+FAMILIES_KEY = 'families'
 
 
 def _render_patient_phenotypes(
@@ -226,6 +231,83 @@ def _render_phenotypes_table(
                 st.success('HPO linking task enqueued')
 
 
+def _render_family_group(
+    paper_resp: PaperResp,
+    family: FamilyResp,
+    patients_in_family: list[tuple[int, PatientResp]],
+    selected_patient_id: int | None,
+    tab_key: str,
+) -> None:
+    """Render a family with multiple patients."""
+    st.markdown(f'### {family.identifier}')
+    with st.expander(
+        'View Family',
+        expanded=any(pid == selected_patient_id for pid, _ in patients_in_family),
+    ):
+        # Family identifier + evidence
+        col1, col2 = st.columns(2)
+        with col1:
+            st.text_input(
+                'Family Identifier',
+                family.identifier,
+                disabled=True,
+                key=f'{tab_key}-fam-{family.id}-identifier',
+            )
+        with col2:
+            st.space()
+            render_evidence_controls(
+                paper_resp.id,
+                block=family.identifier_evidence,
+                label='Family Identifier Evidence',
+                color_key=f'{tab_key}-fam-{family.id}-color',
+                button_key_prefix=f'{tab_key}-fam-{family.id}-btn',
+            )
+
+        # Patients
+        for patient_id, patient in patients_in_family:
+            st.markdown(f'#### {patient.identifier}')
+            render_patient(
+                paper_resp,
+                patient,
+                expanded=(patient_id == selected_patient_id),
+                key_prefix=f'{tab_key}-{patient_id}',
+                patient_id=patient_id,
+            )
+
+
+def _render_patients_grouped_by_family(
+    paper_resp: PaperResp,
+    families: list[FamilyResp],
+    patients: list[tuple[int, PatientResp]],
+    selected_patient_id: int | None,
+    tab_key: str,
+) -> None:
+    """Render patients grouped by family."""
+    family_map = {f.id: f for f in families}
+    # Group patients by family_id
+    by_family: dict[int, list[tuple[int, PatientResp]]] = defaultdict(list)
+    for patient_id, patient in patients:
+        by_family[patient.family_id].append((patient_id, patient))
+
+    for family_id, group in sorted(by_family.items()):
+        family = family_map.get(family_id)
+        if len(group) > 1 and family:
+            _render_family_group(
+                paper_resp, family, group, selected_patient_id, tab_key
+            )
+        else:
+            # Single patient: render as-is (family assignment evidence already in render_patient)
+            patient_id, patient = group[0]
+            st.markdown(f'### {patient.identifier}')
+            render_patient(
+                paper_resp,
+                patient,
+                expanded=(patient_id == selected_patient_id),
+                key_prefix=f'{tab_key}-{patient_id}',
+                patient_id=patient_id,
+            )
+
+
 def render_patient(
     paper_resp: PaperResp,
     patient: PatientResp,
@@ -234,7 +316,7 @@ def render_patient(
     patient_id: int,
 ) -> None:
     with st.expander(
-        'View Metadata',
+        'View Patient Metadata',
         expanded=expanded,
     ):
         col1, col2 = st.columns(2)
@@ -253,6 +335,24 @@ def render_patient(
                 color_key=f'{key_prefix}-{patient.identifier}-color-pi-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-pi-evidence',
                 human_edit_note_key=f'{key_prefix}-identifier-note',
+            )
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.text_input(
+                'Family Identifier',
+                patient.family_identifier,
+                disabled=True,
+                key=f'{key_prefix}-family-identifier',
+            )
+        with col2:
+            st.space()
+            render_evidence_controls(
+                paper_resp.id,
+                block=patient.family_assignment_evidence,
+                label='Family Assignment Evidence',
+                color_key=f'{key_prefix}-{patient.identifier}-color-fam-evidence',
+                button_key_prefix=f'{key_prefix}-{patient.identifier}-fam-evidence',
             )
 
         col1, col2 = st.columns(2)
@@ -340,13 +440,33 @@ def render_patient(
         # --- Ages
         col1, col2 = st.columns(2)
         with col1:
-            age_diagnosis = st.number_input(
-                'Age at Diagnosis (months)',
-                value=patient.age_diagnosis,
-                min_value=0,
-                step=1,
-                key=f'{key_prefix}-age-diagnosis',
-            )
+            age_col, unit_col = st.columns([2, 1])
+            with age_col:
+                age_diagnosis = st.number_input(
+                    'Age at Diagnosis',
+                    value=patient.age_diagnosis,
+                    min_value=0,
+                    step=1,
+                    key=f'{key_prefix}-age-diagnosis',
+                )
+            with unit_col:
+                age_unit_options = [None] + [u.value for u in AgeUnit]
+                age_diagnosis_current = (
+                    patient.age_diagnosis_unit.value
+                    if patient.age_diagnosis_unit
+                    else None
+                )
+                age_diagnosis_idx = (
+                    age_unit_options.index(age_diagnosis_current)
+                    if age_diagnosis_current in age_unit_options
+                    else 0
+                )
+                age_diagnosis_unit = st.selectbox(
+                    'Unit',
+                    options=age_unit_options,
+                    index=age_diagnosis_idx,
+                    key=f'{key_prefix}-age-diagnosis-unit',
+                )
         with col2:
             st.space()
             age_diagnosis_note = render_evidence_controls(
@@ -359,13 +479,31 @@ def render_patient(
             )
         col1, col2 = st.columns(2)
         with col1:
-            age_report = st.number_input(
-                'Age at Report (months)',
-                value=patient.age_report,
-                min_value=0,
-                step=1,
-                key=f'{key_prefix}-age-report',
-            )
+            age_col, unit_col = st.columns([2, 1])
+            with age_col:
+                age_report = st.number_input(
+                    'Age at Report',
+                    value=patient.age_report,
+                    min_value=0,
+                    step=1,
+                    key=f'{key_prefix}-age-report',
+                )
+            with unit_col:
+                age_unit_options = [None] + [u.value for u in AgeUnit]
+                age_report_current = (
+                    patient.age_report_unit.value if patient.age_report_unit else None
+                )
+                age_report_idx = (
+                    age_unit_options.index(age_report_current)
+                    if age_report_current in age_unit_options
+                    else 0
+                )
+                age_report_unit = st.selectbox(
+                    'Unit',
+                    options=age_unit_options,
+                    index=age_report_idx,
+                    key=f'{key_prefix}-age-report-unit',
+                )
         with col2:
             st.space()
             age_report_note = render_evidence_controls(
@@ -378,13 +516,31 @@ def render_patient(
             )
         col1, col2 = st.columns(2)
         with col1:
-            age_death = st.number_input(
-                'Age at Death (months)',
-                value=patient.age_death,
-                min_value=0,
-                step=1,
-                key=f'{key_prefix}-age-death',
-            )
+            age_col, unit_col = st.columns([2, 1])
+            with age_col:
+                age_death = st.number_input(
+                    'Age at Death',
+                    value=patient.age_death,
+                    min_value=0,
+                    step=1,
+                    key=f'{key_prefix}-age-death',
+                )
+            with unit_col:
+                age_unit_options = [None] + [u.value for u in AgeUnit]
+                age_death_current = (
+                    patient.age_death_unit.value if patient.age_death_unit else None
+                )
+                age_death_idx = (
+                    age_unit_options.index(age_death_current)
+                    if age_death_current in age_unit_options
+                    else 0
+                )
+                age_death_unit = st.selectbox(
+                    'Unit',
+                    options=age_unit_options,
+                    index=age_death_idx,
+                    key=f'{key_prefix}-age-death-unit',
+                )
         with col2:
             st.space()
             age_death_note = render_evidence_controls(
@@ -506,6 +662,12 @@ def render_patient(
         ):
             changes['age_diagnosis_human_edit_note'] = age_diagnosis_note
 
+        age_diagnosis_current_unit = (
+            patient.age_diagnosis_unit.value if patient.age_diagnosis_unit else None
+        )
+        if age_diagnosis_unit != age_diagnosis_current_unit:
+            changes['age_diagnosis_unit'] = age_diagnosis_unit
+
         if age_report_val != patient.age_report:
             changes['age_report'] = age_report_val
             if not patient.age_report_evidence.human_edit_note:
@@ -516,6 +678,12 @@ def render_patient(
         ):
             changes['age_report_human_edit_note'] = age_report_note
 
+        age_report_current_unit = (
+            patient.age_report_unit.value if patient.age_report_unit else None
+        )
+        if age_report_unit != age_report_current_unit:
+            changes['age_report_unit'] = age_report_unit
+
         if age_death_val != patient.age_death:
             changes['age_death'] = age_death_val
             if not patient.age_death_evidence.human_edit_note:
@@ -525,6 +693,12 @@ def render_patient(
             and age_death_note != patient.age_death_evidence.human_edit_note
         ):
             changes['age_death_human_edit_note'] = age_death_note
+
+        age_death_current_unit = (
+            patient.age_death_unit.value if patient.age_death_unit else None
+        )
+        if age_death_unit != age_death_current_unit:
+            changes['age_death_unit'] = age_death_unit
 
         if country_of_origin != patient.country_of_origin:
             changes['country_of_origin'] = country_of_origin.value
@@ -582,7 +756,7 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
         st.write(f'{paper_resp.filename} not yet extracted...')
         return
     if not is_task_completed(paper_resp.tasks, TaskType.PATIENT_EXTRACTION):
-        st.write(f'Entity Linking not yet completed...')
+        st.write(f'Patient Extraction not yet completed...')
         return
     # -----------------------------
     # Load patients
@@ -599,19 +773,23 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
     # -----------------------------
     indexed_patients = [(p.id, p) for p in patients]
     probands = [
-        (i, p) for i, p in indexed_patients if p.proband_status == ProbandStatus.Proband
+        (patient_id, p)
+        for patient_id, p in indexed_patients
+        if p.proband_status == ProbandStatus.Proband
     ]
     non_probands = [
-        (i, p) for i, p in indexed_patients if p.proband_status != ProbandStatus.Proband
+        (patient_id, p)
+        for patient_id, p in indexed_patients
+        if p.proband_status != ProbandStatus.Proband
     ]
     affecteds = [
-        (i, p)
-        for i, p in indexed_patients
+        (patient_id, p)
+        for patient_id, p in indexed_patients
         if p.affected_status == AffectedStatus.Affected
     ]
     unaffecteds = [
-        (i, p)
-        for i, p in indexed_patients
+        (patient_id, p)
+        for patient_id, p in indexed_patients
         if p.affected_status != AffectedStatus.Affected
     ]
     tabs = [
@@ -629,53 +807,46 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
             else tabs[0],
         )
     )
+    # Load families
+    if FAMILIES_KEY not in st.session_state:
+        st.session_state[FAMILIES_KEY] = get_families(paper_resp.id)
+    families: list[FamilyResp] = st.session_state[FAMILIES_KEY]
+
     with proband_tab:
         if not probands:
             st.info('No probands detected.')
-        for original_id, patient in probands:
-            st.markdown(f'### {patient.identifier}')
-            render_patient(
-                paper_resp,
-                patient,
-                expanded=(original_id == selected_patient_id),
-                key_prefix=f'patient-proband-{original_id}',
-                patient_id=original_id,
+        else:
+            _render_patients_grouped_by_family(
+                paper_resp, families, probands, selected_patient_id, 'patient-proband'
             )
     with non_proband_tab:
         if not non_probands:
             st.info('No non-probands detected.')
-        for original_id, patient in non_probands:
-            st.markdown(f'### {patient.identifier}')
-            render_patient(
+        else:
+            _render_patients_grouped_by_family(
                 paper_resp,
-                patient,
-                expanded=(original_id == selected_patient_id),
-                key_prefix=f'patient-non-proband-{original_id}',
-                patient_id=original_id,
+                families,
+                non_probands,
+                selected_patient_id,
+                'patient-non-proband',
             )
     with affecteds_tab:
         if not affecteds:
             st.info('No affected patients detected.')
-        for original_id, patient in affecteds:
-            st.markdown(f'### {patient.identifier}')
-            render_patient(
-                paper_resp,
-                patient,
-                expanded=(original_id == selected_patient_id),
-                key_prefix=f'patient-affected-{original_id}',
-                patient_id=original_id,
+        else:
+            _render_patients_grouped_by_family(
+                paper_resp, families, affecteds, selected_patient_id, 'patient-affected'
             )
     with unaffecteds_tab:
         if not unaffecteds:
-            st.info('No affected patients detected.')
-        for original_id, patient in unaffecteds:
-            st.markdown(f'### {patient.identifier}')
-            render_patient(
+            st.info('No unaffected patients detected.')
+        else:
+            _render_patients_grouped_by_family(
                 paper_resp,
-                patient,
-                expanded=(original_id == selected_patient_id),
-                key_prefix=f'patient-unaffected-{original_id}',
-                patient_id=original_id,
+                families,
+                unaffecteds,
+                selected_patient_id,
+                'patient-unaffected',
             )
     with pedigree_image_tab:
         if not pedigree_description:

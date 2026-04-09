@@ -6,6 +6,7 @@ from pydantic import TypeAdapter
 from lib.core.environment import env
 from lib.misc.pdf.highlight import GrobidAnnotation
 from lib.models import (
+    FamilyResp,
     GeneResp,
     PaperResp,
     PaperUpdateRequest,
@@ -143,6 +144,12 @@ def get_patients(paper_id: int) -> list[PatientResp]:
     resp = requests.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/patients')
     resp.raise_for_status()
     return TypeAdapter(list[PatientResp]).validate_python(resp.json())
+
+
+def get_families(paper_id: int) -> list[FamilyResp]:
+    resp = requests.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/families')
+    resp.raise_for_status()
+    return TypeAdapter(list[FamilyResp]).validate_python(resp.json())
 
 
 def get_pedigree(paper_id: int) -> PedigreeResp | None:

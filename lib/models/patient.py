@@ -12,6 +12,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
@@ -36,6 +37,12 @@ class AffectedStatus(str, Enum):
     Affected = 'Affected'
     Unaffected = 'Unaffected'
     Unknown = 'Unknown'
+
+
+class AgeUnit(str, Enum):
+    Years = 'Years'
+    Months = 'Months'
+    Days = 'Days'
 
 
 class SexAtBirth(str, Enum):
@@ -328,18 +335,38 @@ class Patient(BaseModel):
     proband_status: EvidenceBlock[ProbandStatus]
     sex: EvidenceBlock[SexAtBirth]
     age_diagnosis: EvidenceBlock[int | None]
+    age_diagnosis_unit: AgeUnit | None = None
     age_report: EvidenceBlock[int | None]
+    age_report_unit: AgeUnit | None = None
     age_death: EvidenceBlock[int | None]
+    age_death_unit: AgeUnit | None = None
     country_of_origin: EvidenceBlock[CountryCode]
     race_ethnicity: EvidenceBlock[RaceEthnicity]
     affected_status: EvidenceBlock[AffectedStatus]
+
+    @model_validator(mode='after')
+    def validate_age_units(self) -> 'Patient':
+        """Ensure age fields and their units are both populated or both null."""
+        age_pairs = [
+            ('age_diagnosis', 'age_diagnosis_unit'),
+            ('age_report', 'age_report_unit'),
+            ('age_death', 'age_death_unit'),
+        ]
+        for age_field, unit_field in age_pairs:
+            age_value = getattr(self, age_field).value
+            unit_value = getattr(self, unit_field)
+            if (age_value is None) != (unit_value is None):
+                raise ValueError(
+                    f'{age_field} and {unit_field} must both be populated or both null'
+                )
+        return self
 
 
 class FamilyEntry(BaseModel):
     """Family grouping with references to patients by their identifier."""
 
     family: Family
-    patient_identifiers: List[str]
+    patient_identifiers: List[EvidenceBlock[str]]
 
 
 class PatientExtractionOutput(BaseModel):
@@ -350,9 +377,11 @@ class PatientExtractionOutput(BaseModel):
     def validate_family_coverage(self) -> 'PatientExtractionOutput':
         """Ensure every patient is assigned to exactly one family."""
         patient_identifiers = {p.identifier.value for p in self.patients}
-        assigned_identifiers = set()
+        assigned_identifiers: set[str] = set()
         for entry in self.families:
-            assigned_identifiers.update(entry.patient_identifiers)
+            assigned_identifiers.update(
+                id_block.value for id_block in entry.patient_identifiers
+            )
 
         missing = patient_identifiers - assigned_identifiers
         if missing:
@@ -383,8 +412,17 @@ class PatientDB(Base):
     proband_status: Mapped[str] = mapped_column(String, nullable=False)
     sex: Mapped[str] = mapped_column(String, nullable=False)
     age_diagnosis: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    age_diagnosis_unit: Mapped[AgeUnit | None] = mapped_column(
+        SQLEnum(AgeUnit), nullable=True
+    )
     age_report: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    age_report_unit: Mapped[AgeUnit | None] = mapped_column(
+        SQLEnum(AgeUnit), nullable=True
+    )
     age_death: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    age_death_unit: Mapped[AgeUnit | None] = mapped_column(
+        SQLEnum(AgeUnit), nullable=True
+    )
     country_of_origin: Mapped[str] = mapped_column(String, nullable=False)
     race_ethnicity: Mapped[str] = mapped_column(String, nullable=False)
     affected_status: Mapped[str] = mapped_column(String, nullable=False)
@@ -399,6 +437,7 @@ class PatientDB(Base):
     country_of_origin_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     race_ethnicity_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     affected_status_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    family_assignment_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -429,8 +468,11 @@ class PatientResp(BaseModel):
     proband_status: ProbandStatus
     sex: SexAtBirth
     age_diagnosis: int | None
+    age_diagnosis_unit: AgeUnit | None = None
     age_report: int | None
+    age_report_unit: AgeUnit | None = None
     age_death: int | None
+    age_death_unit: AgeUnit | None = None
     country_of_origin: CountryCode
     race_ethnicity: RaceEthnicity
     affected_status: AffectedStatus
@@ -447,7 +489,7 @@ class PatientResp(BaseModel):
     affected_status_evidence: HumanEvidenceBlock[AffectedStatus]
     family_id: int
     family_identifier: str
-    family_identifier_evidence: HumanEvidenceBlock[str]
+    family_assignment_evidence: HumanEvidenceBlock[str]
 
 
 class PatientCreateRequest(BaseModel):
@@ -455,8 +497,11 @@ class PatientCreateRequest(BaseModel):
     proband_status: str
     sex: str
     age_diagnosis: int | None = None
+    age_diagnosis_unit: str | None = None
     age_report: int | None = None
+    age_report_unit: str | None = None
     age_death: int | None = None
+    age_death_unit: str | None = None
     country_of_origin: str
     race_ethnicity: str
     affected_status: str
@@ -469,8 +514,11 @@ class PatientUpdateRequest(PatchModel):
     affected_status: str | None = None
     sex: str | None = None
     age_diagnosis: int | None = None
+    age_diagnosis_unit: str | None = None
     age_report: int | None = None
+    age_report_unit: str | None = None
     age_death: int | None = None
+    age_death_unit: str | None = None
     country_of_origin: str | None = None
     race_ethnicity: str | None = None
     # Human edit notes for evidence blocks

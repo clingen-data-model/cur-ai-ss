@@ -3,6 +3,7 @@ from typing import List
 from agents import Agent
 from pydantic import BaseModel
 
+from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
 from lib.core.environment import env
 from lib.models import ExtractedPhenotype
 
@@ -120,44 +121,26 @@ PHENOTYPE FIELD DEFINITIONS
 
 1. **concept** (EvidenceBlock[str]):
    - **value**: The exact phenotype text (observable trait, sign, or symptom).
-     Can be directly quoted or a close paraphrase of the text.
-   - **reasoning**: Explain WHY this is a phenotype (not a diagnosis) and HOW you determined
-     which patient it belongs to. Reference specific text locations and patient context.
-   - **quote**: Verbatim quote from the paper containing or describing the phenotype.
-     This is the primary evidence source.
-   - **table_id**: If the phenotype information comes from a table, provide the table index.
-
-   At least one of quote or table_id MUST be provided (unless value is null).
-
-   **IMPORTANT**: image_id provides pedigree descriptions only and should not be used here.
+   - **reasoning**: Explain WHY this is a phenotype and HOW you determined which patient it belongs to.
+   - **quote**, **table_id**, **image_id**: Evidence sources (see CORE EXTRACTION RULES below).
 
 2. **negated**: true if the text explicitly states the patient does NOT have the phenotype
    - Example: "no tremor was observed"
-   - Do NOT use negated for "family_history" phenotypes
 
 3. **uncertain**: true if the phenotype is described as possible, suspected, or unclear
    - Example: "possible seizure activity", "suggestive of hearing loss"
-   - Include qualifiers like "may have", "possible", "suspected"
 
-4. **family_history**: true ONLY if:
-   - The phenotype is explicitly in the context of family history, AND
-   - The phenotype is NOT explicitly attributed to the specific patient being profiled
+4. **family_history**: true ONLY if the phenotype is explicitly in family history context,
+   AND NOT explicitly attributed to the specific patient.
    - Example: "the patient's mother had hearing loss" → family_history=true
-   - Example: "the proband presented with hearing loss, as did her mother" → TWO extractions:
-     - One for proband with family_history=false
-     - One for "mother" as patient with family_history=false
 
 5. **onset**: Age or disease stage when phenotype occurred
-   - Example: "infancy", "early childhood", "adult onset", "age 5"
 
 6. **location**: Body site or laterality if specified
-   - Example: "left arm", "bilateral", "heart"
 
 7. **severity**: Severity level if mentioned
-   - Example: "mild", "moderate", "severe", "profound"
 
 8. **modifier**: Additional qualifiers
-   - Example: "intermittent", "progressive", "episodic", "transient"
 
 ---------------------------------------------------
 PATIENT LINKAGE RULES
@@ -304,18 +287,12 @@ VALIDATION
 
 For each extracted phenotype:
 
-- Confirm the phenotype is clearly a phenotype, not a diagnosis
-- Confirm the patient linkage is justified by the text
-- Confirm patient_id matches one of the patient IDs in the provided patient list
-- Confirm the phenotype is clearly a phenotype, not a diagnosis
-- Confirm the patient linkage is justified by the text
+- Confirm the phenotype is clearly a phenotype, not a diagnosis (per DIAGNOSIS → PHENOTYPE EXPANSION RULE)
 - Confirm patient_id matches one of the patient IDs in the provided patient list
 - Confirm all boolean fields are true/false (not "yes"/"no" or strings)
 - Confirm concept.value is a SINGLE phenotype string (not a list)
-- Confirm concept.reasoning clearly explains the phenotype and patient linkage
-- Confirm concept.quote contains a verbatim excerpt from the paper
-- Confirm at least one evidence source is provided: quote or table_id
-- Confirm image_id is not used (image_id provides pedigree descriptions only)
+- Confirm concept.reasoning explains the phenotype and patient linkage
+- Follow CORE EXTRACTION RULES for evidence validation (quote verbatim, table_id for tables, etc.)
 - If multiple phenotypes are mentioned in a quote, split them into separate entries
 - If any check fails, adjust or skip the extraction
 
@@ -374,7 +351,7 @@ Ensure:
 
 agent = Agent(
     name='phenotype_patient_linker',
-    instructions=INSTRUCTIONS,
+    instructions=(INSTRUCTIONS + '\n\n' + CORE_EXTRACTION_SPEC),
     model=env.OPENAI_API_DEPLOYMENT,
     output_type=list[ExtractedPhenotype],
 )

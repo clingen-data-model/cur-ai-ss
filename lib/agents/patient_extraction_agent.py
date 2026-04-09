@@ -60,8 +60,16 @@ Each field is an EvidenceBlock containing:
 
 - age_diagnosis, age_report, age_death (EvidenceBlock[int | None]):
   - Extract ages as reported in text, tables, or pedigrees
-  - Report the age in months as an integer.
+  - Report the numeric value as an integer
   - None if not stated
+
+- age_diagnosis_unit, age_report_unit, age_death_unit (enum: Years, Months, Days):
+  - Extract the unit of measurement for the corresponding age field
+  - Match the unit as stated in the source text
+  - Must be populated if the corresponding age field is populated; must be null if age is null
+  - Prefer the unit as explicitly stated; if ambiguous or missing, infer from context (e.g., decimal ages typically indicate years)
+  - If the unit is hours, round to the nearest day for the age value and set unit to Days
+  - Note that these are not EvidenceBlocks, we only expect the raw enum!
 
 - country_of_origin (EvidenceBlock[enum of valid country names]):
   - Extract from explicit geographic references
@@ -123,9 +131,14 @@ Family identifier rules:
 Output format:
 - Return a "families" list where each entry contains:
   - family: a Family object with an identifier EvidenceBlock (same pattern as patient fields)
-  - patient_identifiers: list of strings matching the patient identifier values extracted above
+  - patient_identifiers: list of EvidenceBlocks[str] where:
+    - value: the patient identifier (matching the patient identifier values extracted above)
+    - reasoning: explanation of how the patient was linked to this family (e.g., "explicitly listed in Figure 2 pedigree", "described as proband's sibling in text", "appears in Family 1 label")
+    - quote: verbatim quote if available
+    - image_id: if derived from a pedigree figure
+    - table_id: if derived from a table
 - The families list must contain at least one family.
-- The union of all patient_identifiers across all families must equal the complete set
+- The union of all patient identifier values across all families must equal the complete set
   of patient identifiers extracted above.
 """
 

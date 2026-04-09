@@ -1,7 +1,7 @@
-from enum import Enum
 from html import unescape
-from re import findall, split, sub
-from typing import List, Optional
+from re import sub
+from typing import List, Tuple
+from xml.etree import ElementTree as ET
 
 import requests
 from agents import Agent, function_tool
@@ -13,66 +13,21 @@ from lib.models import PaperExtractionOutput
 ESEARCH_ENDPOINT = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
 EFETCH_ENDPOINT = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
 
-STOP = {
-    'a',
-    'an',
-    'the',
-    'and',
-    'or',
-    'but',
-    'if',
-    'while',
-    'with',
-    'of',
-    'at',
-    'by',
-    'for',
-    'to',
-    'in',
-    'on',
-    'from',
-    'as',
-    'is',
-    'are',
-    'was',
-    'were',
-    'be',
-    'been',
-    'being',
-    'this',
-    'that',
-    'these',
-    'those',
-    'it',
-    'its',
-}
-
-
-def remove_stopwords(text: str) -> str:
-    tokens = findall(r'[A-Za-z0-9\-\/]+', text)
-    return ' '.join(t for t in tokens if t.lower() not in STOP)
-
 
 @function_tool
-def pubmed_search(title: str, first_author: str | None = None) -> List[str]:
+def pubmed_search_and_titles(first_author: str) -> List[Tuple[str, str]]:
     """
-    Minimal deterministic PubMed title search.
+    Search PubMed by first author, then fetch the titles for all PMIDs.
+    Returns a list of (pmid, title) tuples for candidate selection.
     """
-    cleaned = remove_stopwords(title)
-    tokens = split(r'\s+', cleaned.strip())
-    terms = [f'{t}[ti]' for t in tokens if t]
-
-    if first_author:
-        terms.append(f'{first_author}[au]')
-
+    # Phase 1: search by author
     params: dict[str, str | int] = {
         'db': 'pubmed',
-        'term': ' AND '.join(terms),
+        'term': f'{first_author}[au]',
         'retmode': 'json',
         'sort': 'relevance',
-        'retmax': 5,
+        'retmax': 50,
     }
-
     if env.NCBI_API_KEY:
         params['api_key'] = env.NCBI_API_KEY
     if env.NCBI_EMAIL:
@@ -80,41 +35,64 @@ def pubmed_search(title: str, first_author: str | None = None) -> List[str]:
 
     r = requests.get(ESEARCH_ENDPOINT, params=params, timeout=10)
     r.raise_for_status()
+    pmids = r.json().get('esearchresult', {}).get('idlist', [])
+    if not pmids:
+        return []
 
-    data = r.json()
-    return data.get('esearchresult', {}).get('idlist', [])
+    # Phase 2: fetch titles
+    fetch_params = {
+        'db': 'pubmed',
+        'id': ','.join(pmids),
+        'retmode': 'xml',
+    }
+    if env.NCBI_API_KEY:
+        fetch_params['api_key'] = env.NCBI_API_KEY
+    if env.NCBI_EMAIL:
+        fetch_params['email'] = env.NCBI_EMAIL
+
+    r = requests.get(EFETCH_ENDPOINT, params=fetch_params, timeout=30)
+    r.raise_for_status()
+
+    # Extract PMIDs and titles
+    root = ET.fromstring(r.text)
+    results = []
+    for article in root.findall('.//PubmedArticle'):
+        pmid_elem = article.find('./MedlineCitation/PMID')
+        title_elem = article.find('./MedlineCitation/Article/ArticleTitle')
+
+        # Skip if no PMID or empty
+        if pmid_elem is None or not pmid_elem.text:
+            continue
+
+        pmid_text: str = pmid_elem.text
+        title_text = ''.join(title_elem.itertext()) if title_elem is not None else ''
+        results.append((pmid_text, title_text))
+
+    return results
 
 
 @function_tool
-def pubmed_fetch_xml(pmid: str) -> str:
+def pubmed_fetch_one(pmid: str) -> str:
     """
-    Fetch a PubMed record by PMID using efetch.
+    Fetch a single PubMed record by PMID using efetch.
+    Returns XML text for that record.
+    """
+    if not pmid:
+        return ''
 
-    Returns:
-    - Raw PubMed XML for the specified PMID.
-    - The PMID must come from PubMed search or the input text.
-    """
     params = {
         'db': 'pubmed',
         'id': pmid,
         'retmode': 'xml',
     }
-
     if env.NCBI_API_KEY:
         params['api_key'] = env.NCBI_API_KEY
     if env.NCBI_EMAIL:
         params['email'] = env.NCBI_EMAIL
 
-    r = requests.get(
-        EFETCH_ENDPOINT,
-        params=params,
-        timeout=10,
-    )
+    r = requests.get(EFETCH_ENDPOINT, params=params, timeout=30)
     r.raise_for_status()
 
-    # Strip formatting html out of response.
-    # NB: there might be better ways to do this going forwards, especially
-    # if we want to preserve subscripts!
     xml_text = unescape(r.text)
     xml_text = sub(r'</?(?:i|b|strong|sup|sub)>', '', xml_text)
     return xml_text
@@ -128,56 +106,62 @@ Input:
 
 Task Overview:
 
-1. **Bibliographic Metadata Extraction**
-   - Extract metadata directly from the text whenever explicitly present.
-   - Fields to extract:
-     - title
-     - first_author
-     - journal
-     - abstract
-     - publication_year
-     - doi
-     - pmid
-     - pmcid
-   - When a field cannot be confidently identified from the text or PubMed, fail rather than guessing.
-   - Use PubMed search to find candidate PMIDs using the title and first author extracted from the text.
-     - Do not use PubMed to discover or replace the title or first author unless they are genuinely missing or unreliable in the text.
-     - PubMed may be trusted as authoritative for all other fields.
-     - If the initial search returns no results:
-        1. Modify the title to remove common stop words (a, an, the, etc.) and search with that modified title + last name of the original author.
-        2. Only if that fails, search using author permutations (last name, last name + first initial).
-   - If a PMID is identified:
-     - Fetch metadata from PubMed.
-     - When PubMed XML is provided, extract fields using these locations:
-       - title: MedlineCitation/Article/ArticleTitle
-       - first_author: MedlineCitation/Article/AuthorList/Author[1]/LastName
-       - journal: MedlineCitation/Article/Journal/ISOAbbreviation
-       - abstract: MedlineCitation/Article/Abstract
-       - publication_year: MedlineCitation/Article/Journal/JournalIssue/PubDate/Year
-       - doi: PubmedData/ArticleIdList/ArticleId with IdType="doi"
-       - pmcid: PubmedData/ArticleIdList/ArticleId with IdType="pmc"
-     - Do not invent values.
-     - Return and do not try to search further.
+1. Bibliographic Metadata Extraction
+- Extract metadata directly from the text whenever explicitly present.
+- Fields to extract:
+  - title
+  - first_author
+  - journal
+  - abstract
+  - publication_year
+  - doi
+  - pmid
+  - pmcid
 
-2. **Paper Type Selection**
- - Classify the paper into at MOST two of the following types:
-   - Letter: Short correspondence or “Letter to the Editor”; brief report or commentary with limited data and minimal methodological detail.
-   - Research: Full original research article presenting novel experimental, computational, or clinical findings with complete methods, results, and discussion.
-   - Case_series: Descriptive report of multiple patients or families with shared phenotypes or variants, without a control group or formal statistical comparison.
-   - Case_study: Detailed report of a single patient or a single family, often describing a rare phenotype or novel genetic variant.
-   - Cohort_analysis: Observational analysis of a defined group of individuals selected by shared criteria, focusing on frequencies, outcomes, or genotype–phenotype correlations.
-   - Case_control: Observational study comparing affected individuals (cases) to unaffected individuals (controls) to test genetic association or variant enrichment.
-   - Unknown: The paper type cannot be confidently determined from the provided text.
-   - Other: Does not fit the above categories (e.g., review, meta-analysis, guideline, methods, or database/resource paper).
+Candidate Generation & Selection Workflow:
 
+1️⃣ Candidate Generation:
+- Call `pubmed_search_and_titles` using ONLY the `first_author` extracted from the text.
+- This will return a list of `(pmid, title)` tuples for candidate papers by this author.
+
+2️⃣ Candidate Selection:
+- Compare each returned title to the `title` extracted from the text.
+- Determine the PMID whose title is most closely aligned (semantic match or exact match).
+- Do NOT assume the first result is correct.
+
+3️⃣ Metadata Fetching:
+- Call `pubmed_fetch_one` on the selected PMID to fetch the full PubMed XML.
+- Extract all remaining metadata from that PubMed record:
+    - title: MedlineCitation/Article/ArticleTitle 
+    - first_author: MedlineCitation/Article/AuthorList/Author[1]/LastName 
+    - journal: MedlineCitation/Article/Journal/ISOAbbreviation 
+    - abstract: MedlineCitation/Article/Abstract 
+    - publication_year: MedlineCitation/Article/Journal/JournalIssue/PubDate/Year 
+    - doi: PubmedData/ArticleIdList/ArticleId with IdType="doi" 
+    - pmcid: PubmedData/ArticleIdList/ArticleId with IdType="pmc"
+
+-2. **Paper Type Selection** -
+Classify the paper into at MOST two of the following types:
+    - Letter: Short correspondence or “Letter to the Editor”; brief report or commentary with limited data and minimal methodological detail.
+    - Research: Full original research article presenting novel experimental, computational, or clinical findings with complete methods, results, and discussion.
+    - Case_series: Descriptive report of multiple patients or families with shared phenotypes or variants, without a control group or formal statistical comparison.
+    - Case_study: Detailed report of a single patient or a single family, often describing a rare phenotype or novel genetic variant.
+    - Cohort_analysis: Observational analysis of a defined group of individuals selected by shared criteria, focusing on frequencies, outcomes, or genotype–phenotype correlations.
+    - Case_control: Observational study comparing affected individuals (cases) to unaffected individuals (controls) to test genetic association or variant enrichment.
+    - Unknown: The paper type cannot be confidently determined from the provided text.
+    - Other: Does not fit the above categories (e.g., review, meta-analysis, guideline, methods, or database/resource paper).
+
+Important Guidelines:
+- When a field cannot be confidently identified, fail rather than guess.
+- Always use the `(pmid, title)` pairs to deterministically select the correct PubMed record.
+- Only fetch full records for the chosen PMID.
 """
 
 # --- Agent definition
-
 agent = Agent(
     name='paper_extractor',
     instructions=PAPER_EXTRACTION_INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
     output_type=PaperExtractionOutput,
-    tools=[pubmed_search, pubmed_fetch_xml],
+    tools=[pubmed_search_and_titles, pubmed_fetch_one],
 )

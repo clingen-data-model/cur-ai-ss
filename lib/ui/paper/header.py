@@ -9,6 +9,7 @@ from lib.models import PaperResp
 from lib.tasks import (
     TaskStatus,
     TaskType,
+    get_all_successor_levels,
     get_status_badge_color,
     get_status_badge_icon,
     infer_paper_status,
@@ -65,6 +66,17 @@ def render_queue_tasks_fragment(paper_query_params: PaperQueryParams) -> None:
         options=[t for t in TaskType],
         format_func=lambda t: t.value,
     )
+
+    # Show the full chain of successors
+    successor_levels = get_all_successor_levels(task_type)
+    if successor_levels:
+        st.markdown('**Will trigger:**')
+        for i, level in enumerate(successor_levels, 1):
+            level_text = ', '.join([t.value for t in level])
+            indent = '  ' * i
+            st.caption(f'{indent}→ {level_text}')
+    else:
+        st.caption('↳ Terminal task (no successors)')
 
     def on_confirm() -> None:
         try:

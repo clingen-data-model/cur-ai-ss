@@ -20,6 +20,7 @@ LEASE_TIMEOUT_S = 900
 POLL_INTERVAL_S = 10
 MAX_AGENTIC_TASKS = 5
 MAX_RETRIES = 2
+RETRY_DELAY_S = 30
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -117,17 +118,19 @@ def poll_and_execute_tasks() -> None:
             task.status = TaskStatus.PENDING
 
         # Reset FAILED tasks that haven't exceeded retry limit back to PENDING
+        retry_cutoff = now - datetime.timedelta(seconds=RETRY_DELAY_S)
         retriable_tasks = (
             session.query(TaskDB)
             .filter(
                 TaskDB.status == TaskStatus.FAILED,
                 TaskDB.tries <= MAX_RETRIES,
+                TaskDB.updated_at < retry_cutoff,
             )
             .all()
         )
         for task in retriable_tasks:
             logger.info(
-                f'Retrying task {task.id} ({task.type}) (attempt {task.tries + 1}/{MAX_RETRIES})'
+                f'Retrying task {task.id} ({task.type}) (attempt {task.tries + 1}/{MAX_RETRIES + 1})'
             )
             task.status = TaskStatus.PENDING
             task.error_message = None

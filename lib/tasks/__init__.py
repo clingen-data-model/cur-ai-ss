@@ -1,5 +1,6 @@
 from lib.tasks.misc import (
     enqueue_task,
+    get_all_successor_levels,
     get_status_badge_color,
     get_status_badge_icon,
     infer_paper_status,
@@ -22,6 +23,7 @@ __all__ = [
     'TaskResp',
     'TaskCreateRequest',
     'enqueue_task',
+    'get_all_successor_levels',
     'infer_paper_status',
     'is_task_completed',
     'get_status_badge_color',
