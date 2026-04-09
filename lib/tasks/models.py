@@ -3,7 +3,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, func
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -114,6 +114,9 @@ class TaskDB(Base):
     )
     tries: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_message: Mapped[str | None] = mapped_column(String, nullable=True)
+    skip_successors: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default='0'
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -142,6 +145,7 @@ class TaskResp(BaseModel):
     status: TaskStatus
     tries: int
     error_message: str | None
+    skip_successors: bool
     patient_id: int | None
     variant_id: int | None
     phenotype_id: int | None
@@ -153,3 +157,4 @@ class TaskCreateRequest(BaseModel):
     patient_id: int | None = None
     variant_id: int | None = None
     phenotype_id: int | None = None
+    skip_successors: bool = False

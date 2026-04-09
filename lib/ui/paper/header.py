@@ -78,11 +78,18 @@ def render_queue_tasks_fragment(paper_query_params: PaperQueryParams) -> None:
     else:
         st.caption('↳ Terminal task (no successors)')
 
+    skip_successors = st.checkbox(
+        'Skip successor tasks (run only this task)',
+        value=False,
+        help='When checked, successor tasks will NOT be automatically queued after this task completes',
+    )
+
     def on_confirm() -> None:
         try:
             enqueue_paper_task(
                 paper_id=paper_query_params.paper_id,
                 task_type=task_type,
+                skip_successors=skip_successors,
             )
             st.toast('Task Queued', icon=':material/thumb_up:')
             st.session_state.RERUN_POPOVER_STATE_KEY = False

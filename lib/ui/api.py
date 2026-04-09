@@ -210,6 +210,7 @@ def enqueue_paper_task(
     patient_id: int | None = None,
     variant_id: int | None = None,
     phenotype_id: int | None = None,
+    skip_successors: bool = False,
 ) -> TaskResp:
     resp = requests.post(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/tasks',
@@ -218,6 +219,7 @@ def enqueue_paper_task(
             patient_id=patient_id,
             variant_id=variant_id,
             phenotype_id=phenotype_id,
+            skip_successors=skip_successors,
         ).model_dump(),
     )
     resp.raise_for_status()

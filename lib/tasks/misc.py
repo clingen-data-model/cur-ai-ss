@@ -19,6 +19,7 @@ def enqueue_task(
     patient_id: int | None = None,
     variant_id: int | None = None,
     phenotype_id: int | None = None,
+    skip_successors: bool = False,
 ) -> TaskDB:
     """Create or reset a task to PENDING status.
 
@@ -43,6 +44,7 @@ def enqueue_task(
         existing_task.status = TaskStatus.PENDING
         existing_task.tries = 0
         existing_task.error_message = None
+        existing_task.skip_successors = skip_successors
         session.flush()
         return existing_task
     else:
@@ -54,6 +56,7 @@ def enqueue_task(
             variant_id=variant_id,
             phenotype_id=phenotype_id,
             status=TaskStatus.PENDING,
+            skip_successors=skip_successors,
         )
         session.add(new_task)
         session.flush()

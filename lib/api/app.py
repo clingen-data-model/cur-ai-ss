@@ -294,6 +294,7 @@ def create_task(
         patient_id=request.patient_id,
         variant_id=request.variant_id,
         phenotype_id=request.phenotype_id,
+        skip_successors=request.skip_successors,
     )
     return task
 
