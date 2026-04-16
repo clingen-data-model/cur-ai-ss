@@ -83,7 +83,7 @@ class WordLoc(Polygon):
         bottom = int(self.page_height - min(self.y0, self.y1, self.y2, self.y3))
         right = int(max(self.x2, self.x3))  # bottom-right and top-right
         bbox = anchorite.BBox(top, left, bottom, right)
-        return anchorite.Anchor(text=self.word, page=self.page_idx, boxes=[bbox])
+        return anchorite.Anchor(text=self.word, page=self.page_idx, boxes=(bbox,))
 
 
 def save_unescaped_markdown(document: DoclingDocument, path: Path) -> None:
