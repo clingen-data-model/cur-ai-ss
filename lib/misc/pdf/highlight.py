@@ -196,17 +196,13 @@ def words_to_grobid_annotations(
     words: list[WordLoc],
     color: tuple[float, float, float],
 ) -> list[GrobidAnnotation]:
-    pdf_path = pdf_highlighted_path(paper_id)
-    pdf_doc = fitz.open(pdf_path)
-
     words_by_page: dict[int, list[WordLoc]] = defaultdict(list)
     for word in words:
         words_by_page[int(word.page_idx)].append(word)
 
     annotations = []
     for page_idx, page_words in words_by_page.items():
-        page = pdf_doc[page_idx - 1]  # convert 1-based → 0-based
-        page_height = page.rect.height
+        page_height = page_words[0].page_height
 
         # Merge adjacent words on this page into polygons
         merged_polygons = merge_adjacent_polygons(page_words)
@@ -229,8 +225,6 @@ def words_to_grobid_annotations(
                     border='solid',
                 )
             )
-
-    pdf_doc.close()
 
     return annotations
 
@@ -301,7 +295,7 @@ def highlight_words_in_pdf(
     # Highlight words on each page
     for page_idx, page_words in words_by_page.items():
         page = pdf_doc[page_idx - 1]  # convert 1-based → 0-based
-        page_height = page.rect.height
+        page_height = page_words[0].page_height
 
         # Merge adjacent polygons
         merged_polygons = merge_adjacent_polygons(page_words)

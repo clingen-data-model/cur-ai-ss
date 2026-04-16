@@ -51,6 +51,20 @@ wheels = [
 ]
 
 [[package]]
+name = "anchorite"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "fsspec" },
+    { name = "pypdfium2" },
+    { name = "seq-smith" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b0/a4/2ee292f6cfea1db2f4c31ee591a6083b38cddb491914b4b172cbd59e1f19/anchorite-0.2.0.tar.gz", hash = "sha256:fdf758a4009eeec433d24668f0f69c3d9074fa66f35539357f35b5a0c89b6273", size = 4262583, upload-time = "2026-03-16T05:49:28.507Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6a/bb/07276db60c98febd920210678607585ac849d06e5717532e1f057acee1f3/anchorite-0.2.0-py3-none-any.whl", hash = "sha256:d2e0b6f4314451a8f1848f39699c9b1596bcb39e109b679f7d5f9352d9f2ac57", size = 25450, upload-time = "2026-03-16T05:49:27.121Z" },
+]
+
+[[package]]
 name = "annotated-doc"
 version = "0.0.4"
 source = { registry = "https://pypi.org/simple" }
@@ -153,6 +167,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
+    { name = "anchorite" },
     { name = "biopython" },
     { name = "docling" },
     { name = "fastapi" },
@@ -185,6 +200,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "alembic", specifier = ">=1.18.4" },
+    { name = "anchorite", specifier = ">=0.2.0" },
     { name = "biopython", specifier = ">=1.86" },
     { name = "docling", specifier = "==2.82.0" },
     { name = "fastapi", specifier = ">=0.126.0" },
@@ -2011,6 +2027,22 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/62/96/c418c322730b385e81d4ab462e68dd48bb2dbda4d8efa17cad2ca468d9ac/semchunk-2.2.2.tar.gz", hash = "sha256:940e89896e64eeb01de97ba60f51c8c7b96c6a3951dfcf574f25ce2146752f52", size = 12271, upload-time = "2024-12-17T22:54:30.332Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/76/84/94ca7896c7df20032bcb09973e9a4d14c222507c0aadf22e89fa76bb0a04/semchunk-2.2.2-py3-none-any.whl", hash = "sha256:94ca19020c013c073abdfd06d79a7c13637b91738335f3b8cdb5655ee7cc94d2", size = 10271, upload-time = "2024-12-17T22:54:27.689Z" },
+]
+
+[[package]]
+name = "seq-smith"
+version = "0.5.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2b/40/61ee3442395d352e04654989581055ca6cc2a3d0b623e8a26fdf7ebff826/seq_smith-0.5.1.tar.gz", hash = "sha256:a9fad55f1b9c297f89ca5e73869c671f4566ad2391d8341eb200d4ba08437d04", size = 136405, upload-time = "2025-12-28T04:58:39.675Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e4/30/0281495548ba146793fdb7f3fc316927a4008f58b2460ba2b6d0044af4bc/seq_smith-0.5.1-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:23d380fb40ad1b5842def8efcada41b029098bc87c7e12f6e3c7e2717cb4b9c9", size = 406904, upload-time = "2025-12-28T04:58:24.142Z" },
+    { url = "https://files.pythonhosted.org/packages/a1/23/e8f6fc0c4ae9aea59c2dbd616df05ac0a4bfb4c4a3e24fef3536960217f8/seq_smith-0.5.1-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:aaa81740368273ecebf0aaeae778a58032f845b7887cddc6dcc1168b01103bb7", size = 394850, upload-time = "2025-12-28T04:58:25.918Z" },
+    { url = "https://files.pythonhosted.org/packages/5c/14/6073a3718e4aa53b7075513efb0325dc8a1b5930054e64b447246f2b12cf/seq_smith-0.5.1-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:5d03ff0d52be2c901c07048c7b182670e9897f2c4e8eeab73c974b788623c1aa", size = 435737, upload-time = "2025-12-28T04:58:27.704Z" },
+    { url = "https://files.pythonhosted.org/packages/5b/36/cf0643391bfd893e10d781401fd9c0223dd7784a5b90a4d8451ba8506f5a/seq_smith-0.5.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:1821619080fde171d6cd9520e95b1b64507adce53316f0eaba501f6955b66671", size = 454970, upload-time = "2025-12-28T04:58:29.518Z" },
+    { url = "https://files.pythonhosted.org/packages/f2/d2/ad0dd5985273c70f8f99af2e6f7a5ce909528b05cf802195540eeab497ce/seq_smith-0.5.1-cp312-cp312-win_amd64.whl", hash = "sha256:248f598b85e49847a9931a564344b47c26c8a7e9fc57a841b4423c29471f1407", size = 263356, upload-time = "2025-12-28T04:58:30.866Z" },
 ]
 
 [[package]]

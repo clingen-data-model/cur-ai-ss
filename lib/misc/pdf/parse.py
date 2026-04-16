@@ -3,6 +3,7 @@ import json
 from io import BytesIO
 from pathlib import Path
 
+import anchorite
 from docling.datamodel.base_models import DocumentStream, InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.document_converter import DocumentConverter, PdfFormatOption
@@ -39,7 +40,7 @@ IMAGE_RESOLUTION_SCALE = 4.0
 
 
 class Polygon(BaseModel):
-    """Polygon with 4 corner coordinates (top-left, top-right, bottom-right, bottom-left)."""
+    """Polygon with 4 corner coordinates (top-left, bottom-left, bottom-right, top-right)."""
 
     x0: float
     y0: float
@@ -54,6 +55,7 @@ class Polygon(BaseModel):
 class WordLoc(Polygon):
     page_idx: int
     word: str
+    page_height: float
 
     def to_polygon(self) -> Polygon:
         """Convert to a Polygon, discarding word-specific fields."""
@@ -67,6 +69,21 @@ class WordLoc(Polygon):
             x3=self.x3,
             y3=self.y3,
         )
+
+    def to_anchorite_anchor(self) -> anchorite.Anchor:
+        """Convert to anchorite.Anchor with text and coordinates.
+
+        Converts from PDF coordinates (bottom-left origin, Y increases upward) to
+        screen coordinates (top-left origin, Y increases downward).
+
+        Corner order: top-left, bottom-left, bottom-right, top-right
+        """
+        top = int(self.page_height - max(self.y0, self.y1, self.y2, self.y3))
+        left = int(min(self.x0, self.x1))  # top-left and bottom-left
+        bottom = int(self.page_height - min(self.y0, self.y1, self.y2, self.y3))
+        right = int(max(self.x2, self.x3))  # bottom-right and top-right
+        bbox = anchorite.BBox(top, left, bottom, right)
+        return anchorite.Anchor(text=self.word, page=self.page_idx, boxes=[bbox])
 
 
 def save_unescaped_markdown(document: DoclingDocument, path: Path) -> None:
@@ -82,11 +99,13 @@ def parse_words_json(stream: BytesIO) -> list[WordLoc]:
     parser = DoclingPdfParser()
     pdf_doc: PdfDocument = parser.load(path_or_stream=stream)
     for page_idx, pred_page in pdf_doc.iterate_pages():
+        page_height = pred_page.dimension.height
         for word in pred_page.iterate_cells(unit_type=TextCellUnit.WORD):
             words_json.append(
                 WordLoc(
                     page_idx=page_idx,
                     word=word.text,
+                    page_height=page_height,
                     x0=word.rect.r_x0,
                     y0=word.rect.r_y0,
                     x1=word.rect.r_x1,
