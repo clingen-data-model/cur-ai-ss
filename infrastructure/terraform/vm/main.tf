@@ -72,3 +72,16 @@ resource "google_compute_instance" "this" {
     ]
   }
 }
+
+# IAM bindings for GCS bucket access
+resource "google_storage_bucket_iam_member" "static_resources_read" {
+  bucket = "caa-static-resources"
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.this.email}"
+}
+
+resource "google_storage_bucket_iam_member" "static_resources_write" {
+  bucket = "caa-static-resources"
+  role   = "roles/storage.objectCreator"
+  member = "serviceAccount:${google_service_account.this.email}"
+}
