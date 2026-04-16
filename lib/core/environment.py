@@ -22,6 +22,10 @@ class Env(BaseSettings):
     NCBI_API_KEY: Optional[str] = None
     NCBI_EMAIL: Optional[str] = None
 
+    # GCS configuration
+    GCS_BUCKET_NAME: str = 'caa-static-resources'
+    GCS_SIGNED_URL_EXPIRY_HOURS: int = 12
+
     # Required fields
     OPENAI_API_DEPLOYMENT: str = 'gpt-5-mini'
     OPENAI_API_KEY: str = Field(...)

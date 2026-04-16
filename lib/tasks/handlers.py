@@ -24,6 +24,7 @@ from lib.agents.variant_extraction_agent import (
 from lib.agents.variant_harmonization_agent import agent as variant_harmonization_agent
 from lib.api.db import session_scope
 from lib.core.environment import env
+from lib.misc.gcs import upload_and_sign_image
 from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import fulltext_md, pdf_image_caption_path, pdf_image_path
 from lib.models import (
@@ -122,7 +123,8 @@ async def handle_pedigree_description(task_id: int) -> None:
             caption_text = (
                 caption_path.read_text() if caption_path.exists() else 'No caption'
             )
-            image_url = f'{env.PROTOCOL}{env.API_ENDPOINT}{pdf_image}'
+            # Upload image to GCS and get signed URL
+            image_url = upload_and_sign_image(task.paper_id, image_id, pdf_image)
             combined_text += f'[Processing Pipeline Figure {image_id}]\n'
             combined_text += f'URL: {image_url}\n'
             combined_text += f'Caption: {caption_text}\n\n'

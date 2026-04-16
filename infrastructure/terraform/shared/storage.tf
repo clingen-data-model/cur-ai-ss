@@ -11,4 +11,13 @@ resource "google_storage_bucket" "static_resources" {
   versioning {
     enabled = false
   }
+
+  lifecycle_rule {
+    action {
+      type = "Delete"
+    }
+    condition {
+      age = 1
+    }
+  }
 }

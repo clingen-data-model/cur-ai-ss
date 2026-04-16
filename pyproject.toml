@@ -19,10 +19,10 @@ dependencies = [
     "fastapi>=0.126.0",
     "sqlalchemy>=2.0.45",
     "uvicorn>=0.38.0",
-    
+
     "python-multipart>=0.0.21",
     "alembic>=1.18.4",
-    "ipython",    
+    "ipython",
 
     # pdf parsing
     "docling==2.82.0",
@@ -30,6 +30,9 @@ dependencies = [
     "pymupdf>=1.26.7",
 
     "hpo-toolkit>=0.7.0",
+
+    # Cloud storage
+    "google-cloud-storage>=2.10.0",
 
     # Streamlit components
     "streamlit-pdf-viewer>=0.0.27",
