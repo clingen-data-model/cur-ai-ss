@@ -117,6 +117,7 @@ class TaskDB(Base):
     skip_successors: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default='0'
     )
+    conversation_id: Mapped[str | None] = mapped_column(String, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -146,6 +147,7 @@ class TaskResp(BaseModel):
     tries: int
     error_message: str | None
     skip_successors: bool
+    conversation_id: str | None
     patient_id: int | None
     variant_id: int | None
     phenotype_id: int | None
