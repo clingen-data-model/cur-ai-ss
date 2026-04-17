@@ -104,6 +104,7 @@ def find_best_match(query: str, words: list[WordLoc]) -> list[WordLoc] | None:
         token = token.replace('\u2013', '-')  # en dash
         token = token.replace('\u2014', '-')  # em dash
         token = token.replace('\u2015', '-')  # horizontal bar
+        token = token.replace('|', '')  # markdown table delimiters
         token = re.sub(r'\s+', ' ', token)
         return token
 
