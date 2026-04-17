@@ -85,3 +85,10 @@ resource "google_storage_bucket_iam_member" "static_resources_write" {
   role   = "roles/storage.objectCreator"
   member = "serviceAccount:${google_service_account.this.email}"
 }
+
+# Project-level GCS permission for bucket discovery and administration
+resource "google_project_iam_member" "storage_admin" {
+  project = var.project_id
+  role    = "roles/storage.admin"
+  member  = "serviceAccount:${google_service_account.this.email}"
+}
