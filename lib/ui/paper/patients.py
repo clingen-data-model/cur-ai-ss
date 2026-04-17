@@ -94,32 +94,48 @@ def _render_phenotypes_table(
     show_hpo: bool,
     patient_id: int,
 ) -> None:
-    """Render phenotypes table with detail panel."""
-    # Build table rows
-    rows = []
-    for phenotype in phenotypes:
-        row = {
-            'Select': False,
-            'Phenotype': phenotype.concept,
-            '_phenotype': phenotype,
-        }
+    """Render phenotypes table grouped by HPO term with detail panel."""
+    # Group matched phenotypes by HPO ID
+    if show_hpo:
+        hpo_groups: dict[str, list[PhenotypeResp]] = defaultdict(list)
+        for phenotype in phenotypes:
+            if phenotype.hpo and phenotype.hpo.value and phenotype.hpo.value.id:
+                hpo_groups[phenotype.hpo.value.id].append(phenotype)
 
-        if (
-            show_hpo
-            and phenotype.hpo
-            and phenotype.hpo.value
-            and phenotype.hpo.value.id
-        ):
-            hpo_id_link = f'https://hpo.jax.org/app/browse/term/{phenotype.hpo.value.id}#{phenotype.hpo.value.id}'
-            hpo_term_link = f'https://hpo.jax.org/app/browse/term/{phenotype.hpo.value.id}#{phenotype.hpo.value.name}'
-            row.update(
-                {
-                    'HPO ID': hpo_id_link,
-                    'HPO Term': hpo_term_link,
-                }
-            )
-
-        rows.append(row)
+        # Build rows from grouped phenotypes
+        rows = []
+        for hpo_id, group in hpo_groups.items():
+            first_phenotype = group[0]
+            all_concepts = ', '.join(p.concept for p in group)
+            row = {
+                'Select': False,
+                'Phenotype': all_concepts,
+                '_phenotypes': group,
+            }
+            if (
+                first_phenotype.hpo
+                and first_phenotype.hpo.value
+                and first_phenotype.hpo.value.id
+            ):
+                hpo_id_link = f'https://hpo.jax.org/app/browse/term/{first_phenotype.hpo.value.id}#{first_phenotype.hpo.value.id}'
+                hpo_term_link = f'https://hpo.jax.org/app/browse/term/{first_phenotype.hpo.value.id}#{first_phenotype.hpo.value.name}'
+                row.update(
+                    {
+                        'HPO ID': hpo_id_link,
+                        'HPO Term': hpo_term_link,
+                    }
+                )
+            rows.append(row)
+    else:
+        # For unmatched, keep individual phenotypes
+        rows = [
+            {
+                'Select': False,
+                'Phenotype': phenotype.concept,
+                '_phenotypes': [phenotype],
+            }
+            for phenotype in phenotypes
+        ]
 
     # Create DataFrame for display (exclude internal columns)
     display_rows = [
@@ -161,29 +177,32 @@ def _render_phenotypes_table(
     selected_rows = editted_df[editted_df['Select']].index.tolist()
     if selected_rows:
         idx = selected_rows[0]
-        phenotype = rows[idx]['_phenotype']
+        grouped_phenotypes = rows[idx]['_phenotypes']
+        first_phenotype = grouped_phenotypes[0]
 
         st.divider()
         st.markdown('##### Phenotype Details')
 
+        # Show grouped concepts
         details_data = {
-            'Field': [
-                '**Concept**',
-                '**HPO ID**',
-                '**HPO Term**',
-            ],
+            'Field': ['**Concepts**', '**HPO ID**', '**HPO Term**'],
             'Value': [
-                phenotype.concept,
-                phenotype.hpo.value.id
-                if phenotype.hpo and phenotype.hpo.value and phenotype.hpo.value.id
+                ', '.join(p.concept for p in grouped_phenotypes),
+                first_phenotype.hpo.value.id
+                if first_phenotype.hpo
+                and first_phenotype.hpo.value
+                and first_phenotype.hpo.value.id
                 else 'N/A',
-                phenotype.hpo.value.name
-                if phenotype.hpo and phenotype.hpo.value and phenotype.hpo.value.name
+                first_phenotype.hpo.value.name
+                if first_phenotype.hpo
+                and first_phenotype.hpo.value
+                and first_phenotype.hpo.value.name
                 else 'N/A',
             ],
         }
         st.table(pd.DataFrame(details_data))
 
+        # Show all evidence blocks for grouped phenotypes
         (
             col1,
             col2,
@@ -191,9 +210,14 @@ def _render_phenotypes_table(
         ) = st.columns(3)
 
         with col1:
-            if phenotype.concept_evidence.quote:
+            # Collect all evidence blocks from grouped phenotypes
+            evidence_blocks = [p.concept_evidence for p in grouped_phenotypes]
+
+            if evidence_blocks:
                 with st.expander('Extracted Phenotype Evidence', expanded=False):
-                    st.text(phenotype.concept_evidence.quote)
+                    for block in evidence_blocks:
+                        if block.quote:
+                            st.text(block.quote)
                 with st.container(
                     horizontal=True,
                     vertical_alignment='center',
@@ -201,32 +225,38 @@ def _render_phenotypes_table(
                 ):
                     render_highlight_controls(
                         paper_resp.id,
-                        block=phenotype.concept_evidence,
-                        color_key=f'{key_prefix}-highlight-color-{phenotype.concept}',
-                        button_key_prefix=f'{key_prefix}-highlight-confirm-{phenotype.concept}',
+                        blocks=evidence_blocks,
+                        color_key=f'{key_prefix}-highlight-color-{first_phenotype.id}',
+                        button_key_prefix=f'{key_prefix}-highlight-confirm-{first_phenotype.id}',
                         disabled=False,
                     )
 
         # Concept evidence reasoning
         with col2:
-            if phenotype.concept_evidence.reasoning:
+            reasoning_blocks = [
+                p.concept_evidence.reasoning
+                for p in grouped_phenotypes
+                if p.concept_evidence.reasoning
+            ]
+            if reasoning_blocks:
                 with st.expander('Extracted Phenotype Reasoning', expanded=False):
-                    st.text(phenotype.concept_evidence.reasoning)
+                    for reasoning in reasoning_blocks:
+                        st.text(reasoning)
 
         # HPO matching reasoning
         with col3:
-            if phenotype.hpo and phenotype.hpo.reasoning:
+            if first_phenotype.hpo and first_phenotype.hpo.reasoning:
                 with st.expander('HPO Match Reasoning', expanded=False):
-                    st.text(phenotype.hpo.reasoning)
+                    st.text(first_phenotype.hpo.reasoning)
             if st.button(
                 '🔄 Re-link HPO',
-                key=f'{key_prefix}-relink-hpo-{phenotype.id}',
+                key=f'{key_prefix}-relink-hpo-{first_phenotype.id}',
             ):
                 enqueue_paper_task(
                     paper_resp.id,
                     TaskType.HPO_LINKING,
                     patient_id=patient_id,
-                    phenotype_id=phenotype.id,
+                    phenotype_id=first_phenotype.id,
                 )
                 st.success('HPO linking task enqueued')
 

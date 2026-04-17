@@ -148,33 +148,25 @@ def highlight_evidence(
 
 def render_highlight_controls(
     paper_id: int,
+    blocks: list[EvidenceBlock[Any]],
     color_key: str,
     button_key_prefix: str,
-    block: EvidenceBlock[Any] | None = None,
     disabled: bool = False,
 ) -> None:
     """Render color picker + Highlight + Focus & Switch Tab buttons.
 
     Args:
         paper_id: Paper ID for highlighting/focusing.
-        block: EvidenceBlock containing quote and evidence sources.
+        blocks: List of EvidenceBlocks containing quotes and evidence sources.
         color_key: Session state key for color picker.
         button_key_prefix: Prefix for highlight/focus button keys.
         disabled: Whether to disable the controls.
     """
 
-    # Extract fields from block
-    quote: str | None = None
-    table_id: int | None = None
-    image_id: int | None = None
-    if block is not None:
-        quote = block.quote
-        table_id = block.table_id
-        image_id = block.image_id
-
-    queries = [quote] if quote else []
-    image_ids = [image_id] if image_id is not None else []
-    table_ids = [table_id] if table_id is not None else []
+    # Extract fields from all blocks
+    queries = [b.quote for b in blocks if b.quote]
+    image_ids = [b.image_id for b in blocks if b.image_id is not None]
+    table_ids = [b.table_id for b in blocks if b.table_id is not None]
     if color_key not in st.session_state:
         st.session_state[color_key] = random.choice(COLORS)
     color = st.color_picker(
@@ -251,13 +243,14 @@ def render_evidence_controls(
                     max_chars=120,
                 )
         # Only pass EvidenceBlock to highlight controls (ReasoningBlock has no evidence sources)
-        highlight_block = block if isinstance(block, EvidenceBlock) else None
-        render_highlight_controls(
-            paper_id,
-            block=highlight_block,
-            color_key=color_key,
-            button_key_prefix=button_key_prefix,
-            disabled=not quote,
-        )
+        highlight_blocks = [block] if isinstance(block, EvidenceBlock) else []
+        if highlight_blocks:
+            render_highlight_controls(
+                paper_id,
+                blocks=highlight_blocks,
+                color_key=color_key,
+                button_key_prefix=button_key_prefix,
+                disabled=not quote,
+            )
 
     return edited_note
