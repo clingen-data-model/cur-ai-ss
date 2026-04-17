@@ -2,7 +2,8 @@ import logging
 from datetime import timedelta
 from pathlib import Path
 
-from google import auth
+from google.auth import default
+from google.auth.transport.requests import Request
 from google.cloud import storage
 
 from lib.core.environment import env
@@ -52,13 +53,13 @@ def get_signed_url(object_path: str) -> str:
     client = storage.Client()
     bucket = client.bucket(env.GCS_BUCKET_NAME)
     blob = bucket.blob(object_path)
-    credentials, project = auth.default()
-    credentials.refresh(auth.transport.requests.Request())
+    credentials, project = default()
+    credentials.refresh(Request())
     signed_url = blob.generate_signed_url(
         version='v4',
         expiration=timedelta(hours=env.GCS_SIGNED_URL_EXPIRY_HOURS),
         method='GET',
-        service_account_email=credentials.service_account_email,
+        service_account_email=credentials.service_account_email,  # type: ignore[attr-defined]
         access_token=credentials.token,
     )
     logger.info(f'Generated signed URL for {object_path}')
