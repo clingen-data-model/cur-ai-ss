@@ -92,3 +92,10 @@ resource "google_project_iam_member" "storage_admin" {
   role    = "roles/storage.admin"
   member  = "serviceAccount:${google_service_account.this.email}"
 }
+
+# Allow the VM service account to sign blobs (for GCS signed URLs)
+resource "google_service_account_iam_member" "token_creator" {
+  service_account_id = google_service_account.this.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.this.email}"
+}
