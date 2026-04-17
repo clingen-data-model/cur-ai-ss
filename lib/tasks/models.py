@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, func
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import JSON
 
 from lib.models.base import Base
 
@@ -117,7 +118,7 @@ class TaskDB(Base):
     skip_successors: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default='0'
     )
-    conversation_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    conversation_ids: Mapped[dict] = mapped_column(JSON, nullable=False, default={})
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -147,7 +148,7 @@ class TaskResp(BaseModel):
     tries: int
     error_message: str | None
     skip_successors: bool
-    conversation_id: str | None
+    conversation_ids: dict
     patient_id: int | None
     variant_id: int | None
     phenotype_id: int | None
