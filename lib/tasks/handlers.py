@@ -4,6 +4,7 @@ import logging
 from typing import Any, Awaitable, Callable, Union
 
 from agents import RunConfig, Runner
+from openai import AsyncOpenAI
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -59,6 +60,23 @@ from lib.tasks.models import TaskType
 logger = logging.getLogger(__name__)
 
 
+async def get_or_create_conversation(conversation_id: str | None) -> str:
+    """Get existing conversation or create a new one.
+
+    Args:
+        conversation_id: Existing conversation ID, or None to create new
+
+    Returns:
+        The conversation ID (either provided or newly created)
+    """
+    if conversation_id:
+        return conversation_id
+
+    client = AsyncOpenAI(api_key=env.OPENAI_API_KEY)
+    conversation = await client.conversations.create()
+    return conversation.id
+
+
 def handle_pdf_parsing(task_id: int) -> None:
     """Parse PDF to markdown and extract images/tables."""
     with session_scope() as session:
@@ -75,11 +93,14 @@ async def handle_paper_metadata(task_id: int) -> None:
         if not task:
             return
 
+        conv_id = await get_or_create_conversation(task.conversation_id)
         result = await Runner.run(
             paper_extraction_agent,
             f'Paper (fulltext md): {fulltext_md(task.paper_id)}',
+            conversation_id=conv_id,
         )
 
+        task.conversation_id = conv_id
         paper = session.get(PaperDB, task.paper_id)
         if paper:
             result.final_output.apply_to(paper)
@@ -130,8 +151,14 @@ async def handle_pedigree_description(task_id: int) -> None:
             combined_text += f'Caption: {caption_text}\n\n'
             image_id += 1
 
-        result = await Runner.run(pedigree_describer_agent, combined_text)
+        conv_id = await get_or_create_conversation(task.conversation_id)
+        result = await Runner.run(
+            pedigree_describer_agent,
+            combined_text,
+            conversation_id=conv_id,
+        )
 
+        task.conversation_id = conv_id
         # Idempotent: delete-then-insert
         session.query(PedigreeDB).filter(PedigreeDB.paper_id == task.paper_id).delete()
         if result.final_output and result.final_output.found:
@@ -160,11 +187,14 @@ async def handle_patient_extraction(task_id: int) -> None:
             else None
         )
 
+        conv_id = await get_or_create_conversation(task.conversation_id)
         result = await Runner.run(
             patient_extraction_agent,
             f'Paper (fulltext md): {fulltext_md(task.paper_id)}\nPedigree Description: \n {pedigree_descriptions_output}',
+            conversation_id=conv_id,
         )
 
+        task.conversation_id = conv_id
         # Idempotent: delete families (CASCADE deletes patients), then re-insert both
         session.query(FamilyDB).filter(FamilyDB.paper_id == task.paper_id).delete()
         session.flush()
@@ -194,11 +224,13 @@ async def handle_patient_extraction(task_id: int) -> None:
 
 async def handle_variant_harmonization(task_id: int) -> None:
     """Harmonize variants to standard genomic coordinates."""
+    conv_id = None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
             return
 
+        conv_id = await get_or_create_conversation(task.conversation_id)
         paper = session.get(PaperDB, task.paper_id)
         if not paper:
             return
@@ -232,6 +264,7 @@ async def handle_variant_harmonization(task_id: int) -> None:
                 variant_harmonization_agent,
                 f'Variant JSON:\n{json.dumps(variant_input, indent=2)}',
                 max_turns=15,
+                conversation_id=conv_id,
             )
             return variant_id, result.final_output
 
@@ -248,6 +281,7 @@ async def handle_variant_harmonization(task_id: int) -> None:
         if not task:
             return
 
+        task.conversation_id = conv_id
         # Idempotent: delete-then-insert
         delete_query = session.query(HarmonizedVariantDB).filter(
             HarmonizedVariantDB.variant_id.in_(
@@ -384,11 +418,14 @@ async def handle_patient_variant_linking(task_id: int) -> None:
             else None
         )
 
+        conv_id = await get_or_create_conversation(task.conversation_id)
         result = await Runner.run(
             patient_variant_linking_agent,
             f'Variants JSON:\n{structured_variants}\n Patients JSON:\n {structured_patients} Pedigree Description: \n {pedigree_descriptions_output} Paper (fulltext md): {fulltext_md(task.paper_id)}',
+            conversation_id=conv_id,
         )
 
+        task.conversation_id = conv_id
         # Idempotent: delete-then-insert
         session.query(PatientVariantLinkDB).filter(
             PatientVariantLinkDB.paper_id == task.paper_id
@@ -404,11 +441,13 @@ async def handle_phenotype_extraction(task_id: int) -> None:
     Otherwise, extract for all patients in the paper in parallel.
     """
     # Fetch all patients to process
+    conv_id = None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
             return
 
+        conv_id = await get_or_create_conversation(task.conversation_id)
         paper_id = task.paper_id
         patient_id = task.patient_id
         query = session.query(PatientDB).filter(PatientDB.paper_id == paper_id)
@@ -435,6 +474,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
             result = await Runner.run(
                 patient_phenotype_linking_agent,
                 f'Paper (fulltext md): {fulltext_md(paper_id)}\n\nStructured Patient JSON:\n{[patient_data]}',
+                conversation_id=conv_id,
             )
             return patient_data['patient_id'], result.final_output
 
@@ -444,6 +484,11 @@ async def handle_phenotype_extraction(task_id: int) -> None:
 
     # Update DB with results
     with session_scope() as session:
+        task = session.get(TaskDB, task_id)
+        if not task:
+            return
+
+        task.conversation_id = conv_id
         # Idempotent: delete-then-insert
         delete_query = session.query(PhenotypeDB).filter(
             PhenotypeDB.paper_id == paper_id
@@ -456,18 +501,23 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         for patient_id, phenotypes in results:
             for phenotype in phenotypes:
                 # Ensure patient_id is set on the phenotype
-                if phenotype.patient_id is None or phenotype.patient_id != patient_id:
+                if (
+                    phenotype.patient_id is None
+                    or phenotype.patient_id != patient_id
+                ):
                     phenotype.patient_id = patient_id
                 session.add(phenotype_to_db(paper_id, phenotype))
 
 
 async def handle_hpo_linking(task_id: int) -> None:
     """Link phenotypes to HPO terms."""
+    conv_id = None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
             return
 
+        conv_id = await get_or_create_conversation(task.conversation_id)
         # Get phenotypes for this paper (optionally filtered by patient or phenotype)
         query = session.query(PhenotypeDB).filter(PhenotypeDB.paper_id == task.paper_id)
         if task.patient_id is not None:
@@ -506,6 +556,7 @@ async def handle_hpo_linking(task_id: int) -> None:
                 hpo_linking_agent,
                 f'Phenotype JSON:\n{json.dumps(phenotype_data, indent=2)}',
                 max_turns=15,
+                conversation_id=conv_id,
                 run_config=RunConfig(
                     trace_metadata={
                         'paper_id': str(task_id),
@@ -526,6 +577,7 @@ async def handle_hpo_linking(task_id: int) -> None:
         if not task:
             return
 
+        task.conversation_id = conv_id
         # Idempotent: delete-then-insert
         session.query(HpoDB).filter(HpoDB.phenotype_id.in_(phenotype_id_set)).delete()
 

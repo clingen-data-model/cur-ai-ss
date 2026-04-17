@@ -36,6 +36,7 @@ class _MetadataServerSigner(iam.Signer):
         # Return the signature (already in bytes)
         return base64.b64decode(response.json()['signature'])
 
+
 # Cache for service account email
 _service_account_email_cache: str | None = None
 
