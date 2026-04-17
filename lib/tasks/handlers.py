@@ -501,10 +501,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         for patient_id, phenotypes in results:
             for phenotype in phenotypes:
                 # Ensure patient_id is set on the phenotype
-                if (
-                    phenotype.patient_id is None
-                    or phenotype.patient_id != patient_id
-                ):
+                if phenotype.patient_id is None or phenotype.patient_id != patient_id:
                     phenotype.patient_id = patient_id
                 session.add(phenotype_to_db(paper_id, phenotype))
 

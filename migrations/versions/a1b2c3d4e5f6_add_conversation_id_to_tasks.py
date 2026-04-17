@@ -19,9 +19,7 @@ depends_on: Union[Sequence[str], None] = None
 
 def upgrade() -> None:
     with op.batch_alter_table('tasks', schema=None) as batch_op:
-        batch_op.add_column(
-            sa.Column('conversation_id', sa.String(), nullable=True)
-        )
+        batch_op.add_column(sa.Column('conversation_id', sa.String(), nullable=True))
 
 
 def downgrade() -> None:
