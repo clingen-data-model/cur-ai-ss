@@ -15,15 +15,19 @@ EFETCH_ENDPOINT = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
 
 
 @function_tool
-def pubmed_search_and_titles(first_author: str) -> List[Tuple[str, str]]:
+def pubmed_search_and_titles(
+    first_author: str, gene_symbol: str
+) -> List[Tuple[str, str]]:
     """
-    Search PubMed by first author, then fetch the titles for all PMIDs.
+    Search PubMed by first author and optionally gene symbol, then fetch titles.
     Returns a list of (pmid, title) tuples for candidate selection.
     """
-    # Phase 1: search by author
+    # Phase 1: search by author and gene
+    search_terms = [f'{first_author}[au]', gene_symbol]
+    search_query = ' AND '.join(search_terms)
     params: dict[str, str | int] = {
         'db': 'pubmed',
-        'term': f'{first_author}[au]',
+        'term': search_query,
         'retmode': 'json',
         'sort': 'relevance',
         'retmax': 50,
@@ -102,6 +106,7 @@ PAPER_EXTRACTION_INSTRUCTIONS = """
 You are an expert clinical data curator.
 
 Input:
+- Gene symbol for the paper
 - Full text of an academic paper, case report, or registry entry.
 
 Task Overview:
@@ -121,8 +126,8 @@ Task Overview:
 Candidate Generation & Selection Workflow:
 
 1️⃣ Candidate Generation:
-- Call `pubmed_search_and_titles` using ONLY the `first_author` extracted from the text.
-- This will return a list of `(pmid, title)` tuples for candidate papers by this author.
+- Call `pubmed_search_and_titles` with the `first_author` extracted from the text and the passed in gene_symbol.
+- This will return a list of `(pmid, title)` tuples for candidate papers by this author about this gene.
 
 2️⃣ Candidate Selection:
 - Compare each returned title to the `title` extracted from the text.

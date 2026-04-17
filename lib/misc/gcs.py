@@ -136,5 +136,8 @@ def upload_and_sign_image(paper_id: int, image_id: int, image_path: Path) -> str
     Returns:
         Signed URL for the uploaded image
     """
+    logger.info(f'Uploading image {image_id} for paper {paper_id} to GCS')
     object_path = upload_image_to_gcs(paper_id, image_id, image_path)
-    return get_signed_url(object_path)
+    signed_url = get_signed_url(object_path)
+    logger.info(f'Generated signed URL: {signed_url[:100]}...')  # Log first 100 chars
+    return signed_url

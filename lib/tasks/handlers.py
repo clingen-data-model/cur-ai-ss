@@ -93,10 +93,14 @@ async def handle_paper_metadata(task_id: int) -> None:
         if not task:
             return
 
+        paper = session.get(PaperDB, task.paper_id)
+        if not paper:
+            return
+
         conv_id = await get_or_create_conversation(task.conversation_id)
         result = await Runner.run(
             paper_extraction_agent,
-            f'Paper (fulltext md): {fulltext_md(task.paper_id)}',
+            f'Gene: {paper.gene.symbol}\n\nPaper (fulltext md): {fulltext_md(task.paper_id)}',
             conversation_id=conv_id,
         )
 
@@ -145,7 +149,11 @@ async def handle_pedigree_description(task_id: int) -> None:
                 caption_path.read_text() if caption_path.exists() else 'No caption'
             )
             # Upload image to GCS and get signed URL
+            logger.info(f'Processing image {image_id} from {pdf_image}')
             image_url = upload_and_sign_image(task.paper_id, image_id, pdf_image)
+            logger.info(
+                f'Image {image_id} URL type: {type(image_url)}, starts with: {image_url[:50] if image_url else "None"}'
+            )
             combined_text += f'[Processing Pipeline Figure {image_id}]\n'
             combined_text += f'URL: {image_url}\n'
             combined_text += f'Caption: {caption_text}\n\n'
