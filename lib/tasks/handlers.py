@@ -449,6 +449,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
     Otherwise, extract for all patients in the paper in parallel.
     """
     # Fetch all patients to process
+    stored_conversation_ids: dict[str, str] = {}
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
@@ -456,6 +457,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
 
         paper_id = task.paper_id
         patient_id = task.patient_id
+        stored_conversation_ids = dict(task.conversation_ids)
         query = session.query(PatientDB).filter(PatientDB.paper_id == paper_id)
         if patient_id is not None:
             query = query.filter(PatientDB.id == patient_id)
@@ -470,7 +472,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
             for p in patient_rows
         ]
 
-    # Process patients in parallel with fresh conversations
+    # Process patients in parallel with stored or fresh conversations
     sem = asyncio.Semaphore(2)
     conversation_ids: dict[int, str] = {}
 
@@ -478,7 +480,9 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         patient_data: dict,
     ) -> tuple[int, list]:
         async with sem:
-            conv_id = await get_or_create_conversation(None)
+            conv_id = await get_or_create_conversation(
+                stored_conversation_ids.get(str(patient_data['patient_id']))
+            )
             conversation_ids[patient_data['patient_id']] = conv_id
             result = await Runner.run(
                 patient_phenotype_linking_agent,
@@ -517,11 +521,13 @@ async def handle_phenotype_extraction(task_id: int) -> None:
 
 async def handle_hpo_linking(task_id: int) -> None:
     """Link phenotypes to HPO terms."""
+    stored_conversation_ids: dict[str, str] = {}
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
             return
 
+        stored_conversation_ids = dict(task.conversation_ids)
         # Get phenotypes for this paper (optionally filtered by patient or phenotype)
         query = session.query(PhenotypeDB).filter(PhenotypeDB.paper_id == task.paper_id)
         if task.patient_id is not None:
@@ -557,7 +563,9 @@ async def handle_hpo_linking(task_id: int) -> None:
         phenotype_data: dict,
     ) -> ReasoningBlock[HPOTerm]:
         async with sem:
-            conv_id = await get_or_create_conversation(None)
+            conv_id = await get_or_create_conversation(
+                stored_conversation_ids.get(str(phenotype_data['phenotype_id']))
+            )
             conversation_ids[phenotype_data['phenotype_id']] = conv_id
             result = await Runner.run(
                 hpo_linking_agent,
