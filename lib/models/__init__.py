@@ -23,12 +23,15 @@ from lib.models.paper import (
     PaperUpdateRequest,
     PedigreeDB,
     PedigreeResp,
+    ScoringMethod,
 )
 from lib.models.patient import (
     PatientCreateRequest,
     PatientDB,
     PatientResp,
     PatientUpdateRequest,
+    RelationshipToProband,
+    TwinType,
 )
 from lib.models.patient_variant_link import (
     Inheritance,
@@ -47,6 +50,12 @@ from lib.models.phenotype import (
     PhenotypeDB,
     PhenotypeResp,
     PhenotypeUpdateRequest,
+)
+from lib.models.segregation import (
+    FamilySegregationDB,
+    FamilySegregationResp,
+    FamilySegregationUpdateRequest,
+    SegregationSummaryResp,
 )
 from lib.models.variant import (
     EnrichedVariant,

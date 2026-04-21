@@ -26,6 +26,7 @@ class TaskType(StrEnum):
     VARIANT_HARMONIZATION = 'Variant Harmonization'
     VARIANT_ENRICHMENT = 'Variant Enrichment'
     PATIENT_VARIANT_LINKING = 'Patient Variant Linking'
+    SEGREGATION_ANALYSIS = 'Segregation Analysis'
     PHENOTYPE_EXTRACTION = 'Phenotype Extraction'  # per-patient
     HPO_LINKING = 'HPO Linking'  # per-patient
 
@@ -56,7 +57,8 @@ TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
     ],
     TaskType.VARIANT_HARMONIZATION: [TaskType.VARIANT_ENRICHMENT],
     TaskType.VARIANT_ENRICHMENT: [],
-    TaskType.PATIENT_VARIANT_LINKING: [],
+    TaskType.PATIENT_VARIANT_LINKING: [TaskType.SEGREGATION_ANALYSIS],
+    TaskType.SEGREGATION_ANALYSIS: [],
     TaskType.PHENOTYPE_EXTRACTION: [TaskType.HPO_LINKING],
     TaskType.HPO_LINKING: [],
 }

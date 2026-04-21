@@ -343,6 +343,12 @@ def test_get_patients_returns_ordered_by_position(client, db_session, seeded_pap
         family_assignment_evidence=dict(
             value='Family 1', reasoning='test evidence', quote='test context'
         ),
+        is_obligate_carrier=False,
+        is_obligate_carrier_evidence=dict(
+            value=False, reasoning='test evidence', quote='test context'
+        ),
+        relationship_to_proband_evidence=None,
+        twin_type_evidence=None,
     )
     # Get the default family created in seeded_paper fixture
     family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
@@ -427,6 +433,12 @@ def test_update_patient_with_human_edit_note(client, db_session, seeded_paper):
         family_assignment_evidence=dict(
             value='Family 1', reasoning='test evidence', quote='test context'
         ),
+        is_obligate_carrier=False,
+        is_obligate_carrier_evidence=dict(
+            value=False, reasoning='test evidence', quote='test context'
+        ),
+        relationship_to_proband_evidence=None,
+        twin_type_evidence=None,
     )
     # Get the default family created in seeded_paper fixture
     family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()

@@ -52,6 +52,7 @@ from lib.misc.pdf.paths import (
     pdf_thumbnail_path,
 )
 from lib.models.base import Base, PatchModel
+from lib.models.evidence_block import HumanEvidenceBlock
 from lib.tasks.models import TaskResp
 
 Color: TypeAlias = Literal[
@@ -96,6 +97,11 @@ class PaperType(StrEnum):
     Other = 'Other'
 
 
+class ScoringMethod(StrEnum):
+    Dominant = 'dominant'
+    Recessive = 'recessive'
+
+
 class PaperDB(Base):
     __tablename__ = 'papers'
 
@@ -138,6 +144,10 @@ class PaperDB(Base):
         nullable=False,
         default=list,
     )
+
+    # Segregation analysis
+    scoring_method: Mapped[str | None] = mapped_column(String, nullable=True)
+    scoring_method_evidence: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     @property
     def gene_symbol(self) -> str:
@@ -220,6 +230,10 @@ class PaperResp(PaperExtractionOutput):
     title: str | None = None  # type: ignore
     first_author: str | None = None  # type: ignore
 
+    # Segregation analysis
+    scoring_method: ScoringMethod | None = None
+    scoring_method_evidence: HumanEvidenceBlock[ScoringMethod] | None = None
+
 
 class PaperUpdateRequest(PatchModel):
     title: str | None = None
@@ -231,6 +245,12 @@ class PaperUpdateRequest(PatchModel):
     pmid: str | None = None
     pmcid: str | None = None
     paper_types: list[PaperType] | None = None
+    scoring_method: ScoringMethod | None = None
+    scoring_method_human_edit_note: str | None = None
+
+    def apply_to(self, obj: PaperDB) -> None:  # type: ignore[override]
+        super().apply_to(obj)
+        self.apply_human_edit_notes(obj)
 
 
 class HighlightRequest(BaseModel):

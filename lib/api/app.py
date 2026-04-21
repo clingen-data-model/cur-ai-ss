@@ -51,6 +51,7 @@ from lib.misc.pdf.paths import (
     pdf_thumbnail_path,
     pdf_words_json_path,
 )
+from lib.misc.segregation import FamilySegregationInput, summarize_segregation
 from lib.models import (
     EnrichedVariantDB,
     EnrichedVariantResp,
@@ -58,6 +59,9 @@ from lib.models import (
     FamilyCreateRequest,
     FamilyDB,
     FamilyResp,
+    FamilySegregationDB,
+    FamilySegregationResp,
+    FamilySegregationUpdateRequest,
     FamilyUpdateRequest,
     GeneDB,
     GeneResp,
@@ -81,6 +85,7 @@ from lib.models import (
     PhenotypeDB,
     PhenotypeResp,
     PhenotypeUpdateRequest,
+    SegregationSummaryResp,
     TaskDB,
     VariantDB,
     VariantResp,
@@ -328,6 +333,12 @@ def _patient_to_resp(row: PatientDB) -> PatientResp:
         family_id=row.family.id,
         family_identifier=row.family.identifier,
         family_assignment_evidence=row.family_assignment_evidence,  # type: ignore[arg-type]
+        is_obligate_carrier=row.is_obligate_carrier,
+        is_obligate_carrier_evidence=row.is_obligate_carrier_evidence,  # type: ignore[arg-type]
+        relationship_to_proband=row.relationship_to_proband,  # type: ignore[arg-type]
+        relationship_to_proband_evidence=row.relationship_to_proband_evidence,  # type: ignore[arg-type]
+        twin_type=row.twin_type,  # type: ignore[arg-type]
+        twin_type_evidence=row.twin_type_evidence,  # type: ignore[arg-type]
     )
 
 
@@ -900,3 +911,124 @@ def clear_highlights(
         content = f.read()
     with open(highlighted_path, 'wb') as f:
         f.write(content)
+
+
+def _family_segregation_to_resp(
+    row: FamilySegregationDB, family_identifier: str
+) -> FamilySegregationResp:  # type: ignore[override]
+    """Convert FamilySegregationDB to API response."""
+    return FamilySegregationResp(
+        id=row.id,
+        paper_id=row.paper_id,
+        family_id=row.family_id,
+        family_identifier=family_identifier,
+        inheritance_mode=row.inheritance_mode,
+        sequencing_method_class=row.sequencing_method_class,
+        n_affected_segregations=row.n_affected_segregations,
+        n_unaffected_segregations=row.n_unaffected_segregations,
+        lod_score_type=row.lod_score_type,
+        lod_score=row.lod_score,
+        affected_risk=row.affected_risk,
+        include_in_score=row.include_in_score,
+        notes=row.notes,
+        updated_at=row.updated_at,
+    )
+
+
+@app.get(
+    '/papers/{paper_id}/segregation/families',
+    response_model=list[FamilySegregationResp],
+)
+def get_segregation_families(
+    paper_id: int, session: Session = Depends(get_session)
+) -> Any:
+    """Get all segregation analyses for families in a paper."""
+    # Verify paper exists
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+
+    segs = (
+        session.query(FamilySegregationDB)
+        .filter(FamilySegregationDB.paper_id == paper_id)
+        .order_by(FamilySegregationDB.family_id)
+        .all()
+    )
+
+    results = []
+    for seg in segs:
+        family = session.get(FamilyDB, seg.family_id)
+        family_identifier = family.identifier if family else 'Unknown'
+        results.append(_family_segregation_to_resp(seg, family_identifier))
+
+    return results
+
+
+@app.get('/papers/{paper_id}/segregation', response_model=SegregationSummaryResp)
+def get_segregation_summary(
+    paper_id: int, session: Session = Depends(get_session)
+) -> Any:
+    """Get segregation analysis summary (total LOD and points) for a paper."""
+    # Verify paper exists
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+
+    segs = (
+        session.query(FamilySegregationDB)
+        .filter(FamilySegregationDB.paper_id == paper_id)
+        .all()
+    )
+
+    families = [
+        FamilySegregationInput(
+            family_id=seg.family_id,
+            lod_score=seg.lod_score or 0.0,
+            method_class=seg.sequencing_method_class or 'candidate_gene',
+            include_in_score=seg.include_in_score,
+        )
+        for seg in segs
+    ]
+
+    summary = summarize_segregation(families)
+
+    return SegregationSummaryResp(
+        paper_id=paper_id,
+        total_lod=summary.total_lod,
+        candidate_lod=summary.candidate_lod,
+        exome_lod=summary.exome_lod,
+        points=summary.points,
+        family_count=len(segs),
+        included_family_count=sum(1 for f in families if f.include_in_score),
+    )
+
+
+@app.patch(
+    '/papers/{paper_id}/segregation/families/{family_segregation_id}',
+    response_model=FamilySegregationResp,
+)
+def update_segregation_family(
+    paper_id: int,
+    family_segregation_id: int,
+    update_req: FamilySegregationUpdateRequest,
+    session: Session = Depends(get_session),
+) -> Any:
+    """Update a family segregation analysis."""
+    seg = session.get(FamilySegregationDB, family_segregation_id)
+    if not seg or seg.paper_id != paper_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Segregation record not found',
+        )
+
+    update_req.apply_to(seg)
+    session.commit()
+
+    family = session.get(FamilyDB, seg.family_id)
+    family_identifier = family.identifier if family else 'Unknown'
+
+    return _family_segregation_to_resp(seg, family_identifier)

@@ -28,9 +28,11 @@ from lib.core.environment import env
 from lib.misc.gcs import upload_and_sign_image
 from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import fulltext_md, pdf_image_caption_path, pdf_image_path
+from lib.misc.segregation import estimate_lod_dominant, estimate_lod_recessive
 from lib.models import (
     EnrichedVariantDB,
     FamilyDB,
+    FamilySegregationDB,
     HarmonizedVariantDB,
     HpoDB,
     PaperDB,
@@ -602,6 +604,160 @@ async def handle_hpo_linking(task_id: int) -> None:
                 session.add(hpo_to_db(phenotype_id, hpo_reasoning))
 
 
+def handle_segregation_analysis(task_id: int) -> None:
+    """Generate segregation analysis data for families in paper."""
+    with session_scope() as session:
+        task = session.get(TaskDB, task_id)
+        if not task:
+            return
+
+        paper = session.get(PaperDB, task.paper_id)
+        if not paper:
+            return
+
+        # Get all families for this paper
+        families = (
+            session.query(FamilyDB)
+            .filter(FamilyDB.paper_id == task.paper_id)
+            .order_by(FamilyDB.id)
+            .all()
+        )
+
+        # Clear existing segregation data (idempotent)
+        session.query(FamilySegregationDB).filter(
+            FamilySegregationDB.paper_id == task.paper_id
+        ).delete()
+
+        # Generate segregation analysis for each family
+        for family in families:
+            # Get all patients in the family
+            family_patients = (
+                session.query(PatientDB)
+                .filter(PatientDB.family_id == family.id)
+                .order_by(PatientDB.id)
+                .all()
+            )
+
+            if not family_patients:
+                continue
+
+            # Get all patient-variant links for this family
+            links = (
+                session.query(PatientVariantLinkDB)
+                .filter(
+                    PatientVariantLinkDB.patient_id.in_([p.id for p in family_patients])
+                )
+                .order_by(PatientVariantLinkDB.id)
+                .all()
+            )
+
+            if not links:
+                continue
+
+            # Determine inheritance mode (most common non-unknown value)
+            inheritance_modes = [
+                link.inheritance
+                for link in links
+                if link.inheritance and link.inheritance != 'Unknown'
+            ]
+            inheritance_mode = None
+            if inheritance_modes:
+                inheritance_mode = max(
+                    set(inheritance_modes), key=inheritance_modes.count
+                )
+
+            # Determine sequencing method class
+            testing_methods_set: set[str] = set()
+            for link in links:
+                if link.testing_methods:
+                    testing_methods_set.update(link.testing_methods)
+
+            sequencing_method_class = (
+                'exome_genome'
+                if any(
+                    m in {'Exome Sequencing', 'Genome Sequencing'}
+                    for m in testing_methods_set
+                )
+                else 'candidate_gene'
+            )
+
+            # Count segregations
+            # Get proband for reference
+            proband = next(
+                (p for p in family_patients if p.proband_status == 'Proband'),
+                None,
+            )
+
+            # Non-proband patients with affected_status=Affected or is_obligate_carrier=True
+            affected_patients = [
+                p
+                for p in family_patients
+                if p.id != (proband.id if proband else None)
+                and (p.affected_status == 'Affected' or p.is_obligate_carrier)
+            ]
+
+            # Handle monozygotic twin deduplication
+            n_affected_segregations = len(
+                affected_patients
+            )  # Simplified; ideally deduplicate twins
+
+            # Unaffected count: non-proband, non-parent unaffected siblings
+            # For simplicity, count all non-proband unaffected (curator can adjust)
+            unaffected_patients = [
+                p
+                for p in family_patients
+                if p.id != (proband.id if proband else None)
+                and p.affected_status == 'Unaffected'
+            ]
+            n_unaffected_segregations = len(unaffected_patients)
+
+            # Calculate estimated LOD score
+            lod_score_type = None
+            lod_score = None
+            affected_risk = 0.25
+
+            # Determine scoring method: use paper setting if available, else infer from inheritance_mode
+            scoring_method = (
+                paper.scoring_method if hasattr(paper, 'scoring_method') else None
+            )
+            if scoring_method == 'recessive' or (
+                scoring_method is None and inheritance_mode == 'Recessive'
+            ):
+                # Recessive formula
+                if n_affected_segregations > 0 or n_unaffected_segregations > 0:
+                    lod_score = estimate_lod_recessive(
+                        n_affected_segregations,
+                        n_unaffected_segregations,
+                        affected_risk,
+                    )
+                    lod_score_type = 'estimated'
+            elif scoring_method == 'dominant' or (
+                scoring_method is None
+                and inheritance_mode
+                and inheritance_mode != 'Recessive'
+                and inheritance_mode != 'Unknown'
+            ):
+                # Dominant/X-linked formula
+                if n_affected_segregations > 0:
+                    lod_score = estimate_lod_dominant(n_affected_segregations)
+                    lod_score_type = 'estimated'
+
+            # Create segregation analysis row
+            seg = FamilySegregationDB(
+                paper_id=task.paper_id,
+                family_id=family.id,
+                inheritance_mode=inheritance_mode,
+                sequencing_method_class=sequencing_method_class,
+                n_affected_segregations=n_affected_segregations,
+                n_unaffected_segregations=n_unaffected_segregations,
+                lod_score_type=lod_score_type,
+                lod_score=lod_score,
+                affected_risk=affected_risk,
+                include_in_score=True,
+            )
+            session.add(seg)
+
+
 TASK_HANDLERS: dict[
     TaskType, Union[Callable[[int], Awaitable[None]], Callable[[int], None]]
 ] = {
@@ -613,6 +769,7 @@ TASK_HANDLERS: dict[
     TaskType.VARIANT_HARMONIZATION: handle_variant_harmonization,
     TaskType.VARIANT_ENRICHMENT: handle_variant_enrichment,
     TaskType.PATIENT_VARIANT_LINKING: handle_patient_variant_linking,
+    TaskType.SEGREGATION_ANALYSIS: handle_segregation_analysis,
     TaskType.PHENOTYPE_EXTRACTION: handle_phenotype_extraction,
     TaskType.HPO_LINKING: handle_hpo_linking,
 }
