@@ -90,12 +90,14 @@ def render_metadata_tab() -> None:
         changes['abstract'] = abstract or None
 
     # Track scoring method changes
-    new_scoring_method = None
-    if selected_scoring_method and scoring_reasoning:
-        new_scoring_method = ReasoningBlock(
+    new_scoring_method = (
+        ReasoningBlock(
             value=ScoringMethod(selected_scoring_method),
             reasoning=scoring_reasoning,
         )
+        if selected_scoring_method and scoring_reasoning
+        else None
+    )
     if new_scoring_method != paper_resp.scoring_method:
         changes['scoring_method'] = new_scoring_method
 
