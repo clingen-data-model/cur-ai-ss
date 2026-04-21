@@ -52,6 +52,7 @@ from lib.misc.pdf.paths import (
     pdf_thumbnail_path,
 )
 from lib.models.base import Base, PatchModel
+from lib.models.evidence_block import HumanEvidenceBlock, ReasoningBlock
 from lib.tasks.models import TaskResp
 
 Color: TypeAlias = Literal[
@@ -96,6 +97,11 @@ class PaperType(StrEnum):
     Other = 'Other'
 
 
+class ScoringMethod(StrEnum):
+    Dominant = 'Dominant'
+    Recessive = 'Recessive'
+
+
 class PaperDB(Base):
     __tablename__ = 'papers'
 
@@ -137,6 +143,14 @@ class PaperDB(Base):
         JSON,
         nullable=False,
         default=list,
+    )
+    scoring_method: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+    scoring_method_evidence: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
     )
 
     @property
@@ -191,6 +205,7 @@ class PaperExtractionOutput(BaseModel):
     pmid: str | None = None
     pmcid: str | None = None
     paper_types: list[PaperType]
+    scoring_method: ReasoningBlock[ScoringMethod] | None = None
 
     @model_validator(mode='after')
     def max_two_paper_types(self) -> Self:
@@ -213,6 +228,7 @@ class PaperResp(PaperExtractionOutput):
     filename: str
     updated_at: datetime
     tasks: list['TaskResp'] = []
+    scoring_method_evidence: HumanEvidenceBlock[ScoringMethod] | None = None
 
     # Override the PaperExtractionOutput to make the fields optional.
     # Note that mypy does not approve of the override, though Pydantic functions
@@ -231,6 +247,9 @@ class PaperUpdateRequest(PatchModel):
     pmid: str | None = None
     pmcid: str | None = None
     paper_types: list[PaperType] | None = None
+    scoring_method: ReasoningBlock[ScoringMethod] | None = None
+    # Human edit notes for evidence blocks
+    scoring_method_human_edit_note: str | None = None
 
 
 class HighlightRequest(BaseModel):

@@ -2,8 +2,10 @@ from typing import Any
 
 import streamlit as st
 
-from lib.models import PaperResp, PaperType, PaperUpdateRequest
+from lib.models import PaperResp, PaperType, PaperUpdateRequest, ScoringMethod
+from lib.models.evidence_block import ReasoningBlock
 from lib.ui.api import get_http_error_detail, update_paper
+from lib.ui.paper.shared import render_evidence_controls
 
 
 def render_metadata_tab() -> None:
@@ -41,6 +43,38 @@ def render_metadata_tab() -> None:
 
     abstract = st.text_area('Abstract', paper_resp.abstract, height=200)
 
+    # Scoring Method - editable inputs
+    st.divider()
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        selected_scoring_method = st.selectbox(
+            'Scoring Method',
+            options=[''] + [sm.value for sm in ScoringMethod],
+            index=[''] + [sm.value for sm in ScoringMethod].index(
+                paper_resp.scoring_method.value
+            )
+            if paper_resp.scoring_method
+            else 0,
+            key='scoring-method',
+        )
+    with col2:
+        scoring_reasoning = st.text_input(
+            'Reasoning',
+            value=paper_resp.scoring_method.reasoning if paper_resp.scoring_method else '',
+            placeholder='Explanation for the scoring method choice',
+            key='scoring-reasoning',
+        )
+
+    # Display evidence controls for context (if scoring method exists)
+    if paper_resp.scoring_method:
+        render_evidence_controls(
+            paper_id=paper_resp.id,
+            label='📋 Scoring Method Details',
+            color_key='scoring-color',
+            button_key_prefix='scoring',
+            block=paper_resp.scoring_method,
+        )
+
     changes: dict[str, Any] = {}
     if title != paper_resp.title:
         changes['title'] = title
@@ -54,6 +88,17 @@ def render_metadata_tab() -> None:
         changes['paper_types'] = paper_types
     if (abstract or None) != paper_resp.abstract:
         changes['abstract'] = abstract or None
+
+    # Track scoring method changes
+    new_scoring_method = None
+    if selected_scoring_method and scoring_reasoning:
+        new_scoring_method = ReasoningBlock(
+            value=ScoringMethod(selected_scoring_method),
+            reasoning=scoring_reasoning,
+        )
+    if new_scoring_method != paper_resp.scoring_method:
+        changes['scoring_method'] = new_scoring_method
+
     update_request = PaperUpdateRequest(**changes)
 
     if changes:

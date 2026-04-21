@@ -532,7 +532,3 @@ class PatientUpdateRequest(PatchModel):
     race_ethnicity_human_edit_note: str | None = None
     affected_status_human_edit_note: str | None = None
 
-    def apply_to(self, obj: PatientDB) -> None:  # type: ignore[override]
-        """Apply scalar updates and evidence note updates to patient."""
-        super().apply_to(obj)
-        self.apply_human_edit_notes(obj)
