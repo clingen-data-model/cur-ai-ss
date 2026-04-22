@@ -21,7 +21,9 @@ from lib.models.patient import (
     CountryCode,
     ProbandStatus,
     RaceEthnicity,
+    RelationshipToProband,
     SexAtBirth,
+    TwinType,
 )
 from lib.tasks import TaskType, is_task_completed
 from lib.ui.api import (
@@ -637,6 +639,84 @@ def render_patient(
                 human_edit_note_key=f'{key_prefix}-race-note',
             )
 
+        # --- Segregation Analysis
+        st.markdown('#### Segregation Analysis')
+
+        # --- Segregation Analysis Fields
+        col1, col2 = st.columns(2)
+        with col1:
+            is_obligate_carrier = st.checkbox(
+                'Is Obligate Carrier',
+                value=patient.is_obligate_carrier or False,
+                key=f'{key_prefix}-obligate-carrier',
+            )
+        with col2:
+            st.space()
+            is_obligate_carrier_note = render_evidence_controls(
+                paper_resp.id,
+                block=patient.is_obligate_carrier_evidence,
+                label='Obligate Carrier Evidence',
+                color_key=f'{key_prefix}-{patient.identifier}-color-oc-evidence',
+                button_key_prefix=f'{key_prefix}-{patient.identifier}-oc-evidence',
+                human_edit_note_key=f'{key_prefix}-obligate-carrier-note',
+            )
+
+        col1, col2 = st.columns(2)
+        with col1:
+            rel_options = [None] + [r.value for r in RelationshipToProband]
+            rel_current = (
+                patient.relationship_to_proband.value
+                if patient.relationship_to_proband
+                else None
+            )
+            rel_idx = (
+                rel_options.index(rel_current) if rel_current in rel_options else 0
+            )
+            relationship_raw = st.selectbox(
+                'Relationship to Proband',
+                options=rel_options,
+                index=rel_idx,
+                key=f'{key_prefix}-relationship',
+            )
+            relationship_to_proband = (
+                RelationshipToProband(relationship_raw) if relationship_raw else None
+            )
+        with col2:
+            st.space()
+            relationship_note = render_evidence_controls(
+                paper_resp.id,
+                block=patient.relationship_to_proband_evidence,
+                label='Relationship to Proband Evidence',
+                color_key=f'{key_prefix}-{patient.identifier}-color-rel-evidence',
+                button_key_prefix=f'{key_prefix}-{patient.identifier}-rel-evidence',
+                human_edit_note_key=f'{key_prefix}-relationship-note',
+            )
+
+        col1, col2 = st.columns(2)
+        with col1:
+            twin_options = [None] + [t.value for t in TwinType]
+            twin_current = patient.twin_type.value if patient.twin_type else None
+            twin_idx = (
+                twin_options.index(twin_current) if twin_current in twin_options else 0
+            )
+            twin_raw = st.selectbox(
+                'Twin Type',
+                options=twin_options,
+                index=twin_idx,
+                key=f'{key_prefix}-twin-type',
+            )
+            twin_type = TwinType(twin_raw) if twin_raw else None
+        with col2:
+            st.space()
+            twin_type_note = render_evidence_controls(
+                paper_resp.id,
+                block=patient.twin_type_evidence,
+                label='Twin Type Evidence',
+                color_key=f'{key_prefix}-{patient.identifier}-color-twin-evidence',
+                button_key_prefix=f'{key_prefix}-{patient.identifier}-twin-evidence',
+                human_edit_note_key=f'{key_prefix}-twin-type-note',
+            )
+
         # --- Save edits: only include changed fields so exclude_unset works
         # Age fields are numeric (int or None). Convert 0 to None for empty values.
         age_diagnosis_val = age_diagnosis if age_diagnosis else None
@@ -750,6 +830,51 @@ def render_patient(
             and race_ethnicity_note != patient.race_ethnicity_evidence.human_edit_note
         ):
             changes['race_ethnicity_human_edit_note'] = race_ethnicity_note
+
+        if is_obligate_carrier != (patient.is_obligate_carrier or False):
+            changes['is_obligate_carrier'] = is_obligate_carrier
+            if (
+                patient.is_obligate_carrier_evidence
+                and not patient.is_obligate_carrier_evidence.human_edit_note
+            ):
+                changes['is_obligate_carrier_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
+        if is_obligate_carrier_note and (
+            not patient.is_obligate_carrier_evidence
+            or is_obligate_carrier_note
+            != patient.is_obligate_carrier_evidence.human_edit_note
+        ):
+            changes['is_obligate_carrier_human_edit_note'] = is_obligate_carrier_note
+
+        if relationship_to_proband != patient.relationship_to_proband:
+            changes['relationship_to_proband'] = (
+                relationship_to_proband.value if relationship_to_proband else None
+            )
+            if (
+                patient.relationship_to_proband_evidence
+                and not patient.relationship_to_proband_evidence.human_edit_note
+            ):
+                changes['relationship_to_proband_human_edit_note'] = (
+                    HUMAN_EDIT_NOTE_DEFAULT
+                )
+        if relationship_note and (
+            not patient.relationship_to_proband_evidence
+            or relationship_note
+            != patient.relationship_to_proband_evidence.human_edit_note
+        ):
+            changes['relationship_to_proband_human_edit_note'] = relationship_note
+
+        if twin_type != patient.twin_type:
+            changes['twin_type'] = twin_type.value if twin_type else None
+            if (
+                patient.twin_type_evidence
+                and not patient.twin_type_evidence.human_edit_note
+            ):
+                changes['twin_type_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
+        if twin_type_note and (
+            not patient.twin_type_evidence
+            or twin_type_note != patient.twin_type_evidence.human_edit_note
+        ):
+            changes['twin_type_human_edit_note'] = twin_type_note
 
         update_request = PatientUpdateRequest(**changes)  # type: ignore[arg-type]
 

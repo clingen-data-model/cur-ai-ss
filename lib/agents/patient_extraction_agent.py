@@ -83,6 +83,29 @@ Each field is an EvidenceBlock containing:
   - Unaffected: explicitly reported as not affected
   - Unknown: not stated or unclear
 
+- is_obligate_carrier (EvidenceBlock[bool]):
+  - True: individual is inferred to carry the variant by virtue of their pedigree position alone
+    (e.g., parent of affected child, sibling of affected individual with affected parent).
+    Do NOT mark as True if genotyping confirms the variant; only for pedigree-inferred carriers.
+  - False: not an obligate carrier (either directly genotyped, affected, or not in obligate position).
+  - Use pedigree description and explicit carrier statements in text as evidence.
+
+- relationship_to_proband (EvidenceBlock[enum: Parent, Sibling, Half-Sibling, Child, Other, Unknown]):
+  - Parent: father or mother of the proband
+  - Sibling: brother or sister of the proband (full sibling)
+  - Half-Sibling: shares one parent with the proband
+  - Child: son or daughter of the proband
+  - Other: aunt, uncle, cousin, grandparent, or other relative
+  - Unknown: relationship not specified
+  - Extract from text descriptions and pedigree structure.
+
+- twin_type (EvidenceBlock[enum: Monozygotic, Dizygotic, Unknown] or null):
+  - Monozygotic: identical twins (count as 1 segregation)
+  - Dizygotic: fraternal/non-identical twins (count as 2 segregations)
+  - Unknown: twin status stated but type not specified
+  - null: patient is not a twin
+  - Extract only when explicitly mentioned; if not a twin, return null.
+
 Guidelines:
 
 1. Extract only explicitly stated information. Do NOT infer.

@@ -50,9 +50,8 @@ def render_metadata_tab() -> None:
         selected_scoring_method = st.selectbox(
             'Scoring Method',
             options=[''] + [sm.value for sm in ScoringMethod],
-            index=[''] + [sm.value for sm in ScoringMethod].index(
-                paper_resp.scoring_method.value
-            )
+            index=['']
+            + [sm.value for sm in ScoringMethod].index(paper_resp.scoring_method.value)
             if paper_resp.scoring_method
             else 0,
             key='scoring-method',
@@ -60,7 +59,9 @@ def render_metadata_tab() -> None:
     with col2:
         scoring_reasoning = st.text_input(
             'Reasoning',
-            value=paper_resp.scoring_method.reasoning if paper_resp.scoring_method else '',
+            value=paper_resp.scoring_method.reasoning
+            if paper_resp.scoring_method
+            else '',
             placeholder='Explanation for the scoring method choice',
             key='scoring-reasoning',
         )
