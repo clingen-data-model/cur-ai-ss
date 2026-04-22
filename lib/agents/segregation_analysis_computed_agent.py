@@ -3,8 +3,7 @@
 import json
 import math
 
-from agents import Agent
-from agents.tools import function_tool
+from agents import Agent, function_tool
 
 from lib.core.environment import env
 from lib.models.paper import ScoringMethod
