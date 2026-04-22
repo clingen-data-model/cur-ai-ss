@@ -14,6 +14,7 @@ from lib.models import (
     PatientResp,
     PatientUpdateRequest,
     PhenotypeResp,
+    SegregationAnalysisResp,
 )
 from lib.models.patient import (
     AffectedStatus,
@@ -32,6 +33,7 @@ from lib.ui.api import (
     get_patients,
     get_pedigree,
     get_phenotypes,
+    get_segregation_analysis,
     grobid_annotations,
     update_patient,
 )
@@ -269,6 +271,7 @@ def _render_family_group(
     patients_in_family: list[tuple[int, PatientResp]],
     selected_patient_id: int | None,
     tab_key: str,
+    segregation_analysis: dict[int, SegregationAnalysisResp | None],
 ) -> None:
     """Render a family with multiple patients."""
     st.markdown(f'### {family.identifier}')
@@ -306,6 +309,155 @@ def _render_family_group(
                 patient_id=patient_id,
             )
 
+        # Segregation Analysis
+        seg_data = segregation_analysis.get(family.id)
+        if seg_data:
+            st.subheader('📊 Segregation Analysis')
+
+            # Extracted LOD Score
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric(
+                    'Extracted LOD Score',
+                    f'{seg_data.extracted_lod_score.value:.2f}'
+                    if seg_data.extracted_lod_score.value is not None
+                    else '—',
+                )
+            with col2:
+                st.space()
+                render_evidence_controls(
+                    paper_resp.id,
+                    block=seg_data.extracted_lod_score,
+                    label='Extracted LOD Score Evidence',
+                    color_key=f'{tab_key}-lod-score-color-evidence',
+                    button_key_prefix=f'{tab_key}-lod-score-evidence',
+                )
+
+            # Sequencing Methodology
+            col1, col2 = st.columns(2)
+            with col1:
+                st.text_input(
+                    'Sequencing Methodology',
+                    seg_data.sequencing_methodology.value.value,
+                    disabled=True,
+                    key=f'{tab_key}-sequencing-methodology',
+                )
+            with col2:
+                st.space()
+                render_evidence_controls(
+                    paper_resp.id,
+                    block=seg_data.sequencing_methodology,
+                    label='Sequencing Methodology Evidence',
+                    color_key=f'{tab_key}-seq-method-color-evidence',
+                    button_key_prefix=f'{tab_key}-seq-method-evidence',
+                )
+
+            # Unexplainable Non-segregations
+            col1, col2 = st.columns(2)
+            with col1:
+                non_seg_status = (
+                    '⚠️ Present'
+                    if seg_data.has_unexplainable_non_segregations.value
+                    else '✅ None'
+                )
+                st.text_input(
+                    'Unexplainable Non-segregations',
+                    non_seg_status,
+                    disabled=True,
+                    key=f'{tab_key}-non-segregations',
+                )
+            with col2:
+                st.space()
+                render_evidence_controls(
+                    paper_resp.id,
+                    block=seg_data.has_unexplainable_non_segregations,
+                    label='Non-segregations Evidence',
+                    color_key=f'{tab_key}-nonseg-color-evidence',
+                    button_key_prefix=f'{tab_key}-nonseg-evidence',
+                )
+
+            if seg_data.computed and seg_data.computed.segregation_count.value > 0:
+                # Meets Minimum Criteria
+                col1, col2 = st.columns(2)
+                with col1:
+                    criteria_status = (
+                        '✅ Met'
+                        if seg_data.computed.meets_minimum_criteria.value
+                        else '❌ Not Met'
+                    )
+                    st.text_input(
+                        'Meets Minimum Criteria',
+                        criteria_status,
+                        disabled=True,
+                        key=f'{tab_key}-criteria-status',
+                    )
+                with col2:
+                    st.space()
+                    render_evidence_controls(
+                        paper_resp.id,
+                        block=seg_data.computed.meets_minimum_criteria,
+                        label='Meets Minimum Criteria Reasoning',
+                        color_key=f'{tab_key}-criteria-status-color',
+                        button_key_prefix=f'{tab_key}-criteria-status-btn',
+                    )
+
+                # Segregation Count
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.text_input(
+                        'Segregation Count',
+                        str(seg_data.computed.segregation_count.value),
+                        disabled=True,
+                        key=f'{tab_key}-segregation-count',
+                    )
+                with col2:
+                    st.space()
+                    render_evidence_controls(
+                        paper_resp.id,
+                        block=seg_data.computed.segregation_count,
+                        label='Segregation Count Reasoning',
+                        color_key=f'{tab_key}-segregation-count-color',
+                        button_key_prefix=f'{tab_key}-segregation-count-btn',
+                    )
+
+                # Computed LOD Score
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.text_input(
+                        'Computed LOD Score',
+                        f'{seg_data.computed.computed_lod_score.value:.2f}',
+                        disabled=True,
+                        key=f'{tab_key}-computed-lod-score',
+                    )
+                with col2:
+                    st.space()
+                    render_evidence_controls(
+                        paper_resp.id,
+                        block=seg_data.computed.computed_lod_score,
+                        label='Computed LOD Score Reasoning',
+                        color_key=f'{tab_key}-computed-lod-score-color',
+                        button_key_prefix=f'{tab_key}-computed-lod-score-btn',
+                    )
+
+                # Points Assigned
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.text_input(
+                        'Points Assigned',
+                        f'{seg_data.computed.points_assigned.value:.1f}',
+                        disabled=True,
+                        key=f'{tab_key}-points-assigned',
+                    )
+                with col2:
+                    st.space()
+                    render_evidence_controls(
+                        paper_resp.id,
+                        block=seg_data.computed.points_assigned,
+                        label='Points Assigned Reasoning',
+                        color_key=f'{tab_key}-points-assigned-color',
+                        button_key_prefix=f'{tab_key}-points-assigned-btn',
+                    )
+
 
 def _render_patients_grouped_by_family(
     paper_resp: PaperResp,
@@ -313,6 +465,7 @@ def _render_patients_grouped_by_family(
     patients: list[tuple[int, PatientResp]],
     selected_patient_id: int | None,
     tab_key: str,
+    segregation_analysis: dict[int, SegregationAnalysisResp | None],
 ) -> None:
     """Render patients grouped by family."""
     family_map = {f.id: f for f in families}
@@ -325,7 +478,12 @@ def _render_patients_grouped_by_family(
         family = family_map.get(family_id)
         if len(group) > 1 and family:
             _render_family_group(
-                paper_resp, family, group, selected_patient_id, tab_key
+                paper_resp,
+                family,
+                group,
+                selected_patient_id,
+                tab_key,
+                segregation_analysis,
             )
         else:
             # Single patient: render as-is (family assignment evidence already in render_patient)
@@ -973,12 +1131,23 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
         st.session_state[FAMILIES_KEY] = get_families(paper_resp.id)
     families: list[FamilyResp] = st.session_state[FAMILIES_KEY]
 
+    # Load segregation analysis
+    segregation_list = get_segregation_analysis(paper_resp.id)
+    segregation_analysis: dict[int, SegregationAnalysisResp | None] = {
+        seg.family_id: seg for seg in segregation_list
+    }
+
     with proband_tab:
         if not probands:
             st.info('No probands detected.')
         else:
             _render_patients_grouped_by_family(
-                paper_resp, families, probands, selected_patient_id, 'patient-proband'
+                paper_resp,
+                families,
+                probands,
+                selected_patient_id,
+                'patient-proband',
+                segregation_analysis,
             )
     with non_proband_tab:
         if not non_probands:
@@ -990,13 +1159,19 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
                 non_probands,
                 selected_patient_id,
                 'patient-non-proband',
+                segregation_analysis,
             )
     with affecteds_tab:
         if not affecteds:
             st.info('No affected patients detected.')
         else:
             _render_patients_grouped_by_family(
-                paper_resp, families, affecteds, selected_patient_id, 'patient-affected'
+                paper_resp,
+                families,
+                affecteds,
+                selected_patient_id,
+                'patient-affected',
+                segregation_analysis,
             )
     with unaffecteds_tab:
         if not unaffecteds:
@@ -1008,6 +1183,7 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
                 unaffecteds,
                 selected_patient_id,
                 'patient-unaffected',
+                segregation_analysis,
             )
     with pedigree_image_tab:
         if not pedigree_description:

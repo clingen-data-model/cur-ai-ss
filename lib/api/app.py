@@ -81,11 +81,18 @@ from lib.models import (
     PhenotypeDB,
     PhenotypeResp,
     PhenotypeUpdateRequest,
+    SegregationAnalysisComputedDB,
+    SegregationAnalysisResp,
+    SegregationEvidenceDB,
     TaskDB,
     VariantDB,
     VariantResp,
 )
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
+from lib.models.segregation_analysis import (
+    SegregationAnalysisComputedNestedResp,
+    SequencingMethodology,
+)
 from lib.tasks import TaskCreateRequest, TaskResp, enqueue_task
 from lib.tasks.models import TaskStatus, TaskType
 
@@ -291,6 +298,7 @@ def create_task(
         session,
         paper_id=paper_id,
         task_type=request.type,
+        family_id=request.family_id,
         patient_id=request.patient_id,
         variant_id=request.variant_id,
         phenotype_id=request.phenotype_id,
@@ -435,6 +443,82 @@ def get_pedigree(paper_id: int, session: Session = Depends(get_session)) -> Any:
         session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).one_or_none()
     )
     return pedigree
+
+
+def _segregation_analysis_to_resp(
+    family: FamilyDB,
+    evidence: SegregationEvidenceDB,
+    computed: SegregationAnalysisComputedDB | None,
+) -> SegregationAnalysisResp:
+    computed_nested = None
+    if computed:
+        computed_nested = SegregationAnalysisComputedNestedResp(
+            segregation_count=ReasoningBlock(  # type: ignore[arg-type]
+                value=computed.segregation_count,
+                **computed.segregation_count_reasoning,
+            ),
+            computed_lod_score=ReasoningBlock(  # type: ignore[arg-type]
+                value=computed.computed_lod_score,
+                **computed.computed_lod_score_reasoning,
+            ),
+            points_assigned=ReasoningBlock(  # type: ignore[arg-type]
+                value=computed.points_assigned,
+                **computed.points_assigned_reasoning,
+            ),
+            meets_minimum_criteria=ReasoningBlock(  # type: ignore[arg-type]
+                value=computed.meets_minimum_criteria,
+                **computed.meets_minimum_criteria_reasoning,
+            ),
+        )
+
+    return SegregationAnalysisResp(
+        id=computed.id if computed else evidence.id,
+        family_id=family.id,
+        extracted_lod_score=HumanEvidenceBlock(  # type: ignore[arg-type]
+            value=evidence.extracted_lod_score,
+            **(evidence.extracted_lod_score_evidence or {}),
+        ),
+        sequencing_methodology=HumanEvidenceBlock(  # type: ignore[arg-type]
+            value=SequencingMethodology(evidence.sequencing_methodology),
+            **(evidence.sequencing_methodology_evidence or {}),
+        ),
+        has_unexplainable_non_segregations=HumanEvidenceBlock(  # type: ignore[arg-type]
+            value=evidence.has_unexplainable_non_segregations,
+            **(evidence.has_unexplainable_non_segregations_evidence or {}),
+        ),
+        computed=computed_nested,
+        updated_at=computed.updated_at if computed else evidence.updated_at,
+    )
+
+
+@app.get(
+    '/papers/{paper_id}/segregation-analysis',
+    response_model=list[SegregationAnalysisResp],
+)
+def get_segregation_analysis(
+    paper_id: int, session: Session = Depends(get_session)
+) -> Any:
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    # Get all families with their evidence and computed analysis using join
+    rows = (
+        session.query(FamilyDB, SegregationEvidenceDB, SegregationAnalysisComputedDB)
+        .filter(FamilyDB.paper_id == paper_id)
+        .join(SegregationEvidenceDB, FamilyDB.id == SegregationEvidenceDB.family_id)
+        .outerjoin(
+            SegregationAnalysisComputedDB,
+            FamilyDB.id == SegregationAnalysisComputedDB.family_id,
+        )
+        .all()
+    )
+    result = [
+        _segregation_analysis_to_resp(family, evidence, computed)
+        for family, evidence, computed in rows
+    ]
+    return result
 
 
 @app.get('/papers/{paper_id}/variants', response_model=list[VariantResp])

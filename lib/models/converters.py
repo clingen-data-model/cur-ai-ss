@@ -1,6 +1,6 @@
 from lib.agents.pedigree_describer_agent import PedigreeExtractionOutput
 from lib.models import PatientDB, PedigreeDB, VariantDB
-from lib.models.evidence_block import ReasoningBlock
+from lib.models.evidence_block import HumanEvidenceBlock, ReasoningBlock
 from lib.models.family import Family, FamilyDB
 from lib.models.patient import Patient
 from lib.models.patient_variant_link import PatientVariantLink, PatientVariantLinkDB
@@ -9,6 +9,14 @@ from lib.models.phenotype import (
     HpoDB,
     HPOTerm,
     PhenotypeDB,
+)
+from lib.models.segregation_analysis import (
+    SegregationAnalysisComputedDB,
+    SegregationAnalysisComputedOutput,
+    SegregationAnalysisResp,
+    SegregationEvidenceDB,
+    SegregationEvidenceExtractionOutput,
+    SequencingMethodology,
 )
 from lib.models.variant import (
     HarmonizedVariant,
@@ -153,4 +161,37 @@ def patient_variant_link_to_db(
         inheritance_evidence=link.inheritance.model_dump(),
         testing_methods=[m.value.value for m in link.testing_methods],
         testing_methods_evidence=[m.model_dump() for m in link.testing_methods],
+    )
+
+
+def segregation_evidence_to_db(
+    family_id: int, output: SegregationEvidenceExtractionOutput
+) -> SegregationEvidenceDB:
+    """Convert SegregationEvidenceExtractionOutput to SegregationEvidenceDB."""
+    return SegregationEvidenceDB(
+        family_id=family_id,
+        extracted_lod_score=output.extracted_lod_score.value,
+        extracted_lod_score_evidence=output.extracted_lod_score.model_dump(),
+        sequencing_methodology=output.sequencing_methodology.value.value,
+        sequencing_methodology_evidence=output.sequencing_methodology.model_dump(),
+        has_unexplainable_non_segregations=output.has_unexplainable_non_segregations.value,
+        has_unexplainable_non_segregations_evidence=output.has_unexplainable_non_segregations.model_dump(),
+    )
+
+
+def segregation_analysis_computed_to_db(
+    family_id: int,
+    output: SegregationAnalysisComputedOutput,
+) -> SegregationAnalysisComputedDB:
+    """Convert SegregationAnalysisComputedOutput to SegregationAnalysisComputedDB."""
+    return SegregationAnalysisComputedDB(
+        family_id=family_id,
+        segregation_count=output.segregation_count.value,
+        segregation_count_reasoning=output.segregation_count.model_dump(),
+        computed_lod_score=output.computed_lod_score.value,
+        computed_lod_score_reasoning=output.computed_lod_score.model_dump(),
+        points_assigned=output.points_assigned.value,
+        points_assigned_reasoning=output.points_assigned.model_dump(),
+        meets_minimum_criteria=output.meets_minimum_criteria.value,
+        meets_minimum_criteria_reasoning=output.meets_minimum_criteria.model_dump(),
     )
