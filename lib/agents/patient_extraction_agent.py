@@ -90,14 +90,15 @@ Each field is an EvidenceBlock containing:
   - False: not an obligate carrier (either directly genotyped, affected, or not in obligate position).
   - Use pedigree description and explicit carrier statements in text as evidence.
 
-- relationship_to_proband (EvidenceBlock[enum: Parent, Sibling, Half-Sibling, Child, Other, Unknown]):
+- relationship_to_proband (EvidenceBlock[enum: Proband, Parent, Sibling, Half-Sibling, Child, Other, Unknown]):
+  - Proband: this patient IS the proband
   - Parent: father or mother of the proband
   - Sibling: brother or sister of the proband (full sibling)
   - Half-Sibling: shares one parent with the proband
   - Child: son or daughter of the proband
   - Other: aunt, uncle, cousin, grandparent, or other relative
   - Unknown: relationship not specified
-  - Extract from text descriptions and pedigree structure.
+  - Extract from text descriptions and pedigree structure, relative to the proband within this patient's biological family.
 
 - twin_type (EvidenceBlock[enum: Monozygotic, Dizygotic, Unknown] or null):
   - Monozygotic: identical twins (count as 1 segregation)

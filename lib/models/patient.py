@@ -41,6 +41,7 @@ class AffectedStatus(str, Enum):
 
 
 class RelationshipToProband(str, Enum):
+    Proband = 'Proband'
     Parent = 'Parent'
     Sibling = 'Sibling'
     Half_Sibling = 'Half-Sibling'
