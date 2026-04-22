@@ -39,6 +39,15 @@ from lib.models.patient_variant_link import (
     TestingMethod,
     Zygosity,
 )
+from lib.models.segregation_analysis import (
+    LODScoreType,
+    SegregationAnalysis,
+    SegregationAnalysisCreateRequest,
+    SegregationAnalysisDB,
+    SegregationAnalysisResp,
+    SegregationAnalysisUpdateRequest,
+    SequencingMethodology,
+)
 from lib.models.phenotype import (
     ExtractedPhenotype,
     HpoCandidate,

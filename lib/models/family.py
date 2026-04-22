@@ -14,6 +14,7 @@ from lib.models.paper import PaperDB
 
 if TYPE_CHECKING:
     from lib.models.patient import PatientDB
+    from lib.models.segregation_analysis import SegregationAnalysisDB
 
 
 class Family(BaseModel):
@@ -39,6 +40,9 @@ class FamilyDB(Base):
     paper: Mapped[PaperDB] = relationship('PaperDB', back_populates='families')
     patients: Mapped[list[PatientDB]] = relationship(
         'PatientDB', back_populates='family'
+    )
+    segregation_analyses: Mapped[list['SegregationAnalysisDB']] = relationship(
+        'SegregationAnalysisDB', back_populates='family', cascade='all, delete-orphan'
     )
 
     __table_args__ = (Index('ix_families_paper_id', 'paper_id'),)
