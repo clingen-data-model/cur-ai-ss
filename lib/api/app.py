@@ -324,6 +324,12 @@ def _patient_to_resp(row: PatientDB) -> PatientResp:
         race_ethnicity_evidence=row.race_ethnicity_evidence,  # type: ignore[arg-type]
         affected_status=row.affected_status,  # type: ignore[arg-type]
         affected_status_evidence=row.affected_status_evidence,  # type: ignore[arg-type]
+        is_obligate_carrier=row.is_obligate_carrier,
+        relationship_to_proband=row.relationship_to_proband,  # type: ignore[arg-type]
+        twin_type=row.twin_type,  # type: ignore[arg-type]
+        is_obligate_carrier_evidence=row.is_obligate_carrier_evidence,  # type: ignore[arg-type]
+        relationship_to_proband_evidence=row.relationship_to_proband_evidence,  # type: ignore[arg-type]
+        twin_type_evidence=row.twin_type_evidence,  # type: ignore[arg-type]
         updated_at=row.updated_at,
         family_id=row.family.id,
         family_identifier=row.family.identifier,

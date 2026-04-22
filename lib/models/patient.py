@@ -2,8 +2,9 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, List, Optional
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import (
+    Boolean,
     DateTime,
     ForeignKey,
     Index,
@@ -36,6 +37,22 @@ class ProbandStatus(str, Enum):
 class AffectedStatus(str, Enum):
     Affected = 'Affected'
     Unaffected = 'Unaffected'
+    Unknown = 'Unknown'
+
+
+class RelationshipToProband(str, Enum):
+    Proband = 'Proband'
+    Parent = 'Parent'
+    Sibling = 'Sibling'
+    Half_Sibling = 'Half-Sibling'
+    Child = 'Child'
+    Other = 'Other'
+    Unknown = 'Unknown'
+
+
+class TwinType(str, Enum):
+    Monozygotic = 'Monozygotic'
+    Dizygotic = 'Dizygotic'
     Unknown = 'Unknown'
 
 
@@ -343,6 +360,21 @@ class Patient(BaseModel):
     country_of_origin: EvidenceBlock[CountryCode]
     race_ethnicity: EvidenceBlock[RaceEthnicity]
     affected_status: EvidenceBlock[AffectedStatus]
+    is_obligate_carrier: EvidenceBlock[bool] = Field(
+        default_factory=lambda: EvidenceBlock(
+            value=False, reasoning='Not indicated as obligate carrier'
+        )
+    )
+    relationship_to_proband: EvidenceBlock[RelationshipToProband] = Field(
+        default_factory=lambda: EvidenceBlock(
+            value=RelationshipToProband.Unknown, reasoning='Relationship not specified'
+        )
+    )
+    twin_type: EvidenceBlock[TwinType | None] = Field(
+        default_factory=lambda: EvidenceBlock[TwinType | None](
+            value=None, reasoning='Twin status not specified'
+        )
+    )
 
     @model_validator(mode='after')
     def validate_age_units(self) -> 'Patient':
@@ -426,6 +458,9 @@ class PatientDB(Base):
     country_of_origin: Mapped[str] = mapped_column(String, nullable=False)
     race_ethnicity: Mapped[str] = mapped_column(String, nullable=False)
     affected_status: Mapped[str] = mapped_column(String, nullable=False)
+    is_obligate_carrier: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    relationship_to_proband: Mapped[str | None] = mapped_column(String, nullable=True)
+    twin_type: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Evidence blocks (static, immutable)
     identifier_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
@@ -437,6 +472,13 @@ class PatientDB(Base):
     country_of_origin_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     race_ethnicity_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     affected_status_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    is_obligate_carrier_evidence: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True
+    )
+    relationship_to_proband_evidence: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True
+    )
+    twin_type_evidence: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     family_assignment_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
 
     updated_at: Mapped[datetime] = mapped_column(
@@ -476,6 +518,9 @@ class PatientResp(BaseModel):
     country_of_origin: CountryCode
     race_ethnicity: RaceEthnicity
     affected_status: AffectedStatus
+    is_obligate_carrier: bool | None
+    relationship_to_proband: RelationshipToProband | None
+    twin_type: TwinType | None
     updated_at: datetime
     # Evidence blocks (from DB JSON columns)
     identifier_evidence: HumanEvidenceBlock[str]
@@ -487,6 +532,9 @@ class PatientResp(BaseModel):
     country_of_origin_evidence: HumanEvidenceBlock[CountryCode]
     race_ethnicity_evidence: HumanEvidenceBlock[RaceEthnicity]
     affected_status_evidence: HumanEvidenceBlock[AffectedStatus]
+    is_obligate_carrier_evidence: HumanEvidenceBlock[bool] | None
+    relationship_to_proband_evidence: HumanEvidenceBlock[RelationshipToProband] | None
+    twin_type_evidence: HumanEvidenceBlock[TwinType | None] | None
     family_id: int
     family_identifier: str
     family_assignment_evidence: HumanEvidenceBlock[str]
@@ -521,6 +569,9 @@ class PatientUpdateRequest(PatchModel):
     age_death_unit: str | None = None
     country_of_origin: str | None = None
     race_ethnicity: str | None = None
+    is_obligate_carrier: bool | None = None
+    relationship_to_proband: str | None = None
+    twin_type: str | None = None
     # Human edit notes for evidence blocks
     identifier_human_edit_note: str | None = None
     proband_status_human_edit_note: str | None = None
@@ -531,8 +582,6 @@ class PatientUpdateRequest(PatchModel):
     country_of_origin_human_edit_note: str | None = None
     race_ethnicity_human_edit_note: str | None = None
     affected_status_human_edit_note: str | None = None
-
-    def apply_to(self, obj: PatientDB) -> None:  # type: ignore[override]
-        """Apply scalar updates and evidence note updates to patient."""
-        super().apply_to(obj)
-        self.apply_human_edit_notes(obj)
+    is_obligate_carrier_human_edit_note: str | None = None
+    relationship_to_proband_human_edit_note: str | None = None
+    twin_type_human_edit_note: str | None = None

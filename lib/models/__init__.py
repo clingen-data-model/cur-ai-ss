@@ -48,6 +48,15 @@ from lib.models.phenotype import (
     PhenotypeResp,
     PhenotypeUpdateRequest,
 )
+from lib.models.segregation_analysis import (
+    LODScoreType,
+    SegregationAnalysis,
+    SegregationAnalysisCreateRequest,
+    SegregationAnalysisDB,
+    SegregationAnalysisResp,
+    SegregationAnalysisUpdateRequest,
+    SequencingMethodology,
+)
 from lib.models.variant import (
     EnrichedVariant,
     EnrichedVariantDB,
