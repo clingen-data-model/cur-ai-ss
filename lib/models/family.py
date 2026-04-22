@@ -62,4 +62,3 @@ class FamilyUpdateRequest(PatchModel):
 
     def apply_to(self, obj: FamilyDB) -> None:  # type: ignore[override]
         super().apply_to(obj)
-        self.apply_human_edit_notes(obj)

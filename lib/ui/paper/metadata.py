@@ -2,7 +2,8 @@ from typing import Any
 
 import streamlit as st
 
-from lib.models import PaperResp, PaperType, PaperUpdateRequest, ScoringMethod
+from lib.models import PaperResp, PaperType, PaperUpdateRequest
+from lib.models.paper import ScoringMethod
 from lib.models.evidence_block import ReasoningBlock
 from lib.ui.api import get_http_error_detail, update_paper
 from lib.ui.paper.shared import render_evidence_controls
@@ -47,13 +48,16 @@ def render_metadata_tab() -> None:
     st.divider()
     col1, col2 = st.columns([1, 3])
     with col1:
+        scoring_options = [''] + [sm.value for sm in ScoringMethod]
+        scoring_index = (
+            scoring_options.index(paper_resp.scoring_method.value)
+            if paper_resp.scoring_method
+            else 0
+        )
         selected_scoring_method = st.selectbox(
             'Scoring Method',
-            options=[''] + [sm.value for sm in ScoringMethod],
-            index=['']
-            + [sm.value for sm in ScoringMethod].index(paper_resp.scoring_method.value)
-            if paper_resp.scoring_method
-            else 0,
+            options=scoring_options,
+            index=scoring_index,
             key='scoring-method',
         )
     with col2:

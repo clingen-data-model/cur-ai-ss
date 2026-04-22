@@ -8,7 +8,9 @@ from lib.models.patient import (
     Patient,
     ProbandStatus,
     RaceEthnicity,
+    RelationshipToProband,
     SexAtBirth,
+    TwinType,
 )
 from lib.models.variant import HarmonizedVariant
 
@@ -125,10 +127,18 @@ def test_patient_to_db_maps_all_fields():
     assert row.country_of_origin == 'Japan'
     assert row.race_ethnicity == 'East Asian'
     assert row.affected_status == 'Affected'
+    # Segregation analysis fields (defaults)
+    assert row.is_obligate_carrier is False
+    assert row.relationship_to_proband == 'Unknown'
+    assert row.twin_type is None
     # Evidence blocks
     assert row.identifier_evidence['value'] == 'P1'
     assert row.identifier_evidence['quote'] == 'referred to as P1'
     assert row.identifier_evidence['reasoning'] == 'labeled P1 in table'
+    # Segregation evidence blocks (defaults)
+    assert row.is_obligate_carrier_evidence is not None
+    assert row.relationship_to_proband_evidence is not None
+    assert row.twin_type_evidence is not None
 
 
 def test_patient_to_db_handles_optional_none_values():
@@ -190,6 +200,61 @@ def test_patient_to_db_handles_optional_none_values():
     # Evidence always present
     assert row.identifier_evidence is not None
     assert row.proband_status_evidence is not None
+    # Segregation analysis fields (defaults)
+    assert row.is_obligate_carrier is False
+    assert row.relationship_to_proband == 'Unknown'
+    assert row.twin_type is None
+
+
+def test_patient_to_db_maps_segregation_analysis_fields():
+    """Test that segregation analysis fields are correctly converted."""
+    patient = Patient(
+        identifier=EvidenceBlock(value='P1', quote='patient 1', reasoning='labeled P1'),
+        proband_status=EvidenceBlock(
+            value=ProbandStatus.Proband, quote='index', reasoning='proband'
+        ),
+        sex=EvidenceBlock(value=SexAtBirth.Male, quote='male', reasoning='stated'),
+        age_diagnosis=EvidenceBlock(value=10, quote='age 10', reasoning='at diagnosis'),
+        age_diagnosis_unit=AgeUnit.Years,
+        age_report=EvidenceBlock(value=None, table_id=1, reasoning='no age'),
+        age_death=EvidenceBlock(value=None, table_id=1, reasoning='no death info'),
+        country_of_origin=EvidenceBlock(
+            value=CountryCode.Unknown, quote='unknown', reasoning='not stated'
+        ),
+        race_ethnicity=EvidenceBlock(
+            value=RaceEthnicity.Unknown, quote='unknown', reasoning='not stated'
+        ),
+        affected_status=EvidenceBlock(
+            value=AffectedStatus.Affected, quote='affected', reasoning='disease'
+        ),
+        is_obligate_carrier=EvidenceBlock(
+            value=True,
+            quote='mother of affected child',
+            reasoning='pedigree position indicates carrier',
+        ),
+        relationship_to_proband=EvidenceBlock(
+            value=RelationshipToProband.Parent,
+            quote='father',
+            reasoning='stated as parent',
+        ),
+        twin_type=EvidenceBlock(
+            value=TwinType.Monozygotic,
+            quote='identical twins',
+            reasoning='explicitly stated',
+        ),
+    )
+    row = patient_to_db('paper_seg', patient)
+
+    # Segregation fields should be set correctly
+    assert row.is_obligate_carrier is True
+    assert row.relationship_to_proband == 'Parent'
+    assert row.twin_type == 'Monozygotic'
+
+    # Evidence blocks should be serialized
+    assert row.is_obligate_carrier_evidence['value'] is True
+    assert row.is_obligate_carrier_evidence['quote'] == 'mother of affected child'
+    assert row.relationship_to_proband_evidence['value'] == 'Parent'
+    assert row.twin_type_evidence['value'] == 'Monozygotic'
 
 
 def test_harmonized_variant_to_db_with_all_fields():
