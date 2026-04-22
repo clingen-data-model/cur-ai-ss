@@ -57,10 +57,6 @@ class SegregationAnalysis(BaseModel):
             value=False, reasoning='No non-segregations identified'
         )
     )
-    analysis_notes: str = Field(
-        default='',
-        description='Curator notes about the segregation analysis and LOD score calculation',
-    )
 
 
 class SegregationAnalysisDB(Base):
@@ -74,14 +70,15 @@ class SegregationAnalysisDB(Base):
     # Extracted values (updateable)
     segregation_count: Mapped[int] = mapped_column(Integer, nullable=False)
     lod_score: Mapped[float] = mapped_column(Float, nullable=False)
-    lod_score_type: Mapped[str] = mapped_column(String, nullable=False)
+    lod_score_type: Mapped[LODScoreType] = mapped_column(
+        SQLEnum(LODScoreType), nullable=False
+    )
     sequencing_methodology: Mapped[str] = mapped_column(String, nullable=False)
     points_assigned: Mapped[float] = mapped_column(Float, nullable=False)
     meets_minimum_criteria: Mapped[bool] = mapped_column(default=False, nullable=False)
     has_unexplainable_non_segregations: Mapped[bool] = mapped_column(
         default=False, nullable=False
     )
-    analysis_notes: Mapped[str] = mapped_column(default='', nullable=False)
 
     # Evidence blocks (static, JSON)
     segregation_count_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
@@ -126,7 +123,6 @@ class SegregationAnalysisResp(BaseModel):
     meets_minimum_criteria_evidence: HumanEvidenceBlock[bool]
     has_unexplainable_non_segregations: bool
     has_unexplainable_non_segregations_evidence: HumanEvidenceBlock[bool]
-    analysis_notes: str
     updated_at: datetime
 
 
@@ -139,7 +135,6 @@ class SegregationAnalysisCreateRequest(BaseModel):
     points_assigned: float
     meets_minimum_criteria: bool = False
     has_unexplainable_non_segregations: bool = False
-    analysis_notes: str = ''
 
 
 class SegregationAnalysisUpdateRequest(PatchModel):
@@ -150,7 +145,6 @@ class SegregationAnalysisUpdateRequest(PatchModel):
     points_assigned: float | None = None
     meets_minimum_criteria: bool | None = None
     has_unexplainable_non_segregations: bool | None = None
-    analysis_notes: str | None = None
     # Human edit notes for evidence blocks
     segregation_count_human_edit_note: str | None = None
     lod_score_human_edit_note: str | None = None
