@@ -640,6 +640,7 @@ def render_patient(
             )
 
         # --- Segregation Analysis (for LOD scoring)
+        st.divider()
         with st.expander('Segregation Analysis (for LOD Scoring)', expanded=False):
             # --- Is Obligate Carrier
             col1, col2 = st.columns(2)
