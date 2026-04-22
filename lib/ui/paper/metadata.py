@@ -93,9 +93,7 @@ def render_metadata_tab() -> None:
     )
     if new_scoring_method_value != current_scoring_method_value:
         reasoning = (
-            paper_resp.scoring_method.reasoning
-            if paper_resp.scoring_method
-            else ''
+            paper_resp.scoring_method.reasoning if paper_resp.scoring_method else ''
         )
         changes['scoring_method'] = ReasoningBlock(
             value=new_scoring_method_value,

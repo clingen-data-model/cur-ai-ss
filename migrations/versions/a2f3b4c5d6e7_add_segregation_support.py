@@ -50,7 +50,11 @@ def upgrade() -> None:
         sa.Column('family_id', sa.Integer(), nullable=False),
         sa.Column('segregation_count', sa.Integer(), nullable=False),
         sa.Column('lod_score', sa.Float(), nullable=False),
-        sa.Column('lod_score_type', sa.Enum('Published', 'Estimated', name='lodscoretype'), nullable=False),
+        sa.Column(
+            'lod_score_type',
+            sa.Enum('Published', 'Estimated', name='lodscoretype'),
+            nullable=False,
+        ),
         sa.Column('sequencing_methodology', sa.String(), nullable=False),
         sa.Column('points_assigned', sa.Float(), nullable=False),
         sa.Column('meets_minimum_criteria', sa.Boolean(), nullable=False),
