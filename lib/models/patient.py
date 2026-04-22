@@ -370,7 +370,9 @@ class Patient(BaseModel):
         )
     )
     twin_type: EvidenceBlock[TwinType | None] = Field(
-        default_factory=lambda: EvidenceBlock[TwinType | None](value=None, reasoning='Twin status not specified')
+        default_factory=lambda: EvidenceBlock[TwinType | None](
+            value=None, reasoning='Twin status not specified'
+        )
     )
 
     @model_validator(mode='after')

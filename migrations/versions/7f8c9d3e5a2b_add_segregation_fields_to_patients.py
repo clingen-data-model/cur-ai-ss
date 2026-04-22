@@ -26,18 +26,14 @@ def upgrade() -> None:
         batch_op.add_column(
             sa.Column('relationship_to_proband', sa.String(), nullable=True)
         )
-        batch_op.add_column(
-            sa.Column('twin_type', sa.String(), nullable=True)
-        )
+        batch_op.add_column(sa.Column('twin_type', sa.String(), nullable=True))
         batch_op.add_column(
             sa.Column('is_obligate_carrier_evidence', sa.JSON(), nullable=True)
         )
         batch_op.add_column(
             sa.Column('relationship_to_proband_evidence', sa.JSON(), nullable=True)
         )
-        batch_op.add_column(
-            sa.Column('twin_type_evidence', sa.JSON(), nullable=True)
-        )
+        batch_op.add_column(sa.Column('twin_type_evidence', sa.JSON(), nullable=True))
 
 
 def downgrade() -> None:

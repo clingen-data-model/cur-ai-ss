@@ -3,8 +3,8 @@ from typing import Any
 import streamlit as st
 
 from lib.models import PaperResp, PaperType, PaperUpdateRequest
-from lib.models.paper import ScoringMethod
 from lib.models.evidence_block import ReasoningBlock
+from lib.models.paper import ScoringMethod
 from lib.ui.api import get_http_error_detail, update_paper
 from lib.ui.paper.shared import render_evidence_controls
 

@@ -77,9 +77,7 @@ class SegregationAnalysisDB(Base):
     lod_score_type: Mapped[str] = mapped_column(String, nullable=False)
     sequencing_methodology: Mapped[str] = mapped_column(String, nullable=False)
     points_assigned: Mapped[float] = mapped_column(Float, nullable=False)
-    meets_minimum_criteria: Mapped[bool] = mapped_column(
-        default=False, nullable=False
-    )
+    meets_minimum_criteria: Mapped[bool] = mapped_column(default=False, nullable=False)
     has_unexplainable_non_segregations: Mapped[bool] = mapped_column(
         default=False, nullable=False
     )
@@ -89,13 +87,9 @@ class SegregationAnalysisDB(Base):
     segregation_count_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     lod_score_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     lod_score_type_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
-    sequencing_methodology_evidence: Mapped[dict] = mapped_column(
-        JSON, nullable=False
-    )
+    sequencing_methodology_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     points_assigned_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
-    meets_minimum_criteria_evidence: Mapped[dict] = mapped_column(
-        JSON, nullable=False
-    )
+    meets_minimum_criteria_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     has_unexplainable_non_segregations_evidence: Mapped[dict] = mapped_column(
         JSON, nullable=False
     )
