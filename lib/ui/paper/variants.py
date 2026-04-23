@@ -1,18 +1,48 @@
-import json
 import re
+import time
 
 import pandas as pd
 import streamlit as st
 
-from lib.models import PaperResp, VariantResp
+from lib.models import PaperResp, VariantResp, VariantUpdateRequest
 from lib.models.variant import VariantType
 from lib.tasks import TaskType, is_task_completed
-from lib.ui.api import get_patient_variant_links, get_variants
+from lib.ui.api import get_patient_variant_links, get_variants, update_variant
 from lib.ui.paper.shared import (
+    HUMAN_EDIT_NOTE_DEFAULT,
     get_clinvar_url,
     get_gnomad_url,
     render_evidence_controls,
 )
+
+
+def _note_changes(
+    field_name: str,
+    new_value: object,
+    current_value: object,
+    edited_note: str | None,
+    current_note: str | None,
+) -> dict[str, object]:
+    """Build the change dict entries for a value field and its human_edit_note.
+
+    Behavior:
+    - If the value changed: emit the value change. If the curator cleared the
+      note in the same interaction (or none existed), seed HUMAN_EDIT_NOTE_DEFAULT
+      so every value edit leaves at least the default audit mark.
+    - If only the note changed (including a clear to None): emit the note change.
+    - Empty string from a text area is normalized to None so clears are persisted.
+    """
+    out: dict[str, object] = {}
+    value_changed = new_value != current_value
+    normalized_note = edited_note or None
+    if value_changed:
+        out[field_name] = new_value
+        desired_note = normalized_note or HUMAN_EDIT_NOTE_DEFAULT
+        if desired_note != current_note:
+            out[f'{field_name}_human_edit_note'] = desired_note
+    elif normalized_note != current_note:
+        out[f'{field_name}_human_edit_note'] = normalized_note
+    return out
 
 
 def _is_pathogenic(pathogenicity: str | None) -> bool:
@@ -126,34 +156,51 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                 # ======================================================
                 # Harmonized Variant (PRIMARY DISPLAY)
                 # ======================================================
+                # Inputs for harmonized fields are collected here so they can be
+                # diffed against the current values in the change-detection block below.
+                harmonized_inputs: dict[str, str] = {}
                 with st.container():
                     st.subheader('Harmonized Variant Info')
                     if harmonized_variant and harmonized_variant.value:
+                        hv = harmonized_variant.value
                         col1, col2, col3 = st.columns([1, 1, 2])
-                        gnomad_coords = (
-                            f'[{harmonized_variant.value.gnomad_style_coordinates}]({get_gnomad_url(harmonized_variant.value.gnomad_style_coordinates)})'
-                            if harmonized_variant.value.gnomad_style_coordinates
-                            else 'N/A'
-                        )
                         with col1:
-                            st.markdown(
-                                f'**gnomAD-style coordinates:** {gnomad_coords}'
+                            harmonized_inputs['gnomad_style_coordinates'] = (
+                                st.text_input(
+                                    'gnomAD-style coordinates',
+                                    value=hv.gnomad_style_coordinates or '',
+                                    key=f'{key_prefix}-harm-gnomad',
+                                )
                             )
-                            st.markdown(
-                                f'**rsID:** {harmonized_variant.value.rsid or "N/A"}'
+                            if hv.gnomad_style_coordinates:
+                                st.caption(
+                                    f'[View in gnomAD]({get_gnomad_url(hv.gnomad_style_coordinates)})'
+                                )
+                            harmonized_inputs['rsid'] = st.text_input(
+                                'rsID',
+                                value=hv.rsid or '',
+                                key=f'{key_prefix}-harm-rsid',
                             )
-                            st.markdown(
-                                f'**CAID:** {harmonized_variant.value.caid or "N/A"}'
+                            harmonized_inputs['caid'] = st.text_input(
+                                'CAID',
+                                value=hv.caid or '',
+                                key=f'{key_prefix}-harm-caid',
                             )
                         with col2:
-                            col2.markdown(
-                                f'**HGVS c.:** {harmonized_variant.value.hgvs_c or variant.hgvs_c or "N/A"}'
+                            harmonized_inputs['hgvs_c'] = st.text_input(
+                                'HGVS c.',
+                                value=hv.hgvs_c or '',
+                                key=f'{key_prefix}-harm-hgvs-c',
                             )
-                            col2.markdown(
-                                f'**HGVS p.:** {harmonized_variant.value.hgvs_p or variant.hgvs_p or "N/A"}'
+                            harmonized_inputs['hgvs_p'] = st.text_input(
+                                'HGVS p.',
+                                value=hv.hgvs_p or '',
+                                key=f'{key_prefix}-harm-hgvs-p',
                             )
-                            col2.markdown(
-                                f'**HGVS g.:** {harmonized_variant.value.hgvs_g or variant.hgvs_g or "N/A"}'
+                            harmonized_inputs['hgvs_g'] = st.text_input(
+                                'HGVS g.',
+                                value=hv.hgvs_g or '',
+                                key=f'{key_prefix}-harm-hgvs-g',
                             )
                         with col3:
                             render_evidence_controls(
@@ -179,7 +226,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                 # ======================================================
                 col1, col2 = st.columns(2)
                 with col1:
-                    selected_value = VariantType(
+                    variant_type_val = VariantType(
                         st.selectbox(
                             'Variant Type',
                             [vt.value for vt in VariantType],
@@ -194,12 +241,13 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
 
                 with col2:
                     st.space()
-                    render_evidence_controls(
+                    vtype_note = render_evidence_controls(
                         paper_resp.id,
                         block=variant.variant_type_evidence,
                         label='📋 Evidence & Reasoning',
                         color_key=f'{key_prefix}-vtype-color',
                         button_key_prefix=f'{key_prefix}-vtype',
+                        human_edit_note_key=f'{key_prefix}-vtype-note',
                     )
 
                 # ======================================================
@@ -207,7 +255,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                 # ======================================================
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.checkbox(
+                    functional_evidence_val = st.checkbox(
                         'Functional Evidence Present',
                         value=variant.functional_evidence,
                         width='stretch',
@@ -215,12 +263,13 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                     )
                 with col2:
                     st.space()
-                    render_evidence_controls(
+                    func_ev_note = render_evidence_controls(
                         paper_resp.id,
                         block=variant.functional_evidence_evidence,
                         label='📋 Evidence & Reasoning',
                         color_key=f'{key_prefix}-func-ev-color',
                         button_key_prefix=f'{key_prefix}-func-ev',
+                        human_edit_note_key=f'{key_prefix}-func-ev-note',
                     )
 
                 # ======================================================
@@ -228,7 +277,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                 # ======================================================
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.checkbox(
+                    main_focus_val = st.checkbox(
                         'Main Focus of Study',
                         value=variant.main_focus,
                         width='stretch',
@@ -236,13 +285,66 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                     )
                 with col2:
                     st.space()
-                    render_evidence_controls(
+                    main_focus_note = render_evidence_controls(
                         paper_resp.id,
                         block=variant.main_focus_evidence,
                         label='📋 Evidence & Reasoning',
                         color_key=f'{key_prefix}-main-focus-color',
                         button_key_prefix=f'{key_prefix}-main-focus',
+                        human_edit_note_key=f'{key_prefix}-main-focus-note',
                     )
+
+                # ======================================================
+                # Save edits (change detection → PATCH)
+                # ======================================================
+                changes: dict = {}
+
+                # Extracted fields
+                changes.update(
+                    _note_changes(
+                        'variant_type',
+                        variant_type_val.value,
+                        variant.variant_type,
+                        vtype_note,
+                        variant.variant_type_evidence.human_edit_note,
+                    )
+                )
+                changes.update(
+                    _note_changes(
+                        'functional_evidence',
+                        functional_evidence_val,
+                        variant.functional_evidence,
+                        func_ev_note,
+                        variant.functional_evidence_evidence.human_edit_note,
+                    )
+                )
+                changes.update(
+                    _note_changes(
+                        'main_focus',
+                        main_focus_val,
+                        variant.main_focus,
+                        main_focus_note,
+                        variant.main_focus_evidence.human_edit_note,
+                    )
+                )
+
+                # Harmonized fields (no per-field evidence, no human_edit_note).
+                if harmonized_variant and harmonized_variant.value:
+                    hv = harmonized_variant.value
+                    for field, raw_val in harmonized_inputs.items():
+                        new_val = raw_val or None
+                        if new_val != getattr(hv, field):
+                            changes[f'harmonized_{field}'] = new_val
+
+                if changes:
+                    update_request = VariantUpdateRequest(**changes)
+                    try:
+                        update_variant(paper_resp.id, variant.id, update_request)
+                        st.toast('Saved!', icon=':material/check:')
+                        time.sleep(0.5)
+                        st.rerun()
+                    except Exception as e:
+                        st.toast(f'Failed to save: {str(e)}', icon='❌')
 
                 #
                 # Annotations
