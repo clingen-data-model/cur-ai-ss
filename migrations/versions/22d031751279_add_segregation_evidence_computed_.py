@@ -119,6 +119,10 @@ def upgrade() -> None:
             'fk_tasks_family_id', 'families', ['family_id'], ['id'], ondelete='CASCADE'
         )
 
+    with op.batch_alter_table('papers', schema=None) as batch_op:
+        batch_op.drop_column('scoring_method')
+        batch_op.drop_column('scoring_method_evidence')
+
     # ### end Alembic commands ###
 
 
@@ -197,4 +201,11 @@ def downgrade() -> None:
         batch_op.drop_index('ix_segregation_analysis_computed_family_id')
 
     op.drop_table('segregation_analysis_computed')
+
+    with op.batch_alter_table('papers', schema=None) as batch_op:
+        batch_op.add_column(sa.Column('scoring_method', sa.JSON(), nullable=True))
+        batch_op.add_column(
+            sa.Column('scoring_method_evidence', sa.JSON(), nullable=True)
+        )
+
     # ### end Alembic commands ###

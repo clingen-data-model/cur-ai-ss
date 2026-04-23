@@ -62,7 +62,6 @@ from lib.models.converters import (
     variant_to_db,
 )
 from lib.models.evidence_block import ReasoningBlock
-from lib.models.paper import ScoringMethod
 from lib.models.phenotype import HPOTerm
 from lib.models.variant import HarmonizedVariant, Variant
 from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
@@ -374,9 +373,6 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
             # Build input for agent
             family_info = {
                 'family_identifier': family.identifier,
-                'scoring_method': paper.scoring_method.get('value')
-                if paper.scoring_method
-                else None,
                 'patients': [
                     {
                         'id': p.id,
@@ -392,6 +388,7 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
                         'patient_id': vl.patient_id,
                         'variant_id': vl.variant_id,
                         'zygosity': vl.zygosity,
+                        'inheritance': vl.inheritance,
                     }
                     for vl in variant_links
                 ],

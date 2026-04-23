@@ -1,16 +1,41 @@
 """Agent for computing segregation analysis metrics per ClinGen SOP."""
 
-import json
 import math
+from collections import Counter
 
 from agents import Agent, function_tool
 
 from lib.core.environment import env
-from lib.models.paper import ScoringMethod
 from lib.models.segregation_analysis import (
     SegregationAnalysisComputedOutput,
     SequencingMethodology,
 )
+
+_DOMINANT_INHERITANCE_PATTERNS = {'Dominant', 'Semi-dominant', 'X-linked'}
+
+
+@function_tool
+def compute_scoring_method(inheritance_values: list[str]) -> dict:
+    """
+    Derive the ClinGen scoring method from the most-frequent inheritance pattern
+    across all patient-variant links in the family.
+    Dominant / Semi-dominant / X-linked → 'Dominant'; all others → 'Recessive'.
+    """
+    if not inheritance_values:
+        return {
+            'scoring_method': None,
+            'reasoning': 'No variant links found; cannot determine scoring method',
+        }
+
+    counts: Counter[str] = Counter(inheritance_values)
+    most_common, count = counts.most_common(1)[0]
+    method = 'Dominant' if most_common in _DOMINANT_INHERITANCE_PATTERNS else 'Recessive'
+    return {
+        'scoring_method': method,
+        'reasoning': (
+            f'Most frequent inheritance: {most_common} ({count} of {len(inheritance_values)} links) → {method} scoring'
+        ),
+    }
 
 
 @function_tool
@@ -18,7 +43,7 @@ def calculate_lod_score(
     segregation_count: int,
     affected_count: int,
     unaffected_count: int,
-    scoring_method: ScoringMethod,
+    scoring_method: str,
     extracted_lod_score: float | None,
 ) -> dict:
     """Calculate LOD score (tool for agent to call)."""
@@ -28,7 +53,7 @@ def calculate_lod_score(
             'reasoning': f'Using published LOD score: {extracted_lod_score}',
         }
 
-    if scoring_method == ScoringMethod.Dominant:
+    if scoring_method == 'Dominant':
         denominator = (0.5) ** segregation_count
         lod_score = math.log10(1 / denominator) if denominator > 0 else 0.0
         return {
@@ -36,7 +61,7 @@ def calculate_lod_score(
             'reasoning': f'Dominant: Z = log10(1/(0.5)^{segregation_count}) = {round(lod_score, 2)}',
         }
 
-    elif scoring_method == ScoringMethod.Recessive:
+    elif scoring_method == 'Recessive':
         denominator = ((0.25) ** (affected_count - 1)) * ((0.75) ** unaffected_count)
         lod_score = math.log10(1 / denominator) if denominator > 0 else 0.0
         return {
@@ -51,7 +76,7 @@ def calculate_lod_score(
 def check_minimum_criteria(
     segregation_count: int,
     affected_count: int,
-    scoring_method: ScoringMethod,
+    scoring_method: str,
     has_unexplainable_non_segregations: bool,
 ) -> dict:
     """Check if family meets ClinGen minimum criteria (tool for agent to call)."""
@@ -60,14 +85,16 @@ def check_minimum_criteria(
     if has_unexplainable_non_segregations:
         failed.append('Unexplainable non-segregations present')
 
-    if scoring_method == ScoringMethod.Dominant:
+    if scoring_method == 'Dominant':
         if segregation_count < 4:
             failed.append(
                 f'Dominant requires 4+ segregations (has {segregation_count})'
             )
-    elif scoring_method == ScoringMethod.Recessive:
+    elif scoring_method == 'Recessive':
         if affected_count < 3:
             failed.append(f'Recessive requires 3+ affected (has {affected_count})')
+    else:
+        raise ValueError(f'Received unexpected scoring method {scoring_method}')
 
     meets = len(failed) == 0
     return {
@@ -131,18 +158,23 @@ System: You are an expert in ClinGen segregation analysis following the simplifi
 Task: Compute segregation analysis metrics for a family using ClinGen LOD score methodology.
 
 You will receive:
-1. Scoring method (Dominant or Recessive) - extracted from the paper
-2. Family structure (family identifier, patients with their affected/proband status)
-3. Patient-variant links (which patients carry the variant and with what zygosity)
-4. Extracted segregation evidence (published LOD score if available, sequencing methodology, non-segregation flag)
-5. Paper text for additional context
+1. Family structure (family identifier, patients with their affected/proband status)
+2. Patient-variant links (which patients carry the variant, with zygosity and inheritance pattern)
+3. Extracted segregation evidence (published LOD score if available, sequencing methodology, non-segregation flag)
+4. Paper text for additional context
 
-You have access to three tools:
+You have access to four tools:
+- compute_scoring_method: Derives the ClinGen scoring method (Dominant/Recessive) from the inheritance values in the patient-variant links
 - check_minimum_criteria: Evaluates if family meets ClinGen size/segregation requirements
 - calculate_lod_score: Computes LOD using ClinGen formulas (or uses published LOD if available)
 - assign_points: Assigns points based on LOD score and sequencing methodology per Figure 6 matrix
 
 Your task:
+
+0. **Determine scoring method** (call compute_scoring_method tool first):
+   - Collect all `inheritance` values from the patient-variant links
+   - Pass them to `compute_scoring_method` to get the scoring method (Dominant or Recessive) and reasoning
+   - Use this scoring method for all subsequent steps
 
 1. **Extract segregation count**: Count affected individuals (excluding proband) + obligate carriers, accounting for twins
 
@@ -211,6 +243,7 @@ agent = Agent(
     model=env.OPENAI_API_DEPLOYMENT,
     output_type=SegregationAnalysisComputedOutput,
     tools=[
+        compute_scoring_method,
         check_minimum_criteria,
         calculate_lod_score,
         assign_points,
