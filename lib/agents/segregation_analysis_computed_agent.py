@@ -29,7 +29,9 @@ def compute_scoring_method(inheritance_values: list[str]) -> dict:
 
     counts: Counter[str] = Counter(inheritance_values)
     most_common, count = counts.most_common(1)[0]
-    method = 'Dominant' if most_common in _DOMINANT_INHERITANCE_PATTERNS else 'Recessive'
+    method = (
+        'Dominant' if most_common in _DOMINANT_INHERITANCE_PATTERNS else 'Recessive'
+    )
     return {
         'scoring_method': method,
         'reasoning': (
