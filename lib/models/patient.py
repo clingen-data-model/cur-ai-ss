@@ -349,6 +349,7 @@ class CountryCode(str, Enum):
 
 class Patient(BaseModel):
     identifier: EvidenceBlock[str]
+    family_identifier: EvidenceBlock[str]
     proband_status: EvidenceBlock[ProbandStatus]
     sex: EvidenceBlock[SexAtBirth]
     age_diagnosis: EvidenceBlock[int | None]

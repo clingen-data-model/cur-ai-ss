@@ -229,15 +229,13 @@ async def handle_patient_extraction(task_id: int) -> None:
         # Insert patients with family assignments
         for patient_info in result.final_output.patients:
             db_patient = patient_to_db(task.paper_id, patient_info)
-            # Find which family this patient belongs to
-            for entry in result.final_output.families:
-                for id_block in entry.patient_identifiers:
-                    if id_block.value == patient_info.identifier.value:
-                        db_patient.family_id = family_entries_by_id[
-                            entry.family.identifier.value
-                        ]
-                        db_patient.family_assignment_evidence = id_block.model_dump()
-                        break
+            # Use family_identifier from patient to find correct family
+            family_id_value = patient_info.family_identifier.value
+            if family_id_value in family_entries_by_id:
+                db_patient.family_id = family_entries_by_id[family_id_value]
+                db_patient.family_assignment_evidence = (
+                    patient_info.family_identifier.model_dump()
+                )
             session.add(db_patient)
 
 

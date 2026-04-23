@@ -44,10 +44,11 @@ def patient_to_db(paper_id: int, patient: Patient) -> PatientDB:
     }
 
     # Extract values and evidence blocks for evidence block fields
+    # Skip family_identifier (it's handled separately in handlers.py)
     evidence_fields = [
         name
         for name in Patient.model_fields
-        if name not in {'age_diagnosis_unit', 'age_report_unit', 'age_death_unit'}
+        if name not in {'age_diagnosis_unit', 'age_report_unit', 'age_death_unit', 'family_identifier'}
     ]
     for field_name in evidence_fields:
         field_value = getattr(patient, field_name)

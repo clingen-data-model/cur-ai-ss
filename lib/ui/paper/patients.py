@@ -329,8 +329,8 @@ def _render_family_group(
                     paper_resp.id,
                     block=seg_data.extracted_lod_score,
                     label='Extracted LOD Score Evidence',
-                    color_key=f'{tab_key}-lod-score-color-evidence',
-                    button_key_prefix=f'{tab_key}-lod-score-evidence',
+                    color_key=f'{tab_key}-fam-{family.id}-lod-score-color-evidence',
+                    button_key_prefix=f'{tab_key}-fam-{family.id}-lod-score-evidence',
                 )
 
             # Sequencing Methodology
@@ -340,7 +340,7 @@ def _render_family_group(
                     'Sequencing Methodology',
                     seg_data.sequencing_methodology.value.value,
                     disabled=True,
-                    key=f'{tab_key}-sequencing-methodology',
+                    key=f'{tab_key}-fam-{family.id}-sequencing-methodology',
                 )
             with col2:
                 st.space()
@@ -348,8 +348,8 @@ def _render_family_group(
                     paper_resp.id,
                     block=seg_data.sequencing_methodology,
                     label='Sequencing Methodology Evidence',
-                    color_key=f'{tab_key}-seq-method-color-evidence',
-                    button_key_prefix=f'{tab_key}-seq-method-evidence',
+                    color_key=f'{tab_key}-fam-{family.id}-seq-method-color-evidence',
+                    button_key_prefix=f'{tab_key}-fam-{family.id}-seq-method-evidence',
                 )
 
             # Unexplainable Non-segregations
@@ -364,7 +364,7 @@ def _render_family_group(
                     'Unexplainable Non-segregations',
                     non_seg_status,
                     disabled=True,
-                    key=f'{tab_key}-non-segregations',
+                    key=f'{tab_key}-fam-{family.id}-non-segregations',
                 )
             with col2:
                 st.space()
@@ -372,8 +372,8 @@ def _render_family_group(
                     paper_resp.id,
                     block=seg_data.has_unexplainable_non_segregations,
                     label='Non-segregations Evidence',
-                    color_key=f'{tab_key}-nonseg-color-evidence',
-                    button_key_prefix=f'{tab_key}-nonseg-evidence',
+                    color_key=f'{tab_key}-fam-{family.id}-nonseg-color-evidence',
+                    button_key_prefix=f'{tab_key}-fam-{family.id}-nonseg-evidence',
                 )
 
             if seg_data.computed and seg_data.computed.segregation_count.value > 0:
@@ -389,7 +389,7 @@ def _render_family_group(
                         'Meets Minimum Criteria',
                         criteria_status,
                         disabled=True,
-                        key=f'{tab_key}-criteria-status',
+                        key=f'{tab_key}-fam-{family.id}-criteria-status',
                     )
                 with col2:
                     st.space()
@@ -397,8 +397,8 @@ def _render_family_group(
                         paper_resp.id,
                         block=seg_data.computed.meets_minimum_criteria,
                         label='Meets Minimum Criteria Reasoning',
-                        color_key=f'{tab_key}-criteria-status-color',
-                        button_key_prefix=f'{tab_key}-criteria-status-btn',
+                        color_key=f'{tab_key}-fam-{family.id}-criteria-status-color',
+                        button_key_prefix=f'{tab_key}-fam-{family.id}-criteria-status-btn',
                     )
 
                 # Segregation Count
@@ -408,7 +408,7 @@ def _render_family_group(
                         'Segregation Count',
                         str(seg_data.computed.segregation_count.value),
                         disabled=True,
-                        key=f'{tab_key}-segregation-count',
+                        key=f'{tab_key}-fam-{family.id}-segregation-count',
                     )
                 with col2:
                     st.space()
@@ -416,8 +416,8 @@ def _render_family_group(
                         paper_resp.id,
                         block=seg_data.computed.segregation_count,
                         label='Segregation Count Reasoning',
-                        color_key=f'{tab_key}-segregation-count-color',
-                        button_key_prefix=f'{tab_key}-segregation-count-btn',
+                        color_key=f'{tab_key}-fam-{family.id}-segregation-count-color',
+                        button_key_prefix=f'{tab_key}-fam-{family.id}-segregation-count-btn',
                     )
 
                 # Computed LOD Score
@@ -427,7 +427,7 @@ def _render_family_group(
                         'Computed LOD Score',
                         f'{seg_data.computed.computed_lod_score.value:.2f}',
                         disabled=True,
-                        key=f'{tab_key}-computed-lod-score',
+                        key=f'{tab_key}-fam-{family.id}-computed-lod-score',
                     )
                 with col2:
                     st.space()
@@ -435,8 +435,8 @@ def _render_family_group(
                         paper_resp.id,
                         block=seg_data.computed.computed_lod_score,
                         label='Computed LOD Score Reasoning',
-                        color_key=f'{tab_key}-computed-lod-score-color',
-                        button_key_prefix=f'{tab_key}-computed-lod-score-btn',
+                        color_key=f'{tab_key}-fam-{family.id}-computed-lod-score-color',
+                        button_key_prefix=f'{tab_key}-fam-{family.id}-computed-lod-score-btn',
                     )
 
                 # Points Assigned
@@ -446,7 +446,7 @@ def _render_family_group(
                         'Points Assigned',
                         f'{seg_data.computed.points_assigned.value:.1f}',
                         disabled=True,
-                        key=f'{tab_key}-points-assigned',
+                        key=f'{tab_key}-fam-{family.id}-points-assigned',
                     )
                 with col2:
                     st.space()
@@ -454,8 +454,8 @@ def _render_family_group(
                         paper_resp.id,
                         block=seg_data.computed.points_assigned,
                         label='Points Assigned Reasoning',
-                        color_key=f'{tab_key}-points-assigned-color',
-                        button_key_prefix=f'{tab_key}-points-assigned-btn',
+                        color_key=f'{tab_key}-fam-{family.id}-points-assigned-color',
+                        button_key_prefix=f'{tab_key}-fam-{family.id}-points-assigned-btn',
                     )
 
 
