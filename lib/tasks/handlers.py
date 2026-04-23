@@ -435,13 +435,16 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
 
 async def handle_variant_harmonization(task_id: int) -> None:
     """Harmonize variants to standard genomic coordinates."""
-    conv_id = None
+    stored_conversation_ids: dict[str, str] = {}
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
             return
 
-        conv_id = await get_or_create_conversation(task.conversation_ids.get('default'))
+        stored_conversation_ids = {
+            str(k): v for k, v in task.conversation_ids.items() if str(k).isdigit()
+        }
+
         paper = session.get(PaperDB, task.paper_id)
         if not paper:
             return
@@ -466,11 +469,16 @@ async def handle_variant_harmonization(task_id: int) -> None:
         ]
 
     sem = asyncio.Semaphore(2)
+    conversation_ids: dict[int, str] = {}
 
     async def harmonize_single_variant(
         variant_id: int, variant_input: dict
     ) -> tuple[int, ReasoningBlock[HarmonizedVariant]]:
         async with sem:
+            conv_id = await get_or_create_conversation(
+                stored_conversation_ids.get(str(variant_id))
+            )
+            conversation_ids[variant_id] = conv_id
             result = await Runner.run(
                 variant_harmonization_agent,
                 f'Variant JSON:\n{json.dumps(variant_input, indent=2)}',
@@ -492,7 +500,7 @@ async def handle_variant_harmonization(task_id: int) -> None:
         if not task:
             return
 
-        task.conversation_ids['default'] = conv_id
+        task.conversation_ids.update(conversation_ids)
         # Idempotent: delete-then-insert
         delete_query = session.query(HarmonizedVariantDB).filter(
             HarmonizedVariantDB.variant_id.in_(
