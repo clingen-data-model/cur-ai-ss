@@ -7,6 +7,7 @@ from google.auth.transport.requests import Request
 from google.cloud import storage
 
 from lib.core.environment import env
+from lib.misc.pdf.paths import pdf_image_path
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,8 @@ def upload_and_sign_image(paper_id: int, image_id: int, image_path: Path) -> str
         Signed URL for the uploaded image, or a local API URL if GCS upload is disabled
     """
     if env.DISABLE_GCS_UPLOAD:
-        local_url = f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/images/{image_id}.png'
+        stored_path = pdf_image_path(paper_id, image_id)
+        local_url = f'{env.PROTOCOL}{env.API_ENDPOINT}{stored_path}'
         logger.info(f'GCS upload disabled, using local API URL: {local_url}')
         return local_url
 
