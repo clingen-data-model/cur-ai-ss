@@ -48,7 +48,13 @@ def patient_to_db(paper_id: int, patient: Patient) -> PatientDB:
     evidence_fields = [
         name
         for name in Patient.model_fields
-        if name not in {'age_diagnosis_unit', 'age_report_unit', 'age_death_unit', 'family_identifier'}
+        if name
+        not in {
+            'age_diagnosis_unit',
+            'age_report_unit',
+            'age_death_unit',
+            'family_identifier',
+        }
     ]
     for field_name in evidence_fields:
         field_value = getattr(patient, field_name)

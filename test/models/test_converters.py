@@ -220,7 +220,9 @@ def test_patient_to_db_maps_segregation_analysis_fields():
     """Test that segregation analysis fields are correctly converted."""
     patient = Patient(
         identifier=EvidenceBlock(value='P1', quote='patient 1', reasoning='labeled P1'),
-        family_identifier=EvidenceBlock(value='FamilyA', quote='Family A', reasoning='belongs to Family A'),
+        family_identifier=EvidenceBlock(
+            value='FamilyA', quote='Family A', reasoning='belongs to Family A'
+        ),
         proband_status=EvidenceBlock(
             value=ProbandStatus.Proband, quote='index', reasoning='proband'
         ),

@@ -456,7 +456,9 @@ def _segregation_analysis_to_resp(
             segregation_count=ReasoningBlock(**computed.segregation_count_reasoning),  # type: ignore[arg-type]
             computed_lod_score=ReasoningBlock(**computed.computed_lod_score_reasoning),  # type: ignore[arg-type]
             points_assigned=ReasoningBlock(**computed.points_assigned_reasoning),  # type: ignore[arg-type]
-            meets_minimum_criteria=ReasoningBlock(**computed.meets_minimum_criteria_reasoning),  # type: ignore[arg-type]
+            meets_minimum_criteria=ReasoningBlock(
+                **computed.meets_minimum_criteria_reasoning
+            ),  # type: ignore[arg-type]
         )
 
     return SegregationAnalysisResp(
