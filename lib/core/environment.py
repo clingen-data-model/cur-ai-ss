@@ -25,6 +25,7 @@ class Env(BaseSettings):
     # GCS configuration
     GCS_BUCKET_NAME: str = 'caa-static-resources'
     GCS_SIGNED_URL_EXPIRY_HOURS: int = 12
+    DISABLE_GCS_UPLOAD: bool = False
 
     # Required fields
     OPENAI_API_DEPLOYMENT: str = 'gpt-5-mini'
