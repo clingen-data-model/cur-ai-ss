@@ -16,6 +16,7 @@ def enqueue_task(
     session: Session,
     paper_id: int,
     task_type: TaskType,
+    family_id: int | None = None,
     patient_id: int | None = None,
     variant_id: int | None = None,
     phenotype_id: int | None = None,
@@ -32,6 +33,7 @@ def enqueue_task(
         .filter(
             TaskDB.type == task_type,
             TaskDB.paper_id == paper_id,
+            TaskDB.family_id == family_id,
             TaskDB.patient_id == patient_id,
             TaskDB.variant_id == variant_id,
             TaskDB.phenotype_id == phenotype_id,
@@ -52,6 +54,7 @@ def enqueue_task(
         new_task = TaskDB(
             type=task_type,
             paper_id=paper_id,
+            family_id=family_id,
             patient_id=patient_id,
             variant_id=variant_id,
             phenotype_id=phenotype_id,
@@ -67,8 +70,8 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
     """Create successor tasks when a task completes.
 
     For each successor task type, checks that ALL predecessor tasks are
-    completed before enqueueing. Enqueues with the same paper_id, patient_id,
-    variant_id, and phenotype_id.
+    completed before enqueueing. Enqueues with the same paper_id, family_id,
+    patient_id, variant_id, and phenotype_id.
     """
     successors = TASK_SUCCESSORS.get(task.type, [])
 
@@ -83,6 +86,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 .filter(
                     TaskDB.paper_id == task.paper_id,
                     TaskDB.type == pred_type,
+                    TaskDB.family_id == task.family_id,
                     TaskDB.patient_id == task.patient_id,
                     TaskDB.variant_id == task.variant_id,
                     TaskDB.phenotype_id == task.phenotype_id,
@@ -99,6 +103,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 session,
                 paper_id=task.paper_id,
                 task_type=successor_type,
+                family_id=task.family_id,
                 patient_id=task.patient_id,
                 variant_id=task.variant_id,
                 phenotype_id=task.phenotype_id,

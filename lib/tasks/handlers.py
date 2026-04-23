@@ -18,6 +18,12 @@ from lib.agents.patient_variant_linking_agent import (
     agent as patient_variant_linking_agent,
 )
 from lib.agents.pedigree_describer_agent import agent as pedigree_describer_agent
+from lib.agents.segregation_analysis_computed_agent import (
+    agent as segregation_analysis_computed_agent,
+)
+from lib.agents.segregation_evidence_extractor import (
+    agent as segregation_evidence_extractor,
+)
 from lib.agents.variant_enrichment_agent import enrich_variants_batch
 from lib.agents.variant_extraction_agent import (
     agent as variant_extraction_agent,
@@ -38,6 +44,8 @@ from lib.models import (
     PatientVariantLinkDB,
     PedigreeDB,
     PhenotypeDB,
+    SegregationAnalysisComputedDB,
+    SegregationEvidenceDB,
     TaskDB,
     VariantDB,
 )
@@ -49,6 +57,8 @@ from lib.models.converters import (
     patient_variant_link_to_db,
     pedigree_to_db,
     phenotype_to_db,
+    segregation_analysis_computed_to_db,
+    segregation_evidence_to_db,
     variant_to_db,
 )
 from lib.models.evidence_block import ReasoningBlock
@@ -218,16 +228,204 @@ async def handle_patient_extraction(task_id: int) -> None:
         # Insert patients with family assignments
         for patient_info in result.final_output.patients:
             db_patient = patient_to_db(task.paper_id, patient_info)
-            # Find which family this patient belongs to
-            for entry in result.final_output.families:
-                for id_block in entry.patient_identifiers:
-                    if id_block.value == patient_info.identifier.value:
-                        db_patient.family_id = family_entries_by_id[
-                            entry.family.identifier.value
-                        ]
-                        db_patient.family_assignment_evidence = id_block.model_dump()
-                        break
+            # Use family_identifier from patient to find correct family
+            family_id_value = patient_info.family_identifier.value
+            if family_id_value in family_entries_by_id:
+                db_patient.family_id = family_entries_by_id[family_id_value]
+                db_patient.family_assignment_evidence = (
+                    patient_info.family_identifier.model_dump()
+                )
             session.add(db_patient)
+
+
+async def handle_segregation_evidence_extraction(task_id: int) -> None:
+    """Extract segregation evidence from paper for family/families."""
+    with session_scope() as session:
+        task = session.get(TaskDB, task_id)
+        if not task:
+            return
+
+        paper = session.get(PaperDB, task.paper_id)
+        if not paper:
+            return
+
+        # Determine which families to process
+        if task.family_id:
+            families = (
+                session.query(FamilyDB).filter(FamilyDB.id == task.family_id).all()
+            )
+        else:
+            families = (
+                session.query(FamilyDB).filter(FamilyDB.paper_id == task.paper_id).all()
+            )
+
+        if not families:
+            return
+
+        conv_id = await get_or_create_conversation(task.conversation_ids.get('default'))
+
+        for family in families:
+            # Load patients in family
+            patients = (
+                session.query(PatientDB).filter(PatientDB.family_id == family.id).all()
+            )
+
+            # Load variant links for this family
+            patient_ids = [p.id for p in patients]
+            variant_links = (
+                session.query(PatientVariantLinkDB)
+                .filter(PatientVariantLinkDB.patient_id.in_(patient_ids))
+                .all()
+                if patient_ids
+                else []
+            )
+
+            # Build family structure info
+            family_info = {
+                'family_identifier': family.identifier,
+                'patients': [
+                    {
+                        'id': p.id,
+                        'identifier': p.identifier,
+                        'affected_status': p.affected_status,
+                        'proband_status': p.proband_status,
+                    }
+                    for p in patients
+                ],
+                'patient_variant_links': [
+                    {
+                        'patient_id': vl.patient_id,
+                        'variant_id': vl.variant_id,
+                        'zygosity': vl.zygosity,
+                    }
+                    for vl in variant_links
+                ],
+            }
+
+            result = await Runner.run(
+                segregation_evidence_extractor,
+                f'Paper (fulltext md): {fulltext_md(task.paper_id)}\n\nFamily Structure: {json.dumps(family_info, indent=2, default=str)}',
+                conversation_id=conv_id,
+            )
+
+            # Delete existing segregation evidence and insert new
+            session.query(SegregationEvidenceDB).filter(
+                SegregationEvidenceDB.family_id == family.id
+            ).delete()
+            session.flush()
+
+            # Convert and insert
+            db_evidence = segregation_evidence_to_db(family.id, result.final_output)
+            session.add(db_evidence)
+
+        task.conversation_ids['default'] = conv_id
+
+
+async def handle_segregation_analysis_computed(task_id: int) -> None:
+    """Compute segregation analysis metrics for family/families using ClinGen methodology."""
+    with session_scope() as session:
+        task = session.get(TaskDB, task_id)
+        if not task:
+            return
+
+        paper = session.get(PaperDB, task.paper_id)
+        if not paper:
+            return
+
+        # Determine which families to process
+        if task.family_id:
+            families = (
+                session.query(FamilyDB).filter(FamilyDB.id == task.family_id).all()
+            )
+        else:
+            families = (
+                session.query(FamilyDB).filter(FamilyDB.paper_id == task.paper_id).all()
+            )
+
+        if not families:
+            return
+
+        conv_id = await get_or_create_conversation(task.conversation_ids.get('default'))
+
+        for family in families:
+            # Load patients in family
+            patients = (
+                session.query(PatientDB).filter(PatientDB.family_id == family.id).all()
+            )
+
+            # Load variant links for this family
+            patient_ids = [p.id for p in patients]
+            variant_links = (
+                session.query(PatientVariantLinkDB)
+                .filter(PatientVariantLinkDB.patient_id.in_(patient_ids))
+                .all()
+                if patient_ids
+                else []
+            )
+
+            # Load segregation evidence for this family
+            seg_evidence = (
+                session.query(SegregationEvidenceDB)
+                .filter(SegregationEvidenceDB.family_id == family.id)
+                .first()
+            )
+
+            # Build input for agent
+            family_info = {
+                'family_identifier': family.identifier,
+                'patients': [
+                    {
+                        'id': p.id,
+                        'identifier': p.identifier,
+                        'affected_status': p.affected_status,
+                        'proband_status': p.proband_status,
+                        'sex': p.sex,
+                    }
+                    for p in patients
+                ],
+                'patient_variant_links': [
+                    {
+                        'patient_id': vl.patient_id,
+                        'variant_id': vl.variant_id,
+                        'zygosity': vl.zygosity,
+                        'inheritance': vl.inheritance,
+                    }
+                    for vl in variant_links
+                ],
+                'segregation_evidence': {
+                    'extracted_lod_score': seg_evidence.extracted_lod_score
+                    if seg_evidence
+                    else None,
+                    'sequencing_methodology': seg_evidence.sequencing_methodology
+                    if seg_evidence
+                    else None,
+                    'has_unexplainable_non_segregations': seg_evidence.has_unexplainable_non_segregations
+                    if seg_evidence
+                    else None,
+                }
+                if seg_evidence
+                else None,
+            }
+
+            result = await Runner.run(
+                segregation_analysis_computed_agent,
+                f'Paper (fulltext md): {fulltext_md(task.paper_id)}\n\nFamily Structure and Data: {json.dumps(family_info, indent=2, default=str)}',
+                conversation_id=conv_id,
+            )
+
+            # Delete existing computed analysis and insert new
+            session.query(SegregationAnalysisComputedDB).filter(
+                SegregationAnalysisComputedDB.family_id == family.id
+            ).delete()
+            session.flush()
+
+            # Convert and insert
+            db_computed = segregation_analysis_computed_to_db(
+                family.id, result.final_output
+            )
+            session.add(db_computed)
+
+        task.conversation_ids['default'] = conv_id
 
 
 async def handle_variant_harmonization(task_id: int) -> None:
@@ -321,13 +519,15 @@ async def handle_variant_enrichment(task_id: int) -> None:
         if not task:
             return
 
-        rows = (
+        query = (
             session.query(HarmonizedVariantDB)
             .join(VariantDB, HarmonizedVariantDB.variant_id == VariantDB.id)
             .filter(VariantDB.paper_id == task.paper_id)
-            .order_by(VariantDB.id)
-            .all()
         )
+        if task.variant_id is not None:
+            query = query.filter(HarmonizedVariantDB.variant_id == task.variant_id)
+
+        rows = query.order_by(VariantDB.id).all()
         harmonized_variants = [
             HarmonizedVariant(
                 gnomad_style_coordinates=r.gnomad_style_coordinates,
@@ -354,13 +554,22 @@ async def handle_variant_enrichment(task_id: int) -> None:
             return
 
         # Idempotent: delete-then-insert
-        session.query(EnrichedVariantDB).filter(
+        delete_query = session.query(EnrichedVariantDB).filter(
             EnrichedVariantDB.harmonized_variant_id.in_(
                 select(HarmonizedVariantDB.id)
                 .join(VariantDB, HarmonizedVariantDB.variant_id == VariantDB.id)
                 .where(VariantDB.paper_id == task.paper_id)
             )
-        ).delete()
+        )
+        if task.variant_id is not None:
+            delete_query = delete_query.filter(
+                EnrichedVariantDB.harmonized_variant_id.in_(
+                    select(HarmonizedVariantDB.id).where(
+                        HarmonizedVariantDB.variant_id == task.variant_id
+                    )
+                )
+            )
+        delete_query.delete()
 
         for hv_id, ev in zip(harmonized_variant_ids, enriched_variants):
             session.add(
@@ -618,6 +827,8 @@ TASK_HANDLERS: dict[
     TaskType.VARIANT_EXTRACTION: handle_variant_extraction,
     TaskType.PEDIGREE_DESCRIPTION: handle_pedigree_description,
     TaskType.PATIENT_EXTRACTION: handle_patient_extraction,
+    TaskType.SEGREGATION_EVIDENCE_EXTRACTION: handle_segregation_evidence_extraction,
+    TaskType.SEGREGATION_ANALYSIS_COMPUTED: handle_segregation_analysis_computed,
     TaskType.VARIANT_HARMONIZATION: handle_variant_harmonization,
     TaskType.VARIANT_ENRICHMENT: handle_variant_enrichment,
     TaskType.PATIENT_VARIANT_LINKING: handle_patient_variant_linking,

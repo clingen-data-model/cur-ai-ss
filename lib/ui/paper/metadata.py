@@ -3,8 +3,6 @@ from typing import Any
 import streamlit as st
 
 from lib.models import PaperResp, PaperType, PaperUpdateRequest
-from lib.models.evidence_block import ReasoningBlock
-from lib.models.paper import ScoringMethod
 from lib.ui.api import get_http_error_detail, update_paper
 
 
@@ -43,33 +41,6 @@ def render_metadata_tab() -> None:
 
     abstract = st.text_area('Abstract', paper_resp.abstract, height=200)
 
-    # Scoring Method (for LOD Scoring)
-    st.divider()
-    st.markdown('### Scoring Method (for LOD Scoring)')
-    col1, col2 = st.columns([1, 3])
-    with col1:
-        scoring_options = [''] + [sm.value for sm in ScoringMethod]
-        scoring_index = (
-            scoring_options.index(paper_resp.scoring_method.value)
-            if paper_resp.scoring_method
-            else 0
-        )
-        selected_scoring_method = st.selectbox(
-            'Scoring Method',
-            options=scoring_options,
-            index=scoring_index,
-            key='scoring-method',
-        )
-    with col2:
-        st.text_input(
-            'Reasoning',
-            value=paper_resp.scoring_method.reasoning
-            if paper_resp.scoring_method
-            else '',
-            disabled=True,
-            key='scoring-reasoning',
-        )
-
     changes: dict[str, Any] = {}
     if title != paper_resp.title:
         changes['title'] = title
@@ -83,22 +54,6 @@ def render_metadata_tab() -> None:
         changes['paper_types'] = paper_types
     if (abstract or None) != paper_resp.abstract:
         changes['abstract'] = abstract or None
-
-    # Track scoring method value changes (reasoning is read-only from extraction)
-    new_scoring_method_value = (
-        ScoringMethod(selected_scoring_method) if selected_scoring_method else None
-    )
-    current_scoring_method_value = (
-        paper_resp.scoring_method.value if paper_resp.scoring_method else None
-    )
-    if new_scoring_method_value != current_scoring_method_value:
-        reasoning = (
-            paper_resp.scoring_method.reasoning if paper_resp.scoring_method else ''
-        )
-        changes['scoring_method'] = ReasoningBlock(
-            value=new_scoring_method_value,
-            reasoning=reasoning,
-        )
 
     update_request = PaperUpdateRequest(**changes)
 

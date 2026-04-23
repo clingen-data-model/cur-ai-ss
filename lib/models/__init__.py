@@ -49,12 +49,13 @@ from lib.models.phenotype import (
     PhenotypeUpdateRequest,
 )
 from lib.models.segregation_analysis import (
-    LODScoreType,
-    SegregationAnalysis,
-    SegregationAnalysisCreateRequest,
-    SegregationAnalysisDB,
+    SegregationAnalysisComputedDB,
+    SegregationAnalysisComputedResp,
     SegregationAnalysisResp,
-    SegregationAnalysisUpdateRequest,
+    SegregationEvidence,
+    SegregationEvidenceDB,
+    SegregationEvidenceResp,
+    SegregationEvidenceUpdateRequest,
     SequencingMethodology,
 )
 from lib.models.variant import (

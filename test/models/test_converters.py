@@ -69,6 +69,11 @@ def test_patient_to_db_maps_all_fields():
             quote='referred to as P1',
             reasoning='labeled P1 in table',
         ),
+        family_identifier=EvidenceBlock(
+            value='Family1',
+            quote='Family 1',
+            reasoning='belongs to Family 1',
+        ),
         proband_status=EvidenceBlock(
             value=ProbandStatus.Proband,
             quote='index case',
@@ -148,6 +153,11 @@ def test_patient_to_db_handles_optional_none_values():
             quote='pedigree notation',
             reasoning='labeled in pedigree',
         ),
+        family_identifier=EvidenceBlock(
+            value='Family2',
+            quote='Family 2',
+            reasoning='belongs to Family 2',
+        ),
         proband_status=EvidenceBlock(
             value=ProbandStatus.Unknown,
             quote=None,
@@ -210,6 +220,9 @@ def test_patient_to_db_maps_segregation_analysis_fields():
     """Test that segregation analysis fields are correctly converted."""
     patient = Patient(
         identifier=EvidenceBlock(value='P1', quote='patient 1', reasoning='labeled P1'),
+        family_identifier=EvidenceBlock(
+            value='FamilyA', quote='Family A', reasoning='belongs to Family A'
+        ),
         proband_status=EvidenceBlock(
             value=ProbandStatus.Proband, quote='index', reasoning='proband'
         ),
