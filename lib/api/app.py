@@ -453,37 +453,22 @@ def _segregation_analysis_to_resp(
     computed_nested = None
     if computed:
         computed_nested = SegregationAnalysisComputedNestedResp(
-            segregation_count=ReasoningBlock(  # type: ignore[arg-type]
-                value=computed.segregation_count,
-                **computed.segregation_count_reasoning,
-            ),
-            computed_lod_score=ReasoningBlock(  # type: ignore[arg-type]
-                value=computed.computed_lod_score,
-                **computed.computed_lod_score_reasoning,
-            ),
-            points_assigned=ReasoningBlock(  # type: ignore[arg-type]
-                value=computed.points_assigned,
-                **computed.points_assigned_reasoning,
-            ),
-            meets_minimum_criteria=ReasoningBlock(  # type: ignore[arg-type]
-                value=computed.meets_minimum_criteria,
-                **computed.meets_minimum_criteria_reasoning,
-            ),
+            segregation_count=ReasoningBlock(**computed.segregation_count_reasoning),  # type: ignore[arg-type]
+            computed_lod_score=ReasoningBlock(**computed.computed_lod_score_reasoning),  # type: ignore[arg-type]
+            points_assigned=ReasoningBlock(**computed.points_assigned_reasoning),  # type: ignore[arg-type]
+            meets_minimum_criteria=ReasoningBlock(**computed.meets_minimum_criteria_reasoning),  # type: ignore[arg-type]
         )
 
     return SegregationAnalysisResp(
         id=computed.id if computed else evidence.id,
         family_id=family.id,
         extracted_lod_score=HumanEvidenceBlock(  # type: ignore[arg-type]
-            value=evidence.extracted_lod_score,
             **(evidence.extracted_lod_score_evidence or {}),
         ),
         sequencing_methodology=HumanEvidenceBlock(  # type: ignore[arg-type]
-            value=SequencingMethodology(evidence.sequencing_methodology),
             **(evidence.sequencing_methodology_evidence or {}),
         ),
         has_unexplainable_non_segregations=HumanEvidenceBlock(  # type: ignore[arg-type]
-            value=evidence.has_unexplainable_non_segregations,
             **(evidence.has_unexplainable_non_segregations_evidence or {}),
         ),
         computed=computed_nested,
