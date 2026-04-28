@@ -42,8 +42,9 @@ class EvidenceBlock(ReasoningBlock[T]):
                 'quote, table_id, or image_id'
             )
 
+        # Prioritize table_id if both are provided
         if self.table_id is not None and self.image_id is not None:
-            raise ValueError('Only one of table_id or image_id may be provided')
+            self.image_id = None
 
         return self
 
