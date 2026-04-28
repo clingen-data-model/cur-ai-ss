@@ -1,10 +1,7 @@
 from agents import Agent
 
 from lib.core.environment import env
-from lib.models.segregation_analysis import (
-    SegregationEvidenceExtractionOutput,
-    SequencingMethodology,
-)
+from lib.models.segregation_analysis import SegregationEvidenceExtractionOutput
 
 SEGREGATION_EVIDENCE_EXTRACTION_INSTRUCTIONS = """
 System: You are an expert clinical data curator specializing in genetic segregation analysis.
@@ -27,14 +24,7 @@ Extract the following fields:
      * Tables showing LOD scores by family
      * Pedigree descriptions or figure legends
 
-2. sequencing_methodology (EvidenceBlock[SequencingMethodology]):
-   - Extract how variants in this family were identified.
-   - Must be one of: Candidate Gene, Exome/Genome, All Genes in Linkage Region, Unknown
-   - Look for descriptions of the sequencing or analysis approach used.
-   - Return value + quote/reference showing how this methodology was applied to this family.
-   - If unclear, return Unknown with reasoning.
-
-3. has_unexplainable_non_segregations (EvidenceBlock[bool]):
+2. has_unexplainable_non_segregations (EvidenceBlock[bool]):
    - Determine if there are individuals in the family with the disease phenotype but NOT carrying the identified variant.
    - This indicates incomplete segregation (non-segregating cases).
    - Use the family structure and variant information provided to make this assessment.
@@ -43,7 +33,7 @@ Extract the following fields:
    - Note: If the paper doesn't explicitly discuss segregation or variant carriers, still make your best assessment based on available information.
 
 Output format:
-Return three EvidenceBlocks with:
+Return two EvidenceBlocks with:
 - value: the extracted data
 - reasoning: explanation of how you determined this
 - quote: verbatim text from paper (if applicable; not required for null values)

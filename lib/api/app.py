@@ -89,10 +89,7 @@ from lib.models import (
     VariantResp,
 )
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
-from lib.models.segregation_analysis import (
-    SegregationAnalysisComputedNestedResp,
-    SequencingMethodology,
-)
+from lib.models.segregation_analysis import SegregationAnalysisComputedNestedResp
 from lib.tasks import TaskCreateRequest, TaskResp, enqueue_task
 from lib.tasks.models import TaskStatus, TaskType
 
@@ -466,9 +463,6 @@ def _segregation_analysis_to_resp(
         family_id=family.id,
         extracted_lod_score=HumanEvidenceBlock(  # type: ignore[arg-type]
             **(evidence.extracted_lod_score_evidence or {}),
-        ),
-        sequencing_methodology=HumanEvidenceBlock(  # type: ignore[arg-type]
-            **(evidence.sequencing_methodology_evidence or {}),
         ),
         has_unexplainable_non_segregations=HumanEvidenceBlock(  # type: ignore[arg-type]
             **(evidence.has_unexplainable_non_segregations_evidence or {}),

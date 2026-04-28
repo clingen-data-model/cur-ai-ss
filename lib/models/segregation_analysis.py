@@ -31,7 +31,6 @@ class SegregationEvidence(BaseModel):
 
     family_id: int
     extracted_lod_score: EvidenceBlock[float] | None = None
-    sequencing_methodology: EvidenceBlock[SequencingMethodology]
     has_unexplainable_non_segregations: EvidenceBlock[bool]
 
 
@@ -48,9 +47,6 @@ class SegregationEvidenceDB(Base):
     extracted_lod_score_evidence: Mapped[dict | None] = mapped_column(
         JSON, nullable=True
     )
-
-    sequencing_methodology: Mapped[str] = mapped_column(String, nullable=False)
-    sequencing_methodology_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
 
     has_unexplainable_non_segregations: Mapped[bool] = mapped_column(nullable=False)
     has_unexplainable_non_segregations_evidence: Mapped[dict] = mapped_column(
@@ -75,7 +71,6 @@ class SegregationEvidenceResp(BaseModel):
     id: int
     family_id: int
     extracted_lod_score: HumanEvidenceBlock[float | None]
-    sequencing_methodology: HumanEvidenceBlock[SequencingMethodology]
     has_unexplainable_non_segregations: HumanEvidenceBlock[bool]
     updated_at: datetime
 
@@ -84,11 +79,9 @@ class SegregationEvidenceUpdateRequest(PatchModel):
     """Update extracted evidence fields."""
 
     extracted_lod_score: float | None = None
-    sequencing_methodology: str | None = None
     has_unexplainable_non_segregations: bool | None = None
     # Human edit notes
     extracted_lod_score_human_edit_note: str | None = None
-    sequencing_methodology_human_edit_note: str | None = None
     has_unexplainable_non_segregations_human_edit_note: str | None = None
 
 
@@ -176,7 +169,6 @@ class SegregationAnalysisResp(BaseModel):
     family_id: int
     # Evidence (from extraction agent)
     extracted_lod_score: HumanEvidenceBlock[float | None]
-    sequencing_methodology: HumanEvidenceBlock[SequencingMethodology]
     has_unexplainable_non_segregations: HumanEvidenceBlock[bool]
     # Computed (from computation agent) - nested like harmonized/enriched variants
     computed: SegregationAnalysisComputedNestedResp | None = None
@@ -192,7 +184,6 @@ class SegregationEvidenceExtractionOutput(BaseModel):
     """Output from segregation evidence extraction agent."""
 
     extracted_lod_score: EvidenceBlock[float | None]
-    sequencing_methodology: EvidenceBlock[SequencingMethodology]
     has_unexplainable_non_segregations: EvidenceBlock[bool]
 
 

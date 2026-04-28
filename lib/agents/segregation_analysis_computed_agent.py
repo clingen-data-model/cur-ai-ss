@@ -6,12 +6,35 @@ from collections import Counter
 from agents import Agent, function_tool
 
 from lib.core.environment import env
+from lib.models.patient_variant_link import TestingMethod
 from lib.models.segregation_analysis import (
     SegregationAnalysisComputedOutput,
     SequencingMethodology,
 )
 
 _DOMINANT_INHERITANCE_PATTERNS = {'Dominant', 'Semi-dominant', 'X-linked'}
+
+_TESTING_TO_METHODOLOGY = {
+    # Genome-wide / unbiased
+    TestingMethod.chromosomal_microarray.value: SequencingMethodology.ExomeOrGenome.value,
+    TestingMethod.exome_sequencing.value: SequencingMethodology.ExomeOrGenome.value,
+    TestingMethod.genome_sequencing.value: SequencingMethodology.ExomeOrGenome.value,
+    # Region defined first, then all genes
+    TestingMethod.homozygosity_mapping.value: SequencingMethodology.AllGenesInRegion.value,
+    TestingMethod.linkage_analysis.value: SequencingMethodology.AllGenesInRegion.value,
+    # Targeted / candidate
+    TestingMethod.next_generation_sequencing_panels.value: SequencingMethodology.CandidateGene.value,
+    TestingMethod.sanger_sequencing.value: SequencingMethodology.CandidateGene.value,
+    TestingMethod.pcr.value: SequencingMethodology.CandidateGene.value,
+    TestingMethod.genotyping.value: SequencingMethodology.CandidateGene.value,
+    TestingMethod.denaturing_gradient_gel.value: SequencingMethodology.CandidateGene.value,
+    TestingMethod.high_resolution_melting.value: SequencingMethodology.CandidateGene.value,
+    TestingMethod.restriction_digest.value: SequencingMethodology.CandidateGene.value,
+    TestingMethod.single_strand_conformation_polymorphism.value: SequencingMethodology.CandidateGene.value,
+    # Fallbacks
+    TestingMethod.unknown.value: SequencingMethodology.Unknown.value,
+    TestingMethod.other.value: SequencingMethodology.Unknown.value,
+}
 
 
 @function_tool
@@ -36,6 +59,31 @@ def compute_scoring_method(inheritance_values: list[str]) -> dict:
         'scoring_method': method,
         'reasoning': (
             f'Most frequent inheritance: {most_common} ({count} of {len(inheritance_values)} links) → {method} scoring'
+        ),
+    }
+
+
+@function_tool
+def compute_sequencing_methodology(testing_method_values: list[str]) -> dict:
+    """
+    Derive the sequencing methodology from the most-frequent testing method
+    across all patient-variant links in the family.
+    """
+    if not testing_method_values:
+        return {
+            'sequencing_methodology': SequencingMethodology.Unknown.value,
+            'reasoning': 'No testing methods found; defaulting to Unknown',
+        }
+
+    counts: Counter[str] = Counter(testing_method_values)
+    most_common, count = counts.most_common(1)[0]
+    methodology = _TESTING_TO_METHODOLOGY.get(
+        most_common, SequencingMethodology.Unknown.value
+    )
+    return {
+        'sequencing_methodology': methodology,
+        'reasoning': (
+            f'Most frequent testing method: {most_common} ({count} of {len(testing_method_values)} methods) → {methodology}'
         ),
     }
 
@@ -161,12 +209,13 @@ Task: Compute segregation analysis metrics for a family using ClinGen LOD score 
 
 You will receive:
 1. Family structure (family identifier, patients with their affected/proband status)
-2. Patient-variant links (which patients carry the variant, with zygosity and inheritance pattern)
-3. Extracted segregation evidence (published LOD score if available, sequencing methodology, non-segregation flag)
+2. Patient-variant links (which patients carry the variant, with zygosity, inheritance pattern, and testing methods)
+3. Extracted segregation evidence (published LOD score if available, non-segregation flag)
 4. Paper text for additional context
 
-You have access to four tools:
+You have access to five tools:
 - compute_scoring_method: Derives the ClinGen scoring method (Dominant/Recessive) from the inheritance values in the patient-variant links
+- compute_sequencing_methodology: Derives the sequencing methodology from the testing methods in the patient-variant links
 - check_minimum_criteria: Evaluates if family meets ClinGen size/segregation requirements
 - calculate_lod_score: Computes LOD using ClinGen formulas (or uses published LOD if available)
 - assign_points: Assigns points based on LOD score and sequencing methodology per Figure 6 matrix
@@ -177,6 +226,11 @@ Your task:
    - Collect all `inheritance` values from the patient-variant links
    - Pass them to `compute_scoring_method` to get the scoring method (Dominant or Recessive) and reasoning
    - Use this scoring method for all subsequent steps
+
+0.5. **Determine sequencing methodology** (call compute_sequencing_methodology tool):
+   - Flatten all `testing_methods` values from the patient-variant links into a single list
+   - Pass them to `compute_sequencing_methodology` to get the sequencing methodology and reasoning
+   - Use this methodology when calling `assign_points` in step 5
 
 1. **Extract segregation count**: Count affected individuals (excluding proband) + obligate carriers, accounting for twins
 
@@ -246,6 +300,7 @@ agent = Agent(
     output_type=SegregationAnalysisComputedOutput,
     tools=[
         compute_scoring_method,
+        compute_sequencing_methodology,
         check_minimum_criteria,
         calculate_lod_score,
         assign_points,

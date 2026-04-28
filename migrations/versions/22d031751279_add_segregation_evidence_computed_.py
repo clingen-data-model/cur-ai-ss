@@ -53,8 +53,6 @@ def upgrade() -> None:
         sa.Column('family_id', sa.Integer(), nullable=False),
         sa.Column('extracted_lod_score', sa.Float(), nullable=True),
         sa.Column('extracted_lod_score_evidence', sa.JSON(), nullable=True),
-        sa.Column('sequencing_methodology', sa.String(), nullable=False),
-        sa.Column('sequencing_methodology_evidence', sa.JSON(), nullable=False),
         sa.Column('has_unexplainable_non_segregations', sa.Boolean(), nullable=False),
         sa.Column(
             'has_unexplainable_non_segregations_evidence', sa.JSON(), nullable=False
@@ -166,14 +164,12 @@ def downgrade() -> None:
         sa.Column('segregation_count', sa.INTEGER(), nullable=False),
         sa.Column('lod_score', sa.FLOAT(), nullable=False),
         sa.Column('lod_score_type', sa.VARCHAR(length=9), nullable=False),
-        sa.Column('sequencing_methodology', sa.VARCHAR(), nullable=False),
         sa.Column('points_assigned', sa.FLOAT(), nullable=False),
         sa.Column('meets_minimum_criteria', sa.BOOLEAN(), nullable=False),
         sa.Column('has_unexplainable_non_segregations', sa.BOOLEAN(), nullable=False),
         sa.Column('segregation_count_evidence', sqlite.JSON(), nullable=False),
         sa.Column('lod_score_evidence', sqlite.JSON(), nullable=False),
         sa.Column('lod_score_type_evidence', sqlite.JSON(), nullable=False),
-        sa.Column('sequencing_methodology_evidence', sqlite.JSON(), nullable=False),
         sa.Column('points_assigned_evidence', sqlite.JSON(), nullable=False),
         sa.Column('meets_minimum_criteria_evidence', sqlite.JSON(), nullable=False),
         sa.Column(

@@ -16,7 +16,6 @@ from lib.models.segregation_analysis import (
     SegregationAnalysisResp,
     SegregationEvidenceDB,
     SegregationEvidenceExtractionOutput,
-    SequencingMethodology,
 )
 from lib.models.variant import (
     HarmonizedVariant,
@@ -179,8 +178,6 @@ def segregation_evidence_to_db(
         family_id=family_id,
         extracted_lod_score=output.extracted_lod_score.value,
         extracted_lod_score_evidence=output.extracted_lod_score.model_dump(),
-        sequencing_methodology=output.sequencing_methodology.value.value,
-        sequencing_methodology_evidence=output.sequencing_methodology.model_dump(),
         has_unexplainable_non_segregations=output.has_unexplainable_non_segregations.value,
         has_unexplainable_non_segregations_evidence=output.has_unexplainable_non_segregations.model_dump(),
     )

@@ -333,25 +333,6 @@ def _render_family_group(
                     button_key_prefix=f'{tab_key}-fam-{family.id}-lod-score-evidence',
                 )
 
-            # Sequencing Methodology
-            col1, col2 = st.columns(2)
-            with col1:
-                st.text_input(
-                    'Sequencing Methodology',
-                    seg_data.sequencing_methodology.value.value,
-                    disabled=True,
-                    key=f'{tab_key}-fam-{family.id}-sequencing-methodology',
-                )
-            with col2:
-                st.space()
-                render_evidence_controls(
-                    paper_resp.id,
-                    block=seg_data.sequencing_methodology,
-                    label='Sequencing Methodology Evidence',
-                    color_key=f'{tab_key}-fam-{family.id}-seq-method-color-evidence',
-                    button_key_prefix=f'{tab_key}-fam-{family.id}-seq-method-evidence',
-                )
-
             # Unexplainable Non-segregations
             col1, col2 = st.columns(2)
             with col1:

@@ -389,14 +389,12 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
                         'variant_id': vl.variant_id,
                         'zygosity': vl.zygosity,
                         'inheritance': vl.inheritance,
+                        'testing_methods': vl.testing_methods,
                     }
                     for vl in variant_links
                 ],
                 'segregation_evidence': {
                     'extracted_lod_score': seg_evidence.extracted_lod_score
-                    if seg_evidence
-                    else None,
-                    'sequencing_methodology': seg_evidence.sequencing_methodology
                     if seg_evidence
                     else None,
                     'has_unexplainable_non_segregations': seg_evidence.has_unexplainable_non_segregations
