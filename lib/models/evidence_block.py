@@ -34,8 +34,8 @@ class EvidenceBlock(ReasoningBlock[T]):
             not is_unknown
             and not is_falsy_bool
             and not self.quote
-            and not self.table_id
-            and not self.image_id
+            and self.table_id is None
+            and self.image_id is None
         ):
             raise ValueError(
                 'At least one evidence source must be provided: '
