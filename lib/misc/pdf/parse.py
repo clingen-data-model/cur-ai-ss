@@ -161,7 +161,7 @@ def parse_content(paper_id: int, force: bool = False) -> None:
         pdf_markdown_path(paper_id),
         image_mode=ImageRefMode.REFERENCED,
         escape_html=False,
-        escape_underscores=False,
+        escaping_underscores=False,
     )
 
     document.save_as_json(
