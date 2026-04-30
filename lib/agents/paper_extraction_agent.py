@@ -102,7 +102,7 @@ def pubmed_fetch_one(pmid: str) -> str:
     return xml_text
 
 
-PAPER_EXTRACTION_INSTRUCTIONS = “””
+PAPER_EXTRACTION_INSTRUCTIONS = """
 You are an expert clinical data curator.
 
 Input:
@@ -165,7 +165,7 @@ Important Guidelines:
 - Always use the `(pmid, title)` pairs to deterministically select the correct PubMed record.
 - Only fetch full records for the chosen PMID.
 - Prefer the gene form as it appears in the abstract. Only use the provided gene symbol if the gene is not mentioned in the abstract.
-“””
+"""
 
 # --- Agent definition
 agent = Agent(
