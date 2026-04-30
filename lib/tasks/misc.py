@@ -25,6 +25,7 @@ def enqueue_task(
     """Create or reset a task to PENDING status.
 
     Checks for existing task and updates it, or creates new one.
+    If task is currently running, returns it unchanged.
     Returns the task (either newly created or reset).
     """
     # Check if task exists (SQLAlchemy converts == None to IS NULL)
@@ -42,6 +43,9 @@ def enqueue_task(
     )
 
     if existing_task:
+        # Skip re-queuing if task is already running
+        if existing_task.status == TaskStatus.RUNNING:
+            return existing_task
         # Reset existing task
         existing_task.status = TaskStatus.PENDING
         existing_task.tries = 0
