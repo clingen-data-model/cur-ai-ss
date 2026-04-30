@@ -131,7 +131,7 @@ Candidate Generation & Selection Workflow:
 
 2️⃣ Candidate Generation:
 - Call `pubmed_search_and_titles` with the `first_author` extracted from the text and the gene_symbol (either extracted from abstract or provided as input).
-- The search will use the last name field (last author name) to prioritize results and filter out common first names.
+- The search should prioritize the last name of the `first_author` when generating candidates.
 - This will return a list of `(pmid, title)` tuples for candidate papers by this author about this gene.
 
 3️⃣ Candidate Selection:
