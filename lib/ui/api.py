@@ -198,6 +198,16 @@ def get_phenotypes(paper_id: int, patient_id: int) -> list[PhenotypeResp]:
     return TypeAdapter(list[PhenotypeResp]).validate_python(resp.json())
 
 
+def get_segregation_analysis(paper_id: int) -> list:
+    from lib.models.segregation_analysis import SegregationAnalysisResp
+
+    resp = requests.get(
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/segregation-analysis'
+    )
+    resp.raise_for_status()
+    return TypeAdapter(list[SegregationAnalysisResp]).validate_python(resp.json())
+
+
 def get_paper_tasks(paper_id: int) -> list[TaskResp]:
     resp = requests.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/tasks')
     resp.raise_for_status()

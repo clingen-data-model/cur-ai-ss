@@ -156,26 +156,6 @@ Classify the paper into at MOST two of the following types:
     - Unknown: The paper type cannot be confidently determined from the provided text.
     - Other: Does not fit the above categories (e.g., review, meta-analysis, guideline, methods, or database/resource paper).
 
-3. **Inheritance Pattern Assessment**
-
-Analyze the described inheritance patterns in the paper to determine the likely genetic inheritance mode for ClinGen SOP scoring:
-- **Dominant**: Affected individuals in multiple generations, vertical transmission, few unaffected carriers, de novo variants, or heterozygous pathogenic variants.
-- **Recessive**: Affected individuals with unaffected parents, consanguinity patterns, compound heterozygotes, homozygous variants, or horizontal transmission in a single generation.
-- **X-Linked**: Patterns of male-predominant or male-only affection, affected females only through carrier mothers, skipped generations through carrier females, or hemizygous males with a single pathogenic allele. **For ClinGen SOP scoring, classify X-linked patterns as "Dominant".**
-
-If the paper discusses multiple inheritance patterns:
-- Identify which pattern is PRIMARY or most strongly supported by the evidence.
-- For X-linked patterns, return `scoring_method.value` as "Dominant" per ClinGen guidelines.
-- For other patterns, return that pattern in `scoring_method.value`.
-
-Provide clear reasoning in `scoring_method.reasoning` explaining:
-- Which families or cases informed the decision
-- Key evidence (de novo variants, consanguinity, affected siblings with unaffected parents, X-linked transmission pattern, etc.)
-- Any caveats or ambiguities
-
-If inheritance mode cannot be confidently determined from the paper content:
-- Omit the `scoring_method` field entirely and leave for manual curation.
-
 Important Guidelines:
 - When a field cannot be confidently identified, fail rather than guess.
 - Always use the `(pmid, title)` pairs to deterministically select the correct PubMed record.

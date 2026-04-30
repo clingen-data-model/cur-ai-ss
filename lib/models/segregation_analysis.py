@@ -2,91 +2,53 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, func
-from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON, Float
 
 from lib.models.base import Base, PatchModel
-from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock
+from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock, ReasoningBlock
 
 if TYPE_CHECKING:
     from lib.models.family import FamilyDB
-
-
-class LODScoreType(str, Enum):
-    Published = 'Published'
-    Estimated = 'Estimated'
 
 
 class SequencingMethodology(str, Enum):
     CandidateGene = 'Candidate Gene'
     ExomeOrGenome = 'Exome/Genome'
     AllGenesInRegion = 'All Genes in Linkage Region'
-    Mixed = 'Mixed'
     Unknown = 'Unknown'
 
 
-class SegregationAnalysis(BaseModel):
-    """
-    Segregation analysis for a family following ClinGen simplified LOD score methodology.
+# ============================================================================
+# EVIDENCE EXTRACTION (from paper)
+# ============================================================================
 
-    Segregation analysis evaluates whether genetic variants co-segregate with disease
-    in families. This model stores:
-    - Segregation counts (affected individuals minus proband)
-    - LOD scores (either published or estimated)
-    - Sequencing methodology used to identify variants
-    - Points assigned based on the ClinGen scoring matrix
-    - Assessment of whether family meets criteria for LOD calculation
-    """
+
+class SegregationEvidence(BaseModel):
+    """Evidence extracted from paper by extraction agent."""
 
     family_id: int
-    segregation_count: EvidenceBlock[int]
-    lod_score: EvidenceBlock[float]
-    lod_score_type: EvidenceBlock[LODScoreType]
-    sequencing_methodology: EvidenceBlock[SequencingMethodology]
-    points_assigned: EvidenceBlock[float]
-    meets_minimum_criteria: EvidenceBlock[bool] = Field(
-        default_factory=lambda: EvidenceBlock(
-            value=False, reasoning='Not yet evaluated'
-        )
-    )
-    has_unexplainable_non_segregations: EvidenceBlock[bool] = Field(
-        default_factory=lambda: EvidenceBlock(
-            value=False, reasoning='No non-segregations identified'
-        )
-    )
+    extracted_lod_score: EvidenceBlock[float] | None = None
+    has_unexplainable_non_segregations: EvidenceBlock[bool]
 
 
-class SegregationAnalysisDB(Base):
-    __tablename__ = 'segregation_analyses'
+class SegregationEvidenceDB(Base):
+    __tablename__ = 'segregation_evidence'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     family_id: Mapped[int] = mapped_column(
         Integer, ForeignKey('families.id', ondelete='CASCADE'), nullable=False
     )
 
-    # Extracted values (updateable)
-    segregation_count: Mapped[int] = mapped_column(Integer, nullable=False)
-    lod_score: Mapped[float] = mapped_column(Float, nullable=False)
-    lod_score_type: Mapped[LODScoreType] = mapped_column(
-        SQLEnum(LODScoreType), nullable=False
-    )
-    sequencing_methodology: Mapped[str] = mapped_column(String, nullable=False)
-    points_assigned: Mapped[float] = mapped_column(Float, nullable=False)
-    meets_minimum_criteria: Mapped[bool] = mapped_column(default=False, nullable=False)
-    has_unexplainable_non_segregations: Mapped[bool] = mapped_column(
-        default=False, nullable=False
+    # Extracted from paper
+    extracted_lod_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    extracted_lod_score_evidence: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True
     )
 
-    # Evidence blocks (static, JSON)
-    segregation_count_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
-    lod_score_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
-    lod_score_type_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
-    sequencing_methodology_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
-    points_assigned_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
-    meets_minimum_criteria_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    has_unexplainable_non_segregations: Mapped[bool] = mapped_column(nullable=False)
     has_unexplainable_non_segregations_evidence: Mapped[dict] = mapped_column(
         JSON, nullable=False
     )
@@ -99,57 +61,136 @@ class SegregationAnalysisDB(Base):
     )
 
     family: Mapped['FamilyDB'] = relationship(
-        'FamilyDB', back_populates='segregation_analyses'
+        'FamilyDB', back_populates='segregation_evidence'
     )
 
-    __table_args__ = (Index('ix_segregation_analyses_family_id', 'family_id'),)
+    __table_args__ = (Index('ix_segregation_evidence_family_id', 'family_id'),)
 
 
-class SegregationAnalysisResp(BaseModel):
+class SegregationEvidenceResp(BaseModel):
     id: int
     family_id: int
-    family_identifier: str
-    segregation_count: int
-    segregation_count_evidence: HumanEvidenceBlock[int]
-    lod_score: float
-    lod_score_evidence: HumanEvidenceBlock[float]
-    lod_score_type: LODScoreType
-    lod_score_type_evidence: HumanEvidenceBlock[LODScoreType]
-    sequencing_methodology: SequencingMethodology
-    sequencing_methodology_evidence: HumanEvidenceBlock[SequencingMethodology]
-    points_assigned: float
-    points_assigned_evidence: HumanEvidenceBlock[float]
-    meets_minimum_criteria: bool
-    meets_minimum_criteria_evidence: HumanEvidenceBlock[bool]
-    has_unexplainable_non_segregations: bool
-    has_unexplainable_non_segregations_evidence: HumanEvidenceBlock[bool]
+    extracted_lod_score: HumanEvidenceBlock[float | None]
+    has_unexplainable_non_segregations: HumanEvidenceBlock[bool]
     updated_at: datetime
 
 
-class SegregationAnalysisCreateRequest(BaseModel):
-    family_id: int
-    segregation_count: int
-    lod_score: float
-    lod_score_type: str
-    sequencing_methodology: str
-    points_assigned: float
-    meets_minimum_criteria: bool = False
-    has_unexplainable_non_segregations: bool = False
+class SegregationEvidenceUpdateRequest(PatchModel):
+    """Update extracted evidence fields."""
 
-
-class SegregationAnalysisUpdateRequest(PatchModel):
-    segregation_count: int | None = None
-    lod_score: float | None = None
-    lod_score_type: str | None = None
-    sequencing_methodology: str | None = None
-    points_assigned: float | None = None
-    meets_minimum_criteria: bool | None = None
+    extracted_lod_score: float | None = None
     has_unexplainable_non_segregations: bool | None = None
-    # Human edit notes for evidence blocks
-    segregation_count_human_edit_note: str | None = None
-    lod_score_human_edit_note: str | None = None
-    lod_score_type_human_edit_note: str | None = None
-    sequencing_methodology_human_edit_note: str | None = None
-    points_assigned_human_edit_note: str | None = None
-    meets_minimum_criteria_human_edit_note: str | None = None
+    # Human edit notes
+    extracted_lod_score_human_edit_note: str | None = None
     has_unexplainable_non_segregations_human_edit_note: str | None = None
+
+
+# ============================================================================
+# COMPUTED ANALYSIS (from computation agent using family/patient/variant data)
+# ============================================================================
+
+
+class SegregationAnalysisComputed(BaseModel):
+    """
+    Computed segregation analysis values derived from family, patient, and
+    variant data using ClinGen LOD score methodology.
+    """
+
+    family_id: int
+    segregation_count: ReasoningBlock[int]
+    computed_lod_score: ReasoningBlock[float]
+    points_assigned: ReasoningBlock[float]
+    meets_minimum_criteria: ReasoningBlock[bool]
+
+
+class SegregationAnalysisComputedDB(Base):
+    __tablename__ = 'segregation_analysis_computed'
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    family_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey('families.id', ondelete='CASCADE'), nullable=False
+    )
+
+    # Computed by agent from family/patient/variant data
+    segregation_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    segregation_count_reasoning: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+    computed_lod_score: Mapped[float] = mapped_column(Float, nullable=False)
+    computed_lod_score_reasoning: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+    points_assigned: Mapped[float] = mapped_column(Float, nullable=False)
+    points_assigned_reasoning: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+    meets_minimum_criteria: Mapped[bool] = mapped_column(nullable=False)
+    meets_minimum_criteria_reasoning: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    family: Mapped['FamilyDB'] = relationship(
+        'FamilyDB', back_populates='segregation_analysis_computed'
+    )
+
+    __table_args__ = (Index('ix_segregation_analysis_computed_family_id', 'family_id'),)
+
+
+class SegregationAnalysisComputedResp(BaseModel):
+    id: int
+    family_id: int
+    segregation_count: ReasoningBlock[int]
+    computed_lod_score: ReasoningBlock[float]
+    points_assigned: ReasoningBlock[float]
+    meets_minimum_criteria: ReasoningBlock[bool]
+    updated_at: datetime
+
+
+# ============================================================================
+# COMBINED RESPONSE (for API)
+# ============================================================================
+
+
+class SegregationAnalysisComputedNestedResp(BaseModel):
+    """Nested computed analysis results."""
+
+    segregation_count: ReasoningBlock[int]
+    computed_lod_score: ReasoningBlock[float]
+    points_assigned: ReasoningBlock[float]
+    meets_minimum_criteria: ReasoningBlock[bool]
+
+
+class SegregationAnalysisResp(BaseModel):
+    """Complete segregation analysis combining evidence + computed results."""
+
+    id: int
+    family_id: int
+    # Evidence (from extraction agent)
+    extracted_lod_score: HumanEvidenceBlock[float | None]
+    has_unexplainable_non_segregations: HumanEvidenceBlock[bool]
+    # Computed (from computation agent) - nested like harmonized/enriched variants
+    computed: SegregationAnalysisComputedNestedResp | None = None
+    updated_at: datetime
+
+
+# ============================================================================
+# AGENT OUTPUTS
+# ============================================================================
+
+
+class SegregationEvidenceExtractionOutput(BaseModel):
+    """Output from segregation evidence extraction agent."""
+
+    extracted_lod_score: EvidenceBlock[float | None]
+    has_unexplainable_non_segregations: EvidenceBlock[bool]
+
+
+class SegregationAnalysisComputedOutput(BaseModel):
+    """Output from segregation analysis computation agent."""
+
+    segregation_count: ReasoningBlock[int]
+    computed_lod_score: ReasoningBlock[float]
+    points_assigned: ReasoningBlock[float]
+    meets_minimum_criteria: ReasoningBlock[bool]

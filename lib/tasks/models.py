@@ -23,6 +23,8 @@ class TaskType(StrEnum):
     PEDIGREE_DESCRIPTION = 'Pedigree Description'
     PATIENT_EXTRACTION = 'Patient Extraction'
 
+    SEGREGATION_EVIDENCE_EXTRACTION = 'Segregation Evidence Extraction'  # per-family
+    SEGREGATION_ANALYSIS_COMPUTED = 'Segregation Analysis Computed'  # per-family
     VARIANT_HARMONIZATION = 'Variant Harmonization'
     VARIANT_ENRICHMENT = 'Variant Enrichment'
     PATIENT_VARIANT_LINKING = 'Patient Variant Linking'
@@ -56,7 +58,9 @@ TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
     ],
     TaskType.VARIANT_HARMONIZATION: [TaskType.VARIANT_ENRICHMENT],
     TaskType.VARIANT_ENRICHMENT: [],
-    TaskType.PATIENT_VARIANT_LINKING: [],
+    TaskType.PATIENT_VARIANT_LINKING: [TaskType.SEGREGATION_EVIDENCE_EXTRACTION],
+    TaskType.SEGREGATION_EVIDENCE_EXTRACTION: [TaskType.SEGREGATION_ANALYSIS_COMPUTED],
+    TaskType.SEGREGATION_ANALYSIS_COMPUTED: [],
     TaskType.PHENOTYPE_EXTRACTION: [TaskType.HPO_LINKING],
     TaskType.HPO_LINKING: [],
 }
@@ -88,6 +92,12 @@ class TaskDB(Base):
     paper: Mapped['PaperDB'] = relationship('PaperDB', back_populates='tasks')
     type: Mapped[TaskType] = mapped_column(
         SQLEnum(TaskType), nullable=False, index=True
+    )
+    family_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey('families.id', ondelete='CASCADE'),
+        nullable=True,
+        index=True,
     )
     patient_id: Mapped[int | None] = mapped_column(
         Integer,
@@ -132,6 +142,7 @@ class TaskDB(Base):
             'ix_tasks_dedup',
             'type',
             'paper_id',
+            'family_id',
             'patient_id',
             'variant_id',
             'phenotype_id',
@@ -149,6 +160,7 @@ class TaskResp(BaseModel):
     error_message: str | None
     skip_successors: bool
     conversation_ids: dict
+    family_id: int | None
     patient_id: int | None
     variant_id: int | None
     phenotype_id: int | None
@@ -157,6 +169,7 @@ class TaskResp(BaseModel):
 
 class TaskCreateRequest(BaseModel):
     type: TaskType
+    family_id: int | None = None
     patient_id: int | None = None
     variant_id: int | None = None
     phenotype_id: int | None = None
