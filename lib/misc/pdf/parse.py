@@ -158,7 +158,7 @@ def parse_content(paper_id: int, force: bool = False) -> None:
     ).document
 
     document.save_as_markdown(
-        path,
+        pdf_markdown_path(paper_id),
         image_mode=ImageRefMode.REFERENCED,
         escape_html=False,
         escape_underscores=False,
