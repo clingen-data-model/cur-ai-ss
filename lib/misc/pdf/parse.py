@@ -3,6 +3,7 @@ import json
 from io import BytesIO
 from pathlib import Path
 
+from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
 from docling.datamodel.base_models import DocumentStream, InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.document_converter import DocumentConverter, PdfFormatOption
@@ -144,11 +145,12 @@ def parse_content(paper_id: int, force: bool = False) -> None:
     doc_converter = DocumentConverter(
         format_options={
             InputFormat.PDF: PdfFormatOption(
+                backend=PyPdfiumDocumentBackend,
                 pipeline_options=PdfPipelineOptions(
                     images_scale=IMAGE_RESOLUTION_SCALE,
                     generate_page_images=True,
                     generate_picture_images=True,
-                )
+                ),
             )
         }
     )
