@@ -22,7 +22,7 @@ def pubmed_search_and_titles(
     Search PubMed by first author and optionally gene symbol, then fetch titles.
     Returns a list of (pmid, title) tuples for candidate selection.
     """
-    # Phase 1: search by author and gene
+    # Phase 1: search by author (last name) and gene
     search_terms = [f'{first_author}[au]', gene_symbol]
     search_query = ' AND '.join(search_terms)
     params: dict[str, str | int] = {
@@ -131,6 +131,7 @@ Candidate Generation & Selection Workflow:
 
 2️⃣ Candidate Generation:
 - Call `pubmed_search_and_titles` with the `first_author` extracted from the text and the gene_symbol (either extracted from abstract or provided as input).
+- The search will use the last name field (last author name) to prioritize results and filter out common first names.
 - This will return a list of `(pmid, title)` tuples for candidate papers by this author about this gene.
 
 3️⃣ Candidate Selection:
