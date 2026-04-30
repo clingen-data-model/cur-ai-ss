@@ -102,11 +102,10 @@ def pubmed_fetch_one(pmid: str) -> str:
     return xml_text
 
 
-PAPER_EXTRACTION_INSTRUCTIONS = """
+PAPER_EXTRACTION_INSTRUCTIONS = “””
 You are an expert clinical data curator.
 
 Input:
-- Gene symbol for the paper
 - Full text of an academic paper, case report, or registry entry.
 
 Task Overview:
@@ -125,27 +124,32 @@ Task Overview:
 
 Candidate Generation & Selection Workflow:
 
-1️⃣ Candidate Generation:
-- Call `pubmed_search_and_titles` with the `first_author` extracted from the text and the passed in gene_symbol.
+1️⃣ Gene Extraction:
+- Attempt to extract the gene symbol or gene name from the abstract as it appears in the paper.
+- This is the form of the gene that the authors use when discussing this paper.
+- If the gene is NOT mentioned in the abstract, use the Gene symbol provided in the input.
+
+2️⃣ Candidate Generation:
+- Call `pubmed_search_and_titles` with the `first_author` extracted from the text and the gene_symbol (either extracted from abstract or provided as input).
 - This will return a list of `(pmid, title)` tuples for candidate papers by this author about this gene.
 
-2️⃣ Candidate Selection:
+3️⃣ Candidate Selection:
 - Compare each returned title to the `title` extracted from the text.
 - Determine the PMID whose title is most closely aligned (semantic match or exact match).
 - Do NOT assume the first result is correct.
 
-3️⃣ Metadata Fetching:
+4️⃣ Metadata Fetching:
 - Call `pubmed_fetch_one` on the selected PMID to fetch the full PubMed XML.
 - Extract all remaining metadata from that PubMed record:
-    - title: MedlineCitation/Article/ArticleTitle 
-    - first_author: MedlineCitation/Article/AuthorList/Author[1]/LastName 
-    - journal: MedlineCitation/Article/Journal/ISOAbbreviation 
-    - abstract: MedlineCitation/Article/Abstract 
-    - publication_year: MedlineCitation/Article/Journal/JournalIssue/PubDate/Year 
-    - doi: PubmedData/ArticleIdList/ArticleId with IdType="doi" 
-    - pmcid: PubmedData/ArticleIdList/ArticleId with IdType="pmc"
+    - title: MedlineCitation/Article/ArticleTitle
+    - first_author: MedlineCitation/Article/AuthorList/Author[1]/LastName
+    - journal: MedlineCitation/Article/Journal/ISOAbbreviation
+    - abstract: MedlineCitation/Article/Abstract
+    - publication_year: MedlineCitation/Article/Journal/JournalIssue/PubDate/Year
+    - doi: PubmedData/ArticleIdList/ArticleId with IdType=”doi”
+    - pmcid: PubmedData/ArticleIdList/ArticleId with IdType=”pmc”
 
--2. **Paper Type Selection** -
+2. **Paper Type Selection**
 Classify the paper into at MOST two of the following types:
     - Letter: Short correspondence or “Letter to the Editor”; brief report or commentary with limited data and minimal methodological detail.
     - Research: Full original research article presenting novel experimental, computational, or clinical findings with complete methods, results, and discussion.
@@ -160,7 +164,8 @@ Important Guidelines:
 - When a field cannot be confidently identified, fail rather than guess.
 - Always use the `(pmid, title)` pairs to deterministically select the correct PubMed record.
 - Only fetch full records for the chosen PMID.
-"""
+- Prefer the gene form as it appears in the abstract. Only use the provided gene symbol if the gene is not mentioned in the abstract.
+“””
 
 # --- Agent definition
 agent = Agent(
