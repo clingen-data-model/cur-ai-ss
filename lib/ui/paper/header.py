@@ -67,6 +67,8 @@ def render_queue_tasks_fragment(paper_query_params: PaperQueryParams) -> None:
         format_func=lambda t: t.value,
     )
 
+    st.caption(task_type.description)
+
     skip_successors = st.checkbox(
         'Skip successor tasks (run only this task)',
         value=False,

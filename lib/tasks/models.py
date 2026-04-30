@@ -31,6 +31,25 @@ class TaskType(StrEnum):
     PHENOTYPE_EXTRACTION = 'Phenotype Extraction'  # per-patient
     HPO_LINKING = 'HPO Linking'  # per-patient
 
+    @property
+    def description(self) -> str:
+        """Return a human-readable description with context about what this task does."""
+        descriptions: dict[TaskType, str] = {
+            TaskType.PDF_PARSING: 'Parse PDF file and extract text, tables, and images',
+            TaskType.PAPER_METADATA: 'Extract paper title, authors, publication date, and other metadata',
+            TaskType.VARIANT_EXTRACTION: 'Identify genetic variants mentioned in the paper',
+            TaskType.PEDIGREE_DESCRIPTION: 'Analyze the images in the paper to determine if there is a describable pedigree',
+            TaskType.PATIENT_EXTRACTION: 'Extract patient demographic and clinical information',
+            TaskType.SEGREGATION_EVIDENCE_EXTRACTION: 'Collect segregation analysis evidence within each family',
+            TaskType.SEGREGATION_ANALYSIS_COMPUTED: 'Compute segregation analysis results per family',
+            TaskType.VARIANT_HARMONIZATION: 'Normalize variants to standard genomic coordinates',
+            TaskType.VARIANT_ENRICHMENT: 'Add annotations (SpliceAI, conservation scores, etc.) to variants',
+            TaskType.PATIENT_VARIANT_LINKING: 'Associate patients with their variants and inheritance patterns',
+            TaskType.PHENOTYPE_EXTRACTION: 'Extract phenotype text spans per patient',
+            TaskType.HPO_LINKING: 'Map phenotypes to HPO ontology terms for standardization',
+        }
+        return descriptions[self]
+
 
 class TaskStatus(StrEnum):
     PENDING = 'Pending'
