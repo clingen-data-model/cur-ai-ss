@@ -70,5 +70,6 @@ from lib.models.variant import (
     VariantDB,
     VariantEnrichmentOutput,
     VariantResp,
+    VariantUpdateRequest,
 )
 from lib.tasks.models import TaskDB, TaskResp

@@ -18,8 +18,8 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
-from lib.models.base import Base
-from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
+from lib.models.base import Base, PatchModel
+from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock, ReasoningBlock
 from lib.models.paper import PaperDB
 
 if TYPE_CHECKING:
@@ -147,9 +147,9 @@ class VariantResp(BaseModel):
     hgvs_c_evidence: EvidenceBlock[Optional[str]]
     hgvs_p_evidence: EvidenceBlock[Optional[str]]
     hgvs_g_evidence: EvidenceBlock[Optional[str]]
-    variant_type_evidence: EvidenceBlock[str]
-    functional_evidence_evidence: EvidenceBlock[bool]
-    main_focus_evidence: EvidenceBlock[bool]
+    variant_type_evidence: HumanEvidenceBlock[str]
+    functional_evidence_evidence: HumanEvidenceBlock[bool]
+    main_focus_evidence: HumanEvidenceBlock[bool]
     # Harmonized variant (always present with ReasoningBlock, but value may be None if not yet harmonized)
     harmonized_variant: ReasoningBlock[HarmonizedVariantResp | None]
     # Enriched variant (optional, may not yet be enriched)
@@ -171,6 +171,41 @@ class VariantResp(BaseModel):
                 or f'Variant {self.id}'
             )
         return self.variant_evidence.value or f'Variant {self.id}'
+
+
+class VariantUpdateRequest(PatchModel):
+    """Patch model for updating variant fields editable in the UI.
+
+    Fields prefixed with `harmonized_` are routed to the related HarmonizedVariantDB
+    row; fields suffixed with `_human_edit_note` are folded into the matching
+    `*_evidence` JSON column on the VariantDB row.
+    """
+
+    variant_type: str | None = None
+    functional_evidence: bool | None = None
+    main_focus: bool | None = None
+    harmonized_gnomad_style_coordinates: str | None = None
+    harmonized_rsid: str | None = None
+    harmonized_caid: str | None = None
+    harmonized_hgvs_c: str | None = None
+    harmonized_hgvs_p: str | None = None
+    harmonized_hgvs_g: str | None = None
+    variant_type_human_edit_note: str | None = None
+    functional_evidence_human_edit_note: str | None = None
+    main_focus_human_edit_note: str | None = None
+
+    def apply_to(  # type: ignore[override]
+        self,
+        obj: 'VariantDB',
+        harmonized: 'HarmonizedVariantDB | None' = None,
+    ) -> None:
+        for field, value in self.model_dump(exclude_unset=True).items():
+            if field.startswith('harmonized_'):
+                if harmonized is not None:
+                    setattr(harmonized, field.removeprefix('harmonized_'), value)
+            elif not field.endswith('_human_edit_note'):
+                setattr(obj, field, value)
+        self.apply_human_edit_notes(obj)
 
 
 class VariantDB(Base):
