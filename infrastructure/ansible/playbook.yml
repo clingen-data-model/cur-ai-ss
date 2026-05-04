@@ -370,6 +370,17 @@
         enabled: yes
         state: started
 
+    # --- Database Backup ---
+
+    - name: Create cron job for SQLite database backup
+      cron:
+        name: "Backup CAA SQLite database"
+        minute: "0"
+        hour: "2"
+        user: "{{ caa_user }}"
+        job: "cp /var/{{ caa_user }}/sqllite/app.db /var/{{ caa_user }}/sqllite/app.db.backup"
+        cron_file: caa_db_backup
+
   # --- Handlers ---
 
   handlers:
