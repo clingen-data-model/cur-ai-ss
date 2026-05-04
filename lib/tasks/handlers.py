@@ -332,7 +332,8 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
             return family_data['family_id'], result.final_output
 
     results = await asyncio.gather(
-        *[extract_evidence_for_family(f) for f in families_data]
+        *[extract_evidence_for_family(f) for f in families_data],
+        return_exceptions=True,
     )
 
     # Store results in new session
@@ -343,7 +344,14 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
 
         task.conversation_ids.update(conversation_ids)
         # Idempotent: delete-then-insert
-        for family_id, evidence_output in results:
+        for result in results:
+            if isinstance(result, Exception):
+                logger.exception(
+                    f'Failed to extract segregation evidence: {result}'
+                )
+                continue
+
+            family_id, evidence_output = result
             session.query(SegregationEvidenceDB).filter(
                 SegregationEvidenceDB.family_id == family_id
             ).delete()
@@ -466,7 +474,8 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
             return family_data['family_id'], result.final_output
 
     results = await asyncio.gather(
-        *[compute_analysis_for_family(f) for f in families_data]
+        *[compute_analysis_for_family(f) for f in families_data],
+        return_exceptions=True,
     )
 
     # Store results in new session
@@ -477,7 +486,14 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
 
         task.conversation_ids.update(conversation_ids)
         # Idempotent: delete-then-insert
-        for family_id, computed_output in results:
+        for result in results:
+            if isinstance(result, Exception):
+                logger.exception(
+                    f'Failed to compute segregation analysis: {result}'
+                )
+                continue
+
+            family_id, computed_output = result
             session.query(SegregationAnalysisComputedDB).filter(
                 SegregationAnalysisComputedDB.family_id == family_id
             ).delete()
@@ -548,7 +564,8 @@ async def handle_variant_harmonization(task_id: int) -> None:
         *[
             harmonize_single_variant(variant_id, variant_input)
             for variant_id, variant_input in variant_payloads
-        ]
+        ],
+        return_exceptions=True,
     )
 
     # Update DB with results
@@ -570,7 +587,14 @@ async def handle_variant_harmonization(task_id: int) -> None:
             )
         delete_query.delete()
 
-        for variant_id, harmonized_output in results:
+        for result in results:
+            if isinstance(result, Exception):
+                logger.exception(
+                    f'Failed to harmonize variant: {result}'
+                )
+                continue
+
+            variant_id, harmonized_output = result
             session.add(harmonized_variant_to_db(variant_id, harmonized_output))
 
 
@@ -771,7 +795,8 @@ async def handle_phenotype_extraction(task_id: int) -> None:
             return patient_data['patient_id'], result.final_output
 
     results = await asyncio.gather(
-        *[extract_phenotypes_for_patient(p) for p in patient_data_list]
+        *[extract_phenotypes_for_patient(p) for p in patient_data_list],
+        return_exceptions=True,
     )
 
     # Update DB with results
@@ -790,7 +815,14 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         delete_query.delete()
 
         # Insert all results
-        for patient_id, phenotypes in results:
+        for result in results:
+            if isinstance(result, Exception):
+                logger.exception(
+                    f'Failed to extract phenotypes: {result}'
+                )
+                continue
+
+            patient_id, phenotypes = result
             for phenotype in phenotypes:
                 # Ensure patient_id is set on the phenotype
                 if phenotype.patient_id is None or phenotype.patient_id != patient_id:
@@ -862,7 +894,8 @@ async def handle_hpo_linking(task_id: int) -> None:
             return result.final_output
 
     results = await asyncio.gather(
-        *[link_phenotype_to_hpo(phenotype_data) for phenotype_data in phenotype_inputs]
+        *[link_phenotype_to_hpo(phenotype_data) for phenotype_data in phenotype_inputs],
+        return_exceptions=True,
     )
 
     # Store results in new session
@@ -875,10 +908,17 @@ async def handle_hpo_linking(task_id: int) -> None:
         # Idempotent: delete-then-insert
         session.query(HpoDB).filter(HpoDB.phenotype_id.in_(phenotype_id_set)).delete()
 
-        for phenotype_data, hpo_reasoning in zip(phenotype_inputs, results):
+        for phenotype_data, result in zip(phenotype_inputs, results):
+            if isinstance(result, Exception):
+                phenotype_id: int = phenotype_data['phenotype_id']  # type: ignore
+                logger.exception(
+                    f'Failed to link phenotype {phenotype_id} to HPO: {result}'
+                )
+                continue
+
             phenotype_id: int = phenotype_data['phenotype_id']  # type: ignore
             if phenotype_id in phenotype_id_set:
-                session.add(hpo_to_db(phenotype_id, hpo_reasoning))
+                session.add(hpo_to_db(phenotype_id, result))
 
 
 TASK_HANDLERS: dict[
