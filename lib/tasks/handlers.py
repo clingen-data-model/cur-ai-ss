@@ -346,9 +346,7 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
         # Idempotent: delete-then-insert
         for result in results:
             if isinstance(result, Exception):
-                logger.exception(
-                    f'Failed to extract segregation evidence: {result}'
-                )
+                logger.exception(f'Failed to extract segregation evidence: {result}')
                 continue
 
             family_id, evidence_output = result
@@ -488,9 +486,7 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
         # Idempotent: delete-then-insert
         for result in results:
             if isinstance(result, Exception):
-                logger.exception(
-                    f'Failed to compute segregation analysis: {result}'
-                )
+                logger.exception(f'Failed to compute segregation analysis: {result}')
                 continue
 
             family_id, computed_output = result
@@ -589,9 +585,7 @@ async def handle_variant_harmonization(task_id: int) -> None:
 
         for result in results:
             if isinstance(result, Exception):
-                logger.exception(
-                    f'Failed to harmonize variant: {result}'
-                )
+                logger.exception(f'Failed to harmonize variant: {result}')
                 continue
 
             variant_id, harmonized_output = result
@@ -817,9 +811,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         # Insert all results
         for result in results:
             if isinstance(result, Exception):
-                logger.exception(
-                    f'Failed to extract phenotypes: {result}'
-                )
+                logger.exception(f'Failed to extract phenotypes: {result}')
                 continue
 
             patient_id, phenotypes = result
