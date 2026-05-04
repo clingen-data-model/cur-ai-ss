@@ -240,14 +240,20 @@ async def handle_patient_extraction(task_id: int) -> None:
 
 async def handle_segregation_evidence_extraction(task_id: int) -> None:
     """Extract segregation evidence from paper for family/families."""
+    families_data: list[dict] = []
+    stored_conversation_ids: dict[str, str] = {}
+    paper_id: int = 0
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
             return
 
+        paper_id = task.paper_id
         paper = session.get(PaperDB, task.paper_id)
         if not paper:
             return
+
+        stored_conversation_ids = dict(task.conversation_ids)
 
         # Determine which families to process
         if task.family_id:
@@ -261,8 +267,6 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
 
         if not families:
             return
-
-        conv_id = await get_or_create_conversation(task.conversation_ids.get('default'))
 
         for family in families:
             # Load patients in family
@@ -302,27 +306,58 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
                 ],
             }
 
-            result = await Runner.run(
-                segregation_evidence_extractor,
-                f'Paper (fulltext md): {fulltext_md(task.paper_id)}\n\nFamily Structure: {json.dumps(family_info, indent=2, default=str)}',
-                conversation_id=conv_id,
+            families_data.append(
+                {
+                    'family_id': family.id,
+                    'family_info': family_info,
+                }
             )
 
-            # Delete existing segregation evidence and insert new
+    sem = asyncio.Semaphore(2)
+    conversation_ids: dict[int, str] = {}
+
+    async def extract_evidence_for_family(
+        family_data: dict,
+    ) -> tuple[int, Any]:
+        async with sem:
+            conv_id = await get_or_create_conversation(
+                stored_conversation_ids.get(str(family_data['family_id']))
+            )
+            conversation_ids[family_data['family_id']] = conv_id
+            result = await Runner.run(
+                segregation_evidence_extractor,
+                f'Paper (fulltext md): {fulltext_md(paper_id)}\n\nFamily Structure: {json.dumps(family_data["family_info"], indent=2, default=str)}',
+                conversation_id=conv_id,
+            )
+            return family_data['family_id'], result.final_output
+
+    results = await asyncio.gather(
+        *[extract_evidence_for_family(f) for f in families_data]
+    )
+
+    # Store results in new session
+    with session_scope() as session:
+        task = session.get(TaskDB, task_id)
+        if not task:
+            return
+
+        task.conversation_ids.update(conversation_ids)
+        # Idempotent: delete-then-insert
+        for family_id, evidence_output in results:
             session.query(SegregationEvidenceDB).filter(
-                SegregationEvidenceDB.family_id == family.id
+                SegregationEvidenceDB.family_id == family_id
             ).delete()
             session.flush()
 
             # Convert and insert
-            db_evidence = segregation_evidence_to_db(family.id, result.final_output)
+            db_evidence = segregation_evidence_to_db(family_id, evidence_output)
             session.add(db_evidence)
-
-        task.conversation_ids['default'] = conv_id
 
 
 async def handle_segregation_analysis_computed(task_id: int) -> None:
     """Compute segregation analysis metrics for family/families using ClinGen methodology."""
+    families_data: list[dict] = []
+    stored_conversation_ids: dict[str, str] = {}
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
@@ -331,6 +366,8 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
         paper = session.get(PaperDB, task.paper_id)
         if not paper:
             return
+
+        stored_conversation_ids = dict(task.conversation_ids)
 
         # Determine which families to process
         if task.family_id:
@@ -344,8 +381,6 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
 
         if not families:
             return
-
-        conv_id = await get_or_create_conversation(task.conversation_ids.get('default'))
 
         for family in families:
             # Load patients in family
@@ -405,25 +440,54 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
                 else None,
             }
 
-            result = await Runner.run(
-                segregation_analysis_computed_agent,
-                f'Paper (fulltext md): {fulltext_md(task.paper_id)}\n\nFamily Structure and Data: {json.dumps(family_info, indent=2, default=str)}',
-                conversation_id=conv_id,
+            families_data.append(
+                {
+                    'family_id': family.id,
+                    'family_info': family_info,
+                }
             )
 
-            # Delete existing computed analysis and insert new
+    sem = asyncio.Semaphore(2)
+    conversation_ids: dict[int, str] = {}
+
+    async def compute_analysis_for_family(
+        family_data: dict,
+    ) -> tuple[int, Any]:
+        async with sem:
+            conv_id = await get_or_create_conversation(
+                stored_conversation_ids.get(str(family_data['family_id']))
+            )
+            conversation_ids[family_data['family_id']] = conv_id
+            result = await Runner.run(
+                segregation_analysis_computed_agent,
+                f'Family Structure and Data: {json.dumps(family_data["family_info"], indent=2, default=str)}',
+                conversation_id=conv_id,
+            )
+            return family_data['family_id'], result.final_output
+
+    results = await asyncio.gather(
+        *[compute_analysis_for_family(f) for f in families_data]
+    )
+
+    # Store results in new session
+    with session_scope() as session:
+        task = session.get(TaskDB, task_id)
+        if not task:
+            return
+
+        task.conversation_ids.update(conversation_ids)
+        # Idempotent: delete-then-insert
+        for family_id, computed_output in results:
             session.query(SegregationAnalysisComputedDB).filter(
-                SegregationAnalysisComputedDB.family_id == family.id
+                SegregationAnalysisComputedDB.family_id == family_id
             ).delete()
             session.flush()
 
             # Convert and insert
             db_computed = segregation_analysis_computed_to_db(
-                family.id, result.final_output
+                family_id, computed_output
             )
             session.add(db_computed)
-
-        task.conversation_ids['default'] = conv_id
 
 
 async def handle_variant_harmonization(task_id: int) -> None:
