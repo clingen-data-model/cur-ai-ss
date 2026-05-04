@@ -349,7 +349,7 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
                 logger.exception(f'Failed to extract segregation evidence: {result}')
                 continue
 
-            family_id, evidence_output = result
+            family_id, evidence_output = result  # type: ignore[misc]
             session.query(SegregationEvidenceDB).filter(
                 SegregationEvidenceDB.family_id == family_id
             ).delete()
@@ -489,7 +489,7 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
                 logger.exception(f'Failed to compute segregation analysis: {result}')
                 continue
 
-            family_id, computed_output = result
+            family_id, computed_output = result  # type: ignore[misc]
             session.query(SegregationAnalysisComputedDB).filter(
                 SegregationAnalysisComputedDB.family_id == family_id
             ).delete()
@@ -588,7 +588,7 @@ async def handle_variant_harmonization(task_id: int) -> None:
                 logger.exception(f'Failed to harmonize variant: {result}')
                 continue
 
-            variant_id, harmonized_output = result
+            variant_id, harmonized_output = result  # type: ignore[misc]
             session.add(harmonized_variant_to_db(variant_id, harmonized_output))
 
 
@@ -814,7 +814,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
                 logger.exception(f'Failed to extract phenotypes: {result}')
                 continue
 
-            patient_id, phenotypes = result
+            patient_id, phenotypes = result  # type: ignore[misc]
             for phenotype in phenotypes:
                 # Ensure patient_id is set on the phenotype
                 if phenotype.patient_id is None or phenotype.patient_id != patient_id:
@@ -910,7 +910,7 @@ async def handle_hpo_linking(task_id: int) -> None:
 
             phenotype_id: int = phenotype_data['phenotype_id']  # type: ignore
             if phenotype_id in phenotype_id_set:
-                session.add(hpo_to_db(phenotype_id, result))
+                session.add(hpo_to_db(phenotype_id, result))  # type: ignore[arg-type]
 
 
 TASK_HANDLERS: dict[
