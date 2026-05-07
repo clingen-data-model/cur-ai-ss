@@ -3,9 +3,10 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, func
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import JSON
 
 from lib.models.base import Base
 
@@ -22,11 +23,32 @@ class TaskType(StrEnum):
     PEDIGREE_DESCRIPTION = 'Pedigree Description'
     PATIENT_EXTRACTION = 'Patient Extraction'
 
+    SEGREGATION_EVIDENCE_EXTRACTION = 'Segregation Evidence Extraction'  # per-family
+    SEGREGATION_ANALYSIS_COMPUTED = 'Segregation Analysis Computed'  # per-family
     VARIANT_HARMONIZATION = 'Variant Harmonization'
     VARIANT_ENRICHMENT = 'Variant Enrichment'
     PATIENT_VARIANT_LINKING = 'Patient Variant Linking'
     PHENOTYPE_EXTRACTION = 'Phenotype Extraction'  # per-patient
     HPO_LINKING = 'HPO Linking'  # per-patient
+
+    @property
+    def description(self) -> str:
+        """Return a human-readable description with context about what this task does."""
+        descriptions: dict[TaskType, str] = {
+            TaskType.PDF_PARSING: 'Parse PDF file and extract text, tables, and images',
+            TaskType.PAPER_METADATA: 'Extract paper title, authors, publication date, and other metadata',
+            TaskType.VARIANT_EXTRACTION: 'Identify genetic variants mentioned in the paper',
+            TaskType.PEDIGREE_DESCRIPTION: 'Analyze the images in the paper to determine if there is a describable pedigree',
+            TaskType.PATIENT_EXTRACTION: 'Extract patient demographic and clinical information',
+            TaskType.SEGREGATION_EVIDENCE_EXTRACTION: 'Collect segregation analysis evidence within each family',
+            TaskType.SEGREGATION_ANALYSIS_COMPUTED: 'Compute segregation analysis results per family',
+            TaskType.VARIANT_HARMONIZATION: 'Normalize variants to standard genomic coordinates',
+            TaskType.VARIANT_ENRICHMENT: 'Add annotations (SpliceAI, conservation scores, etc.) to variants',
+            TaskType.PATIENT_VARIANT_LINKING: 'Associate patients with their variants and inheritance patterns',
+            TaskType.PHENOTYPE_EXTRACTION: 'Extract phenotype text spans per patient',
+            TaskType.HPO_LINKING: 'Map phenotypes to HPO ontology terms for standardization',
+        }
+        return descriptions[self]
 
 
 class TaskStatus(StrEnum):
@@ -55,7 +77,9 @@ TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
     ],
     TaskType.VARIANT_HARMONIZATION: [TaskType.VARIANT_ENRICHMENT],
     TaskType.VARIANT_ENRICHMENT: [],
-    TaskType.PATIENT_VARIANT_LINKING: [],
+    TaskType.PATIENT_VARIANT_LINKING: [TaskType.SEGREGATION_EVIDENCE_EXTRACTION],
+    TaskType.SEGREGATION_EVIDENCE_EXTRACTION: [TaskType.SEGREGATION_ANALYSIS_COMPUTED],
+    TaskType.SEGREGATION_ANALYSIS_COMPUTED: [],
     TaskType.PHENOTYPE_EXTRACTION: [TaskType.HPO_LINKING],
     TaskType.HPO_LINKING: [],
 }
@@ -88,6 +112,12 @@ class TaskDB(Base):
     type: Mapped[TaskType] = mapped_column(
         SQLEnum(TaskType), nullable=False, index=True
     )
+    family_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey('families.id', ondelete='CASCADE'),
+        nullable=True,
+        index=True,
+    )
     patient_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey('patients.id', ondelete='CASCADE'),
@@ -114,6 +144,10 @@ class TaskDB(Base):
     )
     tries: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error_message: Mapped[str | None] = mapped_column(String, nullable=True)
+    skip_successors: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default='0'
+    )
+    conversation_ids: Mapped[dict] = mapped_column(JSON, nullable=False, default={})
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -127,6 +161,7 @@ class TaskDB(Base):
             'ix_tasks_dedup',
             'type',
             'paper_id',
+            'family_id',
             'patient_id',
             'variant_id',
             'phenotype_id',
@@ -142,6 +177,9 @@ class TaskResp(BaseModel):
     status: TaskStatus
     tries: int
     error_message: str | None
+    skip_successors: bool
+    conversation_ids: dict
+    family_id: int | None
     patient_id: int | None
     variant_id: int | None
     phenotype_id: int | None
@@ -150,6 +188,8 @@ class TaskResp(BaseModel):
 
 class TaskCreateRequest(BaseModel):
     type: TaskType
+    family_id: int | None = None
     patient_id: int | None = None
     variant_id: int | None = None
     phenotype_id: int | None = None
+    skip_successors: bool = False

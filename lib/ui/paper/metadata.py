@@ -54,6 +54,7 @@ def render_metadata_tab() -> None:
         changes['paper_types'] = paper_types
     if (abstract or None) != paper_resp.abstract:
         changes['abstract'] = abstract or None
+
     update_request = PaperUpdateRequest(**changes)
 
     if changes:

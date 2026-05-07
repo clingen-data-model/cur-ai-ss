@@ -67,22 +67,32 @@ def render_queue_tasks_fragment(paper_query_params: PaperQueryParams) -> None:
         format_func=lambda t: t.value,
     )
 
-    # Show the full chain of successors
-    successor_levels = get_all_successor_levels(task_type)
-    if successor_levels:
-        st.markdown('**Will trigger:**')
-        for i, level in enumerate(successor_levels, 1):
-            level_text = ', '.join([t.value for t in level])
-            indent = '  ' * i
-            st.caption(f'{indent}→ {level_text}')
-    else:
-        st.caption('↳ Terminal task (no successors)')
+    st.caption(task_type.description)
+
+    skip_successors = st.checkbox(
+        'Skip successor tasks (run only this task)',
+        value=False,
+        help='When checked, successor tasks will NOT be automatically queued after this task completes',
+    )
+
+    # Show the full chain of successors only if not skipping them
+    if not skip_successors:
+        successor_levels = get_all_successor_levels(task_type)
+        if successor_levels:
+            st.markdown('**Will trigger:**')
+            for i, level in enumerate(successor_levels, 1):
+                level_text = ', '.join([t.value for t in level])
+                indent = '  ' * i
+                st.caption(f'{indent}→ {level_text}')
+        else:
+            st.caption('↳ Terminal task (no successors)')
 
     def on_confirm() -> None:
         try:
             enqueue_paper_task(
                 paper_id=paper_query_params.paper_id,
                 task_type=task_type,
+                skip_successors=skip_successors,
             )
             st.toast('Task Queued', icon=':material/thumb_up:')
             st.session_state.RERUN_POPOVER_STATE_KEY = False

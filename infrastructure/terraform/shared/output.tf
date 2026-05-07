@@ -17,3 +17,10 @@ output "subnetwork" {
     self_link     = google_compute_subnetwork.default.self_link
   }
 }
+
+output "static_resources_bucket" {
+  description = "Static resources GCS bucket"
+  value = {
+    name = google_storage_bucket.static_resources.name
+  }
+}

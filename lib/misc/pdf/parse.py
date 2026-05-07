@@ -3,6 +3,7 @@ import json
 from io import BytesIO
 from pathlib import Path
 
+from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
 from docling.datamodel.base_models import DocumentStream, InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.document_converter import DocumentConverter, PdfFormatOption
@@ -67,14 +68,6 @@ class WordLoc(Polygon):
             x3=self.x3,
             y3=self.y3,
         )
-
-
-def save_unescaped_markdown(document: DoclingDocument, path: Path) -> None:
-    document.save_as_markdown(path, image_mode=ImageRefMode.REFERENCED)
-    text = path.read_text(encoding='utf-8')
-    text = text.replace(r'\_', '_')
-    text = html.unescape(text)
-    path.write_text(text, encoding='utf-8')
 
 
 def parse_words_json(stream: BytesIO) -> list[WordLoc]:
@@ -152,11 +145,12 @@ def parse_content(paper_id: int, force: bool = False) -> None:
     doc_converter = DocumentConverter(
         format_options={
             InputFormat.PDF: PdfFormatOption(
+                backend=PyPdfiumDocumentBackend,
                 pipeline_options=PdfPipelineOptions(
                     images_scale=IMAGE_RESOLUTION_SCALE,
                     generate_page_images=True,
                     generate_picture_images=True,
-                )
+                ),
             )
         }
     )
@@ -165,9 +159,11 @@ def parse_content(paper_id: int, force: bool = False) -> None:
         source=DocumentStream(name='content', stream=BytesIO(paper_db.content)),
     ).document
 
-    save_unescaped_markdown(
-        document,
+    document.save_as_markdown(
         pdf_markdown_path(paper_id),
+        image_mode=ImageRefMode.REFERENCED,
+        escape_html=False,
+        escaping_underscores=False,
     )
 
     document.save_as_json(

@@ -213,6 +213,15 @@ uv run pytest test/api/test_app.py::test_function  # Specific test
 
 **Pipeline status:** `PipelineStatus` enum tracks paper extraction progress. Worker updates this. UI shows status with icons (⏳🟡❌✔️🎉).
 
+**Task Management:**
+- Tasks represent individual extraction steps in the pipeline
+- Tasks have a type, status (Pending/Running/Completed/Failed), and optional scope (patient_id, variant_id, phenotype_id)
+- Tasks form a dependency graph: when a task completes, successor tasks are automatically queued
+- The "Rerun Agents" button in the UI (top-right of paper page) lets you re-run any task and its successors
+- **Skip Successors:** Check "Skip successor tasks" when queueing a task to run ONLY that task without triggering dependent tasks. Useful for debugging or manual reruns. The flag is stored in `tasks.skip_successors` and checked by the worker when a task completes.
+- Task models: `TaskDB` (ORM), `TaskResp` (API response), `TaskCreateRequest` (for queueing)
+- Task status and dependency logic in `lib/tasks/models.py` and `lib/tasks/misc.py`
+
 **Lease-based concurrency:** Worker uses database leases to prevent multiple workers processing the same paper. Lease timeout is 900s.
 
 **PDF highlighting:** Words/images can be highlighted in PDFs with colors (red, orange, yellow, blue, green, violet, gray, primary). Uses Grobid annotations for word positioning.

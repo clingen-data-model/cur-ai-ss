@@ -72,3 +72,30 @@ resource "google_compute_instance" "this" {
     ]
   }
 }
+
+# IAM bindings for GCS bucket access
+resource "google_storage_bucket_iam_member" "static_resources_read" {
+  bucket = "caa-static-resources"
+  role   = "roles/storage.objectViewer"
+  member = "serviceAccount:${google_service_account.this.email}"
+}
+
+resource "google_storage_bucket_iam_member" "static_resources_write" {
+  bucket = "caa-static-resources"
+  role   = "roles/storage.objectCreator"
+  member = "serviceAccount:${google_service_account.this.email}"
+}
+
+# Project-level GCS permission for bucket discovery and administration
+resource "google_project_iam_member" "storage_admin" {
+  project = var.project_id
+  role    = "roles/storage.admin"
+  member  = "serviceAccount:${google_service_account.this.email}"
+}
+
+# Allow the VM service account to sign blobs (for GCS signed URLs)
+resource "google_service_account_iam_member" "token_creator" {
+  service_account_id = google_service_account.this.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.this.email}"
+}

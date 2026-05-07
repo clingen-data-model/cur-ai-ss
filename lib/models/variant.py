@@ -162,8 +162,8 @@ class VariantResp(BaseModel):
         if self.harmonized_variant and self.harmonized_variant.value:
             hv = self.harmonized_variant.value
             return (
-                hv.hgvs_g
-                or hv.hgvs_c
+                hv.hgvs_c
+                or hv.hgvs_g
                 or hv.gnomad_style_coordinates
                 or hv.rsid
                 or hv.hgvs_p

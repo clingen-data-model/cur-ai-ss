@@ -34,16 +34,17 @@ class EvidenceBlock(ReasoningBlock[T]):
             not is_unknown
             and not is_falsy_bool
             and not self.quote
-            and not self.table_id
-            and not self.image_id
+            and self.table_id is None
+            and self.image_id is None
         ):
             raise ValueError(
                 'At least one evidence source must be provided: '
                 'quote, table_id, or image_id'
             )
 
+        # Prioritize table_id if both are provided
         if self.table_id is not None and self.image_id is not None:
-            raise ValueError('Only one of table_id or image_id may be provided')
+            self.image_id = None
 
         return self
 

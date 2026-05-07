@@ -25,12 +25,11 @@ CORE EXTRACTION RULES:
 CRITICAL:
 - quote MUST contain ONLY verbatim text copied from the input source text.
   - No paraphrasing, summarization, or added words.
+  - If possible, the quote should uniquely identify a location in the text.  Give enough detail such that this is possible.
 - A verbatim quote means an exact substring of the input source text with no modifications.
-
 - reasoning MAY include verbatim quotes from the input source text if helpful.
   - reasoning should primarily explain how the value was derived.
   - Any quoted text in reasoning must be copied exactly from the input source text.
-
 - Do NOT place interpretive commentary inside quote.
 - Do NOT paraphrase text inside quote.
 

@@ -91,7 +91,8 @@ async def execute_task(task_id: int) -> None:
             if error_msg is None:
                 task.status = TaskStatus.COMPLETED
                 task.error_message = None
-                enqueue_successors(session, task)
+                if not task.skip_successors:
+                    enqueue_successors(session, task)
             else:
                 task.status = TaskStatus.FAILED
                 task.error_message = error_msg
