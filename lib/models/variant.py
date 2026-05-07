@@ -203,9 +203,13 @@ class VariantUpdateRequest(PatchModel):
             if field.startswith('harmonized_'):
                 if harmonized is not None:
                     setattr(harmonized, field.removeprefix('harmonized_'), value)
-            elif not field.endswith('_human_edit_note'):
+            elif field.endswith('_human_edit_note'):
+                evidence_column = field.replace('_human_edit_note', '_evidence')
+                evidence_dict = getattr(obj, evidence_column, {}).copy()
+                evidence_dict['human_edit_note'] = value
+                setattr(obj, evidence_column, evidence_dict)
+            else:
                 setattr(obj, field, value)
-        self.apply_human_edit_notes(obj)
 
 
 class VariantDB(Base):
