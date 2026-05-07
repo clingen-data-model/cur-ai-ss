@@ -778,6 +778,21 @@ def test_update_variant_partial(client, seeded_paper, seeded_variant):
     assert data['functional_evidence'] is True
 
 
+@pytest.mark.parametrize(
+    'field',
+    ['variant_type', 'functional_evidence', 'main_focus'],
+)
+def test_update_variant_rejects_null_non_nullable_fields(
+    client, seeded_paper, seeded_variant, field
+):
+    """PATCH rejects explicit null for non-nullable VariantDB columns."""
+    response = client.patch(
+        f'/papers/{seeded_paper.id}/variants/{seeded_variant.id}',
+        json={field: None},
+    )
+    assert response.status_code == 422
+
+
 def test_update_variant_edit_harmonized_clears_enrichment(
     client, db_session, seeded_paper, seeded_variant
 ):

@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from pydantic import BaseModel, computed_field
+from pydantic import BaseModel, computed_field, model_validator
 from sqlalchemy import (
     Boolean,
     DateTime,
@@ -193,6 +193,13 @@ class VariantUpdateRequest(PatchModel):
     variant_type_human_edit_note: str | None = None
     functional_evidence_human_edit_note: str | None = None
     main_focus_human_edit_note: str | None = None
+
+    @model_validator(mode='after')
+    def disallow_null_non_nullable_variant_fields(self) -> 'VariantUpdateRequest':
+        for field in ('variant_type', 'functional_evidence', 'main_focus'):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f'{field} cannot be null')
+        return self
 
     def apply_to(  # type: ignore[override]
         self,
