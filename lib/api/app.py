@@ -42,7 +42,11 @@ from lib.misc.pdf.highlight import (
     parse_hex_color,
     words_to_grobid_annotations,
 )
-from lib.misc.pdf.misc import merge_pdfs, pdf_first_page_to_thumbnail_pymupdf_bytes
+from lib.misc.pdf.misc import (
+    docx_to_pdf,
+    merge_pdfs,
+    pdf_first_page_to_thumbnail_pymupdf_bytes,
+)
 from lib.misc.pdf.parse import WordLoc
 from lib.misc.pdf.paths import (
     pdf_dir,
@@ -147,10 +151,14 @@ def put_paper(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail='Only PDF files are allowed'
         )
-    if supplement_file and supplement_file.content_type != 'application/pdf':
+    valid_supplement_types = {
+        'application/pdf',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    }
+    if supplement_file and supplement_file.content_type not in valid_supplement_types:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail='Only PDF files are allowed for supplements',
+            detail='Only PDF or DOCX files are allowed for supplements',
         )
     gene = session.execute(
         select(GeneDB).where(GeneDB.symbol == gene_symbol)
@@ -165,6 +173,12 @@ def put_paper(
     # Merge with supplement if provided
     if supplement_file:
         supplement_content = supplement_file.file.read()
+        # Convert DOCX to PDF if needed
+        if (
+            supplement_file.content_type
+            == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        ):
+            supplement_content = docx_to_pdf(supplement_content)
         content = merge_pdfs(main_content, supplement_content)
     else:
         content = main_content

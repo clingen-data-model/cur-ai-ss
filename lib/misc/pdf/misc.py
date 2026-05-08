@@ -31,6 +31,14 @@ def merge_pdfs(main_pdf_bytes: bytes, supplement_pdf_bytes: bytes) -> bytes:
         supplement_doc.close()
 
 
+def docx_to_pdf(docx_bytes: bytes) -> bytes:
+    import mammoth
+    import weasyprint
+
+    result = mammoth.convert_to_html(io.BytesIO(docx_bytes))
+    return weasyprint.HTML(string=result.value).write_pdf()
+
+
 def pdf_first_page_to_thumbnail_pymupdf_bytes(
     content: bytes,
     zoom: float = 2.0,
