@@ -13,6 +13,7 @@ from lib.models.family import (
     FamilyUpdateRequest,
 )
 from lib.models.paper import (
+    FileFormat,
     GeneDB,
     GeneResp,
     HighlightRequest,

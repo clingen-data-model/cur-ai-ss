@@ -96,6 +96,11 @@ class PaperType(StrEnum):
     Other = 'Other'
 
 
+class FileFormat(StrEnum):
+    PDF = 'pdf'
+    DOCX = 'docx'
+
+
 class PaperDB(Base):
     __tablename__ = 'papers'
 
@@ -117,6 +122,10 @@ class PaperDB(Base):
         back_populates='papers',
     )
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    supplement_format: Mapped[FileFormat | None] = mapped_column(
+        SQLEnum(FileFormat),
+        nullable=True,
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

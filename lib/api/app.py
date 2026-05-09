@@ -43,8 +43,6 @@ from lib.misc.pdf.highlight import (
     words_to_grobid_annotations,
 )
 from lib.misc.pdf.misc import (
-    docx_to_pdf,
-    merge_pdfs,
     pdf_first_page_to_thumbnail_pymupdf_bytes,
 )
 from lib.misc.pdf.parse import WordLoc
@@ -64,6 +62,7 @@ from lib.models import (
     FamilyDB,
     FamilyResp,
     FamilyUpdateRequest,
+    FileFormat,
     GeneDB,
     GeneResp,
     HarmonizedVariantDB,
@@ -171,20 +170,7 @@ def put_paper(
         )
     main_content = uploaded_file.file.read()
 
-    # Merge with supplement if provided
-    if supplement_file:
-        supplement_content = supplement_file.file.read()
-        # Convert DOCX to PDF if needed
-        if (
-            supplement_file.content_type
-            == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-        ):
-            supplement_content = docx_to_pdf(supplement_content)
-        content = merge_pdfs(main_content, supplement_content)
-    else:
-        content = main_content
-
-    paper_db = PaperDB.from_content(content)
+    paper_db = PaperDB.from_content(main_content)
     paper_db.gene_id = gene.id
     paper_db.filename = uploaded_file.filename or ''
     session.add(paper_db)
@@ -207,10 +193,16 @@ def put_paper(
             fp.write(pdf_first_page_to_thumbnail_pymupdf_bytes(main_content))
 
         if supplement_file:
-            supplement_content = supplement_file.file.read()
             pdf_supplements_dir(paper_db.id).mkdir(parents=True, exist_ok=True)
+            supplement_content = supplement_file.file.read()
             with open(pdf_raw_path(paper_db.id, supplement=True), 'wb') as f:
                 f.write(supplement_content)
+            paper_db.supplement_format = (
+                FileFormat.DOCX
+                if supplement_file.content_type
+                == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                else FileFormat.PDF
+            )
         return paper_db
     except IntegrityError:
         session.rollback()

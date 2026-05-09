@@ -1,5 +1,6 @@
 import html
 import json
+from enum import StrEnum
 from io import BytesIO
 from pathlib import Path
 
@@ -36,6 +37,7 @@ from lib.misc.pdf.paths import (
     pdf_words_json_path,
 )
 from lib.models import PaperDB
+from lib.models.paper import FileFormat
 
 IMAGE_RESOLUTION_SCALE = 4.0
 
@@ -134,7 +136,12 @@ def split_by_sections(
     return sections, image_captions
 
 
-def parse_content(paper_id: int, force: bool = False, supplement: bool = False) -> None:
+def parse_content(
+    paper_id: int,
+    force: bool = False,
+    supplement: bool = False,
+    supplement_extension: FileFormat | None = None,
+) -> None:
     if (
         not force
         and pdf_extraction_success_path(paper_id, supplement=supplement).exists()
@@ -146,6 +153,19 @@ def parse_content(paper_id: int, force: bool = False, supplement: bool = False) 
         return
 
     content = raw.read_bytes()
+
+    if supplement and supplement_extension == FileFormat.DOCX:
+        from lib.misc.pdf.misc import docx_to_markdown
+        markdown = docx_to_markdown(content)
+        pdf_markdown_path(paper_id, supplement=supplement).parent.mkdir(
+            parents=True, exist_ok=True
+        )
+        with open(pdf_markdown_path(paper_id, supplement=supplement), 'w') as f:
+            f.write(markdown)
+        with open(pdf_extraction_success_path(paper_id, supplement=supplement), 'w') as f:
+            pass
+        return
+
     pdf_images_dir(paper_id, supplement=supplement).mkdir(parents=True, exist_ok=True)
     pdf_tables_dir(paper_id, supplement=supplement).mkdir(parents=True, exist_ok=True)
     pdf_sections_dir(paper_id, supplement=supplement).mkdir(parents=True, exist_ok=True)
