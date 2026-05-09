@@ -15,8 +15,8 @@ def pdf_raw_path(
     paper_id: int, supplement: bool = False, file_format: str | None = None
 ) -> Path:
     base = pdf_supplements_dir(paper_id) if supplement else pdf_dir(paper_id)
-    if supplement and file_format == 'docx':
-        return base / 'raw.docx'
+    if supplement and file_format:
+        return base / f'raw.{file_format}'
     return base / 'raw.pdf'
 
 
