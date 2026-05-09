@@ -12,8 +12,8 @@ def test_docx_with_image_extracts_markdown_and_images(mocked_root_dir, docx_with
     paper_id = 1
 
     # Set up supplement directory with DOCX file
-    pdf_raw_path(paper_id, supplement=True).parent.mkdir(parents=True, exist_ok=True)
-    pdf_raw_path(paper_id, supplement=True).write_bytes(docx_with_image)
+    pdf_raw_path(paper_id, supplement=True, file_format=FileFormat.DOCX.value).parent.mkdir(parents=True, exist_ok=True)
+    pdf_raw_path(paper_id, supplement=True, file_format=FileFormat.DOCX.value).write_bytes(docx_with_image)
 
     # Parse the supplement as DOCX
     parse_content(paper_id, force=True, supplement_format=FileFormat.DOCX)
@@ -41,8 +41,8 @@ def test_docx_with_image_extracts_markdown_and_images(mocked_root_dir, docx_with
 def test_docx_markdown_includes_image_references(mocked_root_dir, docx_with_image):
     paper_id = 2
 
-    pdf_raw_path(paper_id, supplement=True).parent.mkdir(parents=True, exist_ok=True)
-    pdf_raw_path(paper_id, supplement=True).write_bytes(docx_with_image)
+    pdf_raw_path(paper_id, supplement=True, file_format=FileFormat.DOCX.value).parent.mkdir(parents=True, exist_ok=True)
+    pdf_raw_path(paper_id, supplement=True, file_format=FileFormat.DOCX.value).write_bytes(docx_with_image)
 
     parse_content(paper_id, force=True, supplement_format=FileFormat.DOCX)
 

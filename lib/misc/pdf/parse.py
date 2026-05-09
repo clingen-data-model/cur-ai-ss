@@ -149,7 +149,9 @@ def parse_content(
     ):
         return
 
-    raw = pdf_raw_path(paper_id, supplement=supplement)
+    raw = pdf_raw_path(
+        paper_id, supplement=supplement, file_format=supplement_format.value if supplement_format else None
+    )
     if not raw.exists():
         return
 
