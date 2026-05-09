@@ -196,9 +196,15 @@ def put_paper(
         if supplement_file:
             pdf_supplements_dir(paper_db.id).mkdir(parents=True, exist_ok=True)
             supplement_content = supplement_file.file.read()
-            if supplement_file.content_type == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+            if (
+                supplement_file.content_type
+                == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            ):
                 paper_db.supplement_format = FileFormat.DOCX
-            elif supplement_file.content_type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+            elif (
+                supplement_file.content_type
+                == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            ):
                 paper_db.supplement_format = FileFormat.XLSX
             else:
                 paper_db.supplement_format = FileFormat.PDF
