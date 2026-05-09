@@ -52,6 +52,7 @@ from lib.misc.pdf.paths import (
     pdf_dir,
     pdf_highlighted_path,
     pdf_raw_path,
+    pdf_supplements_dir,
     pdf_thumbnail_path,
     pdf_words_json_path,
 )
@@ -199,11 +200,17 @@ def put_paper(
 
         pdf_raw_path(paper_db.id).parent.mkdir(parents=True, exist_ok=True)
         with open(pdf_raw_path(paper_db.id), 'wb') as f:
-            f.write(content)
+            f.write(main_content)
         with open(pdf_highlighted_path(paper_db.id), 'wb') as f:
-            f.write(content)
+            f.write(main_content)
         with open(pdf_thumbnail_path(paper_db.id), 'wb') as fp:
-            fp.write(pdf_first_page_to_thumbnail_pymupdf_bytes(content))
+            fp.write(pdf_first_page_to_thumbnail_pymupdf_bytes(main_content))
+
+        if supplement_file:
+            supplement_content = supplement_file.file.read()
+            pdf_supplements_dir(paper_db.id).mkdir(parents=True, exist_ok=True)
+            with open(pdf_raw_path(paper_db.id, supplement=True), 'wb') as f:
+                f.write(supplement_content)
         return paper_db
     except IntegrityError:
         session.rollback()
