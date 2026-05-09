@@ -98,7 +98,8 @@ def handle_pdf_parsing(task_id: int) -> None:
         supplement_format = paper.supplement_format if paper else None
 
     parse_content(paper_id, force=True)
-    parse_content(paper_id, force=True, supplement=True, supplement_extension=supplement_format)
+    if supplement_format:
+        parse_content(paper_id, force=True, supplement_format=supplement_format)
 
 
 async def handle_paper_metadata(task_id: int) -> None:

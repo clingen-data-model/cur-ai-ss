@@ -1,4 +1,6 @@
 import io
+import zipfile
+from pathlib import Path
 
 import fitz  # PyMuPDF
 
@@ -31,9 +33,22 @@ def merge_pdfs(main_pdf_bytes: bytes, supplement_pdf_bytes: bytes) -> bytes:
         supplement_doc.close()
 
 
-def docx_to_markdown(docx_bytes: bytes) -> str:
+def docx_to_markdown(docx_bytes: bytes, images_dir: Path) -> str:
     import mammoth
     from markdownify import markdownify as md
+
+    images_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        with zipfile.ZipFile(io.BytesIO(docx_bytes)) as docx_zip:
+            # DOCX files store media in word/media/
+            for name in docx_zip.namelist():
+                if name.startswith('word/media/'):
+                    image_data = docx_zip.read(name)
+                    # Extract just the filename (e.g., image1.png)
+                    filename = Path(name).name
+                    (images_dir / filename).write_bytes(image_data)
+    except (zipfile.BadZipFile, KeyError):
+        pass
 
     result = mammoth.convert_to_html(io.BytesIO(docx_bytes))
     return md(result.value)

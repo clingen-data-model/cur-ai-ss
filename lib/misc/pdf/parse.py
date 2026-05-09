@@ -139,9 +139,10 @@ def split_by_sections(
 def parse_content(
     paper_id: int,
     force: bool = False,
-    supplement: bool = False,
-    supplement_extension: FileFormat | None = None,
+    supplement_format: FileFormat | None = None,
 ) -> None:
+    supplement = supplement_format is not None
+
     if (
         not force
         and pdf_extraction_success_path(paper_id, supplement=supplement).exists()
@@ -154,15 +155,19 @@ def parse_content(
 
     content = raw.read_bytes()
 
-    if supplement and supplement_extension == FileFormat.DOCX:
+    if supplement_format == FileFormat.DOCX:
         from lib.misc.pdf.misc import docx_to_markdown
-        markdown = docx_to_markdown(content)
+
+        images_dir = pdf_images_dir(paper_id, supplement=supplement)
+        markdown = docx_to_markdown(content, images_dir=images_dir)
         pdf_markdown_path(paper_id, supplement=supplement).parent.mkdir(
             parents=True, exist_ok=True
         )
         with open(pdf_markdown_path(paper_id, supplement=supplement), 'w') as f:
             f.write(markdown)
-        with open(pdf_extraction_success_path(paper_id, supplement=supplement), 'w') as f:
+        with open(
+            pdf_extraction_success_path(paper_id, supplement=supplement), 'w'
+        ) as f:
             pass
         return
 
