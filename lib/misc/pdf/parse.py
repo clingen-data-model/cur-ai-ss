@@ -135,7 +135,10 @@ def split_by_sections(
 
 
 def parse_content(paper_id: int, force: bool = False, supplement: bool = False) -> None:
-    if not force and pdf_extraction_success_path(paper_id, supplement=supplement).exists():
+    if (
+        not force
+        and pdf_extraction_success_path(paper_id, supplement=supplement).exists()
+    ):
         return
 
     raw = pdf_raw_path(paper_id, supplement=supplement)
@@ -183,10 +186,14 @@ def parse_content(paper_id: int, force: bool = False, supplement: bool = False) 
             isinstance(element, TableItem)
             and (table_image := element.get_image(document)) is not None
         ):
-            with open(pdf_table_image_path(paper_id, table_id, supplement=supplement), 'wb') as fp:
+            with open(
+                pdf_table_image_path(paper_id, table_id, supplement=supplement), 'wb'
+            ) as fp:
                 table_image.save(fp, 'PNG')
 
-            with open(pdf_table_markdown_path(paper_id, table_id, supplement=supplement), 'w') as fp:
+            with open(
+                pdf_table_markdown_path(paper_id, table_id, supplement=supplement), 'w'
+            ) as fp:
                 fp.write(element.export_to_markdown(document))
 
             table_id += 1
@@ -195,7 +202,9 @@ def parse_content(paper_id: int, force: bool = False, supplement: bool = False) 
             isinstance(element, PictureItem)
             and (image := element.get_image(document)) is not None
         ):
-            with open(pdf_image_path(paper_id, image_id, supplement=supplement), 'wb') as fp:
+            with open(
+                pdf_image_path(paper_id, image_id, supplement=supplement), 'wb'
+            ) as fp:
                 image.save(fp, 'PNG')
 
             image_id += 1
@@ -208,13 +217,17 @@ def parse_content(paper_id: int, force: bool = False, supplement: bool = False) 
     section_mds, image_captions = split_by_sections(document)
 
     for i, section_md in enumerate(section_mds):
-        with open(pdf_section_markdown_path(paper_id, i, supplement=supplement), 'w') as fp:
+        with open(
+            pdf_section_markdown_path(paper_id, i, supplement=supplement), 'w'
+        ) as fp:
             fp.write('## ' + section_md[0])
             fp.write('\n\n')
             fp.write(section_md[1])
 
     for i, caption in image_captions.items():
-        with open(pdf_image_caption_path(paper_id, i, supplement=supplement), 'w') as fp:
+        with open(
+            pdf_image_caption_path(paper_id, i, supplement=supplement), 'w'
+        ) as fp:
             fp.write(caption)
 
     with open(pdf_extraction_success_path(paper_id, supplement=supplement), 'w') as fp:

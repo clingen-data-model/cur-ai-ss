@@ -224,9 +224,7 @@ async def handle_patient_extraction(task_id: int) -> None:
 
         # Load pedigree from DB
         pedigree_row = (
-            session.query(PedigreeDB)
-            .filter(PedigreeDB.paper_id == paper_id)
-            .first()
+            session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).first()
         )
         pedigree_descriptions_output = (
             {
@@ -753,9 +751,7 @@ async def handle_patient_variant_linking(task_id: int) -> None:
         ]
 
         pedigree_row = (
-            session.query(PedigreeDB)
-            .filter(PedigreeDB.paper_id == paper_id)
-            .first()
+            session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).first()
         )
         pedigree_descriptions_output = (
             {

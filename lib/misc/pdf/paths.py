@@ -63,19 +63,27 @@ def pdf_image_path(paper_id: int, image_id: int, supplement: bool = False) -> Pa
     return pdf_images_dir(paper_id, supplement) / f'{image_id}.png'
 
 
-def pdf_image_caption_path(paper_id: int, image_id: int, supplement: bool = False) -> Path:
+def pdf_image_caption_path(
+    paper_id: int, image_id: int, supplement: bool = False
+) -> Path:
     return pdf_images_dir(paper_id, supplement) / f'{image_id}.md'
 
 
-def pdf_table_image_path(paper_id: int, table_id: int, supplement: bool = False) -> Path:
+def pdf_table_image_path(
+    paper_id: int, table_id: int, supplement: bool = False
+) -> Path:
     return pdf_tables_dir(paper_id, supplement) / f'{table_id}.png'
 
 
-def pdf_table_markdown_path(paper_id: int, table_id: int, supplement: bool = False) -> Path:
+def pdf_table_markdown_path(
+    paper_id: int, table_id: int, supplement: bool = False
+) -> Path:
     return pdf_tables_dir(paper_id, supplement) / f'{table_id}.md'
 
 
-def pdf_section_markdown_path(paper_id: int, section_id: int, supplement: bool = False) -> Path:
+def pdf_section_markdown_path(
+    paper_id: int, section_id: int, supplement: bool = False
+) -> Path:
     return pdf_sections_dir(paper_id, supplement) / f'{section_id}.md'
 
 
@@ -83,7 +91,11 @@ def fulltext_md(paper_id: int) -> str:
     main_md = pdf_markdown_path(paper_id).read_text()
     supplement_md = pdf_markdown_path(paper_id, supplement=True)
     if supplement_md.exists():
-        return main_md + '\n\n---\n\n# Supplementary Material\n\n' + supplement_md.read_text()
+        return (
+            main_md
+            + '\n\n---\n\n# Supplementary Material\n\n'
+            + supplement_md.read_text()
+        )
     return main_md
 
 
