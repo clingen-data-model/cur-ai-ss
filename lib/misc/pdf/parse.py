@@ -27,6 +27,7 @@ from lib.misc.pdf.paths import (
     pdf_images_dir,
     pdf_json_path,
     pdf_markdown_path,
+    pdf_raw_path,
     pdf_section_markdown_path,
     pdf_sections_dir,
     pdf_table_image_path,
@@ -133,14 +134,18 @@ def split_by_sections(
     return sections, image_captions
 
 
-def parse_content(paper_id: int, force: bool = False) -> None:
-    if not force and pdf_extraction_success_path(paper_id).exists():
+def parse_content(paper_id: int, force: bool = False, supplement: bool = False) -> None:
+    if not force and pdf_extraction_success_path(paper_id, supplement=supplement).exists():
         return
 
-    paper_db = PaperDB(id=paper_id).with_content()
-    pdf_images_dir(paper_id).mkdir(parents=True, exist_ok=True)
-    pdf_tables_dir(paper_id).mkdir(parents=True, exist_ok=True)
-    pdf_sections_dir(paper_id).mkdir(parents=True, exist_ok=True)
+    raw = pdf_raw_path(paper_id, supplement=supplement)
+    if not raw.exists():
+        return
+
+    content = raw.read_bytes()
+    pdf_images_dir(paper_id, supplement=supplement).mkdir(parents=True, exist_ok=True)
+    pdf_tables_dir(paper_id, supplement=supplement).mkdir(parents=True, exist_ok=True)
+    pdf_sections_dir(paper_id, supplement=supplement).mkdir(parents=True, exist_ok=True)
 
     doc_converter = DocumentConverter(
         format_options={
@@ -156,18 +161,18 @@ def parse_content(paper_id: int, force: bool = False) -> None:
     )
 
     document: DoclingDocument = doc_converter.convert(
-        source=DocumentStream(name='content', stream=BytesIO(paper_db.content)),
+        source=DocumentStream(name='content', stream=BytesIO(content)),
     ).document
 
     document.save_as_markdown(
-        pdf_markdown_path(paper_id),
+        pdf_markdown_path(paper_id, supplement=supplement),
         image_mode=ImageRefMode.REFERENCED,
         escape_html=False,
         escaping_underscores=False,
     )
 
     document.save_as_json(
-        pdf_json_path(paper_id),
+        pdf_json_path(paper_id, supplement=supplement),
         image_mode=ImageRefMode.REFERENCED,
     )
 
@@ -178,10 +183,10 @@ def parse_content(paper_id: int, force: bool = False) -> None:
             isinstance(element, TableItem)
             and (table_image := element.get_image(document)) is not None
         ):
-            with open(pdf_table_image_path(paper_id, table_id), 'wb') as fp:
+            with open(pdf_table_image_path(paper_id, table_id, supplement=supplement), 'wb') as fp:
                 table_image.save(fp, 'PNG')
 
-            with open(pdf_table_markdown_path(paper_id, table_id), 'w') as fp:
+            with open(pdf_table_markdown_path(paper_id, table_id, supplement=supplement), 'w') as fp:
                 fp.write(element.export_to_markdown(document))
 
             table_id += 1
@@ -190,27 +195,27 @@ def parse_content(paper_id: int, force: bool = False) -> None:
             isinstance(element, PictureItem)
             and (image := element.get_image(document)) is not None
         ):
-            with open(pdf_image_path(paper_id, image_id), 'wb') as fp:
+            with open(pdf_image_path(paper_id, image_id, supplement=supplement), 'wb') as fp:
                 image.save(fp, 'PNG')
 
             image_id += 1
 
-    words_json = parse_words_json(BytesIO(paper_db.content))
+    words_json = parse_words_json(BytesIO(content))
 
-    with open(pdf_words_json_path(paper_id), 'w') as fp:
+    with open(pdf_words_json_path(paper_id, supplement=supplement), 'w') as fp:
         json.dump([w.model_dump() for w in words_json], fp, indent=2)
 
     section_mds, image_captions = split_by_sections(document)
 
     for i, section_md in enumerate(section_mds):
-        with open(pdf_section_markdown_path(paper_id, i), 'w') as fp:
+        with open(pdf_section_markdown_path(paper_id, i, supplement=supplement), 'w') as fp:
             fp.write('## ' + section_md[0])
             fp.write('\n\n')
             fp.write(section_md[1])
 
     for i, caption in image_captions.items():
-        with open(pdf_image_caption_path(paper_id, i), 'w') as fp:
+        with open(pdf_image_caption_path(paper_id, i, supplement=supplement), 'w') as fp:
             fp.write(caption)
 
-    with open(pdf_extraction_success_path(paper_id), 'w') as fp:
+    with open(pdf_extraction_success_path(paper_id, supplement=supplement), 'w') as fp:
         fp.write('')

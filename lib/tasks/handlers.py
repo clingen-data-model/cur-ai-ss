@@ -93,11 +93,17 @@ def handle_pdf_parsing(task_id: int) -> None:
         task = session.get(TaskDB, task_id)
         if not task:
             return
-        parse_content(task.paper_id, force=True)
+        paper_id = task.paper_id
+
+    parse_content(paper_id, force=True)
+    parse_content(paper_id, force=True, supplement=True)
 
 
 async def handle_paper_metadata(task_id: int) -> None:
     """Extract paper metadata (title, authors, abstract, etc)."""
+    paper_id: int
+    gene_symbol: str
+    stored_conv_id: str | None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
@@ -107,21 +113,30 @@ async def handle_paper_metadata(task_id: int) -> None:
         if not paper:
             return
 
-        conv_id = await get_or_create_conversation(task.conversation_ids.get('default'))
-        result = await Runner.run(
-            paper_extraction_agent,
-            f'Gene: {paper.gene.symbol}\n\nPaper (fulltext md): {fulltext_md(task.paper_id)}',
-            conversation_id=conv_id,
-        )
+        paper_id = task.paper_id
+        gene_symbol = paper.gene.symbol
+        stored_conv_id = task.conversation_ids.get('default')
 
-        task.conversation_ids['default'] = conv_id
-        paper = session.get(PaperDB, task.paper_id)
+    conv_id = await get_or_create_conversation(stored_conv_id)
+    result = await Runner.run(
+        paper_extraction_agent,
+        f'Gene: {gene_symbol}\n\nPaper (fulltext md): {fulltext_md(paper_id)}',
+        conversation_id=conv_id,
+    )
+
+    with session_scope() as session:
+        task = session.get(TaskDB, task_id)
+        if task:
+            task.conversation_ids['default'] = conv_id
+        paper = session.get(PaperDB, paper_id)
         if paper:
             result.final_output.apply_to(paper)
 
 
 async def handle_variant_extraction(task_id: int) -> None:
     """Extract genetic variants from paper."""
+    paper_id: int
+    gene_symbol: str
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
@@ -131,69 +146,86 @@ async def handle_variant_extraction(task_id: int) -> None:
         if not paper:
             return
 
-        result = await Runner.run(
-            variant_extraction_agent,
-            f'Gene Symbol: {paper.gene.symbol}\nPaper (fulltext md): {fulltext_md(task.paper_id)}',
-        )
+        paper_id = task.paper_id
+        gene_symbol = paper.gene.symbol
 
+    result = await Runner.run(
+        variant_extraction_agent,
+        f'Gene Symbol: {gene_symbol}\nPaper (fulltext md): {fulltext_md(paper_id)}',
+    )
+
+    with session_scope() as session:
         # Idempotent: delete-then-insert
-        session.query(VariantDB).filter(VariantDB.paper_id == task.paper_id).delete()
+        session.query(VariantDB).filter(VariantDB.paper_id == paper_id).delete()
         for variant in result.final_output.variants:
-            session.add(variant_to_db(task.paper_id, variant))
+            session.add(variant_to_db(paper_id, variant))
 
 
 async def handle_pedigree_description(task_id: int) -> None:
     """Describe pedigree images from paper."""
+    paper_id: int
+    stored_conv_id: str | None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
             return
+        paper_id = task.paper_id
+        stored_conv_id = task.conversation_ids.get('default')
 
-        image_id, combined_text = 0, ''
-        while True:
-            pdf_image = pdf_image_path(task.paper_id, image_id)
-            if not pdf_image.exists():
-                break
-            caption_path = pdf_image_caption_path(task.paper_id, image_id)
-            caption_text = (
-                caption_path.read_text() if caption_path.exists() else 'No caption'
-            )
-            # Upload image to GCS and get signed URL
-            logger.info(f'Processing image {image_id} from {pdf_image}')
-            image_url = upload_and_sign_image(task.paper_id, image_id, pdf_image)
-            logger.info(
-                f'Image {image_id} URL type: {type(image_url)}, starts with: {image_url[:50] if image_url else "None"}'
-            )
-            combined_text += f'[Processing Pipeline Figure {image_id}]\n'
-            combined_text += f'URL: {image_url}\n'
-            combined_text += f'Caption: {caption_text}\n\n'
-            image_id += 1
-
-        conv_id = await get_or_create_conversation(task.conversation_ids.get('default'))
-        result = await Runner.run(
-            pedigree_describer_agent,
-            combined_text,
-            conversation_id=conv_id,
+    image_id, combined_text = 0, ''
+    while True:
+        pdf_image = pdf_image_path(paper_id, image_id)
+        if not pdf_image.exists():
+            break
+        caption_path = pdf_image_caption_path(paper_id, image_id)
+        caption_text = (
+            caption_path.read_text() if caption_path.exists() else 'No caption'
         )
+        # Upload image to GCS and get signed URL
+        logger.info(f'Processing image {image_id} from {pdf_image}')
+        image_url = upload_and_sign_image(paper_id, image_id, pdf_image)
+        logger.info(
+            f'Image {image_id} URL type: {type(image_url)}, starts with: {image_url[:50] if image_url else "None"}'
+        )
+        combined_text += f'[Processing Pipeline Figure {image_id}]\n'
+        combined_text += f'URL: {image_url}\n'
+        combined_text += f'Caption: {caption_text}\n\n'
+        image_id += 1
 
-        task.conversation_ids['default'] = conv_id
+    conv_id = await get_or_create_conversation(stored_conv_id)
+    result = await Runner.run(
+        pedigree_describer_agent,
+        combined_text,
+        conversation_id=conv_id,
+    )
+
+    with session_scope() as session:
+        task = session.get(TaskDB, task_id)
+        if task:
+            task.conversation_ids['default'] = conv_id
         # Idempotent: delete-then-insert
-        session.query(PedigreeDB).filter(PedigreeDB.paper_id == task.paper_id).delete()
+        session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).delete()
         if result.final_output and result.final_output.found:
-            session.add(pedigree_to_db(task.paper_id, result.final_output))
+            session.add(pedigree_to_db(paper_id, result.final_output))
 
 
 async def handle_patient_extraction(task_id: int) -> None:
     """Extract patient information from paper."""
+    paper_id: int
+    pedigree_descriptions_output: dict | None
+    stored_conv_id: str | None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
             return
 
+        paper_id = task.paper_id
+        stored_conv_id = task.conversation_ids.get('default')
+
         # Load pedigree from DB
         pedigree_row = (
             session.query(PedigreeDB)
-            .filter(PedigreeDB.paper_id == task.paper_id)
+            .filter(PedigreeDB.paper_id == paper_id)
             .first()
         )
         pedigree_descriptions_output = (
@@ -205,29 +237,32 @@ async def handle_patient_extraction(task_id: int) -> None:
             else None
         )
 
-        conv_id = await get_or_create_conversation(task.conversation_ids.get('default'))
-        result = await Runner.run(
-            patient_extraction_agent,
-            f'Paper (fulltext md): {fulltext_md(task.paper_id)}\nPedigree Description: \n {pedigree_descriptions_output}',
-            conversation_id=conv_id,
-        )
+    conv_id = await get_or_create_conversation(stored_conv_id)
+    result = await Runner.run(
+        patient_extraction_agent,
+        f'Paper (fulltext md): {fulltext_md(paper_id)}\nPedigree Description: \n {pedigree_descriptions_output}',
+        conversation_id=conv_id,
+    )
 
-        task.conversation_ids['default'] = conv_id
+    with session_scope() as session:
+        task = session.get(TaskDB, task_id)
+        if task:
+            task.conversation_ids['default'] = conv_id
         # Idempotent: delete families (CASCADE deletes patients), then re-insert both
-        session.query(FamilyDB).filter(FamilyDB.paper_id == task.paper_id).delete()
+        session.query(FamilyDB).filter(FamilyDB.paper_id == paper_id).delete()
         session.flush()
 
         # Insert families first so we have family IDs for patient assignment
         family_entries_by_id: dict[str, int] = {}
         for entry in result.final_output.families:
-            db_family = family_to_db(task.paper_id, entry.family)
+            db_family = family_to_db(paper_id, entry.family)
             session.add(db_family)
             session.flush()
             family_entries_by_id[entry.family.identifier.value] = db_family.id
 
         # Insert patients with family assignments
         for patient_info in result.final_output.patients:
-            db_patient = patient_to_db(task.paper_id, patient_info)
+            db_patient = patient_to_db(paper_id, patient_info)
             # Use family_identifier from patient to find correct family
             family_id_value = patient_info.family_identifier.value
             if family_id_value in family_entries_by_id:
@@ -675,14 +710,22 @@ async def handle_variant_enrichment(task_id: int) -> None:
 
 async def handle_patient_variant_linking(task_id: int) -> None:
     """Link patients to variants with inheritance info."""
+    paper_id: int
+    structured_variants: list
+    structured_patients: list
+    pedigree_descriptions_output: dict | None
+    stored_conv_id: str | None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
             return
 
+        paper_id = task.paper_id
+        stored_conv_id = task.conversation_ids.get('default')
+
         variant_rows = (
             session.query(VariantDB)
-            .filter(VariantDB.paper_id == task.paper_id)
+            .filter(VariantDB.paper_id == paper_id)
             .order_by(VariantDB.id)
             .all()
         )
@@ -696,7 +739,7 @@ async def handle_patient_variant_linking(task_id: int) -> None:
 
         patient_rows = (
             session.query(PatientDB)
-            .filter(PatientDB.paper_id == task.paper_id)
+            .filter(PatientDB.paper_id == paper_id)
             .order_by(PatientDB.id)
             .all()
         )
@@ -711,7 +754,7 @@ async def handle_patient_variant_linking(task_id: int) -> None:
 
         pedigree_row = (
             session.query(PedigreeDB)
-            .filter(PedigreeDB.paper_id == task.paper_id)
+            .filter(PedigreeDB.paper_id == paper_id)
             .first()
         )
         pedigree_descriptions_output = (
@@ -723,20 +766,23 @@ async def handle_patient_variant_linking(task_id: int) -> None:
             else None
         )
 
-        conv_id = await get_or_create_conversation(task.conversation_ids.get('default'))
-        result = await Runner.run(
-            patient_variant_linking_agent,
-            f'Variants JSON:\n{structured_variants}\n Patients JSON:\n {structured_patients} Pedigree Description: \n {pedigree_descriptions_output} Paper (fulltext md): {fulltext_md(task.paper_id)}',
-            conversation_id=conv_id,
-        )
+    conv_id = await get_or_create_conversation(stored_conv_id)
+    result = await Runner.run(
+        patient_variant_linking_agent,
+        f'Variants JSON:\n{structured_variants}\n Patients JSON:\n {structured_patients} Pedigree Description: \n {pedigree_descriptions_output} Paper (fulltext md): {fulltext_md(paper_id)}',
+        conversation_id=conv_id,
+    )
 
-        task.conversation_ids['default'] = conv_id
+    with session_scope() as session:
+        task = session.get(TaskDB, task_id)
+        if task:
+            task.conversation_ids['default'] = conv_id
         # Idempotent: delete-then-insert
         session.query(PatientVariantLinkDB).filter(
-            PatientVariantLinkDB.paper_id == task.paper_id
+            PatientVariantLinkDB.paper_id == paper_id
         ).delete()
         for link in result.final_output.links:
-            session.add(patient_variant_link_to_db(task.paper_id, link))
+            session.add(patient_variant_link_to_db(paper_id, link))
 
 
 async def handle_phenotype_extraction(task_id: int) -> None:

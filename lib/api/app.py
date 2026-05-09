@@ -42,12 +42,13 @@ from lib.misc.pdf.highlight import (
     parse_hex_color,
     words_to_grobid_annotations,
 )
-from lib.misc.pdf.misc import merge_pdfs, pdf_first_page_to_thumbnail_pymupdf_bytes
+from lib.misc.pdf.misc import pdf_first_page_to_thumbnail_pymupdf_bytes
 from lib.misc.pdf.parse import WordLoc
 from lib.misc.pdf.paths import (
     pdf_dir,
     pdf_highlighted_path,
     pdf_raw_path,
+    pdf_supplements_dir,
     pdf_thumbnail_path,
     pdf_words_json_path,
 )
@@ -162,14 +163,7 @@ def put_paper(
         )
     main_content = uploaded_file.file.read()
 
-    # Merge with supplement if provided
-    if supplement_file:
-        supplement_content = supplement_file.file.read()
-        content = merge_pdfs(main_content, supplement_content)
-    else:
-        content = main_content
-
-    paper_db = PaperDB.from_content(content)
+    paper_db = PaperDB.from_content(main_content)
     paper_db.gene_id = gene.id
     paper_db.filename = uploaded_file.filename or ''
     session.add(paper_db)
@@ -185,11 +179,17 @@ def put_paper(
 
         pdf_raw_path(paper_db.id).parent.mkdir(parents=True, exist_ok=True)
         with open(pdf_raw_path(paper_db.id), 'wb') as f:
-            f.write(content)
+            f.write(main_content)
         with open(pdf_highlighted_path(paper_db.id), 'wb') as f:
-            f.write(content)
+            f.write(main_content)
         with open(pdf_thumbnail_path(paper_db.id), 'wb') as fp:
-            fp.write(pdf_first_page_to_thumbnail_pymupdf_bytes(content))
+            fp.write(pdf_first_page_to_thumbnail_pymupdf_bytes(main_content))
+
+        if supplement_file:
+            supplement_content = supplement_file.file.read()
+            pdf_supplements_dir(paper_db.id).mkdir(parents=True, exist_ok=True)
+            with open(pdf_raw_path(paper_db.id, supplement=True), 'wb') as f:
+                f.write(supplement_content)
         return paper_db
     except IntegrityError:
         session.rollback()
