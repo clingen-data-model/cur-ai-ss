@@ -96,6 +96,15 @@ from lib.tasks.models import TaskStatus, TaskType
 
 logger = logging.getLogger(__name__)
 
+_SUPPLEMENT_ALLOWED_TYPES = {
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+}
+_SUPPLEMENT_EXTENSIONS = {
+    'application/pdf': 'pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+}
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -148,10 +157,13 @@ def put_paper(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail='Only PDF files are allowed'
         )
-    if supplement_file and supplement_file.content_type != 'application/pdf':
+    if (
+        supplement_file
+        and supplement_file.content_type not in _SUPPLEMENT_ALLOWED_TYPES
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail='Only PDF files are allowed for supplements',
+            detail='Only PDF or DOCX files are allowed for supplements',
         )
     gene = session.execute(
         select(GeneDB).where(GeneDB.symbol == gene_symbol)
@@ -187,8 +199,13 @@ def put_paper(
 
         if supplement_file:
             supplement_content = supplement_file.file.read()
+            content_type = supplement_file.content_type
+            ext = _SUPPLEMENT_EXTENSIONS[content_type]  # type: ignore[index]
+            paper_db.supplement_extension = ext
             pdf_supplements_dir(paper_db.id).mkdir(parents=True, exist_ok=True)
-            with open(pdf_raw_path(paper_db.id, supplement=True), 'wb') as f:
+            with open(
+                pdf_raw_path(paper_db.id, supplement=True, extension=ext), 'wb'
+            ) as f:
                 f.write(supplement_content)
         return paper_db
     except IntegrityError:

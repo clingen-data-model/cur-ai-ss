@@ -20,6 +20,11 @@ from lib.models import (
 )
 from lib.tasks import TaskCreateRequest, TaskType, infer_paper_status
 
+_SUPPLEMENT_MIME_TYPES = {
+    'pdf': 'application/pdf',
+    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+}
+
 
 def get_http_error_detail(e: requests.HTTPError) -> str:
     """Safely extract the 'detail' from an HTTPError response."""
@@ -66,10 +71,12 @@ def put_paper(
         )
     }
     if supplement_file:
+        ext = supplement_file.name.rsplit('.', 1)[-1].lower()
+        mime = _SUPPLEMENT_MIME_TYPES.get(ext, 'application/octet-stream')
         files['supplement_file'] = (
             supplement_file.name,
             supplement_file.read(),
-            'application/pdf',
+            mime,
         )
 
     resp = requests.put(

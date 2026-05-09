@@ -11,9 +11,11 @@ def pdf_supplements_dir(paper_id: int) -> Path:
     return pdf_dir(paper_id) / 'supplements'
 
 
-def pdf_raw_path(paper_id: int, supplement: bool = False) -> Path:
+def pdf_raw_path(
+    paper_id: int, supplement: bool = False, extension: str = 'pdf'
+) -> Path:
     base = pdf_supplements_dir(paper_id) if supplement else pdf_dir(paper_id)
-    return base / 'raw.pdf'
+    return base / f'raw.{extension}'
 
 
 def pdf_thumbnail_path(paper_id: int) -> Path:

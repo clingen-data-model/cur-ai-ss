@@ -117,6 +117,7 @@ class PaperDB(Base):
         back_populates='papers',
     )
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    supplement_extension: Mapped[str | None] = mapped_column(String(10), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

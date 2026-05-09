@@ -6,7 +6,11 @@ from pathlib import Path
 from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
 from docling.datamodel.base_models import DocumentStream, InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions
-from docling.document_converter import DocumentConverter, PdfFormatOption
+from docling.document_converter import (
+    DocumentConverter,
+    PdfFormatOption,
+    WordFormatOption,
+)
 from docling_core.types.doc import (
     DocItemLabel,
     DoclingDocument,
@@ -141,7 +145,18 @@ def parse_content(paper_id: int, force: bool = False, supplement: bool = False) 
     ):
         return
 
-    raw = pdf_raw_path(paper_id, supplement=supplement)
+    if supplement:
+        from lib.api.db import session_scope
+
+        with session_scope() as session:
+            paper = session.query(PaperDB).filter(PaperDB.id == paper_id).one_or_none()
+            if not paper or not paper.supplement_extension:
+                return
+            extension = paper.supplement_extension
+    else:
+        extension = 'pdf'
+
+    raw = pdf_raw_path(paper_id, supplement=supplement, extension=extension)
     if not raw.exists():
         return
 
@@ -159,12 +174,13 @@ def parse_content(paper_id: int, force: bool = False, supplement: bool = False) 
                     generate_page_images=True,
                     generate_picture_images=True,
                 ),
-            )
+            ),
+            InputFormat.DOCX: WordFormatOption(),
         }
     )
 
     document: DoclingDocument = doc_converter.convert(
-        source=DocumentStream(name='content', stream=BytesIO(content)),
+        source=DocumentStream(name=f'content.{extension}', stream=BytesIO(content)),
     ).document
 
     document.save_as_markdown(
@@ -209,10 +225,11 @@ def parse_content(paper_id: int, force: bool = False, supplement: bool = False) 
 
             image_id += 1
 
-    words_json = parse_words_json(BytesIO(content))
+    if extension == 'pdf':
+        words_json = parse_words_json(BytesIO(content))
 
-    with open(pdf_words_json_path(paper_id, supplement=supplement), 'w') as fp:
-        json.dump([w.model_dump() for w in words_json], fp, indent=2)
+        with open(pdf_words_json_path(paper_id, supplement=supplement), 'w') as fp:
+            json.dump([w.model_dump() for w in words_json], fp, indent=2)
 
     section_mds, image_captions = split_by_sections(document)
 
