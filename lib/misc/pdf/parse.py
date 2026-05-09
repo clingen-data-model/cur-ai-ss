@@ -7,7 +7,13 @@ from pathlib import Path
 from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
 from docling.datamodel.base_models import DocumentStream, InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions
-from docling.document_converter import DocumentConverter, PdfFormatOption
+from docling.document_converter import (
+    DocumentConverter,
+    ExcelFormatOption,
+    FormatOption,
+    PdfFormatOption,
+    WordFormatOption,
+)
 from docling_core.types.doc import (
     DocItemLabel,
     DoclingDocument,
@@ -150,35 +156,26 @@ def parse_content(
         return
 
     raw = pdf_raw_path(
-        paper_id, supplement=supplement, file_format=supplement_format.value if supplement_format else None
+        paper_id,
+        supplement=supplement,
+        file_format=supplement_format.value if supplement_format else None,
     )
     if not raw.exists():
         return
 
     content = raw.read_bytes()
 
-    if supplement_format == FileFormat.DOCX:
-        from lib.misc.pdf.misc import docx_to_markdown
-
-        images_dir = pdf_images_dir(paper_id, supplement=supplement)
-        markdown = docx_to_markdown(content, images_dir=images_dir)
-        pdf_markdown_path(paper_id, supplement=supplement).parent.mkdir(
-            parents=True, exist_ok=True
-        )
-        with open(pdf_markdown_path(paper_id, supplement=supplement), 'w') as f:
-            f.write(markdown)
-        with open(
-            pdf_extraction_success_path(paper_id, supplement=supplement), 'w'
-        ) as f:
-            pass
-        return
-
     pdf_images_dir(paper_id, supplement=supplement).mkdir(parents=True, exist_ok=True)
     pdf_tables_dir(paper_id, supplement=supplement).mkdir(parents=True, exist_ok=True)
     pdf_sections_dir(paper_id, supplement=supplement).mkdir(parents=True, exist_ok=True)
 
-    doc_converter = DocumentConverter(
-        format_options={
+    format_options: dict[InputFormat, FormatOption]
+    if supplement_format == FileFormat.DOCX:
+        format_options = {InputFormat.DOCX: WordFormatOption()}
+    elif supplement_format == FileFormat.XLSX:
+        format_options = {InputFormat.XLSX: ExcelFormatOption()}
+    else:
+        format_options = {
             InputFormat.PDF: PdfFormatOption(
                 backend=PyPdfiumDocumentBackend,
                 pipeline_options=PdfPipelineOptions(
@@ -186,9 +183,10 @@ def parse_content(
                     generate_page_images=True,
                     generate_picture_images=True,
                 ),
-            )
+            ),
         }
-    )
+
+    doc_converter = DocumentConverter(format_options=format_options)
 
     document: DoclingDocument = doc_converter.convert(
         source=DocumentStream(name='content', stream=BytesIO(content)),

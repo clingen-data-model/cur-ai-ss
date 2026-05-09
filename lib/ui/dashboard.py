@@ -57,8 +57,8 @@ def upload_paper_modal() -> None:
     )
     if uploaded_file:
         supplement_file = st.file_uploader(
-            'Upload Supplement PDF or DOCX (optional)',
-            type=['pdf', 'docx'],
+            'Upload Supplement PDF, DOCX, or XLSX (optional)',
+            type=['pdf', 'docx', 'xlsx'],
             accept_multiple_files=False,
             key='supplement_uploader',
         )

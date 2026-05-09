@@ -99,6 +99,7 @@ class PaperType(StrEnum):
 class FileFormat(StrEnum):
     PDF = 'pdf'
     DOCX = 'docx'
+    XLSX = 'xlsx'
 
 
 class PaperDB(Base):

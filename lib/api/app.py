@@ -154,11 +154,12 @@ def put_paper(
     valid_supplement_types = {
         'application/pdf',
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     }
     if supplement_file and supplement_file.content_type not in valid_supplement_types:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail='Only PDF or DOCX files are allowed for supplements',
+            detail='Only PDF, DOCX, or XLSX files are allowed for supplements',
         )
     gene = session.execute(
         select(GeneDB).where(GeneDB.symbol == gene_symbol)
@@ -195,13 +196,20 @@ def put_paper(
         if supplement_file:
             pdf_supplements_dir(paper_db.id).mkdir(parents=True, exist_ok=True)
             supplement_content = supplement_file.file.read()
-            paper_db.supplement_format = (
-                FileFormat.DOCX
-                if supplement_file.content_type
-                == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-                else FileFormat.PDF
-            )
-            with open(pdf_raw_path(paper_db.id, supplement=True, file_format=paper_db.supplement_format.value), 'wb') as f:
+            if supplement_file.content_type == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+                paper_db.supplement_format = FileFormat.DOCX
+            elif supplement_file.content_type == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':
+                paper_db.supplement_format = FileFormat.XLSX
+            else:
+                paper_db.supplement_format = FileFormat.PDF
+            with open(
+                pdf_raw_path(
+                    paper_db.id,
+                    supplement=True,
+                    file_format=paper_db.supplement_format.value,
+                ),
+                'wb',
+            ) as f:
                 f.write(supplement_content)
         return paper_db
     except IntegrityError:
