@@ -123,7 +123,7 @@ async def handle_paper_metadata(task_id: int) -> None:
     conv_id = await get_or_create_conversation(stored_conv_id)
     result = await Runner.run(
         paper_extraction_agent,
-        f'Gene: {gene_symbol}\n\nPaper (fulltext md): {fulltext_md(paper_id)}',
+        f'Gene: {gene_symbol}\n\nPaper (fulltext md): {fulltext_md(paper_id, paper.supplement_format)}',
         conversation_id=conv_id,
     )
 
@@ -154,7 +154,7 @@ async def handle_variant_extraction(task_id: int) -> None:
 
     result = await Runner.run(
         variant_extraction_agent,
-        f'Gene Symbol: {gene_symbol}\nPaper (fulltext md): {fulltext_md(paper_id)}',
+        f'Gene Symbol: {gene_symbol}\nPaper (fulltext md): {fulltext_md(paper_id, paper.supplement_format)}',
     )
 
     with session_scope() as session:
@@ -217,6 +217,7 @@ async def handle_patient_extraction(task_id: int) -> None:
     paper_id: int
     pedigree_descriptions_output: dict | None
     stored_conv_id: str | None
+    supplement_format = None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
@@ -225,7 +226,10 @@ async def handle_patient_extraction(task_id: int) -> None:
         paper_id = task.paper_id
         stored_conv_id = task.conversation_ids.get('default')
 
-        # Load pedigree from DB
+        # Load paper and pedigree from DB
+        paper = session.get(PaperDB, paper_id)
+        supplement_format = paper.supplement_format if paper else None
+
         pedigree_row = (
             session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).first()
         )
@@ -241,7 +245,7 @@ async def handle_patient_extraction(task_id: int) -> None:
     conv_id = await get_or_create_conversation(stored_conv_id)
     result = await Runner.run(
         patient_extraction_agent,
-        f'Paper (fulltext md): {fulltext_md(paper_id)}\nPedigree Description: \n {pedigree_descriptions_output}',
+        f'Paper (fulltext md): {fulltext_md(paper_id, supplement_format)}\nPedigree Description: \n {pedigree_descriptions_output}',
         conversation_id=conv_id,
     )
 
@@ -279,6 +283,7 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
     families_data: list[dict] = []
     stored_conversation_ids: dict[str, str] = {}
     paper_id: int = 0
+    supplement_format = None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
@@ -289,6 +294,7 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
         if not paper:
             return
 
+        supplement_format = paper.supplement_format
         stored_conversation_ids = dict(task.conversation_ids)
 
         # Determine which families to process
@@ -362,7 +368,7 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
             conversation_ids[family_data['family_id']] = conv_id
             result = await Runner.run(
                 segregation_evidence_extractor,
-                f'Paper (fulltext md): {fulltext_md(paper_id)}\n\nFamily Structure: {json.dumps(family_data["family_info"], indent=2, default=str)}',
+                f'Paper (fulltext md): {fulltext_md(paper_id, supplement_format)}\n\nFamily Structure: {json.dumps(family_data["family_info"], indent=2, default=str)}',
                 conversation_id=conv_id,
             )
             return family_data['family_id'], result.final_output
@@ -716,6 +722,7 @@ async def handle_patient_variant_linking(task_id: int) -> None:
     structured_patients: list
     pedigree_descriptions_output: dict | None
     stored_conv_id: str | None
+    supplement_format = None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
@@ -723,6 +730,9 @@ async def handle_patient_variant_linking(task_id: int) -> None:
 
         paper_id = task.paper_id
         stored_conv_id = task.conversation_ids.get('default')
+
+        paper = session.get(PaperDB, paper_id)
+        supplement_format = paper.supplement_format if paper else None
 
         variant_rows = (
             session.query(VariantDB)
@@ -768,7 +778,7 @@ async def handle_patient_variant_linking(task_id: int) -> None:
     conv_id = await get_or_create_conversation(stored_conv_id)
     result = await Runner.run(
         patient_variant_linking_agent,
-        f'Variants JSON:\n{structured_variants}\n Patients JSON:\n {structured_patients} Pedigree Description: \n {pedigree_descriptions_output} Paper (fulltext md): {fulltext_md(paper_id)}',
+        f'Variants JSON:\n{structured_variants}\n Patients JSON:\n {structured_patients} Pedigree Description: \n {pedigree_descriptions_output} Paper (fulltext md): {fulltext_md(paper_id, supplement_format)}',
         conversation_id=conv_id,
     )
 
@@ -792,6 +802,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
     """
     # Fetch all patients to process
     stored_conversation_ids: dict[str, str] = {}
+    supplement_format = None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
@@ -800,6 +811,9 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         paper_id = task.paper_id
         patient_id = task.patient_id
         stored_conversation_ids = dict(task.conversation_ids)
+
+        paper = session.get(PaperDB, paper_id)
+        supplement_format = paper.supplement_format if paper else None
         query = session.query(PatientDB).filter(PatientDB.paper_id == paper_id)
         if patient_id is not None:
             query = query.filter(PatientDB.id == patient_id)
@@ -828,7 +842,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
             conversation_ids[patient_data['patient_id']] = conv_id
             result = await Runner.run(
                 patient_phenotype_linking_agent,
-                f'Paper (fulltext md): {fulltext_md(paper_id)}\n\nStructured Patient JSON:\n{[patient_data]}',
+                f'Paper (fulltext md): {fulltext_md(paper_id, supplement_format)}\n\nStructured Patient JSON:\n{[patient_data]}',
                 conversation_id=conv_id,
             )
             return patient_data['patient_id'], result.final_output

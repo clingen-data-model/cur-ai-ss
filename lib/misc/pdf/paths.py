@@ -1,6 +1,10 @@
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from lib.core.environment import env
+
+if TYPE_CHECKING:
+    from lib.models.paper import FileFormat
 
 
 def pdf_dir(paper_id: int) -> Path:
@@ -91,13 +95,18 @@ def pdf_section_markdown_path(
     return pdf_sections_dir(paper_id, supplement) / f'{section_id}.md'
 
 
-def fulltext_md(paper_id: int) -> str:
+def fulltext_md(paper_id: int, supplement_format: 'FileFormat | None' = None) -> str:
     main_md = pdf_markdown_path(paper_id).read_text()
     supplement_md = pdf_markdown_path(paper_id, supplement=True)
     if supplement_md.exists():
+        supplement_header = '# Supplementary Material'
+        if supplement_format:
+            supplement_header += f' ({supplement_format.value.upper()})'
         return (
             main_md
-            + '\n\n---\n\n# Supplementary Material\n\n'
+            + '\n\n---\n\n'
+            + supplement_header
+            + '\n\n'
             + supplement_md.read_text()
         )
     return main_md

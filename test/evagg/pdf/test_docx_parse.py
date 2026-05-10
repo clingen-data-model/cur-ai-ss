@@ -43,3 +43,19 @@ def test_docx_with_image_extracts_markdown_and_images(mocked_root_dir, docx_with
 
     extracted_images = list(images_dir.glob('*.png'))
     assert len(extracted_images) >= 1, 'No images were extracted'
+
+
+def test_xlsx_extracts_markdown(mocked_root_dir, xlsx_with_data):
+    paper_id = 1
+
+    path = pdf_raw_path(paper_id, supplement=True, file_format=FileFormat.XLSX.value)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(xlsx_with_data)
+
+    parse_content(paper_id, force=True, supplement_format=FileFormat.XLSX)
+
+    md_path = pdf_markdown_path(paper_id, supplement=True)
+    assert md_path.exists(), 'Markdown was not created'
+    assert pdf_extraction_success_path(paper_id, supplement=True).exists()
+    md = md_path.read_text()
+    assert 'Sheet1' in md

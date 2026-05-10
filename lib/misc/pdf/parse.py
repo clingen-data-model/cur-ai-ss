@@ -1,5 +1,7 @@
 import html
 import json
+import shutil
+import tempfile
 from enum import StrEnum
 from io import BytesIO
 from pathlib import Path
@@ -9,7 +11,6 @@ from docling.datamodel.base_models import DocumentStream, InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.document_converter import (
     DocumentConverter,
-    ExcelFormatOption,
     FormatOption,
     PdfFormatOption,
     WordFormatOption,
@@ -26,6 +27,7 @@ from docling_core.types.doc import (
 from docling_core.types.doc.page import TextCellUnit
 from docling_parse.pdf_parser import DoclingPdfParser, PdfDocument
 from pydantic import BaseModel
+from xldown import excel_to_markdown
 
 from lib.misc.pdf.paths import (
     pdf_extraction_success_path,
@@ -142,6 +144,40 @@ def split_by_sections(
     return sections, image_captions
 
 
+def _parse_xlsx_content(paper_id: int, content: bytes) -> None:
+    images_dir = pdf_images_dir(paper_id, supplement=True)
+    images_dir.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        xlsx_path = tmp_path / 'raw.xlsx'
+        xlsx_path.write_bytes(content)
+
+        excel_to_markdown(xlsx_path, tmp_path / 'out')
+
+        md_text = (tmp_path / 'out' / 'output.md').read_text()
+
+        image_id = 0
+        ref_map: dict[str, str] = {}
+
+        for src_subdir in ('charts', 'images'):
+            src_dir = tmp_path / 'out' / src_subdir
+            if src_dir.exists():
+                for src_img in sorted(src_dir.iterdir()):
+                    if src_img.suffix.lower() == '.png':
+                        dest = pdf_image_path(paper_id, image_id, supplement=True)
+                        shutil.copy2(src_img, dest)
+                        ref_map[f'{src_subdir}/{src_img.name}'] = (
+                            f'images/{image_id}.png'
+                        )
+                        image_id += 1
+
+        for old_ref, new_ref in ref_map.items():
+            md_text = md_text.replace(old_ref, new_ref)
+
+        pdf_markdown_path(paper_id, supplement=True).write_text(md_text)
+
+
 def parse_content(
     paper_id: int,
     force: bool = False,
@@ -165,6 +201,11 @@ def parse_content(
 
     content = raw.read_bytes()
 
+    if supplement_format == FileFormat.XLSX:
+        _parse_xlsx_content(paper_id, content)
+        pdf_extraction_success_path(paper_id, supplement=True).touch()
+        return
+
     pdf_images_dir(paper_id, supplement=supplement).mkdir(parents=True, exist_ok=True)
     pdf_tables_dir(paper_id, supplement=supplement).mkdir(parents=True, exist_ok=True)
     pdf_sections_dir(paper_id, supplement=supplement).mkdir(parents=True, exist_ok=True)
@@ -172,8 +213,6 @@ def parse_content(
     format_options: dict[InputFormat, FormatOption]
     if supplement_format == FileFormat.DOCX:
         format_options = {InputFormat.DOCX: WordFormatOption()}
-    elif supplement_format == FileFormat.XLSX:
-        format_options = {InputFormat.XLSX: ExcelFormatOption()}
     else:
         format_options = {
             InputFormat.PDF: PdfFormatOption(

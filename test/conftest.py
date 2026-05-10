@@ -71,3 +71,20 @@ def docx_with_image():
     doc.save(doc_bytes)
     doc_bytes.seek(0)
     return doc_bytes.getvalue()
+
+
+@pytest.fixture
+def xlsx_with_data():
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = 'Sheet1'
+    ws['A1'] = 'Name'
+    ws['B1'] = 'Value'
+    ws['A2'] = 'Alpha'
+    ws['B2'] = 42
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf.getvalue()

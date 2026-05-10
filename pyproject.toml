@@ -23,6 +23,7 @@ dependencies = [
     "ipython",
     # pdf parsing
     "docling==2.82.0",
+    "xldown>=0.1.0",
     "biopython>=1.86",
     "pymupdf>=1.26.7",
     "hpo-toolkit>=0.7.0",
