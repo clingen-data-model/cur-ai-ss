@@ -880,6 +880,10 @@ def highlight_pdf(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
+    # Return early if no highlightable evidence (e.g., all from supplements)
+    if not request.queries and not request.image_ids and not request.table_ids:
+        return
+
     # Load words from JSON file
     words_file = pdf_words_json_path(paper_id)
     with open(words_file, 'r') as f:
@@ -936,6 +940,10 @@ def grobid_annotation(
         rgb_color = parse_hex_color(request.color)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    # Return early if no highlightable evidence (e.g., all from supplements)
+    if not request.queries and not request.image_ids and not request.table_ids:
+        return []
 
     # Load words from JSON file
     words_file = pdf_words_json_path(paper_id)

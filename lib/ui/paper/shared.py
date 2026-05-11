@@ -163,22 +163,23 @@ def render_highlight_controls(
         disabled: Whether to disable the controls.
     """
 
-    # Extract fields from all blocks
-    queries = [b.quote for b in blocks if b.quote]
-    image_ids = [b.image_id for b in blocks if b.image_id is not None]
-    table_ids = [b.table_id for b in blocks if b.table_id is not None]
+    # Extract fields from all blocks, filtering out supplement evidence
+    queries = [b.quote for b in blocks if b.quote and not b.is_supplement]
+    image_ids = [b.image_id for b in blocks if b.image_id is not None and not b.is_supplement]
+    table_ids = [b.table_id for b in blocks if b.table_id is not None and not b.is_supplement]
     if color_key not in st.session_state:
         st.session_state[color_key] = random.choice(COLORS)
     color = st.color_picker(
         'Choose Color', label_visibility='collapsed', key=color_key, disabled=disabled
     )
+    has_highlightable_evidence = bool(queries or image_ids or table_ids)
     st.button(
         'Highlight',
         key=f'{button_key_prefix}-highlight',
         type='secondary',
         on_click=highlight_evidence,
         args=(paper_id, queries, image_ids, table_ids, color),
-        disabled=disabled,
+        disabled=disabled or not has_highlightable_evidence,
     )
     st.button(
         'Focus',
@@ -186,7 +187,7 @@ def render_highlight_controls(
         type='secondary',
         on_click=focus_and_show_dialog,
         args=(paper_id, queries, image_ids, table_ids, color),
-        disabled=disabled,
+        disabled=disabled or not has_highlightable_evidence,
     )
 
 
