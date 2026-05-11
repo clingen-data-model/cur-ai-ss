@@ -239,3 +239,11 @@ def enqueue_paper_task(
     )
     resp.raise_for_status()
     return TaskResp.model_validate(resp.json())
+
+
+def get_curation_pptx(paper_id: int) -> bytes:
+    resp = requests.get(
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/curation-export'
+    )
+    resp.raise_for_status()
+    return resp.content

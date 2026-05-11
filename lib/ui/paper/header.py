@@ -18,6 +18,7 @@ from lib.tasks import (
 from lib.ui.api import (
     delete_paper,
     enqueue_paper_task,
+    get_curation_pptx,
     get_http_error_detail,
     get_paper,
 )
@@ -190,6 +191,24 @@ with center:
                 key=RERUN_POPOVER_STATE_KEY,
             ):
                 render_queue_tasks_fragment(paper_query_params)
+            try:
+                pptx_bytes = get_curation_pptx(paper_query_params.paper_id)
+                st.download_button(
+                    '📊 Download PPTX',
+                    data=pptx_bytes,
+                    file_name=f'curation_{paper_query_params.paper_id}.pptx',
+                    mime='application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                    type='tertiary',
+                    width='content',
+                )
+            except Exception as e:
+                st.button(
+                    '📊 Download PPTX',
+                    type='tertiary',
+                    width='content',
+                    disabled=True,
+                    help=f'Failed to load PPTX: {str(e)}',
+                )
             if st.button('🗑️ Delete Paper', type='tertiary', width='content'):
                 try:
                     delete_paper(paper_query_params.paper_id)
