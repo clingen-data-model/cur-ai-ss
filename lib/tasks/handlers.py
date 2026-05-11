@@ -49,6 +49,7 @@ from lib.models import (
     TaskDB,
     VariantDB,
 )
+from lib.models.paper import FileFormat
 from lib.models.converters import (
     family_to_db,
     harmonized_variant_to_db,
@@ -107,6 +108,7 @@ async def handle_paper_metadata(task_id: int) -> None:
     paper_id: int
     gene_symbol: str
     stored_conv_id: str | None
+    supplement_format: FileFormat | None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
@@ -119,11 +121,12 @@ async def handle_paper_metadata(task_id: int) -> None:
         paper_id = task.paper_id
         gene_symbol = paper.gene.symbol
         stored_conv_id = task.conversation_ids.get('default')
+        supplement_format = paper.supplement_format
 
     conv_id = await get_or_create_conversation(stored_conv_id)
     result = await Runner.run(
         paper_extraction_agent,
-        f'Gene: {gene_symbol}\n\nPaper (fulltext md): {fulltext_md(paper_id, paper.supplement_format)}',
+        f'Gene: {gene_symbol}\n\nPaper (fulltext md): {fulltext_md(paper_id, supplement_format)}',
         conversation_id=conv_id,
     )
 
@@ -140,6 +143,7 @@ async def handle_variant_extraction(task_id: int) -> None:
     """Extract genetic variants from paper."""
     paper_id: int
     gene_symbol: str
+    supplement_format: FileFormat | None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
@@ -151,10 +155,11 @@ async def handle_variant_extraction(task_id: int) -> None:
 
         paper_id = task.paper_id
         gene_symbol = paper.gene.symbol
+        supplement_format = paper.supplement_format
 
     result = await Runner.run(
         variant_extraction_agent,
-        f'Gene Symbol: {gene_symbol}\nPaper (fulltext md): {fulltext_md(paper_id, paper.supplement_format)}',
+        f'Gene Symbol: {gene_symbol}\nPaper (fulltext md): {fulltext_md(paper_id, supplement_format)}',
     )
 
     with session_scope() as session:
@@ -217,7 +222,7 @@ async def handle_patient_extraction(task_id: int) -> None:
     paper_id: int
     pedigree_descriptions_output: dict | None
     stored_conv_id: str | None
-    supplement_format = None
+    supplement_format: FileFormat | None = None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
@@ -283,7 +288,7 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
     families_data: list[dict] = []
     stored_conversation_ids: dict[str, str] = {}
     paper_id: int = 0
-    supplement_format = None
+    supplement_format: FileFormat | None = None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
@@ -722,7 +727,7 @@ async def handle_patient_variant_linking(task_id: int) -> None:
     structured_patients: list
     pedigree_descriptions_output: dict | None
     stored_conv_id: str | None
-    supplement_format = None
+    supplement_format: FileFormat | None = None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
@@ -802,7 +807,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
     """
     # Fetch all patients to process
     stored_conversation_ids: dict[str, str] = {}
-    supplement_format = None
+    supplement_format: FileFormat | None = None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:

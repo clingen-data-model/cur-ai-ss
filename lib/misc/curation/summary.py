@@ -5,7 +5,7 @@ from lib.models.curation_summary import CurationSummaryRow
 from lib.models.family import FamilyDB
 from lib.models.patient import PatientDB, ProbandStatus
 from lib.models.patient_variant_link import PatientVariantLinkDB
-from lib.models.phenotype import PhenotypeDB
+from lib.models.phenotype import HpoDB, PhenotypeDB
 from lib.models.segregation_analysis import (
     SegregationAnalysisComputedDB,
     SegregationEvidenceDB,
@@ -145,11 +145,16 @@ def build_curation_row(paper_id: int, session: Session) -> CurationSummaryRow:
     for patient in proband_patients:
         phenotypes = (
             session.query(PhenotypeDB)
+            .join(HpoDB, PhenotypeDB.id == HpoDB.phenotype_id)
             .filter(PhenotypeDB.patient_id == patient.id)
             .all()
         )
         for pheno in phenotypes:
-            phenotype_concepts.append(pheno.concept)
+            hpo_term = pheno.hpo.hpo_name if pheno.hpo else None
+            if hpo_term:
+                phenotype_concepts.append(f'{pheno.concept} ({hpo_term})')
+            else:
+                phenotype_concepts.append(pheno.concept)
 
     # Add inheritance patterns from patient-variant links
     inheritance_patterns = set()
