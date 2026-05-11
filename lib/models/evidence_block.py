@@ -14,7 +14,9 @@ class EvidenceBlock(ReasoningBlock[T]):
     quote: str | None = None  # verbatim quote from text
     table_id: int | None = None  # table-based evidence
     image_id: int | None = None  # figure/pedigree evidence
-    is_supplement: bool = False  # whether evidence came from a supplement (non-renderable in PDF view)
+    is_supplement: bool = (
+        False  # whether evidence came from a supplement (non-renderable in PDF view)
+    )
 
     @model_validator(mode='after')
     def validate_sources(self) -> Self:

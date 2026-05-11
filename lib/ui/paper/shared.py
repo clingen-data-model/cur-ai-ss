@@ -165,8 +165,12 @@ def render_highlight_controls(
 
     # Extract fields from all blocks, filtering out supplement evidence
     queries = [b.quote for b in blocks if b.quote and not b.is_supplement]
-    image_ids = [b.image_id for b in blocks if b.image_id is not None and not b.is_supplement]
-    table_ids = [b.table_id for b in blocks if b.table_id is not None and not b.is_supplement]
+    image_ids = [
+        b.image_id for b in blocks if b.image_id is not None and not b.is_supplement
+    ]
+    table_ids = [
+        b.table_id for b in blocks if b.table_id is not None and not b.is_supplement
+    ]
     if color_key not in st.session_state:
         st.session_state[color_key] = random.choice(COLORS)
     color = st.color_picker(
