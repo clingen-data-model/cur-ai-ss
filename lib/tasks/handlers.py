@@ -49,7 +49,6 @@ from lib.models import (
     TaskDB,
     VariantDB,
 )
-from lib.models.paper import FileFormat
 from lib.models.converters import (
     family_to_db,
     harmonized_variant_to_db,
@@ -63,6 +62,7 @@ from lib.models.converters import (
     variant_to_db,
 )
 from lib.models.evidence_block import ReasoningBlock
+from lib.models.paper import FileFormat
 from lib.models.phenotype import HPOTerm
 from lib.models.variant import HarmonizedVariant, Variant
 from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
