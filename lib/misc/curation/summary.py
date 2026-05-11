@@ -1,7 +1,7 @@
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
-from lib.models.curation_summary import CurationSummaryRow
+from lib.models.curation_summary import CurationSummaryRow, SectionContent
 from lib.models.family import FamilyDB
 from lib.models.patient import PatientDB, ProbandStatus
 from lib.models.patient_variant_link import PatientVariantLinkDB
@@ -32,7 +32,7 @@ def build_curation_row(paper_id: int, session: Session) -> CurationSummaryRow:
         f'{paper.first_author or "Unknown"} et al., {paper.publication_year or "?"}'
     )
     pmid_str = f'PMID: {paper.pmid}' if paper.pmid else ''
-    publication_part = f'{author_year}\n{pmid_str}'.strip()
+    publication_part = f'{author_year} {pmid_str}'.strip()
 
     # Get unique testing methods
     testing_links = (
@@ -45,11 +45,20 @@ def build_curation_row(paper_id: int, session: Session) -> CurationSummaryRow:
         if link.testing_methods:
             testing_methods_set.update(link.testing_methods)
     testing_str = ', '.join(sorted(testing_methods_set)) if testing_methods_set else ''
-    publication_and_testing = f'{publication_part}\n{testing_str}'.strip()
+
+    publication_and_testing_sections = []
+    if publication_part:
+        publication_and_testing_sections.append(
+            SectionContent(title='Publication', content=publication_part)
+        )
+    if testing_str:
+        publication_and_testing_sections.append(
+            SectionContent(title='Testing Methods', content=testing_str)
+        )
 
     # 2. Proband - group by family
     families = session.query(FamilyDB).filter(FamilyDB.paper_id == paper_id).all()
-    proband_lines = []
+    proband_sections = []
     for family in families:
         patients = (
             session.query(PatientDB)
@@ -58,8 +67,9 @@ def build_curation_row(paper_id: int, session: Session) -> CurationSummaryRow:
             .all()
         )
         patient_ids = ', '.join(p.identifier for p in patients)
-        proband_lines.append(f'Family {family.identifier}: {patient_ids}')
-    proband = '\n'.join(proband_lines)
+        proband_sections.append(
+            SectionContent(title=f'Family {family.identifier}', content=patient_ids)
+        )
 
     # 3. Variant Info - main_focus variants with harmonized + enriched data
     variants = (
@@ -72,65 +82,76 @@ def build_curation_row(paper_id: int, session: Session) -> CurationSummaryRow:
         )
         .all()
     )
-    variant_lines = []
-    for variant in variants:
-        parts = []
+    variant_info_sections = []
+    if variants:
+        for idx, variant in enumerate(variants, 1):
+            parts = []
 
-        # HGVS notation
-        if variant.hgvs_c:
-            parts.append(f'{variant.hgvs_c}')
-        if variant.hgvs_p:
-            parts.append(f'({variant.hgvs_p})')
-        if parts:
-            variant_lines.append(' '.join(parts))
+            # HGVS notation
+            hgvs_parts = []
+            if variant.hgvs_c:
+                hgvs_parts.append(variant.hgvs_c)
+            if variant.hgvs_p:
+                hgvs_parts.append(f'({variant.hgvs_p})')
+            hgvs_str = ' '.join(hgvs_parts) if hgvs_parts else f'Variant {idx}'
 
-        # Harmonized data
-        if variant.harmonized_variant:
-            hv = variant.harmonized_variant
-            if hv.gnomad_style_coordinates:
-                variant_lines.append(f'Coord: {hv.gnomad_style_coordinates}')
-            if hv.rsid:
-                variant_lines.append(f'rsID: {hv.rsid}')
-            if hv.caid:
-                variant_lines.append(f'CAID: {hv.caid}')
+            # Harmonized data
+            if variant.harmonized_variant:
+                hv = variant.harmonized_variant
+                if hv.gnomad_style_coordinates:
+                    parts.append(f'Coord: {hv.gnomad_style_coordinates}')
+                if hv.rsid:
+                    parts.append(f'rsID: {hv.rsid}')
+                if hv.caid:
+                    parts.append(f'CAID: {hv.caid}')
 
-            # Enriched data
-            if hv.enriched_variant:
-                ev = hv.enriched_variant
-                enriched_parts = []
-                if ev.pathogenicity:
-                    enriched_parts.append(f'ClinVar: {ev.pathogenicity}')
-                if ev.submissions is not None:
-                    enriched_parts.append(f'Submissions: {ev.submissions}')
-                if ev.stars is not None:
-                    enriched_parts.append(f'Stars: {ev.stars}')
-                if ev.exon:
-                    enriched_parts.append(f'Exon: {ev.exon}')
-                if ev.revel is not None:
-                    enriched_parts.append(f'REVEL: {ev.revel:.3f}')
-                if ev.alphamissense_class:
-                    enriched_parts.append(f'AlphaMissense: {ev.alphamissense_class}')
-                if ev.alphamissense_score is not None:
-                    enriched_parts.append(f'({ev.alphamissense_score:.3f})')
-                if ev.spliceai and isinstance(ev.spliceai, dict):
-                    max_score = ev.spliceai.get('max_score', 0)
-                    if max_score > 0:
-                        enriched_parts.append(f'SpliceAI: {max_score:.3f}')
-                if ev.gnomad_top_level_af is not None:
-                    enriched_parts.append(f'gnomAD AF: {ev.gnomad_top_level_af:.5f}')
-                if ev.gnomad_popmax_af is not None:
-                    pop = ev.gnomad_popmax_population or 'unknown'
-                    enriched_parts.append(
-                        f'PopMax AF: {ev.gnomad_popmax_af:.5f} ({pop})'
-                    )
-                if enriched_parts:
-                    variant_lines.append('; '.join(enriched_parts))
+                # Enriched data
+                if hv.enriched_variant:
+                    ev = hv.enriched_variant
+                    enriched_parts = []
+                    if ev.pathogenicity:
+                        enriched_parts.append(f'ClinVar: {ev.pathogenicity}')
+                    if ev.submissions is not None:
+                        enriched_parts.append(f'Submissions: {ev.submissions}')
+                    if ev.stars is not None:
+                        enriched_parts.append(f'Stars: {ev.stars}')
+                    if ev.exon:
+                        enriched_parts.append(f'Exon: {ev.exon}')
+                    if ev.revel is not None:
+                        enriched_parts.append(f'REVEL: {ev.revel:.3f}')
+                    if ev.alphamissense_class:
+                        enriched_parts.append(
+                            f'AlphaMissense: {ev.alphamissense_class}'
+                        )
+                    if ev.alphamissense_score is not None:
+                        enriched_parts.append(f'({ev.alphamissense_score:.3f})')
+                    if ev.spliceai and isinstance(ev.spliceai, dict):
+                        max_score = ev.spliceai.get('max_score', 0)
+                        if max_score > 0:
+                            enriched_parts.append(f'SpliceAI: {max_score:.3f}')
+                    if ev.gnomad_top_level_af is not None:
+                        enriched_parts.append(
+                            f'gnomAD AF: {ev.gnomad_top_level_af:.5f}'
+                        )
+                    if ev.gnomad_popmax_af is not None:
+                        pop = ev.gnomad_popmax_population or 'unknown'
+                        enriched_parts.append(
+                            f'PopMax AF: {ev.gnomad_popmax_af:.5f} ({pop})'
+                        )
+                    if enriched_parts:
+                        parts.append('; '.join(enriched_parts))
 
-    variant_info = (
-        '\n'.join(variant_lines) if variant_lines else 'No main-focus variants'
-    )
+            variant_info_sections.append(
+                SectionContent(
+                    title=hgvs_str, content='\n'.join(parts) if parts else ''
+                )
+            )
+    else:
+        variant_info_sections.append(
+            SectionContent(title='Variants', content='No main-focus variants')
+        )
 
-    # 4. Clinical Presentation - phenotypes for probands
+    # 4. Clinical Presentation - inheritance + phenotypes for each proband
     proband_patients = (
         session.query(PatientDB)
         .filter(
@@ -141,22 +162,10 @@ def build_curation_row(paper_id: int, session: Session) -> CurationSummaryRow:
         )
         .all()
     )
-    phenotype_concepts = []
-    for patient in proband_patients:
-        phenotypes = (
-            session.query(PhenotypeDB)
-            .join(HpoDB, PhenotypeDB.id == HpoDB.phenotype_id)
-            .filter(PhenotypeDB.patient_id == patient.id)
-            .all()
-        )
-        for pheno in phenotypes:
-            hpo_term = pheno.hpo.hpo_name if pheno.hpo else None
-            if hpo_term:
-                phenotype_concepts.append(f'{pheno.concept} ({hpo_term})')
-            else:
-                phenotype_concepts.append(pheno.concept)
 
-    # Add inheritance patterns from patient-variant links
+    clinical_sections = []
+
+    # Inheritance patterns first
     inheritance_patterns = set()
     for patient in proband_patients:
         links = (
@@ -168,29 +177,64 @@ def build_curation_row(paper_id: int, session: Session) -> CurationSummaryRow:
             if link.inheritance:
                 inheritance_patterns.add(link.inheritance)
 
-    clinical_parts = []
-    if phenotype_concepts:
-        clinical_parts.append(', '.join(phenotype_concepts))
     if inheritance_patterns:
-        clinical_parts.append(f'Inheritance: {", ".join(sorted(inheritance_patterns))}')
-    clinical_presentation = '; '.join(clinical_parts) if clinical_parts else ''
+        clinical_sections.append(
+            SectionContent(
+                title='Inheritance',
+                content=', '.join(sorted(inheritance_patterns)),
+            )
+        )
+
+    # Then phenotypes for each proband
+    for patient in proband_patients:
+        phenotypes = (
+            session.query(PhenotypeDB)
+            .join(HpoDB, PhenotypeDB.id == HpoDB.phenotype_id)
+            .filter(PhenotypeDB.patient_id == patient.id)
+            .all()
+        )
+        phenotype_concepts = []
+        for pheno in phenotypes:
+            if pheno.hpo and pheno.hpo.hpo_id and pheno.hpo.hpo_name:
+                phenotype_concepts.append(
+                    f'{pheno.concept} ({pheno.hpo.hpo_id}: {pheno.hpo.hpo_name})'
+                )
+            elif pheno.hpo and pheno.hpo.hpo_name:
+                phenotype_concepts.append(f'{pheno.concept} ({pheno.hpo.hpo_name})')
+            else:
+                phenotype_concepts.append(pheno.concept)
+
+        if phenotype_concepts:
+            clinical_sections.append(
+                SectionContent(
+                    title=f'Proband {patient.identifier}',
+                    content=', '.join(phenotype_concepts),
+                )
+            )
 
     # 5. Functional/Segregation
-    functional_seg_parts = []
+    functional_segregation_sections = []
 
     # Functional evidence from variants
+    functional_parts = []
     for variant in variants:
         if variant.functional_evidence:
             # Parse the evidence block from JSON
             if variant.functional_evidence_evidence:
                 ev_dict = variant.functional_evidence_evidence
                 if isinstance(ev_dict, dict) and 'reasoning' in ev_dict:
-                    functional_seg_parts.append(
-                        f'Functional evidence: {ev_dict["reasoning"]}'
-                    )
+                    functional_parts.append(ev_dict['reasoning'])
+    if functional_parts:
+        functional_segregation_sections.append(
+            SectionContent(
+                title='Functional Evidence',
+                content='\n'.join(functional_parts),
+            )
+        )
 
     # Segregation data per family
     for family in families:
+        seg_parts = []
         seg_evidence = (
             session.query(SegregationEvidenceDB)
             .filter(SegregationEvidenceDB.family_id == family.id)
@@ -198,13 +242,9 @@ def build_curation_row(paper_id: int, session: Session) -> CurationSummaryRow:
         )
         if seg_evidence:
             if seg_evidence.extracted_lod_score is not None:
-                functional_seg_parts.append(
-                    f'Family {family.identifier} Extracted LOD: {seg_evidence.extracted_lod_score}'
-                )
+                seg_parts.append(f'Extracted LOD: {seg_evidence.extracted_lod_score}')
             if seg_evidence.has_unexplainable_non_segregations:
-                functional_seg_parts.append(
-                    f'Family {family.identifier} has unexplainable non-segregations'
-                )
+                seg_parts.append('Has unexplainable non-segregations')
 
         seg_computed = (
             session.query(SegregationAnalysisComputedDB)
@@ -212,19 +252,19 @@ def build_curation_row(paper_id: int, session: Session) -> CurationSummaryRow:
             .first()
         )
         if seg_computed:
-            functional_seg_parts.append(
-                f'Family {family.identifier} Segregation count: {seg_computed.segregation_count}'
-            )
-            functional_seg_parts.append(
-                f'Family {family.identifier} Computed LOD: {seg_computed.computed_lod_score}'
-            )
+            seg_parts.append(f'Segregation count: {seg_computed.segregation_count}')
+            seg_parts.append(f'Computed LOD: {seg_computed.computed_lod_score}')
 
-    functional_segregation = (
-        '\n'.join(functional_seg_parts) if functional_seg_parts else ''
-    )
+        if seg_parts:
+            functional_segregation_sections.append(
+                SectionContent(
+                    title=f'Family:  {family.identifier}',
+                    content='\n'.join(seg_parts),
+                )
+            )
 
     # 6. Score - points_assigned from segregation analysis
-    score_parts = []
+    score_sections = []
     for family in families:
         seg_computed = (
             session.query(SegregationAnalysisComputedDB)
@@ -232,15 +272,19 @@ def build_curation_row(paper_id: int, session: Session) -> CurationSummaryRow:
             .first()
         )
         if seg_computed:
-            score_parts.append(f'{family.identifier}: {seg_computed.points_assigned}')
-    score = ', '.join(score_parts) if score_parts else ''
+            score_sections.append(
+                SectionContent(
+                    title=f'Family {family.identifier}',
+                    content=str(seg_computed.points_assigned),
+                )
+            )
 
     return CurationSummaryRow(
         paper_id=paper_id,
-        publication_and_testing=publication_and_testing,
-        proband=proband,
-        variant_info=variant_info,
-        clinical_presentation=clinical_presentation,
-        functional_segregation=functional_segregation,
-        score=score,
+        publication_and_testing=publication_and_testing_sections,
+        proband=proband_sections,
+        variant_info=variant_info_sections,
+        clinical_presentation=clinical_sections,
+        functional_segregation=functional_segregation_sections,
+        score=score_sections,
     )

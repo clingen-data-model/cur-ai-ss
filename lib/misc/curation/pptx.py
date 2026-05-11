@@ -1,7 +1,36 @@
+import io
+from typing import TYPE_CHECKING
+
 from pptx import Presentation
 from pptx.util import Inches, Pt
 
-from lib.models.curation_summary import CurationSummaryRow
+from lib.models.curation_summary import CurationSummaryRow, SectionContent
+
+if TYPE_CHECKING:
+    from pptx.text.text import TextFrame
+
+
+def _format_cell_with_sections(
+    text_frame: 'TextFrame', sections: list[SectionContent]
+) -> None:
+    """Format a cell with bold section titles and paragraph breaks."""
+    text_frame.clear()
+
+    for idx, section in enumerate(sections):
+        if idx > 0:
+            text_frame.add_paragraph()
+
+        p = text_frame.add_paragraph()
+
+        # Add bold title
+        title_run = p.add_run()
+        title_run.text = section.title
+        title_run.font.bold = True
+
+        if section.content:
+            # Add content after title
+            content_run = p.add_run()
+            content_run.text = '\n' + section.content
 
 
 def build_curation_pptx(rows: list[CurationSummaryRow]) -> bytes:
@@ -37,11 +66,14 @@ def build_curation_pptx(rows: list[CurationSummaryRow]) -> bytes:
     table = table_shape.table
 
     # Set column widths
-    col_width = width / cols_count
+    col_width = int(width / cols_count)
     for col_idx in range(cols_count):
         table.columns[col_idx].width = col_width
 
-    # Header row
+    # Header row - set smaller height
+    header_row = table.rows[0]
+    header_row.height = Inches(0.4)
+
     headers = [
         'Publication & Testing',
         'Proband',
@@ -59,11 +91,11 @@ def build_curation_pptx(rows: list[CurationSummaryRow]) -> bytes:
         for paragraph in text_frame.paragraphs:
             for run in paragraph.runs:
                 run.font.bold = True
-                run.font.size = Pt(10)
+                run.font.size = Pt(9)
 
     # Data rows
     for row_idx, row_data in enumerate(rows, start=1):
-        cell_values = [
+        cell_sections = [
             row_data.publication_and_testing,
             row_data.proband,
             row_data.variant_info,
@@ -71,19 +103,18 @@ def build_curation_pptx(rows: list[CurationSummaryRow]) -> bytes:
             row_data.functional_segregation,
             row_data.score,
         ]
-        for col_idx, cell_text in enumerate(cell_values):
+        for col_idx, sections in enumerate(cell_sections):
             cell = table.cell(row_idx, col_idx)
-            cell.text = cell_text
-            # Format data cells
             text_frame = cell.text_frame
             text_frame.word_wrap = True
+
+            # Format with sections
+            _format_cell_with_sections(text_frame, sections)
+
+            # Set font size for all text
             for paragraph in text_frame.paragraphs:
                 for run in paragraph.runs:
-                    run.font.size = Pt(9)
-
-    # Save to bytes
-    import io
-
+                    run.font.size = Pt(8)
     pptx_bytes_io = io.BytesIO()
     prs.save(pptx_bytes_io)
     return pptx_bytes_io.getvalue()

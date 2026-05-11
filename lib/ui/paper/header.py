@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Optional
 
 import requests
@@ -103,6 +104,11 @@ def render_queue_tasks_fragment(paper_query_params: PaperQueryParams) -> None:
     st.button('Confirm Rerun', type='secondary', on_click=on_confirm)
 
 
+def _strip_trailing_punctuation(text: str) -> str:
+    """Remove trailing punctuation from text."""
+    return re.sub(r'[.,;:!?]+$', '', text)
+
+
 st.set_page_config(layout='wide')
 paper_query_params = PaperQueryParams.from_query_params()
 with st.spinner('Loading paper...'):
@@ -122,6 +128,18 @@ with st.spinner('Loading paper...'):
     except Exception as e:
         st.error(str(e))
         st.stop()
+
+    # Generate PPTX on page load if paper is completed
+    if (
+        infer_paper_status(paper_resp.tasks) == 'Completed'
+        and 'pptx_bytes' not in st.session_state
+    ):
+        try:
+            st.session_state['pptx_bytes'] = get_curation_pptx(
+                paper_query_params.paper_id
+            )
+        except Exception:
+            st.session_state['pptx_bytes'] = None
 
 left, center, right = st.columns([1, 10, 1])
 with left:
@@ -144,7 +162,7 @@ with center:
         st.caption(' • '.join(parts))
     else:
         st.markdown(f'# {paper_resp.filename}')
-    left, right = st.columns([5, 4])
+    left, right = st.columns([10, 9])
     with left:
         with st.container(horizontal=True, vertical_alignment='center'):
             if paper_query_params.tab_id:
@@ -191,23 +209,17 @@ with center:
                 key=RERUN_POPOVER_STATE_KEY,
             ):
                 render_queue_tasks_fragment(paper_query_params)
-            with st.popover(
-                '📊 Generate PPTX',
-                type='tertiary',
-                width='content',
-                disabled=infer_paper_status(paper_resp.tasks) != 'Completed',
-            ):
-                try:
-                    with st.spinner('Generating PPTX...'):
-                        pptx_bytes = get_curation_pptx(paper_query_params.paper_id)
-                    st.download_button(
-                        '📊 Download PPTX',
-                        data=pptx_bytes,
-                        file_name=f'{paper_resp.title}.pptx',
-                        mime='application/vnd.openxmlformats-officedocument.presentationml.presentation',
-                    )
-                except Exception as e:
-                    st.error(str(e))
+            if st.session_state.get('pptx_bytes'):
+                title = paper_resp.title or f'paper_{paper_query_params.paper_id}'
+                clean_title = _strip_trailing_punctuation(title)
+                st.download_button(
+                    '📊 Download PPTX',
+                    data=st.session_state['pptx_bytes'],
+                    file_name=f'{clean_title}.pptx',
+                    mime='application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                    type='tertiary',
+                    width='content',
+                )
             if st.button('🗑️ Delete Paper', type='tertiary', width='content'):
                 try:
                     delete_paper(paper_query_params.paper_id)
