@@ -1,4 +1,5 @@
 import io
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pptx import Presentation
@@ -17,20 +18,18 @@ def _format_cell_with_sections(
     text_frame.clear()
 
     for idx, section in enumerate(sections):
-        if idx > 0:
-            text_frame.add_paragraph()
-
         p = text_frame.add_paragraph()
 
-        # Add bold title
         title_run = p.add_run()
         title_run.text = section.title
         title_run.font.bold = True
 
         if section.content:
-            # Add content after title
             content_run = p.add_run()
             content_run.text = '\n' + section.content
+
+        if idx < len(sections) - 1:
+            text_frame.add_paragraph()
 
 
 def build_curation_pptx(rows: list[CurationSummaryRow]) -> bytes:
@@ -39,6 +38,7 @@ def build_curation_pptx(rows: list[CurationSummaryRow]) -> bytes:
     Creates a single landscape slide with a table containing:
     - Header row: Publication & Testing | Proband | Variant Info | Clinical Presentation | Functional/Segregation | Score
     - One data row per CurationSummaryRow
+    - Optional pedigree image if available
 
     Returns raw PPTX bytes.
     """
@@ -115,6 +115,16 @@ def build_curation_pptx(rows: list[CurationSummaryRow]) -> bytes:
             for paragraph in text_frame.paragraphs:
                 for run in paragraph.runs:
                     run.font.size = Pt(8)
+
+    # Add pedigree image if available (bottom third of first column)
+    for row_data in rows:
+        if row_data.pedigree_image_path:
+            image_path = Path(row_data.pedigree_image_path)
+            if image_path.exists():
+                slide.shapes.add_picture(
+                    str(image_path), Inches(0.5), Inches(5), width=Inches(2)
+                )
+
     pptx_bytes_io = io.BytesIO()
     prs.save(pptx_bytes_io)
     return pptx_bytes_io.getvalue()

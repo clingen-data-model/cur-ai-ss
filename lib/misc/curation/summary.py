@@ -2,7 +2,9 @@ from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
 from lib.misc.curation.models import CurationSummaryRow, SectionContent
+from lib.misc.pdf.paths import pdf_image_path
 from lib.models.family import FamilyDB
+from lib.models.paper import PedigreeDB
 from lib.models.patient import PatientDB, ProbandStatus
 from lib.models.patient_variant_link import PatientVariantLinkDB
 from lib.models.phenotype import HpoDB, PhenotypeDB
@@ -304,6 +306,13 @@ def build_curation_row(paper_id: int, session: Session) -> CurationSummaryRow:
                 )
             )
 
+    pedigree = session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).first()
+    pedigree_image_path_str = None
+    if pedigree:
+        path = pdf_image_path(paper_id, pedigree.image_id)
+        if path.exists():
+            pedigree_image_path_str = str(path)
+
     return CurationSummaryRow(
         paper_id=paper_id,
         publication_and_testing=publication_and_testing_sections,
@@ -312,4 +321,5 @@ def build_curation_row(paper_id: int, session: Session) -> CurationSummaryRow:
         clinical_presentation=clinical_sections,
         functional_segregation=functional_segregation_sections,
         score=score_sections,
+        pedigree_image_path=pedigree_image_path_str,
     )

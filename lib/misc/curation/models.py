@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from pydantic import BaseModel
 
 
@@ -18,3 +20,4 @@ class CurationSummaryRow(BaseModel):
     clinical_presentation: list[SectionContent]
     functional_segregation: list[SectionContent]
     score: list[SectionContent]
+    pedigree_image_path: str | None = None
