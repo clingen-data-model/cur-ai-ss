@@ -1,7 +1,7 @@
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
-from lib.models.curation_summary import CurationSummaryRow, SectionContent
+from lib.misc.curation.models import CurationSummaryRow, SectionContent
 from lib.models.family import FamilyDB
 from lib.models.patient import PatientDB, ProbandStatus
 from lib.models.patient_variant_link import PatientVariantLinkDB
@@ -73,7 +73,11 @@ def build_curation_row(paper_id: int, session: Session) -> CurationSummaryRow:
         for proband in probands:
             family = proband.family
             sex_str = proband.sex or ''
-            age_str = proband.age_at_last_exam or ''
+            age_str = ''
+            if proband.age_report is not None and proband.age_report_unit:
+                age_str = (
+                    f'{proband.age_report} {proband.age_report_unit.value.lower()}'
+                )
             demographic = ', '.join(filter(None, [sex_str, age_str]))
             line = f'{proband.identifier} - Family {family.identifier}'
             if demographic:
@@ -243,6 +247,15 @@ def build_curation_row(paper_id: int, session: Session) -> CurationSummaryRow:
                 content='\n'.join(functional_parts),
             )
         )
+
+    # Get all families for this paper
+    families = (
+        session.query(FamilyDB)
+        .join(PatientDB, FamilyDB.id == PatientDB.family_id)
+        .filter(PatientDB.paper_id == paper_id)
+        .distinct()
+        .all()
+    )
 
     # Segregation data per family
     for family in families:

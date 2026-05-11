@@ -33,6 +33,7 @@ from lib.api.db import get_session
 from lib.api.middleware import make_log_request_middleware
 from lib.core.environment import env
 from lib.core.logging import setup_logging
+from lib.misc.curation.models import CurationSummaryRow
 from lib.misc.curation.pptx import build_curation_pptx
 from lib.misc.curation.summary import build_curation_row
 from lib.misc.pdf.highlight import (
@@ -94,7 +95,6 @@ from lib.models import (
     VariantDB,
     VariantResp,
 )
-from lib.models.curation_summary import CurationSummaryRow
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.segregation_analysis import SegregationAnalysisComputedNestedResp
 from lib.tasks import TaskCreateRequest, TaskResp, enqueue_task

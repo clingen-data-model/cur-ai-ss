@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 from pptx import Presentation
 from pptx.util import Inches, Pt
 
-from lib.models.curation_summary import CurationSummaryRow, SectionContent
+from lib.misc.curation.models import CurationSummaryRow, SectionContent
 
 if TYPE_CHECKING:
     from pptx.text.text import TextFrame
