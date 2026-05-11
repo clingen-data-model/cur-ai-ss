@@ -56,19 +56,31 @@ def build_curation_row(paper_id: int, session: Session) -> CurationSummaryRow:
             SectionContent(title='Testing Methods', content=testing_str)
         )
 
-    # 2. Proband - group by family
-    families = session.query(FamilyDB).filter(FamilyDB.paper_id == paper_id).all()
-    proband_sections = []
-    for family in families:
-        patients = (
-            session.query(PatientDB)
-            .filter(PatientDB.family_id == family.id)
-            .order_by(PatientDB.proband_status.desc())
-            .all()
+    # 2. Proband - flat list with family info
+    probands = (
+        session.query(PatientDB)
+        .filter(
+            and_(
+                PatientDB.paper_id == paper_id,
+                PatientDB.proband_status == ProbandStatus.Proband.value,
+            )
         )
-        patient_ids = ', '.join(p.identifier for p in patients)
+        .all()
+    )
+    proband_sections = []
+    if probands:
+        proband_lines = []
+        for proband in probands:
+            family = proband.family
+            sex_str = proband.sex or ''
+            age_str = proband.age_at_last_exam or ''
+            demographic = ', '.join(filter(None, [sex_str, age_str]))
+            line = f'{proband.identifier} - Family {family.identifier}'
+            if demographic:
+                line += f' ({demographic})'
+            proband_lines.append(line)
         proband_sections.append(
-            SectionContent(title=f'Family {family.identifier}', content=patient_ids)
+            SectionContent(title='Probands', content='\n'.join(proband_lines))
         )
 
     # 3. Variant Info - main_focus variants with harmonized + enriched data
