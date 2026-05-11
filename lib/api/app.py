@@ -21,7 +21,7 @@ from fastapi import (
     status,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
@@ -33,6 +33,8 @@ from lib.api.db import get_session
 from lib.api.middleware import make_log_request_middleware
 from lib.core.environment import env
 from lib.core.logging import setup_logging
+from lib.misc.curation.pptx import build_curation_pptx
+from lib.misc.curation.summary import build_curation_row
 from lib.misc.pdf.highlight import (
     GrobidAnnotation,
     figures_to_grobid_annotations,
@@ -92,6 +94,7 @@ from lib.models import (
     VariantDB,
     VariantResp,
 )
+from lib.models.curation_summary import CurationSummaryRow
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.segregation_analysis import SegregationAnalysisComputedNestedResp
 from lib.tasks import TaskCreateRequest, TaskResp, enqueue_task
@@ -714,6 +717,49 @@ def _patient_variant_link_to_resp(
         ],
         updated_at=row.updated_at,
     )
+
+
+@app.get(
+    '/papers/{paper_id}/curation-row',
+    response_model=CurationSummaryRow,
+)
+def get_curation_row(paper_id: int, session: Session = Depends(get_session)) -> Any:
+    """Get a curation summary row for a single paper."""
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    try:
+        return build_curation_row(paper_id, session)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@app.get(
+    '/papers/{paper_id}/curation-export',
+)
+def get_curation_export(
+    paper_id: int, session: Session = Depends(get_session)
+) -> Response:
+    """Export a curation summary as a PPTX file."""
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    try:
+        row = build_curation_row(paper_id, session)
+        pptx_bytes = build_curation_pptx([row])
+        return Response(
+            content=pptx_bytes,
+            media_type='application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            headers={
+                'Content-Disposition': f'attachment; filename="curation_{paper_id}.pptx"'
+            },
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @app.get(
