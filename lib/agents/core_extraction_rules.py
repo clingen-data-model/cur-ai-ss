@@ -17,6 +17,10 @@ CORE EXTRACTION RULES:
     - A field is considered table-derived if the information is explicitly presented in a structured table (rows and columns) in the source.
     - If a verbatim quote cannot be extracted (i.e., the exact table row or cell text is not available as a substring of the input text), then table_id alone is sufficient.
   - image_id: required for figure-derived evidence
+  - is_supplement: boolean flag indicating whether evidence came from a supplement
+    - Set to true when evidence is extracted from supplementary material that may not be renderable in the PDF view
+    - Set to false (or omit) when evidence is from the main paper
+    - When true, coordinates may not be available for highlighting/linking in the UI
   - reasoning: required explanation
 
 - At least one of:

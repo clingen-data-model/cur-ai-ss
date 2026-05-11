@@ -42,7 +42,9 @@ from lib.misc.pdf.highlight import (
     parse_hex_color,
     words_to_grobid_annotations,
 )
-from lib.misc.pdf.misc import pdf_first_page_to_thumbnail_pymupdf_bytes
+from lib.misc.pdf.misc import (
+    pdf_first_page_to_thumbnail_pymupdf_bytes,
+)
 from lib.misc.pdf.parse import WordLoc
 from lib.misc.pdf.paths import (
     pdf_dir,
@@ -60,6 +62,7 @@ from lib.models import (
     FamilyDB,
     FamilyResp,
     FamilyUpdateRequest,
+    FileFormat,
     GeneDB,
     GeneResp,
     HarmonizedVariantDB,
@@ -148,10 +151,15 @@ def put_paper(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail='Only PDF files are allowed'
         )
-    if supplement_file and supplement_file.content_type != 'application/pdf':
+    valid_supplement_types = {
+        'application/pdf',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    }
+    if supplement_file and supplement_file.content_type not in valid_supplement_types:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail='Only PDF files are allowed for supplements',
+            detail='Only PDF, DOCX, or XLSX files are allowed for supplements',
         )
     gene = session.execute(
         select(GeneDB).where(GeneDB.symbol == gene_symbol)
@@ -186,9 +194,28 @@ def put_paper(
             fp.write(pdf_first_page_to_thumbnail_pymupdf_bytes(main_content))
 
         if supplement_file:
-            supplement_content = supplement_file.file.read()
             pdf_supplements_dir(paper_db.id).mkdir(parents=True, exist_ok=True)
-            with open(pdf_raw_path(paper_db.id, supplement=True), 'wb') as f:
+            supplement_content = supplement_file.file.read()
+            if (
+                supplement_file.content_type
+                == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            ):
+                paper_db.supplement_format = FileFormat.DOCX
+            elif (
+                supplement_file.content_type
+                == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+            ):
+                paper_db.supplement_format = FileFormat.XLSX
+            else:
+                paper_db.supplement_format = FileFormat.PDF
+            with open(
+                pdf_raw_path(
+                    paper_db.id,
+                    supplement=True,
+                    file_format=paper_db.supplement_format.value,
+                ),
+                'wb',
+            ) as f:
                 f.write(supplement_content)
         return paper_db
     except IntegrityError:
@@ -853,6 +880,10 @@ def highlight_pdf(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
+    # Return early if no highlightable evidence (e.g., all from supplements)
+    if not request.queries and not request.image_ids and not request.table_ids:
+        return
+
     # Load words from JSON file
     words_file = pdf_words_json_path(paper_id)
     with open(words_file, 'r') as f:
@@ -909,6 +940,10 @@ def grobid_annotation(
         rgb_color = parse_hex_color(request.color)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    # Return early if no highlightable evidence (e.g., all from supplements)
+    if not request.queries and not request.image_ids and not request.table_ids:
+        return []
 
     # Load words from JSON file
     words_file = pdf_words_json_path(paper_id)

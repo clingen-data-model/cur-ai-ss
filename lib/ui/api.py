@@ -1,3 +1,5 @@
+import mimetypes
+
 import requests
 import streamlit as st
 import streamlit.runtime.uploaded_file_manager
@@ -66,10 +68,13 @@ def put_paper(
         )
     }
     if supplement_file:
+        supplement_mime = (
+            mimetypes.guess_type(supplement_file.name)[0] or 'application/octet-stream'
+        )
         files['supplement_file'] = (
             supplement_file.name,
             supplement_file.read(),
-            'application/pdf',
+            supplement_mime,
         )
 
     resp = requests.put(
