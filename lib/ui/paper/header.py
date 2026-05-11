@@ -144,7 +144,7 @@ with center:
         st.caption(' • '.join(parts))
     else:
         st.markdown(f'# {paper_resp.filename}')
-    left, right = st.columns([6, 3])
+    left, right = st.columns([6, 4])
     with left:
         with st.container(horizontal=True, vertical_alignment='center'):
             if paper_query_params.tab_id:
@@ -191,24 +191,23 @@ with center:
                 key=RERUN_POPOVER_STATE_KEY,
             ):
                 render_queue_tasks_fragment(paper_query_params)
-            try:
-                pptx_bytes = get_curation_pptx(paper_query_params.paper_id)
-                st.download_button(
-                    '📊 Download PPTX',
-                    data=pptx_bytes,
-                    file_name=f'curation_{paper_query_params.paper_id}.pptx',
-                    mime='application/vnd.openxmlformats-officedocument.presentationml.presentation',
-                    type='tertiary',
-                    width='content',
-                )
-            except Exception as e:
-                st.button(
-                    '📊 Download PPTX',
-                    type='tertiary',
-                    width='content',
-                    disabled=True,
-                    help=f'Failed to load PPTX: {str(e)}',
-                )
+            with st.popover(
+                '📊 Generate PPTX',
+                type='tertiary',
+                width='content',
+                disabled=infer_paper_status(paper_resp.tasks) != 'Completed',
+            ):
+                try:
+                    with st.spinner('Generating PPTX...'):
+                        pptx_bytes = get_curation_pptx(paper_query_params.paper_id)
+                    st.download_button(
+                        '📊 Download PPTX',
+                        data=pptx_bytes,
+                        file_name=f'{paper_resp.title}.pptx',
+                        mime='application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                    )
+                except Exception as e:
+                    st.error(str(e))
             if st.button('🗑️ Delete Paper', type='tertiary', width='content'):
                 try:
                     delete_paper(paper_query_params.paper_id)
