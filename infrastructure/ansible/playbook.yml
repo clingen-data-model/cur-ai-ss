@@ -6,6 +6,8 @@
 # Usage:
 #   ansible-playbook -i <ssh-host>, playbook.yml \
 #     -e domain=example.com
+# Example:
+#   ansible-playbook -i dev-caa.us-east4-a.clingen-caa, infrastructure/ansible/playbook.yml -e gene-curation-ai.app
 #
 # Required variables:
 #   domain        - Domain name for nginx server_name

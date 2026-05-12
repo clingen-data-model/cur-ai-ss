@@ -75,11 +75,16 @@ def build_curation_row(paper_id: int, session: Session) -> CurationSummaryRow:
         for proband in probands:
             family = proband.family
             sex_str = proband.sex or ''
-            age_str = ''
+            age_parts = []
             if proband.age_report is not None and proband.age_report_unit:
-                age_str = (
+                age_parts.append(
                     f'{proband.age_report} {proband.age_report_unit.value.lower()}'
                 )
+            if proband.age_death is not None and proband.age_death_unit:
+                age_parts.append(
+                    f'(†{proband.age_death} {proband.age_death_unit.value.lower()})'
+                )
+            age_str = ' '.join(age_parts)
             demographic = ', '.join(filter(None, [sex_str, age_str]))
             line = f'{proband.identifier} - Family {family.identifier}'
             if demographic:

@@ -40,6 +40,16 @@ def pubmed_search_and_titles(
     r = requests.get(ESEARCH_ENDPOINT, params=params, timeout=10)
     r.raise_for_status()
     pmids = r.json().get('esearchresult', {}).get('idlist', [])
+
+    # Fallback: if gene search returns few results, search by author alone with higher recall
+    if len(pmids) < 5:
+        search_query = f'{first_author}[au]'
+        params['term'] = search_query
+        params['retmax'] = 200
+        r = requests.get(ESEARCH_ENDPOINT, params=params, timeout=10)
+        r.raise_for_status()
+        pmids = r.json().get('esearchresult', {}).get('idlist', [])
+
     if not pmids:
         return []
 
@@ -131,13 +141,14 @@ Candidate Generation & Selection Workflow:
 
 2️⃣ Candidate Generation:
 - Call `pubmed_search_and_titles` with the `first_author` extracted from the text and the gene_symbol (either extracted from abstract or provided as input).
-- The search should prioritize the last name of the `first_author` when generating candidates.
-- This will return a list of `(pmid, title)` tuples for candidate papers by this author about this gene.
+- The search first attempts author + gene matching. If few results are returned, it automatically broadens to author-only search for higher recall.
+- This will return a list of `(pmid, title)` tuples for candidate papers by this author, potentially including papers about related or alternative gene name variants.
 
 3️⃣ Candidate Selection:
 - Compare each returned title to the `title` extracted from the text.
-- Determine the PMID whose title is most closely aligned (semantic match or exact match).
-- Do NOT assume the first result is correct.
+- Look for semantic matches (same keywords, topics, genes) not just exact string matches.
+- Determine the PMID whose title is most closely aligned to the extracted title.
+- Do NOT assume the first result is correct—carefully review all candidates if the author-only fallback was used.
 
 4️⃣ Metadata Fetching:
 - Call `pubmed_fetch_one` on the selected PMID to fetch the full PubMed XML.
