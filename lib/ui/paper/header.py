@@ -162,7 +162,7 @@ with center:
         st.caption(' • '.join(parts))
     else:
         st.markdown(f'# {paper_resp.filename}')
-    left, right = st.columns([10, 9])
+    left, right = st.columns([5, 4])
     with left:
         with st.container(horizontal=True, vertical_alignment='center'):
             if paper_query_params.tab_id:

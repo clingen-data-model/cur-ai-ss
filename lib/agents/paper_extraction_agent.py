@@ -16,21 +16,23 @@ EFETCH_ENDPOINT = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
 
 @function_tool
 def pubmed_search_and_titles(
-    first_author: str, gene_symbol: str
+    first_author: str, search_term: str = ''
 ) -> List[Tuple[str, str]]:
     """
-    Search PubMed by first author and optionally gene symbol, then fetch titles.
+    Search PubMed by first author and optional search term (gene, keyword, year, etc).
     Returns a list of (pmid, title) tuples for candidate selection.
     """
-    # Phase 1: search by author (last name) and gene
-    search_terms = [f'{first_author}[au]', gene_symbol]
-    search_query = ' AND '.join(search_terms)
+    if search_term:
+        search_query = f'{first_author}[au] AND {search_term}'
+    else:
+        search_query = f'{first_author}[au]'
+
     params: dict[str, str | int] = {
         'db': 'pubmed',
         'term': search_query,
         'retmode': 'json',
         'sort': 'relevance',
-        'retmax': 50,
+        'retmax': 100,
     }
     if env.NCBI_API_KEY:
         params['api_key'] = env.NCBI_API_KEY
@@ -41,19 +43,10 @@ def pubmed_search_and_titles(
     r.raise_for_status()
     pmids = r.json().get('esearchresult', {}).get('idlist', [])
 
-    # Fallback: if gene search returns few results, search by author alone with higher recall
-    if len(pmids) < 5:
-        search_query = f'{first_author}[au]'
-        params['term'] = search_query
-        params['retmax'] = 200
-        r = requests.get(ESEARCH_ENDPOINT, params=params, timeout=10)
-        r.raise_for_status()
-        pmids = r.json().get('esearchresult', {}).get('idlist', [])
-
     if not pmids:
         return []
 
-    # Phase 2: fetch titles
+    # Fetch titles
     fetch_params = {
         'db': 'pubmed',
         'id': ','.join(pmids),
@@ -74,7 +67,6 @@ def pubmed_search_and_titles(
         pmid_elem = article.find('./MedlineCitation/PMID')
         title_elem = article.find('./MedlineCitation/Article/ArticleTitle')
 
-        # Skip if no PMID or empty
         if pmid_elem is None or not pmid_elem.text:
             continue
 
@@ -139,16 +131,35 @@ Candidate Generation & Selection Workflow:
 - This is the form of the gene that the authors use when discussing this paper.
 - If the gene is NOT mentioned in the abstract, use the Gene symbol provided in the input.
 
-2️⃣ Candidate Generation:
-- Call `pubmed_search_and_titles` with the `first_author` extracted from the text and the gene_symbol (either extracted from abstract or provided as input).
-- The search first attempts author + gene matching. If few results are returned, it automatically broadens to author-only search for higher recall.
-- This will return a list of `(pmid, title)` tuples for candidate papers by this author, potentially including papers about related or alternative gene name variants.
+2️⃣ Four-Phase PubMed Search:
+Use a four-phase search strategy, collecting candidates from each phase in order:
+
+**Phase 1: Author + Gene Search**
+- Call `pubmed_search_and_titles` with the `first_author` and gene_symbol (either extracted from abstract or provided).
+- Save these results as top candidates.
+
+**Phase 2: Author + Non-Gene Key Word from Title Search**
+- Identify the most information-rich word from the extracted title that is NOT a gene (diseases, phenotypes, anatomical terms, or other key concepts).
+- Evaluate the title to choose the word that best captures the paper's main topic besides the gene.
+- Call `pubmed_search_and_titles` with the `first_author` and this key word.
+- These results provide broader coverage beyond just the gene symbol.
+
+**Phase 3: Author + Publication Year Search**
+- Extract the publication year from the metadata.
+- Call `pubmed_search_and_titles` with the `first_author` and the publication year.
+- This significantly narrows down candidates by temporal proximity.
+
+**Phase 4: Author-Only Search**
+- If phases 1-3 do not yield good matches, perform a broad search using only author name.
+- Call `pubmed_search_and_titles` with just the `first_author` (empty search_term).
+- This provides maximum breadth as a final fallback.
 
 3️⃣ Candidate Selection:
 - Compare each returned title to the `title` extracted from the text.
 - Look for semantic matches (same keywords, topics, genes) not just exact string matches.
 - Determine the PMID whose title is most closely aligned to the extracted title.
-- Do NOT assume the first result is correct—carefully review all candidates if the author-only fallback was used.
+- **Prioritize Phase 1 results, but do not discard results from later phases if they provide better title matches.**
+- When in doubt, prefer results from earlier phases (author+gene > author+keyword > author+year > author-only).
 
 4️⃣ Metadata Fetching:
 - Call `pubmed_fetch_one` on the selected PMID to fetch the full PubMed XML.
