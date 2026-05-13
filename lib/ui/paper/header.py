@@ -15,6 +15,7 @@ from lib.tasks import (
     get_status_badge_color,
     get_status_badge_icon,
     infer_paper_status,
+    infer_paper_status_detail,
     is_task_completed,
 )
 from lib.ui.api import (
@@ -197,8 +198,10 @@ with center:
             horizontal_alignment='center',
         ):
             status = infer_paper_status(paper_resp.tasks)
+            detail = infer_paper_status_detail(paper_resp.tasks)
+            badge_text = f'{status}\n{detail}' if detail else status
             st.badge(
-                status,
+                badge_text,
                 icon=get_status_badge_icon(paper_resp.tasks),
                 color=get_status_badge_color(paper_resp.tasks),
             )
