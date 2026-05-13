@@ -66,10 +66,12 @@ from lib.models.variant import (
     HarmonizedVariant,
     HarmonizedVariantDB,
     HarmonizedVariantResp,
+    HarmonizedVariantUpdate,
     SpliceAI,
     Variant,
     VariantDB,
     VariantEnrichmentOutput,
     VariantResp,
+    VariantUpdateRequest,
 )
 from lib.tasks.models import TaskDB, TaskResp
