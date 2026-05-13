@@ -447,6 +447,7 @@ def _render_patients_grouped_by_family(
     selected_patient_id: int | None,
     tab_key: str,
     segregation_analysis: dict[int, SegregationAnalysisResp | None],
+    family_sizes: dict[int, int],
 ) -> None:
     """Render patients grouped by family."""
     family_map = {f.id: f for f in families}
@@ -457,7 +458,7 @@ def _render_patients_grouped_by_family(
 
     for family_id, group in sorted(by_family.items()):
         family = family_map.get(family_id)
-        if len(group) > 1 and family:
+        if family and (len(group) > 1 or family_sizes.get(family_id, 0) > 1):
             _render_family_group(
                 paper_resp,
                 family,
@@ -1072,6 +1073,12 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
     # Display Patients
     # -----------------------------
     indexed_patients = [(p.id, p) for p in patients]
+
+    # Build family size map from all patients (used for grouping logic)
+    family_sizes: dict[int, int] = defaultdict(int)
+    for _, p in indexed_patients:
+        family_sizes[p.family_id] += 1
+
     probands = [
         (patient_id, p)
         for patient_id, p in indexed_patients
@@ -1129,6 +1136,7 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
                 selected_patient_id,
                 'patient-proband',
                 segregation_analysis,
+                family_sizes,
             )
     with non_proband_tab:
         if not non_probands:
@@ -1141,6 +1149,7 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
                 selected_patient_id,
                 'patient-non-proband',
                 segregation_analysis,
+                family_sizes,
             )
     with affecteds_tab:
         if not affecteds:
@@ -1153,6 +1162,7 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
                 selected_patient_id,
                 'patient-affected',
                 segregation_analysis,
+                family_sizes,
             )
     with unaffecteds_tab:
         if not unaffecteds:
@@ -1165,6 +1175,7 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
                 selected_patient_id,
                 'patient-unaffected',
                 segregation_analysis,
+                family_sizes,
             )
     with pedigree_image_tab:
         if not pedigree_description:
