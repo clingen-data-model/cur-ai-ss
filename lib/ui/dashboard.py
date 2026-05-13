@@ -10,7 +10,7 @@ from streamlit_searchbox import st_searchbox
 from lib.core.environment import env
 from lib.misc.pdf.paths import pdf_thumbnail_path
 from lib.models import PaperResp
-from lib.tasks import get_status_badge_icon, infer_paper_status
+from lib.tasks import get_status_badge_icon, infer_paper_status_detail
 from lib.ui.api import (
     delete_paper,
     get_http_error_detail,
@@ -114,7 +114,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
         axis=1,
     )
     df['agent_status'] = df['id'].map(
-        lambda paper_id: f'{get_status_badge_icon(papers_by_id[paper_id].tasks)} {infer_paper_status(papers_by_id[paper_id].tasks)}'
+        lambda paper_id: f'{get_status_badge_icon(papers_by_id[paper_id].tasks)} {infer_paper_status_detail(papers_by_id[paper_id].tasks)}'
     )
     st.data_editor(
         df[

@@ -58,6 +58,19 @@ class TaskStatus(StrEnum):
     FAILED = 'Failed'
 
 
+class InferredPaperStatus(StrEnum):
+    """Inferred overall status of a paper based on its task states.
+
+    This is a computed value, not a stored database value. It synthesizes
+    the status of all tasks for a paper into a single status indicator.
+    """
+
+    PENDING = 'Pending'
+    RUNNING = 'Running'
+    FAILED = 'Failed'
+    COMPLETED = 'Completed'
+
+
 # Task dependencies: when a task completes, these become PENDING
 TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
     TaskType.PDF_PARSING: [

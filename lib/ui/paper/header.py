@@ -8,6 +8,7 @@ from pydantic import BaseModel, ValidationError
 
 from lib.models import PaperResp
 from lib.tasks import (
+    InferredPaperStatus,
     TaskStatus,
     TaskType,
     get_all_successor_levels,
@@ -131,7 +132,7 @@ with st.spinner('Loading paper...'):
 
     # Generate PPTX on page load if paper is completed
     if (
-        infer_paper_status(paper_resp.tasks) == 'Completed'
+        infer_paper_status(paper_resp.tasks) == InferredPaperStatus.COMPLETED
         and 'pptx_bytes' not in st.session_state
     ):
         try:

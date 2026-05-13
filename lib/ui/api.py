@@ -21,7 +21,7 @@ from lib.models import (
     VariantResp,
     VariantUpdateRequest,
 )
-from lib.tasks import TaskCreateRequest, TaskType, infer_paper_status
+from lib.tasks import TaskCreateRequest, TaskType
 
 
 def get_http_error_detail(e: requests.HTTPError) -> str:

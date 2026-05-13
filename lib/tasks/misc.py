@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from lib.tasks.models import (
     TASK_PREDECESSORS,
     TASK_SUCCESSORS,
+    InferredPaperStatus,
     TaskDB,
     TaskResp,
     TaskStatus,
@@ -114,15 +115,41 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
             )
 
 
-def infer_paper_status(tasks: list[TaskResp]) -> str:
+def infer_paper_status(tasks: list[TaskResp]) -> InferredPaperStatus:
     """Infer the overall status of a paper from its tasks.
 
-    Returns a human-readable status string:
+    Returns the inferred status as an enum. Use infer_paper_status_detail()
+    for a human-readable detail string with task names and IDs.
+    """
+    if not tasks:
+        return InferredPaperStatus.PENDING
+
+    # Check running tasks
+    if any(t.status == TaskStatus.RUNNING for t in tasks):
+        return InferredPaperStatus.RUNNING
+
+    # Check failed tasks
+    if any(t.status == TaskStatus.FAILED for t in tasks):
+        return InferredPaperStatus.FAILED
+
+    # Check if all completed
+    completed_count = sum(1 for t in tasks if t.status == TaskStatus.COMPLETED)
+    if completed_count == len(tasks):
+        return InferredPaperStatus.COMPLETED
+
+    # Otherwise pending
+    return InferredPaperStatus.PENDING
+
+
+def infer_paper_status_detail(tasks: list[TaskResp]) -> str:
+    """Get a detailed human-readable status string for display purposes.
+
+    Returns strings like:
     - "N agents running" if multiple tasks running
     - "Task Name Running" or "Task Name for Patient ID/Variant ID Running" if one running
     - "Task Name Failed" for first failed task
     - "Completed" if all done
-    - "Pending" if no work started
+    - "Pending" if no work started, or "Last Task Name Completed" if some tasks are done
     """
     if not tasks:
         return 'Pending'
@@ -155,7 +182,17 @@ def infer_paper_status(tasks: list[TaskResp]) -> str:
     if completed_count == len(tasks):
         return 'Completed'
 
-    # Otherwise pending
+    # Pending with completed tasks: show last completed task
+    if completed_count > 0:
+        completed_tasks = sorted(
+            [t for t in tasks if t.status == TaskStatus.COMPLETED],
+            key=lambda t: t.updated_at,
+            reverse=True,
+        )
+        last_task = completed_tasks[0]
+        return f'{last_task.type.value} Completed'
+
+    # No work started
     return 'Pending'
 
 
