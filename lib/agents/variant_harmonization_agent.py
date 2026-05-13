@@ -235,7 +235,7 @@ def allele_registry_resolver(
 
     Query priority (tries first matching option):
     1. CAID (most specific)
-    2. HGVS (coding > genomic > protein; does not require gnomAD presence)
+    2. HGVS (coding > genomic; does not require gnomAD presence)
     3. gnomAD ID (queries gnomAD v2 for GRCh37, v4 for GRCh38)
     4. dbSNP rsID
 
@@ -250,11 +250,9 @@ def allele_registry_resolver(
     if caid:
         suffix = f'allele/{quote(caid)}'
     elif hgvs_c:
-        suffix = f'allele?hgvsOrDescriptor={quote(hgvs_c)}'
+        suffix = f'allele?hgvs={quote(hgvs_c)}'
     elif hgvs_g:
-        suffix = f'allele?hgvsOrDescriptor={quote(hgvs_g)}'
-    elif hgvs_p:
-        suffix = f'allele?hgvsOrDescriptor={quote(hgvs_p)}'
+        suffix = f'allele?hgvs={quote(hgvs_g)}'
     elif gnomad_style_coordinates:
         # Use gnomAD v2 for GRCh37, v4 for GRCh38
         gnomad_version = 'gnomAD_2' if genome_build == 'GRCh37' else 'gnomAD_4'
