@@ -647,7 +647,9 @@ Action:
     Compare resolved values (hgvs_c, transcript annotations, gnomad_style_coordinates) against
     input variant data to ensure they represent the same variant.
 
-4. RETURN result.
+4. RETURN the result with gnomad_style_coordinates populated.
+   NOTE: Even if allele_registry_resolver returns no match (None), still return the converted
+   gnomad_style_coordinates with other resolver fields set to None.
 
 If not eligible → proceed to State 2.
 
@@ -666,7 +668,9 @@ If multiple results returned:
     Compare resolved values (hgvs_c, transcript annotations, gnomad_style_coordinates) against
     input variant data.
 
-RETURN selected result.
+RETURN selected result with all available fields populated.
+NOTE: Even if allele_registry_resolver returns no match (None), still return the input
+identifier (rsid or caid) with gnomad_style_coordinates and other fields set to None.
 
 If neither present → proceed to State 3.
 
@@ -701,7 +705,9 @@ C) Construct:
 
 If successful:
     → Call allele_registry_resolver
-    → RETURN result.
+    → RETURN result with gnomad_style_coordinates populated.
+    → NOTE: Even if allele_registry_resolver returns no match (None), still return the projected
+       gnomad_style_coordinates with other resolver fields set to None.
 
 If unsuccessful:
     → Proceed to State 4.
@@ -734,10 +740,12 @@ Action
         Call allele_registry_resolver using gnomad_style_coordinates.
             - If multiple results returned:
                 - Select the result most compatible with input variant context (hgvs_c, hgvs_p, transcript, genomic coordinates).
-        RETURN result.
+            RETURN result with gnomad_style_coordinates populated.
+            - NOTE: Even if allele_registry_resolver returns no match (None), still return the projected
+              gnomad_style_coordinates with other resolver fields set to None.
 
     6. If projection still fails:
-        Proceed to Step 4B.
+        Proceed to State 5.
 
 ============================================================
 STATE 5 — CLINVAR & DBSNP LOOKUP
@@ -780,9 +788,11 @@ Case B — Only hgvs returned:
     If multiple IDs returned:
         - Select the ID most compatible with input variant context (hgvs_c, hgvs_p, transcript, genomic coordinates).
         - Call allele_registry_resolver using selected gnomAD-style ID.
-            - If multiple IDs returned:
-                - Select the ID most compatible with input variant context (hgvs_c, hgvs_p, transcript, genomic coordinates).
-        - RETURN selected record.
+            - If multiple results returned:
+                - Select the result most compatible with input variant context.
+            - RETURN selected record with gnomad_style_coordinates populated.
+            - NOTE: Even if allele_registry_resolver returns no match (None), still return the gnomAD-style ID
+              with other resolver fields set to None.
 
 Case C — ClinVar empty:
     Call dbsnp_lookup using EXACT SAME query.
@@ -793,14 +803,16 @@ Case C — ClinVar empty:
         If multiple IDs returned:
             - Select the ID most compatible with input variant context (hgvs_c, hgvs_p, transcript, genomic coordinates).
             - Call allele_registry_resolver using selected gnomAD-style ID.
-                - If multiple IDs returned:
-                    - Select the ID most compatible with input variant context (hgvs_c, hgvs_p, transcript, genomic coordinates).
-            - RETURN selected record.
+                - If multiple results returned:
+                    - Select the result most compatible with input variant context.
+                - RETURN selected record with gnomad_style_coordinates populated.
+                - NOTE: Even if allele_registry_resolver returns no match (None), still return the gnomAD-style ID
+                  with other resolver fields set to None.
 
     If dbsnp_lookup returns no usable results:
         RETURN outputs with all normalized fields as None.
 
-If EITHER clinvar_lookup OR dbnsp_lookup returns no results RETURN outputs with all normalized fields as None.
+If EITHER clinvar_lookup OR dbsnp_lookup returns no results RETURN outputs with all normalized fields as None.
 
 ============================================================
 STATE 6 — FINALIZATION
