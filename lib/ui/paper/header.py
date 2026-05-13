@@ -209,17 +209,18 @@ with center:
                 key=RERUN_POPOVER_STATE_KEY,
             ):
                 render_queue_tasks_fragment(paper_query_params)
-            if st.session_state.get('pptx_bytes'):
-                title = paper_resp.title or f'paper_{paper_query_params.paper_id}'
-                clean_title = _strip_trailing_punctuation(title)
-                st.download_button(
-                    '📊 Download PPTX',
-                    data=st.session_state['pptx_bytes'],
-                    file_name=f'{clean_title}.pptx',
-                    mime='application/vnd.openxmlformats-officedocument.presentationml.presentation',
-                    type='tertiary',
-                    width='content',
-                )
+            title = paper_resp.title or f'paper_{paper_query_params.paper_id}'
+            clean_title = _strip_trailing_punctuation(title)
+            st.download_button(
+                '📊 Download PPTX',
+                data=st.session_state.get('pptx_bytes') or b'',
+                file_name=f'{clean_title}.pptx',
+                mime='application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                type='tertiary',
+                width='content',
+                disabled=not st.session_state.get('pptx_bytes'),
+                help='Enabled when paper extraction is completed',
+            )
             if st.button('🗑️ Delete Paper', type='tertiary', width='content'):
                 try:
                     delete_paper(paper_query_params.paper_id)
