@@ -65,6 +65,7 @@ from lib.models.variant import (
     HarmonizedVariant,
     HarmonizedVariantDB,
     HarmonizedVariantResp,
+    HarmonizedVariantUpdate,
     SpliceAI,
     Variant,
     VariantDB,

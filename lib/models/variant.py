@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from pydantic import BaseModel, computed_field, model_validator
+from pydantic import BaseModel, ConfigDict, computed_field, model_validator
 from sqlalchemy import (
     Boolean,
     DateTime,
@@ -173,23 +173,32 @@ class VariantResp(BaseModel):
         return self.variant_evidence.value or f'Variant {self.id}'
 
 
-class VariantUpdateRequest(PatchModel):
-    """Patch model for updating variant fields editable in the UI.
+class HarmonizedVariantUpdate(PatchModel):
+    """Patch model for updating harmonized variant fields."""
 
-    Fields prefixed with `harmonized_` are routed to the related HarmonizedVariantDB
-    row; fields suffixed with `_human_edit_note` are folded into the matching
-    `*_evidence` JSON column on the VariantDB row.
-    """
+    model_config = ConfigDict(extra='forbid')
+
+    gnomad_style_coordinates: str | None = None
+    rsid: str | None = None
+    caid: str | None = None
+    hgvs_c: str | None = None
+    hgvs_p: str | None = None
+    hgvs_g: str | None = None
+
+    def apply_to(self, obj: 'HarmonizedVariantDB') -> None:  # type: ignore[override]
+        for field, value in self.model_dump(exclude_unset=True).items():
+            setattr(obj, field, value)
+
+
+class VariantUpdateRequest(PatchModel):
+    """Patch model for updating variant fields editable in the UI."""
+
+    model_config = ConfigDict(extra='forbid')
 
     variant_type: str | None = None
     functional_evidence: bool | None = None
     main_focus: bool | None = None
-    harmonized_gnomad_style_coordinates: str | None = None
-    harmonized_rsid: str | None = None
-    harmonized_caid: str | None = None
-    harmonized_hgvs_c: str | None = None
-    harmonized_hgvs_p: str | None = None
-    harmonized_hgvs_g: str | None = None
+    harmonized_variant: HarmonizedVariantUpdate | None = None
     variant_type_human_edit_note: str | None = None
     functional_evidence_human_edit_note: str | None = None
     main_focus_human_edit_note: str | None = None
@@ -199,18 +208,18 @@ class VariantUpdateRequest(PatchModel):
         for field in ('variant_type', 'functional_evidence', 'main_focus'):
             if field in self.model_fields_set and getattr(self, field) is None:
                 raise ValueError(f'{field} cannot be null')
+        if (
+            'harmonized_variant' in self.model_fields_set
+            and self.harmonized_variant is None
+        ):
+            raise ValueError('harmonized_variant cannot be null')
         return self
 
-    def apply_to(  # type: ignore[override]
-        self,
-        obj: 'VariantDB',
-        harmonized: 'HarmonizedVariantDB | None' = None,
-    ) -> None:
+    def apply_to(self, obj: 'VariantDB') -> None:  # type: ignore[override]
         for field, value in self.model_dump(exclude_unset=True).items():
-            if field.startswith('harmonized_'):
-                if harmonized is not None:
-                    setattr(harmonized, field.removeprefix('harmonized_'), value)
-            elif field.endswith('_human_edit_note'):
+            if field == 'harmonized_variant':
+                continue
+            if field.endswith('_human_edit_note'):
                 evidence_column = field.replace('_human_edit_note', '_evidence')
                 evidence_dict = getattr(obj, evidence_column, {}).copy()
                 evidence_dict['human_edit_note'] = value

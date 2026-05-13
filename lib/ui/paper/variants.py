@@ -309,10 +309,13 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                 # Harmonized fields (no per-field evidence, no human_edit_note).
                 if harmonized_variant and harmonized_variant.value:
                     hv = harmonized_variant.value
+                    harmonized_changes: dict[str, str | None] = {}
                     for field, raw_val in harmonized_inputs.items():
                         new_val = raw_val or None
                         if new_val != getattr(hv, field):
-                            changes[f'harmonized_{field}'] = new_val
+                            harmonized_changes[field] = new_val
+                    if harmonized_changes:
+                        changes['harmonized_variant'] = harmonized_changes
 
                 if changes:
                     update_request = VariantUpdateRequest(**changes)

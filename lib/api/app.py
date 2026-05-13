@@ -626,7 +626,7 @@ def update_variant(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Variant not found'
         )
-    patch_request.apply_to(variant_db, variant_db.harmonized_variant)
+    patch_request.apply_to(variant_db)
     # Editing any harmonized field invalidates the downstream enrichment row,
     # which was computed by key lookup from the pre-edit coordinates. Treat
     # all harmonized siblings uniformly so a future enrichment lookup added
@@ -634,11 +634,18 @@ def update_variant(
     # LLM-generated reasoning on harmonized_variant is intentionally kept
     # intact: it remains the agent's explanation of its original choices,
     # and the curator's rationale belongs in human_edit_note fields.
-    harmonized_edited = any(
-        k.startswith('harmonized_')
-        for k in patch_request.model_dump(exclude_unset=True)
+    harmonized_update = (
+        patch_request.harmonized_variant
+        if 'harmonized_variant' in patch_request.model_fields_set
+        else None
     )
-    if harmonized_edited and variant_db.harmonized_variant is not None:
+    if harmonized_update is not None:
+        if variant_db.harmonized_variant is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail='Variant has not been harmonized by the server yet',
+            )
+        harmonized_update.apply_to(variant_db.harmonized_variant)
         # delete-orphan cascade removes the row
         variant_db.harmonized_variant.enriched_variant = None
     session.flush()
