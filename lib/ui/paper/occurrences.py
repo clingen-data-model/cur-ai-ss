@@ -3,6 +3,7 @@ import streamlit as st
 
 from lib.models import PaperResp, PatientResp, VariantResp
 from lib.models.evidence_block import EvidenceBlock
+from lib.models.patient import AffectedStatus, ProbandStatus
 from lib.models.patient_variant_link import Inheritance, TestingMethod, Zygosity
 from lib.tasks import TaskType, is_task_completed
 from lib.ui.api import (
@@ -94,6 +95,12 @@ def render_patient_variant_occurrences_tab() -> None:
         rows.append(
             {
                 'Select': False,
+                'Proband': patient.proband_status.value
+                if patient.proband_status
+                else 'N/A',
+                'Affected': patient.affected_status.value
+                if patient.affected_status
+                else 'N/A',
                 'Patient': patient_link,
                 'Variant': variant_link,
                 'Zygosity': link.zygosity.value,
@@ -125,14 +132,26 @@ def render_patient_variant_occurrences_tab() -> None:
     zygosity_options = [e.value for e in Zygosity]
     inheritance_options = [e.value for e in Inheritance]
     testing_method_options = [e.value for e in TestingMethod]
+    proband_options = [e.value for e in ProbandStatus]
+    affected_options = [e.value for e in AffectedStatus]
 
     editted_df = st.data_editor(
         df,
         width='stretch',
         hide_index=True,
-        disabled=['Patient', 'Variant'],
+        disabled=['Proband', 'Affected', 'Patient', 'Variant'],
         column_config={
             'Select': st.column_config.CheckboxColumn('Select', width=5),
+            'Proband': st.column_config.SelectboxColumn(
+                'Proband',
+                options=proband_options,
+                width='small',
+            ),
+            'Affected': st.column_config.SelectboxColumn(
+                'Affected',
+                options=affected_options,
+                width='small',
+            ),
             'Patient': st.column_config.LinkColumn(
                 'Patient',
                 display_text=r'.*?#(.+)$',
