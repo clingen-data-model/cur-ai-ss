@@ -94,6 +94,7 @@ from lib.models import (
     TaskDB,
     VariantDB,
     VariantResp,
+    VariantUpdateRequest,
 )
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.segregation_analysis import SegregationAnalysisComputedNestedResp
@@ -639,6 +640,53 @@ def _variant_to_resp(row: VariantDB) -> VariantResp:
         harmonized_variant=harmonized,
         enriched_variant=enriched,
     )
+
+
+@app.patch('/papers/{paper_id}/variants/{variant_id}', response_model=VariantResp)
+def update_variant(
+    paper_id: int,
+    variant_id: int,
+    patch_request: VariantUpdateRequest,
+    session: Session = Depends(get_session),
+) -> Any:
+    variant_db = (
+        session.query(VariantDB)
+        .options(
+            joinedload(VariantDB.harmonized_variant).joinedload(
+                HarmonizedVariantDB.enriched_variant
+            )
+        )
+        .filter(VariantDB.id == variant_id, VariantDB.paper_id == paper_id)
+        .one_or_none()
+    )
+    if not variant_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Variant not found'
+        )
+    patch_request.apply_to(variant_db)
+    # Editing any harmonized field invalidates the downstream enrichment row,
+    # which was computed by key lookup from the pre-edit coordinates. Treat
+    # all harmonized siblings uniformly so a future enrichment lookup added
+    # for e.g. hgvs_p cannot silently produce stale annotations. The
+    # LLM-generated reasoning on harmonized_variant is intentionally kept
+    # intact: it remains the agent's explanation of its original choices,
+    # and the curator's rationale belongs in human_edit_note fields.
+    harmonized_update = (
+        patch_request.harmonized_variant
+        if 'harmonized_variant' in patch_request.model_fields_set
+        else None
+    )
+    if harmonized_update is not None:
+        if variant_db.harmonized_variant is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail='Variant has not been harmonized by the server yet',
+            )
+        harmonized_update.apply_to(variant_db.harmonized_variant)
+        # delete-orphan cascade removes the row
+        variant_db.harmonized_variant.enriched_variant = None
+    session.flush()
+    return _variant_to_resp(variant_db)
 
 
 def _phenotype_to_resp(row: PhenotypeDB) -> PhenotypeResp:
