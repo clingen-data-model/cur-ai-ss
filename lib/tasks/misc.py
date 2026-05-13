@@ -207,25 +207,31 @@ def is_task_completed(tasks: list[TaskResp], task_type: TaskType) -> bool:
 def get_status_badge_color(
     tasks: list[TaskResp],
 ) -> Literal['red', 'blue', 'green', 'gray']:
-    """Get color for status badge based on task states."""
-    if any(t.status == TaskStatus.FAILED for t in tasks):
-        return 'red'
-    if any(t.status == TaskStatus.RUNNING for t in tasks):
-        return 'blue'
-    if all(t.status == TaskStatus.COMPLETED for t in tasks) and tasks:
-        return 'green'
-    return 'gray'
+    """Get color for status badge based on paper status."""
+    status = infer_paper_status(tasks)
+    match status:
+        case InferredPaperStatus.RUNNING:
+            return 'blue'
+        case InferredPaperStatus.FAILED:
+            return 'red'
+        case InferredPaperStatus.COMPLETED:
+            return 'green'
+        case InferredPaperStatus.PENDING:
+            return 'gray'
 
 
 def get_status_badge_icon(tasks: list[TaskResp]) -> str:
-    """Get icon for status badge based on task states."""
-    if any(t.status == TaskStatus.RUNNING for t in tasks):
-        return '⏳'
-    if any(t.status == TaskStatus.FAILED for t in tasks):
-        return '❌'
-    if all(t.status == TaskStatus.COMPLETED for t in tasks) and tasks:
-        return '✅'
-    return '⏹️'
+    """Get icon for status badge based on paper status."""
+    status = infer_paper_status(tasks)
+    match status:
+        case InferredPaperStatus.RUNNING:
+            return '⏳'
+        case InferredPaperStatus.FAILED:
+            return '❌'
+        case InferredPaperStatus.COMPLETED:
+            return '✅'
+        case InferredPaperStatus.PENDING:
+            return '⏹️'
 
 
 def get_all_successor_levels(task_type: TaskType) -> list[list[TaskType]]:
