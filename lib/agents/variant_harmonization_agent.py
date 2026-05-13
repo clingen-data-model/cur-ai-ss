@@ -218,9 +218,13 @@ def dbsnp_lookup(query: str) -> List[str]:
 
 @function_tool
 def allele_registry_resolver(
-    gnomad_style_coordinates: str | None,
-    rsid: str | None,
-    caid: str | None,
+    gnomad_style_coordinates: str | None = None,
+    rsid: str | None = None,
+    caid: str | None = None,
+    hgvs_c: str | None = None,
+    hgvs_g: str | None = None,
+    hgvs_p: str | None = None,
+    genome_build: str | None = None,
 ) -> Optional[list[dict[str, str | None]]]:
     """
     Resolve variant identifiers to comprehensive allele information.
@@ -229,8 +233,14 @@ def allele_registry_resolver(
     When multiple results are returned, inspect each and select the most appropriate
     based on the context of your variant investigation.
 
+    Query priority (tries first matching option):
+    1. CAID (most specific)
+    2. HGVS (coding > genomic > protein; does not require gnomAD presence)
+    3. gnomAD ID (queries gnomAD v2 for GRCh37, v4 for GRCh38)
+    4. dbSNP rsID
+
     Each record includes:
-    - gnomad_style_coordinates: GRCh38 gnomAD-style ID (chrom-pos-ref-alt)
+    - gnomad_style_coordinates: Genomic coordinates style ID (chrom-pos-ref-alt)
     - rsid: dbSNP identifier if available
     - caid: ClinGen Allele ID if available
     - hgvs_c: Coding HGVS (prefer MANE Select)
@@ -239,8 +249,16 @@ def allele_registry_resolver(
     """
     if caid:
         suffix = f'allele/{quote(caid)}'
+    elif hgvs_c:
+        suffix = f'allele?hgvsOrDescriptor={quote(hgvs_c)}'
+    elif hgvs_g:
+        suffix = f'allele?hgvsOrDescriptor={quote(hgvs_g)}'
+    elif hgvs_p:
+        suffix = f'allele?hgvsOrDescriptor={quote(hgvs_p)}'
     elif gnomad_style_coordinates:
-        suffix = f'alleles?gnomAD_4.id={quote(gnomad_style_coordinates)}'
+        # Use gnomAD v2 for GRCh37, v4 for GRCh38
+        gnomad_version = 'gnomAD_2' if genome_build == 'GRCh37' else 'gnomAD_4'
+        suffix = f'alleles?{gnomad_version}.id={quote(gnomad_style_coordinates)}'
     elif rsid:
         suffix = f'alleles?dbSNP.rs={quote(rsid)}'
     else:
@@ -640,7 +658,9 @@ Action:
     Remove "chr"
     Normalize MT → M
 
-2. Call allele_registry_resolver using gnomad_style_coordinates.
+2. Call allele_registry_resolver using gnomad_style_coordinates, genome_build, and any available HGVS.
+   The resolver prioritizes HGVS if available (does not require gnomAD presence), then falls back to gnomAD ID
+   (v2 for GRCh37, v4 for GRCh38).
 
 3. If multiple results returned:
     Select the result most compatible with input context.
@@ -661,7 +681,8 @@ Condition:
 rsid OR caid present in input.
 
 Action:
-Call allele_registry_resolver using available identifier.
+Call allele_registry_resolver using available identifier (caid, rsid), any available HGVS, and genome_build if known.
+The resolver will prioritize HGVS and CAID before trying rsID.
 
 If multiple results returned:
     Select the result most compatible with input context.
@@ -704,7 +725,8 @@ C) Construct:
         Select the ID most compatible with input variant context (hgvs_c, hgvs_p, transcript, genomic coordinates).
 
 If successful:
-    → Call allele_registry_resolver
+    → Call allele_registry_resolver with gnomad_style_coordinates, hgvs_g, and genome_build.
+       The resolver will try HGVS first if available.
     → RETURN result with gnomad_style_coordinates populated.
     → NOTE: Even if allele_registry_resolver returns no match (None), still return the projected
        gnomad_style_coordinates with other resolver fields set to None.
@@ -737,7 +759,8 @@ Action
         Retry once with select_canonical_transcript to handle retired versions.
 
     5. If projection succeeds:
-        Call allele_registry_resolver using gnomad_style_coordinates.
+        Call allele_registry_resolver using gnomad_style_coordinates, hgvs_c, and genome_build.
+        The resolver will prioritize HGVS queries, which don't depend on gnomAD presence.
             - If multiple results returned:
                 - Select the result most compatible with input variant context (hgvs_c, hgvs_p, transcript, genomic coordinates).
             RETURN result with gnomad_style_coordinates populated.
@@ -777,7 +800,8 @@ Step 5B — Call clinvar_lookup(query)
 Step 5C — Interpret Results
 
 Case A — rsid OR caid returned:
-    Call allele_registry_resolver.
+    Call allele_registry_resolver with rsid/caid, any available HGVS from ClinVar results, and genome_build.
+    The resolver will prioritize HGVS if available.
         - If multiple IDs returned:
             - Select the ID most compatible with input variant context (hgvs_c, hgvs_p, transcript, genomic coordinates).
     RETURN result.
@@ -787,7 +811,7 @@ Case B — Only hgvs returned:
     Call gnomad_style_ids_from_variant_validator (may return multiple gnomAD-style IDs).
     If multiple IDs returned:
         - Select the ID most compatible with input variant context (hgvs_c, hgvs_p, transcript, genomic coordinates).
-        - Call allele_registry_resolver using selected gnomAD-style ID.
+        - Call allele_registry_resolver using hgvs_c (if available), selected gnomAD-style ID, and genome_build.
             - If multiple results returned:
                 - Select the result most compatible with input variant context.
             - RETURN selected record with gnomad_style_coordinates populated.
@@ -802,7 +826,7 @@ Case C — ClinVar empty:
         Call gnomad_style_ids_from_variant_validator (may return multiple gnomAD-style IDs).
         If multiple IDs returned:
             - Select the ID most compatible with input variant context (hgvs_c, hgvs_p, transcript, genomic coordinates).
-            - Call allele_registry_resolver using selected gnomAD-style ID.
+            - Call allele_registry_resolver using hgvs_g, selected gnomAD-style ID, and genome_build.
                 - If multiple results returned:
                     - Select the result most compatible with input variant context.
                 - RETURN selected record with gnomad_style_coordinates populated.

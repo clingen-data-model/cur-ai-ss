@@ -238,6 +238,11 @@ def render_evidence_controls(
         ):
             st.markdown('**Evidence**: ' + (quote or ''))
             st.markdown('**Reasoning**: ' + (reasoning or ''))
+            # Show info message if evidence is from supplement
+            if isinstance(block, EvidenceBlock) and block.is_supplement:
+                st.info(
+                    '📎 This evidence comes from a supplement. PDF highlighting is only available for main document evidence.'
+                )
             if human_edit_note and human_edit_note_key:
                 edited_note = st.text_area(
                     'Human Edit Note',
