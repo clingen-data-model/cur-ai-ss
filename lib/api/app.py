@@ -285,9 +285,16 @@ def list_papers(
     session: Session = Depends(get_session),
 ) -> Any:
     query = session.query(PaperDB).options(
-        selectinload(PaperDB.gene), selectinload(PaperDB.tasks)
+        selectinload(PaperDB.gene),
+        selectinload(PaperDB.tasks),
+        selectinload(PaperDB.patients),
+        selectinload(PaperDB.variants),
     )
-    return query.all()
+    papers = query.all()
+    for paper in papers:
+        paper.patient_count = len(paper.patients)
+        paper.variant_count = len(paper.variants)
+    return papers
 
 
 @app.get('/papers/{paper_id}/tasks', response_model=list[TaskResp])

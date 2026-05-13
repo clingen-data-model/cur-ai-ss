@@ -149,6 +149,9 @@ class PaperDB(Base):
         default=list,
     )
 
+    patient_count: int = 0
+    variant_count: int = 0
+
     @property
     def gene_symbol(self) -> str:
         return self.gene.symbol
@@ -223,6 +226,8 @@ class PaperResp(PaperExtractionOutput):
     filename: str
     updated_at: datetime
     tasks: list['TaskResp'] = []
+    patient_count: int = 0
+    variant_count: int = 0
 
     # Override the PaperExtractionOutput to make the fields optional.
     # Note that mypy does not approve of the override, though Pydantic functions

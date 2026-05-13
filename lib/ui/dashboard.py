@@ -125,6 +125,8 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
                 'first_author',
                 'pmid',
                 'filename',
+                'patient_count',
+                'variant_count',
                 'agent_status',
                 'updated_at',
             ]
@@ -155,6 +157,14 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
                 display_text=r'.*?#(.+)$',
             ),
             'filename': st.column_config.Column('Filename'),
+            'patient_count': st.column_config.NumberColumn(
+                '👥 Patients',
+                format='%d',
+            ),
+            'variant_count': st.column_config.NumberColumn(
+                '🧬 Variants',
+                format='%d',
+            ),
             'agent_status': st.column_config.Column('Agent Status'),
             'updated_at': st.column_config.DatetimeColumn(
                 'Last Modified',
@@ -168,6 +178,8 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
             'first_author',
             'pmid',
             'filename',
+            'patient_count',
+            'variant_count',
             'agent_status',
             'updated_at',
         ],
