@@ -54,7 +54,7 @@ def upload_paper_modal() -> None:
         'Upload a PDF',
         type=['pdf'],
         accept_multiple_files=False,
-        max_upload_size=500,
+        max_upload_size=200,
     )
     if uploaded_file:
         supplement_file = st.file_uploader(
