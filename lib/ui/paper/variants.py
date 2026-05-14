@@ -124,132 +124,396 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                 expander_title,
                 expanded=(variant.id == selected_variant_id),
             ):
+                # Create tabs for Harmonized vs Raw display
+                tab_harmonized, tab_raw = st.tabs(['🔧 Harmonized', '📋 Raw'])
+
                 # ======================================================
-                # Harmonized Variant (PRIMARY DISPLAY)
+                # RAW TAB - Show extracted fields from paper
                 # ======================================================
-                # Inputs for harmonized fields are collected here so they can be
-                # diffed against the current values in the change-detection block below.
-                harmonized_inputs: dict[str, str] = {}
-                with st.container():
-                    st.subheader('Harmonized Variant Info')
-                    if harmonized_variant and harmonized_variant.value:
-                        hv = harmonized_variant.value
-                        # gnomAD-style coordinates
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            with st.container(
-                                horizontal=True, vertical_alignment='center'
-                            ):
-                                harmonized_inputs['gnomad_style_coordinates'] = (
-                                    st.text_input(
-                                        'gnomAD-style coordinates',
-                                        value=hv.gnomad_style_coordinates or '',
-                                        key=f'{key_prefix}-harm-gnomad',
+                with tab_raw:
+                    st.subheader('Extracted Variant Info')
+
+                    # Variant description
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.text_area(
+                            'Variant Description',
+                            value=variant.variant_evidence.value or '',
+                            disabled=True,
+                            height=80,
+                            key=f'{key_prefix}-raw-variant',
+                        )
+                    with col2:
+                        st.space()
+                        render_evidence_controls(
+                            paper_resp.id,
+                            block=variant.variant_evidence,
+                            label='📋 Extraction Evidence',
+                            color_key=f'{key_prefix}-raw-variant-color',
+                            button_key_prefix=f'{key_prefix}-raw-variant-ev',
+                        )
+
+                    # Transcript
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.text_input(
+                            'Transcript',
+                            value=variant.transcript_evidence.value or '',
+                            disabled=True,
+                            key=f'{key_prefix}-raw-transcript',
+                        )
+                    with col2:
+                        st.space()
+                        render_evidence_controls(
+                            paper_resp.id,
+                            block=variant.transcript_evidence,
+                            label='📋 Extraction Evidence',
+                            color_key=f'{key_prefix}-raw-transcript-color',
+                            button_key_prefix=f'{key_prefix}-raw-transcript-ev',
+                        )
+
+                    # Protein Accession
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.text_input(
+                            'Protein Accession',
+                            value=variant.protein_accession_evidence.value or '',
+                            disabled=True,
+                            key=f'{key_prefix}-raw-protein',
+                        )
+                    with col2:
+                        st.space()
+                        render_evidence_controls(
+                            paper_resp.id,
+                            block=variant.protein_accession_evidence,
+                            label='📋 Extraction Evidence',
+                            color_key=f'{key_prefix}-raw-protein-color',
+                            button_key_prefix=f'{key_prefix}-raw-protein-ev',
+                        )
+
+                    # Genomic Accession
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.text_input(
+                            'Genomic Accession',
+                            value=variant.genomic_accession_evidence.value or '',
+                            disabled=True,
+                            key=f'{key_prefix}-raw-genomic-acc',
+                        )
+                    with col2:
+                        st.space()
+                        render_evidence_controls(
+                            paper_resp.id,
+                            block=variant.genomic_accession_evidence,
+                            label='📋 Extraction Evidence',
+                            color_key=f'{key_prefix}-raw-genomic-acc-color',
+                            button_key_prefix=f'{key_prefix}-raw-genomic-acc-ev',
+                        )
+
+                    # LRG Accession
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.text_input(
+                            'LRG Accession',
+                            value=variant.lrg_accession_evidence.value or '',
+                            disabled=True,
+                            key=f'{key_prefix}-raw-lrg',
+                        )
+                    with col2:
+                        st.space()
+                        render_evidence_controls(
+                            paper_resp.id,
+                            block=variant.lrg_accession_evidence,
+                            label='📋 Extraction Evidence',
+                            color_key=f'{key_prefix}-raw-lrg-color',
+                            button_key_prefix=f'{key_prefix}-raw-lrg-ev',
+                        )
+
+                    # Gene Accession
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.text_input(
+                            'Gene Accession',
+                            value=variant.gene_accession_evidence.value or '',
+                            disabled=True,
+                            key=f'{key_prefix}-raw-gene-acc',
+                        )
+                    with col2:
+                        st.space()
+                        render_evidence_controls(
+                            paper_resp.id,
+                            block=variant.gene_accession_evidence,
+                            label='📋 Extraction Evidence',
+                            color_key=f'{key_prefix}-raw-gene-acc-color',
+                            button_key_prefix=f'{key_prefix}-raw-gene-acc-ev',
+                        )
+
+                    # Genomic Coordinates
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.text_input(
+                            'Genomic Coordinates',
+                            value=variant.genomic_coordinates_evidence.value or '',
+                            disabled=True,
+                            key=f'{key_prefix}-raw-genomic-coords',
+                        )
+                    with col2:
+                        st.space()
+                        render_evidence_controls(
+                            paper_resp.id,
+                            block=variant.genomic_coordinates_evidence,
+                            label='📋 Extraction Evidence',
+                            color_key=f'{key_prefix}-raw-genomic-coords-color',
+                            button_key_prefix=f'{key_prefix}-raw-genomic-coords-ev',
+                        )
+
+                    # Genome Build
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        genome_build_val = (
+                            variant.genome_build_evidence.value
+                            if variant.genome_build_evidence.value
+                            else ''
+                        )
+                        st.text_input(
+                            'Genome Build',
+                            value=genome_build_val,
+                            disabled=True,
+                            key=f'{key_prefix}-raw-genome-build',
+                        )
+                    with col2:
+                        st.space()
+                        render_evidence_controls(
+                            paper_resp.id,
+                            block=variant.genome_build_evidence,
+                            label='📋 Extraction Evidence',
+                            color_key=f'{key_prefix}-raw-genome-build-color',
+                            button_key_prefix=f'{key_prefix}-raw-genome-build-ev',
+                        )
+
+                    # HGVS c.
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.text_input(
+                            'HGVS c.',
+                            value=variant.hgvs_c_evidence.value or '',
+                            disabled=True,
+                            key=f'{key_prefix}-raw-hgvs-c',
+                        )
+                    with col2:
+                        st.space()
+                        render_evidence_controls(
+                            paper_resp.id,
+                            block=variant.hgvs_c_evidence,
+                            label='📋 Extraction Evidence',
+                            color_key=f'{key_prefix}-raw-hgvs-c-color',
+                            button_key_prefix=f'{key_prefix}-raw-hgvs-c-ev',
+                        )
+
+                    # HGVS p.
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.text_input(
+                            'HGVS p.',
+                            value=variant.hgvs_p_evidence.value or '',
+                            disabled=True,
+                            key=f'{key_prefix}-raw-hgvs-p',
+                        )
+                    with col2:
+                        st.space()
+                        render_evidence_controls(
+                            paper_resp.id,
+                            block=variant.hgvs_p_evidence,
+                            label='📋 Extraction Evidence',
+                            color_key=f'{key_prefix}-raw-hgvs-p-color',
+                            button_key_prefix=f'{key_prefix}-raw-hgvs-p-ev',
+                        )
+
+                    # HGVS g.
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.text_input(
+                            'HGVS g.',
+                            value=variant.hgvs_g_evidence.value or '',
+                            disabled=True,
+                            key=f'{key_prefix}-raw-hgvs-g',
+                        )
+                    with col2:
+                        st.space()
+                        render_evidence_controls(
+                            paper_resp.id,
+                            block=variant.hgvs_g_evidence,
+                            label='📋 Extraction Evidence',
+                            color_key=f'{key_prefix}-raw-hgvs-g-color',
+                            button_key_prefix=f'{key_prefix}-raw-hgvs-g-ev',
+                        )
+
+                    # rsID
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.text_input(
+                            'rsID',
+                            value=variant.rsid_evidence.value or '',
+                            disabled=True,
+                            key=f'{key_prefix}-raw-rsid',
+                        )
+                    with col2:
+                        st.space()
+                        render_evidence_controls(
+                            paper_resp.id,
+                            block=variant.rsid_evidence,
+                            label='📋 Extraction Evidence',
+                            color_key=f'{key_prefix}-raw-rsid-color',
+                            button_key_prefix=f'{key_prefix}-raw-rsid-ev',
+                        )
+
+                    # CAID
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.text_input(
+                            'CAID',
+                            value=variant.caid_evidence.value or '',
+                            disabled=True,
+                            key=f'{key_prefix}-raw-caid',
+                        )
+                    with col2:
+                        st.space()
+                        render_evidence_controls(
+                            paper_resp.id,
+                            block=variant.caid_evidence,
+                            label='📋 Extraction Evidence',
+                            color_key=f'{key_prefix}-raw-caid-color',
+                            button_key_prefix=f'{key_prefix}-raw-caid-ev',
+                        )
+
+                # ======================================================
+                # HARMONIZED TAB - Show harmonized and enriched data
+                # ======================================================
+                with tab_harmonized:
+                    # Inputs for harmonized fields are collected here so they can be
+                    # diffed against the current values in the change-detection block below.
+                    harmonized_inputs: dict[str, str] = {}
+                    with st.container():
+                        st.subheader('Harmonized Variant Info')
+                        if harmonized_variant and harmonized_variant.value:
+                            hv = harmonized_variant.value
+                            # gnomAD-style coordinates
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                with st.container(
+                                    horizontal=True, vertical_alignment='center'
+                                ):
+                                    harmonized_inputs['gnomad_style_coordinates'] = (
+                                        st.text_input(
+                                            'gnomAD-style coordinates',
+                                            value=hv.gnomad_style_coordinates or '',
+                                            key=f'{key_prefix}-harm-gnomad',
+                                        )
                                     )
-                                )
                                 with st.container(
                                     horizontal=False,
                                 ):
                                     st.space()
-                                    st.caption(
-                                        f'[View in gnomAD]({get_gnomad_url(hv.gnomad_style_coordinates)})'
-                                    )
-                        with col2:
-                            st.space()
-                            render_evidence_controls(
-                                paper_resp.id,
-                                block=harmonized_variant,
-                                label='📋 Harmonization Reasoning',
-                                color_key=f'{key_prefix}-harm-gnomad-color',
-                                button_key_prefix=f'{key_prefix}-harm-gnomad-ev',
-                            )
-                        # rsID
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            harmonized_inputs['rsid'] = st.text_input(
-                                'rsID',
-                                value=hv.rsid or '',
-                                key=f'{key_prefix}-harm-rsid',
-                            )
-                        with col2:
-                            st.space()
-                            render_evidence_controls(
-                                paper_resp.id,
-                                block=harmonized_variant,
-                                label='📋 Harmonization Reasoning',
-                                color_key=f'{key_prefix}-harm-rsid-color',
-                                button_key_prefix=f'{key_prefix}-harm-rsid-ev',
-                            )
-                        # CAID
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            harmonized_inputs['caid'] = st.text_input(
-                                'CAID',
-                                value=hv.caid or '',
-                                key=f'{key_prefix}-harm-caid',
-                            )
-                        with col2:
-                            st.space()
-                            render_evidence_controls(
-                                paper_resp.id,
-                                block=harmonized_variant,
-                                label='📋 Harmonization Reasoning',
-                                color_key=f'{key_prefix}-harm-caid-color',
-                                button_key_prefix=f'{key_prefix}-harm-caid-ev',
-                            )
-                        # HGVS c.
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            harmonized_inputs['hgvs_c'] = st.text_input(
-                                'HGVS c.',
-                                value=hv.hgvs_c or '',
-                                key=f'{key_prefix}-harm-hgvs-c',
-                            )
-                        with col2:
-                            st.space()
-                            render_evidence_controls(
-                                paper_resp.id,
-                                block=harmonized_variant,
-                                label='📋 Harmonization Reasoning',
-                                color_key=f'{key_prefix}-harm-hgvs-c-color',
-                                button_key_prefix=f'{key_prefix}-harm-hgvs-c-ev',
-                            )
-                        # HGVS p.
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            harmonized_inputs['hgvs_p'] = st.text_input(
-                                'HGVS p.',
-                                value=hv.hgvs_p or '',
-                                key=f'{key_prefix}-harm-hgvs-p',
-                            )
-                        with col2:
-                            st.space()
-                            render_evidence_controls(
-                                paper_resp.id,
-                                block=harmonized_variant,
-                                label='📋 Harmonization Reasoning',
-                                color_key=f'{key_prefix}-harm-hgvs-p-color',
-                                button_key_prefix=f'{key_prefix}-harm-hgvs-p-ev',
-                            )
-                        # HGVS g.
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            harmonized_inputs['hgvs_g'] = st.text_input(
-                                'HGVS g.',
-                                value=hv.hgvs_g or '',
-                                key=f'{key_prefix}-harm-hgvs-g',
-                            )
-                        with col2:
-                            st.space()
-                            render_evidence_controls(
-                                paper_resp.id,
-                                block=harmonized_variant,
-                                label='📋 Harmonization Reasoning',
-                                color_key=f'{key_prefix}-harm-hgvs-g-color',
-                                button_key_prefix=f'{key_prefix}-harm-hgvs-g-ev',
-                            )
-                    else:
-                        st.info('Harmonization not yet completed for this variant')
+                                    if hv.gnomad_style_coordinates:
+                                        st.caption(
+                                            f'[View in gnomAD]({get_gnomad_url(hv.gnomad_style_coordinates)})'
+                                        )
+                            with col2:
+                                st.space()
+                                render_evidence_controls(
+                                    paper_resp.id,
+                                    block=harmonized_variant,
+                                    label='📋 Harmonization Reasoning',
+                                    color_key=f'{key_prefix}-harm-gnomad-color',
+                                    button_key_prefix=f'{key_prefix}-harm-gnomad-ev',
+                                )
+                            # rsID
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                harmonized_inputs['rsid'] = st.text_input(
+                                    'rsID',
+                                    value=hv.rsid or '',
+                                    key=f'{key_prefix}-harm-rsid',
+                                )
+                            with col2:
+                                st.space()
+                                render_evidence_controls(
+                                    paper_resp.id,
+                                    block=harmonized_variant,
+                                    label='📋 Harmonization Reasoning',
+                                    color_key=f'{key_prefix}-harm-rsid-color',
+                                    button_key_prefix=f'{key_prefix}-harm-rsid-ev',
+                                )
+                            # CAID
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                harmonized_inputs['caid'] = st.text_input(
+                                    'CAID',
+                                    value=hv.caid or '',
+                                    key=f'{key_prefix}-harm-caid',
+                                )
+                            with col2:
+                                st.space()
+                                render_evidence_controls(
+                                    paper_resp.id,
+                                    block=harmonized_variant,
+                                    label='📋 Harmonization Reasoning',
+                                    color_key=f'{key_prefix}-harm-caid-color',
+                                    button_key_prefix=f'{key_prefix}-harm-caid-ev',
+                                )
+                            # HGVS c.
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                harmonized_inputs['hgvs_c'] = st.text_input(
+                                    'HGVS c.',
+                                    value=hv.hgvs_c or '',
+                                    key=f'{key_prefix}-harm-hgvs-c',
+                                )
+                            with col2:
+                                st.space()
+                                render_evidence_controls(
+                                    paper_resp.id,
+                                    block=harmonized_variant,
+                                    label='📋 Harmonization Reasoning',
+                                    color_key=f'{key_prefix}-harm-hgvs-c-color',
+                                    button_key_prefix=f'{key_prefix}-harm-hgvs-c-ev',
+                                )
+                            # HGVS p.
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                harmonized_inputs['hgvs_p'] = st.text_input(
+                                    'HGVS p.',
+                                    value=hv.hgvs_p or '',
+                                    key=f'{key_prefix}-harm-hgvs-p',
+                                )
+                            with col2:
+                                st.space()
+                                render_evidence_controls(
+                                    paper_resp.id,
+                                    block=harmonized_variant,
+                                    label='📋 Harmonization Reasoning',
+                                    color_key=f'{key_prefix}-harm-hgvs-p-color',
+                                    button_key_prefix=f'{key_prefix}-harm-hgvs-p-ev',
+                                )
+                            # HGVS g.
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                harmonized_inputs['hgvs_g'] = st.text_input(
+                                    'HGVS g.',
+                                    value=hv.hgvs_g or '',
+                                    key=f'{key_prefix}-harm-hgvs-g',
+                                )
+                            with col2:
+                                st.space()
+                                render_evidence_controls(
+                                    paper_resp.id,
+                                    block=harmonized_variant,
+                                    label='📋 Harmonization Reasoning',
+                                    color_key=f'{key_prefix}-harm-hgvs-g-color',
+                                    button_key_prefix=f'{key_prefix}-harm-hgvs-g-ev',
+                                )
+                        else:
+                            st.info('Harmonization not yet completed for this variant')
 
                 # ======================================================
                 # Variant Type
