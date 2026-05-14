@@ -137,17 +137,20 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                         # gnomAD-style coordinates
                         col1, col2 = st.columns(2)
                         with col1:
-                            harmonized_inputs['gnomad_style_coordinates'] = (
-                                st.text_input(
-                                    'gnomAD-style coordinates',
-                                    value=hv.gnomad_style_coordinates or '',
-                                    key=f'{key_prefix}-harm-gnomad',
+                            subcol1, subcol2 = st.columns([4, 1])
+                            with subcol1:
+                                harmonized_inputs['gnomad_style_coordinates'] = (
+                                    st.text_input(
+                                        'gnomAD-style coordinates',
+                                        value=hv.gnomad_style_coordinates or '',
+                                        key=f'{key_prefix}-harm-gnomad',
+                                    )
                                 )
-                            )
-                            if hv.gnomad_style_coordinates:
-                                st.caption(
-                                    f'[View in gnomAD]({get_gnomad_url(hv.gnomad_style_coordinates)})'
-                                )
+                            with subcol2:
+                                if hv.gnomad_style_coordinates:
+                                    st.caption(
+                                        f'[View in gnomAD]({get_gnomad_url(hv.gnomad_style_coordinates)})'
+                                    )
                         with col2:
                             st.space()
                             render_evidence_controls(
