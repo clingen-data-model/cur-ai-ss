@@ -147,7 +147,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                         render_evidence_controls(
                             paper_resp.id,
                             block=variant.variant_evidence,
-                            label='📋 Extraction Evidence',
+                            label='📋 Evidence & Reasoning',
                             color_key=f'{key_prefix}-raw-variant-color',
                             button_key_prefix=f'{key_prefix}-raw-variant-ev',
                         )
@@ -166,7 +166,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                         render_evidence_controls(
                             paper_resp.id,
                             block=variant.transcript_evidence,
-                            label='📋 Extraction Evidence',
+                            label='📋 Evidence & Reasoning',
                             color_key=f'{key_prefix}-raw-transcript-color',
                             button_key_prefix=f'{key_prefix}-raw-transcript-ev',
                         )
@@ -185,7 +185,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                         render_evidence_controls(
                             paper_resp.id,
                             block=variant.protein_accession_evidence,
-                            label='📋 Extraction Evidence',
+                            label='📋 Evidence & Reasoning',
                             color_key=f'{key_prefix}-raw-protein-color',
                             button_key_prefix=f'{key_prefix}-raw-protein-ev',
                         )
@@ -204,7 +204,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                         render_evidence_controls(
                             paper_resp.id,
                             block=variant.genomic_accession_evidence,
-                            label='📋 Extraction Evidence',
+                            label='📋 Evidence & Reasoning',
                             color_key=f'{key_prefix}-raw-genomic-acc-color',
                             button_key_prefix=f'{key_prefix}-raw-genomic-acc-ev',
                         )
@@ -223,7 +223,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                         render_evidence_controls(
                             paper_resp.id,
                             block=variant.lrg_accession_evidence,
-                            label='📋 Extraction Evidence',
+                            label='📋 Evidence & Reasoning',
                             color_key=f'{key_prefix}-raw-lrg-color',
                             button_key_prefix=f'{key_prefix}-raw-lrg-ev',
                         )
@@ -242,7 +242,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                         render_evidence_controls(
                             paper_resp.id,
                             block=variant.gene_accession_evidence,
-                            label='📋 Extraction Evidence',
+                            label='📋 Evidence & Reasoning',
                             color_key=f'{key_prefix}-raw-gene-acc-color',
                             button_key_prefix=f'{key_prefix}-raw-gene-acc-ev',
                         )
@@ -261,7 +261,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                         render_evidence_controls(
                             paper_resp.id,
                             block=variant.genomic_coordinates_evidence,
-                            label='📋 Extraction Evidence',
+                            label='📋 Evidence & Reasoning',
                             color_key=f'{key_prefix}-raw-genomic-coords-color',
                             button_key_prefix=f'{key_prefix}-raw-genomic-coords-ev',
                         )
@@ -285,7 +285,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                         render_evidence_controls(
                             paper_resp.id,
                             block=variant.genome_build_evidence,
-                            label='📋 Extraction Evidence',
+                            label='📋 Evidence & Reasoning',
                             color_key=f'{key_prefix}-raw-genome-build-color',
                             button_key_prefix=f'{key_prefix}-raw-genome-build-ev',
                         )
@@ -304,7 +304,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                         render_evidence_controls(
                             paper_resp.id,
                             block=variant.hgvs_c_evidence,
-                            label='📋 Extraction Evidence',
+                            label='📋 Evidence & Reasoning',
                             color_key=f'{key_prefix}-raw-hgvs-c-color',
                             button_key_prefix=f'{key_prefix}-raw-hgvs-c-ev',
                         )
@@ -323,7 +323,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                         render_evidence_controls(
                             paper_resp.id,
                             block=variant.hgvs_p_evidence,
-                            label='📋 Extraction Evidence',
+                            label='📋 Evidence & Reasoning',
                             color_key=f'{key_prefix}-raw-hgvs-p-color',
                             button_key_prefix=f'{key_prefix}-raw-hgvs-p-ev',
                         )
@@ -342,7 +342,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                         render_evidence_controls(
                             paper_resp.id,
                             block=variant.hgvs_g_evidence,
-                            label='📋 Extraction Evidence',
+                            label='📋 Evidence & Reasoning',
                             color_key=f'{key_prefix}-raw-hgvs-g-color',
                             button_key_prefix=f'{key_prefix}-raw-hgvs-g-ev',
                         )
@@ -361,7 +361,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                         render_evidence_controls(
                             paper_resp.id,
                             block=variant.rsid_evidence,
-                            label='📋 Extraction Evidence',
+                            label='📋 Evidence & Reasoning',
                             color_key=f'{key_prefix}-raw-rsid-color',
                             button_key_prefix=f'{key_prefix}-raw-rsid-ev',
                         )
@@ -380,7 +380,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                         render_evidence_controls(
                             paper_resp.id,
                             block=variant.caid_evidence,
-                            label='📋 Extraction Evidence',
+                            label='📋 Evidence & Reasoning',
                             color_key=f'{key_prefix}-raw-caid-color',
                             button_key_prefix=f'{key_prefix}-raw-caid-ev',
                         )
@@ -412,8 +412,8 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                                 with st.container(
                                     horizontal=False,
                                 ):
-                                    st.space()
                                     if hv.gnomad_style_coordinates:
+                                        st.space()
                                         st.caption(
                                             f'[View in gnomAD]({get_gnomad_url(hv.gnomad_style_coordinates)})'
                                         )
