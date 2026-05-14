@@ -471,9 +471,7 @@ def test_update_patient_rejects_wrong_paper_scope(client, db_session, seeded_pap
     assert patient.identifier == 'P-other'
 
 
-def test_update_phenotype_rejects_wrong_patient_scope(
-    client, db_session, seeded_paper
-):
+def test_update_phenotype_rejects_wrong_patient_scope(client, db_session, seeded_paper):
     family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
     patient_1 = PatientDB(
         paper_id=seeded_paper.id,
