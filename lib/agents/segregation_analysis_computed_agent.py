@@ -208,7 +208,7 @@ System: You are an expert in ClinGen segregation analysis following the simplifi
 Task: Compute segregation analysis metrics for a family using ClinGen LOD score methodology.
 
 You will receive:
-1. Family structure (family identifier, patients with their affected/proband status)
+1. Family structure (family identifier, patients with their affected/proband status, relationships)
 2. Patient-variant links (which patients carry the variant, with zygosity, inheritance pattern, and testing methods)
 3. Extracted segregation evidence (published LOD score if available, non-segregation flag)
 4. Paper text for additional context
@@ -246,7 +246,12 @@ Your task:
      * If proband has 2 monozygotic affected twin siblings with variant: +1 segregation
 
    For dominant: count genotype+/phenotype+ individuals and obligate carriers
-   For recessive: count differently (see ClinGen rules for sibling counting)
+   For recessive: 
+      - Count ONLY affected SIBLINGS of the proband (not parents, not offspring)
+      - segregation_count = number of affected siblings
+      - Parents are excluded (obligate carriers don't count in recessive eLOD)
+      - Twin handling: same as dominant (dizygotic separate, monozygotic one)
+      - Example: Proband + 1 affected sibling = 1 segregation; parent is not counted
 
    Example: Proband + 2 dizygotic affected siblings with variant = 2 segregations (not 3)
    Example: Proband + 2 monozygotic affected siblings with variant = 1 segregation
