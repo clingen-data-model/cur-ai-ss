@@ -223,7 +223,6 @@ def allele_registry_resolver(
     caid: str | None = None,
     hgvs_c: str | None = None,
     hgvs_g: str | None = None,
-    hgvs_p: str | None = None,
     genome_build: str | None = None,
 ) -> Optional[list[dict[str, str | None]]]:
     """
@@ -245,7 +244,6 @@ def allele_registry_resolver(
     - caid: ClinGen Allele ID if available
     - hgvs_c: Coding HGVS (prefer MANE Select)
     - hgvs_g: Genomic HGVS (prefer GRCh38)
-    - hgvs_p: Protein HGVS (prefer MANE Select)
     """
     if caid:
         suffix = f'allele/{quote(caid)}'
