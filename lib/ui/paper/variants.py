@@ -125,7 +125,9 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                 expanded=(variant.id == selected_variant_id),
             ):
                 # Create tabs for Harmonized vs Raw display
-                tab_harmonized, tab_raw = st.tabs(['🔧 Harmonized', 'Raw (as extracted from the paper)'])
+                tab_harmonized, tab_raw = st.tabs(
+                    ['🔧 Harmonized', 'Raw (as extracted from the paper)']
+                )
 
                 # ======================================================
                 # RAW TAB - Show extracted fields from paper
