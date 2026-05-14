@@ -51,7 +51,6 @@ from lib.models.phenotype import (
 )
 from lib.models.segregation_analysis import (
     SegregationAnalysisComputedDB,
-    SegregationAnalysisComputedResp,
     SegregationAnalysisResp,
     SegregationEvidence,
     SegregationEvidenceDB,

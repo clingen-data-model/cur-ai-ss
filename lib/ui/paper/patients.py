@@ -357,7 +357,7 @@ def _render_family_group(
                     button_key_prefix=f'{tab_key}-fam-{family.id}-nonseg-evidence',
                 )
 
-            if seg_data.computed and seg_data.computed.segregation_count.value > 0:
+            if seg_data.computed and seg_data.computed.segregation_count.value is not None:
                 # Meets Minimum Criteria
                 col1, col2 = st.columns(2)
                 with col1:

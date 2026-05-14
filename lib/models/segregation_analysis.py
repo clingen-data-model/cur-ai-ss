@@ -90,19 +90,6 @@ class SegregationEvidenceUpdateRequest(PatchModel):
 # ============================================================================
 
 
-class SegregationAnalysisComputed(BaseModel):
-    """
-    Computed segregation analysis values derived from family, patient, and
-    variant data using ClinGen LOD score methodology.
-    """
-
-    family_id: int
-    segregation_count: ReasoningBlock[int]
-    computed_lod_score: ReasoningBlock[float]
-    points_assigned: ReasoningBlock[float]
-    meets_minimum_criteria: ReasoningBlock[bool]
-
-
 class SegregationAnalysisComputedDB(Base):
     __tablename__ = 'segregation_analysis_computed'
 
@@ -136,16 +123,6 @@ class SegregationAnalysisComputedDB(Base):
     )
 
     __table_args__ = (Index('ix_segregation_analysis_computed_family_id', 'family_id'),)
-
-
-class SegregationAnalysisComputedResp(BaseModel):
-    id: int
-    family_id: int
-    segregation_count: ReasoningBlock[int]
-    computed_lod_score: ReasoningBlock[float]
-    points_assigned: ReasoningBlock[float]
-    meets_minimum_criteria: ReasoningBlock[bool]
-    updated_at: datetime
 
 
 # ============================================================================
