@@ -137,8 +137,9 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                         # gnomAD-style coordinates
                         col1, col2 = st.columns(2)
                         with col1:
-                            subcol1, subcol2 = st.columns([4, 1])
-                            with subcol1:
+                            with st.container(
+                                horizontal=True, vertical_alignment='center'
+                            ):
                                 harmonized_inputs['gnomad_style_coordinates'] = (
                                     st.text_input(
                                         'gnomAD-style coordinates',
@@ -146,12 +147,9 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                                         key=f'{key_prefix}-harm-gnomad',
                                     )
                                 )
-                            with subcol2:
-                                if hv.gnomad_style_coordinates:
-                                    with st.container(horizontal=True, vertical_alignment='center'):
-                                        st.markdown(
-                                            f'[View in gnomAD]({get_gnomad_url(hv.gnomad_style_coordinates)})'
-                                        )
+                                st.caption(
+                                    f'[View in gnomAD]({get_gnomad_url(hv.gnomad_style_coordinates)})'
+                                )
                         with col2:
                             st.space()
                             render_evidence_controls(
