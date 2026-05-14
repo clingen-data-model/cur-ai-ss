@@ -286,7 +286,7 @@ Your task:
    - Returns: points float and reasoning
    - Applies Figure 6 matrix based on methodology and criteria
 
-Output all four computed values with clear reasoning.
+Output all six computed values with clear reasoning: segregation_count, affected_count, unaffected_count, computed_lod_score, points_assigned, meets_minimum_criteria.
 
 ## Edge Cases
 

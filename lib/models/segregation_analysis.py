@@ -102,6 +102,12 @@ class SegregationAnalysisComputedDB(Base):
     segregation_count: Mapped[int] = mapped_column(Integer, nullable=False)
     segregation_count_reasoning: Mapped[dict] = mapped_column(JSON, nullable=False)
 
+    affected_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    affected_count_reasoning: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+    unaffected_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    unaffected_count_reasoning: Mapped[dict] = mapped_column(JSON, nullable=False)
+
     computed_lod_score: Mapped[float] = mapped_column(Float, nullable=False)
     computed_lod_score_reasoning: Mapped[dict] = mapped_column(JSON, nullable=False)
 
@@ -134,6 +140,8 @@ class SegregationAnalysisComputedNestedResp(BaseModel):
     """Nested computed analysis results."""
 
     segregation_count: ReasoningBlock[int]
+    affected_count: ReasoningBlock[int]
+    unaffected_count: ReasoningBlock[int]
     computed_lod_score: ReasoningBlock[float]
     points_assigned: ReasoningBlock[float]
     meets_minimum_criteria: ReasoningBlock[bool]
@@ -168,6 +176,8 @@ class SegregationAnalysisComputedOutput(BaseModel):
     """Output from segregation analysis computation agent."""
 
     segregation_count: ReasoningBlock[int]
+    affected_count: ReasoningBlock[int]
+    unaffected_count: ReasoningBlock[int]
     computed_lod_score: ReasoningBlock[float]
     points_assigned: ReasoningBlock[float]
     meets_minimum_criteria: ReasoningBlock[bool]

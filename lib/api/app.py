@@ -489,6 +489,8 @@ def _segregation_analysis_to_resp(
     if computed:
         computed_nested = SegregationAnalysisComputedNestedResp(
             segregation_count=ReasoningBlock(**computed.segregation_count_reasoning),  # type: ignore[arg-type]
+            affected_count=ReasoningBlock(**computed.affected_count_reasoning),  # type: ignore[arg-type]
+            unaffected_count=ReasoningBlock(**computed.unaffected_count_reasoning),  # type: ignore[arg-type]
             computed_lod_score=ReasoningBlock(**computed.computed_lod_score_reasoning),  # type: ignore[arg-type]
             points_assigned=ReasoningBlock(**computed.points_assigned_reasoning),  # type: ignore[arg-type]
             meets_minimum_criteria=ReasoningBlock(

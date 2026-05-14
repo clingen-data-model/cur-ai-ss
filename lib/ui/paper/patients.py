@@ -357,7 +357,10 @@ def _render_family_group(
                     button_key_prefix=f'{tab_key}-fam-{family.id}-nonseg-evidence',
                 )
 
-            if seg_data.computed and seg_data.computed.segregation_count.value is not None:
+            if (
+                seg_data.computed
+                and seg_data.computed.segregation_count.value is not None
+            ):
                 # Meets Minimum Criteria
                 col1, col2 = st.columns(2)
                 with col1:
@@ -399,6 +402,44 @@ def _render_family_group(
                         label='Segregation Count Reasoning',
                         color_key=f'{tab_key}-fam-{family.id}-segregation-count-color',
                         button_key_prefix=f'{tab_key}-fam-{family.id}-segregation-count-btn',
+                    )
+
+                # Affected Count
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.text_input(
+                        'Affected Count',
+                        str(seg_data.computed.affected_count.value),
+                        disabled=True,
+                        key=f'{tab_key}-fam-{family.id}-affected-count',
+                    )
+                with col2:
+                    st.space()
+                    render_evidence_controls(
+                        paper_resp.id,
+                        block=seg_data.computed.affected_count,
+                        label='Affected Count Reasoning',
+                        color_key=f'{tab_key}-fam-{family.id}-affected-count-color',
+                        button_key_prefix=f'{tab_key}-fam-{family.id}-affected-count-btn',
+                    )
+
+                # Unaffected Count
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.text_input(
+                        'Unaffected Count',
+                        str(seg_data.computed.unaffected_count.value),
+                        disabled=True,
+                        key=f'{tab_key}-fam-{family.id}-unaffected-count',
+                    )
+                with col2:
+                    st.space()
+                    render_evidence_controls(
+                        paper_resp.id,
+                        block=seg_data.computed.unaffected_count,
+                        label='Unaffected Count Reasoning',
+                        color_key=f'{tab_key}-fam-{family.id}-unaffected-count-color',
+                        button_key_prefix=f'{tab_key}-fam-{family.id}-unaffected-count-btn',
                     )
 
                 # Computed LOD Score
