@@ -148,9 +148,10 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                                 )
                             with subcol2:
                                 if hv.gnomad_style_coordinates:
-                                    st.caption(
-                                        f'[View in gnomAD]({get_gnomad_url(hv.gnomad_style_coordinates)})'
-                                    )
+                                    with st.container(horizontal=True, vertical_alignment='center'):
+                                        st.markdown(
+                                            f'[View in gnomAD]({get_gnomad_url(hv.gnomad_style_coordinates)})'
+                                        )
                         with col2:
                             st.space()
                             render_evidence_controls(
