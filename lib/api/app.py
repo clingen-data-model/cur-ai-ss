@@ -902,7 +902,13 @@ def update_phenotype(
     session: Session = Depends(get_session),
 ) -> Any:
     phenotype_db = (
-        session.query(PhenotypeDB).filter(PhenotypeDB.id == phenotype_id).one_or_none()
+        session.query(PhenotypeDB)
+        .filter(
+            PhenotypeDB.id == phenotype_id,
+            PhenotypeDB.paper_id == paper_id,
+            PhenotypeDB.patient_id == patient_id,
+        )
+        .one_or_none()
     )
     if not phenotype_db:
         raise HTTPException(
@@ -922,7 +928,7 @@ def update_patient(
     patient_db = (
         session.query(PatientDB)
         .options(selectinload(PatientDB.family))
-        .filter(PatientDB.id == patient_id)
+        .filter(PatientDB.id == patient_id, PatientDB.paper_id == paper_id)
         .one_or_none()
     )
     if not patient_db:
