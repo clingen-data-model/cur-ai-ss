@@ -20,10 +20,32 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     with op.batch_alter_table('segregation_analysis_computed', schema=None) as batch_op:
-        batch_op.add_column(sa.Column('affected_count', sa.Integer(), nullable=False, server_default='0'))
-        batch_op.add_column(sa.Column('affected_count_reasoning', sa.JSON(), nullable=False, server_default='{}'))
-        batch_op.add_column(sa.Column('unaffected_count', sa.Integer(), nullable=False, server_default='0'))
-        batch_op.add_column(sa.Column('unaffected_count_reasoning', sa.JSON(), nullable=False, server_default='{}'))
+        batch_op.add_column(
+            sa.Column(
+                'affected_count', sa.Integer(), nullable=False, server_default='0'
+            )
+        )
+        batch_op.add_column(
+            sa.Column(
+                'affected_count_reasoning',
+                sa.JSON(),
+                nullable=False,
+                server_default='{}',
+            )
+        )
+        batch_op.add_column(
+            sa.Column(
+                'unaffected_count', sa.Integer(), nullable=False, server_default='0'
+            )
+        )
+        batch_op.add_column(
+            sa.Column(
+                'unaffected_count_reasoning',
+                sa.JSON(),
+                nullable=False,
+                server_default='{}',
+            )
+        )
 
 
 def downgrade() -> None:

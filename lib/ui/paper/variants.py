@@ -134,7 +134,8 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                     st.subheader('Harmonized Variant Info')
                     if harmonized_variant and harmonized_variant.value:
                         hv = harmonized_variant.value
-                        col1, col2, col3 = st.columns([1, 1, 2])
+                        # gnomAD-style coordinates
+                        col1, col2 = st.columns(2)
                         with col1:
                             harmonized_inputs['gnomad_style_coordinates'] = (
                                 st.text_input(
@@ -147,48 +148,100 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                                 st.caption(
                                     f'[View in gnomAD]({get_gnomad_url(hv.gnomad_style_coordinates)})'
                                 )
+                        with col2:
+                            st.space()
+                            render_evidence_controls(
+                                paper_resp.id,
+                                block=harmonized_variant,
+                                label='📋 Harmonization Reasoning',
+                                color_key=f'{key_prefix}-harm-gnomad-color',
+                                button_key_prefix=f'{key_prefix}-harm-gnomad-ev',
+                            )
+                        # rsID
+                        col1, col2 = st.columns(2)
+                        with col1:
                             harmonized_inputs['rsid'] = st.text_input(
                                 'rsID',
                                 value=hv.rsid or '',
                                 key=f'{key_prefix}-harm-rsid',
                             )
+                        with col2:
+                            st.space()
+                            render_evidence_controls(
+                                paper_resp.id,
+                                block=harmonized_variant,
+                                label='📋 Harmonization Reasoning',
+                                color_key=f'{key_prefix}-harm-rsid-color',
+                                button_key_prefix=f'{key_prefix}-harm-rsid-ev',
+                            )
+                        # CAID
+                        col1, col2 = st.columns(2)
+                        with col1:
                             harmonized_inputs['caid'] = st.text_input(
                                 'CAID',
                                 value=hv.caid or '',
                                 key=f'{key_prefix}-harm-caid',
                             )
                         with col2:
+                            st.space()
+                            render_evidence_controls(
+                                paper_resp.id,
+                                block=harmonized_variant,
+                                label='📋 Harmonization Reasoning',
+                                color_key=f'{key_prefix}-harm-caid-color',
+                                button_key_prefix=f'{key_prefix}-harm-caid-ev',
+                            )
+                        # HGVS c.
+                        col1, col2 = st.columns(2)
+                        with col1:
                             harmonized_inputs['hgvs_c'] = st.text_input(
                                 'HGVS c.',
                                 value=hv.hgvs_c or '',
                                 key=f'{key_prefix}-harm-hgvs-c',
                             )
+                        with col2:
+                            st.space()
+                            render_evidence_controls(
+                                paper_resp.id,
+                                block=harmonized_variant,
+                                label='📋 Harmonization Reasoning',
+                                color_key=f'{key_prefix}-harm-hgvs-c-color',
+                                button_key_prefix=f'{key_prefix}-harm-hgvs-c-ev',
+                            )
+                        # HGVS p.
+                        col1, col2 = st.columns(2)
+                        with col1:
                             harmonized_inputs['hgvs_p'] = st.text_input(
                                 'HGVS p.',
                                 value=hv.hgvs_p or '',
                                 key=f'{key_prefix}-harm-hgvs-p',
                             )
+                        with col2:
+                            st.space()
+                            render_evidence_controls(
+                                paper_resp.id,
+                                block=harmonized_variant,
+                                label='📋 Harmonization Reasoning',
+                                color_key=f'{key_prefix}-harm-hgvs-p-color',
+                                button_key_prefix=f'{key_prefix}-harm-hgvs-p-ev',
+                            )
+                        # HGVS g.
+                        col1, col2 = st.columns(2)
+                        with col1:
                             harmonized_inputs['hgvs_g'] = st.text_input(
                                 'HGVS g.',
                                 value=hv.hgvs_g or '',
                                 key=f'{key_prefix}-harm-hgvs-g',
                             )
-                        with col3:
+                        with col2:
+                            st.space()
                             render_evidence_controls(
                                 paper_resp.id,
-                                block=variant.variant_evidence,
-                                label='📋 Evidence & Reasoning',
-                                color_key=f'{key_prefix}-var-color',
-                                button_key_prefix=f'{key_prefix}-var',
+                                block=harmonized_variant,
+                                label='📋 Harmonization Reasoning',
+                                color_key=f'{key_prefix}-harm-hgvs-g-color',
+                                button_key_prefix=f'{key_prefix}-harm-hgvs-g-ev',
                             )
-
-                        st.text_area(
-                            'Harmonization Reasoning',
-                            harmonized_variant.reasoning if harmonized_variant else '',
-                            height=140,
-                            disabled=True,
-                            key=f'{key_prefix}-norm-notes',
-                        )
                     else:
                         st.info('Harmonization not yet completed for this variant')
 
