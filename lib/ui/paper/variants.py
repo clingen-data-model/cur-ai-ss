@@ -147,10 +147,13 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                                         key=f'{key_prefix}-harm-gnomad',
                                     )
                                 )
-                                st.space()
-                                st.caption(
-                                    f'[View in gnomAD]({get_gnomad_url(hv.gnomad_style_coordinates)})'
-                                )
+                                with st.container(
+                                    horizontal=False,
+                                ):
+                                    st.space()
+                                    st.caption(
+                                        f'[View in gnomAD]({get_gnomad_url(hv.gnomad_style_coordinates)})'
+                                    )
                         with col2:
                             st.space()
                             render_evidence_controls(
