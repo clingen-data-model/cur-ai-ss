@@ -125,7 +125,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                 expanded=(variant.id == selected_variant_id),
             ):
                 # Create tabs for Harmonized vs Raw display
-                tab_harmonized, tab_raw = st.tabs(['🔧 Harmonized', '📋 Raw'])
+                tab_harmonized, tab_raw = st.tabs(['🔧 Harmonized', 'Raw (as extracted from the paper)'])
 
                 # ======================================================
                 # RAW TAB - Show extracted fields from paper
@@ -136,11 +136,10 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                     # Variant description
                     col1, col2 = st.columns(2)
                     with col1:
-                        st.text_area(
+                        st.text_input(
                             'Variant Description',
                             value=variant.variant_evidence.value or '',
                             disabled=True,
-                            height=80,
                             key=f'{key_prefix}-raw-variant',
                         )
                     with col2:
@@ -514,6 +513,9 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                                 )
                         else:
                             st.info('Harmonization not yet completed for this variant')
+
+                st.divider()
+                st.subheader('Variant Properties')
 
                 # ======================================================
                 # Variant Type
