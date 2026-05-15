@@ -1,7 +1,7 @@
 """add additional_context to tasks
 
 Revision ID: 79d76bfe280f
-Revises: 3f8g9h0i1j2
+Revises: d8f7e6c5b4a3
 Create Date: 2026-05-14 19:35:00.232295
 
 """
@@ -13,7 +13,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = '79d76bfe280f'
-down_revision: Union[str, None] = '3f8g9h0i1j2'
+down_revision: Union[str, None] = 'd8f7e6c5b4a3'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
