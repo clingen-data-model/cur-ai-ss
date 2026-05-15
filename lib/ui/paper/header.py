@@ -140,8 +140,9 @@ with st.spinner('Loading paper...'):
             st.session_state['pptx_bytes'] = get_curation_pptx(
                 paper_query_params.paper_id
             )
-        except Exception:
+        except Exception as e:
             st.session_state['pptx_bytes'] = None
+            st.error(f'Failed to generate PPTX: {str(e)}')
 
 left, center, right = st.columns([1, 10, 1])
 with left:
