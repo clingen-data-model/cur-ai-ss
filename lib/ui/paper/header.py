@@ -64,6 +64,7 @@ class PaperQueryParams(BaseModel):
             )
 
 
+@st.fragment
 def render_queue_tasks_fragment(paper_query_params: PaperQueryParams) -> None:
     task_type = st.selectbox(
         'Select task to rerun:',
@@ -218,7 +219,6 @@ with center:
             with st.popover(
                 '🔄 Rerun Agents',
                 type='tertiary',
-                on_change='rerun',
                 disabled=any(t.status == TaskStatus.RUNNING for t in paper_resp.tasks),
                 key=RERUN_POPOVER_STATE_KEY,
             ):
