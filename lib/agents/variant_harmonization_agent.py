@@ -218,32 +218,29 @@ def dbsnp_lookup(query: str) -> List[str]:
 
 @function_tool
 def allele_registry_resolver(
-    gnomad_style_coordinates: str | None = None,
     rsid: str | None = None,
     caid: str | None = None,
     hgvs_c: str | None = None,
     hgvs_g: str | None = None,
-    genome_build: str | None = None,
 ) -> Optional[list[dict[str, str | None]]]:
     """
-    Resolve variant identifiers to comprehensive allele information.
+    Resolve variant identifiers to comprehensive allele information via ClinGen Allele Registry.
 
     Returns a list of resolved allele records (one per unique allele in the response).
     When multiple results are returned, inspect each and select the most appropriate
     based on the context of your variant investigation.
 
     Query priority (tries first matching option):
-    1. CAID (most specific)
-    2. HGVS (coding > genomic; does not require gnomAD presence)
-    3. gnomAD ID (queries gnomAD v2 for GRCh37, v4 for GRCh38)
-    4. dbSNP rsID
+    1. CAID (ClinGen Allele ID - most specific)
+    2. HGVS (coding preferred over genomic)
+    3. dbSNP rsID
 
     Each record includes:
-    - gnomad_style_coordinates: Genomic coordinates style ID (chrom-pos-ref-alt)
     - rsid: dbSNP identifier if available
     - caid: ClinGen Allele ID if available
-    - hgvs_c: Coding HGVS (prefer MANE Select)
+    - hgvs_c: Coding HGVS (prefer MANE Select RefSeq)
     - hgvs_g: Genomic HGVS (prefer GRCh38)
+    - hgvs_p: Protein HGVS if available
     """
     if caid:
         suffix = f'allele/{quote(caid)}'
@@ -251,10 +248,6 @@ def allele_registry_resolver(
         suffix = f'allele?hgvs={quote(hgvs_c)}'
     elif hgvs_g:
         suffix = f'allele?hgvs={quote(hgvs_g)}'
-    elif gnomad_style_coordinates:
-        # Use gnomAD v2 for GRCh37, v4 for GRCh38
-        gnomad_version = 'gnomAD_2' if genome_build == 'GRCh37' else 'gnomAD_4'
-        suffix = f'alleles?{gnomad_version}.id={quote(gnomad_style_coordinates)}'
     elif rsid:
         suffix = f'alleles?dbSNP.rs={quote(rsid)}'
     else:
@@ -386,7 +379,7 @@ def allele_registry_resolver(
 
         results.append(
             {
-                'gnomad_style_coordinates': resolved_gnomad or gnomad_style_coordinates,
+                'gnomad_style_coordinates': resolved_gnomad,
                 'rsid': resolved_rsid or rsid,
                 'caid': resolved_caid or caid,
                 'hgvs_c': resolved_hgvsc,
@@ -641,33 +634,45 @@ Use the following fields of the provided structured input:
 Proceed to State 1.
 
 ============================================================
-STATE 1 — DIRECT GENOMIC COORDINATE RESOLUTION
+STATE 1 — DIRECT GENOMIC RESOLUTION
 ============================================================
 
 Condition:
-Input contains EXPLICIT genomic_coordinates with:
-    chromosome, 1-based position, ref allele, alt allele.
+Input contains EXPLICIT genomic_coordinates OR hgvs_g.
 
 Action:
-1. Convert to gnomAD-style format:
-    chr1:55051215 G>A → 1-55051215-G-A
-    Remove "chr"
-    Normalize MT → M
 
-2. Call allele_registry_resolver using gnomad_style_coordinates, genome_build, and any available HGVS.
-   The resolver prioritizes HGVS if available (does not require gnomAD presence), then falls back to gnomAD ID
-   (v2 for GRCh37, v4 for GRCh38).
+A) If genomic_coordinates present (chromosome, 1-based position, ref, alt):
+    1. Get genomic accession:
+        Call genomic_accession_for_gene_and_transcript(gene, transcript if provided) resolving with genome_build.
+        If transcript missing, first call select_canonical_transcript(gene, genome_build or GRCh38).
 
-3. If multiple results returned:
+    2. Construct full genomic HGVS:
+        genomic_accession + ":g." + position + ref + ">" + alt
+        Example: NC_000017.11:g.40152569C>A
+
+B) If hgvs_g present but missing genomic accession (e.g., "17:g.40152569C>A"):
+    1. Parse hgvs_g to extract coordinates (or recognize incomplete format).
+    2. Get genomic accession:
+        Call genomic_accession_for_gene_and_transcript(gene, transcript if available, or genome_build).
+        If transcript missing, first call select_canonical_transcript(gene, genome_build or GRCh38).
+
+    3. Reconstruct full genomic HGVS with accession:
+        Example: NC_000017.11:g.40152569C>A
+
+C) If hgvs_g already complete (starts with NC_):
+    Use as-is.
+
+D) Call allele_registry_resolver with the complete hgvs_g and genome_build.
+   Do NOT pass incomplete/malformed hgvs_c or hgvs_p—the resolver will extract complete
+   transcript info from the registry response.
+
+E) If multiple results returned:
     Select the result most compatible with input context.
-    Compare resolved values (hgvs_c, transcript annotations, gnomad_style_coordinates) against
-    input variant data to ensure they represent the same variant.
 
-4. RETURN the result with gnomad_style_coordinates populated.
-   NOTE: Even if allele_registry_resolver returns no match (None), still return the converted
-   gnomad_style_coordinates with other resolver fields set to None.
+F) RETURN result with all available fields populated.
 
-If not eligible → proceed to State 2.
+If neither genomic_coordinates nor hgvs_g present → proceed to State 2.
 
 ============================================================
 STATE 2 — IDENTIFIER RESOLUTION
@@ -678,60 +683,20 @@ rsid OR caid present in input.
 
 Action:
 Call allele_registry_resolver using available identifier (caid, rsid), any available HGVS, and genome_build if known.
-The resolver will prioritize HGVS and CAID before trying rsID.
+The resolver will prioritize CAID, then HGVS, then rsID.
 
 If multiple results returned:
     Select the result most compatible with input context.
-    Compare resolved values (hgvs_c, transcript annotations, gnomad_style_coordinates) against
-    input variant data.
+    Compare resolved values (hgvs_c, transcript annotations, hgvs_g) against input variant data.
 
 RETURN selected result with all available fields populated.
 NOTE: Even if allele_registry_resolver returns no match (None), still return the input
-identifier (rsid or caid) with gnomad_style_coordinates and other fields set to None.
+identifier (rsid or caid) with other fields set to None.
 
 If neither present → proceed to State 3.
 
 ============================================================
-STATE 3 — GENOMIC HGVS PROJECTION
-============================================================
-
-Condition:
-hgvs_g present.
-
-Action:
-
-A) If hgvs_g contains genomic accession (starts with NC_):
-    Call gnomad_style_ids_from_variant_validator (may return multiple gnomAD-style IDs).
-    If multiple IDs returned:
-        Select the ID most compatible with input variant context (hgvs_c, hgvs_p, transcript, genomic coordinates).
-
-B) If genomic_accession missing:
-    If transcript missing:
-        Call select_canonical_transcript(gene, genome_build or GRCh38 default)
-    Call genomic_accession_for_gene_and_transcript to retrieve genomic accession.
-
-    If genomic accession still unavailable:
-        FAIL → return None (proceed to State 4 for hgvs_c/p fallback).
-
-C) Construct:
-    genomic_accession + ":" + hgvs_g
-
-    Call gnomad_style_ids_from_variant_validator (may return multiple gnomAD-style IDs).
-    If multiple IDs returned:
-        Select the ID most compatible with input variant context (hgvs_c, hgvs_p, transcript, genomic coordinates).
-
-If successful:
-    → Call allele_registry_resolver with gnomad_style_coordinates, hgvs_g, and genome_build.
-       The resolver will try HGVS first if available.
-    → RETURN result with gnomad_style_coordinates populated.
-    → NOTE: Even if allele_registry_resolver returns no match (None), still return the projected
-       gnomad_style_coordinates with other resolver fields set to None.
-
-If unsuccessful:
-    → Proceed to State 4.
-
-============================================================
-STATE 4 — TRANSCRIPT-BASED PROJECTION
+STATE 3 — TRANSCRIPT-BASED PROJECTION
 ============================================================
 
 Condition:
@@ -755,19 +720,19 @@ Action
         Retry once with select_canonical_transcript to handle retired versions.
 
     5. If projection succeeds:
-        Call allele_registry_resolver using gnomad_style_coordinates, hgvs_c, and genome_build.
+        Call allele_registry_resolver using hgvs_c and genome_build.
         The resolver will prioritize HGVS queries, which don't depend on gnomAD presence.
             - If multiple results returned:
                 - Select the result most compatible with input variant context (hgvs_c, hgvs_p, transcript, genomic coordinates).
-            RETURN result with gnomad_style_coordinates populated.
-            - NOTE: Even if allele_registry_resolver returns no match (None), still return the projected
-              gnomad_style_coordinates with other resolver fields set to None.
+            RETURN result with all fields populated.
+            - NOTE: Even if allele_registry_resolver returns no match (None), still return with
+              hgvs_c populated and other resolver fields set to None.
 
     6. If projection still fails:
-        Proceed to State 5.
+        Proceed to State 4.
 
 ============================================================
-STATE 5 — CLINVAR & DBSNP LOOKUP
+STATE 4 — CLINVAR & DBSNP LOOKUP
 ============================================================
 
 Condition:
@@ -797,37 +762,36 @@ Step 5C — Interpret Results
 
 Case A — rsid OR caid returned:
     Call allele_registry_resolver with rsid/caid, any available HGVS from ClinVar results, and genome_build.
-    The resolver will prioritize HGVS if available.
-        - If multiple IDs returned:
-            - Select the ID most compatible with input variant context (hgvs_c, hgvs_p, transcript, genomic coordinates).
+    The resolver will prioritize CAID, then HGVS.
+        - If multiple results returned:
+            - Select the result most compatible with input variant context.
     RETURN result.
 
 Case B — Only hgvs returned:
-    Extract transcript and hgvs_c from hgvs.
-    Call gnomad_style_ids_from_variant_validator (may return multiple gnomAD-style IDs).
-    If multiple IDs returned:
-        - Select the ID most compatible with input variant context (hgvs_c, hgvs_p, transcript, genomic coordinates).
-        - Call allele_registry_resolver using hgvs_c (if available), selected gnomAD-style ID, and genome_build.
-            - If multiple results returned:
-                - Select the result most compatible with input variant context.
-            - RETURN selected record with gnomad_style_coordinates populated.
-            - NOTE: Even if allele_registry_resolver returns no match (None), still return the gnomAD-style ID
-              with other resolver fields set to None.
+    Extract hgvs_c or hgvs_g from ClinVar results.
+    If hgvs_c available:
+        Call allele_registry_resolver with hgvs_c and genome_build.
+    Else if hgvs_g available:
+        Ensure genomic accession is present; if not, add it (see State 1).
+        Call allele_registry_resolver with complete hgvs_g and genome_build.
+        - If multiple results returned:
+            - Select the result most compatible with input variant context.
+        - RETURN selected record with all fields populated.
+        - NOTE: Even if allele_registry_resolver returns no match (None), still return with
+          hgvs_g populated and other resolver fields set to None.
 
 Case C — ClinVar empty:
     Call dbsnp_lookup using EXACT SAME query.
 
     If dbsnp_lookup returns genomic HGVS (hgvs_g):
         Prefer hgvs_g compatible with input context.
-        Call gnomad_style_ids_from_variant_validator (may return multiple gnomAD-style IDs).
-        If multiple IDs returned:
-            - Select the ID most compatible with input variant context (hgvs_c, hgvs_p, transcript, genomic coordinates).
-            - Call allele_registry_resolver using hgvs_g, selected gnomAD-style ID, and genome_build.
-                - If multiple results returned:
-                    - Select the result most compatible with input variant context.
-                - RETURN selected record with gnomad_style_coordinates populated.
-                - NOTE: Even if allele_registry_resolver returns no match (None), still return the gnomAD-style ID
-                  with other resolver fields set to None.
+        Ensure genomic accession is present; if not, add it (see State 1).
+        Call allele_registry_resolver using complete hgvs_g and genome_build.
+            - If multiple results returned:
+                - Select the result most compatible with input variant context.
+            - RETURN selected record with all fields populated.
+            - NOTE: Even if allele_registry_resolver returns no match (None), still return with
+              hgvs_g populated and other resolver fields set to None.
 
     If dbsnp_lookup returns no usable results:
         RETURN outputs with all normalized fields as None.
@@ -835,12 +799,12 @@ Case C — ClinVar empty:
 If EITHER clinvar_lookup OR dbsnp_lookup returns no results RETURN outputs with all normalized fields as None.
 
 ============================================================
-STATE 6 — FINALIZATION
+STATE 5 — FINALIZATION
 ============================================================
 
 Return a single harmonized variant object with:
 - reasoning (clear human-readable summary)
-- allele_registry_resolver fields if available: gnomad_style_coordinates, rsid, caid, hgvs_c, hgvs_g, hgvs_p
+- allele_registry_resolver fields if available: rsid, caid, hgvs_c, hgvs_g, hgvs_p
 
 Confidence Levels:
 
