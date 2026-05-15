@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from lib.misc.curation.models import CurationSummaryRow, SectionContent
 from lib.misc.pdf.paths import pdf_image_path
 from lib.models.family import FamilyDB
-from lib.models.paper import PedigreeDB
+from lib.models.paper import PaperDB, PedigreeDB
 from lib.models.patient import PatientDB, ProbandStatus
 from lib.models.patient_variant_link import PatientVariantLinkDB
 from lib.models.phenotype import HpoDB, PhenotypeDB
@@ -22,14 +22,15 @@ def build_curation_row(paper_id: int, session: Session) -> CurationSummaryRow:
     phenotypes, segregation) and assembles them into a single CurationSummaryRow.
     """
     # 1. Publication & Testing
-    # For simplicity, fetch via direct query of first patient to get paper
+    # Fetch paper directly if available
+    paper = session.get(PaperDB, paper_id)
+    if not paper:
+        raise ValueError(f'Paper {paper_id} not found')
+
+    # Check for patients - if none, return empty row
     first_patient = (
         session.query(PatientDB).filter(PatientDB.paper_id == paper_id).first()
     )
-    if not first_patient:
-        raise ValueError(f'No patients found for paper {paper_id}')
-
-    paper = first_patient.paper
     author_year = (
         f'{paper.first_author or "Unknown"} et al., {paper.publication_year or "?"}'
     )
@@ -56,6 +57,19 @@ def build_curation_row(paper_id: int, session: Session) -> CurationSummaryRow:
     if testing_str:
         publication_and_testing_sections.append(
             SectionContent(title='Testing Methods', content=testing_str)
+        )
+
+    # If no patients found, return early with basic publication info
+    if not first_patient:
+        return CurationSummaryRow(
+            paper_id=paper_id,
+            publication_and_testing=publication_and_testing_sections,
+            proband=[],
+            variant_info=[SectionContent(title='Variants', content='No data extracted')],
+            clinical_presentation=[],
+            functional_segregation=[],
+            score=[],
+            pedigree_image_path=None,
         )
 
     # 2. Proband - flat list with family info
