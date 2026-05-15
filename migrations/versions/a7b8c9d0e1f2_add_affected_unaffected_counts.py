@@ -1,6 +1,6 @@
 """add affected_count and unaffected_count to segregation_analysis_computed
 
-Revision ID: 3f8g9h0i1j2
+Revision ID: a7b8c9d0e1f2
 Revises: 170ae36b1b74
 Create Date: 2026-05-13 10:00:00.000000
 
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = '3f8g9h0i1j2'
+revision: str = 'a7b8c9d0e1f2'
 down_revision: Union[str, None] = '170ae36b1b74'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
