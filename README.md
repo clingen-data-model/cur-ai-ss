@@ -54,9 +54,6 @@ cd cur-ai-ss
 # Install dependencies
 uv sync
 uv pip install -e .
-
-# Verify installation
-./bin/extract_single_pdf
 ```
 
 ## Development
@@ -115,11 +112,6 @@ curl -L -o masp1_paper.pdf “https://pmc.ncbi.nlm.nih.gov/articles/PMC4657649/p
 3. Correct HPO term assignments if needed
 4. Verify variant information
 5. Save your edits
-
-Alternatively, run extraction from the command line:
-```bash
-./bin/extract_single_pdf --pdf masp1_paper.pdf
-```
 
 ## Project Architecture
 
