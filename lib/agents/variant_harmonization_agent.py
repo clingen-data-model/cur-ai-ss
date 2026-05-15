@@ -604,7 +604,8 @@ You may not call clinvar_lookup more than once.
 You may not call dbsnp_lookup more than once.
 You should not need to call select_canonical_transcript for the gene more than once per genome build.
 You should not need to call genomic_accession_for_gene_and_transcript more than once per gene and transcript.
-The pipeline MUST terminate after a single call to allele_registry_resolver.
+After allele_registry_resolver, you may call gnomad_style_ids_from_variant_validator once if needed to derive gnomad-style coordinates.
+The pipeline MUST terminate after allele_registry_resolver (and optionally the follow-up VariantValidator call for gnomad coordinates).
 
 Goal:
 Normalize the provided variant to a GRCh38 gnomAD-style identifier and resolve via
@@ -799,12 +800,23 @@ Case C — ClinVar empty:
 If EITHER clinvar_lookup OR dbsnp_lookup returns no results RETURN outputs with all normalized fields as None.
 
 ============================================================
-STATE 5 — FINALIZATION
+STATE 5 — GNOMAD COORDINATES (POST-REGISTRY)
+============================================================
+
+After allele_registry_resolver returns:
+- If gnomad_style_coordinates is NULL but hgvs_g is available:
+    Call gnomad_style_ids_from_variant_validator(hgvs_g) to derive gnomad-style coordinates
+    If successful, use the first ID returned.
+    If call fails or returns empty, continue with null gnomad_style_coordinates.
+
+============================================================
+STATE 6 — FINALIZATION
 ============================================================
 
 Return a single harmonized variant object with:
 - reasoning (clear human-readable summary)
 - allele_registry_resolver fields if available: rsid, caid, hgvs_c, hgvs_g, hgvs_p
+- gnomad_style_coordinates if derived from VariantValidator
 
 Confidence Levels:
 
@@ -815,6 +827,7 @@ high:
 
 medium:
     - Resolution via ClinVar or dbSNP lookup
+    - Derived gnomAD coordinates via VariantValidator post-processing
 
 low:
     - Partial recovery only
