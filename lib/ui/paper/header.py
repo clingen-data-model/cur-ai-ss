@@ -187,11 +187,13 @@ with center:
                 default_tab = '🧬 Variants'
             else:
                 default_tab = '📝 Metadata'
-            metadata_tab, patients_tab, variants_tab, occurrences_tab, chat_tab = st.tabs(
-                HEADER_TABS,
-                on_change='rerun',
-                default=default_tab,
-                key=HEADER_TABS_KEY,
+            metadata_tab, patients_tab, variants_tab, occurrences_tab, chat_tab = (
+                st.tabs(
+                    HEADER_TABS,
+                    on_change='rerun',
+                    default=default_tab,
+                    key=HEADER_TABS_KEY,
+                )
             )
             with center:
                 if metadata_tab.open:

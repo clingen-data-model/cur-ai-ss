@@ -16,7 +16,13 @@ from lib.ui.api import (
 )
 
 CURRENT_ANNOTATIONS_KEY = 'CURRENT_ANNOTATIONS_KEY'
-HEADER_TABS = ['📝 Metadata', '👤 Patients', '🧬 Variants', '🔗 Occurrences', '💬 Chat with Agent']
+HEADER_TABS = [
+    '📝 Metadata',
+    '👤 Patients',
+    '🧬 Variants',
+    '🔗 Occurrences',
+    '💬 Chat with Agent',
+]
 HEADER_TABS_KEY = 'HEADER_TABS_KEY'
 HUMAN_EDIT_NOTE_DEFAULT = 'Edited by Human'
 

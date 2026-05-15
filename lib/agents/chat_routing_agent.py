@@ -18,10 +18,7 @@ class ChatRoutingOutput(BaseModel):
     entity_label: str | None = None
 
 
-
-_TASK_TYPE_LIST = '\n'.join(
-    f'- "{t.value}": {t.description}' for t in TaskType
-)
+_TASK_TYPE_LIST = '\n'.join(f'- "{t.value}": {t.description}' for t in TaskType)
 
 CHAT_ROUTING_INSTRUCTIONS = f"""
 You are a routing assistant for a genetic research paper analysis system.

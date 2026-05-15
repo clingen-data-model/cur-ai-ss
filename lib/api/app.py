@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, AsyncGenerator, Optional
 
+from agents import Runner
 from fastapi import (
     Body,
     Depends,
@@ -23,12 +24,14 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from openai import AsyncOpenAI
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, selectinload
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
+from lib.agents.chat_routing_agent import ChatRoutingOutput, make_routing_agent
 from lib.api.db import get_session
 from lib.api.middleware import make_log_request_middleware
 from lib.core.environment import env
@@ -99,10 +102,6 @@ from lib.models import (
     VariantResp,
     VariantUpdateRequest,
 )
-from agents import Runner
-from openai import AsyncOpenAI
-
-from lib.agents.chat_routing_agent import ChatRoutingOutput, make_routing_agent
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.segregation_analysis import SegregationAnalysisComputedNestedResp
 from lib.tasks import TaskCreateRequest, TaskResp, enqueue_all_instances, enqueue_task
@@ -1146,7 +1145,9 @@ def get_chat_messages(
     session: Session = Depends(get_session),
 ) -> Any:
     conversation_db = (
-        session.query(ConversationDB).filter(ConversationDB.paper_id == paper_id).first()
+        session.query(ConversationDB)
+        .filter(ConversationDB.paper_id == paper_id)
+        .first()
     )
     return conversation_db.messages if conversation_db else []
 
@@ -1159,18 +1160,18 @@ async def chat_with_paper(
 ) -> Any:
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found')
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
 
     conversation_db = (
-        session.query(ConversationDB).filter(ConversationDB.paper_id == paper_id).first()
+        session.query(ConversationDB)
+        .filter(ConversationDB.paper_id == paper_id)
+        .first()
     )
 
     if conversation_db is None:
-        any_eligible = (
-            session.query(TaskDB)
-            .filter(TaskDB.paper_id == paper_id)
-            .all()
-        )
+        any_eligible = session.query(TaskDB).filter(TaskDB.paper_id == paper_id).all()
         if not any(t.conversation_ids for t in any_eligible):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -1184,9 +1185,7 @@ async def chat_with_paper(
             parts.append(f'because it {output.task_type.description.lower()}')
             return ' '.join(parts)
 
-        routing_result = await Runner.run(
-            make_routing_agent(paper_id), request.message
-        )
+        routing_result = await Runner.run(make_routing_agent(paper_id), request.message)
         routing_output = routing_result.final_output
         chosen_task_id = routing_output.task_id
         chosen_task = session.get(TaskDB, chosen_task_id)
@@ -1217,7 +1216,12 @@ async def chat_with_paper(
         conversation_db = ConversationDB(
             paper_id=paper_id,
             conversation_id=conv_id,
-            messages=[{'role': 'assistant', 'content': build_selection_summary(routing_output)}],
+            messages=[
+                {
+                    'role': 'assistant',
+                    'content': build_selection_summary(routing_output),
+                }
+            ],
         )
         session.add(conversation_db)
         session.commit()
