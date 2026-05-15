@@ -88,6 +88,18 @@ async def get_or_create_conversation(conversation_id: str | None) -> str:
     return conversation.id
 
 
+def build_followup_prompt(additional_context: str) -> str:
+    """Build a follow-up prompt for continuing an existing agent conversation.
+
+    Args:
+        additional_context: Context/feedback to provide to the agent
+
+    Returns:
+        Formatted follow-up prompt
+    """
+    return f'Please review your previous analysis in light of the following additional context:\n\n{additional_context}'
+
+
 def handle_pdf_parsing(task_id: int) -> None:
     """Parse PDF to markdown and extract images/tables."""
     with session_scope() as session:
@@ -108,6 +120,7 @@ async def handle_paper_metadata(task_id: int) -> None:
     paper_id: int
     gene_symbol: str
     stored_conv_id: str | None
+    additional_context: str | None
     supplement_format: FileFormat | None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -121,12 +134,19 @@ async def handle_paper_metadata(task_id: int) -> None:
         paper_id = task.paper_id
         gene_symbol = paper.gene.symbol
         stored_conv_id = task.conversation_ids.get('default')
+        additional_context = task.additional_context
         supplement_format = paper.supplement_format
 
     conv_id = await get_or_create_conversation(stored_conv_id)
+
+    if stored_conv_id is not None and additional_context is not None:
+        message = build_followup_prompt(additional_context)
+    else:
+        message = f'Gene: {gene_symbol}\n\nPaper (fulltext md): {fulltext_md(paper_id, supplement_format)}'
+
     result = await Runner.run(
         paper_extraction_agent,
-        f'Gene: {gene_symbol}\n\nPaper (fulltext md): {fulltext_md(paper_id, supplement_format)}',
+        message,
         conversation_id=conv_id,
     )
 
@@ -173,12 +193,14 @@ async def handle_pedigree_description(task_id: int) -> None:
     """Describe pedigree images from paper."""
     paper_id: int
     stored_conv_id: str | None
+    additional_context: str | None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
             return
         paper_id = task.paper_id
         stored_conv_id = task.conversation_ids.get('default')
+        additional_context = task.additional_context
 
     image_id, combined_text = 0, ''
     while True:
@@ -201,9 +223,15 @@ async def handle_pedigree_description(task_id: int) -> None:
         image_id += 1
 
     conv_id = await get_or_create_conversation(stored_conv_id)
+
+    if stored_conv_id is not None and additional_context is not None:
+        message = build_followup_prompt(additional_context)
+    else:
+        message = combined_text
+
     result = await Runner.run(
         pedigree_describer_agent,
-        combined_text,
+        message,
         conversation_id=conv_id,
     )
 
@@ -222,6 +250,7 @@ async def handle_patient_extraction(task_id: int) -> None:
     paper_id: int
     pedigree_descriptions_output: dict | None
     stored_conv_id: str | None
+    additional_context: str | None
     supplement_format: FileFormat | None = None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -230,6 +259,7 @@ async def handle_patient_extraction(task_id: int) -> None:
 
         paper_id = task.paper_id
         stored_conv_id = task.conversation_ids.get('default')
+        additional_context = task.additional_context
 
         # Load paper and pedigree from DB
         paper = session.get(PaperDB, paper_id)
@@ -248,9 +278,15 @@ async def handle_patient_extraction(task_id: int) -> None:
         )
 
     conv_id = await get_or_create_conversation(stored_conv_id)
+
+    if stored_conv_id is not None and additional_context is not None:
+        message = build_followup_prompt(additional_context)
+    else:
+        message = f'Paper (fulltext md): {fulltext_md(paper_id, supplement_format)}\nPedigree Description: \n {pedigree_descriptions_output}'
+
     result = await Runner.run(
         patient_extraction_agent,
-        f'Paper (fulltext md): {fulltext_md(paper_id, supplement_format)}\nPedigree Description: \n {pedigree_descriptions_output}',
+        message,
         conversation_id=conv_id,
     )
 
@@ -727,6 +763,7 @@ async def handle_patient_variant_linking(task_id: int) -> None:
     structured_patients: list
     pedigree_descriptions_output: dict | None
     stored_conv_id: str | None
+    additional_context: str | None
     supplement_format: FileFormat | None = None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -735,6 +772,7 @@ async def handle_patient_variant_linking(task_id: int) -> None:
 
         paper_id = task.paper_id
         stored_conv_id = task.conversation_ids.get('default')
+        additional_context = task.additional_context
 
         paper = session.get(PaperDB, paper_id)
         supplement_format = paper.supplement_format if paper else None
@@ -781,9 +819,15 @@ async def handle_patient_variant_linking(task_id: int) -> None:
         )
 
     conv_id = await get_or_create_conversation(stored_conv_id)
+
+    if stored_conv_id is not None and additional_context is not None:
+        message = build_followup_prompt(additional_context)
+    else:
+        message = f'Variants JSON:\n{structured_variants}\n Patients JSON:\n {structured_patients} Pedigree Description: \n {pedigree_descriptions_output} Paper (fulltext md): {fulltext_md(paper_id, supplement_format)}'
+
     result = await Runner.run(
         patient_variant_linking_agent,
-        f'Variants JSON:\n{structured_variants}\n Patients JSON:\n {structured_patients} Pedigree Description: \n {pedigree_descriptions_output} Paper (fulltext md): {fulltext_md(paper_id, supplement_format)}',
+        message,
         conversation_id=conv_id,
     )
 

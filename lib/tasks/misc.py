@@ -22,6 +22,7 @@ def enqueue_task(
     variant_id: int | None = None,
     phenotype_id: int | None = None,
     skip_successors: bool = False,
+    additional_context: str | None = None,
 ) -> TaskDB:
     """Create or reset a task to PENDING status.
 
@@ -52,6 +53,7 @@ def enqueue_task(
         existing_task.tries = 0
         existing_task.error_message = None
         existing_task.skip_successors = skip_successors
+        existing_task.additional_context = additional_context
         session.flush()
         return existing_task
     else:
@@ -65,6 +67,7 @@ def enqueue_task(
             phenotype_id=phenotype_id,
             status=TaskStatus.PENDING,
             skip_successors=skip_successors,
+            additional_context=additional_context,
         )
         session.add(new_task)
         session.flush()

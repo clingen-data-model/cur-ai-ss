@@ -161,6 +161,7 @@ class TaskDB(Base):
         Boolean, nullable=False, default=False, server_default='0'
     )
     conversation_ids: Mapped[dict] = mapped_column(JSON, nullable=False, default={})
+    additional_context: Mapped[str | None] = mapped_column(String, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -192,6 +193,7 @@ class TaskResp(BaseModel):
     error_message: str | None
     skip_successors: bool
     conversation_ids: dict
+    additional_context: str | None
     family_id: int | None
     patient_id: int | None
     variant_id: int | None
@@ -206,3 +208,4 @@ class TaskCreateRequest(BaseModel):
     variant_id: int | None = None
     phenotype_id: int | None = None
     skip_successors: bool = False
+    additional_context: str | None = None

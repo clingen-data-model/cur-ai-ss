@@ -79,6 +79,13 @@ def render_queue_tasks_fragment(paper_query_params: PaperQueryParams) -> None:
         help='When checked, successor tasks will NOT be automatically queued after this task completes',
     )
 
+    additional_context = st.text_area(
+        'Additional context for agent',
+        value='',
+        placeholder='Enter any additional context or instructions for the agent (optional)',
+        height=100,
+    )
+
     # Show the full chain of successors only if not skipping them
     if not skip_successors:
         successor_levels = get_all_successor_levels(task_type)
@@ -97,6 +104,7 @@ def render_queue_tasks_fragment(paper_query_params: PaperQueryParams) -> None:
                 paper_id=paper_query_params.paper_id,
                 task_type=task_type,
                 skip_successors=skip_successors,
+                additional_context=additional_context or None,
             )
             st.toast('Task Queued', icon=':material/thumb_up:')
             st.session_state.RERUN_POPOVER_STATE_KEY = False

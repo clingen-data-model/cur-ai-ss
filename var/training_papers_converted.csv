@@ -1,0 +1,31 @@
+PMID,First Author (last name),Year of publication,Curator,Type of paper (informal),Notes on paper complexity (if applicable),Testing method 1,Testing method 2,Additional methods (including previous testing),Country of origin,Total number of probands and families ,Family history
+34298581,Liu,2021,Kelley,Cohort Analysis,,Exome sequencing,Sanger sequencing,,,,
+30157177,Avenarius,2018,Kelley,"Cohort Analysis, Research",Variants in supplemental file,PCR,Sanger sequencing,,,,
+33117677,Ye,2020,Vanessa,"Cohort Analysis, Research",,Next generation sequencing panels,Other,50 metastatic castration-resistant prostate cancer (mCRPC) patients with alterations in MMR genes were identifed using a targeted deep sequencing approach. Statistical analysis were conducted using R,China,1 proband from 1 family,None
+37656691,Al-Kafaji ,2023,Vanessa,"Case Study, Research",Different RefSeq used instead of the MANE select,Next generation sequencing panels,,A targeted gene-panel covering 180 cancer susceptibility genes,Bahrain,1 proband from 1 family,"two paternal aunts affected by breast cancer, and other family members affected by breast cancer and/or leukemia"
+32154054,Alagia,2020,Vanessa,Case Study,,Exome sequencing,Sanger sequencing,,,,
+33531950,Sivathanu,2020,Julie,"Case Study, Research","Paper is relatively simple and brief, as it only reports a single proband.",Exome sequencing,,,India ,1 proband from 1 family is reported,None
+30992453,Bjornsdottir ,2019,Julie,"Case Control, Research",Large case-control study with somewhat complex methods,Genome sequencing,Genotyping,"This was a genome-wide association study. 28,075 individuals from Iceland were sequenced. 7045 underwent GWAS and were phenotyped (6879 for sural nerve action potential & 6979 for sural nerve conduction velocity) included. 557 had chronic pain.",Iceland,7045 probands,N/A
+36041817,Verdura ,2022,Julie,"Case Study, Research",Individual case report that is easy to follow,Exome sequencing,Sanger sequencing,,,1 proband from 1 family,None
+35743796,Huang,2022,Kezang,Case Study,,Genome sequencing,Sanger sequencing,,,,
+31953910,Hiraide,2019,Kezang,Case Study,,Exome sequencing,Sanger sequencing,,Japan,,
+36450898,Morotomi‑Yano,2022,Kezang,Research,,Sanger sequencing,,,,,
+26084686,Akinrinade,2015,Kelley,"Cohort Analysis, Research",Variant in supplemental file,Next generation sequencing panels,,,,,
+34046667,Reis,2021,Kelley,Case Series,,Exome sequencing,,,Czech Republic,,
+32976546,Rashid,2020,Kelley,Cohort Analysis,,Exome sequencing,Sanger sequencing,,Pakistan,,
+33528103,Wonkam,2021,Vanessa,Case Series,,Exome sequencing,Sanger sequencing,,Cameroon,,
+37371654,Valtonen,2023,Vanessa,Case Study,,PCR,Sanger sequencing,,,,
+35001666,Lehnart,2022,Vanessa,Other,,Other,Other,,,,
+37780619,Wang,2023,Julie,"Research, Case Study","Single case-report, lots of phenotypic detail",Exome sequencing,,,,1 proband from 1 family,None
+27536250,Brody,2016,Julie,Other,"This article reports a homozygous knockout mouse model, not any human cases. ",Other,,"The homozygous knockout mice exhibit decreased cardiac function before birth that is progressive to eccentric cardiac growth, ventricular dilation, and worsening cardiac function in adulthood. Also, the mice have significantly decreased cardiac contratility and increased remodeling due to pressure overload as a result of transverse aortic constriction.  ",,0,
+34262438,Suk King Lai ,2021,Julie,Other,"This article reports a mouse model of the NGLN3 variant p.Arg451Cys, which has been identified in patients with autism spectrum disorder.",Other,,"Mice with the p.Arg451Cys monoallelic variant have an increased inhibition to excitation (I/E) balance of synaptic inputs to Purkinje cells. Calcium transients in the soma caused by high strength and low strength climbing fiber inputs were decreased in the mutants. Thus, the findings indicate that an individual missense variant substantially impacts the synapse development in regulation of cerebelllar circuitry. This could be part of the mechanism behind autism spectrum disorder.",,,
+29678925,Fletcher,2018,Kezang,Research,,Other,,,,,
+37041648,Polokhov,2023,Kezang,Case Study,,Next generation sequencing panels,Sanger sequencing,,,,
+34199176,Hernandez-Gonzalez,2021,Kezang,Cohort Analysis,,Next generation sequencing panels,,,,,
+33270637,Brauner,2020,Kelley,Cohort Analysis,Large table ,Exome sequencing,,,,,
+33362715,Ma,2020,Kelley,"Cohort Analysis, Research",Large table ,Next generation sequencing panels,Sanger sequencing,,,,
+29271071,Geetha,2018,Kezang,Case Study,,Exome sequencing,Next generation sequencing panels,,,,
+32184806,Xu,2020,Julie,"Research, Case Study",Single-family report that is easy to follow ,Next generation sequencing panels,Sanger sequencing,,China,1 family,8 affected family members with variant
+26094573,Reyes,2015,Vanessa,Case Series,,Sanger sequencing,Exome sequencing,,,,
+31768050,Farhan,2019,Kelley,"Cohort Analysis, Case Control",No specific proband identifiers used,Exome sequencing,,,,,
+32639540,Van Bergen,2020,Kelley,Case Series,,Exome sequencing,Sanger sequencing,,Lebanon,,

@@ -1,0 +1,214 @@
+EvAgg Gene,Curator,Type of paper (informal),Notes on paper complexity (if applicable),PMID,First Author (last name),Year of publication,Testing method 1,Testing method 2,Additional methods (including previous testing),Proband ID,Sex,"Age (dx, report, death)",Country of origin,Ethnicity,Race,Clinical presentation (HPO),Clinical presentation (free text),Gene (curator provide),Variant HGVS (transcript),Variant HGVS (c.),Variant HGVS (p.),Variant type,Zygosity of variant,Mode of inheritance,De novo (yes/no/unknown),Exon xx/xx,REVEL,Alphamissense,SpliceAI,gnomAD FAF,gnomAD MAF,ClinVar,Number of segregations,LOD score (published/calculated),Number of affected,Number of unaffected,Number of affected non-carriers,Number of unaffected carriers,Functional data (in publication),Score,Total number of probands and families ,Family history,Other reported variants in different genes
+COG4,Kelley,Cohort analysis,,34298581,Liu,2021,Exome sequencing,Sanger sequencing,,P21,Female,Report: 9 months,,,,"Abnormal glycosylation (HP:0012345)
+Hepatomegaly (HP:0002240)
+Hepatic failure (HP:0001399)
+Global developmental delay (HP:0001263)
+Seizure (HP:0001250)
+Microcephaly (HP:0000252)
+Abnormality of coagulation (HP:0001928)","Decreased coagulation factors, abnormal liver enzymes",COG4,NM_015386.3,c.1255G>T,p.Glu419Ter,Stop gained,Compound heterozygous,Autosomal recessive,No,10/19,N/A,N/A,0.17,Absent,Absent,"Path, 1 sub, 1 star",,,,,,,No,1.5,,,
+GRXCR2,Kelley,"Cohort analysis, Research",Variants in supplemental file,30157177,Avenarius,2018,PCR,Sanger sequencing,,unknown,Unknown,Unknown,,,,"Profound sensorineural hearing impairment (HP:0011476)
+Severe sensorineural hearing impairment (HP:0008625)","Congenital, severe-to-profound, nonsyndromic deafnes",GRXCR2,NM_001080516.1,c.155G>A,p.Ser52Asn,Missense,Unknown,Undetermined MOI,Unknown,1/3,0.187,0.29,0.02,0.1092,0.1112,"Benign, 4 subs, 2 stars",,,,,,,No,0.1,,,
+MLH3,Vanessa,"Cohort analysis, Research",,33117677,Ye,2020,Next generation sequencing panels,Other,50 metastatic castration-resistant prostate cancer (mCRPC) patients with alterations in MMR genes were identifed using a targeted deep sequencing approach. Statistical analysis were conducted using R,4,Unknown,median age at diagnosis was 63.5,China,Not Hispanic or Latino,Asian,"Prostate cancer (HP:0012125),",metastatic castration-resistant prostate cancer,MLH3,NM_001040108.2,c.615del,p.Asp206fs,Frameshift,Unknown,Undetermined MOI,Unknown,1/12,N/A,N/A,0,Joint Max Group AF 0.00010395 (EAS),0.000006195,"Conflicting classifications of pathogenicity
+Pathogenic(1); Likely pathogenic(1); Uncertain significance(2)",N/A,N/A,N/A,N/A,N/A,N/A,No,N/A,1 proband from 1 family,None,"ATM (c.185+ 1G > C) 
+BRCA2 loss
+RB1 loss"
+MLH3,Vanessa,"Case study/report, Research",Different RefSeq used instead of the MANE select,37656691,Al-Kafaji ,2023,Next generation sequencing panels,,A targeted gene-panel covering 180 cancer susceptibility genes,P-13,Female,"32 years, dx",Bahrain,Unknown,Unknown,Breast carcinoma (HP:0003002),unilateral breast cancer,MLH3,NM_001040108.2,c.3343C>T,p.Arg1115Ter,Stop gained,Heterozygous,Autosomal dominant,No,3/12,N/A,N/A,0.21,Joint Max Group AF 0.00000247 (NFE),0.000004956,Uncertain significance(1),"4, although genotype confirmation is not provided",1.2,5,11,0,0,No,0.1,1 proband from 1 family,"two paternal aunts affected by breast cancer, and other family members affected by breast cancer and/or leukemia",None
+NDUFA2,Vanessa,Case study/report,,32154054,Alagia,2020,Exome sequencing,Sanger sequencing,,case 4,Female,Report: 4 years,,,Asian,"Abnormal cerebral white matter morphology (HP:0002500)
+Abnormal periventricular white matter morphology (HP:0002518)
+Abnormality of the eye (HP:0000478)
+Abnormality of visual evoked potentials (HP:0000649)
+Axial hypotonia (HP:0008936)
+Brisk reflexes (HP:0001348)
+Cavitating leukodystrophy (HP:0033369)
+Developmental regression (HP:0002376)
+Drooling (HP:0002307)
+Equinovarus deformity (HP:0008110)
+Failure to thrive (HP:0001508)
+Generalized-onset seizure (HP:0002197)
+Global developmental delay (HP:0001263)
+Hearing impairment (HP:0000365)
+Leukoencephalopathy (HP:0002352)
+Microcephaly (HP:0000252)
+Seizure (HP:0001250)",Regression followed by regaining of motor and language skills. White matter changes with cysts of periventricular and supratentorial white matter; tigroid-like lesions. Lactate peak; increased choline/NAA ratio,NDUFA2,NM_002488.5,c.170A>C,p.Glu57Ala,Missense,Homozygous,Autosomal recessive,Unknown,2.3,0.567,0.847,0.02,Absent,Absent,"Path, 1 sub, 0 stars",,,,,,,No,0.1,,,
+ZNF423,Julie,"Case study/report, Research","Paper is relatively simple and brief, as it only reports a single proband.",33531950,Sivathanu,2020,Exome sequencing,,,unknown,Male,Report: 8 years,India ,Not Hispanic or Latino,,"Spasticity (HP:0001257), Global Developmental Delay (HP:0001263), Facial Dysmorphism (HP:0001999), Epileptic Spasm (HP:0011097), Central Hypotonia (HP:0001252), Hypsarrhythmia (HP:0002521), Molar Tooth Sign of Midbrain (HP:0002419), Cerebellar Vermis Hypoplasia (HP:0001320),","The proband had episodic spasms of the trunk along with stiffness of the limbs lasting for 1-2 and accompanied by arching of the back. These episodes occurred more frequently when the individual was awake, and often happened in clusters with greater frequency in the past month. The developmental age was 2-3 months. Facial dysmorphism was subtle, and central hypotonia was mild.. Prominent cerebellar folia and a prominent fourth ventricle on brain imaging were present. The hypsarrhytmia showed full remission. The proband was diagnosed with West Syndrome.",ZNF423,NM_001379286.1 (ClinVar transcript),Variant #1: c.1216C>T: nomenclature in ClinVar; c.1192C>T: nomenclature in paper                                                    Variant #2: c.296C>T: nomenclature in ClinVar; c.272C>T: nomenclature in paper,Variant #1: p.Arg406Trp: nomenclature in ClinVar; p.Arg398Trp: nomenclature in paper Variant #2: p.Pro99Leu: nomenclature in ClinVar; p.Pro91Leu: nomenclature in paper,Missense,Compound heterozygous in trans ,Compound heterozygous,Unknown (but unlikely due to recessive inheritance of variants),Both variants are in exon 4/8,p.Arg406Trp: 0.097;       p.Pro99Leu: 0.118,p.Arg406Trp: 0.207 (likely benign prediction); p.Pro99Leu: 0.087 (likely benign prediction),p.Arg406Trp: 0.00; p.Pro99Leu: 0.00,p.Arg406Trp: 0.00007281 (Admixed American population); p.Pro99Leu: 0.0001181 (European (non-Finnish) population),p.Arg406Trp: 0.0002832 (17/60026 alleles) in the Admixed American population (no homozygotes); p.Pro99Leu: 0.0001322 (156/1180050 alleles) in the European (non-Finnish) population (no homozygotes),"p.Arg406Trp: Uncertain Significance (2-star, 3 submissions); p.Pro99Leu: Uncertain Significance (2-star, 3 submissions)",0,N/A,1,0,0,0,No,0.1 * 2 = 0.2 pts. (each variant received 0.1 pts.),1 proband from 1 family is reported,None,N/A
+PRPH,Julie,"Case control, Research",Large case-control study with somewhat complex methods,30992453,Bjornsdottir ,2019,Genome sequencing,Genotyping,"This was a genome-wide association study. 28,075 individuals from Iceland were sequenced. 7045 underwent GWAS and were phenotyped (6879 for sural nerve action potential & 6979 for sural nerve conduction velocity) included. 557 had chronic pain.",unknown,,Average age = 54.4 for males and 54.9 for females.,Iceland,Not Hispanic or Latino,,Chronic pain (HP:0012532),Reduced sural nerve amplitude and risk for peripheral neuropathy ,PRPH,NM_006262.4,c.996+1G>A,N/A,Splice donor,Homozygous,Autosomal recessive,Unknown (but unlikely due to recessive inheritance of variants),5/9,N/A,N/A,1.00 (Donor Loss),0.004678 (European (non-Finnish) population,0.02197 (1404/63906 alleles) in the European (Finnish) population,"Benign/likely benign (2-star, 6 submissions: 2 benign, 4 likely benign; 3/6 submissions are 1-star, the rest are 0 star)",N/A,N/A,557,6488,N/A,N/A,Yes,N/A,7045 probands,N/A,None
+SARS1,Julie,"Case study/report, Research",Individual case report that is easy to follow,36041817,Verdura ,2022,Exome sequencing,Sanger sequencing,,patient,Male,Report: early adolescence,,Not Hispanic or Latino,White,"Focal seizures (HP:0007359), Multifocal seizures (HP:0031165), Global developmental delay (HP:0001263), Incoordination (HP:0002311), Speech delay (HP:0000750), Spastic tetraparesis (HP:0001285), Lower limb spasticity (HP:0002061), Lower limb hyperreflexia (HP:0002395), Strabismus (HP:0000486), Ankle clonus (HP:0011448), Babinski sign (HP:0003487), Unsteady gait (HP:0002317), Ataxia (HP:0001251), Intellectual disability (HP:0001249)","Focal seziures onset in toddlerhood and were often caused by fever, which lasted up to 10 minutes. Multifocal spikes were infrequenct. Non-progressive punctiform frontal subcortical hyperintensities were present. Visual evoked potentials revealed bilateral increased latencies. Delayed onset of walking; right Babinski sign, and a wide-based unsteady spastic gait were present.",SARS1,NM_006513.4,c.969+1_969+3del,p.Lys323_Ile324insSerArgTrpValArg,Splice donor,Heterozygous,Autosomal dominant,Yes,7/11,N/A,N/A,1.00 & 0.99 (Donor Loss and Gain),0,0,"Uncertain significance (1-star, 1 submission); 1 flagged pathogenic submission",0,N/A,1,0,0,0,Yes,N/A (not included in curation; does not match the inheritance pattern of the other cases),1 proband from 1 family,None,N/A
+TDO2,Kezang,Case study/report,,35743796,Huang,2022,Genome sequencing,Sanger sequencing,,elder brother,Male,Report: 30 years,,,,"Intellectual disability moderate (HP:0002342)
+Autism (HP:0000717)
+Agitation (HP:0000713)
+Irritability (HP:0000737)
+Abnormal temper tantrums (HP:0025160)
+Aggressive behavior (HP:0000718)
+Schizophrenia (HP:0100753)",,TDO2,NM_005651.4,c.803T>A,p.Phe268Tyr,Missense,Heterozygous,Autosomal dominant,No,8/12,0.354,0.384,0.01,0.003652,0.004142,"Likely benign, 1 sub, 0 stars",1,,2,,,,No,0,,,"Additional variants identified in KLHL17, TRRAP, EIF3F, DICER1, ATP10A, CDH15"
+TOP2B,Kezang,Case study/report,,31953910,Hiraide,2019,Exome sequencing,Sanger sequencing,,patient,Female,Report: 7 years,Japan,,,"Global developmental delay (HP:0001263)
+Autistic behavior (HP:0000729)
+Axial hypotonia (HP:0008936)
+Hypotonia (HP:0001252)",,TOP2B,NM_001330700.2,c.187C>T,p.His63Tyr,Missense,Heterozygous,Autosomal dominant,No,2/36,0.646,0.996,0.01,Absent,Absent,"Path, 1 sub, 1 star",,,1,,,2,No,0.1,,,
+TOP2B,Kezang,Research,,36450898,Morotomi‑Yano,2022,Sanger sequencing,,,unknown,Unknown,Unknown,,,,"Autism (HP:0000717)
+Autistic behavior (HP:0000729)
+Global developmental delay (HP:0001263)",,TOP2B,NP_001059.2,c.172C>T,p.His58Tyr,Missense,Heterozygous,Autosomal dominant,Unknown,2/36,0.646,0.996,0.01,Absent,Absent,"Path, 1 sub, 1 star",,,,,,,Yes,0.5,,,
+CTF1,Kelley,"Cohort analysis, Research",Variant in supplemental file,26084686,Akinrinade,2015,Next generation sequencing panels,,,unknown,Unknown,Unknown,,,,Dilated cardiomyopathy (HP:0001644),,CTF1,NM_001330.5,c.274G>A,p.Ala92Thr,Missense,Heterozygous,Undetermined MOI,Unknown,3/3,0.439,0.096,0.01,0.0001725,0.004146,"Conflicting classifications of pathogenicity
+Uncertain significance(2); Benign(2), 4 subs, 1 star",,,,,,,No,0.1,,,
+FOXE3,Kelley,Case series,,34046667,Reis,2021,Exome sequencing,,,15A,Female,Report: 59 years,Czech Republic,,White,"Posterior embryotoxon (HP:0000627)
+Cataract (HP:0000518)
+Ectopia pupillae (HP:0009918)
+Hypoplasia of the iris (HP:0007676)
+Anterior synechiae of the anterior chamber (HP:0011483)
+Glaucoma (HP:0000501)",,FOXE3,NM_012186.3,c.959G>C,p.∗320Serext∗72,Stop lost,Heterozygous,Autosomal dominant,Unknown,1/1,N/A,N/A,0.03,N/A,0,"Path, 1 sub, 0 stars",3,,4,,,,Yes,2,,,
+FOXE3,Kelley,Cohort analysis,,32976546,Rashid,2020,Exome sequencing,Sanger sequencing,,IV:1,Female,Report: 55 years,Pakistan,,,Microphthalmia (HP:0000568),"Corneal Haze, Microphthalmia",FOXE3,NM_012186,c.289A>G,p.Ile97Val,Missense,Homozygous,Autosomal recessive,Unknown,1/1,0.775,0.894,0.01,0.0001281,0.0001991,"Likely Path, 1 sub, 1 star",4,1.81 (calculated),5,,,,No,0.1,,,
+GRXCR2,Vanessa,Case series,,33528103,Wonkam,2021,Exome sequencing,Sanger sequencing,,unknown,Unknown,Unknown,Cameroon,,,Sensorineural hearing impairment (HP:0000407),,GRXCR2,NM_001080516.1,c.251delC,p.Ile85SerfsTer33,Frameshift,Homozygous,Autosomal recessive,Unknown,1/3,N/A,N/A,0.05,N/A,0.00001335,Absent,,,2,,,,Yes,2,,,
+JPH2,Vanessa,Case study/report,,37371654,Valtonen,2023,PCR,Sanger sequencing,,patient,Male,Diagnosis: 14 years,,,,"Abnormal cardiac septum morphology (HP:0001671) 
+Abnormal left ventricular function (HP:0005162)
+Ventricular tachycardia (HP:0004756)
+Dyspnea (HP:0002094)",,JPH2,NM_020433.5,c.482C>A,p.Thr161Lys,Missense,Heterozygous,Autosomal dominant,Unknown,2/6,0.422,0.945,0,N/A,0.0000361,"Path/Likely Path, 3 subs, 2 stars",,,,,,,Yes,0.5,,,
+JPH2,Vanessa,Other,,35001666,Lehnart,2022,Other,Other,,unknown,Unknown,Unknown,,,,Hypertrophic cardiomyopathy (HP:0001639),,JPH2,NM_020433.5,c.2011-1G>T,N/A,Splice acceptor,Unknown,Undetermined MOI,Unknown,Intron 4/5,N/A,N/A,1,Absent,Absent,Absent,,,,,,,No,1.5,,,
+KIF1B,Julie,"Research, Case study/report","Single case-report, lots of phenotypic detail",37780619,Wang,2023,Exome sequencing,,,patient,Male,Report: 65 years,,,,"Fever (HP:0001945), Palpitations (HP:0001962), Fatigue (HP:0012378), Tachycardia (HP:0001649), Anemia (HP:0001903), Decreased hemoglobin concentration (HP:0020062), Iron Deficiency Anemia (HP:0001891), Elevated CRP (HP:0011227), Paraganglioma (HP:0002668), Edema (HP:0000969), Dilated right atrium (HP:0030718), Tricuspid regurgitation (HP:0005180), Thrombocytosis (HP:0001894),  Respiratory failure (HP:0002878)","Hemoglobin was very low initially, but normalized with treatment. The the paraganglioma mass was approximately 148mm*100mm, and the upper and lower diameter was roughly 155mm. Pulmonary hypertension was severe.",KIF1B,NM_015047.3,c.4660G>C,p.Val1554Leu,Missense,Heterozygous,Autosomal dominant,Unknown,41/46,0.057,0.165 (likely benign),0.01 (Acceptor gain),0,0.00001333 (1/75020 alleles) in the African/African American population,Absent,0,N/A,1,0,0,0,No,N/A (published after curation was done),1 proband from 1 family,None,None
+LRRC10,Julie,Other,"This article reports a homozygous knockout mouse model, not any human cases. ",27536250,Brody,2016,Other,,"The homozygous knockout mice exhibit decreased cardiac function before birth that is progressive to eccentric cardiac growth, ventricular dilation, and worsening cardiac function in adulthood. Also, the mice have significantly decreased cardiac contratility and increased remodeling due to pressure overload as a result of transverse aortic constriction.  ",NA,,,,,,,,,,,,,,,,,,,,,,,,,,,,,Yes,,0,,
+NLGN3,Julie,Other,"This article reports a mouse model of the NGLN3 variant p.Arg451Cys, which has been identified in patients with autism spectrum disorder.",34262438,Suk King Lai ,2021,Other,,"Mice with the p.Arg451Cys monoallelic variant have an increased inhibition to excitation (I/E) balance of synaptic inputs to Purkinje cells. Calcium transients in the soma caused by high strength and low strength climbing fiber inputs were decreased in the mutants. Thus, the findings indicate that an individual missense variant substantially impacts the synapse development in regulation of cerebelllar circuitry. This could be part of the mechanism behind autism spectrum disorder.",unknown,,,,,,,,,NM_018977.4,c.1351C>T,p.Arg451Cys,Missense,,X-linked,,6/7,0.767,0.942 (likely pathogenic),0,0,0,Risk factor ,,,,,,,Yes,1.5,,,
+SLFN14,Kezang,Research,,29678925,Fletcher,2018,Other,,,unknown,Unknown,,,,,Congenital Thrombocytopenia (HP:0001905),,SLFN14,NM_001129820.2,c.652A>G,p.Lys218Glu,Missense,Unknown,Undetermined MOI,,3/6,0.122,0.138,0.02,Absent,Absent,"Likely Path, 2 subs, 2 stars",,,,,,,Yes,0.5,,,
+SLFN14,Kezang,Case study/report,,37041648,Polokhov,2023,Next generation sequencing panels,Sanger sequencing,,patient,Female,Report: 17 years,,,,"Macrothrombocytopenia (HP:0040185)
+Abnormal bleeding (HP:0001892)
+Bleeding disorder platelet-type 20  (OMIM:616913)
+Spontaneous recurrent epistaxis (HP:0004406)
+Menorrhagia (HP:0000132)",,SLFN14,NM_001129820.2,c.655A>G,p.Lys219Glu,Missense,Heterozygous,Autosomal dominant,Unknown,3/6,0.12,0.268,0.04,Absent,Absent,Absent,,,,,,,No,0.1,,,
+TOPBP1,Kezang,Cohort analysis,,34199176,Hernandez-Gonzalez,2021,Next generation sequencing panels,,,9,Unknown,Unknown,,,,"Pulmonary arterial hypertension (HP:0002092)
+Abnormality of connective tissue (HP:0003549)",,TOPBP1,NM_007027.3,c.951T>G,p.Ile317Met,Missense,Heterozygous,Undetermined MOI,Unknown,8/28,0.153,0.34,0.03,0.00002269,0.00006725,Absent,,,,,,,No,0.1,,,
+ZNF423,Kelley,Cohort analysis,Large table ,33270637,Brauner,2020,Exome sequencing,,,29,Female,Diagnosis: 3 years,,,,"Nephronophthisis (HP:0000090)
+Decreased circulating inhibin B concentration (HP:0031100)
+Postnatal growth retardation (HP:0008897)",Joubert syndrome,ZNF423,NM_015069.5,c.1144T>C,p.Ser382Pro,Missense,Heterozygous,Undetermined MOI,Unknown,4/8,0.43,0.385,0,Absent,Absent,Absent,,,,,,,No,0.1,,,
+KIF1B,Kelley,"Cohort analysis, Research",Large table ,33362715,Ma,2020,Next generation sequencing panels,Sanger sequencing,,108,Female,Diagnosis: 36 years,,,,Pheochromocytoma (HP:0002666),,KIF1B,NM_015074.3,c.3649C>T,p.Pro1217Ser,Missense,None,Undetermined MOI,Unknown,33/47,0.34,0.461,0.01,0.001672,0.002007,"Conflicting classifications of pathogenicity
+Likely pathogenic(1); Likely benign(2), 3 subs, 1 star",,,,,,,No,0.1,,,
+EMC1,Kezang,Case study/report,,29271071,Geetha,2018,Exome sequencing,Next generation sequencing panels,,proband,Female,Report: 4 years,,,,"Epilepsy (HP:0001250)
+Scaphocephaly (HP:0030799)
+Global developmental delay (HP:0001263)
+Central hypotonia (HP:0001252)
+Muscle wasting (HP:0003202)
+Cerebellar atrophy (HP:0001272)
+Atrophy/Degeneration affecting the brainstem (HP:0007366)",,EMC1,NM_015047.2,c.1212+1G>A,N/A,Splice donor,Homozygous,Autosomal recessive,No,Intron 11/22,N/A,N/A,1,Absent,Absent,Absent,,,1,,,2,Yes,2,,,
+EMC1,Kezang,Case study/report,,29271071,Geetha,2018,Exome sequencing,Next generation sequencing panels,,proband,Female,Report: 4 years,,,,"Epilepsy (HP:0001250)
+Scaphocephaly (HP:0030799)
+Global developmental delay (HP:0001263)
+Central hypotonia (HP:0001252)
+Muscle wasting (HP:0003202)
+Cerebellar atrophy (HP:0001272)
+Atrophy/Degeneration affecting the brainstem (HP:0007366)",,EMC1,NM_015047.3,c.1201C>T,p.Arg401Trp,Missense,Unknown,Undetermined MOI,Unknown,11/23,0.226,0.105,0.02,0.001016,0.001198,"Conflicting classifications of pathogenicity
+Uncertain significance(1); Benign(1), 2 subs, 1 star",,,,,,,No,0.1,,,
+FBN2,Julie,"Research, Case study/report",Single-family report that is easy to follow ,32184806,Xu,2020,Next generation sequencing panels,Sanger sequencing,,I-1,Female,Not reported,China,Not Hispanic or Latino,Asian,Congenital contracture (HP:0002803),"Congenital Contracture Arachnodactyly, Spider-like fingers, Systemic musculoskeletal crouching, Unable to stand on tiptoe",FBN2,NM_001999.4,c.3724+3A>C,p.1200_1241del,Splice donor,Heterozygous,Autosomal dominant,Unknown,28/65,N/A,N/A,0.38 (donor loss),N/A,absent ,"Likely pathogenic (1-star, 1 sub)",8,2.7,9,7,0,0,Yes,"N/A, not scored in original curation",1 family,8 affected family members with variant,N/A
+FBN2,Julie,"Research, Case study/report",Single-family report that is easy to follow ,32184806,Xu,2020,Next generation sequencing panels,Sanger sequencing,,II-1,Female,Not reported,China,Not Hispanic or Latino,Asian,Congenital contracture (HP:0002803); slender long bones (HP:0003100),"Congenital Contracture Arachnodactyly, Spider-like fingers",FBN2,NM_001999.4,c.3724+3A>C,p.1200_1241del,Splice donor,Heterozygous,Autosomal dominant,No,28/66,N/A,N/A,0.38 (donor loss),N/A,absent ,"Likely pathogenic (1-star, 1 sub)",8,2.7,9,7,0,0,Yes,"N/A, not scored in original curation",1 family,8 affected family members with variant,N/A
+FBN2,Julie,"Research, Case study/report",Single-family report that is easy to follow ,32184806,Xu,2020,Next generation sequencing panels,Sanger sequencing,,II-3,Female,Not reported,China,Not Hispanic or Latino,Asian,"Congenital contracture (HP:0002803), thoracic dysplasia (HP:0006644)","Congenital Contracture Arachnodactyly, Systemic musculoskeletal crouching, Unable to stand on tiptoe",FBN2,NM_001999.4,c.3724+3A>C,p.1200_1241del,Splice donor,Heterozygous,Autosomal dominant,No,28/67,N/A,N/A,0.38 (donor loss),N/A,absent ,"Likely pathogenic (1-star, 1 sub)",8,2.7,9,7,0,0,Yes,"N/A, not scored in original curation",1 family,8 affected family members with variant,N/A
+FBN2,Julie,"Research, Case study/report",Single-family report that is easy to follow ,32184806,Xu,2020,Next generation sequencing panels,Sanger sequencing,,II-8,Male,Not reported,China,Not Hispanic or Latino,Asian,Congenital contracture (HP:0002803); slender long bones (HP:0003100),"Congenital Contracture Arachnodactyly, Spider-like fingers, Unable to stand on tiptoe",FBN2,NM_001999.4,c.3724+3A>C,p.1200_1241del,Splice donor,Heterozygous,Autosomal dominant,No,28/68,N/A,N/A,0.38 (donor loss),N/A,absent ,"Likely pathogenic (1-star, 1 sub)",8,2.7,9,7,0,0,Yes,"N/A, not scored in original curation",1 family,8 affected family members with variant,N/A
+FBN2,Julie,"Research, Case study/report",Single-family report that is easy to follow ,32184806,Xu,2020,Next generation sequencing panels,Sanger sequencing,,III-1,Male,Not reported,China,Not Hispanic or Latino,Asian,"Congenital contracture (HP:0002803); slender long bones (HP:0003100), thoracic dysplasia (HP:0006644)","Congenital Contracture Arachnodactyly, Spider-like fingers, Systemic musculoskeletal crouching",FBN2,NM_001999.4,c.3724+3A>C,p.1200_1241del,Splice donor,Heterozygous,Autosomal dominant,No,28/69,N/A,N/A,0.38 (donor loss),N/A,absent ,"Likely pathogenic (1-star, 1 sub)",8,2.7,9,7,0,0,Yes,"N/A, not scored in original curation",1 family,8 affected family members with variant,N/A
+FBN2,Julie,"Research, Case study/report",Single-family report that is easy to follow ,32184806,Xu,2020,Next generation sequencing panels,Sanger sequencing,,III-3,Male,Not reported,China,Not Hispanic or Latino,Asian,Congenital contracture (HP:0002803); slender long bones (HP:0003100); thoracic dysplasia (HP:0006644); crumpled ear (HP:0009901),"Congenital Contracture Arachnodactyly, Spider-like fingers, Systemic musculoskeletal crouching",FBN2,NM_001999.4,c.3724+3A>C,p.1200_1241del,Splice donor,Heterozygous,Autosomal dominant,No,28/70,N/A,N/A,0.38 (donor loss),N/A,absent ,"Likely pathogenic (1-star, 1 sub)",8,2.7,9,7,0,0,Yes,"N/A, not scored in original curation",1 family,8 affected family members with variant,N/A
+FBN2,Julie,"Research, Case study/report",Single-family report that is easy to follow ,32184806,Xu,2020,Exome sequencing,Sanger sequencing,,III-4,Male,Not reported,China,Not Hispanic or Latino,Asian,Congenital contracture (HP:0002803); slender long bones (HP:0003100); thoracic dysplasia (HP:0006644); crumpled ear (HP:0009901),"Congenital Contracture Arachnodactyly, Spider-like fingers, Systemic musculoskeletal crouching, Unable to stand on tiptoe",FBN2,NM_001999.4,c.3724+3A>C,p.1200_1241del,Splice donor,Heterozygous,Autosomal dominant,No,28/71,N/A,N/A,0.38 (donor loss),N/A,absent ,"Likely pathogenic (1-star, 1 sub)",8,2.7,9,7,0,0,Yes,"N/A, not scored in original curation",1 family,8 affected family members with variant,N/A
+FBN2,Julie,"Research, Case study/report",Single-family report that is easy to follow ,32184806,Xu,2020,Next generation sequencing panels,Sanger sequencing,,III-6,Male,Not reported,China,Not Hispanic or Latino,Asian,Congenital contracture (HP:0002803); slender long bones (HP:0003100),"Congenital Contracture Arachnodactyly, Spider-like fingers, Unable to stand on tiptoe",FBN2,NM_001999.4,c.3724+3A>C,p.1200_1241del,Splice donor,Heterozygous,Autosomal dominant,No,28/72,N/A,N/A,0.38 (donor loss),N/A,absent ,"Likely pathogenic (1-star, 1 sub)",8,2.7,9,7,0,0,Yes,"N/A, not scored in original curation",1 family,8 affected family members with variant,N/A
+FBN2,Julie,"Research, Case study/report",Single-family report that is easy to follow ,32184806,Xu,2020,Next generation sequencing panels,Sanger sequencing,,III-7,Male,Not reported,China,Not Hispanic or Latino,Asian,Congenital contracture (HP:0002803); slender long bones (HP:0003100); thoracic dysplasia (HP:0006644); crumpled ear (HP:0009901),"Congenital Contracture Arachnodactyly, Spider-like fingers, Unable to stand on tiptoe",FBN2,NM_001999.4,c.3724+3A>C,p.1200_1241del,Splice donor,Heterozygous,Autosomal dominant,No,28/73,N/A,N/A,0.38 (donor loss),N/A,absent ,"Likely pathogenic (1-star, 1 sub)",8,2.7,9,7,0,0,Yes,"N/A, not scored in original curation",1 family,8 affected family members with variant,N/A
+RNASEH1,Vanessa,Case series,,26094573,Reyes,2015,Sanger sequencing,Exome sequencing,,S1,Male,Report: 42 years,,,,"External ophthalmoplegia (HP:0000544)
+Muscle weakness (HP:0001324)
+Skeletal muscle atrophy (HP:0003202)
+Sensorimotor neuropathy (HP:0007141)
+Dyspnea (HP:0002094)
+Orthopnea (HP:0012764)
+Progressive cerebellar ataxia (HP:0002073)",,RNASEH1,NM_002936.4,c.424G>A,p.Val142Ile,Missense,Compound heterozyous,Autosomal recessive,No,4/8,0.292,0.23,0.01,0.00006617,0.0001334,"Path/Likely Path, 6 subs, 2 stars",,,,,,,Yes,0.5,,,
+RNASEH1,Vanessa,Case series,,26094573,Reyes,2015,Sanger sequencing,Exome sequencing,,S1,Male,Report: 42 years,,,,"External ophthalmoplegia (HP:0000544)
+Muscle weakness (HP:0001324)
+Skeletal muscle atrophy (HP:0003202)
+Sensorimotor neuropathy (HP:0007141)
+Dyspnea (HP:0002094)
+Orthopnea (HP:0012764)
+Progressive cerebellar ataxia (HP:0002073)",,RNASEH1,NM_002936.4,c.469C>T,p.Arg157∗,Stop gained,Compound heterozyous,Autosomal recessive,No,4/8,N/A,N/A,0.01,0.00000875,0.00003294,"Likely Path, 1 sub, 1 star",,,,,,,Yes,2,,,
+RNASEH1,Vanessa,Case series,,26094573,Reyes,2015,Next generation sequencing panels,,,S2,Male,Report: 46 years,,,,"External ophthalmoplegia (HP:0000544)
+Muscle weakness (HP:0001324)
+Skeletal muscle atrophy (HP:0003202)
+Sensorimotor neuropathy (HP:0007141)
+Progressive cerebellar ataxia (HP:0002073)",,RNASEH1,NM_002936.4,c.424G>A,p.Val142Ile,Missense,Compound heterozyous,Autosomal recessive,No,4/8,0.292,0.23,0.01,0.00006617,0.0001334,"Path/Likely Path, 6 subs, 2 stars",,,,,,,Yes,0.5,,,
+RNASEH1,Vanessa,Case series,,26094573,Reyes,2015,Next generation sequencing panels,,,S2,Male,Report: 46 years,,,,"External ophthalmoplegia (HP:0000544)
+Muscle weakness (HP:0001324)
+Skeletal muscle atrophy (HP:0003202)
+Sensorimotor neuropathy (HP:0007141)
+Progressive cerebellar ataxia (HP:0002073)",,RNASEH1,NM_002936.4,c.554C>T,p.Ala185Val,Missense,Compound heterozyous,Autosomal recessive,No,5/8,0.591,0.98,0.07,7.9E-07,0.00002229,"Path, 1 sub, 0 stars",,,,,,,Yes,0.5,,,
+RNASEH1,Vanessa,Case series,,26094573,Reyes,2015,Next generation sequencing panels,,,S3,Male,Death: 60 years,,,,"External ophthalmoplegia (HP:0000544)
+Abnormal pattern of respiration (HP:0002793)
+Dysphagia (HP:0002015)
+Cerebellar atrophy (HP:0001272)",,RNASEH1,NM_002936.4,c.424G>A,p.Val142Ile,Missense,Homozygous,Autosomal recessive,No,4/8,0.292,0.23,0.01,0.00006617,0.0001334,"Path/Likely Path, 6 subs, 2 stars",3,1.81 (calculated),4,,,,Yes,0.5,,,
+RNASEH1,Vanessa,Case series,,26094573,Reyes,2015,Next generation sequencing panels,,,S4,Female,Death: 70 years,,,,"External ophthalmoplegia (HP:0000544)
+Abnormal pattern of respiration (HP:0002793)
+Dysphagia (HP:0002015)
+Cerebellar atrophy (HP:0001272)",,RNASEH1,NM_002936.4,c.424G>A,p.Val142Ile,Missense,Homozygous,Autosomal recessive,No,4/8,0.292,0.23,0.01,0.00006617,0.0001334,"Path/Likely Path, 6 subs, 2 stars",3,1.81 (calculated),4,,,,Yes,0.5,,,
+RNASEH1,Vanessa,Case series,,26094573,Reyes,2015,Next generation sequencing panels,,,S5,Female,Death: 63 years,,,,"External ophthalmoplegia (HP:0000544)
+Abnormal pattern of respiration (HP:0002793)
+Dysphagia (HP:0002015)
+Cerebellar atrophy (HP:0001272)",,RNASEH1,NM_002936.4,c.424G>A,p.Val142Ile,Missense,Homozygous,Autosomal recessive,No,4/8,0.292,0.23,0.01,0.00006617,0.0001334,"Path/Likely Path, 6 subs, 2 stars",3,1.81 (calculated),4,,,,Yes,0.5,,,
+RNASEH1,Vanessa,Case series,,26094573,Reyes,2015,Next generation sequencing panels,,,S6,Female,Report: 65 years,,,,"External ophthalmoplegia (HP:0000544)
+Abnormal pattern of respiration (HP:0002793)
+Dysphagia (HP:0002015)
+Cerebellar atrophy (HP:0001272)",,RNASEH1,NM_002936.4,c.424G>A,p.Val142Ile,Missense,Homozygous,Autosomal recessive,No,4/8,0.292,0.23,0.01,0.00006617,0.0001334,"Path/Likely Path, 6 subs, 2 stars",3,1.81 (calculated),4,,,,Yes,0.5,,,
+DNAJC7,Kelley,"Cohort analysis, Case control",No specific proband identifiers used,31768050,Farhan,2019,Exome sequencing,,,table 2 row 4,Unknown,Unknown,,,,Amyotrophic lateral sclerosis (HP:0007354),,DNAJC7,NM_003315.4,c.466C>T,p.Arg156*,Stop gained,Heterozygous,Undetermined MOI,Unknown,5/14,N/A,N/A,0.05,0.00000124,0.00003202,Absent,,,,,,,Yes,2,,,
+DNAJC7,Kelley,"Cohort analysis, Case control",No specific proband identifiers used,31768050,Farhan,2019,Exome sequencing,,,table 2 row 2,Unknown,Unknown,,,,Amyotrophic lateral sclerosis (HP:0007354),,DNAJC7,NM_003315.4,c.97G>T,p.Glu33*,Stop gained,Heterozygous,Undetermined MOI,Unknown,2/14,N/A,N/A,0.05,N/A,0,Absent,,,,,,,No,1.5,,,
+DNAJC7,Kelley,"Cohort analysis, Case control",No specific proband identifiers used,31768050,Farhan,2019,Exome sequencing,,,table 2 row 3,Unknown,Unknown,,,,Amyotrophic lateral sclerosis (HP:0007354),,DNAJC7,NM_003315.4,c.358C>T,p.Gln120*,Stop gained,Heterozygous,Undetermined MOI,Unknown,4/14,N/A,N/A,0.01,Absent,Absent,Absent,,,,,,,No,1.5,,,
+DNAJC7,Kelley,"Cohort analysis, Case control",No specific proband identifiers used,31768050,Farhan,2019,Exome sequencing,,,table 2 row 5,Unknown,Unknown,,,,Amyotrophic lateral sclerosis (HP:0007354),,DNAJC7,NM_003315.4,c.488delT,p.Phe163fs,Frameshift,Heterozygous,Undetermined MOI,Unknown,6/14,N/A,N/A,0.01,Absent,Absent,Absent,,,,,,,No,1.5,,,
+DNAJC7,Kelley,"Cohort analysis, Case control",No specific proband identifiers used,31768050,Farhan,2019,Exome sequencing,,,table 2 row 6,Unknown,Unknown,,,,Amyotrophic lateral sclerosis (HP:0007354),,DNAJC7,NM_003315.4,c.646C>T,p.Arg216*,Stop gained,Heterozygous,Undetermined MOI,Unknown,7/14,N/A,N/A,0.07,Absent,Absent,Absent,,,,,,,No,1.5,,,
+DNAJC7,Kelley,"Cohort analysis, Case control",No specific proband identifiers used,31768050,Farhan,2019,Exome sequencing,,,table 2 row 7,Unknown,Unknown,,,,Amyotrophic lateral sclerosis (HP:0007354),,DNAJC7,NM_003315.4,c.1011–2A>G,N/A,Splice acceptor,Heterozygous,Undetermined MOI,Unknown,Intron 9/13,N/A,N/A,1,N/A,0.000009854 (gnomAD v2.1.1),Absent,,,,,,,No,1.5,,,
+DNAJC7,Kelley,"Cohort analysis, Case control",No specific proband identifiers used,31768050,Farhan,2019,Exome sequencing,,,table 2 row 8,Unknown,Unknown,,,,Amyotrophic lateral sclerosis (HP:0007354),,DNAJC7,NM_003315.4,c.22G>C,p.Asp8His,Missense,Heterozygous,Undetermined MOI,Unknown,1/14,0.248,0.501,0,0.00002394,0.00003221,Absent,,,,,,,No,0.1,,,
+DNAJC7,Kelley,"Cohort analysis, Case control",No specific proband identifiers used,31768050,Farhan,2019,Exome sequencing,,,table 2 row 9,Unknown,Unknown,,,,Amyotrophic lateral sclerosis (HP:0007354),,DNAJC7,NM_003315.4,c.235C>T,p.Arg79Trp,Missense,Heterozygous,Undetermined MOI,Unknown,3/14,0.706,0.273,0.02,0.00000247,0.00001336,Absent,,,,,,,No,0.1,,,
+DNAJC7,Kelley,"Cohort analysis, Case control",No specific proband identifiers used,31768050,Farhan,2019,Exome sequencing,,,table 2 row 10,Unknown,Unknown,,,,Amyotrophic lateral sclerosis (HP:0007354),,DNAJC7,NM_003315.4,c.631G>A,p.Asp211Asn,Missense,Heterozygous,Undetermined MOI,Unknown,7/14,0.477,0.685,0.02,N/A,8.48E-07,Absent,,,,,,,No,0.1,,,
+DNAJC7,Kelley,"Cohort analysis, Case control",No specific proband identifiers used,31768050,Farhan,2019,Exome sequencing,,,table 2 row 11,Unknown,Unknown,,,,Amyotrophic lateral sclerosis (HP:0007354),,DNAJC7,NM_003315.4,c.1234C>T,p.Arg412Trp,Missense,Heterozygous,Undetermined MOI,Unknown,12/14,0.576,0.996,0.01,N/A,8.48E-07,Absent,,,,,,,No,0.1,,,
+DNAJC7,Kelley,"Cohort analysis, Case control",No specific proband identifiers used,31768050,Farhan,2019,Exome sequencing,,,table 2 row 12,Unknown,Unknown,,,,Amyotrophic lateral sclerosis (HP:0007354),,DNAJC7,NM_003315.4,c.1273G>A,p.Glu425Lys,Missense,Heterozygous,Undetermined MOI,Unknown,12/14,0.666,0.976,0,N/A,0.00002228,Absent,,,,,,,No,0.1,,,
+EXOC2,Kelley,Case series,,32639540,Van Bergen,2020,Exome sequencing,Sanger sequencing,,1:IV-2,Male,Onset: birth; Death: 10 years,Lebanon,,,"Acquired microcephaly (HP:0004485)
+Severe global developmental delay (HP:0001263)
+Spastic quadriplegia (HP:0001258)
+Congenital contractures of joints (HP:0001371)
+Epilepsy (HP:0001250)
+Facial dysmorphism (HP:0001999)
+Small sloping forehead (HP:0000340)
+Upslanting palpebral fissures (HP:0000582)
+High broad nasal bridge (HP:0000431)
+Broad depressed nasal tip (HP:0000437)
+Long flat philtrum (HP:0000319)
+Thin upper lip (HP:0000219)
+Hypoplastic inferior cerebellar vermis and cerebellar hemispheres (HP:0001320)
+Large fourth ventricle (HP:0002119)
+Decreased supratentorial white matter volume and thinning of corpus callosum (HP:0002079)
+Ventricular septal defect (HP:0001629)
+Developmental cataract (HP:0000519)",,EXOC2,NM_018303.6,c.1309C>T,p.Arg437*,Stop gained,Homozygous,Autosomal recessive,Unknown,12/28,N/A,N/A,0.01,0.00000292,0.00001562,"VUS, 1 sub, 1 star",1,,2,,,,Yes,2,,,
+EXOC2,Kelley,Case series,,32639540,Van Bergen,2020,Exome sequencing,Sanger sequencing,,1:IV-8,Female,Onset: birth,Lebanon,,,"Acquired microcephaly (HP:0004485)
+Severe global developmental delay (HP:0001263)
+Spastic quadriplegia (HP:0001258)
+Congenital contractures of joints (HP:0001371)
+Facial dysmorphism (HP:0001999)
+Sloping forehead (HP:0000340)
+Hypertelorism (HP:0000316)
+Upslanting palpebral fissures (HP:0000582)
+Broad depressed nasal bridge (HP:0005280)
+Broad depressed nasal tip (HP:0000437)
+Hypoplastic optic discs (HP:0007766)
+Generalized decreased myelination (HP:0012447)
+Frontal horn cysts (HP:0030724)
+Fusion of thalami (HP:0010664)
+Hypoplastic brainstem (HP:0002365)
+Hypoplasticcerebellum (HP:0001321)",,EXOC2,NM_018303.6,c.1309C>T,p.Arg437*,Stop gained,Homozygous,Autosomal recessive,Unknown,12/28,N/A,N/A,0.01,0.00000292,0.00001562,"VUS, 1 sub, 1 star",1,,2,,,,Yes,2,,,
+EXOC2,Kelley,Case series,,32639540,Van Bergen,2020,Exome sequencing,Sanger sequencing,,2:II-1,Female,Onset: 4 months,Italy,,,"Facial dysmorphism (HP:0001999)
+Oval face (HP:0000300)
+Slight bitemporal depression (HP:0025386)
+High forehead (HP:0000348)
+Arched eyebrows (HP:0002553)
+Hypertelorism (HP:0000316)
+Low-set simplified ears (HP:0000369)
+Thin upper lip (HP:0000219)
+Slightly dry skin (HP:0000958)
+Molar tooth cerebellar abnormality (HP:0002419)
+Vermis hypoplasia (HP:0001320)
+Rhombencephalosynapsis (HP:0031913)
+Obstructive sleep apnea syndrome (HP:0002870)",,EXOC2,NM_018303.5,c.389G>A,p.Arg130His,Missense,Compound heterozygous,Autosomal recessive,Unknown,4/28,0.105,0.166,0,0.00001327,0.00005,no classifications from unflagged records,,,,,,,Yes,0.5,,,
+EXOC2,Kelley,Case series,,32639540,Van Bergen,2020,Exome sequencing,Sanger sequencing,,2:II-1,Female,Onset: 4 months,Italy,,,"Facial dysmorphism (HP:0001999)
+Oval face (HP:0000300)
+Slight bitemporal depression (HP:0025386)
+High forehead (HP:0000348)
+Arched eyebrows (HP:0002553)
+Hypertelorism (HP:0000316)
+Low-set simplified ears (HP:0000369)
+Thin upper lip (HP:0000219)
+Slightly dry skin (HP:0000958)
+Molar tooth cerebellar abnormality (HP:0002419)
+Vermis hypoplasia (HP:0001320)
+Rhombencephalosynapsis (HP:0031913)
+Obstructive sleep apnea syndrome (HP:0002870)",,EXOC2,NM_018303.5,c.1739T>C,p.Leu580Ser,Missense,Compound heterozygous,Autosomal recessive,Unknown,16/28,0.139,0.195,0.05,Absent,Absent,"Path, 1 sub, 0 stars",,,,,,,Yes,0.5,,,

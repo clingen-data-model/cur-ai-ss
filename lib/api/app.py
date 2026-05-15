@@ -338,6 +338,7 @@ def create_task(
         variant_id=request.variant_id,
         phenotype_id=request.phenotype_id,
         skip_successors=request.skip_successors,
+        additional_context=request.additional_context,
     )
     return task
 
