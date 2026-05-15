@@ -54,6 +54,9 @@ def enqueue_task(
         existing_task.error_message = None
         existing_task.skip_successors = skip_successors
         existing_task.additional_context = additional_context
+        # Clear conversation_id if not providing new context (start fresh)
+        if additional_context is None:
+            existing_task.conversation_id = None
         session.flush()
         return existing_task
     else:
@@ -106,6 +109,9 @@ def enqueue_all_instances(
                 task.error_message = None
                 task.skip_successors = skip_successors
                 task.additional_context = additional_context
+                # Clear conversation_id if not providing new context (start fresh)
+                if additional_context is None:
+                    task.conversation_id = None
                 results.append(task)
         session.flush()
         return results if results else existing_tasks
