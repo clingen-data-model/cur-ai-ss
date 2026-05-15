@@ -215,14 +215,16 @@ with center:
                 icon=get_status_badge_icon(paper_resp.tasks),
                 color=get_status_badge_color(paper_resp.tasks),
             )
-            if st.session_state.RERUN_POPOVER_STATE_KEY:
-                with st.popover(
-                    '🔄 Rerun Agents',
-                    type='tertiary',
-                    disabled=any(t.status == TaskStatus.RUNNING for t in paper_resp.tasks),
-                    key=RERUN_POPOVER_STATE_KEY,
-                ):
-                    render_queue_tasks_fragment(paper_query_params)
+            with st.popover(
+                '🔄 Rerun Agents',
+                type='tertiary',
+                disabled=any(
+                    t.status == TaskStatus.RUNNING for t in paper_resp.tasks
+                ),
+                key=RERUN_POPOVER_STATE_KEY,
+                on_change='rerun',
+            ):
+                render_queue_tasks_fragment(paper_query_params)
             title = paper_resp.title or f'paper_{paper_query_params.paper_id}'
             clean_title = _strip_trailing_punctuation(title)
             st.download_button(

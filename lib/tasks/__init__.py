@@ -1,4 +1,5 @@
 from lib.tasks.misc import (
+    enqueue_all_instances,
     enqueue_task,
     get_all_successor_levels,
     get_status_badge_color,
@@ -25,6 +26,7 @@ __all__ = [
     'TaskResp',
     'TaskCreateRequest',
     'InferredPaperStatus',
+    'enqueue_all_instances',
     'enqueue_task',
     'get_all_successor_levels',
     'infer_paper_status',

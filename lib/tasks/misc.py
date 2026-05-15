@@ -74,6 +74,53 @@ def enqueue_task(
         return new_task
 
 
+def enqueue_all_instances(
+    session: Session,
+    paper_id: int,
+    task_type: TaskType,
+    skip_successors: bool = False,
+    additional_context: str | None = None,
+) -> list[TaskDB]:
+    """Re-queue all instances of a task type for a paper.
+
+    If splatted instances exist (with entity IDs), re-queues all of them.
+    Otherwise creates/resets a single global task.
+    """
+    # Find all existing tasks of this type for this paper
+    existing_tasks = (
+        session.query(TaskDB)
+        .filter(
+            TaskDB.type == task_type,
+            TaskDB.paper_id == paper_id,
+        )
+        .all()
+    )
+
+    if existing_tasks:
+        # Re-queue all existing instances, skip if running
+        results = []
+        for task in existing_tasks:
+            if task.status != TaskStatus.RUNNING:
+                task.status = TaskStatus.PENDING
+                task.tries = 0
+                task.error_message = None
+                task.skip_successors = skip_successors
+                task.additional_context = additional_context
+                results.append(task)
+        session.flush()
+        return results if results else existing_tasks
+    else:
+        # No existing tasks, create a global one
+        task = enqueue_task(
+            session,
+            paper_id=paper_id,
+            task_type=task_type,
+            skip_successors=skip_successors,
+            additional_context=additional_context,
+        )
+        return [task]
+
+
 def enqueue_successors(session: Session, task: TaskDB) -> None:
     """Create successor tasks when a task completes.
 
