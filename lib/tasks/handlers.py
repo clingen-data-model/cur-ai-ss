@@ -126,7 +126,7 @@ async def handle_paper_metadata(task_id: int) -> None:
 
         paper_id = task.paper_id
         gene_symbol = paper.gene.symbol
-        stored_conv_id = task.conversation_ids.get('default')
+        stored_conv_id = task.conversation_id
         additional_context = task.additional_context
         supplement_format = paper.supplement_format
 
@@ -146,7 +146,7 @@ async def handle_paper_metadata(task_id: int) -> None:
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if task:
-            task.conversation_ids['default'] = stored_conv_id
+            task.conversation_id = stored_conv_id
         paper = session.get(PaperDB, paper_id)
         if paper:
             result.final_output.apply_to(paper)
@@ -192,7 +192,7 @@ async def handle_pedigree_description(task_id: int) -> None:
         if not task:
             return
         paper_id = task.paper_id
-        stored_conv_id = task.conversation_ids.get('default')
+        stored_conv_id = task.conversation_id
         additional_context = task.additional_context
 
     image_id, combined_text = 0, ''
@@ -231,7 +231,7 @@ async def handle_pedigree_description(task_id: int) -> None:
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if task:
-            task.conversation_ids['default'] = stored_conv_id
+            task.conversation_id = stored_conv_id
         # Idempotent: delete-then-insert
         session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).delete()
         if result.final_output and result.final_output.found:
@@ -251,7 +251,7 @@ async def handle_patient_extraction(task_id: int) -> None:
             return
 
         paper_id = task.paper_id
-        stored_conv_id = task.conversation_ids.get('default')
+        stored_conv_id = task.conversation_id
         additional_context = task.additional_context
 
         # Load paper and pedigree from DB
@@ -286,7 +286,7 @@ async def handle_patient_extraction(task_id: int) -> None:
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if task:
-            task.conversation_ids['default'] = stored_conv_id
+            task.conversation_id = stored_conv_id
         # Idempotent: delete families (CASCADE deletes patients), then re-insert both
         session.query(FamilyDB).filter(FamilyDB.paper_id == paper_id).delete()
         session.flush()
@@ -313,14 +313,20 @@ async def handle_patient_extraction(task_id: int) -> None:
 
 
 async def handle_segregation_evidence_extraction(task_id: int) -> None:
-    """Extract segregation evidence from paper for family/families."""
-    families_data: list[dict] = []
-    stored_conversation_ids: dict[str, str] = {}
+    """Extract segregation evidence from paper for a specific family."""
     paper_id: int = 0
+    family_id: int | None = None
     supplement_format: FileFormat | None = None
+    stored_conv_id: str | None = None
+    family_info: dict | None = None
+
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
+            return
+
+        family_id = task.family_id
+        if family_id is None:
             return
 
         paper_id = task.paper_id
@@ -329,87 +335,55 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
             return
 
         supplement_format = paper.supplement_format
-        stored_conversation_ids = dict(task.conversation_ids)
+        stored_conv_id = task.conversation_id
 
-        # Determine which families to process
-        if task.family_id:
-            families = (
-                session.query(FamilyDB).filter(FamilyDB.id == task.family_id).all()
-            )
-        else:
-            families = (
-                session.query(FamilyDB).filter(FamilyDB.paper_id == task.paper_id).all()
-            )
-
-        if not families:
+        family = session.get(FamilyDB, family_id)
+        if not family:
             return
 
-        for family in families:
-            # Load patients in family
-            patients = (
-                session.query(PatientDB).filter(PatientDB.family_id == family.id).all()
-            )
+        # Load patients in family
+        patients = (
+            session.query(PatientDB).filter(PatientDB.family_id == family_id).all()
+        )
 
-            # Load variant links for this family
-            patient_ids = [p.id for p in patients]
-            variant_links = (
-                session.query(PatientVariantLinkDB)
-                .filter(PatientVariantLinkDB.patient_id.in_(patient_ids))
-                .all()
-                if patient_ids
-                else []
-            )
+        # Load variant links for this family
+        patient_ids = [p.id for p in patients]
+        variant_links = (
+            session.query(PatientVariantLinkDB)
+            .filter(PatientVariantLinkDB.patient_id.in_(patient_ids))
+            .all()
+            if patient_ids
+            else []
+        )
 
-            # Build family structure info
-            family_info = {
-                'family_identifier': family.identifier,
-                'patients': [
-                    {
-                        'id': p.id,
-                        'identifier': p.identifier,
-                        'affected_status': p.affected_status,
-                        'proband_status': p.proband_status,
-                    }
-                    for p in patients
-                ],
-                'patient_variant_links': [
-                    {
-                        'patient_id': vl.patient_id,
-                        'variant_id': vl.variant_id,
-                        'zygosity': vl.zygosity,
-                    }
-                    for vl in variant_links
-                ],
-            }
-
-            families_data.append(
+        # Build family structure info
+        family_info = {
+            'family_identifier': family.identifier,
+            'patients': [
                 {
-                    'family_id': family.id,
-                    'family_info': family_info,
+                    'id': p.id,
+                    'identifier': p.identifier,
+                    'affected_status': p.affected_status,
+                    'proband_status': p.proband_status,
                 }
-            )
+                for p in patients
+            ],
+            'patient_variant_links': [
+                {
+                    'patient_id': vl.patient_id,
+                    'variant_id': vl.variant_id,
+                    'zygosity': vl.zygosity,
+                }
+                for vl in variant_links
+            ],
+        }
 
-    sem = asyncio.Semaphore(2)
-    conversation_ids: dict[int, str] = {}
+    stored_conv_id = await ensure_conversation_id(stored_conv_id)
 
-    async def extract_evidence_for_family(
-        family_data: dict,
-    ) -> tuple[int, Any]:
-        async with sem:
-            stored_conv_id = await ensure_conversation_id(
-                stored_conversation_ids.get(str(family_data['family_id']))
-            )
-            conversation_ids[family_data['family_id']] = stored_conv_id
-            result = await Runner.run(
-                segregation_evidence_extractor,
-                f'Paper (fulltext md): {fulltext_md(paper_id, supplement_format)}\n\nFamily Structure: {json.dumps(family_data["family_info"], indent=2, default=str)}',
-                conversation_id=stored_conv_id,
-            )
-            return family_data['family_id'], result.final_output
-
-    results = await asyncio.gather(
-        *[extract_evidence_for_family(f) for f in families_data],
-        return_exceptions=True,
+    result = await Runner.run(
+        segregation_evidence_extractor,
+        f'Paper (fulltext md): {fulltext_md(paper_id, supplement_format)}\n\nFamily Structure: {json.dumps(family_info, indent=2, default=str)}',
+        conversation_id=stored_conv_id,
     )
 
     # Store results in new session
@@ -418,138 +392,106 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
         if not task:
             return
 
-        task.conversation_ids.update(conversation_ids)
-        # Idempotent: delete-then-insert
-        for result in results:
-            if isinstance(result, Exception):
-                logger.exception(f'Failed to extract segregation evidence: {result}')
-                continue
+        task.conversation_id = stored_conv_id
 
-            family_id, evidence_output = result  # type: ignore[misc]
-            session.query(SegregationEvidenceDB).filter(
-                SegregationEvidenceDB.family_id == family_id
-            ).delete()
-            session.flush()
+        session.query(SegregationEvidenceDB).filter(
+            SegregationEvidenceDB.family_id == family_id
+        ).delete()
+        session.flush()
 
-            # Convert and insert
-            db_evidence = segregation_evidence_to_db(family_id, evidence_output)
-            session.add(db_evidence)
+        # Convert and insert
+        db_evidence = segregation_evidence_to_db(family_id, result.final_output)
+        session.add(db_evidence)
 
 
 async def handle_segregation_analysis_computed(task_id: int) -> None:
-    """Compute segregation analysis metrics for family/families using ClinGen methodology."""
-    families_data: list[dict] = []
-    stored_conversation_ids: dict[str, str] = {}
+    """Compute segregation analysis metrics for a specific family using ClinGen methodology."""
+    family_id: int | None = None
+    stored_conv_id: str | None = None
+    family_info: dict | None = None
+
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
+            return
+
+        family_id = task.family_id
+        if family_id is None:
             return
 
         paper = session.get(PaperDB, task.paper_id)
         if not paper:
             return
 
-        stored_conversation_ids = dict(task.conversation_ids)
+        stored_conv_id = task.conversation_id
 
-        # Determine which families to process
-        if task.family_id:
-            families = (
-                session.query(FamilyDB).filter(FamilyDB.id == task.family_id).all()
-            )
-        else:
-            families = (
-                session.query(FamilyDB).filter(FamilyDB.paper_id == task.paper_id).all()
-            )
-
-        if not families:
+        family = session.get(FamilyDB, family_id)
+        if not family:
             return
 
-        for family in families:
-            # Load patients in family
-            patients = (
-                session.query(PatientDB).filter(PatientDB.family_id == family.id).all()
-            )
+        # Load patients in family
+        patients = (
+            session.query(PatientDB).filter(PatientDB.family_id == family_id).all()
+        )
 
-            # Load variant links for this family
-            patient_ids = [p.id for p in patients]
-            variant_links = (
-                session.query(PatientVariantLinkDB)
-                .filter(PatientVariantLinkDB.patient_id.in_(patient_ids))
-                .all()
-                if patient_ids
-                else []
-            )
+        # Load variant links for this family
+        patient_ids = [p.id for p in patients]
+        variant_links = (
+            session.query(PatientVariantLinkDB)
+            .filter(PatientVariantLinkDB.patient_id.in_(patient_ids))
+            .all()
+            if patient_ids
+            else []
+        )
 
-            # Load segregation evidence for this family
-            seg_evidence = (
-                session.query(SegregationEvidenceDB)
-                .filter(SegregationEvidenceDB.family_id == family.id)
-                .first()
-            )
+        # Load segregation evidence for this family
+        seg_evidence = (
+            session.query(SegregationEvidenceDB)
+            .filter(SegregationEvidenceDB.family_id == family_id)
+            .first()
+        )
 
-            # Build input for agent
-            family_info = {
-                'family_identifier': family.identifier,
-                'patients': [
-                    {
-                        'id': p.id,
-                        'identifier': p.identifier,
-                        'affected_status': p.affected_status,
-                        'proband_status': p.proband_status,
-                        'sex': p.sex,
-                    }
-                    for p in patients
-                ],
-                'patient_variant_links': [
-                    {
-                        'patient_id': vl.patient_id,
-                        'variant_id': vl.variant_id,
-                        'zygosity': vl.zygosity,
-                        'inheritance': vl.inheritance,
-                        'testing_methods': vl.testing_methods,
-                    }
-                    for vl in variant_links
-                ],
-                'segregation_evidence': {
-                    'extracted_lod_score': seg_evidence.extracted_lod_score
-                    if seg_evidence
-                    else None,
-                    'has_unexplainable_non_segregations': seg_evidence.has_unexplainable_non_segregations
-                    if seg_evidence
-                    else None,
+        # Build input for agent
+        family_info = {
+            'family_identifier': family.identifier,
+            'patients': [
+                {
+                    'id': p.id,
+                    'identifier': p.identifier,
+                    'affected_status': p.affected_status,
+                    'proband_status': p.proband_status,
+                    'sex': p.sex,
                 }
+                for p in patients
+            ],
+            'patient_variant_links': [
+                {
+                    'patient_id': vl.patient_id,
+                    'variant_id': vl.variant_id,
+                    'zygosity': vl.zygosity,
+                    'inheritance': vl.inheritance,
+                    'testing_methods': vl.testing_methods,
+                }
+                for vl in variant_links
+            ],
+            'segregation_evidence': {
+                'extracted_lod_score': seg_evidence.extracted_lod_score
+                if seg_evidence
+                else None,
+                'has_unexplainable_non_segregations': seg_evidence.has_unexplainable_non_segregations
                 if seg_evidence
                 else None,
             }
+            if seg_evidence
+            else None,
+        }
 
-            families_data.append(
-                {
-                    'family_id': family.id,
-                    'family_info': family_info,
-                }
-            )
+    stored_conv_id = await ensure_conversation_id(stored_conv_id)
 
-    sem = asyncio.Semaphore(2)
-    conversation_ids: dict[int, str] = {}
-
-    async def compute_analysis_for_family(
-        family_data: dict,
-    ) -> tuple[int, Any]:
-        async with sem:
-            stored_conv_id = await ensure_conversation_id(
-                stored_conversation_ids.get(str(family_data['family_id']))
-            )
-            conversation_ids[family_data['family_id']] = stored_conv_id
-            result = await Runner.run(
-                segregation_analysis_computed_agent,
-                f'Family Structure and Data: {json.dumps(family_data["family_info"], indent=2, default=str)}',
-                conversation_id=stored_conv_id,
-            )
-            return family_data['family_id'], result.final_output
-
-    results = await asyncio.gather(
-        *[compute_analysis_for_family(f) for f in families_data],
-        return_exceptions=True,
+    result = await Runner.run(
+        segregation_analysis_computed_agent,
+        f'Family Structure and Data: {json.dumps(family_info, indent=2, default=str)}',
+        conversation_id=stored_conv_id,
     )
 
     # Store results in new session
@@ -558,86 +500,58 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
         if not task:
             return
 
-        task.conversation_ids.update(conversation_ids)
-        # Idempotent: delete-then-insert
-        for result in results:
-            if isinstance(result, Exception):
-                logger.exception(f'Failed to compute segregation analysis: {result}')
-                continue
+        task.conversation_id = stored_conv_id
 
-            family_id, computed_output = result  # type: ignore[misc]
-            session.query(SegregationAnalysisComputedDB).filter(
-                SegregationAnalysisComputedDB.family_id == family_id
-            ).delete()
-            session.flush()
+        session.query(SegregationAnalysisComputedDB).filter(
+            SegregationAnalysisComputedDB.family_id == family_id
+        ).delete()
+        session.flush()
 
-            # Convert and insert
-            db_computed = segregation_analysis_computed_to_db(
-                family_id, computed_output
-            )
-            session.add(db_computed)
+        # Convert and insert
+        db_computed = segregation_analysis_computed_to_db(
+            family_id, result.final_output
+        )
+        session.add(db_computed)
 
 
 async def handle_variant_harmonization(task_id: int) -> None:
-    """Harmonize variants to standard genomic coordinates."""
-    stored_conversation_ids: dict[str, str] = {}
+    """Harmonize a variant to standard genomic coordinates."""
+    variant_id: int | None = None
+    stored_conv_id: str | None = None
+    variant_input: dict | None = None
+
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
             return
 
-        stored_conversation_ids = {
-            str(k): v for k, v in task.conversation_ids.items() if str(k).isdigit()
-        }
+        variant_id = task.variant_id
+        if variant_id is None:
+            return
+
+        stored_conv_id = task.conversation_id
 
         paper = session.get(PaperDB, task.paper_id)
         if not paper:
             return
 
-        # Query variants to harmonize
-        query = session.query(VariantDB).filter(VariantDB.paper_id == task.paper_id)
-        if task.variant_id is not None:
-            query = query.filter(VariantDB.id == task.variant_id)
+        variant_row = session.get(VariantDB, variant_id)
+        if not variant_row:
+            return
 
-        rows = query.order_by(VariantDB.id).all()
+        # Extract variant payload
+        variant_input = {
+            'gene_symbol': paper.gene.symbol,
+            **{f: getattr(variant_row, f) for f in Variant.model_fields},
+        }
 
-        # Extract variant payloads
-        variant_payloads = [
-            (
-                row.id,
-                {
-                    'gene_symbol': paper.gene.symbol,
-                    **{f: getattr(row, f) for f in Variant.model_fields},
-                },
-            )
-            for row in rows
-        ]
+    stored_conv_id = await ensure_conversation_id(stored_conv_id)
 
-    sem = asyncio.Semaphore(2)
-    conversation_ids: dict[int, str] = {}
-
-    async def harmonize_single_variant(
-        variant_id: int, variant_input: dict
-    ) -> tuple[int, ReasoningBlock[HarmonizedVariant]]:
-        async with sem:
-            stored_conv_id = await ensure_conversation_id(
-                stored_conversation_ids.get(str(variant_id))
-            )
-            conversation_ids[variant_id] = stored_conv_id
-            result = await Runner.run(
-                variant_harmonization_agent,
-                f'Variant JSON:\n{json.dumps(variant_input, indent=2)}',
-                max_turns=15,
-                conversation_id=stored_conv_id,
-            )
-            return variant_id, result.final_output
-
-    results = await asyncio.gather(
-        *[
-            harmonize_single_variant(variant_id, variant_input)
-            for variant_id, variant_input in variant_payloads
-        ],
-        return_exceptions=True,
+    result = await Runner.run(
+        variant_harmonization_agent,
+        f'Variant JSON:\n{json.dumps(variant_input, indent=2)}',
+        max_turns=15,
+        conversation_id=stored_conv_id,
     )
 
     # Update DB with results
@@ -646,26 +560,14 @@ async def handle_variant_harmonization(task_id: int) -> None:
         if not task:
             return
 
-        task.conversation_ids.update(conversation_ids)
+        task.conversation_id = stored_conv_id
+
         # Idempotent: delete-then-insert
-        delete_query = session.query(HarmonizedVariantDB).filter(
-            HarmonizedVariantDB.variant_id.in_(
-                select(VariantDB.id).where(VariantDB.paper_id == task.paper_id)
-            )
-        )
-        if task.variant_id is not None:
-            delete_query = delete_query.filter(
-                HarmonizedVariantDB.variant_id == task.variant_id
-            )
-        delete_query.delete()
+        session.query(HarmonizedVariantDB).filter(
+            HarmonizedVariantDB.variant_id == variant_id
+        ).delete()
 
-        for result in results:
-            if isinstance(result, Exception):
-                logger.exception(f'Failed to harmonize variant: {result}')
-                continue
-
-            variant_id, harmonized_output = result  # type: ignore[misc]
-            session.add(harmonized_variant_to_db(variant_id, harmonized_output))
+        session.add(harmonized_variant_to_db(variant_id, result.final_output))
 
 
 async def handle_variant_enrichment(task_id: int) -> None:
@@ -764,7 +666,7 @@ async def handle_patient_variant_linking(task_id: int) -> None:
             return
 
         paper_id = task.paper_id
-        stored_conv_id = task.conversation_ids.get('default')
+        stored_conv_id = task.conversation_id
         additional_context = task.additional_context
 
         paper = session.get(PaperDB, paper_id)
@@ -827,7 +729,7 @@ async def handle_patient_variant_linking(task_id: int) -> None:
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if task:
-            task.conversation_ids['default'] = stored_conv_id
+            task.conversation_id = stored_conv_id
         # Idempotent: delete-then-insert
         session.query(PatientVariantLinkDB).filter(
             PatientVariantLinkDB.paper_id == paper_id
@@ -837,14 +739,13 @@ async def handle_patient_variant_linking(task_id: int) -> None:
 
 
 async def handle_phenotype_extraction(task_id: int) -> None:
-    """Extract phenotypes for patients in paper.
-
-    If task.patient_id is set, extract for only that patient.
-    Otherwise, extract for all patients in the paper in parallel.
-    """
-    # Fetch all patients to process
-    stored_conversation_ids: dict[str, str] = {}
+    """Extract phenotypes for a specific patient in paper."""
+    paper_id: int
+    patient_id: int | None = None
     supplement_format: FileFormat | None = None
+    stored_conv_id: str | None = None
+    patient_data: dict | None = None
+
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
@@ -852,46 +753,30 @@ async def handle_phenotype_extraction(task_id: int) -> None:
 
         paper_id = task.paper_id
         patient_id = task.patient_id
-        stored_conversation_ids = dict(task.conversation_ids)
+        if patient_id is None:
+            return
+
+        stored_conv_id = task.conversation_id
 
         paper = session.get(PaperDB, paper_id)
         supplement_format = paper.supplement_format if paper else None
-        query = session.query(PatientDB).filter(PatientDB.paper_id == paper_id)
-        if patient_id is not None:
-            query = query.filter(PatientDB.id == patient_id)
 
-        patient_rows = query.order_by(PatientDB.id).all()
-        patient_data_list = [
-            {
-                'patient_id': p.id,
-                'identifier': p.identifier,
-                'identifier_quote': p.identifier_evidence['quote'],
-            }
-            for p in patient_rows
-        ]
+        patient_row = session.get(PatientDB, patient_id)
+        if not patient_row:
+            return
 
-    # Process patients in parallel with stored or fresh conversations
-    sem = asyncio.Semaphore(2)
-    conversation_ids: dict[int, str] = {}
+        patient_data = {
+            'patient_id': patient_row.id,
+            'identifier': patient_row.identifier,
+            'identifier_quote': patient_row.identifier_evidence['quote'],
+        }
 
-    async def extract_phenotypes_for_patient(
-        patient_data: dict,
-    ) -> tuple[int, list]:
-        async with sem:
-            stored_conv_id = await ensure_conversation_id(
-                stored_conversation_ids.get(str(patient_data['patient_id']))
-            )
-            conversation_ids[patient_data['patient_id']] = stored_conv_id
-            result = await Runner.run(
-                patient_phenotype_linking_agent,
-                f'Paper (fulltext md): {fulltext_md(paper_id, supplement_format)}\n\nStructured Patient JSON:\n{[patient_data]}',
-                conversation_id=stored_conv_id,
-            )
-            return patient_data['patient_id'], result.final_output
+    stored_conv_id = await ensure_conversation_id(stored_conv_id)
 
-    results = await asyncio.gather(
-        *[extract_phenotypes_for_patient(p) for p in patient_data_list],
-        return_exceptions=True,
+    result = await Runner.run(
+        patient_phenotype_linking_agent,
+        f'Paper (fulltext md): {fulltext_md(paper_id, supplement_format)}\n\nStructured Patient JSON:\n{[patient_data]}',
+        conversation_id=stored_conv_id,
     )
 
     # Update DB with results
@@ -900,95 +785,68 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         if not task:
             return
 
-        task.conversation_ids.update(conversation_ids)
+        task.conversation_id = stored_conv_id
+
         # Idempotent: delete-then-insert
-        delete_query = session.query(PhenotypeDB).filter(
-            PhenotypeDB.paper_id == paper_id
-        )
-        if patient_id is not None:
-            delete_query = delete_query.filter(PhenotypeDB.patient_id == patient_id)
-        delete_query.delete()
+        session.query(PhenotypeDB).filter(PhenotypeDB.patient_id == patient_id).delete()
 
-        # Insert all results
-        for result in results:
-            if isinstance(result, Exception):
-                logger.exception(f'Failed to extract phenotypes: {result}')
-                continue
-
-            patient_id, phenotypes = result  # type: ignore[misc]
-            for phenotype in phenotypes:
-                # Ensure patient_id is set on the phenotype
-                if phenotype.patient_id is None or phenotype.patient_id != patient_id:
-                    phenotype.patient_id = patient_id
-                session.add(phenotype_to_db(paper_id, phenotype))
+        # Insert results
+        for phenotype in result.final_output:
+            # Ensure patient_id is set on the phenotype
+            if phenotype.patient_id is None or phenotype.patient_id != patient_id:
+                phenotype.patient_id = patient_id
+            session.add(phenotype_to_db(paper_id, phenotype))
 
 
 async def handle_hpo_linking(task_id: int) -> None:
-    """Link phenotypes to HPO terms."""
-    stored_conversation_ids: dict[str, str] = {}
+    """Link a phenotype to HPO terms."""
+    phenotype_id: int | None = None
+    stored_conv_id: str | None = None
+    phenotype_data: dict | None = None
+
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
             return
 
-        stored_conversation_ids = dict(task.conversation_ids)
-        # Get phenotypes for this paper (optionally filtered by patient or phenotype)
-        query = session.query(PhenotypeDB).filter(PhenotypeDB.paper_id == task.paper_id)
-        if task.patient_id is not None:
-            query = query.filter(PhenotypeDB.patient_id == task.patient_id)
-        if task.phenotype_id is not None:
-            query = query.filter(PhenotypeDB.id == task.phenotype_id)
+        phenotype_id = task.phenotype_id
+        if phenotype_id is None:
+            return
 
-        phenotype_rows = query.order_by(PhenotypeDB.patient_id, PhenotypeDB.id).all()
-        phenotype_id_set = {row.id for row in phenotype_rows}
+        stored_conv_id = task.conversation_id
+
+        phenotype_row = session.get(PhenotypeDB, phenotype_id)
+        if not phenotype_row:
+            return
 
         term_lookup = build_term_lookup()
+        candidates = find_matching_hpo_terms(
+            str(phenotype_row.concept), term_lookup=term_lookup
+        )
 
-        phenotype_inputs = []
-        for row in phenotype_rows:
-            candidates = find_matching_hpo_terms(
-                str(row.concept), term_lookup=term_lookup
-            )
-            phenotype_inputs.append(
-                {
-                    'phenotype_id': row.id,
-                    'concept': row.concept,
-                    'negated': row.negated,
-                    'uncertain': row.uncertain,
-                    'family_history': row.family_history,
-                    'candidates': [c.model_dump() for c in candidates],
-                }
-            )
+        phenotype_data = {
+            'phenotype_id': phenotype_row.id,
+            'concept': phenotype_row.concept,
+            'negated': phenotype_row.negated,
+            'uncertain': phenotype_row.uncertain,
+            'family_history': phenotype_row.family_history,
+            'candidates': [c.model_dump() for c in candidates],
+        }
 
-    sem = asyncio.Semaphore(10)
-    conversation_ids: dict[int, str] = {}
+    stored_conv_id = await ensure_conversation_id(stored_conv_id)
 
-    async def link_phenotype_to_hpo(
-        phenotype_data: dict,
-    ) -> ReasoningBlock[HPOTerm]:
-        async with sem:
-            stored_conv_id = await ensure_conversation_id(
-                stored_conversation_ids.get(str(phenotype_data['phenotype_id']))
-            )
-            conversation_ids[phenotype_data['phenotype_id']] = stored_conv_id
-            result = await Runner.run(
-                hpo_linking_agent,
-                f'Phenotype JSON:\n{json.dumps(phenotype_data, indent=2)}',
-                max_turns=15,
-                conversation_id=stored_conv_id,
-                run_config=RunConfig(
-                    trace_metadata={
-                        'paper_id': str(task_id),
-                        'phenotype_id': str(phenotype_data['phenotype_id']),
-                        'concept': phenotype_data['concept'],
-                    },
-                ),
-            )
-            return result.final_output
-
-    results = await asyncio.gather(
-        *[link_phenotype_to_hpo(phenotype_data) for phenotype_data in phenotype_inputs],
-        return_exceptions=True,
+    result = await Runner.run(
+        hpo_linking_agent,
+        f'Phenotype JSON:\n{json.dumps(phenotype_data, indent=2)}',
+        max_turns=15,
+        conversation_id=stored_conv_id,
+        run_config=RunConfig(
+            trace_metadata={
+                'paper_id': str(task_id),
+                'phenotype_id': str(phenotype_id),
+                'concept': phenotype_data['concept'],
+            },
+        ),
     )
 
     # Store results in new session
@@ -997,21 +855,11 @@ async def handle_hpo_linking(task_id: int) -> None:
         if not task:
             return
 
-        task.conversation_ids.update(conversation_ids)
+        task.conversation_id = stored_conv_id
+
         # Idempotent: delete-then-insert
-        session.query(HpoDB).filter(HpoDB.phenotype_id.in_(phenotype_id_set)).delete()
-
-        for phenotype_data, result in zip(phenotype_inputs, results):
-            if isinstance(result, Exception):
-                phenotype_id: int = phenotype_data['phenotype_id']  # type: ignore
-                logger.exception(
-                    f'Failed to link phenotype {phenotype_id} to HPO: {result}'
-                )
-                continue
-
-            phenotype_id: int = phenotype_data['phenotype_id']  # type: ignore
-            if phenotype_id in phenotype_id_set:
-                session.add(hpo_to_db(phenotype_id, result))  # type: ignore[arg-type]
+        session.query(HpoDB).filter(HpoDB.phenotype_id == phenotype_id).delete()
+        session.add(hpo_to_db(phenotype_id, result))  # type: ignore[arg-type]
 
 
 TASK_HANDLERS: dict[
