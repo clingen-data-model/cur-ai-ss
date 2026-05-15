@@ -170,6 +170,8 @@ with center:
             )
         if paper_resp.journal_name:
             parts.append(paper_resp.journal_name)
+        if paper_resp.gene_symbol:
+            parts.append(f'🧬 {paper_resp.gene_symbol}')
         st.caption(' • '.join(parts))
     else:
         st.markdown(f'# {paper_resp.filename}')
