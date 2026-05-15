@@ -102,8 +102,7 @@ from lib.models import (
 from agents import Runner
 from openai import AsyncOpenAI
 
-from lib.agents.chat_routing_agent import ChatRoutingOutput
-from lib.agents.chat_routing_agent import agent as routing_agent
+from lib.agents.chat_routing_agent import ChatRoutingOutput, make_routing_agent
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.segregation_analysis import SegregationAnalysisComputedNestedResp
 from lib.tasks import TaskCreateRequest, TaskResp, enqueue_task
@@ -1152,34 +1151,59 @@ async def chat_with_paper(
     )
 
     if conversation_db is None:
-        tasks = (
+        any_eligible = (
             session.query(TaskDB)
             .filter(TaskDB.paper_id == paper_id)
             .all()
         )
-        eligible = [t for t in tasks if t.conversation_ids]
-        if not eligible:
+        if not any(t.conversation_ids for t in any_eligible):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail='No completed task conversations available for this paper.',
             )
 
-        task_list = '\n'.join(
-            f'- task_id={t.id}, type="{t.type}", description="{t.type.description}"'
-            for t in eligible
-        )
-        routing_prompt = (
-            f'User question: {request.message}\n\nAvailable tasks:\n{task_list}'
-        )
-        routing_result = await Runner.run(routing_agent, routing_prompt)
-        output: ChatRoutingOutput = routing_result.final_output
+        def build_selection_summary(output: ChatRoutingOutput) -> str:
+            parts = [f'Selected the "{output.task_type}" agent']
+            if output.entity_label:
+                parts.append(f'for "{output.entity_label}"')
+            parts.append(f'because it {output.task_type.description.lower()}')
+            return ' '.join(parts)
 
-        chosen_task = next((t for t in eligible if t.id == output.task_id), eligible[0])
-        conv_id: str = chosen_task.conversation_ids.get('default') or next(
-            iter(chosen_task.conversation_ids.values())
+        routing_result = await Runner.run(
+            make_routing_agent(paper_id), request.message
         )
+        routing_output = routing_result.final_output
+        chosen_task_id = routing_output.task_id
+        chosen_task = session.get(TaskDB, chosen_task_id)
+        if chosen_task is None or not chosen_task.conversation_ids:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f'Routing agent returned invalid task_id {chosen_task_id}.',
+            )
 
-        conversation_db = ConversationDB(paper_id=paper_id, conversation_id=conv_id)
+        entity_id = (
+            chosen_task.family_id
+            or chosen_task.patient_id
+            or chosen_task.variant_id
+            or chosen_task.phenotype_id
+        )
+        conv_key = str(entity_id) if entity_id is not None else 'default'
+        # Fall back to first value for global multi-entity tasks where keys are entity IDs
+        # rather than 'default'. Temporary until tasks are always scoped to a single entity.
+        conv_id: str | None = chosen_task.conversation_ids.get(conv_key) or next(
+            iter(chosen_task.conversation_ids.values()), None
+        )
+        if not conv_id:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f'No conversation found for task {chosen_task.id}.',
+            )
+
+        conversation_db = ConversationDB(
+            paper_id=paper_id,
+            conversation_id=conv_id,
+            messages=[{'role': 'assistant', 'content': build_selection_summary(routing_output)}],
+        )
         session.add(conversation_db)
         session.commit()
         session.refresh(conversation_db)
