@@ -65,7 +65,9 @@ def build_curation_row(paper_id: int, session: Session) -> CurationSummaryRow:
             paper_id=paper_id,
             publication_and_testing=publication_and_testing_sections,
             proband=[],
-            variant_info=[SectionContent(title='Variants', content='No data extracted')],
+            variant_info=[
+                SectionContent(title='Variants', content='No data extracted')
+            ],
             clinical_presentation=[],
             functional_segregation=[],
             score=[],
