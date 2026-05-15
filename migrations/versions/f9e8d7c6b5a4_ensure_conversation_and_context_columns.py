@@ -28,9 +28,13 @@ def upgrade() -> None:
         if 'conversation_ids' in columns:
             batch_op.drop_column('conversation_ids')
         if 'conversation_id' not in columns:
-            batch_op.add_column(sa.Column('conversation_id', sa.String(), nullable=True))
+            batch_op.add_column(
+                sa.Column('conversation_id', sa.String(), nullable=True)
+            )
         if 'additional_context' not in columns:
-            batch_op.add_column(sa.Column('additional_context', sa.String(), nullable=True))
+            batch_op.add_column(
+                sa.Column('additional_context', sa.String(), nullable=True)
+            )
 
 
 def downgrade() -> None:
