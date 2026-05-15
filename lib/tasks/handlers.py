@@ -71,15 +71,8 @@ from lib.tasks.models import TaskType
 logger = logging.getLogger(__name__)
 
 
-async def get_or_create_conversation(conversation_id: str | None) -> str:
-    """Get existing conversation or create a new one.
-
-    Args:
-        conversation_id: Existing conversation ID, or None to create new
-
-    Returns:
-        The conversation ID (either provided or newly created)
-    """
+async def ensure_conversation_id(conversation_id: str | None) -> str:
+    """Create a new conversation if needed, otherwise return the provided ID."""
     if conversation_id:
         return conversation_id
 
@@ -137,9 +130,9 @@ async def handle_paper_metadata(task_id: int) -> None:
         additional_context = task.additional_context
         supplement_format = paper.supplement_format
 
-    conv_id = await get_or_create_conversation(stored_conv_id)
+    stored_conv_id = await ensure_conversation_id(stored_conv_id)
 
-    if stored_conv_id is not None and additional_context is not None:
+    if additional_context is not None:
         message = build_followup_prompt(additional_context)
     else:
         message = f'Gene: {gene_symbol}\n\nPaper (fulltext md): {fulltext_md(paper_id, supplement_format)}'
@@ -147,13 +140,13 @@ async def handle_paper_metadata(task_id: int) -> None:
     result = await Runner.run(
         paper_extraction_agent,
         message,
-        conversation_id=conv_id,
+        conversation_id=stored_conv_id,
     )
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if task:
-            task.conversation_ids['default'] = conv_id
+            task.conversation_ids['default'] = stored_conv_id
         paper = session.get(PaperDB, paper_id)
         if paper:
             result.final_output.apply_to(paper)
@@ -222,9 +215,9 @@ async def handle_pedigree_description(task_id: int) -> None:
         combined_text += f'Caption: {caption_text}\n\n'
         image_id += 1
 
-    conv_id = await get_or_create_conversation(stored_conv_id)
+    stored_conv_id = await ensure_conversation_id(stored_conv_id)
 
-    if stored_conv_id is not None and additional_context is not None:
+    if additional_context is not None:
         message = build_followup_prompt(additional_context)
     else:
         message = combined_text
@@ -232,13 +225,13 @@ async def handle_pedigree_description(task_id: int) -> None:
     result = await Runner.run(
         pedigree_describer_agent,
         message,
-        conversation_id=conv_id,
+        conversation_id=stored_conv_id,
     )
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if task:
-            task.conversation_ids['default'] = conv_id
+            task.conversation_ids['default'] = stored_conv_id
         # Idempotent: delete-then-insert
         session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).delete()
         if result.final_output and result.final_output.found:
@@ -277,9 +270,9 @@ async def handle_patient_extraction(task_id: int) -> None:
             else None
         )
 
-    conv_id = await get_or_create_conversation(stored_conv_id)
+    stored_conv_id = await ensure_conversation_id(stored_conv_id)
 
-    if stored_conv_id is not None and additional_context is not None:
+    if additional_context is not None:
         message = build_followup_prompt(additional_context)
     else:
         message = f'Paper (fulltext md): {fulltext_md(paper_id, supplement_format)}\nPedigree Description: \n {pedigree_descriptions_output}'
@@ -287,13 +280,13 @@ async def handle_patient_extraction(task_id: int) -> None:
     result = await Runner.run(
         patient_extraction_agent,
         message,
-        conversation_id=conv_id,
+        conversation_id=stored_conv_id,
     )
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if task:
-            task.conversation_ids['default'] = conv_id
+            task.conversation_ids['default'] = stored_conv_id
         # Idempotent: delete families (CASCADE deletes patients), then re-insert both
         session.query(FamilyDB).filter(FamilyDB.paper_id == paper_id).delete()
         session.flush()
@@ -403,14 +396,14 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
         family_data: dict,
     ) -> tuple[int, Any]:
         async with sem:
-            conv_id = await get_or_create_conversation(
+            stored_conv_id = await ensure_conversation_id(
                 stored_conversation_ids.get(str(family_data['family_id']))
             )
-            conversation_ids[family_data['family_id']] = conv_id
+            conversation_ids[family_data['family_id']] = stored_conv_id
             result = await Runner.run(
                 segregation_evidence_extractor,
                 f'Paper (fulltext md): {fulltext_md(paper_id, supplement_format)}\n\nFamily Structure: {json.dumps(family_data["family_info"], indent=2, default=str)}',
-                conversation_id=conv_id,
+                conversation_id=stored_conv_id,
             )
             return family_data['family_id'], result.final_output
 
@@ -543,14 +536,14 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
         family_data: dict,
     ) -> tuple[int, Any]:
         async with sem:
-            conv_id = await get_or_create_conversation(
+            stored_conv_id = await ensure_conversation_id(
                 stored_conversation_ids.get(str(family_data['family_id']))
             )
-            conversation_ids[family_data['family_id']] = conv_id
+            conversation_ids[family_data['family_id']] = stored_conv_id
             result = await Runner.run(
                 segregation_analysis_computed_agent,
                 f'Family Structure and Data: {json.dumps(family_data["family_info"], indent=2, default=str)}',
-                conversation_id=conv_id,
+                conversation_id=stored_conv_id,
             )
             return family_data['family_id'], result.final_output
 
@@ -627,15 +620,15 @@ async def handle_variant_harmonization(task_id: int) -> None:
         variant_id: int, variant_input: dict
     ) -> tuple[int, ReasoningBlock[HarmonizedVariant]]:
         async with sem:
-            conv_id = await get_or_create_conversation(
+            stored_conv_id = await ensure_conversation_id(
                 stored_conversation_ids.get(str(variant_id))
             )
-            conversation_ids[variant_id] = conv_id
+            conversation_ids[variant_id] = stored_conv_id
             result = await Runner.run(
                 variant_harmonization_agent,
                 f'Variant JSON:\n{json.dumps(variant_input, indent=2)}',
                 max_turns=15,
-                conversation_id=conv_id,
+                conversation_id=stored_conv_id,
             )
             return variant_id, result.final_output
 
@@ -818,9 +811,9 @@ async def handle_patient_variant_linking(task_id: int) -> None:
             else None
         )
 
-    conv_id = await get_or_create_conversation(stored_conv_id)
+    stored_conv_id = await ensure_conversation_id(stored_conv_id)
 
-    if stored_conv_id is not None and additional_context is not None:
+    if additional_context is not None:
         message = build_followup_prompt(additional_context)
     else:
         message = f'Variants JSON:\n{structured_variants}\n Patients JSON:\n {structured_patients} Pedigree Description: \n {pedigree_descriptions_output} Paper (fulltext md): {fulltext_md(paper_id, supplement_format)}'
@@ -828,13 +821,13 @@ async def handle_patient_variant_linking(task_id: int) -> None:
     result = await Runner.run(
         patient_variant_linking_agent,
         message,
-        conversation_id=conv_id,
+        conversation_id=stored_conv_id,
     )
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if task:
-            task.conversation_ids['default'] = conv_id
+            task.conversation_ids['default'] = stored_conv_id
         # Idempotent: delete-then-insert
         session.query(PatientVariantLinkDB).filter(
             PatientVariantLinkDB.paper_id == paper_id
@@ -885,14 +878,14 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         patient_data: dict,
     ) -> tuple[int, list]:
         async with sem:
-            conv_id = await get_or_create_conversation(
+            stored_conv_id = await ensure_conversation_id(
                 stored_conversation_ids.get(str(patient_data['patient_id']))
             )
-            conversation_ids[patient_data['patient_id']] = conv_id
+            conversation_ids[patient_data['patient_id']] = stored_conv_id
             result = await Runner.run(
                 patient_phenotype_linking_agent,
                 f'Paper (fulltext md): {fulltext_md(paper_id, supplement_format)}\n\nStructured Patient JSON:\n{[patient_data]}',
-                conversation_id=conv_id,
+                conversation_id=stored_conv_id,
             )
             return patient_data['patient_id'], result.final_output
 
@@ -974,15 +967,15 @@ async def handle_hpo_linking(task_id: int) -> None:
         phenotype_data: dict,
     ) -> ReasoningBlock[HPOTerm]:
         async with sem:
-            conv_id = await get_or_create_conversation(
+            stored_conv_id = await ensure_conversation_id(
                 stored_conversation_ids.get(str(phenotype_data['phenotype_id']))
             )
-            conversation_ids[phenotype_data['phenotype_id']] = conv_id
+            conversation_ids[phenotype_data['phenotype_id']] = stored_conv_id
             result = await Runner.run(
                 hpo_linking_agent,
                 f'Phenotype JSON:\n{json.dumps(phenotype_data, indent=2)}',
                 max_turns=15,
-                conversation_id=conv_id,
+                conversation_id=stored_conv_id,
                 run_config=RunConfig(
                     trace_metadata={
                         'paper_id': str(task_id),

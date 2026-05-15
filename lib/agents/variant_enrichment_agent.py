@@ -131,7 +131,7 @@ def vep_lookup(
             f'/vep/human/id/{rsid}?mane=1&numbers=1&SpliceAI=2&REVEL=1&AlphaMissense=1'
         )
     else:
-        raise ValueError('Requires rsid or hgvs_g')
+        raise ValueError('Requires rsid or hgvs_g or hgvs_c')
 
     headers = {'Content-Type': 'application/json'}
     r = requests.get(VEP_BASE + ext, headers=headers, timeout=10)
