@@ -218,9 +218,7 @@ with center:
             with st.popover(
                 '🔄 Rerun Agents',
                 type='tertiary',
-                disabled=any(
-                    t.status == TaskStatus.RUNNING for t in paper_resp.tasks
-                ),
+                disabled=any(t.status == TaskStatus.RUNNING for t in paper_resp.tasks),
                 key=RERUN_POPOVER_STATE_KEY,
                 on_change='rerun',
             ):
