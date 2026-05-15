@@ -1006,6 +1006,82 @@ def test_update_variant_clears_nested_harmonized_field(
     assert hv['hgvs_c'] == 'c.68_69delAG'
 
 
+def test_enqueue_all_instances_for_splatted_task(client, seeded_paper, db_session):
+    """Test re-enqueueing a splatted task with no entity IDs re-queues all instances."""
+    from lib.tasks import TaskCreateRequest
+
+    # Create families and splatted tasks
+    family1 = FamilyDB(
+        paper_id=seeded_paper.id, identifier='fam1', identifier_evidence={}
+    )
+    family2 = FamilyDB(
+        paper_id=seeded_paper.id, identifier='fam2', identifier_evidence={}
+    )
+    db_session.add_all([family1, family2])
+    db_session.flush()
+
+    # Create per-family tasks and mark them as completed
+    task1 = TaskDB(
+        paper_id=seeded_paper.id,
+        type=TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
+        family_id=family1.id,
+        status=TaskStatus.COMPLETED,
+    )
+    task2 = TaskDB(
+        paper_id=seeded_paper.id,
+        type=TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
+        family_id=family2.id,
+        status=TaskStatus.COMPLETED,
+    )
+    db_session.add_all([task1, task2])
+    db_session.commit()
+
+    # Re-enqueue without entity IDs - should reset all instances to PENDING
+    response = client.post(
+        f'/papers/{seeded_paper.id}/tasks',
+        json=TaskCreateRequest(
+            type=TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
+        ).model_dump(),
+    )
+    assert response.status_code == 200
+    tasks = response.json()
+    assert len(tasks) == 2
+    assert all(t['status'] == 'Pending' for t in tasks)
+    assert {t['family_id'] for t in tasks} == {family1.id, family2.id}
+
+
+def test_enqueue_clears_conversation_id_without_context(
+    client, seeded_paper, db_session
+):
+    """Test that re-enqueueing without additional_context clears conversation_id."""
+    from lib.tasks import TaskCreateRequest
+
+    # Create a task with existing conversation_id and additional_context
+    task = TaskDB(
+        paper_id=seeded_paper.id,
+        type=TaskType.HPO_LINKING,
+        status=TaskStatus.COMPLETED,
+        conversation_id='conv-123',
+        additional_context='old context',
+    )
+    db_session.add(task)
+    db_session.commit()
+
+    # Re-enqueue without additional_context - should clear conversation_id
+    response = client.post(
+        f'/papers/{seeded_paper.id}/tasks',
+        json=TaskCreateRequest(
+            type=TaskType.HPO_LINKING,
+        ).model_dump(),
+    )
+    assert response.status_code == 200
+    tasks = response.json()
+    assert len(tasks) == 1
+    assert tasks[0]['conversation_id'] is None
+    assert tasks[0]['additional_context'] is None
+    assert tasks[0]['status'] == 'Pending'
+
+
 def test_update_variant_rejects_harmonized_update_before_harmonization(
     client, seeded_paper, seeded_unharmonized_variant
 ):

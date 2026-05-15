@@ -27,6 +27,10 @@ def upgrade() -> None:
         sa.Column('family_id', sa.Integer(), nullable=False),
         sa.Column('segregation_count', sa.Integer(), nullable=False),
         sa.Column('segregation_count_reasoning', sa.JSON(), nullable=False),
+        sa.Column('affected_count', sa.Integer(), nullable=False),
+        sa.Column('affected_count_reasoning', sa.JSON(), nullable=False),
+        sa.Column('unaffected_count', sa.Integer(), nullable=False),
+        sa.Column('unaffected_count_reasoning', sa.JSON(), nullable=False),
         sa.Column('computed_lod_score', sa.Float(), nullable=False),
         sa.Column('computed_lod_score_reasoning', sa.JSON(), nullable=False),
         sa.Column('points_assigned', sa.Float(), nullable=False),
@@ -194,6 +198,10 @@ def downgrade() -> None:
 
     op.drop_table('segregation_evidence')
     with op.batch_alter_table('segregation_analysis_computed', schema=None) as batch_op:
+        batch_op.drop_column('unaffected_count_reasoning')
+        batch_op.drop_column('unaffected_count')
+        batch_op.drop_column('affected_count_reasoning')
+        batch_op.drop_column('affected_count')
         batch_op.drop_index('ix_segregation_analysis_computed_family_id')
 
     op.drop_table('segregation_analysis_computed')

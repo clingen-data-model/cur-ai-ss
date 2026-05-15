@@ -240,7 +240,7 @@ def enqueue_paper_task(
     phenotype_id: int | None = None,
     skip_successors: bool = False,
     additional_context: str | None = None,
-) -> TaskResp:
+) -> list[TaskResp]:
     resp = requests.post(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/tasks',
         json=TaskCreateRequest(
@@ -253,7 +253,7 @@ def enqueue_paper_task(
         ).model_dump(),
     )
     resp.raise_for_status()
-    return TaskResp.model_validate(resp.json())
+    return TypeAdapter(list[TaskResp]).validate_python(resp.json())
 
 
 def get_curation_pptx(paper_id: int) -> bytes:

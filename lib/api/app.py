@@ -105,7 +105,7 @@ from openai import AsyncOpenAI
 from lib.agents.chat_routing_agent import ChatRoutingOutput, make_routing_agent
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.segregation_analysis import SegregationAnalysisComputedNestedResp
-from lib.tasks import TaskCreateRequest, TaskResp, enqueue_task
+from lib.tasks import TaskCreateRequest, TaskResp, enqueue_all_instances, enqueue_task
 from lib.tasks.models import TaskStatus, TaskType
 
 logger = logging.getLogger(__name__)
@@ -324,7 +324,7 @@ def list_tasks(
     return tasks
 
 
-@app.post('/papers/{paper_id}/tasks', response_model=TaskResp)
+@app.post('/papers/{paper_id}/tasks', response_model=list[TaskResp])
 def create_task(
     paper_id: int,
     request: TaskCreateRequest,
@@ -336,18 +336,33 @@ def create_task(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
 
-    task = enqueue_task(
-        session,
-        paper_id=paper_id,
-        task_type=request.type,
-        family_id=request.family_id,
-        patient_id=request.patient_id,
-        variant_id=request.variant_id,
-        phenotype_id=request.phenotype_id,
-        skip_successors=request.skip_successors,
-        additional_context=request.additional_context,
-    )
-    return task
+    if (
+        request.family_id is None
+        and request.patient_id is None
+        and request.variant_id is None
+        and request.phenotype_id is None
+    ):
+        tasks = enqueue_all_instances(
+            session,
+            paper_id=paper_id,
+            task_type=request.type,
+            skip_successors=request.skip_successors,
+            additional_context=request.additional_context,
+        )
+    else:
+        task = enqueue_task(
+            session,
+            paper_id=paper_id,
+            task_type=request.type,
+            family_id=request.family_id,
+            patient_id=request.patient_id,
+            variant_id=request.variant_id,
+            phenotype_id=request.phenotype_id,
+            skip_successors=request.skip_successors,
+            additional_context=request.additional_context,
+        )
+        tasks = [task]
+    return tasks
 
 
 def _patient_to_resp(row: PatientDB) -> PatientResp:
