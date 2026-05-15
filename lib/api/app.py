@@ -58,6 +58,9 @@ from lib.misc.pdf.paths import (
     pdf_words_json_path,
 )
 from lib.models import (
+    ChatMessageRequest,
+    ChatMessageResp,
+    ConversationDB,
     EnrichedVariantDB,
     EnrichedVariantResp,
     ExtractedPhenotype,
@@ -96,6 +99,11 @@ from lib.models import (
     VariantResp,
     VariantUpdateRequest,
 )
+from agents import Runner
+from openai import AsyncOpenAI
+
+from lib.agents.chat_routing_agent import ChatRoutingOutput
+from lib.agents.chat_routing_agent import agent as routing_agent
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.segregation_analysis import SegregationAnalysisComputedNestedResp
 from lib.tasks import TaskCreateRequest, TaskResp, enqueue_task
@@ -1116,3 +1124,76 @@ def clear_highlights(
         content = f.read()
     with open(highlighted_path, 'wb') as f:
         f.write(content)
+
+
+@app.get('/papers/{paper_id}/chat/messages', response_model=list[dict])
+def get_chat_messages(
+    paper_id: int,
+    session: Session = Depends(get_session),
+) -> Any:
+    conversation_db = (
+        session.query(ConversationDB).filter(ConversationDB.paper_id == paper_id).first()
+    )
+    return conversation_db.messages if conversation_db else []
+
+
+@app.post('/papers/{paper_id}/chat', response_model=ChatMessageResp)
+async def chat_with_paper(
+    paper_id: int,
+    request: ChatMessageRequest,
+    session: Session = Depends(get_session),
+) -> Any:
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found')
+
+    conversation_db = (
+        session.query(ConversationDB).filter(ConversationDB.paper_id == paper_id).first()
+    )
+
+    if conversation_db is None:
+        tasks = (
+            session.query(TaskDB)
+            .filter(TaskDB.paper_id == paper_id)
+            .all()
+        )
+        eligible = [t for t in tasks if t.conversation_ids]
+        if not eligible:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail='No completed task conversations available for this paper.',
+            )
+
+        task_list = '\n'.join(
+            f'- task_id={t.id}, type="{t.type}", description="{t.type.description}"'
+            for t in eligible
+        )
+        routing_prompt = (
+            f'User question: {request.message}\n\nAvailable tasks:\n{task_list}'
+        )
+        routing_result = await Runner.run(routing_agent, routing_prompt)
+        output: ChatRoutingOutput = routing_result.final_output
+
+        chosen_task = next((t for t in eligible if t.id == output.task_id), eligible[0])
+        conv_id: str = chosen_task.conversation_ids.get('default') or next(
+            iter(chosen_task.conversation_ids.values())
+        )
+
+        conversation_db = ConversationDB(paper_id=paper_id, conversation_id=conv_id)
+        session.add(conversation_db)
+        session.commit()
+        session.refresh(conversation_db)
+
+    client = AsyncOpenAI(api_key=env.OPENAI_API_KEY)
+    resp = await client.responses.create(
+        model=env.OPENAI_API_DEPLOYMENT,
+        input=request.message,
+        conversation_id=conversation_db.conversation_id,
+    )
+    conversation_db.messages = [
+        *conversation_db.messages,
+        {'role': 'user', 'content': request.message},
+        {'role': 'assistant', 'content': resp.output_text},
+    ]
+    session.commit()
+    return ChatMessageResp(response=resp.output_text)
