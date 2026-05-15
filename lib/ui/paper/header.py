@@ -106,11 +106,10 @@ def render_queue_tasks_fragment(paper_query_params: PaperQueryParams) -> None:
                 skip_successors=skip_successors,
                 additional_context=additional_context or None,
             )
-            st.session_state.RERUN_POPOVER_STATE_KEY = False
             st.toast('Task Queued', icon=':material/thumb_up:')
-            st.rerun()
         except Exception as e:
             st.toast(f'Failed to enqueue task: {str(e)}', icon='❌')
+        st.session_state.RERUN_POPOVER_STATE_KEY = False
 
     st.button('Confirm Rerun', type='secondary', on_click=on_confirm)
 
@@ -216,13 +215,14 @@ with center:
                 icon=get_status_badge_icon(paper_resp.tasks),
                 color=get_status_badge_color(paper_resp.tasks),
             )
-            with st.popover(
-                '🔄 Rerun Agents',
-                type='tertiary',
-                disabled=any(t.status == TaskStatus.RUNNING for t in paper_resp.tasks),
-                key=RERUN_POPOVER_STATE_KEY,
-            ):
-                render_queue_tasks_fragment(paper_query_params)
+            if st.session_state.RERUN_POPOVER_STATE_KEY:
+                with st.popover(
+                    '🔄 Rerun Agents',
+                    type='tertiary',
+                    disabled=any(t.status == TaskStatus.RUNNING for t in paper_resp.tasks),
+                    key=RERUN_POPOVER_STATE_KEY,
+                ):
+                    render_queue_tasks_fragment(paper_query_params)
             title = paper_resp.title or f'paper_{paper_query_params.paper_id}'
             clean_title = _strip_trailing_punctuation(title)
             st.download_button(
