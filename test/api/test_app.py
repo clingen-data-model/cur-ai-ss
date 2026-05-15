@@ -15,6 +15,7 @@ from lib.models import (
     HarmonizedVariantDB,
     PaperDB,
     PatientDB,
+    PhenotypeDB,
     TaskDB,
     VariantDB,
 )
@@ -306,15 +307,15 @@ def test_get_patients_empty(client, seeded_paper):
     assert response.json() == []
 
 
-def test_get_patients_returns_ordered_by_position(client, db_session, seeded_paper):
-    required = dict(
+def _patient_required_fields(identifier: str = 'P1') -> dict:
+    return dict(
         proband_status='Unknown',
         sex='Unknown',
         country_of_origin='Unknown',
         race_ethnicity='Unknown',
         affected_status='Unknown',
         identifier_evidence=dict(
-            value='P', reasoning='test evidence', quote='test context'
+            value=identifier, reasoning='test evidence', quote='test context'
         ),
         proband_status_evidence=dict(
             value='Unknown', reasoning='test evidence', quote='test context'
@@ -344,6 +345,9 @@ def test_get_patients_returns_ordered_by_position(client, db_session, seeded_pap
             value='Family 1', reasoning='test evidence', quote='test context'
         ),
     )
+
+
+def test_get_patients_returns_ordered_by_position(client, db_session, seeded_paper):
     # Get the default family created in seeded_paper fixture
     family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
     # Insert patients in order (they'll get auto-incrementing IDs)
@@ -352,7 +356,7 @@ def test_get_patients_returns_ordered_by_position(client, db_session, seeded_pap
             paper_id=seeded_paper.id,
             family_id=family.id,
             identifier='P3',
-            **required,
+            **_patient_required_fields('P3'),
         )
     )
     db_session.add(
@@ -360,7 +364,7 @@ def test_get_patients_returns_ordered_by_position(client, db_session, seeded_pap
             paper_id=seeded_paper.id,
             family_id=family.id,
             identifier='P1',
-            **required,
+            **_patient_required_fields('P1'),
         )
     )
     db_session.add(
@@ -368,7 +372,7 @@ def test_get_patients_returns_ordered_by_position(client, db_session, seeded_pap
             paper_id=seeded_paper.id,
             family_id=family.id,
             identifier='P2',
-            **required,
+            **_patient_required_fields('P2'),
         )
     )
     db_session.flush()
@@ -391,43 +395,6 @@ def test_get_patients_paper_not_found(client):
 
 def test_update_patient_with_human_edit_note(client, db_session, seeded_paper):
     """Test updating a patient with human_edit_note on evidence."""
-    required = dict(
-        proband_status='Unknown',
-        sex='Unknown',
-        country_of_origin='Unknown',
-        race_ethnicity='Unknown',
-        affected_status='Unknown',
-        identifier_evidence=dict(
-            value='P1', reasoning='test evidence', quote='test context'
-        ),
-        proband_status_evidence=dict(
-            value='Unknown', reasoning='test evidence', quote='test context'
-        ),
-        sex_evidence=dict(
-            value='Unknown', reasoning='test evidence', quote='test context'
-        ),
-        age_diagnosis_evidence=dict(
-            value=None, reasoning='test evidence', quote='test context'
-        ),
-        age_report_evidence=dict(
-            value=None, reasoning='test evidence', quote='test context'
-        ),
-        age_death_evidence=dict(
-            value=None, reasoning='test evidence', quote='test context'
-        ),
-        country_of_origin_evidence=dict(
-            value='Unknown', reasoning='test evidence', quote='test context'
-        ),
-        race_ethnicity_evidence=dict(
-            value='Unknown', reasoning='test evidence', quote='test context'
-        ),
-        affected_status_evidence=dict(
-            value='Unknown', reasoning='test evidence', quote='test context'
-        ),
-        family_assignment_evidence=dict(
-            value='Family 1', reasoning='test evidence', quote='test context'
-        ),
-    )
     # Get the default family created in seeded_paper fixture
     family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
     # Create a patient
@@ -435,7 +402,7 @@ def test_update_patient_with_human_edit_note(client, db_session, seeded_paper):
         paper_id=seeded_paper.id,
         family_id=family.id,
         identifier='P1',
-        **required,
+        **_patient_required_fields('P1'),
     )
     db_session.add(patient)
     db_session.flush()
@@ -463,6 +430,91 @@ def test_update_patient_with_human_edit_note(client, db_session, seeded_paper):
     )
     # Other evidence should have null notes (only the specified ones were updated)
     assert resp_json['sex_evidence']['human_edit_note'] is None
+
+
+def test_update_patient_rejects_wrong_paper_scope(client, db_session, seeded_paper):
+    other_paper = PaperDB(
+        content_hash='other-paper',
+        gene_id=seeded_paper.gene_id,
+        filename='other.pdf',
+    )
+    db_session.add(other_paper)
+    db_session.flush()
+
+    other_family = FamilyDB(
+        paper_id=other_paper.id,
+        identifier='Other Family',
+        identifier_evidence=dict(
+            value='Other Family', reasoning='test family', quote='Other Family'
+        ),
+    )
+    db_session.add(other_family)
+    db_session.flush()
+
+    patient = PatientDB(
+        paper_id=other_paper.id,
+        family_id=other_family.id,
+        identifier='P-other',
+        **_patient_required_fields('P-other'),
+    )
+    db_session.add(patient)
+    db_session.flush()
+
+    response = client.patch(
+        f'/papers/{seeded_paper.id}/patients/{patient.id}',
+        json={'identifier': 'Wrongly scoped edit'},
+    )
+
+    assert response.status_code == 404
+    assert response.json()['detail'] == 'Patient not found'
+    db_session.refresh(patient)
+    assert patient.identifier == 'P-other'
+
+
+def test_update_phenotype_rejects_wrong_patient_scope(client, db_session, seeded_paper):
+    family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
+    patient_1 = PatientDB(
+        paper_id=seeded_paper.id,
+        family_id=family.id,
+        identifier='P1',
+        **_patient_required_fields('P1'),
+    )
+    patient_2 = PatientDB(
+        paper_id=seeded_paper.id,
+        family_id=family.id,
+        identifier='P2',
+        **_patient_required_fields('P2'),
+    )
+    db_session.add_all([patient_1, patient_2])
+    db_session.flush()
+
+    phenotype = PhenotypeDB(
+        paper_id=seeded_paper.id,
+        patient_id=patient_2.id,
+        concept='Seizures',
+        concept_evidence=dict(
+            value='Seizures', reasoning='test evidence', quote='test context'
+        ),
+        negated=False,
+        uncertain=False,
+        family_history=False,
+        onset=None,
+        location=None,
+        severity=None,
+        modifier=None,
+    )
+    db_session.add(phenotype)
+    db_session.flush()
+
+    response = client.patch(
+        f'/papers/{seeded_paper.id}/patients/{patient_1.id}/phenotypes/{phenotype.id}',
+        json={'uncertain': True},
+    )
+
+    assert response.status_code == 404
+    assert response.json()['detail'] == 'Phenotype not found'
+    db_session.refresh(phenotype)
+    assert phenotype.uncertain is False
 
 
 def test_get_variants_harmonized_and_enriched(client, db_session, seeded_paper):
