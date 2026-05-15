@@ -1,7 +1,7 @@
 """conversation_ids to conversation_id
 
 Revision ID: d8f7e6c5b4a3
-Revises: a7b8c9d0e1f2
+Revises: 170ae36b1b74
 Create Date: 2026-05-15 12:00:00.000000
 
 """
@@ -13,7 +13,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = 'd8f7e6c5b4a3'
-down_revision: Union[str, None] = 'a7b8c9d0e1f2'
+down_revision: Union[str, None] = '170ae36b1b74'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

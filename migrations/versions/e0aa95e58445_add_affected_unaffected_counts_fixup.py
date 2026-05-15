@@ -1,8 +1,8 @@
-"""add affected_count and unaffected_count to segregation_analysis_computed
+"""Add affected_count and unaffected_count to segregation_analysis_computed
 
-Revision ID: a7b8c9d0e1f2
-Revises: 170ae36b1b74
-Create Date: 2026-05-13 10:00:00.000000
+Revision ID: e0aa95e58445
+Revises: f9e8d7c6b5a4
+Create Date: 2026-05-15 15:51:00.000000
 
 """
 
@@ -12,10 +12,10 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = 'a7b8c9d0e1f2'
-down_revision: Union[str, None] = '170ae36b1b74'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+revision: str = 'e0aa95e58445'
+down_revision: Union[str, None] = 'f9e8d7c6b5a4'
+branch_labels: Union[Sequence[str], None] = None
+depends_on: Union[Sequence[str], None] = None
 
 
 def upgrade() -> None:

@@ -22,6 +22,11 @@ depends_on: Union[Sequence[str], None] = None
 def upgrade() -> None:
     bind = op.get_bind()
     inspector = inspect(bind)
+
+    # Only proceed if tasks table exists
+    if 'tasks' not in inspector.get_table_names():
+        return
+
     columns = [col['name'] for col in inspector.get_columns('tasks')]
 
     with op.batch_alter_table('tasks', schema=None) as batch_op:
