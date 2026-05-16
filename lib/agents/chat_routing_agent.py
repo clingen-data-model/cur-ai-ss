@@ -117,5 +117,5 @@ def make_routing_agent(paper_id: int) -> Agent:
         instructions=CHAT_ROUTING_INSTRUCTIONS,
         model=env.OPENAI_API_DEPLOYMENT,
         output_type=ChatRoutingOutput,
-        tools=[fetch_tasks_for_type],
+        tools=[fetch_tasks_for_type],  # type: ignore[list-item]
     )

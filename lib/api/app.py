@@ -1232,7 +1232,7 @@ async def chat_with_paper(
     resp = await client.responses.create(
         model=env.OPENAI_API_DEPLOYMENT,
         input=request.message,
-        conversation_id=conversation_db.conversation_id,
+        conversation=conversation_db.conversation_id,
     )
     conversation_db.messages = [
         *conversation_db.messages,
