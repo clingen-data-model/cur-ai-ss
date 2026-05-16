@@ -5,7 +5,7 @@ from lib.ui.api import (
     clear_chat,
     get_chat_messages,
     get_http_error_detail,
-    send_chat_message,
+    send_chat_message_stream,
 )
 
 
@@ -17,9 +17,13 @@ def render_chat_with_agent_tab() -> None:
 
     messages: list[dict[str, str]] = st.session_state['chat_messages']
 
-    col1, col2 = st.columns([10, 2])
+    for msg in messages:
+        with st.chat_message(msg['role']):
+            st.markdown(msg['content'])
+
+    col1, col2 = st.columns([8, 2])
     with col2:
-        if st.button('Clear Chat', type='tertiary', use_container_width=True):
+        if st.button('🗑️ Clear', use_container_width=True):
             try:
                 clear_chat(paper_resp.id)
                 st.session_state['chat_messages'] = []
@@ -30,21 +34,19 @@ def render_chat_with_agent_tab() -> None:
             except Exception as e:
                 st.error(str(e))
 
-    for msg in messages:
-        with st.chat_message(msg['role']):
-            st.markdown(msg['content'])
-
     if user_input := st.chat_input('Ask a question about this paper...'):
         messages.append({'role': 'user', 'content': user_input})
         with st.chat_message('user'):
             st.markdown(user_input)
         with st.chat_message('assistant'):
-            with st.spinner('Thinking...'):
-                try:
-                    response = send_chat_message(paper_resp.id, user_input)
-                    st.markdown(response)
-                    messages.append({'role': 'assistant', 'content': response})
-                except requests.HTTPError as e:
-                    st.error(get_http_error_detail(e))
-                except Exception as e:
-                    st.error(str(e))
+            try:
+                response_container = st.empty()
+                full_response = ''
+                for chunk in send_chat_message_stream(paper_resp.id, user_input):
+                    full_response += chunk
+                    response_container.markdown(full_response)
+                messages.append({'role': 'assistant', 'content': full_response})
+            except requests.HTTPError as e:
+                st.error(get_http_error_detail(e))
+            except Exception as e:
+                st.error(str(e))

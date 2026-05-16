@@ -22,7 +22,7 @@ from fastapi import (
     status,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from openai import AsyncOpenAI
 from sqlalchemy import delete, func, select
@@ -32,7 +32,7 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
 from lib.agents.chat_routing_agent import ChatRoutingOutput, make_routing_agent
-from lib.api.db import get_session
+from lib.api.db import get_session, session_scope
 from lib.api.middleware import make_log_request_middleware
 from lib.core.environment import env
 from lib.core.logging import setup_logging
@@ -1228,16 +1228,36 @@ async def chat_with_paper(
         session.commit()
         session.refresh(conversation_db)
 
-    client = AsyncOpenAI(api_key=env.OPENAI_API_KEY)
-    resp = await client.responses.create(
-        model=env.OPENAI_API_DEPLOYMENT,
-        input=request.message,
-        conversation=conversation_db.conversation_id,
+    def save_to_db(accumulated_response: str) -> None:
+        conversation_db.messages = [
+            *conversation_db.messages,
+            {'role': 'user', 'content': request.message},
+            {'role': 'assistant', 'content': accumulated_response},
+        ]
+        session.commit()
+
+    async def stream_response() -> AsyncGenerator[str, None]:
+        client = AsyncOpenAI(api_key=env.OPENAI_API_KEY)
+        system_instruction = 'Keep responses short and snappy. Be concise and direct.'
+        accumulated_response = ''
+
+        resp = await client.responses.create(
+            model=env.OPENAI_API_DEPLOYMENT,
+            input=request.message,
+            conversation=conversation_db.conversation_id,
+            instructions=system_instruction,
+            stream=True,
+        )
+        async with resp:
+            async for chunk in resp:
+                if hasattr(chunk, 'output_text') and chunk.output_text:
+                    accumulated_response += chunk.output_text
+                    yield chunk.output_text
+
+        await asyncio.to_thread(save_to_db, accumulated_response)
+
+    return StreamingResponse(
+        stream_response(),
+        media_type='text/plain',
+        headers={'Cache-Control': 'no-cache'},
     )
-    conversation_db.messages = [
-        *conversation_db.messages,
-        {'role': 'user', 'content': request.message},
-        {'role': 'assistant', 'content': resp.output_text},
-    ]
-    session.commit()
-    return ChatMessageResp(response=resp.output_text)

@@ -1,4 +1,5 @@
 import mimetypes
+from collections.abc import Iterator
 
 import requests
 import streamlit as st
@@ -272,13 +273,17 @@ def get_chat_messages(paper_id: int) -> list[dict[str, str]]:
     return TypeAdapter(list[dict[str, str]]).validate_python(resp.json())
 
 
-def send_chat_message(paper_id: int, message: str) -> str:
+def send_chat_message_stream(paper_id: int, message: str) -> Iterator[str]:
+    """Stream chat response chunks from the API."""
     resp = requests.post(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/chat',
         json={'message': message},
+        stream=True,
     )
     resp.raise_for_status()
-    return ChatMessageResp.model_validate(resp.json()).response
+    for chunk in resp.iter_content(decode_unicode=True):
+        if chunk:
+            yield chunk
 
 
 def clear_chat(paper_id: int) -> None:

@@ -1,4 +1,5 @@
 import json
+from typing import Any
 
 from agents import Agent, function_tool
 from pydantic import BaseModel
@@ -58,7 +59,7 @@ def _entity_label(
     return None
 
 
-def _make_fetch_tasks_tool(paper_id: int):
+def _make_fetch_tasks_tool(paper_id: int) -> Any:
     @function_tool
     def fetch_tasks_for_type(task_type: str) -> str:
         """Fetch all completed tasks for this paper that match a given task type.
