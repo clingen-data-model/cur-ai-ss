@@ -15,12 +15,34 @@ def render_chat_with_agent_tab() -> None:
     if 'chat_messages' not in st.session_state:
         st.session_state['chat_messages'] = get_chat_messages(paper_resp.id)
 
+    # NOTE: this is a HACK until streamlit
+    # https://github.com/streamlit/streamlit/issues/8564#issuecomment-4321649533 is released
+    chat_container = st.container(height=600, border=None)
     for msg in st.session_state['chat_messages']:
-        with st.chat_message(msg['role']):
+        with chat_container.chat_message(msg['role']):
             st.markdown(msg['content'])
+    if user_input := st.chat_input('Ask a question about this paper...'):
+        st.session_state['chat_messages'].append(
+            {
+                'role': 'user',
+                'content': user_input,
+            }
+        )
+        with chat_container.chat_message('user'):
+            st.markdown(user_input)
+        with chat_container.chat_message('assistant'):
+            try:
+                with chat_container.spinner('Thinking...'):
+                    messages = send_chat_message(paper_resp.id, user_input)
+                st.session_state['chat_messages'] = messages
+                if messages:
+                    st.markdown(messages[-1]['content'])
+            except requests.HTTPError as e:
+                st.error(get_http_error_detail(e))
+            except Exception as e:
+                st.error(str(e))
 
-    user_input = st.chat_input('Ask a question about this paper...')
-    if st.button('🗑️ Clear'):
+    if st.button('🗑️ Clear Chat', use_container_width=True):
         try:
             clear_chat(paper_resp.id)
             st.session_state['chat_messages'] = []
@@ -30,26 +52,3 @@ def render_chat_with_agent_tab() -> None:
             st.error(get_http_error_detail(e))
         except Exception as e:
             st.error(str(e))
-
-    if user_input:
-        st.session_state['chat_messages'].append(
-            {
-                'role': 'user',
-                'content': user_input,
-            }
-        )
-
-        with st.chat_message('user'):
-            st.markdown(user_input)
-
-        with st.chat_message('assistant'):
-            try:
-                with st.spinner('Thinking...'):
-                    messages = send_chat_message(paper_resp.id, user_input)
-                st.session_state['chat_messages'] = messages
-                if messages:
-                    st.markdown(messages[-1]['content'])
-            except requests.HTTPError as e:
-                st.error(get_http_error_detail(e))
-            except Exception as e:
-                st.error(str(e))
