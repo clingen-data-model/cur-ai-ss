@@ -1230,7 +1230,7 @@ def route_chat(
         messages=[
             {
                 'role': 'user',
-                'content': selection_summary,
+                'content': request.message,
             },
             {
                 'role': 'assistant',
