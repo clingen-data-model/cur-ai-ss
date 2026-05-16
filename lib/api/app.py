@@ -63,6 +63,7 @@ from lib.misc.pdf.paths import (
 from lib.models import (
     ChatMessageRequest,
     ChatMessageResp,
+    ChatRoutingResponse,
     ConversationDB,
     EnrichedVariantDB,
     EnrichedVariantResp,
@@ -1168,6 +1169,80 @@ def clear_chat(
     return {'status': 'cleared'}
 
 
+@app.post('/papers/{paper_id}/chat/route', response_model=ChatRoutingResponse)
+async def route_chat(
+    paper_id: int,
+    request: ChatMessageRequest,
+    session: Session = Depends(get_session),
+) -> Any:
+    """Route the first chat message to select the best task/context.
+
+    Returns routing details including which task was selected and why.
+    Creates a conversation entry to establish the context for subsequent messages.
+    """
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+
+    conversation_db = (
+        session.query(ConversationDB)
+        .filter(ConversationDB.paper_id == paper_id)
+        .first()
+    )
+    if conversation_db is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail='Conversation already routed for this paper.',
+        )
+
+    any_eligible = session.query(TaskDB).filter(TaskDB.paper_id == paper_id).all()
+    if not any(t.conversation_id for t in any_eligible):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail='No completed task conversations available for this paper.',
+        )
+
+    def build_selection_summary(output: ChatRoutingOutput) -> str:
+        parts = [f'Selected the "{output.task_type}" agent']
+        if output.entity_label:
+            parts.append(f'for "{output.entity_label}"')
+        parts.append(f'because it {output.task_type.description.lower()}')
+        return ' '.join(parts)
+
+    routing_result = await Runner.run(make_routing_agent(paper_id), request.message)
+    routing_output = routing_result.final_output
+    chosen_task_id = routing_output.task_id
+    chosen_task = session.get(TaskDB, chosen_task_id)
+    if chosen_task is None or not chosen_task.conversation_id:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f'Routing agent returned invalid task_id {chosen_task_id}.',
+        )
+
+    selection_summary = build_selection_summary(routing_output)
+    conversation_db = ConversationDB(
+        paper_id=paper_id,
+        conversation_id=chosen_task.conversation_id,
+        messages=[
+            {
+                'role': 'assistant',
+                'content': selection_summary,
+            }
+        ],
+    )
+    session.add(conversation_db)
+    session.commit()
+
+    return ChatRoutingResponse(
+        task_id=chosen_task_id,
+        task_type=str(routing_output.task_type),
+        entity_label=routing_output.entity_label,
+        selection_summary=selection_summary,
+    )
+
+
 @app.post('/papers/{paper_id}/chat', response_model=ChatMessageResp)
 async def chat_with_paper(
     paper_id: int,
@@ -1187,46 +1262,10 @@ async def chat_with_paper(
     )
 
     if conversation_db is None:
-        any_eligible = session.query(TaskDB).filter(TaskDB.paper_id == paper_id).all()
-        if not any(t.conversation_id for t in any_eligible):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail='No completed task conversations available for this paper.',
-            )
-
-        # Route once on first message to select the best task/context for this conversation.
-        # Subsequent messages reuse the same task's conversation_id (no re-routing).
-        # This avoids latency from running the routing agent on every message.
-        def build_selection_summary(output: ChatRoutingOutput) -> str:
-            parts = [f'Selected the "{output.task_type}" agent']
-            if output.entity_label:
-                parts.append(f'for "{output.entity_label}"')
-            parts.append(f'because it {output.task_type.description.lower()}')
-            return ' '.join(parts)
-
-        routing_result = await Runner.run(make_routing_agent(paper_id), request.message)
-        routing_output = routing_result.final_output
-        chosen_task_id = routing_output.task_id
-        chosen_task = session.get(TaskDB, chosen_task_id)
-        if chosen_task is None or not chosen_task.conversation_id:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f'Routing agent returned invalid task_id {chosen_task_id}.',
-            )
-
-        conversation_db = ConversationDB(
-            paper_id=paper_id,
-            conversation_id=chosen_task.conversation_id,
-            messages=[
-                {
-                    'role': 'assistant',
-                    'content': build_selection_summary(routing_output),
-                }
-            ],
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='Chat conversation not initialized. Call /chat/route first.',
         )
-        session.add(conversation_db)
-        session.commit()
-        session.refresh(conversation_db)
 
     def save_to_db(accumulated_response: str) -> None:
         conversation_db.messages = [

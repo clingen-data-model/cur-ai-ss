@@ -5,6 +5,7 @@ from lib.ui.api import (
     clear_chat,
     get_chat_messages,
     get_http_error_detail,
+    route_chat,
     send_chat_message_stream,
 )
 
@@ -12,10 +13,11 @@ from lib.ui.api import (
 def render_chat_with_agent_tab() -> None:
     paper_resp = st.session_state['paper_resp']
 
-    if 'chat_messages' not in st.session_state:
-        st.session_state['chat_messages'] = get_chat_messages(paper_resp.id)
+    if 'chat_routed' not in st.session_state:
+        st.session_state['chat_routed'] = False
 
-    messages: list[dict[str, str]] = st.session_state['chat_messages']
+    messages: list[dict[str, str]] = get_chat_messages(paper_resp.id)
+    st.session_state['chat_routed'] = len(messages) > 0
 
     for msg in messages:
         with st.chat_message(msg['role']):
@@ -25,11 +27,10 @@ def render_chat_with_agent_tab() -> None:
     with col1:
         user_input = st.chat_input('Ask a question about this paper...')
     with col2:
-        st.space()
+        st.space(size='xsmall')
         if st.button('🗑️ Clear', use_container_width=True):
             try:
                 clear_chat(paper_resp.id)
-                st.session_state['chat_messages'] = []
                 st.toast('Chat cleared', icon='🗑️')
                 st.rerun()
             except requests.HTTPError as e:
@@ -38,7 +39,18 @@ def render_chat_with_agent_tab() -> None:
                 st.error(str(e))
 
     if user_input:
-        messages.append({'role': 'user', 'content': user_input})
+        if not st.session_state['chat_routed']:
+            try:
+                route_chat(paper_resp.id, user_input)
+                st.session_state['chat_routed'] = True
+                st.rerun()
+            except requests.HTTPError as e:
+                st.error(get_http_error_detail(e))
+                st.stop()
+            except Exception as e:
+                st.error(str(e))
+                st.stop()
+
         with st.chat_message('user'):
             st.markdown(user_input)
         with st.chat_message('assistant'):
@@ -48,7 +60,7 @@ def render_chat_with_agent_tab() -> None:
                 for chunk in send_chat_message_stream(paper_resp.id, user_input):
                     full_response += chunk
                     response_container.markdown(full_response)
-                messages.append({'role': 'assistant', 'content': full_response})
+                st.rerun()
             except requests.HTTPError as e:
                 st.error(get_http_error_detail(e))
             except Exception as e:

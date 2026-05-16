@@ -10,6 +10,7 @@ from lib.core.environment import env
 from lib.misc.pdf.highlight import GrobidAnnotation
 from lib.models import (
     ChatMessageResp,
+    ChatRoutingResponse,
     FamilyResp,
     GeneResp,
     PaperResp,
@@ -284,6 +285,16 @@ def send_chat_message_stream(paper_id: int, message: str) -> Iterator[str]:
     for chunk in resp.iter_content(decode_unicode=True):
         if chunk:
             yield chunk
+
+
+def route_chat(paper_id: int, message: str) -> ChatRoutingResponse:
+    """Route the first chat message to select the best task context."""
+    resp = requests.post(
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/chat/route',
+        json={'message': message},
+    )
+    resp.raise_for_status()
+    return ChatRoutingResponse.model_validate(resp.json())
 
 
 def clear_chat(paper_id: int) -> None:

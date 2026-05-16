@@ -49,3 +49,10 @@ class ChatMessageRequest(BaseModel):
 
 class ChatMessageResp(BaseModel):
     response: str
+
+
+class ChatRoutingResponse(BaseModel):
+    task_id: int
+    task_type: str
+    entity_label: str | None
+    selection_summary: str
