@@ -279,3 +279,10 @@ def send_chat_message(paper_id: int, message: str) -> str:
     )
     resp.raise_for_status()
     return ChatMessageResp.model_validate(resp.json()).response
+
+
+def clear_chat(paper_id: int) -> None:
+    resp = requests.delete(
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/chat',
+    )
+    resp.raise_for_status()

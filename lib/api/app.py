@@ -1152,6 +1152,22 @@ def get_chat_messages(
     return conversation_db.messages if conversation_db else []
 
 
+@app.delete('/papers/{paper_id}/chat')
+def clear_chat(
+    paper_id: int,
+    session: Session = Depends(get_session),
+) -> Any:
+    conversation_db = (
+        session.query(ConversationDB)
+        .filter(ConversationDB.paper_id == paper_id)
+        .first()
+    )
+    if conversation_db:
+        session.delete(conversation_db)
+        session.commit()
+    return {'status': 'cleared'}
+
+
 @app.post('/papers/{paper_id}/chat', response_model=ChatMessageResp)
 async def chat_with_paper(
     paper_id: int,

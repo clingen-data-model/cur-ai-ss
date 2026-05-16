@@ -1,7 +1,7 @@
 import requests
 import streamlit as st
 
-from lib.ui.api import get_chat_messages, get_http_error_detail, send_chat_message
+from lib.ui.api import clear_chat, get_chat_messages, get_http_error_detail, send_chat_message
 
 
 def render_chat_with_agent_tab() -> None:
@@ -11,6 +11,19 @@ def render_chat_with_agent_tab() -> None:
         st.session_state['chat_messages'] = get_chat_messages(paper_resp.id)
 
     messages: list[dict[str, str]] = st.session_state['chat_messages']
+
+    col1, col2 = st.columns([10, 2])
+    with col2:
+        if st.button('Clear Chat', type='tertiary', use_container_width=True):
+            try:
+                clear_chat(paper_resp.id)
+                st.session_state['chat_messages'] = []
+                st.toast('Chat cleared', icon='🗑️')
+                st.rerun()
+            except requests.HTTPError as e:
+                st.error(get_http_error_detail(e))
+            except Exception as e:
+                st.error(str(e))
 
     for msg in messages:
         with st.chat_message(msg['role']):
