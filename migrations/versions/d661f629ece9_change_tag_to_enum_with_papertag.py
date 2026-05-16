@@ -19,8 +19,15 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    pass
+    op.add_column(
+        'papers',
+        sa.Column(
+            'tag',
+            sa.Enum('TrainingSet', 'ValidationSet', name='papertag'),
+            nullable=True,
+        ),
+    )
 
 
 def downgrade() -> None:
-    pass
+    op.drop_column('papers', 'tag')
