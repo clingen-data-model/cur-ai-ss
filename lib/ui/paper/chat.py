@@ -21,7 +21,9 @@ def render_chat_with_agent_tab() -> None:
         with st.chat_message(msg['role']):
             st.markdown(msg['content'])
 
-    col1, col2 = st.columns([8, 2])
+    col1, col2 = st.columns([9, 1])
+    with col1:
+        user_input = st.chat_input('Ask a question about this paper...')
     with col2:
         if st.button('🗑️ Clear', use_container_width=True):
             try:
@@ -34,7 +36,7 @@ def render_chat_with_agent_tab() -> None:
             except Exception as e:
                 st.error(str(e))
 
-    if user_input := st.chat_input('Ask a question about this paper...'):
+    if user_input:
         messages.append({'role': 'user', 'content': user_input})
         with st.chat_message('user'):
             st.markdown(user_input)
