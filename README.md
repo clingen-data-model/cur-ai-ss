@@ -1,4 +1,4 @@
-# Curation Assistance AI - Smart Selection System
+# Curation AI Assistant
 
 A web-based tool for extracting and curating genetic evidence from scientific papers. This system uses AI agents to automatically extract patient information, genetic variants, and phenotypes from research PDFs, then links them to standard databases (HPO ontology). Researchers can review, edit, and validate the extracted data through an interactive interface.
 
