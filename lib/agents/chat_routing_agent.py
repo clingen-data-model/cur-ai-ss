@@ -60,7 +60,7 @@ def _entity_label(
 
 def make_routing_agent(paper_id: int) -> Agent:
     def fetch_tasks_for_type(task_type: str) -> str:
-        """Fetch all tasks with conversation history for this paper that match a given task type.
+        """Fetch all completed tasks for this paper that match a given task type.
         Each entry includes an entity_label (patient identifier, variant HGVS, or phenotype concept).
         Returns a JSON array of matching tasks."""
         with session_scope() as session:
@@ -75,7 +75,7 @@ def make_routing_agent(paper_id: int) -> Agent:
             )
             results = []
             for task, family, patient, variant, phenotype in rows:
-                if not task.conversation_ids:
+                if not task.conversation_id:
                     continue
                 entry: dict = {
                     'task_id': task.id,
