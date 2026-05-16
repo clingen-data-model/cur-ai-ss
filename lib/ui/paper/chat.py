@@ -25,6 +25,7 @@ def render_chat_with_agent_tab() -> None:
     with col1:
         user_input = st.chat_input('Ask a question about this paper...')
     with col2:
+        st.space()
         if st.button('🗑️ Clear', use_container_width=True):
             try:
                 clear_chat(paper_resp.id)
