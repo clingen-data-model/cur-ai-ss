@@ -1178,6 +1178,9 @@ async def chat_with_paper(
                 detail='No completed task conversations available for this paper.',
             )
 
+        # Route once on first message to select the best task/context for this conversation.
+        # Subsequent messages reuse the same task's conversation_id (no re-routing).
+        # This avoids latency from running the routing agent on every message.
         def build_selection_summary(output: ChatRoutingOutput) -> str:
             parts = [f'Selected the "{output.task_type}" agent']
             if output.entity_label:

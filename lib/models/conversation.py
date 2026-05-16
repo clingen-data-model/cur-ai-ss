@@ -9,6 +9,19 @@ from lib.models.base import Base
 
 
 class ConversationDB(Base):
+    """User conversation thread for a paper with OpenAI's Responses API.
+
+    One conversation per paper (unique constraint on paper_id). Initialized on
+    first user message by routing to the best matching extraction task. All
+    subsequent messages in this conversation use that task's conversation_id
+    from OpenAI's Responses API, ensuring context continuity.
+
+    Design notes:
+    - Single task per conversation for latency: avoids re-routing on each message
+    - Users can interact with only one entity context per conversation
+    - To chat about a different entity, users create a new paper conversation
+    """
+
     __tablename__ = 'conversations'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
