@@ -272,11 +272,20 @@ def get_chat_messages(paper_id: int) -> list[dict[str, str]]:
     return TypeAdapter(list[dict[str, str]]).validate_python(resp.json())
 
 
-def send_chat_message(paper_id: int, message: str) -> list[dict[str, str]]:
-    """Send chat message and get updated conversation from the API."""
+def init_chat_message(paper_id: int, message: str) -> list[dict[str, str]]:
+    """Initialize chat message (fast, returns immediately with routing result)."""
     resp = requests.post(
-        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/chat',
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/chat/init',
         json={'message': message},
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def generate_chat_response(paper_id: int) -> list[dict[str, str]]:
+    """Generate OpenAI response for the initialized conversation."""
+    resp = requests.post(
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/chat/generate',
     )
     resp.raise_for_status()
     return resp.json()

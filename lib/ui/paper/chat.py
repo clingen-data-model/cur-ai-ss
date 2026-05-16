@@ -3,9 +3,10 @@ import streamlit as st
 
 from lib.ui.api import (
     clear_chat,
+    generate_chat_response,
     get_chat_messages,
     get_http_error_detail,
-    send_chat_message,
+    init_chat_message,
 )
 
 
@@ -33,7 +34,8 @@ def render_chat_with_agent_tab() -> None:
         with chat_container.chat_message('assistant'):
             try:
                 with chat_container.spinner('Thinking...'):
-                    messages = send_chat_message(paper_resp.id, user_input)
+                    init_chat_message(paper_resp.id, user_input)
+                    messages = generate_chat_response(paper_resp.id)
                 st.session_state['chat_messages'] = messages
                 if messages:
                     st.markdown(messages[-1]['content'])

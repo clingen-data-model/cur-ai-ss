@@ -39,10 +39,17 @@ jobs:
         sudo mkdir -p /var/caa
         sudo chown -R $USER:$USER /var/caa
 
-    - name: Install make
-      run: sudo apt-get update && sudo apt-get install -y make
+    - name: Lint with ruff
+      run: uv run ruff check lib
 
-    - name: Run make ci
-      shell: bash -l {0}
-      run: make ci
+    - name: Type check with mypy
+      run: uv run mypy lib
+
+    - name: Format check with ruff
+      run: uv run ruff format --check lib test
+
+    - name: Run tests with coverage
+      run: uv run python3 -m pytest test --cov=lib --cov-report=term-missing --cov-report=xml
+      env:
+        ENV_FILE: .env.test
 

@@ -1169,19 +1169,12 @@ def clear_chat(
     return {'status': 'cleared'}
 
 
-@app.post('/papers/{paper_id}/chat', response_model=list[dict])
-async def chat_with_paper(
+@app.post('/papers/{paper_id}/chat/init', response_model=list[dict])
+async def init_chat(
     paper_id: int,
     request: ChatMessageRequest,
     session: Session = Depends(get_session),
 ) -> Any:
-    SYSTEM_INSTRUCTIONS = (
-        'You are an expert clinical genomics assistant helping users understand extracted data from research papers. '
-        'The system has extracted patients, variants, phenotypes, and their relationships from a paper. '
-        'You answer questions about this extracted data, help interpret findings, and clarify relationships between entities. '
-        'Keep responses short and precise.'
-    )
-
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
         raise HTTPException(
@@ -1202,9 +1195,6 @@ async def chat_with_paper(
                 detail='No completed task conversations available for this paper.',
             )
 
-        # Route once on first message to select the best task/context for this conversation.
-        # Subsequent messages reuse the same task's conversation_id (no re-routing).
-        # This avoids latency from running the routing agent on every message.
         def build_selection_summary(output: ChatRoutingOutput) -> str:
             parts = [f'Selected the "{output.task_type}" agent']
             if output.entity_label:
@@ -1234,7 +1224,6 @@ async def chat_with_paper(
             ],
         )
         session.add(conversation_db)
-        session.commit()
         session.refresh(conversation_db)
     else:
         conversation_db.messages = [
@@ -1242,10 +1231,47 @@ async def chat_with_paper(
             {'role': 'user', 'content': request.message},
         ]
 
+    return conversation_db.messages
+
+
+@app.post('/papers/{paper_id}/chat/generate', response_model=list[dict])
+async def generate_chat_response(
+    paper_id: int,
+    session: Session = Depends(get_session),
+) -> Any:
+    SYSTEM_INSTRUCTIONS = (
+        'You are an expert clinical genomics assistant helping users understand extracted data from research papers. '
+        'The system has extracted patients, variants, phenotypes, and their relationships from a paper. '
+        'You answer questions about this extracted data, help interpret findings, and clarify relationships between entities. '
+        'Keep responses short and precise.'
+    )
+
+    conversation_db = (
+        session.query(ConversationDB)
+        .filter(ConversationDB.paper_id == paper_id)
+        .first()
+    )
+
+    if conversation_db is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='No conversation initialized for this paper.',
+        )
+
+    last_user_message = next(
+        (msg['content'] for msg in reversed(conversation_db.messages) if msg['role'] == 'user'),
+        None,
+    )
+    if last_user_message is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='No user message in conversation.',
+        )
+
     client = AsyncOpenAI(api_key=env.OPENAI_API_KEY)
     resp = await client.responses.create(
         model=env.OPENAI_API_DEPLOYMENT,
-        input=request.message,
+        input=last_user_message,
         conversation=conversation_db.conversation_id,
         instructions=SYSTEM_INSTRUCTIONS,
     )

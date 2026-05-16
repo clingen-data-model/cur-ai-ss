@@ -12,12 +12,10 @@ uv pip install -e .
 
 **Common commands:**
 ```bash
-make ci              # Run linting, formatting, type checks, and tests (required for PRs)
-make test            # Run tests with coverage report
-make lint            # Run ruff linter
-make format          # Check code formatting with ruff
-make type            # Run mypy type checking
-
+uv run ruff check lib              # Run ruff linter
+uv run ruff format --check lib test  # Check code formatting with ruff
+uv run mypy lib                    # Run mypy type checking
+uv run pytest test --cov=lib --cov-report=term-missing  # Run all tests with coverage
 uv run pytest test/path/to/test_file.py  # Run a specific test
 ```
 
