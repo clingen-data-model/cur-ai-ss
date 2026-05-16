@@ -96,6 +96,11 @@ class PaperType(StrEnum):
     Other = 'Other'
 
 
+class PaperTag(StrEnum):
+    TrainingSet = 'TrainingSet'
+    ValidationSet = 'ValidationSet'
+
+
 class FileFormat(StrEnum):
     PDF = 'pdf'
     DOCX = 'docx'
@@ -147,6 +152,10 @@ class PaperDB(Base):
         JSON,
         nullable=False,
         default=list,
+    )
+    tag: Mapped[PaperTag | None] = mapped_column(
+        SQLEnum(PaperTag),
+        nullable=True,
     )
 
     patient_count: int = 0
@@ -224,6 +233,7 @@ class PaperResp(PaperExtractionOutput):
     content_hash: str
     gene_symbol: str
     filename: str
+    tag: PaperTag | None = None
     updated_at: datetime
     tasks: list['TaskResp'] = []
     patient_count: int = 0

@@ -26,6 +26,7 @@ from lib.models.paper import (
     PaperDB,
     PaperExtractionOutput,
     PaperResp,
+    PaperTag,
     PaperType,
     PaperUpdateRequest,
     PedigreeDB,

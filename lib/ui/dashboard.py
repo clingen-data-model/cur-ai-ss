@@ -120,6 +120,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
         df[
             [
                 'gene_symbol',
+                'tag',
                 'thumbnail_path',
                 'title',
                 'first_author',
@@ -134,6 +135,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
         row_height=100,
         column_config={
             'gene_symbol': st.column_config.Column('Gene Symbol'),
+            'tag': st.column_config.Column('Tag'),
             'thumbnail_path': st.column_config.ImageColumn(
                 'Thumbnail',
                 help='First page preview',
@@ -173,6 +175,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
         },
         disabled=[
             'gene_symbol',
+            'tag',
             'thumbnail_path',
             'title',
             'first_author',
