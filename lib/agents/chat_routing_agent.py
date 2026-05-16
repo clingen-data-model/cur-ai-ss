@@ -1,6 +1,6 @@
 import json
 
-from agents import Agent
+from agents import Agent, function_tool
 from pydantic import BaseModel
 
 from lib.api.db import session_scope
@@ -20,7 +20,7 @@ class ChatRoutingOutput(BaseModel):
 
 _TASK_TYPE_LIST = '\n'.join(f'- "{t.value}": {t.description}' for t in TaskType)
 
-CHAT_ROUTING_INSTRUCTIONS = f"""
+INSTRUCTIONS = f"""
 You are a routing assistant for a genetic research paper analysis system.
 
 Given a user question, follow these two steps:
@@ -58,7 +58,8 @@ def _entity_label(
     return None
 
 
-def make_routing_agent(paper_id: int) -> Agent:
+def _make_fetch_tasks_tool(paper_id: int):
+    @function_tool
     def fetch_tasks_for_type(task_type: str) -> str:
         """Fetch all completed tasks for this paper that match a given task type.
         Each entry includes an entity_label (patient identifier, variant HGVS, or phenotype concept).
@@ -112,9 +113,14 @@ def make_routing_agent(paper_id: int) -> Agent:
 
             return json.dumps(results)
 
+    return fetch_tasks_for_type
+
+
+def make_routing_agent(paper_id: int) -> Agent:
+    fetch_tasks_for_type = _make_fetch_tasks_tool(paper_id)
     return Agent(
         name='chat_router',
-        instructions=CHAT_ROUTING_INSTRUCTIONS,
+        instructions=INSTRUCTIONS,
         model=env.OPENAI_API_DEPLOYMENT,
         output_type=ChatRoutingOutput,
         tools=[fetch_tasks_for_type],  # type: ignore[list-item]

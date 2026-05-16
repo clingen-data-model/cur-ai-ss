@@ -180,6 +180,7 @@ uv run pytest test/api/test_app.py::test_function  # Specific test
 - Store outputs in JSON files alongside PDFs (paths via `lib/misc/pdf/paths.py`)
 - Update database with converter functions (`lib/models/converters.py`)
 - Log with Python's `logging` module
+- **See `lib/agents/AGENT_GUIDE.md` for writing new agents** — tools, instructions, output models, calling patterns
 
 ## Common Tasks
 
