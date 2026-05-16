@@ -25,6 +25,7 @@ from lib.ui.api import (
     get_http_error_detail,
     get_paper,
 )
+from lib.ui.paper.chat import render_chat_with_agent_tab
 from lib.ui.paper.metadata import render_metadata_tab
 from lib.ui.paper.occurrences import render_patient_variant_occurrences_tab
 from lib.ui.paper.patients import render_patients_tab
@@ -84,6 +85,9 @@ def render_queue_tasks_fragment(paper_query_params: PaperQueryParams) -> None:
         value='',
         placeholder='Enter any additional context or instructions for the agent (optional)',
         height=100,
+    )
+    st.caption(
+        'ℹ️ Context is only used for this task and will not be passed to successor tasks.'
     )
 
     # Show the full chain of successors only if not skipping them
@@ -186,11 +190,13 @@ with center:
                 default_tab = '🧬 Variants'
             else:
                 default_tab = '📝 Metadata'
-            metadata_tab, patients_tab, variants_tab, occurrences_tab = st.tabs(
-                HEADER_TABS,
-                on_change='rerun',
-                default=default_tab,
-                key=HEADER_TABS_KEY,
+            metadata_tab, patients_tab, variants_tab, occurrences_tab, chat_tab = (
+                st.tabs(
+                    HEADER_TABS,
+                    on_change='rerun',
+                    default=default_tab,
+                    key=HEADER_TABS_KEY,
+                )
             )
             with center:
                 if metadata_tab.open:
@@ -201,6 +207,8 @@ with center:
                     render_variants_tab(paper_query_params.variant_id)
                 elif occurrences_tab.open:
                     render_patient_variant_occurrences_tab()
+                elif chat_tab.open:
+                    render_chat_with_agent_tab()
 
     with right:
         with st.container(

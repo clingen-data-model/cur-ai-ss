@@ -8,6 +8,7 @@ from pydantic import TypeAdapter
 from lib.core.environment import env
 from lib.misc.pdf.highlight import GrobidAnnotation
 from lib.models import (
+    ChatMessageResp,
     FamilyResp,
     GeneResp,
     PaperResp,
@@ -261,3 +262,27 @@ def get_curation_pptx(paper_id: int) -> bytes:
     )
     resp.raise_for_status()
     return resp.content
+
+
+def get_chat_messages(paper_id: int) -> list[dict[str, str]]:
+    resp = requests.get(
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/chat/messages'
+    )
+    resp.raise_for_status()
+    return TypeAdapter(list[dict[str, str]]).validate_python(resp.json())
+
+
+def send_chat_message(paper_id: int, message: str) -> str:
+    resp = requests.post(
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/chat',
+        json={'message': message},
+    )
+    resp.raise_for_status()
+    return ChatMessageResp.model_validate(resp.json()).response
+
+
+def clear_chat(paper_id: int) -> None:
+    resp = requests.delete(
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/chat',
+    )
+    resp.raise_for_status()
