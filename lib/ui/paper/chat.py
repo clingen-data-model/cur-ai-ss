@@ -1,7 +1,12 @@
 import requests
 import streamlit as st
 
-from lib.ui.api import clear_chat, get_chat_messages, get_http_error_detail, send_chat_message
+from lib.ui.api import (
+    clear_chat,
+    get_chat_messages,
+    get_http_error_detail,
+    send_chat_message,
+)
 
 
 def render_chat_with_agent_tab() -> None:
