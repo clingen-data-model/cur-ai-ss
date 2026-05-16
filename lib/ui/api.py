@@ -1,5 +1,4 @@
 import mimetypes
-from collections.abc import Iterator
 
 import requests
 import streamlit as st
@@ -10,7 +9,6 @@ from lib.core.environment import env
 from lib.misc.pdf.highlight import GrobidAnnotation
 from lib.models import (
     ChatMessageResp,
-    ChatRoutingResponse,
     FamilyResp,
     GeneResp,
     PaperResp,
@@ -274,27 +272,14 @@ def get_chat_messages(paper_id: int) -> list[dict[str, str]]:
     return TypeAdapter(list[dict[str, str]]).validate_python(resp.json())
 
 
-def send_chat_message_stream(paper_id: int, message: str) -> Iterator[str]:
-    """Stream chat response chunks from the API."""
+def send_chat_message(paper_id: int, message: str) -> list[dict[str, str]]:
+    """Send chat message and get updated conversation from the API."""
     resp = requests.post(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/chat',
         json={'message': message},
-        stream=True,
     )
     resp.raise_for_status()
-    for chunk in resp.iter_content(decode_unicode=True):
-        if chunk:
-            yield chunk
-
-
-def route_chat(paper_id: int, message: str) -> ChatRoutingResponse:
-    """Route the first chat message to select the best task context."""
-    resp = requests.post(
-        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/chat/route',
-        json={'message': message},
-    )
-    resp.raise_for_status()
-    return ChatRoutingResponse.model_validate(resp.json())
+    return resp.json()
 
 
 def clear_chat(paper_id: int) -> None:

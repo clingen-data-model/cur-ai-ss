@@ -5,8 +5,7 @@ from lib.ui.api import (
     clear_chat,
     get_chat_messages,
     get_http_error_detail,
-    route_chat,
-    send_chat_message_stream,
+    send_chat_message,
 )
 
 
@@ -20,21 +19,17 @@ def render_chat_with_agent_tab() -> None:
         with st.chat_message(msg['role']):
             st.markdown(msg['content'])
 
-    col1, col2 = st.columns([9, 1])
-    with col1:
-        user_input = st.chat_input('Ask a question about this paper...')
-    with col2:
-        st.space(size='xxsmall')
-        if st.button('🗑️ Clear', use_container_width=True):
-            try:
-                clear_chat(paper_resp.id)
-                st.session_state['chat_messages'] = []
-                st.toast('Chat cleared', icon='🗑️')
-                st.rerun()
-            except requests.HTTPError as e:
-                st.error(get_http_error_detail(e))
-            except Exception as e:
-                st.error(str(e))
+    user_input = st.chat_input('Ask a question about this paper...')
+    if st.button('🗑️ Clear'):
+        try:
+            clear_chat(paper_resp.id)
+            st.session_state['chat_messages'] = []
+            st.toast('Chat cleared', icon='🗑️')
+            st.rerun()
+        except requests.HTTPError as e:
+            st.error(get_http_error_detail(e))
+        except Exception as e:
+            st.error(str(e))
 
     if user_input:
         st.session_state['chat_messages'].append(
@@ -44,33 +39,16 @@ def render_chat_with_agent_tab() -> None:
             }
         )
 
-        if len(st.session_state['chat_messages']) == 1:
-            try:
-                with st.chat_message('assistant'):
-                    with st.spinner():
-                        routing_msg = route_chat(paper_resp.id, user_input)
-                    st.markdown(routing_msg.selection_summary)
-                st.session_state['chat_messages'].append(
-                    {'role': 'assistant', 'content': routing_msg.selection_summary}
-                )
-            except requests.HTTPError as e:
-                st.error(get_http_error_detail(e))
-                st.stop()
-            except Exception as e:
-                st.error(str(e))
-                st.stop()
+        with st.chat_message('user'):
+            st.markdown(user_input)
 
         with st.chat_message('assistant'):
             try:
-                response = st.write_stream(
-                    send_chat_message_stream(paper_resp.id, user_input)
-                )
-                st.session_state['chat_messages'].append(
-                    {
-                        'role': 'assistant',
-                        'content': response,
-                    }
-                )
+                with st.spinner('Thinking...'):
+                    messages = send_chat_message(paper_resp.id, user_input)
+                st.session_state['chat_messages'] = messages
+                if messages:
+                    st.markdown(messages[-1]['content'])
             except requests.HTTPError as e:
                 st.error(get_http_error_detail(e))
             except Exception as e:

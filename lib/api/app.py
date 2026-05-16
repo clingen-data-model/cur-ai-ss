@@ -22,7 +22,7 @@ from fastapi import (
     status,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from openai import AsyncOpenAI
 from sqlalchemy import delete, func, select
@@ -1169,92 +1169,19 @@ def clear_chat(
     return {'status': 'cleared'}
 
 
-@app.post('/papers/{paper_id}/chat/route', response_model=ChatRoutingResponse)
-def route_chat(
-    paper_id: int,
-    request: ChatMessageRequest,
-    session: Session = Depends(get_session),
-) -> Any:
-    """Route the first chat message to select the best task/context.
-
-    Returns routing details including which task was selected and why.
-    Creates a conversation entry to establish the context for subsequent messages.
-    """
-    import asyncio
-
-    paper_db = session.get(PaperDB, paper_id)
-    if not paper_db:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
-        )
-
-    conversation_db = (
-        session.query(ConversationDB)
-        .filter(ConversationDB.paper_id == paper_id)
-        .first()
-    )
-    if conversation_db is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail='Conversation already routed for this paper.',
-        )
-
-    any_eligible = session.query(TaskDB).filter(TaskDB.paper_id == paper_id).all()
-    if not any(t.conversation_id for t in any_eligible):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail='No completed task conversations available for this paper.',
-        )
-
-    def build_selection_summary(output: ChatRoutingOutput) -> str:
-        parts = [f'Selected the "{output.task_type}" agent']
-        if output.entity_label:
-            parts.append(f'for "{output.entity_label}"')
-        parts.append(f'because it {output.task_type.description.lower()}')
-        return ' '.join(parts)
-
-    routing_result = asyncio.run(Runner.run(make_routing_agent(paper_id), request.message))
-    routing_output = routing_result.final_output
-    chosen_task_id = routing_output.task_id
-    chosen_task = session.get(TaskDB, chosen_task_id)
-    if chosen_task is None or not chosen_task.conversation_id:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f'Routing agent returned invalid task_id {chosen_task_id}.',
-        )
-
-    selection_summary = build_selection_summary(routing_output)
-    conversation_db = ConversationDB(
-        paper_id=paper_id,
-        conversation_id=chosen_task.conversation_id,
-        messages=[
-            {
-                'role': 'user',
-                'content': request.message,
-            },
-            {
-                'role': 'assistant',
-                'content': selection_summary,
-            },
-        ],
-    )
-    session.add(conversation_db)
-    session.commit()
-
-    return ChatRoutingResponse(
-        task_id=chosen_task_id,
-        task_type=str(routing_output.task_type),
-        entity_label=routing_output.entity_label,
-        selection_summary=selection_summary,
-    )
-
-
-@app.post('/papers/{paper_id}/chat', response_model=ChatMessageResp)
+@app.post('/papers/{paper_id}/chat', response_model=list[dict])
 async def chat_with_paper(
     paper_id: int,
     request: ChatMessageRequest,
     session: Session = Depends(get_session),
 ) -> Any:
+    SYSTEM_INSTRUCTIONS = (
+        'You are an expert clinical genomics assistant helping users understand extracted data from research papers. '
+        'The system has extracted patients, variants, phenotypes, and their relationships from a paper. '
+        'You answer questions about this extracted data, help interpret findings, and clarify relationships between entities. '
+        'Keep responses short and precise.'
+    )
+
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
         raise HTTPException(
@@ -1268,41 +1195,63 @@ async def chat_with_paper(
     )
 
     if conversation_db is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail='Chat conversation not initialized. Call /chat/route first.',
-        )
+        any_eligible = session.query(TaskDB).filter(TaskDB.paper_id == paper_id).all()
+        if not any(t.conversation_id for t in any_eligible):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail='No completed task conversations available for this paper.',
+            )
 
-    def save_to_db(accumulated_response: str) -> None:
+        # Route once on first message to select the best task/context for this conversation.
+        # Subsequent messages reuse the same task's conversation_id (no re-routing).
+        # This avoids latency from running the routing agent on every message.
+        def build_selection_summary(output: ChatRoutingOutput) -> str:
+            parts = [f'Selected the "{output.task_type}" agent']
+            if output.entity_label:
+                parts.append(f'for "{output.entity_label}"')
+            parts.append(f'because it {output.task_type.description.lower()}')
+            return ' '.join(parts)
+
+        routing_result = await Runner.run(make_routing_agent(paper_id), request.message)
+        routing_output = routing_result.final_output
+        chosen_task_id = routing_output.task_id
+        chosen_task = session.get(TaskDB, chosen_task_id)
+        if chosen_task is None or not chosen_task.conversation_id:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f'Routing agent returned invalid task_id {chosen_task_id}.',
+            )
+
+        conversation_db = ConversationDB(
+            paper_id=paper_id,
+            conversation_id=chosen_task.conversation_id,
+            messages=[
+                {'role': 'user', 'content': request.message},
+                {
+                    'role': 'assistant',
+                    'content': build_selection_summary(routing_output),
+                },
+            ],
+        )
+        session.add(conversation_db)
+        session.commit()
+        session.refresh(conversation_db)
+    else:
         conversation_db.messages = [
             *conversation_db.messages,
             {'role': 'user', 'content': request.message},
-            {'role': 'assistant', 'content': accumulated_response},
         ]
-        session.commit()
 
-    async def stream_response() -> AsyncGenerator[str, None]:
-        client = AsyncOpenAI(api_key=env.OPENAI_API_KEY)
-        system_instruction = 'Keep responses short and snappy. Be concise and direct.'
-        accumulated_response = ''
-
-        resp = await client.responses.create(
-            model=env.OPENAI_API_DEPLOYMENT,
-            input=request.message,
-            conversation=conversation_db.conversation_id,
-            instructions=system_instruction,
-            stream=True,
-        )
-        async with resp:
-            async for chunk in resp:
-                if hasattr(chunk, 'output_text') and chunk.output_text:
-                    accumulated_response += chunk.output_text
-                    yield chunk.output_text
-
-        await asyncio.to_thread(save_to_db, accumulated_response)
-
-    return StreamingResponse(
-        stream_response(),
-        media_type='text/plain',
-        headers={'Cache-Control': 'no-cache'},
+    client = AsyncOpenAI(api_key=env.OPENAI_API_KEY)
+    resp = await client.responses.create(
+        model=env.OPENAI_API_DEPLOYMENT,
+        input=request.message,
+        conversation=conversation_db.conversation_id,
+        instructions=SYSTEM_INSTRUCTIONS,
     )
+    response_text = resp.output_text or ''
+    conversation_db.messages = [
+        *conversation_db.messages,
+        {'role': 'assistant', 'content': response_text},
+    ]
+    return conversation_db.messages
