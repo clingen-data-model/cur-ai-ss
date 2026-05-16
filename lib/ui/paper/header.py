@@ -86,6 +86,7 @@ def render_queue_tasks_fragment(paper_query_params: PaperQueryParams) -> None:
         placeholder='Enter any additional context or instructions for the agent (optional)',
         height=100,
     )
+    st.caption('ℹ️ Context is only used for this task and will not be passed to successor tasks.')
 
     # Show the full chain of successors only if not skipping them
     if not skip_successors:
