@@ -37,17 +37,6 @@ def render_chat_with_agent_tab() -> None:
                 st.error(str(e))
 
     if user_input:
-        if len(st.session_state['chat_messages']) == 0:
-            try:
-                routing_msg = route_chat(paper_resp.id, user_input)
-                st.session_state['chat_messages'].append(routing_msg)
-            except requests.HTTPError as e:
-                st.error(get_http_error_detail(e))
-                st.stop()
-            except Exception as e:
-                st.error(str(e))
-                st.stop()
-
         st.session_state['chat_messages'].append(
             {
                 'role': 'user',
@@ -55,8 +44,22 @@ def render_chat_with_agent_tab() -> None:
             }
         )
 
-        with st.chat_message('user'):
-            st.markdown(user_input)
+        if len(st.session_state['chat_messages']) == 1:
+            try:
+                with st.chat_message('assistant'):
+                    with st.spinner():
+                        routing_msg = route_chat(paper_resp.id, user_input)
+                    st.markdown(routing_msg.selection_summary)
+                st.session_state['chat_messages'].append(
+                    {'role': 'assistant', 'content': routing_msg.selection_summary}
+                )
+            except requests.HTTPError as e:
+                st.error(get_http_error_detail(e))
+                st.stop()
+            except Exception as e:
+                st.error(str(e))
+                st.stop()
+
         with st.chat_message('assistant'):
             try:
                 response = st.write_stream(

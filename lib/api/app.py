@@ -1170,7 +1170,7 @@ def clear_chat(
 
 
 @app.post('/papers/{paper_id}/chat/route', response_model=ChatRoutingResponse)
-async def route_chat(
+def route_chat(
     paper_id: int,
     request: ChatMessageRequest,
     session: Session = Depends(get_session),
@@ -1180,6 +1180,8 @@ async def route_chat(
     Returns routing details including which task was selected and why.
     Creates a conversation entry to establish the context for subsequent messages.
     """
+    import asyncio
+
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
         raise HTTPException(
@@ -1211,7 +1213,7 @@ async def route_chat(
         parts.append(f'because it {output.task_type.description.lower()}')
         return ' '.join(parts)
 
-    routing_result = await Runner.run(make_routing_agent(paper_id), request.message)
+    routing_result = asyncio.run(Runner.run(make_routing_agent(paper_id), request.message))
     routing_output = routing_result.final_output
     chosen_task_id = routing_output.task_id
     chosen_task = session.get(TaskDB, chosen_task_id)
@@ -1227,8 +1229,13 @@ async def route_chat(
         conversation_id=chosen_task.conversation_id,
         messages=[
             {
+                'role': 'user',
                 'content': selection_summary,
-            }
+            },
+            {
+                'role': 'assistant',
+                'content': selection_summary,
+            },
         ],
     )
     session.add(conversation_db)
@@ -1269,8 +1276,8 @@ async def chat_with_paper(
     def save_to_db(accumulated_response: str) -> None:
         conversation_db.messages = [
             *conversation_db.messages,
-            {'content': request.message},
-            {'content': accumulated_response},
+            {'role': 'user', 'content': request.message},
+            {'role': 'assistant', 'content': accumulated_response},
         ]
         session.commit()
 
