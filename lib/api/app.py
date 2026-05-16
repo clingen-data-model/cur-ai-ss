@@ -1227,7 +1227,6 @@ async def route_chat(
         conversation_id=chosen_task.conversation_id,
         messages=[
             {
-                'role': 'assistant',
                 'content': selection_summary,
             }
         ],
@@ -1270,8 +1269,8 @@ async def chat_with_paper(
     def save_to_db(accumulated_response: str) -> None:
         conversation_db.messages = [
             *conversation_db.messages,
-            {'role': 'user', 'content': request.message},
-            {'role': 'assistant', 'content': accumulated_response},
+            {'content': request.message},
+            {'content': accumulated_response},
         ]
         session.commit()
 
