@@ -11,9 +11,8 @@ from lib.models.variant import (
 VARIANT_EXTRACTION_INSTRUCTIONS = """
 System: You are an expert genomics curator specializing in variant extraction from academic literature.
 
-Inputs:
-- Target gene of interest
-- Academic paper text
+CONTEXT:
+- The target gene and academic paper text are provided above in the PAPER AND GENE CONTEXT section.
 
 Task:
 Extract all explicitly mentioned genetic variants associated with the target gene from the text.

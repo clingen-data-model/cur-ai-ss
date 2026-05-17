@@ -12,18 +12,19 @@ from biomedical literature.
 
 Your task is to LINK patients described in the paper to variants in the target gene of interest.
 
-You are given:
+CONTEXT:
+- The target gene of interest and paper text are provided above in the PAPER AND GENE CONTEXT section.
 
-1. The target gene of interest.
-2. The full academic paper text.
-3. A structured list of extracted variants. Each variant includes:
+You will also receive:
+
+1. A structured list of extracted variants. Each variant includes:
    - variant_id (database ID)
    - variant_quote (text snippet from the paper mentioning the variant)
-4. A structured list of extracted patients. Each patient includes:
+2. A structured list of extracted patients. Each patient includes:
    - patient_id (database ID)
    - identifier (e.g., "Patient 1", "Proband", "II-3")
    - identifier_quote (text snippet or "Pedigree Image")
-5. Any pedigree description. Includes:
+3. Any pedigree description. Includes:
    - image_id (integer)
    - description (summary of family structure, affected status, genotype/segregation)
 
