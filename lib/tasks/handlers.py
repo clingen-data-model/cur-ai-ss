@@ -3,7 +3,7 @@ import json
 import logging
 from typing import Any, Awaitable, Callable, Union
 
-from agents import RunConfig, Runner
+from agents import Agent, RunConfig, Runner
 from openai import AsyncOpenAI
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -93,6 +93,32 @@ def build_followup_prompt(additional_context: str) -> str:
     return f'Please review your previous analysis in light of the following additional context:\n\n{additional_context}'
 
 
+def with_paper(
+    agent: Agent, paper_markdown: str, gene_symbol: str | None = None
+) -> Agent:
+    """Return a copy of agent with paper and gene content prepended to instructions.
+
+    Places paper and gene first so they form a shared cached prefix across all agents
+    processing the same paper — only the agent-specific instructions vary.
+    This optimizes for OpenAI prompt caching.
+
+    Args:
+        agent: The agent to clone
+        paper_markdown: The full paper content to prepend
+        gene_symbol: Optional gene symbol to include in the cached prefix
+
+    Returns:
+        New agent with combined instructions
+    """
+    sections = ['PAPER AND GENE CONTEXT', f'Paper (fulltext md):\n{paper_markdown}']
+    if gene_symbol:
+        sections.append(f'Gene: {gene_symbol}')
+    prefix = '\n\n'.join(sections)
+    return agent.clone(
+        instructions=f'{prefix}\n\n{agent.instructions}'
+    )
+
+
 def handle_pdf_parsing(task_id: int) -> None:
     """Parse PDF to markdown and extract images/tables."""
     with session_scope() as session:
@@ -131,14 +157,17 @@ async def handle_paper_metadata(task_id: int) -> None:
         supplement_format = paper.supplement_format
 
     stored_conv_id = await ensure_conversation_id(stored_conv_id)
+    paper_markdown = fulltext_md(paper_id, supplement_format)
 
     if additional_context is not None:
         message = build_followup_prompt(additional_context)
+        agent = paper_extraction_agent
     else:
-        message = f'Gene: {gene_symbol}\n\nPaper (fulltext md): {fulltext_md(paper_id, supplement_format)}'
+        message = ''
+        agent = with_paper(paper_extraction_agent, paper_markdown, gene_symbol)
 
     result = await Runner.run(
-        paper_extraction_agent,
+        agent,
         message,
         conversation_id=stored_conv_id,
     )
@@ -170,9 +199,10 @@ async def handle_variant_extraction(task_id: int) -> None:
         gene_symbol = paper.gene.symbol
         supplement_format = paper.supplement_format
 
+    paper_markdown = fulltext_md(paper_id, supplement_format)
     result = await Runner.run(
-        variant_extraction_agent,
-        f'Gene Symbol: {gene_symbol}\nPaper (fulltext md): {fulltext_md(paper_id, supplement_format)}',
+        with_paper(variant_extraction_agent, paper_markdown, gene_symbol),
+        '',
     )
 
     with session_scope() as session:
@@ -271,14 +301,17 @@ async def handle_patient_extraction(task_id: int) -> None:
         )
 
     stored_conv_id = await ensure_conversation_id(stored_conv_id)
+    paper_markdown = fulltext_md(paper_id, supplement_format)
 
     if additional_context is not None:
         message = build_followup_prompt(additional_context)
+        agent = patient_extraction_agent
     else:
-        message = f'Paper (fulltext md): {fulltext_md(paper_id, supplement_format)}\nPedigree Description: \n {pedigree_descriptions_output}'
+        message = f'Pedigree Description:\n{pedigree_descriptions_output}'
+        agent = with_paper(patient_extraction_agent, paper_markdown)
 
     result = await Runner.run(
-        patient_extraction_agent,
+        agent,
         message,
         conversation_id=stored_conv_id,
     )
@@ -379,10 +412,11 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
         }
 
     stored_conv_id = await ensure_conversation_id(stored_conv_id)
+    paper_markdown = fulltext_md(paper_id, supplement_format)
 
     result = await Runner.run(
-        segregation_evidence_extractor,
-        f'Paper (fulltext md): {fulltext_md(paper_id, supplement_format)}\n\nFamily Structure: {json.dumps(family_info, indent=2, default=str)}',
+        with_paper(segregation_evidence_extractor, paper_markdown),
+        f'Family Structure: {json.dumps(family_info, indent=2, default=str)}',
         conversation_id=stored_conv_id,
     )
 
@@ -714,14 +748,17 @@ async def handle_patient_variant_linking(task_id: int) -> None:
         )
 
     stored_conv_id = await ensure_conversation_id(stored_conv_id)
+    paper_markdown = fulltext_md(paper_id, supplement_format)
 
     if additional_context is not None:
         message = build_followup_prompt(additional_context)
+        agent = patient_variant_linking_agent
     else:
-        message = f'Variants JSON:\n{structured_variants}\n Patients JSON:\n {structured_patients} Pedigree Description: \n {pedigree_descriptions_output} Paper (fulltext md): {fulltext_md(paper_id, supplement_format)}'
+        message = f'Variants JSON:\n{structured_variants}\n\nPatients JSON:\n{structured_patients}\n\nPedigree Description:\n{pedigree_descriptions_output}'
+        agent = with_paper(patient_variant_linking_agent, paper_markdown)
 
     result = await Runner.run(
-        patient_variant_linking_agent,
+        agent,
         message,
         conversation_id=stored_conv_id,
     )
@@ -772,10 +809,11 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         }
 
     stored_conv_id = await ensure_conversation_id(stored_conv_id)
+    paper_markdown = fulltext_md(paper_id, supplement_format)
 
     result = await Runner.run(
-        patient_phenotype_linking_agent,
-        f'Paper (fulltext md): {fulltext_md(paper_id, supplement_format)}\n\nStructured Patient JSON:\n{[patient_data]}',
+        with_paper(patient_phenotype_linking_agent, paper_markdown),
+        f'Structured Patient JSON:\n{[patient_data]}',
         conversation_id=stored_conv_id,
     )
 

@@ -8,9 +8,9 @@ System: You are an expert clinical data curator specializing in genetic segregat
 
 Task: Extract segregation-related evidence from a research paper for a specific family.
 
-You will receive:
-1. The paper text (fulltext markdown)
-2. Family identifier and structure (list of patients in the family, their affected status)
+CONTEXT:
+1. The paper text is provided above in the PAPER AND GENE CONTEXT section
+2. Family identifier and structure (list of patients, their affected status)
 3. Patient-variant links (which patients carry which variants)
 
 Extract the following fields:

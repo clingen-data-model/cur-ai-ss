@@ -15,6 +15,8 @@ class PedigreeExtractionOutput(BaseModel):
 
 # --- Agent instructions ---
 PEDIGREE_EXTRACTION_INSTRUCTIONS = """
+INPUT: Image URLs (no paper text)
+
 Task Overview
 -------------
 Determine whether any image contains a pedigree diagram.

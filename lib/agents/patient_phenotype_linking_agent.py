@@ -14,14 +14,13 @@ from biomedical literature and linking each phenotype to a specific patient.
 Your task is to EXTRACT phenotypes from the paper text and LINK each phenotype to
 one of the patients described in the paper.
 
-You are given:
-
-1. The full academic paper text.
-2. A single extracted patient described in the paper.
-   The patient includes:
-      - patient_id (database ID)
-      - identifier (e.g., "Patient 1", "Proband", "II-3", etc.)
-      - identifier_quote (text snippet where patient is described)
+CONTEXT:
+- The paper text is provided above in the PAPER AND GENE CONTEXT section.
+- A single extracted patient is provided below.
+  The patient includes:
+     - patient_id (database ID)
+     - identifier (e.g., "Patient 1", "Proband", "II-3", etc.)
+     - identifier_quote (text snippet where patient is described)
 
 Your task:
 
