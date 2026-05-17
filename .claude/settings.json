@@ -1,0 +1,23 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run ruff format .",
+            "statusMessage": "Formatting with ruff",
+            "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "uv run ruff check . --fix",
+            "statusMessage": "Fixing with ruff check",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -114,9 +114,7 @@ def with_paper(
     if gene_symbol:
         sections.append(f'Gene: {gene_symbol}')
     prefix = '\n\n'.join(sections)
-    return agent.clone(
-        instructions=f'{prefix}\n\n{agent.instructions}'
-    )
+    return agent.clone(instructions=f'{prefix}\n\n{agent.instructions}')
 
 
 def handle_pdf_parsing(task_id: int) -> None:
@@ -565,7 +563,9 @@ async def handle_variant_harmonization(task_id: int) -> None:
 
         variant_id = task.variant_id
         if variant_id is None:
-            raise ValueError(f'Task {task_id}: VARIANT_HARMONIZATION requires variant_id')
+            raise ValueError(
+                f'Task {task_id}: VARIANT_HARMONIZATION requires variant_id'
+            )
 
         stored_conv_id = task.conversation_id
 
@@ -787,7 +787,9 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         paper_id = task.paper_id
         patient_id = task.patient_id
         if patient_id is None:
-            raise ValueError(f'Task {task_id}: PHENOTYPE_EXTRACTION requires patient_id')
+            raise ValueError(
+                f'Task {task_id}: PHENOTYPE_EXTRACTION requires patient_id'
+            )
 
         stored_conv_id = task.conversation_id
 
