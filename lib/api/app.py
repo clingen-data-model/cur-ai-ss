@@ -1259,7 +1259,11 @@ async def generate_chat_response(
         )
 
     last_user_message = next(
-        (msg['content'] for msg in reversed(conversation_db.messages) if msg['role'] == 'user'),
+        (
+            msg['content']
+            for msg in reversed(conversation_db.messages)
+            if msg['role'] == 'user'
+        ),
         None,
     )
     if last_user_message is None:
