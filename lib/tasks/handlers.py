@@ -360,7 +360,9 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
 
         family_id = task.family_id
         if family_id is None:
-            return
+            raise ValueError(
+                f'Task {task_id}: SEGREGATION_EVIDENCE_EXTRACTION requires family_id'
+            )
 
         paper_id = task.paper_id
         paper = session.get(PaperDB, task.paper_id)
@@ -451,7 +453,9 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
 
         family_id = task.family_id
         if family_id is None:
-            return
+            raise ValueError(
+                f'Task {task_id}: SEGREGATION_ANALYSIS_COMPUTED requires family_id'
+            )
 
         paper = session.get(PaperDB, task.paper_id)
         if not paper:
@@ -561,7 +565,7 @@ async def handle_variant_harmonization(task_id: int) -> None:
 
         variant_id = task.variant_id
         if variant_id is None:
-            return
+            raise ValueError(f'Task {task_id}: VARIANT_HARMONIZATION requires variant_id')
 
         stored_conv_id = task.conversation_id
 
@@ -611,14 +615,15 @@ async def handle_variant_enrichment(task_id: int) -> None:
         if not task:
             return
 
+        if task.variant_id is None:
+            raise ValueError(f'Task {task_id}: VARIANT_ENRICHMENT requires variant_id')
+
         query = (
             session.query(HarmonizedVariantDB)
             .join(VariantDB, HarmonizedVariantDB.variant_id == VariantDB.id)
             .filter(VariantDB.paper_id == task.paper_id)
+            .filter(HarmonizedVariantDB.variant_id == task.variant_id)
         )
-        if task.variant_id is not None:
-            query = query.filter(HarmonizedVariantDB.variant_id == task.variant_id)
-
         rows = query.order_by(VariantDB.id).all()
         harmonized_variants = [
             HarmonizedVariant(
@@ -645,23 +650,14 @@ async def handle_variant_enrichment(task_id: int) -> None:
         if not task:
             return
 
-        # Idempotent: delete-then-insert
-        delete_query = session.query(EnrichedVariantDB).filter(
+        # Idempotent: delete-then-insert (for this specific variant)
+        session.query(EnrichedVariantDB).filter(
             EnrichedVariantDB.harmonized_variant_id.in_(
-                select(HarmonizedVariantDB.id)
-                .join(VariantDB, HarmonizedVariantDB.variant_id == VariantDB.id)
-                .where(VariantDB.paper_id == task.paper_id)
-            )
-        )
-        if task.variant_id is not None:
-            delete_query = delete_query.filter(
-                EnrichedVariantDB.harmonized_variant_id.in_(
-                    select(HarmonizedVariantDB.id).where(
-                        HarmonizedVariantDB.variant_id == task.variant_id
-                    )
+                select(HarmonizedVariantDB.id).where(
+                    HarmonizedVariantDB.variant_id == task.variant_id
                 )
             )
-        delete_query.delete()
+        ).delete()
 
         for hv_id, ev in zip(harmonized_variant_ids, enriched_variants):
             session.add(
@@ -791,7 +787,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         paper_id = task.paper_id
         patient_id = task.patient_id
         if patient_id is None:
-            return
+            raise ValueError(f'Task {task_id}: PHENOTYPE_EXTRACTION requires patient_id')
 
         stored_conv_id = task.conversation_id
 
@@ -849,7 +845,7 @@ async def handle_hpo_linking(task_id: int) -> None:
 
         phenotype_id = task.phenotype_id
         if phenotype_id is None:
-            return
+            raise ValueError(f'Task {task_id}: HPO_LINKING requires phenotype_id')
 
         stored_conv_id = task.conversation_id
 
