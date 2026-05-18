@@ -116,9 +116,9 @@ def render_queue_tasks_fragment(paper_query_params: PaperQueryParams) -> None:
                 additional_context=additional_context or None,
             )
             st.toast('Task Queued', icon=':material/thumb_up:')
+            st.session_state.RERUN_POPOVER_STATE_KEY = False
         except Exception as e:
             st.toast(f'Failed to enqueue task: {str(e)}', icon='❌')
-        st.session_state.RERUN_POPOVER_STATE_KEY = False
 
     st.button('Confirm Rerun', type='secondary', on_click=on_confirm)
 

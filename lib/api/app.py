@@ -1168,7 +1168,6 @@ def clear_chat(
     )
     if conversation_db:
         session.delete(conversation_db)
-        session.commit()
     return {'status': 'cleared'}
 
 
@@ -1240,7 +1239,6 @@ async def init_chat(
             )
 
         session.add(conversation_db)
-        session.refresh(conversation_db)
     else:
         conversation_db.messages = [
             *conversation_db.messages,
