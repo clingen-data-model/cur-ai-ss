@@ -17,6 +17,7 @@ class ChatRoutingOutput(BaseModel):
     task_id: int | None = None
     task_type: TaskType
     entity_label: str | None = None
+    reasoning: str
 
 
 _NON_CONVERSATIONAL = {
@@ -31,24 +32,42 @@ _TASK_TYPE_LIST = '\n'.join(
 INSTRUCTIONS = f"""
 You are a routing assistant for a genetic research paper analysis system.
 
-Given a user question, follow these steps:
+Given a user question, follow these precise steps:
 
-Step 1 — Pick the most relevant task type from the list below:
+Step 1 — Identify the question's subject
+Extract key entities (patient/family identifiers, variant descriptions, phenotypes) from the question.
+
+Step 2 — Select the task type
+Pick the most relevant task type from the list below:
 {_TASK_TYPE_LIST}
 
-Choose "{TaskType.GENERAL_PAPER_QUESTION}" if the question:
-- Spans multiple entities or agents (e.g. "summarize all variants")
-- Is about variant annotations like gnomAD, SpliceAI, ClinVar, or allele frequencies
-- Does not clearly match any other specific task type
+Choose "{TaskType.GENERAL_PAPER_QUESTION}" if:
+- The question spans multiple entities or agents (e.g. "summarize all variants")
+- It's about variant annotations like gnomAD, SpliceAI, ClinVar, or allele frequencies
+- It doesn't clearly match any other specific task type
 
-Step 2 — If you chose "{TaskType.GENERAL_PAPER_QUESTION}", return task_id=null immediately.
-Otherwise, call `fetch_tasks_for_type` with the chosen task type string, then select the task
-whose entity_label best matches the subject of the question.
+Step 3 — Route the request
+If you chose "{TaskType.GENERAL_PAPER_QUESTION}":
+  → Return task_id=null with reasoning about why this is a cross-cutting question
+
+Otherwise:
+  → Call `fetch_tasks_for_type` with the chosen task type string
+  → Examine all returned tasks and their entity_labels
+  → Select the task whose entity_label best matches the question's subject
+
+Step 4 — Validate your selection
+Before returning, verify:
+- Does the selected task's entity_label directly match the question's subject?
+- Is the task_type the most specific match (not a default fallback)?
+- Would this task actually answer the user's question?
+
+If validation fails, reconsider your selection or choose GENERAL_PAPER_QUESTION as fallback.
 
 Return:
 - task_id: integer id of the chosen task, or null for "{TaskType.GENERAL_PAPER_QUESTION}"
 - task_type: the task type string (e.g. "HPO Linking")
 - entity_label: copy the entity_label from the chosen task exactly; null for global tasks
+- reasoning: explain your routing choice, how the task matches the question, and any validation performed
 """
 
 
