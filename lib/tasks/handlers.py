@@ -104,12 +104,11 @@ def build_followup_prompt(additional_context: str) -> str:
 
 def with_paper(
     agent: Agent, paper_markdown: str, gene_symbol: str | None = None
-) -> Agent:
-    """Return a copy of agent with paper and gene content prepended to instructions.
+) -> tuple[Agent, str]:
+    """Return agent and message with paper context.
 
-    Places paper and gene first so they form a shared cached prefix across all agents
-    processing the same paper — only the agent-specific instructions vary.
-    This optimizes for OpenAI prompt caching.
+    Attempts to place paper and gene in agent instructions for caching optimization.
+    If paper exceeds OpenAI's instructions limit, returns it in the message instead.
 
     Args:
         agent: The agent to clone
@@ -117,13 +116,31 @@ def with_paper(
         gene_symbol: Optional gene symbol to include in the cached prefix
 
     Returns:
-        New agent with combined instructions
+        Tuple of (modified_agent, message). If paper fits in instructions, agent is
+        modified and message is empty. If paper doesn't fit, agent is unchanged and
+        paper is returned in message.
     """
-    sections = ['PAPER AND GENE CONTEXT', f'Paper (fulltext md):\n{paper_markdown}']
+    MAX_INSTRUCTIONS_LENGTH = 1048576  # OpenAI's hard limit
+
+    sections = [
+        'PAPER AND GENE CONTEXT',
+        f'Paper (fulltext md):\n{paper_markdown}',
+    ]
     if gene_symbol:
         sections.append(f'Gene: {gene_symbol}')
     prefix = '\n\n'.join(sections)
-    return agent.clone(instructions=f'{prefix}\n\n{agent.instructions}')
+    combined = f'{prefix}\n\n{agent.instructions}'
+
+    if len(combined) <= MAX_INSTRUCTIONS_LENGTH:
+        # Paper fits in instructions—use it for caching
+        return agent.clone(instructions=combined), ''
+
+    # Paper too large for instructions; pass in message instead
+    logger.warning(
+        f'Paper markdown {len(paper_markdown):,} chars exceeds OpenAI '
+        f'instructions limit; passing in message instead'
+    )
+    return agent, prefix
 
 
 def handle_pdf_parsing(task_id: int) -> None:
@@ -166,8 +183,9 @@ async def handle_paper_section_classifier(task_id: int) -> None:
         message = build_followup_prompt(additional_context)
         agent = paper_section_classifier_agent
     else:
-        message = ''
-        agent = with_paper(paper_section_classifier_agent, paper_markdown, gene_symbol)
+        agent, message = with_paper(
+            paper_section_classifier_agent, paper_markdown, gene_symbol
+        )
 
     result = await Runner.run(agent, message, conversation_id=stored_conv_id)
 
@@ -209,8 +227,7 @@ async def handle_paper_metadata(task_id: int) -> None:
         message = build_followup_prompt(additional_context)
         agent = paper_extraction_agent
     else:
-        message = ''
-        agent = with_paper(paper_extraction_agent, paper_markdown, gene_symbol)
+        agent, message = with_paper(paper_extraction_agent, paper_markdown, gene_symbol)
 
     result = await Runner.run(
         agent,
@@ -249,9 +266,10 @@ async def handle_variant_extraction(task_id: int) -> None:
 
     stored_conv_id = await ensure_conversation_id(stored_conv_id)
     paper_markdown = relevant_sections_md(paper_id, supplement_format)
+    agent, message = with_paper(variant_extraction_agent, paper_markdown, gene_symbol)
     result = await Runner.run(
-        with_paper(variant_extraction_agent, paper_markdown, gene_symbol),
-        '',
+        agent,
+        message,
         conversation_id=stored_conv_id,
     )
 
@@ -360,8 +378,10 @@ async def handle_patient_extraction(task_id: int) -> None:
         message = build_followup_prompt(additional_context)
         agent = patient_extraction_agent
     else:
+        agent, paper_msg = with_paper(patient_extraction_agent, paper_markdown)
         message = f'Pedigree Description:\n{pedigree_descriptions_output}'
-        agent = with_paper(patient_extraction_agent, paper_markdown)
+        if paper_msg:
+            message = f'{paper_msg}\n\n{message}'
 
     result = await Runner.run(
         agent,
@@ -469,9 +489,14 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
     stored_conv_id = await ensure_conversation_id(stored_conv_id)
     paper_markdown = relevant_sections_md(paper_id, supplement_format)
 
+    agent, paper_msg = with_paper(segregation_evidence_extractor, paper_markdown)
+    message = f'Family Structure: {json.dumps(family_info, indent=2, default=str)}'
+    if paper_msg:
+        message = f'{paper_msg}\n\n{message}'
+
     result = await Runner.run(
-        with_paper(segregation_evidence_extractor, paper_markdown),
-        f'Family Structure: {json.dumps(family_info, indent=2, default=str)}',
+        agent,
+        message,
         conversation_id=stored_conv_id,
     )
 
@@ -805,8 +830,10 @@ async def handle_patient_variant_linking(task_id: int) -> None:
         message = build_followup_prompt(additional_context)
         agent = patient_variant_linking_agent
     else:
+        agent, paper_msg = with_paper(patient_variant_linking_agent, paper_markdown)
         message = f'Variants JSON:\n{structured_variants}\n\nPatients JSON:\n{structured_patients}\n\nPedigree Description:\n{pedigree_descriptions_output}'
-        agent = with_paper(patient_variant_linking_agent, paper_markdown)
+        if paper_msg:
+            message = f'{paper_msg}\n\n{message}'
 
     result = await Runner.run(
         agent,
@@ -864,9 +891,14 @@ async def handle_phenotype_extraction(task_id: int) -> None:
     stored_conv_id = await ensure_conversation_id(stored_conv_id)
     paper_markdown = relevant_sections_md(paper_id, supplement_format)
 
+    agent, paper_msg = with_paper(patient_phenotype_linking_agent, paper_markdown)
+    message = f'Structured Patient JSON:\n{[patient_data]}'
+    if paper_msg:
+        message = f'{paper_msg}\n\n{message}'
+
     result = await Runner.run(
-        with_paper(patient_phenotype_linking_agent, paper_markdown),
-        f'Structured Patient JSON:\n{[patient_data]}',
+        agent,
+        message,
         conversation_id=stored_conv_id,
     )
 
