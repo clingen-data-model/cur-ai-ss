@@ -1240,12 +1240,6 @@ async def init_chat(
             )
 
         session.add(conversation_db)
-    else:
-        conversation_db.messages = [
-            *conversation_db.messages,
-            {'role': 'user', 'content': request.message},
-        ]
-        flag_modified(conversation_db, 'messages')
 
     return conversation_db.messages
 
@@ -1332,6 +1326,7 @@ def _build_general_qa_agent(paper_id: int, paper_db: PaperDB, session: Session) 
 @app.post('/papers/{paper_id}/chat/generate', response_model=list[dict])
 async def generate_chat_response(
     paper_id: int,
+    request: ChatMessageRequest | None = None,
     session: Session = Depends(get_session),
 ) -> Any:
     conversation_db = (
@@ -1345,6 +1340,13 @@ async def generate_chat_response(
             status_code=status.HTTP_404_NOT_FOUND,
             detail='No conversation initialized for this paper.',
         )
+
+    if request and request.message:
+        conversation_db.messages = [
+            *conversation_db.messages,
+            {'role': 'user', 'content': request.message},
+        ]
+        flag_modified(conversation_db, 'messages')
 
     last_user_message = next(
         (

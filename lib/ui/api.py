@@ -282,10 +282,14 @@ def init_chat_message(paper_id: int, message: str) -> list[dict[str, str]]:
     return resp.json()
 
 
-def generate_chat_response(paper_id: int) -> list[dict[str, str]]:
+def generate_chat_response(
+    paper_id: int, message: str | None = None
+) -> list[dict[str, str]]:
     """Generate OpenAI response for the initialized conversation."""
+    payload = {'message': message} if message else {}
     resp = requests.post(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/chat/generate',
+        json=payload,
     )
     resp.raise_for_status()
     return resp.json()
