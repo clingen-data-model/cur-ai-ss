@@ -43,7 +43,7 @@ def render_chat_with_agent_tab() -> None:
                         st.session_state['chat_messages'] = messages
                         if messages:
                             st.markdown(messages[-1]['content'])
-                        messages = get_chat_messages(paper_resp.id)
+                        messages = generate_chat_response(paper_resp.id)
                     else:
                         messages = generate_chat_response(paper_resp.id)
                 st.session_state['chat_messages'] = messages
