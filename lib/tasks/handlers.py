@@ -10,6 +10,9 @@ from sqlalchemy.orm import Session
 
 from lib.agents.hpo_linking_agent import agent as hpo_linking_agent
 from lib.agents.paper_extraction_agent import agent as paper_extraction_agent
+from lib.agents.paper_section_classifier_agent import (
+    agent as paper_section_classifier_agent,
+)
 from lib.agents.patient_extraction_agent import agent as patient_extraction_agent
 from lib.agents.patient_phenotype_linking_agent import (
     agent as patient_phenotype_linking_agent,
@@ -33,7 +36,13 @@ from lib.api.db import session_scope
 from lib.core.environment import env
 from lib.misc.gcs import upload_and_sign_image
 from lib.misc.pdf.parse import parse_content
-from lib.misc.pdf.paths import fulltext_md, pdf_image_caption_path, pdf_image_path
+from lib.misc.pdf.paths import (
+    fulltext_md,
+    paper_section_classification_path,
+    pdf_image_caption_path,
+    pdf_image_path,
+    relevant_sections_md,
+)
 from lib.models import (
     EnrichedVariantDB,
     FamilyDB,
@@ -132,6 +141,45 @@ def handle_pdf_parsing(task_id: int) -> None:
         parse_content(paper_id, force=True, supplement_format=supplement_format)
 
 
+async def handle_paper_section_classifier(task_id: int) -> None:
+    """Classify paper sections as relevant or irrelevant for downstream extraction."""
+    paper_id: int
+    gene_symbol: str
+    stored_conv_id: str | None
+    additional_context: str | None
+    supplement_format: FileFormat | None
+    with session_scope() as session:
+        task = session.get(TaskDB, task_id)
+        paper = session.get(PaperDB, task.paper_id) if task else None
+        if not task or not paper:
+            return
+        paper_id = task.paper_id
+        gene_symbol = paper.gene.symbol
+        stored_conv_id = task.conversation_id
+        additional_context = task.additional_context
+        supplement_format = paper.supplement_format
+
+    stored_conv_id = await ensure_conversation_id(stored_conv_id)
+    paper_markdown = fulltext_md(paper_id, supplement_format)
+
+    if additional_context is not None:
+        message = build_followup_prompt(additional_context)
+        agent = paper_section_classifier_agent
+    else:
+        message = ''
+        agent = with_paper(paper_section_classifier_agent, paper_markdown, gene_symbol)
+
+    result = await Runner.run(agent, message, conversation_id=stored_conv_id)
+
+    output_path = paper_section_classification_path(paper_id)
+    output_path.write_text(result.final_output.model_dump_json())
+
+    with session_scope() as session:
+        task = session.get(TaskDB, task_id)
+        if task:
+            task.conversation_id = stored_conv_id
+
+
 async def handle_paper_metadata(task_id: int) -> None:
     """Extract paper metadata (title, authors, abstract, etc)."""
     paper_id: int
@@ -155,7 +203,7 @@ async def handle_paper_metadata(task_id: int) -> None:
         supplement_format = paper.supplement_format
 
     stored_conv_id = await ensure_conversation_id(stored_conv_id)
-    paper_markdown = fulltext_md(paper_id, supplement_format)
+    paper_markdown = relevant_sections_md(paper_id, supplement_format)
 
     if additional_context is not None:
         message = build_followup_prompt(additional_context)
@@ -183,6 +231,7 @@ async def handle_variant_extraction(task_id: int) -> None:
     """Extract genetic variants from paper."""
     paper_id: int
     gene_symbol: str
+    stored_conv_id: str | None
     supplement_format: FileFormat | None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -195,12 +244,15 @@ async def handle_variant_extraction(task_id: int) -> None:
 
         paper_id = task.paper_id
         gene_symbol = paper.gene.symbol
+        stored_conv_id = task.conversation_id
         supplement_format = paper.supplement_format
 
-    paper_markdown = fulltext_md(paper_id, supplement_format)
+    stored_conv_id = await ensure_conversation_id(stored_conv_id)
+    paper_markdown = relevant_sections_md(paper_id, supplement_format)
     result = await Runner.run(
         with_paper(variant_extraction_agent, paper_markdown, gene_symbol),
         '',
+        conversation_id=stored_conv_id,
     )
 
     with session_scope() as session:
@@ -208,6 +260,9 @@ async def handle_variant_extraction(task_id: int) -> None:
         session.query(VariantDB).filter(VariantDB.paper_id == paper_id).delete()
         for variant in result.final_output.variants:
             session.add(variant_to_db(paper_id, variant))
+        task = session.get(TaskDB, task_id)
+        if task:
+            task.conversation_id = stored_conv_id
 
 
 async def handle_pedigree_description(task_id: int) -> None:
@@ -299,7 +354,7 @@ async def handle_patient_extraction(task_id: int) -> None:
         )
 
     stored_conv_id = await ensure_conversation_id(stored_conv_id)
-    paper_markdown = fulltext_md(paper_id, supplement_format)
+    paper_markdown = relevant_sections_md(paper_id, supplement_format)
 
     if additional_context is not None:
         message = build_followup_prompt(additional_context)
@@ -412,7 +467,7 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
         }
 
     stored_conv_id = await ensure_conversation_id(stored_conv_id)
-    paper_markdown = fulltext_md(paper_id, supplement_format)
+    paper_markdown = relevant_sections_md(paper_id, supplement_format)
 
     result = await Runner.run(
         with_paper(segregation_evidence_extractor, paper_markdown),
@@ -744,7 +799,7 @@ async def handle_patient_variant_linking(task_id: int) -> None:
         )
 
     stored_conv_id = await ensure_conversation_id(stored_conv_id)
-    paper_markdown = fulltext_md(paper_id, supplement_format)
+    paper_markdown = relevant_sections_md(paper_id, supplement_format)
 
     if additional_context is not None:
         message = build_followup_prompt(additional_context)
@@ -807,7 +862,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         }
 
     stored_conv_id = await ensure_conversation_id(stored_conv_id)
-    paper_markdown = fulltext_md(paper_id, supplement_format)
+    paper_markdown = relevant_sections_md(paper_id, supplement_format)
 
     result = await Runner.run(
         with_paper(patient_phenotype_linking_agent, paper_markdown),
@@ -902,6 +957,7 @@ TASK_HANDLERS: dict[
     TaskType, Union[Callable[[int], Awaitable[None]], Callable[[int], None]]
 ] = {
     TaskType.PDF_PARSING: handle_pdf_parsing,
+    TaskType.PAPER_ACKNOWLEDGEMENT: handle_paper_section_classifier,
     TaskType.PAPER_METADATA: handle_paper_metadata,
     TaskType.VARIANT_EXTRACTION: handle_variant_extraction,
     TaskType.PEDIGREE_DESCRIPTION: handle_pedigree_description,

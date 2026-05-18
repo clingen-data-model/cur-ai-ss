@@ -1,3 +1,5 @@
+import json
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -5,6 +7,8 @@ from lib.core.environment import env
 
 if TYPE_CHECKING:
     from lib.models.paper import FileFormat
+
+SUPPLEMENTARY_MATERIAL_HEADER = '# Supplementary Material'
 
 
 def pdf_dir(paper_id: int) -> Path:
@@ -95,11 +99,15 @@ def pdf_section_markdown_path(
     return pdf_sections_dir(paper_id, supplement) / f'{section_id}.md'
 
 
+def paper_section_classification_path(paper_id: int) -> Path:
+    return pdf_dir(paper_id) / 'paper_section_classification.json'
+
+
 def fulltext_md(paper_id: int, supplement_format: 'FileFormat | None' = None) -> str:
     main_md = pdf_markdown_path(paper_id).read_text()
     supplement_md = pdf_markdown_path(paper_id, supplement=True)
     if supplement_md.exists():
-        supplement_header = '# Supplementary Material'
+        supplement_header = SUPPLEMENTARY_MATERIAL_HEADER
         if supplement_format:
             supplement_header += f' ({supplement_format.value.upper()})'
         return (
@@ -110,6 +118,56 @@ def fulltext_md(paper_id: int, supplement_format: 'FileFormat | None' = None) ->
             + supplement_md.read_text()
         )
     return main_md
+
+
+def relevant_sections_md(
+    paper_id: int, supplement_format: 'FileFormat | None' = None
+) -> str:
+    """Return paper markdown with irrelevant sections removed.
+
+    Falls back to fulltext_md if section classification has not been run yet.
+    Splices directly from raw.md: when a classified irrelevant section header is
+    encountered, lines are skipped until the next classified relevant section header.
+    Unclassified headings do not change skip state.
+    """
+    classification_path = paper_section_classification_path(paper_id)
+    if not classification_path.exists():
+        return fulltext_md(paper_id, supplement_format)
+
+    data = json.loads(classification_path.read_text())
+    classified: dict[str, bool] = {
+        s['header'].lower(): s.get('relevant', True) for s in data.get('sections', [])
+    }
+
+    main_md = pdf_markdown_path(paper_id).read_text()
+    lines = main_md.splitlines(keepends=True)
+    result_lines: list[str] = []
+    skip = False
+    for line in lines:
+        heading_match = re.match(r'^#{1,3} (.+)', line.rstrip())
+        if heading_match:
+            header_text = heading_match.group(1).strip().lower()
+            if header_text in classified:
+                skip = not classified[header_text]
+        if not skip:
+            result_lines.append(line)
+
+    filtered_md = ''.join(result_lines)
+
+    supplement_md = pdf_markdown_path(paper_id, supplement=True)
+    if supplement_md.exists():
+        supplement_header = SUPPLEMENTARY_MATERIAL_HEADER
+        if supplement_format:
+            supplement_header += f' ({supplement_format.value.upper()})'
+        return (
+            filtered_md
+            + '\n\n---\n\n'
+            + supplement_header
+            + '\n\n'
+            + supplement_md.read_text()
+        )
+
+    return filtered_md
 
 
 def sections_md(paper_id: int) -> list[str]:
