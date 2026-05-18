@@ -37,7 +37,7 @@ class TaskType(StrEnum):
         """Return a human-readable description with context about what this task does."""
         descriptions: dict[TaskType, str] = {
             TaskType.PDF_PARSING: 'Parse PDF file and extract text, tables, and images',
-            TaskType.PAPER_ACKNOWLEDGEMENT: 'Acknowledge the paper and classify which are relevant for downstream extraction',
+            TaskType.PAPER_ACKNOWLEDGEMENT: 'Acknowledge the paper and classify which sections are relevant for downstream extraction',
             TaskType.GENERAL_PAPER_QUESTION: 'Answer a general question using the full paper text and all extracted data',
             TaskType.PAPER_METADATA: 'Extract paper title, authors, publication date, and other metadata',
             TaskType.VARIANT_EXTRACTION: 'Identify genetic variants mentioned in the paper',
