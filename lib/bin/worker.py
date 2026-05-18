@@ -19,7 +19,7 @@ from lib.tasks.models import TaskStatus, TaskType
 
 LEASE_TIMEOUT_S = 900
 POLL_INTERVAL_S = 10
-MAX_AGENTIC_TASKS = 15
+MAX_AGENTIC_TASKS = 20
 MAX_RETRIES = 2
 RETRY_DELAY_S = 30
 
