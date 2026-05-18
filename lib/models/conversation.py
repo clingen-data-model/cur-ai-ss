@@ -44,7 +44,7 @@ class ConversationDB(Base):
 
 
 class ChatMessageRequest(BaseModel):
-    message: str
+    message: str | None = None
 
 
 class ChatMessageResp(BaseModel):
