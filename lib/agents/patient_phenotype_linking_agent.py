@@ -3,6 +3,7 @@ from typing import List
 from agents import Agent
 from pydantic import BaseModel
 
+from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
 from lib.core.environment import env
 from lib.models import ExtractedPhenotype
@@ -348,9 +349,13 @@ Ensure:
 - image_id provides pedigree descriptions only and should not be used here
 """
 
+PATIENT_PHENOTYPE_LINKING_AGENT_INSTRUCTIONS = (
+    INSTRUCTIONS + '\n\n' + CORE_EXTRACTION_SPEC
+)
+
 agent = Agent(
     name='phenotype_patient_linker',
-    instructions=(INSTRUCTIONS + '\n\n' + CORE_EXTRACTION_SPEC),
+    instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
     output_type=list[ExtractedPhenotype],
 )

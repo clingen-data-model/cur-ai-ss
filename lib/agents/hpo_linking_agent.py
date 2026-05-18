@@ -1,6 +1,7 @@
 import hpotk
 from agents import Agent, function_tool
 
+from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.core.environment import env
 from lib.models.evidence_block import ReasoningBlock
 from lib.models.phenotype import HPOTerm
@@ -355,9 +356,11 @@ Do not omit tool calls if they were used.
 
 """
 
+HPO_LINKING_AGENT_INSTRUCTIONS = INSTRUCTIONS
+
 agent = Agent(
     name='hpo_linker',
-    instructions=INSTRUCTIONS,
+    instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
     output_type=ReasoningBlock[HPOTerm],
     tools=[search_hpo_terms, get_hpo_term, get_hpo_parents, get_hpo_children],

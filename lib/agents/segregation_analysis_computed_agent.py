@@ -5,6 +5,7 @@ from collections import Counter
 
 from agents import Agent, function_tool
 
+from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.core.environment import env
 from lib.models.patient_variant_link import TestingMethod
 from lib.models.segregation_analysis import (
@@ -297,9 +298,13 @@ Output all six computed values with clear reasoning: segregation_count, affected
 - **Unknown sequencing methodology**: Tools use conservative candidate gene matrix row.
 """
 
+SEGREGATION_ANALYSIS_COMPUTED_AGENT_INSTRUCTIONS = (
+    SEGREGATION_ANALYSIS_COMPUTED_INSTRUCTIONS
+)
+
 agent = Agent(
     name='segregation_analysis_computed',
-    instructions=SEGREGATION_ANALYSIS_COMPUTED_INSTRUCTIONS,
+    instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
     output_type=SegregationAnalysisComputedOutput,
     tools=[

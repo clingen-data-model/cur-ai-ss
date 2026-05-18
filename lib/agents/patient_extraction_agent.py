@@ -1,5 +1,6 @@
 from agents import Agent
 
+from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
 from lib.core.environment import env
 from lib.models.patient import Patient, PatientExtractionOutput
@@ -164,9 +165,14 @@ Output format:
   of patient identifiers extracted above.
 """
 
+PATIENT_EXTRACTION_AGENT_INSTRUCTIONS = (
+    PATIENT_EXTRACTION_INSTRUCTIONS + '\n\n' + CORE_EXTRACTION_SPEC
+)
+
+
 agent = Agent(
     name='patient_info_extractor',
-    instructions=(PATIENT_EXTRACTION_INSTRUCTIONS + '\n\n' + CORE_EXTRACTION_SPEC),
+    instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
     output_type=PatientExtractionOutput,
 )

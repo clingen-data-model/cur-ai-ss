@@ -1,5 +1,7 @@
 from agents import Agent
 
+from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
+from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
 from lib.core.environment import env
 from lib.models.segregation_analysis import SegregationEvidenceExtractionOutput
 
@@ -43,9 +45,14 @@ At least one source (quote/table_id/image_id) is required for non-null values.
 For null values (e.g., no LOD score mentioned), quote/table_id/image_id are optional.
 """
 
+SEGREGATION_EVIDENCE_AGENT_INSTRUCTIONS = (
+    SEGREGATION_EVIDENCE_EXTRACTION_INSTRUCTIONS + '\n\n' + CORE_EXTRACTION_SPEC
+)
+
+
 agent = Agent(
     name='segregation_evidence_extractor',
-    instructions=SEGREGATION_EVIDENCE_EXTRACTION_INSTRUCTIONS,
+    instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
     output_type=SegregationEvidenceExtractionOutput,
 )

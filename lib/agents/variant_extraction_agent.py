@@ -2,6 +2,7 @@ from typing import Literal
 
 from agents import Agent, ModelSettings
 
+from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
 from lib.core.environment import env
 from lib.models.variant import (
@@ -197,9 +198,13 @@ Output rules:
 """
 
 
+VARIANT_EXTRACTION_AGENT_INSTRUCTIONS = (
+    VARIANT_EXTRACTION_INSTRUCTIONS + '\n\n' + CORE_EXTRACTION_SPEC
+)
+
 agent = Agent(
     name='variant_extractor',
-    instructions=(VARIANT_EXTRACTION_INSTRUCTIONS + '\n\n' + CORE_EXTRACTION_SPEC),
+    instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
     output_type=VariantExtractionOutput,
 )

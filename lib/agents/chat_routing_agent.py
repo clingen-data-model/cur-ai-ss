@@ -4,6 +4,7 @@ from typing import Any
 from agents import Agent, function_tool
 from pydantic import BaseModel
 
+from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.api.db import session_scope
 from lib.core.environment import env
 from lib.models.family import FamilyDB
@@ -25,14 +26,19 @@ _NON_CONVERSATIONAL = {
     TaskType.PAPER_ACKNOWLEDGEMENT,
     TaskType.VARIANT_ENRICHMENT,
 }
+_GLOBAL_AGENTS = {
+    TaskType.GENERAL_PAPER_QUESTION,
+    TaskType.PAPER_METADATA,
+    TaskType.VARIANT_EXTRACTION,
+    TaskType.PEDIGREE_DESCRIPTION,
+    TaskType.PATIENT_EXTRACTION,
+    TaskType.PATIENT_VARIANT_LINKING,
+}
 _TASK_TYPE_LIST = '\n'.join(
     f'- "{t.value}": {t.description}' for t in TaskType if t not in _NON_CONVERSATIONAL
 )
 
-INSTRUCTIONS = f"""
-You are a routing assistant for a genetic research paper analysis system.
-
-Given a user question, follow these precise steps:
+CHAT_ROUTING_INSTRUCTIONS = f"""Given a user question about a genomics paper, route to the appropriate task type.
 
 Step 1 — Identify the question's subject
 Extract key entities (patient/family identifiers, variant descriptions, phenotypes) from the question.
@@ -41,33 +47,40 @@ Step 2 — Select the task type
 Pick the most relevant task type from the list below:
 {_TASK_TYPE_LIST}
 
-Choose "{TaskType.GENERAL_PAPER_QUESTION}" if:
-- The question spans multiple entities or agents (e.g. "summarize all variants")
-- It's about variant annotations like gnomAD, SpliceAI, ClinVar, or allele frequencies
-- It doesn't clearly match any other specific task type
+**Important: Agent scopes**
+- **Global agents** perform extraction/analysis at the paper level without associated entity IDs:
+  Patient Extraction, Variant Extraction, Paper Metadata, Pedigree Description, Patient Variant Linking,
+  General Paper Question. These work on the paper as a whole.
+
+- **Entity-specific agents** operate on a specific entity instance and require routing to a matched entity:
+  Segregation Evidence Extraction (per-family), Segregation Analysis Computed (per-family),
+  Variant Harmonization (per-variant), Phenotype Extraction (per-patient), HPO Linking (per-phenotype).
 
 Step 3 — Route the request
-If you chose "{TaskType.GENERAL_PAPER_QUESTION}":
-  → Return task_id=null with reasoning about why this is a cross-cutting question
+If you chose a global agent:
+  → Return task_id=null, entity_label=null
+  → Reasoning: explain why this task is paper-wide
 
-Otherwise:
+If you chose an entity-specific agent:
   → Call `fetch_tasks_for_type` with the chosen task type string
   → Examine all returned tasks and their entity_labels
   → Select the task whose entity_label best matches the question's subject
+  → Return the task_id and entity_label from the matched task
 
 Step 4 — Validate your selection
 Before returning, verify:
-- Does the selected task's entity_label directly match the question's subject?
+- If global agent: Does the question genuinely require this paper-wide analysis?
+- If entity-specific: Does the selected task's entity_label match the question's subject?
 - Is the task_type the most specific match (not a default fallback)?
 - Would this task actually answer the user's question?
 
 If validation fails, reconsider your selection or choose GENERAL_PAPER_QUESTION as fallback.
 
 Return:
-- task_id: integer id of the chosen task, or null for "{TaskType.GENERAL_PAPER_QUESTION}"
-- task_type: the task type string (e.g. "HPO Linking")
-- entity_label: copy the entity_label from the chosen task exactly; null for global tasks
-- reasoning: explain your routing choice, how the task matches the question, and any validation performed
+- task_id: integer id of the chosen task, or null for global agents
+- task_type: the task type string (e.g. "Patient Extraction", "HPO Linking")
+- entity_label: the entity identifier from the matched task; null for global agents
+- reasoning: explain your routing choice, agent scope classification, entity matching, and validation
 """
 
 
@@ -150,7 +163,7 @@ def make_routing_agent(paper_id: int) -> Agent:
     fetch_tasks_for_type = _make_fetch_tasks_tool(paper_id)
     return Agent(
         name='chat_router',
-        instructions=INSTRUCTIONS,
+        instructions=BASE_SYSTEM_INSTRUCTIONS,
         model=env.OPENAI_API_DEPLOYMENT,
         output_type=ChatRoutingOutput,
         tools=[fetch_tasks_for_type],  # type: ignore[list-item]

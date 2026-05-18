@@ -1,5 +1,6 @@
 from agents import Agent
 
+from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
 from lib.core.environment import env
 from lib.models.patient_variant_link import (
@@ -56,9 +57,13 @@ Return **exactly** the following for each link:
 - "low": partially ambiguous textual evidence; never for pure speculation
 """
 
+PATIENT_VARIANT_LINKING_AGENT_INSTRUCTIONS = (
+    INSTRUCTIONS + '\n\n' + CORE_EXTRACTION_SPEC
+)
+
 agent = Agent(
     name='patient_variant_linker',
-    instructions=(INSTRUCTIONS + '\n\n' + CORE_EXTRACTION_SPEC),
+    instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
     output_type=PatientVariantLinkerOutput,
 )
