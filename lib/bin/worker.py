@@ -12,6 +12,7 @@ from typing import Any, Callable, Coroutine, Iterable, List
 from lib.api.db import session_scope
 from lib.core.logging import setup_logging
 from lib.models import TaskDB
+from lib.models.paper import PaperDB
 from lib.tasks.handlers import TASK_HANDLERS
 from lib.tasks.misc import enqueue_successors
 from lib.tasks.models import TaskStatus, TaskType
@@ -96,6 +97,9 @@ async def execute_task(task_id: int) -> None:
             else:
                 task.status = TaskStatus.FAILED
                 task.error_message = error_msg
+            paper = session.get(PaperDB, task.paper_id)
+            if paper:
+                paper.updated_at = datetime.datetime.now(datetime.timezone.utc)
 
 
 def poll_and_execute_tasks() -> None:

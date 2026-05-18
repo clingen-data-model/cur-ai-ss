@@ -1,4 +1,5 @@
 import random
+from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote
 
@@ -8,6 +9,7 @@ from streamlit_pdf_viewer import pdf_viewer
 
 from lib.misc.pdf.paths import pdf_highlighted_path
 from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock, ReasoningBlock
+from lib.models.paper import PaperResp
 from lib.ui.api import (
     clear_highlights,
     get_http_error_detail,
@@ -25,6 +27,24 @@ HEADER_TABS = [
 ]
 HEADER_TABS_KEY = 'HEADER_TABS_KEY'
 HUMAN_EDIT_NOTE_DEFAULT = 'Edited by Human'
+CHAT_FEATURE_GATE_TIME = datetime(2026, 5, 17, 12, 0, 0, tzinfo=timezone.utc)
+
+
+def get_available_tabs(paper_resp: PaperResp) -> list[str]:
+    """Get available tabs for a paper, conditionally excluding chat based on update time.
+
+    The chat feature is only available for papers updated after CHAT_FEATURE_GATE_TIME.
+    """
+    tabs = [
+        '📝 Metadata',
+        '👤 Patients',
+        '🧬 Variants',
+        '🔗 Occurrences',
+    ]
+    if paper_resp.updated_at > CHAT_FEATURE_GATE_TIME:
+        tabs.append('💬 Chat with Agent')
+    return tabs
+
 
 COLORS = [
     '#FFF59D',  # soft yellow

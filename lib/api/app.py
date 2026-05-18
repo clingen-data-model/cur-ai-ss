@@ -106,6 +106,7 @@ from lib.models import (
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.segregation_analysis import SegregationAnalysisComputedNestedResp
 from lib.tasks import TaskCreateRequest, TaskResp, enqueue_all_instances, enqueue_task
+from lib.tasks.handlers import ensure_conversation_id
 from lib.tasks.models import TaskStatus, TaskType
 
 logger = logging.getLogger(__name__)

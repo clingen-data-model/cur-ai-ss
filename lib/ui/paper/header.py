@@ -29,7 +29,11 @@ from lib.ui.paper.chat import render_chat_with_agent_tab
 from lib.ui.paper.metadata import render_metadata_tab
 from lib.ui.paper.occurrences import render_patient_variant_occurrences_tab
 from lib.ui.paper.patients import render_patients_tab
-from lib.ui.paper.shared import CURRENT_ANNOTATIONS_KEY, HEADER_TABS, HEADER_TABS_KEY
+from lib.ui.paper.shared import (
+    CURRENT_ANNOTATIONS_KEY,
+    HEADER_TABS_KEY,
+    get_available_tabs,
+)
 from lib.ui.paper.variants import render_variants_tab
 
 RERUN_POPOVER_STATE_KEY = 'RERUN_POPOVER_STATE_KEY'
@@ -183,22 +187,31 @@ with center:
     left, right = st.columns([5, 4])
     with left:
         with st.container(horizontal=True, vertical_alignment='center'):
+            available_tabs = get_available_tabs(paper_resp)
             if paper_query_params.tab_id:
-                default_tab = HEADER_TABS[paper_query_params.tab_id]
+                default_tab = (
+                    available_tabs[paper_query_params.tab_id]
+                    if paper_query_params.tab_id < len(available_tabs)
+                    else available_tabs[0]
+                )
             elif paper_query_params.patient_id:
                 default_tab = '👤 Patients'
             elif paper_query_params.variant_id:
                 default_tab = '🧬 Variants'
             else:
                 default_tab = '📝 Metadata'
-            metadata_tab, patients_tab, variants_tab, occurrences_tab, chat_tab = (
-                st.tabs(
-                    HEADER_TABS,
-                    on_change='rerun',
-                    default=default_tab,
-                    key=HEADER_TABS_KEY,
-                )
+            tabs = st.tabs(
+                available_tabs,
+                on_change='rerun',
+                default=default_tab,
+                key=HEADER_TABS_KEY,
             )
+            metadata_tab = tabs[0]
+            patients_tab = tabs[1]
+            variants_tab = tabs[2]
+            occurrences_tab = tabs[3]
+            chat_tab = tabs[4] if len(tabs) > 4 else None
+
             with center:
                 if metadata_tab.open:
                     render_metadata_tab()
@@ -208,7 +221,7 @@ with center:
                     render_variants_tab(paper_query_params.variant_id)
                 elif occurrences_tab.open:
                     render_patient_variant_occurrences_tab()
-                elif chat_tab.open:
+                elif chat_tab and chat_tab.open:
                     render_chat_with_agent_tab()
 
     with right:
