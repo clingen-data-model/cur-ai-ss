@@ -1,5 +1,5 @@
 import random
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 from urllib.parse import quote
 
@@ -27,7 +27,7 @@ HEADER_TABS = [
 ]
 HEADER_TABS_KEY = 'HEADER_TABS_KEY'
 HUMAN_EDIT_NOTE_DEFAULT = 'Edited by Human'
-CHAT_FEATURE_GATE_TIME = datetime(2026, 5, 17, 12, 0, 0, tzinfo=timezone.utc)
+CHAT_FEATURE_GATE_TIME = datetime(2026, 5, 17, 12, 0, 0)
 
 
 def get_available_tabs(paper_resp: PaperResp) -> list[str]:
