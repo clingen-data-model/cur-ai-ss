@@ -39,7 +39,8 @@ def render_chat_with_agent_tab() -> None:
                         for msg in st.session_state['chat_messages']
                     )
                     if not has_init:
-                        messages = init_chat_message(paper_resp.id, user_input)
+                        init_chat_message(paper_resp.id, user_input)
+                        messages = get_chat_messages(paper_resp.id)
                     else:
                         messages = generate_chat_response(paper_resp.id)
                 st.session_state['chat_messages'] = messages
