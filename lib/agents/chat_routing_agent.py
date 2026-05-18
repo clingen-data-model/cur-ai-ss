@@ -14,31 +14,41 @@ from lib.tasks.models import TaskDB, TaskType
 
 
 class ChatRoutingOutput(BaseModel):
-    task_id: int
+    task_id: int | None = None
     task_type: TaskType
     entity_label: str | None = None
 
 
-_TASK_TYPE_LIST = '\n'.join(f'- "{t.value}": {t.description}' for t in TaskType)
+_NON_CONVERSATIONAL = {
+    TaskType.PDF_PARSING,
+    TaskType.PAPER_ACKNOWLEDGEMENT,
+    TaskType.VARIANT_ENRICHMENT,
+}
+_TASK_TYPE_LIST = '\n'.join(
+    f'- "{t.value}": {t.description}' for t in TaskType if t not in _NON_CONVERSATIONAL
+)
 
 INSTRUCTIONS = f"""
 You are a routing assistant for a genetic research paper analysis system.
 
-Given a user question, follow these two steps:
+Given a user question, follow these steps:
 
-Step 1 — Pick the most relevant task type string from the list below based on the question topic:
+Step 1 — Pick the most relevant task type from the list below:
 {_TASK_TYPE_LIST}
 
-Step 2 — Call `fetch_tasks_for_type` with the task type string chosen above.
-From the returned JSON list of tasks, each entry includes an `entity_label` field computed
-from the entity (patient identifier, variant HGVS, or phenotype concept). Select the task
-whose entity_label best matches the subject of the user's question.
+Choose "{TaskType.GENERAL_PAPER_QUESTION}" if the question:
+- Spans multiple entities or agents (e.g. "summarize all variants")
+- Is about variant annotations like gnomAD, SpliceAI, ClinVar, or allele frequencies
+- Does not clearly match any other specific task type
+
+Step 2 — If you chose "{TaskType.GENERAL_PAPER_QUESTION}", return task_id=null immediately.
+Otherwise, call `fetch_tasks_for_type` with the chosen task type string, then select the task
+whose entity_label best matches the subject of the question.
 
 Return:
-- task_id: the integer id of the chosen task
+- task_id: integer id of the chosen task, or null for "{TaskType.GENERAL_PAPER_QUESTION}"
 - task_type: the task type string (e.g. "HPO Linking")
-- entity_label: copy the entity_label value from the chosen task exactly as returned by the tool
-  (do not generate or modify it); null for global tasks
+- entity_label: copy the entity_label from the chosen task exactly; null for global tasks
 """
 
 

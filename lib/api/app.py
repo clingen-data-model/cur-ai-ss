@@ -32,6 +32,7 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
 from lib.agents.chat_routing_agent import ChatRoutingOutput, make_routing_agent
+from lib.agents.general_paper_qa_agent import agent as general_paper_qa_agent
 from lib.api.db import get_session, session_scope
 from lib.api.middleware import make_log_request_middleware
 from lib.core.environment import env
@@ -59,6 +60,7 @@ from lib.misc.pdf.paths import (
     pdf_supplements_dir,
     pdf_thumbnail_path,
     pdf_words_json_path,
+    relevant_sections_md,
 )
 from lib.models import (
     ChatMessageRequest,
@@ -1205,25 +1207,38 @@ async def init_chat(
 
         routing_result = await Runner.run(make_routing_agent(paper_id), request.message)
         routing_output = routing_result.final_output
-        chosen_task_id = routing_output.task_id
-        chosen_task = session.get(TaskDB, chosen_task_id)
-        if chosen_task is None or not chosen_task.conversation_id:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f'Routing agent returned invalid task_id {chosen_task_id}.',
+
+        if routing_output.task_type == TaskType.GENERAL_PAPER_QUESTION:
+            conversation_db = ConversationDB(
+                paper_id=paper_id,
+                conversation_id=None,
+                messages=[
+                    {'role': 'user', 'content': request.message},
+                    {
+                        'role': 'assistant',
+                        'content': build_selection_summary(routing_output),
+                    },
+                ],
+            )
+        else:
+            chosen_task = session.get(TaskDB, routing_output.task_id)
+            if chosen_task is None or not chosen_task.conversation_id:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail='No agent conversation is available for the selected task type.',
+                )
+            conversation_db = ConversationDB(
+                paper_id=paper_id,
+                conversation_id=chosen_task.conversation_id,
+                messages=[
+                    {'role': 'user', 'content': request.message},
+                    {
+                        'role': 'assistant',
+                        'content': build_selection_summary(routing_output),
+                    },
+                ],
             )
 
-        conversation_db = ConversationDB(
-            paper_id=paper_id,
-            conversation_id=chosen_task.conversation_id,
-            messages=[
-                {'role': 'user', 'content': request.message},
-                {
-                    'role': 'assistant',
-                    'content': build_selection_summary(routing_output),
-                },
-            ],
-        )
         session.add(conversation_db)
         session.refresh(conversation_db)
     else:
@@ -1233,6 +1248,85 @@ async def init_chat(
         ]
 
     return conversation_db.messages
+
+
+def _build_general_qa_agent(paper_id: int, paper_db: PaperDB, session: Session) -> Any:
+    families = session.query(FamilyDB).filter(FamilyDB.paper_id == paper_id).all()
+    family_ids = [f.id for f in families]
+    patients = session.query(PatientDB).filter(PatientDB.paper_id == paper_id).all()
+    pedigrees = session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).all()
+    phenotypes = (
+        session.query(PhenotypeDB).filter(PhenotypeDB.paper_id == paper_id).all()
+    )
+    phenotype_ids = [p.id for p in phenotypes]
+    hpos = (
+        session.query(HpoDB).filter(HpoDB.phenotype_id.in_(phenotype_ids)).all()
+        if phenotype_ids
+        else []
+    )
+    variants = session.query(VariantDB).filter(VariantDB.paper_id == paper_id).all()
+    variant_ids = [v.id for v in variants]
+    harmonized = (
+        session.query(HarmonizedVariantDB)
+        .filter(HarmonizedVariantDB.variant_id.in_(variant_ids))
+        .all()
+        if variant_ids
+        else []
+    )
+    harmonized_ids = [h.id for h in harmonized]
+    enriched = (
+        session.query(EnrichedVariantDB)
+        .filter(EnrichedVariantDB.harmonized_variant_id.in_(harmonized_ids))
+        .all()
+        if harmonized_ids
+        else []
+    )
+    pvlinks = (
+        session.query(PatientVariantLinkDB)
+        .filter(PatientVariantLinkDB.paper_id == paper_id)
+        .all()
+    )
+    seg_evidence = (
+        session.query(SegregationEvidenceDB)
+        .filter(SegregationEvidenceDB.family_id.in_(family_ids))
+        .all()
+        if family_ids
+        else []
+    )
+    seg_computed = (
+        session.query(SegregationAnalysisComputedDB)
+        .filter(SegregationAnalysisComputedDB.family_id.in_(family_ids))
+        .all()
+        if family_ids
+        else []
+    )
+
+    def _row(row: Any) -> dict:
+        return {c.name: getattr(row, c.name) for c in row.__table__.columns}
+
+    db_state = {
+        'paper': _row(paper_db),
+        'families': [_row(r) for r in families],
+        'patients': [_row(r) for r in patients],
+        'pedigrees': [_row(r) for r in pedigrees],
+        'phenotypes': [_row(r) for r in phenotypes],
+        'hpo_terms': [_row(r) for r in hpos],
+        'variants': [_row(r) for r in variants],
+        'harmonized_variants': [_row(r) for r in harmonized],
+        'enriched_variants': [_row(r) for r in enriched],
+        'patient_variant_links': [_row(r) for r in pvlinks],
+        'segregation_evidence': [_row(r) for r in seg_evidence],
+        'segregation_analysis': [_row(r) for r in seg_computed],
+    }
+
+    paper_md = relevant_sections_md(paper_id, paper_db.supplement_format)
+    context = (
+        f'PAPER TEXT:\n{paper_md}\n\n'
+        f'DATABASE STATE:\n{json.dumps(db_state, default=str)}'
+    )
+    return general_paper_qa_agent.clone(
+        instructions=f'{context}\n\n{general_paper_qa_agent.instructions}'
+    )
 
 
 @app.post('/papers/{paper_id}/chat/generate', response_model=list[dict])
@@ -1273,14 +1367,29 @@ async def generate_chat_response(
             detail='No user message in conversation.',
         )
 
-    client = AsyncOpenAI(api_key=env.OPENAI_API_KEY)
-    resp = await client.responses.create(
-        model=env.OPENAI_API_DEPLOYMENT,
-        input=last_user_message,
-        conversation=conversation_db.conversation_id,
-        instructions=SYSTEM_INSTRUCTIONS,
-    )
-    response_text = resp.output_text or ''
+    if conversation_db.conversation_id is None:
+        paper_db = session.get(PaperDB, paper_id)
+        if not paper_db:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+            )
+        qa_agent = _build_general_qa_agent(paper_id, paper_db, session)
+        new_conv_id = await ensure_conversation_id(None)
+        result = await Runner.run(
+            qa_agent, last_user_message, conversation_id=new_conv_id
+        )
+        response_text = result.final_output
+        conversation_db.conversation_id = new_conv_id
+    else:
+        client = AsyncOpenAI(api_key=env.OPENAI_API_KEY)
+        resp = await client.responses.create(
+            model=env.OPENAI_API_DEPLOYMENT,
+            input=last_user_message,
+            conversation=conversation_db.conversation_id,
+            instructions=SYSTEM_INSTRUCTIONS,
+        )
+        response_text = resp.output_text or ''
+
     conversation_db.messages = [
         *conversation_db.messages,
         {'role': 'assistant', 'content': response_text},
