@@ -146,12 +146,7 @@ def log_cache_metrics(task_type: str, result: Any) -> None:
             else 0
         )
 
-        if cache_create > 0 or cache_read > 0:
-            logger.info(
-                f'[CACHE] {task_type}: '
-                f'created={cache_create} tokens, '
-                f'read={cache_read} tokens'
-            )
+        logger.info(f'[CACHE] {task_type}: created={cache_create} read={cache_read}')
 
 
 async def ensure_conversation_id(conversation_id: str | None) -> str:

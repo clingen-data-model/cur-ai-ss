@@ -1335,7 +1335,7 @@ def _build_qa_context(
 
     paper_md = relevant_sections_md(paper_id, paper_db.supplement_format)
     paper_context = f'PAPER TEXT:\n{paper_md}'
-    db_state_context = f'DATABASE STATE:\n{json.dumps(db_state, default=str)}'
+    db_state_context = f'CAA Extracted State:\n{json.dumps(db_state, default=str)}'
 
     return paper_context, db_state_context, GENERAL_PAPER_QA_INSTRUCTIONS
 
