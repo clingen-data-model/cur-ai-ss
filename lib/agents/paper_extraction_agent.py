@@ -7,6 +7,7 @@ import requests
 from agents import Agent, function_tool
 from pydantic import BaseModel
 
+from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.core.environment import env
 from lib.models import PaperExtractionOutput
 
@@ -190,10 +191,11 @@ Important Guidelines:
 - Prefer the gene form as it appears in the abstract. Only use the provided gene symbol if the gene is not mentioned in the abstract.
 """
 
-# --- Agent definition
+PAPER_EXTRACTION_AGENT_INSTRUCTIONS = PAPER_EXTRACTION_INSTRUCTIONS
+
 agent = Agent(
     name='paper_extractor',
-    instructions=PAPER_EXTRACTION_INSTRUCTIONS,
+    instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
     output_type=PaperExtractionOutput,
     tools=[pubmed_search_and_titles, pubmed_fetch_one],

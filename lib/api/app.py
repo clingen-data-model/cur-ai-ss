@@ -32,8 +32,18 @@ from sqlalchemy.orm.attributes import flag_modified
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
-from lib.agents.chat_routing_agent import ChatRoutingOutput, make_routing_agent
-from lib.agents.general_paper_qa_agent import agent as general_paper_qa_agent
+from lib.agents.chat_routing_agent import (
+    _GLOBAL_AGENTS,
+    CHAT_ROUTING_INSTRUCTIONS,
+    ChatRoutingOutput,
+    make_routing_agent,
+)
+from lib.agents.general_paper_qa_agent import (
+    GENERAL_PAPER_QA_INSTRUCTIONS,
+)
+from lib.agents.general_paper_qa_agent import (
+    agent as general_paper_qa_agent,
+)
 from lib.api.db import get_session, session_scope
 from lib.api.middleware import make_log_request_middleware
 from lib.core.environment import env
@@ -1205,7 +1215,10 @@ async def init_chat(
             parts.append(f'because it {output.task_type.description.lower()}')
             return ' '.join(parts)
 
-        routing_result = await Runner.run(make_routing_agent(paper_id), request.message)
+        routing_input = (
+            f'{CHAT_ROUTING_INSTRUCTIONS}\n\nUser question: {request.message}'
+        )
+        routing_result = await Runner.run(make_routing_agent(paper_id), routing_input)
         routing_output = routing_result.final_output
 
         if routing_output.task_type == TaskType.GENERAL_PAPER_QUESTION:
@@ -1244,7 +1257,14 @@ async def init_chat(
     return conversation_db.messages
 
 
-def _build_general_qa_agent(paper_id: int, paper_db: PaperDB, session: Session) -> Any:
+def _build_qa_context(
+    paper_id: int, paper_db: PaperDB, session: Session
+) -> tuple[str, str, str]:
+    """Build paper context and database state separately.
+
+    Returns:
+        Tuple of (paper_context, db_state_context, agent_instructions)
+    """
     families = session.query(FamilyDB).filter(FamilyDB.paper_id == paper_id).all()
     family_ids = [f.id for f in families]
     patients = session.query(PatientDB).filter(PatientDB.paper_id == paper_id).all()
@@ -1314,13 +1334,10 @@ def _build_general_qa_agent(paper_id: int, paper_db: PaperDB, session: Session) 
     }
 
     paper_md = relevant_sections_md(paper_id, paper_db.supplement_format)
-    context = (
-        f'PAPER TEXT:\n{paper_md}\n\n'
-        f'DATABASE STATE:\n{json.dumps(db_state, default=str)}'
-    )
-    return general_paper_qa_agent.clone(
-        instructions=f'{context}\n\n{general_paper_qa_agent.instructions}'
-    )
+    paper_context = f'PAPER TEXT:\n{paper_md}'
+    db_state_context = f'DATABASE STATE:\n{json.dumps(db_state, default=str)}'
+
+    return paper_context, db_state_context, GENERAL_PAPER_QA_INSTRUCTIONS
 
 
 @app.post('/papers/{paper_id}/chat/generate', response_model=list[dict])
@@ -1362,29 +1379,40 @@ async def generate_chat_response(
             detail='No user message in conversation.',
         )
 
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+
+    paper_context, db_state_context, agent_instructions = _build_qa_context(
+        paper_id, paper_db, session
+    )
+
     if conversation_db.conversation_id is None:
-        paper_db = session.get(PaperDB, paper_id)
-        if not paper_db:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
-            )
-        qa_agent = _build_general_qa_agent(paper_id, paper_db, session)
+        qa_input = (
+            f'{paper_context}\n\n'
+            f'{db_state_context}\n\n'
+            f'{agent_instructions}\n\n'
+            f'User question: {last_user_message}'
+        )
         new_conv_id = await ensure_conversation_id(None)
         result = await Runner.run(
-            qa_agent, last_user_message, conversation_id=new_conv_id
+            general_paper_qa_agent, qa_input, conversation_id=new_conv_id
         )
         response_text = result.final_output
         conversation_db.conversation_id = new_conv_id
     else:
         client = AsyncOpenAI(api_key=env.OPENAI_API_KEY)
-        contextual_input = (
-            'You are answering a follow-up question about extracted genomics data from a research paper. '
-            'Provide a response to a non-technical user who is unfamiliar with the actual extraction process.  '
+        qa_input = (
+            f'{paper_context}\n\n'
+            f'{db_state_context}\n\n'
+            f'{agent_instructions}\n\n'
             f'User question: {last_user_message}'
         )
         resp = await client.responses.create(
             model=env.OPENAI_API_DEPLOYMENT,
-            input=contextual_input,
+            input=qa_input,
             conversation=conversation_db.conversation_id,
         )
         response_text = resp.output_text or ''

@@ -1,6 +1,7 @@
 from agents import Agent
 from pydantic import BaseModel
 
+from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.core.environment import env
 
 PAPER_SECTION_CLASSIFIER_INSTRUCTIONS = """
@@ -44,9 +45,11 @@ class PaperSectionClassificationOutput(BaseModel):
     sections: list[SectionClassification]
 
 
+PAPER_SECTION_CLASSIFIER_AGENT_INSTRUCTIONS = PAPER_SECTION_CLASSIFIER_INSTRUCTIONS
+
 agent = Agent(
     name='paper_section_classifier',
-    instructions=PAPER_SECTION_CLASSIFIER_INSTRUCTIONS,
+    instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
     output_type=PaperSectionClassificationOutput,
 )

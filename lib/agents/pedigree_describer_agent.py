@@ -3,6 +3,7 @@ from typing import Optional
 from agents import Agent
 from pydantic import BaseModel
 
+from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.core.environment import env
 
 
@@ -77,9 +78,11 @@ IMPORTANT: Always set found=True and populate both image_id and description when
 
 
 # --- Agent definition ---
+PEDIGREE_DESCRIBER_AGENT_INSTRUCTIONS = PEDIGREE_EXTRACTION_INSTRUCTIONS
+
 agent = Agent(
     name='pedigree_describer',
-    instructions=PEDIGREE_EXTRACTION_INSTRUCTIONS,
+    instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
     output_type=PedigreeExtractionOutput,
 )
