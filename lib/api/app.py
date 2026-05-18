@@ -27,7 +27,7 @@ from fastapi.staticfiles import StaticFiles
 from openai import AsyncOpenAI
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import Session, flag_modified, joinedload, selectinload
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
@@ -1244,6 +1244,7 @@ async def init_chat(
             *conversation_db.messages,
             {'role': 'user', 'content': request.message},
         ]
+        flag_modified(conversation_db, 'messages')
 
     return conversation_db.messages
 
@@ -1388,4 +1389,5 @@ async def generate_chat_response(
         *conversation_db.messages,
         {'role': 'assistant', 'content': response_text},
     ]
+    flag_modified(conversation_db, 'messages')
     return conversation_db.messages
