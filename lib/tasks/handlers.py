@@ -123,6 +123,35 @@ from lib.tasks.models import TaskType
 logger = logging.getLogger(__name__)
 
 
+def log_cache_metrics(task_type: str, result: Any) -> None:
+    """Log prompt cache metrics from agent response."""
+    if not hasattr(result, 'raw_responses') or not result.raw_responses:
+        return
+
+    for resp in result.raw_responses:
+        if not hasattr(resp, 'usage'):
+            continue
+
+        usage = resp.usage
+        cache_create = (
+            usage.cache_creation_input_tokens
+            if hasattr(usage, 'cache_creation_input_tokens')
+            else 0
+        )
+        cache_read = (
+            usage.cache_read_input_tokens
+            if hasattr(usage, 'cache_read_input_tokens')
+            else 0
+        )
+
+        if cache_create > 0 or cache_read > 0:
+            logger.info(
+                f'[CACHE] {task_type}: '
+                f'created={cache_create} tokens, '
+                f'read={cache_read} tokens'
+            )
+
+
 async def ensure_conversation_id(conversation_id: str | None) -> str:
     """Create a new conversation if needed, otherwise return the provided ID."""
     if conversation_id:
@@ -211,6 +240,7 @@ async def handle_paper_section_classifier(task_id: int) -> None:
         agent = paper_section_classifier_agent
 
     result = await Runner.run(agent, message, conversation_id=stored_conv_id)
+    log_cache_metrics('PAPER_SECTION_CLASSIFIER', result)
 
     output_path = paper_section_classification_path(paper_id)
     output_path.write_text(result.final_output.model_dump_json())
@@ -261,6 +291,7 @@ async def handle_paper_metadata(task_id: int) -> None:
         message,
         conversation_id=stored_conv_id,
     )
+    log_cache_metrics('PAPER_METADATA', result)
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -311,6 +342,7 @@ async def handle_variant_extraction(task_id: int) -> None:
         message,
         conversation_id=stored_conv_id,
     )
+    log_cache_metrics('VARIANT_EXTRACTION', result)
 
     with session_scope() as session:
         # Idempotent: delete-then-insert
@@ -369,6 +401,7 @@ async def handle_pedigree_description(task_id: int) -> None:
         message,
         conversation_id=stored_conv_id,
     )
+    log_cache_metrics('PEDIGREE_DESCRIPTION', result)
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -434,6 +467,7 @@ async def handle_patient_extraction(task_id: int) -> None:
         message,
         conversation_id=stored_conv_id,
     )
+    log_cache_metrics('PATIENT_EXTRACTION', result)
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -556,6 +590,7 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
         message,
         conversation_id=stored_conv_id,
     )
+    log_cache_metrics('SEGREGATION_EVIDENCE_EXTRACTION', result)
 
     # Store results in new session
     with session_scope() as session:
@@ -685,6 +720,7 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
         message,
         conversation_id=stored_conv_id,
     )
+    log_cache_metrics('SEGREGATION_ANALYSIS_COMPUTED', result)
 
     # Store results in new session
     with session_scope() as session:
@@ -759,6 +795,7 @@ async def handle_variant_harmonization(task_id: int) -> None:
         max_turns=15,
         conversation_id=stored_conv_id,
     )
+    log_cache_metrics('VARIANT_HARMONIZATION', result)
 
     # Update DB with results
     with session_scope() as session:
@@ -935,6 +972,7 @@ async def handle_patient_variant_linking(task_id: int) -> None:
         message,
         conversation_id=stored_conv_id,
     )
+    log_cache_metrics('PATIENT_VARIANT_LINKING', result)
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -1007,6 +1045,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         message,
         conversation_id=stored_conv_id,
     )
+    log_cache_metrics('PHENOTYPE_EXTRACTION', result)
 
     # Update DB with results
     with session_scope() as session:
@@ -1089,6 +1128,7 @@ async def handle_hpo_linking(task_id: int) -> None:
             },
         ),
     )
+    log_cache_metrics('HPO_LINKING', result)
 
     # Store results in new session
     with session_scope() as session:
