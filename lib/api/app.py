@@ -1240,7 +1240,7 @@ async def init_chat(
             )
 
         session.add(conversation_db)
-        session.refresh(conversation_db)
+        session.flush()
     else:
         conversation_db.messages = [
             *conversation_db.messages,
