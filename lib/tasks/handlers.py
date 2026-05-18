@@ -130,23 +130,31 @@ def log_cache_metrics(task_type: str, result: Any) -> None:
     if not hasattr(result, 'raw_responses') or not result.raw_responses:
         return
 
+    total_input = 0
+    total_cache_read = 0
+
     for resp in result.raw_responses:
         if not hasattr(resp, 'usage'):
             continue
 
         usage = resp.usage
-        cache_create = (
-            usage.cache_creation_input_tokens
-            if hasattr(usage, 'cache_creation_input_tokens')
-            else 0
-        )
+        input_tokens = usage.input_tokens or 0
         cache_read = (
-            usage.cache_read_input_tokens
-            if hasattr(usage, 'cache_read_input_tokens')
+            usage.input_tokens_details.cached_tokens
+            if usage.input_tokens_details and usage.input_tokens_details.cached_tokens
             else 0
         )
 
-        logger.info(f'[CACHE] {task_type}: created={cache_create} read={cache_read}')
+        total_input += input_tokens
+        total_cache_read += cache_read
+
+    if total_input > 0:
+        cache_pct = (total_cache_read / total_input * 100) if total_input > 0 else 0
+        logger.info(
+            f'[CACHE] {task_type}: '
+            f'input={total_input} cached={total_cache_read} '
+            f'({cache_pct:.1f}%)'
+        )
 
 
 async def ensure_conversation_id(conversation_id: str | None) -> str:
