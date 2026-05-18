@@ -1240,7 +1240,7 @@ async def init_chat(
             )
 
         session.add(conversation_db)
-        session.flush()
+        session.refresh(conversation_db)
     else:
         conversation_db.messages = [
             *conversation_db.messages,
@@ -1334,13 +1334,6 @@ async def generate_chat_response(
     paper_id: int,
     session: Session = Depends(get_session),
 ) -> Any:
-    SYSTEM_INSTRUCTIONS = (
-        'You are an expert clinical genomics assistant helping users understand extracted data from research papers. '
-        'The system has extracted patients, variants, phenotypes, and their relationships from a paper. '
-        'You answer questions about this extracted data, help interpret findings, and clarify relationships between entities. '
-        'Keep responses short and precise.'
-    )
-
     conversation_db = (
         session.query(ConversationDB)
         .filter(ConversationDB.paper_id == paper_id)
@@ -1382,11 +1375,14 @@ async def generate_chat_response(
         conversation_db.conversation_id = new_conv_id
     else:
         client = AsyncOpenAI(api_key=env.OPENAI_API_KEY)
+        contextual_input = (
+            'You are answering a follow-up question about extracted genomics data from a research paper. '
+            f'User question: {last_user_message}'
+        )
         resp = await client.responses.create(
             model=env.OPENAI_API_DEPLOYMENT,
-            input=last_user_message,
+            input=contextual_input,
             conversation=conversation_db.conversation_id,
-            instructions=SYSTEM_INSTRUCTIONS,
         )
         response_text = resp.output_text or ''
 

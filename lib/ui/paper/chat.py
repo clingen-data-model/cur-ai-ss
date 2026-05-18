@@ -18,7 +18,7 @@ def render_chat_with_agent_tab() -> None:
 
     # NOTE: this is a HACK until streamlit
     # https://github.com/streamlit/streamlit/issues/8564#issuecomment-4321649533 is released
-    chat_container = st.container(height=600, border=None)
+    chat_container = st.container(height=650, border=None)
     for msg in st.session_state['chat_messages']:
         with chat_container.chat_message(msg['role']):
             st.markdown(msg['content'])
@@ -34,8 +34,14 @@ def render_chat_with_agent_tab() -> None:
         with chat_container.chat_message('assistant'):
             try:
                 with chat_container.spinner('Thinking...'):
-                    init_chat_message(paper_resp.id, user_input)
-                    messages = generate_chat_response(paper_resp.id)
+                    has_init = any(
+                        msg['role'] == 'assistant'
+                        for msg in st.session_state['chat_messages']
+                    )
+                    if not has_init:
+                        messages = init_chat_message(paper_resp.id, user_input)
+                    else:
+                        messages = generate_chat_response(paper_resp.id)
                 st.session_state['chat_messages'] = messages
                 if messages:
                     st.markdown(messages[-1]['content'])
@@ -43,7 +49,6 @@ def render_chat_with_agent_tab() -> None:
                 st.error(get_http_error_detail(e))
             except Exception as e:
                 st.error(str(e))
-
     if st.button('🗑️ Clear Chat', use_container_width=True):
         try:
             clear_chat(paper_resp.id)
