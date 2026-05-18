@@ -9,7 +9,7 @@ from streamlit_searchbox import st_searchbox
 
 from lib.core.environment import env
 from lib.misc.pdf.paths import pdf_thumbnail_path
-from lib.models import PaperResp
+from lib.models import PaperResp, PaperUpdateRequest
 from lib.tasks import get_status_badge_icon, infer_paper_status_detail
 from lib.ui.api import (
     delete_paper,
@@ -116,6 +116,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
     df['agent_status'] = df['id'].map(
         lambda paper_id: f'{get_status_badge_icon(papers_by_id[paper_id].tasks)} {infer_paper_status_detail(papers_by_id[paper_id].tasks)}'
     )
+    df['tag'] = df['tag'].apply(lambda x: [x] if x else [])
     st.data_editor(
         df[
             [
@@ -135,7 +136,11 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
         row_height=100,
         column_config={
             'gene_symbol': st.column_config.Column('Gene Symbol'),
-            'tag': st.column_config.Column('Tag'),
+            'tag': st.column_config.MultiselectColumn(
+                'Tag',
+                options=['TrainingSet', 'ValidationSet'],
+                color=['#ffa421', '#803df5'],
+            ),
             'thumbnail_path': st.column_config.ImageColumn(
                 'Thumbnail',
                 help='First page preview',
