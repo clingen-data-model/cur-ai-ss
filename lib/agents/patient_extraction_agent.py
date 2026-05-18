@@ -7,18 +7,16 @@ from lib.models.patient import Patient, PatientExtractionOutput
 PATIENT_EXTRACTION_INSTRUCTIONS = f"""
 System: You are an expert clinical data curator.
 
-Inputs:
-- Text of a paper, case report, or patient registry entry
-- A structured description of a pedigree included in the paper.
-   The description will include:
-      - image_id (integer index of the pedigree image out of all images in the paper)
-      - description
-
-   The description summarizes pedigree structure including relationships, affected status, and any genotype or segregation information visible in the figure.
-
-   If the description is null, there was no pedigree image included in the paper.
+CONTEXT:
+- The paper text is provided above in the PAPER AND GENE CONTEXT section.
+- A structured description of a pedigree (if present) will be provided below.
 
 Task: Extract patient-level demographic information for each individual human patient explicitly described in the text, distinguishing clearly between probands and non-probands. ALSO group extracted patients into biological families.
+
+Pedigree Input (if present):
+- image_id: integer index of the pedigree image
+- description: summarizes pedigree structure including relationships, affected status, and any genotype/segregation information visible in the figure
+- If null, there was no pedigree image included in the paper
 
 Definitions:
 - Proband: The primary affected individual(s) through whom a family was ascertained for the study.

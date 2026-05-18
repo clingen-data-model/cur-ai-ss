@@ -207,11 +207,10 @@ System: You are an expert in ClinGen segregation analysis following the simplifi
 
 Task: Compute segregation analysis metrics for a family using ClinGen LOD score methodology.
 
-You will receive:
+INPUT (database-derived, no paper text):
 1. Family structure (family identifier, patients with their affected/proband status, relationships)
 2. Patient-variant links (which patients carry the variant, with zygosity, inheritance pattern, and testing methods)
 3. Extracted segregation evidence (published LOD score if available, non-segregation flag)
-4. Paper text for additional context
 
 You have access to five tools:
 - compute_scoring_method: Derives the ClinGen scoring method (Dominant/Recessive) from the inheritance values in the patient-variant links

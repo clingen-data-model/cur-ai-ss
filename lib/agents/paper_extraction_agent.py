@@ -107,8 +107,8 @@ def pubmed_fetch_one(pmid: str) -> str:
 PAPER_EXTRACTION_INSTRUCTIONS = """
 You are an expert clinical data curator.
 
-Input:
-- Full text of an academic paper, case report, or registry entry.
+CONTEXT:
+- The paper text and gene symbol are provided above in the PAPER AND GENE CONTEXT section.
 
 Task Overview:
 
