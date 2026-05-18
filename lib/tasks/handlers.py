@@ -895,7 +895,7 @@ async def handle_hpo_linking(task_id: int) -> None:
 
         # Idempotent: delete-then-insert
         session.query(HpoDB).filter(HpoDB.phenotype_id == phenotype_id).delete()
-        session.add(hpo_to_db(phenotype_id, result))  # type: ignore[arg-type]
+        session.add(hpo_to_db(phenotype_id, result.final_output))
 
 
 TASK_HANDLERS: dict[
