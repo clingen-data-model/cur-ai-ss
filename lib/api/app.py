@@ -1379,6 +1379,7 @@ async def generate_chat_response(
         client = AsyncOpenAI(api_key=env.OPENAI_API_KEY)
         contextual_input = (
             'You are answering a follow-up question about extracted genomics data from a research paper. '
+            'Provide a response to a non-technical user who is unfamiliar with the actual extraction process.  '
             f'User question: {last_user_message}'
         )
         resp = await client.responses.create(
