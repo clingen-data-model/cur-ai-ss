@@ -34,9 +34,11 @@ _GLOBAL_AGENTS = {
     TaskType.PATIENT_EXTRACTION,
     TaskType.PATIENT_VARIANT_LINKING,
 }
+_CONVERSATIONAL_TASK_TYPES = [t for t in TaskType if t not in _NON_CONVERSATIONAL]
 _TASK_TYPE_LIST = '\n'.join(
-    f'- "{t.value}": {t.description}' for t in TaskType if t not in _NON_CONVERSATIONAL
+    f'- "{t.value}": {t.description}' for t in _CONVERSATIONAL_TASK_TYPES
 )
+_VALID_TASK_TYPE_VALUES = [t.value for t in _CONVERSATIONAL_TASK_TYPES]
 
 CHAT_ROUTING_INSTRUCTIONS = f"""Given a user question about a genomics paper, route to the appropriate task type.
 
@@ -44,8 +46,11 @@ Step 1 — Identify the question's subject
 Extract key entities (patient/family identifiers, variant descriptions, phenotypes) from the question.
 
 Step 2 — Select the task type
-Pick the most relevant task type from the list below:
+Pick the most relevant task type from the list below. Use EXACTLY one of these values for task_type:
 {_TASK_TYPE_LIST}
+
+**IMPORTANT: task_type must be one of these exact values:
+{chr(10).join(f'  - "{v}"' for v in _VALID_TASK_TYPE_VALUES)}
 
 **Important: Agent scopes**
 - **Global agents** perform extraction/analysis at the paper level without associated entity IDs:
@@ -57,28 +62,30 @@ Pick the most relevant task type from the list below:
   Variant Harmonization (per-variant), Phenotype Extraction (per-patient), HPO Linking (per-phenotype).
 
 Step 3 — Route the request
-If you chose a global agent:
+If you chose "General Paper Question":
   → Return task_id=null, entity_label=null
   → Reasoning: explain why this task is paper-wide
 
-If you chose an entity-specific agent:
-  → Call `fetch_tasks_for_type` with the chosen task type string
+For all other task types:
+  → Call `fetch_tasks_for_type` with the chosen task type string (MUST match one of the exact values above)
   → Examine all returned tasks and their entity_labels
-  → Select the task whose entity_label best matches the question's subject
+  → If the task type is entity-specific (per-family, per-patient, per-variant, per-phenotype):
+     Select the task whose entity_label best matches the question's subject
   → Return the task_id and entity_label from the matched task
 
 Step 4 — Validate your selection
 Before returning, verify:
-- If global agent: Does the question genuinely require this paper-wide analysis?
+- Is the task_type one of the exact values listed above?
+- If "General Paper Question": Does the question genuinely require paper-wide analysis?
+- For all other types: Did fetch_tasks_for_type return at least one result?
 - If entity-specific: Does the selected task's entity_label match the question's subject?
-- Is the task_type the most specific match (not a default fallback)?
 - Would this task actually answer the user's question?
 
-If validation fails, reconsider your selection or choose GENERAL_PAPER_QUESTION as fallback.
+If validation fails, reconsider your selection or choose "General Paper Question" as fallback.
 
 Return:
 - task_id: integer id of the chosen task, or null for global agents
-- task_type: the task type string (e.g. "Patient Extraction", "HPO Linking")
+- task_type: MUST be one of the exact values listed above
 - entity_label: the entity identifier from the matched task; null for global agents
 - reasoning: explain your routing choice, agent scope classification, entity matching, and validation
 """

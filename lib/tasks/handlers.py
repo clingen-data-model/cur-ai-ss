@@ -77,6 +77,7 @@ from lib.agents.variant_harmonization_agent import (
 )
 from lib.api.db import session_scope
 from lib.core.environment import env
+from lib.core.logging import setup_logging
 from lib.misc.gcs import upload_and_sign_image
 from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import (
@@ -120,6 +121,7 @@ from lib.models.variant import HarmonizedVariant, Variant
 from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
 from lib.tasks.models import TaskType
 
+setup_logging()
 logger = logging.getLogger(__name__)
 
 
