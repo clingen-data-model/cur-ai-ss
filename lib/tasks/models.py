@@ -36,20 +36,20 @@ class TaskType(StrEnum):
     def description(self) -> str:
         """Return a human-readable description with context about what this task does."""
         descriptions: dict[TaskType, str] = {
-            TaskType.PDF_PARSING: 'Parse PDF file and extract text, tables, and images',
-            TaskType.PAPER_ACKNOWLEDGEMENT: 'Acknowledge the paper and classify which sections are relevant for downstream extraction',
-            TaskType.GENERAL_PAPER_QUESTION: 'Answer a general question using the full paper text and all extracted data',
-            TaskType.PAPER_METADATA: 'Extract paper title, authors, publication date, and other metadata; resolve to PubMed article',
-            TaskType.VARIANT_EXTRACTION: 'Identify genetic variants mentioned in the paper',
-            TaskType.PEDIGREE_DESCRIPTION: 'Analyze the images in the paper to determine if there is a describable pedigree',
-            TaskType.PATIENT_EXTRACTION: 'Extract patient demographic and clinical information',
-            TaskType.SEGREGATION_EVIDENCE_EXTRACTION: 'Collect segregation analysis evidence within each family',
-            TaskType.SEGREGATION_ANALYSIS_COMPUTED: 'Compute segregation analysis results per family',
-            TaskType.VARIANT_HARMONIZATION: 'Normalize variants to standard genomic coordinates using ClinVar, dbSNP, ClinGen Allele Registry, and VariantValidator',
-            TaskType.VARIANT_ENRICHMENT: 'Add annotations (SpliceAI, conservation scores, etc.) to variants',
-            TaskType.PATIENT_VARIANT_LINKING: 'Associate patients with their variants and inheritance patterns',
-            TaskType.PHENOTYPE_EXTRACTION: 'Extract phenotype text spans per patient',
-            TaskType.HPO_LINKING: 'Map phenotypes to HPO ontology terms for standardization',
+            TaskType.PDF_PARSING: 'Parses PDF file and extract text, tables, and images',
+            TaskType.PAPER_ACKNOWLEDGEMENT: 'Acknowledges the paper and classify which sections are relevant for downstream extraction',
+            TaskType.GENERAL_PAPER_QUESTION: 'Answers a general question using the full paper text and all extracted data',
+            TaskType.PAPER_METADATA: 'Extracts paper title, authors, publication date, and other metadata; resolve to PubMed article',
+            TaskType.VARIANT_EXTRACTION: 'Identifies genetic variants mentioned in the paper',
+            TaskType.PEDIGREE_DESCRIPTION: 'Analyzes the images in the paper to determine if there is a describable pedigree',
+            TaskType.PATIENT_EXTRACTION: 'Extracts patient demographic and clinical information',
+            TaskType.SEGREGATION_EVIDENCE_EXTRACTION: 'Collects segregation analysis evidence within each family',
+            TaskType.SEGREGATION_ANALYSIS_COMPUTED: 'Computes segregation analysis results per family',
+            TaskType.VARIANT_HARMONIZATION: 'Normalizes variants to standard genomic coordinates using ClinVar, dbSNP, ClinGen Allele Registry, and VariantValidator',
+            TaskType.VARIANT_ENRICHMENT: 'Adds annotations (SpliceAI, conservation scores, etc.) to variants',
+            TaskType.PATIENT_VARIANT_LINKING: 'Associates patients with their variants and inheritance patterns',
+            TaskType.PHENOTYPE_EXTRACTION: 'Extracts phenotype text spans per patient',
+            TaskType.HPO_LINKING: 'Maps phenotypes to HPO ontology terms for standardization',
         }
         return descriptions[self]
 
