@@ -27,7 +27,8 @@ from fastapi.staticfiles import StaticFiles
 from openai import AsyncOpenAI
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, flag_modified, joinedload, selectinload
+from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm.attributes import flag_modified
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
