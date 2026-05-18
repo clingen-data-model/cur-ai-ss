@@ -15,9 +15,9 @@ from typing import (
 from urllib.parse import quote
 
 import requests
-from agents import Agent
+from agents import Agent, function_tool
 
-from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS, function_tool
+from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.core.environment import env
 from lib.models.evidence_block import ReasoningBlock
 from lib.models.variant import (

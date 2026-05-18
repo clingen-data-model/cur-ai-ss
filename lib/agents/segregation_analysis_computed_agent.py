@@ -3,9 +3,9 @@
 import math
 from collections import Counter
 
-from agents import Agent
+from agents import Agent, function_tool
 
-from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS, function_tool
+from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.core.environment import env
 from lib.models.patient_variant_link import TestingMethod
 from lib.models.segregation_analysis import (
