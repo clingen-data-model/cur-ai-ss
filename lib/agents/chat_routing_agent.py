@@ -62,9 +62,17 @@ Pick the most relevant task type from the list below. Use EXACTLY one of these v
   Variant Harmonization (per-variant), Phenotype Extraction (per-patient), HPO Linking (per-phenotype).
 
 Step 3 — Route the request
+**Critical distinction for global agents:**
+- Questions ABOUT VARIANTS (why weren't they extracted, how were they processed, etc.) → "Variant Extraction"
+- Questions ABOUT PATIENTS (demographics, identification, status, etc.) → "Patient Extraction"
+- Questions ABOUT PEDIGREES (pedigree images/diagrams, family structure visualization, etc.) → "Pedigree Description"
+- Questions ABOUT PATIENT-VARIANT LINKS (inheritance, segregation, testing, etc.) → "Patient Variant Linking"
+- Questions ABOUT PAPER METADATA (title, authors, publication date, etc.) → "Paper Metadata"
+- General questions that don't fit above categories (overall summary, general discussion, etc.) → "General Paper Question"
+
 If you chose "General Paper Question":
   → Return task_id=null, entity_label=null
-  → Reasoning: explain why this task is paper-wide
+  → Reasoning: explain why this task is paper-wide and doesn't fit the more specific categories
 
 For all other task types:
   → Call `fetch_tasks_for_type` with the chosen task type string (MUST match one of the exact values above)
@@ -76,7 +84,7 @@ For all other task types:
 Step 4 — Validate your selection
 Before returning, verify:
 - Is the task_type one of the exact values listed above?
-- If "General Paper Question": Does the question genuinely require paper-wide analysis?
+- If "General Paper Question": Does the question genuinely NOT relate to variants, patients, families, links, or metadata?
 - For all other types: Did fetch_tasks_for_type return at least one result?
 - If entity-specific: Does the selected task's entity_label match the question's subject?
 - Would this task actually answer the user's question?
