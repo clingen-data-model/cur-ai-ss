@@ -835,6 +835,29 @@ async def handle_variant_enrichment(task_id: int) -> None:
             .filter(HarmonizedVariantDB.variant_id == task.variant_id)
         )
         rows = query.order_by(VariantDB.id).all()
+
+        # Skip enrichment if harmonization did not succeed
+        # A successful harmonization must have at least one meaningful identifier
+        rows = [
+            r
+            for r in rows
+            if any(
+                [
+                    r.gnomad_style_coordinates,
+                    r.rsid,
+                    r.caid,
+                    r.hgvs_g,
+                    r.hgvs_c,
+                ]
+            )
+        ]
+
+        if not rows:
+            logger.info(
+                f'Task {task_id}: Skipping enrichment - variant failed to harmonize'
+            )
+            return
+
         harmonized_variants = [
             HarmonizedVariant(
                 gnomad_style_coordinates=r.gnomad_style_coordinates,
