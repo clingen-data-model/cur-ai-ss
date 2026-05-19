@@ -294,6 +294,12 @@ class VariantDB(Base):
         uselist=False,
         cascade='all, delete-orphan',
     )
+    enriched_variant: Mapped['EnrichedVariantDB | None'] = relationship(
+        'EnrichedVariantDB',
+        back_populates='variant',
+        uselist=False,
+        cascade='all, delete-orphan',
+    )
     patient_variant_links: Mapped[list['PatientVariantLinkDB']] = relationship(
         'PatientVariantLinkDB', back_populates='variant', cascade='all, delete-orphan'
     )
@@ -327,12 +333,6 @@ class HarmonizedVariantDB(Base):
 
     variant: Mapped['VariantDB'] = relationship(
         'VariantDB', back_populates='harmonized_variant', foreign_keys=[variant_id]
-    )
-    enriched_variant: Mapped['EnrichedVariantDB | None'] = relationship(
-        'EnrichedVariantDB',
-        back_populates='harmonized_variant',
-        uselist=False,
-        cascade='all, delete-orphan',
     )
 
     __table_args__ = (
@@ -421,9 +421,9 @@ class EnrichedVariantDB(Base):
     __tablename__ = 'enriched_variants'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    harmonized_variant_id: Mapped[int] = mapped_column(
+    variant_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey('harmonized_variants.id', ondelete='CASCADE'),
+        ForeignKey('variants.id', ondelete='CASCADE'),
         nullable=False,
     )
 
@@ -456,15 +456,13 @@ class EnrichedVariantDB(Base):
         onupdate=func.now(),
     )
 
-    harmonized_variant: Mapped[HarmonizedVariantDB] = relationship(
-        'HarmonizedVariantDB',
+    variant: Mapped['VariantDB'] = relationship(
+        'VariantDB',
         back_populates='enriched_variant',
-        foreign_keys=[harmonized_variant_id],
+        foreign_keys=[variant_id],
     )
 
     __table_args__ = (
-        UniqueConstraint(
-            'harmonized_variant_id', name='uq_enriched_variants_harmonized_variant_id'
-        ),
-        Index('ix_enriched_variants_harmonized_variant_id', 'harmonized_variant_id'),
+        UniqueConstraint('variant_id', name='uq_enriched_variants_variant_id'),
+        Index('ix_enriched_variants_variant_id', 'variant_id'),
     )

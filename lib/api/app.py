@@ -589,9 +589,8 @@ def get_variants(paper_id: int, session: Session = Depends(get_session)) -> Any:
     variants = (
         session.query(VariantDB)
         .options(
-            joinedload(VariantDB.harmonized_variant).joinedload(
-                HarmonizedVariantDB.enriched_variant
-            )
+            joinedload(VariantDB.harmonized_variant),
+            joinedload(VariantDB.enriched_variant),
         )
         .filter(VariantDB.paper_id == paper_id)
         .order_by(VariantDB.id)
@@ -622,22 +621,22 @@ def _variant_to_resp(row: VariantDB) -> VariantResp:
         )
     enriched = (
         EnrichedVariantResp(
-            gnomad_style_coordinates=hv.enriched_variant.gnomad_style_coordinates,
-            rsid=hv.enriched_variant.rsid,
-            caid=hv.enriched_variant.caid,
-            pathogenicity=hv.enriched_variant.pathogenicity,
-            submissions=hv.enriched_variant.submissions,
-            stars=hv.enriched_variant.stars,
-            exon=hv.enriched_variant.exon,
-            revel=hv.enriched_variant.revel,
-            alphamissense_class=hv.enriched_variant.alphamissense_class,
-            alphamissense_score=hv.enriched_variant.alphamissense_score,
-            spliceai=hv.enriched_variant.spliceai,
-            gnomad_top_level_af=hv.enriched_variant.gnomad_top_level_af,
-            gnomad_popmax_af=hv.enriched_variant.gnomad_popmax_af,
-            gnomad_popmax_population=hv.enriched_variant.gnomad_popmax_population,
+            gnomad_style_coordinates=row.enriched_variant.gnomad_style_coordinates,
+            rsid=row.enriched_variant.rsid,
+            caid=row.enriched_variant.caid,
+            pathogenicity=row.enriched_variant.pathogenicity,
+            submissions=row.enriched_variant.submissions,
+            stars=row.enriched_variant.stars,
+            exon=row.enriched_variant.exon,
+            revel=row.enriched_variant.revel,
+            alphamissense_class=row.enriched_variant.alphamissense_class,
+            alphamissense_score=row.enriched_variant.alphamissense_score,
+            spliceai=row.enriched_variant.spliceai,
+            gnomad_top_level_af=row.enriched_variant.gnomad_top_level_af,
+            gnomad_popmax_af=row.enriched_variant.gnomad_popmax_af,
+            gnomad_popmax_population=row.enriched_variant.gnomad_popmax_population,
         )
-        if hv and hv.enriched_variant
+        if row.enriched_variant
         else None
     )
     return VariantResp(
@@ -691,9 +690,8 @@ def update_variant(
     variant_db = (
         session.query(VariantDB)
         .options(
-            joinedload(VariantDB.harmonized_variant).joinedload(
-                HarmonizedVariantDB.enriched_variant
-            )
+            joinedload(VariantDB.harmonized_variant),
+            joinedload(VariantDB.enriched_variant),
         )
         .filter(VariantDB.id == variant_id, VariantDB.paper_id == paper_id)
         .one_or_none()
@@ -723,7 +721,7 @@ def update_variant(
             )
         harmonized_update.apply_to(variant_db.harmonized_variant)
         # delete-orphan cascade removes the row
-        variant_db.harmonized_variant.enriched_variant = None
+        variant_db.enriched_variant = None
     session.flush()
     return _variant_to_resp(variant_db)
 
@@ -1287,12 +1285,11 @@ def _build_qa_context(
         if variant_ids
         else []
     )
-    harmonized_ids = [h.id for h in harmonized]
     enriched = (
         session.query(EnrichedVariantDB)
-        .filter(EnrichedVariantDB.harmonized_variant_id.in_(harmonized_ids))
+        .filter(EnrichedVariantDB.variant_id.in_(variant_ids))
         .all()
-        if harmonized_ids
+        if variant_ids
         else []
     )
     pvlinks = (

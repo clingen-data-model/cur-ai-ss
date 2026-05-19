@@ -65,9 +65,7 @@ def build_curation_row(paper_id: int, session: Session) -> CurationSummaryRow:
             paper_id=paper_id,
             publication_and_testing=publication_and_testing_sections,
             proband=[],
-            variant_info=[
-                SectionContent(title='Variants', content='No data extracted')
-            ],
+            variant_info=[],
             clinical_presentation=[],
             functional_segregation=[],
             score=[],
@@ -145,8 +143,8 @@ def build_curation_row(paper_id: int, session: Session) -> CurationSummaryRow:
                     parts.append(f'CAID: {hv.caid}')
 
                 # Enriched data
-                if hv.enriched_variant:
-                    ev = hv.enriched_variant
+                if variant.enriched_variant:
+                    ev = variant.enriched_variant
                     enriched_parts = []
                     if ev.pathogenicity:
                         enriched_parts.append(f'ClinVar: {ev.pathogenicity}')
