@@ -3,7 +3,6 @@ from typing import Literal
 from sqlalchemy.orm import Session
 
 from lib.tasks.models import (
-    TASK_PREDECESSORS,
     TASK_SUCCESSORS,
     InferredPaperStatus,
     TaskDB,
@@ -130,75 +129,46 @@ def enqueue_all_instances(
 def enqueue_successors(session: Session, task: TaskDB) -> None:
     """Create successor tasks when a task completes.
 
-    For each successor task type, checks that ALL predecessor tasks are
-    completed before enqueueing. For successors that require entity expansion,
-    creates per-entity tasks instead of global ones.
+    Each case is explicit about what successors to create and any entity ID
+    filtering/expansion needed. PATIENT_VARIANT_LINKING is the only task that
+    requires checking multiple independent predecessors.
     """
     from lib.models import FamilyDB, PatientDB, PhenotypeDB, VariantDB
 
-    successors = TASK_SUCCESSORS.get(task.type, [])
-
-    for successor_type in successors:
-        # Check that all predecessors for this successor are completed
-        predecessor_types = TASK_PREDECESSORS.get(successor_type, [])
-        all_predecessors_done = True
-
-        for pred_type in predecessor_types:
-            pred_task = (
-                session.query(TaskDB)
-                .filter(
-                    TaskDB.paper_id == task.paper_id,
-                    TaskDB.type == pred_type,
-                )
-                .first()
+    match task.type:
+        case TaskType.PDF_PARSING:
+            enqueue_task(
+                session,
+                paper_id=task.paper_id,
+                task_type=TaskType.PAPER_ACKNOWLEDGEMENT,
             )
-            # If predecessor doesn't exist or isn't completed, skip this successor
-            if not pred_task or pred_task.status != TaskStatus.COMPLETED:
-                all_predecessors_done = False
-                break
 
-            # Check that predecessor's entity IDs match (or predecessor is global)
-            if (
-                (
-                    pred_task.family_id is not None
-                    and pred_task.family_id != task.family_id
-                )
-                or (
-                    pred_task.patient_id is not None
-                    and pred_task.patient_id != task.patient_id
-                )
-                or (
-                    pred_task.variant_id is not None
-                    and pred_task.variant_id != task.variant_id
-                )
-                or (
-                    pred_task.phenotype_id is not None
-                    and pred_task.phenotype_id != task.phenotype_id
-                )
-            ):
-                all_predecessors_done = False
-                break
-
-        if not all_predecessors_done:
-            continue
-
-        # Handle entity expansion for transitions that need per-entity tasks
-        if successor_type == TaskType.VARIANT_HARMONIZATION:
-            # VARIANT_EXTRACTION (global) -> VARIANT_HARMONIZATION (per-variant)
-            variants = (
-                session.query(VariantDB)
-                .filter(VariantDB.paper_id == task.paper_id)
-                .all()
+        case TaskType.PAPER_ACKNOWLEDGEMENT:
+            enqueue_task(
+                session,
+                paper_id=task.paper_id,
+                task_type=TaskType.PAPER_METADATA,
             )
-            for variant in variants:
-                enqueue_task(
-                    session,
-                    paper_id=task.paper_id,
-                    task_type=successor_type,
-                    variant_id=variant.id,
-                )
-        elif successor_type == TaskType.PHENOTYPE_EXTRACTION:
-            # PATIENT_EXTRACTION (global) -> PHENOTYPE_EXTRACTION (per-patient)
+            enqueue_task(
+                session,
+                paper_id=task.paper_id,
+                task_type=TaskType.VARIANT_EXTRACTION,
+            )
+            enqueue_task(
+                session,
+                paper_id=task.paper_id,
+                task_type=TaskType.PEDIGREE_DESCRIPTION,
+            )
+
+        case TaskType.PEDIGREE_DESCRIPTION:
+            enqueue_task(
+                session,
+                paper_id=task.paper_id,
+                task_type=TaskType.PATIENT_EXTRACTION,
+            )
+
+        case TaskType.PATIENT_EXTRACTION:
+            # Expand to per-patient PHENOTYPE_EXTRACTION tasks
             patients = (
                 session.query(PatientDB)
                 .filter(PatientDB.paper_id == task.paper_id)
@@ -208,25 +178,69 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 enqueue_task(
                     session,
                     paper_id=task.paper_id,
-                    task_type=successor_type,
+                    task_type=TaskType.PHENOTYPE_EXTRACTION,
                     patient_id=patient.id,
                 )
-        elif successor_type == TaskType.HPO_LINKING:
-            # PHENOTYPE_EXTRACTION (per-patient) -> HPO_LINKING (per-phenotype)
-            phenotypes = (
-                session.query(PhenotypeDB)
-                .filter(PhenotypeDB.paper_id == task.paper_id)
-                .all()
+
+            # Gate PATIENT_VARIANT_LINKING on VARIANT_EXTRACTION also being done
+            variant_task = (
+                session.query(TaskDB)
+                .filter(
+                    TaskDB.paper_id == task.paper_id,
+                    TaskDB.type == TaskType.VARIANT_EXTRACTION,
+                    TaskDB.status == TaskStatus.COMPLETED,
+                )
+                .first()
             )
-            for phenotype in phenotypes:
+            if variant_task:
                 enqueue_task(
                     session,
                     paper_id=task.paper_id,
-                    task_type=successor_type,
-                    phenotype_id=phenotype.id,
+                    task_type=TaskType.PATIENT_VARIANT_LINKING,
                 )
-        elif successor_type == TaskType.SEGREGATION_EVIDENCE_EXTRACTION:
-            # PATIENT_VARIANT_LINKING (global) -> SEGREGATION_EVIDENCE_EXTRACTION (per-family)
+
+        case TaskType.VARIANT_EXTRACTION:
+            # Expand to per-variant VARIANT_HARMONIZATION tasks
+            variants = (
+                session.query(VariantDB)
+                .filter(VariantDB.paper_id == task.paper_id)
+                .all()
+            )
+            for variant in variants:
+                enqueue_task(
+                    session,
+                    paper_id=task.paper_id,
+                    task_type=TaskType.VARIANT_HARMONIZATION,
+                    variant_id=variant.id,
+                )
+
+            # Gate PATIENT_VARIANT_LINKING on PATIENT_EXTRACTION also being done
+            patient_task = (
+                session.query(TaskDB)
+                .filter(
+                    TaskDB.paper_id == task.paper_id,
+                    TaskDB.type == TaskType.PATIENT_EXTRACTION,
+                    TaskDB.status == TaskStatus.COMPLETED,
+                )
+                .first()
+            )
+            if patient_task:
+                enqueue_task(
+                    session,
+                    paper_id=task.paper_id,
+                    task_type=TaskType.PATIENT_VARIANT_LINKING,
+                )
+
+        case TaskType.VARIANT_HARMONIZATION:
+            enqueue_task(
+                session,
+                paper_id=task.paper_id,
+                task_type=TaskType.VARIANT_ENRICHMENT,
+                variant_id=task.variant_id,
+            )
+
+        case TaskType.PATIENT_VARIANT_LINKING:
+            # Expand to per-family SEGREGATION_EVIDENCE_EXTRACTION tasks
             families = (
                 session.query(FamilyDB).filter(FamilyDB.paper_id == task.paper_id).all()
             )
@@ -234,19 +248,50 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 enqueue_task(
                     session,
                     paper_id=task.paper_id,
-                    task_type=successor_type,
+                    task_type=TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
                     family_id=family.id,
                 )
-        else:
-            # For all other successors, pass through the same entity IDs
+
+        case TaskType.SEGREGATION_EVIDENCE_EXTRACTION:
             enqueue_task(
                 session,
                 paper_id=task.paper_id,
-                task_type=successor_type,
+                task_type=TaskType.SEGREGATION_ANALYSIS_COMPUTED,
                 family_id=task.family_id,
-                patient_id=task.patient_id,
-                variant_id=task.variant_id,
-                phenotype_id=task.phenotype_id,
+            )
+
+        case TaskType.PHENOTYPE_EXTRACTION:
+            # Expand to per-phenotype HPO_LINKING tasks (filtered by this patient's phenotypes)
+            phenotypes = (
+                session.query(PhenotypeDB)
+                .filter(
+                    PhenotypeDB.paper_id == task.paper_id,
+                    PhenotypeDB.patient_id == task.patient_id,
+                )
+                .all()
+            )
+            for phenotype in phenotypes:
+                enqueue_task(
+                    session,
+                    paper_id=task.paper_id,
+                    task_type=TaskType.HPO_LINKING,
+                    phenotype_id=phenotype.id,
+                )
+
+        case (
+            TaskType.PAPER_METADATA
+            | TaskType.VARIANT_ENRICHMENT
+            | TaskType.SEGREGATION_ANALYSIS_COMPUTED
+            | TaskType.HPO_LINKING
+            | TaskType.GENERAL_PAPER_QUESTION
+        ):
+            # These tasks have no successors
+            pass
+
+        case _:
+            raise ValueError(
+                f'enqueue_successors: unhandled task type {task.type}. '
+                'Add a case for this task type.'
             )
 
 
