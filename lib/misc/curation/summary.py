@@ -143,8 +143,8 @@ def build_curation_row(paper_id: int, session: Session) -> CurationSummaryRow:
                     parts.append(f'CAID: {hv.caid}')
 
                 # Enriched data
-                if hv.enriched_variant:
-                    ev = hv.enriched_variant
+                if variant.enriched_variant:
+                    ev = variant.enriched_variant
                     enriched_parts = []
                     if ev.pathogenicity:
                         enriched_parts.append(f'ClinVar: {ev.pathogenicity}')
