@@ -1,3 +1,4 @@
+import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Optional, Tuple, cast
 
@@ -5,6 +6,8 @@ import requests
 
 from lib.core.environment import env
 from lib.models.variant import EnrichedVariant, HarmonizedVariant, SpliceAI
+
+logger = logging.getLogger(__name__)
 
 GNOMAD_BASE = 'https://gnomad.broadinstitute.org/api'
 EUTILS_BASE = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils'
@@ -321,14 +324,14 @@ def enrich_variants_batch(
 ) -> List[EnrichedVariant]:
     results: List[EnrichedVariant] = []
 
-    # Parallelize across variants
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        futures = [executor.submit(enrich_variant, hv) for hv in harmonized_variants]
-
-        for future in futures:
-            try:
-                results.append(future.result())
-            except Exception:
-                continue
+    for i, hv in enumerate(harmonized_variants, 1):
+        logger.info(
+            f'Enriching variant {i}/{len(harmonized_variants)}: {hv.gnomad_style_coordinates or hv.rsid}'
+        )
+        try:
+            enriched = enrich_variant(hv)
+            results.append(enriched)
+        except Exception as e:
+            logger.exception(f'Failed to enrich variant: {e}')
 
     return results
