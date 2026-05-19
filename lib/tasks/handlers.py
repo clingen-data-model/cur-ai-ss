@@ -846,7 +846,7 @@ async def handle_variant_enrichment(task_id: int) -> None:
             )
             for r in rows
         ]
-        harmonized_variant_ids = [r.id for r in rows]
+        variant_ids = [r.variant_id for r in rows]
 
     # Offload blocking enrichment to thread (outside session context)
     enriched_variants = await asyncio.to_thread(
@@ -862,17 +862,13 @@ async def handle_variant_enrichment(task_id: int) -> None:
 
         # Idempotent: delete-then-insert (for this specific variant)
         session.query(EnrichedVariantDB).filter(
-            EnrichedVariantDB.harmonized_variant_id.in_(
-                select(HarmonizedVariantDB.id).where(
-                    HarmonizedVariantDB.variant_id == task.variant_id
-                )
-            )
+            EnrichedVariantDB.variant_id == task.variant_id
         ).delete()
 
-        for hv_id, ev in zip(harmonized_variant_ids, enriched_variants):
+        for var_id, ev in zip(variant_ids, enriched_variants):
             session.add(
                 EnrichedVariantDB(
-                    harmonized_variant_id=hv_id,
+                    variant_id=var_id,
                     gnomad_style_coordinates=ev.gnomad_style_coordinates,
                     rsid=ev.rsid,
                     caid=ev.caid,
