@@ -616,7 +616,7 @@ def test_get_variants_harmonized_and_enriched(client, db_session, seeded_paper):
 
     # Create enriched variant
     enriched = EnrichedVariantDB(
-        harmonized_variant_id=harmonized.id,
+        variant_id=variant.id,
         pathogenicity='Pathogenic',
         submissions=15,
         stars=3,
@@ -744,7 +744,7 @@ def seeded_variant(db_session, seeded_paper):
     db_session.flush()
     db_session.add(
         EnrichedVariantDB(
-            harmonized_variant_id=harmonized.id,
+            variant_id=variant.id,
             pathogenicity='Pathogenic',
             submissions=3,
             stars=2,
@@ -895,11 +895,7 @@ def test_update_variant_edit_harmonized_clears_enrichment(
     # Row is actually gone, not just hidden from the response.
     remaining = (
         db_session.query(EnrichedVariantDB)
-        .join(
-            HarmonizedVariantDB,
-            EnrichedVariantDB.harmonized_variant_id == HarmonizedVariantDB.id,
-        )
-        .filter(HarmonizedVariantDB.variant_id == seeded_variant.id)
+        .filter(EnrichedVariantDB.variant_id == seeded_variant.id)
         .count()
     )
     assert remaining == 0

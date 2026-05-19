@@ -35,7 +35,11 @@ def upgrade() -> None:
             'uq_enriched_variants_variant_id', ['variant_id']
         )
         batch_op.create_foreign_key(
-            None, 'variants', ['variant_id'], ['id'], ondelete='CASCADE'
+            'fk_enriched_variants_variant_id_variants',
+            'variants',
+            ['variant_id'],
+            ['id'],
+            ondelete='CASCADE',
         )
 
 
