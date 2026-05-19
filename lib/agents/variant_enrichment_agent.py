@@ -5,8 +5,10 @@ from typing import List, Optional, Tuple, cast
 import requests
 
 from lib.core.environment import env
+from lib.core.logging import setup_logging
 from lib.models.variant import EnrichedVariant, HarmonizedVariant, SpliceAI
 
+setup_logging()
 logger = logging.getLogger(__name__)
 
 GNOMAD_BASE = 'https://gnomad.broadinstitute.org/api'
