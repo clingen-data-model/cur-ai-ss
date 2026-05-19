@@ -3,6 +3,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Optional, Tuple, cast
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from lib.core.environment import env
 from lib.core.logging import setup_logging
@@ -14,6 +16,22 @@ logger = logging.getLogger(__name__)
 GNOMAD_BASE = 'https://gnomad.broadinstitute.org/api'
 EUTILS_BASE = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils'
 VEP_BASE = 'https://rest.ensembl.org'
+
+
+def _get_session_with_retries() -> requests.Session:
+    """Create requests session with automatic retry logic."""
+    session = requests.Session()
+    retry_strategy = Retry(
+        total=3,
+        backoff_factor=1,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=['GET', 'POST'],
+    )
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
+    return session
+
 
 CLINVAR_GOLD_STARS_LOOKUP = {
     'no classification for the single variant': 0,
@@ -39,6 +57,8 @@ def clinvar_lookup(
 
     if not (caid or rsid or hgvs_g or hgvs_c):
         return result_variant
+
+    session = _get_session_with_retries()
 
     term_parts = []
 
@@ -73,14 +93,22 @@ def clinvar_lookup(
     if env.NCBI_EMAIL:
         esearch_params['email'] = env.NCBI_EMAIL
 
-    r = requests.get(
-        f'{EUTILS_BASE}/esearch.fcgi',
-        params=esearch_params,
-        headers=headers,
-        timeout=10,
-    )
-    r.raise_for_status()
-    ids = r.json().get('esearchresult', {}).get('idlist', [])
+    try:
+        r = session.get(
+            f'{EUTILS_BASE}/esearch.fcgi',
+            params=esearch_params,
+            headers=headers,
+            timeout=10,
+        )
+        r.raise_for_status()
+        ids = r.json().get('esearchresult', {}).get('idlist', [])
+    except requests.exceptions.RequestException as e:
+        logger.error(f'ClinVar esearch failed for {term}: {e}')
+        return result_variant
+    except ValueError as e:
+        logger.error(f'ClinVar esearch JSON parse failed for {term}: {e}')
+        return result_variant
+
     if not ids:
         return result_variant
 
@@ -97,14 +125,22 @@ def clinvar_lookup(
     if env.NCBI_EMAIL:
         esummary_params['email'] = env.NCBI_EMAIL
 
-    r = requests.get(
-        f'{EUTILS_BASE}/esummary.fcgi',
-        params=esummary_params,
-        headers=headers,
-        timeout=10,
-    )
-    r.raise_for_status()
-    summary = r.json().get('result', {})
+    try:
+        r = session.get(
+            f'{EUTILS_BASE}/esummary.fcgi',
+            params=esummary_params,
+            headers=headers,
+            timeout=10,
+        )
+        r.raise_for_status()
+        summary = r.json().get('result', {})
+    except requests.exceptions.RequestException as e:
+        logger.error(f'ClinVar esummary failed for {term}: {e}')
+        return result_variant
+    except ValueError as e:
+        logger.error(f'ClinVar esummary JSON parse failed for {term}: {e}')
+        return result_variant
+
     uids = summary.get('uids', [])
     if not uids:
         return result_variant
@@ -129,19 +165,32 @@ def vep_lookup(
     """Query Ensembl VEP for a given variant identifier and extract key annotations from the most relevant transcript."""
     if hgvs_g is not None:
         ext = f'/vep/human/hgvs/{hgvs_g}?mane=1&numbers=1&SpliceAI=2&REVEL=1&AlphaMissense=1'
+        variant_id = hgvs_g
     elif hgvs_c is not None:
         ext = f'/vep/human/hgvs/{hgvs_c}?mane=1&numbers=1&SpliceAI=2&REVEL=1&AlphaMissense=1'
+        variant_id = hgvs_c
     elif rsid is not None:
         ext = (
             f'/vep/human/id/{rsid}?mane=1&numbers=1&SpliceAI=2&REVEL=1&AlphaMissense=1'
         )
+        variant_id = rsid
     else:
         raise ValueError('Requires rsid or hgvs_g or hgvs_c')
 
+    session = _get_session_with_retries()
     headers = {'Content-Type': 'application/json'}
-    r = requests.get(VEP_BASE + ext, headers=headers, timeout=10)
-    r.raise_for_status()
-    data = r.json()
+
+    try:
+        r = session.get(VEP_BASE + ext, headers=headers, timeout=10)
+        r.raise_for_status()
+        data = r.json()
+    except requests.exceptions.RequestException as e:
+        logger.error(f'VEP lookup failed for {variant_id}: {e}')
+        return EnrichedVariant(rsid=rsid)
+    except ValueError as e:
+        logger.error(f'VEP JSON parse failed for {variant_id}: {e}')
+        return EnrichedVariant(rsid=rsid)
+
     result_variant = EnrichedVariant(rsid=rsid)
 
     if not data:
@@ -201,26 +250,37 @@ def gnomad_lookup(gnomad_style_coordinates: str) -> EnrichedVariant:
     }
     """
 
+    session = _get_session_with_retries()
+
     # ---------------------
     # Step 1: GraphQL POST
     # ---------------------
-    r = requests.post(
-        GNOMAD_BASE,
-        json={
-            'query': query,
-            'variables': {'variantId': gnomad_style_coordinates},
-        },
-        headers={
-            **headers,
-            'User-Agent': 'Mozilla/5.0',  # required by gnomAD
-        },
-        timeout=10,
-    )
-    r.raise_for_status()
-
-    payload = r.json()
+    try:
+        r = session.post(
+            GNOMAD_BASE,
+            json={
+                'query': query,
+                'variables': {'variantId': gnomad_style_coordinates},
+            },
+            headers={
+                **headers,
+                'User-Agent': 'Mozilla/5.0',  # required by gnomAD
+            },
+            timeout=10,
+        )
+        r.raise_for_status()
+        payload = r.json()
+    except requests.exceptions.RequestException as e:
+        logger.error(f'gnomAD lookup failed for {gnomad_style_coordinates}: {e}')
+        return result_variant
+    except ValueError as e:
+        logger.error(f'gnomAD JSON parse failed for {gnomad_style_coordinates}: {e}')
+        return result_variant
 
     if 'errors' in payload:
+        logger.error(
+            f'gnomAD GraphQL error for {gnomad_style_coordinates}: {payload["errors"]}'
+        )
         return result_variant
 
     variant = payload.get('data', {}).get('variant')
@@ -307,8 +367,14 @@ def enrich_variant(hv: HarmonizedVariant) -> EnrichedVariant:
                 result = future.result()
                 if isinstance(result, EnrichedVariant):
                     results.append(result)
-            except Exception:
-                # Fail-soft: ignore individual tool failure
+            except Exception as e:
+                # Fail-soft: log individual tool failure
+                variant_id = (
+                    hv.gnomad_style_coordinates or hv.rsid or hv.hgvs_g or hv.hgvs_c
+                )
+                logger.error(
+                    f'Enrichment tool failed for {variant_id}: {e}', exc_info=True
+                )
                 continue
 
     # Deterministic merge phase
