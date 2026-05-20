@@ -353,6 +353,17 @@ def allele_registry_resolver(
 
         transcripts = data.get('transcriptAlleles', [])
 
+        # Helper to extract and sort by transcript version (e.g., NM_006513.4 > NM_006513.3)
+        def extract_version(hgvs_str: str) -> tuple[str, int]:
+            parts = hgvs_str.split(':')[0]
+            if '.' in parts:
+                acc, ver = parts.rsplit('.', 1)
+                try:
+                    return (acc, int(ver))
+                except ValueError:
+                    return (parts, 0)
+            return (parts, 0)
+
         # Priority 1: MANE Select + RefSeq
         for t in transcripts:
             mane = t.get('MANE')
@@ -366,25 +377,29 @@ def allele_registry_resolver(
                     resolved_hgvsp = refseq_pro
                 break
 
-        # Priority 2: RefSeq transcripts (NM_, NR_)
+        # Priority 2: RefSeq transcripts (NM_, NR_) - prefer latest version
         if not resolved_hgvsc:
+            refseq_candidates = []
             for t in transcripts:
                 for h in t.get('hgvs', []):
                     if ':c.' in h and (h.startswith('NM_') or h.startswith('NR_')):
-                        resolved_hgvsc = h
-                        break
-                if resolved_hgvsc:
-                    break
+                        refseq_candidates.append(h)
 
-        # Priority 3: Any transcript with :c. (Ensembl fallback)
+            if refseq_candidates:
+                refseq_candidates.sort(key=extract_version, reverse=True)
+                resolved_hgvsc = refseq_candidates[0]
+
+        # Priority 3: Any transcript with :c. (Ensembl fallback) - prefer latest version
         if not resolved_hgvsc:
+            ensembl_candidates = []
             for t in transcripts:
                 for h in t.get('hgvs', []):
                     if ':c.' in h:
-                        resolved_hgvsc = h
-                        break
-                if resolved_hgvsc:
-                    break
+                        ensembl_candidates.append(h)
+
+            if ensembl_candidates:
+                ensembl_candidates.sort(key=extract_version, reverse=True)
+                resolved_hgvsc = ensembl_candidates[0]
 
         # Extract protein HGVS if available
         if not resolved_hgvsp:
