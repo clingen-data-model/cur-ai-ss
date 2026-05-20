@@ -93,7 +93,7 @@ def get_gnomad_url(variant_id: str) -> str:
 
 
 def get_clingen_url(caid: str) -> str:
-    return f'https://reg.clinicalgenome.org/redmine/projects/registry/genomes/{caid}'
+    return f'https://reg.clinicalgenome.org/redmine/projects/registry/genboree_registry/by_canonicalid?canonicalid={caid}'
 
 
 @st.dialog(
