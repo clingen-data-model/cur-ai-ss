@@ -1382,11 +1382,10 @@ async def generate_chat_response(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
 
-    paper_context, db_state_context, agent_instructions = _build_qa_context(
-        paper_id, paper_db, session
-    )
-
     if conversation_db.conversation_id is None:
+        paper_context, db_state_context, agent_instructions = _build_qa_context(
+            paper_id, paper_db, session
+        )
         qa_input = (
             f'{paper_context}\n\n'
             f'{db_state_context}\n\n'
@@ -1401,15 +1400,9 @@ async def generate_chat_response(
         conversation_db.conversation_id = new_conv_id
     else:
         client = AsyncOpenAI(api_key=env.OPENAI_API_KEY)
-        qa_input = (
-            f'{paper_context}\n\n'
-            f'{db_state_context}\n\n'
-            f'{agent_instructions}\n\n'
-            f'User question: {last_user_message}'
-        )
         resp = await client.responses.create(
             model=env.OPENAI_API_DEPLOYMENT,
-            input=qa_input,
+            input=last_user_message,
             conversation=conversation_db.conversation_id,
         )
         response_text = resp.output_text or ''
