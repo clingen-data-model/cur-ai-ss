@@ -195,6 +195,16 @@ Output rules:
 - Null values are acceptable for any value field
 - Include all 15 fields: gene, transcript, protein_accession, genomic_accession, lrg_accession, gene_accession, genomic_coordinates, genome_build, rsid, caid, variant, hgvs_c, hgvs_p, hgvs_g, variant_type, functional_evidence
 - Each field independently justified by its own evidence
+- CRITICAL FILTER: Only output variants that have at least ONE of these structured identifier fields:
+  - hgvs_c: "c.NNNT>N" or similar cDNA nomenclature
+  - hgvs_p: "p.AaaNN..." or similar protein nomenclature
+  - hgvs_g: "g.NNNT>N" or similar genomic nomenclature
+  - rsid: "rs" followed by numbers
+  - caid: "CA" followed by numbers
+  - genomic_coordinates: "chr:position" or equivalent formatted coordinates
+  - variant: Structured variant identifier (not general text like "VUS in GENE")
+- Do NOT output variants based solely on accessions (transcript, protein_accession, genomic_accession, lrg_accession, gene_accession)—these support but cannot alone identify a variant
+- Do NOT output variants that only have general descriptive text (e.g., "carries a VUS in TOPBP1")
 """
 
 
