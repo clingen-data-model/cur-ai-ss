@@ -136,9 +136,8 @@ def correct_tables(paper_id: int, supplement: bool = False) -> None:
             f'Image URL for extraction if needed: {image_url}'
         )
 
-        # Run agent
-        loop = asyncio.get_event_loop()
-        result = loop.run_until_complete(Runner.run(agent, message))
+        # Run agent via asyncio.run to avoid nested event loop issues
+        result = asyncio.run(Runner.run(agent, message))
 
         if not result.final_output.is_corrupted:
             logger.info(f'Table {table_id} looks OK')
