@@ -1,3 +1,4 @@
+import asyncio
 import html
 import json
 import shutil
@@ -295,7 +296,7 @@ def parse_content(
         ) as fp:
             fp.write(caption)
 
-    correct_tables(paper_id, supplement=supplement)
+    asyncio.run(correct_tables(paper_id, supplement=supplement))
 
     with open(pdf_extraction_success_path(paper_id, supplement=supplement), 'w') as fp:
         fp.write('')

@@ -91,7 +91,7 @@ agent = Agent(
 )
 
 
-def correct_tables(paper_id: int, supplement: bool = False) -> None:
+async def correct_tables(paper_id: int, supplement: bool = False) -> None:
     """Correct corrupted table markdown in paper using agent.
 
     Scans all tables, checks each with agent, generates .vision.md files
@@ -135,7 +135,7 @@ def correct_tables(paper_id: int, supplement: bool = False) -> None:
         )
 
         # Run agent
-        result = Runner.run(agent, message)
+        result = await Runner.run(agent, message)
 
         if not result.final_output.is_corrupted:
             logger.info(f'Table {table_id} looks OK')
