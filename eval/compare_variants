@@ -14,26 +14,6 @@ from collections import defaultdict
 # PMIDs where protein notation should be ignored in variant matching
 PMIDS_IGNORE_PROTEIN = ('33531950', '36041817')
 
-
-def normalize_zygosity(zygosity: str) -> str:
-    """Normalize zygosity for comparison (case-insensitive)."""
-    if not zygosity:
-        return ''
-    return zygosity.lower().strip()
-
-
-def normalize_moi(moi: str) -> str:
-    """Normalize mode of inheritance for comparison.
-    Strips 'Autosomal' and 'X-linked' prefixes, case-insensitive.
-    """
-    if not moi:
-        return ''
-    moi = moi.lower().strip()
-    # Remove common prefixes
-    moi = moi.replace('autosomal ', '').replace('x-linked ', '').strip()
-    return moi
-
-
 def normalize_hgvs(hgvs_notation: str) -> str:
     """
     Normalize HGVS notation for comparison.
