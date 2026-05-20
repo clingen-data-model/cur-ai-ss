@@ -1,5 +1,6 @@
 """Agent to correct corrupted table markdown using OpenAI vision."""
 
+import asyncio
 import base64
 import logging
 from pathlib import Path
@@ -72,7 +73,7 @@ Your task:
 4. Return the assessment and any corrections
 
 A corrupted table has signs like:
-- Headers with excessive parentheses: "( 7 ) 7 ) 7 )"
+- Headers with excessive parentheses
 - Headers with mostly numbers/special chars
 - Cell content that's jumbled or doesn't make sense
 - Missing actual column headers
@@ -91,7 +92,7 @@ agent = Agent(
 )
 
 
-async def correct_tables(paper_id: int, supplement: bool = False) -> None:
+def correct_tables(paper_id: int, supplement: bool = False) -> None:
     """Correct corrupted table markdown in paper using agent.
 
     Scans all tables, checks each with agent, generates .vision.md files
@@ -135,7 +136,8 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
         )
 
         # Run agent
-        result = await Runner.run(agent, message)
+        loop = asyncio.get_event_loop()
+        result = loop.run_until_complete(Runner.run(agent, message))
 
         if not result.final_output.is_corrupted:
             logger.info(f'Table {table_id} looks OK')

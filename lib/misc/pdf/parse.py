@@ -296,7 +296,7 @@ def parse_content(
         ) as fp:
             fp.write(caption)
 
-    asyncio.run(correct_tables(paper_id, supplement=supplement))
+    correct_tables(paper_id, supplement=supplement)
 
     with open(pdf_extraction_success_path(paper_id, supplement=supplement), 'w') as fp:
         fp.write('')
