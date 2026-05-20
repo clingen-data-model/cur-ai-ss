@@ -92,6 +92,10 @@ def get_gnomad_url(variant_id: str) -> str:
     return f'https://gnomad.broadinstitute.org/variant/{variant_id}?dataset=gnomad_r4'
 
 
+def get_clingen_url(caid: str) -> str:
+    return f'https://reg.clinicalgenome.org/redmine/projects/registry/genomes/{caid}'
+
+
 @st.dialog(
     'Pdf Focus Modal',
     width='large',

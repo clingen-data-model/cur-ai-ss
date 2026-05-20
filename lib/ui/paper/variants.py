@@ -10,6 +10,7 @@ from lib.tasks import TaskType, is_task_completed
 from lib.ui.api import get_patient_variant_links, get_variants, update_variant
 from lib.ui.paper.shared import (
     HUMAN_EDIT_NOTE_DEFAULT,
+    get_clingen_url,
     get_clinvar_url,
     get_gnomad_url,
     render_evidence_controls,
@@ -448,11 +449,22 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                             # CAID
                             col1, col2 = st.columns(2)
                             with col1:
-                                harmonized_inputs['caid'] = st.text_input(
-                                    'CAID',
-                                    value=hv.caid or '',
-                                    key=f'{key_prefix}-harm-caid',
-                                )
+                                with st.container(
+                                    horizontal=True, vertical_alignment='center'
+                                ):
+                                    harmonized_inputs['caid'] = st.text_input(
+                                        'CAID',
+                                        value=hv.caid or '',
+                                        key=f'{key_prefix}-harm-caid',
+                                    )
+                                    with st.container(
+                                        horizontal=False,
+                                    ):
+                                        if hv.caid:
+                                            st.space()
+                                            st.caption(
+                                                f'[View in ClinGen]({get_clingen_url(hv.caid)})'
+                                            )
                             with col2:
                                 st.space()
                                 render_evidence_controls(
