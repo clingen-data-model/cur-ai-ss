@@ -93,7 +93,7 @@ agent = Agent(
 )
 
 
-def correct_tables(paper_id: int, supplement: bool = False) -> None:
+async def correct_tables(paper_id: int, supplement: bool = False) -> None:
     """Correct corrupted table markdown in paper using agent.
 
     Scans all tables, checks each with agent, generates .vision.md files
@@ -127,7 +127,7 @@ def correct_tables(paper_id: int, supplement: bool = False) -> None:
 
         # Upload image and get signed URL
         image_path = pdf_table_image_path(paper_id, table_id, supplement=supplement)
-        image_url = upload_and_sign_image(paper_id, table_id, image_path)
+        image_url = upload_and_sign_image(image_path)
 
         # Build prompt with table markdown and image URL
         message = (
@@ -136,8 +136,8 @@ def correct_tables(paper_id: int, supplement: bool = False) -> None:
             f'Image URL for extraction if needed: {image_url}'
         )
 
-        # Run agent via asyncio.run to avoid nested event loop issues
-        result = asyncio.run(Runner.run(agent, message))
+        # Run agent
+        result = await Runner.run(agent, message)
 
         if not result.final_output.is_corrupted:
             logger.info(f'Table {table_id} looks OK')

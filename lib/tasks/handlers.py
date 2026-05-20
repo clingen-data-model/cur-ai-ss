@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from typing import Any, Awaitable, Callable, Union
+from typing import Any, Awaitable, Callable
 
 from agents import Agent, RunConfig, Runner
 from openai import AsyncOpenAI
@@ -198,7 +198,7 @@ def format_paper_context(paper_markdown: str, gene_symbol: str | None = None) ->
     return '\n\n'.join(sections)
 
 
-def handle_pdf_parsing(task_id: int) -> None:
+async def handle_pdf_parsing(task_id: int) -> None:
     """Parse PDF to markdown and extract images/tables."""
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -208,9 +208,9 @@ def handle_pdf_parsing(task_id: int) -> None:
         paper = session.get(PaperDB, paper_id)
         supplement_format = paper.supplement_format if paper else None
 
-    parse_content(paper_id, force=True)
+    await parse_content(paper_id, force=True)
     if supplement_format:
-        parse_content(paper_id, force=True, supplement_format=supplement_format)
+        await parse_content(paper_id, force=True, supplement_format=supplement_format)
 
 
 async def handle_paper_section_classifier(task_id: int) -> None:
@@ -372,7 +372,10 @@ async def handle_pedigree_description(task_id: int) -> None:
         stored_conv_id = task.conversation_id
         additional_context = task.additional_context
 
-    image_id, combined_text = 0, ''
+    combined_text = ''
+
+    # Process regular images
+    image_id = 0
     while True:
         pdf_image = pdf_image_path(paper_id, image_id)
         if not pdf_image.exists():
@@ -383,11 +386,32 @@ async def handle_pedigree_description(task_id: int) -> None:
         )
         # Upload image to GCS and get signed URL
         logger.info(f'Processing image {image_id} from {pdf_image}')
-        image_url = upload_and_sign_image(paper_id, image_id, pdf_image)
+        image_url = upload_and_sign_image(pdf_image)
         logger.info(
             f'Image {image_id} URL type: {type(image_url)}, starts with: {image_url[:50] if image_url else "None"}'
         )
         combined_text += f'[Processing Pipeline Figure {image_id}]\n'
+        combined_text += f'URL: {image_url}\n'
+        combined_text += f'Caption: {caption_text}\n\n'
+        image_id += 1
+
+    # Process supplement images
+    image_id = 0
+    while True:
+        pdf_image = pdf_image_path(paper_id, image_id, supplement=True)
+        if not pdf_image.exists():
+            break
+        caption_path = pdf_image_caption_path(paper_id, image_id, supplement=True)
+        caption_text = (
+            caption_path.read_text() if caption_path.exists() else 'No caption'
+        )
+        # Upload image to GCS and get signed URL
+        logger.info(f'Processing supplement image {image_id} from {pdf_image}')
+        image_url = upload_and_sign_image(pdf_image)
+        logger.info(
+            f'Supplement image {image_id} URL type: {type(image_url)}, starts with: {image_url[:50] if image_url else "None"}'
+        )
+        combined_text += f'[Processing Supplement Figure {image_id}]\n'
         combined_text += f'URL: {image_url}\n'
         combined_text += f'Caption: {caption_text}\n\n'
         image_id += 1
@@ -1167,9 +1191,7 @@ async def handle_hpo_linking(task_id: int) -> None:
         session.add(hpo_to_db(phenotype_id, result.final_output))
 
 
-TASK_HANDLERS: dict[
-    TaskType, Union[Callable[[int], Awaitable[None]], Callable[[int], None]]
-] = {
+TASK_HANDLERS: dict[TaskType, Callable[[int], Awaitable[None]]] = {
     TaskType.PDF_PARSING: handle_pdf_parsing,
     TaskType.PAPER_ACKNOWLEDGEMENT: handle_paper_section_classifier,
     TaskType.PAPER_METADATA: handle_paper_metadata,

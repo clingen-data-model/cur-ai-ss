@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import asyncio
 import datetime
-import inspect
 import logging
 import os
 import signal
@@ -77,10 +76,7 @@ async def execute_task(task_id: int) -> None:
     handler = TASK_HANDLERS[task_type]
     error_msg = None
     try:
-        if inspect.iscoroutinefunction(handler):
-            await handler(task_id)
-        else:
-            handler(task_id)
+        await handler(task_id)
     except Exception as e:
         logger.exception(f'Task {task_id} ({task_type}) failed')
         error_msg = str(e)

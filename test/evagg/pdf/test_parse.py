@@ -15,7 +15,7 @@ from lib.misc.pdf.paths import (
 from lib.models import PaperDB
 
 
-def test_convert_and_extract_creates_outputs(test_file_contents):
+async def test_convert_and_extract_creates_outputs(test_file_contents):
     mock_result = MagicMock()
     mock_result.final_output = TableCorrectionResult(
         original_markdown='| Header 1 | Header 2 |\n|----------|----------|\n| Cell 1   | Cell 2   |',
@@ -38,7 +38,7 @@ def test_convert_and_extract_creates_outputs(test_file_contents):
         paper_id = paper_db.id
         pdf_raw_path(paper_id).parent.mkdir(parents=True, exist_ok=True)
         pdf_raw_path(paper_id).write_bytes(content)
-        parse_content(paper_id, force=True)
+        await parse_content(paper_id, force=True)
 
         # ---- core outputs ----
         json_path = pdf_json_path(paper_id)

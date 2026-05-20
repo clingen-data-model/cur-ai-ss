@@ -180,7 +180,7 @@ def _parse_xlsx_content(paper_id: int, content: bytes) -> None:
         pdf_markdown_path(paper_id, supplement=True).write_text(md_text)
 
 
-def parse_content(
+async def parse_content(
     paper_id: int,
     force: bool = False,
     supplement_format: FileFormat | None = None,
@@ -296,7 +296,7 @@ def parse_content(
         ) as fp:
             fp.write(caption)
 
-    correct_tables(paper_id, supplement=supplement)
+    await correct_tables(paper_id, supplement=supplement)
 
     with open(pdf_extraction_success_path(paper_id, supplement=supplement), 'w') as fp:
         fp.write('')
