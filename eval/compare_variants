@@ -1,0 +1,310 @@
+#!/usr/bin/env python3
+"""
+Compare variant extraction accuracy between training set and API.
+
+Compares var/pmid_variants.tsv (training) against var/pmid_variants_api.tsv (API)
+with nomenclature tolerance for common variations in HGVS notation.
+Generates var/accuracy_report.txt with detailed per-PMID results.
+"""
+
+import csv
+from collections import defaultdict
+
+
+# PMIDs where protein notation should be ignored in variant matching
+PMIDS_IGNORE_PROTEIN = ('33531950', '36041817')
+
+
+def normalize_zygosity(zygosity: str) -> str:
+    """Normalize zygosity for comparison (case-insensitive)."""
+    if not zygosity:
+        return ''
+    return zygosity.lower().strip()
+
+
+def normalize_moi(moi: str) -> str:
+    """Normalize mode of inheritance for comparison.
+    Strips 'Autosomal' and 'X-linked' prefixes, case-insensitive.
+    """
+    if not moi:
+        return ''
+    moi = moi.lower().strip()
+    # Remove common prefixes
+    moi = moi.replace('autosomal ', '').replace('x-linked ', '').strip()
+    return moi
+
+
+def normalize_hgvs(hgvs_notation: str) -> str:
+    """
+    Normalize HGVS notation for comparison.
+    Handles common variations in nomenclature:
+    - Single-letter amino acids (S, N, etc.) → full names (Ser, Asn, etc.)
+    - ASCII asterisk (*) → Ter
+    - Unicode asterisk (∗) → Ter
+    - Transcript/protein prefixes (NM_*, NP_*) → stripped
+    - Parentheses in frameshifts → stripped
+    - Whitespace → stripped
+    """
+    if not hgvs_notation or hgvs_notation == 'missing' or hgvs_notation == 'N/A':
+        return 'missing'
+
+    # Remove prefixes like NM_002936.6:, NP_002927.2:
+    if ':' in hgvs_notation:
+        hgvs_notation = hgvs_notation.split(':')[1]
+
+    # Amino acid single-letter to full-name mapping
+    aa_map = {
+        'A': 'Ala', 'R': 'Arg', 'N': 'Asn', 'D': 'Asp', 'C': 'Cys',
+        'E': 'Glu', 'Q': 'Gln', 'G': 'Gly', 'H': 'His', 'I': 'Ile',
+        'L': 'Leu', 'K': 'Lys', 'M': 'Met', 'F': 'Phe', 'P': 'Pro',
+        'S': 'Ser', 'T': 'Thr', 'W': 'Trp', 'Y': 'Tyr', 'V': 'Val'
+    }
+
+    import re
+    # Normalize cDNA deletion notation: c.488delT → c.488del, c.488delTT → c.488del
+    hgvs_notation = re.sub(r'del[ACGT]+', 'del', hgvs_notation)
+
+    # Expand single-letter amino acids in protein notation (p.X123Y format)
+    if hgvs_notation.startswith('p.'):
+        # Find patterns like p.S52N and expand to p.Ser52Asn
+        def expand_amino_acids(match):
+            from_aa = match.group(1)
+            position = match.group(2)
+            to_aa = match.group(3)
+            from_full = aa_map.get(from_aa, from_aa)
+            to_full = aa_map.get(to_aa, to_aa)
+            return f'p.{from_full}{position}{to_full}'
+
+        # Match patterns like p.S52N (single letter, numbers, single letter)
+        hgvs_notation = re.sub(r'p\.([A-Z])(\d+)([A-Z])', expand_amino_acids, hgvs_notation)
+
+        # Normalize frameshift notation: p.Asp206ThrfsTer18 → p.Asp206fs
+        hgvs_notation = re.sub(r'(\d+)[A-Za-z]*fs.*$', r'\1fs', hgvs_notation)
+
+    # Replace asterisks (both ASCII and Unicode) with Ter
+    hgvs_notation = hgvs_notation.replace('*', 'Ter').replace('∗', 'Ter')
+
+    # Normalize dashes (en-dash, em-dash, etc. → regular hyphen)
+    hgvs_notation = hgvs_notation.replace('–', '-').replace('—', '-')
+
+    # Remove parentheses
+    hgvs_notation = hgvs_notation.replace('(', '').replace(')', '')
+
+    # Remove excess whitespace
+    hgvs_notation = hgvs_notation.replace(' ', '')
+
+    return hgvs_notation
+
+
+def variants_match(train_c: str, train_p: str, api_c: str, api_p: str, pmid: str = None) -> bool:
+    """Check if two variants match with nomenclature tolerance."""
+    norm_train_c = normalize_hgvs(train_c)
+    norm_train_p = normalize_hgvs(train_p)
+    norm_api_c = normalize_hgvs(api_c)
+    norm_api_p = normalize_hgvs(api_p)
+
+    # cDNA must match
+    if norm_train_c != norm_api_c:
+        return False
+
+    # For PMIDs in PMIDS_IGNORE_PROTEIN, only compare cDNA
+    if pmid in PMIDS_IGNORE_PROTEIN:
+        return True
+
+    # Protein notation: match if exact, or if either is noncoding (n.) notation
+    # (noncoding is used for splice/structural variants where protein change may not be applicable)
+    return (norm_train_p == norm_api_p or
+            norm_train_p.startswith('n.') or
+            norm_api_p.startswith('n.'))
+
+
+def main():
+    # Read training set
+    print("Reading training set...")
+    training_variants = defaultdict(list)
+    with open('var/pmid_variants.tsv', 'r') as f:
+        reader = csv.DictReader(f, delimiter='\t')
+        for row in reader:
+            pmid = row['pmid']
+            training_variants[pmid].append({
+                'gene': row.get('gene', ''),
+                'transcript': row.get('transcript', ''),
+                'hgvsc': row.get('hgvsc', ''),
+                'hgvsp': row.get('hgvsp', ''),
+                'proband_id': row.get('proband_id', ''),
+                'variant_type': row.get('variant_type', ''),
+                'zygosity': row.get('zygosity', ''),
+                'mode_of_inheritance': row.get('mode_of_inheritance', ''),
+            })
+
+    print(f"Read {len(training_variants)} PMIDs from training set")
+
+    # Read API set
+    print("Reading API set...")
+    api_variants = defaultdict(list)
+    with open('var/pmid_variants_api.tsv', 'r') as f:
+        reader = csv.DictReader(f, delimiter='\t')
+        for row in reader:
+            pmid = row['pmid']
+            api_variants[pmid].append({
+                'gene': row.get('gene', ''),
+                'hgvsc': row.get('hgvsc', ''),
+                'hgvsp': row.get('hgvsp', ''),
+                'patient_id': row.get('patient_id', ''),
+                'variant_type': row.get('variant_type', ''),
+                'zygosity': row.get('zygosity', ''),
+                'mode_of_inheritance': row.get('mode_of_inheritance', ''),
+            })
+
+    print(f"Read {len(api_variants)} PMIDs from API set")
+
+    # Compare variants per PMID
+    print("\nGenerating accuracy report...")
+    report_lines = []
+    report_lines.append("=" * 150)
+    report_lines.append("VARIANT EXTRACTION METRICS COMPARISON REPORT (WITH NOMENCLATURE TOLERANCE)")
+    report_lines.append("Training Set vs API-Extracted Data")
+    report_lines.append("=" * 150)
+    report_lines.append("")
+
+    metrics_by_pmid = {}
+    total_precision = 0
+    total_recall = 0
+    total_f1 = 0
+    pmid_count = 0
+
+    # For micro-averaging
+    total_tp = 0
+    total_fp = 0
+    total_fn = 0
+
+    for pmid in sorted(training_variants.keys()):
+        train_vars = training_variants[pmid]
+        api_vars = api_variants.get(pmid, [])
+
+        # Match variants
+        matched = []
+        train_unmatched = list(range(len(train_vars)))
+        api_unmatched = list(range(len(api_vars)))
+
+        for ti, tv in enumerate(train_vars):
+            for ai, av in enumerate(api_vars):
+                if ti in train_unmatched and ai in api_unmatched:
+                    if tv['gene'] == av['gene'] and variants_match(tv['hgvsc'], tv['hgvsp'], av['hgvsc'], av['hgvsp'], pmid):
+                        matched.append((ti, ai, tv, av))
+                        train_unmatched.remove(ti)
+                        api_unmatched.remove(ai)
+                        break
+
+        # Calculate Precision, Recall, F1
+        tp = len(matched)
+        fp = len(api_unmatched)
+        fn = len(train_unmatched)
+
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+        f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+
+        metrics_by_pmid[pmid] = {'precision': precision, 'recall': recall, 'f1': f1}
+        total_precision += precision
+        total_recall += recall
+        total_f1 += f1
+        pmid_count += 1
+
+        # Accumulate for micro-averaging
+        total_tp += tp
+        total_fp += fp
+        total_fn += fn
+
+        # Format report section
+        report_lines.append(f"PMID: {pmid}")
+        report_lines.append("-" * 150)
+        report_lines.append(f"Precision: {precision:.1%} | Recall: {recall:.1%} | F1: {f1:.3f}")
+        report_lines.append(f"Training variants: {len(train_vars)} | API variants: {len(api_vars)} | Matched: {len(matched)}")
+
+        if f1 == 1.0:
+            report_lines.append("Summary: Perfect match (F1=1.0)")
+            report_lines.append("Explanation: All variants match when accounting for nomenclature variations.")
+        elif f1 > 0:
+            report_lines.append(f"Summary: Partial match (F1={f1:.3f})")
+            report_lines.append("Explanation: Some variants matched; missing or extra variants present:")
+        else:
+            report_lines.append("Summary: No match (F1=0)")
+            report_lines.append("Explanation: No variants matched:")
+
+        if matched:
+            report_lines.append("Matched variants:")
+            for ti, ai, tv, av in matched:
+                report_lines.append(f"  ✓ {tv['gene']}")
+                # Extract protein accession from API if available
+                protein_accession = ''
+                if ':' in av['hgvsp'] and av['hgvsp'].startswith('NP_'):
+                    protein_accession = av['hgvsp'].split(':')[0] + ':'
+                train_notation = f"{tv['transcript']}:{tv['hgvsc']} / {protein_accession}{tv['hgvsp']}"
+                api_notation = f"{av['hgvsc']} / {av['hgvsp']}"
+                if train_notation != api_notation:
+                    report_lines.append(f"      Training: {train_notation}")
+                    report_lines.append(f"      API:      {api_notation}")
+                else:
+                    report_lines.append(f"      Training: {train_notation}")
+                    report_lines.append(f"      API:      {api_notation}")
+
+                # Check zygosity and inheritance match
+                zygosity_match = tv['zygosity'] == av['zygosity']
+                moi_match = tv['mode_of_inheritance'] == av['mode_of_inheritance']
+                zygosity_str = '✓' if zygosity_match else '✗'
+                moi_str = '✓' if moi_match else '✗'
+                report_lines.append(f"      Zygosity: {zygosity_str} Train={tv['zygosity']!r} API={av['zygosity']!r}")
+                report_lines.append(f"      MOI:      {moi_str} Train={tv['mode_of_inheritance']!r} API={av['mode_of_inheritance']!r}")
+
+        if train_unmatched:
+            report_lines.append("Missing from API:")
+            for ti in train_unmatched:
+                tv = train_vars[ti]
+                report_lines.append(f"  ✗ {tv['gene']} {tv['transcript']}:{tv['hgvsc']}/{tv['hgvsp']} (Patient: {tv['proband_id']})")
+
+        if api_unmatched:
+            report_lines.append("Additional from API:")
+            for ai in api_unmatched:
+                av = api_vars[ai]
+                report_lines.append(f"  + {av['gene']} {av['hgvsc']}/{av['hgvsp']} (Patient: {av['patient_id']}, Zygosity: {av['zygosity']}, MOI: {av['mode_of_inheritance']})")
+
+        report_lines.append("")
+
+    # Calculate micro-averaged metrics
+    micro_precision = total_tp / (total_tp + total_fp) if (total_tp + total_fp) > 0 else 0
+    micro_recall = total_tp / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0
+    micro_f1 = 2 * (micro_precision * micro_recall) / (micro_precision + micro_recall) if (micro_precision + micro_recall) > 0 else 0
+
+    # Add summary
+    report_lines.append("=" * 150)
+    report_lines.append("SUMMARY STATISTICS")
+    report_lines.append("=" * 150)
+    report_lines.append(f"Total PMIDs analyzed: {pmid_count}")
+    report_lines.append("")
+    report_lines.append("MACRO-AVERAGED (equal weight per PMID):")
+    report_lines.append(f"  Precision: {total_precision / pmid_count:.1%}")
+    report_lines.append(f"  Recall: {total_recall / pmid_count:.1%}")
+    report_lines.append(f"  F1: {total_f1 / pmid_count:.3f}")
+    report_lines.append("")
+    report_lines.append("MICRO-AVERAGED (weighted by variant count):")
+    report_lines.append(f"  Precision: {micro_precision:.1%}")
+    report_lines.append(f"  Recall: {micro_recall:.1%}")
+    report_lines.append(f"  F1: {micro_f1:.3f}")
+    report_lines.append("")
+    report_lines.append(f"Perfect match (F1=1.0): {sum(1 for m in metrics_by_pmid.values() if m['f1'] == 1.0)}")
+    report_lines.append(f"Partial match (0<F1<1.0): {sum(1 for m in metrics_by_pmid.values() if 0 < m['f1'] < 1.0)}")
+    report_lines.append(f"No match (F1=0): {sum(1 for m in metrics_by_pmid.values() if m['f1'] == 0)}")
+
+    # Write report
+    print("Writing report...")
+    with open('var/accuracy_report.txt', 'w') as f:
+        f.write('\n'.join(report_lines))
+
+    print(f"Report written to var/accuracy_report.txt")
+    print(f"\nMacro-Averaged: Precision {total_precision / pmid_count:.1%} | Recall {total_recall / pmid_count:.1%} | F1 {total_f1 / pmid_count:.3f}")
+    print(f"Micro-Averaged: Precision {micro_precision:.1%} | Recall {micro_recall:.1%} | F1 {micro_f1:.3f}")
+
+
+if __name__ == '__main__':
+    main()

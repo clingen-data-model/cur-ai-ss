@@ -1,0 +1,598 @@
+======================================================================================================================================================
+VARIANT EXTRACTION METRICS COMPARISON REPORT (WITH NOMENCLATURE TOLERANCE)
+Training Set vs API-Extracted Data
+======================================================================================================================================================
+
+PMID: 26084686
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 100.0% | Recall: 100.0% | F1: 1.000
+Training variants: 1 | API variants: 1 | Matched: 1
+Summary: Perfect match (F1=1.0)
+Explanation: All variants match when accounting for nomenclature variations.
+Matched variants:
+  ✓ CTF1
+      Training: NM_001330.5:c.274G>A / p.Ala92Thr
+      API:      c.274G>A / p.Ala92Thr
+      Zygosity: ✗ Train='Heterozygous' API='Unknown'
+      MOI:      ✗ Train='Undetermined Moi' API='Unknown'
+
+PMID: 26094573
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 100.0% | Recall: 100.0% | F1: 1.000
+Training variants: 8 | API variants: 8 | Matched: 8
+Summary: Perfect match (F1=1.0)
+Explanation: All variants match when accounting for nomenclature variations.
+Matched variants:
+  ✓ RNASEH1
+      Training: NM_002936.4:c.424G>A / NP_002927.2:p.Val142Ile
+      API:      NM_002936.6:c.424G>A / NP_002927.2:p.Val142Ile
+      Zygosity: ✗ Train='Compound Heterozyous' API='Compound Heterozygous'
+      MOI:      ✓ Train='Recessive' API='Recessive'
+  ✓ RNASEH1
+      Training: NM_002936.4:c.469C>T / NP_002927.2:p.Arg157∗
+      API:      NM_002936.6:c.469C>T / NP_002927.2:p.Arg157Ter
+      Zygosity: ✗ Train='Compound Heterozyous' API='Compound Heterozygous'
+      MOI:      ✓ Train='Recessive' API='Recessive'
+  ✓ RNASEH1
+      Training: NM_002936.4:c.424G>A / NP_002927.2:p.Val142Ile
+      API:      NM_002936.6:c.424G>A / NP_002927.2:p.Val142Ile
+      Zygosity: ✗ Train='Compound Heterozyous' API='Compound Heterozygous'
+      MOI:      ✓ Train='Recessive' API='Recessive'
+  ✓ RNASEH1
+      Training: NM_002936.4:c.554C>T / NP_002927.2:p.Ala185Val
+      API:      NM_002936.6:c.554C>T / NP_002927.2:p.Ala185Val
+      Zygosity: ✗ Train='Compound Heterozyous' API='Compound Heterozygous'
+      MOI:      ✓ Train='Recessive' API='Recessive'
+  ✓ RNASEH1
+      Training: NM_002936.4:c.424G>A / NP_002927.2:p.Val142Ile
+      API:      NM_002936.6:c.424G>A / NP_002927.2:p.Val142Ile
+      Zygosity: ✓ Train='Homozygous' API='Homozygous'
+      MOI:      ✓ Train='Recessive' API='Recessive'
+  ✓ RNASEH1
+      Training: NM_002936.4:c.424G>A / NP_002927.2:p.Val142Ile
+      API:      NM_002936.6:c.424G>A / NP_002927.2:p.Val142Ile
+      Zygosity: ✓ Train='Homozygous' API='Homozygous'
+      MOI:      ✓ Train='Recessive' API='Recessive'
+  ✓ RNASEH1
+      Training: NM_002936.4:c.424G>A / NP_002927.2:p.Val142Ile
+      API:      NM_002936.6:c.424G>A / NP_002927.2:p.Val142Ile
+      Zygosity: ✓ Train='Homozygous' API='Homozygous'
+      MOI:      ✓ Train='Recessive' API='Recessive'
+  ✓ RNASEH1
+      Training: NM_002936.4:c.424G>A / NP_002927.2:p.Val142Ile
+      API:      NM_002936.6:c.424G>A / NP_002927.2:p.Val142Ile
+      Zygosity: ✓ Train='Homozygous' API='Homozygous'
+      MOI:      ✓ Train='Recessive' API='Recessive'
+
+PMID: 27536250
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 0.0% | Recall: 0.0% | F1: 0.000
+Training variants: 1 | API variants: 2 | Matched: 0
+Summary: No match (F1=0)
+Explanation: No variants matched:
+Missing from API:
+  ✗ LRRC10 :/ (Patient: NA)
+Additional from API:
+  + LRRC10 missing/p.L41V (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + LRRC10 missing/p.L163I (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+
+PMID: 29271071
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 100.0% | Recall: 100.0% | F1: 1.000
+Training variants: 2 | API variants: 2 | Matched: 2
+Summary: Perfect match (F1=1.0)
+Explanation: All variants match when accounting for nomenclature variations.
+Matched variants:
+  ✓ EMC1
+      Training: NM_015047.2:c.1212+1G>A / NP_055862.1:N/A
+      API:      NM_015047.3:c.1212+1G>A / NP_055862.1:n.1212+1G>A
+      Zygosity: ✓ Train='Homozygous' API='Homozygous'
+      MOI:      ✓ Train='Recessive' API='Recessive'
+  ✓ EMC1
+      Training: NM_015047.3:c.1201C>T / NP_055862.1:p.Arg401Trp
+      API:      NM_015047.3:c.1201C>T / NP_055862.1:p.Arg401Trp
+      Zygosity: ✗ Train='Unknown' API='Homozygous'
+      MOI:      ✗ Train='Undetermined Moi' API='Recessive'
+
+PMID: 29678925
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 25.0% | Recall: 100.0% | F1: 0.400
+Training variants: 1 | API variants: 4 | Matched: 1
+Summary: Partial match (F1=0.400)
+Explanation: Some variants matched; missing or extra variants present:
+Matched variants:
+  ✓ SLFN14
+      Training: NM_001129820.2:c.652A>G / p.Lys218Glu
+      API:      NM_001129820.2:c.652A>G / p.Lys218Glu
+      Zygosity: ✓ Train='Unknown' API='Unknown'
+      MOI:      ✗ Train='Undetermined Moi' API='Unknown'
+Additional from API:
+  + SLFN14 NM_001129820.2:c.657A>T/p.Lys219Asn (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + SLFN14 NM_001129820.2:c.659T>A/p.Val220Asp (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + SLFN14 NM_001129820.2:c.667C>T/p.Arg223Trp (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+
+PMID: 30157177
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 25.0% | Recall: 100.0% | F1: 0.400
+Training variants: 1 | API variants: 4 | Matched: 1
+Summary: Partial match (F1=0.400)
+Explanation: Some variants matched; missing or extra variants present:
+Matched variants:
+  ✓ GRXCR2
+      Training: NM_001080516.1:c.155G>A / p.Ser52Asn
+      API:      NM_001080516.2:c.155G>A / p.S52N
+      Zygosity: ✓ Train='Unknown' API='Unknown'
+      MOI:      ✗ Train='Undetermined Moi' API='Unknown'
+Additional from API:
+  + GRXCR2 NM_001080516.2:c.205G>A/p.E69K (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + GRXCR2 missing/p.G98D (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + GRXCR2 NM_001080516.2:c.543A>C/p.L181F (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+
+PMID: 30992453
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 50.0% | Recall: 100.0% | F1: 0.667
+Training variants: 1 | API variants: 2 | Matched: 1
+Summary: Partial match (F1=0.667)
+Explanation: Some variants matched; missing or extra variants present:
+Matched variants:
+  ✓ PRPH
+      Training: NM_006262.4:c.996+1G>A / NP_006253.2:N/A
+      API:      c.996+1G>A / NP_006253.2:n.996+1G>A
+      Zygosity: ✗ Train='Homozygous' API='Unknown'
+      MOI:      ✗ Train='Recessive' API='Unknown'
+Additional from API:
+  + PRPH NM_006262.4:c.1107A>G/NP_006253.2:p.Lys369= (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+
+PMID: 31768050
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 91.7% | Recall: 100.0% | F1: 0.957
+Training variants: 11 | API variants: 12 | Matched: 11
+Summary: Partial match (F1=0.957)
+Explanation: Some variants matched; missing or extra variants present:
+Matched variants:
+  ✓ DNAJC7
+      Training: NM_003315.4:c.466C>T / NP_003306.3:p.Arg156*
+      API:      NM_003315.4:c.466C>T / NP_003306.3:p.Arg156Ter
+      Zygosity: ✗ Train='Heterozygous' API='Unknown'
+      MOI:      ✗ Train='Undetermined Moi' API='Unknown'
+  ✓ DNAJC7
+      Training: NM_003315.4:c.97G>T / NP_003306.3:p.Glu33*
+      API:      NM_003315.4:c.97G>T / NP_003306.3:p.Glu33Ter
+      Zygosity: ✗ Train='Heterozygous' API='Unknown'
+      MOI:      ✗ Train='Undetermined Moi' API='Unknown'
+  ✓ DNAJC7
+      Training: NM_003315.4:c.358C>T / NP_003306.3:p.Gln120*
+      API:      NM_003315.4:c.358C>T / NP_003306.3:p.Gln120Ter
+      Zygosity: ✗ Train='Heterozygous' API='Unknown'
+      MOI:      ✗ Train='Undetermined Moi' API='Unknown'
+  ✓ DNAJC7
+      Training: NM_003315.4:c.488delT / NP_003306.3:p.Phe163fs
+      API:      NM_003315.4:c.488del / NP_003306.3:p.Phe163SerfsTer7
+      Zygosity: ✗ Train='Heterozygous' API='Unknown'
+      MOI:      ✗ Train='Undetermined Moi' API='Unknown'
+  ✓ DNAJC7
+      Training: NM_003315.4:c.646C>T / NP_003306.3:p.Arg216*
+      API:      NM_003315.4:c.646C>T / NP_003306.3:p.Arg216Ter
+      Zygosity: ✗ Train='Heterozygous' API='Unknown'
+      MOI:      ✗ Train='Undetermined Moi' API='Unknown'
+  ✓ DNAJC7
+      Training: NM_003315.4:c.1011–2A>G / NP_003306.3:N/A
+      API:      NM_003315.4:c.1011-2A>G / NP_003306.3:n.1011-2A>G
+      Zygosity: ✗ Train='Heterozygous' API='Unknown'
+      MOI:      ✗ Train='Undetermined Moi' API='Unknown'
+  ✓ DNAJC7
+      Training: NM_003315.4:c.22G>C / NP_003306.3:p.Asp8His
+      API:      NM_003315.4:c.22G>C / NP_003306.3:p.Asp8His
+      Zygosity: ✗ Train='Heterozygous' API='Unknown'
+      MOI:      ✗ Train='Undetermined Moi' API='Unknown'
+  ✓ DNAJC7
+      Training: NM_003315.4:c.235C>T / NP_003306.3:p.Arg79Trp
+      API:      NM_003315.4:c.235C>T / NP_003306.3:p.Arg79Trp
+      Zygosity: ✗ Train='Heterozygous' API='Unknown'
+      MOI:      ✗ Train='Undetermined Moi' API='Unknown'
+  ✓ DNAJC7
+      Training: NM_003315.4:c.631G>A / NP_003306.3:p.Asp211Asn
+      API:      NM_003315.4:c.631G>A / NP_003306.3:p.Asp211Asn
+      Zygosity: ✗ Train='Heterozygous' API='Unknown'
+      MOI:      ✗ Train='Undetermined Moi' API='Unknown'
+  ✓ DNAJC7
+      Training: NM_003315.4:c.1234C>T / NP_003306.3:p.Arg412Trp
+      API:      NM_003315.4:c.1234C>T / NP_003306.3:p.Arg412Trp
+      Zygosity: ✗ Train='Heterozygous' API='Unknown'
+      MOI:      ✗ Train='Undetermined Moi' API='Unknown'
+  ✓ DNAJC7
+      Training: NM_003315.4:c.1273G>A / NP_003306.3:p.Glu425Lys
+      API:      NM_003315.4:c.1273G>A / NP_003306.3:p.Glu425Lys
+      Zygosity: ✗ Train='Heterozygous' API='Unknown'
+      MOI:      ✗ Train='Undetermined Moi' API='Unknown'
+Additional from API:
+  + DNAJC7 NM_003315.4:c.466C>T/NP_003306.3:p.Arg156Ter (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+
+PMID: 31953910
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 100.0% | Recall: 100.0% | F1: 1.000
+Training variants: 1 | API variants: 1 | Matched: 1
+Summary: Perfect match (F1=1.0)
+Explanation: All variants match when accounting for nomenclature variations.
+Matched variants:
+  ✓ TOP2B
+      Training: NM_001330700.2:c.187C>T / NP_001317629.1:p.His63Tyr
+      API:      NM_001330700.2:c.187C>T / NP_001317629.1:p.His63Tyr
+      Zygosity: ✓ Train='Heterozygous' API='Heterozygous'
+      MOI:      ✗ Train='Dominant' API='De Novo'
+
+PMID: 32154054
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 100.0% | Recall: 100.0% | F1: 1.000
+Training variants: 1 | API variants: 1 | Matched: 1
+Summary: Perfect match (F1=1.0)
+Explanation: All variants match when accounting for nomenclature variations.
+Matched variants:
+  ✓ NDUFA2
+      Training: NM_002488.5:c.170A>C / NP_002479.1:p.Glu57Ala
+      API:      NM_002488.5:c.170A>C / NP_002479.1:p.Glu57Ala
+      Zygosity: ✓ Train='Homozygous' API='Homozygous'
+      MOI:      ✓ Train='Recessive' API='Recessive'
+
+PMID: 32184806
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 100.0% | Recall: 100.0% | F1: 1.000
+Training variants: 9 | API variants: 9 | Matched: 9
+Summary: Perfect match (F1=1.0)
+Explanation: All variants match when accounting for nomenclature variations.
+Matched variants:
+  ✓ FBN2
+      Training: NM_001999.4:c.3724+3A>C / NP_001990.2:p.1200_1241del
+      API:      NM_001999.4:c.3724+3A>C / NP_001990.2:n.3724+3A>C
+      Zygosity: ✓ Train='Heterozygous' API='Heterozygous'
+      MOI:      ✓ Train='Dominant' API='Dominant'
+  ✓ FBN2
+      Training: NM_001999.4:c.3724+3A>C / NP_001990.2:p.1200_1241del
+      API:      NM_001999.4:c.3724+3A>C / NP_001990.2:n.3724+3A>C
+      Zygosity: ✓ Train='Heterozygous' API='Heterozygous'
+      MOI:      ✓ Train='Dominant' API='Dominant'
+  ✓ FBN2
+      Training: NM_001999.4:c.3724+3A>C / NP_001990.2:p.1200_1241del
+      API:      NM_001999.4:c.3724+3A>C / NP_001990.2:n.3724+3A>C
+      Zygosity: ✓ Train='Heterozygous' API='Heterozygous'
+      MOI:      ✓ Train='Dominant' API='Dominant'
+  ✓ FBN2
+      Training: NM_001999.4:c.3724+3A>C / NP_001990.2:p.1200_1241del
+      API:      NM_001999.4:c.3724+3A>C / NP_001990.2:n.3724+3A>C
+      Zygosity: ✓ Train='Heterozygous' API='Heterozygous'
+      MOI:      ✓ Train='Dominant' API='Dominant'
+  ✓ FBN2
+      Training: NM_001999.4:c.3724+3A>C / NP_001990.2:p.1200_1241del
+      API:      NM_001999.4:c.3724+3A>C / NP_001990.2:n.3724+3A>C
+      Zygosity: ✓ Train='Heterozygous' API='Heterozygous'
+      MOI:      ✓ Train='Dominant' API='Dominant'
+  ✓ FBN2
+      Training: NM_001999.4:c.3724+3A>C / NP_001990.2:p.1200_1241del
+      API:      NM_001999.4:c.3724+3A>C / NP_001990.2:n.3724+3A>C
+      Zygosity: ✓ Train='Heterozygous' API='Heterozygous'
+      MOI:      ✓ Train='Dominant' API='Dominant'
+  ✓ FBN2
+      Training: NM_001999.4:c.3724+3A>C / NP_001990.2:p.1200_1241del
+      API:      NM_001999.4:c.3724+3A>C / NP_001990.2:n.3724+3A>C
+      Zygosity: ✓ Train='Heterozygous' API='Heterozygous'
+      MOI:      ✓ Train='Dominant' API='Dominant'
+  ✓ FBN2
+      Training: NM_001999.4:c.3724+3A>C / NP_001990.2:p.1200_1241del
+      API:      NM_001999.4:c.3724+3A>C / NP_001990.2:n.3724+3A>C
+      Zygosity: ✓ Train='Heterozygous' API='Heterozygous'
+      MOI:      ✓ Train='Dominant' API='Dominant'
+  ✓ FBN2
+      Training: NM_001999.4:c.3724+3A>C / NP_001990.2:p.1200_1241del
+      API:      NM_001999.4:c.3724+3A>C / NP_001990.2:n.3724+3A>C
+      Zygosity: ✓ Train='Heterozygous' API='Heterozygous'
+      MOI:      ✓ Train='Dominant' API='Dominant'
+
+PMID: 32639540
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 100.0% | Recall: 100.0% | F1: 1.000
+Training variants: 4 | API variants: 4 | Matched: 4
+Summary: Perfect match (F1=1.0)
+Explanation: All variants match when accounting for nomenclature variations.
+Matched variants:
+  ✓ EXOC2
+      Training: NM_018303.6:c.1309C>T / NP_060773.3:p.Arg437*
+      API:      NM_018303.6:c.1309C>T / NP_060773.3:p.Arg437Ter
+      Zygosity: ✓ Train='Homozygous' API='Homozygous'
+      MOI:      ✓ Train='Recessive' API='Recessive'
+  ✓ EXOC2
+      Training: NM_018303.6:c.1309C>T / NP_060773.3:p.Arg437*
+      API:      NM_018303.6:c.1309C>T / NP_060773.3:p.Arg437Ter
+      Zygosity: ✓ Train='Homozygous' API='Homozygous'
+      MOI:      ✓ Train='Recessive' API='Recessive'
+  ✓ EXOC2
+      Training: NM_018303.5:c.389G>A / NP_060773.3:p.Arg130His
+      API:      NM_018303.6:c.389G>A / NP_060773.3:p.Arg130His
+      Zygosity: ✓ Train='Compound Heterozygous' API='Compound Heterozygous'
+      MOI:      ✓ Train='Recessive' API='Recessive'
+  ✓ EXOC2
+      Training: NM_018303.5:c.1739T>C / NP_060773.3:p.Leu580Ser
+      API:      NM_018303.6:c.1739T>C / NP_060773.3:p.Leu580Ser
+      Zygosity: ✓ Train='Compound Heterozygous' API='Compound Heterozygous'
+      MOI:      ✓ Train='Recessive' API='Recessive'
+
+PMID: 32976546
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 20.0% | Recall: 100.0% | F1: 0.333
+Training variants: 1 | API variants: 5 | Matched: 1
+Summary: Partial match (F1=0.333)
+Explanation: Some variants matched; missing or extra variants present:
+Matched variants:
+  ✓ FOXE3
+      Training: NM_012186:c.289A>G / NP_036318.1:p.Ile97Val
+      API:      NM_012186.3:c.289A>G / NP_036318.1:p.Ile97Val
+      Zygosity: ✗ Train='Homozygous' API='Unknown'
+      MOI:      ✓ Train='Recessive' API='Recessive'
+Additional from API:
+  + FOXE3 NM_012186.3:c.289A>G/NP_036318.1:p.Ile97Val (Patient: IV:2, Zygosity: Unknown, MOI: Recessive)
+  + FOXE3 NM_012186.3:c.289A>G/NP_036318.1:p.Ile97Val (Patient: IV:3, Zygosity: Unknown, MOI: Recessive)
+  + FOXE3 NM_012186.3:c.289A>G/NP_036318.1:p.Ile97Val (Patient: V:2, Zygosity: Unknown, MOI: Recessive)
+  + FOXE3 NM_012186.3:c.289A>G/NP_036318.1:p.Ile97Val (Patient: V:3, Zygosity: Unknown, MOI: Recessive)
+
+PMID: 33117677
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 100.0% | Recall: 100.0% | F1: 1.000
+Training variants: 1 | API variants: 1 | Matched: 1
+Summary: Perfect match (F1=1.0)
+Explanation: All variants match when accounting for nomenclature variations.
+Matched variants:
+  ✓ MLH3
+      Training: NM_001040108.2:c.615del / NP_001035197.1:p.Asp206fs
+      API:      NM_001040108.2:c.615del / NP_001035197.1:p.Asp206ThrfsTer18
+      Zygosity: ✓ Train='Unknown' API='Unknown'
+      MOI:      ✗ Train='Undetermined Moi' API='Unknown'
+
+PMID: 33270637
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 0.0% | Recall: 0.0% | F1: 0.000
+Training variants: 1 | API variants: 1 | Matched: 0
+Summary: No match (F1=0)
+Explanation: No variants matched:
+Missing from API:
+  ✗ ZNF423 NM_015069.5:c.1144T>C/p.Ser382Pro (Patient: 29)
+Additional from API:
+  + ZNF423 NM_001379286.1:c.1168T>C/NP_001366215.1:p.Ser390Pro (Patient: Case 27, Zygosity: Heterozygous, MOI: Unknown)
+
+PMID: 33362715
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 100.0% | Recall: 100.0% | F1: 1.000
+Training variants: 1 | API variants: 1 | Matched: 1
+Summary: Perfect match (F1=1.0)
+Explanation: All variants match when accounting for nomenclature variations.
+Matched variants:
+  ✓ KIF1B
+      Training: NM_015074.3:c.3649C>T / p.Pro1217Ser
+      API:      c.3649C>T / p.P1217S
+      Zygosity: ✗ Train='None' API='Unknown'
+      MOI:      ✗ Train='Undetermined Moi' API='Unknown'
+
+PMID: 33528103
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 100.0% | Recall: 100.0% | F1: 1.000
+Training variants: 1 | API variants: 1 | Matched: 1
+Summary: Perfect match (F1=1.0)
+Explanation: All variants match when accounting for nomenclature variations.
+Matched variants:
+  ✓ GRXCR2
+      Training: NM_001080516.1:c.251delC / p.Ile85SerfsTer33
+      API:      NM_001080516.1(GRXCR2):c.251delC / p.(Ile85SerfsTer33)
+      Zygosity: ✓ Train='Homozygous' API='Homozygous'
+      MOI:      ✓ Train='Recessive' API='Recessive'
+
+PMID: 33531950
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 100.0% | Recall: 100.0% | F1: 1.000
+Training variants: 2 | API variants: 2 | Matched: 2
+Summary: Perfect match (F1=1.0)
+Explanation: All variants match when accounting for nomenclature variations.
+Matched variants:
+  ✓ ZNF423
+      Training: NM_001379286.1:c.1192C>T / NP_001366215.1:p.Arg398Trp
+      API:      NM_001379286.1:c.1192C>T / NP_001366215.1:p.Pro398Ser
+      Zygosity: ✗ Train='Compound Heterozygous In Trans' API='Compound Heterozygous'
+      MOI:      ✗ Train='Compound Heterozygous' API='Recessive'
+  ✓ ZNF423
+      Training: NM_001379286.1:c.272C>T / NP_001366215.1:p.Pro91Leu
+      API:      NM_001379286.1:c.272C>T / NP_001366215.1:p.Thr91Met
+      Zygosity: ✗ Train='Compound Heterozygous In Trans' API='Compound Heterozygous'
+      MOI:      ✗ Train='Compound Heterozygous' API='Recessive'
+
+PMID: 34046667
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 0.0% | Recall: 0.0% | F1: 0.000
+Training variants: 1 | API variants: 22 | Matched: 0
+Summary: No match (F1=0)
+Explanation: No variants matched:
+Missing from API:
+  ✗ FOXE3 NM_012186.3:c.959G>C/p.∗320Serext∗72 (Patient: 15A)
+Additional from API:
+  + FOXE3 c.148_170dup/p.(Gly58Argfs ∗ 174) (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + FOXE3 c.543del/p.(Pro182Argfs ∗ 42) (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + FOXE3 c.844_850dup/p.(Glu284Alafs ∗ 3) (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + FOXE3 c.286G > A/p.(Ala96Thr) (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + FOXE3 c.359G > C/p.(Arg120Pro) (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + FOXE3 c.371C > T/p.(Thr124Met) (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + FOXE3 c.244A > G/p.(Met82Val) (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + FOXE3 c.21_24del/p.(Met7Ilefs ∗ 216) (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + FOXE3 c.232G > A/p.(Ala78Thr) (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + FOXE3 c.720C > A/p.(Cys240 ∗ ) (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + FOXE3 c.307G > A/p.(Glu103Lys) (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + FOXE3 c.351C > G/p.(Asn117Lys) (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + FOXE3 c.244A > G/p.Met82Val (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + FOXE3 missing/p.Phe186Serfs ∗ 38 (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + FOXE3 NM_012186.3:c.705del/p.Glu236Serfs ∗ 71 (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + FOXE3 c.720C > A/p.Cys240 ∗ (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + FOXE3 missing/p.Leu315Alafs ∗ 117 (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + FOXE3 missing/p. ∗ 320Serext ∗ 72 (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + FOXE3 NM_012186.3:c.269G>T/p.Arg90Leu (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + FOXE3 missing/p.Arg120Gly (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + FOXE3 NM_012186.3:c.289A>G/p.(Ile97Val) (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + FOXE3 NM_012186.3:c.291C>G/p.(Ile97Met) (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+
+PMID: 34199176
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 100.0% | Recall: 100.0% | F1: 1.000
+Training variants: 1 | API variants: 1 | Matched: 1
+Summary: Perfect match (F1=1.0)
+Explanation: All variants match when accounting for nomenclature variations.
+Matched variants:
+  ✓ TOPBP1
+      Training: NM_007027.3:c.951T>G / p.Ile317Met
+      API:      NM_007027.3:c.951T>G / p.Ile317Met
+      Zygosity: ✗ Train='Heterozygous' API='Unknown'
+      MOI:      ✗ Train='Undetermined Moi' API='Unknown'
+
+PMID: 34262438
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 0.0% | Recall: 0.0% | F1: 0.000
+Training variants: 1 | API variants: 1 | Matched: 0
+Summary: No match (F1=0)
+Explanation: No variants matched:
+Missing from API:
+  ✗ NLGN3 NM_018977.4:c.1351C>T/p.Arg451Cys (Patient: unknown)
+Additional from API:
+  + NLGN3 NM_181303.2:c.1411C>T/p.Arg451Cys (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+
+PMID: 34298581
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 50.0% | Recall: 100.0% | F1: 0.667
+Training variants: 1 | API variants: 2 | Matched: 1
+Summary: Partial match (F1=0.667)
+Explanation: Some variants matched; missing or extra variants present:
+Matched variants:
+  ✓ COG4
+      Training: NM_015386.3:c.1255G>T / NP_056201.2:p.Glu419Ter
+      API:      NM_015386.3:c.1255G>T / NP_056201.2:p.Glu419Ter
+      Zygosity: ✓ Train='Compound Heterozygous' API='Compound Heterozygous'
+      MOI:      ✓ Train='Recessive' API='Recessive'
+Additional from API:
+  + COG4 NM_015386.3:c.941G>A/NP_056201.2:p.Cys314Tyr (Patient: P21, Zygosity: Compound Heterozygous, MOI: Recessive)
+
+PMID: 35001666
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 0.0% | Recall: 0.0% | F1: 0.000
+Training variants: 1 | API variants: 1 | Matched: 0
+Summary: No match (F1=0)
+Explanation: No variants matched:
+Missing from API:
+  ✗ JPH2 NM_020433.5:c.2011-1G>T/N/A (Patient: unknown)
+Additional from API:
+  + JPH2 NM_020433.5:c.1920dup/NP_065166.2:p.Glu641Ter (Patient: One proband, Zygosity: Homozygous, MOI: Recessive)
+
+PMID: 35743796
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 50.0% | Recall: 100.0% | F1: 0.667
+Training variants: 1 | API variants: 2 | Matched: 1
+Summary: Partial match (F1=0.667)
+Explanation: Some variants matched; missing or extra variants present:
+Matched variants:
+  ✓ TDO2
+      Training: NM_005651.4:c.803T>A / NP_005642.1:p.Phe268Tyr
+      API:      NM_005651.4:c.803T>A / NP_005642.1:p.Phe268Tyr
+      Zygosity: ✓ Train='Heterozygous' API='Heterozygous'
+      MOI:      ✗ Train='Dominant' API='Unknown'
+Additional from API:
+  + TDO2 NM_005651.4:c.803T>A/NP_005642.1:p.Phe268Tyr (Patient: father, Zygosity: Heterozygous, MOI: Unknown)
+
+PMID: 36041817
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 100.0% | Recall: 100.0% | F1: 1.000
+Training variants: 1 | API variants: 1 | Matched: 1
+Summary: Perfect match (F1=1.0)
+Explanation: All variants match when accounting for nomenclature variations.
+Matched variants:
+  ✓ SARS1
+      Training: NM_006513.4:c.969+1_969+3del / p.Lys323_Ile324insSerArgTrpValArg
+      API:      NM_006513.4:c.969+1_969+3del / missing
+      Zygosity: ✓ Train='Heterozygous' API='Heterozygous'
+      MOI:      ✗ Train='Dominant' API='De Novo'
+
+PMID: 36450898
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 0.0% | Recall: 0.0% | F1: 0.000
+Training variants: 1 | API variants: 5 | Matched: 0
+Summary: No match (F1=0)
+Explanation: No variants matched:
+Missing from API:
+  ✗ TOP2B NP_001059.2:c.172C>T/p.His58Tyr (Patient: unknown)
+Additional from API:
+  + TOP2B NM_001330700.2:c.187C>T/p.His58Tyr (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + TOP2B missing/p.Thr65Ile (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + TOP2B NM_001330700.2:c.212A>T/p.Tyr66Phe (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + TOP2B missing/p.Gly180Ile (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+  + TOP2B missing/p.Leu185Phe (Patient: Unknown, Zygosity: Unknown, MOI: Unknown)
+
+PMID: 37041648
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 100.0% | Recall: 100.0% | F1: 1.000
+Training variants: 1 | API variants: 1 | Matched: 1
+Summary: Perfect match (F1=1.0)
+Explanation: All variants match when accounting for nomenclature variations.
+Matched variants:
+  ✓ SLFN14
+      Training: NM_001129820.2:c.655A>G / NP_001123292.1:p.Lys219Glu
+      API:      NM_001129820.2:c.655A>G / NP_001123292.1:p.Lys219Glu
+      Zygosity: ✓ Train='Heterozygous' API='Heterozygous'
+      MOI:      ✓ Train='Dominant' API='Dominant'
+
+PMID: 37371654
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 100.0% | Recall: 100.0% | F1: 1.000
+Training variants: 1 | API variants: 1 | Matched: 1
+Summary: Perfect match (F1=1.0)
+Explanation: All variants match when accounting for nomenclature variations.
+Matched variants:
+  ✓ JPH2
+      Training: NM_020433.5:c.482C>A / NP_065166.2:p.Thr161Lys
+      API:      NM_020433.5:c.482C>A / NP_065166.2:p.Thr161Lys
+      Zygosity: ✓ Train='Heterozygous' API='Heterozygous'
+      MOI:      ✗ Train='Dominant' API='Unknown'
+
+PMID: 37656691
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 100.0% | Recall: 100.0% | F1: 1.000
+Training variants: 1 | API variants: 1 | Matched: 1
+Summary: Perfect match (F1=1.0)
+Explanation: All variants match when accounting for nomenclature variations.
+Matched variants:
+  ✓ MLH3
+      Training: NM_001040108.2:c.3343C>T / NP_001035197.1:p.Arg1115Ter
+      API:      NM_001040108.2:c.3343C>T / NP_001035197.1:p.Arg1115Ter
+      Zygosity: ✓ Train='Heterozygous' API='Heterozygous'
+      MOI:      ✗ Train='Dominant' API='Unknown'
+
+PMID: 37780619
+------------------------------------------------------------------------------------------------------------------------------------------------------
+Precision: 100.0% | Recall: 100.0% | F1: 1.000
+Training variants: 1 | API variants: 1 | Matched: 1
+Summary: Perfect match (F1=1.0)
+Explanation: All variants match when accounting for nomenclature variations.
+Matched variants:
+  ✓ KIF1B
+      Training: NM_015047.3:c.4660G>C / p.Val1554Leu
+      API:      NM_015047.3:c.4660G>C / p.Val1554Leu
+      Zygosity: ✓ Train='Heterozygous' API='Heterozygous'
+      MOI:      ✗ Train='Dominant' API='Unknown'
+
+======================================================================================================================================================
+SUMMARY STATISTICS
+======================================================================================================================================================
+Total PMIDs analyzed: 30
+
+MACRO-AVERAGED (equal weight per PMID):
+  Precision: 67.1%
+  Recall: 80.0%
+  F1: 0.703
+
+MICRO-AVERAGED (weighted by variant count):
+  Precision: 54.0%
+  Recall: 90.0%
+  F1: 0.675
+
+Perfect match (F1=1.0): 17
+Partial match (0<F1<1.0): 7
+No match (F1=0): 6

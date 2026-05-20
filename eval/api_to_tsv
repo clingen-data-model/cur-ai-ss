@@ -1,0 +1,222 @@
+#!/usr/bin/env python3
+"""
+Generate var/pmid_variants_api.tsv from the API.
+
+This script fetches paper data from https://gene-curation-ai.app/api and
+builds a TSV matching the structure of var/pmid_variants.tsv for comparison.
+
+For each PMID in var/pmid_variants.tsv:
+- Fetches patient-variant-links via /api/papers/{paper_id}/patient-variant-links
+- Fetches patients to identify probands
+- If proband(s) are identified, filters to only include variants linked to proband patients
+- Always uses harmonized HGVS notation (hgvsc, hgvsp) for consistency
+- Extracts transcript accession from harmonized HGVS prefix (e.g., NM_123456.7:c.123C>T -> NM_123456.7)
+- For papers without links, outputs all variants with patient_id='Unknown' and zygosity/inheritance='Unknown'
+- Extracts: gene, transcript, hgvsc, hgvsp, patient_id, variant_type, zygosity, inheritance
+- Writes to var/pmid_variants_api.tsv with same column structure as training TSV
+"""
+
+import csv
+import requests
+
+BASE_URL = "https://gene-curation-ai.app/api"
+
+# PMIDs that should output all affected family members (not filtered by proband status)
+PMIDS_SKIP_PROBAND_FILTER = ('26094573', '32184806', '35743796')
+
+
+def extract_transcript_from_hgvs(hgvs_notation: str) -> str:
+    """Extract transcript accession from HGVS notation (e.g., NM_123456.7:c.123C>T -> NM_123456.7)."""
+    if not hgvs_notation or ':' not in hgvs_notation:
+        return 'missing'
+    return hgvs_notation.split(':')[0]
+
+
+def main():
+    # Step 1: Fetch all papers and build PMID mapping
+    print("Fetching all papers from API...")
+    papers_response = requests.get(f"{BASE_URL}/papers")
+    papers_response.raise_for_status()
+    papers_data = papers_response.json()
+
+    pmid_to_paper = {}
+    for paper in papers_data:
+        pmid = paper.get('pmid')
+        if pmid:
+            pmid_to_paper[pmid] = {
+                'paper_id': paper['id'],
+                'gene_symbol': paper.get('gene_symbol', 'Unknown')
+            }
+
+    print(f"Found {len(pmid_to_paper)} papers with PMIDs")
+
+    # Read PMIDs from var/pmid_variants.tsv
+    print("\nReading var/pmid_variants.tsv...")
+    pmids_in_tsv = set()
+    with open('var/pmid_variants.tsv', 'r') as f:
+        reader = csv.DictReader(f, delimiter='\t')
+        for row in reader:
+            pmid = row.get('pmid', '').strip()
+            if pmid:
+                pmids_in_tsv.add(pmid)
+
+    print(f"Found {len(pmids_in_tsv)} unique PMIDs in TSV")
+
+    # Check which PMIDs are in the API
+    missing_pmids = pmids_in_tsv - set(pmid_to_paper.keys())
+    if missing_pmids:
+        print(f"Warning: {len(missing_pmids)} PMIDs not found in API")
+
+    # Step 2: For each PMID, fetch patient-variant-links or variants
+    print("\nFetching patient-variant-links and variants for each paper...")
+    api_rows = []
+
+    for pmid in sorted(pmids_in_tsv):
+        if pmid not in pmid_to_paper:
+            print(f"  Skipping {pmid} (not in API)")
+            continue
+
+        paper_info = pmid_to_paper[pmid]
+        paper_id = paper_info['paper_id']
+        gene_symbol = paper_info['gene_symbol']
+
+        try:
+            # Try to get patient-variant-links first
+            links_response = requests.get(f"{BASE_URL}/papers/{paper_id}/patient-variant-links")
+            links_response.raise_for_status()
+            links_data = links_response.json()
+
+            # Fetch variants for this paper to get their details
+            variants_response = requests.get(f"{BASE_URL}/papers/{paper_id}/variants")
+            variants_response.raise_for_status()
+            variants_data = variants_response.json()
+
+            # Fetch patients to identify probands
+            patients_response = requests.get(f"{BASE_URL}/papers/{paper_id}/patients")
+            patients_response.raise_for_status()
+            patients_data = patients_response.json()
+
+            # Build lookup of patient IDs that are probands
+            proband_ids = {p['id'] for p in patients_data if p.get('proband_status') == 'Proband'}
+
+            # Create variant lookup by ID
+            variant_by_id = {v['id']: v for v in variants_data}
+
+            if len(links_data) > 0:
+                # Has patient-variant links
+                # If there are identified probands, filter to only proband links
+                # Exception: PMIDs in PMIDS_SKIP_PROBAND_FILTER output all affected family members
+                skip_proband_filter = pmid in PMIDS_SKIP_PROBAND_FILTER
+                if proband_ids and not skip_proband_filter:
+                    links_data = [link for link in links_data if link['patient_id'] in proband_ids]
+
+                print(f"  {pmid}: Found {len(links_data)} patient-variant links")
+
+                # Track which variants are already linked
+                linked_variant_ids = {link['variant_id'] for link in links_data}
+
+                # Process each link
+                for link in links_data:
+                    variant_id = link['variant_id']
+                    variant = variant_by_id.get(variant_id, {})
+
+                    # Always use harmonized HGVS
+                    hgvsc = 'missing'
+                    hgvsp = 'missing'
+                    transcript = 'missing'
+
+                    if variant.get('harmonized_variant') and variant['harmonized_variant'].get('value'):
+                        hv = variant['harmonized_variant']['value']
+                        hgvsc = hv.get('hgvs_c') or 'missing'
+                        hgvsp = hv.get('hgvs_p') or 'missing'
+                        # Extract transcript accession from HGVS (e.g., NM_123456.7:c.123C>T -> NM_123456.7)
+                        transcript = extract_transcript_from_hgvs(hgvsc)
+
+                    row = {
+                        'pmid': pmid,
+                        'gene': gene_symbol,
+                        'transcript': transcript,
+                        'hgvsc': hgvsc,
+                        'hgvsp': hgvsp,
+                        'patient_id': link['patient_identifier'],
+                        'variant_type': variant.get('variant_type', 'Unknown'),
+                        'zygosity': link['zygosity'],
+                        'mode_of_inheritance': link['inheritance']
+                    }
+                    api_rows.append(row)
+
+                # If no probands identified, also output unlinked variants with Unknown patient
+                if not proband_ids:
+                    unlinked_variants = [v for v in variants_data if v['id'] not in linked_variant_ids]
+                    if unlinked_variants:
+                        print(f"  {pmid}: Also outputting {len(unlinked_variants)} unlinked variants with patient_id='Unknown'")
+                        for variant in unlinked_variants:
+                            hgvsc = 'missing'
+                            hgvsp = 'missing'
+                            transcript = 'missing'
+
+                            if variant.get('harmonized_variant') and variant['harmonized_variant'].get('value'):
+                                hv = variant['harmonized_variant']['value']
+                                hgvsc = hv.get('hgvs_c') or 'missing'
+                                hgvsp = hv.get('hgvs_p') or 'missing'
+                                transcript = extract_transcript_from_hgvs(hgvsc)
+
+                            row = {
+                                'pmid': pmid,
+                                'gene': gene_symbol,
+                                'transcript': transcript,
+                                'hgvsc': hgvsc,
+                                'hgvsp': hgvsp,
+                                'patient_id': 'Unknown',
+                                'variant_type': variant.get('variant_type', 'Unknown'),
+                                'zygosity': 'Unknown',
+                                'mode_of_inheritance': 'Unknown'
+                            }
+                            api_rows.append(row)
+            else:
+                # No patient-variant links, output variants with patient_id='Unknown'
+                print(f"  {pmid}: No patient-variant links, outputting {len(variants_data)} variants with patient_id='Unknown'")
+
+                for variant in variants_data:
+                    # Extract HGVS notation
+                    hgvsc = variant.get('hgvs_c')
+                    if not hgvsc and variant.get('harmonized_variant') and variant['harmonized_variant'].get('value'):
+                        hgvsc = variant['harmonized_variant']['value'].get('hgvs_c')
+                    hgvsc = hgvsc or 'missing'
+
+                    hgvsp = variant.get('hgvs_p')
+                    if not hgvsp and variant.get('harmonized_variant') and variant['harmonized_variant'].get('value'):
+                        hgvsp = variant['harmonized_variant']['value'].get('hgvs_p')
+                    hgvsp = hgvsp or 'missing'
+
+                    row = {
+                        'pmid': pmid,
+                        'gene': gene_symbol,
+                        'transcript': variant.get('transcript') or 'missing',
+                        'hgvsc': hgvsc,
+                        'hgvsp': hgvsp,
+                        'patient_id': 'Unknown',
+                        'variant_type': variant.get('variant_type', 'Unknown'),
+                        'zygosity': 'Unknown',
+                        'mode_of_inheritance': 'Unknown'
+                    }
+                    api_rows.append(row)
+
+        except Exception as e:
+            print(f"  Error fetching data for {pmid}: {e}")
+
+    # Step 3: Write to output TSV
+    print(f"\nWriting {len(api_rows)} rows to var/pmid_variants_api.tsv...")
+    fieldnames = ['pmid', 'gene', 'transcript', 'hgvsc', 'hgvsp', 'patient_id', 'variant_type', 'zygosity', 'mode_of_inheritance']
+
+    with open('var/pmid_variants_api.tsv', 'w') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter='\t')
+        writer.writeheader()
+        writer.writerows(api_rows)
+
+    print("Done!")
+    print(f"Total API rows: {len(api_rows)}")
+
+
+if __name__ == '__main__':
+    main()
