@@ -1,5 +1,6 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+from lib.agents.table_correction_agent import TableCorrectionResult
 from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import (
     pdf_extraction_success_path,
@@ -15,9 +16,21 @@ from lib.models import PaperDB
 
 
 def test_convert_and_extract_creates_outputs(test_file_contents):
-    with patch(
-        'lib.misc.gcs.upload_and_sign_image',
-        return_value='https://example.com/image.png',
+    mock_result = MagicMock()
+    mock_result.final_output = TableCorrectionResult(
+        original_markdown='| Header 1 | Header 2 |\n|----------|----------|\n| Cell 1   | Cell 2   |',
+        is_corrupted=False,
+    )
+
+    with (
+        patch(
+            'lib.misc.gcs.upload_and_sign_image',
+            return_value='https://example.com/image.png',
+        ),
+        patch(
+            'agents.Runner.run',
+            return_value=mock_result,
+        ),
     ):
         content = test_file_contents('ACN3-7-1962.pdf', mode='rb')
 
