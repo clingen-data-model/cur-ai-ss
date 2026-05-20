@@ -41,6 +41,7 @@ class Inheritance(str, Enum):
     dominant = 'Dominant'
     recessive = 'Recessive'
     semi_dominant = 'Semi-dominant'
+    compound_heterozygous = 'Compound Heterozygous'
     x_linked = 'X-linked'
     de_novo = 'De Novo'
     somatic_mosaicism = 'Somatic Mosaicism'
@@ -76,6 +77,7 @@ class PatientVariantLink(BaseModel):
     variant_id: int
     zygosity: EvidenceBlock[Zygosity]
     inheritance: EvidenceBlock[Inheritance]
+    de_novo: EvidenceBlock[bool]
     testing_methods: List[EvidenceBlock[TestingMethod]]
 
     @model_validator(mode='after')
@@ -111,11 +113,13 @@ class PatientVariantLinkDB(Base):
     # Values (updateable)
     zygosity: Mapped[str] = mapped_column(String, nullable=False)
     inheritance: Mapped[str] = mapped_column(String, nullable=False)
+    de_novo: Mapped[bool] = mapped_column(nullable=False)
     testing_methods: Mapped[list[str]] = mapped_column(JSON, nullable=False)
 
     # Evidence blocks (static, JSON)
     zygosity_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     inheritance_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    de_novo_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     testing_methods_evidence: Mapped[list] = mapped_column(JSON, nullable=False)
 
     updated_at: Mapped[datetime] = mapped_column(
@@ -160,6 +164,8 @@ class PatientVariantLinkResp(BaseModel):
     zygosity_evidence: EvidenceBlock[Zygosity]
     inheritance: Inheritance
     inheritance_evidence: EvidenceBlock[Inheritance]
+    de_novo: bool
+    de_novo_evidence: EvidenceBlock[bool]
     testing_methods: list[TestingMethod]
     testing_methods_evidence: List[EvidenceBlock[TestingMethod]]
     updated_at: datetime

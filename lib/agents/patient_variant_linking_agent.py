@@ -38,6 +38,7 @@ Return **exactly** the following for each link:
 - variant_id
 - zygosity: a single EvidenceBlock[Zygosity]
 - inheritance: a single EvidenceBlock[Inheritance]
+- de_novo: EvidenceBlock[bool] (true if variant is de novo, false otherwise)
 - testing_methods: a list of EvidenceBlock[TestingMethod] (max 2 items)
 
 **Linking rules:**
