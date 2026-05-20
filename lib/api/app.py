@@ -803,6 +803,8 @@ def _patient_variant_link_to_resp(
         zygosity_evidence=EvidenceBlock.model_validate(row.zygosity_evidence),
         inheritance=Inheritance(row.inheritance),
         inheritance_evidence=EvidenceBlock.model_validate(row.inheritance_evidence),
+        de_novo=row.de_novo,
+        de_novo_evidence=EvidenceBlock.model_validate(row.de_novo_evidence),
         testing_methods=[TestingMethod(m) for m in row.testing_methods],
         testing_methods_evidence=[
             EvidenceBlock.model_validate(m) for m in row.testing_methods_evidence
