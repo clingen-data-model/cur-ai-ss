@@ -346,13 +346,15 @@ def allele_registry_resolver(
                     break
 
         # -----------------------
-        # Transcript HGVS (prefer MANE Select RefSeq)
+        # Transcript HGVS (prefer MANE Select RefSeq, then RefSeq, then Ensembl)
         # -----------------------
         resolved_hgvsc = None
         resolved_hgvsp = None
-        found_mane = False
 
-        for t in data.get('transcriptAlleles', []):
+        transcripts = data.get('transcriptAlleles', [])
+
+        # Priority 1: MANE Select + RefSeq
+        for t in transcripts:
             mane = t.get('MANE')
             if mane and mane.get('maneStatus') == 'MANE Select':
                 refseq_nuc = mane.get('nucleotide', {}).get('RefSeq', {}).get('hgvs')
@@ -362,21 +364,35 @@ def allele_registry_resolver(
                     resolved_hgvsc = refseq_nuc
                 if refseq_pro:
                     resolved_hgvsp = refseq_pro
+                break
 
-                found_mane = True
-                continue
+        # Priority 2: RefSeq transcripts (NM_, NR_)
+        if not resolved_hgvsc:
+            for t in transcripts:
+                for h in t.get('hgvs', []):
+                    if ':c.' in h and (h.startswith('NM_') or h.startswith('NR_')):
+                        resolved_hgvsc = h
+                        break
+                if resolved_hgvsc:
+                    break
 
-            if not found_mane:
-                if not resolved_hgvsc:
-                    for h in t.get('hgvs', []):
-                        if ':c.' in h:
-                            resolved_hgvsc = h
-                            break
+        # Priority 3: Any transcript with :c. (Ensembl fallback)
+        if not resolved_hgvsc:
+            for t in transcripts:
+                for h in t.get('hgvs', []):
+                    if ':c.' in h:
+                        resolved_hgvsc = h
+                        break
+                if resolved_hgvsc:
+                    break
 
-                if not resolved_hgvsp:
-                    protein_hgvs = t.get('proteinEffect', {}).get('hgvs')
-                    if protein_hgvs:
-                        resolved_hgvsp = protein_hgvs
+        # Extract protein HGVS if available
+        if not resolved_hgvsp:
+            for t in transcripts:
+                protein_hgvs = t.get('proteinEffect', {}).get('hgvs')
+                if protein_hgvs:
+                    resolved_hgvsp = protein_hgvs
+                    break
 
         results.append(
             {
