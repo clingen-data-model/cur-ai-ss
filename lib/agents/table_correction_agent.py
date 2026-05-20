@@ -53,7 +53,8 @@ Return ONLY the markdown table, no other text.""",
         ],
     )
 
-    return message.choices[0].message.content
+    content = message.choices[0].message.content
+    return content if content is not None else ''
 
 
 class TableCorrectionResult(BaseModel):
@@ -111,8 +112,8 @@ def correct_tables(paper_id: int, supplement: bool = False) -> None:
     if not table_files:
         return
 
-    # Track corrections: table_id -> corrected_markdown
-    corrections: dict[int, str] = {}
+    # Track corrections: table_id -> (original_markdown, corrected_markdown)
+    corrections: dict[int, tuple[str, str]] = {}
 
     for table_path in table_files:
         # Skip vision files
