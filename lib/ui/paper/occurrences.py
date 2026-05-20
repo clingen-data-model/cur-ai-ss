@@ -105,6 +105,7 @@ def render_patient_variant_occurrences_tab() -> None:
                 'Variant': variant_link,
                 'Zygosity': link.zygosity.value,
                 'Inheritance': link.inheritance.value,
+                'De Novo': link.de_novo,
                 'Testing Methods': testing_methods_list,
                 # Store full objects for detail panel
                 '_link': link,
@@ -168,6 +169,10 @@ def render_patient_variant_occurrences_tab() -> None:
             'Inheritance': st.column_config.SelectboxColumn(
                 'Inheritance',
                 options=inheritance_options,
+                width='small',
+            ),
+            'De Novo': st.column_config.CheckboxColumn(
+                'De Novo',
                 width='small',
             ),
             'Testing Methods': st.column_config.MultiselectColumn(
@@ -264,6 +269,21 @@ def render_patient_variant_occurrences_tab() -> None:
             _render_evidence_block(
                 link.inheritance_evidence, paper_resp.id, 'inheritance'
             )
+
+        st.divider()
+
+        # Display de novo evidence
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown('#### De Novo')
+            st.info(f'**De Novo Status:** {"Yes" if link.de_novo else "No"}')
+
+        with col2:
+            st.markdown('#### De Novo Evidence')
+            _render_evidence_block(link.de_novo_evidence, paper_resp.id, 'de_novo')
+
+        st.divider()
 
         # Display testing methods evidence
         if link.testing_methods_evidence:
