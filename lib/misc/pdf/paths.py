@@ -93,6 +93,12 @@ def pdf_table_markdown_path(
     return pdf_tables_dir(paper_id, supplement) / f'{table_id}.md'
 
 
+def pdf_table_vision_markdown_path(
+    paper_id: int, table_id: int, supplement: bool = False
+) -> Path:
+    return pdf_tables_dir(paper_id, supplement) / f'{table_id}.vision.md'
+
+
 def pdf_section_markdown_path(
     paper_id: int, section_id: int, supplement: bool = False
 ) -> Path:

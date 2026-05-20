@@ -1,3 +1,4 @@
+import asyncio
 import html
 import json
 import shutil
@@ -29,6 +30,7 @@ from docling_parse.pdf_parser import DoclingPdfParser, PdfDocument
 from pydantic import BaseModel
 from xldown import excel_to_markdown
 
+from lib.agents.table_correction_agent import correct_tables
 from lib.misc.pdf.paths import (
     pdf_extraction_success_path,
     pdf_image_caption_path,
@@ -293,6 +295,8 @@ def parse_content(
             pdf_image_caption_path(paper_id, i, supplement=supplement), 'w'
         ) as fp:
             fp.write(caption)
+
+    correct_tables(paper_id, supplement=supplement)
 
     with open(pdf_extraction_success_path(paper_id, supplement=supplement), 'w') as fp:
         fp.write('')
