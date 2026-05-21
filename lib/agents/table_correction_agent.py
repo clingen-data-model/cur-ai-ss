@@ -20,23 +20,6 @@ from lib.misc.pdf.paths import (
 logger = logging.getLogger(__name__)
 
 
-def rotate_image(image_path: Path, angle: int, scale_factor: float = 3.0) -> Path:
-    """Upscale and rotate image, save with _rotated_{angle}.png suffix."""
-    from PIL import Image
-
-    img = Image.open(image_path)
-    new_size = (
-        int(img.width * scale_factor),
-        int(img.height * scale_factor),
-    )
-    upscaled = img.resize(new_size, Image.Resampling.LANCZOS)
-    rotated = upscaled.rotate(angle, expand=True)
-
-    rotated_path = image_path.parent / f'{image_path.stem}_rotated_{angle}.png'
-    rotated.save(rotated_path)
-    return rotated_path
-
-
 @function_tool
 def extract_table_from_image(image_url: str) -> str:
     """Extract table markdown from image URL using vision."""
@@ -52,10 +35,7 @@ def extract_table_from_image(image_url: str) -> str:
                 'content': [
                     {
                         'type': 'image_url',
-                        'image_url': {
-                            'url': image_url,
-                            'detail': 'high'
-                        },
+                        'image_url': {'url': image_url, 'detail': 'high'},
                     },
                     {
                         'type': 'text',
@@ -165,29 +145,9 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
             continue
 
         if not result.final_output.conversion_successful:
-            logger.info(
-                f'Table {table_id} extraction failed on first attempt, retrying with rotated images...'
+            raise ValueError(
+                f'Table {table_id} was detected as corrupted but conversion failed'
             )
-
-            for angle in [90, 180, 270]:
-                rotated_path = rotate_image(image_path, angle)
-                rotated_url = upload_and_sign_image(rotated_path)
-
-                message = (
-                    f'Table ID: {table_id}\n\n'
-                    f'Markdown to evaluate:\n```\n{table_markdown}\n```\n\n'
-                    f'Image URL for extraction if needed: {rotated_url}'
-                )
-
-                result = await Runner.run(agent, message)
-
-                if result.final_output.conversion_successful:
-                    logger.info(f'Table {table_id} succeeded with {angle}° rotation')
-                    break
-            else:
-                raise ValueError(
-                    f'Table {table_id} was detected as corrupted but conversion failed even after rotation retries'
-                )
 
         logger.info(f'Table {table_id} was corrupted, corrected version ready')
 
