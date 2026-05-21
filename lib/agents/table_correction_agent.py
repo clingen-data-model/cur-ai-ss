@@ -20,18 +20,6 @@ from lib.misc.pdf.paths import (
 logger = logging.getLogger(__name__)
 
 
-def rotate_image_90(image_path: Path) -> Path:
-    """Rotate image 90 degrees and save with _rotated.png suffix."""
-    from PIL import Image
-
-    img = Image.open(image_path)
-    rotated = img.rotate(90, expand=True)
-
-    rotated_path = image_path.parent / f'{image_path.stem}_rotated.png'
-    rotated.save(rotated_path)
-    return rotated_path
-
-
 @function_tool
 def extract_table_from_image(image_url: str) -> str:
     """Extract table markdown from image URL using vision."""
@@ -159,24 +147,9 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
             continue
 
         if not result.final_output.conversion_successful:
-            logger.info(
-                f'Table {table_id} extraction failed on first attempt, retrying with rotated image...'
+            raise ValueError(
+                f'Table {table_id} was detected as corrupted but conversion failed'
             )
-            rotated_image_path = rotate_image_90(image_path)
-            rotated_image_url = upload_and_sign_image(rotated_image_path)
-
-            message = (
-                f'Table ID: {table_id}\n\n'
-                f'Markdown to evaluate:\n```\n{table_markdown}\n```\n\n'
-                f'Image URL for extraction if needed: {rotated_image_url}'
-            )
-
-            result = await Runner.run(agent, message)
-
-            if not result.final_output.conversion_successful:
-                raise ValueError(
-                    f'Table {table_id} was detected as corrupted but conversion failed even after rotation retry'
-                )
 
         logger.info(f'Table {table_id} was corrupted, corrected version ready')
 
