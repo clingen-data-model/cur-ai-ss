@@ -45,7 +45,7 @@ def extract_table_from_image(image_url: str) -> str:
     client = OpenAI(api_key=env.OPENAI_API_KEY)
 
     message = client.chat.completions.create(
-        model='gpt-5',
+        model='gpt-5.5',
         messages=[
             {
                 'role': 'user',
@@ -54,6 +54,7 @@ def extract_table_from_image(image_url: str) -> str:
                         'type': 'image_url',
                         'image_url': {
                             'url': image_url,
+                            'detail': 'high'
                         },
                     },
                     {
