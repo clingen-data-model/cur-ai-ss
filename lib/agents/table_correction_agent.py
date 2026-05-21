@@ -20,7 +20,7 @@ from lib.misc.pdf.paths import (
 logger = logging.getLogger(__name__)
 
 
-def upscale_image(image_path: Path, scale_factor: float = 2.0) -> Path:
+def upscale_image(image_path: Path, scale_factor: float = 3.0) -> Path:
     """Upscale image and save with _upscaled.png suffix."""
     from PIL import Image
 
