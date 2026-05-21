@@ -141,15 +141,12 @@ def relevant_sections_md(
     Args:
         paper_id: ID of the paper
         supplement_format: Format of supplement if present
-        section_classifications: Optional classification data (from paper.section_classifications).
-                                If not provided, falls back to file or fulltext.
+        section_classifications: Classification data (from paper.section_classifications).
+                                If not provided, returns fulltext.
     """
-    # Use provided classifications or fall back to file
+    # If no classifications provided, return fulltext
     if section_classifications is None:
-        classification_path = paper_section_classification_path(paper_id)
-        if not classification_path.exists():
-            return fulltext_md(paper_id, supplement_format)
-        section_classifications = json.loads(classification_path.read_text())
+        return fulltext_md(paper_id, supplement_format)
 
     classified: dict[str, bool] = {
         s['header'].lower(): s.get('relevant', True)

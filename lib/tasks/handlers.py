@@ -82,7 +82,6 @@ from lib.misc.gcs import upload_and_sign_image
 from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import (
     fulltext_md,
-    paper_section_classification_path,
     pdf_image_caption_path,
     pdf_image_path,
     relevant_sections_md,
