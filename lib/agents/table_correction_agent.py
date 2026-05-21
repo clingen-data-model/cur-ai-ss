@@ -17,12 +17,14 @@ from lib.misc.pdf.paths import (
 setup_logging()
 logger = logging.getLogger(__name__)
 
-VISION_EXTRACTION_PROMPT = """Extract this table as structured markdown.
+VISION_EXTRACTION_PROMPT = """
+Extract this table as structured markdown.
 
 Use proper markdown table syntax (pipes and dashes).
 Preserve all cell content exactly as shown.
 Include headers if present.
-Return ONLY the markdown table, no other text."""
+Return ONLY the markdown table, no other text.
+"""
 
 
 @function_tool
