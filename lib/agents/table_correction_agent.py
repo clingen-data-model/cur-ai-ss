@@ -1,23 +1,28 @@
 """Agent to correct corrupted table markdown using OpenAI vision."""
 
-import asyncio
-import base64
 import logging
-from pathlib import Path
 
 from agents import Agent, function_tool
 from pydantic import BaseModel
 
 from lib.core.environment import env
+from lib.core.logging import setup_logging
 from lib.misc.pdf.paths import (
     pdf_markdown_path,
     pdf_table_image_path,
-    pdf_table_markdown_path,
     pdf_table_vision_markdown_path,
     pdf_tables_dir,
 )
 
+setup_logging()
 logger = logging.getLogger(__name__)
+
+VISION_EXTRACTION_PROMPT = """Extract this table as structured markdown.
+
+Use proper markdown table syntax (pipes and dashes).
+Preserve all cell content exactly as shown.
+Include headers if present.
+Return ONLY the markdown table, no other text."""
 
 
 @function_tool
@@ -28,7 +33,7 @@ def extract_table_from_image(image_url: str) -> str:
     client = OpenAI(api_key=env.OPENAI_API_KEY)
 
     message = client.chat.completions.create(
-        model='gpt-5.5',
+        model=env.OPENAI_API_DEPLOYMENT,
         messages=[
             {
                 'role': 'user',
@@ -39,12 +44,7 @@ def extract_table_from_image(image_url: str) -> str:
                     },
                     {
                         'type': 'text',
-                        'text': """Extract this table as structured markdown.
-
-Use proper markdown table syntax (pipes and dashes).
-Preserve all cell content exactly as shown.
-Include headers if present.
-Return ONLY the markdown table, no other text.""",
+                        'text': VISION_EXTRACTION_PROMPT,
                     },
                 ],
             }
@@ -64,7 +64,7 @@ class TableCorrectionResult(BaseModel):
     conversion_successful: bool = False
 
 
-INSTRUCTIONS = """You are an expert at evaluating table markdown quality from PDF extraction.
+TABLE_CORRECTION_INSTRUCTIONS = """You are an expert at evaluating table markdown quality from PDF extraction.
 
 Your task:
 1. Review the provided table markdown
@@ -87,8 +87,8 @@ Always set conversion_successful to true only if the corrected_markdown is a val
 
 agent = Agent(
     name='table_corrector',
-    instructions=INSTRUCTIONS,
-    model='gpt-5',
+    instructions=TABLE_CORRECTION_INSTRUCTIONS,
+    model=env.OPENAI_API_DEPLOYMENT,
     output_type=TableCorrectionResult,
     tools=[extract_table_from_image],
 )
