@@ -3,7 +3,6 @@
 import asyncio
 import base64
 import logging
-import tempfile
 from pathlib import Path
 
 from agents import Agent, function_tool
@@ -22,13 +21,13 @@ logger = logging.getLogger(__name__)
 
 
 def rotate_image_90(image_path: Path) -> Path:
-    """Rotate image 90 degrees and save to temporary location."""
+    """Rotate image 90 degrees and save with _rotated.png suffix."""
     from PIL import Image
 
     img = Image.open(image_path)
     rotated = img.rotate(90, expand=True)
 
-    rotated_path = Path(tempfile.gettempdir()) / f'{image_path.stem}_rotated.png'
+    rotated_path = image_path.parent / f'{image_path.stem}_rotated.png'
     rotated.save(rotated_path)
     return rotated_path
 
@@ -41,7 +40,7 @@ def extract_table_from_image(image_url: str) -> str:
     client = OpenAI(api_key=env.OPENAI_API_KEY)
 
     message = client.chat.completions.create(
-        model=env.OPENAI_API_DEPLOYMENT,
+        model='gpt-5',
         messages=[
             {
                 'role': 'user',
@@ -76,6 +75,7 @@ class TableCorrectionResult(BaseModel):
     original_markdown: str
     is_corrupted: bool
     corrected_markdown: str | None = None
+    conversion_successful: bool = False
 
 
 INSTRUCTIONS = """You are an expert at evaluating table markdown quality from PDF extraction.
@@ -95,12 +95,14 @@ A corrupted table has signs like:
 A good table has:
 - Readable headers describing columns
 - Consistent cell alignment
-- Content that makes semantic sense"""
+- Content that makes semantic sense
+
+Always set conversion_successful to true only if the corrected_markdown is a valid markdown table with proper pipe delimiters and header rows. If extraction failed or returned invalid markdown, set it to false."""
 
 agent = Agent(
     name='table_corrector',
     instructions=INSTRUCTIONS,
-    model=env.OPENAI_API_DEPLOYMENT,
+    model='gpt-5',
     output_type=TableCorrectionResult,
     tools=[extract_table_from_image],
 )
@@ -156,7 +158,7 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
             logger.info(f'Table {table_id} looks OK')
             continue
 
-        if not result.final_output.corrected_markdown:
+        if not result.final_output.conversion_successful:
             logger.info(
                 f'Table {table_id} extraction failed on first attempt, retrying with rotated image...'
             )
@@ -171,9 +173,9 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
 
             result = await Runner.run(agent, message)
 
-            if not result.final_output.corrected_markdown:
+            if not result.final_output.conversion_successful:
                 raise ValueError(
-                    f'Table {table_id} was detected as corrupted but no corrected markdown was generated even after rotation retry'
+                    f'Table {table_id} was detected as corrupted but conversion failed even after rotation retry'
                 )
 
         logger.info(f'Table {table_id} was corrupted, corrected version ready')
