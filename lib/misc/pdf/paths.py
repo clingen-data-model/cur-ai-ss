@@ -127,7 +127,9 @@ def fulltext_md(paper_id: int, supplement_format: 'FileFormat | None' = None) ->
 
 
 def relevant_sections_md(
-    paper_id: int, supplement_format: 'FileFormat | None' = None
+    paper_id: int,
+    supplement_format: 'FileFormat | None' = None,
+    section_classifications: dict | None = None,
 ) -> str:
     """Return paper markdown with irrelevant sections removed.
 
@@ -135,14 +137,23 @@ def relevant_sections_md(
     Splices directly from raw.md: when a classified irrelevant section header is
     encountered, lines are skipped until the next classified relevant section header.
     Unclassified headings do not change skip state.
-    """
-    classification_path = paper_section_classification_path(paper_id)
-    if not classification_path.exists():
-        return fulltext_md(paper_id, supplement_format)
 
-    data = json.loads(classification_path.read_text())
+    Args:
+        paper_id: ID of the paper
+        supplement_format: Format of supplement if present
+        section_classifications: Optional classification data (from paper.section_classifications).
+                                If not provided, falls back to file or fulltext.
+    """
+    # Use provided classifications or fall back to file
+    if section_classifications is None:
+        classification_path = paper_section_classification_path(paper_id)
+        if not classification_path.exists():
+            return fulltext_md(paper_id, supplement_format)
+        section_classifications = json.loads(classification_path.read_text())
+
     classified: dict[str, bool] = {
-        s['header'].lower(): s.get('relevant', True) for s in data.get('sections', [])
+        s['header'].lower(): s.get('relevant', True)
+        for s in section_classifications.get('sections', [])
     }
 
     main_md = pdf_markdown_path(paper_id).read_text()

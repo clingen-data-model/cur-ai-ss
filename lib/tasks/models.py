@@ -17,7 +17,7 @@ class TaskType(StrEnum):
     """Pipeline task types in execution order."""
 
     PDF_PARSING = 'PDF Parsing'
-    PAPER_ACKNOWLEDGEMENT = 'Paper Acknowledgement'
+    PAPER_CLASSIFIER = 'Paper Classifier'
     GENERAL_PAPER_QUESTION = 'General Paper Question'
     PAPER_METADATA = 'Paper Metadata'
     VARIANT_EXTRACTION = 'Variant Extraction'
@@ -37,7 +37,7 @@ class TaskType(StrEnum):
         """Return a human-readable description with context about what this task does."""
         descriptions: dict[TaskType, str] = {
             TaskType.PDF_PARSING: 'Parses PDF file and extract text, tables, and images',
-            TaskType.PAPER_ACKNOWLEDGEMENT: 'Acknowledges the paper and classify which sections are relevant for downstream extraction',
+            TaskType.PAPER_CLASSIFIER: 'Classifies paper sections by relevance and evaluates if paper contains extractable patient-variant pairs',
             TaskType.GENERAL_PAPER_QUESTION: 'Answers a general question using the full paper text and all extracted data',
             TaskType.PAPER_METADATA: 'Extracts paper title, authors, publication date, and other metadata; resolve to PubMed article',
             TaskType.VARIANT_EXTRACTION: 'Identifies genetic variants mentioned in the paper',
@@ -76,8 +76,8 @@ class InferredPaperStatus(StrEnum):
 
 # Task dependencies: when a task completes, these become PENDING
 TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
-    TaskType.PDF_PARSING: [TaskType.PAPER_ACKNOWLEDGEMENT],
-    TaskType.PAPER_ACKNOWLEDGEMENT: [
+    TaskType.PDF_PARSING: [TaskType.PAPER_CLASSIFIER],
+    TaskType.PAPER_CLASSIFIER: [
         TaskType.PAPER_METADATA,
         TaskType.VARIANT_EXTRACTION,
         TaskType.PEDIGREE_DESCRIPTION,

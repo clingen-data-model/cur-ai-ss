@@ -140,10 +140,10 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
             enqueue_task(
                 session,
                 paper_id=task.paper_id,
-                task_type=TaskType.PAPER_ACKNOWLEDGEMENT,
+                task_type=TaskType.PAPER_CLASSIFIER,
             )
 
-        case TaskType.PAPER_ACKNOWLEDGEMENT:
+        case TaskType.PAPER_CLASSIFIER:
             enqueue_task(
                 session,
                 paper_id=task.paper_id,

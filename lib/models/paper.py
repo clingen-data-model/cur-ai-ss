@@ -157,6 +157,13 @@ class PaperDB(Base):
         SQLEnum(PaperTag),
         nullable=True,
     )
+    is_paper_relevant: Mapped[bool | None] = mapped_column(
+        nullable=True,
+    )
+    section_classifications: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
 
     patient_count: int = 0
     variant_count: int = 0
@@ -234,6 +241,8 @@ class PaperResp(PaperExtractionOutput):
     gene_symbol: str
     filename: str
     tag: PaperTag | None = None
+    is_paper_relevant: bool | None = None
+    section_classifications: dict | None = None
     updated_at: datetime
     tasks: list['TaskResp'] = []
     patient_count: int = 0
