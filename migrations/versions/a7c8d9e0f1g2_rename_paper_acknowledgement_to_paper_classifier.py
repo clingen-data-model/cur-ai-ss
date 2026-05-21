@@ -22,12 +22,12 @@ def upgrade() -> None:
     """Migrate existing 'Paper Acknowledgement' tasks to 'Paper Classifier'."""
     # Update existing records
     op.execute(
-        "UPDATE tasks SET type = 'Paper Classifier' WHERE type = 'Paper Acknowledgement'"
+        "UPDATE tasks SET type = 'PAPER_CLASSIFIER' WHERE type = 'PAPER_ACKNOWLEDGEMENT'"
     )
 
 
 def downgrade() -> None:
     """Revert to 'Paper Acknowledgement' task type."""
     op.execute(
-        "UPDATE tasks SET type = 'Paper Acknowledgement' WHERE type = 'Paper Classifier'"
+        "UPDATE tasks SET type = 'PAPER_ACKNOWLEDGEMENT' WHERE type = 'PAPER_CLASSIFIER'"
     )
