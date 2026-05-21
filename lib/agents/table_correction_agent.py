@@ -20,8 +20,8 @@ from lib.misc.pdf.paths import (
 logger = logging.getLogger(__name__)
 
 
-def upscale_image(image_path: Path, scale_factor: float = 3.0) -> Path:
-    """Upscale image and save with _upscaled.png suffix."""
+def rotate_image(image_path: Path, angle: int, scale_factor: float = 3.0) -> Path:
+    """Upscale and rotate image, save with _rotated_{angle}.png suffix."""
     from PIL import Image
 
     img = Image.open(image_path)
@@ -30,10 +30,11 @@ def upscale_image(image_path: Path, scale_factor: float = 3.0) -> Path:
         int(img.height * scale_factor),
     )
     upscaled = img.resize(new_size, Image.Resampling.LANCZOS)
+    rotated = upscaled.rotate(angle, expand=True)
 
-    upscaled_path = image_path.parent / f'{image_path.stem}_upscaled.png'
-    upscaled.save(upscaled_path)
-    return upscaled_path
+    rotated_path = image_path.parent / f'{image_path.stem}_rotated_{angle}.png'
+    rotated.save(rotated_path)
+    return rotated_path
 
 
 @function_tool
@@ -164,22 +165,27 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
 
         if not result.final_output.conversion_successful:
             logger.info(
-                f'Table {table_id} extraction failed on first attempt, retrying with upscaled image...'
-            )
-            upscaled_image_path = upscale_image(image_path)
-            upscaled_image_url = upload_and_sign_image(upscaled_image_path)
-
-            message = (
-                f'Table ID: {table_id}\n\n'
-                f'Markdown to evaluate:\n```\n{table_markdown}\n```\n\n'
-                f'Image URL for extraction if needed: {upscaled_image_url}'
+                f'Table {table_id} extraction failed on first attempt, retrying with rotated images...'
             )
 
-            result = await Runner.run(agent, message)
+            for angle in [90, 180, 270]:
+                rotated_path = rotate_image(image_path, angle)
+                rotated_url = upload_and_sign_image(rotated_path)
 
-            if not result.final_output.conversion_successful:
+                message = (
+                    f'Table ID: {table_id}\n\n'
+                    f'Markdown to evaluate:\n```\n{table_markdown}\n```\n\n'
+                    f'Image URL for extraction if needed: {rotated_url}'
+                )
+
+                result = await Runner.run(agent, message)
+
+                if result.final_output.conversion_successful:
+                    logger.info(f'Table {table_id} succeeded with {angle}° rotation')
+                    break
+            else:
                 raise ValueError(
-                    f'Table {table_id} was detected as corrupted but conversion failed even after upscaling retry'
+                    f'Table {table_id} was detected as corrupted but conversion failed even after rotation retries'
                 )
 
         logger.info(f'Table {table_id} was corrupted, corrected version ready')
