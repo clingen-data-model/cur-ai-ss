@@ -20,6 +20,22 @@ from lib.misc.pdf.paths import (
 logger = logging.getLogger(__name__)
 
 
+def upscale_image(image_path: Path, scale_factor: float = 2.0) -> Path:
+    """Upscale image and save with _upscaled.png suffix."""
+    from PIL import Image
+
+    img = Image.open(image_path)
+    new_size = (
+        int(img.width * scale_factor),
+        int(img.height * scale_factor),
+    )
+    upscaled = img.resize(new_size, Image.Resampling.LANCZOS)
+
+    upscaled_path = image_path.parent / f'{image_path.stem}_upscaled.png'
+    upscaled.save(upscaled_path)
+    return upscaled_path
+
+
 @function_tool
 def extract_table_from_image(image_url: str) -> str:
     """Extract table markdown from image URL using vision."""
@@ -147,9 +163,24 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
             continue
 
         if not result.final_output.conversion_successful:
-            raise ValueError(
-                f'Table {table_id} was detected as corrupted but conversion failed'
+            logger.info(
+                f'Table {table_id} extraction failed on first attempt, retrying with upscaled image...'
             )
+            upscaled_image_path = upscale_image(image_path)
+            upscaled_image_url = upload_and_sign_image(upscaled_image_path)
+
+            message = (
+                f'Table ID: {table_id}\n\n'
+                f'Markdown to evaluate:\n```\n{table_markdown}\n```\n\n'
+                f'Image URL for extraction if needed: {upscaled_image_url}'
+            )
+
+            result = await Runner.run(agent, message)
+
+            if not result.final_output.conversion_successful:
+                raise ValueError(
+                    f'Table {table_id} was detected as corrupted but conversion failed even after upscaling retry'
+                )
 
         logger.info(f'Table {table_id} was corrupted, corrected version ready')
 
