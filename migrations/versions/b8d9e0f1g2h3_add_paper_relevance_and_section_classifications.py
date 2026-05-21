@@ -31,7 +31,6 @@ def upgrade() -> None:
     # Populate from existing JSON files on disk
     try:
         from lib.core.environment import env
-        from lib.misc.pdf.paths import paper_section_classification_path
 
         # Get a connection to execute raw SQL
         conn = op.get_bind()
@@ -42,7 +41,11 @@ def upgrade() -> None:
 
         # For each paper, try to read its classification JSON and populate the DB
         for paper_id in paper_ids:
-            classification_path = paper_section_classification_path(paper_id)
+            classification_path = (
+                env.extracted_pdf_dir
+                / str(paper_id)
+                / 'paper_section_classification.json'
+            )
             if classification_path.exists():
                 try:
                     data = json.loads(classification_path.read_text())
