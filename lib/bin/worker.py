@@ -4,9 +4,8 @@ import datetime
 import logging
 import os
 import signal
-import time
 from types import FrameType
-from typing import Any, Callable, Coroutine, Iterable, List
+from typing import Any
 
 from lib.api.db import session_scope
 from lib.core.logging import setup_logging
@@ -40,28 +39,6 @@ def _signal_handler(sig: int, frame: FrameType | None) -> None:
 
 signal.signal(signal.SIGINT, _signal_handler)
 signal.signal(signal.SIGTERM, _signal_handler)
-
-
-def run_async(
-    fn: Callable[[Any], Coroutine[Any, Any, Any]], items: Iterable[Any]
-) -> List[Any]:
-    """Run async function on multiple items concurrently.
-
-    Args:
-        fn: An async function that takes a single item
-        items: Iterable of items to pass to fn
-
-    Returns:
-        List of results or exceptions from executing fn on each item
-    """
-
-    async def _runner() -> List[Any]:
-        return await asyncio.gather(
-            *(fn(item) for item in items),
-            return_exceptions=True,
-        )
-
-    return asyncio.run(_runner())
 
 
 async def execute_task(task_id: int) -> None:
@@ -104,9 +81,18 @@ async def execute_task(task_id: int) -> None:
                 paper.updated_at = datetime.datetime.now(datetime.timezone.utc)
 
 
-def poll_and_execute_tasks() -> None:
-    """Poll for pending tasks and execute them."""
-    # Poll and prepare tasks
+async def execute_task_with_semaphore(
+    task_id: int, semaphore: asyncio.Semaphore
+) -> None:
+    """Execute task, respecting concurrency limit via semaphore."""
+    async with semaphore:
+        await execute_task(task_id)
+
+
+async def poll_and_schedule_tasks(
+    semaphores: dict[TaskType, asyncio.Semaphore],
+) -> None:
+    """Poll for pending tasks and schedule them (non-blocking)."""
     with session_scope() as session:
         now = datetime.datetime.utcnow()
         expired_cutoff = now - datetime.timedelta(seconds=LEASE_TIMEOUT_S)
@@ -144,54 +130,57 @@ def poll_and_execute_tasks() -> None:
 
         session.flush()
 
-        # Fetch pending tasks grouped by concurrency tier
-        # Group task types by their concurrency limits
-        concurrency_tiers: dict[int, list[TaskType]] = {}
+        # Fetch pending tasks grouped by type
+        pending_tasks: dict[TaskType, list[int]] = {}
         for task_type in TaskType:
             limit = TASK_CONCURRENCY.get(task_type, DEFAULT_CONCURRENCY)
-            if limit not in concurrency_tiers:
-                concurrency_tiers[limit] = []
-            concurrency_tiers[limit].append(task_type)
-
-        # Fetch tasks for each tier, respecting their concurrency limits
-        tasks_by_tier: dict[int, list[int]] = {}
-        for limit, task_types in concurrency_tiers.items():
             tier_tasks = (
                 session.query(TaskDB)
                 .filter(
-                    TaskDB.type.in_(task_types),
+                    TaskDB.type == task_type,
                     TaskDB.status == TaskStatus.PENDING,
                 )
                 .limit(limit)
                 .all()
             )
             if tier_tasks:
-                tasks_by_tier[limit] = [t.id for t in tier_tasks]
+                pending_tasks[task_type] = [t.id for t in tier_tasks]
 
-    if not tasks_by_tier:
+    if not pending_tasks:
         logger.info('Found no pending tasks')
         return
 
-    # Execute tasks by concurrency tier (low to high)
-    # This ensures external DB tasks run before higher-concurrency OpenAI tasks
-    for limit in sorted(tasks_by_tier.keys()):
-        task_ids = tasks_by_tier[limit]
-        logger.info(f'Executing {len(task_ids)} tasks with concurrency limit {limit}')
-        try:
-            run_async(execute_task, task_ids)
-        except Exception:
-            logger.exception(f'Error executing task batch with limit {limit}')
+    # Schedule tasks with their type-specific semaphores (non-blocking)
+    total_scheduled = 0
+    for task_type, task_ids in pending_tasks.items():
+        for task_id in task_ids:
+            asyncio.create_task(
+                execute_task_with_semaphore(task_id, semaphores[task_type])
+            )
+            total_scheduled += 1
+    logger.info(f'Scheduled {total_scheduled} tasks')
 
 
-def main() -> None:
+async def main_async() -> None:
+    """Main async loop: continuously poll for tasks and schedule them."""
+    # Create semaphores for each task type
+    semaphores: dict[TaskType, asyncio.Semaphore] = {}
+    for task_type in TaskType:
+        limit = TASK_CONCURRENCY.get(task_type, DEFAULT_CONCURRENCY)
+        semaphores[task_type] = asyncio.Semaphore(limit)
+
     logger.info('Starting task worker')
     while True:
         logger.info('Looking for work')
         try:
-            poll_and_execute_tasks()
+            await poll_and_schedule_tasks(semaphores)
         except Exception:
             logger.exception('Unexpected error in worker loop')
-        time.sleep(POLL_INTERVAL_S)
+        await asyncio.sleep(POLL_INTERVAL_S)
+
+
+def main() -> None:
+    asyncio.run(main_async())
 
 
 if __name__ == '__main__':
