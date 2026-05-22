@@ -20,15 +20,23 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    from lib.agents.run_tracking import ensure_agent_run
-
-    # Create the initial agent run using ensure_agent_run
-    session = Session(bind=op.get_bind())
-    run = ensure_agent_run(session, description='Initial baseline run')
-    session.commit()
-    run_id = run.id
-
     conn = op.get_bind()
+
+    # Get or create the initial agent run
+    result = conn.execute(sa.text('SELECT id FROM agent_runs ORDER BY id DESC LIMIT 1'))
+    run_id = result.scalar()
+    if not run_id:
+        # Create initial agent run if none exists
+        conn.execute(
+            sa.text(
+                'INSERT INTO agent_runs (git_hash, description, updated_at) '
+                "VALUES ('baseline', 'Initial baseline run', CURRENT_TIMESTAMP)"
+            )
+        )
+        result = conn.execute(
+            sa.text('SELECT id FROM agent_runs ORDER BY id DESC LIMIT 1')
+        )
+        run_id = result.scalar()
 
     # Add agent_run_id columns and backfill with run_id using batch mode for each table
     for table_name in ['patients', 'variants']:

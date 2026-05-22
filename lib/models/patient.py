@@ -441,7 +441,10 @@ class PatientDB(Base):
         Integer, ForeignKey('families.id', ondelete='CASCADE'), nullable=False
     )
     agent_run_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey('agent_runs.id', ondelete='CASCADE'), nullable=False
+        Integer,
+        ForeignKey('agent_runs.id', ondelete='CASCADE'),
+        nullable=False,
+        index=True,
     )
 
     # Extracted values (updateable, strongly typed)

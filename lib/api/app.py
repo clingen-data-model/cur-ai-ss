@@ -74,6 +74,7 @@ from lib.misc.pdf.paths import (
     relevant_sections_md,
 )
 from lib.models import (
+    AgentRunDB,
     ChatMessageRequest,
     ChatMessageResp,
     ChatRoutingResponse,
@@ -196,6 +197,14 @@ def put_paper(
         )
     main_content = uploaded_file.file.read()
 
+    # Get latest agent run
+    latest_run = session.query(AgentRunDB).order_by(AgentRunDB.id.desc()).first()
+    if not latest_run:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail='No agent runs found. Create one with ensure_agent_run().',
+        )
+
     paper_db = PaperDB.from_content(main_content)
     paper_db.gene_id = gene.id
     paper_db.filename = uploaded_file.filename or ''
@@ -204,6 +213,7 @@ def put_paper(
         # Create initial PDF_PARSING task
         task = TaskDB(
             paper_id=paper_db.id,
+            agent_run_id=latest_run.id,
             type=TaskType.PDF_PARSING,
             status=TaskStatus.PENDING,
         )

@@ -23,6 +23,10 @@ class AgentRunDB(Base):
         Text,
         nullable=True,
     )
+    model: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -37,4 +41,5 @@ class AgentRunResp(BaseModel):
     id: int
     git_hash: str
     description: str | None
+    model: str
     updated_at: datetime

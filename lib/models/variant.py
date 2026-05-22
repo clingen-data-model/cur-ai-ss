@@ -237,7 +237,10 @@ class VariantDB(Base):
         Integer, ForeignKey('papers.id', ondelete='CASCADE'), nullable=False
     )
     agent_run_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey('agent_runs.id', ondelete='CASCADE'), nullable=False
+        Integer,
+        ForeignKey('agent_runs.id', ondelete='CASCADE'),
+        nullable=False,
+        index=True,
     )
 
     # Core fields

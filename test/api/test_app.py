@@ -88,7 +88,7 @@ def seeded_genes(db_session):
     db_session.flush()
 
 
-def test_queue_new_paper(client, test_pdf, db_session, seeded_genes):
+def test_queue_new_paper(client, test_pdf, db_session, seeded_genes, agent_run):
     count = db_session.scalar(select(func.count(GeneDB.id)))
     assert count == 3
     response = client.put(
@@ -108,7 +108,9 @@ def test_queue_new_paper(client, test_pdf, db_session, seeded_genes):
     assert count == 1
 
 
-def test_queue_existing_paper_fails(client, db_session, test_pdf, seeded_genes):
+def test_queue_existing_paper_fails(
+    client, db_session, test_pdf, seeded_genes, agent_run
+):
     # Second upload: same content/name triggers conflict
     response = client.put(
         '/papers',
@@ -125,7 +127,7 @@ def test_queue_existing_paper_fails(client, db_session, test_pdf, seeded_genes):
     assert response2.json()['detail'] == 'Paper with this content already exists'
 
 
-def test_get_paper_success(client, test_pdf, seeded_genes):
+def test_get_paper_success(client, test_pdf, seeded_genes, agent_run):
     upload_response = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
@@ -152,7 +154,7 @@ def test_get_paper_not_found(client):
     assert response.json()['detail'] == 'Paper not found'
 
 
-def test_update_paper_metadata(client, test_pdf, db_session, seeded_genes):
+def test_update_paper_metadata(client, test_pdf, db_session, seeded_genes, agent_run):
     response = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
@@ -177,7 +179,7 @@ def test_update_paper_metadata(client, test_pdf, db_session, seeded_genes):
     assert response3.status_code == 404
 
 
-def test_list_paper(client, test_pdf, seeded_genes):
+def test_list_paper(client, test_pdf, seeded_genes, agent_run):
     response = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
@@ -202,7 +204,7 @@ def test_list_paper(client, test_pdf, seeded_genes):
         _assert_updated_at_recent(job['updated_at'])
 
 
-def test_list_papers_with_tasks(client, test_pdf, db_session, seeded_genes):
+def test_list_papers_with_tasks(client, test_pdf, db_session, seeded_genes, agent_run):
     response = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
@@ -229,7 +231,7 @@ def test_list_papers_with_tasks(client, test_pdf, db_session, seeded_genes):
         _assert_updated_at_recent(job['updated_at'])
 
 
-def test_delete_paper(client, test_pdf, db_session, seeded_genes):
+def test_delete_paper(client, test_pdf, db_session, seeded_genes, agent_run):
     response = client.delete(
         f'/papers/999',
     )
@@ -721,7 +723,13 @@ def _ev(value: object = None, quote: str | None = 'test') -> dict:
 @pytest.fixture
 def seeded_agent_run(db_session):
     """Create a test agent run."""
-    agent_run = AgentRunDB(git_hash='abc123def456', description='test run')
+    from lib.core.environment import env
+
+    agent_run = AgentRunDB(
+        git_hash='abc123def456',
+        description='test run',
+        model=env.OPENAI_API_DEPLOYMENT,
+    )
     db_session.add(agent_run)
     db_session.flush()
     return agent_run
@@ -1032,7 +1040,9 @@ def test_update_variant_clears_nested_harmonized_field(
     assert hv['hgvs_c'] == 'c.68_69delAG'
 
 
-def test_enqueue_all_instances_for_splatted_task(client, seeded_paper, db_session):
+def test_enqueue_all_instances_for_splatted_task(
+    client, seeded_paper, db_session, agent_run
+):
     """Test re-enqueueing a splatted task with no entity IDs re-queues all instances."""
     from lib.tasks import TaskCreateRequest
 
@@ -1049,12 +1059,14 @@ def test_enqueue_all_instances_for_splatted_task(client, seeded_paper, db_sessio
     # Create per-family tasks and mark them as completed
     task1 = TaskDB(
         paper_id=seeded_paper.id,
+        agent_run_id=agent_run.id,
         type=TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
         family_id=family1.id,
         status=TaskStatus.COMPLETED,
     )
     task2 = TaskDB(
         paper_id=seeded_paper.id,
+        agent_run_id=agent_run.id,
         type=TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
         family_id=family2.id,
         status=TaskStatus.COMPLETED,
@@ -1077,7 +1089,7 @@ def test_enqueue_all_instances_for_splatted_task(client, seeded_paper, db_sessio
 
 
 def test_enqueue_clears_conversation_id_without_context(
-    client, seeded_paper, db_session
+    client, seeded_paper, db_session, agent_run
 ):
     """Test that re-enqueueing without additional_context clears conversation_id."""
     from lib.tasks import TaskCreateRequest
@@ -1085,6 +1097,7 @@ def test_enqueue_clears_conversation_id_without_context(
     # Create a task with existing conversation_id and additional_context
     task = TaskDB(
         paper_id=seeded_paper.id,
+        agent_run_id=agent_run.id,
         type=TaskType.HPO_LINKING,
         status=TaskStatus.COMPLETED,
         conversation_id='conv-123',
