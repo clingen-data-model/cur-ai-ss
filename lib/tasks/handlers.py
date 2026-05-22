@@ -92,6 +92,7 @@ from lib.models import (
     HarmonizedVariantDB,
     HpoDB,
     PaperDB,
+    PaperTag,
     PatientDB,
     PatientVariantLinkDB,
     PedigreeDB,
@@ -258,6 +259,10 @@ async def handle_paper_section_classifier(task_id: int) -> None:
         if paper:
             paper.is_paper_relevant = result.final_output.is_paper_relevant.value
             paper.section_classifications = result.final_output.model_dump()
+            # Add FailedPaperRelevancy tag if paper is not relevant
+            if not result.final_output.is_paper_relevant.value:
+                if PaperTag.FailedPaperRelevancy.value not in paper.tags:
+                    paper.tags.append(PaperTag.FailedPaperRelevancy.value)
 
 
 async def handle_paper_metadata(task_id: int) -> None:
