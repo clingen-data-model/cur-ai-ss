@@ -132,12 +132,11 @@ def render_patient_variant_occurrences_tab() -> None:
         st.stop()
 
     # Sort rows by patient_id, then paired_variant_link_id (so pairs are adjacent)
-    rows.sort(
-        key=lambda r: (
-            r['_link'].patient_id,
-            r['_link'].paired_variant_link_id or 0,
-        )
-    )
+    def sort_key(r: dict) -> tuple:  # type: ignore[no-untyped-def]
+        link = r['_link']
+        return (link.patient_id, link.paired_variant_link_id or 0)
+
+    rows.sort(key=sort_key)
 
     # Create DataFrame for display (exclude internal columns)
     display_rows = [
