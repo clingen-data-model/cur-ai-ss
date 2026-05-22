@@ -28,7 +28,7 @@ class TaskType(StrEnum):
     SEGREGATION_EVIDENCE_EXTRACTION = 'Segregation Evidence Extraction'  # per-family
     SEGREGATION_ANALYSIS_COMPUTED = 'Segregation Analysis Computed'  # per-family
     VARIANT_HARMONIZATION = 'Variant Harmonization'
-    VARIANT_ENRICHMENT = 'Variant Enrichment'
+    VARIANT_ANNOTATION = 'Variant Annotation'
     PATIENT_VARIANT_LINKING = 'Patient Variant Linking'
     PHENOTYPE_EXTRACTION = 'Phenotype Extraction'  # per-patient
     HPO_LINKING = 'HPO Linking'  # per-patient
@@ -47,7 +47,7 @@ class TaskType(StrEnum):
             TaskType.SEGREGATION_EVIDENCE_EXTRACTION: 'Collects segregation analysis evidence within each family',
             TaskType.SEGREGATION_ANALYSIS_COMPUTED: 'Computes segregation analysis results per family',
             TaskType.VARIANT_HARMONIZATION: 'Normalizes variants to standard genomic coordinates using ClinVar, dbSNP, ClinGen Allele Registry, and VariantValidator',
-            TaskType.VARIANT_ENRICHMENT: 'Adds annotations (SpliceAI, conservation scores, etc.) to variants',
+            TaskType.VARIANT_ANNOTATION: 'Adds annotations (SpliceAI, conservation scores, etc.) to variants',
             TaskType.PATIENT_VARIANT_LINKING: 'Associates patients with their variants and inheritance patterns',
             TaskType.PHENOTYPE_EXTRACTION: 'Extracts phenotype text spans per patient',
             TaskType.HPO_LINKING: 'Maps phenotypes to HPO ontology terms for standardization',
@@ -93,8 +93,8 @@ TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
         TaskType.VARIANT_HARMONIZATION,
         TaskType.PATIENT_VARIANT_LINKING,
     ],
-    TaskType.VARIANT_HARMONIZATION: [TaskType.VARIANT_ENRICHMENT],
-    TaskType.VARIANT_ENRICHMENT: [],
+    TaskType.VARIANT_HARMONIZATION: [TaskType.VARIANT_ANNOTATION],
+    TaskType.VARIANT_ANNOTATION: [],
     TaskType.PATIENT_VARIANT_LINKING: [TaskType.SEGREGATION_EVIDENCE_EXTRACTION],
     TaskType.SEGREGATION_EVIDENCE_EXTRACTION: [TaskType.SEGREGATION_ANALYSIS_COMPUTED],
     TaskType.SEGREGATION_ANALYSIS_COMPUTED: [],

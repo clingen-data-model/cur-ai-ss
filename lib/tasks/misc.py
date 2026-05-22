@@ -243,7 +243,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
             enqueue_task(
                 session,
                 paper_id=task.paper_id,
-                task_type=TaskType.VARIANT_ENRICHMENT,
+                task_type=TaskType.VARIANT_ANNOTATION,
                 variant_id=task.variant_id,
             )
 
@@ -288,7 +288,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
 
         case (
             TaskType.PAPER_METADATA
-            | TaskType.VARIANT_ENRICHMENT
+            | TaskType.VARIANT_ANNOTATION
             | TaskType.SEGREGATION_ANALYSIS_COMPUTED
             | TaskType.HPO_LINKING
             | TaskType.GENERAL_PAPER_QUESTION

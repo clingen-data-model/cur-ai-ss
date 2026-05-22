@@ -62,7 +62,7 @@ from lib.agents.segregation_evidence_extractor import (
 from lib.agents.segregation_evidence_extractor import (
     agent as segregation_evidence_extractor,
 )
-from lib.agents.variant_enrichment_agent import enrich_variants_batch
+from lib.agents.variant_annotation_agent import enrich_variants_batch
 from lib.agents.variant_extraction_agent import (
     VARIANT_EXTRACTION_AGENT_INSTRUCTIONS,
 )
@@ -878,7 +878,7 @@ async def handle_variant_harmonization(task_id: int) -> None:
         session.add(harmonized_variant_to_db(variant_id, result.final_output))
 
 
-async def handle_variant_enrichment(task_id: int) -> None:
+async def handle_variant_annotation(task_id: int) -> None:
     """Enrich harmonized variants with annotations."""
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -886,7 +886,7 @@ async def handle_variant_enrichment(task_id: int) -> None:
             return
 
         if task.variant_id is None:
-            raise ValueError(f'Task {task_id}: VARIANT_ENRICHMENT requires variant_id')
+            raise ValueError(f'Task {task_id}: VARIANT_ANNOTATION requires variant_id')
 
         query = (
             session.query(HarmonizedVariantDB)
@@ -1278,7 +1278,7 @@ TASK_HANDLERS: dict[TaskType, Callable[[int], Awaitable[None]]] = {
     TaskType.SEGREGATION_EVIDENCE_EXTRACTION: handle_segregation_evidence_extraction,
     TaskType.SEGREGATION_ANALYSIS_COMPUTED: handle_segregation_analysis_computed,
     TaskType.VARIANT_HARMONIZATION: handle_variant_harmonization,
-    TaskType.VARIANT_ENRICHMENT: handle_variant_enrichment,
+    TaskType.VARIANT_ANNOTATION: handle_variant_annotation,
     TaskType.PATIENT_VARIANT_LINKING: handle_patient_variant_linking,
     TaskType.PHENOTYPE_EXTRACTION: handle_phenotype_extraction,
     TaskType.HPO_LINKING: handle_hpo_linking,

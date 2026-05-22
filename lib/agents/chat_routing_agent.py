@@ -24,7 +24,7 @@ class ChatRoutingOutput(BaseModel):
 _NON_CONVERSATIONAL = {
     TaskType.PDF_PARSING,
     TaskType.PAPER_CLASSIFIER,
-    TaskType.VARIANT_ENRICHMENT,
+    TaskType.VARIANT_ANNOTATION,
 }
 _GLOBAL_AGENTS = {
     TaskType.GENERAL_PAPER_QUESTION,
