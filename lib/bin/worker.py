@@ -23,10 +23,10 @@ RETRY_DELAY_S = 30
 
 TASK_CONCURRENCY: dict[TaskType, int] = {
     TaskType.PDF_PARSING: 1,
-    TaskType.VARIANT_HARMONIZATION: 8,
-    TaskType.VARIANT_ANNOTATION: 8,
+    TaskType.VARIANT_HARMONIZATION: 10,
+    TaskType.VARIANT_ANNOTATION: 10,
 }
-DEFAULT_CONCURRENCY = 16
+DEFAULT_CONCURRENCY = 20
 
 setup_logging()
 logger = logging.getLogger(__name__)
