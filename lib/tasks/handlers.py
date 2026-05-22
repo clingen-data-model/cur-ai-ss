@@ -75,6 +75,14 @@ from lib.agents.variant_harmonization_agent import (
 from lib.agents.variant_harmonization_agent import (
     agent as variant_harmonization_agent,
 )
+
+
+class RateLimitError(Exception):
+    """Raised when external rate limiting prevents task completion."""
+
+    pass
+
+
 from lib.api.db import session_scope
 from lib.core.environment import env
 from lib.core.logging import setup_logging
@@ -866,6 +874,14 @@ async def handle_variant_harmonization(task_id: int) -> None:
         conversation_id=stored_conv_id,
     )
     log_cache_metrics('VARIANT_HARMONIZATION', result)
+
+    # Check if rate limited (agent encountered rate limit in tool calls)
+    if result.final_output and hasattr(result.final_output, 'reasoning'):
+        reasoning_text = result.final_output.reasoning or ''
+        if '429' in reasoning_text or 'rate limit' in reasoning_text.lower():
+            raise RateLimitError(
+                f'VARIANT_HARMONIZATION rate limited: {reasoning_text[:200]}'
+            )
 
     # Update DB with results
     with session_scope() as session:
