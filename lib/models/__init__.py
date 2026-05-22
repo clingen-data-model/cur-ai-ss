@@ -3,6 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from lib.models.agent_run import AgentRunDB, AgentRunResp
 from lib.models.base import Base, PatchModel
 from lib.models.conversation import (
     ChatMessageRequest,
