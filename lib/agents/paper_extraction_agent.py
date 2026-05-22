@@ -184,6 +184,13 @@ Classify the paper into at MOST two of the following types:
     - Unknown: The paper type cannot be confidently determined from the provided text.
     - Other: Does not fit the above categories (e.g., review, meta-analysis, guideline, methods, or database/resource paper).
 
+3. **Gene-Disease Relationship Extraction**
+Extract the disease name and mode of inheritance associated with this gene in the paper:
+- **disease_name**: The name or description of the disease/phenotype caused by variants in this gene (e.g., "Stargardt disease", "retinitis pigmentosa", "dilated cardiomyopathy"). Extract from the abstract, introduction, or case descriptions.
+- **disease_inheritance_mode**: The primary mode of inheritance for this gene-disease relationship as stated or implied in the paper (e.g., "Autosomal Recessive", "Autosomal Dominant", "X-linked Recessive"). Extract from the abstract or clinical findings.
+- Include reasoning that identifies where in the paper this information was found.
+- If the disease name or inheritance mode cannot be confidently identified, omit the gene_disease_relation field entirely.
+
 Important Guidelines:
 - When a field cannot be confidently identified, fail rather than guess.
 - Always use the `(pmid, title)` pairs to deterministically select the correct PubMed record.

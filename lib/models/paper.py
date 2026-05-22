@@ -11,9 +11,10 @@ from pydantic import (
 )
 
 if TYPE_CHECKING:
+    from lib.models.evidence_block import EvidenceBlock
     from lib.models.family import FamilyDB
     from lib.models.patient import PatientDB
-    from lib.models.patient_variant_link import PatientVariantLinkDB
+    from lib.models.patient_variant_link import Inheritance, PatientVariantLinkDB
     from lib.models.phenotype import PhenotypeDB
     from lib.models.variant import VariantDB
     from lib.tasks.models import TaskDB
@@ -52,6 +53,9 @@ from lib.misc.pdf.paths import (
     pdf_thumbnail_path,
 )
 from lib.models.base import Base, PatchModel
+from lib.models.evidence_block import EvidenceBlock
+from lib.models.gene_disease_relation import GeneDiseaseRelation
+from lib.models.patient_variant_link import Inheritance
 from lib.tasks.models import TaskResp
 
 Color: TypeAlias = Literal[
@@ -165,6 +169,21 @@ class PaperDB(Base):
         nullable=True,
     )
 
+    # Gene-disease relationship (extracted from paper text and case data)
+    disease_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    disease_name_evidence: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+    disease_inheritance_mode: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+    )
+    disease_inheritance_mode_evidence: Mapped[dict | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+
     patient_count: int = 0
     variant_count: int = 0
 
@@ -220,6 +239,7 @@ class PaperExtractionOutput(BaseModel):
     pmid: str | None = None
     pmcid: str | None = None
     paper_types: list[PaperType]
+    gene_disease_relation: 'GeneDiseaseRelation | None' = None
 
     @model_validator(mode='after')
     def max_two_paper_types(self) -> Self:
@@ -230,8 +250,18 @@ class PaperExtractionOutput(BaseModel):
     def apply_to(self, paper_db: PaperDB) -> None:
         data = self.model_dump()
         data['paper_types'] = [pt.value for pt in self.paper_types]
+        gene_disease_relation = data.pop('gene_disease_relation', None)
         for key, value in data.items():
             setattr(paper_db, key, value)
+        if gene_disease_relation is not None:
+            paper_db.disease_name = gene_disease_relation['disease_name']['value']
+            paper_db.disease_name_evidence = gene_disease_relation['disease_name']
+            paper_db.disease_inheritance_mode = gene_disease_relation[
+                'disease_inheritance_mode'
+            ]['value']
+            paper_db.disease_inheritance_mode_evidence = gene_disease_relation[
+                'disease_inheritance_mode'
+            ]
 
 
 class PaperResp(PaperExtractionOutput):
@@ -243,6 +273,10 @@ class PaperResp(PaperExtractionOutput):
     tag: PaperTag | None = None
     is_paper_relevant: bool | None = None
     section_classifications: dict | None = None
+    disease_name: str | None = None
+    disease_name_evidence: EvidenceBlock[str] | None = None
+    disease_inheritance_mode: Inheritance | None = None
+    disease_inheritance_mode_evidence: EvidenceBlock[Inheritance] | None = None
     updated_at: datetime
     tasks: list['TaskResp'] = []
     patient_count: int = 0

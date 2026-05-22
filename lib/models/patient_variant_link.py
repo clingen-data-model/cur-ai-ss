@@ -78,6 +78,7 @@ class PatientVariantLink(BaseModel):
     inheritance: EvidenceBlock[Inheritance]
     de_novo: EvidenceBlock[bool]
     testing_methods: List[EvidenceBlock[TestingMethod]]
+    disease_name: EvidenceBlock[str] | None = None
 
     @model_validator(mode='after')
     def max_two_methods(self) -> Self:

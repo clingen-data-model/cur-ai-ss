@@ -40,6 +40,7 @@ Return **exactly** the following for each link:
 - inheritance: a single EvidenceBlock[Inheritance]
 - de_novo: EvidenceBlock[bool] (true if variant is de novo, false otherwise)
 - testing_methods: a list of EvidenceBlock[TestingMethod] (max 2 items)
+- disease_name: EvidenceBlock[str] (OPTIONAL: the disease/phenotype name associated with this patient's variants or family, extracted from case-level context in the paper. This may differ from or clarify the paper-level disease context. Include if mentioned in relation to the patient or variant.)
 
 **Linking rules:**
 

@@ -173,6 +173,12 @@ uv run pytest test/api/test_app.py::test_function  # Specific test
 - Use FastAPI dependency injection in endpoints: `session: Session = Depends(get_session)`
 - Explicitly handle `IntegrityError` for constraint violations
 
+**Database migrations (SQLite safety):**
+- **NEVER use `ondelete='CASCADE'` when adding new foreign keys in batch_alter_table** — SQLite's table rebuild process can trigger cascading deletes unexpectedly, wiping child table data even if parent rows are intact. This happened with `patient_variant_links` in May 2026.
+- If adding a CASCADE constraint: write a manual migration outside batch mode that adds the column first, then the constraint separately.
+- Always backup before running complex migrations (especially those involving multiple batches or adding CASCADE constraints).
+- After migrations, verify data integrity: check row counts on tables with cascade relationships.
+
 **Agent implementation:**
 - Agents use `openai_agents` library (structured outputs)
 - Store outputs in JSON files alongside PDFs (paths via `lib/misc/pdf/paths.py`)
