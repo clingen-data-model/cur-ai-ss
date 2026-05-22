@@ -9,6 +9,7 @@ from sqlalchemy import func, select, update
 from lib.api.app import app
 from lib.api.db import get_session, session_scope
 from lib.models import (
+    AgentRunDB,
     EnrichedVariantDB,
     FamilyDB,
     GeneDB,
@@ -347,7 +348,9 @@ def _patient_required_fields(identifier: str = 'P1') -> dict:
     )
 
 
-def test_get_patients_returns_ordered_by_position(client, db_session, seeded_paper):
+def test_get_patients_returns_ordered_by_position(
+    client, db_session, seeded_paper, seeded_agent_run
+):
     # Get the default family created in seeded_paper fixture
     family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
     # Insert patients in order (they'll get auto-incrementing IDs)
@@ -355,6 +358,7 @@ def test_get_patients_returns_ordered_by_position(client, db_session, seeded_pap
         PatientDB(
             paper_id=seeded_paper.id,
             family_id=family.id,
+            agent_run_id=seeded_agent_run.id,
             identifier='P3',
             **_patient_required_fields('P3'),
         )
@@ -363,6 +367,7 @@ def test_get_patients_returns_ordered_by_position(client, db_session, seeded_pap
         PatientDB(
             paper_id=seeded_paper.id,
             family_id=family.id,
+            agent_run_id=seeded_agent_run.id,
             identifier='P1',
             **_patient_required_fields('P1'),
         )
@@ -371,6 +376,7 @@ def test_get_patients_returns_ordered_by_position(client, db_session, seeded_pap
         PatientDB(
             paper_id=seeded_paper.id,
             family_id=family.id,
+            agent_run_id=seeded_agent_run.id,
             identifier='P2',
             **_patient_required_fields('P2'),
         )
@@ -393,7 +399,9 @@ def test_get_patients_paper_not_found(client):
     assert response.json()['detail'] == 'Paper not found'
 
 
-def test_update_patient_with_human_edit_note(client, db_session, seeded_paper):
+def test_update_patient_with_human_edit_note(
+    client, db_session, seeded_paper, seeded_agent_run
+):
     """Test updating a patient with human_edit_note on evidence."""
     # Get the default family created in seeded_paper fixture
     family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
@@ -401,6 +409,7 @@ def test_update_patient_with_human_edit_note(client, db_session, seeded_paper):
     patient = PatientDB(
         paper_id=seeded_paper.id,
         family_id=family.id,
+        agent_run_id=seeded_agent_run.id,
         identifier='P1',
         **_patient_required_fields('P1'),
     )
@@ -432,7 +441,9 @@ def test_update_patient_with_human_edit_note(client, db_session, seeded_paper):
     assert resp_json['sex_evidence']['human_edit_note'] is None
 
 
-def test_update_patient_rejects_wrong_paper_scope(client, db_session, seeded_paper):
+def test_update_patient_rejects_wrong_paper_scope(
+    client, db_session, seeded_paper, seeded_agent_run
+):
     other_paper = PaperDB(
         content_hash='other-paper',
         gene_id=seeded_paper.gene_id,
@@ -454,6 +465,7 @@ def test_update_patient_rejects_wrong_paper_scope(client, db_session, seeded_pap
     patient = PatientDB(
         paper_id=other_paper.id,
         family_id=other_family.id,
+        agent_run_id=seeded_agent_run.id,
         identifier='P-other',
         **_patient_required_fields('P-other'),
     )
@@ -471,17 +483,21 @@ def test_update_patient_rejects_wrong_paper_scope(client, db_session, seeded_pap
     assert patient.identifier == 'P-other'
 
 
-def test_update_phenotype_rejects_wrong_patient_scope(client, db_session, seeded_paper):
+def test_update_phenotype_rejects_wrong_patient_scope(
+    client, db_session, seeded_paper, seeded_agent_run
+):
     family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
     patient_1 = PatientDB(
         paper_id=seeded_paper.id,
         family_id=family.id,
+        agent_run_id=seeded_agent_run.id,
         identifier='P1',
         **_patient_required_fields('P1'),
     )
     patient_2 = PatientDB(
         paper_id=seeded_paper.id,
         family_id=family.id,
+        agent_run_id=seeded_agent_run.id,
         identifier='P2',
         **_patient_required_fields('P2'),
     )
@@ -517,10 +533,13 @@ def test_update_phenotype_rejects_wrong_patient_scope(client, db_session, seeded
     assert phenotype.uncertain is False
 
 
-def test_get_variants_harmonized_and_enriched(client, db_session, seeded_paper):
+def test_get_variants_harmonized_and_enriched(
+    client, db_session, seeded_paper, seeded_agent_run
+):
     # Create a variant with evidence blocks
     variant = VariantDB(
         paper_id=seeded_paper.id,
+        agent_run_id=seeded_agent_run.id,
         transcript='NM_007294.3',
         protein_accession='NP_009225.1',
         genomic_accession='NC_000017.11',
@@ -700,10 +719,20 @@ def _ev(value: object = None, quote: str | None = 'test') -> dict:
 
 
 @pytest.fixture
-def seeded_variant(db_session, seeded_paper):
+def seeded_agent_run(db_session):
+    """Create a test agent run."""
+    agent_run = AgentRunDB(git_hash='abc123def456', description='test run')
+    db_session.add(agent_run)
+    db_session.flush()
+    return agent_run
+
+
+@pytest.fixture
+def seeded_variant(db_session, seeded_paper, seeded_agent_run):
     """Create a variant with a harmonized variant for PATCH tests."""
     variant = VariantDB(
         paper_id=seeded_paper.id,
+        agent_run_id=seeded_agent_run.id,
         variant='c.68_69delAG',
         transcript='NM_007294.3',
         genome_build='GRCh38',
@@ -756,10 +785,11 @@ def seeded_variant(db_session, seeded_paper):
 
 
 @pytest.fixture
-def seeded_unharmonized_variant(db_session, seeded_paper):
+def seeded_unharmonized_variant(db_session, seeded_paper, seeded_agent_run):
     """Create a variant without a harmonized variant row for PATCH tests."""
     variant = VariantDB(
         paper_id=seeded_paper.id,
+        agent_run_id=seeded_agent_run.id,
         variant='c.100A>G',
         transcript='NM_000000.1',
         genome_build='GRCh38',
