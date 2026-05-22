@@ -103,6 +103,7 @@ class PaperType(StrEnum):
 class PaperTag(StrEnum):
     TrainingSet = 'TrainingSet'
     ValidationSet = 'ValidationSet'
+    FailedPaperRelevancy = 'FailedPaperRelevancy'
 
 
 class FileFormat(StrEnum):
@@ -157,9 +158,10 @@ class PaperDB(Base):
         nullable=False,
         default=list,
     )
-    tag: Mapped[PaperTag | None] = mapped_column(
-        SQLEnum(PaperTag),
-        nullable=True,
+    tag: Mapped[list[str]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
     )
     is_paper_relevant: Mapped[bool | None] = mapped_column(
         nullable=True,
@@ -270,7 +272,7 @@ class PaperResp(PaperExtractionOutput):
     content_hash: str
     gene_symbol: str
     filename: str
-    tag: PaperTag | None = None
+    tag: list[str] = []
     is_paper_relevant: bool | None = None
     section_classifications: dict | None = None
     disease_name: str | None = None
@@ -299,6 +301,7 @@ class PaperUpdateRequest(PatchModel):
     pmid: str | None = None
     pmcid: str | None = None
     paper_types: list[PaperType] | None = None
+    tag: list[str] | None = None
 
 
 class HighlightRequest(BaseModel):

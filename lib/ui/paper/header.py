@@ -196,8 +196,8 @@ with center:
             )
             reasoning = relevance_block.get('reasoning', '')
         st.warning(
-            f'⚠️ **Paper Classification Alert**: This paper was classified as not relevant for extraction (no clear patient-variant pairs found). {reasoning} '
-            'You can still process this paper using the **Rerun Agents** panel if needed.',
+            f'**Paper Classification Alert**: This paper was classified as not relevant for extraction (no clear patient-variant pairs found). {reasoning} '
+            'You can still process this paper using the **Rerun Agents** panel if needed, skipping the Paper Classification task.',
             icon='⚠️',
         )
 
