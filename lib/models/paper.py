@@ -158,7 +158,7 @@ class PaperDB(Base):
         nullable=False,
         default=list,
     )
-    tag: Mapped[list[str]] = mapped_column(
+    tags: Mapped[list[str]] = mapped_column(
         JSON,
         nullable=False,
         default=list,
@@ -272,7 +272,7 @@ class PaperResp(PaperExtractionOutput):
     content_hash: str
     gene_symbol: str
     filename: str
-    tag: list[str] = []
+    tags: list[str] = []
     is_paper_relevant: bool | None = None
     section_classifications: dict | None = None
     disease_name: str | None = None
@@ -301,7 +301,7 @@ class PaperUpdateRequest(PatchModel):
     pmid: str | None = None
     pmcid: str | None = None
     paper_types: list[PaperType] | None = None
-    tag: list[str] | None = None
+    tags: list[str] | None = None
 
 
 class HighlightRequest(BaseModel):

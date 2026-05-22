@@ -50,12 +50,12 @@ def papers_df_on_change() -> None:
     # Handle edited rows (particularly tag changes)
     edited_rows = st.session_state[CURATIONS_DF_KEY].get('edited_rows', {})
     for row_idx, changes in edited_rows.items():
-        if 'tag' in changes and paper_resps and 0 <= row_idx < len(paper_resps):
+        if 'tags' in changes and paper_resps and 0 <= row_idx < len(paper_resps):
             paper_id = paper_resps[row_idx].id
-            new_tags = changes['tag']
+            new_tags = changes['tags']
             try:
-                update_paper(paper_id, PaperUpdateRequest(tag=new_tags))
-                paper_resps[row_idx].tag = new_tags
+                update_paper(paper_id, PaperUpdateRequest(tags=new_tags))
+                paper_resps[row_idx].tags = new_tags
             except requests.HTTPError as e:
                 st.error(
                     f'Failed to update tags for paper {paper_id}: {get_http_error_detail(e)}'
@@ -131,12 +131,12 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
     df['agent_status'] = df['id'].map(
         lambda paper_id: f'{get_status_badge_icon(papers_by_id[paper_id].tasks)} {infer_paper_status_detail(papers_by_id[paper_id].tasks)}'
     )
-    df['tag'] = df['tag'].apply(lambda x: x if isinstance(x, list) else [])
+    df['tags'] = df['tags'].apply(lambda x: x if isinstance(x, list) else [])
     st.data_editor(
         df[
             [
                 'gene_symbol',
-                'tag',
+                'tags',
                 'thumbnail_path',
                 'title',
                 'first_author',
@@ -151,7 +151,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
         row_height=100,
         column_config={
             'gene_symbol': st.column_config.Column('Gene Symbol'),
-            'tag': st.column_config.MultiselectColumn(
+            'tags': st.column_config.MultiselectColumn(
                 'Tags',
                 options=['TrainingSet', 'ValidationSet', 'FailedPaperRelevancy'],
                 color=['#ffa421', '#803df5', '#ff0000'],
