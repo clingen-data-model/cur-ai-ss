@@ -18,9 +18,15 @@ from lib.tasks.models import TaskStatus, TaskType
 
 LEASE_TIMEOUT_S = 900
 POLL_INTERVAL_S = 10
-MAX_AGENTIC_TASKS = 20
 MAX_RETRIES = 2
 RETRY_DELAY_S = 30
+
+TASK_CONCURRENCY: dict[TaskType, int] = {
+    TaskType.PDF_PARSING: 1,
+    TaskType.VARIANT_HARMONIZATION: 8,
+    TaskType.VARIANT_ANNOTATION: 8,
+}
+DEFAULT_CONCURRENCY = 16
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -138,50 +144,43 @@ def poll_and_execute_tasks() -> None:
 
         session.flush()
 
-        # Now fetch pending tasks
-        # Separate PDF_PARSING (CPU-bound, max 1) from other tasks
-        pdf_parsing_tasks = (
-            session.query(TaskDB)
-            .filter(
-                TaskDB.type == TaskType.PDF_PARSING,
-                TaskDB.status == TaskStatus.PENDING,
+        # Fetch pending tasks grouped by concurrency tier
+        # Group task types by their concurrency limits
+        concurrency_tiers: dict[int, list[TaskType]] = {}
+        for task_type in TaskType:
+            limit = TASK_CONCURRENCY.get(task_type, DEFAULT_CONCURRENCY)
+            if limit not in concurrency_tiers:
+                concurrency_tiers[limit] = []
+            concurrency_tiers[limit].append(task_type)
+
+        # Fetch tasks for each tier, respecting their concurrency limits
+        tasks_by_tier: dict[int, list[int]] = {}
+        for limit, task_types in concurrency_tiers.items():
+            tier_tasks = (
+                session.query(TaskDB)
+                .filter(
+                    TaskDB.type.in_(task_types),
+                    TaskDB.status == TaskStatus.PENDING,
+                )
+                .limit(limit)
+                .all()
             )
-            .limit(1)
-            .all()
-        )
+            if tier_tasks:
+                tasks_by_tier[limit] = [t.id for t in tier_tasks]
 
-        other_tasks = (
-            session.query(TaskDB)
-            .filter(
-                TaskDB.type != TaskType.PDF_PARSING,
-                TaskDB.status == TaskStatus.PENDING,
-            )
-            .limit(MAX_AGENTIC_TASKS)
-            .all()
-        )
-
-        all_tasks = pdf_parsing_tasks + other_tasks
-        all_task_ids = [t.id for t in all_tasks]
-
-        # Build a map of task type to task objects for logging
-        task_type_counts: dict[TaskType, int] = {}
-        for task in all_tasks:
-            task_type_counts[task.type] = task_type_counts.get(task.type, 0) + 1
-
-    if not all_task_ids:
+    if not tasks_by_tier:
         logger.info('Found no pending tasks')
         return
 
-    # Build detailed log message with task type breakdown
-    type_breakdown = ', '.join(
-        f'{count} {task_type}' for task_type, count in sorted(task_type_counts.items())
-    )
-    logger.info(f'Executing {len(all_task_ids)} tasks: {type_breakdown}')
-
-    try:
-        run_async(execute_task, all_task_ids)
-    except Exception:
-        logger.exception('Error executing task batch')
+    # Execute tasks by concurrency tier (low to high)
+    # This ensures external DB tasks run before higher-concurrency OpenAI tasks
+    for limit in sorted(tasks_by_tier.keys()):
+        task_ids = tasks_by_tier[limit]
+        logger.info(f'Executing {len(task_ids)} tasks with concurrency limit {limit}')
+        try:
+            run_async(execute_task, task_ids)
+        except Exception:
+            logger.exception(f'Error executing task batch with limit {limit}')
 
 
 def main() -> None:
