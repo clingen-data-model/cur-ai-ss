@@ -119,6 +119,7 @@ def render_patient_variant_occurrences_tab() -> None:
                 'Inheritance': link.inheritance.value,
                 'De Novo': link.de_novo,
                 'Testing Methods': testing_methods_list,
+                'Disease Name': link.disease_name or '',
                 # Store full objects for detail panel
                 '_link': link,
                 '_patient': patient,
@@ -138,10 +139,23 @@ def render_patient_variant_occurrences_tab() -> None:
 
     rows.sort(key=sort_key)
 
+    # Determine which columns to display based on data
+    has_diplotypes = any(row['Diplotype'] for row in rows)
+    has_disease_names = any(row['Disease Name'] for row in rows)
+
     # Create DataFrame for display (exclude internal columns)
     display_rows = [
         {k: v for k, v in row.items() if not k.startswith('_')} for row in rows
     ]
+
+    # Remove columns that shouldn't be displayed
+    if not has_diplotypes:
+        for row in display_rows:
+            del row['Diplotype']
+    if not has_disease_names:
+        for row in display_rows:
+            del row['Disease Name']
+
     df = pd.DataFrame(display_rows)
 
     # Display main table with row selection
@@ -155,56 +169,74 @@ def render_patient_variant_occurrences_tab() -> None:
     proband_options = [e.value for e in ProbandStatus]
     affected_options = [e.value for e in AffectedStatus]
 
+    # Build column_config with conditional columns
+    column_config = {
+        'Select': st.column_config.CheckboxColumn('Select', width=5),
+        'Proband': st.column_config.SelectboxColumn(
+            'Proband',
+            options=proband_options,
+            width='small',
+        ),
+        'Affected': st.column_config.SelectboxColumn(
+            'Affected',
+            options=affected_options,
+            width='small',
+        ),
+        'Patient': st.column_config.LinkColumn(
+            'Patient',
+            display_text=r'.*?#(.+)$',
+        ),
+        'Variant': st.column_config.LinkColumn(
+            'Variant',
+            display_text=r'.*?#(.+)$',
+        ),
+        'Zygosity': st.column_config.SelectboxColumn(
+            'Zygosity',
+            options=zygosity_options,
+            width='small',
+        ),
+        'Inheritance': st.column_config.SelectboxColumn(
+            'Inheritance',
+            options=inheritance_options,
+            width='small',
+        ),
+        'De Novo': st.column_config.CheckboxColumn(
+            'De Novo',
+            width='small',
+        ),
+        'Testing Methods': st.column_config.MultiselectColumn(
+            'Testing Methods',
+            options=testing_method_options,
+            color=['#ffa421', '#803df5', '#00c0f2'],
+            format_func=lambda x: x.capitalize(),
+        ),
+    }
+
+    # Add Diplotype column only if there are diplotypes
+    if has_diplotypes:
+        column_config['Diplotype'] = st.column_config.TextColumn(
+            'Diplotype',
+            width='medium',
+        )
+
+    # Add Disease Name column only if there are disease names
+    if has_disease_names:
+        column_config['Disease Name'] = st.column_config.TextColumn(
+            'Disease Name',
+            width='medium',
+        )
+
+    # Build disabled list, excluding columns that don't exist in the DataFrame
+    disabled = ['Proband', 'Affected', 'Patient', 'Variant']
+    if has_diplotypes:
+        disabled.append('Diplotype')
+
     editted_df = st.data_editor(
         df,
         width='stretch',
         hide_index=True,
-        disabled=['Proband', 'Affected', 'Patient', 'Variant', 'Diplotype'],
-        column_config={
-            'Select': st.column_config.CheckboxColumn('Select', width=5),
-            'Proband': st.column_config.SelectboxColumn(
-                'Proband',
-                options=proband_options,
-                width='small',
-            ),
-            'Affected': st.column_config.SelectboxColumn(
-                'Affected',
-                options=affected_options,
-                width='small',
-            ),
-            'Patient': st.column_config.LinkColumn(
-                'Patient',
-                display_text=r'.*?#(.+)$',
-            ),
-            'Variant': st.column_config.LinkColumn(
-                'Variant',
-                display_text=r'.*?#(.+)$',
-            ),
-            'Diplotype': st.column_config.TextColumn(
-                'Diplotype',
-                width='medium',
-            ),
-            'Zygosity': st.column_config.SelectboxColumn(
-                'Zygosity',
-                options=zygosity_options,
-                width='small',
-            ),
-            'Inheritance': st.column_config.SelectboxColumn(
-                'Inheritance',
-                options=inheritance_options,
-                width='small',
-            ),
-            'De Novo': st.column_config.CheckboxColumn(
-                'De Novo',
-                width='small',
-            ),
-            'Testing Methods': st.column_config.MultiselectColumn(
-                'Testing Methods',
-                options=testing_method_options,
-                color=['#ffa421', '#803df5', '#00c0f2'],
-                format_func=lambda x: x.capitalize(),
-            ),
-        },
+        disabled=disabled,
+        column_config=column_config,
     )
 
     # Show editable panel when a row is selected
@@ -321,3 +353,18 @@ def render_patient_variant_occurrences_tab() -> None:
                     _render_evidence_block(
                         testing_method_evidence_block, paper_resp.id, f'method_{i}'
                     )
+
+        # Display disease name evidence if present
+        if link.disease_name_evidence:
+            st.divider()
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown('#### Disease Name')
+                st.info(f'**Disease Name:** {link.disease_name or "N/A"}')
+
+            with col2:
+                st.markdown('#### Disease Name Evidence')
+                _render_evidence_block(
+                    link.disease_name_evidence, paper_resp.id, 'disease_name'
+                )
