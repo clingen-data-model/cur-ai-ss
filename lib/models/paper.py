@@ -302,6 +302,8 @@ class PaperUpdateRequest(PatchModel):
     pmcid: str | None = None
     paper_types: list[PaperType] | None = None
     tags: list[str] | None = None
+    disease_name: str | None = None
+    disease_inheritance_mode: Inheritance | None = None
 
 
 class HighlightRequest(BaseModel):
