@@ -191,9 +191,10 @@ with center:
     ):
         reasoning = ''
         if paper_resp.section_classifications:
-            reasoning = paper_resp.section_classifications.get(
-                'relevance_reasoning', ''
+            relevance_block = paper_resp.section_classifications.get(
+                'is_paper_relevant', {}
             )
+            reasoning = relevance_block.get('reasoning', '')
         st.warning(
             f'⚠️ **Paper Classification Alert**: This paper was classified as not relevant for extraction (no clear patient-variant pairs found). {reasoning} '
             'You can still process this paper using the **Rerun Agents** panel if needed.',

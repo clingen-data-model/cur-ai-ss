@@ -21,10 +21,10 @@ from lib.agents.paper_extraction_agent import (
     agent as paper_extraction_agent,
 )
 from lib.agents.paper_section_classifier_agent import (
-    PAPER_SECTION_CLASSIFIER_AGENT_INSTRUCTIONS,
+    PAPER_CLASSIFIER_AGENT_INSTRUCTIONS,
 )
 from lib.agents.paper_section_classifier_agent import (
-    agent as paper_section_classifier_agent,
+    agent as paper_classifier_agent,
 )
 from lib.agents.patient_extraction_agent import (
     PATIENT_EXTRACTION_AGENT_INSTRUCTIONS,
@@ -236,13 +236,13 @@ async def handle_paper_section_classifier(task_id: int) -> None:
     if additional_context is not None:
         # Follow-up: agent has context from conversation
         message = build_followup_prompt(additional_context)
-        agent = paper_section_classifier_agent
+        agent = paper_classifier_agent
     else:
         # Initial query: build full message with paper + instructions
         paper_markdown = fulltext_md(paper_id, supplement_format)
         paper_context = format_paper_context(paper_markdown, gene_symbol)
-        message = f'{paper_context}\n\n{PAPER_SECTION_CLASSIFIER_AGENT_INSTRUCTIONS}'
-        agent = paper_section_classifier_agent
+        message = f'{paper_context}\n\n{PAPER_CLASSIFIER_AGENT_INSTRUCTIONS}'
+        agent = paper_classifier_agent
 
     result = await Runner.run(agent, message, conversation_id=stored_conv_id)
     log_cache_metrics('PAPER_SECTION_CLASSIFIER', result)
@@ -253,10 +253,10 @@ async def handle_paper_section_classifier(task_id: int) -> None:
         if task:
             task.conversation_id = stored_conv_id
             # If paper is not relevant, skip enqueuing successors
-            if not result.final_output.is_paper_relevant:
+            if not result.final_output.is_paper_relevant.value:
                 task.skip_successors = True
         if paper:
-            paper.is_paper_relevant = result.final_output.is_paper_relevant
+            paper.is_paper_relevant = result.final_output.is_paper_relevant.value
             paper.section_classifications = result.final_output.model_dump()
 
 
