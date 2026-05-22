@@ -33,10 +33,11 @@ def family_to_db(paper_id: int, family: Family) -> FamilyDB:
     )
 
 
-def patient_to_db(paper_id: int, patient: Patient) -> PatientDB:
+def patient_to_db(paper_id: int, patient: Patient, agent_run_id: int) -> PatientDB:
     """Convert a Patient to PatientDB, splitting values from evidence."""
     kwargs = {
         'paper_id': paper_id,
+        'agent_run_id': agent_run_id,
         'age_diagnosis_unit': patient.age_diagnosis_unit,
         'age_report_unit': patient.age_report_unit,
         'age_death_unit': patient.age_death_unit,
@@ -102,10 +103,11 @@ def hpo_to_db(
     )
 
 
-def variant_to_db(paper_id: int, variant: Variant) -> VariantDB:
+def variant_to_db(paper_id: int, variant: Variant, agent_run_id: int) -> VariantDB:
     """Convert Variant to VariantDB, extracting values and evidence from EvidenceBlocks."""
     kwargs = {
         'paper_id': paper_id,
+        'agent_run_id': agent_run_id,
     }
 
     # All fields except gene have evidence blocks

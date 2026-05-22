@@ -361,13 +361,19 @@ async def handle_variant_extraction(task_id: int) -> None:
     log_cache_metrics('VARIANT_EXTRACTION', result)
 
     with session_scope() as session:
-        # Idempotent: delete-then-insert
-        session.query(VariantDB).filter(VariantDB.paper_id == paper_id).delete()
-        for variant in result.final_output.variants:
-            session.add(variant_to_db(paper_id, variant))
         task = session.get(TaskDB, task_id)
-        if task:
-            task.conversation_id = stored_conv_id
+        if not task:
+            return
+        agent_run_id = task.agent_run_id
+        task.conversation_id = stored_conv_id
+
+        # Idempotent: delete-then-insert (only from current run)
+        session.query(VariantDB).filter(
+            VariantDB.paper_id == paper_id,
+            VariantDB.agent_run_id == agent_run_id,
+        ).delete()
+        for variant in result.final_output.variants:
+            session.add(variant_to_db(paper_id, variant, agent_run_id))
 
 
 async def handle_pedigree_description(task_id: int) -> None:
@@ -515,10 +521,16 @@ async def handle_patient_extraction(task_id: int) -> None:
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
-        if task:
-            task.conversation_id = stored_conv_id
-        # Idempotent: delete families (CASCADE deletes patients), then re-insert both
-        session.query(FamilyDB).filter(FamilyDB.paper_id == paper_id).delete()
+        if not task:
+            return
+        agent_run_id = task.agent_run_id
+        task.conversation_id = stored_conv_id
+
+        # Idempotent: delete patients (CASCADE deletes families) only from current run, then re-insert both
+        session.query(PatientDB).filter(
+            PatientDB.paper_id == paper_id,
+            PatientDB.agent_run_id == agent_run_id,
+        ).delete()
         session.flush()
 
         # Insert families first so we have family IDs for patient assignment
@@ -531,7 +543,7 @@ async def handle_patient_extraction(task_id: int) -> None:
 
         # Insert patients with family assignments
         for patient_info in result.final_output.patients:
-            db_patient = patient_to_db(paper_id, patient_info)
+            db_patient = patient_to_db(paper_id, patient_info, agent_run_id)
             # Use family_identifier from patient to find correct family
             family_id_value = patient_info.family_identifier.value
             if family_id_value in family_entries_by_id:
@@ -1135,6 +1147,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         task.conversation_id = stored_conv_id
 
         # Idempotent: delete-then-insert
+        # Phenotypes are scoped by patient_id, which is already run-versioned
         session.query(PhenotypeDB).filter(PhenotypeDB.patient_id == patient_id).delete()
 
         # Insert results
