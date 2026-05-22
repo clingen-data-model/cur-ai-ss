@@ -100,6 +100,7 @@ from lib.models import (
     SegregationEvidenceDB,
     TaskDB,
     VariantDB,
+    Zygosity,
 )
 from lib.models.converters import (
     family_to_db,
@@ -1071,6 +1072,38 @@ async def handle_patient_variant_linking(task_id: int) -> None:
         ).delete()
         for link in result.final_output.links:
             session.add(patient_variant_link_to_db(paper_id, link))
+        session.flush()
+
+        # Diplotype grouping: pair exactly-2 heterozygous variants per patient
+        links = (
+            session.query(PatientVariantLinkDB)
+            .filter(PatientVariantLinkDB.paper_id == paper_id)
+            .order_by(PatientVariantLinkDB.patient_id, PatientVariantLinkDB.id)
+            .all()
+        )
+
+        # Clear any existing pairing (idempotent re-run support)
+        for link in links:
+            link.paired_variant_link_id = None
+        session.flush()
+
+        # Group by patient and find exactly-2 heterozygous pairs
+        from collections import defaultdict
+
+        links_by_patient: dict[int, list[PatientVariantLinkDB]] = defaultdict(list)
+        for link in links:
+            links_by_patient[link.patient_id].append(link)
+
+        for patient_id, patient_links in links_by_patient.items():
+            het_links = [
+                lnk
+                for lnk in patient_links
+                if lnk.zygosity == Zygosity.heterozygous.value
+            ]
+            if len(het_links) == 2:
+                link_a, link_b = het_links[0], het_links[1]
+                link_a.paired_variant_link_id = link_b.id
+                link_b.paired_variant_link_id = link_a.id
 
 
 async def handle_phenotype_extraction(task_id: int) -> None:

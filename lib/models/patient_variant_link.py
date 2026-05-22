@@ -41,7 +41,6 @@ class Inheritance(str, Enum):
     dominant = 'Dominant'
     recessive = 'Recessive'
     semi_dominant = 'Semi-dominant'
-    compound_heterozygous = 'Compound Heterozygous'
     x_linked = 'X-linked'
     de_novo = 'De Novo'
     somatic_mosaicism = 'Somatic Mosaicism'
@@ -122,6 +121,12 @@ class PatientVariantLinkDB(Base):
     de_novo_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     testing_methods_evidence: Mapped[list] = mapped_column(JSON, nullable=False)
 
+    paired_variant_link_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey('patient_variant_links.id', ondelete='SET NULL'),
+        nullable=True,
+    )
+
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -138,6 +143,13 @@ class PatientVariantLinkDB(Base):
     variant: Mapped['VariantDB'] = relationship(
         'VariantDB', back_populates='patient_variant_links'
     )
+    paired_link: Mapped['PatientVariantLinkDB | None'] = relationship(
+        'PatientVariantLinkDB',
+        foreign_keys=[paired_variant_link_id],
+        primaryjoin='PatientVariantLinkDB.paired_variant_link_id == PatientVariantLinkDB.id',
+        uselist=False,
+        remote_side='PatientVariantLinkDB.id',
+    )
 
     __table_args__ = (
         UniqueConstraint(
@@ -147,6 +159,9 @@ class PatientVariantLinkDB(Base):
         ),
         Index('ix_patient_variant_links_patient_id', 'patient_id'),
         Index('ix_patient_variant_links_variant_id', 'variant_id'),
+        Index(
+            'ix_patient_variant_links_paired_variant_link_id', 'paired_variant_link_id'
+        ),
     )
 
 
@@ -156,6 +171,7 @@ class PatientVariantLinkDB(Base):
 
 
 class PatientVariantLinkResp(BaseModel):
+    id: int
     paper_id: int
     patient_id: int
     patient_identifier: str
@@ -168,4 +184,5 @@ class PatientVariantLinkResp(BaseModel):
     de_novo_evidence: EvidenceBlock[bool]
     testing_methods: list[TestingMethod]
     testing_methods_evidence: List[EvidenceBlock[TestingMethod]]
+    paired_variant_link_id: int | None = None
     updated_at: datetime

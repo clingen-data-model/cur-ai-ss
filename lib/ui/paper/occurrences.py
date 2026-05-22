@@ -77,6 +77,7 @@ def render_patient_variant_occurrences_tab() -> None:
     # Create lookup maps by ID
     patients_by_id = {p.id: p for p in patients}
     variants_by_id = {v.id: v for v in variants}
+    links_by_id = {link.id: link for link in links}
 
     # Build a list of rows for the DataFrame
     rows = []
@@ -92,6 +93,16 @@ def render_patient_variant_occurrences_tab() -> None:
         patient_display = link.patient_identifier
         patient_link = f'/paper?paper_id={paper_resp.id}&patient_id={link.patient_id}#{patient_display}'
         variant_link = f'/paper?paper_id={paper_resp.id}&variant_id={link.variant_id}#{variant_desc}'
+
+        # Diplotype: if paired with another variant, show the partner's description
+        diplotype_desc = ''
+        if link.paired_variant_link_id is not None:
+            paired_link = links_by_id.get(link.paired_variant_link_id)
+            if paired_link:
+                paired_variant = variants_by_id.get(paired_link.variant_id)
+                if paired_variant:
+                    diplotype_desc = paired_variant.variant_description
+
         rows.append(
             {
                 'Select': False,
@@ -103,6 +114,7 @@ def render_patient_variant_occurrences_tab() -> None:
                 else 'N/A',
                 'Patient': patient_link,
                 'Variant': variant_link,
+                'Diplotype': diplotype_desc,
                 'Zygosity': link.zygosity.value,
                 'Inheritance': link.inheritance.value,
                 'De Novo': link.de_novo,
@@ -118,6 +130,14 @@ def render_patient_variant_occurrences_tab() -> None:
     if not rows:
         st.info('No Patient/Variant links found.')
         st.stop()
+
+    # Sort rows by patient_id, then paired_variant_link_id (so pairs are adjacent)
+    rows.sort(
+        key=lambda r: (
+            r['_link'].patient_id,
+            r['_link'].paired_variant_link_id or 0,
+        )
+    )
 
     # Create DataFrame for display (exclude internal columns)
     display_rows = [
@@ -140,7 +160,7 @@ def render_patient_variant_occurrences_tab() -> None:
         df,
         width='stretch',
         hide_index=True,
-        disabled=['Proband', 'Affected', 'Patient', 'Variant'],
+        disabled=['Proband', 'Affected', 'Patient', 'Variant', 'Diplotype'],
         column_config={
             'Select': st.column_config.CheckboxColumn('Select', width=5),
             'Proband': st.column_config.SelectboxColumn(
@@ -160,6 +180,10 @@ def render_patient_variant_occurrences_tab() -> None:
             'Variant': st.column_config.LinkColumn(
                 'Variant',
                 display_text=r'.*?#(.+)$',
+            ),
+            'Diplotype': st.column_config.TextColumn(
+                'Diplotype',
+                width='medium',
             ),
             'Zygosity': st.column_config.SelectboxColumn(
                 'Zygosity',

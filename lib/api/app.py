@@ -805,6 +805,7 @@ def _patient_variant_link_to_resp(
     from lib.models import Inheritance, TestingMethod, Zygosity
 
     return PatientVariantLinkResp(
+        id=row.id,
         paper_id=row.paper_id,
         patient_id=row.patient_id,
         patient_identifier=patient_identifier,
@@ -819,6 +820,7 @@ def _patient_variant_link_to_resp(
         testing_methods_evidence=[
             EvidenceBlock.model_validate(m) for m in row.testing_methods_evidence
         ],
+        paired_variant_link_id=row.paired_variant_link_id,
         updated_at=row.updated_at,
     )
 
