@@ -23,6 +23,7 @@ from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock, Reasoni
 from lib.models.paper import PaperDB
 
 if TYPE_CHECKING:
+    from lib.models.agent_run import AgentRunDB
     from lib.models.patient_variant_link import PatientVariantLinkDB
 
 
@@ -235,6 +236,9 @@ class VariantDB(Base):
     paper_id: Mapped[int] = mapped_column(
         Integer, ForeignKey('papers.id', ondelete='CASCADE'), nullable=False
     )
+    agent_run_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey('agent_runs.id', ondelete='CASCADE'), nullable=False
+    )
 
     # Core fields
     variant: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -288,6 +292,7 @@ class VariantDB(Base):
     )
 
     paper: Mapped[PaperDB] = relationship('PaperDB', back_populates='variants')
+    agent_run: Mapped['AgentRunDB'] = relationship('AgentRunDB')
     harmonized_variant: Mapped['HarmonizedVariantDB | None'] = relationship(
         'HarmonizedVariantDB',
         back_populates='variant',
