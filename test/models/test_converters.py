@@ -116,7 +116,7 @@ def test_patient_to_db_maps_all_fields():
             reasoning='clearly affected',
         ),
     )
-    row = patient_to_db('paper123', patient)
+    row = patient_to_db('paper123', patient, agent_run_id=1)
 
     assert row.paper_id == 'paper123'
     # Values
@@ -196,7 +196,7 @@ def test_patient_to_db_handles_optional_none_values():
             reasoning='phenotype not detailed',
         ),
     )
-    row = patient_to_db('paper456', patient)
+    row = patient_to_db('paper456', patient, agent_run_id=1)
 
     assert row.identifier == 'II-2'
     assert row.proband_status == 'Unknown'
@@ -256,7 +256,7 @@ def test_patient_to_db_maps_segregation_analysis_fields():
             reasoning='explicitly stated',
         ),
     )
-    row = patient_to_db('paper_seg', patient)
+    row = patient_to_db('paper_seg', patient, agent_run_id=1)
 
     # Segregation fields should be set correctly
     assert row.is_obligate_carrier is True
