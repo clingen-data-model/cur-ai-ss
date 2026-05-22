@@ -1105,6 +1105,15 @@ async def handle_patient_variant_linking(task_id: int) -> None:
                 link_a.paired_variant_link_id = link_b.id
                 link_b.paired_variant_link_id = link_a.id
 
+        # Update paper-level disease_name if provided by the agent (case-level context)
+        if result.final_output.disease_name is not None:
+            paper = session.get(PaperDB, paper_id)
+            if paper:
+                paper.disease_name = result.final_output.disease_name.value
+                paper.disease_name_evidence = (
+                    result.final_output.disease_name.model_dump()
+                )
+
 
 async def handle_phenotype_extraction(task_id: int) -> None:
     """Extract phenotypes for a specific patient in paper."""

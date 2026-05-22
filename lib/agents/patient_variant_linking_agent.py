@@ -42,6 +42,9 @@ Return **exactly** the following for each link:
 - testing_methods: a list of EvidenceBlock[TestingMethod] (max 2 items)
 - disease_name: EvidenceBlock[str] (OPTIONAL: the disease/phenotype name associated with this patient's variants or family, extracted from case-level context in the paper. This may differ from or clarify the paper-level disease context. Include if mentioned in relation to the patient or variant.)
 
+Additionally, provide at the top level:
+- disease_name: EvidenceBlock[str] (OPTIONAL: if the case-level data reveals a different or more specific disease name than what was extracted from the paper abstract/introduction, include it here to update the paper-level disease context. Extract from case summaries, case titles, or family diagnoses.)
+
 **Linking rules:**
 
 - Only link if the patient is unambiguously reported to carry the variant.

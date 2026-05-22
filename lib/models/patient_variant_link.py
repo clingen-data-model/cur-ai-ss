@@ -89,6 +89,7 @@ class PatientVariantLink(BaseModel):
 
 class PatientVariantLinkerOutput(BaseModel):
     links: List[PatientVariantLink]
+    disease_name: EvidenceBlock[str] | None = None
 
 
 # ==============================

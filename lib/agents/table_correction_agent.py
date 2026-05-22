@@ -35,7 +35,7 @@ def extract_table_from_image(image_url: str) -> str:
     client = OpenAI(api_key=env.OPENAI_API_KEY)
 
     message = client.chat.completions.create(
-        model=env.OPENAI_API_DEPLOYMENT,
+        model=env.OPENAI_VLM,
         messages=[
             {
                 'role': 'user',
