@@ -820,6 +820,10 @@ def _patient_variant_link_to_resp(
         testing_methods_evidence=[
             EvidenceBlock.model_validate(m) for m in row.testing_methods_evidence
         ],
+        disease_name=row.disease_name,
+        disease_name_evidence=EvidenceBlock.model_validate(row.disease_name_evidence)
+        if row.disease_name_evidence
+        else None,
         paired_variant_link_id=row.paired_variant_link_id,
         updated_at=row.updated_at,
     )

@@ -122,6 +122,8 @@ class PatientVariantLinkDB(Base):
     inheritance_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     de_novo_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     testing_methods_evidence: Mapped[list] = mapped_column(JSON, nullable=False)
+    disease_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    disease_name_evidence: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     paired_variant_link_id: Mapped[int | None] = mapped_column(
         Integer,
@@ -186,5 +188,7 @@ class PatientVariantLinkResp(BaseModel):
     de_novo_evidence: EvidenceBlock[bool]
     testing_methods: list[TestingMethod]
     testing_methods_evidence: List[EvidenceBlock[TestingMethod]]
+    disease_name: str | None = None
+    disease_name_evidence: EvidenceBlock[str] | None = None
     paired_variant_link_id: int | None = None
     updated_at: datetime

@@ -171,6 +171,10 @@ def patient_variant_link_to_db(
         de_novo_evidence=link.de_novo.model_dump(),
         testing_methods=[m.value.value for m in link.testing_methods],
         testing_methods_evidence=[m.model_dump() for m in link.testing_methods],
+        disease_name=link.disease_name.value if link.disease_name else None,
+        disease_name_evidence=link.disease_name.model_dump()
+        if link.disease_name
+        else None,
     )
 
 

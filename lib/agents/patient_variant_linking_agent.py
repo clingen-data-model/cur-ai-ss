@@ -40,7 +40,11 @@ Return **exactly** the following for each link:
 - inheritance: a single EvidenceBlock[Inheritance]
 - de_novo: EvidenceBlock[bool] (true if variant is de novo, false otherwise)
 - testing_methods: a list of EvidenceBlock[TestingMethod] (max 2 items)
-- disease_name: EvidenceBlock[str] (OPTIONAL: the disease/phenotype name associated with this patient's variants or family, extracted from case-level context in the paper. This may differ from or clarify the paper-level disease context. Include if mentioned in relation to the patient or variant.)
+- disease_name: EvidenceBlock[str] (OPTIONAL: the disease name SPECIFIC TO THIS PATIENT-VARIANT LINK.
+  Use when the paper describes multiple conditions or when this patient's case clarifies, narrows, or
+  differs from the paper-level disease. This value OVERRIDES the paper-level disease for this link.
+  Extract from case-specific context — case summaries, family diagnoses, or variant-level descriptions.
+  Omit if the link's disease is the same as the paper-level disease.)
 
 Additionally, provide at the top level:
 - disease_name: EvidenceBlock[str] (OPTIONAL: if the case-level data reveals a different or more specific disease name than what was extracted from the paper abstract/introduction, include it here to update the paper-level disease context. Extract from case summaries, case titles, or family diagnoses.)
