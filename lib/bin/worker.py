@@ -20,6 +20,7 @@ POLL_INTERVAL_S = 10
 MAX_RETRIES = 2
 RETRY_DELAY_S = 30
 
+GLOBAL_CONCURRENCY = 30
 TASK_CONCURRENCY: dict[TaskType, int] = {
     TaskType.PDF_PARSING: 1,
     TaskType.VARIANT_HARMONIZATION: 10,
@@ -52,6 +53,7 @@ async def execute_task(task_id: int) -> None:
             return
 
         task.status = TaskStatus.RUNNING
+        task.updated_at = datetime.datetime.now(datetime.timezone.utc)
         task.tries += 1
         task_type = task.type
 
@@ -68,33 +70,39 @@ async def execute_task(task_id: int) -> None:
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if task:
+            now = datetime.datetime.now(datetime.timezone.utc)
             if error_msg is None:
                 task.status = TaskStatus.COMPLETED
+                task.updated_at = now
                 task.error_message = None
                 if not task.skip_successors:
                     enqueue_successors(session, task)
             else:
                 task.status = TaskStatus.FAILED
+                task.updated_at = now
                 task.error_message = error_msg
             paper = session.get(PaperDB, task.paper_id)
             if paper:
-                paper.updated_at = datetime.datetime.now(datetime.timezone.utc)
+                paper.updated_at = now
 
 
 async def execute_task_with_semaphore(
-    task_id: int, semaphore: asyncio.Semaphore
+    task_id: int,
+    global_semaphore: asyncio.Semaphore,
+    type_semaphore: asyncio.Semaphore,
 ) -> None:
-    """Execute task, respecting concurrency limit via semaphore."""
-    async with semaphore:
+    """Execute task, respecting global and type-specific concurrency limits."""
+    async with global_semaphore, type_semaphore:
         await execute_task(task_id)
 
 
 async def poll_and_schedule_tasks(
+    global_semaphore: asyncio.Semaphore,
     semaphores: dict[TaskType, asyncio.Semaphore],
 ) -> None:
     """Poll for pending tasks and schedule them (non-blocking)."""
     with session_scope() as session:
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now(datetime.timezone.utc)
         expired_cutoff = now - datetime.timedelta(seconds=LEASE_TIMEOUT_S)
 
         # Reset timed-out RUNNING tasks back to PENDING
@@ -109,6 +117,7 @@ async def poll_and_schedule_tasks(
         for task in timed_out_tasks:
             logger.info(f'Resetting timed-out task {task.id} ({task.type})')
             task.status = TaskStatus.PENDING
+            task.updated_at = now
 
         # Reset FAILED tasks that haven't exceeded retry limit back to PENDING
         retry_cutoff = now - datetime.timedelta(seconds=RETRY_DELAY_S)
@@ -126,6 +135,7 @@ async def poll_and_schedule_tasks(
                 f'Retrying task {task.id} ({task.type}) (attempt {task.tries + 1}/{MAX_RETRIES + 1})'
             )
             task.status = TaskStatus.PENDING
+            task.updated_at = now
             task.error_message = None
 
         session.flush()
@@ -150,12 +160,14 @@ async def poll_and_schedule_tasks(
         logger.info('Found no pending tasks')
         return
 
-    # Schedule tasks with their type-specific semaphores (non-blocking)
+    # Schedule tasks with global and type-specific semaphores (non-blocking)
     total_scheduled = 0
     for task_type, task_ids in pending_tasks.items():
         for task_id in task_ids:
             asyncio.create_task(
-                execute_task_with_semaphore(task_id, semaphores[task_type])
+                execute_task_with_semaphore(
+                    task_id, global_semaphore, semaphores[task_type]
+                )
             )
             total_scheduled += 1
     logger.info(f'Scheduled {total_scheduled} tasks')
@@ -163,7 +175,8 @@ async def poll_and_schedule_tasks(
 
 async def main_async() -> None:
     """Main async loop: continuously poll for tasks and schedule them."""
-    # Create semaphores for each task type
+    # Create global and type-specific semaphores
+    global_semaphore = asyncio.Semaphore(GLOBAL_CONCURRENCY)
     semaphores: dict[TaskType, asyncio.Semaphore] = {}
     for task_type in TaskType:
         limit = TASK_CONCURRENCY.get(task_type, DEFAULT_CONCURRENCY)
@@ -173,7 +186,7 @@ async def main_async() -> None:
     while True:
         logger.info('Looking for work')
         try:
-            await poll_and_schedule_tasks(semaphores)
+            await poll_and_schedule_tasks(global_semaphore, semaphores)
         except Exception:
             logger.exception('Unexpected error in worker loop')
         await asyncio.sleep(POLL_INTERVAL_S)
