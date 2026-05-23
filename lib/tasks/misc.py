@@ -51,8 +51,8 @@ def enqueue_task(
     )
 
     if existing_task:
-        # Skip re-queuing if task is already running
-        if existing_task.status == TaskStatus.RUNNING:
+        # Skip re-queuing if task is already running or queued
+        if existing_task.status in (TaskStatus.RUNNING, TaskStatus.QUEUED):
             return existing_task
         # Reset existing task
         existing_task.status = TaskStatus.PENDING
@@ -107,10 +107,10 @@ def enqueue_all_instances(
     )
 
     if existing_tasks:
-        # Re-queue all existing instances, skip if running
+        # Re-queue all existing instances, skip if running or queued
         results = []
         for task in existing_tasks:
-            if task.status != TaskStatus.RUNNING:
+            if task.status not in (TaskStatus.RUNNING, TaskStatus.QUEUED):
                 task.status = TaskStatus.PENDING
                 task.tries = 0
                 task.error_message = None
@@ -312,8 +312,8 @@ def infer_paper_status(tasks: list[TaskResp]) -> InferredPaperStatus:
     if not tasks:
         return InferredPaperStatus.PENDING
 
-    # Check running tasks
-    if any(t.status == TaskStatus.RUNNING for t in tasks):
+    # Check running or queued tasks
+    if any(t.status in (TaskStatus.RUNNING, TaskStatus.QUEUED) for t in tasks):
         return InferredPaperStatus.RUNNING
 
     # Check failed tasks
@@ -342,8 +342,10 @@ def infer_paper_status_detail(tasks: list[TaskResp]) -> str:
     if not tasks:
         return 'Pending'
 
-    # Check running tasks
-    running_tasks = [t for t in tasks if t.status == TaskStatus.RUNNING]
+    # Check running or queued tasks
+    running_tasks = [
+        t for t in tasks if t.status in (TaskStatus.RUNNING, TaskStatus.QUEUED)
+    ]
     if running_tasks:
         if len(running_tasks) > 1:
             return f'{len(running_tasks)} agents running'

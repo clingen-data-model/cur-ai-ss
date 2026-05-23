@@ -57,6 +57,7 @@ class TaskType(StrEnum):
 
 class TaskStatus(StrEnum):
     PENDING = 'Pending'
+    QUEUED = 'Queued'
     RUNNING = 'Running'
     COMPLETED = 'Completed'
     FAILED = 'Failed'

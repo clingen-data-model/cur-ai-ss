@@ -7,6 +7,7 @@ from agents import Agent, RunConfig, Runner
 from openai import AsyncOpenAI
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from lib.agents.hpo_linking_agent import (
     HPO_LINKING_AGENT_INSTRUCTIONS,
@@ -271,6 +272,7 @@ async def handle_paper_section_classifier(task_id: int) -> None:
             if not result.final_output.is_paper_relevant.value:
                 if PaperTag.FailedPaperRelevancy.value not in paper.tags:
                     paper.tags.append(PaperTag.FailedPaperRelevancy.value)
+                    flag_modified(paper, 'tags')
 
 
 async def handle_paper_metadata(task_id: int) -> None:

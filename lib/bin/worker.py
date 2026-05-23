@@ -166,9 +166,9 @@ async def poll_and_schedule_tasks(
             )
             if tier_tasks:
                 pending_tasks[task_type] = [t.id for t in tier_tasks]
-                # Mark as RUNNING immediately to prevent re-scheduling
+                # Mark as QUEUED to prevent re-scheduling before execution
                 for task in tier_tasks:
-                    task.status = TaskStatus.RUNNING
+                    task.status = TaskStatus.QUEUED
                     task.updated_at = now
 
         session.flush()
