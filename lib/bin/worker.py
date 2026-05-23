@@ -120,6 +120,7 @@ async def poll_and_schedule_tasks(
                     f'Resetting timed-out task {task.id} ({task.type}) (attempt {task.tries + 1}/{MAX_RETRIES + 1})'
                 )
                 task.status = TaskStatus.PENDING
+                task.conversation_id = None
             else:
                 logger.info(
                     f'Abandoning timed-out task {task.id} ({task.type}) (exhausted retries at {task.tries})'
@@ -148,6 +149,7 @@ async def poll_and_schedule_tasks(
             task.status = TaskStatus.PENDING
             task.updated_at = now
             task.error_message = None
+            task.conversation_id = None
 
         session.flush()
 
