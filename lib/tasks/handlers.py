@@ -877,14 +877,6 @@ async def handle_variant_harmonization(task_id: int) -> None:
     )
     log_cache_metrics('VARIANT_HARMONIZATION', result)
 
-    # Check if rate limited (agent encountered rate limit in tool calls)
-    if result.final_output and hasattr(result.final_output, 'reasoning'):
-        reasoning_text = result.final_output.reasoning or ''
-        if '429' in reasoning_text or 'rate limit' in reasoning_text.lower():
-            raise RateLimitError(
-                f'VARIANT_HARMONIZATION rate limited: {reasoning_text[:200]}'
-            )
-
     # Update DB with results
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
