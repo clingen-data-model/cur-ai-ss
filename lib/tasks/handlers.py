@@ -877,6 +877,37 @@ async def handle_variant_harmonization(task_id: int) -> None:
     )
     log_cache_metrics('VARIANT_HARMONIZATION', result)
 
+    # Check if rate limited (only if harmonization actually failed)
+    if result.final_output:
+        has_resolved = any(
+            [
+                result.final_output.gnomad_style_coordinates,
+                result.final_output.rsid,
+                result.final_output.caid,
+                result.final_output.hgvs_g,
+                result.final_output.hgvs_c,
+            ]
+        )
+
+        if not has_resolved:
+            reasoning_text = result.final_output.reasoning or ''
+            # Only raise if reasoning indicates rate limit caused the failure
+            # Avoid false positives from "429" appearing in variant coordinates
+            if any(
+                [
+                    'http 429' in reasoning_text.lower(),
+                    'too many requests' in reasoning_text.lower(),
+                    'rate limit' in reasoning_text.lower()
+                    and (
+                        'prevented' in reasoning_text.lower()
+                        or 'failed' in reasoning_text.lower()
+                    ),
+                ]
+            ):
+                raise RateLimitError(
+                    f'VARIANT_HARMONIZATION rate limited: {reasoning_text[:200]}'
+                )
+
     # Update DB with results
     with session_scope() as session:
         task = session.get(TaskDB, task_id)

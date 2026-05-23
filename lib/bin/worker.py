@@ -15,7 +15,7 @@ from lib.tasks.handlers import TASK_HANDLERS
 from lib.tasks.misc import enqueue_successors
 from lib.tasks.models import TaskStatus, TaskType
 
-LEASE_TIMEOUT_S = 900
+LEASE_TIMEOUT_S = 1800
 POLL_INTERVAL_S = 10
 MAX_RETRIES = 2
 RETRY_DELAY_S = 30
@@ -105,11 +105,11 @@ async def poll_and_schedule_tasks(
         now = datetime.datetime.now(datetime.timezone.utc)
         expired_cutoff = now - datetime.timedelta(seconds=LEASE_TIMEOUT_S)
 
-        # Reset timed-out RUNNING tasks back to PENDING (only if retries remain)
+        # Reset timed-out RUNNING/QUEUED tasks back to PENDING (only if retries remain)
         timed_out_tasks = (
             session.query(TaskDB)
             .filter(
-                TaskDB.status == TaskStatus.RUNNING,
+                TaskDB.status.in_([TaskStatus.RUNNING, TaskStatus.QUEUED]),
                 TaskDB.updated_at < expired_cutoff,
             )
             .all()
