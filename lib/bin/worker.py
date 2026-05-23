@@ -105,7 +105,7 @@ async def poll_and_schedule_tasks(
         now = datetime.datetime.now(datetime.timezone.utc)
         expired_cutoff = now - datetime.timedelta(seconds=LEASE_TIMEOUT_S)
 
-        # Reset timed-out RUNNING tasks back to PENDING
+        # Reset timed-out RUNNING tasks back to PENDING (only if retries remain)
         timed_out_tasks = (
             session.query(TaskDB)
             .filter(
@@ -115,8 +115,19 @@ async def poll_and_schedule_tasks(
             .all()
         )
         for task in timed_out_tasks:
-            logger.info(f'Resetting timed-out task {task.id} ({task.type})')
-            task.status = TaskStatus.PENDING
+            if task.tries < MAX_RETRIES:
+                logger.info(
+                    f'Resetting timed-out task {task.id} ({task.type}) (attempt {task.tries + 1}/{MAX_RETRIES + 1})'
+                )
+                task.status = TaskStatus.PENDING
+            else:
+                logger.info(
+                    f'Abandoning timed-out task {task.id} ({task.type}) (exhausted retries at {task.tries})'
+                )
+                task.status = TaskStatus.FAILED
+                task.error_message = (
+                    f'Task exceeded lease timeout ({LEASE_TIMEOUT_S}s) and max retries'
+                )
             task.updated_at = now
 
         # Reset FAILED tasks that haven't exceeded retry limit back to PENDING
@@ -155,6 +166,12 @@ async def poll_and_schedule_tasks(
             )
             if tier_tasks:
                 pending_tasks[task_type] = [t.id for t in tier_tasks]
+                # Mark as RUNNING immediately to prevent re-scheduling
+                for task in tier_tasks:
+                    task.status = TaskStatus.RUNNING
+                    task.updated_at = now
+
+        session.flush()
 
     if not pending_tasks:
         logger.info('Found no pending tasks')
