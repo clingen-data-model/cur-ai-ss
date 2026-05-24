@@ -1141,13 +1141,14 @@ async def handle_patient_variant_linking(task_id: int) -> None:
             links_by_patient[link.patient_id].append(link)
 
         for patient_id, patient_links in links_by_patient.items():
-            het_links = [
+            het_or_ch_links = [
                 lnk
                 for lnk in patient_links
-                if lnk.zygosity == Zygosity.heterozygous.value
+                if lnk.zygosity
+                in (Zygosity.heterozygous.value, Zygosity.compound_heterozygous.value)
             ]
-            if len(het_links) == 2:
-                link_a, link_b = het_links[0], het_links[1]
+            if len(het_or_ch_links) == 2:
+                link_a, link_b = het_or_ch_links[0], het_or_ch_links[1]
                 link_a.paired_variant_link_id = link_b.id
                 link_b.paired_variant_link_id = link_a.id
 

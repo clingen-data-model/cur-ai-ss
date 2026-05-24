@@ -49,6 +49,25 @@ Return **exactly** the following for each link:
 Additionally, provide at the top level:
 - disease_name: EvidenceBlock[str] (OPTIONAL: if the case-level data reveals a different or more specific disease name than what was extracted from the paper abstract/introduction, include it here to update the paper-level disease context. Extract from case summaries, case titles, or family diagnoses.)
 
+**Zygosity Definitions:**
+
+- `Homozygous`: Patient carries the variant on both copies of the gene (same variant on both chromosomes)
+- `Hemizygous`: Patient carries the variant on a single copy (typically for X-linked variants in males, or haploid regions)
+- `Heterozygous`: Patient carries the variant on one copy of the gene (different allele on the other copy)
+- `Compound Heterozygous`: Patient carries exactly 2 different heterozygous variants in the same gene (one mutation on each chromosome copy). When extracting variants for a patient, if you identify exactly 2 different heterozygous variants (and no more), mark BOTH with zygosity='Compound Heterozygous'. "Different" means the variants are at different positions/represent different mutations (not the same variant appearing twice). Also mark variants as Compound Heterozygous when the paper explicitly describes them as "compound heterozygous".
+- `Unknown`: The paper does not clearly specify the zygosity status
+
+**Inheritance Definitions:**
+
+- `Dominant`: One mutant copy is sufficient to cause disease. The variant is inherited from an affected parent or occurs de novo.
+- `Recessive`: Two mutant copies (homozygous or compound heterozygous) are required to cause disease. Typically inherited from two unaffected carrier parents.
+- `Semi-dominant`: One mutant copy causes disease, but two mutant copies may have different (often more severe) phenotypic consequences.
+- `X-linked`: The variant is on the X chromosome. Males with one mutant copy are affected; females may be affected if homozygous or show variable penetrance due to X-inactivation.
+- `De Novo`: The variant is newly acquired in the patient and not inherited from either parent (occurs in a germ cell or early in development).
+- `Somatic Mosaicism`: The variant is present only in a subset of the patient's cells (somatic cells), not in the germline.
+- `Mitochondrial`: The variant is in mitochondrial DNA, inherited maternally with variable heteroplasmy levels.
+- `Unknown`: The paper does not clearly specify the inheritance pattern.
+
 **Linking rules:**
 
 - Only link if the patient is unambiguously reported to carry the variant.
