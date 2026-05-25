@@ -20,6 +20,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    op.rename_table('enriched_variants', 'annotated_variants')
     with op.batch_alter_table('annotated_variants', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_enriched_variants_variant_id'))
         batch_op.drop_constraint(
@@ -43,3 +44,4 @@ def downgrade() -> None:
         batch_op.create_index(
             batch_op.f('ix_enriched_variants_variant_id'), ['variant_id'], unique=False
         )
+    op.rename_table('annotated_variants', 'enriched_variants')
