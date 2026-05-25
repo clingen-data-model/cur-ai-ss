@@ -7,7 +7,7 @@ import streamlit as st
 from lib.models import PaperResp, VariantResp, VariantUpdateRequest
 from lib.models.variant import VariantType
 from lib.tasks import TaskType, is_task_completed
-from lib.ui.api import get_patient_variant_occurrences, get_variants, update_variant
+from lib.ui.api import get_occurrences, get_variants, update_variant
 from lib.ui.paper.shared import (
     HUMAN_EDIT_NOTE_DEFAULT,
     get_clingen_url,
@@ -44,7 +44,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
     annotated_variants = [v.annotated_variant for v in variants]
 
     # Fetch patient-variant links
-    patient_variant_links = get_patient_variant_occurrences(paper_resp.id)
+    patient_variant_links = get_occurrences(paper_resp.id)
     # Create mapping from variant_id to list of links
     links_by_variant: dict[int, list] = {}
     for link in patient_variant_links:

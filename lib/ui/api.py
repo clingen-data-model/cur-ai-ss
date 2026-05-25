@@ -200,14 +200,45 @@ def clear_highlights(paper_id: int) -> None:
     resp.raise_for_status()
 
 
-def get_patient_variant_occurrences(
+def get_occurrences(
     paper_id: int,
 ) -> list[PatientVariantOccurrenceResp]:
+    """Get all patient-variant occurrences for a paper."""
     resp = requests.get(
-        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/patient-variant-occurrences'
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/occurrences'
     )
     resp.raise_for_status()
     return TypeAdapter(list[PatientVariantOccurrenceResp]).validate_python(resp.json())
+
+
+def get_variant_occurrences(
+    paper_id: int, variant_id: int
+) -> list[PatientVariantOccurrenceResp]:
+    """Get all patient occurrences of a specific variant."""
+    resp = requests.get(
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/variants/{variant_id}/occurrences'
+    )
+    resp.raise_for_status()
+    return TypeAdapter(list[PatientVariantOccurrenceResp]).validate_python(resp.json())
+
+
+def get_patient_occurrences(
+    paper_id: int, patient_id: int
+) -> list[PatientVariantOccurrenceResp]:
+    """Get all variant occurrences for a specific patient."""
+    resp = requests.get(
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/patients/{patient_id}/occurrences'
+    )
+    resp.raise_for_status()
+    return TypeAdapter(list[PatientVariantOccurrenceResp]).validate_python(resp.json())
+
+
+# Backward compatibility alias
+def get_patient_variant_occurrences(
+    paper_id: int,
+) -> list[PatientVariantOccurrenceResp]:
+    """Deprecated: use get_occurrences() instead."""
+    return get_occurrences(paper_id)
 
 
 def get_phenotypes(paper_id: int, patient_id: int) -> list[PhenotypeResp]:

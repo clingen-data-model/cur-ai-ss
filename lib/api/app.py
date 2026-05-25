@@ -394,36 +394,52 @@ def _patient_to_resp(row: PatientDB) -> PatientResp:
         id=row.id,
         paper_id=row.paper_id,
         identifier=row.identifier,
-        identifier_evidence=row.identifier_evidence,  # type: ignore[arg-type]
-        proband_status=row.proband_status,  # type: ignore[arg-type]
-        proband_status_evidence=row.proband_status_evidence,  # type: ignore[arg-type]
-        sex=row.sex,  # type: ignore[arg-type]
-        sex_evidence=row.sex_evidence,  # type: ignore[arg-type]
+        identifier_evidence=HumanEvidenceBlock.model_validate(row.identifier_evidence),
+        proband_status=row.proband_status,
+        proband_status_evidence=HumanEvidenceBlock.model_validate(
+            row.proband_status_evidence
+        ),
+        sex=row.sex,
+        sex_evidence=HumanEvidenceBlock.model_validate(row.sex_evidence),
         age_diagnosis=row.age_diagnosis,
         age_diagnosis_unit=row.age_diagnosis_unit,
-        age_diagnosis_evidence=row.age_diagnosis_evidence,  # type: ignore[arg-type]
+        age_diagnosis_evidence=HumanEvidenceBlock.model_validate(
+            row.age_diagnosis_evidence
+        ),
         age_report=row.age_report,
         age_report_unit=row.age_report_unit,
-        age_report_evidence=row.age_report_evidence,  # type: ignore[arg-type]
+        age_report_evidence=HumanEvidenceBlock.model_validate(row.age_report_evidence),
         age_death=row.age_death,
         age_death_unit=row.age_death_unit,
-        age_death_evidence=row.age_death_evidence,  # type: ignore[arg-type]
-        country_of_origin=row.country_of_origin,  # type: ignore[arg-type]
-        country_of_origin_evidence=row.country_of_origin_evidence,  # type: ignore[arg-type]
-        race_ethnicity=row.race_ethnicity,  # type: ignore[arg-type]
-        race_ethnicity_evidence=row.race_ethnicity_evidence,  # type: ignore[arg-type]
-        affected_status=row.affected_status,  # type: ignore[arg-type]
-        affected_status_evidence=row.affected_status_evidence,  # type: ignore[arg-type]
+        age_death_evidence=HumanEvidenceBlock.model_validate(row.age_death_evidence),
+        country_of_origin=row.country_of_origin,
+        country_of_origin_evidence=HumanEvidenceBlock.model_validate(
+            row.country_of_origin_evidence
+        ),
+        race_ethnicity=row.race_ethnicity,
+        race_ethnicity_evidence=HumanEvidenceBlock.model_validate(
+            row.race_ethnicity_evidence
+        ),
+        affected_status=row.affected_status,
+        affected_status_evidence=HumanEvidenceBlock.model_validate(
+            row.affected_status_evidence
+        ),
         is_obligate_carrier=row.is_obligate_carrier,
-        relationship_to_proband=row.relationship_to_proband,  # type: ignore[arg-type]
-        twin_type=row.twin_type,  # type: ignore[arg-type]
-        is_obligate_carrier_evidence=row.is_obligate_carrier_evidence,  # type: ignore[arg-type]
-        relationship_to_proband_evidence=row.relationship_to_proband_evidence,  # type: ignore[arg-type]
-        twin_type_evidence=row.twin_type_evidence,  # type: ignore[arg-type]
+        relationship_to_proband=row.relationship_to_proband,
+        twin_type=row.twin_type,
+        is_obligate_carrier_evidence=HumanEvidenceBlock.model_validate(
+            row.is_obligate_carrier_evidence
+        ),
+        relationship_to_proband_evidence=HumanEvidenceBlock.model_validate(
+            row.relationship_to_proband_evidence
+        ),
+        twin_type_evidence=HumanEvidenceBlock.model_validate(row.twin_type_evidence),
         updated_at=row.updated_at,
         family_id=row.family.id,
         family_identifier=row.family.identifier,
-        family_assignment_evidence=row.family_assignment_evidence,  # type: ignore[arg-type]
+        family_assignment_evidence=HumanEvidenceBlock.model_validate(
+            row.family_assignment_evidence
+        ),
     )
 
 
@@ -462,6 +478,12 @@ def create_patient(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
 
+    family_db = session.get(FamilyDB, patient_data.family_id)
+    if not family_db or family_db.paper_id != paper_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Family not found'
+        )
+
     def create_evidence_block(value: Any) -> dict:
         """Create an evidence block for human-created data."""
         block = EvidenceBlock(
@@ -496,7 +518,14 @@ def create_patient(
         affected_status_evidence=create_evidence_block(patient_data.affected_status),
     )
     session.add(patient_db)
-    return patient_db
+    session.flush()
+    patient_db = (
+        session.query(PatientDB)
+        .options(selectinload(PatientDB.family))
+        .filter(PatientDB.id == patient_db.id)
+        .one()
+    )
+    return _patient_to_resp(patient_db)
 
 
 @app.get('/papers/{paper_id}/families', response_model=list[FamilyResp])
@@ -535,24 +564,34 @@ def _segregation_analysis_to_resp(
     computed_nested = None
     if computed:
         computed_nested = SegregationAnalysisComputedNestedResp(
-            segregation_count=ReasoningBlock(**computed.segregation_count_reasoning),  # type: ignore[arg-type]
-            affected_count=ReasoningBlock(**computed.affected_count_reasoning),  # type: ignore[arg-type]
-            unaffected_count=ReasoningBlock(**computed.unaffected_count_reasoning),  # type: ignore[arg-type]
-            computed_lod_score=ReasoningBlock(**computed.computed_lod_score_reasoning),  # type: ignore[arg-type]
-            points_assigned=ReasoningBlock(**computed.points_assigned_reasoning),  # type: ignore[arg-type]
-            meets_minimum_criteria=ReasoningBlock(
-                **computed.meets_minimum_criteria_reasoning
-            ),  # type: ignore[arg-type]
+            segregation_count=ReasoningBlock.model_validate(
+                computed.segregation_count_reasoning
+            ),
+            affected_count=ReasoningBlock.model_validate(
+                computed.affected_count_reasoning
+            ),
+            unaffected_count=ReasoningBlock.model_validate(
+                computed.unaffected_count_reasoning
+            ),
+            computed_lod_score=ReasoningBlock.model_validate(
+                computed.computed_lod_score_reasoning
+            ),
+            points_assigned=ReasoningBlock.model_validate(
+                computed.points_assigned_reasoning
+            ),
+            meets_minimum_criteria=ReasoningBlock.model_validate(
+                computed.meets_minimum_criteria_reasoning
+            ),
         )
 
     return SegregationAnalysisResp(
         id=computed.id if computed else evidence.id,
         family_id=family.id,
-        extracted_lod_score=HumanEvidenceBlock(  # type: ignore[arg-type]
-            **(evidence.extracted_lod_score_evidence or {}),
+        extracted_lod_score=HumanEvidenceBlock.model_validate(
+            evidence.extracted_lod_score_evidence or {}
         ),
-        has_unexplainable_non_segregations=HumanEvidenceBlock(  # type: ignore[arg-type]
-            **(evidence.has_unexplainable_non_segregations_evidence or {}),
+        has_unexplainable_non_segregations=HumanEvidenceBlock.model_validate(
+            evidence.has_unexplainable_non_segregations_evidence or {}
         ),
         computed=computed_nested,
         updated_at=computed.updated_at if computed else evidence.updated_at,
@@ -600,7 +639,7 @@ def get_variants(paper_id: int, session: Session = Depends(get_session)) -> Any:
         session.query(VariantDB)
         .options(
             joinedload(VariantDB.harmonized_variant),
-            joinedload(VariantDB.enriched_variant),
+            joinedload(VariantDB.annotated_variant),
         )
         .filter(VariantDB.paper_id == paper_id)
         .order_by(VariantDB.id)
@@ -631,22 +670,22 @@ def _variant_to_resp(row: VariantDB) -> VariantResp:
         )
     enriched = (
         AnnotatedVariantResp(
-            gnomad_style_coordinates=row.enriched_variant.gnomad_style_coordinates,
-            rsid=row.enriched_variant.rsid,
-            caid=row.enriched_variant.caid,
-            pathogenicity=row.enriched_variant.pathogenicity,
-            submissions=row.enriched_variant.submissions,
-            stars=row.enriched_variant.stars,
-            exon=row.enriched_variant.exon,
-            revel=row.enriched_variant.revel,
-            alphamissense_class=row.enriched_variant.alphamissense_class,
-            alphamissense_score=row.enriched_variant.alphamissense_score,
-            spliceai=row.enriched_variant.spliceai,
-            gnomad_top_level_af=row.enriched_variant.gnomad_top_level_af,
-            gnomad_popmax_af=row.enriched_variant.gnomad_popmax_af,
-            gnomad_popmax_population=row.enriched_variant.gnomad_popmax_population,
+            gnomad_style_coordinates=row.annotated_variant.gnomad_style_coordinates,
+            rsid=row.annotated_variant.rsid,
+            caid=row.annotated_variant.caid,
+            pathogenicity=row.annotated_variant.pathogenicity,
+            submissions=row.annotated_variant.submissions,
+            stars=row.annotated_variant.stars,
+            exon=row.annotated_variant.exon,
+            revel=row.annotated_variant.revel,
+            alphamissense_class=row.annotated_variant.alphamissense_class,
+            alphamissense_score=row.annotated_variant.alphamissense_score,
+            spliceai=row.annotated_variant.spliceai,
+            gnomad_top_level_af=row.annotated_variant.gnomad_top_level_af,
+            gnomad_popmax_af=row.annotated_variant.gnomad_popmax_af,
+            gnomad_popmax_population=row.annotated_variant.gnomad_popmax_population,
         )
-        if row.enriched_variant
+        if row.annotated_variant
         else None
     )
     return VariantResp(
@@ -668,23 +707,35 @@ def _variant_to_resp(row: VariantDB) -> VariantResp:
         variant_type=row.variant_type,
         functional_evidence=row.functional_evidence,
         updated_at=row.updated_at,
-        transcript_evidence=row.transcript_evidence,  # type: ignore[arg-type]
-        protein_accession_evidence=row.protein_accession_evidence,  # type: ignore[arg-type]
-        genomic_accession_evidence=row.genomic_accession_evidence,  # type: ignore[arg-type]
-        lrg_accession_evidence=row.lrg_accession_evidence,  # type: ignore[arg-type]
-        gene_accession_evidence=row.gene_accession_evidence,  # type: ignore[arg-type]
-        genomic_coordinates_evidence=row.genomic_coordinates_evidence,  # type: ignore[arg-type]
-        genome_build_evidence=row.genome_build_evidence,  # type: ignore[arg-type]
-        rsid_evidence=row.rsid_evidence,  # type: ignore[arg-type]
-        caid_evidence=row.caid_evidence,  # type: ignore[arg-type]
-        variant_evidence=row.variant_evidence,  # type: ignore[arg-type]
-        hgvs_c_evidence=row.hgvs_c_evidence,  # type: ignore[arg-type]
-        hgvs_p_evidence=row.hgvs_p_evidence,  # type: ignore[arg-type]
-        hgvs_g_evidence=row.hgvs_g_evidence,  # type: ignore[arg-type]
-        variant_type_evidence=row.variant_type_evidence,  # type: ignore[arg-type]
-        functional_evidence_evidence=row.functional_evidence_evidence,  # type: ignore[arg-type]
+        transcript_evidence=EvidenceBlock.model_validate(row.transcript_evidence),
+        protein_accession_evidence=EvidenceBlock.model_validate(
+            row.protein_accession_evidence
+        ),
+        genomic_accession_evidence=EvidenceBlock.model_validate(
+            row.genomic_accession_evidence
+        ),
+        lrg_accession_evidence=EvidenceBlock.model_validate(row.lrg_accession_evidence),
+        gene_accession_evidence=EvidenceBlock.model_validate(
+            row.gene_accession_evidence
+        ),
+        genomic_coordinates_evidence=EvidenceBlock.model_validate(
+            row.genomic_coordinates_evidence
+        ),
+        genome_build_evidence=EvidenceBlock.model_validate(row.genome_build_evidence),
+        rsid_evidence=EvidenceBlock.model_validate(row.rsid_evidence),
+        caid_evidence=EvidenceBlock.model_validate(row.caid_evidence),
+        variant_evidence=EvidenceBlock.model_validate(row.variant_evidence),
+        hgvs_c_evidence=EvidenceBlock.model_validate(row.hgvs_c_evidence),
+        hgvs_p_evidence=EvidenceBlock.model_validate(row.hgvs_p_evidence),
+        hgvs_g_evidence=EvidenceBlock.model_validate(row.hgvs_g_evidence),
+        variant_type_evidence=HumanEvidenceBlock.model_validate(
+            row.variant_type_evidence
+        ),
+        functional_evidence_evidence=HumanEvidenceBlock.model_validate(
+            row.functional_evidence_evidence
+        ),
         main_focus=row.main_focus,
-        main_focus_evidence=row.main_focus_evidence,  # type: ignore[arg-type]
+        main_focus_evidence=HumanEvidenceBlock.model_validate(row.main_focus_evidence),
         harmonized_variant=harmonized,
         enriched_variant=enriched,
     )
@@ -701,7 +752,7 @@ def update_variant(
         session.query(VariantDB)
         .options(
             joinedload(VariantDB.harmonized_variant),
-            joinedload(VariantDB.enriched_variant),
+            joinedload(VariantDB.annotated_variant),
         )
         .filter(VariantDB.id == variant_id, VariantDB.paper_id == paper_id)
         .one_or_none()
@@ -731,7 +782,7 @@ def update_variant(
             )
         harmonized_update.apply_to(variant_db.harmonized_variant)
         # delete-orphan cascade removes the row
-        variant_db.enriched_variant = None
+        variant_db.annotated_variant = None
     session.flush()
     return _variant_to_resp(variant_db)
 
@@ -771,12 +822,11 @@ def _phenotype_to_resp(row: PhenotypeDB) -> PhenotypeResp:
 
 
 @app.get(
-    '/papers/{paper_id}/patient-variant-occurrences',
+    '/papers/{paper_id}/occurrences',
     response_model=list[PatientVariantOccurrenceResp],
 )
-def get_patient_variant_occurrences(
-    paper_id: int, session: Session = Depends(get_session)
-) -> Any:
+def get_occurrences(paper_id: int, session: Session = Depends(get_session)) -> Any:
+    """Get all patient-variant occurrences for a paper."""
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
         raise HTTPException(
@@ -791,6 +841,68 @@ def get_patient_variant_occurrences(
         .order_by(
             PatientVariantOccurrenceDB.patient_id, PatientVariantOccurrenceDB.variant_id
         )
+        .all()
+    )
+    return [
+        _patient_variant_occurrence_to_resp(link[0], patient_identifier=link[1])
+        for link in links
+    ]
+
+
+@app.get(
+    '/papers/{paper_id}/variants/{variant_id}/occurrences',
+    response_model=list[PatientVariantOccurrenceResp],
+)
+def get_variant_occurrences(
+    paper_id: int, variant_id: int, session: Session = Depends(get_session)
+) -> Any:
+    """Get all patient occurrences of a specific variant."""
+    variant_db = session.get(VariantDB, variant_id)
+    if not variant_db or variant_db.paper_id != paper_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Variant not found'
+        )
+    from lib.models.patient import PatientDB
+
+    links = (
+        session.query(PatientVariantOccurrenceDB, PatientDB.identifier)
+        .join(PatientDB, PatientVariantOccurrenceDB.patient_id == PatientDB.id)
+        .filter(
+            PatientVariantOccurrenceDB.variant_id == variant_id,
+            PatientVariantOccurrenceDB.paper_id == paper_id,
+        )
+        .order_by(PatientVariantOccurrenceDB.patient_id)
+        .all()
+    )
+    return [
+        _patient_variant_occurrence_to_resp(link[0], patient_identifier=link[1])
+        for link in links
+    ]
+
+
+@app.get(
+    '/papers/{paper_id}/patients/{patient_id}/occurrences',
+    response_model=list[PatientVariantOccurrenceResp],
+)
+def get_patient_occurrences(
+    paper_id: int, patient_id: int, session: Session = Depends(get_session)
+) -> Any:
+    """Get all variant occurrences for a specific patient."""
+    patient_db = session.get(PatientDB, patient_id)
+    if not patient_db or patient_db.paper_id != paper_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Patient not found'
+        )
+    from lib.models.patient import PatientDB
+
+    links = (
+        session.query(PatientVariantOccurrenceDB, PatientDB.identifier)
+        .join(PatientDB, PatientVariantOccurrenceDB.patient_id == PatientDB.id)
+        .filter(
+            PatientVariantOccurrenceDB.patient_id == patient_id,
+            PatientVariantOccurrenceDB.paper_id == paper_id,
+        )
+        .order_by(PatientVariantOccurrenceDB.variant_id)
         .all()
     )
     return [
@@ -958,6 +1070,7 @@ def update_phenotype(
 ) -> Any:
     phenotype_db = (
         session.query(PhenotypeDB)
+        .options(joinedload(PhenotypeDB.hpo))
         .filter(
             PhenotypeDB.id == phenotype_id,
             PhenotypeDB.paper_id == paper_id,
@@ -1344,7 +1457,7 @@ def _build_qa_context(
         'hpo_terms': [_row(r) for r in hpos],
         'variants': [_row(r) for r in variants],
         'harmonized_variants': [_row(r) for r in harmonized],
-        'enriched_variants': [_row(r) for r in enriched],
+        'annotated_variants': [_row(r) for r in enriched],
         'patient_variant_occurrences': [_row(r) for r in pvlinks],
         'segregation_evidence': [_row(r) for r in seg_evidence],
         'segregation_analysis': [_row(r) for r in seg_computed],
