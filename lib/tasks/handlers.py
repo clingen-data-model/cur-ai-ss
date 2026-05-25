@@ -96,7 +96,7 @@ from lib.misc.pdf.paths import (
     relevant_sections_md,
 )
 from lib.models import (
-    EnrichedVariantDB,
+    AnnotatedVariantDB,
     FamilyDB,
     HarmonizedVariantDB,
     HpoDB,
@@ -990,13 +990,13 @@ async def handle_variant_annotation(task_id: int) -> None:
             return
 
         # Idempotent: delete-then-insert (for this specific variant)
-        session.query(EnrichedVariantDB).filter(
-            EnrichedVariantDB.variant_id == task.variant_id
+        session.query(AnnotatedVariantDB).filter(
+            AnnotatedVariantDB.variant_id == task.variant_id
         ).delete()
 
         for var_id, ev in zip(variant_ids, enriched_variants):
             session.add(
-                EnrichedVariantDB(
+                AnnotatedVariantDB(
                     variant_id=var_id,
                     gnomad_style_coordinates=ev.gnomad_style_coordinates,
                     rsid=ev.rsid,

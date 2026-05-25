@@ -41,7 +41,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
         return
     variant_rows = get_variants(paper_resp.id)
     variants: list[VariantResp] = variant_rows
-    enriched_variants = [v.enriched_variant for v in variants]
+    annotated_variants = [v.annotated_variant for v in variants]
 
     # Fetch patient-variant links
     patient_variant_links = get_patient_variant_links(paper_resp.id)
@@ -55,11 +55,11 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
     # Separate variants into pathogenic and other by index
     pathogenic_indices = [
         i
-        for i, ev in enumerate(enriched_variants)
+        for i, ev in enumerate(annotated_variants)
         if ev and _is_pathogenic(ev.pathogenicity)
     ]
     other_indices = [
-        i for i in range(len(enriched_variants)) if i not in pathogenic_indices
+        i for i in range(len(annotated_variants)) if i not in pathogenic_indices
     ]
 
     # Separate variants into main focus and contextual by index
@@ -103,8 +103,8 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
             i = idx + 1  # Convert 0-based to 1-based for display
             variant = variants[idx]
             harmonized_variant = variant.harmonized_variant
-            enriched_variant = (
-                enriched_variants[idx] if idx < len(enriched_variants) else None
+            annotated_variant = (
+                annotated_variants[idx] if idx < len(annotated_variants) else None
             )
             key_prefix = f'{tab_name}-variant-{variant.id}'
             st.markdown(f'### Variant {i}')
@@ -675,10 +675,10 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                 with st.container():
                     st.subheader('Annotations')
 
-                    if not enriched_variant:
+                    if not annotated_variant:
                         st.info('Enrichment not yet completed for this variant')
                     else:
-                        ev = enriched_variant
+                        ev = annotated_variant
 
                         # ----------------------------
                         # ClinVar

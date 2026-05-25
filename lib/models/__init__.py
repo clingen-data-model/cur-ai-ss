@@ -67,17 +67,17 @@ from lib.models.segregation_analysis import (
     SequencingMethodology,
 )
 from lib.models.variant import (
-    EnrichedVariant,
-    EnrichedVariantDB,
-    EnrichedVariantResp,
+    AnnotatedVariant,
+    AnnotatedVariantDB,
+    AnnotatedVariantResp,
     HarmonizedVariant,
     HarmonizedVariantDB,
     HarmonizedVariantResp,
     HarmonizedVariantUpdate,
     SpliceAI,
     Variant,
+    VariantAnnotationOutput,
     VariantDB,
-    VariantEnrichmentOutput,
     VariantResp,
     VariantUpdateRequest,
 )

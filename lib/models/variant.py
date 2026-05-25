@@ -153,8 +153,8 @@ class VariantResp(BaseModel):
     main_focus_evidence: HumanEvidenceBlock[bool]
     # Harmonized variant (always present with ReasoningBlock, but value may be None if not yet harmonized)
     harmonized_variant: ReasoningBlock[HarmonizedVariantResp | None]
-    # Enriched variant (optional, may not yet be enriched)
-    enriched_variant: Optional['EnrichedVariantResp'] = None
+    # Annotated variant (optional, may not yet be annotated)
+    annotated_variant: Optional['AnnotatedVariantResp'] = None
 
     @computed_field  # type: ignore[misc]
     @property
@@ -302,8 +302,8 @@ class VariantDB(Base):
         uselist=False,
         cascade='all, delete-orphan',
     )
-    enriched_variant: Mapped['EnrichedVariantDB | None'] = relationship(
-        'EnrichedVariantDB',
+    annotated_variant: Mapped['AnnotatedVariantDB | None'] = relationship(
+        'AnnotatedVariantDB',
         back_populates='variant',
         uselist=False,
         cascade='all, delete-orphan',
@@ -376,8 +376,8 @@ class SpliceAI(BaseModel):
         return cls(max_score=max_score, effect_type=effect_type, position=position)
 
 
-class EnrichedVariant(BaseModel):
-    """Enriched variant data from ClinVar, VEP, and gnomAD."""
+class AnnotatedVariant(BaseModel):
+    """Annotated variant data from ClinVar, VEP, and gnomAD."""
 
     gnomad_style_coordinates: Optional[str] = None
     rsid: Optional[str] = None
@@ -397,14 +397,14 @@ class EnrichedVariant(BaseModel):
     gnomad_popmax_population: Optional[str] = None
 
 
-class VariantEnrichmentOutput(BaseModel):
-    """Output from variant enrichment agent."""
+class VariantAnnotationOutput(BaseModel):
+    """Output from variant annotation agent."""
 
-    variants: List[EnrichedVariant]
+    variants: List[AnnotatedVariant]
 
 
-class EnrichedVariantResp(BaseModel):
-    """Response model for enriched variants."""
+class AnnotatedVariantResp(BaseModel):
+    """Response model for annotated variants."""
 
     gnomad_style_coordinates: Optional[str] = None
     rsid: Optional[str] = None
@@ -423,10 +423,10 @@ class EnrichedVariantResp(BaseModel):
     gnomad_popmax_population: Optional[str] = None
 
 
-class EnrichedVariantDB(Base):
-    """Enriched variant data persisted to database."""
+class AnnotatedVariantDB(Base):
+    """Annotated variant data persisted to database."""
 
-    __tablename__ = 'enriched_variants'
+    __tablename__ = 'annotated_variants'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     variant_id: Mapped[int] = mapped_column(
@@ -466,11 +466,11 @@ class EnrichedVariantDB(Base):
 
     variant: Mapped['VariantDB'] = relationship(
         'VariantDB',
-        back_populates='enriched_variant',
+        back_populates='annotated_variant',
         foreign_keys=[variant_id],
     )
 
     __table_args__ = (
-        UniqueConstraint('variant_id', name='uq_enriched_variants_variant_id'),
-        Index('ix_enriched_variants_variant_id', 'variant_id'),
+        UniqueConstraint('variant_id', name='uq_annotated_variants_variant_id'),
+        Index('ix_annotated_variants_variant_id', 'variant_id'),
     )

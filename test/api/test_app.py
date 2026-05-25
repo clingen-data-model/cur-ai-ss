@@ -10,7 +10,7 @@ from lib.api.app import app
 from lib.api.db import get_session, session_scope
 from lib.models import (
     AgentRunDB,
-    EnrichedVariantDB,
+    AnnotatedVariantDB,
     FamilyDB,
     GeneDB,
     HarmonizedVariantDB,
@@ -636,7 +636,7 @@ def test_get_variants_harmonized_and_enriched(
     db_session.flush()
 
     # Create enriched variant
-    enriched = EnrichedVariantDB(
+    enriched = AnnotatedVariantDB(
         variant_id=variant.id,
         pathogenicity='Pathogenic',
         submissions=15,
@@ -780,7 +780,7 @@ def seeded_variant(db_session, seeded_paper, seeded_agent_run):
     db_session.add(harmonized)
     db_session.flush()
     db_session.add(
-        EnrichedVariantDB(
+        AnnotatedVariantDB(
             variant_id=variant.id,
             pathogenicity='Pathogenic',
             submissions=3,
@@ -932,8 +932,8 @@ def test_update_variant_edit_harmonized_clears_enrichment(
     assert response.json()['enriched_variant'] is None
     # Row is actually gone, not just hidden from the response.
     remaining = (
-        db_session.query(EnrichedVariantDB)
-        .filter(EnrichedVariantDB.variant_id == seeded_variant.id)
+        db_session.query(AnnotatedVariantDB)
+        .filter(AnnotatedVariantDB.variant_id == seeded_variant.id)
         .count()
     )
     assert remaining == 0

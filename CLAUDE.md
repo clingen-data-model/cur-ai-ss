@@ -68,7 +68,7 @@ Papers flow through this sequence of agents (all triggered by worker):
 3. **Pedigree Description** → Describes family relationships
 4. **Variant Extraction** → Extracts genetic variant information
 5. **Variant Harmonization** → Normalizes variants to standard formats
-6. **Variant Enrichment** → Adds annotations (SpliceAI, etc.)
+6. **Variant Annotation** → Adds annotations (SpliceAI, etc.)
 7. **Phenotype Extraction + HPO Linking** → Links phenotypes to HPO ontology terms
 8. **Patient-Variant Linking** → Links patients to their variants with inheritance info
 
@@ -81,7 +81,7 @@ All models are defined with Pydantic (for serialization) and SQLAlchemy ORM (for
 - **Paper** (`lib/models/paper.py`) - Represents a research paper with pipeline status and path references
 - **Patient** (`lib/models/patient.py`) - Patient demographics and clinical data
 - **Phenotype** (`lib/models/phenotype.py`) - Extracted phenotypes with HPO matching candidates and confidence scores
-- **Variant** (`lib/models/variant.py`) - Extracted, harmonized, and enriched variants
+- **Variant** (`lib/models/variant.py`) - Extracted, harmonized, and annotated variants
 - **PatientVariantLink** (`lib/models/patient_variant_link.py`) - Links patients to variants with inheritance/testing info
 - **Evidence** (`lib/models/evidence_block.py`) - Text blocks from paper supporting extracted data
 

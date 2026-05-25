@@ -75,12 +75,12 @@ from lib.misc.pdf.paths import (
 )
 from lib.models import (
     AgentRunDB,
+    AnnotatedVariantDB,
+    AnnotatedVariantResp,
     ChatMessageRequest,
     ChatMessageResp,
     ChatRoutingResponse,
     ConversationDB,
-    EnrichedVariantDB,
-    EnrichedVariantResp,
     ExtractedPhenotype,
     FamilyCreateRequest,
     FamilyDB,
@@ -630,7 +630,7 @@ def _variant_to_resp(row: VariantDB) -> VariantResp:
             reasoning='Harmonization not yet performed',
         )
     enriched = (
-        EnrichedVariantResp(
+        AnnotatedVariantResp(
             gnomad_style_coordinates=row.enriched_variant.gnomad_style_coordinates,
             rsid=row.enriched_variant.rsid,
             caid=row.enriched_variant.caid,
@@ -1304,8 +1304,8 @@ def _build_qa_context(
         else []
     )
     enriched = (
-        session.query(EnrichedVariantDB)
-        .filter(EnrichedVariantDB.variant_id.in_(variant_ids))
+        session.query(AnnotatedVariantDB)
+        .filter(AnnotatedVariantDB.variant_id.in_(variant_ids))
         .all()
         if variant_ids
         else []

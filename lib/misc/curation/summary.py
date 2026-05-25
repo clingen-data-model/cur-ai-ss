@@ -12,7 +12,7 @@ from lib.models.segregation_analysis import (
     SegregationAnalysisComputedDB,
     SegregationEvidenceDB,
 )
-from lib.models.variant import EnrichedVariantDB, HarmonizedVariantDB, VariantDB
+from lib.models.variant import AnnotatedVariantDB, HarmonizedVariantDB, VariantDB
 
 
 def build_curation_row(paper_id: int, session: Session) -> CurationSummaryRow:

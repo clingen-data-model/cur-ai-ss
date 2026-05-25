@@ -8,7 +8,7 @@ from urllib3.util.retry import Retry
 
 from lib.core.environment import env
 from lib.core.logging import setup_logging
-from lib.models.variant import EnrichedVariant, HarmonizedVariant, SpliceAI
+from lib.models.variant import AnnotatedVariant, HarmonizedVariant, SpliceAI
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -51,9 +51,9 @@ def clinvar_lookup(
     caid: Optional[str],
     hgvs_g: Optional[str],
     hgvs_c: Optional[str],
-) -> EnrichedVariant:
+) -> AnnotatedVariant:
     headers = {'content-type': 'application/json'}
-    result_variant = EnrichedVariant(rsid=rsid, caid=caid)
+    result_variant = AnnotatedVariant(rsid=rsid, caid=caid)
 
     if not (caid or rsid or hgvs_g or hgvs_c):
         return result_variant
@@ -161,7 +161,7 @@ def vep_lookup(
     rsid: str | None,
     hgvs_g: str | None,
     hgvs_c: str | None,
-) -> EnrichedVariant:
+) -> AnnotatedVariant:
     """Query Ensembl VEP for a given variant identifier and extract key annotations from the most relevant transcript."""
     if hgvs_g is not None:
         ext = f'/vep/human/hgvs/{hgvs_g}?mane=1&numbers=1&SpliceAI=2&REVEL=1&AlphaMissense=1'
@@ -186,12 +186,12 @@ def vep_lookup(
         data = r.json()
     except requests.exceptions.RequestException as e:
         logger.error(f'VEP lookup failed for {variant_id}: {e}')
-        return EnrichedVariant(rsid=rsid)
+        return AnnotatedVariant(rsid=rsid)
     except ValueError as e:
         logger.error(f'VEP JSON parse failed for {variant_id}: {e}')
-        return EnrichedVariant(rsid=rsid)
+        return AnnotatedVariant(rsid=rsid)
 
-    result_variant = EnrichedVariant(rsid=rsid)
+    result_variant = AnnotatedVariant(rsid=rsid)
 
     if not data:
         return result_variant
@@ -228,10 +228,10 @@ def vep_lookup(
     return result_variant
 
 
-def gnomad_lookup(gnomad_style_coordinates: str) -> EnrichedVariant:
+def gnomad_lookup(gnomad_style_coordinates: str) -> AnnotatedVariant:
     headers = {'content-type': 'application/json'}
 
-    result_variant = EnrichedVariant(gnomad_style_coordinates=gnomad_style_coordinates)
+    result_variant = AnnotatedVariant(gnomad_style_coordinates=gnomad_style_coordinates)
 
     query = """
     query ($variantId: String!) {
@@ -338,15 +338,15 @@ def gnomad_lookup(gnomad_style_coordinates: str) -> EnrichedVariant:
     return result_variant
 
 
-def enrich_variant(hv: HarmonizedVariant) -> EnrichedVariant:
-    enriched = EnrichedVariant(
+def enrich_variant(hv: HarmonizedVariant) -> AnnotatedVariant:
+    enriched = AnnotatedVariant(
         gnomad_style_coordinates=hv.gnomad_style_coordinates,
         rsid=hv.rsid,
         caid=hv.caid,
     )
 
     futures = []
-    results: List[EnrichedVariant] = []
+    results: List[AnnotatedVariant] = []
 
     with ThreadPoolExecutor(max_workers=3) as executor:
         # Submit tasks conditionally
@@ -365,7 +365,7 @@ def enrich_variant(hv: HarmonizedVariant) -> EnrichedVariant:
         for future in as_completed(futures):
             try:
                 result = future.result()
-                if isinstance(result, EnrichedVariant):
+                if isinstance(result, AnnotatedVariant):
                     results.append(result)
             except Exception as e:
                 # Fail-soft: log individual tool failure
@@ -389,8 +389,8 @@ def enrich_variant(hv: HarmonizedVariant) -> EnrichedVariant:
 
 def enrich_variants_batch(
     harmonized_variants: List[HarmonizedVariant],
-) -> List[EnrichedVariant]:
-    results: List[EnrichedVariant] = []
+) -> List[AnnotatedVariant]:
+    results: List[AnnotatedVariant] = []
 
     for i, hv in enumerate(harmonized_variants, 1):
         logger.info(
