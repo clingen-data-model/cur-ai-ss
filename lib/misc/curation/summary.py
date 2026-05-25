@@ -6,7 +6,7 @@ from lib.misc.pdf.paths import pdf_image_path
 from lib.models.family import FamilyDB
 from lib.models.paper import PaperDB, PedigreeDB
 from lib.models.patient import PatientDB, ProbandStatus
-from lib.models.patient_variant_link import PatientVariantLinkDB
+from lib.models.patient_variant_occurrence import PatientVariantOccurrenceDB
 from lib.models.phenotype import HpoDB, PhenotypeDB
 from lib.models.segregation_analysis import (
     SegregationAnalysisComputedDB,
@@ -39,8 +39,8 @@ def build_curation_row(paper_id: int, session: Session) -> CurationSummaryRow:
 
     # Get unique testing methods
     testing_links = (
-        session.query(PatientVariantLinkDB)
-        .filter(PatientVariantLinkDB.paper_id == paper_id)
+        session.query(PatientVariantOccurrenceDB)
+        .filter(PatientVariantOccurrenceDB.paper_id == paper_id)
         .all()
     )
     testing_methods_set = set()
@@ -206,8 +206,8 @@ def build_curation_row(paper_id: int, session: Session) -> CurationSummaryRow:
     inheritance_patterns = set()
     for patient in proband_patients:
         links = (
-            session.query(PatientVariantLinkDB)
-            .filter(PatientVariantLinkDB.patient_id == patient.id)
+            session.query(PatientVariantOccurrenceDB)
+            .filter(PatientVariantOccurrenceDB.patient_id == patient.id)
             .all()
         )
         for link in links:

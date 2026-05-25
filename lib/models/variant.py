@@ -24,7 +24,7 @@ from lib.models.paper import PaperDB
 
 if TYPE_CHECKING:
     from lib.models.agent_run import AgentRunDB
-    from lib.models.patient_variant_link import PatientVariantLinkDB
+    from lib.models.patient_variant_occurrence import PatientVariantOccurrenceDB
 
 
 class VariantType(str, Enum):
@@ -308,8 +308,12 @@ class VariantDB(Base):
         uselist=False,
         cascade='all, delete-orphan',
     )
-    patient_variant_links: Mapped[list['PatientVariantLinkDB']] = relationship(
-        'PatientVariantLinkDB', back_populates='variant', cascade='all, delete-orphan'
+    patient_variant_occurrences: Mapped[list['PatientVariantOccurrenceDB']] = (
+        relationship(
+            'PatientVariantOccurrenceDB',
+            back_populates='variant',
+            cascade='all, delete-orphan',
+        )
     )
 
     __table_args__ = (Index('ix_variants_paper_id', 'paper_id'),)

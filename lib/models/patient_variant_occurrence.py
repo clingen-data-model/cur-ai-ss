@@ -71,7 +71,7 @@ class TestingMethod(str, Enum):
 # ==============================
 
 
-class PatientVariantLink(BaseModel):
+class PatientVariantOccurrence(BaseModel):
     patient_id: int
     variant_id: int
     zygosity: EvidenceBlock[Zygosity]
@@ -87,8 +87,8 @@ class PatientVariantLink(BaseModel):
         return self
 
 
-class PatientVariantLinkerOutput(BaseModel):
-    links: List[PatientVariantLink]
+class PatientVariantOccurrenceOutput(BaseModel):
+    links: List[PatientVariantOccurrence]
     disease_name: EvidenceBlock[str] | None = None
 
 
@@ -97,8 +97,8 @@ class PatientVariantLinkerOutput(BaseModel):
 # ==============================
 
 
-class PatientVariantLinkDB(Base):
-    __tablename__ = 'patient_variant_links'
+class PatientVariantOccurrenceDB(Base):
+    __tablename__ = 'patient_variant_occurrences'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     paper_id: Mapped[int] = mapped_column(
@@ -127,7 +127,7 @@ class PatientVariantLinkDB(Base):
 
     paired_variant_link_id: Mapped[int | None] = mapped_column(
         Integer,
-        ForeignKey('patient_variant_links.id', ondelete='SET NULL'),
+        ForeignKey('patient_variant_occurrences.id', ondelete='SET NULL'),
         nullable=True,
     )
 
@@ -139,32 +139,33 @@ class PatientVariantLinkDB(Base):
     )
 
     paper: Mapped['PaperDB'] = relationship(
-        'PaperDB', back_populates='patient_variant_links'
+        'PaperDB', back_populates='patient_variant_occurrences'
     )
     patient: Mapped['PatientDB'] = relationship(
-        'PatientDB', back_populates='patient_variant_links'
+        'PatientDB', back_populates='patient_variant_occurrences'
     )
     variant: Mapped['VariantDB'] = relationship(
-        'VariantDB', back_populates='patient_variant_links'
+        'VariantDB', back_populates='patient_variant_occurrences'
     )
-    paired_link: Mapped['PatientVariantLinkDB | None'] = relationship(
-        'PatientVariantLinkDB',
+    paired_link: Mapped['PatientVariantOccurrenceDB | None'] = relationship(
+        'PatientVariantOccurrenceDB',
         foreign_keys=[paired_variant_link_id],
-        primaryjoin='PatientVariantLinkDB.paired_variant_link_id == PatientVariantLinkDB.id',
+        primaryjoin='PatientVariantOccurrenceDB.paired_variant_link_id == PatientVariantOccurrenceDB.id',
         uselist=False,
-        remote_side='PatientVariantLinkDB.id',
+        remote_side='PatientVariantOccurrenceDB.id',
     )
 
     __table_args__ = (
         UniqueConstraint(
             'patient_id',
             'variant_id',
-            name='uq_patient_variant_links_patient_variant',
+            name='uq_patient_variant_occurrences_patient_variant',
         ),
-        Index('ix_patient_variant_links_patient_id', 'patient_id'),
-        Index('ix_patient_variant_links_variant_id', 'variant_id'),
+        Index('ix_patient_variant_occurrences_patient_id', 'patient_id'),
+        Index('ix_patient_variant_occurrences_variant_id', 'variant_id'),
         Index(
-            'ix_patient_variant_links_paired_variant_link_id', 'paired_variant_link_id'
+            'ix_patient_variant_occurrences_paired_variant_link_id',
+            'paired_variant_link_id',
         ),
     )
 
@@ -174,7 +175,7 @@ class PatientVariantLinkDB(Base):
 # ==============================
 
 
-class PatientVariantLinkResp(BaseModel):
+class PatientVariantOccurrenceResp(BaseModel):
     id: int
     paper_id: int
     patient_id: int

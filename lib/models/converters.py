@@ -3,7 +3,10 @@ from lib.models import PatientDB, PedigreeDB, VariantDB
 from lib.models.evidence_block import HumanEvidenceBlock, ReasoningBlock
 from lib.models.family import Family, FamilyDB
 from lib.models.patient import Patient
-from lib.models.patient_variant_link import PatientVariantLink, PatientVariantLinkDB
+from lib.models.patient_variant_occurrence import (
+    PatientVariantOccurrence,
+    PatientVariantOccurrenceDB,
+)
 from lib.models.phenotype import (
     ExtractedPhenotype,
     HpoDB,
@@ -155,11 +158,11 @@ def harmonized_variant_to_db(
     )
 
 
-def patient_variant_link_to_db(
-    paper_id: int, link: PatientVariantLink
-) -> PatientVariantLinkDB:
-    """Convert PatientVariantLink to PatientVariantLinkDB, extracting values and evidence."""
-    return PatientVariantLinkDB(
+def patient_variant_occurrence_to_db(
+    paper_id: int, link: PatientVariantOccurrence
+) -> PatientVariantOccurrenceDB:
+    """Convert PatientVariantOccurrence to PatientVariantOccurrenceDB, extracting values and evidence."""
+    return PatientVariantOccurrenceDB(
         paper_id=paper_id,
         patient_id=link.patient_id,
         variant_id=link.variant_id,

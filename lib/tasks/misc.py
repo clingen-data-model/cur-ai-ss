@@ -204,7 +204,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 enqueue_task(
                     session,
                     paper_id=task.paper_id,
-                    task_type=TaskType.PATIENT_VARIANT_LINKING,
+                    task_type=TaskType.PATIENT_VARIANT_OCCURRENCES,
                 )
 
         case TaskType.VARIANT_EXTRACTION:
@@ -236,7 +236,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 enqueue_task(
                     session,
                     paper_id=task.paper_id,
-                    task_type=TaskType.PATIENT_VARIANT_LINKING,
+                    task_type=TaskType.PATIENT_VARIANT_OCCURRENCES,
                 )
 
         case TaskType.VARIANT_HARMONIZATION:
@@ -247,7 +247,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 variant_id=task.variant_id,
             )
 
-        case TaskType.PATIENT_VARIANT_LINKING:
+        case TaskType.PATIENT_VARIANT_OCCURRENCES:
             # Expand to per-family SEGREGATION_EVIDENCE_EXTRACTION tasks
             families = (
                 session.query(FamilyDB).filter(FamilyDB.paper_id == task.paper_id).all()

@@ -102,8 +102,8 @@ from lib.models import (
     PatientDB,
     PatientResp,
     PatientUpdateRequest,
-    PatientVariantLinkDB,
-    PatientVariantLinkResp,
+    PatientVariantOccurrenceDB,
+    PatientVariantOccurrenceResp,
     PedigreeDB,
     PedigreeResp,
     PhenotypeDB,
@@ -771,10 +771,10 @@ def _phenotype_to_resp(row: PhenotypeDB) -> PhenotypeResp:
 
 
 @app.get(
-    '/papers/{paper_id}/patient-variant-links',
-    response_model=list[PatientVariantLinkResp],
+    '/papers/{paper_id}/patient-variant-occurrences',
+    response_model=list[PatientVariantOccurrenceResp],
 )
-def get_patient_variant_links(
+def get_patient_variant_occurrences(
     paper_id: int, session: Session = Depends(get_session)
 ) -> Any:
     paper_db = session.get(PaperDB, paper_id)
@@ -785,26 +785,28 @@ def get_patient_variant_links(
     from lib.models.patient import PatientDB
 
     links = (
-        session.query(PatientVariantLinkDB, PatientDB.identifier)
-        .join(PatientDB, PatientVariantLinkDB.patient_id == PatientDB.id)
-        .filter(PatientVariantLinkDB.paper_id == paper_id)
-        .order_by(PatientVariantLinkDB.patient_id, PatientVariantLinkDB.variant_id)
+        session.query(PatientVariantOccurrenceDB, PatientDB.identifier)
+        .join(PatientDB, PatientVariantOccurrenceDB.patient_id == PatientDB.id)
+        .filter(PatientVariantOccurrenceDB.paper_id == paper_id)
+        .order_by(
+            PatientVariantOccurrenceDB.patient_id, PatientVariantOccurrenceDB.variant_id
+        )
         .all()
     )
     return [
-        _patient_variant_link_to_resp(link[0], patient_identifier=link[1])
+        _patient_variant_occurrence_to_resp(link[0], patient_identifier=link[1])
         for link in links
     ]
 
 
-def _patient_variant_link_to_resp(
-    row: PatientVariantLinkDB,
+def _patient_variant_occurrence_to_resp(
+    row: PatientVariantOccurrenceDB,
     patient_identifier: str,
-) -> PatientVariantLinkResp:
-    """Convert PatientVariantLinkDB to PatientVariantLinkResp."""
+) -> PatientVariantOccurrenceResp:
+    """Convert PatientVariantOccurrenceDB to PatientVariantOccurrenceResp."""
     from lib.models import Inheritance, TestingMethod, Zygosity
 
-    return PatientVariantLinkResp(
+    return PatientVariantOccurrenceResp(
         id=row.id,
         paper_id=row.paper_id,
         patient_id=row.patient_id,
@@ -1311,8 +1313,8 @@ def _build_qa_context(
         else []
     )
     pvlinks = (
-        session.query(PatientVariantLinkDB)
-        .filter(PatientVariantLinkDB.paper_id == paper_id)
+        session.query(PatientVariantOccurrenceDB)
+        .filter(PatientVariantOccurrenceDB.paper_id == paper_id)
         .all()
     )
     seg_evidence = (
@@ -1343,7 +1345,7 @@ def _build_qa_context(
         'variants': [_row(r) for r in variants],
         'harmonized_variants': [_row(r) for r in harmonized],
         'enriched_variants': [_row(r) for r in enriched],
-        'patient_variant_links': [_row(r) for r in pvlinks],
+        'patient_variant_occurrences': [_row(r) for r in pvlinks],
         'segregation_evidence': [_row(r) for r in seg_evidence],
         'segregation_analysis': [_row(r) for r in seg_computed],
     }

@@ -25,7 +25,7 @@ from lib.models.paper import PaperDB
 if TYPE_CHECKING:
     from lib.models.agent_run import AgentRunDB
     from lib.models.family import FamilyDB
-    from lib.models.patient_variant_link import PatientVariantLinkDB
+    from lib.models.patient_variant_occurrence import PatientVariantOccurrenceDB
     from lib.models.phenotype import PhenotypeDB
 
 
@@ -502,8 +502,12 @@ class PatientDB(Base):
     phenotypes: Mapped[list['PhenotypeDB']] = relationship(
         'PhenotypeDB', back_populates='patient', cascade='all, delete-orphan'
     )
-    patient_variant_links: Mapped[list['PatientVariantLinkDB']] = relationship(
-        'PatientVariantLinkDB', back_populates='patient', cascade='all, delete-orphan'
+    patient_variant_occurrences: Mapped[list['PatientVariantOccurrenceDB']] = (
+        relationship(
+            'PatientVariantOccurrenceDB',
+            back_populates='patient',
+            cascade='all, delete-orphan',
+        )
     )
 
     __table_args__ = (

@@ -29,7 +29,7 @@ class TaskType(StrEnum):
     SEGREGATION_ANALYSIS_COMPUTED = 'Segregation Analysis Computed'  # per-family
     VARIANT_HARMONIZATION = 'Variant Harmonization'
     VARIANT_ANNOTATION = 'Variant Annotation'
-    PATIENT_VARIANT_LINKING = 'Patient Variant Linking'
+    PATIENT_VARIANT_OCCURRENCES = 'Patient Variant Occurrences'
     PHENOTYPE_EXTRACTION = 'Phenotype Extraction'  # per-patient
     HPO_LINKING = 'HPO Linking'  # per-patient
 
@@ -48,7 +48,7 @@ class TaskType(StrEnum):
             TaskType.SEGREGATION_ANALYSIS_COMPUTED: 'Computes segregation analysis results per family',
             TaskType.VARIANT_HARMONIZATION: 'Normalizes variants to standard genomic coordinates using ClinVar, dbSNP, ClinGen Allele Registry, and VariantValidator',
             TaskType.VARIANT_ANNOTATION: 'Adds annotations (SpliceAI, conservation scores, etc.) to variants',
-            TaskType.PATIENT_VARIANT_LINKING: 'Associates patients with their variants and inheritance patterns',
+            TaskType.PATIENT_VARIANT_OCCURRENCES: 'Associates patients with their variants and inheritance patterns',
             TaskType.PHENOTYPE_EXTRACTION: 'Extracts phenotype text spans per patient',
             TaskType.HPO_LINKING: 'Maps phenotypes to HPO ontology terms for standardization',
         }
@@ -87,16 +87,16 @@ TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
     TaskType.PEDIGREE_DESCRIPTION: [TaskType.PATIENT_EXTRACTION],
     TaskType.PATIENT_EXTRACTION: [
         TaskType.PHENOTYPE_EXTRACTION,
-        TaskType.PATIENT_VARIANT_LINKING,
+        TaskType.PATIENT_VARIANT_OCCURRENCES,
     ],
     TaskType.PAPER_METADATA: [],
     TaskType.VARIANT_EXTRACTION: [
         TaskType.VARIANT_HARMONIZATION,
-        TaskType.PATIENT_VARIANT_LINKING,
+        TaskType.PATIENT_VARIANT_OCCURRENCES,
     ],
     TaskType.VARIANT_HARMONIZATION: [TaskType.VARIANT_ANNOTATION],
     TaskType.VARIANT_ANNOTATION: [],
-    TaskType.PATIENT_VARIANT_LINKING: [TaskType.SEGREGATION_EVIDENCE_EXTRACTION],
+    TaskType.PATIENT_VARIANT_OCCURRENCES: [TaskType.SEGREGATION_EVIDENCE_EXTRACTION],
     TaskType.SEGREGATION_EVIDENCE_EXTRACTION: [TaskType.SEGREGATION_ANALYSIS_COMPUTED],
     TaskType.SEGREGATION_ANALYSIS_COMPUTED: [],
     TaskType.PHENOTYPE_EXTRACTION: [TaskType.HPO_LINKING],

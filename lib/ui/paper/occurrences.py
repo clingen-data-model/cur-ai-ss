@@ -4,10 +4,10 @@ import streamlit as st
 from lib.models import PaperResp, PatientResp, VariantResp
 from lib.models.evidence_block import EvidenceBlock
 from lib.models.patient import AffectedStatus, ProbandStatus
-from lib.models.patient_variant_link import Inheritance, TestingMethod, Zygosity
+from lib.models.patient_variant_occurrence import Inheritance, TestingMethod, Zygosity
 from lib.tasks import TaskType, is_task_completed
 from lib.ui.api import (
-    get_patient_variant_links,
+    get_patient_variant_occurrences,
     get_patients,
     get_variants,
 )
@@ -72,7 +72,7 @@ def render_patient_variant_occurrences_tab() -> None:
     # Load all data sources via API
     patients: list[PatientResp] = get_patients(paper_resp.id)
     variants: list[VariantResp] = get_variants(paper_resp.id)
-    links = get_patient_variant_links(paper_resp.id)
+    links = get_patient_variant_occurrences(paper_resp.id)
 
     # Create lookup maps by ID
     patients_by_id = {p.id: p for p in patients}

@@ -14,7 +14,10 @@ if TYPE_CHECKING:
     from lib.models.evidence_block import EvidenceBlock
     from lib.models.family import FamilyDB
     from lib.models.patient import PatientDB
-    from lib.models.patient_variant_link import Inheritance, PatientVariantLinkDB
+    from lib.models.patient_variant_occurrence import (
+        Inheritance,
+        PatientVariantOccurrenceDB,
+    )
     from lib.models.phenotype import PhenotypeDB
     from lib.models.variant import VariantDB
     from lib.tasks.models import TaskDB
@@ -55,7 +58,7 @@ from lib.misc.pdf.paths import (
 from lib.models.base import Base, PatchModel
 from lib.models.evidence_block import EvidenceBlock
 from lib.models.gene_disease_relation import GeneDiseaseRelation
-from lib.models.patient_variant_link import Inheritance
+from lib.models.patient_variant_occurrence import Inheritance
 from lib.tasks.models import TaskResp
 
 Color: TypeAlias = Literal[
@@ -223,8 +226,12 @@ class PaperDB(Base):
     variants: Mapped[list['VariantDB']] = relationship(
         'VariantDB', back_populates='paper', cascade='all, delete-orphan'
     )
-    patient_variant_links: Mapped[list['PatientVariantLinkDB']] = relationship(
-        'PatientVariantLinkDB', back_populates='paper', cascade='all, delete-orphan'
+    patient_variant_occurrences: Mapped[list['PatientVariantOccurrenceDB']] = (
+        relationship(
+            'PatientVariantOccurrenceDB',
+            back_populates='paper',
+            cascade='all, delete-orphan',
+        )
     )
     tasks: Mapped[list['TaskDB']] = relationship(
         'TaskDB', back_populates='paper', cascade='all, delete-orphan'
@@ -241,7 +248,7 @@ class PaperExtractionOutput(BaseModel):
     pmid: str | None = None
     pmcid: str | None = None
     paper_types: list[PaperType]
-    gene_disease_relation: 'GeneDiseaseRelation | None' = None
+    gene_disease_relation: GeneDiseaseRelation | None = None
 
     @model_validator(mode='after')
     def max_two_paper_types(self) -> Self:

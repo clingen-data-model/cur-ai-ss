@@ -39,11 +39,11 @@ from lib.agents.patient_phenotype_linking_agent import (
 from lib.agents.patient_phenotype_linking_agent import (
     agent as patient_phenotype_linking_agent,
 )
-from lib.agents.patient_variant_linking_agent import (
-    PATIENT_VARIANT_LINKING_AGENT_INSTRUCTIONS,
+from lib.agents.patient_variant_occurrence_agent import (
+    PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS,
 )
-from lib.agents.patient_variant_linking_agent import (
-    agent as patient_variant_linking_agent,
+from lib.agents.patient_variant_occurrence_agent import (
+    agent as patient_variant_occurrence_agent,
 )
 from lib.agents.pedigree_describer_agent import (
     PEDIGREE_DESCRIBER_AGENT_INSTRUCTIONS,
@@ -103,7 +103,7 @@ from lib.models import (
     PaperDB,
     PaperTag,
     PatientDB,
-    PatientVariantLinkDB,
+    PatientVariantOccurrenceDB,
     PedigreeDB,
     PhenotypeDB,
     SegregationAnalysisComputedDB,
@@ -117,7 +117,7 @@ from lib.models.converters import (
     harmonized_variant_to_db,
     hpo_to_db,
     patient_to_db,
-    patient_variant_link_to_db,
+    patient_variant_occurrence_to_db,
     pedigree_to_db,
     phenotype_to_db,
     segregation_analysis_computed_to_db,
@@ -613,8 +613,8 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
         # Load variant links for this family
         patient_ids = [p.id for p in patients]
         variant_links = (
-            session.query(PatientVariantLinkDB)
-            .filter(PatientVariantLinkDB.patient_id.in_(patient_ids))
+            session.query(PatientVariantOccurrenceDB)
+            .filter(PatientVariantOccurrenceDB.patient_id.in_(patient_ids))
             .all()
             if patient_ids
             else []
@@ -632,7 +632,7 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
                 }
                 for p in patients
             ],
-            'patient_variant_links': [
+            'patient_variant_occurrences': [
                 {
                     'patient_id': vl.patient_id,
                     'variant_id': vl.variant_id,
@@ -729,8 +729,8 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
         # Load variant links for this family
         patient_ids = [p.id for p in patients]
         variant_links = (
-            session.query(PatientVariantLinkDB)
-            .filter(PatientVariantLinkDB.patient_id.in_(patient_ids))
+            session.query(PatientVariantOccurrenceDB)
+            .filter(PatientVariantOccurrenceDB.patient_id.in_(patient_ids))
             .all()
             if patient_ids
             else []
@@ -756,7 +756,7 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
                 }
                 for p in patients
             ],
-            'patient_variant_links': [
+            'patient_variant_occurrences': [
                 {
                     'patient_id': vl.patient_id,
                     'variant_id': vl.variant_id,
@@ -1016,7 +1016,7 @@ async def handle_variant_annotation(task_id: int) -> None:
             )
 
 
-async def handle_patient_variant_linking(task_id: int) -> None:
+async def handle_patient_variant_occurrence(task_id: int) -> None:
     """Link patients to variants with inheritance info."""
     paper_id: int
     structured_variants: list
@@ -1085,7 +1085,7 @@ async def handle_patient_variant_linking(task_id: int) -> None:
     if additional_context is not None:
         # Follow-up: agent has context from conversation
         message = build_followup_prompt(additional_context)
-        agent = patient_variant_linking_agent
+        agent = patient_variant_occurrence_agent
     else:
         # Initial query: build full message with paper + variant/patient data + instructions
         paper_markdown = relevant_sections_md(
@@ -1097,34 +1097,36 @@ async def handle_patient_variant_linking(task_id: int) -> None:
             f'Variants JSON:\n{structured_variants}\n\n'
             f'Patients JSON:\n{structured_patients}\n\n'
             f'Pedigree Description:\n{pedigree_descriptions_output}\n\n'
-            f'{PATIENT_VARIANT_LINKING_AGENT_INSTRUCTIONS}'
+            f'{PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS}'
         )
-        agent = patient_variant_linking_agent
+        agent = patient_variant_occurrence_agent
 
     result = await Runner.run(
         agent,
         message,
         conversation_id=stored_conv_id,
     )
-    log_cache_metrics('PATIENT_VARIANT_LINKING', result)
+    log_cache_metrics('PATIENT_VARIANT_OCCURRENCE', result)
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if task:
             task.conversation_id = stored_conv_id
         # Idempotent: delete-then-insert
-        session.query(PatientVariantLinkDB).filter(
-            PatientVariantLinkDB.paper_id == paper_id
+        session.query(PatientVariantOccurrenceDB).filter(
+            PatientVariantOccurrenceDB.paper_id == paper_id
         ).delete()
         for link in result.final_output.links:
-            session.add(patient_variant_link_to_db(paper_id, link))
+            session.add(patient_variant_occurrence_to_db(paper_id, link))
         session.flush()
 
         # Diplotype grouping: pair exactly-2 heterozygous variants per patient
         links = (
-            session.query(PatientVariantLinkDB)
-            .filter(PatientVariantLinkDB.paper_id == paper_id)
-            .order_by(PatientVariantLinkDB.patient_id, PatientVariantLinkDB.id)
+            session.query(PatientVariantOccurrenceDB)
+            .filter(PatientVariantOccurrenceDB.paper_id == paper_id)
+            .order_by(
+                PatientVariantOccurrenceDB.patient_id, PatientVariantOccurrenceDB.id
+            )
             .all()
         )
 
@@ -1136,7 +1138,9 @@ async def handle_patient_variant_linking(task_id: int) -> None:
         # Group by patient and find exactly-2 heterozygous pairs
         from collections import defaultdict
 
-        links_by_patient: dict[int, list[PatientVariantLinkDB]] = defaultdict(list)
+        links_by_patient: dict[int, list[PatientVariantOccurrenceDB]] = defaultdict(
+            list
+        )
         for link in links:
             links_by_patient[link.patient_id].append(link)
 
@@ -1335,7 +1339,7 @@ TASK_HANDLERS: dict[TaskType, Callable[[int], Awaitable[None]]] = {
     TaskType.SEGREGATION_ANALYSIS_COMPUTED: handle_segregation_analysis_computed,
     TaskType.VARIANT_HARMONIZATION: handle_variant_harmonization,
     TaskType.VARIANT_ANNOTATION: handle_variant_annotation,
-    TaskType.PATIENT_VARIANT_LINKING: handle_patient_variant_linking,
+    TaskType.PATIENT_VARIANT_OCCURRENCES: handle_patient_variant_occurrence,
     TaskType.PHENOTYPE_EXTRACTION: handle_phenotype_extraction,
     TaskType.HPO_LINKING: handle_hpo_linking,
 }
