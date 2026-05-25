@@ -6,7 +6,7 @@ from lib.misc.pdf.paths import pdf_image_path
 from lib.models.family import FamilyDB
 from lib.models.paper import PaperDB, PedigreeDB
 from lib.models.patient import PatientDB, ProbandStatus
-from lib.models.patient_variant_occurrence import PatientVariantOccurrenceDB
+from lib.models.patient_variant_occurrences import PatientVariantOccurrenceDB
 from lib.models.phenotype import HpoDB, PhenotypeDB
 from lib.models.segregation_analysis import (
     SegregationAnalysisComputedDB,

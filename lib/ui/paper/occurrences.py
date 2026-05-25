@@ -4,7 +4,7 @@ import streamlit as st
 from lib.models import PaperResp, PatientResp, VariantResp
 from lib.models.evidence_block import EvidenceBlock
 from lib.models.patient import AffectedStatus, ProbandStatus
-from lib.models.patient_variant_occurrence import Inheritance, TestingMethod, Zygosity
+from lib.models.patient_variant_occurrences import Inheritance, TestingMethod, Zygosity
 from lib.tasks import TaskType, is_task_completed
 from lib.ui.api import (
     get_patient_variant_occurrences,

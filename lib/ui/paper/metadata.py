@@ -3,7 +3,7 @@ from typing import Any
 import streamlit as st
 
 from lib.models import PaperResp, PaperType, PaperUpdateRequest
-from lib.models.patient_variant_occurrence import Inheritance
+from lib.models.patient_variant_occurrences import Inheritance
 from lib.ui.api import get_http_error_detail, update_paper
 from lib.ui.paper.shared import render_evidence_controls
 

@@ -39,7 +39,7 @@ from lib.models.patient import (
     PatientResp,
     PatientUpdateRequest,
 )
-from lib.models.patient_variant_occurrence import (
+from lib.models.patient_variant_occurrences import (
     Inheritance,
     PatientVariantOccurrence,
     PatientVariantOccurrenceDB,

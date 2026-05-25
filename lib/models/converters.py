@@ -3,7 +3,7 @@ from lib.models import PatientDB, PedigreeDB, VariantDB
 from lib.models.evidence_block import HumanEvidenceBlock, ReasoningBlock
 from lib.models.family import Family, FamilyDB
 from lib.models.patient import Patient
-from lib.models.patient_variant_occurrence import (
+from lib.models.patient_variant_occurrences import (
     PatientVariantOccurrence,
     PatientVariantOccurrenceDB,
 )

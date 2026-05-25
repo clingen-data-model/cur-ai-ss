@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from lib.models.evidence_block import EvidenceBlock
     from lib.models.family import FamilyDB
     from lib.models.patient import PatientDB
-    from lib.models.patient_variant_occurrence import (
+    from lib.models.patient_variant_occurrences import (
         Inheritance,
         PatientVariantOccurrenceDB,
     )
@@ -58,7 +58,7 @@ from lib.misc.pdf.paths import (
 from lib.models.base import Base, PatchModel
 from lib.models.evidence_block import EvidenceBlock
 from lib.models.gene_disease_relation import GeneDiseaseRelation
-from lib.models.patient_variant_occurrence import Inheritance
+from lib.models.patient_variant_occurrences import Inheritance
 from lib.tasks.models import TaskResp
 
 Color: TypeAlias = Literal[

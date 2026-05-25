@@ -25,7 +25,7 @@ from lib.models.paper import PaperDB
 if TYPE_CHECKING:
     from lib.models.agent_run import AgentRunDB
     from lib.models.family import FamilyDB
-    from lib.models.patient_variant_occurrence import PatientVariantOccurrenceDB
+    from lib.models.patient_variant_occurrences import PatientVariantOccurrenceDB
     from lib.models.phenotype import PhenotypeDB
 
 

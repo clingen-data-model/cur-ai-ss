@@ -24,7 +24,7 @@ from lib.models.paper import PaperDB
 
 if TYPE_CHECKING:
     from lib.models.agent_run import AgentRunDB
-    from lib.models.patient_variant_occurrence import PatientVariantOccurrenceDB
+    from lib.models.patient_variant_occurrences import PatientVariantOccurrenceDB
 
 
 class VariantType(str, Enum):

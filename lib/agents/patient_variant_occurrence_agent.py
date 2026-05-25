@@ -3,7 +3,7 @@ from agents import Agent
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
 from lib.core.environment import env
-from lib.models.patient_variant_occurrence import (
+from lib.models.patient_variant_occurrences import (
     PatientVariantOccurrenceOutput,
 )
 

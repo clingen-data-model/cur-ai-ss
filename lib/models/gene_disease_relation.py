@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 
 from lib.models.evidence_block import EvidenceBlock
-from lib.models.patient_variant_occurrence import Inheritance
+from lib.models.patient_variant_occurrences import Inheritance
 
 
 class GeneDiseaseRelation(BaseModel):
