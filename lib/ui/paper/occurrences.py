@@ -65,8 +65,8 @@ def render_patient_variant_occurrences_tab() -> None:
     if not paper_resp.title:
         st.write(f'{paper_resp.filename} not yet extracted...')
         return
-    elif not is_task_completed(paper_resp.tasks, TaskType.PATIENT_VARIANT_LINKING):
-        st.write(f'Patient/Variant Linking not yet completed...')
+    elif not is_task_completed(paper_resp.tasks, TaskType.PATIENT_VARIANT_OCCURRENCES):
+        st.write(f'Patient/Variant Occurrences not yet completed...')
         return
 
     # Load all data sources via API

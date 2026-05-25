@@ -138,7 +138,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
     """Create successor tasks when a task completes.
 
     Each case is explicit about what successors to create and any entity ID
-    filtering/expansion needed. PATIENT_VARIANT_LINKING is the only task that
+    filtering/expansion needed. PATIENT_VARIANT_OCCURRENCES is the only task that
     requires checking multiple independent predecessors.
     """
     from lib.models import FamilyDB, PatientDB, PhenotypeDB, VariantDB
@@ -190,7 +190,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     patient_id=patient.id,
                 )
 
-            # Gate PATIENT_VARIANT_LINKING on VARIANT_EXTRACTION also being done
+            # Gate PATIENT_VARIANT_OCCURRENCES on VARIANT_EXTRACTION also being done
             variant_task = (
                 session.query(TaskDB)
                 .filter(
@@ -222,7 +222,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     variant_id=variant.id,
                 )
 
-            # Gate PATIENT_VARIANT_LINKING on PATIENT_EXTRACTION also being done
+            # Gate PATIENT_VARIANT_OCCURRENCES on PATIENT_EXTRACTION also being done
             patient_task = (
                 session.query(TaskDB)
                 .filter(
