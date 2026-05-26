@@ -94,14 +94,15 @@ def render_patient_variant_occurrences_tab() -> None:
         patient_link = f'/paper?paper_id={paper_resp.id}&patient_id={link.patient_id}#{patient_display}'
         variant_link = f'/paper?paper_id={paper_resp.id}&variant_id={link.variant_id}#{variant_desc}'
 
-        # Diplotype: if paired with another variant, show the partner's description
-        diplotype_desc = ''
+        # Paired Variant: if paired with another variant, create a link to it
+        paired_variant_link = ''
         if link.paired_variant_link_id is not None:
             paired_link = links_by_id.get(link.paired_variant_link_id)
             if paired_link:
                 paired_variant = variants_by_id.get(paired_link.variant_id)
                 if paired_variant:
-                    diplotype_desc = paired_variant.variant_description
+                    paired_variant_desc = paired_variant.variant_description
+                    paired_variant_link = f'/paper?paper_id={paper_resp.id}&variant_id={paired_link.variant_id}#{paired_variant_desc}'
 
         rows.append(
             {
@@ -114,7 +115,7 @@ def render_patient_variant_occurrences_tab() -> None:
                 else 'N/A',
                 'Patient': patient_link,
                 'Variant': variant_link,
-                'Diplotype': diplotype_desc,
+                'Paired Variant': paired_variant_link,
                 'Zygosity': link.zygosity.value,
                 'Inheritance': link.inheritance.value,
                 'De Novo': link.de_novo,
@@ -140,7 +141,7 @@ def render_patient_variant_occurrences_tab() -> None:
     rows.sort(key=sort_key)
 
     # Determine which columns to display based on data
-    has_diplotypes = any(row['Diplotype'] for row in rows)
+    has_paired_variants = any(row['Paired Variant'] for row in rows)
     has_disease_names = any(row['Disease Name'] for row in rows)
 
     # Create DataFrame for display (exclude internal columns)
@@ -149,9 +150,9 @@ def render_patient_variant_occurrences_tab() -> None:
     ]
 
     # Remove columns that shouldn't be displayed
-    if not has_diplotypes:
+    if not has_paired_variants:
         for row in display_rows:
-            del row['Diplotype']
+            del row['Paired Variant']
     if not has_disease_names:
         for row in display_rows:
             del row['Disease Name']
@@ -212,11 +213,11 @@ def render_patient_variant_occurrences_tab() -> None:
         ),
     }
 
-    # Add Diplotype column only if there are diplotypes
-    if has_diplotypes:
-        column_config['Diplotype'] = st.column_config.TextColumn(
-            'Diplotype',
-            width='medium',
+    # Add Paired Variant column only if there are paired variants
+    if has_paired_variants:
+        column_config['Paired Variant'] = st.column_config.LinkColumn(
+            'Paired Variant',
+            display_text=r'.*?#(.+)$',
         )
 
     # Add Disease Name column only if there are disease names
@@ -228,8 +229,8 @@ def render_patient_variant_occurrences_tab() -> None:
 
     # Build disabled list, excluding columns that don't exist in the DataFrame
     disabled = ['Proband', 'Affected', 'Patient', 'Variant']
-    if has_diplotypes:
-        disabled.append('Diplotype')
+    if has_paired_variants:
+        disabled.append('Paired Variant')
 
     editted_df = st.data_editor(
         df,
