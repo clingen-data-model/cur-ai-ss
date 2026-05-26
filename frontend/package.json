@@ -5,42 +5,38 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "../bin/generate-api-spec && pnpm api:generate",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives",
-    "api:generate": "openapi-ts --input http://localhost:8000/openapi.json --output ./src/api/generated"
+    "api:generate": "openapi-ts --input ./api-spec.json --output ./src/api/generated --client fetch"
   },
   "dependencies": {
+    "@tanstack/react-form": "^0.37.0",
+    "@tanstack/react-query": "^5.60.0",
+    "@tanstack/react-router": "^1.60.0",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "@tanstack/react-router": "^1.60.0",
-    "@tanstack/react-query": "^5.60.0",
-    "@tanstack/react-form": "^0.37.0",
-    "@tanstack/form": "^0.37.0",
+    "tailwind-merge": "^2.4.0",
     "zod": "^3.23.0",
-    "zustand": "^4.4.0",
-    "axios": "^1.7.0",
-    "clsx": "^2.1.0",
-    "class-variance-authority": "^0.7.0",
-    "tailwind-merge": "^2.4.0"
+    "zustand": "^4.4.0"
   },
   "devDependencies": {
-    "typescript": "^5.6.0",
+    "@hey-api/openapi-ts": "^0.52.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.2.0",
+    "@typescript-eslint/parser": "^7.2.0",
     "@vitejs/plugin-react": "^4.3.0",
-    "vite": "^5.4.0",
-    "tailwindcss": "^3.4.0",
-    "postcss": "^8.4.0",
     "autoprefixer": "^10.4.0",
-    "@hey-api/openapi-ts": "^0.52.0",
     "eslint": "^8.57.0",
     "eslint-plugin-react-hooks": "^4.6.0",
-    "@typescript-eslint/eslint-plugin": "^7.2.0",
-    "@typescript-eslint/parser": "^7.2.0"
-  },
-  "pnpm": {
-    "overrides": {}
+    "postcss": "^8.4.0",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.6.0",
+    "vite": "^5.4.0"
   }
 }

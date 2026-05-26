@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Get the root directory of the project
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SPEC_PATH="$ROOT_DIR/frontend/api-spec.json"
+
+uv run python3 << EOF
+from lib.api.app import app
+import json
+
+spec = app.openapi()
+with open('$SPEC_PATH', 'w') as f:
+    json.dump(spec, f, indent=2)
+
+print(f"✓ API spec generated: frontend/api-spec.json ({len(spec.get('paths', {}))} endpoints)")
+EOF

@@ -211,6 +211,12 @@ uv run pytest test/api/test_app.py::test_function  # Specific test
 3. Call API endpoints to save changes
 4. Use PDF highlighting via `lib/misc/pdf/highlight.py` utilities
 
+**Generating API specification:**
+```bash
+./bin/generate-api-spec
+```
+Extracts OpenAPI schema from FastAPI app and generates `frontend/api-spec.json`. Does not require running the API server.
+
 ## Important Notes
 
 **PDF file organization:** All extracted content for a paper is stored in a directory named after the paper ID. Use path functions from `lib/misc/pdf/paths.py` to build consistent paths:

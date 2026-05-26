@@ -6,6 +6,9 @@ pnpm-lock.yaml
 # Build outputs
 dist
 build
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
 
 # Development
 .env.local
@@ -20,5 +23,6 @@ build
 coverage
 .nyc_output
 
-# API client (generated, not checked in)
+# API client and spec (generated, not checked in)
+api-spec.json
 src/api/generated

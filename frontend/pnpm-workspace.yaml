@@ -1,0 +1,5 @@
+# pnpm workspace configuration
+# Controls which packages are allowed to run build scripts during installation
+# This is a security measure to prevent arbitrary code execution during deps installation
+allowBuilds:
+  esbuild: true  # Vite depends on esbuild; needs to build native binaries for your platform

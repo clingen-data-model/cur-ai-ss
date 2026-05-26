@@ -8,7 +8,7 @@
  *   papers.tsx  → /papers route
  *   etc.
  */
-import { RootRoute, Route, RootRouteWithContext, createRoutesFromElements } from '@tanstack/react-router'
+import { RootRoute, Route } from '@tanstack/react-router'
 import { RootLayout } from './routes/__root'
 import { HomePage } from './routes/index'
 
