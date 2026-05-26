@@ -1,0 +1,24 @@
+# Dependencies
+node_modules
+.pnpm-store
+pnpm-lock.yaml
+
+# Build outputs
+dist
+build
+
+# Development
+.env.local
+.env.*.local
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Testing
+coverage
+.nyc_output
+
+# API client (generated, not checked in)
+src/api/generated

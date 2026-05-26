@@ -1,0 +1,14 @@
+/* Global styles
+ * @tailwind directives inject Tailwind's base, component, and utility styles
+ * These must be present for Tailwind to work
+ */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom base styles if needed */
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900;
+  }
+}

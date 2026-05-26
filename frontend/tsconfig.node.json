@@ -1,0 +1,14 @@
+/* Separate TypeScript config for build tools (Vite, etc.)
+ * Kept separate from tsconfig.json to avoid conflicts between
+ * React app config and build config.
+ */
+{
+  "compilerOptions": {
+    "composite": true,
+    "skipLibCheck": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowSyntheticDefaultImports": true
+  },
+  "include": ["vite.config.ts"]
+}
