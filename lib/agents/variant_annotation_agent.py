@@ -339,7 +339,7 @@ def gnomad_lookup(gnomad_style_coordinates: str) -> AnnotatedVariant:
 
 
 def enrich_variant(hv: HarmonizedVariant) -> AnnotatedVariant:
-    enriched = AnnotatedVariant(
+    annotated = AnnotatedVariant(
         gnomad_style_coordinates=hv.gnomad_style_coordinates,
         rsid=hv.rsid,
         caid=hv.caid,
@@ -383,8 +383,8 @@ def enrich_variant(hv: HarmonizedVariant) -> AnnotatedVariant:
         for field_name, field_info in result.model_fields.items():
             value = getattr(result, field_name, None)
             if value is not None:
-                setattr(enriched, field_name, value)
-    return enriched
+                setattr(annotated, field_name, value)
+    return annotated
 
 
 def enrich_variants_batch(
@@ -397,8 +397,8 @@ def enrich_variants_batch(
             f'Enriching variant {i}/{len(harmonized_variants)}: {hv.gnomad_style_coordinates or hv.rsid}'
         )
         try:
-            enriched = enrich_variant(hv)
-            results.append(enriched)
+            annotated = enrich_variant(hv)
+            results.append(annotated)
         except Exception as e:
             logger.exception(f'Failed to enrich variant: {e}')
 

@@ -737,7 +737,7 @@ def _variant_to_resp(row: VariantDB) -> VariantResp:
         main_focus=row.main_focus,
         main_focus_evidence=HumanEvidenceBlock.model_validate(row.main_focus_evidence),
         harmonized_variant=harmonized,
-        enriched_variant=enriched,
+        annotated_variant=enriched,
     )
 
 

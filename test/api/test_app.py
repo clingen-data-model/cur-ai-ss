@@ -693,23 +693,23 @@ def test_get_variants_harmonized_and_enriched(
     )
 
     # Check enriched data
-    assert v['enriched_variant'] is not None
-    assert v['enriched_variant']['pathogenicity'] == 'Pathogenic'
-    assert v['enriched_variant']['submissions'] == 15
-    assert v['enriched_variant']['stars'] == 3
-    assert v['enriched_variant']['exon'] == '1/24'
-    assert v['enriched_variant']['revel'] == 0.89
-    assert v['enriched_variant']['alphamissense_class'] == 'likely_pathogenic'
-    assert v['enriched_variant']['alphamissense_score'] == 0.75
-    assert v['enriched_variant']['spliceai'] == {
+    assert v['annotated_variant'] is not None
+    assert v['annotated_variant']['pathogenicity'] == 'Pathogenic'
+    assert v['annotated_variant']['submissions'] == 15
+    assert v['annotated_variant']['stars'] == 3
+    assert v['annotated_variant']['exon'] == '1/24'
+    assert v['annotated_variant']['revel'] == 0.89
+    assert v['annotated_variant']['alphamissense_class'] == 'likely_pathogenic'
+    assert v['annotated_variant']['alphamissense_score'] == 0.75
+    assert v['annotated_variant']['spliceai'] == {
         'DS_AG': 0.1,
         'DS_AL': 0.05,
         'DS_DG': 0.2,
         'DS_DL': 0.15,
     }
-    assert v['enriched_variant']['gnomad_top_level_af'] == 0.0001
-    assert v['enriched_variant']['gnomad_popmax_af'] == 0.0003
-    assert v['enriched_variant']['gnomad_popmax_population'] == 'eas'
+    assert v['annotated_variant']['gnomad_top_level_af'] == 0.0001
+    assert v['annotated_variant']['gnomad_popmax_af'] == 0.0003
+    assert v['annotated_variant']['gnomad_popmax_population'] == 'eas'
 
 
 def _ev(value: object = None, quote: str | None = 'test') -> dict:
@@ -929,7 +929,7 @@ def test_update_variant_edit_harmonized_clears_enrichment(
         json={'harmonized_variant': {'hgvs_g': 'g.41196312_41196313del'}},
     )
     assert response.status_code == 200
-    assert response.json()['enriched_variant'] is None
+    assert response.json()['annotated_variant'] is None
     # Row is actually gone, not just hidden from the response.
     remaining = (
         db_session.query(AnnotatedVariantDB)
@@ -951,7 +951,7 @@ def test_update_variant_edit_harmonized_hgvs_p_also_clears_enrichment(
         json={'harmonized_variant': {'hgvs_p': 'p.Glu23Ter'}},
     )
     assert response.status_code == 200
-    assert response.json()['enriched_variant'] is None
+    assert response.json()['annotated_variant'] is None
 
 
 def test_update_variant_edit_harmonized_preserves_reasoning(
@@ -984,8 +984,8 @@ def test_update_variant_edit_extracted_only_preserves_derived(
     )
     assert response.status_code == 200
     data = response.json()
-    assert data['enriched_variant'] is not None
-    assert data['enriched_variant']['pathogenicity'] == 'Pathogenic'
+    assert data['annotated_variant'] is not None
+    assert data['annotated_variant']['pathogenicity'] == 'Pathogenic'
     assert data['harmonized_variant']['reasoning'] == 'Harmonized via VariantValidator'
 
 
@@ -999,7 +999,7 @@ def test_update_variant_edit_only_note_preserves_derived(
     )
     assert response.status_code == 200
     data = response.json()
-    assert data['enriched_variant'] is not None
+    assert data['annotated_variant'] is not None
     assert data['harmonized_variant']['reasoning'] == 'Harmonized via VariantValidator'
 
 
