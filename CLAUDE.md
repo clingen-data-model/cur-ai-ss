@@ -26,6 +26,13 @@ uv run pytest test/path/to/test_file.py  # Run a specific test
 ./bin/worker    # Background job processor
 ```
 
+**Frontend setup (first time only):**
+```bash
+cd frontend
+pnpm install
+pnpm dlx skills add shadcn/ui   # Install shadcn/ui AI skill (gitignored, run once per machine)
+```
+
 **Database migrations:**
 ```bash
 alembic current             # Check current migration version
