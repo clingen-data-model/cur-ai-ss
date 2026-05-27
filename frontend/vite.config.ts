@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import https from 'https'
 
 /* Vite configuration for the React frontend
  * - Dev server runs on port 5173 with HMR (hot module reload)
@@ -8,15 +9,20 @@ import react from '@vitejs/plugin-react'
  * - Build minifies with esbuild and targets ES2020
  */
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@': '/src',
+    },
+  },
   plugins: [react()],
   server: {
-    port: 5173,
+    port: 8501,
     open: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'https://gene-curation-ai.app',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),
+        secure: false,
       },
     },
   },
