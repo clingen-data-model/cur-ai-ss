@@ -15,13 +15,13 @@ export interface GeneRow {
 export function useGeneTable() {
   const papersQuery = useQuery({
     queryKey: ['papers'],
-    queryFn: () => listPapersPapersGet(),
+    queryFn: () => listPapersPapersGet({}),
     staleTime: STALE_TIME,
   })
 
   const genesQuery = useQuery({
     queryKey: ['genes'],
-    queryFn: () => listGenesGenesGet(),
+    queryFn: () => listGenesGenesGet({ query: { limit: 1000 } }),
     staleTime: STALE_TIME,
   })
 

@@ -18,28 +18,28 @@ export function usePaperGraph(paperId: string | undefined) {
   // Base queries: families, patients, variants, occurrences
   const familiesQuery = useQuery({
     queryKey: ['families', papIdNum],
-    queryFn: () => getFamiliesPapersPaperIdFamiliesGet({ paperId: papIdNum! }),
+    queryFn: () => getFamiliesPapersPaperIdFamiliesGet({ path: { paper_id: papIdNum! } }),
     enabled: !!papIdNum,
     staleTime: STALE_TIME,
   })
 
   const patientsQuery = useQuery({
     queryKey: ['patients', papIdNum],
-    queryFn: () => getPatientsPapersPaperIdPatientsGet({ paperId: papIdNum! }),
+    queryFn: () => getPatientsPapersPaperIdPatientsGet({ path: { paper_id: papIdNum! } }),
     enabled: !!papIdNum,
     staleTime: STALE_TIME,
   })
 
   const variantsQuery = useQuery({
     queryKey: ['variants', papIdNum],
-    queryFn: () => getVariantsPapersPaperIdVariantsGet({ paperId: papIdNum! }),
+    queryFn: () => getVariantsPapersPaperIdVariantsGet({ path: { paper_id: papIdNum! } }),
     enabled: !!papIdNum,
     staleTime: STALE_TIME,
   })
 
   const occurrencesQuery = useQuery({
     queryKey: ['occurrences', papIdNum],
-    queryFn: () => getOccurrencesPapersPaperIdOccurrencesGet({ paperId: papIdNum! }),
+    queryFn: () => getOccurrencesPapersPaperIdOccurrencesGet({ path: { paper_id: papIdNum! } }),
     enabled: !!papIdNum,
     staleTime: STALE_TIME,
   })
@@ -50,8 +50,7 @@ export function usePaperGraph(paperId: string | undefined) {
       queryKey: ['phenotypes', papIdNum, patient.id],
       queryFn: () =>
         getPhenotypesPapersPaperIdPatientsPatientIdPhenotypesGet({
-          paperId: papIdNum!,
-          patientId: patient.id,
+          path: { paper_id: papIdNum!, patient_id: patient.id },
         }),
       enabled: !!papIdNum && patientsQuery.isSuccess,
       staleTime: STALE_TIME,

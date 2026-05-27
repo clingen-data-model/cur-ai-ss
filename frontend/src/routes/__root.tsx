@@ -1,6 +1,7 @@
 /* Root layout component
  * This wraps all routes with common header/nav and outlet for child routes
  */
+import '@/lib/api'
 import { Outlet } from '@tanstack/react-router'
 import { Toaster } from '@/components/ui/sonner'
 
@@ -31,7 +32,7 @@ export function RootLayout() {
         </div>
       </footer>
 
-      <Toaster />
+      <Toaster position="top-right" />
     </div>
   )
 }

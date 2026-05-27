@@ -4,6 +4,7 @@ import { GeneTable } from '@/components/GeneTable'
 import { Spinner } from '@/components/ui/spinner'
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
 import { Button } from '@/components/ui/button'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { UploadPaperDialog } from '@/components/UploadPaperDialog'
 import { FileX } from 'lucide-react'
 
@@ -34,19 +35,19 @@ export function HomePage() {
       <div className="flex items-center justify-center min-h-[60vh]">
         <Empty>
           <EmptyHeader>
-            <EmptyMedia variant="icon">
+            <Alert className="w-fit border-red-200 bg-red-50 text-red-900 text-center justify-center flex flex-col items-center">
               <FileX className="size-4" />
-            </EmptyMedia>
-            <EmptyTitle>No papers uploaded</EmptyTitle>
+              <AlertTitle>No Papers Uploaded</AlertTitle>
+            </Alert>
             <EmptyDescription>
               Start by uploading a PDF of a research paper to begin extracting structured curation fields.
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent className="flex-row justify-center">
-            <Button onClick={() => setDialogOpen(true)}>Upload Paper</Button>
+            <Button onClick={() => setDialogOpen(true)}>Create a Curation</Button>
           </EmptyContent>
         </Empty>
-        <UploadPaperDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+        <UploadPaperDialog open={dialogOpen} setDialogOpen={setDialogOpen} />
       </div>
     )
   }
