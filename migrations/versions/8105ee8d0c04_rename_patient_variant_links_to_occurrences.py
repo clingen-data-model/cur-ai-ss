@@ -20,6 +20,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    op.rename_table('patient_variant_links', 'patient_variant_occurrences')
     with op.batch_alter_table('patient_variant_occurrences', schema=None) as batch_op:
         # Drop old indexes
         batch_op.drop_index('ix_patient_variant_links_patient_id')
@@ -65,13 +66,12 @@ def downgrade() -> None:
         batch_op.drop_index('ix_patient_variant_occurrences_variant_id')
         batch_op.drop_index('ix_patient_variant_occurrences_patient_id')
         batch_op.drop_constraint(
-            'fk_patient_variant_occurrences_paired_variant_link_id',
+            'fk_patient_variant_occurrences_paired',
             type_='foreignkey',
         )
-        batch_op.create_constraint(
+        batch_op.create_unique_constraint(
             batch_op.f('uq_patient_variant_links_patient_variant'),
             ['patient_id', 'variant_id'],
-            type_='unique',
         )
         batch_op.create_index(
             batch_op.f('ix_patient_variant_links_paired_variant_link_id'),
@@ -89,8 +89,8 @@ def downgrade() -> None:
             unique=False,
         )
         batch_op.create_foreign_key(
-            batch_op.f('fk_patient_variant_links_paired_variant_link_id'),
-            'patient_variant_links',
+            batch_op.f('fk_patient_variant_links_paired'),
+            'patient_variant_occurrences',
             ['paired_variant_link_id'],
             ['id'],
             ondelete='SET NULL',
