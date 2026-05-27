@@ -1,10 +1,31 @@
+import { useEffect, useRef } from 'react'
 import { useParams } from '@tanstack/react-router'
+import CytoscapeComponent from 'react-cytoscapejs'
+import type { Core } from 'cytoscape'
+import type { ElementDefinition } from 'cytoscape'
 import { usePaperGraph } from '@/hooks/usePaperGraph'
-import { PaperGraph } from '@/components/PaperGraph'
+import { cyStylesheet } from '@/lib/graphElements'
+
+// Compound Spring Embedder - Cytoscape's built-in force-directed layout algorithm
+const LAYOUT_ALGORITHM = 'cose'
 
 export function PaperGraphPage() {
   const { paperId } = useParams({ strict: false })
   const { elements, isLoading, isError, error } = usePaperGraph(paperId)
+  const cyRef = useRef<Core | null>(null)
+
+  useEffect(() => {
+    if (cyRef.current && elements.length > 0) {
+      cyRef.current.elements().layout({ name: LAYOUT_ALGORITHM }).run()
+    }
+  }, [elements])
+
+  const handleCytoscape = (cy: Core) => {
+    cyRef.current = cy
+    if (elements.length > 0) {
+      cy.elements().layout({ name: LAYOUT_ALGORITHM }).run()
+    }
+  }
 
   if (isLoading) {
     return (
@@ -30,5 +51,14 @@ export function PaperGraphPage() {
     )
   }
 
-  return <PaperGraph elements={elements} />
+  return (
+    <div className="w-full" style={{ height: '80vh' }}>
+      <CytoscapeComponent
+        elements={elements}
+        style={{ width: '100%', height: '100%' }}
+        stylesheet={cyStylesheet as any}
+        cy={handleCytoscape}
+      />
+    </div>
+  )
 }
