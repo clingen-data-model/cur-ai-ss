@@ -995,6 +995,8 @@ def _patient_variant_occurrence_to_resp(
         disease_name_evidence=EvidenceBlock.model_validate(row.disease_name_evidence)
         if row.disease_name_evidence
         else None,
+        mondo_id=row.mondo_id,
+        mondo_term=row.mondo_term,
         paired_variant_link_id=row.paired_variant_link_id,
         updated_at=row.updated_at,
     )

@@ -135,6 +135,7 @@ from lib.models.paper import FileFormat
 from lib.models.phenotype import HPOTerm
 from lib.models.variant import HarmonizedVariant, Variant
 from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
+from lib.reference_data.mondo import MondoTerm, find_mondo_term_for_disease
 from lib.tasks.models import TaskType
 
 setup_logging()
@@ -1444,6 +1445,67 @@ async def handle_hpo_linking(task_id: int) -> None:
         session.add(hpo_to_db(phenotype_id, result.final_output))
 
 
+async def handle_mondo_linking(task_id: int) -> None:
+    """Link paper and occurrence disease names to MONDO terms."""
+    paper_id: int
+    paper_disease_name: str | None = None
+    occurrence_disease_names: list[tuple[int, str | None]] = []
+
+    with session_scope() as session:
+        task = session.get(TaskDB, task_id)
+        if not task:
+            return
+
+        paper_id = task.paper_id
+        paper = session.get(PaperDB, paper_id)
+        if not paper:
+            return
+
+        paper_disease_name = paper.disease_name
+        occurrence_disease_names = [
+            (row.id, row.disease_name)
+            for row in session.query(PatientVariantOccurrenceDB)
+            .filter(PatientVariantOccurrenceDB.paper_id == paper_id)
+            .order_by(PatientVariantOccurrenceDB.id)
+            .all()
+        ]
+
+    mondo_by_disease_name: dict[str, MondoTerm | None] = {}
+    for disease_name in [
+        paper_disease_name,
+        *(disease_name for _, disease_name in occurrence_disease_names),
+    ]:
+        if disease_name is None or disease_name in mondo_by_disease_name:
+            continue
+        mondo_by_disease_name[disease_name] = find_mondo_term_for_disease(
+            disease_name
+        )
+
+    def _mondo_id_and_term(disease_name: str | None) -> tuple[str | None, str | None]:
+        if disease_name is None:
+            return None, None
+        mondo = mondo_by_disease_name.get(disease_name)
+        if mondo is None:
+            return None, None
+        return mondo.mondo_id, mondo.term
+
+    with session_scope() as session:
+        task = session.get(TaskDB, task_id)
+        if not task:
+            return
+
+        paper = session.get(PaperDB, paper_id)
+        if paper and paper.disease_name == paper_disease_name:
+            paper.mondo_id, paper.mondo_term = _mondo_id_and_term(paper_disease_name)
+
+        for occurrence_id, disease_name in occurrence_disease_names:
+            occurrence = session.get(PatientVariantOccurrenceDB, occurrence_id)
+            if occurrence and occurrence.disease_name == disease_name:
+                occurrence.mondo_id, occurrence.mondo_term = _mondo_id_and_term(
+                    disease_name
+                )
+
+
 TASK_HANDLERS: dict[TaskType, Callable[[int], Awaitable[None]]] = {
     TaskType.PDF_PARSING: handle_pdf_parsing,
     TaskType.PAPER_CLASSIFIER: handle_paper_section_classifier,
@@ -1459,4 +1521,5 @@ TASK_HANDLERS: dict[TaskType, Callable[[int], Awaitable[None]]] = {
     TaskType.COMPOUND_HET_EVALUATION: handle_compound_het_evaluation,
     TaskType.PHENOTYPE_EXTRACTION: handle_phenotype_extraction,
     TaskType.HPO_LINKING: handle_hpo_linking,
+    TaskType.MONDO_LINKING: handle_mondo_linking,
 }

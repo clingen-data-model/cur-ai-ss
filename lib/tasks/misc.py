@@ -252,6 +252,12 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
             )
 
         case TaskType.PATIENT_VARIANT_OCCURRENCES:
+            enqueue_task(
+                session,
+                paper_id=task.paper_id,
+                task_type=TaskType.MONDO_LINKING,
+            )
+
             # Expand to per-family SEGREGATION_EVIDENCE_EXTRACTION tasks
             families = (
                 session.query(FamilyDB).filter(FamilyDB.paper_id == task.paper_id).all()
@@ -311,12 +317,19 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     phenotype_id=phenotype.id,
                 )
 
+        case TaskType.PAPER_METADATA:
+            enqueue_task(
+                session,
+                paper_id=task.paper_id,
+                task_type=TaskType.MONDO_LINKING,
+            )
+
         case (
-            TaskType.PAPER_METADATA
-            | TaskType.VARIANT_ANNOTATION
+            TaskType.VARIANT_ANNOTATION
             | TaskType.SEGREGATION_ANALYSIS_COMPUTED
             | TaskType.COMPOUND_HET_EVALUATION
             | TaskType.HPO_LINKING
+            | TaskType.MONDO_LINKING
             | TaskType.GENERAL_PAPER_QUESTION
         ):
             # These tasks have no successors

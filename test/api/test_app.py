@@ -1,3 +1,4 @@
+import asyncio
 import io
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
@@ -16,6 +17,7 @@ from lib.models import (
     HarmonizedVariantDB,
     PaperDB,
     PatientDB,
+    PatientVariantOccurrenceDB,
     PhenotypeDB,
     TaskDB,
     VariantDB,
@@ -1137,6 +1139,127 @@ def test_enqueue_clears_conversation_id_without_context(
     assert tasks[0]['conversation_id'] is None
     assert tasks[0]['additional_context'] is None
     assert tasks[0]['status'] == 'Pending'
+
+
+def test_mondo_linking_handler_updates_paper_and_occurrence(
+    monkeypatch, db_session, seeded_paper, seeded_variant, seeded_agent_run
+):
+    from lib.reference_data.mondo import MondoTerm
+    from lib.tasks import handlers
+
+    family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
+    patient = PatientDB(
+        paper_id=seeded_paper.id,
+        family_id=family.id,
+        agent_run_id=seeded_agent_run.id,
+        identifier='P1',
+        **_patient_required_fields('P1'),
+    )
+    db_session.add(patient)
+    db_session.flush()
+
+    seeded_paper.disease_name = 'limb-girdle muscular dystrophy type 2Q'
+    occurrence = PatientVariantOccurrenceDB(
+        paper_id=seeded_paper.id,
+        patient_id=patient.id,
+        variant_id=seeded_variant.id,
+        zygosity='Heterozygous',
+        inheritance='Dominant',
+        de_novo=False,
+        testing_methods=['Sanger Sequencing'],
+        zygosity_evidence=_ev('Heterozygous'),
+        inheritance_evidence=_ev('Dominant'),
+        de_novo_evidence=_ev(False),
+        testing_methods_evidence=[_ev('Sanger Sequencing')],
+        disease_name='epidermolysis bullosa simplex',
+        disease_name_evidence=_ev('epidermolysis bullosa simplex'),
+    )
+    db_session.add(occurrence)
+    db_session.flush()
+
+    task = TaskDB(
+        paper_id=seeded_paper.id,
+        agent_run_id=seeded_agent_run.id,
+        type=TaskType.MONDO_LINKING,
+        status=TaskStatus.PENDING,
+    )
+    db_session.add(task)
+    db_session.commit()
+
+    terms = {
+        'limb-girdle muscular dystrophy type 2Q': MondoTerm(
+            mondo_id='MONDO:0015152',
+            term='limb-girdle muscular dystrophy-dystroglycanopathy type C1',
+        ),
+        'epidermolysis bullosa simplex': MondoTerm(
+            mondo_id='MONDO:0008275',
+            term='epidermolysis bullosa simplex',
+        ),
+    }
+    monkeypatch.setattr(handlers, 'find_mondo_term_for_disease', terms.get)
+
+    asyncio.run(handlers.handle_mondo_linking(task.id))
+
+    db_session.expire_all()
+    paper = db_session.get(PaperDB, seeded_paper.id)
+    occurrence = db_session.get(PatientVariantOccurrenceDB, occurrence.id)
+    assert paper.mondo_id == 'MONDO:0015152'
+    assert paper.mondo_term == 'limb-girdle muscular dystrophy-dystroglycanopathy type C1'
+    assert occurrence.mondo_id == 'MONDO:0008275'
+    assert occurrence.mondo_term == 'epidermolysis bullosa simplex'
+
+
+def test_paper_metadata_successor_enqueues_mondo_linking(
+    db_session, seeded_paper, agent_run
+):
+    from lib.tasks.misc import enqueue_successors
+
+    task = TaskDB(
+        paper_id=seeded_paper.id,
+        agent_run_id=agent_run.id,
+        type=TaskType.PAPER_METADATA,
+        status=TaskStatus.COMPLETED,
+    )
+    db_session.add(task)
+    db_session.flush()
+
+    enqueue_successors(db_session, task)
+
+    mondo_task = (
+        db_session.query(TaskDB)
+        .filter(
+            TaskDB.paper_id == seeded_paper.id,
+            TaskDB.type == TaskType.MONDO_LINKING,
+        )
+        .one()
+    )
+    assert mondo_task.status == TaskStatus.PENDING
+
+
+def test_patient_variant_occurrence_successor_enqueues_mondo_linking(
+    db_session, seeded_paper, agent_run
+):
+    from lib.tasks.misc import enqueue_successors
+
+    task = TaskDB(
+        paper_id=seeded_paper.id,
+        agent_run_id=agent_run.id,
+        type=TaskType.PATIENT_VARIANT_OCCURRENCES,
+        status=TaskStatus.COMPLETED,
+    )
+    db_session.add(task)
+    db_session.flush()
+
+    enqueue_successors(db_session, task)
+
+    task_types = {
+        task.type
+        for task in db_session.query(TaskDB)
+        .filter(TaskDB.paper_id == seeded_paper.id)
+        .all()
+    }
+    assert TaskType.MONDO_LINKING in task_types
+    assert TaskType.SEGREGATION_EVIDENCE_EXTRACTION in task_types
 
 
 def test_update_variant_rejects_harmonized_update_before_harmonization(

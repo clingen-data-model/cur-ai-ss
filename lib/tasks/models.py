@@ -33,6 +33,7 @@ class TaskType(StrEnum):
     COMPOUND_HET_EVALUATION = 'Compound Het Evaluation'  # per-patient
     PHENOTYPE_EXTRACTION = 'Phenotype Extraction'  # per-patient
     HPO_LINKING = 'HPO Linking'  # per-patient
+    MONDO_LINKING = 'MONDO Linking'
 
     @property
     def description(self) -> str:
@@ -53,6 +54,7 @@ class TaskType(StrEnum):
             TaskType.COMPOUND_HET_EVALUATION: 'Evaluates pairs of heterozygous variants to identify compound heterozygous genotypes',
             TaskType.PHENOTYPE_EXTRACTION: 'Extracts phenotype text spans per patient',
             TaskType.HPO_LINKING: 'Maps phenotypes to HPO ontology terms for standardization',
+            TaskType.MONDO_LINKING: 'Maps disease names to MONDO ontology terms for standardization',
         }
         return descriptions[self]
 
@@ -91,18 +93,22 @@ TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
         TaskType.PHENOTYPE_EXTRACTION,
         TaskType.PATIENT_VARIANT_OCCURRENCES,
     ],
-    TaskType.PAPER_METADATA: [],
+    TaskType.PAPER_METADATA: [TaskType.MONDO_LINKING],
     TaskType.VARIANT_EXTRACTION: [
         TaskType.VARIANT_HARMONIZATION,
         TaskType.PATIENT_VARIANT_OCCURRENCES,
     ],
     TaskType.VARIANT_HARMONIZATION: [TaskType.VARIANT_ANNOTATION],
     TaskType.VARIANT_ANNOTATION: [],
-    TaskType.PATIENT_VARIANT_OCCURRENCES: [TaskType.SEGREGATION_EVIDENCE_EXTRACTION],
+    TaskType.PATIENT_VARIANT_OCCURRENCES: [
+        TaskType.MONDO_LINKING,
+        TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
+    ],
     TaskType.SEGREGATION_EVIDENCE_EXTRACTION: [TaskType.SEGREGATION_ANALYSIS_COMPUTED],
     TaskType.SEGREGATION_ANALYSIS_COMPUTED: [],
     TaskType.PHENOTYPE_EXTRACTION: [TaskType.HPO_LINKING],
     TaskType.HPO_LINKING: [],
+    TaskType.MONDO_LINKING: [],
 }
 
 
