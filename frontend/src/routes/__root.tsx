@@ -2,6 +2,7 @@
  * This wraps all routes with common header/nav and outlet for child routes
  */
 import { Outlet } from '@tanstack/react-router'
+import { Toaster } from '@/components/ui/sonner'
 
 export function RootLayout() {
   return (
@@ -29,6 +30,8 @@ export function RootLayout() {
           <p>Gene Curation w/ AI-Assistance</p>
         </div>
       </footer>
+
+      <Toaster />
     </div>
   )
 }

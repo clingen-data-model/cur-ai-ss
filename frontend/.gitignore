@@ -11,6 +11,7 @@ vite.config.js
 vite.config.d.ts
 
 # Development
+.agents
 .env.local
 .env.*.local
 .vscode

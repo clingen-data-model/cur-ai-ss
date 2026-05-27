@@ -1,8 +1,8 @@
 """upsert gene symbols
 
-Revision ID: eb6bb798b30f
-Revises: a67ad1f5c9b7
-Create Date: 2026-03-05 16:04:39.887523
+Revision ID: 8105ee8d0c04
+Revises: 0001_squashed_initial_schema
+Create Date: 2026-05-27 00:40:00.000000
 
 """
 
@@ -15,7 +15,7 @@ from alembic import op
 from lib.core.environment import env
 
 # revision identifiers, used by Alembic.
-revision: str = 'eb6bb798b30f'
+revision: str = '8105ee8d0c04'
 down_revision: Union[str, None] = '0001_squashed_initial_schema'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
