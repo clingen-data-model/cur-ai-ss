@@ -304,6 +304,11 @@ class PaperResp(PaperExtractionOutput):
 
         return str(pdf_thumbnail_path(self.id))
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def pdf_url(self) -> str:
+        return str(pdf_raw_path(self.id))
+
 
 class PaperUpdateRequest(PatchModel):
     title: str | None = None
