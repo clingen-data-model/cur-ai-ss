@@ -86,7 +86,7 @@ function RerunTaskButton({ paper }: { paper: PaperResp }) {
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-40">
                   {RERUNNABLE_TASK_TYPES.map(t => (
                     <SelectItem key={t} value={t}>{t}</SelectItem>
                   ))}
