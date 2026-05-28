@@ -1477,17 +1477,17 @@ async def handle_mondo_linking(task_id: int) -> None:
     ]:
         if disease_name is None or disease_name in mondo_by_disease_name:
             continue
-        mondo_by_disease_name[disease_name] = find_mondo_term_for_disease(
-            disease_name
-        )
+        mondo_by_disease_name[disease_name] = find_mondo_term_for_disease(disease_name)
 
-    def _mondo_id_and_term(disease_name: str | None) -> tuple[str | None, str | None]:
+    def _mondo_values(
+        disease_name: str | None,
+    ) -> tuple[str | None, str | None, dict | None]:
         if disease_name is None:
-            return None, None
+            return None, None, None
         mondo = mondo_by_disease_name.get(disease_name)
         if mondo is None:
-            return None, None
-        return mondo.mondo_id, mondo.term
+            return None, None, None
+        return mondo.mondo_id, mondo.term, mondo.match_context
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -1496,14 +1496,20 @@ async def handle_mondo_linking(task_id: int) -> None:
 
         paper = session.get(PaperDB, paper_id)
         if paper and paper.disease_name == paper_disease_name:
-            paper.mondo_id, paper.mondo_term = _mondo_id_and_term(paper_disease_name)
+            (
+                paper.mondo_id,
+                paper.mondo_term,
+                paper.mondo_match_context,
+            ) = _mondo_values(paper_disease_name)
 
         for occurrence_id, disease_name in occurrence_disease_names:
             occurrence = session.get(PatientVariantOccurrenceDB, occurrence_id)
             if occurrence and occurrence.disease_name == disease_name:
-                occurrence.mondo_id, occurrence.mondo_term = _mondo_id_and_term(
-                    disease_name
-                )
+                (
+                    occurrence.mondo_id,
+                    occurrence.mondo_term,
+                    occurrence.mondo_match_context,
+                ) = _mondo_values(disease_name)
 
 
 TASK_HANDLERS: dict[TaskType, Callable[[int], Awaitable[None]]] = {

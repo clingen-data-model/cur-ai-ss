@@ -997,6 +997,7 @@ def _patient_variant_occurrence_to_resp(
         else None,
         mondo_id=row.mondo_id,
         mondo_term=row.mondo_term,
+        mondo_match_context=row.mondo_match_context,
         paired_variant_link_id=row.paired_variant_link_id,
         updated_at=row.updated_at,
     )

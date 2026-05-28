@@ -1190,10 +1190,12 @@ def test_mondo_linking_handler_updates_paper_and_occurrence(
         'limb-girdle muscular dystrophy type 2Q': MondoTerm(
             mondo_id='MONDO:0015152',
             term='limb-girdle muscular dystrophy-dystroglycanopathy type C1',
+            match_context={'match_type': 'related_synonym'},
         ),
         'epidermolysis bullosa simplex': MondoTerm(
             mondo_id='MONDO:0008275',
             term='epidermolysis bullosa simplex',
+            match_context={'match_type': 'primary_label'},
         ),
     }
     monkeypatch.setattr(handlers, 'find_mondo_term_for_disease', terms.get)
@@ -1204,9 +1206,13 @@ def test_mondo_linking_handler_updates_paper_and_occurrence(
     paper = db_session.get(PaperDB, seeded_paper.id)
     occurrence = db_session.get(PatientVariantOccurrenceDB, occurrence.id)
     assert paper.mondo_id == 'MONDO:0015152'
-    assert paper.mondo_term == 'limb-girdle muscular dystrophy-dystroglycanopathy type C1'
+    assert (
+        paper.mondo_term == 'limb-girdle muscular dystrophy-dystroglycanopathy type C1'
+    )
+    assert paper.mondo_match_context == {'match_type': 'related_synonym'}
     assert occurrence.mondo_id == 'MONDO:0008275'
     assert occurrence.mondo_term == 'epidermolysis bullosa simplex'
+    assert occurrence.mondo_match_context == {'match_type': 'primary_label'}
 
 
 def test_paper_metadata_successor_enqueues_mondo_linking(

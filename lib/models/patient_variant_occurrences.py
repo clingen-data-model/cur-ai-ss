@@ -141,6 +141,7 @@ class PatientVariantOccurrenceDB(Base):
     disease_name_evidence: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     mondo_id: Mapped[str | None] = mapped_column(String, nullable=True)
     mondo_term: Mapped[str | None] = mapped_column(String, nullable=True)
+    mondo_match_context: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     paired_variant_link_id: Mapped[int | None] = mapped_column(
         Integer,
@@ -213,6 +214,7 @@ class PatientVariantOccurrenceResp(BaseModel):
     disease_name_evidence: EvidenceBlock[str] | None = None
     mondo_id: str | None = None
     mondo_term: str | None = None
+    mondo_match_context: dict | None = None
     paired_variant_link_id: int | None = None
     paired_variant_link_reasoning: ReasoningBlock[CompoundHetConfidence] | None = None
     updated_at: datetime
