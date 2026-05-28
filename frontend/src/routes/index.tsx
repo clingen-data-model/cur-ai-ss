@@ -61,9 +61,7 @@ export function HomePage() {
           <p className="text-muted-foreground">All genes with uploaded papers.</p>
         </div>
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button onClick={() => setDialogOpen(true)}><FolderPlus />Upload paper</Button>
-          </TooltipTrigger>
+          <TooltipTrigger render={<Button onClick={() => setDialogOpen(true)}><FolderPlus />Upload paper</Button>} />
           <TooltipContent>Upload a paper and select its gene from the list</TooltipContent>
         </Tooltip>
       </div>

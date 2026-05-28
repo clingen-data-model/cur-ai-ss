@@ -303,14 +303,12 @@ export function GeneTable({ rows, papersByGene }: GeneTableProps) {
       header: () => null,
       cell: ({ row }) => (
         <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              className="flex items-center justify-center size-6 rounded border border-slate-300 hover:bg-slate-100 cursor-pointer"
-              onClick={() => setUploadGene(row.original.gene_symbol)}
-            >
-              <FolderPlus className="size-3.5" />
-            </button>
+          <TooltipTrigger
+            type="button"
+            className="flex items-center justify-center size-6 rounded border border-slate-300 hover:bg-slate-100 cursor-pointer"
+            onClick={() => setUploadGene(row.original.gene_symbol)}
+          >
+            <FolderPlus className="size-3.5" />
           </TooltipTrigger>
           <TooltipContent>Add paper for {row.original.gene_symbol}</TooltipContent>
         </Tooltip>
