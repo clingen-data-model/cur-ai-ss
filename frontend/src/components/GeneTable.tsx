@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { ChevronDown, ChevronRight, FolderPlus, RefreshCw, Trash2 } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
 import { deletePaperPapersPaperIdDelete, createTaskPapersPaperIdTasksPost } from '@/api/generated'
 import { DataTable } from '@/components/ui/data-table'
@@ -190,16 +191,38 @@ function PaperCard({ paper }: { paper: PaperResp }) {
         </div>
       </div>
       <CardContent className="grid grid-cols-2 gap-x-3 gap-y-2 pt-3">
-        {([
-          ['Title', paper.title ?? '—'],
-          ['First Author', paper.first_author ?? '—'],
-          ['Filename', paper.filename],
-        ] as [string, React.ReactNode][]).map(([label, value]) => (
-          <div key={label} className="col-span-2 space-y-0.5 min-w-0">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
-            <div className="text-xs truncate">{value}</div>
+        <div className="col-span-2 space-y-0.5 min-w-0">
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Title</div>
+          <div className="text-xs truncate">
+            {paper.title ? (
+              <Link
+                to="/papers/$paperId/patients"
+                params={{ paperId: String(paper.id) }}
+                className="text-blue-600 hover:underline"
+              >
+                {paper.title}
+              </Link>
+            ) : '—'}
           </div>
-        ))}
+        </div>
+        <div className="col-span-2 space-y-0.5 min-w-0">
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">First Author</div>
+          <div className="text-xs truncate">
+            {paper.first_author ? (
+              <Link
+                to="/papers/$paperId/patients"
+                params={{ paperId: String(paper.id) }}
+                className="text-blue-600 hover:underline"
+              >
+                {paper.first_author}
+              </Link>
+            ) : '—'}
+          </div>
+        </div>
+        <div className="col-span-2 space-y-0.5 min-w-0">
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Filename</div>
+          <div className="text-xs truncate">{paper.filename}</div>
+        </div>
         {([
           ['Patients', paper.patient_count ?? '—'],
           ['Variants', paper.variant_count ?? '—'],
@@ -246,9 +269,9 @@ function PaperCarousel({ papers }: { papers: PaperResp[] }) {
         </div>
       ) : (
         <Carousel key={filter}>
-          <CarouselContent className={filtered.length === 1 ? '-ml-1 justify-center' : '-ml-1'}>
+          <CarouselContent className={filtered.length === 2 ? '-ml-1 justify-center' : '-ml-1'}>
             {filtered.map((p) => (
-              <CarouselItem key={p.id} className={`pl-1 ${filtered.length === 2 ? 'basis-1/2' : 'basis-1/3'}`}>
+              <CarouselItem key={p.id} className="pl-1 basis-1/3">
                 <div className="p-1">
                   <PaperCard paper={p} />
                 </div>

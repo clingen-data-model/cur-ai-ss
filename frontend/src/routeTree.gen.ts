@@ -11,6 +11,7 @@
 import { RootRoute, Route } from '@tanstack/react-router'
 import { RootLayout } from './routes/__root'
 import { HomePage } from './routes/index'
+import { PatientsPage } from './routes/papers.$paperId.patients'
 
 const rootRoute = new RootRoute({
   component: RootLayout,
@@ -22,4 +23,12 @@ const indexRoute = new Route({
   component: HomePage,
 })
 
-export const routeTree = rootRoute.addChildren([indexRoute]);
+const papersPatientRoute = new Route({
+  getParentRoute: () => rootRoute,
+  path: '/papers/$paperId/patients',
+  component: PatientsPage,
+})
+
+export const routeTree = rootRoute.addChildren([indexRoute, papersPatientRoute])
+
+export { papersPatientRoute }

@@ -31,10 +31,13 @@ export function useGeneTable() {
   const { rows, papersByGene } = useMemo(() => {
     if (!papersQuery.data || !genesQuery.data) return { rows: [], papersByGene: new Map<string, PaperResp[]>() }
 
+    const papers = Array.isArray(papersQuery.data) ? papersQuery.data : []
+    const genes = Array.isArray(genesQuery.data) ? genesQuery.data : []
+
     const papersByGene = new Map<string, PaperResp[]>()
     const geneStats = new Map<string, { paper_count: number; patient_count: number; variant_count: number }>()
 
-    for (const paper of papersQuery.data) {
+    for (const paper of papers) {
       const key = paper.gene_symbol
       if (!geneStats.has(key)) {
         geneStats.set(key, { paper_count: 0, patient_count: 0, variant_count: 0 })
@@ -47,7 +50,7 @@ export function useGeneTable() {
       papersByGene.get(key)!.push(paper)
     }
 
-    const rows: GeneRow[] = genesQuery.data.map((gene) => {
+    const rows: GeneRow[] = genes.map((gene) => {
       const stats = geneStats.get(gene.symbol) || { paper_count: 0, patient_count: 0, variant_count: 0 }
       return {
         gene_id: gene.id,

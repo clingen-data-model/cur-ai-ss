@@ -2,5 +2,6 @@
 # Controls which packages are allowed to run build scripts during installation
 # This is a security measure to prevent arbitrary code execution during deps installation
 allowBuilds:
+  canvas: set this to true or false
   esbuild: true # Vite depends on esbuild; needs to build native binaries for your platform
   msw: false # Mock Service Worker for testing; not used in this project
