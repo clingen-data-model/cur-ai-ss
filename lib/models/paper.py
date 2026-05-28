@@ -297,6 +297,13 @@ class PaperResp(PaperExtractionOutput):
     title: str | None = None  # type: ignore
     first_author: str | None = None  # type: ignore
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def thumbnail_url(self) -> str:
+        from lib.misc.pdf.paths import pdf_thumbnail_path
+
+        return str(pdf_thumbnail_path(self.id))
+
 
 class PaperUpdateRequest(PatchModel):
     title: str | None = None
