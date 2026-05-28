@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 /* Vite configuration for the React frontend
- * - Dev server runs on port 5173 with HMR (hot module reload)
+ * - Dev server runs on port 8501 with HMR (hot module reload)
  * - API proxy redirects /api/* requests to FastAPI backend
  *   Set VITE_API_TARGET env var to toggle between:
  *   - http://localhost:8000 (local dev, default)
@@ -20,13 +20,6 @@ export default defineConfig({
   server: {
     port: 8501,
     open: true,
-    // proxy: {
-    //   '/api': {
-    //     target: process.env.VITE_API_URL || 'http://localhost:8000',
-    //     changeOrigin: true,
-    //     secure: false,
-    //   },
-    // },
   },
   build: {
     target: 'ES2020',

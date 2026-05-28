@@ -24,7 +24,7 @@ export function useGeneTable() {
 
   const genesQuery = useQuery({
     queryKey: ['genes'],
-    queryFn: () => listGenesGenesGet({}),
+    queryFn: () => listGenesGenesGet({ query: { limit: 50000 } }),
     staleTime: STALE_TIME,
   })
 
@@ -59,8 +59,9 @@ export function useGeneTable() {
     })
 
     rows.sort((a, b) => b.paper_count - a.paper_count)
-
-    return { rows: rows.filter(r => r.paper_count > 0), papersByGene }
+    const filtered = rows.filter(r => r.paper_count > 0)
+    console.log('total rows:', rows.length, 'filtered:', filtered.length)
+    return { rows: filtered, papersByGene }
   }, [papersQuery.data, genesQuery.data])
 
   return {

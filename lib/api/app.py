@@ -32,7 +32,6 @@ from sqlalchemy.orm.attributes import flag_modified
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
-from lib.agents.run_tracking import ensure_agent_run
 from lib.agents.chat_routing_agent import (
     _GLOBAL_AGENTS,
     CHAT_ROUTING_INSTRUCTIONS,
@@ -45,6 +44,7 @@ from lib.agents.general_paper_qa_agent import (
 from lib.agents.general_paper_qa_agent import (
     agent as general_paper_qa_agent,
 )
+from lib.agents.run_tracking import ensure_agent_run
 from lib.api.db import get_session, session_scope
 from lib.api.middleware import make_log_request_middleware
 from lib.core.environment import env
