@@ -144,13 +144,11 @@ function DeletePaperButton({ paper }: { paper: PaperResp }) {
 
   return (
     <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <button
-          type="button"
-          className="flex items-center justify-center size-7 rounded text-destructive hover:bg-destructive/10 cursor-pointer transition-colors"
-        >
-          <Trash2 className="size-4" />
-        </button>
+      <AlertDialogTrigger
+        type="button"
+        className="flex items-center justify-center size-7 rounded text-destructive hover:bg-destructive/10 cursor-pointer transition-colors"
+      >
+        <Trash2 className="size-4" />
       </AlertDialogTrigger>
       <AlertDialogContent size="sm">
         <AlertDialogHeader>
