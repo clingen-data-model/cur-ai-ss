@@ -100,11 +100,12 @@ export function UploadPaperDialog({ open, setDialogOpen, initialGene }: UploadPa
     if (open) setSelectedGene(initialGene ?? '')
   }, [open, initialGene])
 
-  const { data: genes = [] } = useQuery({
+  const { data: genesData } = useQuery({
     queryKey: ['genes', 'search', genePrefix],
     queryFn: () => searchGenesGenesSearchGet({ query: { prefix: genePrefix, limit: 1000 } }),
     enabled: !initialGene,
   })
+  const genes = Array.isArray(genesData) ? genesData : []
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
@@ -167,11 +168,11 @@ export function UploadPaperDialog({ open, setDialogOpen, initialGene }: UploadPa
                 {initialGene}
               </div>
             ) : (
-              <Combobox value={selectedGene} onValueChange={setSelectedGene} onInputValueChange={setGenePrefix}>
+              <Combobox value={selectedGene} onValueChange={(val: string | null) => setSelectedGene(val ?? '')} onInputValueChange={(val: string | null) => setGenePrefix(val ?? '')}>
                 <ComboboxInput placeholder="Select a gene..." className="w-full" showClear />
                 <ComboboxContent>
                   <ComboboxList>
-                    {genes.map((g) => (
+                    {genes.map((g: any) => (
                       <ComboboxItem key={g.symbol} value={g.symbol}>
                         {g.symbol}
                       </ComboboxItem>
