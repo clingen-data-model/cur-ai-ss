@@ -168,7 +168,7 @@ async def add_cache_headers(
 ) -> Response:
     response = await call_next(request)
     # Add 24-hour cache headers for static files (thumbnails, PDFs, etc.)
-    if request.url.path.startswith(f'/{env.CAA_ROOT}'):
+    if request.url.path.startswith(env.CAA_ROOT):
         response.headers['Cache-Control'] = 'public, max-age=86400'  # 24 hours
     return response
 
