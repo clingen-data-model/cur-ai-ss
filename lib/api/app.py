@@ -32,6 +32,7 @@ from sqlalchemy.orm.attributes import flag_modified
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
+from lib.agents.run_tracking import ensure_agent_run
 from lib.agents.chat_routing_agent import (
     _GLOBAL_AGENTS,
     CHAT_ROUTING_INSTRUCTIONS,
@@ -197,12 +198,13 @@ def put_paper(
         )
     main_content = uploaded_file.file.read()
 
-    # Get latest agent run
+    # Ensure agent run exists
     latest_run = session.query(AgentRunDB).order_by(AgentRunDB.id.desc()).first()
     if not latest_run:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail='No agent runs found. Create one with ensure_agent_run().',
+        latest_run = ensure_agent_run(
+            session=session,
+            description='Web UI upload',
+            model=env.OPENAI_API_DEPLOYMENT,
         )
 
     paper_db = PaperDB.from_content(main_content)
@@ -1124,10 +1126,12 @@ def search_genes(
 
 @app.get('/genes', response_model=list[GeneResp])
 def list_genes(
-    limit: int = Query(10),
+    limit: int | None = Query(None),
     session: Session = Depends(get_session),
 ) -> Any:
-    query = session.query(GeneDB).order_by(GeneDB.symbol).limit(limit)
+    query = session.query(GeneDB).order_by(GeneDB.symbol)
+    if limit is not None:
+        query = query.limit(limit)
     return query.all()
 
 

@@ -4,9 +4,11 @@
 import '@/lib/api'
 import { Outlet } from '@tanstack/react-router'
 import { Toaster } from '@/components/ui/sonner'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 export function RootLayout() {
   return (
+    <TooltipProvider>
     <div className="min-h-screen flex flex-col">
       {/* Header */}
       <header className="bg-white border-b border-slate-200">
@@ -34,5 +36,6 @@ export function RootLayout() {
 
       <Toaster position="top-right" />
     </div>
+    </TooltipProvider>
   )
 }

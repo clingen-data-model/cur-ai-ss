@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { File as FileIcon, X } from 'lucide-react'
@@ -19,6 +19,7 @@ import { formatFileSize } from '@/lib/utils'
 interface UploadPaperDialogProps {
   open: boolean
   setDialogOpen: (open: boolean) => void
+  initialGene?: string
 }
 
 const SUPPLEMENT_TYPES = [
@@ -87,16 +88,22 @@ function FileCard({ file, onRemove }: { file: File; onRemove: () => void }) {
   )
 }
 
-export function UploadPaperDialog({ open, setDialogOpen }: UploadPaperDialogProps) {
-  const [selectedGene, setSelectedGene] = useState<string>('')
+export function UploadPaperDialog({ open, setDialogOpen, initialGene }: UploadPaperDialogProps) {
+  const [selectedGene, setSelectedGene] = useState<string>(initialGene ?? '')
   const [genePrefix, setGenePrefix] = useState<string>('')
   const [file, setFile] = useState<File | null>(null)
   const [supplement, setSupplement] = useState<File | null>(null)
   const queryClient = useQueryClient()
 
+  // Sync selectedGene whenever the dialog opens (handles the gene-locked case)
+  useEffect(() => {
+    if (open) setSelectedGene(initialGene ?? '')
+  }, [open, initialGene])
+
   const { data: genes = [] } = useQuery({
     queryKey: ['genes', 'search', genePrefix],
     queryFn: () => searchGenesGenesSearchGet({ query: { prefix: genePrefix, limit: 1000 } }),
+    enabled: !initialGene,
   })
 
   const uploadMutation = useMutation({
@@ -117,7 +124,7 @@ export function UploadPaperDialog({ open, setDialogOpen }: UploadPaperDialogProp
       toast.success('Paper uploaded successfully')
       queryClient.invalidateQueries({ queryKey: ['papers'] })
       setDialogOpen(false)
-      setSelectedGene('')
+      setSelectedGene(initialGene ?? '')
       setGenePrefix('')
       setFile(null)
       setSupplement(null)
@@ -155,19 +162,25 @@ export function UploadPaperDialog({ open, setDialogOpen }: UploadPaperDialogProp
           {/* Gene selector */}
           <div>
             <label className="text-sm font-medium block mb-1.5">Gene Symbol</label>
-            <Combobox value={selectedGene} onValueChange={setSelectedGene} onInputValueChange={setGenePrefix}>
-              <ComboboxInput placeholder="Select a gene..." className="w-full" showClear />
-              <ComboboxContent>
-                <ComboboxList>
-                  {genes.map((g) => (
-                    <ComboboxItem key={g.symbol} value={g.symbol}>
-                      {g.symbol}
-                    </ComboboxItem>
-                  ))}
-                  <ComboboxEmpty>No genes found.</ComboboxEmpty>
-                </ComboboxList>
-              </ComboboxContent>
-            </Combobox>
+            {initialGene ? (
+              <div className="flex h-8 items-center rounded-lg border border-input bg-muted px-2.5 text-sm text-muted-foreground">
+                {initialGene}
+              </div>
+            ) : (
+              <Combobox value={selectedGene} onValueChange={setSelectedGene} onInputValueChange={setGenePrefix}>
+                <ComboboxInput placeholder="Select a gene..." className="w-full" showClear />
+                <ComboboxContent>
+                  <ComboboxList>
+                    {genes.map((g) => (
+                      <ComboboxItem key={g.symbol} value={g.symbol}>
+                        {g.symbol}
+                      </ComboboxItem>
+                    ))}
+                    <ComboboxEmpty>No genes found.</ComboboxEmpty>
+                  </ComboboxList>
+                </ComboboxContent>
+              </Combobox>
+            )}
           </div>
 
           {/* Main PDF — drop zone until selected, then file card */}

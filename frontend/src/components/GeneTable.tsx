@@ -1,50 +1,341 @@
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import type { GeneRow } from '@/hooks/useGeneTable'
+import React, { useMemo, useState } from 'react'
+import type { ColumnDef } from '@tanstack/react-table'
+import { ChevronDown, ChevronRight, FolderPlus, RefreshCw, Trash2 } from 'lucide-react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { deletePaperPapersPaperIdDelete, createTaskPapersPaperIdTasksPost } from '@/api/generated'
+import { DataTable } from '@/components/ui/data-table'
+import { Carousel, CarouselContent, CarouselItem, CarouselPrevious, CarouselNext, CarouselCounter } from '@/components/ui/carousel'
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogMedia, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
+import { UploadPaperDialog } from '@/components/UploadPaperDialog'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
+import type { GeneRow, PaperResp, TaskType } from '@/hooks/useGeneTable'
+import type { TaskStatus } from '@/api/generated/types.gen'
+import type { badgeVariants } from '@/components/ui/badge'
+import type { VariantProps } from 'class-variance-authority'
+
+const API_URL = import.meta.env.VITE_API_URL as string
+
+type BadgeVariant = VariantProps<typeof badgeVariants>['variant']
+
+function deriveAgentStatus(tasks: PaperResp['tasks']): { label: string; variant: BadgeVariant; className?: string } {
+  if (!tasks || tasks.length === 0) return { label: 'Not started', variant: 'secondary' }
+  const statuses = tasks.map(t => t.status) as TaskStatus[]
+  if (statuses.some(s => s === 'Running')) return { label: 'Running', variant: 'default' }
+  if (statuses.some(s => s === 'Failed')) return { label: 'Failed', variant: 'destructive' }
+  if (statuses.every(s => s === 'Completed')) return { label: 'Done', variant: 'outline', className: 'border-green-500 text-green-600' }
+  return { label: 'In progress', variant: 'outline', className: 'border-amber-500 text-amber-600' }
+}
+
+const RERUNNABLE_TASK_TYPES: TaskType[] = [
+  'PDF Parsing', 'Paper Classifier', 'Paper Metadata',
+  'Variant Extraction', 'Pedigree Description', 'Patient Extraction',
+  'Segregation Evidence Extraction', 'Segregation Analysis Computed',
+  'Variant Harmonization', 'Variant Annotation', 'Patient Variant Occurrences',
+  'Phenotype Extraction', 'HPO Linking',
+]
+
+function RerunTaskButton({ paper }: { paper: PaperResp }) {
+  const [open, setOpen] = useState(false)
+  const [taskType, setTaskType] = useState<TaskType>('PDF Parsing')
+  const [skipSuccessors, setSkipSuccessors] = useState(false)
+  const [context, setContext] = useState('')
+  const isRunning = paper.tasks?.some(t => t.status === 'Running' || t.status === 'Queued')
+
+  const mutation = useMutation({
+    mutationFn: () => createTaskPapersPaperIdTasksPost({
+      path: { paper_id: paper.id },
+      body: { type: taskType, skip_successors: skipSuccessors, additional_context: context || null },
+      throwOnError: true,
+    }),
+    onSuccess: () => {
+      toast.success('Task queued')
+      setOpen(false)
+      setContext('')
+      setSkipSuccessors(false)
+    },
+    onError: () => toast.error('Failed to queue task'),
+  })
+
+  return (
+    <>
+      <button
+        type="button"
+        disabled={!!isRunning}
+        onClick={() => setOpen(true)}
+        className="flex items-center justify-center size-7 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        <RefreshCw className="size-4" />
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-base font-semibold">Rerun Agent</h2>
+              <p className="text-sm text-muted-foreground mt-0.5">{paper.title ?? paper.filename}</p>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Task</label>
+              <Select value={taskType} onValueChange={(v) => setTaskType(v as TaskType)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {RERUNNABLE_TASK_TYPES.map(t => (
+                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">
+                Additional context <span className="text-muted-foreground font-normal">(optional)</span>
+              </label>
+              <textarea
+                value={context}
+                onChange={(e) => setContext(e.target.value)}
+                placeholder="Any specific instructions for this task run..."
+                rows={3}
+                className="w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none resize-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              />
+            </div>
+            <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={skipSuccessors}
+                onChange={(e) => setSkipSuccessors(e.target.checked)}
+                className="cursor-pointer"
+              />
+              Skip successor tasks
+            </label>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>
+                {mutation.isPending ? 'Queuing...' : 'Confirm Rerun'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
+function DeletePaperButton({ paper }: { paper: PaperResp }) {
+  const queryClient = useQueryClient()
+  const mutation = useMutation({
+    mutationFn: () => deletePaperPapersPaperIdDelete({ path: { paper_id: paper.id }, throwOnError: true }),
+    onSuccess: () => {
+      toast.success(`"${paper.title ?? paper.filename}" deleted`)
+      queryClient.invalidateQueries({ queryKey: ['papers'] })
+    },
+    onError: () => toast.error('Failed to delete paper'),
+  })
+
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <button
+          type="button"
+          className="flex items-center justify-center size-7 rounded text-destructive hover:bg-destructive/10 cursor-pointer transition-colors"
+        >
+          <Trash2 className="size-4" />
+        </button>
+      </AlertDialogTrigger>
+      <AlertDialogContent size="sm">
+        <AlertDialogHeader>
+          <AlertDialogMedia className="bg-destructive/10 text-destructive dark:bg-destructive/20">
+            <Trash2 />
+          </AlertDialogMedia>
+          <AlertDialogTitle>Delete paper?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This will permanently delete <span className="font-medium text-foreground">{paper.title ?? paper.filename}</span> and all extracted data. This cannot be undone.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel variant="outline">Cancel</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" onClick={() => mutation.mutate()}>Delete</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
+function PaperCard({ paper }: { paper: PaperResp }) {
+  const status = deriveAgentStatus(paper.tasks)
+  const thumbnailSrc = `${API_URL}${paper.thumbnail_url}`
+
+  return (
+    <Card size="sm">
+      <div className="flex justify-end gap-1 px-2 pt-2">
+        <RerunTaskButton paper={paper} />
+        <DeletePaperButton paper={paper} />
+      </div>
+      <div className="flex justify-center px-3">
+        <div className="w-4/5 overflow-hidden rounded-md border border-border shadow-sm">
+          <img
+            src={thumbnailSrc}
+            alt=""
+            className="w-full aspect-[3/4] object-cover object-top bg-slate-100"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+          />
+        </div>
+      </div>
+      <CardContent className="grid grid-cols-2 gap-x-3 gap-y-2 pt-3">
+        {([
+          ['Title', paper.title ?? '—'],
+          ['First Author', paper.first_author ?? '—'],
+          ['Filename', paper.filename],
+        ] as [string, React.ReactNode][]).map(([label, value]) => (
+          <div key={label} className="col-span-2 space-y-0.5 min-w-0">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+            <div className="text-xs truncate">{value}</div>
+          </div>
+        ))}
+        {([
+          ['Patients', paper.patient_count ?? '—'],
+          ['Variants', paper.variant_count ?? '—'],
+          ['Status', <Badge variant={status.variant} className={status.className}>{status.label}</Badge>],
+          ['Modified', formatDate(paper.updated_at)],
+        ] as [string, React.ReactNode][]).map(([label, value]) => (
+          <div key={label} className="space-y-0.5 min-w-0">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+            <div className="text-xs">{value}</div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  )
+}
+
+function PaperCarousel({ papers }: { papers: PaperResp[] }) {
+  const [filter, setFilter] = useState('')
+
+  const filtered = useMemo(() => {
+    const q = filter.toLowerCase()
+    return q
+      ? papers.filter(p =>
+          p.title?.toLowerCase().includes(q) ||
+          p.first_author?.toLowerCase().includes(q) ||
+          p.journal_name?.toLowerCase().includes(q),
+        )
+      : papers
+  }, [papers, filter])
+
+  return (
+    <div className="px-6 py-3 bg-slate-50 border-t space-y-2">
+      {papers.length > 5 && (
+        <Input
+          placeholder="Search papers..."
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          className="max-w-sm"
+        />
+      )}
+      {filtered.length === 0 ? (
+        <div className="flex h-16 items-center justify-center text-sm text-muted-foreground">
+          No results.
+        </div>
+      ) : (
+        <Carousel key={filter}>
+          <CarouselContent className={filtered.length === 1 ? '-ml-1 justify-center' : '-ml-1'}>
+            {filtered.map((p) => (
+              <CarouselItem key={p.id} className={`pl-1 ${filtered.length === 2 ? 'basis-1/2' : 'basis-1/3'}`}>
+                <div className="p-1">
+                  <PaperCard paper={p} />
+                </div>
+              </CarouselItem>
+            ))}
+          </CarouselContent>
+          <div className="flex items-center justify-between mt-2">
+            <CarouselCounter />
+            <div className="flex gap-2">
+              <CarouselPrevious />
+              <CarouselNext />
+            </div>
+          </div>
+        </Carousel>
+      )}
+    </div>
+  )
+}
 
 interface GeneTableProps {
   rows: GeneRow[]
+  papersByGene: Map<string, PaperResp[]>
 }
 
-export function GeneTable({ rows }: GeneTableProps) {
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Gene</TableHead>
-          <TableHead className="text-right">Papers</TableHead>
-          <TableHead className="text-right">Patients</TableHead>
-          <TableHead className="text-right">Variants</TableHead>
-          <TableHead className="text-center">Action</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((row) => {
-          const hasPapers = row.paper_count > 0
-          return (
-            <TableRow
-              key={row.gene_id}
-              className={!hasPapers ? 'bg-slate-50' : ''}
+export function GeneTable({ rows, papersByGene }: GeneTableProps) {
+  const [uploadGene, setUploadGene] = useState<string | null>(null)
+
+  const columns: ColumnDef<GeneRow>[] = [
+    {
+      id: 'expander',
+      size: 40,
+      enableSorting: false,
+      header: () => null,
+      cell: ({ row }) => (
+        <button type="button" onClick={row.getToggleExpandedHandler()} className="cursor-pointer flex items-center">
+          {row.getIsExpanded() ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+        </button>
+      ),
+    },
+    {
+      accessorKey: 'gene_symbol',
+      header: 'Gene',
+      cell: ({ getValue }) => <span className="font-medium">{getValue() as string}</span>,
+    },
+    { accessorKey: 'paper_count', header: 'Papers' },
+    { accessorKey: 'patient_count', header: 'Patients' },
+    { accessorKey: 'variant_count', header: 'Variants' },
+    {
+      id: 'action',
+      size: 60,
+      enableSorting: false,
+      header: () => null,
+      cell: ({ row }) => (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              className="flex items-center justify-center size-6 rounded border border-slate-300 hover:bg-slate-100 cursor-pointer"
+              onClick={() => setUploadGene(row.original.gene_symbol)}
             >
-              <TableCell className={!hasPapers ? 'text-slate-400 italic' : 'font-medium'}>
-                {row.gene_symbol}
-              </TableCell>
-              <TableCell className="text-right">{hasPapers ? row.paper_count : '—'}</TableCell>
-              <TableCell className="text-right">{hasPapers ? row.patient_count : '—'}</TableCell>
-              <TableCell className="text-right">{hasPapers ? row.variant_count : '—'}</TableCell>
-              <TableCell className="text-center">
-                {!hasPapers && (
-                  <button
-                    type="button"
-                    className="text-xs px-2 py-1 rounded border border-slate-300 hover:bg-slate-100"
-                  >
-                    Upload paper
-                  </button>
-                )}
-              </TableCell>
-            </TableRow>
-          )
-        })}
-      </TableBody>
-    </Table>
+              <FolderPlus className="size-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Add paper for {row.original.gene_symbol}</TooltipContent>
+        </Tooltip>
+      ),
+    },
+  ]
+
+  return (
+    <>
+      <DataTable
+        columns={columns}
+        data={rows}
+        filterPlaceholder="Filter genes..."
+        getRowCanExpand={() => true}
+        renderSubComponent={({ row }) => (
+          <PaperCarousel papers={papersByGene.get(row.gene_symbol) ?? []} />
+        )}
+      />
+      <UploadPaperDialog
+        open={uploadGene !== null}
+        setDialogOpen={(open) => { if (!open) setUploadGene(null) }}
+        initialGene={uploadGene ?? undefined}
+      />
+    </>
   )
 }

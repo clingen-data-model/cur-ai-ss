@@ -6,11 +6,12 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { UploadPaperDialog } from '@/components/UploadPaperDialog'
-import { FileX } from 'lucide-react'
+import { FileX, FolderPlus } from 'lucide-react'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 
 export function HomePage() {
   const [dialogOpen, setDialogOpen] = useState(false)
-  const { rows, isLoading, isError, error } = useGeneTable()
+  const { rows, papersByGene, isLoading, isError, error } = useGeneTable()
 
   if (isLoading) {
     return (
@@ -44,7 +45,7 @@ export function HomePage() {
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent className="flex-row justify-center">
-            <Button onClick={() => setDialogOpen(true)}>Create a Curation</Button>
+            <Button onClick={() => setDialogOpen(true)}><FolderPlus />Create a Curation</Button>
           </EmptyContent>
         </Empty>
         <UploadPaperDialog open={dialogOpen} setDialogOpen={setDialogOpen} />
@@ -54,11 +55,20 @@ export function HomePage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-bold">Genes</h1>
-        <p className="text-muted-foreground">All genes with papers loaded. Select a gene without papers to upload new data.</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Genes</h1>
+          <p className="text-muted-foreground">All genes with uploaded papers.</p>
+        </div>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button onClick={() => setDialogOpen(true)}><FolderPlus />Upload paper</Button>
+          </TooltipTrigger>
+          <TooltipContent>Upload a paper and select its gene from the list</TooltipContent>
+        </Tooltip>
       </div>
-      <GeneTable rows={rows} />
+      <GeneTable rows={rows} papersByGene={papersByGene} />
+      <UploadPaperDialog open={dialogOpen} setDialogOpen={setDialogOpen} />
     </div>
   )
 }
