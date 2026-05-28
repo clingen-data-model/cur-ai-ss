@@ -878,14 +878,15 @@ async def handle_variant_harmonization(task_id: int) -> None:
     log_cache_metrics('VARIANT_HARMONIZATION', result)
 
     # Check if rate limited (only if harmonization actually failed)
-    if result.final_output:
+    if result.final_output and result.final_output.value:
+        hv = result.final_output.value
         has_resolved = any(
             [
-                result.final_output.gnomad_style_coordinates,
-                result.final_output.rsid,
-                result.final_output.caid,
-                result.final_output.hgvs_g,
-                result.final_output.hgvs_c,
+                hv.gnomad_style_coordinates,
+                hv.rsid,
+                hv.caid,
+                hv.hgvs_g,
+                hv.hgvs_c,
             ]
         )
 
