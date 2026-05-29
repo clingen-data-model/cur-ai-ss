@@ -315,7 +315,7 @@ function PaperCarousel({ papers }: { papers: PaperResp[] }) {
         </div>
       ) : (
         <Carousel key={filter}>
-          <CarouselContent className={filtered.length === 2 ? '-ml-1 justify-center' : '-ml-1'}>
+          <CarouselContent className={filtered.length <= 2 ? '-ml-1 justify-center' : '-ml-1'}>
             {filtered.map((p) => (
               <CarouselItem key={p.id} className="pl-1 basis-1/3">
                 <div className="p-1">

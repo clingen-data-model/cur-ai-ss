@@ -1,11 +1,12 @@
 import React, { useRef, useState, useEffect } from 'react'
 import { useParams } from '@tanstack/react-router'
 import { Collapsible } from '@base-ui/react/collapsible'
-import { FolderIcon, FileIcon, ChevronRightIcon } from 'lucide-react'
+import { HomeIcon, UserCircleIcon, ChevronRightIcon } from 'lucide-react'
 import { usePaperPatients } from '@/hooks/usePaperPatients'
 import type { FamilyNode, PatientResp } from '@/hooks/usePaperPatients'
 import { Spinner } from '@/components/ui/spinner'
 import { TwoColumnWithBottomRightPdf, annotationsToHighlights, type Highlight, type PdfViewerRef } from '@/components/TwoColumnWithBottomRightPdf'
+import { PatientDetails, type HighlightArgs } from '@/components/PatientDetails'
 import { grobidAnnotationPapersPaperIdGrobidAnnotationPost } from '@/api/generated'
 import * as pdfjs from 'pdfjs-dist'
 
@@ -22,7 +23,7 @@ function FamilyRow({ node, selectedPatientId, onPatientClick }: FamilyRowProps) 
     <Collapsible.Root defaultOpen={false} className="w-full">
       <Collapsible.Trigger className="flex w-full items-center gap-1 rounded px-2 py-1 text-sm hover:bg-muted cursor-pointer group">
         <ChevronRightIcon className="size-3.5 transition-transform group-data-[state=open]:rotate-90" />
-        <FolderIcon className="size-3.5 text-amber-500" />
+        <HomeIcon className="size-3.5 text-amber-500" />
         <span className="truncate">{node.family.identifier}</span>
         <span className="ml-auto text-xs text-muted-foreground">
           {node.patients.length}
@@ -37,7 +38,7 @@ function FamilyRow({ node, selectedPatientId, onPatientClick }: FamilyRowProps) 
               selectedPatientId === patient.id ? 'bg-muted font-medium' : ''
             }`}
           >
-            <FileIcon className="size-3.5 text-blue-400" />
+            <UserCircleIcon className="size-3.5 text-blue-400" />
             <span className="truncate">{patient.identifier}</span>
           </button>
         ))}
@@ -52,41 +53,29 @@ export function PatientsPage() {
   const { paper, familyNodes, isLoading, isError, error } =
     usePaperPatients(paperIdNum)
 
-  const [selectedPatientId, setSelectedPatientId] = useState<number | null>(null)
+  const [selectedPatient, setSelectedPatient] = useState<PatientResp | null>(null)
   const [highlights, setHighlights] = useState<Highlight[]>([])
-  // Lifted to PatientsPage so we can access pdfDocument to resolve annotations,
-  // and call scrollTo when highlights are resolved
   const pdfViewerRef = useRef<PdfViewerRef>(null)
 
-  // Auto-scroll to first highlight when highlights are resolved
   useEffect(() => {
     if (highlights.length > 0 && pdfViewerRef.current) {
       pdfViewerRef.current.scrollTo(highlights[0])
     }
   }, [highlights])
 
-  const handlePatientClick = async (patient: PatientResp) => {
-    setSelectedPatientId(patient.id)
-    // Guard: ensure PDF is loaded before calling API
+  const highlight = async ({ query, tableId, imageId }: HighlightArgs) => {
     if (!pdfViewerRef.current?.pdfDocument) return
-
-    const query =
-      (patient as any).identifier_evidence?.quote ?? patient.identifier
-    if (!query) return
-
     try {
       const result = await grobidAnnotationPapersPaperIdGrobidAnnotationPost({
         path: { paper_id: paperIdNum },
         body: {
           queries: [query],
-          image_ids: [],
-          table_ids: [],
+          table_ids: tableId != null ? [tableId] : [],
+          image_ids: imageId != null ? [imageId] : [],
           color: '#FFE28F',
         },
       })
       const annotations = (Array.isArray(result.data) ? result.data : result) as any[]
-      // Convert annotations to highlights using PDF document for coordinate calculation
-      // ! asserts pdfDocument is not null (we checked above with guard)
       const newHighlights = await annotationsToHighlights(
         pdfViewerRef.current.pdfDocument!,
         annotations,
@@ -94,9 +83,15 @@ export function PatientsPage() {
       )
       setHighlights(newHighlights)
     } catch (err) {
-      console.error('Failed to highlight patient:', err)
+      console.error('Failed to highlight:', err)
       setHighlights([])
     }
+  }
+
+  const handlePatientClick = async (patient: PatientResp) => {
+    setSelectedPatient(patient)
+    const query = (patient as any).identifier_evidence?.quote ?? patient.identifier
+    if (query) highlight({ query })
   }
 
   if (isLoading) {
@@ -133,7 +128,7 @@ export function PatientsPage() {
           <FamilyRow
             key={node.family.id}
             node={node}
-            selectedPatientId={selectedPatientId}
+            selectedPatientId={selectedPatient?.id ?? null}
             onPatientClick={handlePatientClick}
           />
         ))
@@ -141,10 +136,8 @@ export function PatientsPage() {
     </>
   )
 
-  const topRightPanel = selectedPatientId ? (
-    <div className="text-sm text-muted-foreground">
-      Patient details for ID {selectedPatientId} would go here
-    </div>
+  const topRightPanel = selectedPatient ? (
+    <PatientDetails patient={selectedPatient} paperId={paperIdNum} onHighlight={highlight} />
   ) : (
     <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
       Select a patient to view details

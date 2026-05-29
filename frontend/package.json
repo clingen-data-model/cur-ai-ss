@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives",
-    "api:generate": "openapi-ts --input ./api-spec.json --output ./src/api/generated --client @hey-api/client-fetch"
+    "api:generate": "openapi-ts --file ./openapi-ts.config.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
