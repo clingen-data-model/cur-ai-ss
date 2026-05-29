@@ -11,13 +11,12 @@ export function RootLayout() {
     <TooltipProvider>
     <div className="min-h-screen flex flex-col">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-slate-900">CAA</h1>
+      <header className="gradient-header border-b border-slate-200">
+        <div className="container mx-auto px-4 py-2 flex items-center justify-between">
+          <a href="/" className="hover:opacity-80 transition-opacity">
+            <img src="/clingen-logo.svg" alt="ClinGen" className="h-8 brightness-0 invert" />
+          </a>
           <nav className="flex gap-4">
-            <a href="/" className="text-slate-600 hover:text-slate-900">
-              Home
-            </a>
           </nav>
         </div>
       </header>

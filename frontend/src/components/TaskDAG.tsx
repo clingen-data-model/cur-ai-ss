@@ -133,8 +133,8 @@ function TaskNode({ data }: { data: TaskNodeData }) {
 
       {hovered && (
         <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-50 w-56 rounded-md bg-popover border border-border px-3 py-2 shadow-md pointer-events-none">
-          <p className="text-xs font-medium text-foreground mb-1">{data.label}</p>
-          <p className="text-[11px] text-muted-foreground leading-snug">{data.description}</p>
+          <p className="text-lg font-medium text-foreground mb-1">{data.label}</p>
+          <p className="text-base text-muted-foreground leading-snug">{data.description}</p>
         </div>
       )}
     </div>
@@ -152,7 +152,7 @@ const NODE_H = 56
 function layoutNodes(tasks: TaskResp[]): { nodes: Node[]; edges: Edge[] } {
   const g = new dagre.graphlib.Graph()
   g.setDefaultEdgeLabel(() => ({}))
-  g.setGraph({ rankdir: 'TB', nodesep: 24, ranksep: 120 })
+  g.setGraph({ rankdir: 'TB', nodesep: 50, ranksep: 160 })
 
   for (const type of ALL_TASK_TYPES) {
     g.setNode(type, { width: NODE_W, height: NODE_H })

@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogMedia, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { UploadPaperDialog } from '@/components/UploadPaperDialog'
 import { TaskDAG, computeStatus, type NodeStatus } from '@/components/TaskDAG'
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import type { GeneRow, PaperResp, TaskType } from '@/hooks/useGeneTable'
 import type { PaperTag } from '@/api/generated/types.gen'
@@ -219,7 +219,7 @@ function PaperCard({ paper }: { paper: PaperResp }) {
                 <Link
                   to="/papers/$paperId/patients"
                   params={{ paperId: String(paper.id) }}
-                  className="text-blue-600 hover:underline"
+                  className="text-link hover:underline"
                 >
                   {paper.title}
                 </Link>
@@ -233,7 +233,7 @@ function PaperCard({ paper }: { paper: PaperResp }) {
                 <Link
                   to="/papers/$paperId/patients"
                   params={{ paperId: String(paper.id) }}
-                  className="text-blue-600 hover:underline"
+                  className="text-link hover:underline"
                 >
                   {paper.first_author}
                 </Link>
@@ -250,13 +250,13 @@ function PaperCard({ paper }: { paper: PaperResp }) {
             ['Occurrences', paper.patient_variant_occurrences_count ?? '—'],
             ['Status', (
               <Tooltip>
-                <TooltipTrigger render={
+                <TooltipTrigger asChild>
                   <button type="button" onClick={() => setDagOpen(true)} className="cursor-pointer">
                     <Badge variant={status.variant} className={`${status.className} hover:opacity-80 transition-opacity`}>
                       {status.label}
                     </Badge>
                   </button>
-                } />
+                </TooltipTrigger>
                 <TooltipContent>View pipeline</TooltipContent>
               </Tooltip>
             )],
@@ -270,19 +270,19 @@ function PaperCard({ paper }: { paper: PaperResp }) {
         </CardContent>
       </Card>
 
-      <Sheet open={dagOpen} onOpenChange={setDagOpen}>
-        <SheetContent side="right" className="w-[680px] sm:max-w-none flex flex-col p-0">
-          <SheetHeader className="px-5 pt-5 pb-3 border-b">
-            <SheetTitle className="text-sm font-semibold truncate">
-              {paper.title ?? paper.filename}
-            </SheetTitle>
-            <p className="text-xs text-muted-foreground">Pipeline execution</p>
-          </SheetHeader>
-          <div className="flex-1 min-h-0">
-            <TaskDAG tasks={paper.tasks ?? []} />
+      <Dialog open={dagOpen} onOpenChange={setDagOpen}>
+        <DialogContent className="!w-[32vw] !max-w-none h-[90vh]">
+          <div className="flex flex-col h-full">
+            <div className="border-b pb-4">
+              <h2 className="text-lg font-semibold">{paper.title ?? paper.filename}</h2>
+              <p className="text-sm text-muted-foreground">Pipeline execution</p>
+            </div>
+            <div className="flex-1 min-h-0 mt-4">
+              <TaskDAG tasks={paper.tasks ?? []} />
+            </div>
           </div>
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
