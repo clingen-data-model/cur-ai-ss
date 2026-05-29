@@ -15,9 +15,11 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogMedia, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { UploadPaperDialog } from '@/components/UploadPaperDialog'
+import { TaskDAG, computeStatus, type NodeStatus } from '@/components/TaskDAG'
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import type { GeneRow, PaperResp, TaskType } from '@/hooks/useGeneTable'
-import type { TaskStatus, PaperTag } from '@/api/generated/types.gen'
+import type { PaperTag } from '@/api/generated/types.gen'
 import type { badgeVariants } from '@/components/ui/badge'
 import type { VariantProps } from 'class-variance-authority'
 
@@ -31,13 +33,13 @@ const TAG_COLORS: Record<PaperTag, string> = {
   'FailedPaperRelevancy': 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300',
 }
 
-function deriveAgentStatus(tasks: PaperResp['tasks']): { label: string; variant: BadgeVariant; className?: string } {
-  if (!tasks || tasks.length === 0) return { label: 'Not started', variant: 'secondary' }
-  const statuses = tasks.map(t => t.status) as TaskStatus[]
-  if (statuses.some(s => s === 'Running')) return { label: 'Running', variant: 'default' }
-  if (statuses.some(s => s === 'Failed')) return { label: 'Failed', variant: 'destructive' }
-  if (statuses.every(s => s === 'Completed')) return { label: 'Done', variant: 'outline', className: 'border-green-500 text-green-600' }
-  return { label: 'In progress', variant: 'outline', className: 'border-amber-500 text-amber-600' }
+const STATUS_BADGE: Record<NodeStatus, { label: string; variant: BadgeVariant; className?: string }> = {
+  idle:      { label: 'Not started', variant: 'secondary' },
+  pending:   { label: 'Pending',     variant: 'secondary' },
+  running:   { label: 'Running',     variant: 'default' },
+  partial:   { label: 'In progress', variant: 'outline', className: 'border-amber-500 text-amber-600' },
+  completed: { label: 'Done',        variant: 'outline', className: 'border-green-500 text-green-600' },
+  failed:    { label: 'Failed',      variant: 'destructive' },
 }
 
 const RERUNNABLE_TASK_TYPES: TaskType[] = [
@@ -177,83 +179,111 @@ function DeletePaperButton({ paper }: { paper: PaperResp }) {
 }
 
 function PaperCard({ paper }: { paper: PaperResp }) {
-  const status = deriveAgentStatus(paper.tasks)
+  const status = STATUS_BADGE[computeStatus(paper.tasks ?? [])]
   const thumbnailSrc = `${API_URL}${paper.thumbnail_url}`
+  const [dagOpen, setDagOpen] = useState(false)
 
   return (
-    <Card size="sm">
-      <div className="flex justify-between items-start px-2 pt-2 gap-2">
-        {paper.tags && paper.tags.length > 0 && (
-          <div className="flex flex-col gap-1">
-            {paper.tags.map((tag) => (
-              <Badge key={tag} className={`text-xs py-0.5 px-1.5 whitespace-nowrap ${TAG_COLORS[tag] || 'bg-gray-50 text-gray-700 dark:bg-gray-950 dark:text-gray-300'}`}>
-                {tag}
-              </Badge>
-            ))}
-          </div>
-        )}
-        <div className="flex justify-end gap-1">
-          <RerunTaskButton paper={paper} />
-          <DeletePaperButton paper={paper} />
-        </div>
-      </div>
-      <div className="flex justify-center px-3">
-        <div className="w-4/5 overflow-hidden rounded-md border border-border shadow-sm">
-          <img
-            src={thumbnailSrc}
-            alt=""
-            className="w-full aspect-[3/4] object-cover object-top bg-slate-100"
-            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-          />
-        </div>
-      </div>
-      <CardContent className="grid grid-cols-2 gap-x-3 gap-y-2 pt-3">
-        <div className="col-span-2 space-y-0.5 min-w-0">
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Title</div>
-          <div className="text-xs truncate">
-            {paper.title ? (
-              <Link
-                to="/papers/$paperId/patients"
-                params={{ paperId: String(paper.id) }}
-                className="text-blue-600 hover:underline"
-              >
-                {paper.title}
-              </Link>
-            ) : '—'}
+    <>
+      <Card size="sm">
+        <div className="flex items-start px-2 pt-2 gap-2">
+          {paper.tags && paper.tags.length > 0 && (
+            <div className="flex flex-col gap-1">
+              {paper.tags.map((tag) => (
+                <Badge key={tag} className={`text-xs py-0.5 px-1.5 whitespace-nowrap ${TAG_COLORS[tag as PaperTag] ?? 'bg-gray-50 text-gray-700 dark:bg-gray-950 dark:text-gray-300'}`}>
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+          )}
+          <div className="flex gap-1 ml-auto">
+            <RerunTaskButton paper={paper} />
+            <DeletePaperButton paper={paper} />
           </div>
         </div>
-        <div className="col-span-2 space-y-0.5 min-w-0">
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">First Author</div>
-          <div className="text-xs truncate">
-            {paper.first_author ? (
-              <Link
-                to="/papers/$paperId/patients"
-                params={{ paperId: String(paper.id) }}
-                className="text-blue-600 hover:underline"
-              >
-                {paper.first_author}
-              </Link>
-            ) : '—'}
+        <div className="flex justify-center px-3">
+          <div className="w-4/5 overflow-hidden rounded-md border border-border shadow-sm">
+            <img
+              src={thumbnailSrc}
+              alt=""
+              className="w-full aspect-[3/4] object-cover object-top bg-slate-100"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+            />
           </div>
         </div>
-        <div className="col-span-2 space-y-0.5 min-w-0">
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Filename</div>
-          <div className="text-xs truncate">{paper.filename}</div>
-        </div>
-        {([
-          ['Patients', paper.patient_count ?? '—'],
-          ['Variants', paper.variant_count ?? '—'],
-          ['Occurrences', paper.patient_variant_occurrences_count ?? '—'],
-          ['Status', <Badge variant={status.variant} className={status.className}>{status.label}</Badge>],
-          ['Modified', formatDate(paper.updated_at)],
-        ] as [string, React.ReactNode][]).map(([label, value]) => (
-          <div key={label} className="space-y-0.5 min-w-0">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
-            <div className="text-xs">{value}</div>
+        <CardContent className="grid grid-cols-2 gap-x-3 gap-y-2 pt-3">
+          <div className="col-span-2 space-y-0.5 min-w-0">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Title</div>
+            <div className="text-xs truncate">
+              {paper.title ? (
+                <Link
+                  to="/papers/$paperId/patients"
+                  params={{ paperId: String(paper.id) }}
+                  className="text-blue-600 hover:underline"
+                >
+                  {paper.title}
+                </Link>
+              ) : '—'}
+            </div>
           </div>
-        ))}
-      </CardContent>
-    </Card>
+          <div className="col-span-2 space-y-0.5 min-w-0">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">First Author</div>
+            <div className="text-xs truncate">
+              {paper.first_author ? (
+                <Link
+                  to="/papers/$paperId/patients"
+                  params={{ paperId: String(paper.id) }}
+                  className="text-blue-600 hover:underline"
+                >
+                  {paper.first_author}
+                </Link>
+              ) : '—'}
+            </div>
+          </div>
+          <div className="col-span-2 space-y-0.5 min-w-0">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Filename</div>
+            <div className="text-xs truncate">{paper.filename}</div>
+          </div>
+          {([
+            ['Patients', paper.patient_count ?? '—'],
+            ['Variants', paper.variant_count ?? '—'],
+            ['Occurrences', paper.patient_variant_occurrences_count ?? '—'],
+            ['Status', (
+              <Tooltip>
+                <TooltipTrigger render={
+                  <button type="button" onClick={() => setDagOpen(true)} className="cursor-pointer">
+                    <Badge variant={status.variant} className={`${status.className} hover:opacity-80 transition-opacity`}>
+                      {status.label}
+                    </Badge>
+                  </button>
+                } />
+                <TooltipContent>View pipeline</TooltipContent>
+              </Tooltip>
+            )],
+            ['Modified', formatDate(paper.updated_at)],
+          ] as [string, React.ReactNode][]).map(([label, value]) => (
+            <div key={label} className="space-y-0.5 min-w-0">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+              <div className="text-xs">{value}</div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Sheet open={dagOpen} onOpenChange={setDagOpen}>
+        <SheetContent side="right" className="w-[680px] sm:max-w-none flex flex-col p-0">
+          <SheetHeader className="px-5 pt-5 pb-3 border-b">
+            <SheetTitle className="text-sm font-semibold truncate">
+              {paper.title ?? paper.filename}
+            </SheetTitle>
+            <p className="text-xs text-muted-foreground">Pipeline execution</p>
+          </SheetHeader>
+          <div className="flex-1 min-h-0">
+            <TaskDAG tasks={paper.tasks ?? []} />
+          </div>
+        </SheetContent>
+      </Sheet>
+    </>
   )
 }
 
@@ -337,6 +367,7 @@ export function GeneTable({ rows, papersByGene }: GeneTableProps) {
     { accessorKey: 'paper_count', header: 'Papers' },
     { accessorKey: 'patient_count', header: 'Patients' },
     { accessorKey: 'variant_count', header: 'Variants' },
+    { accessorKey: 'occurrences_count', header: 'Occurrences' },
     {
       id: 'action',
       size: 60,

@@ -24,7 +24,7 @@ const ResizableHandle = React.forwardRef<
   <Separator
     elementRef={ref}
     {...props}
-    className={`relative flex w-px select-none touch-none bg-border after:absolute after:left-1/2 after:top-1/2 after:h-8 after:w-1 after:-translate-x-1/2 after:-translate-y-1/2 after:translate-x-0 after:bg-border after:opacity-0 hover:after:opacity-100 after:transition-opacity [&[data-panel-group-direction=vertical]]:h-px [&[data-panel-group-direction=vertical]]:w-full [&[data-panel-group-direction=vertical]]:after:h-1 [&[data-panel-group-direction=vertical]]:after:w-8 ${props.className || ''}`}
+    className={`relative flex w-1 select-none touch-none bg-border hover:bg-slate-400 transition-colors after:absolute after:left-1/2 after:top-1/2 after:h-8 after:w-1.5 after:-translate-x-1/2 after:-translate-y-1/2 after:translate-x-0 after:bg-slate-400 after:opacity-0 hover:after:opacity-100 after:transition-opacity ${props.className || ''}`}
   >
     {withHandle && (
       <div className="z-10 flex h-4 w-4 items-center justify-center rounded-md border bg-border">

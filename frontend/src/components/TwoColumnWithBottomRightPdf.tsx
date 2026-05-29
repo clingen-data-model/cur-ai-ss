@@ -227,7 +227,7 @@ export function TwoColumnWithBottomRightPdf({
               </div>
             </ResizablePanel>
 
-            <ResizableHandle withHandle />
+            <ResizableHandle withHandle className="!h-1 !w-full" />
 
             {/* Lower right - PDF */}
             <ResizablePanel defaultSize={bottomRightDefaultSize} minSize={bottomRightMinSize}>

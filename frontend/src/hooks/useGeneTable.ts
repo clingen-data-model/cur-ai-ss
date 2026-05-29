@@ -13,6 +13,7 @@ export interface GeneRow {
   paper_count: number
   patient_count: number
   variant_count: number
+  occurrences_count: number
 }
 
 export function useGeneTable() {
@@ -35,29 +36,31 @@ export function useGeneTable() {
     const genes = Array.isArray(genesQuery.data) ? genesQuery.data : []
 
     const papersByGene = new Map<string, PaperResp[]>()
-    const geneStats = new Map<string, { paper_count: number; patient_count: number; variant_count: number }>()
+    const geneStats = new Map<string, { paper_count: number; patient_count: number; variant_count: number; occurrences_count: number }>()
 
     for (const paper of papers) {
       const key = paper.gene_symbol
       if (!geneStats.has(key)) {
-        geneStats.set(key, { paper_count: 0, patient_count: 0, variant_count: 0 })
+        geneStats.set(key, { paper_count: 0, patient_count: 0, variant_count: 0, occurrences_count: 0 })
         papersByGene.set(key, [])
       }
       const stats = geneStats.get(key)!
       stats.paper_count += 1
       stats.patient_count += paper.patient_count || 0
       stats.variant_count += paper.variant_count || 0
+      stats.occurrences_count += paper.patient_variant_occurrences_count || 0
       papersByGene.get(key)!.push(paper)
     }
 
     const rows: GeneRow[] = genes.map((gene) => {
-      const stats = geneStats.get(gene.symbol) || { paper_count: 0, patient_count: 0, variant_count: 0 }
+      const stats = geneStats.get(gene.symbol) || { paper_count: 0, patient_count: 0, variant_count: 0, occurrences_count: 0 }
       return {
         gene_id: gene.id,
         gene_symbol: gene.symbol,
         paper_count: stats.paper_count,
         patient_count: stats.patient_count,
         variant_count: stats.variant_count,
+        occurrences_count: stats.occurrences_count,
       }
     })
 
