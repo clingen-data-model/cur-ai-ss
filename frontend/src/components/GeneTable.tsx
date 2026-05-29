@@ -17,13 +17,19 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { UploadPaperDialog } from '@/components/UploadPaperDialog'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import type { GeneRow, PaperResp, TaskType } from '@/hooks/useGeneTable'
-import type { TaskStatus } from '@/api/generated/types.gen'
+import type { TaskStatus, PaperTag } from '@/api/generated/types.gen'
 import type { badgeVariants } from '@/components/ui/badge'
 import type { VariantProps } from 'class-variance-authority'
 
 const API_URL = import.meta.env.VITE_API_URL as string
 
 type BadgeVariant = VariantProps<typeof badgeVariants>['variant']
+
+const TAG_COLORS: Record<PaperTag, string> = {
+  'TrainingSet': 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
+  'ValidationSet': 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300',
+  'FailedPaperRelevancy': 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300',
+}
 
 function deriveAgentStatus(tasks: PaperResp['tasks']): { label: string; variant: BadgeVariant; className?: string } {
   if (!tasks || tasks.length === 0) return { label: 'Not started', variant: 'secondary' }
@@ -176,9 +182,20 @@ function PaperCard({ paper }: { paper: PaperResp }) {
 
   return (
     <Card size="sm">
-      <div className="flex justify-end gap-1 px-2 pt-2">
-        <RerunTaskButton paper={paper} />
-        <DeletePaperButton paper={paper} />
+      <div className="flex justify-between items-start px-2 pt-2 gap-2">
+        {paper.tags && paper.tags.length > 0 && (
+          <div className="flex flex-col gap-1">
+            {paper.tags.map((tag) => (
+              <Badge key={tag} className={`text-xs py-0.5 px-1.5 whitespace-nowrap ${TAG_COLORS[tag] || 'bg-gray-50 text-gray-700 dark:bg-gray-950 dark:text-gray-300'}`}>
+                {tag}
+              </Badge>
+            ))}
+          </div>
+        )}
+        <div className="flex justify-end gap-1">
+          <RerunTaskButton paper={paper} />
+          <DeletePaperButton paper={paper} />
+        </div>
       </div>
       <div className="flex justify-center px-3">
         <div className="w-4/5 overflow-hidden rounded-md border border-border shadow-sm">
@@ -226,6 +243,7 @@ function PaperCard({ paper }: { paper: PaperResp }) {
         {([
           ['Patients', paper.patient_count ?? '—'],
           ['Variants', paper.variant_count ?? '—'],
+          ['Occurrences', paper.patient_variant_occurrences_count ?? '—'],
           ['Status', <Badge variant={status.variant} className={status.className}>{status.label}</Badge>],
           ['Modified', formatDate(paper.updated_at)],
         ] as [string, React.ReactNode][]).map(([label, value]) => (

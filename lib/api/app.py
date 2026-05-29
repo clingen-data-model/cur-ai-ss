@@ -334,11 +334,13 @@ def list_papers(
         selectinload(PaperDB.tasks),
         selectinload(PaperDB.patients),
         selectinload(PaperDB.variants),
+        selectinload(PaperDB.patient_variant_occurrences),
     )
     papers = query.all()
     for paper in papers:
         paper.patient_count = len(paper.patients)
         paper.variant_count = len(paper.variants)
+        paper.patient_variant_occurrences_count = len(paper.patient_variant_occurrences)
     return papers
 
 
