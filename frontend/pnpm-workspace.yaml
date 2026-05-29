@@ -5,3 +5,5 @@ allowBuilds:
   canvas: false
   esbuild: true # Vite depends on esbuild; needs to build native binaries for your platform
   msw: false # Mock Service Worker for testing; not used in this project
+patchedDependencies:
+  react-pdf-highlighter@8.0.0-rc.0: patches/react-pdf-highlighter@8.0.0-rc.0.patch
