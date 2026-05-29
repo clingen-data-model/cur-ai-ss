@@ -1,3 +1,15 @@
+"""MONDO ontology loading and disease-name matching.
+
+Disease names come from paper and patient-variant extraction agents, so most
+inputs are author-facing text rather than ontology IDs. The matcher therefore
+tries high-confidence deterministic lookups before fuzzy matching. The order is
+intentional: direct MONDO IDs and primary labels are strongest, synonyms and
+external IDs require more source-aware handling, abbreviations are often
+ambiguous, and deprecated terms should resolve only through explicit
+replacement metadata. Fuzzy matching is a final fallback for typos, punctuation
+differences, and near labels, with context stored for audit.
+"""
+
 import json
 import re
 import unicodedata
@@ -336,7 +348,25 @@ def add_deprecated_replacement(index: MondoIndex, node: dict[str, Any]) -> None:
 
 
 def find_mondo_term_for_disease(disease_name: str) -> MondoTerm | None:
-    """Return the selected MONDO term for a plaintext disease name."""
+    """Return the selected MONDO term for a disease name.
+
+    Matching proceeds from highest-confidence exact signals to lower-confidence
+    fallbacks:
+
+    1. Direct MONDO CURIE or IRI.
+    2. Exact primary label.
+    3. Exact synonym.
+    4. External identifier or exact mapping ID.
+    5. Related synonym.
+    6. Broad or narrow synonym.
+    7. Unique abbreviation.
+    8. Deprecated term with one valid replacement.
+    9. Fuzzy match over labels plus exact/related synonyms.
+
+    Exact tiers use conservative normalization and return only when a tier
+    selects one distinct MONDO ID. Ambiguous exact tiers are recorded and fuzzy
+    matching can include that context in the returned audit data.
+    """
     query = disease_name.strip()
     if not query:
         return None
