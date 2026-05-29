@@ -250,12 +250,10 @@ function PaperCard({ paper }: { paper: PaperResp }) {
             ['Occurrences', paper.patient_variant_occurrences_count ?? '—'],
             ['Status', (
               <Tooltip>
-                <TooltipTrigger asChild>
-                  <button type="button" onClick={() => setDagOpen(true)} className="cursor-pointer">
-                    <Badge variant={status.variant} className={`${status.className} hover:opacity-80 transition-opacity`}>
-                      {status.label}
-                    </Badge>
-                  </button>
+                <TooltipTrigger type="button" onClick={() => setDagOpen(true)} className="cursor-pointer">
+                  <Badge variant={status.variant} className={`${status.className} hover:opacity-80 transition-opacity`}>
+                    {status.label}
+                  </Badge>
                 </TooltipTrigger>
                 <TooltipContent>View pipeline</TooltipContent>
               </Tooltip>

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
-import { listPapersPapersGet, listGenesGenesGet } from '@/api/generated'
+import { listPapersPapersGet } from '@/api/generated'
 import type { PaperResp, TaskType } from '@/api/generated/types.gen'
 
 export type { PaperResp, TaskType }
@@ -23,17 +23,10 @@ export function useGeneTable() {
     staleTime: STALE_TIME,
   })
 
-  const genesQuery = useQuery({
-    queryKey: ['genes'],
-    queryFn: () => listGenesGenesGet({ query: { limit: 50000 } }),
-    staleTime: STALE_TIME,
-  })
-
   const { rows, papersByGene } = useMemo(() => {
-    if (!papersQuery.data || !genesQuery.data) return { rows: [], papersByGene: new Map<string, PaperResp[]>() }
+    if (!papersQuery.data) return { rows: [], papersByGene: new Map<string, PaperResp[]>() }
 
     const papers = Array.isArray(papersQuery.data) ? papersQuery.data : []
-    const genes = Array.isArray(genesQuery.data) ? genesQuery.data : []
 
     const papersByGene = new Map<string, PaperResp[]>()
     const geneStats = new Map<string, { paper_count: number; patient_count: number; variant_count: number; occurrences_count: number }>()
@@ -52,29 +45,24 @@ export function useGeneTable() {
       papersByGene.get(key)!.push(paper)
     }
 
-    const rows: GeneRow[] = genes.map((gene) => {
-      const stats = geneStats.get(gene.symbol) || { paper_count: 0, patient_count: 0, variant_count: 0, occurrences_count: 0 }
-      return {
-        gene_id: gene.id,
-        gene_symbol: gene.symbol,
-        paper_count: stats.paper_count,
-        patient_count: stats.patient_count,
-        variant_count: stats.variant_count,
-        occurrences_count: stats.occurrences_count,
-      }
-    })
+    const rows: GeneRow[] = Array.from(geneStats.entries()).map(([symbol, stats], index) => ({
+      gene_id: index,
+      gene_symbol: symbol,
+      paper_count: stats.paper_count,
+      patient_count: stats.patient_count,
+      variant_count: stats.variant_count,
+      occurrences_count: stats.occurrences_count,
+    }))
 
     rows.sort((a, b) => b.paper_count - a.paper_count)
-    const filtered = rows.filter(r => r.paper_count > 0)
-    console.log('total rows:', rows.length, 'filtered:', filtered.length)
-    return { rows: filtered, papersByGene }
-  }, [papersQuery.data, genesQuery.data])
+    return { rows, papersByGene }
+  }, [papersQuery.data])
 
   return {
     rows,
     papersByGene,
-    isLoading: papersQuery.isPending || genesQuery.isPending,
-    isError: papersQuery.isError || genesQuery.isError,
-    error: papersQuery.error || genesQuery.error,
+    isLoading: papersQuery.isPending,
+    isError: papersQuery.isError,
+    error: papersQuery.error,
   }
 }
