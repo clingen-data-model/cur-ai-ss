@@ -31,12 +31,17 @@ Return ONLY the markdown table, no other text.
 
 
 def _image_path_to_data_url(image_path: Path) -> str:
+    """Encode a local image path as a data URL for OpenAI image input.
+
+    See: https://developers.openai.com/api/docs/guides/images-vision?format=base64-encoded
+    """
     mime_type = mimetypes.guess_type(image_path.name)[0] or 'image/png'
     image_b64 = base64.b64encode(image_path.read_bytes()).decode('ascii')
     return f'data:{mime_type};base64,{image_b64}'
 
 
 def _image_url_for_openai(image_path: Path) -> str:
+    """Return an OpenAI-readable image URL, using upload or local data URL."""
     if env.DISABLE_GCS_UPLOAD:
         logger.info(f'GCS upload disabled, encoding {image_path} as a data URL')
         return _image_path_to_data_url(image_path)
@@ -47,6 +52,8 @@ def _image_url_for_openai(image_path: Path) -> str:
 
 
 def table_correction_agent_for_image(image_path: Path) -> Agent:
+    """Build a table correction agent bound to a specific table image."""
+
     @function_tool
     def extract_table_from_image() -> str:
         """Extract the current table image as markdown using vision."""
@@ -153,8 +160,7 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
         # Build prompt with table markdown only. The vision tool reads the image
         # on demand if the agent decides the markdown is corrupted.
         message = (
-            f'Table ID: {table_id}\n\n'
-            f'Markdown to evaluate:\n```\n{table_markdown}\n```'
+            f'Table ID: {table_id}\n\nMarkdown to evaluate:\n```\n{table_markdown}\n```'
         )
 
         # Run agent
