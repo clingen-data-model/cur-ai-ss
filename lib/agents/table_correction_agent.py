@@ -100,7 +100,7 @@ TABLE_CORRECTION_INSTRUCTIONS = """You are an expert at evaluating table markdow
 Your task:
 1. Review the provided table markdown
 2. Judge if it's corrupted (headers are gibberish, cells are jumbled, content is nonsensical)
-3. If corrupted, use extract_table_from_image to get the corrected version. The tool already knows which table image to inspect; do not provide a URL.
+3. If corrupted, use extract_table_from_image to get the corrected version
 4. Return the assessment and any corrections
 
 A corrupted table has signs like:
