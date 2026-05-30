@@ -29,7 +29,10 @@ CORE EXTRACTION RULES:
 CRITICAL:
 - quote MUST contain ONLY verbatim text copied from the input source text.
   - No paraphrasing, summarization, or added words.
-  - If possible, the quote should uniquely identify a location in the text.  Give enough detail such that this is possible.
+  - quote MUST contain enough context to be uniquely identifiable in the source. This typically means:
+    - For table-derived values: include the full row or cell with row/column headers
+    - For text: include surrounding context (e.g., section headers, case labels with full identifiers)
+    - Avoid partial identifiers that are ambiguous (e.g., "Case 2" when "Case 2", "Case 23", "Case 24" exist; instead quote the full row or full context)
 - A verbatim quote means an exact substring of the input source text with no modifications.
 - reasoning MAY include verbatim quotes from the input source text if helpful.
   - reasoning should primarily explain how the value was derived.
@@ -47,8 +50,8 @@ TABLE EVIDENCE RULES:
 
   - quote MUST contain a verbatim quote from the table WHEN POSSIBLE.
     - This should be either:
-      - the full row containing the relevant value, OR
-      - the minimal exact cell text copied exactly as shown
+      - the full row containing the relevant value (PREFERRED for uniqueness), OR
+      - the minimal exact cell text copied exactly as shown (ONLY if unambiguous—must include row/column context if needed to ensure uniqueness)
 
   - If a verbatim quote cannot be extracted (i.e., the exact table row or cell text is not available as a substring of the input text), then:
     - table_id alone is sufficient.
