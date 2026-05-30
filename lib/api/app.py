@@ -458,11 +458,17 @@ def _patient_to_resp(row: PatientDB) -> PatientResp:
         twin_type=TwinType(row.twin_type) if row.twin_type else None,
         is_obligate_carrier_evidence=HumanEvidenceBlock.model_validate(
             row.is_obligate_carrier_evidence
-        ),
+        )
+        if row.is_obligate_carrier_evidence
+        else None,
         relationship_to_proband_evidence=HumanEvidenceBlock.model_validate(
             row.relationship_to_proband_evidence
-        ),
-        twin_type_evidence=HumanEvidenceBlock.model_validate(row.twin_type_evidence),
+        )
+        if row.relationship_to_proband_evidence
+        else None,
+        twin_type_evidence=HumanEvidenceBlock.model_validate(row.twin_type_evidence)
+        if row.twin_type_evidence
+        else None,
         updated_at=row.updated_at,
         family_id=row.family.id,
         family_identifier=row.family.identifier,

@@ -78,9 +78,10 @@ def upgrade() -> None:
             nullable=True,
         ),
         sa.Column(
-            'tag',
-            sa.Enum('TrainingSet', 'ValidationSet', name='papertag'),
-            nullable=True,
+            'tags',
+            sa.JSON(),
+            nullable=False,
+            server_default=sa.text("'[]'"),
         ),
         sa.Column('is_paper_relevant', sa.Boolean(), nullable=True),
         sa.Column('section_classifications', sa.JSON(), nullable=True),
