@@ -17,7 +17,7 @@ from sqlalchemy.types import JSON
 from typing_extensions import Self
 
 from lib.models.base import Base
-from lib.models.evidence_block import EvidenceBlock
+from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 
 if TYPE_CHECKING:
     from lib.models.paper import PaperDB
@@ -33,7 +33,6 @@ class Zygosity(str, Enum):
     homozygous = 'Homozygous'
     hemizygous = 'Hemizygous'
     heterozygous = 'Heterozygous'
-    compound_heterozygous = 'Compound Heterozygous'
     unknown = 'Unknown'
 
 
@@ -66,6 +65,12 @@ class TestingMethod(str, Enum):
     other = 'Other'
 
 
+class CompoundHetConfidence(str, Enum):
+    high = 'high'
+    medium = 'medium'
+    low = 'low'
+
+
 # ==============================
 # Pydantic Models (Agent Input/Output)
 # ==============================
@@ -90,6 +95,16 @@ class PatientVariantOccurrence(BaseModel):
 class PatientVariantOccurrenceOutput(BaseModel):
     links: List[PatientVariantOccurrence]
     disease_name: EvidenceBlock[str] | None = None
+
+
+class CompoundHetPair(BaseModel):
+    variant_id_a: int
+    variant_id_b: int
+    compound_het: ReasoningBlock[CompoundHetConfidence]
+
+
+class CompoundHetEvaluationOutput(BaseModel):
+    pairs: List[CompoundHetPair]
 
 
 # ==============================
@@ -129,6 +144,9 @@ class PatientVariantOccurrenceDB(Base):
         Integer,
         ForeignKey('patient_variant_occurrences.id', ondelete='SET NULL'),
         nullable=True,
+    )
+    paired_variant_link_reasoning: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True
     )
 
     updated_at: Mapped[datetime] = mapped_column(
@@ -192,4 +210,5 @@ class PatientVariantOccurrenceResp(BaseModel):
     disease_name: str | None = None
     disease_name_evidence: EvidenceBlock[str] | None = None
     paired_variant_link_id: int | None = None
+    paired_variant_link_reasoning: ReasoningBlock[CompoundHetConfidence] | None = None
     updated_at: datetime

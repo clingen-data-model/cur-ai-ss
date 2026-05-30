@@ -3,6 +3,10 @@ from typing import Literal
 from sqlalchemy.orm import Session
 
 from lib.models.agent_run import AgentRunDB
+from lib.models.patient_variant_occurrences import (
+    PatientVariantOccurrenceDB,
+    Zygosity,
+)
 from lib.tasks.models import (
     TASK_SUCCESSORS,
     InferredPaperStatus,
@@ -260,6 +264,27 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     family_id=family.id,
                 )
 
+            # Expand to per-patient COMPOUND_HET_EVALUATION for patients with ≥2 heterozygous variants
+            from sqlalchemy import func as sql_func
+
+            het_patients = (
+                session.query(PatientVariantOccurrenceDB.patient_id)
+                .filter(
+                    PatientVariantOccurrenceDB.paper_id == task.paper_id,
+                    PatientVariantOccurrenceDB.zygosity == Zygosity.heterozygous.value,
+                )
+                .group_by(PatientVariantOccurrenceDB.patient_id)
+                .having(sql_func.count() >= 2)
+                .all()
+            )
+            for row in het_patients:
+                enqueue_task(
+                    session,
+                    paper_id=task.paper_id,
+                    task_type=TaskType.COMPOUND_HET_EVALUATION,
+                    patient_id=row.patient_id,
+                )
+
         case TaskType.SEGREGATION_EVIDENCE_EXTRACTION:
             enqueue_task(
                 session,
@@ -290,6 +315,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
             TaskType.PAPER_METADATA
             | TaskType.VARIANT_ANNOTATION
             | TaskType.SEGREGATION_ANALYSIS_COMPUTED
+            | TaskType.COMPOUND_HET_EVALUATION
             | TaskType.HPO_LINKING
             | TaskType.GENERAL_PAPER_QUESTION
         ):

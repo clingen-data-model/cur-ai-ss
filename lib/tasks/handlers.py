@@ -9,6 +9,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
+from lib.agents.compound_het_agent import (
+    COMPOUND_HET_AGENT_INSTRUCTIONS,
+)
+from lib.agents.compound_het_agent import (
+    agent as compound_het_agent,
+)
 from lib.agents.hpo_linking_agent import (
     HPO_LINKING_AGENT_INSTRUCTIONS,
 )
@@ -1121,41 +1127,17 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
             session.add(patient_variant_occurrence_to_db(paper_id, link))
         session.flush()
 
-        # Diplotype grouping: pair exactly-2 heterozygous variants per patient
+        # Clear any existing pairing and reasoning (idempotent re-run support)
+        # Compound het evaluation will be done by a separate agent
         links = (
             session.query(PatientVariantOccurrenceDB)
             .filter(PatientVariantOccurrenceDB.paper_id == paper_id)
-            .order_by(
-                PatientVariantOccurrenceDB.patient_id, PatientVariantOccurrenceDB.id
-            )
             .all()
         )
-
-        # Clear any existing pairing (idempotent re-run support)
         for link in links:
             link.paired_variant_link_id = None
+            link.paired_variant_link_reasoning = None
         session.flush()
-
-        # Group by patient and find exactly-2 heterozygous pairs
-        from collections import defaultdict
-
-        links_by_patient: dict[int, list[PatientVariantOccurrenceDB]] = defaultdict(
-            list
-        )
-        for link in links:
-            links_by_patient[link.patient_id].append(link)
-
-        for patient_id, patient_links in links_by_patient.items():
-            het_or_ch_links = [
-                lnk
-                for lnk in patient_links
-                if lnk.zygosity
-                in (Zygosity.heterozygous.value, Zygosity.compound_heterozygous.value)
-            ]
-            if len(het_or_ch_links) == 2:
-                link_a, link_b = het_or_ch_links[0], het_or_ch_links[1]
-                link_a.paired_variant_link_id = link_b.id
-                link_b.paired_variant_link_id = link_a.id
 
         # Update paper-level disease_name if provided by the agent (case-level context)
         if result.final_output.disease_name is not None:
@@ -1165,6 +1147,135 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
                 paper.disease_name_evidence = (
                     result.final_output.disease_name.model_dump()
                 )
+
+
+async def handle_compound_het_evaluation(task_id: int) -> None:
+    """Evaluate heterozygous variant pairs for compound heterozygous genotypes."""
+    paper_id: int
+    patient_id: int | None = None
+    stored_conv_id: str | None = None
+    supplement_format: FileFormat | None = None
+    section_classifications: dict | None = None
+
+    with session_scope() as session:
+        task = session.get(TaskDB, task_id)
+        if not task:
+            return
+
+        paper_id = task.paper_id
+        patient_id = task.patient_id
+        if patient_id is None:
+            raise ValueError(
+                f'Task {task_id}: COMPOUND_HET_EVALUATION requires patient_id'
+            )
+
+        stored_conv_id = task.conversation_id
+
+        # Load all heterozygous variants for this patient
+        het_links = (
+            session.query(PatientVariantOccurrenceDB)
+            .filter(
+                PatientVariantOccurrenceDB.patient_id == patient_id,
+                PatientVariantOccurrenceDB.paper_id == paper_id,
+                PatientVariantOccurrenceDB.zygosity == Zygosity.heterozygous.value,
+            )
+            .all()
+        )
+
+        # If fewer than 2 heterozygous variants, nothing to evaluate
+        if len(het_links) < 2:
+            return
+
+        # Load patient and paper data
+        patient = session.get(PatientDB, patient_id)
+        paper = session.get(PaperDB, paper_id)
+        if not patient or not paper:
+            return
+
+        supplement_format = paper.supplement_format
+        section_classifications = paper.section_classifications
+
+        # Get pedigree description
+        pedigree_row = (
+            session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).first()
+        )
+        pedigree_description = (
+            pedigree_row.description if pedigree_row else 'No pedigree information'
+        )
+
+        # Build message with patient info, variants, and pedigree
+        variants_json = [
+            {
+                'variant_id': link.variant_id,
+                'description': (
+                    link.variant.variant_evidence.get('value', '')
+                    if isinstance(link.variant.variant_evidence, dict)
+                    else ''
+                ),
+            }
+            for link in het_links
+        ]
+
+        # Get paper markdown
+        paper_markdown = relevant_sections_md(
+            paper_id, supplement_format, section_classifications
+        )
+        paper_context = format_paper_context(paper_markdown)
+
+        message = (
+            f'{paper_context}\n\n'
+            f'Patient: {patient.identifier}\n\n'
+            f'Pedigree Description:\n{pedigree_description}\n\n'
+            f'Heterozygous Variants for This Patient:\n'
+            f'{json.dumps(variants_json, indent=2)}\n\n'
+            f'{COMPOUND_HET_AGENT_INSTRUCTIONS}'
+        )
+
+        agent_to_use = compound_het_agent
+
+    result = await Runner.run(
+        agent_to_use,
+        message,
+        conversation_id=stored_conv_id,
+    )
+    log_cache_metrics('COMPOUND_HET_EVALUATION', result)
+
+    with session_scope() as session:
+        task = session.get(TaskDB, task_id)
+        if task:
+            task.conversation_id = stored_conv_id
+
+        # For each pair in the result, set the pairing and reasoning
+        for pair in result.final_output.pairs:
+            link_a = (
+                session.query(PatientVariantOccurrenceDB)
+                .filter(
+                    PatientVariantOccurrenceDB.patient_id == patient_id,
+                    PatientVariantOccurrenceDB.paper_id == paper_id,
+                    PatientVariantOccurrenceDB.variant_id == pair.variant_id_a,
+                )
+                .first()
+            )
+            link_b = (
+                session.query(PatientVariantOccurrenceDB)
+                .filter(
+                    PatientVariantOccurrenceDB.patient_id == patient_id,
+                    PatientVariantOccurrenceDB.paper_id == paper_id,
+                    PatientVariantOccurrenceDB.variant_id == pair.variant_id_b,
+                )
+                .first()
+            )
+
+            if link_a and link_b:
+                # Bidirectionally set pairing
+                link_a.paired_variant_link_id = link_b.id
+                link_b.paired_variant_link_id = link_a.id
+                # Set reasoning on both
+                reasoning_dict = pair.compound_het.model_dump()
+                link_a.paired_variant_link_reasoning = reasoning_dict
+                link_b.paired_variant_link_reasoning = reasoning_dict
+
+        session.flush()
 
 
 async def handle_phenotype_extraction(task_id: int) -> None:
@@ -1341,6 +1452,7 @@ TASK_HANDLERS: dict[TaskType, Callable[[int], Awaitable[None]]] = {
     TaskType.VARIANT_HARMONIZATION: handle_variant_harmonization,
     TaskType.VARIANT_ANNOTATION: handle_variant_annotation,
     TaskType.PATIENT_VARIANT_OCCURRENCES: handle_patient_variant_occurrence,
+    TaskType.COMPOUND_HET_EVALUATION: handle_compound_het_evaluation,
     TaskType.PHENOTYPE_EXTRACTION: handle_phenotype_extraction,
     TaskType.HPO_LINKING: handle_hpo_linking,
 }

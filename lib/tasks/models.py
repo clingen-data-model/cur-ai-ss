@@ -30,6 +30,7 @@ class TaskType(StrEnum):
     VARIANT_HARMONIZATION = 'Variant Harmonization'
     VARIANT_ANNOTATION = 'Variant Annotation'
     PATIENT_VARIANT_OCCURRENCES = 'Patient Variant Occurrences'
+    COMPOUND_HET_EVALUATION = 'Compound Het Evaluation'  # per-patient
     PHENOTYPE_EXTRACTION = 'Phenotype Extraction'  # per-patient
     HPO_LINKING = 'HPO Linking'  # per-patient
 
@@ -49,6 +50,7 @@ class TaskType(StrEnum):
             TaskType.VARIANT_HARMONIZATION: 'Normalizes variants to standard genomic coordinates using ClinVar, dbSNP, ClinGen Allele Registry, and VariantValidator',
             TaskType.VARIANT_ANNOTATION: 'Adds annotations (SpliceAI, conservation scores, etc.) to variants',
             TaskType.PATIENT_VARIANT_OCCURRENCES: 'Associates patients with their variants and inheritance patterns',
+            TaskType.COMPOUND_HET_EVALUATION: 'Evaluates pairs of heterozygous variants to identify compound heterozygous genotypes',
             TaskType.PHENOTYPE_EXTRACTION: 'Extracts phenotype text spans per patient',
             TaskType.HPO_LINKING: 'Maps phenotypes to HPO ontology terms for standardization',
         }
