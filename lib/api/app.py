@@ -452,7 +452,9 @@ def _patient_to_resp(row: PatientDB) -> PatientResp:
             row.affected_status_evidence
         ),
         is_obligate_carrier=row.is_obligate_carrier,
-        relationship_to_proband=RelationshipToProband(row.relationship_to_proband) if row.relationship_to_proband else None,
+        relationship_to_proband=RelationshipToProband(row.relationship_to_proband)
+        if row.relationship_to_proband
+        else None,
         twin_type=TwinType(row.twin_type) if row.twin_type else None,
         is_obligate_carrier_evidence=HumanEvidenceBlock.model_validate(
             row.is_obligate_carrier_evidence
