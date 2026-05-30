@@ -44,6 +44,7 @@ from lib.agents.general_paper_qa_agent import (
 from lib.agents.general_paper_qa_agent import (
     agent as general_paper_qa_agent,
 )
+from lib.agents.run_tracking import ensure_agent_run
 from lib.api.db import get_session, session_scope
 from lib.api.middleware import make_log_request_middleware
 from lib.core.environment import env
@@ -118,6 +119,15 @@ from lib.models import (
     VariantUpdateRequest,
 )
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
+from lib.models.patient import (
+    AffectedStatus,
+    CountryCode,
+    ProbandStatus,
+    RaceEthnicity,
+    RelationshipToProband,
+    SexAtBirth,
+    TwinType,
+)
 from lib.models.segregation_analysis import SegregationAnalysisComputedNestedResp
 from lib.tasks import TaskCreateRequest, TaskResp, enqueue_all_instances, enqueue_task
 from lib.tasks.handlers import ensure_conversation_id
@@ -208,13 +218,17 @@ def put_paper(
         )
     main_content = uploaded_file.file.read()
 
-    # Get latest agent run
-    latest_run = session.query(AgentRunDB).order_by(AgentRunDB.id.desc()).first()
-    if not latest_run:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail='No agent runs found. Create one with ensure_agent_run().',
+    # Ensure agent run exists
+    latest_run_db = session.query(AgentRunDB).order_by(AgentRunDB.id.desc()).first()
+    if not latest_run_db:
+        latest_run_resp = ensure_agent_run(
+            session=session,
+            description='Web UI upload',
+            model=env.OPENAI_API_DEPLOYMENT,
         )
+        latest_run_id = latest_run_resp.id
+    else:
+        latest_run_id = latest_run_db.id
 
     paper_db = PaperDB.from_content(main_content)
     paper_db.gene_id = gene.id
@@ -224,7 +238,7 @@ def put_paper(
         # Create initial PDF_PARSING task
         task = TaskDB(
             paper_id=paper_db.id,
-            agent_run_id=latest_run.id,
+            agent_run_id=latest_run_id,
             type=TaskType.PDF_PARSING,
             status=TaskStatus.PENDING,
         )
@@ -332,11 +346,13 @@ def list_papers(
         selectinload(PaperDB.tasks),
         selectinload(PaperDB.patients),
         selectinload(PaperDB.variants),
+        selectinload(PaperDB.patient_variant_occurrences),
     )
     papers = query.all()
     for paper in papers:
         paper.patient_count = len(paper.patients)
         paper.variant_count = len(paper.variants)
+        paper.patient_variant_occurrences_count = len(paper.patient_variant_occurrences)
     return papers
 
 
@@ -406,11 +422,11 @@ def _patient_to_resp(row: PatientDB) -> PatientResp:
         paper_id=row.paper_id,
         identifier=row.identifier,
         identifier_evidence=HumanEvidenceBlock.model_validate(row.identifier_evidence),
-        proband_status=row.proband_status,
+        proband_status=ProbandStatus(row.proband_status),
         proband_status_evidence=HumanEvidenceBlock.model_validate(
             row.proband_status_evidence
         ),
-        sex=row.sex,
+        sex=SexAtBirth(row.sex),
         sex_evidence=HumanEvidenceBlock.model_validate(row.sex_evidence),
         age_diagnosis=row.age_diagnosis,
         age_diagnosis_unit=row.age_diagnosis_unit,
@@ -423,28 +439,36 @@ def _patient_to_resp(row: PatientDB) -> PatientResp:
         age_death=row.age_death,
         age_death_unit=row.age_death_unit,
         age_death_evidence=HumanEvidenceBlock.model_validate(row.age_death_evidence),
-        country_of_origin=row.country_of_origin,
+        country_of_origin=CountryCode(row.country_of_origin),
         country_of_origin_evidence=HumanEvidenceBlock.model_validate(
             row.country_of_origin_evidence
         ),
-        race_ethnicity=row.race_ethnicity,
+        race_ethnicity=RaceEthnicity(row.race_ethnicity),
         race_ethnicity_evidence=HumanEvidenceBlock.model_validate(
             row.race_ethnicity_evidence
         ),
-        affected_status=row.affected_status,
+        affected_status=AffectedStatus(row.affected_status),
         affected_status_evidence=HumanEvidenceBlock.model_validate(
             row.affected_status_evidence
         ),
         is_obligate_carrier=row.is_obligate_carrier,
-        relationship_to_proband=row.relationship_to_proband,
-        twin_type=row.twin_type,
+        relationship_to_proband=RelationshipToProband(row.relationship_to_proband)
+        if row.relationship_to_proband
+        else None,
+        twin_type=TwinType(row.twin_type) if row.twin_type else None,
         is_obligate_carrier_evidence=HumanEvidenceBlock.model_validate(
             row.is_obligate_carrier_evidence
-        ),
+        )
+        if row.is_obligate_carrier_evidence
+        else None,
         relationship_to_proband_evidence=HumanEvidenceBlock.model_validate(
             row.relationship_to_proband_evidence
-        ),
-        twin_type_evidence=HumanEvidenceBlock.model_validate(row.twin_type_evidence),
+        )
+        if row.relationship_to_proband_evidence
+        else None,
+        twin_type_evidence=HumanEvidenceBlock.model_validate(row.twin_type_evidence)
+        if row.twin_type_evidence
+        else None,
         updated_at=row.updated_at,
         family_id=row.family.id,
         family_identifier=row.family.identifier,
@@ -1135,10 +1159,12 @@ def search_genes(
 
 @app.get('/genes', response_model=list[GeneResp])
 def list_genes(
-    limit: int = Query(10),
+    limit: int | None = Query(None),
     session: Session = Depends(get_session),
 ) -> Any:
-    query = session.query(GeneDB).order_by(GeneDB.symbol).limit(limit)
+    query = session.query(GeneDB).order_by(GeneDB.symbol)
+    if limit is not None:
+        query = query.limit(limit)
     return query.all()
 
 
