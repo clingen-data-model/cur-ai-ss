@@ -118,6 +118,7 @@ from lib.models import (
     VariantResp,
     VariantUpdateRequest,
 )
+from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.patient import (
     AffectedStatus,
     CountryCode,
@@ -127,7 +128,6 @@ from lib.models.patient import (
     SexAtBirth,
     TwinType,
 )
-from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.segregation_analysis import SegregationAnalysisComputedNestedResp
 from lib.tasks import TaskCreateRequest, TaskResp, enqueue_all_instances, enqueue_task
 from lib.tasks.handlers import ensure_conversation_id
