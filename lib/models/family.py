@@ -13,6 +13,7 @@ from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock
 from lib.models.paper import PaperDB
 
 if TYPE_CHECKING:
+    from lib.models.agent_run import AgentRunDB
     from lib.models.patient import PatientDB
     from lib.models.segregation_analysis import (
         SegregationAnalysisComputedDB,
@@ -30,6 +31,9 @@ class FamilyDB(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     paper_id: Mapped[int] = mapped_column(
         Integer, ForeignKey('papers.id', ondelete='CASCADE'), nullable=False
+    )
+    agent_run_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey('agent_runs.id', ondelete='CASCADE'), nullable=False
     )
     identifier: Mapped[str] = mapped_column(String, nullable=False)
     identifier_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
@@ -55,12 +59,16 @@ class FamilyDB(Base):
         )
     )
 
-    __table_args__ = (Index('ix_families_paper_id', 'paper_id'),)
+    __table_args__ = (
+        Index('ix_families_paper_id', 'paper_id'),
+        Index('ix_families_agent_run_id', 'agent_run_id'),
+    )
 
 
 class FamilyResp(BaseModel):
     id: int
     paper_id: int
+    agent_run_id: int
     identifier: str
     identifier_evidence: HumanEvidenceBlock[str]
     updated_at: datetime

@@ -280,6 +280,16 @@ def test_search_genes_by_prefix_no_match(client, seeded_genes):
 
 @pytest.fixture
 def seeded_paper(db_session):
+    from lib.core.environment import env
+    from lib.models import AgentRunDB
+
+    agent_run = AgentRunDB(
+        git_hash='abc123def456',
+        description='test run',
+        model=env.OPENAI_API_DEPLOYMENT,
+    )
+    db_session.add(agent_run)
+    db_session.flush()
     gene = GeneDB(symbol='BRCA1')
     db_session.add(gene)
     db_session.flush()
@@ -293,6 +303,7 @@ def seeded_paper(db_session):
     # Create default family for tests
     family = FamilyDB(
         paper_id=paper.id,
+        agent_run_id=agent_run.id,
         identifier='Family 1',
         identifier_evidence=dict(
             value='Family 1', reasoning='test family', quote='Family 1'
@@ -456,6 +467,7 @@ def test_update_patient_rejects_wrong_paper_scope(
 
     other_family = FamilyDB(
         paper_id=other_paper.id,
+        agent_run_id=seeded_agent_run.id,
         identifier='Other Family',
         identifier_evidence=dict(
             value='Other Family', reasoning='test family', quote='Other Family'
@@ -1048,10 +1060,16 @@ def test_enqueue_all_instances_for_splatted_task(
 
     # Create families and splatted tasks
     family1 = FamilyDB(
-        paper_id=seeded_paper.id, identifier='fam1', identifier_evidence={}
+        paper_id=seeded_paper.id,
+        agent_run_id=agent_run.id,
+        identifier='fam1',
+        identifier_evidence={},
     )
     family2 = FamilyDB(
-        paper_id=seeded_paper.id, identifier='fam2', identifier_evidence={}
+        paper_id=seeded_paper.id,
+        agent_run_id=agent_run.id,
+        identifier='fam2',
+        identifier_evidence={},
     )
     db_session.add_all([family1, family2])
     db_session.flush()
