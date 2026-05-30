@@ -44,6 +44,7 @@ from lib.agents.general_paper_qa_agent import (
 from lib.agents.general_paper_qa_agent import (
     agent as general_paper_qa_agent,
 )
+from lib.agents.run_tracking import ensure_agent_run
 from lib.api.db import get_session, session_scope
 from lib.api.middleware import make_log_request_middleware
 from lib.core.environment import env
@@ -208,12 +209,13 @@ def put_paper(
         )
     main_content = uploaded_file.file.read()
 
-    # Get latest agent run
+    # Ensure agent run exists
     latest_run = session.query(AgentRunDB).order_by(AgentRunDB.id.desc()).first()
     if not latest_run:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail='No agent runs found. Create one with ensure_agent_run().',
+        latest_run = ensure_agent_run(
+            session=session,
+            description='Web UI upload',
+            model=env.OPENAI_API_DEPLOYMENT,
         )
 
     paper_db = PaperDB.from_content(main_content)
@@ -332,11 +334,13 @@ def list_papers(
         selectinload(PaperDB.tasks),
         selectinload(PaperDB.patients),
         selectinload(PaperDB.variants),
+        selectinload(PaperDB.patient_variant_occurrences),
     )
     papers = query.all()
     for paper in papers:
         paper.patient_count = len(paper.patients)
         paper.variant_count = len(paper.variants)
+        paper.patient_variant_occurrences_count = len(paper.patient_variant_occurrences)
     return papers
 
 
@@ -1135,10 +1139,12 @@ def search_genes(
 
 @app.get('/genes', response_model=list[GeneResp])
 def list_genes(
-    limit: int = Query(10),
+    limit: int | None = Query(None),
     session: Session = Depends(get_session),
 ) -> Any:
-    query = session.query(GeneDB).order_by(GeneDB.symbol).limit(limit)
+    query = session.query(GeneDB).order_by(GeneDB.symbol)
+    if limit is not None:
+        query = query.limit(limit)
     return query.all()
 
 
