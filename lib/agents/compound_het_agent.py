@@ -5,8 +5,6 @@ from lib.core.environment import env
 from lib.models.patient_variant_occurrences import CompoundHetEvaluationOutput
 
 COMPOUND_HET_AGENT_INSTRUCTIONS = """
-You are an expert clinical geneticist specializing in variant analysis and compound heterozygote identification.
-
 Your task is to evaluate heterozygous variant pairs in a patient to determine if they represent
 a compound heterozygous genotype (variants in trans on different chromosome copies).
 
