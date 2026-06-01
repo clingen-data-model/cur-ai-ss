@@ -376,12 +376,12 @@ def render_patient_variant_occurrences_tab() -> None:
             st.markdown('#### Compound Heterozygous Pairing')
             st.markdown(
                 f'**Paired with variant:** {link.paired_variant_link_id} '
-                f'(Confidence: {link.paired_variant_link_reasoning.get("value", "Unknown")})'
+                f'(Confidence: {link.paired_variant_link_reasoning.value})'
             )
-            if link.paired_variant_link_reasoning.get('reasoning'):
+            if link.paired_variant_link_reasoning.reasoning:
                 st.text_area(
                     'Pairing Reasoning',
-                    value=link.paired_variant_link_reasoning['reasoning'],
+                    value=link.paired_variant_link_reasoning.reasoning,
                     height=15,
                     disabled=True,
                 )
