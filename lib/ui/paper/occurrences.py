@@ -369,3 +369,19 @@ def render_patient_variant_occurrences_tab() -> None:
                 _render_evidence_block(
                     link.disease_name_evidence, paper_resp.id, 'disease_name'
                 )
+
+        # Display paired variant link reasoning if present (compound heterozygous pairing)
+        if link.paired_variant_link_id and link.paired_variant_link_reasoning:
+            st.divider()
+            st.markdown('#### Compound Heterozygous Pairing')
+            st.markdown(
+                f'**Paired with variant:** {link.paired_variant_link_id} '
+                f'(Confidence: {link.paired_variant_link_reasoning.value})'
+            )
+            if link.paired_variant_link_reasoning.reasoning:
+                st.text_area(
+                    'Pairing Reasoning',
+                    value=link.paired_variant_link_reasoning.reasoning,
+                    height=15,
+                    disabled=True,
+                )
