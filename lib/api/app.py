@@ -22,7 +22,7 @@ from fastapi import (
     status,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.gzip import GZIPMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from openai import AsyncOpenAI
@@ -169,7 +169,7 @@ app.add_middleware(
     allow_methods=['*'],  # Allows all HTTP methods (GET, POST, PUT, etc.)
     allow_headers=['*'],  # Allows all headers
 )
-app.add_middleware(GZIPMiddleware, minimum_size=1000)  # Compress responses > 1KB
+app.add_middleware(GZipMiddleware, minimum_size=1000)  # Compress responses > 1KB
 app.middleware('http')(make_log_request_middleware(logger))  # Logging middleware
 
 
