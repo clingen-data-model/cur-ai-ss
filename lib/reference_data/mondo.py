@@ -29,11 +29,17 @@ MONDO_ID_RE = re.compile(
     r'^(?:https?://purl\.obolibrary\.org/obo/)?MONDO[:_](\d+)$',
     re.IGNORECASE,
 )
+MONDO_ID_IN_TEXT_RE = re.compile(
+    r'(?:https?://purl\.obolibrary\.org/obo/)?MONDO[:_](\d+)\b',
+    re.IGNORECASE,
+)
 OBO_IRI_RE = re.compile(r'https?://purl\.obolibrary\.org/obo/([A-Za-z]+)_(.+)$')
 ORPHANET_IRI_RE = re.compile(r'https?://www\.orpha\.net/ORDO/Orphanet_(\d+)$')
 OMIM_IRI_RE = re.compile(r'https?://omim\.org/entry/(\d+)$')
 IDENTIFIERS_IRI_RE = re.compile(r'https?://identifiers\.org/([^/]+)/(.+)$')
 ICD_IRI_RE = re.compile(r'https?://id\.who\.int/icd/entity/(.+)$')
+CURIE_IN_TEXT_RE = re.compile(r'\b[A-Za-z][A-Za-z0-9_.-]*:[A-Za-z0-9_.-]+\b')
+URL_IN_TEXT_RE = re.compile(r'https?://[^\s<>)\]},"\']+')
 
 SKOS_EXACT_MATCH = 'http://www.w3.org/2004/02/skos/core#exactMatch'
 DEPRECATED_REPLACEMENT_PREDICATES = {
@@ -49,6 +55,7 @@ EXCLUDED_SYNONYM_TYPE_TOKENS = (
 )
 STRICT_DASHES_RE = re.compile(r'[\u2010-\u2015\u2212]')
 FUZZY_PUNCTUATION_RE = re.compile(r'[\W_]+')
+FUZZY_SCORE_CUTOFF = 85.0
 
 _mondo_index: 'MondoIndex | None' = None
 
@@ -137,11 +144,6 @@ def ensure_ontology() -> Path:
     return path
 
 
-def reset_mondo_index_cache() -> None:
-    global _mondo_index
-    _mondo_index = None
-
-
 def get_mondo_index() -> MondoIndex:
     global _mondo_index
     if _mondo_index is None:
@@ -150,6 +152,26 @@ def get_mondo_index() -> MondoIndex:
 
 
 def build_mondo_index(path: Path) -> MondoIndex:
+    """Build lookup tables from OWLGraph JSON nodes.
+
+    For now this loads the entire mondo JSON file using json.loads and prunes it
+    down, however the dict from json.loads must fit into memory (400-500MiB).
+
+    Non-deprecated MONDO CLASS nodes become records keyed by CURIE, IRI,
+    normalized primary label, normalized synonym text by synonym predicate,
+    abbreviation text, and external IDs from node xrefs / exactMatch
+    properties. Deprecated nodes are kept out of normal indexes and only
+    contribute replacement lookups when they point to one valid non-deprecated
+    MONDO term. Text keys use strict normalization for deterministic matching;
+    fuzzy choices use looser punctuation/whitespace normalization over labels
+    plus exact/related synonyms.
+
+    Args:
+        path: Path to the MONDO OWLGraph JSON ontology file.
+
+    Returns:
+        A MondoIndex containing deterministic lookup indexes and fuzzy choices.
+    """
     with open(path) as f:
         data = json.load(f)
     graphs = data.get('graphs') or []
@@ -374,17 +396,21 @@ def find_mondo_term_for_disease(disease_name: str) -> MondoTerm | None:
     index = get_mondo_index()
     strict_ambiguities: list[dict[str, Any]] = []
 
-    direct_match = index.by_iri.get(query.casefold())
-    if direct_match is None:
-        mondo_id = normalize_mondo_id(query)
-        direct_match = index.by_iri.get(mondo_id.casefold()) if mondo_id else None
-    if direct_match is not None:
-        return term_from_entry(direct_match, 'direct_mondo_id', query)
+    direct_matches = [
+        index.by_iri[mondo_id.casefold()]
+        for mondo_id in extract_mondo_ids(query)
+        if mondo_id.casefold() in index.by_iri
+    ]
+    selected, ambiguity = select_unique_entry('direct_mondo_id', query, direct_matches)
+    if selected is not None:
+        return term_from_entry(selected, 'direct_mondo_id', query)
+    if ambiguity is not None:
+        strict_ambiguities.append(ambiguity)
 
     strict_steps: list[tuple[str, str | set[str], dict[str, list[MatchEntry]]]] = [
         ('primary_label', normalize_strict(query), index.label_index),
         ('exact_synonym', normalize_strict(query), index.exact_synonym_index),
-        ('xref', normalize_identifier_keys(query), index.xref_index),
+        ('xref', extract_identifier_keys(query), index.xref_index),
         ('related_synonym', normalize_strict(query), index.related_synonym_index),
         (
             'broad_narrow_synonym',
@@ -406,6 +432,9 @@ def find_mondo_term_for_disease(disease_name: str) -> MondoTerm | None:
         if ambiguity is not None:
             strict_ambiguities.append(ambiguity)
 
+    if strict_ambiguities:
+        return None
+
     return fuzzy_match(index, query, strict_ambiguities)
 
 
@@ -424,7 +453,7 @@ def fuzzy_match(
         index.fuzzy_choices,
         scorer=fuzz.token_sort_ratio,
         limit=max(limit * 10, 50),
-        score_cutoff=0.0,
+        score_cutoff=FUZZY_SCORE_CUTOFF,
     )
 
     best_by_mondo_id: dict[str, tuple[MatchEntry, float]] = {}
@@ -556,10 +585,24 @@ def normalize_mondo_id(value: str) -> str | None:
     return f'MONDO:{match.group(1)}'
 
 
+def extract_mondo_ids(text: str) -> set[str]:
+    return {f'MONDO:{match.group(1)}' for match in MONDO_ID_IN_TEXT_RE.finditer(text)}
+
+
 def iri_to_mondo_id(iri: str) -> str | None:
     if not iri.startswith(MONDO_IRI_PREFIX):
         return normalize_mondo_id(iri)
     return f'MONDO:{iri.removeprefix(MONDO_IRI_PREFIX)}'
+
+
+def extract_identifier_keys(text: str) -> set[str]:
+    keys = set()
+    keys.update(normalize_identifier_keys(text))
+    for match in CURIE_IN_TEXT_RE.finditer(text):
+        keys.update(normalize_identifier_keys(match.group(0)))
+    for match in URL_IN_TEXT_RE.finditer(text):
+        keys.update(normalize_identifier_keys(match.group(0)))
+    return keys
 
 
 def normalize_identifier_keys(identifier: str) -> set[str]:

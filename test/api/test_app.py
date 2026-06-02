@@ -1215,6 +1215,35 @@ def test_mondo_linking_handler_updates_paper_and_occurrence(
     assert occurrence.mondo_match_context == {'match_type': 'primary_label'}
 
 
+def test_mondo_linking_handler_skips_blank_disease_name(
+    monkeypatch, db_session, seeded_paper, seeded_agent_run
+):
+    from lib.tasks import handlers
+
+    seeded_paper.disease_name = '   '
+    task = TaskDB(
+        paper_id=seeded_paper.id,
+        agent_run_id=seeded_agent_run.id,
+        type=TaskType.MONDO_LINKING,
+        status=TaskStatus.PENDING,
+    )
+    db_session.add(task)
+    db_session.commit()
+
+    def fail_on_lookup(disease_name: str):
+        raise AssertionError(f'unexpected MONDO lookup for {disease_name!r}')
+
+    monkeypatch.setattr(handlers, 'find_mondo_term_for_disease', fail_on_lookup)
+
+    asyncio.run(handlers.handle_mondo_linking(task.id))
+
+    db_session.expire_all()
+    paper = db_session.get(PaperDB, seeded_paper.id)
+    assert paper.mondo_id is None
+    assert paper.mondo_term is None
+    assert paper.mondo_match_context is None
+
+
 def test_paper_metadata_successor_enqueues_mondo_linking(
     db_session, seeded_paper, agent_run
 ):

@@ -25,6 +25,22 @@ def test_direct_mondo_id_match(mondo_index: mondo.MondoIndex) -> None:
     assert result.match_type == 'direct_mondo_id'
 
 
+def test_embedded_mondo_id_match(mondo_index: mondo.MondoIndex) -> None:
+    result = mondo.find_mondo_term_for_disease('Marfan syndrome (MONDO:0007947)')
+
+    assert result is not None
+    assert result.mondo_id == 'MONDO:0007947'
+    assert result.match_type == 'direct_mondo_id'
+
+
+def test_non_mondo_curie_does_not_match_mondo_id(
+    mondo_index: mondo.MondoIndex,
+) -> None:
+    result = mondo.find_mondo_term_for_disease('OMIM:0007947')
+
+    assert result is None
+
+
 def test_primary_label_match(mondo_index: mondo.MondoIndex) -> None:
     result = mondo.find_mondo_term_for_disease('cystic fibrosis')
 
@@ -65,13 +81,20 @@ def test_exact_mapping_identifier_match(mondo_index: mondo.MondoIndex) -> None:
     assert result.match_type == 'exact_mapping_id'
 
 
+def test_embedded_external_identifier_match(mondo_index: mondo.MondoIndex) -> None:
+    result = mondo.find_mondo_term_for_disease('Disease identifier Orphanet:558')
+
+    assert result is not None
+    assert result.mondo_id == 'MONDO:0007947'
+    assert result.match_type == 'exact_mapping_id'
+
+
 def test_synonym_xrefs_are_not_identifier_matches(
     mondo_index: mondo.MondoIndex,
 ) -> None:
     result = mondo.find_mondo_term_for_disease('SYNPROV:001')
 
-    assert result is not None
-    assert result.match_type == 'fuzzy'
+    assert result is None
 
 
 def test_unique_abbreviation_match(mondo_index: mondo.MondoIndex) -> None:
@@ -82,15 +105,12 @@ def test_unique_abbreviation_match(mondo_index: mondo.MondoIndex) -> None:
     assert result.match_type == 'abbreviation'
 
 
-def test_ambiguous_abbreviation_falls_through_to_fuzzy(
+def test_ambiguous_abbreviation_does_not_fall_through_to_fuzzy(
     mondo_index: mondo.MondoIndex,
 ) -> None:
     result = mondo.find_mondo_term_for_disease('MFS')
 
-    assert result is not None
-    assert result.match_type == 'fuzzy'
-    assert result.match_context is not None
-    assert result.match_context['strict_ambiguities'][0]['match_type'] == 'abbreviation'
+    assert result is None
 
 
 def test_deprecated_term_replacement(mondo_index: mondo.MondoIndex) -> None:
@@ -129,6 +149,18 @@ def test_fuzzy_match_includes_context(mondo_index: mondo.MondoIndex) -> None:
     assert result.match_context is not None
     assert result.match_context['scorer'] == 'rapidfuzz.fuzz.token_sort_ratio'
     assert result.match_context['nearest_candidates'][0]['mondo_id'] == 'MONDO:0009061'
+
+
+def test_low_score_fuzzy_match_returns_none(mondo_index: mondo.MondoIndex) -> None:
+    result = mondo.find_mondo_term_for_disease('nonsense totally unrelated')
+
+    assert result is None
+
+
+def test_empty_disease_name_returns_none(mondo_index: mondo.MondoIndex) -> None:
+    result = mondo.find_mondo_term_for_disease('   ')
+
+    assert result is None
 
 
 def _node(

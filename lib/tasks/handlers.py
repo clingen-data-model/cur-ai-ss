@@ -1475,16 +1475,23 @@ async def handle_mondo_linking(task_id: int) -> None:
         paper_disease_name,
         *(disease_name for _, disease_name in occurrence_disease_names),
     ]:
-        if disease_name is None or disease_name in mondo_by_disease_name:
+        normalized_disease_name = disease_name.strip() if disease_name else ''
+        if (
+            not normalized_disease_name
+            or normalized_disease_name in mondo_by_disease_name
+        ):
             continue
-        mondo_by_disease_name[disease_name] = find_mondo_term_for_disease(disease_name)
+        mondo_by_disease_name[normalized_disease_name] = find_mondo_term_for_disease(
+            normalized_disease_name
+        )
 
     def _mondo_values(
         disease_name: str | None,
     ) -> tuple[str | None, str | None, dict | None]:
-        if disease_name is None:
+        normalized_disease_name = disease_name.strip() if disease_name else ''
+        if not normalized_disease_name:
             return None, None, None
-        mondo = mondo_by_disease_name.get(disease_name)
+        mondo = mondo_by_disease_name.get(normalized_disease_name)
         if mondo is None:
             return None, None, None
         return mondo.mondo_id, mondo.term, mondo.match_context
