@@ -54,8 +54,9 @@ Additionally, provide at the top level:
 - `Homozygous`: Patient carries the variant on both copies of the gene (same variant on both chromosomes)
 - `Hemizygous`: Patient carries the variant on a single copy (typically for X-linked variants in males, or haploid regions)
 - `Heterozygous`: Patient carries the variant on one copy of the gene (different allele on the other copy)
-- `Compound Heterozygous`: Patient carries exactly 2 different heterozygous variants in the same gene (one mutation on each chromosome copy). When extracting variants for a patient, if you identify exactly 2 different heterozygous variants (and no more), mark BOTH with zygosity='Compound Heterozygous'. "Different" means the variants are at different positions/represent different mutations (not the same variant appearing twice). Also mark variants as Compound Heterozygous when the paper explicitly describes them as "compound heterozygous".
 - `Unknown`: The paper does not clearly specify the zygosity status
+
+Note: Compound heterozygous genotype evaluation (determining if two heterozygous variants are in trans) is handled by a separate compound heterozygote evaluation agent.
 
 **Inheritance Definitions:**
 
