@@ -27,10 +27,11 @@ from lib.models.variant import (
 )
 
 
-def family_to_db(paper_id: int, family: Family) -> FamilyDB:
+def family_to_db(paper_id: int, agent_run_id: int, family: Family) -> FamilyDB:
     """Convert a Family to FamilyDB, splitting values from evidence."""
     return FamilyDB(
         paper_id=paper_id,
+        agent_run_id=agent_run_id,
         identifier=family.identifier.value,
         identifier_evidence=family.identifier.model_dump(),
     )
