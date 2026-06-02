@@ -558,7 +558,7 @@ async def handle_patient_extraction(task_id: int) -> None:
         # Insert families first so we have family IDs for patient assignment
         family_entries_by_id: dict[str, int] = {}
         for entry in result.final_output.families:
-            db_family = family_to_db(paper_id, entry.family)
+            db_family = family_to_db(paper_id, agent_run_id, entry.family)
             session.add(db_family)
             session.flush()
             family_entries_by_id[entry.family.identifier.value] = db_family.id
