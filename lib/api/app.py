@@ -292,7 +292,12 @@ def put_paper(
 def get_paper(paper_id: int, session: Session = Depends(get_session)) -> Any:
     paper_db = (
         session.query(PaperDB)
-        .options(selectinload(PaperDB.gene))
+        .options(
+            selectinload(PaperDB.gene),
+            selectinload(PaperDB.patients),
+            selectinload(PaperDB.variants),
+            selectinload(PaperDB.patient_variant_occurrences),
+        )
         .filter(PaperDB.id == paper_id)
         .one_or_none()
     )
@@ -300,6 +305,11 @@ def get_paper(paper_id: int, session: Session = Depends(get_session)) -> Any:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
+    paper_db.patient_count = len(paper_db.patients)
+    paper_db.variant_count = len(paper_db.variants)
+    paper_db.patient_variant_occurrences_count = len(
+        paper_db.patient_variant_occurrences
+    )
     return paper_db
 
 
@@ -326,7 +336,12 @@ def update_paper(
 ) -> Any:
     paper_db = (
         session.query(PaperDB)
-        .options(selectinload(PaperDB.gene))
+        .options(
+            selectinload(PaperDB.gene),
+            selectinload(PaperDB.patients),
+            selectinload(PaperDB.variants),
+            selectinload(PaperDB.patient_variant_occurrences),
+        )
         .filter(PaperDB.id == paper_id)
         .one_or_none()
     )
@@ -336,6 +351,11 @@ def update_paper(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
     patch_request.apply_to(paper_db)
+    paper_db.patient_count = len(paper_db.patients)
+    paper_db.variant_count = len(paper_db.variants)
+    paper_db.patient_variant_occurrences_count = len(
+        paper_db.patient_variant_occurrences
+    )
     return paper_db
 
 
