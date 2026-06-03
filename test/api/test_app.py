@@ -1,5 +1,6 @@
 import asyncio
 import io
+import json
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
@@ -1328,11 +1329,17 @@ def test_mondo_linking_handler_updates_paper_only_for_paper_scoped_task(
     }
     calls = []
 
-    async def fake_find_mondo_term(disease_name: str, context=None):
-        calls.append(disease_name)
-        return terms.get(disease_name)
+    mondo_index = object()
 
-    monkeypatch.setattr(handlers, '_find_mondo_term_for_disease', fake_find_mondo_term)
+    def fake_deterministic_index_lookup(index, disease_name: str):
+        assert index is mondo_index
+        calls.append(disease_name)
+        return terms.get(disease_name), []
+
+    monkeypatch.setattr(handlers, 'get_mondo_index', lambda: mondo_index)
+    monkeypatch.setattr(
+        handlers, 'deterministic_index_lookup', fake_deterministic_index_lookup
+    )
 
     asyncio.run(handlers.handle_mondo_linking(task.id))
 
@@ -1353,7 +1360,9 @@ def test_mondo_linking_handler_updates_paper_only_for_paper_scoped_task(
 def test_mondo_linking_handler_updates_target_occurrence_only(
     monkeypatch, db_session, seeded_paper, seeded_variant, seeded_agent_run
 ):
-    from lib.reference_data.mondo import MondoTerm
+    from types import SimpleNamespace
+
+    from lib.reference_data.mondo import MondoMatchType
     from lib.tasks import handlers
 
     seeded_paper.disease_name = 'limb-girdle muscular dystrophy type 2Q'
@@ -1374,17 +1383,50 @@ def test_mondo_linking_handler_updates_target_occurrence_only(
     db_session.add(task)
     db_session.commit()
 
-    async def fake_find_mondo_term(disease_name: str, context=None):
+    mondo_index = object()
+
+    def fake_deterministic_index_lookup(index, disease_name: str):
+        assert index is mondo_index
         assert disease_name == 'epidermolysis bullosa simplex'
-        assert context.occurrence_disease_text == 'epidermolysis bullosa simplex'
-        assert context.inheritance_mode == 'Dominant'
-        return MondoTerm(
-            mondo_id='MONDO:0008275',
-            term='epidermolysis bullosa simplex',
-            match_context={'match_type': 'primary_label'},
+        return None, []
+
+    async def fake_runner_run(agent, message, **kwargs):
+        assert agent is handlers.mondo_linking_agent
+        assert kwargs['max_turns'] == 12
+        payload = json.loads(
+            message.removeprefix('MONDO linking JSON:\n').split('\n\n', 1)[0]
+        )
+        assert payload['disease_name'] == 'epidermolysis bullosa simplex'
+        assert payload['context']['occurrence_disease_text'] == (
+            'epidermolysis bullosa simplex'
+        )
+        assert payload['context']['inheritance_mode'] == 'Dominant'
+        return SimpleNamespace(
+            final_output=SimpleNamespace(
+                value=SimpleNamespace(
+                    mondo_id='MONDO:0008275',
+                    match_type=MondoMatchType.PRIMARY_LABEL,
+                    candidates_considered=['MONDO:0008275'],
+                    confidence='high',
+                ),
+                reasoning='matched primary label',
+            )
         )
 
-    monkeypatch.setattr(handlers, '_find_mondo_term_for_disease', fake_find_mondo_term)
+    monkeypatch.setattr(handlers, 'get_mondo_index', lambda: mondo_index)
+    monkeypatch.setattr(
+        handlers, 'deterministic_index_lookup', fake_deterministic_index_lookup
+    )
+    monkeypatch.setattr(handlers, 'retrieve_mondo_candidates', lambda *args, **kw: [])
+    monkeypatch.setattr(
+        handlers,
+        'get_mondo_term',
+        lambda mondo_id: {
+            'mondo_id': mondo_id,
+            'label': 'epidermolysis bullosa simplex',
+        },
+    )
+    monkeypatch.setattr(handlers.Runner, 'run', fake_runner_run)
 
     asyncio.run(handlers.handle_mondo_linking(task.id))
 
@@ -1396,7 +1438,11 @@ def test_mondo_linking_handler_updates_target_occurrence_only(
     assert paper.mondo_match_context is None
     assert occurrence.mondo_id == 'MONDO:0008275'
     assert occurrence.mondo_term == 'epidermolysis bullosa simplex'
-    assert occurrence.mondo_match_context == {'match_type': 'primary_label'}
+    assert occurrence.mondo_match_context['query'] == 'epidermolysis bullosa simplex'
+    assert occurrence.mondo_match_context['agent']['used'] is True
+    assert occurrence.mondo_match_context['agent']['reasoning'] == (
+        'matched primary label'
+    )
 
 
 def test_mondo_linking_handler_skips_blank_disease_name(
@@ -1414,10 +1460,14 @@ def test_mondo_linking_handler_skips_blank_disease_name(
     db_session.add(task)
     db_session.commit()
 
-    async def fail_on_lookup(disease_name: str, context=None):
-        raise AssertionError(f'unexpected MONDO lookup for {disease_name!r}')
+    def fail_get_mondo_index():
+        raise AssertionError('unexpected MONDO lookup')
 
-    monkeypatch.setattr(handlers, '_find_mondo_term_for_disease', fail_on_lookup)
+    monkeypatch.setattr(
+        handlers,
+        'get_mondo_index',
+        fail_get_mondo_index,
+    )
 
     asyncio.run(handlers.handle_mondo_linking(task.id))
 
@@ -1453,10 +1503,14 @@ def test_mondo_linking_handler_skips_blank_occurrence_disease_name(
     db_session.add(task)
     db_session.commit()
 
-    async def fail_on_lookup(disease_name: str, context=None):
-        raise AssertionError(f'unexpected MONDO lookup for {disease_name!r}')
+    def fail_get_mondo_index():
+        raise AssertionError('unexpected MONDO lookup')
 
-    monkeypatch.setattr(handlers, '_find_mondo_term_for_disease', fail_on_lookup)
+    monkeypatch.setattr(
+        handlers,
+        'get_mondo_index',
+        fail_get_mondo_index,
+    )
 
     asyncio.run(handlers.handle_mondo_linking(task.id))
 

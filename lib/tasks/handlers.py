@@ -21,6 +21,12 @@ from lib.agents.hpo_linking_agent import (
 from lib.agents.hpo_linking_agent import (
     agent as hpo_linking_agent,
 )
+from lib.agents.mondo_linking_agent import (
+    MONDO_LINKING_AGENT_INSTRUCTIONS,
+)
+from lib.agents.mondo_linking_agent import (
+    agent as mondo_linking_agent,
+)
 from lib.agents.paper_extraction_agent import (
     PAPER_EXTRACTION_AGENT_INSTRUCTIONS,
 )
@@ -137,14 +143,18 @@ from lib.models.variant import HarmonizedVariant, Variant
 from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
 from lib.reference_data.mondo import (
     MondoDiseaseContext,
+    MondoMatchType,
     MondoTerm,
-    find_mondo_term_for_disease_with_agent,
+    build_match_context,
+    deterministic_index_lookup,
+    get_mondo_index,
+    get_mondo_term,
+    retrieve_mondo_candidates,
 )
 from lib.tasks.models import TaskType
 
 setup_logging()
 logger = logging.getLogger(__name__)
-_find_mondo_term_for_disease = find_mondo_term_for_disease_with_agent
 
 
 def log_cache_metrics(task_type: str, result: Any) -> None:
@@ -1506,10 +1516,60 @@ async def handle_mondo_linking(task_id: int) -> None:
     normalized_disease_name = disease_name.strip() if disease_name else ''
     mondo_term: MondoTerm | None = None
     if normalized_disease_name:
-        mondo_term = await _find_mondo_term_for_disease(
-            normalized_disease_name,
-            disease_context,
+        query = normalized_disease_name
+        mondo_index = get_mondo_index()
+        mondo_term, strict_ambiguities = deterministic_index_lookup(
+            mondo_index, query
         )
+
+        if mondo_term is None:
+            candidates = retrieve_mondo_candidates(mondo_index, query, limit=20)
+            message = {
+                'disease_name': query,
+                'context': disease_context.model_dump(exclude_none=True),
+                'initial_candidates': [
+                    candidate.model_dump() for candidate in candidates
+                ],
+                'strict_ambiguities': strict_ambiguities,
+            }
+
+            result = await Runner.run(
+                mondo_linking_agent,
+                (
+                    f'MONDO linking JSON:\n{json.dumps(message, indent=2)}\n\n'
+                    f'{MONDO_LINKING_AGENT_INSTRUCTIONS}'
+                ),
+                max_turns=12,
+                run_config=RunConfig(
+                    trace_metadata={
+                        'disease_name': query,
+                        'gene_symbol': disease_context.gene_symbol or '',
+                    },
+                ),
+            )
+            log_cache_metrics('MONDO_LINKING', result)
+
+            decision = result.final_output.value
+            if decision.mondo_id:
+                selected_term = get_mondo_term(decision.mondo_id)
+                if selected_term is not None:
+                    mondo_term = MondoTerm(
+                        mondo_id=selected_term['mondo_id'],
+                        term=selected_term['label'],
+                        match_type=decision.match_type
+                        or MondoMatchType.AGENT_SELECTED,
+                        matched_text=query,
+                    )
+                    mondo_term.match_context = build_match_context(
+                        query=query,
+                        selected=mondo_term,
+                        candidates=candidates,
+                        strict_ambiguities=strict_ambiguities,
+                        agent_used=True,
+                        agent_reasoning=result.final_output.reasoning,
+                        candidates_considered=decision.candidates_considered,
+                        confidence=decision.confidence,
+                    )
 
     def _mondo_values() -> tuple[str | None, str | None, dict | None]:
         if mondo_term is None:

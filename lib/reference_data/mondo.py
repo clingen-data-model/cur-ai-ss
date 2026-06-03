@@ -19,7 +19,6 @@ from pathlib import Path
 from typing import Any
 
 import requests
-from agents import RunConfig, Runner
 from pydantic import BaseModel
 from rapidfuzz import fuzz, process
 
@@ -599,72 +598,6 @@ def _rank_rapidfuzz_matches(
         best_by_mondo_id.values(),
         key=lambda item: fuzzy_sort_key(item[0], item[1], normalized_query),
     )[:limit]
-
-
-async def find_mondo_term_for_disease_with_agent(
-    disease_name: str,
-    context: MondoDiseaseContext | None = None,
-) -> MondoTerm | None:
-    """Return a MONDO term, using the agent for ambiguous or uncertain cases."""
-    query = disease_name.strip()
-    if not query:
-        return None
-
-    index = get_mondo_index()
-    selected, strict_ambiguities = deterministic_index_lookup(index, query)
-    if selected is not None:
-        return selected
-
-    candidates = retrieve_mondo_candidates(index, query, limit=20)
-    message = {
-        'disease_name': query,
-        'context': context.model_dump(exclude_none=True) if context else {},
-        'initial_candidates': [candidate.model_dump() for candidate in candidates],
-        'strict_ambiguities': strict_ambiguities,
-    }
-
-    from lib.agents.mondo_linking_agent import MONDO_LINKING_AGENT_INSTRUCTIONS
-    from lib.agents.mondo_linking_agent import agent as mondo_linking_agent
-
-    result = await Runner.run(
-        mondo_linking_agent,
-        (
-            f'MONDO linking JSON:\n{json.dumps(message, indent=2)}\n\n'
-            f'{MONDO_LINKING_AGENT_INSTRUCTIONS}'
-        ),
-        max_turns=12,
-        run_config=RunConfig(
-            trace_metadata={
-                'disease_name': query,
-                'gene_symbol': context.gene_symbol if context else '',
-            },
-        ),
-    )
-    decision = result.final_output.value
-    if not decision.mondo_id:
-        return None
-
-    selected_term = get_mondo_term(decision.mondo_id)
-    if selected_term is None:
-        return None
-
-    selected = MondoTerm(
-        mondo_id=selected_term['mondo_id'],
-        term=selected_term['label'],
-        match_type=decision.match_type or MondoMatchType.AGENT_SELECTED,
-        matched_text=query,
-    )
-    selected.match_context = build_match_context(
-        query=query,
-        selected=selected,
-        candidates=candidates,
-        strict_ambiguities=strict_ambiguities,
-        agent_used=True,
-        agent_reasoning=result.final_output.reasoning,
-        candidates_considered=decision.candidates_considered,
-        confidence=decision.confidence,
-    )
-    return selected
 
 
 def retrieve_mondo_candidates(
