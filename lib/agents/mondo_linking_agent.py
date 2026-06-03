@@ -21,12 +21,6 @@ class MondoAgentDecision(BaseModel):
         description='Selected MONDO label, or null when no supported match exists.',
     )
     confidence: Literal['high', 'medium', 'low'] | None = None
-    confidence_score: float | None = Field(
-        default=None,
-        ge=0,
-        le=100,
-        description='Optional confidence score on a 0-100 scale.',
-    )
     matched_text: str | None = None
     match_type: str | None = None
     candidates_considered: list[str] = Field(default_factory=list)
@@ -115,7 +109,6 @@ Output:
   "mondo_id": "MONDO:0000000" or null,
   "term": "label" or null,
   "confidence": "high" | "medium" | "low" | null,
-  "confidence_score": 0-100 or null,
   "matched_text": "text that matched" or null,
   "match_type": "agent_selected" or another concise match type,
   "candidates_considered": ["MONDO:..."]

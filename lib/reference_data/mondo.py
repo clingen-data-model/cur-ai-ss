@@ -65,7 +65,6 @@ class MondoTerm(BaseModel):
     term: str
     match_type: str | None = None
     matched_text: str | None = None
-    score: float | None = None
     match_context: dict[str, Any] | None = None
 
 
@@ -615,7 +614,6 @@ async def find_mondo_term_for_disease_with_agent(
         term=selected_term['label'],
         match_type=decision.match_type or 'agent_selected',
         matched_text=decision.matched_text or query,
-        score=decision.confidence_score,
     )
     selected.match_context = build_match_context(
         query=query,
@@ -716,7 +714,6 @@ def term_from_entry(entry: MatchEntry, match_type: str, query: str) -> MondoTerm
         term=entry.label,
         match_type=match_type,
         matched_text=entry.matched_text,
-        score=100.0,
         match_context=context,
     )
 
@@ -812,8 +809,6 @@ def build_match_context(
         'matched_text': selected.matched_text,
         'match_type': selected.match_type,
     }
-    if selected.score is not None:
-        selected_context['confidence_score'] = float(selected.score)
     if confidence:
         selected_context['confidence'] = confidence
 
