@@ -1140,7 +1140,8 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
         )
         for link in links:
             link.paired_variant_link_id = None
-            link.paired_variant_link_reasoning = None
+            link.paired_variant_confidence = None
+            link.paired_variant_confidence_reasoning = None
         session.flush()
 
         # Update paper-level disease_name if provided by the agent (case-level context)
@@ -1274,10 +1275,15 @@ async def handle_compound_het_evaluation(task_id: int) -> None:
                 # Bidirectionally set pairing
                 link_a.paired_variant_link_id = link_b.id
                 link_b.paired_variant_link_id = link_a.id
-                # Set reasoning on both
-                reasoning_dict = pair.compound_het.model_dump()
-                link_a.paired_variant_link_reasoning = reasoning_dict
-                link_b.paired_variant_link_reasoning = reasoning_dict
+                # Set confidence value and reasoning on both
+                link_a.paired_variant_confidence = pair.confidence.value
+                link_b.paired_variant_confidence = pair.confidence.value
+                reasoning_block = pair.confidence.model_dump()
+                link_a.paired_variant_confidence_reasoning = reasoning_block
+                link_b.paired_variant_confidence_reasoning = reasoning_block
+                # JSON columns require flag_modified to track changes
+                flag_modified(link_a, 'paired_variant_confidence_reasoning')
+                flag_modified(link_b, 'paired_variant_confidence_reasoning')
 
         session.flush()
 
