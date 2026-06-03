@@ -974,6 +974,8 @@ def _patient_variant_occurrence_to_resp(
 ) -> PatientVariantOccurrenceResp:
     """Convert PatientVariantOccurrenceDB to PatientVariantOccurrenceResp."""
     from lib.models import Inheritance, TestingMethod, Zygosity
+    from lib.models.evidence_block import ReasoningBlock
+    from lib.models.patient_variant_occurrences import CompoundHetConfidence
 
     return PatientVariantOccurrenceResp(
         id=row.id,
@@ -996,6 +998,14 @@ def _patient_variant_occurrence_to_resp(
         if row.disease_name_evidence
         else None,
         paired_variant_link_id=row.paired_variant_link_id,
+        paired_variant_confidence=CompoundHetConfidence(row.paired_variant_confidence)
+        if row.paired_variant_confidence
+        else None,
+        paired_variant_confidence_reasoning=ReasoningBlock[
+            CompoundHetConfidence
+        ].model_validate(row.paired_variant_confidence_reasoning)
+        if row.paired_variant_confidence_reasoning
+        else None,
         updated_at=row.updated_at,
     )
 

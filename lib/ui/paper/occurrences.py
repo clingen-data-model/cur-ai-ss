@@ -378,10 +378,7 @@ def render_patient_variant_occurrences_tab() -> None:
                 f'**Paired with variant:** {link.paired_variant_link_id} '
                 f'(Confidence: {link.paired_variant_confidence})'
             )
-            if (
-                link.paired_variant_confidence_reasoning
-                and link.paired_variant_confidence_reasoning.reasoning
-            ):
+            if link.paired_variant_confidence_reasoning:
                 st.text_area(
                     'Pairing Reasoning',
                     value=link.paired_variant_confidence_reasoning.reasoning,
