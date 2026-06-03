@@ -87,6 +87,14 @@ def render_patient_variant_occurrences_tab() -> None:
         harmonized_variant = variant.harmonized_variant
         variant_desc = variant.variant_description
 
+        # Show p. notation for paired variants or heterozygous
+        show_protein = (
+            link.paired_variant_link_id is not None
+            or link.zygosity == Zygosity.heterozygous
+        )
+        if show_protein and variant.hgvs_p:
+            variant_desc += f' | {variant.hgvs_p}'
+
         # Format testing methods as a list of values
         testing_methods_list = link.testing_methods
 
@@ -102,7 +110,16 @@ def render_patient_variant_occurrences_tab() -> None:
                 paired_variant = variants_by_id.get(paired_link.variant_id)
                 if paired_variant:
                     paired_variant_desc = paired_variant.variant_description
+                    # Show p. notation for paired variants
+                    if paired_variant.hgvs_p:
+                        paired_variant_desc += f' | {paired_variant.hgvs_p}'
                     paired_variant_link = f'/paper?paper_id={paper_resp.id}&variant_id={paired_link.variant_id}#{paired_variant_desc}'
+                    # Include confidence level if less than High
+                    if (
+                        link.paired_variant_confidence
+                        and link.paired_variant_confidence != 'high'
+                    ):
+                        paired_variant_link += f' ({link.paired_variant_confidence})'
 
         rows.append(
             {
