@@ -1,7 +1,7 @@
 """add mondo fields to disease records
 
 Revision ID: m1n2o3p4q5r6
-Revises: 9b1c2d3e4f5a
+Revises: cabffa6b7543
 Create Date: 2026-05-27 15:30:00.000000
 
 """
@@ -13,7 +13,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = 'm1n2o3p4q5r6'
-down_revision: Union[str, None] = '9b1c2d3e4f5a'
+down_revision: Union[str, None] = 'cabffa6b7543'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
