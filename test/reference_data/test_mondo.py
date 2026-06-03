@@ -17,9 +17,7 @@ def mondo_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> mondo.MondoI
 
 
 def test_direct_mondo_id_match(mondo_index: mondo.MondoIndex) -> None:
-    result, ambiguities = mondo.deterministic_index_lookup(
-        mondo_index, 'MONDO:0007947'
-    )
+    result, ambiguities = mondo.deterministic_index_lookup(mondo_index, 'MONDO:0007947')
 
     assert not ambiguities
     assert result is not None
@@ -42,9 +40,7 @@ def test_embedded_mondo_id_match(mondo_index: mondo.MondoIndex) -> None:
 def test_non_mondo_curie_does_not_match_mondo_id(
     mondo_index: mondo.MondoIndex,
 ) -> None:
-    result, ambiguities = mondo.deterministic_index_lookup(
-        mondo_index, 'OMIM:0007947'
-    )
+    result, ambiguities = mondo.deterministic_index_lookup(mondo_index, 'OMIM:0007947')
 
     assert not ambiguities
     assert result is None
@@ -84,9 +80,7 @@ def test_related_synonym_match(mondo_index: mondo.MondoIndex) -> None:
 
 
 def test_node_level_xref_identifier_match(mondo_index: mondo.MondoIndex) -> None:
-    result, ambiguities = mondo.deterministic_index_lookup(
-        mondo_index, 'GARD:0016535'
-    )
+    result, ambiguities = mondo.deterministic_index_lookup(mondo_index, 'GARD:0016535')
 
     assert not ambiguities
     assert result is not None
@@ -95,9 +89,7 @@ def test_node_level_xref_identifier_match(mondo_index: mondo.MondoIndex) -> None
 
 
 def test_exact_mapping_identifier_match(mondo_index: mondo.MondoIndex) -> None:
-    result, ambiguities = mondo.deterministic_index_lookup(
-        mondo_index, 'Orphanet:558'
-    )
+    result, ambiguities = mondo.deterministic_index_lookup(mondo_index, 'Orphanet:558')
 
     assert not ambiguities
     assert result is not None
@@ -119,9 +111,7 @@ def test_embedded_external_identifier_match(mondo_index: mondo.MondoIndex) -> No
 def test_synonym_xrefs_are_not_identifier_matches(
     mondo_index: mondo.MondoIndex,
 ) -> None:
-    result, ambiguities = mondo.deterministic_index_lookup(
-        mondo_index, 'SYNPROV:001'
-    )
+    result, ambiguities = mondo.deterministic_index_lookup(mondo_index, 'SYNPROV:001')
 
     assert not ambiguities
     assert result is None
@@ -159,9 +149,7 @@ def test_deprecated_term_replacement(mondo_index: mondo.MondoIndex) -> None:
 
 
 def test_cross_species_nodes_are_indexed(mondo_index: mondo.MondoIndex) -> None:
-    result, ambiguities = mondo.deterministic_index_lookup(
-        mondo_index, 'MONDO:1010544'
-    )
+    result, ambiguities = mondo.deterministic_index_lookup(mondo_index, 'MONDO:1010544')
 
     assert not ambiguities
     assert result is not None
@@ -194,7 +182,9 @@ def test_retrieve_mondo_candidates_ranks_rapidfuzz_matches(
     assert candidates[0].rapidfuzz_score is not None
 
 
-def test_invalid_candidate_strategy_returns_empty(mondo_index: mondo.MondoIndex) -> None:
+def test_invalid_candidate_strategy_returns_empty(
+    mondo_index: mondo.MondoIndex,
+) -> None:
     candidates = mondo.retrieve_mondo_candidates(
         mondo_index,
         'cystic fibrosis',
