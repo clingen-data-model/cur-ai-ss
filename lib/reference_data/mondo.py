@@ -557,6 +557,50 @@ def find_mondo_term_for_disease(disease_name: str) -> MondoTerm | None:
     return fuzzy_match(index, query, strict_ambiguities)
 
 
+def _rank_rapidfuzz_matches(
+    index: MondoIndex,
+    query: str,
+    limit: int,
+    score_cutoff: float | None = None,
+) -> tuple[str, list[tuple[MatchEntry, float]]]:
+    """Return RapidFuzz-ranked label/synonym matches deduped by MONDO ID."""
+    if not index.fuzzy_choices:
+        return '', []
+
+    normalized_query = normalize_fuzzy(query)
+    if not normalized_query:
+        return normalized_query, []
+
+    extract_kwargs: dict[str, Any] = {
+        'scorer': fuzz.token_sort_ratio,
+        'limit': max(limit * 10, 50),
+    }
+    if score_cutoff is not None:
+        extract_kwargs['score_cutoff'] = score_cutoff
+
+    matches = process.extract(
+        normalized_query,
+        index.fuzzy_choices,
+        **extract_kwargs,
+    )
+
+    # Collapse multiple label/synonym hits to the strongest alias per MONDO term.
+    best_by_mondo_id: dict[str, tuple[MatchEntry, float]] = {}
+    for _, score, entry_idx in matches:
+        entry = index.fuzzy_entries[entry_idx]
+        existing = best_by_mondo_id.get(entry.mondo_id)
+        if existing is None or fuzzy_sort_key(
+            entry, score, normalized_query
+        ) < fuzzy_sort_key(existing[0], existing[1], normalized_query):
+            best_by_mondo_id[entry.mondo_id] = (entry, float(score))
+
+    # Rank deduped MONDO terms and return only the requested candidate window.
+    return normalized_query, sorted(
+        best_by_mondo_id.values(),
+        key=lambda item: fuzzy_sort_key(item[0], item[1], normalized_query),
+    )[:limit]
+
+
 def fuzzy_match(
     index: MondoIndex,
     query: str,
@@ -571,38 +615,17 @@ def fuzzy_match(
     MONDO ID ordering. The returned context includes nearest candidates for
     auditability.
     """
-    if not index.fuzzy_choices:
-        return None
-
-    normalized_query = normalize_fuzzy(query)
-    matches = process.extract(
-        normalized_query,
-        index.fuzzy_choices,
-        scorer=fuzz.token_sort_ratio,
-        limit=max(limit * 10, 50),
+    normalized_query, ranked = _rank_rapidfuzz_matches(
+        index,
+        query,
+        limit=limit,
         score_cutoff=FUZZY_SCORE_CUTOFF,
     )
-
-    # Collapse multiple label/synonym hits to the strongest alias per MONDO term.
-    best_by_mondo_id: dict[str, tuple[MatchEntry, float]] = {}
-    for _, score, entry_idx in matches:
-        entry = index.fuzzy_entries[entry_idx]
-        existing = best_by_mondo_id.get(entry.mondo_id)
-        if existing is None or fuzzy_sort_key(
-            entry, score, normalized_query
-        ) < fuzzy_sort_key(existing[0], existing[1], normalized_query):
-            best_by_mondo_id[entry.mondo_id] = (entry, float(score))
-
-    if not best_by_mondo_id:
+    if not ranked:
         return None
 
-    # Rank deduped MONDO terms and retain nearby alternatives for audit context.
-    ranked = sorted(
-        best_by_mondo_id.values(),
-        key=lambda item: fuzzy_sort_key(item[0], item[1], normalized_query),
-    )
     selected, selected_score = ranked[0]
-    nearest = [entry.context(score=score) for entry, score in ranked[:limit]]
+    nearest = [entry.context(score=score) for entry, score in ranked]
     context: dict[str, Any] = {
         'query': query,
         'normalized_query': normalized_query,
@@ -701,23 +724,10 @@ def retrieve_mondo_candidates(
     """Return RapidFuzz-ranked candidates from in-memory fuzzy aliases."""
     if strategy not in {'combined', 'rapidfuzz'}:
         return []
-    if not index.fuzzy_choices:
-        return []
-    normalized_query = normalize_fuzzy(query)
-    if not normalized_query:
-        return []
 
-    matches = process.extract(
-        normalized_query,
-        index.fuzzy_choices,
-        scorer=fuzz.token_sort_ratio,
-        limit=max(limit * 10, 50),
-    )
-
-    best_by_mondo_id: dict[str, MondoCandidate] = {}
-    for _, score, entry_idx in matches:
-        entry = index.fuzzy_entries[entry_idx]
-        candidate = MondoCandidate(
+    _, ranked = _rank_rapidfuzz_matches(index, query, limit=limit)
+    return [
+        MondoCandidate(
             mondo_id=entry.mondo_id,
             label=entry.label,
             definition=entry.definition,
@@ -727,16 +737,8 @@ def retrieve_mondo_candidates(
             retrieval_source='rapidfuzz',
             rapidfuzz_score=float(score),
         )
-        existing = best_by_mondo_id.get(candidate.mondo_id)
-        if existing is None or candidate_sort_key(candidate, normalized_query) < (
-            candidate_sort_key(existing, normalized_query)
-        ):
-            best_by_mondo_id[candidate.mondo_id] = candidate
-
-    return sorted(
-        best_by_mondo_id.values(),
-        key=lambda candidate: candidate_sort_key(candidate, normalized_query),
-    )[:limit]
+        for entry, score in ranked
+    ]
 
 
 def fuzzy_sort_key(
@@ -918,19 +920,6 @@ def build_match_context(
     if candidates_considered:
         context['agent']['candidates_considered'] = candidates_considered
     return context
-
-
-def candidate_sort_key(
-    candidate: MondoCandidate,
-    normalized_query: str,
-) -> tuple[float, int, int, str]:
-    """Return the deterministic sort key for reranked candidates."""
-    return (
-        -float(candidate.rapidfuzz_score or 0.0),
-        candidate.source_priority,
-        abs(len(normalize_fuzzy(candidate.matched_alias_text)) - len(normalized_query)),
-        candidate.mondo_id,
-    )
 
 
 def entries_for_lookup(
