@@ -613,7 +613,7 @@ async def find_mondo_term_for_disease_with_agent(
         mondo_id=selected_term['mondo_id'],
         term=selected_term['label'],
         match_type=decision.match_type or 'agent_selected',
-        matched_text=decision.matched_text or query,
+        matched_text=query,
     )
     selected.match_context = build_match_context(
         query=query,
