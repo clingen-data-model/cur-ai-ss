@@ -350,7 +350,17 @@ def update_paper(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
+    previous_disease_name = paper_db.disease_name
     patch_request.apply_to(paper_db)
+    # Disease MONDO fields are computed from the free-text disease name. Clear
+    # them on manual text edits so clients never see a match for stale text.
+    if (
+        'disease_name' in patch_request.model_fields_set
+        and paper_db.disease_name != previous_disease_name
+    ):
+        paper_db.mondo_id = None
+        paper_db.mondo_term = None
+        paper_db.mondo_match_context = None
     paper_db.patient_count = len(paper_db.patients)
     paper_db.variant_count = len(paper_db.variants)
     paper_db.patient_variant_occurrences_count = len(

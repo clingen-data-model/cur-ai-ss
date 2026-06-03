@@ -97,7 +97,6 @@ def render_metadata_tab() -> None:
     if (abstract or None) != paper_resp.abstract:
         changes['abstract'] = abstract or None
     if (disease_name or None) != paper_resp.disease_name:
-        # TODO: Clear or recompute computed MONDO fields when disease_name changes.
         changes['disease_name'] = disease_name or None
     selected_inheritance = (
         Inheritance(disease_inheritance_mode) if disease_inheritance_mode else None

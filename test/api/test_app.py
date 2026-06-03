@@ -181,6 +181,72 @@ def test_update_paper_metadata(client, test_pdf, db_session, seeded_genes, agent
     assert response3.status_code == 404
 
 
+def test_update_paper_disease_name_clears_mondo_fields(
+    client, db_session, seeded_paper
+):
+    seeded_paper.disease_name = 'old disease'
+    seeded_paper.mondo_id = 'MONDO:0000001'
+    seeded_paper.mondo_term = 'old disease term'
+    seeded_paper.mondo_match_context = {'query': 'old disease'}
+    db_session.commit()
+
+    response = client.patch(
+        f'/papers/{seeded_paper.id}',
+        json={'disease_name': 'new disease'},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data['disease_name'] == 'new disease'
+    assert data['mondo_id'] is None
+    assert data['mondo_term'] is None
+    assert data['mondo_match_context'] is None
+
+
+def test_update_paper_unrelated_metadata_keeps_mondo_fields(
+    client, db_session, seeded_paper
+):
+    seeded_paper.disease_name = 'old disease'
+    seeded_paper.mondo_id = 'MONDO:0000001'
+    seeded_paper.mondo_term = 'old disease term'
+    seeded_paper.mondo_match_context = {'query': 'old disease'}
+    db_session.commit()
+
+    response = client.patch(
+        f'/papers/{seeded_paper.id}',
+        json={'title': 'Updated Title'},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data['title'] == 'Updated Title'
+    assert data['mondo_id'] == 'MONDO:0000001'
+    assert data['mondo_term'] == 'old disease term'
+    assert data['mondo_match_context'] == {'query': 'old disease'}
+
+
+def test_update_paper_same_disease_name_keeps_mondo_fields(
+    client, db_session, seeded_paper
+):
+    seeded_paper.disease_name = 'old disease'
+    seeded_paper.mondo_id = 'MONDO:0000001'
+    seeded_paper.mondo_term = 'old disease term'
+    seeded_paper.mondo_match_context = {'query': 'old disease'}
+    db_session.commit()
+
+    response = client.patch(
+        f'/papers/{seeded_paper.id}',
+        json={'disease_name': 'old disease'},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data['disease_name'] == 'old disease'
+    assert data['mondo_id'] == 'MONDO:0000001'
+    assert data['mondo_term'] == 'old disease term'
+    assert data['mondo_match_context'] == {'query': 'old disease'}
+
+
 def test_list_paper(client, test_pdf, seeded_genes, agent_run):
     response = client.put(
         '/papers',

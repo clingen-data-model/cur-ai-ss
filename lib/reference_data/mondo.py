@@ -511,7 +511,9 @@ def deterministic_index_lookup(
         entries = entries_for_lookup(match_index, lookup_key)
         selected, ambiguity = select_unique_entry(match_type, query, entries)
         if selected is not None:
-            return term_from_entry(selected, selected.match_type, query), strict_ambiguities
+            return term_from_entry(
+                selected, selected.match_type, query
+            ), strict_ambiguities
         if ambiguity is not None:
             strict_ambiguities.append(ambiguity)
 
@@ -581,6 +583,7 @@ def fuzzy_match(
         score_cutoff=FUZZY_SCORE_CUTOFF,
     )
 
+    # Collapse multiple label/synonym hits to the strongest alias per MONDO term.
     best_by_mondo_id: dict[str, tuple[MatchEntry, float]] = {}
     for _, score, entry_idx in matches:
         entry = index.fuzzy_entries[entry_idx]
@@ -593,6 +596,7 @@ def fuzzy_match(
     if not best_by_mondo_id:
         return None
 
+    # Rank deduped MONDO terms and retain nearby alternatives for audit context.
     ranked = sorted(
         best_by_mondo_id.values(),
         key=lambda item: fuzzy_sort_key(item[0], item[1], normalized_query),
