@@ -138,14 +138,13 @@ from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
 from lib.reference_data.mondo import (
     MondoDiseaseContext,
     MondoTerm,
-    find_mondo_term_for_disease,
     find_mondo_term_for_disease_with_agent,
 )
 from lib.tasks.models import TaskType
 
 setup_logging()
 logger = logging.getLogger(__name__)
-_deterministic_find_mondo_term_for_disease = find_mondo_term_for_disease
+_find_mondo_term_for_disease = find_mondo_term_for_disease_with_agent
 
 
 def log_cache_metrics(task_type: str, result: Any) -> None:
@@ -1510,20 +1509,12 @@ async def handle_mondo_linking(task_id: int) -> None:
             or normalized_disease_name in mondo_by_disease_name
         ):
             continue
-        if (
-            find_mondo_term_for_disease
-            is not _deterministic_find_mondo_term_for_disease
-        ):
-            mondo_by_disease_name[normalized_disease_name] = (
-                find_mondo_term_for_disease(normalized_disease_name)
-            )
-        else:
-            mondo_by_disease_name[
-                normalized_disease_name
-            ] = await find_mondo_term_for_disease_with_agent(
-                normalized_disease_name,
-                disease_context,
-            )
+        mondo_by_disease_name[
+            normalized_disease_name
+        ] = await _find_mondo_term_for_disease(
+            normalized_disease_name,
+            disease_context,
+        )
 
     # Apply results only when source disease text is unchanged since the snapshot.
     def _mondo_values(

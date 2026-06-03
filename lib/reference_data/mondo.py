@@ -56,7 +56,6 @@ EXCLUDED_SYNONYM_TYPE_TOKENS = (
 )
 STRICT_DASHES_RE = re.compile(r'[\u2010-\u2015\u2212]')
 FUZZY_PUNCTUATION_RE = re.compile(r'[\W_]+')
-FUZZY_SCORE_CUTOFF = 85.0
 
 _mondo_index: 'MondoIndex | None' = None
 
@@ -523,45 +522,10 @@ def deterministic_index_lookup(
     return None, []
 
 
-def find_mondo_term_for_disease(disease_name: str) -> MondoTerm | None:
-    """Return the selected MONDO term for a disease name.
-
-    Matching proceeds from highest-confidence exact signals to lower-confidence
-    fallbacks:
-
-    1. Direct MONDO CURIE or IRI.
-    2. Exact primary label.
-    3. Exact synonym.
-    4. External identifier or exact mapping ID.
-    5. Related synonym.
-    6. Broad or narrow synonym.
-    7. Unique abbreviation.
-    8. Deprecated term with one valid replacement.
-    9. Fuzzy match over labels plus exact/related synonyms.
-
-    Exact tiers use conservative normalization and return only when a tier
-    selects one distinct MONDO ID. Ambiguous exact tiers are recorded and fuzzy
-    matching can include that context in the returned audit data.
-    """
-    query = disease_name.strip()
-    if not query:
-        return None
-
-    index = get_mondo_index()
-    selected, strict_ambiguities = deterministic_index_lookup(index, query)
-    if selected is not None:
-        return selected
-    if strict_ambiguities:
-        return None
-
-    return fuzzy_match(index, query, strict_ambiguities)
-
-
 def _rank_rapidfuzz_matches(
     index: MondoIndex,
     query: str,
     limit: int,
-    score_cutoff: float | None = None,
 ) -> tuple[str, list[tuple[MatchEntry, float]]]:
     """Return RapidFuzz-ranked label/synonym matches deduped by MONDO ID."""
     if not index.fuzzy_choices:
@@ -575,8 +539,6 @@ def _rank_rapidfuzz_matches(
         'scorer': fuzz.token_sort_ratio,
         'limit': max(limit * 10, 50),
     }
-    if score_cutoff is not None:
-        extract_kwargs['score_cutoff'] = score_cutoff
 
     matches = process.extract(
         normalized_query,
@@ -599,53 +561,6 @@ def _rank_rapidfuzz_matches(
         best_by_mondo_id.values(),
         key=lambda item: fuzzy_sort_key(item[0], item[1], normalized_query),
     )[:limit]
-
-
-def fuzzy_match(
-    index: MondoIndex,
-    query: str,
-    strict_ambiguities: list[dict[str, Any]],
-    limit: int = 10,
-) -> MondoTerm | None:
-    """Return the best fuzzy MONDO match above the configured score cutoff.
-
-    Fuzzy matching compares a normalized query against primary labels plus
-    exact and related synonyms. Candidate ranking prefers higher RapidFuzz
-    scores, then stronger source types, closer matched-text length, and stable
-    MONDO ID ordering. The returned context includes nearest candidates for
-    auditability.
-    """
-    normalized_query, ranked = _rank_rapidfuzz_matches(
-        index,
-        query,
-        limit=limit,
-        score_cutoff=FUZZY_SCORE_CUTOFF,
-    )
-    if not ranked:
-        return None
-
-    selected, selected_score = ranked[0]
-    nearest = [entry.context(score=score) for entry, score in ranked]
-    context: dict[str, Any] = {
-        'query': query,
-        'normalized_query': normalized_query,
-        'scorer': 'rapidfuzz.fuzz.token_sort_ratio',
-        'selected_score': float(selected_score),
-        'selected_matched_text': selected.matched_text,
-        'selected_match_type': selected.match_type,
-        'nearest_candidates': nearest,
-    }
-    if strict_ambiguities:
-        context['strict_ambiguities'] = strict_ambiguities
-
-    return MondoTerm(
-        mondo_id=selected.mondo_id,
-        term=selected.label,
-        match_type='fuzzy',
-        matched_text=selected.matched_text,
-        score=float(selected_score),
-        match_context=context,
-    )
 
 
 async def find_mondo_term_for_disease_with_agent(

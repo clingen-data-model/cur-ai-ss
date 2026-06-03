@@ -1264,7 +1264,11 @@ def test_mondo_linking_handler_updates_paper_and_occurrence(
             match_context={'match_type': 'primary_label'},
         ),
     }
-    monkeypatch.setattr(handlers, 'find_mondo_term_for_disease', terms.get)
+
+    async def fake_find_mondo_term(disease_name: str, context=None):
+        return terms.get(disease_name)
+
+    monkeypatch.setattr(handlers, '_find_mondo_term_for_disease', fake_find_mondo_term)
 
     asyncio.run(handlers.handle_mondo_linking(task.id))
 
@@ -1296,10 +1300,10 @@ def test_mondo_linking_handler_skips_blank_disease_name(
     db_session.add(task)
     db_session.commit()
 
-    def fail_on_lookup(disease_name: str):
+    async def fail_on_lookup(disease_name: str, context=None):
         raise AssertionError(f'unexpected MONDO lookup for {disease_name!r}')
 
-    monkeypatch.setattr(handlers, 'find_mondo_term_for_disease', fail_on_lookup)
+    monkeypatch.setattr(handlers, '_find_mondo_term_for_disease', fail_on_lookup)
 
     asyncio.run(handlers.handle_mondo_linking(task.id))
 
