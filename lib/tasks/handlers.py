@@ -548,7 +548,11 @@ async def handle_patient_extraction(task_id: int) -> None:
         agent_run_id = task.agent_run_id
         task.conversation_id = stored_conv_id
 
-        # Idempotent: delete patients (CASCADE deletes families) only from current run, then re-insert both
+        # Idempotent: delete existing families and patients from current run, then re-insert both
+        session.query(FamilyDB).filter(
+            FamilyDB.paper_id == paper_id,
+            FamilyDB.agent_run_id == agent_run_id,
+        ).delete()
         session.query(PatientDB).filter(
             PatientDB.paper_id == paper_id,
             PatientDB.agent_run_id == agent_run_id,
