@@ -280,7 +280,7 @@ class PaperResp(PaperExtractionOutput):
     content_hash: str
     gene_symbol: str
     filename: str
-    tags: list[str] = []
+    tags: list[PaperTag] = []
     is_paper_relevant: bool | None = None
     section_classifications: dict | None = None
     disease_name: str | None = None
@@ -291,6 +291,7 @@ class PaperResp(PaperExtractionOutput):
     tasks: list['TaskResp'] = []
     patient_count: int = 0
     variant_count: int = 0
+    patient_variant_occurrences_count: int = 0
 
     # Override the PaperExtractionOutput to make the fields optional.
     # Note that mypy does not approve of the override, though Pydantic functions
