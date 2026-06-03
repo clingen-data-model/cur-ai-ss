@@ -1,17 +1,26 @@
-"""SQLite-backed MONDO ontology retrieval and disease-name matching."""
+"""MONDO ontology loading and disease-name matching.
+
+Disease names come from paper and patient-variant extraction agents, so most
+inputs are author-facing text rather than ontology IDs. The matcher therefore
+tries high-confidence deterministic lookups before fuzzy matching. The order is
+intentional: direct MONDO IDs and primary labels are strongest, synonyms and
+external IDs require more source-aware handling, abbreviations are often
+ambiguous, and deprecated terms should resolve only through explicit
+replacement metadata. Fuzzy matching is a final fallback for typos, punctuation
+differences, and near labels, with context stored for audit.
+"""
 
 import json
 import re
-import sqlite3
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import requests
 from agents import RunConfig, Runner
 from pydantic import BaseModel
-from rapidfuzz import fuzz
+from rapidfuzz import fuzz, process
 
 from lib.core.environment import env
 
@@ -78,15 +87,15 @@ class MondoCandidate(BaseModel):
     retrieval_source: str
     source_priority: int
     definition: str | None = None
-    fts_rank: float | None = None
     rapidfuzz_score: float | None = None
 
 
 @dataclass(frozen=True)
-class MondoIndex:
-    sqlite_path: Path
-    ontology_path: Path | None = None
-    has_trigram_fts: bool = True
+class MondoRecord:
+    mondo_id: str
+    iri: str
+    label: str
+    definition: str | None = None
 
 
 @dataclass(frozen=True)
@@ -99,6 +108,7 @@ class MatchEntry:
     definition: str | None = None
 
     def context(self, score: float | None = None) -> dict[str, Any]:
+        """Return serializable audit context for a match candidate."""
         context: dict[str, Any] = {
             'mondo_id': self.mondo_id,
             'term': self.label,
@@ -110,20 +120,36 @@ class MatchEntry:
         return context
 
 
-@dataclass(frozen=True)
-class DeterministicLookup:
-    selected: MondoTerm | None
-    strict_ambiguities: list[dict[str, Any]]
+@dataclass
+class MondoIndex:
+    records: dict[str, MondoRecord]
+    by_iri: dict[str, MatchEntry] = field(default_factory=dict)
+    label_index: dict[str, list[MatchEntry]] = field(default_factory=dict)
+    exact_synonym_index: dict[str, list[MatchEntry]] = field(default_factory=dict)
+    related_synonym_index: dict[str, list[MatchEntry]] = field(default_factory=dict)
+    broad_narrow_synonym_index: dict[str, list[MatchEntry]] = field(
+        default_factory=dict
+    )
+    abbreviation_index: dict[str, list[MatchEntry]] = field(default_factory=dict)
+    xref_index: dict[str, list[MatchEntry]] = field(default_factory=dict)
+    deprecated_replacement_index: dict[str, list[MatchEntry]] = field(
+        default_factory=dict
+    )
+    fuzzy_entries: list[MatchEntry] = field(default_factory=list)
+    fuzzy_choices: list[str] = field(default_factory=list)
+    aliases_by_mondo_id: dict[str, list[MatchEntry]] = field(default_factory=dict)
+    xrefs_by_mondo_id: dict[str, list[MatchEntry]] = field(default_factory=dict)
+    parent_edges_by_mondo_id: dict[str, list[dict[str, Any]]] = field(
+        default_factory=dict
+    )
+    child_edges_by_mondo_id: dict[str, list[dict[str, Any]]] = field(
+        default_factory=dict
+    )
 
 
 def ontology_path() -> Path:
     """Return the local path for the MONDO ontology JSON file."""
     return env.reference_data_dir / 'mondo.json'
-
-
-def sqlite_path() -> Path:
-    """Return the local path for the MONDO SQLite index."""
-    return env.reference_data_dir / 'mondo.sqlite'
 
 
 def ontology_url() -> str:
@@ -154,51 +180,35 @@ def ensure_ontology() -> Path:
     return path
 
 
-def ensure_mondo_sqlite() -> Path:
-    """Return the SQLite index path, building it from MONDO JSON if missing."""
-    path = sqlite_path()
-    if not path.exists():
-        build_mondo_index(ensure_ontology(), path)
-    return path
-
-
 def get_mondo_index() -> MondoIndex:
-    """Return the process-local MONDO SQLite index descriptor."""
+    """Return the process-local MONDO index, building it on first use."""
     global _mondo_index
     if _mondo_index is None:
-        path = sqlite_path()
-        if not path.exists():
-            _mondo_index = build_mondo_index(ensure_ontology(), path)
-        else:
-            _mondo_index = MondoIndex(
-                sqlite_path=path,
-                has_trigram_fts=sqlite_has_trigram_fts(path),
-            )
+        _mondo_index = build_mondo_index(ensure_ontology())
     return _mondo_index
 
 
-def build_mondo_index(path: Path, target_sqlite_path: Path | None = None) -> MondoIndex:
-    """Build a SQLite MONDO index from OWLGraph JSON.
+def build_mondo_index(path: Path) -> MondoIndex:
+    """Build lookup tables from OWLGraph JSON nodes.
+
+    For now this loads the entire mondo JSON file using json.loads and prunes it
+    down, however the dict from json.loads must fit into memory (400-500MiB).
+
+    Non-deprecated MONDO CLASS nodes become records keyed by CURIE, IRI,
+    normalized primary label, normalized synonym text by synonym predicate,
+    abbreviation text, and external IDs from node xrefs / exactMatch
+    properties. Deprecated nodes are kept out of normal indexes and only
+    contribute replacement lookups when they point to one valid non-deprecated
+    MONDO term. Text keys use strict normalization for deterministic matching;
+    fuzzy choices use looser punctuation/whitespace normalization over labels
+    plus exact/related synonyms.
 
     Args:
         path: Path to the MONDO OWLGraph JSON ontology file.
-        target_sqlite_path: Optional output path. Defaults to ``path`` with a
-            ``.sqlite`` suffix.
 
     Returns:
-        A MondoIndex descriptor for the created SQLite index.
+        A MondoIndex containing deterministic lookup indexes and fuzzy choices.
     """
-    db_path = target_sqlite_path or path.with_suffix('.sqlite')
-    has_trigram_fts = build_mondo_sqlite(path, db_path)
-    return MondoIndex(
-        sqlite_path=db_path,
-        ontology_path=path,
-        has_trigram_fts=has_trigram_fts,
-    )
-
-
-def build_mondo_sqlite(path: Path, db_path: Path) -> bool:
-    """Create the SQLite schema and populate it from MONDO JSON."""
     with open(path) as f:
         data = json.load(f)
     graphs = data.get('graphs') or []
@@ -208,13 +218,10 @@ def build_mondo_sqlite(path: Path, db_path: Path) -> bool:
     graph = graphs[0]
     nodes = graph.get('nodes') or []
     edges = graph.get('edges') or []
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = db_path.with_suffix(f'{db_path.suffix}.tmp')
-    if tmp_path.exists():
-        tmp_path.unlink()
-
-    non_deprecated_nodes: dict[str, dict[str, Any]] = {}
+    raw_records: dict[str, dict[str, Any]] = {}
+    records: dict[str, MondoRecord] = {}
     deprecated_nodes: list[dict[str, Any]] = []
+
     for node in nodes:
         iri = node.get('id')
         label = node.get('lbl')
@@ -227,215 +234,77 @@ def build_mondo_sqlite(path: Path, db_path: Path) -> bool:
             continue
         if is_deprecated_node(node):
             deprecated_nodes.append(node)
-        else:
-            non_deprecated_nodes[mondo_id] = node
+            continue
+        record = MondoRecord(
+            mondo_id=mondo_id,
+            iri=iri,
+            label=label,
+            definition=extract_definition(node),
+        )
+        raw_records[mondo_id] = node
+        records[mondo_id] = record
 
-    conn = sqlite3.connect(tmp_path)
-    conn.row_factory = sqlite3.Row
-    has_trigram_fts = True
-    try:
-        create_schema(conn)
-        try:
-            conn.execute(
-                """
-                CREATE VIRTUAL TABLE mondo_alias_trigram_fts
-                USING fts5(
-                    normalized_alias,
-                    alias_id UNINDEXED,
-                    tokenize='trigram'
+    index = MondoIndex(records=records)
+    for record in records.values():
+        node = raw_records[record.mondo_id]
+        entry = MatchEntry(
+            mondo_id=record.mondo_id,
+            label=record.label,
+            matched_text=record.label,
+            match_type='primary_label',
+            source_priority=0,
+            definition=record.definition,
+        )
+        index.by_iri[record.iri.casefold()] = entry
+        index.by_iri[record.mondo_id.casefold()] = entry
+        index.by_iri[record.mondo_id.replace(':', '_').casefold()] = entry
+        _append(index.label_index, normalize_strict(record.label), entry)
+        _append(index.aliases_by_mondo_id, record.mondo_id, entry)
+        index.fuzzy_entries.append(entry)
+        index.fuzzy_choices.append(normalize_fuzzy(record.label))
+
+        meta = node.get('meta') or {}
+        for synonym in meta.get('synonyms') or []:
+            add_synonym_to_index(index, record, synonym)
+
+        for xref in meta.get('xrefs') or []:
+            val = xref.get('val') if isinstance(xref, dict) else None
+            if isinstance(val, str):
+                add_identifier_to_index(index, record, val, 'xref')
+
+        for basic_property in meta.get('basicPropertyValues') or []:
+            if not isinstance(basic_property, dict):
+                continue
+            if basic_property.get('pred') == SKOS_EXACT_MATCH and isinstance(
+                basic_property.get('val'), str
+            ):
+                add_identifier_to_index(
+                    index,
+                    record,
+                    basic_property['val'],
+                    'exact_mapping_id',
                 )
-                """
-            )
-        except sqlite3.OperationalError:
-            has_trigram_fts = False
 
-        for mondo_id, node in sorted(non_deprecated_nodes.items()):
-            insert_term(conn, mondo_id, node, deprecated=False)
-            insert_alias(
-                conn,
-                mondo_id,
-                node['lbl'],
-                'primary_label',
-                source_priority=0,
-                include_in_fts=True,
-                has_trigram_fts=has_trigram_fts,
-            )
-            meta = node.get('meta') or {}
-            for synonym in meta.get('synonyms') or []:
-                insert_synonym_alias(conn, mondo_id, synonym, has_trigram_fts)
-            for xref in meta.get('xrefs') or []:
-                val = xref.get('val') if isinstance(xref, dict) else None
-                if isinstance(val, str):
-                    insert_identifier(conn, mondo_id, val, 'xref')
-            for basic_property in meta.get('basicPropertyValues') or []:
-                if not isinstance(basic_property, dict):
-                    continue
-                if basic_property.get('pred') == SKOS_EXACT_MATCH and isinstance(
-                    basic_property.get('val'), str
-                ):
-                    insert_identifier(
-                        conn,
-                        mondo_id,
-                        basic_property['val'],
-                        'exact_mapping_id',
-                    )
+    for node in deprecated_nodes:
+        add_deprecated_replacement(index, node)
 
-        for node in deprecated_nodes:
-            insert_deprecated_replacement_aliases(
-                conn,
-                node,
-                set(non_deprecated_nodes),
-                has_trigram_fts,
-            )
+    for edge in edges:
+        add_edge_to_index(index, edge)
 
-        for edge in edges:
-            insert_edge(conn, edge)
-
-        create_indexes(conn)
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
-
-    tmp_path.replace(db_path)
-    return has_trigram_fts
+    return index
 
 
-def create_schema(conn: sqlite3.Connection) -> None:
-    """Create the production MONDO SQLite tables."""
-    conn.executescript(
-        """
-        CREATE TABLE mondo_terms (
-            mondo_id TEXT PRIMARY KEY,
-            iri TEXT NOT NULL,
-            label TEXT NOT NULL,
-            definition TEXT,
-            deprecated INTEGER NOT NULL DEFAULT 0,
-            replacement_mondo_id TEXT
-        );
-
-        CREATE TABLE mondo_aliases (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            mondo_id TEXT NOT NULL,
-            alias_text TEXT NOT NULL,
-            normalized_alias TEXT NOT NULL,
-            alias_type TEXT NOT NULL,
-            source_priority INTEGER NOT NULL,
-            FOREIGN KEY (mondo_id) REFERENCES mondo_terms(mondo_id)
-        );
-
-        CREATE TABLE mondo_xrefs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            mondo_id TEXT NOT NULL,
-            identifier TEXT NOT NULL,
-            normalized_identifier TEXT NOT NULL,
-            xref_type TEXT NOT NULL,
-            FOREIGN KEY (mondo_id) REFERENCES mondo_terms(mondo_id)
-        );
-
-        CREATE TABLE mondo_edges (
-            subject_mondo_id TEXT NOT NULL,
-            predicate TEXT NOT NULL,
-            object_mondo_id TEXT NOT NULL
-        );
-
-        CREATE TABLE mondo_metadata (
-            key TEXT PRIMARY KEY,
-            value TEXT NOT NULL
-        );
-        """
-    )
-
-
-def create_indexes(conn: sqlite3.Connection) -> None:
-    """Create B-tree indexes used by deterministic lookup tiers."""
-    conn.executescript(
-        """
-        CREATE INDEX idx_mondo_aliases_lookup
-            ON mondo_aliases(normalized_alias, alias_type);
-        CREATE INDEX idx_mondo_aliases_mondo_id
-            ON mondo_aliases(mondo_id);
-        CREATE INDEX idx_mondo_xrefs_lookup
-            ON mondo_xrefs(normalized_identifier);
-        CREATE INDEX idx_mondo_xrefs_mondo_id
-            ON mondo_xrefs(mondo_id);
-        CREATE INDEX idx_mondo_edges_subject
-            ON mondo_edges(subject_mondo_id);
-        CREATE INDEX idx_mondo_edges_object
-            ON mondo_edges(object_mondo_id);
-        """
-    )
-
-
-def insert_term(
-    conn: sqlite3.Connection,
-    mondo_id: str,
-    node: dict[str, Any],
-    deprecated: bool,
-    replacement_mondo_id: str | None = None,
+def add_synonym_to_index(
+    index: MondoIndex, record: MondoRecord, synonym: dict[str, Any]
 ) -> None:
-    """Insert one MONDO term row."""
-    conn.execute(
-        """
-        INSERT OR REPLACE INTO mondo_terms (
-            mondo_id, iri, label, definition, deprecated, replacement_mondo_id
-        )
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        (
-            mondo_id,
-            node['id'],
-            node['lbl'],
-            extract_definition(node),
-            int(deprecated),
-            replacement_mondo_id,
-        ),
-    )
+    """Add a MONDO synonym to the appropriate exact and fuzzy indexes.
 
-
-def insert_alias(
-    conn: sqlite3.Connection,
-    mondo_id: str,
-    alias_text: str,
-    alias_type: str,
-    source_priority: int,
-    include_in_fts: bool,
-    has_trigram_fts: bool,
-) -> None:
-    """Insert one alias and optionally mirror it into the trigram FTS table."""
-    normalized_alias = normalize_strict(alias_text)
-    if not normalized_alias:
-        return
-    cursor = conn.execute(
-        """
-        INSERT INTO mondo_aliases (
-            mondo_id, alias_text, normalized_alias, alias_type, source_priority
-        )
-        VALUES (?, ?, ?, ?, ?)
-        """,
-        (mondo_id, alias_text, normalized_alias, alias_type, source_priority),
-    )
-    if include_in_fts and has_trigram_fts:
-        conn.execute(
-            """
-            INSERT INTO mondo_alias_trigram_fts (
-                rowid, normalized_alias, alias_id
-            )
-            VALUES (?, ?, ?)
-            """,
-            (cursor.lastrowid, normalize_fuzzy(alias_text), cursor.lastrowid),
-        )
-
-
-def insert_synonym_alias(
-    conn: sqlite3.Connection,
-    mondo_id: str,
-    synonym: dict[str, Any],
-    has_trigram_fts: bool,
-) -> None:
-    """Insert a MONDO synonym into the appropriate alias tier."""
+    Synonyms with excluded provenance types are ignored. Abbreviations are kept
+    in their own exact-only index because they are often ambiguous. Exact and
+    related synonyms are also added to the fuzzy candidate lists; broad and
+    narrow synonyms remain exact-only because their semantic relationship is
+    weaker.
+    """
     val = synonym.get('val')
     pred = synonym.get('pred')
     synonym_type = synonym.get('synonymType')
@@ -445,51 +314,82 @@ def insert_synonym_alias(
         return
 
     if synonym_type == ABBREVIATION_TYPE:
-        insert_alias(
-            conn,
-            mondo_id,
-            val,
-            'abbreviation',
+        entry = MatchEntry(
+            mondo_id=record.mondo_id,
+            label=record.label,
+            matched_text=val,
+            match_type='abbreviation',
             source_priority=3,
-            include_in_fts=False,
-            has_trigram_fts=has_trigram_fts,
+            definition=record.definition,
         )
+        _append(index.abbreviation_index, normalize_strict(val), entry)
+        _append(index.aliases_by_mondo_id, record.mondo_id, entry)
         return
 
+    match_type: str
+    target_index: dict[str, list[MatchEntry]]
+    source_priority: int
+    include_in_fuzzy = False
     if pred == 'hasExactSynonym':
-        insert_alias(conn, mondo_id, val, 'exact_synonym', 1, True, has_trigram_fts)
+        match_type = 'exact_synonym'
+        target_index = index.exact_synonym_index
+        source_priority = 1
+        include_in_fuzzy = True
     elif pred == 'hasRelatedSynonym':
-        insert_alias(conn, mondo_id, val, 'related_synonym', 2, True, has_trigram_fts)
+        match_type = 'related_synonym'
+        target_index = index.related_synonym_index
+        source_priority = 2
+        include_in_fuzzy = True
     elif pred in {'hasBroadSynonym', 'hasNarrowSynonym'}:
-        insert_alias(conn, mondo_id, val, pred, 4, False, has_trigram_fts)
+        match_type = pred
+        target_index = index.broad_narrow_synonym_index
+        source_priority = 4
+    else:
+        return
+
+    entry = MatchEntry(
+        mondo_id=record.mondo_id,
+        label=record.label,
+        matched_text=val,
+        match_type=match_type,
+        source_priority=source_priority,
+        definition=record.definition,
+    )
+    _append(target_index, normalize_strict(val), entry)
+    _append(index.aliases_by_mondo_id, record.mondo_id, entry)
+    if include_in_fuzzy:
+        index.fuzzy_entries.append(entry)
+        index.fuzzy_choices.append(normalize_fuzzy(val))
 
 
-def insert_identifier(
-    conn: sqlite3.Connection,
-    mondo_id: str,
+def add_identifier_to_index(
+    index: MondoIndex,
+    record: MondoRecord,
     identifier: str,
-    xref_type: str,
+    match_type: str,
 ) -> None:
-    """Insert normalized lookup keys for one external identifier."""
+    """Add normalized lookup keys for an external identifier mapping."""
+    entry = MatchEntry(
+        mondo_id=record.mondo_id,
+        label=record.label,
+        matched_text=identifier,
+        match_type=match_type,
+        source_priority=1,
+        definition=record.definition,
+    )
     for key in normalize_identifier_keys(identifier):
-        conn.execute(
-            """
-            INSERT INTO mondo_xrefs (
-                mondo_id, identifier, normalized_identifier, xref_type
-            )
-            VALUES (?, ?, ?, ?)
-            """,
-            (mondo_id, identifier, key, xref_type),
-        )
+        _append(index.xref_index, key, entry)
+    _append(index.xrefs_by_mondo_id, record.mondo_id, entry)
 
 
-def insert_deprecated_replacement_aliases(
-    conn: sqlite3.Connection,
-    node: dict[str, Any],
-    valid_mondo_ids: set[str],
-    has_trigram_fts: bool,
-) -> None:
-    """Index deprecated node text when it has exactly one valid replacement."""
+def add_deprecated_replacement(index: MondoIndex, node: dict[str, Any]) -> None:
+    """Index deprecated node text when it has one valid MONDO replacement.
+
+    Replacement metadata is accepted only when it resolves to exactly one
+    non-deprecated MONDO record already present in the index. When that is true,
+    the deprecated label, deprecated MONDO ID forms, and deprecated synonyms are
+    indexed as exact lookups that return the current replacement term.
+    """
     replacement_ids = []
     meta = node.get('meta') or {}
     for basic_property in meta.get('basicPropertyValues') or []:
@@ -501,115 +401,222 @@ def insert_deprecated_replacement_aliases(
         if not isinstance(val, str):
             continue
         mondo_id = iri_to_mondo_id(val) or normalize_mondo_id(val)
-        if mondo_id and mondo_id in valid_mondo_ids:
+        if mondo_id and mondo_id in index.records:
             replacement_ids.append(mondo_id)
 
     distinct_replacements = sorted(set(replacement_ids))
-    deprecated_mondo_id = iri_to_mondo_id(node.get('id', ''))
-    if deprecated_mondo_id:
-        insert_term(
-            conn,
-            deprecated_mondo_id,
-            node,
-            deprecated=True,
-            replacement_mondo_id=distinct_replacements[0]
-            if len(distinct_replacements) == 1
-            else None,
-        )
     if len(distinct_replacements) != 1:
         return
+
+    replacement = index.records[distinct_replacements[0]]
+    replacement_entry = MatchEntry(
+        mondo_id=replacement.mondo_id,
+        label=replacement.label,
+        matched_text=node.get('lbl', replacement.label),
+        match_type='deprecated_replacement',
+        source_priority=5,
+        definition=replacement.definition,
+    )
 
     deprecated_texts = set()
     if isinstance(node.get('lbl'), str):
         deprecated_texts.add(node['lbl'])
-    if deprecated_mondo_id:
-        deprecated_texts.add(deprecated_mondo_id)
-        deprecated_texts.add(deprecated_mondo_id.replace(':', '_'))
+    mondo_id = iri_to_mondo_id(node.get('id', ''))
+    if mondo_id:
+        deprecated_texts.add(mondo_id)
+        deprecated_texts.add(mondo_id.replace(':', '_'))
     for synonym in meta.get('synonyms') or []:
         val = synonym.get('val') if isinstance(synonym, dict) else None
         if isinstance(val, str):
             deprecated_texts.add(val)
 
     for text in deprecated_texts:
-        insert_alias(
-            conn,
-            distinct_replacements[0],
-            text,
-            'deprecated_replacement',
-            source_priority=5,
-            include_in_fts=False,
-            has_trigram_fts=has_trigram_fts,
+        entry = MatchEntry(
+            mondo_id=replacement_entry.mondo_id,
+            label=replacement_entry.label,
+            matched_text=text,
+            match_type='deprecated_replacement',
+            source_priority=replacement_entry.source_priority,
+            definition=replacement_entry.definition,
         )
+        _append(index.deprecated_replacement_index, normalize_strict(text), entry)
 
 
-def insert_edge(conn: sqlite3.Connection, edge: dict[str, Any]) -> None:
-    """Insert one MONDO-to-MONDO graph edge when both endpoints are MONDO terms."""
+def add_edge_to_index(index: MondoIndex, edge: dict[str, Any]) -> None:
+    """Add one parent/child MONDO edge to the in-memory graph indexes."""
     subject = iri_to_mondo_id(edge.get('sub', ''))
     obj = iri_to_mondo_id(edge.get('obj', ''))
     pred = edge.get('pred')
     if not subject or not obj or not isinstance(pred, str):
         return
-    conn.execute(
-        """
-        INSERT INTO mondo_edges (subject_mondo_id, predicate, object_mondo_id)
-        VALUES (?, ?, ?)
-        """,
-        (subject, pred, obj),
+    if subject not in index.records or obj not in index.records:
+        return
+
+    parent = index.records[obj]
+    child = index.records[subject]
+    index.parent_edges_by_mondo_id.setdefault(subject, []).append(
+        {
+            'mondo_id': parent.mondo_id,
+            'label': parent.label,
+            'definition': parent.definition,
+            'predicate': pred,
+        }
+    )
+    index.child_edges_by_mondo_id.setdefault(obj, []).append(
+        {
+            'mondo_id': child.mondo_id,
+            'label': child.label,
+            'definition': child.definition,
+            'predicate': pred,
+        }
     )
 
 
+def deterministic_index_lookup(
+    index: MondoIndex,
+    query: str,
+) -> tuple[MondoTerm | None, list[dict[str, Any]]]:
+    """Return an exact MONDO match or ambiguity context from in-memory indexes."""
+    strict_ambiguities: list[dict[str, Any]] = []
+
+    direct_matches = [
+        index.by_iri[mondo_id.casefold()]
+        for mondo_id in extract_mondo_ids(query)
+        if mondo_id.casefold() in index.by_iri
+    ]
+    selected, ambiguity = select_unique_entry('direct_mondo_id', query, direct_matches)
+    if selected is not None:
+        return term_from_entry(selected, 'direct_mondo_id', query), strict_ambiguities
+    if ambiguity is not None:
+        strict_ambiguities.append(ambiguity)
+
+    strict_steps: list[tuple[str, str | set[str], dict[str, list[MatchEntry]]]] = [
+        ('primary_label', normalize_strict(query), index.label_index),
+        ('exact_synonym', normalize_strict(query), index.exact_synonym_index),
+        ('xref', extract_identifier_keys(query), index.xref_index),
+        ('related_synonym', normalize_strict(query), index.related_synonym_index),
+        (
+            'broad_narrow_synonym',
+            normalize_strict(query),
+            index.broad_narrow_synonym_index,
+        ),
+        ('abbreviation', normalize_strict(query), index.abbreviation_index),
+        (
+            'deprecated_replacement',
+            normalize_strict(query),
+            index.deprecated_replacement_index,
+        ),
+    ]
+    for match_type, lookup_key, match_index in strict_steps:
+        entries = entries_for_lookup(match_index, lookup_key)
+        selected, ambiguity = select_unique_entry(match_type, query, entries)
+        if selected is not None:
+            return term_from_entry(selected, selected.match_type, query), strict_ambiguities
+        if ambiguity is not None:
+            strict_ambiguities.append(ambiguity)
+
+    if strict_ambiguities:
+        return None, strict_ambiguities
+
+    return None, []
+
+
 def find_mondo_term_for_disease(disease_name: str) -> MondoTerm | None:
-    """Return the selected MONDO term for a disease name without agent calls."""
+    """Return the selected MONDO term for a disease name.
+
+    Matching proceeds from highest-confidence exact signals to lower-confidence
+    fallbacks:
+
+    1. Direct MONDO CURIE or IRI.
+    2. Exact primary label.
+    3. Exact synonym.
+    4. External identifier or exact mapping ID.
+    5. Related synonym.
+    6. Broad or narrow synonym.
+    7. Unique abbreviation.
+    8. Deprecated term with one valid replacement.
+    9. Fuzzy match over labels plus exact/related synonyms.
+
+    Exact tiers use conservative normalization and return only when a tier
+    selects one distinct MONDO ID. Ambiguous exact tiers are recorded and fuzzy
+    matching can include that context in the returned audit data.
+    """
     query = disease_name.strip()
     if not query:
         return None
 
     index = get_mondo_index()
-    deterministic = deterministic_sql_lookup(index, query)
-    if deterministic.selected is not None:
-        return deterministic.selected
-    if deterministic.strict_ambiguities:
+    selected, strict_ambiguities = deterministic_index_lookup(index, query)
+    if selected is not None:
+        return selected
+    if strict_ambiguities:
         return None
 
-    candidates = retrieve_mondo_candidates(index, query, limit=10)
-    if not candidates:
+    return fuzzy_match(index, query, strict_ambiguities)
+
+
+def fuzzy_match(
+    index: MondoIndex,
+    query: str,
+    strict_ambiguities: list[dict[str, Any]],
+    limit: int = 10,
+) -> MondoTerm | None:
+    """Return the best fuzzy MONDO match above the configured score cutoff.
+
+    Fuzzy matching compares a normalized query against primary labels plus
+    exact and related synonyms. Candidate ranking prefers higher RapidFuzz
+    scores, then stronger source types, closer matched-text length, and stable
+    MONDO ID ordering. The returned context includes nearest candidates for
+    auditability.
+    """
+    if not index.fuzzy_choices:
         return None
 
-    selected = candidates[0]
-    score = selected.rapidfuzz_score or 0.0
-    if score < FUZZY_SCORE_CUTOFF:
-        return None
-
-    context = build_match_context(
-        query=query,
-        selected=MondoTerm(
-            mondo_id=selected.mondo_id,
-            term=selected.label,
-            match_type='fuzzy',
-            matched_text=selected.matched_alias_text,
-            score=float(score),
-        ),
-        candidates=candidates,
-        strict_ambiguities=deterministic.strict_ambiguities,
-        agent_used=False,
+    normalized_query = normalize_fuzzy(query)
+    matches = process.extract(
+        normalized_query,
+        index.fuzzy_choices,
+        scorer=fuzz.token_sort_ratio,
+        limit=max(limit * 10, 50),
+        score_cutoff=FUZZY_SCORE_CUTOFF,
     )
-    context.update(
-        {
-            'scorer': 'rapidfuzz.fuzz.token_sort_ratio',
-            'nearest_candidates': [
-                candidate_to_legacy_context(candidate) for candidate in candidates
-            ],
-            'selected_score': float(score),
-            'selected_matched_text': selected.matched_alias_text,
-            'selected_match_type': selected.alias_type,
-        }
+
+    best_by_mondo_id: dict[str, tuple[MatchEntry, float]] = {}
+    for _, score, entry_idx in matches:
+        entry = index.fuzzy_entries[entry_idx]
+        existing = best_by_mondo_id.get(entry.mondo_id)
+        if existing is None or fuzzy_sort_key(
+            entry, score, normalized_query
+        ) < fuzzy_sort_key(existing[0], existing[1], normalized_query):
+            best_by_mondo_id[entry.mondo_id] = (entry, float(score))
+
+    if not best_by_mondo_id:
+        return None
+
+    ranked = sorted(
+        best_by_mondo_id.values(),
+        key=lambda item: fuzzy_sort_key(item[0], item[1], normalized_query),
     )
+    selected, selected_score = ranked[0]
+    nearest = [entry.context(score=score) for entry, score in ranked[:limit]]
+    context: dict[str, Any] = {
+        'query': query,
+        'normalized_query': normalized_query,
+        'scorer': 'rapidfuzz.fuzz.token_sort_ratio',
+        'selected_score': float(selected_score),
+        'selected_matched_text': selected.matched_text,
+        'selected_match_type': selected.match_type,
+        'nearest_candidates': nearest,
+    }
+    if strict_ambiguities:
+        context['strict_ambiguities'] = strict_ambiguities
+
     return MondoTerm(
         mondo_id=selected.mondo_id,
         term=selected.label,
         match_type='fuzzy',
-        matched_text=selected.matched_alias_text,
-        score=float(score),
+        matched_text=selected.matched_text,
+        score=float(selected_score),
         match_context=context,
     )
 
@@ -624,16 +631,16 @@ async def find_mondo_term_for_disease_with_agent(
         return None
 
     index = get_mondo_index()
-    deterministic = deterministic_sql_lookup(index, query)
-    if deterministic.selected is not None:
-        return deterministic.selected
+    selected, strict_ambiguities = deterministic_index_lookup(index, query)
+    if selected is not None:
+        return selected
 
     candidates = retrieve_mondo_candidates(index, query, limit=20)
     message = {
         'disease_name': query,
         'context': context.model_dump(exclude_none=True) if context else {},
-        'initial_candidates': [c.model_dump() for c in candidates],
-        'strict_ambiguities': deterministic.strict_ambiguities,
+        'initial_candidates': [candidate.model_dump() for candidate in candidates],
+        'strict_ambiguities': strict_ambiguities,
     }
 
     from lib.agents.mondo_linking_agent import MONDO_LINKING_AGENT_INSTRUCTIONS
@@ -672,7 +679,7 @@ async def find_mondo_term_for_disease_with_agent(
         query=query,
         selected=selected,
         candidates=candidates,
-        strict_ambiguities=deterministic.strict_ambiguities,
+        strict_ambiguities=strict_ambiguities,
         agent_used=True,
         agent_reasoning=result.final_output.reasoning,
         candidates_considered=decision.candidates_considered,
@@ -681,118 +688,41 @@ async def find_mondo_term_for_disease_with_agent(
     return selected
 
 
-def deterministic_sql_lookup(index: MondoIndex, query: str) -> DeterministicLookup:
-    """Run strict deterministic SQL lookup tiers."""
-    strict_ambiguities: list[dict[str, Any]] = []
-    direct_matches = []
-    with connect_index(index) as conn:
-        for mondo_id in extract_mondo_ids(query):
-            row = conn.execute(
-                """
-                SELECT mondo_id, label, definition
-                FROM mondo_terms
-                WHERE mondo_id = ? AND deprecated = 0
-                """,
-                (mondo_id,),
-            ).fetchone()
-            if row:
-                direct_matches.append(
-                    MatchEntry(
-                        mondo_id=row['mondo_id'],
-                        label=row['label'],
-                        matched_text=mondo_id,
-                        match_type='direct_mondo_id',
-                        source_priority=0,
-                        definition=row['definition'],
-                    )
-                )
-        selected, ambiguity = select_unique_entry(
-            'direct_mondo_id', query, direct_matches
-        )
-        if selected is not None:
-            return DeterministicLookup(
-                term_from_entry(selected, 'direct_mondo_id', query),
-                strict_ambiguities,
-            )
-        if ambiguity is not None:
-            strict_ambiguities.append(ambiguity)
-
-        strict_steps: list[tuple[str, str | set[str], tuple[str, ...]]] = [
-            ('primary_label', normalize_strict(query), ('primary_label',)),
-            ('exact_synonym', normalize_strict(query), ('exact_synonym',)),
-            ('xref', extract_identifier_keys(query), ()),
-            ('related_synonym', normalize_strict(query), ('related_synonym',)),
-            (
-                'broad_narrow_synonym',
-                normalize_strict(query),
-                ('hasBroadSynonym', 'hasNarrowSynonym'),
-            ),
-            ('abbreviation', normalize_strict(query), ('abbreviation',)),
-            (
-                'deprecated_replacement',
-                normalize_strict(query),
-                ('deprecated_replacement',),
-            ),
-        ]
-        for match_type, lookup_key, alias_types in strict_steps:
-            if match_type == 'xref':
-                entries = xref_entries_for_lookup(conn, lookup_key)
-            else:
-                entries = alias_entries_for_lookup(conn, lookup_key, alias_types)
-            selected, ambiguity = select_unique_entry(match_type, query, entries)
-            if selected is not None:
-                return DeterministicLookup(
-                    term_from_entry(selected, selected.match_type, query),
-                    strict_ambiguities,
-                )
-            if ambiguity is not None:
-                strict_ambiguities.append(ambiguity)
-
-    return DeterministicLookup(None, strict_ambiguities)
-
-
 def retrieve_mondo_candidates(
     index: MondoIndex,
     query: str,
     strategy: str = 'combined',
     limit: int = 20,
 ) -> list[MondoCandidate]:
-    """Retrieve and rerank MONDO candidates from SQLite-backed aliases."""
+    """Return RapidFuzz-ranked candidates from in-memory fuzzy aliases."""
+    if strategy not in {'combined', 'rapidfuzz'}:
+        return []
+    if not index.fuzzy_choices:
+        return []
     normalized_query = normalize_fuzzy(query)
     if not normalized_query:
         return []
 
-    with connect_index(index) as conn:
-        alias_rows: list[sqlite3.Row] = []
-        if strategy in {'combined', 'trigram_fts'} and index.has_trigram_fts:
-            alias_rows = query_trigram_fts(
-                conn, normalized_query, limit=max(200, limit * 20)
-            )
-        if not alias_rows and strategy in {'combined', 'rapidfuzz'}:
-            alias_rows = query_all_fuzzy_aliases(conn)
-
-    if not alias_rows:
-        return []
-
-    scored: list[MondoCandidate] = []
-    for row in alias_rows:
-        score = fuzz.token_sort_ratio(normalized_query, normalize_fuzzy(row['alias_text']))
-        scored.append(
-            MondoCandidate(
-                mondo_id=row['mondo_id'],
-                label=row['label'],
-                definition=row['definition'],
-                matched_alias_text=row['alias_text'],
-                alias_type=row['alias_type'],
-                source_priority=row['source_priority'],
-                retrieval_source=row['retrieval_source'],
-                fts_rank=row['fts_rank'],
-                rapidfuzz_score=float(score),
-            )
-        )
+    matches = process.extract(
+        normalized_query,
+        index.fuzzy_choices,
+        scorer=fuzz.token_sort_ratio,
+        limit=max(limit * 10, 50),
+    )
 
     best_by_mondo_id: dict[str, MondoCandidate] = {}
-    for candidate in scored:
+    for _, score, entry_idx in matches:
+        entry = index.fuzzy_entries[entry_idx]
+        candidate = MondoCandidate(
+            mondo_id=entry.mondo_id,
+            label=entry.label,
+            definition=entry.definition,
+            matched_alias_text=entry.matched_text,
+            alias_type=entry.match_type,
+            source_priority=entry.source_priority,
+            retrieval_source='rapidfuzz',
+            rapidfuzz_score=float(score),
+        )
         existing = best_by_mondo_id.get(candidate.mondo_id)
         if existing is None or candidate_sort_key(candidate, normalized_query) < (
             candidate_sort_key(existing, normalized_query)
@@ -805,263 +735,18 @@ def retrieve_mondo_candidates(
     )[:limit]
 
 
-def query_trigram_fts(
-    conn: sqlite3.Connection,
+def fuzzy_sort_key(
+    entry: MatchEntry,
+    score: float,
     normalized_query: str,
-    limit: int,
-) -> list[sqlite3.Row]:
-    """Query the trigram FTS table and return alias rows."""
-    fts_query = fts5_trigram_query(normalized_query)
-    if not fts_query:
-        return []
-    try:
-        return list(
-            conn.execute(
-                """
-                SELECT
-                    a.mondo_id,
-                    t.label,
-                    t.definition,
-                    a.alias_text,
-                    a.alias_type,
-                    a.source_priority,
-                    'trigram_fts' AS retrieval_source,
-                    bm25(mondo_alias_trigram_fts) AS fts_rank
-                FROM mondo_alias_trigram_fts
-                JOIN mondo_aliases a ON a.id = mondo_alias_trigram_fts.alias_id
-                JOIN mondo_terms t ON t.mondo_id = a.mondo_id
-                WHERE mondo_alias_trigram_fts MATCH ?
-                    AND t.deprecated = 0
-                ORDER BY fts_rank
-                LIMIT ?
-                """,
-                (fts_query, limit),
-            )
-        )
-    except sqlite3.OperationalError:
-        return []
-
-
-def fts5_trigram_query(normalized_query: str) -> str:
-    """Return a permissive FTS5 query over quoted trigrams."""
-    grams = []
-    seen = set()
-    for idx in range(max(len(normalized_query) - 2, 0)):
-        gram = normalized_query[idx : idx + 3].strip()
-        if len(gram) < 3 or gram in seen:
-            continue
-        seen.add(gram)
-        grams.append(f'"{gram.replace("\"", "\"\"")}"')
-    return ' OR '.join(grams)
-
-
-def query_all_fuzzy_aliases(conn: sqlite3.Connection) -> list[sqlite3.Row]:
-    """Return all fuzzy-eligible aliases for RapidFuzz fallback reranking."""
-    return list(
-        conn.execute(
-            """
-            SELECT
-                a.mondo_id,
-                t.label,
-                t.definition,
-                a.alias_text,
-                a.alias_type,
-                a.source_priority,
-                'rapidfuzz' AS retrieval_source,
-                NULL AS fts_rank
-            FROM mondo_aliases a
-            JOIN mondo_terms t ON t.mondo_id = a.mondo_id
-            WHERE t.deprecated = 0
-                AND a.alias_type IN ('primary_label', 'exact_synonym', 'related_synonym')
-            """
-        )
+) -> tuple[float, int, int, str]:
+    """Return the deterministic sort key for fuzzy match candidates."""
+    return (
+        -float(score),
+        entry.source_priority,
+        abs(len(normalize_fuzzy(entry.matched_text)) - len(normalized_query)),
+        entry.mondo_id,
     )
-
-
-def get_mondo_term(mondo_id: str) -> dict[str, Any] | None:
-    """Return MONDO term details for tools and agent validation."""
-    normalized_id = normalize_mondo_id(mondo_id)
-    if normalized_id is None:
-        return None
-    index = get_mondo_index()
-    with connect_index(index) as conn:
-        row = conn.execute(
-            """
-            SELECT mondo_id, iri, label, definition, deprecated, replacement_mondo_id
-            FROM mondo_terms
-            WHERE mondo_id = ?
-            """,
-            (normalized_id,),
-        ).fetchone()
-        if not row:
-            return None
-        aliases = [
-            dict(alias)
-            for alias in conn.execute(
-                """
-                SELECT alias_text, alias_type, source_priority
-                FROM mondo_aliases
-                WHERE mondo_id = ?
-                ORDER BY source_priority, alias_text
-                """,
-                (normalized_id,),
-            )
-        ]
-        xrefs = [
-            dict(xref)
-            for xref in conn.execute(
-                """
-                SELECT identifier, xref_type
-                FROM mondo_xrefs
-                WHERE mondo_id = ?
-                ORDER BY xref_type, identifier
-                """,
-                (normalized_id,),
-            )
-        ]
-    return {
-        'mondo_id': row['mondo_id'],
-        'iri': row['iri'],
-        'label': row['label'],
-        'definition': row['definition'],
-        'deprecated': bool(row['deprecated']),
-        'replacement_mondo_id': row['replacement_mondo_id'],
-        'aliases': aliases,
-        'xrefs': xrefs,
-    }
-
-
-def get_mondo_related_terms(mondo_id: str, direction: str) -> list[dict[str, Any]]:
-    """Return parent or child MONDO terms connected by ontology edges."""
-    normalized_id = normalize_mondo_id(mondo_id)
-    if normalized_id is None:
-        return []
-    if direction == 'parents':
-        predicate_column = 'subject_mondo_id'
-        related_column = 'object_mondo_id'
-    else:
-        predicate_column = 'object_mondo_id'
-        related_column = 'subject_mondo_id'
-    index = get_mondo_index()
-    with connect_index(index) as conn:
-        return [
-            dict(row)
-            for row in conn.execute(
-                f"""
-                SELECT
-                    t.mondo_id,
-                    t.label,
-                    t.definition,
-                    e.predicate
-                FROM mondo_edges e
-                JOIN mondo_terms t ON t.mondo_id = e.{related_column}
-                WHERE e.{predicate_column} = ?
-                    AND t.deprecated = 0
-                ORDER BY t.label
-                LIMIT 100
-                """,
-                (normalized_id,),
-            )
-        ]
-
-
-def get_mondo_terms_by_xref(identifier: str) -> list[dict[str, Any]]:
-    """Return MONDO terms matching an external identifier."""
-    index = get_mondo_index()
-    keys = extract_identifier_keys(identifier)
-    if not keys:
-        return []
-    with connect_index(index) as conn:
-        entries = xref_entries_for_lookup(conn, keys)
-    return [
-        {
-            'mondo_id': entry.mondo_id,
-            'label': entry.label,
-            'definition': entry.definition,
-            'matched_identifier': entry.matched_text,
-            'xref_type': entry.match_type,
-        }
-        for entry in entries
-    ]
-
-
-def alias_entries_for_lookup(
-    conn: sqlite3.Connection,
-    lookup_key: str | set[str],
-    alias_types: tuple[str, ...],
-) -> list[MatchEntry]:
-    """Return alias entries for one normalized key or a deduped set of keys."""
-    keys = {lookup_key} if isinstance(lookup_key, str) else lookup_key
-    if not keys:
-        return []
-    entries: dict[tuple[str, str, str], MatchEntry] = {}
-    for key in keys:
-        rows = conn.execute(
-            f"""
-            SELECT
-                a.mondo_id,
-                t.label,
-                t.definition,
-                a.alias_text,
-                a.alias_type,
-                a.source_priority
-            FROM mondo_aliases a
-            JOIN mondo_terms t ON t.mondo_id = a.mondo_id
-            WHERE a.normalized_alias = ?
-                AND a.alias_type IN ({','.join('?' for _ in alias_types)})
-                AND t.deprecated = 0
-            """,
-            (key, *alias_types),
-        )
-        for row in rows:
-            entry = MatchEntry(
-                mondo_id=row['mondo_id'],
-                label=row['label'],
-                definition=row['definition'],
-                matched_text=row['alias_text'],
-                match_type=row['alias_type'],
-                source_priority=row['source_priority'],
-            )
-            entries[(entry.mondo_id, entry.match_type, entry.matched_text)] = entry
-    return list(entries.values())
-
-
-def xref_entries_for_lookup(
-    conn: sqlite3.Connection,
-    lookup_key: str | set[str],
-) -> list[MatchEntry]:
-    """Return xref entries for one normalized key or a deduped set of keys."""
-    keys = {lookup_key} if isinstance(lookup_key, str) else lookup_key
-    if not keys:
-        return []
-    entries: dict[tuple[str, str, str], MatchEntry] = {}
-    for key in keys:
-        rows = conn.execute(
-            """
-            SELECT
-                x.mondo_id,
-                t.label,
-                t.definition,
-                x.identifier,
-                x.xref_type
-            FROM mondo_xrefs x
-            JOIN mondo_terms t ON t.mondo_id = x.mondo_id
-            WHERE x.normalized_identifier = ?
-                AND t.deprecated = 0
-            """,
-            (key,),
-        )
-        for row in rows:
-            entry = MatchEntry(
-                mondo_id=row['mondo_id'],
-                label=row['label'],
-                definition=row['definition'],
-                matched_text=row['identifier'],
-                match_type=row['xref_type'],
-                source_priority=1,
-            )
-            entries[(entry.mondo_id, entry.match_type, entry.matched_text)] = entry
-    return list(entries.values())
 
 
 def select_unique_entry(
@@ -1069,12 +754,25 @@ def select_unique_entry(
     query: str,
     entries: list[MatchEntry],
 ) -> tuple[MatchEntry | None, dict[str, Any] | None]:
-    """Select a match only when all entries point to one MONDO ID."""
+    """Select a match only when all entries point to one MONDO ID.
+
+    Args:
+        match_type: Lookup tier that produced the entries.
+        query: Original user-facing disease query.
+        entries: Candidate entries for the lookup tier.
+
+    Returns:
+        A selected entry and no ambiguity context when the tier is unambiguous;
+        otherwise no entry plus ambiguity context when multiple MONDO IDs match.
+        If there are no entries, both return values are None.
+    """
     if not entries:
         return None, None
+
     by_mondo_id = {entry.mondo_id: entry for entry in entries}
     if len(by_mondo_id) == 1:
         return next(iter(by_mondo_id.values())), None
+
     return None, {
         'match_type': match_type,
         'query': query,
@@ -1087,27 +785,93 @@ def select_unique_entry(
 
 def term_from_entry(entry: MatchEntry, match_type: str, query: str) -> MondoTerm:
     """Convert a deterministic match entry into the public result model."""
-    term = MondoTerm(
+    context = {
+        'query': query,
+        'match_type': match_type,
+        'matched_text': entry.matched_text,
+    }
+    return MondoTerm(
         mondo_id=entry.mondo_id,
         term=entry.label,
         match_type=match_type,
         matched_text=entry.matched_text,
         score=100.0,
+        match_context=context,
     )
-    term.match_context = build_match_context(
-        query=query,
-        selected=term,
-        candidates=[],
-        strict_ambiguities=[],
-        agent_used=False,
-    )
-    term.match_context.update(
+
+
+def get_mondo_term(mondo_id: str) -> dict[str, Any] | None:
+    """Return MONDO term details for tools and agent validation."""
+    normalized_id = normalize_mondo_id(mondo_id)
+    if normalized_id is None:
+        return None
+    index = get_mondo_index()
+    record = index.records.get(normalized_id)
+    if record is None:
+        return None
+    aliases = [
         {
-            'match_type': match_type,
-            'matched_text': entry.matched_text,
+            'alias_text': entry.matched_text,
+            'alias_type': entry.match_type,
+            'source_priority': entry.source_priority,
         }
-    )
-    return term
+        for entry in sorted(
+            index.aliases_by_mondo_id.get(normalized_id, []),
+            key=lambda entry: (entry.source_priority, entry.matched_text),
+        )
+    ]
+    xrefs = [
+        {
+            'identifier': entry.matched_text,
+            'xref_type': entry.match_type,
+        }
+        for entry in sorted(
+            index.xrefs_by_mondo_id.get(normalized_id, []),
+            key=lambda entry: (entry.match_type, entry.matched_text),
+        )
+    ]
+    return {
+        'mondo_id': record.mondo_id,
+        'iri': record.iri,
+        'label': record.label,
+        'definition': record.definition,
+        'deprecated': False,
+        'replacement_mondo_id': None,
+        'aliases': aliases,
+        'xrefs': xrefs,
+    }
+
+
+def get_mondo_related_terms(mondo_id: str, direction: str) -> list[dict[str, Any]]:
+    """Return parent or child MONDO terms connected by ontology edges."""
+    normalized_id = normalize_mondo_id(mondo_id)
+    if normalized_id is None:
+        return []
+    index = get_mondo_index()
+    if direction == 'parents':
+        related = index.parent_edges_by_mondo_id.get(normalized_id, [])
+    else:
+        related = index.child_edges_by_mondo_id.get(normalized_id, [])
+    return sorted(related, key=lambda row: row['label'])[:100]
+
+
+def get_mondo_terms_by_xref(identifier: str) -> list[dict[str, Any]]:
+    """Return MONDO terms matching an external identifier."""
+    index = get_mondo_index()
+    keys = extract_identifier_keys(identifier)
+    if not keys:
+        return []
+    entries = entries_for_lookup(index.xref_index, keys)
+    return [
+        {
+            'mondo_id': entry.mondo_id,
+            'label': entry.label,
+            'definition': entry.definition,
+            'matched_identifier': entry.matched_text,
+            'xref_type': entry.match_type,
+        }
+        for entry in entries
+    ]
 
 
 def build_match_context(
@@ -1137,7 +901,7 @@ def build_match_context(
         'normalized_query': normalize_strict(query),
         'selected': selected_context,
         'retrieval': {
-            'strategies': ['deterministic_sql', 'trigram_fts', 'rapidfuzz_rerank'],
+            'strategies': ['in_memory_exact', 'rapidfuzz'],
             'strict_ambiguities': strict_ambiguities,
             'candidates': [candidate.model_dump() for candidate in candidates],
         },
@@ -1152,17 +916,6 @@ def build_match_context(
     return context
 
 
-def candidate_to_legacy_context(candidate: MondoCandidate) -> dict[str, Any]:
-    """Return the previous fuzzy context shape for compatibility."""
-    return {
-        'mondo_id': candidate.mondo_id,
-        'term': candidate.label,
-        'matched_text': candidate.matched_alias_text,
-        'match_type': candidate.alias_type,
-        'score': candidate.rapidfuzz_score,
-    }
-
-
 def candidate_sort_key(
     candidate: MondoCandidate,
     normalized_query: str,
@@ -1174,6 +927,22 @@ def candidate_sort_key(
         abs(len(normalize_fuzzy(candidate.matched_alias_text)) - len(normalized_query)),
         candidate.mondo_id,
     )
+
+
+def entries_for_lookup(
+    match_index: dict[str, list[MatchEntry]], lookup_key: str | set[str]
+) -> list[MatchEntry]:
+    """Return entries for one normalized key or a deduped set of keys."""
+    if isinstance(lookup_key, str):
+        return match_index.get(lookup_key, [])
+
+    entries_by_mondo_and_type: dict[tuple[str, str, str], MatchEntry] = {}
+    for key in lookup_key:
+        for entry in match_index.get(key, []):
+            entries_by_mondo_and_type[
+                (entry.mondo_id, entry.match_type, entry.matched_text)
+            ] = entry
+    return list(entries_by_mondo_and_type.values())
 
 
 def normalize_strict(text: str) -> str:
@@ -1228,7 +997,13 @@ def extract_identifier_keys(text: str) -> set[str]:
 
 
 def normalize_identifier_keys(identifier: str) -> set[str]:
-    """Return normalized lookup keys for supported CURIE and URL identifiers."""
+    """Return normalized lookup keys for supported CURIE and URL identifiers.
+
+    The original CURIE or URL is retained as one key when applicable, then
+    supported OBO, Orphanet, OMIM, identifiers.org, and ICD URLs are translated
+    to their equivalent CURIE forms so text-extracted identifiers can match
+    ontology xrefs.
+    """
     identifier = identifier.strip()
     if not identifier:
         return set()
@@ -1289,30 +1064,8 @@ def is_excluded_synonym_type(synonym_type: Any) -> bool:
     return any(token in synonym_type.upper() for token in EXCLUDED_SYNONYM_TYPE_TOKENS)
 
 
-def connect_index(index: MondoIndex) -> sqlite3.Connection:
-    """Open a read-only SQLite connection when possible."""
-    if index.sqlite_path.exists():
-        conn = sqlite3.connect(
-            f'file:{index.sqlite_path}?mode=ro',
-            uri=True,
-        )
-    else:
-        conn = sqlite3.connect(index.sqlite_path)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def sqlite_has_trigram_fts(path: Path) -> bool:
-    """Return whether an existing MONDO SQLite index has the FTS table."""
-    conn = sqlite3.connect(f'file:{path}?mode=ro', uri=True)
-    try:
-        row = conn.execute(
-            """
-            SELECT 1
-            FROM sqlite_master
-            WHERE type = 'table' AND name = 'mondo_alias_trigram_fts'
-            """
-        ).fetchone()
-        return row is not None
-    finally:
-        conn.close()
+def _append(lookup: dict[str, list[MatchEntry]], key: str, entry: MatchEntry) -> None:
+    """Append an entry to a lookup list when the key is non-empty."""
+    if not key:
+        return
+    lookup.setdefault(key, []).append(entry)
