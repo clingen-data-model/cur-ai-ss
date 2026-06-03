@@ -119,7 +119,12 @@ def render_patient_variant_occurrences_tab() -> None:
                         link.paired_variant_confidence
                         and link.paired_variant_confidence != 'high'
                     ):
-                        paired_variant_link += f' ({link.paired_variant_confidence})'
+                        confidence_text = (
+                            link.paired_variant_confidence.value.capitalize()
+                        )
+                        paired_variant_link += (
+                            f' (Pairing Confidence: {confidence_text})'
+                        )
 
         rows.append(
             {
@@ -401,7 +406,7 @@ def render_patient_variant_occurrences_tab() -> None:
                     paired_variant_link_url = f'/paper?paper_id={paper_resp.id}&variant_id={paired_variant.id}#{paired_variant_desc}'
                     st.markdown(
                         f'**Paired with:** [{paired_variant_desc}]({paired_variant_link_url}) '
-                        f'— Confidence: **{link.paired_variant_confidence.value}**'
+                        f'— Confidence: **{link.paired_variant_confidence.capitalize()}**'
                     )
 
             if link.paired_variant_confidence_reasoning:
