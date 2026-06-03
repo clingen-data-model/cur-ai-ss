@@ -1457,13 +1457,14 @@ async def handle_hpo_linking(task_id: int) -> None:
 
 
 async def handle_mondo_linking(task_id: int) -> None:
-    """Link paper and occurrence disease names to MONDO terms."""
+    """Link a paper or patient-variant occurrence disease name to a MONDO term."""
     paper_id: int
-    paper_disease_name: str | None = None
-    occurrence_disease_names: list[tuple[int, str | None, str | None]] = []
-    paper_context: MondoDiseaseContext
+    patient_variant_occurrence_id: int | None = None
+    disease_name: str | None = None
+    disease_context: MondoDiseaseContext
 
-    # Get paper and occurrence disease text
+    # Snapshot the source disease text before matching so we can avoid applying
+    # stale MONDO fields if the row changes while the matcher runs.
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
@@ -1474,87 +1475,71 @@ async def handle_mondo_linking(task_id: int) -> None:
         if not paper:
             return
 
-        paper_disease_name = paper.disease_name
-        paper_context = MondoDiseaseContext(
+        patient_variant_occurrence_id = task.patient_variant_occurrence_id
+        disease_context = MondoDiseaseContext(
             paper_title=paper.title,
             paper_abstract=paper.abstract,
             paper_disease_name=paper.disease_name,
             gene_symbol=paper.gene.symbol if paper.gene else None,
             inheritance_mode=paper.disease_inheritance_mode,
         )
-        occurrence_disease_names = [
-            (row.id, row.disease_name, row.inheritance)
-            for row in session.query(PatientVariantOccurrenceDB)
-            .filter(PatientVariantOccurrenceDB.paper_id == paper_id)
-            .order_by(PatientVariantOccurrenceDB.id)
-            .all()
-        ]
 
-    # Resolve each distinct non-blank disease string once, carrying paper context.
-    mondo_by_disease_name: dict[str, MondoTerm | None] = {}
-    disease_contexts: list[tuple[str | None, MondoDiseaseContext]] = [
-        (paper_disease_name, paper_context),
-        *(
-            (
-                disease_name,
-                paper_context.model_copy(
-                    update={
-                        'occurrence_disease_text': disease_name,
-                        'inheritance_mode': inheritance
-                        or paper_context.inheritance_mode,
-                    }
-                ),
+        if patient_variant_occurrence_id is None:
+            # Task is from a paper-level disease term
+            disease_name = paper.disease_name
+        else:
+            # Task is from a patient-variant occurrence disease term
+            occurrence = session.get(
+                PatientVariantOccurrenceDB, patient_variant_occurrence_id
             )
-            for _, disease_name, inheritance in occurrence_disease_names
-        ),
-    ]
-    for disease_name, disease_context in disease_contexts:
-        normalized_disease_name = disease_name.strip() if disease_name else ''
-        if (
-            not normalized_disease_name
-            or normalized_disease_name in mondo_by_disease_name
-        ):
-            continue
-        mondo_by_disease_name[
-            normalized_disease_name
-        ] = await _find_mondo_term_for_disease(
+            if not occurrence or occurrence.paper_id != paper_id:
+                return
+            disease_name = occurrence.disease_name
+            disease_context = disease_context.model_copy(
+                update={
+                    'occurrence_disease_text': occurrence.disease_name,
+                    'inheritance_mode': occurrence.inheritance
+                    or disease_context.inheritance_mode,
+                }
+            )
+
+    normalized_disease_name = disease_name.strip() if disease_name else ''
+    mondo_term: MondoTerm | None = None
+    if normalized_disease_name:
+        mondo_term = await _find_mondo_term_for_disease(
             normalized_disease_name,
             disease_context,
         )
 
-    # Apply results only when source disease text is unchanged since the snapshot.
-    def _mondo_values(
-        disease_name: str | None,
-    ) -> tuple[str | None, str | None, dict | None]:
-        normalized_disease_name = disease_name.strip() if disease_name else ''
-        if not normalized_disease_name:
+    def _mondo_values() -> tuple[str | None, str | None, dict | None]:
+        if mondo_term is None:
             return None, None, None
-        mondo = mondo_by_disease_name.get(normalized_disease_name)
-        if mondo is None:
-            return None, None, None
-        return mondo.mondo_id, mondo.term, mondo.match_context
+        return mondo_term.mondo_id, mondo_term.term, mondo_term.match_context
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
             return
 
-        paper = session.get(PaperDB, paper_id)
-        if paper and paper.disease_name == paper_disease_name:
-            (
-                paper.mondo_id,
-                paper.mondo_term,
-                paper.mondo_match_context,
-            ) = _mondo_values(paper_disease_name)
-
-        for occurrence_id, disease_name, _ in occurrence_disease_names:
-            occurrence = session.get(PatientVariantOccurrenceDB, occurrence_id)
-            if occurrence and occurrence.disease_name == disease_name:
+        if patient_variant_occurrence_id is None:
+            paper = session.get(PaperDB, paper_id)
+            if paper and paper.disease_name == disease_name:
                 (
-                    occurrence.mondo_id,
-                    occurrence.mondo_term,
-                    occurrence.mondo_match_context,
-                ) = _mondo_values(disease_name)
+                    paper.mondo_id,
+                    paper.mondo_term,
+                    paper.mondo_match_context,
+                ) = _mondo_values()
+            return
+
+        occurrence = session.get(
+            PatientVariantOccurrenceDB, patient_variant_occurrence_id
+        )
+        if occurrence and occurrence.disease_name == disease_name:
+            (
+                occurrence.mondo_id,
+                occurrence.mondo_term,
+                occurrence.mondo_match_context,
+            ) = _mondo_values()
 
 
 TASK_HANDLERS: dict[TaskType, Callable[[int], Awaitable[None]]] = {

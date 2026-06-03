@@ -271,6 +271,7 @@ def enqueue_paper_task(
     patient_id: int | None = None,
     variant_id: int | None = None,
     phenotype_id: int | None = None,
+    patient_variant_occurrence_id: int | None = None,
     skip_successors: bool = False,
     additional_context: str | None = None,
 ) -> list[TaskResp]:
@@ -281,6 +282,7 @@ def enqueue_paper_task(
             patient_id=patient_id,
             variant_id=variant_id,
             phenotype_id=phenotype_id,
+            patient_variant_occurrence_id=patient_variant_occurrence_id,
             skip_successors=skip_successors,
             additional_context=additional_context,
         ).model_dump(),

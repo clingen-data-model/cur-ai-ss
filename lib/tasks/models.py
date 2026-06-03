@@ -157,6 +157,12 @@ class TaskDB(Base):
         nullable=True,
         index=True,
     )
+    patient_variant_occurrence_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey('patient_variant_occurrences.id', ondelete='CASCADE'),
+        nullable=True,
+        index=True,
+    )
     status: Mapped[TaskStatus] = mapped_column(
         SQLEnum(TaskStatus),
         nullable=False,
@@ -187,6 +193,7 @@ class TaskDB(Base):
             'patient_id',
             'variant_id',
             'phenotype_id',
+            'patient_variant_occurrence_id',
             unique=True,
         ),
     )
@@ -206,6 +213,7 @@ class TaskResp(BaseModel):
     patient_id: int | None
     variant_id: int | None
     phenotype_id: int | None
+    patient_variant_occurrence_id: int | None
     updated_at: datetime
 
 
@@ -215,5 +223,6 @@ class TaskCreateRequest(BaseModel):
     patient_id: int | None = None
     variant_id: int | None = None
     phenotype_id: int | None = None
+    patient_variant_occurrence_id: int | None = None
     skip_successors: bool = False
     additional_context: str | None = None

@@ -424,6 +424,7 @@ def create_task(
         and request.patient_id is None
         and request.variant_id is None
         and request.phenotype_id is None
+        and request.patient_variant_occurrence_id is None
     ):
         tasks = enqueue_all_instances(
             session,
@@ -441,6 +442,7 @@ def create_task(
             patient_id=request.patient_id,
             variant_id=request.variant_id,
             phenotype_id=request.phenotype_id,
+            patient_variant_occurrence_id=request.patient_variant_occurrence_id,
             skip_successors=request.skip_successors,
             additional_context=request.additional_context,
         )

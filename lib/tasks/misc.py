@@ -25,6 +25,7 @@ def enqueue_task(
     patient_id: int | None = None,
     variant_id: int | None = None,
     phenotype_id: int | None = None,
+    patient_variant_occurrence_id: int | None = None,
     skip_successors: bool = False,
     additional_context: str | None = None,
 ) -> TaskDB:
@@ -50,6 +51,7 @@ def enqueue_task(
             TaskDB.patient_id == patient_id,
             TaskDB.variant_id == variant_id,
             TaskDB.phenotype_id == phenotype_id,
+            TaskDB.patient_variant_occurrence_id == patient_variant_occurrence_id,
         )
         .first()
     )
@@ -79,6 +81,7 @@ def enqueue_task(
             patient_id=patient_id,
             variant_id=variant_id,
             phenotype_id=phenotype_id,
+            patient_variant_occurrence_id=patient_variant_occurrence_id,
             status=TaskStatus.PENDING,
             skip_successors=skip_successors,
             additional_context=additional_context,
@@ -252,11 +255,20 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
             )
 
         case TaskType.PATIENT_VARIANT_OCCURRENCES:
-            enqueue_task(
-                session,
-                paper_id=task.paper_id,
-                task_type=TaskType.MONDO_LINKING,
+            occurrences = (
+                session.query(PatientVariantOccurrenceDB)
+                .filter(PatientVariantOccurrenceDB.paper_id == task.paper_id)
+                .all()
             )
+            for occurrence in occurrences:
+                if not occurrence.disease_name or not occurrence.disease_name.strip():
+                    continue
+                enqueue_task(
+                    session,
+                    paper_id=task.paper_id,
+                    task_type=TaskType.MONDO_LINKING,
+                    patient_variant_occurrence_id=occurrence.id,
+                )
 
             # Expand to per-family SEGREGATION_EVIDENCE_EXTRACTION tasks
             families = (
