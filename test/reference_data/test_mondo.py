@@ -23,6 +23,7 @@ def test_direct_mondo_id_match(mondo_index: mondo.MondoIndex) -> None:
     assert result is not None
     assert result.mondo_id == 'MONDO:0007947'
     assert result.term == 'Marfan syndrome'
+    assert result.match_type is mondo.MondoMatchType.DIRECT_MONDO_ID
     assert result.match_type == 'direct_mondo_id'
 
 
@@ -177,6 +178,7 @@ def test_retrieve_mondo_candidates_ranks_rapidfuzz_matches(
 
     assert candidates
     assert candidates[0].mondo_id == 'MONDO:0009061'
+    assert candidates[0].alias_type is mondo.MondoMatchType.PRIMARY_LABEL
     assert candidates[0].alias_type == 'primary_label'
     assert candidates[0].retrieval_source == 'rapidfuzz'
     assert candidates[0].rapidfuzz_score is not None

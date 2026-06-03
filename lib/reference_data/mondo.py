@@ -14,6 +14,7 @@ import json
 import re
 import unicodedata
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
@@ -60,10 +61,25 @@ FUZZY_PUNCTUATION_RE = re.compile(r'[\W_]+')
 _mondo_index: 'MondoIndex | None' = None
 
 
+class MondoMatchType(StrEnum):
+    DIRECT_MONDO_ID = 'direct_mondo_id'
+    PRIMARY_LABEL = 'primary_label'
+    EXACT_SYNONYM = 'exact_synonym'
+    XREF = 'xref'
+    EXACT_MAPPING_ID = 'exact_mapping_id'
+    RELATED_SYNONYM = 'related_synonym'
+    BROAD_SYNONYM = 'hasBroadSynonym'
+    NARROW_SYNONYM = 'hasNarrowSynonym'
+    BROAD_NARROW_SYNONYM = 'broad_narrow_synonym'
+    ABBREVIATION = 'abbreviation'
+    DEPRECATED_REPLACEMENT = 'deprecated_replacement'
+    AGENT_SELECTED = 'agent_selected'
+
+
 class MondoTerm(BaseModel):
     mondo_id: str
     term: str
-    match_type: str | None = None
+    match_type: MondoMatchType | None = None
     matched_text: str | None = None
     match_context: dict[str, Any] | None = None
 
@@ -81,7 +97,7 @@ class MondoCandidate(BaseModel):
     mondo_id: str
     label: str
     matched_alias_text: str
-    alias_type: str
+    alias_type: MondoMatchType
     retrieval_source: str
     source_priority: int
     definition: str | None = None
@@ -101,7 +117,7 @@ class MatchEntry:
     mondo_id: str
     label: str
     matched_text: str
-    match_type: str
+    match_type: MondoMatchType
     source_priority: int
     definition: str | None = None
 
@@ -249,7 +265,7 @@ def build_mondo_index(path: Path) -> MondoIndex:
             mondo_id=record.mondo_id,
             label=record.label,
             matched_text=record.label,
-            match_type='primary_label',
+            match_type=MondoMatchType.PRIMARY_LABEL,
             source_priority=0,
             definition=record.definition,
         )
@@ -268,7 +284,7 @@ def build_mondo_index(path: Path) -> MondoIndex:
         for xref in meta.get('xrefs') or []:
             val = xref.get('val') if isinstance(xref, dict) else None
             if isinstance(val, str):
-                add_identifier_to_index(index, record, val, 'xref')
+                add_identifier_to_index(index, record, val, MondoMatchType.XREF)
 
         for basic_property in meta.get('basicPropertyValues') or []:
             if not isinstance(basic_property, dict):
@@ -280,7 +296,7 @@ def build_mondo_index(path: Path) -> MondoIndex:
                     index,
                     record,
                     basic_property['val'],
-                    'exact_mapping_id',
+                    MondoMatchType.EXACT_MAPPING_ID,
                 )
 
     for node in deprecated_nodes:
@@ -316,7 +332,7 @@ def add_synonym_to_index(
             mondo_id=record.mondo_id,
             label=record.label,
             matched_text=val,
-            match_type='abbreviation',
+            match_type=MondoMatchType.ABBREVIATION,
             source_priority=3,
             definition=record.definition,
         )
@@ -324,22 +340,26 @@ def add_synonym_to_index(
         _append(index.aliases_by_mondo_id, record.mondo_id, entry)
         return
 
-    match_type: str
+    match_type: MondoMatchType
     target_index: dict[str, list[MatchEntry]]
     source_priority: int
     include_in_fuzzy = False
     if pred == 'hasExactSynonym':
-        match_type = 'exact_synonym'
+        match_type = MondoMatchType.EXACT_SYNONYM
         target_index = index.exact_synonym_index
         source_priority = 1
         include_in_fuzzy = True
     elif pred == 'hasRelatedSynonym':
-        match_type = 'related_synonym'
+        match_type = MondoMatchType.RELATED_SYNONYM
         target_index = index.related_synonym_index
         source_priority = 2
         include_in_fuzzy = True
-    elif pred in {'hasBroadSynonym', 'hasNarrowSynonym'}:
-        match_type = pred
+    elif pred == MondoMatchType.BROAD_SYNONYM:
+        match_type = MondoMatchType.BROAD_SYNONYM
+        target_index = index.broad_narrow_synonym_index
+        source_priority = 4
+    elif pred == MondoMatchType.NARROW_SYNONYM:
+        match_type = MondoMatchType.NARROW_SYNONYM
         target_index = index.broad_narrow_synonym_index
         source_priority = 4
     else:
@@ -364,7 +384,7 @@ def add_identifier_to_index(
     index: MondoIndex,
     record: MondoRecord,
     identifier: str,
-    match_type: str,
+    match_type: MondoMatchType,
 ) -> None:
     """Add normalized lookup keys for an external identifier mapping."""
     entry = MatchEntry(
@@ -411,7 +431,7 @@ def add_deprecated_replacement(index: MondoIndex, node: dict[str, Any]) -> None:
         mondo_id=replacement.mondo_id,
         label=replacement.label,
         matched_text=node.get('lbl', replacement.label),
-        match_type='deprecated_replacement',
+        match_type=MondoMatchType.DEPRECATED_REPLACEMENT,
         source_priority=5,
         definition=replacement.definition,
     )
@@ -433,7 +453,7 @@ def add_deprecated_replacement(index: MondoIndex, node: dict[str, Any]) -> None:
             mondo_id=replacement_entry.mondo_id,
             label=replacement_entry.label,
             matched_text=text,
-            match_type='deprecated_replacement',
+            match_type=MondoMatchType.DEPRECATED_REPLACEMENT,
             source_priority=replacement_entry.source_priority,
             definition=replacement_entry.definition,
         )
@@ -482,25 +502,44 @@ def deterministic_index_lookup(
         for mondo_id in extract_mondo_ids(query)
         if mondo_id.casefold() in index.by_iri
     ]
-    selected, ambiguity = select_unique_entry('direct_mondo_id', query, direct_matches)
+    selected, ambiguity = select_unique_entry(
+        MondoMatchType.DIRECT_MONDO_ID, query, direct_matches
+    )
     if selected is not None:
-        return term_from_entry(selected, 'direct_mondo_id', query), strict_ambiguities
+        return (
+            term_from_entry(selected, MondoMatchType.DIRECT_MONDO_ID, query),
+            strict_ambiguities,
+        )
     if ambiguity is not None:
         strict_ambiguities.append(ambiguity)
 
-    strict_steps: list[tuple[str, str | set[str], dict[str, list[MatchEntry]]]] = [
-        ('primary_label', normalize_strict(query), index.label_index),
-        ('exact_synonym', normalize_strict(query), index.exact_synonym_index),
-        ('xref', extract_identifier_keys(query), index.xref_index),
-        ('related_synonym', normalize_strict(query), index.related_synonym_index),
+    strict_steps: list[
+        tuple[MondoMatchType, str | set[str], dict[str, list[MatchEntry]]]
+    ] = [
+        (MondoMatchType.PRIMARY_LABEL, normalize_strict(query), index.label_index),
         (
-            'broad_narrow_synonym',
+            MondoMatchType.EXACT_SYNONYM,
+            normalize_strict(query),
+            index.exact_synonym_index,
+        ),
+        (MondoMatchType.XREF, extract_identifier_keys(query), index.xref_index),
+        (
+            MondoMatchType.RELATED_SYNONYM,
+            normalize_strict(query),
+            index.related_synonym_index,
+        ),
+        (
+            MondoMatchType.BROAD_NARROW_SYNONYM,
             normalize_strict(query),
             index.broad_narrow_synonym_index,
         ),
-        ('abbreviation', normalize_strict(query), index.abbreviation_index),
         (
-            'deprecated_replacement',
+            MondoMatchType.ABBREVIATION,
+            normalize_strict(query),
+            index.abbreviation_index,
+        ),
+        (
+            MondoMatchType.DEPRECATED_REPLACEMENT,
             normalize_strict(query),
             index.deprecated_replacement_index,
         ),
@@ -612,7 +651,7 @@ async def find_mondo_term_for_disease_with_agent(
     selected = MondoTerm(
         mondo_id=selected_term['mondo_id'],
         term=selected_term['label'],
-        match_type=decision.match_type or 'agent_selected',
+        match_type=decision.match_type or MondoMatchType.AGENT_SELECTED,
         matched_text=query,
     )
     selected.match_context = build_match_context(
@@ -669,7 +708,7 @@ def fuzzy_sort_key(
 
 
 def select_unique_entry(
-    match_type: str,
+    match_type: MondoMatchType,
     query: str,
     entries: list[MatchEntry],
 ) -> tuple[MatchEntry | None, dict[str, Any] | None]:
@@ -702,7 +741,9 @@ def select_unique_entry(
     }
 
 
-def term_from_entry(entry: MatchEntry, match_type: str, query: str) -> MondoTerm:
+def term_from_entry(
+    entry: MatchEntry, match_type: MondoMatchType, query: str
+) -> MondoTerm:
     """Convert a deterministic match entry into the public result model."""
     context = {
         'query': query,
@@ -839,7 +880,7 @@ def entries_for_lookup(
     if isinstance(lookup_key, str):
         return match_index.get(lookup_key, [])
 
-    entries_by_mondo_and_type: dict[tuple[str, str, str], MatchEntry] = {}
+    entries_by_mondo_and_type: dict[tuple[str, MondoMatchType, str], MatchEntry] = {}
     for key in lookup_key:
         for entry in match_index.get(key, []):
             entries_by_mondo_and_type[
