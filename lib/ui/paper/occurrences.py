@@ -17,6 +17,16 @@ from lib.ui.paper.shared import (
 )
 
 
+def _format_variant_with_protein(
+    variant: VariantResp, include_protein: bool = False
+) -> str:
+    """Format variant description with optional protein notation."""
+    desc = variant.variant_description
+    if include_protein and variant.hgvs_p:
+        desc += f' p.({variant.hgvs_p})'
+    return desc
+
+
 def _render_evidence_block(
     evidence_block: EvidenceBlock, paper_id: int, block_id: str
 ) -> None:
@@ -85,15 +95,12 @@ def render_patient_variant_occurrences_tab() -> None:
         patient = patients_by_id[link.patient_id]
         variant = variants_by_id[link.variant_id]
         harmonized_variant = variant.harmonized_variant
-        variant_desc = variant.variant_description
-
         # Show p. notation for paired variants or heterozygous
         show_protein = (
             link.paired_variant_link_id is not None
             or link.zygosity == Zygosity.heterozygous
         )
-        if show_protein and variant.hgvs_p:
-            variant_desc += f' | {variant.hgvs_p}'
+        variant_desc = _format_variant_with_protein(variant, show_protein)
 
         # Format testing methods as a list of values
         testing_methods_list = link.testing_methods
@@ -109,10 +116,10 @@ def render_patient_variant_occurrences_tab() -> None:
             if paired_link:
                 paired_variant = variants_by_id.get(paired_link.variant_id)
                 if paired_variant:
-                    paired_variant_desc = paired_variant.variant_description
                     # Show p. notation for paired variants
-                    if paired_variant.hgvs_p:
-                        paired_variant_desc += f' | {paired_variant.hgvs_p}'
+                    paired_variant_desc = _format_variant_with_protein(
+                        paired_variant, True
+                    )
                     paired_variant_link = f'/paper?paper_id={paper_resp.id}&variant_id={paired_link.variant_id}#{paired_variant_desc}'
                     # Include confidence level if less than High
                     if (
@@ -402,7 +409,9 @@ def render_patient_variant_occurrences_tab() -> None:
             if paired_link:
                 paired_variant = variants_by_id.get(paired_link.variant_id)
                 if paired_variant:
-                    paired_variant_desc = paired_variant.variant_description
+                    paired_variant_desc = _format_variant_with_protein(
+                        paired_variant, True
+                    )
                     paired_variant_link_url = f'/paper?paper_id={paper_resp.id}&variant_id={paired_variant.id}#{paired_variant_desc}'
                     st.markdown(
                         f'**Paired with:** [{paired_variant_desc}]({paired_variant_link_url}) '
