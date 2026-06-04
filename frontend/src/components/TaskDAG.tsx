@@ -28,6 +28,7 @@ const DAG_EDGES: [TaskType, TaskType][] = [
   ['Variant Extraction', 'Patient Variant Occurrences'],
   ['Variant Harmonization', 'Variant Annotation'],
   ['Patient Variant Occurrences', 'Segregation Evidence Extraction'],
+  ['Patient Variant Occurrences', 'Compound Het Evaluation'],
   ['Segregation Evidence Extraction', 'Segregation Analysis Computed'],
   ['Phenotype Extraction', 'HPO Linking'],
 ]
@@ -42,6 +43,7 @@ const ALL_TASK_TYPES: TaskType[] = [
   'Variant Harmonization',
   'Variant Annotation',
   'Patient Variant Occurrences',
+  'Compound Het Evaluation',
   'Segregation Evidence Extraction',
   'Segregation Analysis Computed',
   'Phenotype Extraction',
@@ -61,6 +63,7 @@ const TASK_DESCRIPTIONS: Record<TaskType, string> = {
   'Variant Harmonization': 'Normalizes variants to standard genomic coordinates using ClinVar, dbSNP, ClinGen Allele Registry, and VariantValidator',
   'Variant Annotation': 'Adds annotations (SpliceAI, conservation scores, etc.) to variants',
   'Patient Variant Occurrences': 'Associates patients with their variants and inheritance patterns',
+  'Compound Het Evaluation': 'Evaluates pairs of heterozygous variants to identify compound heterozygous genotypes',
   'Phenotype Extraction': 'Extracts phenotype text spans per patient',
   'HPO Linking': 'Maps phenotypes to HPO ontology terms for standardization',
 }
