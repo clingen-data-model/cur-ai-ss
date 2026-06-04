@@ -145,11 +145,11 @@ from lib.reference_data.mondo import (
     MondoDiseaseContext,
     MondoMatchType,
     MondoTerm,
-    build_match_context,
+    build_agent_match_context,
     deterministic_index_lookup,
     get_mondo_index,
     get_mondo_term,
-    retrieve_mondo_candidates,
+    retrieve_mondo_fuzzy_candidates,
 )
 from lib.tasks.models import TaskType
 
@@ -1515,20 +1515,27 @@ async def handle_mondo_linking(task_id: int) -> None:
 
     normalized_disease_name = disease_name.strip() if disease_name else ''
     mondo_term: MondoTerm | None = None
+    mondo_match_context: dict | None = None
     if normalized_disease_name:
         query = normalized_disease_name
         mondo_index = get_mondo_index()
-        mondo_term, strict_ambiguities = deterministic_index_lookup(
-            mondo_index, query
-        )
+        mondo_term, strict_ambiguities = deterministic_index_lookup(mondo_index, query)
+        if mondo_term is not None:
+            mondo_match_context = {
+                'match_type': mondo_term.match_type,
+            }
+            if mondo_term.matched_text is not None:
+                mondo_match_context['matched_text'] = mondo_term.matched_text
 
         if mondo_term is None:
-            candidates = retrieve_mondo_candidates(mondo_index, query, limit=20)
+            fuzzy_candidates = retrieve_mondo_fuzzy_candidates(
+                mondo_index, query, limit=20
+            )
             message = {
                 'disease_name': query,
                 'context': disease_context.model_dump(exclude_none=True),
-                'initial_candidates': [
-                    candidate.model_dump() for candidate in candidates
+                'fuzzy_candidates': [
+                    candidate.model_dump() for candidate in fuzzy_candidates
                 ],
                 'strict_ambiguities': strict_ambiguities,
             }
@@ -1556,50 +1563,51 @@ async def handle_mondo_linking(task_id: int) -> None:
                     mondo_term = MondoTerm(
                         mondo_id=selected_term['mondo_id'],
                         term=selected_term['label'],
-                        match_type=decision.match_type
-                        or MondoMatchType.AGENT_SELECTED,
+                        match_type=decision.match_type or MondoMatchType.AGENT_SELECTED,
                         matched_text=query,
                     )
-                    mondo_term.match_context = build_match_context(
+                    mondo_match_context = build_agent_match_context(
                         query=query,
                         selected=mondo_term,
-                        candidates=candidates,
+                        fuzzy_candidates=fuzzy_candidates,
                         strict_ambiguities=strict_ambiguities,
-                        agent_used=True,
                         agent_reasoning=result.final_output.reasoning,
-                        candidates_considered=decision.candidates_considered,
                         confidence=decision.confidence,
                     )
 
-    def _mondo_values() -> tuple[str | None, str | None, dict | None]:
+    def _mondo_values_to_apply() -> tuple[str | None, str | None, dict | None]:
         if mondo_term is None:
             return None, None, None
-        return mondo_term.mondo_id, mondo_term.term, mondo_term.match_context
+        return mondo_term.mondo_id, mondo_term.term, mondo_match_context
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
             return
 
+        # Update paper MONDO terms if this is a paper-level task
+        # otherwise update occurrence MONDO terms
         if patient_variant_occurrence_id is None:
             paper = session.get(PaperDB, paper_id)
             if paper and paper.disease_name == disease_name:
+                # Set paper MONDO fields to none or to the new values
                 (
                     paper.mondo_id,
                     paper.mondo_term,
                     paper.mondo_match_context,
-                ) = _mondo_values()
+                ) = _mondo_values_to_apply()
             return
 
         occurrence = session.get(
             PatientVariantOccurrenceDB, patient_variant_occurrence_id
         )
         if occurrence and occurrence.disease_name == disease_name:
+            # Set occurrence MONDO fields to none or to the new values
             (
                 occurrence.mondo_id,
                 occurrence.mondo_term,
                 occurrence.mondo_match_context,
-            ) = _mondo_values()
+            ) = _mondo_values_to_apply()
 
 
 TASK_HANDLERS: dict[TaskType, Callable[[int], Awaitable[None]]] = {

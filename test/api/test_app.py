@@ -1319,12 +1319,12 @@ def test_mondo_linking_handler_updates_paper_only_for_paper_scoped_task(
         'limb-girdle muscular dystrophy type 2Q': MondoTerm(
             mondo_id='MONDO:0015152',
             term='limb-girdle muscular dystrophy-dystroglycanopathy type C1',
-            match_context={'match_type': 'related_synonym'},
+            match_type='related_synonym',
         ),
         'epidermolysis bullosa simplex': MondoTerm(
             mondo_id='MONDO:0008275',
             term='epidermolysis bullosa simplex',
-            match_context={'match_type': 'primary_label'},
+            match_type='primary_label',
         ),
     }
     calls = []
@@ -1406,7 +1406,6 @@ def test_mondo_linking_handler_updates_target_occurrence_only(
                 value=SimpleNamespace(
                     mondo_id='MONDO:0008275',
                     match_type=MondoMatchType.PRIMARY_LABEL,
-                    candidates_considered=['MONDO:0008275'],
                     confidence='high',
                 ),
                 reasoning='matched primary label',
@@ -1417,7 +1416,9 @@ def test_mondo_linking_handler_updates_target_occurrence_only(
     monkeypatch.setattr(
         handlers, 'deterministic_index_lookup', fake_deterministic_index_lookup
     )
-    monkeypatch.setattr(handlers, 'retrieve_mondo_candidates', lambda *args, **kw: [])
+    monkeypatch.setattr(
+        handlers, 'retrieve_mondo_fuzzy_candidates', lambda *args, **kw: []
+    )
     monkeypatch.setattr(
         handlers,
         'get_mondo_term',
@@ -1439,10 +1440,7 @@ def test_mondo_linking_handler_updates_target_occurrence_only(
     assert occurrence.mondo_id == 'MONDO:0008275'
     assert occurrence.mondo_term == 'epidermolysis bullosa simplex'
     assert occurrence.mondo_match_context['query'] == 'epidermolysis bullosa simplex'
-    assert occurrence.mondo_match_context['agent']['used'] is True
-    assert occurrence.mondo_match_context['agent']['reasoning'] == (
-        'matched primary label'
-    )
+    assert occurrence.mondo_match_context['agent_reasoning'] == 'matched primary label'
 
 
 def test_mondo_linking_handler_skips_blank_disease_name(

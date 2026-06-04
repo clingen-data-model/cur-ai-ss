@@ -98,6 +98,18 @@ def test_exact_mapping_identifier_match(mondo_index: mondo.MondoIndex) -> None:
     assert result.match_type == 'exact_mapping_id'
 
 
+def test_known_identifier_urls_canonicalize_to_curie_keys() -> None:
+    key = mondo.normalize_identifier_key('http://www.orpha.net/ORDO/Orphanet_558')
+
+    assert key == 'orphanet:558'
+
+
+def test_unrecognized_identifier_url_falls_back_to_normalized_input() -> None:
+    key = mondo.normalize_identifier_key('https://example.org/xref/ABC_123')
+
+    assert key == 'https://example.org/xref/abc_123'
+
+
 def test_embedded_external_identifier_match(mondo_index: mondo.MondoIndex) -> None:
     result, ambiguities = mondo.deterministic_index_lookup(
         mondo_index, 'Disease identifier Orphanet:558'
@@ -171,35 +183,24 @@ def test_animal_word_human_disease_name_is_indexed(
     assert result.match_type == 'primary_label'
 
 
-def test_retrieve_mondo_candidates_ranks_rapidfuzz_matches(
+def test_retrieve_mondo_fuzzy_candidates_ranks_rapidfuzz_matches(
     mondo_index: mondo.MondoIndex,
 ) -> None:
-    candidates = mondo.retrieve_mondo_candidates(mondo_index, 'cystic fibroses')
-
-    assert candidates
-    assert candidates[0].mondo_id == 'MONDO:0009061'
-    assert candidates[0].alias_type is mondo.MondoMatchType.PRIMARY_LABEL
-    assert candidates[0].alias_type == 'primary_label'
-    assert candidates[0].retrieval_source == 'rapidfuzz'
-    assert candidates[0].rapidfuzz_score is not None
-
-
-def test_invalid_candidate_strategy_returns_empty(
-    mondo_index: mondo.MondoIndex,
-) -> None:
-    candidates = mondo.retrieve_mondo_candidates(
-        mondo_index,
-        'cystic fibrosis',
-        strategy='unsupported',
+    fuzzy_candidates = mondo.retrieve_mondo_fuzzy_candidates(
+        mondo_index, 'cystic fibroses'
     )
 
-    assert candidates == []
+    assert fuzzy_candidates
+    assert fuzzy_candidates[0].mondo_id == 'MONDO:0009061'
+    assert fuzzy_candidates[0].alias_type is mondo.MondoMatchType.PRIMARY_LABEL
+    assert fuzzy_candidates[0].alias_type == 'primary_label'
+    assert fuzzy_candidates[0].rapidfuzz_score is not None
 
 
 def test_empty_candidate_query_returns_empty(mondo_index: mondo.MondoIndex) -> None:
-    candidates = mondo.retrieve_mondo_candidates(mondo_index, '   ')
+    fuzzy_candidates = mondo.retrieve_mondo_fuzzy_candidates(mondo_index, '   ')
 
-    assert candidates == []
+    assert fuzzy_candidates == []
 
 
 def _node(

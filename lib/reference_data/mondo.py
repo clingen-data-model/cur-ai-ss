@@ -80,7 +80,6 @@ class MondoTerm(BaseModel):
     term: str
     match_type: MondoMatchType | None = None
     matched_text: str | None = None
-    match_context: dict[str, Any] | None = None
 
 
 class MondoDiseaseContext(BaseModel):
@@ -97,8 +96,6 @@ class MondoCandidate(BaseModel):
     label: str
     matched_alias_text: str
     alias_type: MondoMatchType
-    retrieval_source: str
-    source_priority: int
     definition: str | None = None
     rapidfuzz_score: float | None = None
 
@@ -106,52 +103,27 @@ class MondoCandidate(BaseModel):
 @dataclass(frozen=True)
 class MondoRecord:
     mondo_id: str
-    iri: str
     label: str
     definition: str | None = None
-
-
-@dataclass(frozen=True)
-class MatchEntry:
-    mondo_id: str
-    label: str
-    matched_text: str
-    match_type: MondoMatchType
-    source_priority: int
-    definition: str | None = None
-
-    def context(self, score: float | None = None) -> dict[str, Any]:
-        """Return serializable audit context for a match candidate."""
-        context: dict[str, Any] = {
-            'mondo_id': self.mondo_id,
-            'term': self.label,
-            'matched_text': self.matched_text,
-            'match_type': self.match_type,
-        }
-        if score is not None:
-            context['score'] = float(score)
-        return context
+    aliases: list[str] = field(default_factory=list)
+    xrefs: list[str] = field(default_factory=list)
 
 
 @dataclass
 class MondoIndex:
     records: dict[str, MondoRecord]
-    by_iri: dict[str, MatchEntry] = field(default_factory=dict)
-    label_index: dict[str, list[MatchEntry]] = field(default_factory=dict)
-    exact_synonym_index: dict[str, list[MatchEntry]] = field(default_factory=dict)
-    related_synonym_index: dict[str, list[MatchEntry]] = field(default_factory=dict)
-    broad_narrow_synonym_index: dict[str, list[MatchEntry]] = field(
-        default_factory=dict
-    )
-    abbreviation_index: dict[str, list[MatchEntry]] = field(default_factory=dict)
-    xref_index: dict[str, list[MatchEntry]] = field(default_factory=dict)
-    deprecated_replacement_index: dict[str, list[MatchEntry]] = field(
-        default_factory=dict
-    )
-    fuzzy_entries: list[MatchEntry] = field(default_factory=list)
+    label_index: dict[str, list[str]] = field(default_factory=dict)
+    exact_synonym_index: dict[str, list[str]] = field(default_factory=dict)
+    related_synonym_index: dict[str, list[str]] = field(default_factory=dict)
+    broad_synonym_index: dict[str, list[str]] = field(default_factory=dict)
+    narrow_synonym_index: dict[str, list[str]] = field(default_factory=dict)
+    abbreviation_index: dict[str, list[str]] = field(default_factory=dict)
+    xref_index: dict[str, list[str]] = field(default_factory=dict)
+    exact_mapping_index: dict[str, list[str]] = field(default_factory=dict)
+    deprecated_replacement_index: dict[str, list[str]] = field(default_factory=dict)
     fuzzy_choices: list[str] = field(default_factory=list)
-    aliases_by_mondo_id: dict[str, list[MatchEntry]] = field(default_factory=dict)
-    xrefs_by_mondo_id: dict[str, list[MatchEntry]] = field(default_factory=dict)
+    fuzzy_choice_to_mondo_ids: dict[str, list[str]] = field(default_factory=dict)
+    fuzzy_choice_match_types: dict[str, MondoMatchType] = field(default_factory=dict)
     parent_edges_by_mondo_id: dict[str, list[dict[str, Any]]] = field(
         default_factory=dict
     )
@@ -207,14 +179,14 @@ def build_mondo_index(path: Path) -> MondoIndex:
     For now this loads the entire mondo JSON file using json.loads and prunes it
     down, however the dict from json.loads must fit into memory (400-500MiB).
 
-    Non-deprecated MONDO CLASS nodes become records keyed by CURIE, IRI,
-    normalized primary label, normalized synonym text by synonym predicate,
-    abbreviation text, and external IDs from node xrefs / exactMatch
-    properties. Deprecated nodes are kept out of normal indexes and only
+    Non-deprecated MONDO CLASS nodes become records keyed by CURIE. Separate
+    lookup maps connect normalized primary labels, synonym text by predicate,
+    abbreviation text, and external IDs from node xrefs / exactMatch properties
+    to MONDO IDs. Deprecated nodes are kept out of normal indexes and only
     contribute replacement lookups when they point to one valid non-deprecated
     MONDO term. Text keys use strict normalization for deterministic matching;
-    fuzzy choices use looser punctuation/whitespace normalization over labels
-    plus exact/related synonyms.
+    fuzzy choices retain original alias/xref text and use looser
+    punctuation/whitespace normalization at query time.
 
     Args:
         path: Path to the MONDO OWLGraph JSON ontology file.
@@ -242,7 +214,7 @@ def build_mondo_index(path: Path) -> MondoIndex:
             continue
         if node.get('type') != 'CLASS' or not isinstance(label, str):
             continue
-        mondo_id = iri_to_mondo_id(iri)
+        mondo_id = normalize_mondo_curie(iri)
         if mondo_id is None:
             continue
         if is_deprecated_node(node):
@@ -250,9 +222,9 @@ def build_mondo_index(path: Path) -> MondoIndex:
             continue
         record = MondoRecord(
             mondo_id=mondo_id,
-            iri=iri,
             label=label,
             definition=extract_definition(node),
+            aliases=[label],
         )
         raw_records[mondo_id] = node
         records[mondo_id] = record
@@ -260,21 +232,10 @@ def build_mondo_index(path: Path) -> MondoIndex:
     index = MondoIndex(records=records)
     for record in records.values():
         node = raw_records[record.mondo_id]
-        entry = MatchEntry(
-            mondo_id=record.mondo_id,
-            label=record.label,
-            matched_text=record.label,
-            match_type=MondoMatchType.PRIMARY_LABEL,
-            source_priority=0,
-            definition=record.definition,
+        _append_id(index.label_index, normalize_strict(record.label), record.mondo_id)
+        add_fuzzy_choice(
+            index, record.label, record.mondo_id, MondoMatchType.PRIMARY_LABEL
         )
-        index.by_iri[record.iri.casefold()] = entry
-        index.by_iri[record.mondo_id.casefold()] = entry
-        index.by_iri[record.mondo_id.replace(':', '_').casefold()] = entry
-        _append(index.label_index, normalize_strict(record.label), entry)
-        _append(index.aliases_by_mondo_id, record.mondo_id, entry)
-        index.fuzzy_entries.append(entry)
-        index.fuzzy_choices.append(normalize_fuzzy(record.label))
 
         meta = node.get('meta') or {}
         for synonym in meta.get('synonyms') or []:
@@ -325,58 +286,39 @@ def add_synonym_to_index(
         return
     if is_excluded_synonym_type(synonym_type):
         return
+    _append_unique(record.aliases, val)
 
     if synonym_type == ABBREVIATION_TYPE:
-        entry = MatchEntry(
-            mondo_id=record.mondo_id,
-            label=record.label,
-            matched_text=val,
-            match_type=MondoMatchType.ABBREVIATION,
-            source_priority=3,
-            definition=record.definition,
+        _append_id(
+            index.abbreviation_index,
+            normalize_strict(val),
+            record.mondo_id,
         )
-        _append(index.abbreviation_index, normalize_strict(val), entry)
-        _append(index.aliases_by_mondo_id, record.mondo_id, entry)
         return
 
     match_type: MondoMatchType
-    target_index: dict[str, list[MatchEntry]]
-    source_priority: int
+    target_index: dict[str, list[str]]
     include_in_fuzzy = False
     if pred == 'hasExactSynonym':
         match_type = MondoMatchType.EXACT_SYNONYM
         target_index = index.exact_synonym_index
-        source_priority = 1
         include_in_fuzzy = True
     elif pred == 'hasRelatedSynonym':
         match_type = MondoMatchType.RELATED_SYNONYM
         target_index = index.related_synonym_index
-        source_priority = 2
         include_in_fuzzy = True
     elif pred == MondoMatchType.BROAD_SYNONYM:
         match_type = MondoMatchType.BROAD_SYNONYM
-        target_index = index.broad_narrow_synonym_index
-        source_priority = 4
+        target_index = index.broad_synonym_index
     elif pred == MondoMatchType.NARROW_SYNONYM:
         match_type = MondoMatchType.NARROW_SYNONYM
-        target_index = index.broad_narrow_synonym_index
-        source_priority = 4
+        target_index = index.narrow_synonym_index
     else:
         return
 
-    entry = MatchEntry(
-        mondo_id=record.mondo_id,
-        label=record.label,
-        matched_text=val,
-        match_type=match_type,
-        source_priority=source_priority,
-        definition=record.definition,
-    )
-    _append(target_index, normalize_strict(val), entry)
-    _append(index.aliases_by_mondo_id, record.mondo_id, entry)
+    _append_id(target_index, normalize_strict(val), record.mondo_id)
     if include_in_fuzzy:
-        index.fuzzy_entries.append(entry)
-        index.fuzzy_choices.append(normalize_fuzzy(val))
+        add_fuzzy_choice(index, val, record.mondo_id, match_type)
 
 
 def add_identifier_to_index(
@@ -386,17 +328,16 @@ def add_identifier_to_index(
     match_type: MondoMatchType,
 ) -> None:
     """Add normalized lookup keys for an external identifier mapping."""
-    entry = MatchEntry(
-        mondo_id=record.mondo_id,
-        label=record.label,
-        matched_text=identifier,
-        match_type=match_type,
-        source_priority=1,
-        definition=record.definition,
+    target_index = (
+        index.exact_mapping_index
+        if match_type == MondoMatchType.EXACT_MAPPING_ID
+        else index.xref_index
     )
-    for key in normalize_identifier_keys(identifier):
-        _append(index.xref_index, key, entry)
-    _append(index.xrefs_by_mondo_id, record.mondo_id, entry)
+    key = normalize_identifier_key(identifier)
+    if key is not None:
+        _append_id(target_index, key, record.mondo_id)
+    _append_unique(record.xrefs, identifier)
+    add_fuzzy_choice(index, identifier, record.mondo_id, match_type)
 
 
 def add_deprecated_replacement(index: MondoIndex, node: dict[str, Any]) -> None:
@@ -417,7 +358,7 @@ def add_deprecated_replacement(index: MondoIndex, node: dict[str, Any]) -> None:
         val = basic_property.get('val')
         if not isinstance(val, str):
             continue
-        mondo_id = iri_to_mondo_id(val) or normalize_mondo_id(val)
+        mondo_id = normalize_mondo_curie(val)
         if mondo_id and mondo_id in index.records:
             replacement_ids.append(mondo_id)
 
@@ -426,19 +367,10 @@ def add_deprecated_replacement(index: MondoIndex, node: dict[str, Any]) -> None:
         return
 
     replacement = index.records[distinct_replacements[0]]
-    replacement_entry = MatchEntry(
-        mondo_id=replacement.mondo_id,
-        label=replacement.label,
-        matched_text=node.get('lbl', replacement.label),
-        match_type=MondoMatchType.DEPRECATED_REPLACEMENT,
-        source_priority=5,
-        definition=replacement.definition,
-    )
-
     deprecated_texts = set()
     if isinstance(node.get('lbl'), str):
         deprecated_texts.add(node['lbl'])
-    mondo_id = iri_to_mondo_id(node.get('id', ''))
+    mondo_id = normalize_mondo_curie(node.get('id', ''))
     if mondo_id:
         deprecated_texts.add(mondo_id)
         deprecated_texts.add(mondo_id.replace(':', '_'))
@@ -448,21 +380,17 @@ def add_deprecated_replacement(index: MondoIndex, node: dict[str, Any]) -> None:
             deprecated_texts.add(val)
 
     for text in deprecated_texts:
-        entry = MatchEntry(
-            mondo_id=replacement_entry.mondo_id,
-            label=replacement_entry.label,
-            matched_text=text,
-            match_type=MondoMatchType.DEPRECATED_REPLACEMENT,
-            source_priority=replacement_entry.source_priority,
-            definition=replacement_entry.definition,
+        _append_id(
+            index.deprecated_replacement_index,
+            normalize_strict(text),
+            replacement.mondo_id,
         )
-        _append(index.deprecated_replacement_index, normalize_strict(text), entry)
 
 
 def add_edge_to_index(index: MondoIndex, edge: dict[str, Any]) -> None:
     """Add one parent/child MONDO edge to the in-memory graph indexes."""
-    subject = iri_to_mondo_id(edge.get('sub', ''))
-    obj = iri_to_mondo_id(edge.get('obj', ''))
+    subject = normalize_mondo_curie(edge.get('sub', ''))
+    obj = normalize_mondo_curie(edge.get('obj', ''))
     pred = edge.get('pred')
     if not subject or not obj or not isinstance(pred, str):
         return
@@ -496,25 +424,36 @@ def deterministic_index_lookup(
     """Return an exact MONDO match or ambiguity context from in-memory indexes."""
     strict_ambiguities: list[dict[str, Any]] = []
 
-    direct_matches = [
-        index.by_iri[mondo_id.casefold()]
-        for mondo_id in extract_mondo_ids(query)
-        if mondo_id.casefold() in index.by_iri
+    # A MONDO ID embedded in the query is the strongest deterministic signal.
+    # records is already keyed by canonical MONDO CURIE, so no text index is needed.
+    mondo_ids_in_query = [
+        mondo_id
+        for mondo_id in extract_mondo_curies(query)
+        if mondo_id in index.records
     ]
-    selected, ambiguity = select_unique_entry(
-        MondoMatchType.DIRECT_MONDO_ID, query, direct_matches
+    selected, ambiguity = unique_mondo_id_or_ambiguity(
+        index,
+        MondoMatchType.DIRECT_MONDO_ID,
+        query,
+        mondo_ids_in_query,
     )
     if selected is not None:
         return (
-            term_from_entry(selected, MondoMatchType.DIRECT_MONDO_ID, query),
+            term_from_mondo_id(
+                index,
+                selected,
+                MondoMatchType.DIRECT_MONDO_ID,
+                query,
+                matched_text=selected,
+            ),
             strict_ambiguities,
         )
     if ambiguity is not None:
         strict_ambiguities.append(ambiguity)
 
-    strict_steps: list[
-        tuple[MondoMatchType, str | set[str], dict[str, list[MatchEntry]]]
-    ] = [
+    # Try exact text/identifier indexes from highest-confidence to weakest.
+    # Each lookup map is keyed by normalized input text and points to MONDO IDs.
+    strict_steps: list[tuple[MondoMatchType, str | set[str], dict[str, list[str]]]] = [
         (MondoMatchType.PRIMARY_LABEL, normalize_strict(query), index.label_index),
         (
             MondoMatchType.EXACT_SYNONYM,
@@ -523,14 +462,24 @@ def deterministic_index_lookup(
         ),
         (MondoMatchType.XREF, extract_identifier_keys(query), index.xref_index),
         (
+            MondoMatchType.EXACT_MAPPING_ID,
+            extract_identifier_keys(query),
+            index.exact_mapping_index,
+        ),
+        (
             MondoMatchType.RELATED_SYNONYM,
             normalize_strict(query),
             index.related_synonym_index,
         ),
         (
-            MondoMatchType.BROAD_NARROW_SYNONYM,
+            MondoMatchType.BROAD_SYNONYM,
             normalize_strict(query),
-            index.broad_narrow_synonym_index,
+            index.broad_synonym_index,
+        ),
+        (
+            MondoMatchType.NARROW_SYNONYM,
+            normalize_strict(query),
+            index.narrow_synonym_index,
         ),
         (
             MondoMatchType.ABBREVIATION,
@@ -544,13 +493,17 @@ def deterministic_index_lookup(
         ),
     ]
     for match_type, lookup_key, match_index in strict_steps:
-        entries = entries_for_lookup(match_index, lookup_key)
-        selected, ambiguity = select_unique_entry(match_type, query, entries)
+        mondo_ids = mondo_ids_for_lookup(match_index, lookup_key)
+        selected, ambiguity = unique_mondo_id_or_ambiguity(
+            index, match_type, query, mondo_ids
+        )
         if selected is not None:
-            return term_from_entry(
-                selected, selected.match_type, query
+            return term_from_mondo_id(
+                index, selected, match_type, query
             ), strict_ambiguities
         if ambiguity is not None:
+            # Keep ambiguity evidence and continue; a later, weaker tier should
+            # not override it, but it may provide useful agent context.
             strict_ambiguities.append(ambiguity)
 
     if strict_ambiguities:
@@ -563,7 +516,7 @@ def _rank_rapidfuzz_matches(
     index: MondoIndex,
     query: str,
     limit: int,
-) -> tuple[str, list[tuple[MatchEntry, float]]]:
+) -> tuple[str, list[tuple[str, str, MondoMatchType, float]]]:
     """Return RapidFuzz-ranked label/synonym matches deduped by MONDO ID."""
     if not index.fuzzy_choices:
         return '', []
@@ -575,126 +528,144 @@ def _rank_rapidfuzz_matches(
     extract_kwargs: dict[str, Any] = {
         'scorer': fuzz.token_sort_ratio,
         'limit': max(limit * 10, 50),
+        'processor': normalize_fuzzy,
     }
 
     matches = process.extract(
-        normalized_query,
+        query,
         index.fuzzy_choices,
         **extract_kwargs,
     )
 
     # Collapse multiple label/synonym hits to the strongest alias per MONDO term.
-    best_by_mondo_id: dict[str, tuple[MatchEntry, float]] = {}
-    for _, score, entry_idx in matches:
-        entry = index.fuzzy_entries[entry_idx]
-        existing = best_by_mondo_id.get(entry.mondo_id)
-        if existing is None or fuzzy_sort_key(
-            entry, score, normalized_query
-        ) < fuzzy_sort_key(existing[0], existing[1], normalized_query):
-            best_by_mondo_id[entry.mondo_id] = (entry, float(score))
+    best_by_mondo_id: dict[str, tuple[str, MondoMatchType, float]] = {}
+    for choice, score, _ in matches:
+        match_type = index.fuzzy_choice_match_types[choice]
+        for mondo_id in index.fuzzy_choice_to_mondo_ids[choice]:
+            existing = best_by_mondo_id.get(mondo_id)
+            new_key = fuzzy_sort_key(
+                choice,
+                match_type,
+                score,
+                normalized_query,
+                mondo_id=mondo_id,
+            )
+            if existing is not None:
+                existing_key = fuzzy_sort_key(
+                    existing[0],
+                    existing[1],
+                    existing[2],
+                    normalized_query,
+                    mondo_id=mondo_id,
+                )
+                if existing_key <= new_key:
+                    continue
+            best_by_mondo_id[mondo_id] = (choice, match_type, float(score))
 
     # Rank deduped MONDO terms and return only the requested candidate window.
     return normalized_query, sorted(
-        best_by_mondo_id.values(),
-        key=lambda item: fuzzy_sort_key(item[0], item[1], normalized_query),
+        (
+            (mondo_id, choice, match_type, score)
+            for mondo_id, (choice, match_type, score) in best_by_mondo_id.items()
+        ),
+        key=lambda item: fuzzy_sort_key(
+            item[1], item[2], item[3], normalized_query, mondo_id=item[0]
+        ),
     )[:limit]
 
 
-def retrieve_mondo_candidates(
+def retrieve_mondo_fuzzy_candidates(
     index: MondoIndex,
     query: str,
-    strategy: str = 'combined',
     limit: int = 20,
 ) -> list[MondoCandidate]:
     """Return RapidFuzz-ranked candidates from in-memory fuzzy aliases."""
-    if strategy not in {'combined', 'rapidfuzz'}:
-        return []
-
     _, ranked = _rank_rapidfuzz_matches(index, query, limit=limit)
     return [
         MondoCandidate(
-            mondo_id=entry.mondo_id,
-            label=entry.label,
-            definition=entry.definition,
-            matched_alias_text=entry.matched_text,
-            alias_type=entry.match_type,
-            source_priority=entry.source_priority,
-            retrieval_source='rapidfuzz',
+            mondo_id=mondo_id,
+            label=index.records[mondo_id].label,
+            definition=index.records[mondo_id].definition,
+            matched_alias_text=choice,
+            alias_type=match_type,
             rapidfuzz_score=float(score),
         )
-        for entry, score in ranked
+        for mondo_id, choice, match_type, score in ranked
     ]
 
 
 def fuzzy_sort_key(
-    entry: MatchEntry,
+    choice: str,
+    match_type: MondoMatchType,
     score: float,
     normalized_query: str,
+    mondo_id: str = '',
 ) -> tuple[float, int, int, str]:
     """Return the deterministic sort key for fuzzy match candidates."""
     return (
         -float(score),
-        entry.source_priority,
-        abs(len(normalize_fuzzy(entry.matched_text)) - len(normalized_query)),
-        entry.mondo_id,
+        fuzzy_match_type_priority(match_type),
+        abs(len(normalize_fuzzy(choice)) - len(normalized_query)),
+        mondo_id,
     )
 
 
-def select_unique_entry(
+def unique_mondo_id_or_ambiguity(
+    index: MondoIndex,
     match_type: MondoMatchType,
     query: str,
-    entries: list[MatchEntry],
-) -> tuple[MatchEntry | None, dict[str, Any] | None]:
-    """Select a match only when all entries point to one MONDO ID.
+    mondo_ids: list[str],
+) -> tuple[str | None, dict[str, Any] | None]:
+    """Select a match only when all IDs point to one MONDO ID.
 
     Args:
+        index: The MONDO ontology index.
         match_type: Lookup tier that produced the entries.
         query: Original user-facing disease query.
-        entries: Candidate entries for the lookup tier.
+        mondo_ids: Candidate MONDO IDs for the lookup tier.
 
     Returns:
-        A selected entry and no ambiguity context when the tier is unambiguous;
-        otherwise no entry plus ambiguity context when multiple MONDO IDs match.
-        If there are no entries, both return values are None.
+        A selected MONDO ID and no ambiguity context when the tier is
+        unambiguous; otherwise no ID plus ambiguity context when multiple MONDO
+        IDs match. If there are no IDs, both return values are None.
     """
-    if not entries:
+    if not mondo_ids:
         return None, None
 
-    by_mondo_id = {entry.mondo_id: entry for entry in entries}
-    if len(by_mondo_id) == 1:
-        return next(iter(by_mondo_id.values())), None
+    distinct_ids = sorted(set(mondo_ids))
+    if len(distinct_ids) == 1:
+        return distinct_ids[0], None
 
     return None, {
         'match_type': match_type,
         'query': query,
         'candidates': [
-            entry.context()
-            for entry in sorted(by_mondo_id.values(), key=lambda e: e.mondo_id)
+            match_context(index, mondo_id, match_type, query)
+            for mondo_id in distinct_ids
         ],
     }
 
 
-def term_from_entry(
-    entry: MatchEntry, match_type: MondoMatchType, query: str
+def term_from_mondo_id(
+    index: MondoIndex,
+    mondo_id: str,
+    match_type: MondoMatchType,
+    query: str,
+    matched_text: str | None = None,
 ) -> MondoTerm:
-    """Convert a deterministic match entry into the public result model."""
-    context = {
-        'query': query,
-        'match_type': match_type,
-        'matched_text': entry.matched_text,
-    }
+    """Convert a deterministic MONDO ID match into the public result model."""
+    record = index.records[mondo_id]
     return MondoTerm(
-        mondo_id=entry.mondo_id,
-        term=entry.label,
+        mondo_id=record.mondo_id,
+        term=record.label,
         match_type=match_type,
-        matched_text=entry.matched_text,
-        match_context=context,
+        matched_text=matched_text or query,
     )
 
 
 def get_mondo_term(mondo_id: str) -> dict[str, Any] | None:
     """Return MONDO term details for tools and agent validation."""
-    normalized_id = normalize_mondo_id(mondo_id)
+    normalized_id = normalize_mondo_curie(mondo_id)
     if normalized_id is None:
         return None
     index = get_mondo_index()
@@ -702,29 +673,16 @@ def get_mondo_term(mondo_id: str) -> dict[str, Any] | None:
     if record is None:
         return None
     aliases = [
-        {
-            'alias_text': entry.matched_text,
-            'alias_type': entry.match_type,
-            'source_priority': entry.source_priority,
-        }
-        for entry in sorted(
-            index.aliases_by_mondo_id.get(normalized_id, []),
-            key=lambda entry: (entry.source_priority, entry.matched_text),
-        )
+        {'alias_text': alias}
+        for alias in sorted(set(record.aliases), key=lambda alias: alias.casefold())
     ]
     xrefs = [
-        {
-            'identifier': entry.matched_text,
-            'xref_type': entry.match_type,
-        }
-        for entry in sorted(
-            index.xrefs_by_mondo_id.get(normalized_id, []),
-            key=lambda entry: (entry.match_type, entry.matched_text),
-        )
+        {'identifier': xref}
+        for xref in sorted(set(record.xrefs), key=lambda xref: xref.casefold())
     ]
     return {
         'mondo_id': record.mondo_id,
-        'iri': record.iri,
+        'iri': mondo_id_to_iri(record.mondo_id),
         'label': record.label,
         'definition': record.definition,
         'deprecated': False,
@@ -736,7 +694,7 @@ def get_mondo_term(mondo_id: str) -> dict[str, Any] | None:
 
 def get_mondo_related_terms(mondo_id: str, direction: str) -> list[dict[str, Any]]:
     """Return parent or child MONDO terms connected by ontology edges."""
-    normalized_id = normalize_mondo_id(mondo_id)
+    normalized_id = normalize_mondo_curie(mondo_id)
     if normalized_id is None:
         return []
     index = get_mondo_index()
@@ -753,77 +711,102 @@ def get_mondo_terms_by_xref(identifier: str) -> list[dict[str, Any]]:
     keys = extract_identifier_keys(identifier)
     if not keys:
         return []
-    entries = entries_for_lookup(index.xref_index, keys)
+    matches: dict[tuple[str, MondoMatchType], str] = {}
+    for match_type, match_index in (
+        (MondoMatchType.XREF, index.xref_index),
+        (MondoMatchType.EXACT_MAPPING_ID, index.exact_mapping_index),
+    ):
+        for mondo_id in mondo_ids_for_lookup(match_index, keys):
+            matches[(mondo_id, match_type)] = identifier
+
     return [
         {
-            'mondo_id': entry.mondo_id,
-            'label': entry.label,
-            'definition': entry.definition,
-            'matched_identifier': entry.matched_text,
-            'xref_type': entry.match_type,
+            'mondo_id': record.mondo_id,
+            'label': record.label,
+            'definition': record.definition,
+            'matched_identifier': matched_identifier,
+            'xref_type': match_type,
         }
-        for entry in entries
+        for (matched_id, match_type), matched_identifier in sorted(matches.items())
+        if (record := index.records.get(matched_id)) is not None
     ]
 
 
-def build_match_context(
+def build_agent_match_context(
     query: str,
     selected: MondoTerm,
-    candidates: list[MondoCandidate],
+    fuzzy_candidates: list[MondoCandidate],
     strict_ambiguities: list[dict[str, Any]],
-    agent_used: bool,
     agent_reasoning: str | None = None,
-    candidates_considered: list[str] | None = None,
     confidence: str | None = None,
 ) -> dict[str, Any]:
-    """Build JSON-compatible MONDO linking evidence."""
-    selected_context: dict[str, Any] = {
-        'mondo_id': selected.mondo_id,
-        'term': selected.term,
-        'matched_text': selected.matched_text,
-        'match_type': selected.match_type,
-    }
+    """Build JSON-compatible evidence for an agent-selected MONDO match."""
+    selected_context = selected.model_dump(mode='json', exclude_none=True)
     if confidence:
         selected_context['confidence'] = confidence
 
     context: dict[str, Any] = {
         'query': query,
-        'normalized_query': normalize_strict(query),
+        'normalized_query': {
+            'strict': normalize_strict(query),
+            'fuzzy': normalize_fuzzy(query),
+        },
         'selected': selected_context,
-        'retrieval': {
-            'strategies': ['in_memory_exact', 'rapidfuzz'],
-            'strict_ambiguities': strict_ambiguities,
-            'candidates': [candidate.model_dump() for candidate in candidates],
-        },
-        'agent': {
-            'used': agent_used,
-        },
+        'strict_ambiguities': strict_ambiguities,
+        'fuzzy_candidates': [candidate.model_dump() for candidate in fuzzy_candidates],
     }
     if agent_reasoning:
-        context['agent']['reasoning'] = agent_reasoning
-    if candidates_considered:
-        context['agent']['candidates_considered'] = candidates_considered
+        context['agent_reasoning'] = agent_reasoning
     return context
 
 
-def entries_for_lookup(
-    match_index: dict[str, list[MatchEntry]], lookup_key: str | set[str]
-) -> list[MatchEntry]:
-    """Return entries for one normalized key or a deduped set of keys."""
+def mondo_ids_for_lookup(
+    match_index: dict[str, list[str]], lookup_key: str | set[str]
+) -> list[str]:
+    """Return MONDO IDs for one normalized key or a deduped set of keys."""
     if isinstance(lookup_key, str):
         return match_index.get(lookup_key, [])
 
-    entries_by_mondo_and_type: dict[tuple[str, MondoMatchType, str], MatchEntry] = {}
+    mondo_ids = set()
     for key in lookup_key:
-        for entry in match_index.get(key, []):
-            entries_by_mondo_and_type[
-                (entry.mondo_id, entry.match_type, entry.matched_text)
-            ] = entry
-    return list(entries_by_mondo_and_type.values())
+        mondo_ids.update(match_index.get(key, []))
+    return sorted(mondo_ids)
+
+
+def match_context(
+    index: MondoIndex,
+    mondo_id: str,
+    match_type: MondoMatchType,
+    matched_text: str,
+) -> dict[str, Any]:
+    """Return serializable audit context for a match candidate."""
+    record = index.records[mondo_id]
+    return {
+        'mondo_id': record.mondo_id,
+        'term': record.label,
+        'matched_text': matched_text,
+        'match_type': match_type,
+    }
+
+
+def fuzzy_match_type_priority(match_type: MondoMatchType) -> int:
+    """Return deterministic tie-break priority for fuzzy match categories."""
+    priority_by_type = {
+        MondoMatchType.PRIMARY_LABEL: 0,
+        MondoMatchType.EXACT_SYNONYM: 1,
+        MondoMatchType.XREF: 1,
+        MondoMatchType.EXACT_MAPPING_ID: 1,
+        MondoMatchType.RELATED_SYNONYM: 2,
+    }
+    return priority_by_type.get(match_type, 99)
 
 
 def normalize_strict(text: str) -> str:
-    """Normalize text for deterministic exact matching."""
+    """Normalize text for deterministic exact matching.
+
+    Preserves punctuation and token boundaries while folding Unicode, dash
+    variants, surrounding quotes, repeated whitespace, and case.
+    """
     normalized = unicodedata.normalize('NFKC', text)
     normalized = STRICT_DASHES_RE.sub('-', normalized)
     normalized = normalized.strip().strip('"\'')
@@ -832,7 +815,11 @@ def normalize_strict(text: str) -> str:
 
 
 def normalize_fuzzy(text: str) -> str:
-    """Normalize text for token-based fuzzy matching."""
+    """Normalize text for token-based fuzzy matching.
+
+    Folds Unicode, dashes, and case, then converts punctuation and
+    underscores to spaces so RapidFuzz compares token content.
+    """
     normalized = unicodedata.normalize('NFKC', text)
     normalized = STRICT_DASHES_RE.sub('-', normalized)
     normalized = normalized.casefold()
@@ -840,65 +827,63 @@ def normalize_fuzzy(text: str) -> str:
     return re.sub(r'\s+', ' ', normalized).strip()
 
 
-def normalize_mondo_id(value: str) -> str | None:
+def normalize_mondo_curie(value: str) -> str | None:
     """Return a canonical MONDO CURIE from a MONDO CURIE or IRI-like value."""
+    if not isinstance(value, str):
+        return None
+    if value.startswith(MONDO_IRI_PREFIX):
+        return f'MONDO:{value.removeprefix(MONDO_IRI_PREFIX)}'
     match = MONDO_ID_RE.match(value.strip())
     if not match:
         return None
     return f'MONDO:{match.group(1)}'
 
 
-def extract_mondo_ids(text: str) -> set[str]:
+def extract_mondo_curies(text: str) -> set[str]:
     """Extract canonical MONDO CURIEs embedded in free text."""
     return {f'MONDO:{match.group(1)}' for match in MONDO_ID_IN_TEXT_RE.finditer(text)}
 
 
-def iri_to_mondo_id(iri: str) -> str | None:
-    """Return a canonical MONDO CURIE from a MONDO OBO IRI."""
-    if not isinstance(iri, str):
-        return None
-    if not iri.startswith(MONDO_IRI_PREFIX):
-        return normalize_mondo_id(iri)
-    return f'MONDO:{iri.removeprefix(MONDO_IRI_PREFIX)}'
-
-
 def extract_identifier_keys(text: str) -> set[str]:
-    """Extract normalized external identifier keys from free text."""
+    """Extract normalized external identifier keys from free text.
+
+    Checks the whole input first, then scans for embedded CURIE and URL tokens
+    so identifier-only strings and prose containing identifiers both match.
+    """
     keys = set()
-    keys.update(normalize_identifier_keys(text))
+    if key := normalize_identifier_key(text):
+        keys.add(key)
     for match in CURIE_IN_TEXT_RE.finditer(text):
-        keys.update(normalize_identifier_keys(match.group(0)))
+        if key := normalize_identifier_key(match.group(0)):
+            keys.add(key)
     for match in URL_IN_TEXT_RE.finditer(text):
-        keys.update(normalize_identifier_keys(match.group(0)))
+        if key := normalize_identifier_key(match.group(0)):
+            keys.add(key)
     return keys
 
 
-def normalize_identifier_keys(identifier: str) -> set[str]:
-    """Return normalized lookup keys for supported CURIE and URL identifiers.
+def normalize_identifier_key(identifier: str) -> str | None:
+    """Return a canonical lookup key for a supported CURIE or URL identifier.
 
-    The original CURIE or URL is retained as one key when applicable, then
-    supported OBO, Orphanet, OMIM, identifiers.org, and ICD URLs are translated
-    to their equivalent CURIE forms so text-extracted identifiers can match
-    ontology xrefs.
+    Supported OBO, Orphanet, OMIM, identifiers.org, and ICD URLs are converted
+    to equivalent CURIE-style keys. Unrecognized CURIE or URL values fall back
+    to their normalized input form.
     """
     identifier = identifier.strip()
     if not identifier:
-        return set()
+        return None
 
-    keys = set()
-    if ':' in identifier or identifier.startswith(('http://', 'https://')):
-        keys.add(normalize_strict(identifier))
     obo_match = OBO_IRI_RE.match(identifier)
     if obo_match:
-        keys.add(normalize_strict(f'{obo_match.group(1)}:{obo_match.group(2)}'))
+        return normalize_strict(f'{obo_match.group(1)}:{obo_match.group(2)}')
 
     orphanet_match = ORPHANET_IRI_RE.match(identifier)
     if orphanet_match:
-        keys.add(normalize_strict(f'Orphanet:{orphanet_match.group(1)}'))
+        return normalize_strict(f'Orphanet:{orphanet_match.group(1)}')
 
     omim_match = OMIM_IRI_RE.match(identifier)
     if omim_match:
-        keys.add(normalize_strict(f'OMIM:{omim_match.group(1)}'))
+        return normalize_strict(f'OMIM:{omim_match.group(1)}')
 
     identifiers_match = IDENTIFIERS_IRI_RE.match(identifier)
     if identifiers_match:
@@ -910,13 +895,15 @@ def normalize_identifier_keys(identifier: str) -> set[str]:
             'snomedct': 'SCTID',
         }
         prefix = prefix_by_namespace.get(namespace, namespace)
-        keys.add(normalize_strict(f'{prefix}:{value}'))
+        return normalize_strict(f'{prefix}:{value}')
 
     icd_match = ICD_IRI_RE.match(identifier)
     if icd_match:
-        keys.add(normalize_strict(f'icd11.foundation:{icd_match.group(1)}'))
+        return normalize_strict(f'icd11.foundation:{icd_match.group(1)}')
 
-    return keys
+    if ':' in identifier or identifier.startswith(('http://', 'https://')):
+        return normalize_strict(identifier)
+    return None
 
 
 def extract_definition(node: dict[str, Any]) -> str | None:
@@ -941,8 +928,39 @@ def is_excluded_synonym_type(synonym_type: Any) -> bool:
     return any(token in synonym_type.upper() for token in EXCLUDED_SYNONYM_TYPE_TOKENS)
 
 
-def _append(lookup: dict[str, list[MatchEntry]], key: str, entry: MatchEntry) -> None:
-    """Append an entry to a lookup list when the key is non-empty."""
+def mondo_id_to_iri(mondo_id: str) -> str:
+    """Return the canonical OBO IRI for a MONDO CURIE."""
+    return f'{MONDO_IRI_PREFIX}{mondo_id.removeprefix("MONDO:")}'
+
+
+def add_fuzzy_choice(
+    index: MondoIndex,
+    choice: str,
+    mondo_id: str,
+    match_type: MondoMatchType,
+) -> None:
+    """Add one RapidFuzz choice and its MONDO ID mapping."""
+    if not choice:
+        return
+    if choice not in index.fuzzy_choice_to_mondo_ids:
+        index.fuzzy_choices.append(choice)
+        index.fuzzy_choice_to_mondo_ids[choice] = []
+        index.fuzzy_choice_match_types[choice] = match_type
+    elif fuzzy_match_type_priority(match_type) < fuzzy_match_type_priority(
+        index.fuzzy_choice_match_types[choice]
+    ):
+        index.fuzzy_choice_match_types[choice] = match_type
+    _append_unique(index.fuzzy_choice_to_mondo_ids[choice], mondo_id)
+
+
+def _append_id(lookup: dict[str, list[str]], key: str, mondo_id: str) -> None:
+    """Append a MONDO ID to a lookup list when the key is non-empty."""
     if not key:
         return
-    lookup.setdefault(key, []).append(entry)
+    _append_unique(lookup.setdefault(key, []), mondo_id)
+
+
+def _append_unique(values: list[str], value: str) -> None:
+    """Append a string only if it is not already present."""
+    if value not in values:
+        values.append(value)
