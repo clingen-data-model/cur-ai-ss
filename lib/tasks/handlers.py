@@ -22,10 +22,10 @@ from lib.agents.hpo_linking_agent import (
     agent as hpo_linking_agent,
 )
 from lib.agents.mondo_linking_agent import (
-    MONDO_LINKING_AGENT_INSTRUCTIONS,
+    agent as mondo_linking_agent,
 )
 from lib.agents.mondo_linking_agent import (
-    agent as mondo_linking_agent,
+    build_mondo_agent_message,
 )
 from lib.agents.paper_extraction_agent import (
     PAPER_EXTRACTION_AGENT_INSTRUCTIONS,
@@ -1521,30 +1521,23 @@ async def handle_mondo_linking(task_id: int) -> None:
         mondo_index = get_mondo_index()
         mondo_term, strict_ambiguities = deterministic_index_lookup(mondo_index, query)
         if mondo_term is not None:
-            mondo_match_context = {
-                'match_type': mondo_term.match_type,
-            }
-            if mondo_term.matched_text is not None:
-                mondo_match_context['matched_text'] = mondo_term.matched_text
+            mondo_match_context = mondo_term.model_dump(
+                mode='json',
+                include={'match_type', 'matched_text'},
+                exclude_none=True,
+            )
 
         if mondo_term is None:
             fuzzy_candidates = retrieve_mondo_fuzzy_candidates(
                 mondo_index, query, limit=20
             )
-            message = {
-                'disease_name': query,
-                'context': disease_context.model_dump(exclude_none=True),
-                'fuzzy_candidates': [
-                    candidate.model_dump() for candidate in fuzzy_candidates
-                ],
-                'strict_ambiguities': strict_ambiguities,
-            }
-
             result = await Runner.run(
                 mondo_linking_agent,
-                (
-                    f'MONDO linking JSON:\n{json.dumps(message, indent=2)}\n\n'
-                    f'{MONDO_LINKING_AGENT_INSTRUCTIONS}'
+                build_mondo_agent_message(
+                    query=query,
+                    disease_context=disease_context,
+                    fuzzy_candidates=fuzzy_candidates,
+                    strict_ambiguities=strict_ambiguities,
                 ),
                 max_turns=12,
                 run_config=RunConfig(

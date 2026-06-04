@@ -148,6 +148,12 @@ def test_ambiguous_abbreviation_returns_ambiguity(
     assert len(ambiguities) == 1
     assert ambiguities[0]['match_type'] == 'abbreviation'
     assert len(ambiguities[0]['candidates']) == 2
+    assert ambiguities[0]['candidates'][0] == {
+        'mondo_id': 'MONDO:0007947',
+        'term': 'Marfan syndrome',
+    }
+    assert 'match_type' not in ambiguities[0]['candidates'][0]
+    assert 'matched_text' not in ambiguities[0]['candidates'][0]
 
 
 def test_deprecated_term_replacement(mondo_index: mondo.MondoIndex) -> None:
@@ -159,6 +165,22 @@ def test_deprecated_term_replacement(mondo_index: mondo.MondoIndex) -> None:
     assert result is not None
     assert result.mondo_id == 'MONDO:0009061'
     assert result.match_type == 'deprecated_replacement'
+
+
+def test_primary_label_preferred_over_exact_synonym(
+    mondo_index: mondo.MondoIndex,
+) -> None:
+    key = mondo.normalize_strict('Marfan syndrome')
+    mondo._append_id(mondo_index.exact_synonym_index, key, 'MONDO:0009061')
+
+    result, ambiguities = mondo.deterministic_index_lookup(
+        mondo_index, 'Marfan syndrome'
+    )
+
+    assert not ambiguities
+    assert result is not None
+    assert result.mondo_id == 'MONDO:0007947'
+    assert result.match_type == 'primary_label'
 
 
 def test_cross_species_nodes_are_indexed(mondo_index: mondo.MondoIndex) -> None:
@@ -201,6 +223,37 @@ def test_empty_candidate_query_returns_empty(mondo_index: mondo.MondoIndex) -> N
     fuzzy_candidates = mondo.retrieve_mondo_fuzzy_candidates(mondo_index, '   ')
 
     assert fuzzy_candidates == []
+
+
+def test_mondo_agent_message_includes_exact_ambiguities_and_fuzzy_candidates() -> None:
+    from lib.agents.mondo_linking_agent import build_mondo_agent_message
+
+    message = build_mondo_agent_message(
+        query='cystic fibroses',
+        disease_context=mondo.MondoDiseaseContext(gene_symbol='CFTR'),
+        fuzzy_candidates=[
+            mondo.MondoCandidate(
+                mondo_id='MONDO:0009061',
+                label='cystic fibrosis',
+                matched_alias_text='cystic fibrosis',
+                alias_type=mondo.MondoMatchType.PRIMARY_LABEL,
+                rapidfuzz_score=96.0,
+            )
+        ],
+        strict_ambiguities=[
+            {
+                'match_type': 'abbreviation',
+                'query': 'MFS',
+                'candidates': [{'mondo_id': 'MONDO:0007947'}],
+            }
+        ],
+    )
+
+    payload = json.loads(
+        message.removeprefix('MONDO linking JSON:\n').split('\n\n', 1)[0]
+    )
+    assert payload['exact_lookup']['ambiguities'][0]['match_type'] == 'abbreviation'
+    assert payload['fuzzy_candidates'][0]['mondo_id'] == 'MONDO:0009061'
 
 
 def _node(

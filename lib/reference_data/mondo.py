@@ -451,47 +451,25 @@ def deterministic_index_lookup(
     if ambiguity is not None:
         strict_ambiguities.append(ambiguity)
 
-    # Try exact text/identifier indexes from highest-confidence to weakest.
-    # Each lookup map is keyed by normalized input text and points to MONDO IDs.
+    strict_query = normalize_strict(query)
+    identifier_keys = extract_identifier_keys(query)
     strict_steps: list[tuple[MondoMatchType, str | set[str], dict[str, list[str]]]] = [
-        (MondoMatchType.PRIMARY_LABEL, normalize_strict(query), index.label_index),
-        (
-            MondoMatchType.EXACT_SYNONYM,
-            normalize_strict(query),
-            index.exact_synonym_index,
-        ),
-        (MondoMatchType.XREF, extract_identifier_keys(query), index.xref_index),
-        (
-            MondoMatchType.EXACT_MAPPING_ID,
-            extract_identifier_keys(query),
-            index.exact_mapping_index,
-        ),
-        (
-            MondoMatchType.RELATED_SYNONYM,
-            normalize_strict(query),
-            index.related_synonym_index,
-        ),
-        (
-            MondoMatchType.BROAD_SYNONYM,
-            normalize_strict(query),
-            index.broad_synonym_index,
-        ),
-        (
-            MondoMatchType.NARROW_SYNONYM,
-            normalize_strict(query),
-            index.narrow_synonym_index,
-        ),
-        (
-            MondoMatchType.ABBREVIATION,
-            normalize_strict(query),
-            index.abbreviation_index,
-        ),
+        (MondoMatchType.PRIMARY_LABEL, strict_query, index.label_index),
+        (MondoMatchType.EXACT_SYNONYM, strict_query, index.exact_synonym_index),
+        (MondoMatchType.XREF, identifier_keys, index.xref_index),
+        (MondoMatchType.EXACT_MAPPING_ID, identifier_keys, index.exact_mapping_index),
+        (MondoMatchType.RELATED_SYNONYM, strict_query, index.related_synonym_index),
+        (MondoMatchType.BROAD_SYNONYM, strict_query, index.broad_synonym_index),
+        (MondoMatchType.NARROW_SYNONYM, strict_query, index.narrow_synonym_index),
+        (MondoMatchType.ABBREVIATION, strict_query, index.abbreviation_index),
         (
             MondoMatchType.DEPRECATED_REPLACEMENT,
-            normalize_strict(query),
+            strict_query,
             index.deprecated_replacement_index,
         ),
     ]
+
+    # Try exact text/identifier indexes from highest-confidence to weakest.
     for match_type, lookup_key, match_index in strict_steps:
         mondo_ids = mondo_ids_for_lookup(match_index, lookup_key)
         selected, ambiguity = unique_mondo_id_or_ambiguity(
@@ -596,7 +574,10 @@ def unique_mondo_id_or_ambiguity(
         'match_type': match_type,
         'query': query,
         'candidates': [
-            match_context(index, mondo_id, match_type, query)
+            {
+                'mondo_id': index.records[mondo_id].mondo_id,
+                'term': index.records[mondo_id].label,
+            }
             for mondo_id in distinct_ids
         ],
     }
@@ -727,22 +708,6 @@ def mondo_ids_for_lookup(
     for key in lookup_key:
         mondo_ids.update(match_index.get(key, []))
     return sorted(mondo_ids)
-
-
-def match_context(
-    index: MondoIndex,
-    mondo_id: str,
-    match_type: MondoMatchType,
-    matched_text: str,
-) -> dict[str, Any]:
-    """Return serializable audit context for a match candidate."""
-    record = index.records[mondo_id]
-    return {
-        'mondo_id': record.mondo_id,
-        'term': record.label,
-        'matched_text': matched_text,
-        'match_type': match_type,
-    }
 
 
 def fuzzy_match_type_priority(match_type: MondoMatchType) -> int:

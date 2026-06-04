@@ -1362,7 +1362,7 @@ def test_mondo_linking_handler_updates_target_occurrence_only(
 ):
     from types import SimpleNamespace
 
-    from lib.reference_data.mondo import MondoMatchType
+    from lib.reference_data.mondo import MondoMatchType, MondoTerm
     from lib.tasks import handlers
 
     seeded_paper.disease_name = 'limb-girdle muscular dystrophy type 2Q'
@@ -1401,6 +1401,7 @@ def test_mondo_linking_handler_updates_target_occurrence_only(
             'epidermolysis bullosa simplex'
         )
         assert payload['context']['inheritance_mode'] == 'Dominant'
+        assert payload['exact_lookup'] == {'ambiguities': []}
         return SimpleNamespace(
             final_output=SimpleNamespace(
                 value=SimpleNamespace(
@@ -1409,7 +1410,8 @@ def test_mondo_linking_handler_updates_target_occurrence_only(
                     confidence='high',
                 ),
                 reasoning='matched primary label',
-            )
+            ),
+            raw_responses=[],
         )
 
     monkeypatch.setattr(handlers, 'get_mondo_index', lambda: mondo_index)
