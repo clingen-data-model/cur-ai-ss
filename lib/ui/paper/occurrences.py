@@ -416,7 +416,7 @@ def render_patient_variant_occurrences_tab() -> None:
                     paired_variant_desc = _format_variant_with_protein(
                         paired_variant, True
                     )
-                    paired_variant_link_url = f'/paper?paper_id={paper_resp.id}&variant_id={paired_variant.id}#{paired_variant_desc}'
+                    paired_variant_link_url = f'/paper?paper_id={paper_resp.id}&variant_id={paired_variant.id}'
                     st.markdown(
                         f'**Paired with:** [{paired_variant_desc}]({paired_variant_link_url}) '
                         f'— Confidence: **{link.paired_variant_confidence.capitalize()}**'
