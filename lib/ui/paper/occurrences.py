@@ -23,7 +23,11 @@ def _format_variant_with_protein(
     """Format variant description with optional protein notation."""
     desc = variant.variant_description
     if include_protein and variant.hgvs_p:
-        desc += f' p.({variant.hgvs_p})'
+        # If already formatted with parentheses, use as-is
+        if variant.hgvs_p.startswith('p.('):
+            desc += f' {variant.hgvs_p}'
+        else:
+            desc += f' p.({variant.hgvs_p})'
     return desc
 
 
