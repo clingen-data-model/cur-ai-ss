@@ -516,62 +516,34 @@ def _rank_rapidfuzz_matches(
     index: MondoIndex,
     query: str,
     limit: int,
-) -> tuple[str, list[tuple[str, str, MondoMatchType, float]]]:
-    """Return RapidFuzz-ranked label/synonym matches deduped by MONDO ID."""
-    if not index.fuzzy_choices:
-        return '', []
-
-    normalized_query = normalize_fuzzy(query)
-    if not normalized_query:
-        return normalized_query, []
-
-    extract_kwargs: dict[str, Any] = {
-        'scorer': fuzz.token_sort_ratio,
-        'limit': max(limit * 10, 50),
-        'processor': normalize_fuzzy,
-    }
+) -> list[tuple[str, str, MondoMatchType, float]]:
+    """Return RapidFuzz-ranked matches with at most one alias per MONDO ID."""
+    # Exit early if the query has no text to match against after normalization
+    if not normalize_fuzzy(query):
+        return []
 
     matches = process.extract(
         query,
         index.fuzzy_choices,
-        **extract_kwargs,
+        scorer=fuzz.token_sort_ratio,
+        limit=max(limit * 10, 50),
+        processor=normalize_fuzzy,
     )
 
-    # Collapse multiple label/synonym hits to the strongest alias per MONDO term.
-    best_by_mondo_id: dict[str, tuple[str, MondoMatchType, float]] = {}
+    # RapidFuzz ranks aliases; keep the first alias seen for each MONDO term.
+    ranked: list[tuple[str, str, MondoMatchType, float]] = []
+    seen_mondo_ids: set[str] = set()
     for choice, score, _ in matches:
         match_type = index.fuzzy_choice_match_types[choice]
         for mondo_id in index.fuzzy_choice_to_mondo_ids[choice]:
-            existing = best_by_mondo_id.get(mondo_id)
-            new_key = fuzzy_sort_key(
-                choice,
-                match_type,
-                score,
-                normalized_query,
-                mondo_id=mondo_id,
-            )
-            if existing is not None:
-                existing_key = fuzzy_sort_key(
-                    existing[0],
-                    existing[1],
-                    existing[2],
-                    normalized_query,
-                    mondo_id=mondo_id,
-                )
-                if existing_key <= new_key:
-                    continue
-            best_by_mondo_id[mondo_id] = (choice, match_type, float(score))
+            if mondo_id in seen_mondo_ids:
+                continue
+            seen_mondo_ids.add(mondo_id)
+            ranked.append((mondo_id, choice, match_type, float(score)))
+            if len(ranked) >= limit:
+                return ranked
 
-    # Rank deduped MONDO terms and return only the requested candidate window.
-    return normalized_query, sorted(
-        (
-            (mondo_id, choice, match_type, score)
-            for mondo_id, (choice, match_type, score) in best_by_mondo_id.items()
-        ),
-        key=lambda item: fuzzy_sort_key(
-            item[1], item[2], item[3], normalized_query, mondo_id=item[0]
-        ),
-    )[:limit]
+    return ranked
 
 
 def retrieve_mondo_fuzzy_candidates(
@@ -580,7 +552,7 @@ def retrieve_mondo_fuzzy_candidates(
     limit: int = 20,
 ) -> list[MondoCandidate]:
     """Return RapidFuzz-ranked candidates from in-memory fuzzy aliases."""
-    _, ranked = _rank_rapidfuzz_matches(index, query, limit=limit)
+    ranked = _rank_rapidfuzz_matches(index, query, limit=limit)
     return [
         MondoCandidate(
             mondo_id=mondo_id,
@@ -592,22 +564,6 @@ def retrieve_mondo_fuzzy_candidates(
         )
         for mondo_id, choice, match_type, score in ranked
     ]
-
-
-def fuzzy_sort_key(
-    choice: str,
-    match_type: MondoMatchType,
-    score: float,
-    normalized_query: str,
-    mondo_id: str = '',
-) -> tuple[float, int, int, str]:
-    """Return the deterministic sort key for fuzzy match candidates."""
-    return (
-        -float(score),
-        fuzzy_match_type_priority(match_type),
-        abs(len(normalize_fuzzy(choice)) - len(normalized_query)),
-        mondo_id,
-    )
 
 
 def unique_mondo_id_or_ambiguity(
@@ -939,7 +895,13 @@ def add_fuzzy_choice(
     mondo_id: str,
     match_type: MondoMatchType,
 ) -> None:
-    """Add one RapidFuzz choice and its MONDO ID mapping."""
+    """Add one RapidFuzz choice and its MONDO ID mapping.
+
+    The same alias text can point to multiple MONDO IDs with different match
+    types. For example, Record A may have "foo syndrome" as a related synonym
+    while Record B has "foo syndrome" as its primary label. Keep all MONDO IDs,
+    but retain the strongest observed match type for the shared choice text.
+    """
     if not choice:
         return
     if choice not in index.fuzzy_choice_to_mondo_ids:
