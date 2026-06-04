@@ -265,10 +265,11 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 )
 
             # Expand to per-patient COMPOUND_HET_EVALUATION for patients with ≥2 heterozygous variants
+            from sqlalchemy import distinct
             from sqlalchemy import func as sql_func
 
-            het_patients = (
-                session.query(PatientVariantOccurrenceDB.patient_id)
+            het_patient_ids = (
+                session.query(distinct(PatientVariantOccurrenceDB.patient_id))
                 .filter(
                     PatientVariantOccurrenceDB.paper_id == task.paper_id,
                     PatientVariantOccurrenceDB.zygosity == Zygosity.heterozygous.value,
@@ -277,12 +278,12 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 .having(sql_func.count() >= 2)
                 .all()
             )
-            for row in het_patients:
+            for (patient_id,) in het_patient_ids:
                 enqueue_task(
                     session,
                     paper_id=task.paper_id,
                     task_type=TaskType.COMPOUND_HET_EVALUATION,
-                    patient_id=row.patient_id,
+                    patient_id=patient_id,
                 )
 
         case TaskType.SEGREGATION_EVIDENCE_EXTRACTION:

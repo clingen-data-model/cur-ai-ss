@@ -17,6 +17,20 @@ from lib.ui.paper.shared import (
 )
 
 
+def _format_variant_with_protein(
+    variant: VariantResp, include_protein: bool = False
+) -> str:
+    """Format variant description with optional protein notation."""
+    desc = variant.variant_description
+    if include_protein and variant.hgvs_p:
+        # If already formatted with parentheses, use as-is
+        if variant.hgvs_p.startswith('p.('):
+            desc += f' {variant.hgvs_p}'
+        else:
+            desc += f' p.({variant.hgvs_p})'
+    return desc
+
+
 def _render_evidence_block(
     evidence_block: EvidenceBlock, paper_id: int, block_id: str
 ) -> None:
@@ -85,7 +99,12 @@ def render_patient_variant_occurrences_tab() -> None:
         patient = patients_by_id[link.patient_id]
         variant = variants_by_id[link.variant_id]
         harmonized_variant = variant.harmonized_variant
-        variant_desc = variant.variant_description
+        # Show p. notation for paired variants or heterozygous
+        show_protein = (
+            link.paired_variant_link_id is not None
+            or link.zygosity == Zygosity.heterozygous
+        )
+        variant_desc = _format_variant_with_protein(variant, show_protein)
 
         # Format testing methods as a list of values
         testing_methods_list = link.testing_methods
@@ -101,8 +120,22 @@ def render_patient_variant_occurrences_tab() -> None:
             if paired_link:
                 paired_variant = variants_by_id.get(paired_link.variant_id)
                 if paired_variant:
-                    paired_variant_desc = paired_variant.variant_description
+                    # Show p. notation for paired variants
+                    paired_variant_desc = _format_variant_with_protein(
+                        paired_variant, True
+                    )
                     paired_variant_link = f'/paper?paper_id={paper_resp.id}&variant_id={paired_link.variant_id}#{paired_variant_desc}'
+                    # Include confidence level if less than High
+                    if (
+                        link.paired_variant_confidence
+                        and link.paired_variant_confidence != 'high'
+                    ):
+                        confidence_text = (
+                            link.paired_variant_confidence.value.capitalize()
+                        )
+                        paired_variant_link += (
+                            f' (Pairing Confidence: {confidence_text})'
+                        )
 
         rows.append(
             {
@@ -370,18 +403,29 @@ def render_patient_variant_occurrences_tab() -> None:
                     link.disease_name_evidence, paper_resp.id, 'disease_name'
                 )
 
-        # Display paired variant link reasoning if present (compound heterozygous pairing)
-        if link.paired_variant_link_id and link.paired_variant_link_reasoning:
+        # Display paired variant confidence if present (compound heterozygous pairing)
+        if link.paired_variant_link_id and link.paired_variant_confidence:
             st.divider()
             st.markdown('#### Compound Heterozygous Pairing')
-            st.markdown(
-                f'**Paired with variant:** {link.paired_variant_link_id} '
-                f'(Confidence: {link.paired_variant_link_reasoning.value})'
-            )
-            if link.paired_variant_link_reasoning.reasoning:
+
+            # Get the paired variant
+            paired_link = links_by_id.get(link.paired_variant_link_id)
+            if paired_link:
+                paired_variant = variants_by_id.get(paired_link.variant_id)
+                if paired_variant:
+                    paired_variant_desc = _format_variant_with_protein(
+                        paired_variant, True
+                    )
+                    paired_variant_link_url = f'/paper?paper_id={paper_resp.id}&variant_id={paired_variant.id}'
+                    st.markdown(
+                        f'**Paired with:** [{paired_variant_desc}]({paired_variant_link_url}) '
+                        f'— Confidence: **{link.paired_variant_confidence.capitalize()}**'
+                    )
+
+            if link.paired_variant_confidence_reasoning:
                 st.text_area(
                     'Pairing Reasoning',
-                    value=link.paired_variant_link_reasoning.reasoning,
+                    value=link.paired_variant_confidence_reasoning.reasoning,
                     height=15,
                     disabled=True,
                 )

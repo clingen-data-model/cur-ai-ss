@@ -21,7 +21,7 @@ A list of the patient's heterozygous variant links, including:
 OUTPUT:
 A JSON array of compound heterozygous pairs. Each pair includes:
 - variant_id_a, variant_id_b (the two variant IDs)
-- compound_het: a ReasoningBlock with:
+- confidence: a ReasoningBlock with:
   - value: confidence level ('high', 'medium', or 'low')
   - reasoning: explanation of the evidence
 

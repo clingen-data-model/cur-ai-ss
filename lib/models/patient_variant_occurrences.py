@@ -100,7 +100,7 @@ class PatientVariantOccurrenceOutput(BaseModel):
 class CompoundHetPair(BaseModel):
     variant_id_a: int
     variant_id_b: int
-    compound_het: ReasoningBlock[CompoundHetConfidence]
+    confidence: ReasoningBlock[CompoundHetConfidence]
 
 
 class CompoundHetEvaluationOutput(BaseModel):
@@ -145,7 +145,8 @@ class PatientVariantOccurrenceDB(Base):
         ForeignKey('patient_variant_occurrences.id', ondelete='SET NULL'),
         nullable=True,
     )
-    paired_variant_link_reasoning: Mapped[dict | None] = mapped_column(
+    paired_variant_confidence: Mapped[str | None] = mapped_column(String, nullable=True)
+    paired_variant_confidence_reasoning: Mapped[dict | None] = mapped_column(
         JSON, nullable=True
     )
 
@@ -210,5 +211,8 @@ class PatientVariantOccurrenceResp(BaseModel):
     disease_name: str | None = None
     disease_name_evidence: EvidenceBlock[str] | None = None
     paired_variant_link_id: int | None = None
-    paired_variant_link_reasoning: ReasoningBlock[CompoundHetConfidence] | None = None
+    paired_variant_confidence: CompoundHetConfidence | None = None
+    paired_variant_confidence_reasoning: (
+        ReasoningBlock[CompoundHetConfidence] | None
+    ) = None
     updated_at: datetime
