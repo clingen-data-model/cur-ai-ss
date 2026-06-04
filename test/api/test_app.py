@@ -308,6 +308,8 @@ def seeded_paper(db_session):
         identifier_evidence=dict(
             value='Family 1', reasoning='test family', quote='Family 1'
         ),
+        consanguinity=False,
+        consanguinity_evidence=dict(value=False, reasoning='test family', quote='test'),
     )
     db_session.add(family)
     db_session.flush()
@@ -472,6 +474,8 @@ def test_update_patient_rejects_wrong_paper_scope(
         identifier_evidence=dict(
             value='Other Family', reasoning='test family', quote='Other Family'
         ),
+        consanguinity=False,
+        consanguinity_evidence=dict(value=False, reasoning='test family', quote='test'),
     )
     db_session.add(other_family)
     db_session.flush()
@@ -1064,12 +1068,16 @@ def test_enqueue_all_instances_for_splatted_task(
         agent_run_id=agent_run.id,
         identifier='fam1',
         identifier_evidence={},
+        consanguinity=False,
+        consanguinity_evidence={},
     )
     family2 = FamilyDB(
         paper_id=seeded_paper.id,
         agent_run_id=agent_run.id,
         identifier='fam2',
         identifier_evidence={},
+        consanguinity=False,
+        consanguinity_evidence={},
     )
     db_session.add_all([family1, family2])
     db_session.flush()

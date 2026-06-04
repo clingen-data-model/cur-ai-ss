@@ -298,6 +298,25 @@ def _render_family_group(
                 button_key_prefix=f'{tab_key}-fam-{family.id}-btn',
             )
 
+        # Consanguinity
+        col1, col2 = st.columns(2)
+        with col1:
+            st.checkbox(
+                'Consanguineous',
+                value=family.consanguinity,
+                disabled=True,
+                key=f'{tab_key}-fam-{family.id}-consanguinity',
+            )
+        with col2:
+            st.space()
+            render_evidence_controls(
+                paper_resp.id,
+                block=family.consanguinity_evidence,
+                label='Consanguinity Evidence',
+                color_key=f'{tab_key}-fam-{family.id}-consanguinity-color',
+                button_key_prefix=f'{tab_key}-fam-{family.id}-consanguinity-btn',
+            )
+
         # Patients
         for patient_id, patient in patients_in_family:
             st.markdown(f'#### {patient.identifier}')
