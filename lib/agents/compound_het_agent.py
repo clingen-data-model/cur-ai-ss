@@ -22,22 +22,22 @@ OUTPUT:
 A JSON array of compound heterozygous pairs. Each pair includes:
 - variant_id_a, variant_id_b (the two variant IDs)
 - confidence: a ReasoningBlock with:
-  - value: confidence level ('high', 'medium', or 'low')
+  - value: confidence level ('confirmed', 'assumed', or 'uncertain')
   - reasoning: explanation of the evidence
 
 CONFIDENCE LEVELS:
 
-**High confidence:**
+**Confirmed:**
 - Paper explicitly states "compound heterozygous" or "compound het" for these variants
 - Pedigree shows each variant inherited from a different parent (one from mother, one from father)
 - Parental testing confirms variants are in trans (on different chromosomes)
 
-**Medium confidence:**
+**Assumed:**
 - Segregation pattern strongly implies trans inheritance (e.g., de novo variant + inherited variant in same patient)
 - Haplotype analysis or linkage disequilibrium context indicates variants are on different chromosomes
 - Multiple affected family members share both variants in the same patient
 
-**Low confidence:**
+**Uncertain:**
 - Two variants co-occur in the same patient but phase is not established
 - Indirect evidence suggesting compound heterozygosity without explicit confirmation
 - Only a general statement that patient is "compound heterozygous" without variant mapping

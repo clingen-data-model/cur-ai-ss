@@ -4,7 +4,12 @@ import streamlit as st
 from lib.models import PaperResp, PatientResp, VariantResp
 from lib.models.evidence_block import EvidenceBlock
 from lib.models.patient import AffectedStatus, ProbandStatus
-from lib.models.patient_variant_occurrences import Inheritance, TestingMethod, Zygosity
+from lib.models.patient_variant_occurrences import (
+    CompoundHetConfidence,
+    Inheritance,
+    TestingMethod,
+    Zygosity,
+)
 from lib.tasks import TaskType, is_task_completed
 from lib.ui.api import (
     get_occurrences,
@@ -125,10 +130,11 @@ def render_patient_variant_occurrences_tab() -> None:
                         paired_variant, True
                     )
                     paired_variant_link = f'/paper?paper_id={paper_resp.id}&variant_id={paired_link.variant_id}#{paired_variant_desc}'
-                    # Include confidence level if less than High
+                    # Include confidence level if less than Confirmed
                     if (
                         link.paired_variant_confidence
-                        and link.paired_variant_confidence != 'high'
+                        and link.paired_variant_confidence
+                        != CompoundHetConfidence.confirmed
                     ):
                         confidence_text = (
                             link.paired_variant_confidence.value.capitalize()

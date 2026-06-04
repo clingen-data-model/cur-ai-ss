@@ -66,9 +66,9 @@ class TestingMethod(str, Enum):
 
 
 class CompoundHetConfidence(str, Enum):
-    high = 'high'
-    medium = 'medium'
-    low = 'low'
+    confirmed = 'confirmed'
+    assumed = 'assumed'
+    uncertain = 'uncertain'
 
 
 # ==============================
