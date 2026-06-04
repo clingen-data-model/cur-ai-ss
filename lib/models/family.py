@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 
 class Family(BaseModel):
     identifier: EvidenceBlock[str]
+    consanguinity: EvidenceBlock[bool]
 
 
 class FamilyDB(Base):
@@ -37,6 +38,8 @@ class FamilyDB(Base):
     )
     identifier: Mapped[str] = mapped_column(String, nullable=False)
     identifier_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    consanguinity: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    consanguinity_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -71,6 +74,8 @@ class FamilyResp(BaseModel):
     agent_run_id: int
     identifier: str
     identifier_evidence: HumanEvidenceBlock[str]
+    consanguinity: bool
+    consanguinity_evidence: HumanEvidenceBlock[bool]
     updated_at: datetime
 
 
@@ -81,6 +86,8 @@ class FamilyCreateRequest(BaseModel):
 class FamilyUpdateRequest(PatchModel):
     identifier: str | None = None
     identifier_human_edit_note: str | None = None
+    consanguinity: bool | None = None
+    consanguinity_human_edit_note: str | None = None
 
     def apply_to(self, obj: FamilyDB) -> None:  # type: ignore[override]
         super().apply_to(obj)

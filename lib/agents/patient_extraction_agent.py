@@ -50,7 +50,7 @@ Each field is an EvidenceBlock containing:
     3. Preserve exact wording when multiple probands or cases are distinguished.
 
 - proband_status (EvidenceBlock[enum: Proband, Non-Proband, Unknown]):
-  - Proband: explicitly described as proband/index case
+  - Proband: explicitly described as proband/index case, OR the individual discussed in most detail in the paper when no explicit proband is identified (explain the rationale in the reasoning block)
   - Non-Proband: clearly another cohort member or relative
   - Unknown: unclear
 
@@ -147,13 +147,23 @@ Family identifier rules:
   use "Family 1".
 - If multiple patients/families exist with no paper-provided labels:
   - For unrelated individual patients: create a singleton family for each.
-    Label it using the patient's identifier (e.g., "Patient 1", "proband", "Case 2").
+    Label each as "Family 1", "Family 2", etc. in the order they appear in the paper.
   - For related patient groups without labels: assign a generic label like "Family 1",
     "Family 2", etc. in the order they appear in the paper.
 
+Consanguinity:
+- Extract whether parents in the family are consanguineous (related by blood).
+- Consanguinity is captured as a boolean (True/False) with supporting evidence.
+- Examples: "parents are first cousins", "consanguineous marriage", "unrelated parents"
+- If explicitly stated or clearly implied from pedigree, set to True.
+- If explicitly stated as unrelated or no consanguinity mentioned, set to False.
+- Provide reasoning with the specific relationship or explanation.
+
 Output format:
 - Return a "families" list where each entry contains:
-  - family: a Family object with an identifier EvidenceBlock (same pattern as patient fields)
+  - family: a Family object with:
+    - identifier: EvidenceBlock[str] (same pattern as patient fields)
+    - consanguinity: EvidenceBlock[bool] (whether parents are consanguineous)
   - patient_identifiers: list of EvidenceBlocks[str] where:
     - value: the patient identifier (matching the patient identifier values extracted above)
     - reasoning: explanation of how the patient was linked to this family (e.g., "explicitly listed in Figure 2 pedigree", "described as proband's sibling in text", "appears in Family 1 label")

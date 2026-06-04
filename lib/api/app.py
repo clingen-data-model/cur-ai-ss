@@ -1040,8 +1040,8 @@ def get_curation_export(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
     try:
-        row = build_curation_row(paper_id, session)
-        pptx_bytes = build_curation_pptx([row])
+        rows = build_curation_row(paper_id, session)
+        pptx_bytes = build_curation_pptx(rows)
         return Response(
             content=pptx_bytes,
             media_type='application/vnd.openxmlformats-officedocument.presentationml.presentation',

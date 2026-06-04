@@ -34,6 +34,8 @@ def family_to_db(paper_id: int, agent_run_id: int, family: Family) -> FamilyDB:
         agent_run_id=agent_run_id,
         identifier=family.identifier.value,
         identifier_evidence=family.identifier.model_dump(),
+        consanguinity=family.consanguinity.value,
+        consanguinity_evidence=family.consanguinity.model_dump(),
     )
 
 
