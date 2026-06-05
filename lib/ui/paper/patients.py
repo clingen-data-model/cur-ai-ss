@@ -298,25 +298,6 @@ def _render_family_group(
                 button_key_prefix=f'{tab_key}-fam-{family.id}-btn',
             )
 
-        # Consanguinity
-        col1, col2 = st.columns(2)
-        with col1:
-            st.checkbox(
-                'Consanguineous',
-                value=family.consanguinity,
-                disabled=True,
-                key=f'{tab_key}-fam-{family.id}-consanguinity',
-            )
-        with col2:
-            st.space()
-            render_evidence_controls(
-                paper_resp.id,
-                block=family.consanguinity_evidence,
-                label='Consanguinity Evidence',
-                color_key=f'{tab_key}-fam-{family.id}-consanguinity-color',
-                button_key_prefix=f'{tab_key}-fam-{family.id}-consanguinity-btn',
-            )
-
         # Patients
         for patient_id, patient in patients_in_family:
             st.markdown(f'#### {patient.identifier}')
@@ -326,6 +307,7 @@ def _render_family_group(
                 expanded=(patient_id == selected_patient_id),
                 key_prefix=f'{tab_key}-{patient_id}',
                 patient_id=patient_id,
+                family=family,
             )
 
         # Segregation Analysis
@@ -537,6 +519,7 @@ def _render_patients_grouped_by_family(
                 expanded=(patient_id == selected_patient_id),
                 key_prefix=f'{tab_key}-{patient_id}',
                 patient_id=patient_id,
+                family=family,
             )
 
 
@@ -546,6 +529,7 @@ def render_patient(
     expanded: bool,
     key_prefix: str,
     patient_id: int,
+    family: FamilyResp | None = None,
 ) -> None:
     with st.expander(
         'View Patient Metadata',
@@ -586,6 +570,26 @@ def render_patient(
                 color_key=f'{key_prefix}-{patient.identifier}-color-fam-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-fam-evidence',
             )
+
+        # Consanguinity (from family, if available)
+        if family:
+            col1, col2 = st.columns(2)
+            with col1:
+                st.checkbox(
+                    'Consanguineous',
+                    value=family.consanguinity,
+                    disabled=True,
+                    key=f'{key_prefix}-consanguinity',
+                )
+            with col2:
+                st.space()
+                render_evidence_controls(
+                    paper_resp.id,
+                    block=family.consanguinity_evidence,
+                    label='Consanguinity Evidence',
+                    color_key=f'{key_prefix}-consanguinity-color',
+                    button_key_prefix=f'{key_prefix}-consanguinity-btn',
+                )
 
         col1, col2 = st.columns(2)
         with col1:
