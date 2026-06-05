@@ -350,7 +350,17 @@ def update_paper(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
+    previous_disease_name = paper_db.disease_name
     patch_request.apply_to(paper_db)
+    # Disease MONDO fields are computed from the free-text disease name. Clear
+    # them on manual text edits so clients never see a match for stale text.
+    if (
+        'disease_name' in patch_request.model_fields_set
+        and paper_db.disease_name != previous_disease_name
+    ):
+        paper_db.mondo_id = None
+        paper_db.mondo_term = None
+        paper_db.mondo_match_context = None
     paper_db.patient_count = len(paper_db.patients)
     paper_db.variant_count = len(paper_db.variants)
     paper_db.patient_variant_occurrences_count = len(
@@ -414,6 +424,7 @@ def create_task(
         and request.patient_id is None
         and request.variant_id is None
         and request.phenotype_id is None
+        and request.patient_variant_occurrence_id is None
     ):
         tasks = enqueue_all_instances(
             session,
@@ -431,6 +442,7 @@ def create_task(
             patient_id=request.patient_id,
             variant_id=request.variant_id,
             phenotype_id=request.phenotype_id,
+            patient_variant_occurrence_id=request.patient_variant_occurrence_id,
             skip_successors=request.skip_successors,
             additional_context=request.additional_context,
         )
@@ -997,6 +1009,9 @@ def _patient_variant_occurrence_to_resp(
         disease_name_evidence=EvidenceBlock.model_validate(row.disease_name_evidence)
         if row.disease_name_evidence
         else None,
+        mondo_id=row.mondo_id,
+        mondo_term=row.mondo_term,
+        mondo_match_context=row.mondo_match_context,
         paired_variant_link_id=row.paired_variant_link_id,
         paired_variant_confidence=CompoundHetConfidence(row.paired_variant_confidence)
         if row.paired_variant_confidence

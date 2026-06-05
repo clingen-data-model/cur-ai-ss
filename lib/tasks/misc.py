@@ -25,6 +25,7 @@ def enqueue_task(
     patient_id: int | None = None,
     variant_id: int | None = None,
     phenotype_id: int | None = None,
+    patient_variant_occurrence_id: int | None = None,
     skip_successors: bool = False,
     additional_context: str | None = None,
 ) -> TaskDB:
@@ -50,6 +51,7 @@ def enqueue_task(
             TaskDB.patient_id == patient_id,
             TaskDB.variant_id == variant_id,
             TaskDB.phenotype_id == phenotype_id,
+            TaskDB.patient_variant_occurrence_id == patient_variant_occurrence_id,
         )
         .first()
     )
@@ -79,6 +81,7 @@ def enqueue_task(
             patient_id=patient_id,
             variant_id=variant_id,
             phenotype_id=phenotype_id,
+            patient_variant_occurrence_id=patient_variant_occurrence_id,
             status=TaskStatus.PENDING,
             skip_successors=skip_successors,
             additional_context=additional_context,
@@ -312,12 +315,19 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     phenotype_id=phenotype.id,
                 )
 
+        case TaskType.PAPER_METADATA:
+            enqueue_task(
+                session,
+                paper_id=task.paper_id,
+                task_type=TaskType.MONDO_LINKING,
+            )
+
         case (
-            TaskType.PAPER_METADATA
-            | TaskType.VARIANT_ANNOTATION
+            TaskType.VARIANT_ANNOTATION
             | TaskType.SEGREGATION_ANALYSIS_COMPUTED
             | TaskType.COMPOUND_HET_EVALUATION
             | TaskType.HPO_LINKING
+            | TaskType.MONDO_LINKING
             | TaskType.GENERAL_PAPER_QUESTION
         ):
             # These tasks have no successors

@@ -21,6 +21,12 @@ from lib.agents.hpo_linking_agent import (
 from lib.agents.hpo_linking_agent import (
     agent as hpo_linking_agent,
 )
+from lib.agents.mondo_linking_agent import (
+    agent as mondo_linking_agent,
+)
+from lib.agents.mondo_linking_agent import (
+    build_mondo_agent_message,
+)
 from lib.agents.paper_extraction_agent import (
     PAPER_EXTRACTION_AGENT_INSTRUCTIONS,
 )
@@ -135,6 +141,12 @@ from lib.models.paper import FileFormat
 from lib.models.phenotype import HPOTerm
 from lib.models.variant import HarmonizedVariant, Variant
 from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
+from lib.reference_data.mondo import (
+    MondoDiseaseContext,
+    MondoDiseaseScope,
+    MondoLinkingTarget,
+    get_mondo_term,
+)
 from lib.tasks.models import TaskType
 
 setup_logging()
@@ -1449,6 +1461,128 @@ async def handle_hpo_linking(task_id: int) -> None:
         session.query(HpoDB).filter(HpoDB.phenotype_id == phenotype_id).delete()
         session.add(hpo_to_db(phenotype_id, result.final_output))
 
+def build_mondo_linking_target(
+    session: Session, task: TaskDB
+) -> MondoLinkingTarget | None:
+    """Build the scoped disease text target for a MONDO linking task.
+
+    Args:
+        session: Active database session.
+        task: MONDO linking task row.
+
+    Returns:
+        A paper- or occurrence-scoped target, or None if the task target is gone.
+    """
+    paper = session.get(PaperDB, task.paper_id)
+    if not paper:
+        return None
+
+    context = MondoDiseaseContext(
+        paper_title=paper.title,
+        paper_abstract=paper.abstract,
+        paper_disease_name=paper.disease_name,
+        gene_symbol=paper.gene.symbol if paper.gene else None,
+        inheritance_mode=paper.disease_inheritance_mode,
+    )
+
+    if task.patient_variant_occurrence_id is None:
+        return MondoLinkingTarget(
+            scope=MondoDiseaseScope.PAPER,
+            paper_id=task.paper_id,
+            disease_text=paper.disease_name,
+            context=context,
+        )
+
+    occurrence = session.get(
+        PatientVariantOccurrenceDB, task.patient_variant_occurrence_id
+    )
+    if not occurrence or occurrence.paper_id != task.paper_id:
+        return None
+
+    return MondoLinkingTarget(
+        scope=MondoDiseaseScope.OCCURRENCE,
+        paper_id=task.paper_id,
+        patient_variant_occurrence_id=occurrence.id,
+        disease_text=occurrence.disease_name,
+        context=context.model_copy(
+            update={
+                'occurrence_disease_text': occurrence.disease_name,
+                'inheritance_mode': occurrence.inheritance
+                or context.inheritance_mode,
+            }
+        ),
+    )
+
+
+async def handle_mondo_linking(task_id: int) -> None:
+    """Link a paper or patient-variant occurrence disease name to a MONDO term."""
+    with session_scope() as session:
+        task = session.get(TaskDB, task_id)
+        if not task:
+            return
+        target = build_mondo_linking_target(session, task)
+        if target is None:
+            return
+
+    query = target.disease_text.strip() if target.disease_text else ''
+    selected_mondo_id: str | None = None
+    selected_mondo_term: str | None = None
+    mondo_match_context: dict | None = None
+
+    if query:
+        result = await Runner.run(
+            mondo_linking_agent,
+            build_mondo_agent_message(target),
+            max_turns=12,
+            run_config=RunConfig(
+                trace_metadata={
+                    'scope': target.scope.value,
+                    'paper_id': str(target.paper_id),
+                    'patient_variant_occurrence_id': str(
+                        target.patient_variant_occurrence_id or ''
+                    ),
+                    'disease_text': query,
+                    'gene_symbol': target.context.gene_symbol or '',
+                },
+            ),
+        )
+        log_cache_metrics('MONDO_LINKING', result)
+
+        decision = result.final_output.value
+        if decision.mondo_id:
+            selected_term = get_mondo_term(decision.mondo_id)
+            if selected_term is not None:
+                selected_mondo_id = selected_term['mondo_id']
+                selected_mondo_term = selected_term['label']
+                mondo_match_context = {
+                    'scope': target.scope.value,
+                    'query': query,
+                    'confidence': decision.confidence,
+                    'agent_reasoning': result.final_output.reasoning,
+                    'selected': selected_term,
+                }
+
+    with session_scope() as session:
+        task = session.get(TaskDB, task_id)
+        if not task:
+            return
+
+        if target.scope is MondoDiseaseScope.PAPER:
+            paper = session.get(PaperDB, target.paper_id)
+            if paper and paper.disease_name == target.disease_text:
+                paper.mondo_id = selected_mondo_id
+                paper.mondo_term = selected_mondo_term
+                paper.mondo_match_context = mondo_match_context
+            return
+
+        occurrence = session.get(
+            PatientVariantOccurrenceDB, target.patient_variant_occurrence_id
+        )
+        if occurrence and occurrence.disease_name == target.disease_text:
+            occurrence.mondo_id = selected_mondo_id
+            occurrence.mondo_term = selected_mondo_term
+            occurrence.mondo_match_context = mondo_match_context
+
 
 TASK_HANDLERS: dict[TaskType, Callable[[int], Awaitable[None]]] = {
     TaskType.PDF_PARSING: handle_pdf_parsing,
@@ -1465,4 +1599,5 @@ TASK_HANDLERS: dict[TaskType, Callable[[int], Awaitable[None]]] = {
     TaskType.COMPOUND_HET_EVALUATION: handle_compound_het_evaluation,
     TaskType.PHENOTYPE_EXTRACTION: handle_phenotype_extraction,
     TaskType.HPO_LINKING: handle_hpo_linking,
+    TaskType.MONDO_LINKING: handle_mondo_linking,
 }

@@ -1,4 +1,6 @@
+import asyncio
 import io
+import json
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
@@ -16,6 +18,7 @@ from lib.models import (
     HarmonizedVariantDB,
     PaperDB,
     PatientDB,
+    PatientVariantOccurrenceDB,
     PhenotypeDB,
     TaskDB,
     VariantDB,
@@ -736,6 +739,45 @@ def _ev(value: object = None, quote: str | None = 'test') -> dict:
     return d
 
 
+def _create_patient_variant_occurrence(
+    db_session,
+    paper: PaperDB,
+    variant: VariantDB,
+    agent_run: AgentRunDB,
+    disease_name: str | None = 'test disease',
+) -> PatientVariantOccurrenceDB:
+    patient_number = db_session.scalar(select(func.count(PatientDB.id))) + 1
+    patient_identifier = f'PVO Test Patient {patient_number}'
+    patient = PatientDB(
+        paper_id=paper.id,
+        family_id=paper.default_family_id,
+        agent_run_id=agent_run.id,
+        identifier=patient_identifier,
+        **_patient_required_fields(patient_identifier),
+    )
+    db_session.add(patient)
+    db_session.flush()
+
+    occurrence = PatientVariantOccurrenceDB(
+        paper_id=paper.id,
+        patient_id=patient.id,
+        variant_id=variant.id,
+        zygosity='Heterozygous',
+        zygosity_evidence=_ev('Heterozygous'),
+        inheritance='Dominant',
+        inheritance_evidence=_ev('Dominant'),
+        de_novo=False,
+        de_novo_evidence=_ev(False),
+        testing_methods=['Sanger Sequencing'],
+        testing_methods_evidence=[_ev('Sanger Sequencing')],
+        disease_name=disease_name,
+        disease_name_evidence=_ev(disease_name) if disease_name is not None else None,
+    )
+    db_session.add(occurrence)
+    db_session.flush()
+    return occurrence
+
+
 @pytest.fixture
 def seeded_agent_run(db_session):
     """Create a test agent run."""
@@ -1145,6 +1187,400 @@ def test_enqueue_clears_conversation_id_without_context(
     assert tasks[0]['conversation_id'] is None
     assert tasks[0]['additional_context'] is None
     assert tasks[0]['status'] == 'Pending'
+
+
+def test_enqueue_task_with_patient_variant_occurrence_scope(
+    client, seeded_paper, seeded_variant, seeded_agent_run, db_session
+):
+    from lib.tasks import TaskCreateRequest
+
+    occurrence = _create_patient_variant_occurrence(
+        db_session,
+        seeded_paper,
+        seeded_variant,
+        seeded_agent_run,
+    )
+
+    response = client.post(
+        f'/papers/{seeded_paper.id}/tasks',
+        json=TaskCreateRequest(
+            type=TaskType.MONDO_LINKING,
+            patient_variant_occurrence_id=occurrence.id,
+        ).model_dump(),
+    )
+    assert response.status_code == 200
+    tasks = response.json()
+    assert len(tasks) == 1
+    assert tasks[0]['patient_variant_occurrence_id'] == occurrence.id
+    assert tasks[0]['status'] == 'Pending'
+
+    task = db_session.get(TaskDB, tasks[0]['id'])
+    task.status = TaskStatus.COMPLETED
+    task.conversation_id = 'conv-123'
+    db_session.commit()
+
+    response = client.post(
+        f'/papers/{seeded_paper.id}/tasks',
+        json=TaskCreateRequest(
+            type=TaskType.MONDO_LINKING,
+            patient_variant_occurrence_id=occurrence.id,
+        ).model_dump(),
+    )
+    assert response.status_code == 200
+    tasks = response.json()
+    assert len(tasks) == 1
+    assert tasks[0]['id'] == task.id
+    assert tasks[0]['patient_variant_occurrence_id'] == occurrence.id
+    assert tasks[0]['status'] == 'Pending'
+    assert tasks[0]['conversation_id'] is None
+
+
+def test_mondo_linking_handler_updates_paper_only_for_paper_scoped_task(
+    monkeypatch, db_session, seeded_paper, seeded_variant, seeded_agent_run
+):
+    from types import SimpleNamespace
+
+    from lib.tasks import handlers
+
+    seeded_paper.disease_name = 'limb-girdle muscular dystrophy type 2Q'
+    occurrence = _create_patient_variant_occurrence(
+        db_session,
+        seeded_paper,
+        seeded_variant,
+        seeded_agent_run,
+        disease_name='epidermolysis bullosa simplex',
+    )
+
+    task = TaskDB(
+        paper_id=seeded_paper.id,
+        agent_run_id=seeded_agent_run.id,
+        type=TaskType.MONDO_LINKING,
+        status=TaskStatus.PENDING,
+    )
+    db_session.add(task)
+    db_session.commit()
+
+    async def fake_runner_run(agent, message, **kwargs):
+        assert agent is handlers.mondo_linking_agent
+        assert kwargs['max_turns'] == 12
+        payload = json.loads(
+            message.removeprefix('MONDO linking target JSON:\n').split('\n\n', 1)[0]
+        )
+        assert payload['scope'] == 'paper'
+        assert payload['disease_text'] == 'limb-girdle muscular dystrophy type 2Q'
+        return SimpleNamespace(
+            final_output=SimpleNamespace(
+                value=SimpleNamespace(
+                    mondo_id='MONDO:0015152',
+                    term=(
+                        'limb-girdle muscular dystrophy-dystroglycanopathy type C1'
+                    ),
+                    confidence='high',
+                ),
+                reasoning='tool search selected the supported paper disease',
+            ),
+            raw_responses=[],
+        )
+
+    monkeypatch.setattr(
+        handlers,
+        'get_mondo_term',
+        lambda mondo_id: {
+            'mondo_id': mondo_id,
+            'label': 'limb-girdle muscular dystrophy-dystroglycanopathy type C1',
+        },
+    )
+    monkeypatch.setattr(handlers.Runner, 'run', fake_runner_run)
+
+    asyncio.run(handlers.handle_mondo_linking(task.id))
+
+    db_session.expire_all()
+    paper = db_session.get(PaperDB, seeded_paper.id)
+    occurrence = db_session.get(PatientVariantOccurrenceDB, occurrence.id)
+    assert paper.mondo_id == 'MONDO:0015152'
+    assert (
+        paper.mondo_term == 'limb-girdle muscular dystrophy-dystroglycanopathy type C1'
+    )
+    assert occurrence.mondo_id is None
+    assert occurrence.mondo_term is None
+    assert occurrence.mondo_match_context is None
+    assert paper.mondo_match_context['scope'] == 'paper'
+    assert paper.mondo_match_context['confidence'] == 'high'
+    assert paper.mondo_match_context['agent_reasoning'] == (
+        'tool search selected the supported paper disease'
+    )
+
+
+def test_mondo_linking_handler_updates_target_occurrence_only(
+    monkeypatch, db_session, seeded_paper, seeded_variant, seeded_agent_run
+):
+    from types import SimpleNamespace
+
+    from lib.tasks import handlers
+
+    seeded_paper.disease_name = 'limb-girdle muscular dystrophy type 2Q'
+    occurrence = _create_patient_variant_occurrence(
+        db_session,
+        seeded_paper,
+        seeded_variant,
+        seeded_agent_run,
+        disease_name='epidermolysis bullosa simplex',
+    )
+    task = TaskDB(
+        paper_id=seeded_paper.id,
+        agent_run_id=seeded_agent_run.id,
+        type=TaskType.MONDO_LINKING,
+        patient_variant_occurrence_id=occurrence.id,
+        status=TaskStatus.PENDING,
+    )
+    db_session.add(task)
+    db_session.commit()
+
+    async def fake_runner_run(agent, message, **kwargs):
+        assert agent is handlers.mondo_linking_agent
+        assert kwargs['max_turns'] == 12
+        payload = json.loads(
+            message.removeprefix('MONDO linking target JSON:\n').split('\n\n', 1)[0]
+        )
+        assert payload['scope'] == 'occurrence'
+        assert payload['disease_text'] == 'epidermolysis bullosa simplex'
+        assert payload['context']['occurrence_disease_text'] == (
+            'epidermolysis bullosa simplex'
+        )
+        assert payload['context']['inheritance_mode'] == 'Dominant'
+        return SimpleNamespace(
+            final_output=SimpleNamespace(
+                value=SimpleNamespace(
+                    mondo_id='MONDO:0008275',
+                    term='epidermolysis bullosa simplex',
+                    confidence='high',
+                ),
+                reasoning='matched primary label',
+            ),
+            raw_responses=[],
+        )
+
+    monkeypatch.setattr(
+        handlers,
+        'get_mondo_term',
+        lambda mondo_id: {
+            'mondo_id': mondo_id,
+            'label': 'epidermolysis bullosa simplex',
+        },
+    )
+    monkeypatch.setattr(handlers.Runner, 'run', fake_runner_run)
+
+    asyncio.run(handlers.handle_mondo_linking(task.id))
+
+    db_session.expire_all()
+    paper = db_session.get(PaperDB, seeded_paper.id)
+    occurrence = db_session.get(PatientVariantOccurrenceDB, occurrence.id)
+    assert paper.mondo_id is None
+    assert paper.mondo_term is None
+    assert paper.mondo_match_context is None
+    assert occurrence.mondo_id == 'MONDO:0008275'
+    assert occurrence.mondo_term == 'epidermolysis bullosa simplex'
+    assert occurrence.mondo_match_context['query'] == 'epidermolysis bullosa simplex'
+    assert occurrence.mondo_match_context['agent_reasoning'] == 'matched primary label'
+
+
+def test_mondo_linking_handler_skips_blank_paper_disease_name(
+    monkeypatch, db_session, seeded_paper, seeded_agent_run
+):
+    from lib.tasks import handlers
+
+    seeded_paper.disease_name = '   '
+    task = TaskDB(
+        paper_id=seeded_paper.id,
+        agent_run_id=seeded_agent_run.id,
+        type=TaskType.MONDO_LINKING,
+        status=TaskStatus.PENDING,
+    )
+    db_session.add(task)
+    db_session.commit()
+
+    async def fail_runner_run(*args, **kwargs):
+        raise AssertionError('unexpected MONDO agent call')
+
+    monkeypatch.setattr(
+        handlers.Runner,
+        'run',
+        fail_runner_run,
+    )
+
+    asyncio.run(handlers.handle_mondo_linking(task.id))
+
+    db_session.expire_all()
+    paper = db_session.get(PaperDB, seeded_paper.id)
+    assert paper.mondo_id is None
+    assert paper.mondo_term is None
+    assert paper.mondo_match_context is None
+
+
+def test_mondo_linking_handler_skips_blank_occurrence_disease_name(
+    monkeypatch, db_session, seeded_paper, seeded_variant, seeded_agent_run
+):
+    from lib.tasks import handlers
+
+    occurrence = _create_patient_variant_occurrence(
+        db_session,
+        seeded_paper,
+        seeded_variant,
+        seeded_agent_run,
+        disease_name='   ',
+    )
+    occurrence.mondo_id = 'MONDO:0000001'
+    occurrence.mondo_term = 'old disease term'
+    occurrence.mondo_match_context = {'query': 'old disease'}
+    task = TaskDB(
+        paper_id=seeded_paper.id,
+        agent_run_id=seeded_agent_run.id,
+        type=TaskType.MONDO_LINKING,
+        patient_variant_occurrence_id=occurrence.id,
+        status=TaskStatus.PENDING,
+    )
+    db_session.add(task)
+    db_session.commit()
+
+    async def fail_runner_run(*args, **kwargs):
+        raise AssertionError('unexpected MONDO agent call')
+
+    monkeypatch.setattr(
+        handlers.Runner,
+        'run',
+        fail_runner_run,
+    )
+
+    asyncio.run(handlers.handle_mondo_linking(task.id))
+
+    db_session.expire_all()
+    occurrence = db_session.get(PatientVariantOccurrenceDB, occurrence.id)
+    assert occurrence.mondo_id is None
+    assert occurrence.mondo_term is None
+    assert occurrence.mondo_match_context is None
+
+
+def test_mondo_linking_handler_clears_invalid_agent_result(
+    monkeypatch, db_session, seeded_paper, seeded_agent_run
+):
+    from types import SimpleNamespace
+
+    from lib.tasks import handlers
+
+    seeded_paper.disease_name = 'old disease'
+    seeded_paper.mondo_id = 'MONDO:0000001'
+    seeded_paper.mondo_term = 'old disease term'
+    seeded_paper.mondo_match_context = {'query': 'old disease'}
+    task = TaskDB(
+        paper_id=seeded_paper.id,
+        agent_run_id=seeded_agent_run.id,
+        type=TaskType.MONDO_LINKING,
+        status=TaskStatus.PENDING,
+    )
+    db_session.add(task)
+    db_session.commit()
+
+    async def fake_runner_run(*args, **kwargs):
+        return SimpleNamespace(
+            final_output=SimpleNamespace(
+                value=SimpleNamespace(
+                    mondo_id='MONDO:9999999',
+                    term=None,
+                    confidence='low',
+                ),
+                reasoning='no valid tool-supported match',
+            ),
+            raw_responses=[],
+        )
+
+    monkeypatch.setattr(handlers.Runner, 'run', fake_runner_run)
+    monkeypatch.setattr(handlers, 'get_mondo_term', lambda mondo_id: None)
+
+    asyncio.run(handlers.handle_mondo_linking(task.id))
+
+    db_session.expire_all()
+    paper = db_session.get(PaperDB, seeded_paper.id)
+    assert paper.mondo_id is None
+    assert paper.mondo_term is None
+    assert paper.mondo_match_context is None
+
+
+def test_paper_metadata_successor_enqueues_mondo_linking(
+    db_session, seeded_paper, agent_run
+):
+    from lib.tasks.misc import enqueue_successors
+
+    task = TaskDB(
+        paper_id=seeded_paper.id,
+        agent_run_id=agent_run.id,
+        type=TaskType.PAPER_METADATA,
+        status=TaskStatus.COMPLETED,
+    )
+    db_session.add(task)
+    db_session.flush()
+
+    enqueue_successors(db_session, task)
+
+    mondo_task = (
+        db_session.query(TaskDB)
+        .filter(
+            TaskDB.paper_id == seeded_paper.id,
+            TaskDB.type == TaskType.MONDO_LINKING,
+        )
+        .one()
+    )
+    assert mondo_task.status == TaskStatus.PENDING
+
+
+def test_patient_variant_occurrence_successor_does_not_enqueue_occurrence_mondo_yet(
+    db_session, seeded_paper, seeded_variant, seeded_agent_run
+):
+    from lib.tasks.misc import enqueue_successors
+
+    _create_patient_variant_occurrence(
+        db_session,
+        seeded_paper,
+        seeded_variant,
+        seeded_agent_run,
+        disease_name='disease one',
+    )
+    _create_patient_variant_occurrence(
+        db_session,
+        seeded_paper,
+        seeded_variant,
+        seeded_agent_run,
+        disease_name='disease two',
+    )
+    task = TaskDB(
+        paper_id=seeded_paper.id,
+        agent_run_id=seeded_agent_run.id,
+        type=TaskType.PATIENT_VARIANT_OCCURRENCES,
+        status=TaskStatus.COMPLETED,
+    )
+    db_session.add(task)
+    db_session.flush()
+
+    enqueue_successors(db_session, task)
+
+    mondo_tasks = (
+        db_session.query(TaskDB)
+        .filter(
+            TaskDB.paper_id == seeded_paper.id,
+            TaskDB.type == TaskType.MONDO_LINKING,
+        )
+        .all()
+    )
+    assert mondo_tasks == []
+
+    segregation_task = (
+        db_session.query(TaskDB)
+        .filter(
+            TaskDB.paper_id == seeded_paper.id,
+            TaskDB.type == TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
+        )
+        .one()
+    )
+    assert segregation_task.family_id == seeded_paper.default_family_id
 
 
 def test_update_variant_rejects_harmonized_update_before_harmonization(

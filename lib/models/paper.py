@@ -188,6 +188,9 @@ class PaperDB(Base):
         JSON,
         nullable=True,
     )
+    mondo_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    mondo_term: Mapped[str | None] = mapped_column(String, nullable=True)
+    mondo_match_context: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     patient_count: int = 0
     variant_count: int = 0
@@ -287,6 +290,9 @@ class PaperResp(PaperExtractionOutput):
     disease_name_evidence: EvidenceBlock[str] | None = None
     disease_inheritance_mode: Inheritance | None = None
     disease_inheritance_mode_evidence: EvidenceBlock[Inheritance] | None = None
+    mondo_id: str | None = None
+    mondo_term: str | None = None
+    mondo_match_context: dict | None = None
     updated_at: datetime
     tasks: list['TaskResp'] = []
     patient_count: int = 0
