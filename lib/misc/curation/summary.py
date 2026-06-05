@@ -193,7 +193,7 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
             if phenotype_concepts:
                 clinical_sections.append(
                     SectionContent(
-                        title='Phenotypes',
+                        title='',
                         content=', '.join(phenotype_concepts),
                     )
                 )
@@ -222,7 +222,7 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
                 if relative_lines:
                     clinical_sections.append(
                         SectionContent(
-                            title='Family notes',
+                            title='Other Affected Family Members',
                             content='\n'.join(relative_lines),
                         )
                     )
@@ -315,8 +315,8 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
                         if max_score > 0:
                             variant_parts.append(f'SpliceAI: {max_score:.3f}')
 
-                # Title is just the variant (no HGVS in title)
-                variant_title = f'Variant {variant.id}'
+                # Build variant title using human-readable description
+                variant_title = variant.variant_description
                 variant_section = [
                     SectionContent(
                         title=variant_title,
