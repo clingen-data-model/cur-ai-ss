@@ -27,6 +27,26 @@ if TYPE_CHECKING:
     from lib.models.patient_variant_occurrences import PatientVariantOccurrenceDB
 
 
+def get_variant_description(
+    variant_id: int,
+    harmonized_variant: 'HarmonizedVariant | HarmonizedVariantDB | HarmonizedVariantResp | None',
+    variant_evidence: dict,
+) -> str:
+    """Generate a human-readable description of a variant, prioritizing harmonized fields."""
+    if harmonized_variant:
+        hv = harmonized_variant
+        return (
+            hv.hgvs_c
+            or hv.hgvs_g
+            or hv.gnomad_style_coordinates
+            or hv.rsid
+            or hv.hgvs_p
+            or variant_evidence.get('value')
+            or f'Variant {variant_id}'
+        )
+    return variant_evidence.get('value') or f'Variant {variant_id}'
+
+
 class VariantType(str, Enum):
     missense = 'Missense'
     frameshift = 'Frameshift'
@@ -160,18 +180,14 @@ class VariantResp(BaseModel):
     @property
     def variant_description(self) -> str:
         """Generate a human-readable description of the variant, prioritizing harmonized fields."""
-        if self.harmonized_variant and self.harmonized_variant.value:
-            hv = self.harmonized_variant.value
-            return (
-                hv.hgvs_c
-                or hv.hgvs_g
-                or hv.gnomad_style_coordinates
-                or hv.rsid
-                or hv.hgvs_p
-                or self.variant_evidence.value
-                or f'Variant {self.id}'
-            )
-        return self.variant_evidence.value or f'Variant {self.id}'
+        hv_value = self.harmonized_variant.value if self.harmonized_variant else None
+        return get_variant_description(
+            self.id,
+            hv_value,
+            self.variant_evidence.model_dump()
+            if hasattr(self.variant_evidence, 'model_dump')
+            else {'value': self.variant_evidence.value},
+        )
 
 
 class HarmonizedVariantUpdate(PatchModel):

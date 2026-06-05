@@ -12,7 +12,12 @@ from lib.models.segregation_analysis import (
     SegregationAnalysisComputedDB,
     SegregationEvidenceDB,
 )
-from lib.models.variant import AnnotatedVariantDB, HarmonizedVariantDB, VariantDB
+from lib.models.variant import (
+    AnnotatedVariantDB,
+    HarmonizedVariantDB,
+    VariantDB,
+    get_variant_description,
+)
 
 
 def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryRow]:
@@ -316,7 +321,11 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
                             variant_parts.append(f'SpliceAI: {max_score:.3f}')
 
                 # Build variant title using human-readable description
-                variant_title = variant.variant_description
+                variant_title = get_variant_description(
+                    variant.id,
+                    variant.harmonized_variant,
+                    variant.variant_evidence,
+                )
                 variant_section = [
                     SectionContent(
                         title=variant_title,
