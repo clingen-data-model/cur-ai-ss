@@ -99,14 +99,14 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
             if seg_evidence.extracted_lod_score is not None:
                 seg_sections.append(
                     SectionContent(
-                        title=f'Family {family.identifier}',
+                        title=f'Family "{family.identifier}"',
                         content=f'Extracted LOD: {seg_evidence.extracted_lod_score}',
                     )
                 )
             if seg_evidence.has_unexplainable_non_segregations:
                 seg_sections.append(
                     SectionContent(
-                        title=f'Family {family.identifier}',
+                        title=f'Family "{family.identifier}"',
                         content='Has unexplainable non-segregations',
                     )
                 )
@@ -122,7 +122,7 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
                 f'Computed LOD: {seg_computed.computed_lod_score}'
             )
             seg_sections.append(
-                SectionContent(title=f'Family {family.identifier}', content=seg_info)
+                SectionContent(title=f'Family "{family.identifier}"', content=seg_info)
             )
 
         family_segregation_map[family.id] = seg_sections
@@ -131,7 +131,7 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
         if seg_computed:
             score_sections.append(
                 SectionContent(
-                    title=f'Family {family.identifier}',
+                    title=f'Family "{family.identifier}"',
                     content=str(seg_computed.points_assigned),
                 )
             )
@@ -146,6 +146,7 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
         if path.exists():
             pedigree_image_path_str = str(path)
 
+    first_row = True
     for proband in probands:
         family = proband.family
 
@@ -169,7 +170,7 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
         )
         demographic = ', '.join(filter(None, [sex_str, age_str, country_str]))
 
-        family_header = family.identifier
+        family_header = f'Family "{family.identifier}"'
         if family.consanguinity:
             family_header += ' (Consanguineous)'
         proband_lines = [family_header, f'  - {proband.identifier}']
@@ -177,7 +178,7 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
             proband_lines[-1] += f' ({demographic})'
 
         proband_section.append(
-            SectionContent(title='Proband', content='\n'.join(proband_lines))
+            SectionContent(title='', content='\n'.join(proband_lines))
         )
 
         # Build clinical presentation once (reused for each variant)
@@ -350,7 +351,7 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
                     ]
                     functional_sections.append(
                         SectionContent(
-                            title=f'Segregation (Family {family.identifier})',
+                            title=f'Segregation (Family "{family.identifier}")',
                             content='\n'.join(seg_parts),
                         )
                     )
@@ -359,10 +360,12 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
                 score_sections = family_score_map.get(family.id, [])
 
                 # Create one row for this proband/variant pair
+                # Publication/Testing only on first row
+                pub_test = publication_and_testing_sections if first_row else []
                 rows.append(
                     CurationSummaryRow(
                         paper_id=paper_id,
-                        publication_and_testing=publication_and_testing_sections,
+                        publication_and_testing=pub_test,
                         proband=proband_section,
                         variant_info=variant_section,
                         clinical_presentation=clinical_sections,
@@ -371,16 +374,18 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
                         pedigree_image_path=pedigree_image_path_str,
                     )
                 )
+                first_row = False
         else:
             # No variants for this proband - create one row anyway
             variant_section = [
                 SectionContent(title='Variants', content='No variants for this proband')
             ]
             score_sections = family_score_map.get(family.id, [])
+            pub_test = publication_and_testing_sections if first_row else []
             rows.append(
                 CurationSummaryRow(
                     paper_id=paper_id,
-                    publication_and_testing=publication_and_testing_sections,
+                    publication_and_testing=pub_test,
                     proband=proband_section,
                     variant_info=variant_section,
                     clinical_presentation=clinical_sections,
@@ -389,5 +394,6 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
                     pedigree_image_path=pedigree_image_path_str,
                 )
             )
+            first_row = False
 
     return rows
