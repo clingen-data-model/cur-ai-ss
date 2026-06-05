@@ -328,7 +328,12 @@ def extract_definition(node: dict[str, Any]) -> str | None:
 
 
 def extract_synonyms(node: dict[str, Any]) -> list[str]:
-    """Extract synonym strings from a MONDO node."""
+    """Extract all synonym strings from a MONDO node.
+
+    This currently ignores the synonym predicate, such as exact, related,
+    broad, or narrow. Preserve that metadata later if it becomes useful for
+    ranking candidates or giving the agent richer match context.
+    """
     synonyms: list[str] = []
     for synonym in (node.get('meta') or {}).get('synonyms') or []:
         if not isinstance(synonym, dict):
