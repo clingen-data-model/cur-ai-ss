@@ -90,17 +90,21 @@ def test_get_mondo_terms_by_xref_uses_xrefs_and_exact_matches(
     assert mondo.get_mondo_terms_by_xref('GARD:0016535')[0]['mondo_id'] == (
         'MONDO:0007947'
     )
-    assert mondo.get_mondo_terms_by_xref('http://www.orpha.net/ORDO/Orphanet_558')[
-        0
-    ]['mondo_id'] == 'MONDO:0007947'
+    assert (
+        mondo.get_mondo_terms_by_xref('http://www.orpha.net/ORDO/Orphanet_558')[0][
+            'mondo_id'
+        ]
+        == 'MONDO:0007947'
+    )
 
 
 def test_get_mondo_related_terms_returns_parent_and_children(
     mondo_index: mondo.MondoIndex,
 ) -> None:
-    assert mondo.get_mondo_related_terms('MONDO:0007947', 'parents')[0][
-        'mondo_id'
-    ] == 'MONDO:0700096'
+    assert (
+        mondo.get_mondo_related_terms('MONDO:0007947', 'parents')[0]['mondo_id']
+        == 'MONDO:0700096'
+    )
     children = mondo.get_mondo_related_terms('MONDO:0700096', 'children')
     assert {child['mondo_id'] for child in children} == {
         'MONDO:0007947',

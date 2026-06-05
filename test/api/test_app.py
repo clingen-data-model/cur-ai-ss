@@ -1272,9 +1272,7 @@ def test_mondo_linking_handler_updates_paper_only_for_paper_scoped_task(
             final_output=SimpleNamespace(
                 value=SimpleNamespace(
                     mondo_id='MONDO:0015152',
-                    term=(
-                        'limb-girdle muscular dystrophy-dystroglycanopathy type C1'
-                    ),
+                    term=('limb-girdle muscular dystrophy-dystroglycanopathy type C1'),
                     confidence='high',
                 ),
                 reasoning='tool search selected the supported paper disease',

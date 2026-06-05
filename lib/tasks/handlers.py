@@ -1461,6 +1461,7 @@ async def handle_hpo_linking(task_id: int) -> None:
         session.query(HpoDB).filter(HpoDB.phenotype_id == phenotype_id).delete()
         session.add(hpo_to_db(phenotype_id, result.final_output))
 
+
 def build_mondo_linking_target(
     session: Session, task: TaskDB
 ) -> MondoLinkingTarget | None:
@@ -1507,8 +1508,7 @@ def build_mondo_linking_target(
         context=context.model_copy(
             update={
                 'occurrence_disease_text': occurrence.disease_name,
-                'inheritance_mode': occurrence.inheritance
-                or context.inheritance_mode,
+                'inheritance_mode': occurrence.inheritance or context.inheritance_mode,
             }
         ),
     )
