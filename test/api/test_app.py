@@ -1236,7 +1236,7 @@ def test_enqueue_task_with_patient_variant_occurrence_scope(
 
 
 def test_mondo_linking_handler_updates_paper_only_for_paper_scoped_task(
-    monkeypatch, db_session, seeded_paper, seeded_variant, seeded_agent_run
+    monkeypatch, client, db_session, seeded_paper, seeded_variant, seeded_agent_run
 ):
     from types import SimpleNamespace
 
@@ -1307,10 +1307,25 @@ def test_mondo_linking_handler_updates_paper_only_for_paper_scoped_task(
     assert paper.mondo_match_context['agent_reasoning'] == (
         'tool search selected the supported paper disease'
     )
+    response = client.get(f'/papers/{seeded_paper.id}')
+    assert response.status_code == 200
+    paper_resp = response.json()
+    assert 'mondo_id' not in paper_resp
+    assert 'mondo_term' not in paper_resp
+    assert 'mondo_match_context' not in paper_resp
+    assert paper_resp['mondo']['value'] == {
+        'mondo_id': 'MONDO:0015152',
+        'term': 'limb-girdle muscular dystrophy-dystroglycanopathy type C1',
+        'confidence': 'high',
+    }
+    assert (
+        paper_resp['mondo']['reasoning']
+        == 'tool search selected the supported paper disease'
+    )
 
 
 def test_mondo_linking_handler_updates_target_occurrence_only(
-    monkeypatch, db_session, seeded_paper, seeded_variant, seeded_agent_run
+    monkeypatch, client, db_session, seeded_paper, seeded_variant, seeded_agent_run
 ):
     from types import SimpleNamespace
 
@@ -1380,6 +1395,20 @@ def test_mondo_linking_handler_updates_target_occurrence_only(
     assert occurrence.mondo_term == 'epidermolysis bullosa simplex'
     assert occurrence.mondo_match_context['query'] == 'epidermolysis bullosa simplex'
     assert occurrence.mondo_match_context['agent_reasoning'] == 'matched primary label'
+    response = client.get(f'/papers/{seeded_paper.id}/occurrences')
+    assert response.status_code == 200
+    occurrence_resp = next(
+        item for item in response.json() if item['id'] == occurrence.id
+    )
+    assert 'mondo_id' not in occurrence_resp
+    assert 'mondo_term' not in occurrence_resp
+    assert 'mondo_match_context' not in occurrence_resp
+    assert occurrence_resp['mondo']['value'] == {
+        'mondo_id': 'MONDO:0008275',
+        'term': 'epidermolysis bullosa simplex',
+        'confidence': 'high',
+    }
+    assert occurrence_resp['mondo']['reasoning'] == 'matched primary label'
 
 
 def test_mondo_linking_handler_skips_blank_paper_disease_name(

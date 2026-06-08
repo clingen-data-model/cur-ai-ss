@@ -120,6 +120,7 @@ from lib.models import (
     VariantUpdateRequest,
 )
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
+from lib.models.mondo import mondo_link_to_reasoning_block
 from lib.models.patient import (
     AffectedStatus,
     CountryCode,
@@ -279,7 +280,13 @@ def put_paper(
                 'wb',
             ) as f:
                 f.write(supplement_content)
-        return paper_db
+        # We fill in these counts for the response, they are not persisted to DB.
+        paper_db.patient_count = len(paper_db.patients)
+        paper_db.variant_count = len(paper_db.variants)
+        paper_db.patient_variant_occurrences_count = len(
+            paper_db.patient_variant_occurrences
+        )
+        return _paper_to_resp(paper_db)
     except IntegrityError:
         session.rollback()
         raise HTTPException(
@@ -294,6 +301,7 @@ def get_paper(paper_id: int, session: Session = Depends(get_session)) -> Any:
         session.query(PaperDB)
         .options(
             selectinload(PaperDB.gene),
+            selectinload(PaperDB.tasks),
             selectinload(PaperDB.patients),
             selectinload(PaperDB.variants),
             selectinload(PaperDB.patient_variant_occurrences),
@@ -310,7 +318,7 @@ def get_paper(paper_id: int, session: Session = Depends(get_session)) -> Any:
     paper_db.patient_variant_occurrences_count = len(
         paper_db.patient_variant_occurrences
     )
-    return paper_db
+    return _paper_to_resp(paper_db)
 
 
 @app.delete('/papers/{paper_id}', status_code=status.HTTP_204_NO_CONTENT)
@@ -338,6 +346,7 @@ def update_paper(
         session.query(PaperDB)
         .options(
             selectinload(PaperDB.gene),
+            selectinload(PaperDB.tasks),
             selectinload(PaperDB.patients),
             selectinload(PaperDB.variants),
             selectinload(PaperDB.patient_variant_occurrences),
@@ -366,7 +375,7 @@ def update_paper(
     paper_db.patient_variant_occurrences_count = len(
         paper_db.patient_variant_occurrences
     )
-    return paper_db
+    return _paper_to_resp(paper_db)
 
 
 @app.get('/papers', response_model=list[PaperResp])
@@ -385,7 +394,56 @@ def list_papers(
         paper.patient_count = len(paper.patients)
         paper.variant_count = len(paper.variants)
         paper.patient_variant_occurrences_count = len(paper.patient_variant_occurrences)
-    return papers
+    return [_paper_to_resp(paper) for paper in papers]
+
+
+def _paper_to_resp(row: PaperDB) -> PaperResp:
+    """Convert PaperDB to PaperResp, including reconstructed MONDO reasoning."""
+    from lib.models.paper import PaperTag, PaperType
+    from lib.models.patient_variant_occurrences import Inheritance
+
+    return PaperResp(
+        id=row.id,
+        content_hash=row.content_hash,
+        gene_symbol=row.gene.symbol,
+        filename=row.filename,
+        tags=[PaperTag(tag) for tag in row.tags],
+        is_paper_relevant=row.is_paper_relevant,
+        section_classifications=row.section_classifications,
+        disease_name=row.disease_name,
+        disease_name_evidence=EvidenceBlock.model_validate(row.disease_name_evidence)
+        if row.disease_name_evidence
+        else None,
+        disease_inheritance_mode=Inheritance(row.disease_inheritance_mode)
+        if row.disease_inheritance_mode
+        else None,
+        disease_inheritance_mode_evidence=EvidenceBlock.model_validate(
+            row.disease_inheritance_mode_evidence
+        )
+        if row.disease_inheritance_mode_evidence
+        else None,
+        mondo=mondo_link_to_reasoning_block(
+            row.mondo_id,
+            row.mondo_term,
+            row.mondo_match_context,
+        ),
+        updated_at=row.updated_at,
+        tasks=[
+            TaskResp.model_validate(task, from_attributes=True) for task in row.tasks
+        ],
+        patient_count=row.patient_count,
+        variant_count=row.variant_count,
+        patient_variant_occurrences_count=row.patient_variant_occurrences_count,
+        title=row.title,
+        first_author=row.first_author,
+        journal_name=row.journal_name,
+        abstract=row.abstract,
+        publication_year=row.publication_year,
+        doi=row.doi,
+        pmid=row.pmid,
+        pmcid=row.pmcid,
+        paper_types=[PaperType(paper_type) for paper_type in row.paper_types],
+    )
 
 
 @app.get('/papers/{paper_id}/tasks', response_model=list[TaskResp])
@@ -1009,9 +1067,11 @@ def _patient_variant_occurrence_to_resp(
         disease_name_evidence=EvidenceBlock.model_validate(row.disease_name_evidence)
         if row.disease_name_evidence
         else None,
-        mondo_id=row.mondo_id,
-        mondo_term=row.mondo_term,
-        mondo_match_context=row.mondo_match_context,
+        mondo=mondo_link_to_reasoning_block(
+            row.mondo_id,
+            row.mondo_term,
+            row.mondo_match_context,
+        ),
         paired_variant_link_id=row.paired_variant_link_id,
         paired_variant_confidence=CompoundHetConfidence(row.paired_variant_confidence)
         if row.paired_variant_confidence

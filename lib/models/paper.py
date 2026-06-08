@@ -11,7 +11,7 @@ from pydantic import (
 )
 
 if TYPE_CHECKING:
-    from lib.models.evidence_block import EvidenceBlock
+    from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
     from lib.models.family import FamilyDB
     from lib.models.patient import PatientDB
     from lib.models.patient_variant_occurrences import (
@@ -56,8 +56,9 @@ from lib.misc.pdf.paths import (
     pdf_thumbnail_path,
 )
 from lib.models.base import Base, PatchModel
-from lib.models.evidence_block import EvidenceBlock
+from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.gene_disease_relation import GeneDiseaseRelation
+from lib.models.mondo import MondoLink
 from lib.models.patient_variant_occurrences import Inheritance
 from lib.tasks.models import TaskResp
 
@@ -290,9 +291,7 @@ class PaperResp(PaperExtractionOutput):
     disease_name_evidence: EvidenceBlock[str] | None = None
     disease_inheritance_mode: Inheritance | None = None
     disease_inheritance_mode_evidence: EvidenceBlock[Inheritance] | None = None
-    mondo_id: str | None = None
-    mondo_term: str | None = None
-    mondo_match_context: dict | None = None
+    mondo: ReasoningBlock[MondoLink | None]
     updated_at: datetime
     tasks: list['TaskResp'] = []
     patient_count: int = 0
