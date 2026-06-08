@@ -1530,24 +1530,34 @@ def test_paper_metadata_successor_enqueues_mondo_linking(
     assert mondo_task.status == TaskStatus.PENDING
 
 
-def test_patient_variant_occurrence_successor_does_not_enqueue_occurrence_mondo_yet(
+def test_patient_variant_occurrence_successor_enqueues_paper_and_occurrence_mondo(
     db_session, seeded_paper, seeded_variant, seeded_agent_run
 ):
+    """Enqueue MONDO-linking for paper and patient variant occurrences with nonblank disease names."""
     from lib.tasks.misc import enqueue_successors
 
-    _create_patient_variant_occurrence(
+    occurrence_one = _create_patient_variant_occurrence(
         db_session,
         seeded_paper,
         seeded_variant,
         seeded_agent_run,
         disease_name='disease one',
     )
-    _create_patient_variant_occurrence(
+    occurrence_two = _create_patient_variant_occurrence(
         db_session,
         seeded_paper,
         seeded_variant,
         seeded_agent_run,
         disease_name='disease two',
+    )
+    # This occurrence has a blank disease name so enqueue_successors
+    # should not queue a MONDO linking task for it.
+    _create_patient_variant_occurrence(
+        db_session,
+        seeded_paper,
+        seeded_variant,
+        seeded_agent_run,
+        disease_name='   ',
     )
     task = TaskDB(
         paper_id=seeded_paper.id,
@@ -1568,7 +1578,13 @@ def test_patient_variant_occurrence_successor_does_not_enqueue_occurrence_mondo_
         )
         .all()
     )
-    assert mondo_tasks == []
+    assert len(mondo_tasks) == 3
+    assert {task.patient_variant_occurrence_id for task in mondo_tasks} == {
+        None,
+        occurrence_one.id,
+        occurrence_two.id,
+    }
+    assert all(task.status == TaskStatus.PENDING for task in mondo_tasks)
 
     segregation_task = (
         db_session.query(TaskDB)

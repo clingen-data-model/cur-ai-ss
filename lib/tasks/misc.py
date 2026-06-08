@@ -289,6 +289,30 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     patient_id=patient_id,
                 )
 
+            # Re-link paper disease context after case-level occurrence extraction,
+            # which may update paper.disease_name.
+            enqueue_task(
+                session,
+                paper_id=task.paper_id,
+                task_type=TaskType.MONDO_LINKING,
+            )
+
+            # Expand to per-occurrence MONDO_LINKING tasks for extracted disease names.
+            occurrences = (
+                session.query(PatientVariantOccurrenceDB)
+                .filter(PatientVariantOccurrenceDB.paper_id == task.paper_id)
+                .all()
+            )
+            for occurrence in occurrences:
+                if not occurrence.disease_name or not occurrence.disease_name.strip():
+                    continue
+                enqueue_task(
+                    session,
+                    paper_id=task.paper_id,
+                    task_type=TaskType.MONDO_LINKING,
+                    patient_variant_occurrence_id=occurrence.id,
+                )
+
         case TaskType.SEGREGATION_EVIDENCE_EXTRACTION:
             enqueue_task(
                 session,
