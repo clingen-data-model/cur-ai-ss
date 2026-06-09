@@ -444,7 +444,15 @@ def normalize_for_search(value: str) -> str:
 
 
 def normalize_text(value: str) -> str:
-    """Normalize Unicode and whitespace while preserving punctuation."""
+    """Normalize Unicode and whitespace while preserving punctuation.
+
+    Strip external whitespace, collapse internal whitespace,
+    and apply Unicode NFKC normalization.
+
+    Example:
+        ``normalize_text('  Marfan\\u00a0syndrome (Orphanet:558)  ')`` returns
+        ``'Marfan syndrome (Orphanet:558)'``.
+    """
     normalized = unicodedata.normalize('NFKC', value or '')
     return ' '.join(normalized.strip().split())
 
