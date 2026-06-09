@@ -287,21 +287,30 @@ def get_mondo_terms_by_xref(identifier: str) -> list[dict[str, Any]]:
     ]
 
 
-def get_mondo_related_terms(mondo_id: str, direction: str) -> list[dict[str, Any]]:
-    """Fetch parent or child MONDO terms."""
+def get_mondo_parents(mondo_id: str) -> list[dict[str, Any]]:
+    """Fetch parent MONDO terms."""
+    index = get_mondo_index()
+    return _get_mondo_related_terms(mondo_id, index.parent_ids_by_id, index)
+
+
+def get_mondo_children(mondo_id: str) -> list[dict[str, Any]]:
+    """Fetch child MONDO terms."""
+    index = get_mondo_index()
+    return _get_mondo_related_terms(mondo_id, index.child_ids_by_id, index)
+
+
+def _get_mondo_related_terms(
+    mondo_id: str,
+    related_ids_by_id: dict[str, list[str]],
+    index: MondoIndex,
+) -> list[dict[str, Any]]:
+    """Fetch MONDO terms from a precomputed relationship map."""
     normalized_id = normalize_mondo_curie(mondo_id)
     if normalized_id is None:
         return []
-    index = get_mondo_index()
-    if direction == 'parents':
-        related_ids = index.parent_ids_by_id.get(normalized_id, [])
-    elif direction == 'children':
-        related_ids = index.child_ids_by_id.get(normalized_id, [])
-    else:
-        raise ValueError(f'Unsupported MONDO relation direction: {direction}')
     return [
         term_payload(index.terms_by_id[related_id])
-        for related_id in related_ids
+        for related_id in related_ids_by_id.get(normalized_id, [])
         if related_id in index.terms_by_id
     ]
 

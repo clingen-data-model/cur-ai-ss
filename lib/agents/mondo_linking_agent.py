@@ -50,13 +50,13 @@ def get_mondo_by_xref(identifier: str) -> list[dict]:
 @function_tool
 def get_mondo_parents(mondo_id: str) -> list[dict]:
     """Fetch parent terms for a MONDO term."""
-    return mondo.get_mondo_related_terms(mondo_id, 'parents')
+    return mondo.get_mondo_parents(mondo_id)
 
 
 @function_tool
 def get_mondo_children(mondo_id: str) -> list[dict]:
     """Fetch child terms for a MONDO term."""
-    return mondo.get_mondo_related_terms(mondo_id, 'children')
+    return mondo.get_mondo_children(mondo_id)
 
 
 MONDO_LINKING_AGENT_INSTRUCTIONS = """

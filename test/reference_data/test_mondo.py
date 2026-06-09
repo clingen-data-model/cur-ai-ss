@@ -98,14 +98,11 @@ def test_get_mondo_terms_by_xref_uses_xrefs_and_exact_matches(
     )
 
 
-def test_get_mondo_related_terms_returns_parent_and_children(
+def test_get_mondo_parents_and_children_return_related_terms(
     mondo_index: mondo.MondoIndex,
 ) -> None:
-    assert (
-        mondo.get_mondo_related_terms('MONDO:0007947', 'parents')[0]['mondo_id']
-        == 'MONDO:0700096'
-    )
-    children = mondo.get_mondo_related_terms('MONDO:0700096', 'children')
+    assert mondo.get_mondo_parents('MONDO:0007947')[0]['mondo_id'] == 'MONDO:0700096'
+    children = mondo.get_mondo_children('MONDO:0700096')
     assert {child['mondo_id'] for child in children} == {
         'MONDO:0007947',
         'MONDO:0009061',
