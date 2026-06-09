@@ -1486,6 +1486,7 @@ def build_mondo_linking_target(
         inheritance_mode=paper.disease_inheritance_mode,
     )
 
+    # Is paper-scoped disease text
     if task.patient_variant_occurrence_id is None:
         return MondoLinkingTarget(
             scope=MondoDiseaseScope.PAPER,
@@ -1500,6 +1501,7 @@ def build_mondo_linking_target(
     if not occurrence or occurrence.paper_id != task.paper_id:
         return None
 
+    # Is occurrence-scoped disease text
     return MondoLinkingTarget(
         scope=MondoDiseaseScope.OCCURRENCE,
         paper_id=task.paper_id,
@@ -1549,18 +1551,19 @@ async def handle_mondo_linking(task_id: int) -> None:
         log_cache_metrics('MONDO_LINKING', result)
 
         decision = result.final_output.value
+        selected_term = None
         if decision.mondo_id:
             selected_term = get_mondo_term(decision.mondo_id)
             if selected_term is not None:
                 selected_mondo_id = selected_term['mondo_id']
                 selected_mondo_term = selected_term['label']
-                mondo_match_context = {
-                    'scope': target.scope.value,
-                    'query': query,
-                    'confidence': decision.confidence,
-                    'agent_reasoning': result.final_output.reasoning,
-                    'selected': selected_term,
-                }
+        mondo_match_context = {
+            'scope': target.scope.value,
+            'query': query,
+            'confidence': decision.confidence,
+            'agent_reasoning': result.final_output.reasoning,
+            'selected': selected_term,
+        }
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)

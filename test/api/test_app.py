@@ -1487,7 +1487,7 @@ def test_mondo_linking_handler_skips_blank_occurrence_disease_name(
     assert occurrence.mondo_match_context is None
 
 
-def test_mondo_linking_handler_clears_invalid_agent_result(
+def test_mondo_linking_handler_stores_context_for_invalid_agent_result(
     monkeypatch, db_session, seeded_paper, seeded_agent_run
 ):
     from types import SimpleNamespace
@@ -1529,7 +1529,13 @@ def test_mondo_linking_handler_clears_invalid_agent_result(
     paper = db_session.get(PaperDB, seeded_paper.id)
     assert paper.mondo_id is None
     assert paper.mondo_term is None
-    assert paper.mondo_match_context is None
+    assert paper.mondo_match_context == {
+        'scope': 'paper',
+        'query': 'old disease',
+        'confidence': 'low',
+        'agent_reasoning': 'no valid tool-supported match',
+        'selected': None,
+    }
 
 
 def test_paper_metadata_successor_enqueues_mondo_linking(
