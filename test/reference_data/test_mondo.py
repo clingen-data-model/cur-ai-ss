@@ -46,20 +46,28 @@ def test_index_builds_tool_oriented_structures(
     assert marfan.label == 'Marfan syndrome'
     assert marfan.definition == 'A connective tissue disorder.'
     assert any(
-        synonym.text == "Marfan's syndrome"
-        and synonym.scope is mondo.MondoSynonymScope.EXACT
+        synonym.text == "Marfan's syndrome" and synonym.scope == 'exact'
         for synonym in marfan.synonyms
     )
     assert any(
         synonym.text == 'MFS'
-        and synonym.scope is mondo.MondoSynonymScope.EXACT
+        and synonym.scope == 'exact'
         and synonym.synonym_type == 'ABBREVIATION'
         for synonym in marfan.synonyms
     )
     assert 'GARD:0016535' in marfan.xrefs
     assert 'http://www.orpha.net/ORDO/Orphanet_558' in marfan.exact_matches
-    assert mondo_index.xref_to_ids['gard:0016535'] == ['MONDO:0007947']
-    assert mondo_index.xref_to_ids['orphanet:558'] == ['MONDO:0007947']
+    assert mondo_index.identifier_to_ids['mondo:0007947'] == ['MONDO:0007947']
+    assert mondo_index.identifier_to_ids['gard:0016535'] == ['MONDO:0007947']
+    assert mondo_index.identifier_to_ids['orphanet:558'] == ['MONDO:0007947']
+    assert any(
+        alias.mondo_id == 'MONDO:0007947'
+        and alias.text == 'MFS'
+        and alias.type == 'synonym'
+        and alias.synonym_scope == 'exact'
+        and alias.synonym_type == 'ABBREVIATION'
+        for alias in mondo_index.search_aliases
+    )
     assert mondo_index.parent_ids_by_id['MONDO:0007947'] == ['MONDO:0700096']
     assert set(mondo_index.child_ids_by_id['MONDO:0700096']) == {
         'MONDO:0007947',
@@ -99,25 +107,15 @@ def test_search_mondo_terms_returns_near_matches(
     assert candidates[0]['matches'][0]['type'] == 'label'
 
 
-def test_search_mondo_terms_can_focus_labels_or_synonyms(
+def test_search_mondo_terms_returns_synonym_evidence(
     mondo_index: mondo.MondoIndex,
 ) -> None:
-    label_candidates = mondo.search_mondo_terms(
-        'mucoviscidosis',
-        search_labels=True,
-        search_synonyms=False,
-    )
-    synonym_candidates = mondo.search_mondo_terms(
-        'mucoviscidosis',
-        search_labels=False,
-        search_synonyms=True,
-    )
+    candidates = mondo.search_mondo_terms('mucoviscidosis')
 
-    assert label_candidates[0]['matches'][0]['type'] == 'label'
-    assert synonym_candidates[0]['mondo_id'] == 'MONDO:0009061'
-    assert synonym_candidates[0]['matches'][0]['text'] == 'mucoviscidosis'
-    assert synonym_candidates[0]['matches'][0]['type'] == 'synonym'
-    assert synonym_candidates[0]['matches'][0]['synonym_scope'] == 'exact'
+    assert candidates[0]['mondo_id'] == 'MONDO:0009061'
+    assert candidates[0]['matches'][0]['text'] == 'mucoviscidosis'
+    assert candidates[0]['matches'][0]['type'] == 'synonym'
+    assert candidates[0]['matches'][0]['synonym_scope'] == 'exact'
 
 
 def test_search_mondo_terms_groups_multiple_match_evidence(
@@ -145,14 +143,20 @@ def test_empty_search_query_returns_no_candidates(
     assert mondo.search_mondo_terms('   ') == []
 
 
-def test_get_mondo_terms_by_xref_uses_xrefs_and_exact_matches(
+def test_get_mondo_by_identifier_uses_mondo_ids_xrefs_and_exact_matches(
     mondo_index: mondo.MondoIndex,
 ) -> None:
-    assert mondo.get_mondo_terms_by_xref('GARD:0016535')[0]['mondo_id'] == (
+    assert mondo.get_mondo_by_identifier('MONDO_0007947')[0]['mondo_id'] == (
+        'MONDO:0007947'
+    )
+    assert mondo.get_mondo_by_identifier('GARD:0016535')[0]['mondo_id'] == (
+        'MONDO:0007947'
+    )
+    assert mondo.get_mondo_by_identifier('ORPHA:558')[0]['mondo_id'] == (
         'MONDO:0007947'
     )
     assert (
-        mondo.get_mondo_terms_by_xref('http://www.orpha.net/ORDO/Orphanet_558')[0][
+        mondo.get_mondo_by_identifier('http://www.orpha.net/ORDO/Orphanet_558')[0][
             'mondo_id'
         ]
         == 'MONDO:0007947'

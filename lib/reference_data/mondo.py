@@ -6,7 +6,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import requests
 from pydantic import BaseModel, Field
@@ -29,15 +29,6 @@ OBO_IRI_RE = re.compile(r'https?://purl\.obolibrary\.org/obo/([A-Za-z]+)_(.+)$')
 PUNCTUATION_RE = re.compile(r'[\W_]+')
 
 _mondo_index: 'MondoIndex | None' = None
-
-
-class MondoAliasType(StrEnum):
-    """MONDO text source used to retrieve a candidate."""
-
-    LABEL = 'label'
-    SYNONYM = 'synonym'
-    XREF = 'xref'
-    EXACT_MATCH = 'exact_match'
 
 
 class MondoSynonymScope(StrEnum):
@@ -91,7 +82,7 @@ class MondoMatchEvidence(BaseModel):
 
     text: str
     normalized_text: str
-    type: MondoAliasType
+    type: Literal['label', 'synonym']
     score: float
     synonym_scope: MondoSynonymScope | None = None
     synonym_type: str | None = None
@@ -139,11 +130,11 @@ class MondoRecord:
 
 
 @dataclass(frozen=True)
-class MondoAlias:
+class MondoSearchAlias:
     mondo_id: str
     text: str
     normalized_text: str
-    type: MondoAliasType
+    type: Literal['label', 'synonym']
     synonym_scope: MondoSynonymScope | None = None
     synonym_type: str | None = None
 
@@ -151,9 +142,8 @@ class MondoAlias:
 @dataclass
 class MondoIndex:
     terms_by_id: dict[str, MondoRecord]
-    xref_to_ids: dict[str, list[str]] = field(default_factory=dict)
-    fuzzy_choices: list[str] = field(default_factory=list)
-    fuzzy_choice_to_aliases: dict[str, list[MondoAlias]] = field(default_factory=dict)
+    identifier_to_ids: dict[str, list[str]] = field(default_factory=dict)
+    search_aliases: list[MondoSearchAlias] = field(default_factory=list)
     parent_ids_by_id: dict[str, list[str]] = field(default_factory=dict)
     child_ids_by_id: dict[str, list[str]] = field(default_factory=dict)
 
@@ -242,33 +232,32 @@ def build_mondo_index(path: Path) -> MondoIndex:
         )
         terms_by_id[mondo_id] = record
 
+    # Build exact identifier lookup and fuzzy label/synonym search aliases.
     for record in terms_by_id.values():
-        add_fuzzy_alias(
+        add_search_alias(
             index,
-            MondoAlias(
-                mondo_id=record.mondo_id,
-                text=record.label,
-                normalized_text=normalize_for_search(record.label),
-                type=MondoAliasType.LABEL,
-            ),
+            mondo_id=record.mondo_id,
+            text=record.label,
+            alias_type='label',
         )
-        for synonym in record.synonyms:
-            add_fuzzy_alias(
-                index,
-                MondoAlias(
-                    mondo_id=record.mondo_id,
-                    text=synonym.text,
-                    normalized_text=normalize_for_search(synonym.text),
-                    type=MondoAliasType.SYNONYM,
-                    synonym_scope=synonym.scope,
-                    synonym_type=synonym.synonym_type,
-                ),
-            )
+        add_identifier(index, record.mondo_id, record.mondo_id)
         for xref in record.xrefs:
             add_identifier(index, xref, record.mondo_id)
         for exact_match in record.exact_matches:
             add_identifier(index, exact_match, record.mondo_id)
+        for synonym in record.synonyms:
+            add_search_alias(
+                index,
+                mondo_id=record.mondo_id,
+                text=synonym.text,
+                alias_type='synonym',
+                synonym_scope=synonym.scope,
+                synonym_type=synonym.synonym_type,
+            )
+            for xref in synonym.xrefs:
+                add_identifier(index, xref, record.mondo_id)
 
+    # Build one-hop is_a relation maps for parent/child exploration tools.
     for edge in graph.get('edges') or []:
         if edge.get('pred') != 'is_a':
             continue
@@ -297,19 +286,12 @@ def get_mondo_term(
     return term_payload(record, index=index, include_relations=include_relations)
 
 
-def search_mondo_terms(
-    query: str,
-    limit: int = 10,
-    search_labels: bool = True,
-    search_synonyms: bool = True,
-) -> list[dict[str, Any]]:
+def search_mondo_terms(query: str, limit: int = 10) -> list[dict[str, Any]]:
     """Search MONDO labels and synonyms for agent retrieval.
 
     Args:
-        query: Free-text disease query or normalized variant to search.
+        query: Free-text disease query to search.
         limit: Maximum candidates to return.
-        search_labels: Whether to search preferred labels.
-        search_synonyms: Whether to search synonyms.
 
     Returns:
         Candidate MONDO terms grouped with label/synonym match evidence.
@@ -319,61 +301,38 @@ def search_mondo_terms(
     if not normalized_query or limit <= 0:
         return []
 
-    allowed_alias_types: set[MondoAliasType] = set()
-    if search_labels:
-        allowed_alias_types.add(MondoAliasType.LABEL)
-    if search_synonyms:
-        allowed_alias_types.add(MondoAliasType.SYNONYM)
-    if not allowed_alias_types:
+    aliases = index.search_aliases
+    if not aliases:
         return []
-
-    eligible_choices = [
-        choice
-        for choice in index.fuzzy_choices
-        if any(
-            alias.type in allowed_alias_types
-            for alias in index.fuzzy_choice_to_aliases.get(choice, [])
-        )
-    ]
-    if not eligible_choices:
-        return []
+    alias_text = lambda value: (
+        value.normalized_text if isinstance(value, MondoSearchAlias) else str(value)
+    )
 
     matches = process.extract(
         normalized_query,
-        eligible_choices,
+        aliases,
+        processor=alias_text,
         scorer=fuzz.WRatio,
         limit=max(limit * 20, 50),
     )
     candidates_by_id: dict[str, MondoCandidate] = {}
     candidate_order: list[str] = []
-    for choice, score, _ in matches:
-        for alias in index.fuzzy_choice_to_aliases.get(choice, []):
-            if alias.type not in allowed_alias_types:
-                continue
-            record = index.terms_by_id[alias.mondo_id]
-            candidate = candidates_by_id.get(record.mondo_id)
-            if candidate is None:
-                candidate = MondoCandidate(
-                    mondo_id=record.mondo_id,
-                    label=record.label,
-                    definition=record.definition,
-                    score=float(score),
-                )
-                candidates_by_id[record.mondo_id] = candidate
-                candidate_order.append(record.mondo_id)
-            else:
-                candidate.score = max(candidate.score, float(score))
-
-            evidence = MondoMatchEvidence(
-                text=alias.text,
-                normalized_text=alias.normalized_text,
-                type=alias.type,
-                synonym_scope=alias.synonym_scope,
-                synonym_type=alias.synonym_type,
+    for alias, score, _ in matches:
+        record = index.terms_by_id[alias.mondo_id]
+        candidate = candidates_by_id.get(record.mondo_id)
+        if candidate is None:
+            candidate = MondoCandidate(
+                mondo_id=record.mondo_id,
+                label=record.label,
+                definition=record.definition,
                 score=float(score),
             )
-            if not has_match_evidence(candidate.matches, evidence):
-                candidate.matches.append(evidence)
+            candidates_by_id[record.mondo_id] = candidate
+            candidate_order.append(record.mondo_id)
+        else:
+            candidate.score = max(candidate.score, float(score))
+
+        candidate.matches.append(match_evidence(alias, score))
 
     candidates = list(candidates_by_id.values())
     order_by_id = {mondo_id: order for order, mondo_id in enumerate(candidate_order)}
@@ -383,30 +342,59 @@ def search_mondo_terms(
     return [candidate.model_dump(mode='json') for candidate in candidates[:limit]]
 
 
-def has_match_evidence(
-    matches: list[MondoMatchEvidence],
-    evidence: MondoMatchEvidence,
-) -> bool:
-    """Return whether equivalent match evidence is already present."""
-    return any(
-        match.text == evidence.text
-        and match.normalized_text == evidence.normalized_text
-        and match.type == evidence.type
-        and match.synonym_scope == evidence.synonym_scope
-        and match.synonym_type == evidence.synonym_type
-        for match in matches
+def add_search_alias(
+    index: MondoIndex,
+    *,
+    mondo_id: str,
+    text: str,
+    alias_type: Literal['label', 'synonym'],
+    synonym_scope: MondoSynonymScope | None = None,
+    synonym_type: str | None = None,
+) -> None:
+    """Add an alias to the search mapping if it has searchable text."""
+    normalized_text = normalize_for_search(text)
+    if not normalized_text:
+        return
+    index.search_aliases.append(
+        MondoSearchAlias(
+            mondo_id=mondo_id,
+            text=text,
+            normalized_text=normalized_text,
+            type=alias_type,
+            synonym_scope=synonym_scope,
+            synonym_type=synonym_type,
+        )
     )
 
 
-def get_mondo_terms_by_xref(identifier: str) -> list[dict[str, Any]]:
-    """Fetch MONDO terms that reference an external identifier."""
+def match_evidence(alias: MondoSearchAlias, score: float) -> MondoMatchEvidence:
+    """Build one search match evidence row from an alias."""
+    if alias.type == 'synonym':
+        return MondoMatchEvidence(
+            text=alias.text,
+            normalized_text=alias.normalized_text,
+            type='synonym',
+            synonym_scope=alias.synonym_scope,
+            synonym_type=alias.synonym_type,
+            score=float(score),
+        )
+    return MondoMatchEvidence(
+        text=alias.text,
+        normalized_text=alias.normalized_text,
+        type='label',
+        score=float(score),
+    )
+
+
+def get_mondo_by_identifier(identifier: str) -> list[dict[str, Any]]:
+    """Fetch MONDO terms by MONDO ID, OBO IRI, xref, or exactMatch identifier."""
     index = get_mondo_index()
     key = normalize_identifier_key(identifier)
     if not key:
         return []
     return [
         term_payload(index.terms_by_id[mondo_id], index=index)
-        for mondo_id in index.xref_to_ids.get(key, [])
+        for mondo_id in index.identifier_to_ids.get(key, [])
         if mondo_id in index.terms_by_id
     ]
 
@@ -542,22 +530,11 @@ def extract_exact_matches(values: list[Any]) -> list[str]:
 
 
 def add_identifier(index: MondoIndex, identifier: str, mondo_id: str) -> None:
-    """Add an external identifier to the xref lookup table."""
+    """Add a MONDO or external identifier to the identifier lookup table."""
     key = normalize_identifier_key(identifier)
     if not key:
         return
-    append_unique(index.xref_to_ids.setdefault(key, []), mondo_id)
-
-
-def add_fuzzy_alias(index: MondoIndex, alias: MondoAlias) -> None:
-    """Add a label or synonym alias to the MONDO fuzzy search lookup."""
-    if not alias.normalized_text:
-        return
-    if alias.normalized_text not in index.fuzzy_choice_to_aliases:
-        index.fuzzy_choices.append(alias.normalized_text)
-        index.fuzzy_choice_to_aliases[alias.normalized_text] = []
-    if alias not in index.fuzzy_choice_to_aliases[alias.normalized_text]:
-        index.fuzzy_choice_to_aliases[alias.normalized_text].append(alias)
+    append_unique(index.identifier_to_ids.setdefault(key, []), mondo_id)
 
 
 def synonym_scope_from_predicate(value: Any) -> MondoSynonymScope:
@@ -603,6 +580,10 @@ def normalize_identifier_key(identifier: str) -> str:
     if not value:
         return ''
 
+    mondo_id = normalize_mondo_curie(value)
+    if mondo_id is not None:
+        return mondo_id.lower()
+
     for regex, prefix in (
         (ORPHANET_IRI_RE, 'orphanet'),
         (OMIM_IRI_RE, 'omim'),
@@ -614,10 +595,15 @@ def normalize_identifier_key(identifier: str) -> str:
             continue
         if prefix is not None:
             return f'{prefix}:{match.group(1).lower()}'
-        return f'{match.group(1).lower()}:{match.group(2).lower()}'
+        prefix_part = match.group(1).lower()
+        if prefix_part == 'orpha':
+            prefix_part = 'orphanet'
+        return f'{prefix_part}:{match.group(2).lower()}'
 
     if ':' in value:
         prefix_part, suffix = value.split(':', 1)
+        if prefix_part.lower() == 'orpha':
+            prefix_part = 'orphanet'
         return f'{prefix_part.lower()}:{suffix.lower()}'
     return value.lower()
 

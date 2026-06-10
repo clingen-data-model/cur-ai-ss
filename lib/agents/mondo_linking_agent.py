@@ -39,22 +39,15 @@ def get_mondo_term(mondo_id: str, include_relations: bool = True) -> dict:
 def search_mondo_terms(
     query: str,
     limit: int = 10,
-    search_labels: bool = True,
-    search_synonyms: bool = True,
 ) -> list[dict]:
     """Search MONDO labels and synonyms for candidate terms."""
-    return mondo.search_mondo_terms(
-        query,
-        limit=limit,
-        search_labels=search_labels,
-        search_synonyms=search_synonyms,
-    )
+    return mondo.search_mondo_terms(query, limit=limit)
 
 
 @function_tool
-def get_mondo_by_xref(identifier: str) -> list[dict]:
-    """Fetch MONDO terms by external identifier such as OMIM or Orphanet."""
-    return mondo.get_mondo_terms_by_xref(identifier)
+def get_mondo_by_identifier(identifier: str) -> list[dict]:
+    """Fetch MONDO terms by MONDO ID, OBO IRI, OMIM, Orphanet, or other xref."""
+    return mondo.get_mondo_by_identifier(identifier)
 
 
 @function_tool
@@ -78,16 +71,12 @@ paper-scoped disease text or patient-variant occurrence-scoped disease text.
 
 Rules:
 - Never invent a MONDO ID.
-- If the disease text includes a MONDO ID, call get_mondo_term() directly for
-  that ID before doing anything else.
-- If the disease text or context includes an external identifier such as OMIM,
-  Orphanet, GARD, MedGen, MeSH, DOID, ICD, or UMLS, call get_mondo_by_xref().
-  If an xref lookup misses, retry alternate namespace formats for the same
-  identifier, (e.g. Orphanet:123, ORPHA:123).
+- If the disease text or context includes any identifier such as a MONDO ID,
+  MONDO OBO IRI, OMIM, Orphanet, GARD, MedGen, MeSH, DOID, ICD, or UMLS, call
+  get_mondo_by_identifier(). If an identifier lookup misses, retry alternate
+  namespace formats for the same identifier, (e.g. Orphanet:123, ORPHA:123).
 - For free text, call search_mondo_terms() with useful disease substrings,
-  abbreviations, and clinically equivalent wording. Use label-only search when
-  you need stronger direct label evidence, and synonym-only search when you are
-  investigating alternate names or abbreviations.
+  abbreviations, and clinically equivalent wording.
 - Search results are candidate terms with match evidence rows. Label matches are
   stronger direct evidence than synonym-only matches. Exact synonym matches can
   support a choice after inspecting the term. Related synonym matches are leads,
@@ -119,7 +108,7 @@ agent = Agent(
     tools=[
         get_mondo_term,
         search_mondo_terms,
-        get_mondo_by_xref,
+        get_mondo_by_identifier,
         get_mondo_parents,
         get_mondo_children,
     ],
