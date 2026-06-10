@@ -1,4 +1,5 @@
 import mimetypes
+from typing import Any
 
 import requests
 import streamlit as st
@@ -19,10 +20,38 @@ from lib.models import (
     PedigreeResp,
     PhenotypeResp,
     TaskResp,
+    UserResp,
     VariantResp,
     VariantUpdateRequest,
 )
 from lib.tasks import TaskCreateRequest, TaskType
+
+# Session-state key holding the current user's JWT access token. Written by
+# lib/ui/auth.py after login; read here to authenticate every API request.
+AUTH_TOKEN_KEY = 'auth_token'
+
+
+class _AuthSession(requests.Session):
+    """A requests Session that attaches the logged-in user's bearer token.
+
+    The token is read from st.session_state on *every* request rather than
+    stored on the session object: Streamlit serves all browser sessions from a
+    single process, so a token cached on a shared object would leak between
+    users. st.session_state is per-session, so reading it per-call is safe.
+    """
+
+    def request(  # type: ignore[override]
+        self, method: str | bytes, url: str | bytes, **kwargs: Any
+    ) -> requests.Response:
+        token = st.session_state.get(AUTH_TOKEN_KEY)
+        if token:
+            headers = dict(kwargs.pop('headers', None) or {})
+            headers['Authorization'] = f'Bearer {token}'
+            kwargs['headers'] = headers
+        return super().request(method, url, **kwargs)
+
+
+_session = _AuthSession()
 
 
 def get_http_error_detail(e: requests.HTTPError) -> str:
@@ -36,14 +65,40 @@ def get_http_error_detail(e: requests.HTTPError) -> str:
     return str(e)
 
 
+def register(email: str, password: str, first_name: str, last_name: str) -> UserResp:
+    resp = _session.post(
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/auth/register',
+        json={
+            'email': email,
+            'password': password,
+            'first_name': first_name,
+            'last_name': last_name,
+        },
+    )
+    resp.raise_for_status()
+    return UserResp.model_validate(resp.json())
+
+
+def change_password(current_password: str, new_password: str) -> UserResp:
+    resp = _session.post(
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/auth/change-password',
+        json={
+            'current_password': current_password,
+            'new_password': new_password,
+        },
+    )
+    resp.raise_for_status()
+    return UserResp.model_validate(resp.json())
+
+
 def get_papers() -> list[PaperResp]:
-    resp = requests.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers')
+    resp = _session.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers')
     resp.raise_for_status()
     return TypeAdapter(list[PaperResp]).validate_python(resp.json())
 
 
 def search_genes(prefix: str, limit: int = 10) -> list[GeneResp]:
-    resp = requests.get(
+    resp = _session.get(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/genes/search',
         params={'prefix': prefix, 'limit': str(limit)},
     )
@@ -52,7 +107,7 @@ def search_genes(prefix: str, limit: int = 10) -> list[GeneResp]:
 
 
 def get_paper(paper_id: int) -> PaperResp:
-    resp = requests.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}')
+    resp = _session.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}')
     resp.raise_for_status()
     return PaperResp.model_validate(resp.json())
 
@@ -79,7 +134,7 @@ def put_paper(
             supplement_mime,
         )
 
-    resp = requests.put(
+    resp = _session.put(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers',
         data={'gene_symbol': gene_symbol},
         files=files,
@@ -90,7 +145,7 @@ def put_paper(
 
 
 def update_paper(paper_id: int, update_request: PaperUpdateRequest) -> PaperResp:
-    resp = requests.patch(
+    resp = _session.patch(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}',
         json=update_request.model_dump(mode='json', exclude_unset=True),
     )
@@ -99,7 +154,7 @@ def update_paper(paper_id: int, update_request: PaperUpdateRequest) -> PaperResp
 
 
 def delete_paper(paper_id: int) -> None:
-    resp = requests.delete(
+    resp = _session.delete(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}',
     )
     resp.raise_for_status()
@@ -114,7 +169,7 @@ def highlight_pdf(
 ) -> None:
     if isinstance(queries, str):
         queries = [queries]
-    resp = requests.post(
+    resp = _session.post(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/highlight',
         json={
             'queries': queries,
@@ -133,7 +188,7 @@ def grobid_annotations(
     table_ids: list[int],
     color: str,
 ) -> list[GrobidAnnotation]:
-    resp = requests.post(
+    resp = _session.post(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/grobid-annotation',
         json={
             'queries': queries,
@@ -147,19 +202,19 @@ def grobid_annotations(
 
 
 def get_patients(paper_id: int) -> list[PatientResp]:
-    resp = requests.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/patients')
+    resp = _session.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/patients')
     resp.raise_for_status()
     return TypeAdapter(list[PatientResp]).validate_python(resp.json())
 
 
 def get_families(paper_id: int) -> list[FamilyResp]:
-    resp = requests.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/families')
+    resp = _session.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/families')
     resp.raise_for_status()
     return TypeAdapter(list[FamilyResp]).validate_python(resp.json())
 
 
 def get_pedigree(paper_id: int) -> PedigreeResp | None:
-    resp = requests.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/pedigree')
+    resp = _session.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/pedigree')
     resp.raise_for_status()
     data = resp.json()
     return PedigreeResp.model_validate(data) if data else None
@@ -168,7 +223,7 @@ def get_pedigree(paper_id: int) -> PedigreeResp | None:
 def update_patient(
     paper_id: int, patient_id: int, update_request: PatientUpdateRequest
 ) -> PatientResp:
-    resp = requests.patch(
+    resp = _session.patch(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/patients/{patient_id}',
         json=update_request.model_dump(mode='json', exclude_unset=True),
     )
@@ -177,7 +232,7 @@ def update_patient(
 
 
 def get_variants(paper_id: int) -> list[VariantResp]:
-    resp = requests.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/variants')
+    resp = _session.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/variants')
     resp.raise_for_status()
     return TypeAdapter(list[VariantResp]).validate_python(resp.json())
 
@@ -185,7 +240,7 @@ def get_variants(paper_id: int) -> list[VariantResp]:
 def update_variant(
     paper_id: int, variant_id: int, update_request: VariantUpdateRequest
 ) -> VariantResp:
-    resp = requests.patch(
+    resp = _session.patch(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/variants/{variant_id}',
         json=update_request.model_dump(mode='json', exclude_unset=True),
     )
@@ -194,7 +249,7 @@ def update_variant(
 
 
 def clear_highlights(paper_id: int) -> None:
-    resp = requests.post(
+    resp = _session.post(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/clear-highlights',
     )
     resp.raise_for_status()
@@ -204,7 +259,7 @@ def get_occurrences(
     paper_id: int,
 ) -> list[PatientVariantOccurrenceResp]:
     """Get all patient-variant occurrences for a paper."""
-    resp = requests.get(
+    resp = _session.get(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/occurrences'
     )
     resp.raise_for_status()
@@ -215,7 +270,7 @@ def get_variant_occurrences(
     paper_id: int, variant_id: int
 ) -> list[PatientVariantOccurrenceResp]:
     """Get all patient occurrences of a specific variant."""
-    resp = requests.get(
+    resp = _session.get(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/variants/{variant_id}/occurrences'
     )
     resp.raise_for_status()
@@ -226,7 +281,7 @@ def get_patient_occurrences(
     paper_id: int, patient_id: int
 ) -> list[PatientVariantOccurrenceResp]:
     """Get all variant occurrences for a specific patient."""
-    resp = requests.get(
+    resp = _session.get(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/patients/{patient_id}/occurrences'
     )
     resp.raise_for_status()
@@ -242,7 +297,7 @@ def get_patient_variant_occurrences(
 
 
 def get_phenotypes(paper_id: int, patient_id: int) -> list[PhenotypeResp]:
-    resp = requests.get(
+    resp = _session.get(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/patients/{patient_id}/phenotypes'
     )
     resp.raise_for_status()
@@ -252,7 +307,7 @@ def get_phenotypes(paper_id: int, patient_id: int) -> list[PhenotypeResp]:
 def get_segregation_analysis(paper_id: int) -> list:
     from lib.models.segregation_analysis import SegregationAnalysisResp
 
-    resp = requests.get(
+    resp = _session.get(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/segregation-analysis'
     )
     resp.raise_for_status()
@@ -260,7 +315,7 @@ def get_segregation_analysis(paper_id: int) -> list:
 
 
 def get_paper_tasks(paper_id: int) -> list[TaskResp]:
-    resp = requests.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/tasks')
+    resp = _session.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/tasks')
     resp.raise_for_status()
     return TypeAdapter(list[TaskResp]).validate_python(resp.json())
 
@@ -274,7 +329,7 @@ def enqueue_paper_task(
     skip_successors: bool = False,
     additional_context: str | None = None,
 ) -> list[TaskResp]:
-    resp = requests.post(
+    resp = _session.post(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/tasks',
         json=TaskCreateRequest(
             type=task_type,
@@ -290,7 +345,7 @@ def enqueue_paper_task(
 
 
 def get_curation_pptx(paper_id: int) -> bytes:
-    resp = requests.get(
+    resp = _session.get(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/curation-export'
     )
     resp.raise_for_status()
@@ -298,7 +353,7 @@ def get_curation_pptx(paper_id: int) -> bytes:
 
 
 def get_chat_messages(paper_id: int) -> list[dict[str, str]]:
-    resp = requests.get(
+    resp = _session.get(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/chat/messages'
     )
     resp.raise_for_status()
@@ -307,7 +362,7 @@ def get_chat_messages(paper_id: int) -> list[dict[str, str]]:
 
 def init_chat_message(paper_id: int, message: str) -> list[dict[str, str]]:
     """Initialize chat message (fast, returns immediately with routing result)."""
-    resp = requests.post(
+    resp = _session.post(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/chat/init',
         json={'message': message},
     )
@@ -320,7 +375,7 @@ def generate_chat_response(
 ) -> list[dict[str, str]]:
     """Generate OpenAI response for the initialized conversation."""
     payload = {'message': message} if message else {}
-    resp = requests.post(
+    resp = _session.post(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/chat/generate',
         json=payload,
     )
@@ -329,7 +384,7 @@ def generate_chat_response(
 
 
 def clear_chat(paper_id: int) -> None:
-    resp = requests.delete(
+    resp = _session.delete(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/chat',
     )
     resp.raise_for_status()

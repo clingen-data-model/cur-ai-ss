@@ -20,7 +20,6 @@ from lib.ui.api import (
     update_paper,
 )
 
-st.set_page_config(page_title='Papers Dashboard', layout='wide')
 left, center, right = st.columns([2, 7, 2])
 
 CURATIONS_DF_KEY = 'CURATIONS_DF_KEY'

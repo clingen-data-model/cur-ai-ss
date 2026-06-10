@@ -85,6 +85,7 @@ from lib.models import (
     AgentRunDB,
     AnnotatedVariantDB,
     AnnotatedVariantResp,
+    ChangePasswordRequest,
     ChatMessageRequest,
     ChatMessageResp,
     ChatRoutingResponse,
@@ -243,6 +244,20 @@ def login(request: LoginRequest, session: Session = Depends(get_session)) -> Any
 
 @app.get('/auth/me', response_model=UserResp, tags=['auth'])
 def get_me(current_user: UserDB = Depends(get_current_user)) -> Any:
+    return current_user
+
+
+@app.post('/auth/change-password', response_model=UserResp, tags=['auth'])
+def change_password(
+    request: ChangePasswordRequest,
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    if not verify_password(request.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail='Current password is incorrect',
+        )
+    current_user.hashed_password = hash_password(request.new_password)
     return current_user
 
 

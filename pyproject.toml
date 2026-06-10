@@ -35,6 +35,7 @@ dependencies = [
     # Streamlit components
     "streamlit-pdf-viewer>=0.0.27",
     "streamlit-searchbox>=0.1.24",
+    "streamlit-authenticator>=0.4.2",
     # Office document generation
     "python-pptx>=0.6.23",
 ]

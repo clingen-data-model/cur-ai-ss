@@ -67,6 +67,7 @@ from lib.models.segregation_analysis import (
     SequencingMethodology,
 )
 from lib.models.user import (
+    ChangePasswordRequest,
     LoginRequest,
     TokenResp,
     UserCreateRequest,

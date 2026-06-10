@@ -26,68 +26,6 @@ from lib.tasks.models import TaskStatus, TaskType
 
 
 @pytest.fixture
-def unauth_client(db_session):
-    """TestClient with the real auth dependency (no current-user override).
-
-    Use this for exercising the register/login/me flow and 401 behavior.
-    """
-
-    def override_get_session():
-        yield db_session
-
-    @asynccontextmanager
-    async def _noop_lifespan(app):
-        yield
-
-    # This overrides the app lifespan so it doesn't try to run migrations.
-    # DB initialization for tests should be handled by the `db_session` fixture.
-    original_lifespan = app.router.lifespan_context
-    app.router.lifespan_context = _noop_lifespan
-    app.dependency_overrides[get_session] = override_get_session
-    with TestClient(app) as client:
-        yield client
-    app.dependency_overrides.clear()
-    app.router.lifespan_context = original_lifespan
-
-
-@pytest.fixture
-def test_user(db_session):
-    """A persisted user used as the authenticated editor in `client`."""
-    user = UserDB(
-        email='tester@example.com',
-        hashed_password='not-a-real-hash',
-        first_name='Test',
-        last_name='User',
-    )
-    db_session.add(user)
-    db_session.flush()
-    return user
-
-
-@pytest.fixture
-def client(db_session, test_user):
-    def override_get_session():
-        yield db_session
-
-    @asynccontextmanager
-    async def _noop_lifespan(app):
-        yield
-
-    # This overrides the app lifespan so it doesn't try to run migrations.
-    # DB initialization for tests should be handled by the `db_session` fixture.
-    original_lifespan = app.router.lifespan_context
-    app.router.lifespan_context = _noop_lifespan
-    app.dependency_overrides[get_session] = override_get_session
-    # Authenticated endpoints resolve to a fixed test user so existing tests do
-    # not need to manage tokens; updated_by_user_id is recorded as this user.
-    app.dependency_overrides[get_current_user] = lambda: test_user
-    with TestClient(app) as client:
-        yield client
-    app.dependency_overrides.clear()
-    app.router.lifespan_context = original_lifespan
-
-
-@pytest.fixture
 def test_pdf():
     # The smallest valid pdf https://pdfa.org/the-smallest-possible-valid-pdf/
     yield io.BytesIO(b"""
@@ -1225,62 +1163,11 @@ def test_no_cache_headers_on_api_endpoints(client):
 
 
 # ---------------------------------------------------------------------------
-# Authentication
+# Authentication on domain endpoints
+#
+# Pure auth-flow tests (register/login/me/change-password) live in test_auth.py;
+# these cover how the domain (PATCH) endpoints enforce and record the user.
 # ---------------------------------------------------------------------------
-
-_REGISTER_PAYLOAD = {
-    'email': 'newuser@example.com',
-    'password': 'supersecret',
-    'first_name': 'New',
-    'last_name': 'User',
-}
-
-
-def test_register_login_me_flow(unauth_client):
-    # Register
-    resp = unauth_client.post('/auth/register', json=_REGISTER_PAYLOAD)
-    assert resp.status_code == 201
-    body = resp.json()
-    assert body['email'] == 'newuser@example.com'
-    assert 'hashed_password' not in body  # never leak the hash
-
-    # Login
-    resp = unauth_client.post(
-        '/auth/login',
-        json={'email': 'newuser@example.com', 'password': 'supersecret'},
-    )
-    assert resp.status_code == 200
-    token = resp.json()['access_token']
-    assert token
-
-    # Authenticated /auth/me
-    resp = unauth_client.get('/auth/me', headers={'Authorization': f'Bearer {token}'})
-    assert resp.status_code == 200
-    assert resp.json()['email'] == 'newuser@example.com'
-
-
-def test_register_duplicate_email_conflicts(unauth_client):
-    first = unauth_client.post('/auth/register', json=_REGISTER_PAYLOAD)
-    assert first.status_code == 201
-    dup = unauth_client.post('/auth/register', json=_REGISTER_PAYLOAD)
-    assert dup.status_code == 409
-
-
-def test_login_wrong_password_unauthorized(unauth_client):
-    unauth_client.post('/auth/register', json=_REGISTER_PAYLOAD)
-    resp = unauth_client.post(
-        '/auth/login',
-        json={'email': 'newuser@example.com', 'password': 'wrong-password'},
-    )
-    assert resp.status_code == 401
-
-
-def test_me_requires_authentication(unauth_client):
-    assert unauth_client.get('/auth/me').status_code == 401
-    bad = unauth_client.get(
-        '/auth/me', headers={'Authorization': 'Bearer not-a-real-token'}
-    )
-    assert bad.status_code == 401
 
 
 def test_patch_requires_authentication(unauth_client, seeded_paper):
