@@ -66,6 +66,13 @@ from lib.models.segregation_analysis import (
     SegregationEvidenceUpdateRequest,
     SequencingMethodology,
 )
+from lib.models.user import (
+    LoginRequest,
+    TokenResp,
+    UserCreateRequest,
+    UserDB,
+    UserResp,
+)
 from lib.models.variant import (
     AnnotatedVariant,
     AnnotatedVariantDB,

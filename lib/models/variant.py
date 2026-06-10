@@ -25,6 +25,7 @@ from lib.models.paper import PaperDB
 if TYPE_CHECKING:
     from lib.models.agent_run import AgentRunDB
     from lib.models.patient_variant_occurrences import PatientVariantOccurrenceDB
+    from lib.models.user import UserDB
 
 
 def get_variant_description(
@@ -154,6 +155,7 @@ class VariantResp(BaseModel):
     functional_evidence: bool
     main_focus: bool
     updated_at: datetime
+    updated_by_user_id: int | None = None
     # Evidence blocks (from DB JSON columns)
     transcript_evidence: EvidenceBlock[Optional[str]]
     protein_accession_evidence: EvidenceBlock[Optional[str]]
@@ -309,9 +311,16 @@ class VariantDB(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    updated_by_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey('users.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
 
     paper: Mapped[PaperDB] = relationship('PaperDB', back_populates='variants')
     agent_run: Mapped['AgentRunDB'] = relationship('AgentRunDB')
+    updated_by: Mapped['UserDB | None'] = relationship('UserDB')
     harmonized_variant: Mapped['HarmonizedVariantDB | None'] = relationship(
         'HarmonizedVariantDB',
         back_populates='variant',
@@ -358,10 +367,17 @@ class HarmonizedVariantDB(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    updated_by_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey('users.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
 
     variant: Mapped['VariantDB'] = relationship(
         'VariantDB', back_populates='harmonized_variant', foreign_keys=[variant_id]
     )
+    updated_by: Mapped['UserDB | None'] = relationship('UserDB')
 
     __table_args__ = (
         UniqueConstraint('variant_id', name='uq_harmonized_variants_variant_id'),

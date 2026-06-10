@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select, update
 
 from lib.api.app import app
+from lib.api.auth import get_current_user
 from lib.api.db import get_session, session_scope
 from lib.models import (
     AgentRunDB,
@@ -18,13 +19,19 @@ from lib.models import (
     PatientDB,
     PhenotypeDB,
     TaskDB,
+    UserDB,
     VariantDB,
 )
 from lib.tasks.models import TaskStatus, TaskType
 
 
 @pytest.fixture
-def client(db_session):
+def unauth_client(db_session):
+    """TestClient with the real auth dependency (no current-user override).
+
+    Use this for exercising the register/login/me flow and 401 behavior.
+    """
+
     def override_get_session():
         yield db_session
 
@@ -37,6 +44,43 @@ def client(db_session):
     original_lifespan = app.router.lifespan_context
     app.router.lifespan_context = _noop_lifespan
     app.dependency_overrides[get_session] = override_get_session
+    with TestClient(app) as client:
+        yield client
+    app.dependency_overrides.clear()
+    app.router.lifespan_context = original_lifespan
+
+
+@pytest.fixture
+def test_user(db_session):
+    """A persisted user used as the authenticated editor in `client`."""
+    user = UserDB(
+        email='tester@example.com',
+        hashed_password='not-a-real-hash',
+        first_name='Test',
+        last_name='User',
+    )
+    db_session.add(user)
+    db_session.flush()
+    return user
+
+
+@pytest.fixture
+def client(db_session, test_user):
+    def override_get_session():
+        yield db_session
+
+    @asynccontextmanager
+    async def _noop_lifespan(app):
+        yield
+
+    # This overrides the app lifespan so it doesn't try to run migrations.
+    # DB initialization for tests should be handled by the `db_session` fixture.
+    original_lifespan = app.router.lifespan_context
+    app.router.lifespan_context = _noop_lifespan
+    app.dependency_overrides[get_session] = override_get_session
+    # Authenticated endpoints resolve to a fixed test user so existing tests do
+    # not need to manage tokens; updated_by_user_id is recorded as this user.
+    app.dependency_overrides[get_current_user] = lambda: test_user
     with TestClient(app) as client:
         yield client
     app.dependency_overrides.clear()
@@ -1178,3 +1222,92 @@ def test_no_cache_headers_on_api_endpoints(client):
     # Should not have the static file cache header
     cache_control = response.headers.get('Cache-Control')
     assert cache_control != 'public, max-age=86400'
+
+
+# ---------------------------------------------------------------------------
+# Authentication
+# ---------------------------------------------------------------------------
+
+_REGISTER_PAYLOAD = {
+    'email': 'newuser@example.com',
+    'password': 'supersecret',
+    'first_name': 'New',
+    'last_name': 'User',
+}
+
+
+def test_register_login_me_flow(unauth_client):
+    # Register
+    resp = unauth_client.post('/auth/register', json=_REGISTER_PAYLOAD)
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body['email'] == 'newuser@example.com'
+    assert 'hashed_password' not in body  # never leak the hash
+
+    # Login
+    resp = unauth_client.post(
+        '/auth/login',
+        json={'email': 'newuser@example.com', 'password': 'supersecret'},
+    )
+    assert resp.status_code == 200
+    token = resp.json()['access_token']
+    assert token
+
+    # Authenticated /auth/me
+    resp = unauth_client.get('/auth/me', headers={'Authorization': f'Bearer {token}'})
+    assert resp.status_code == 200
+    assert resp.json()['email'] == 'newuser@example.com'
+
+
+def test_register_duplicate_email_conflicts(unauth_client):
+    first = unauth_client.post('/auth/register', json=_REGISTER_PAYLOAD)
+    assert first.status_code == 201
+    dup = unauth_client.post('/auth/register', json=_REGISTER_PAYLOAD)
+    assert dup.status_code == 409
+
+
+def test_login_wrong_password_unauthorized(unauth_client):
+    unauth_client.post('/auth/register', json=_REGISTER_PAYLOAD)
+    resp = unauth_client.post(
+        '/auth/login',
+        json={'email': 'newuser@example.com', 'password': 'wrong-password'},
+    )
+    assert resp.status_code == 401
+
+
+def test_me_requires_authentication(unauth_client):
+    assert unauth_client.get('/auth/me').status_code == 401
+    bad = unauth_client.get(
+        '/auth/me', headers={'Authorization': 'Bearer not-a-real-token'}
+    )
+    assert bad.status_code == 401
+
+
+def test_patch_requires_authentication(unauth_client, seeded_paper):
+    # No current-user override here: the PATCH endpoint must reject anonymous edits.
+    resp = unauth_client.patch(
+        f'/papers/{seeded_paper.id}', json={'title': 'New Title'}
+    )
+    assert resp.status_code == 401
+
+
+def test_patch_patient_records_updated_by(
+    client, db_session, seeded_paper, seeded_agent_run, test_user
+):
+    family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
+    patient = PatientDB(
+        paper_id=seeded_paper.id,
+        family_id=family.id,
+        agent_run_id=seeded_agent_run.id,
+        identifier='P1',
+        **_patient_required_fields('P1'),
+    )
+    db_session.add(patient)
+    db_session.flush()
+
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/patients/{patient.id}',
+        json={'identifier': 'P1-edited'},
+    )
+    assert resp.status_code == 200
+    assert resp.json()['updated_by_user_id'] == test_user.id

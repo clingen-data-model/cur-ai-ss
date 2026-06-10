@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from lib.models.family import FamilyDB
     from lib.models.patient_variant_occurrences import PatientVariantOccurrenceDB
     from lib.models.phenotype import PhenotypeDB
+    from lib.models.user import UserDB
 
 
 class ProbandStatus(str, Enum):
@@ -446,6 +447,12 @@ class PatientDB(Base):
         nullable=False,
         index=True,
     )
+    updated_by_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey('users.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
 
     # Extracted values (updateable, strongly typed)
     identifier: Mapped[str] = mapped_column(String, nullable=False)
@@ -499,6 +506,7 @@ class PatientDB(Base):
     paper: Mapped[PaperDB] = relationship('PaperDB', back_populates='patients')
     family: Mapped['FamilyDB'] = relationship('FamilyDB', back_populates='patients')
     agent_run: Mapped['AgentRunDB'] = relationship('AgentRunDB')
+    updated_by: Mapped['UserDB | None'] = relationship('UserDB')
     phenotypes: Mapped[list['PhenotypeDB']] = relationship(
         'PhenotypeDB', back_populates='patient', cascade='all, delete-orphan'
     )
@@ -535,6 +543,7 @@ class PatientResp(BaseModel):
     relationship_to_proband: RelationshipToProband | None
     twin_type: TwinType | None
     updated_at: datetime
+    updated_by_user_id: int | None = None
     # Evidence blocks (from DB JSON columns)
     identifier_evidence: HumanEvidenceBlock[str]
     proband_status_evidence: HumanEvidenceBlock[ProbandStatus]

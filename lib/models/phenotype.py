@@ -21,6 +21,7 @@ from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 if TYPE_CHECKING:
     from lib.models.paper import PaperDB
     from lib.models.patient import PatientDB
+    from lib.models.user import UserDB
 
 
 class ExtractedPhenotype(BaseModel):
@@ -79,8 +80,15 @@ class PhenotypeDB(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    updated_by_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey('users.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
 
     paper: Mapped['PaperDB'] = relationship('PaperDB', overlaps='phenotypes')
+    updated_by: Mapped['UserDB | None'] = relationship('UserDB')
     patient: Mapped['PatientDB'] = relationship(
         'PatientDB', back_populates='phenotypes', overlaps='paper'
     )
@@ -142,6 +150,7 @@ class PhenotypeResp(BaseModel):
     severity: str | None
     modifier: str | None
     updated_at: datetime
+    updated_by_user_id: int | None = None
     # Evidence block (from DB JSON column)
     concept_evidence: EvidenceBlock[str]
     # HPO link (always present with ReasoningBlock, value may be None if not yet linked or excluded)

@@ -19,6 +19,7 @@ if TYPE_CHECKING:
         PatientVariantOccurrenceDB,
     )
     from lib.models.phenotype import PhenotypeDB
+    from lib.models.user import UserDB
     from lib.models.variant import VariantDB
     from lib.tasks.models import TaskDB
 
@@ -146,6 +147,13 @@ class PaperDB(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    updated_by_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey('users.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
+    updated_by: Mapped['UserDB | None'] = relationship('UserDB')
 
     # Paper extraction metadata (populated asynchronously by extraction agent)
     title: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -288,6 +296,7 @@ class PaperResp(PaperExtractionOutput):
     disease_inheritance_mode: Inheritance | None = None
     disease_inheritance_mode_evidence: EvidenceBlock[Inheritance] | None = None
     updated_at: datetime
+    updated_by_user_id: int | None = None
     tasks: list['TaskResp'] = []
     patient_count: int = 0
     variant_count: int = 0

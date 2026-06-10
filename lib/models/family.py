@@ -19,6 +19,7 @@ if TYPE_CHECKING:
         SegregationAnalysisComputedDB,
         SegregationEvidenceDB,
     )
+    from lib.models.user import UserDB
 
 
 class Family(BaseModel):
@@ -46,8 +47,15 @@ class FamilyDB(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    updated_by_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey('users.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
 
     paper: Mapped[PaperDB] = relationship('PaperDB', back_populates='families')
+    updated_by: Mapped['UserDB | None'] = relationship('UserDB')
     patients: Mapped[list[PatientDB]] = relationship(
         'PatientDB', back_populates='family'
     )
@@ -77,6 +85,7 @@ class FamilyResp(BaseModel):
     consanguinity: bool
     consanguinity_evidence: HumanEvidenceBlock[bool]
     updated_at: datetime
+    updated_by_user_id: int | None = None
 
 
 class FamilyCreateRequest(BaseModel):

@@ -33,6 +33,11 @@ class Env(BaseSettings):
     OPENAI_VLM: str = 'gpt-5'
     LOG_LEVEL: LogLevel = LogLevel.INFO
 
+    # Auth / JWT
+    JWT_SECRET_KEY: str = Field(...)
+    JWT_ALGORITHM: str = 'HS256'
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
+
     # Directories
     CAA_ROOT: str = '/var/caa'
     SQLLITE_DIR: str = 'sqllite'

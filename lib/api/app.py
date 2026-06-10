@@ -46,10 +46,16 @@ from lib.agents.general_paper_qa_agent import (
     agent as general_paper_qa_agent,
 )
 from lib.agents.run_tracking import ensure_agent_run
+from lib.api.auth import get_current_user, get_current_user_optional
 from lib.api.db import get_session, session_scope
 from lib.api.middleware import make_log_request_middleware
 from lib.core.environment import env
 from lib.core.logging import setup_logging
+from lib.core.security import (
+    create_access_token,
+    hash_password,
+    verify_password,
+)
 from lib.misc.curation.models import CurationSummaryRow
 from lib.misc.curation.pptx import build_curation_pptx
 from lib.misc.curation.summary import build_curation_row
@@ -97,6 +103,7 @@ from lib.models import (
     HpoDB,
     HPOTerm,
     HumanEvidenceBlock,
+    LoginRequest,
     PaperDB,
     PaperResp,
     PaperUpdateRequest,
@@ -115,6 +122,10 @@ from lib.models import (
     SegregationAnalysisResp,
     SegregationEvidenceDB,
     TaskDB,
+    TokenResp,
+    UserCreateRequest,
+    UserDB,
+    UserResp,
     VariantDB,
     VariantResp,
     VariantUpdateRequest,
@@ -187,6 +198,52 @@ async def add_cache_headers(
 @app.get('/status', tags=['health'])
 def get_status() -> dict[str, str]:
     return {'status': 'ok'}
+
+
+@app.post(
+    '/auth/register',
+    response_model=UserResp,
+    status_code=status.HTTP_201_CREATED,
+    tags=['auth'],
+)
+def register_user(
+    request: UserCreateRequest, session: Session = Depends(get_session)
+) -> Any:
+    user = UserDB(
+        email=request.email,
+        hashed_password=hash_password(request.password),
+        first_name=request.first_name,
+        last_name=request.last_name,
+    )
+    session.add(user)
+    try:
+        session.flush()
+    except IntegrityError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail='A user with this email already exists',
+        )
+    return user
+
+
+@app.post('/auth/login', response_model=TokenResp, tags=['auth'])
+def login(request: LoginRequest, session: Session = Depends(get_session)) -> Any:
+    user = session.query(UserDB).filter(UserDB.email == request.email).one_or_none()
+    if (
+        user is None
+        or not user.is_active
+        or not verify_password(request.password, user.hashed_password)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail='Incorrect email or password',
+        )
+    return TokenResp(access_token=create_access_token(user.id))
+
+
+@app.get('/auth/me', response_model=UserResp, tags=['auth'])
+def get_me(current_user: UserDB = Depends(get_current_user)) -> Any:
+    return current_user
 
 
 @app.put('/papers', response_model=PaperResp, status_code=status.HTTP_201_CREATED)
@@ -333,6 +390,7 @@ def update_paper(
     paper_id: int,
     patch_request: PaperUpdateRequest,
     session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> Any:
     paper_db = (
         session.query(PaperDB)
@@ -351,6 +409,7 @@ def update_paper(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
     patch_request.apply_to(paper_db)
+    paper_db.updated_by_user_id = current_user.id
     paper_db.patient_count = len(paper_db.patients)
     paper_db.variant_count = len(paper_db.variants)
     paper_db.patient_variant_occurrences_count = len(
@@ -492,6 +551,7 @@ def _patient_to_resp(row: PatientDB) -> PatientResp:
         if row.twin_type_evidence
         else None,
         updated_at=row.updated_at,
+        updated_by_user_id=row.updated_by_user_id,
         family_id=row.family.id,
         family_identifier=row.family.identifier,
         family_assignment_evidence=HumanEvidenceBlock.model_validate(
@@ -764,6 +824,7 @@ def _variant_to_resp(row: VariantDB) -> VariantResp:
         variant_type=row.variant_type,
         functional_evidence=row.functional_evidence,
         updated_at=row.updated_at,
+        updated_by_user_id=row.updated_by_user_id,
         transcript_evidence=EvidenceBlock.model_validate(row.transcript_evidence),
         protein_accession_evidence=EvidenceBlock.model_validate(
             row.protein_accession_evidence
@@ -804,6 +865,7 @@ def update_variant(
     variant_id: int,
     patch_request: VariantUpdateRequest,
     session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> Any:
     variant_db = (
         session.query(VariantDB)
@@ -819,6 +881,7 @@ def update_variant(
             status_code=status.HTTP_404_NOT_FOUND, detail='Variant not found'
         )
     patch_request.apply_to(variant_db)
+    variant_db.updated_by_user_id = current_user.id
     # Editing any harmonized field invalidates the downstream enrichment row,
     # which was computed by key lookup from the pre-edit coordinates. Treat
     # all harmonized siblings uniformly so a future enrichment lookup added
@@ -838,6 +901,7 @@ def update_variant(
                 detail='Variant has not been harmonized by the server yet',
             )
         harmonized_update.apply_to(variant_db.harmonized_variant)
+        variant_db.harmonized_variant.updated_by_user_id = current_user.id
         # delete-orphan cascade removes the row
         variant_db.annotated_variant = None
     session.flush()
@@ -874,6 +938,7 @@ def _phenotype_to_resp(row: PhenotypeDB) -> PhenotypeResp:
         severity=row.severity,
         modifier=row.modifier,
         updated_at=row.updated_at,
+        updated_by_user_id=row.updated_by_user_id,
         hpo=hpo,
     )
 
@@ -1134,6 +1199,7 @@ def update_phenotype(
     phenotype_id: int,
     patch_request: PhenotypeUpdateRequest,
     session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> Any:
     phenotype_db = (
         session.query(PhenotypeDB)
@@ -1150,6 +1216,7 @@ def update_phenotype(
             status_code=status.HTTP_404_NOT_FOUND, detail='Phenotype not found'
         )
     patch_request.apply_to(phenotype_db)
+    phenotype_db.updated_by_user_id = current_user.id
     return phenotype_db
 
 
@@ -1159,6 +1226,7 @@ def update_patient(
     patient_id: int,
     patch_request: PatientUpdateRequest,
     session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> Any:
     patient_db = (
         session.query(PatientDB)
@@ -1171,6 +1239,7 @@ def update_patient(
             status_code=status.HTTP_404_NOT_FOUND, detail='Patient not found'
         )
     patch_request.apply_to(patient_db)
+    patient_db.updated_by_user_id = current_user.id
     return _patient_to_resp(patient_db)
 
 

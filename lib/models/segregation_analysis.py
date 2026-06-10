@@ -12,6 +12,7 @@ from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock, Reasoni
 
 if TYPE_CHECKING:
     from lib.models.family import FamilyDB
+    from lib.models.user import UserDB
 
 
 class SequencingMethodology(str, Enum):
@@ -59,10 +60,17 @@ class SegregationEvidenceDB(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    updated_by_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey('users.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
 
     family: Mapped['FamilyDB'] = relationship(
         'FamilyDB', back_populates='segregation_evidence'
     )
+    updated_by: Mapped['UserDB | None'] = relationship('UserDB')
 
     __table_args__ = (Index('ix_segregation_evidence_family_id', 'family_id'),)
 
@@ -73,6 +81,7 @@ class SegregationEvidenceResp(BaseModel):
     extracted_lod_score: HumanEvidenceBlock[float | None]
     has_unexplainable_non_segregations: HumanEvidenceBlock[bool]
     updated_at: datetime
+    updated_by_user_id: int | None = None
 
 
 class SegregationEvidenceUpdateRequest(PatchModel):

@@ -115,12 +115,15 @@ Configuration is in `lib/core/environment.py` using Pydantic BaseSettings:
 **Required:**
 - `OPENAI_API_KEY` - OpenAI API key (Bearer token)
 - `OPENAI_API_DEPLOYMENT` - Model to use (default: `gpt-5-mini`)
+- `JWT_SECRET_KEY` - Secret used to sign auth access tokens (set a strong value in prod)
 
 **Optional:**
 - `NCBI_API_KEY` / `NCBI_EMAIL` - For variant enrichment
 - `API_ENDPOINT` - Where UI reaches API (default: `localhost:8000`)
 - `CORS_ALLOWED_ORIGINS` - CORS origins (default: `http://localhost:8501`)
 - `LOG_LEVEL` - Logging level (default: `INFO`)
+- `JWT_ALGORITHM` - JWT signing algorithm (default: `HS256`)
+- `ACCESS_TOKEN_EXPIRE_MINUTES` - Access token lifetime (default: `1440`)
 
 **Directories (relative to `CAA_ROOT`, default `/var/caa`):**
 - `sqllite/` - Database file
