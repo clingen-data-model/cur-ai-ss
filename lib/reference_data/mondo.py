@@ -322,7 +322,6 @@ def search_mondo_terms(
         score_cutoff=score_cutoff,
     )
     candidates_by_id: dict[str, MondoCandidate] = {}
-    candidate_order: list[str] = []
     for alias, score, _ in matches:
         record = index.terms_by_id[alias.mondo_id]
         candidate = candidates_by_id.get(record.mondo_id)
@@ -334,17 +333,13 @@ def search_mondo_terms(
                 score=float(score),
             )
             candidates_by_id[record.mondo_id] = candidate
-            candidate_order.append(record.mondo_id)
         else:
             candidate.score = max(candidate.score, float(score))
 
         candidate.matches.append(match_evidence(alias, score))
 
     candidates = list(candidates_by_id.values())
-    order_by_id = {mondo_id: order for order, mondo_id in enumerate(candidate_order)}
-    candidates.sort(
-        key=lambda candidate: (-candidate.score, order_by_id[candidate.mondo_id])
-    )
+    candidates.sort(key=lambda candidate: candidate.score, reverse=True)
     return [candidate.model_dump(mode='json') for candidate in candidates[:limit]]
 
 
