@@ -1,7 +1,7 @@
 import re
 from datetime import datetime
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, SecretStr, field_validator
 from sqlalchemy import Boolean, DateTime, Index, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -40,7 +40,7 @@ class UserResp(BaseModel):
 
 class UserCreateRequest(BaseModel):
     email: str
-    password: str
+    password: SecretStr
     first_name: str
     last_name: str
 
@@ -54,27 +54,27 @@ class UserCreateRequest(BaseModel):
 
     @field_validator('password')
     @classmethod
-    def validate_password(cls, v: str) -> str:
-        if len(v) < 8:
+    def validate_password(cls, v: SecretStr) -> SecretStr:
+        if len(v.get_secret_value()) < 8:
             raise ValueError('Password must be at least 8 characters')
         return v
 
 
 class ChangePasswordRequest(BaseModel):
-    current_password: str
-    new_password: str
+    current_password: SecretStr
+    new_password: SecretStr
 
     @field_validator('new_password')
     @classmethod
-    def validate_new_password(cls, v: str) -> str:
-        if len(v) < 8:
+    def validate_new_password(cls, v: SecretStr) -> SecretStr:
+        if len(v.get_secret_value()) < 8:
             raise ValueError('Password must be at least 8 characters')
         return v
 
 
 class LoginRequest(BaseModel):
     email: str
-    password: str
+    password: SecretStr
 
     @field_validator('email')
     @classmethod

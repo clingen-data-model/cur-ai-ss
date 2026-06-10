@@ -126,20 +126,24 @@ def require_auth() -> None:
         auto_hash=False,  # passwords from the DB are already bcrypt-hashed
     )
 
-    try:
-        authenticator.login(location='main')
-    except LoginError as e:
-        st.error(str(e))
+    # Constrain the login/registration widgets to a centered column so they
+    # don't stretch across the full screen width.
+    _, center, _ = st.columns([1, 1.5, 1])
+    with center:
+        try:
+            authenticator.login(location='main')
+        except LoginError as e:
+            st.error(str(e))
 
-    status = st.session_state.get('authentication_status')
+        status = st.session_state.get('authentication_status')
 
-    if status is not True:
-        # Clear any stale token and offer registration below the login form.
-        st.session_state.pop(AUTH_TOKEN_KEY, None)
-        if status is False:
-            st.error('Email/password is incorrect')
-        _render_register_form()
-        st.stop()
+        if status is not True:
+            # Clear any stale token and offer registration below the login form.
+            st.session_state.pop(AUTH_TOKEN_KEY, None)
+            if status is False:
+                st.error('Email/password is incorrect')
+            _render_register_form()
+            st.stop()
 
     # Authenticated: resolve the user and mint a JWT for the API layer.
     username = st.session_state.get('username')
@@ -152,6 +156,8 @@ def require_auth() -> None:
             authenticator.logout(location='unrendered')
             st.stop()
         st.session_state[AUTH_TOKEN_KEY] = create_access_token(user.id)
+        display_name = f'{user.first_name} {user.last_name}'.strip() or user.email
 
+    st.sidebar.markdown(f'Signed in as **{display_name}**')
     authenticator.logout('Log out', 'sidebar')
     _render_change_password_form()

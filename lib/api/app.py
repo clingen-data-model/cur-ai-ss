@@ -212,7 +212,7 @@ def register_user(
 ) -> Any:
     user = UserDB(
         email=request.email,
-        hashed_password=hash_password(request.password),
+        hashed_password=hash_password(request.password.get_secret_value()),
         first_name=request.first_name,
         last_name=request.last_name,
     )
@@ -233,7 +233,9 @@ def login(request: LoginRequest, session: Session = Depends(get_session)) -> Any
     if (
         user is None
         or not user.is_active
-        or not verify_password(request.password, user.hashed_password)
+        or not verify_password(
+            request.password.get_secret_value(), user.hashed_password
+        )
     ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -252,12 +254,16 @@ def change_password(
     request: ChangePasswordRequest,
     current_user: UserDB = Depends(get_current_user),
 ) -> Any:
-    if not verify_password(request.current_password, current_user.hashed_password):
+    if not verify_password(
+        request.current_password.get_secret_value(), current_user.hashed_password
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail='Current password is incorrect',
         )
-    current_user.hashed_password = hash_password(request.new_password)
+    current_user.hashed_password = hash_password(
+        request.new_password.get_secret_value()
+    )
     return current_user
 
 
