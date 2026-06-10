@@ -27,18 +27,28 @@ class MondoAgentDecision(BaseModel):
 
 
 @function_tool
-def get_mondo_term(mondo_id: str) -> dict:
+def get_mondo_term(mondo_id: str, include_relations: bool = True) -> dict:
     """Fetch MONDO term information by MONDO ID."""
-    term = mondo.get_mondo_term(mondo_id)
+    term = mondo.get_mondo_term(mondo_id, include_relations=include_relations)
     if term is None:
         raise ValueError(f'MONDO term {mondo_id} not found')
     return term
 
 
 @function_tool
-def search_mondo_terms(query: str, limit: int = 10) -> list[dict]:
+def search_mondo_terms(
+    query: str,
+    limit: int = 10,
+    search_labels: bool = True,
+    search_synonyms: bool = True,
+) -> list[dict]:
     """Search MONDO labels and synonyms for candidate terms."""
-    return mondo.search_mondo_terms(query, limit=limit)
+    return mondo.search_mondo_terms(
+        query,
+        limit=limit,
+        search_labels=search_labels,
+        search_synonyms=search_synonyms,
+    )
 
 
 @function_tool
@@ -74,11 +84,21 @@ Rules:
   Orphanet, GARD, MedGen, MeSH, DOID, ICD, or UMLS, call get_mondo_by_xref().
   If an xref lookup misses, retry alternate namespace formats for the same
   identifier, (e.g. Orphanet:123, ORPHA:123).
-- For free text, call search_mondo_terms() multiple times with useful variants:
-  stripped punctuation, removed surrounding prose, quoted disease substrings,
-  expanded abbreviations, and clinically equivalent wording.
+- For free text, call search_mondo_terms() with useful disease substrings,
+  abbreviations, and clinically equivalent wording. Use label-only search when
+  you need stronger direct label evidence, and synonym-only search when you are
+  investigating alternate names or abbreviations.
+- Search results are candidate terms with match evidence rows. Label matches are
+  stronger direct evidence than synonym-only matches. Exact synonym matches can
+  support a choice after inspecting the term. Related synonym matches are leads,
+  not final proof.
+- Broad synonym matches should prompt child-term inspection. Narrow synonym
+  matches should prompt parent-term inspection. Unknown synonym matches require
+  term, definition, parent, and child inspection before selecting.
 - Before selecting a term, call get_mondo_term() for the selected MONDO ID.
-- Use get_mondo_parents() or get_mondo_children() when specificity is unclear.
+- Use the parents and children returned by get_mondo_term(), or call
+  get_mondo_parents() / get_mondo_children() for deeper traversal, when
+  specificity is unclear.
 - Prefer null over a weak guess.
 - Use paper and occurrence context only to disambiguate supported tool results.
 - Prefer the most specific term supported by the input disease text and context.

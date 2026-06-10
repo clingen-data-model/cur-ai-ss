@@ -45,7 +45,17 @@ def test_index_builds_tool_oriented_structures(
 
     assert marfan.label == 'Marfan syndrome'
     assert marfan.definition == 'A connective tissue disorder.'
-    assert "Marfan's syndrome" in marfan.synonyms
+    assert any(
+        synonym.text == "Marfan's syndrome"
+        and synonym.scope is mondo.MondoSynonymScope.EXACT
+        for synonym in marfan.synonyms
+    )
+    assert any(
+        synonym.text == 'MFS'
+        and synonym.scope is mondo.MondoSynonymScope.EXACT
+        and synonym.synonym_type == 'ABBREVIATION'
+        for synonym in marfan.synonyms
+    )
     assert 'GARD:0016535' in marfan.xrefs
     assert 'http://www.orpha.net/ORDO/Orphanet_558' in marfan.exact_matches
     assert mondo_index.xref_to_ids['gard:0016535'] == ['MONDO:0007947']
@@ -61,7 +71,15 @@ def test_index_builds_tool_oriented_structures(
 def test_get_mondo_term_accepts_curie_underscore_and_iri(
     mondo_index: mondo.MondoIndex,
 ) -> None:
-    assert mondo.get_mondo_term('MONDO:0007947')['label'] == 'Marfan syndrome'
+    term = mondo.get_mondo_term('MONDO:0007947')
+
+    assert term['label'] == 'Marfan syndrome'
+    assert {(synonym['text'], synonym['scope']) for synonym in term['synonyms']} >= {
+        ("Marfan's syndrome", 'exact'),
+        ('connective tissue disorder', 'related'),
+    }
+    assert term['parents'] == [{'mondo_id': 'MONDO:0700096', 'label': 'human disease'}]
+    assert term['children'] == []
     assert mondo.get_mondo_term('MONDO_0007947')['label'] == 'Marfan syndrome'
     assert mondo.get_mondo_term(_iri('MONDO:0007947'))['label'] == 'Marfan syndrome'
     assert mondo.get_mondo_term('OMIM:154700') is None
@@ -76,6 +94,49 @@ def test_search_mondo_terms_returns_near_matches(
     assert candidates[0]['mondo_id'] == 'MONDO:0009061'
     assert candidates[0]['label'] == 'cystic fibrosis'
     assert candidates[0]['score'] > 80
+    assert candidates[0]['matches'][0]['text'] == 'cystic fibrosis'
+    assert candidates[0]['matches'][0]['normalized_text'] == 'cystic fibrosis'
+    assert candidates[0]['matches'][0]['type'] == 'label'
+
+
+def test_search_mondo_terms_can_focus_labels_or_synonyms(
+    mondo_index: mondo.MondoIndex,
+) -> None:
+    label_candidates = mondo.search_mondo_terms(
+        'mucoviscidosis',
+        search_labels=True,
+        search_synonyms=False,
+    )
+    synonym_candidates = mondo.search_mondo_terms(
+        'mucoviscidosis',
+        search_labels=False,
+        search_synonyms=True,
+    )
+
+    assert label_candidates[0]['matches'][0]['type'] == 'label'
+    assert synonym_candidates[0]['mondo_id'] == 'MONDO:0009061'
+    assert synonym_candidates[0]['matches'][0]['text'] == 'mucoviscidosis'
+    assert synonym_candidates[0]['matches'][0]['type'] == 'synonym'
+    assert synonym_candidates[0]['matches'][0]['synonym_scope'] == 'exact'
+
+
+def test_search_mondo_terms_groups_multiple_match_evidence(
+    mondo_index: mondo.MondoIndex,
+) -> None:
+    candidates = mondo.search_mondo_terms('Marfan syndrome')
+
+    marfan = next(
+        candidate
+        for candidate in candidates
+        if candidate['mondo_id'] == 'MONDO:0007947'
+    )
+    assert {
+        (match['text'], match['type'], match.get('synonym_scope'))
+        for match in marfan['matches']
+    } >= {
+        ('Marfan syndrome', 'label', None),
+        ('Marfan syndrome', 'synonym', 'exact'),
+    }
 
 
 def test_empty_search_query_returns_no_candidates(
@@ -107,6 +168,8 @@ def test_get_mondo_parents_and_children_return_related_terms(
         'MONDO:0007947',
         'MONDO:0009061',
     }
+    assert children[0]['parents'] == []
+    assert children[0]['children'] == []
 
 
 def test_mondo_agent_message_includes_scoped_target() -> None:
@@ -159,8 +222,17 @@ def _mondo_nodes() -> list[dict[str, Any]]:
             {
                 'definition': {'val': 'A connective tissue disorder.'},
                 'synonyms': [
+                    {'pred': 'hasExactSynonym', 'val': 'Marfan syndrome'},
                     {'pred': 'hasExactSynonym', 'val': "Marfan's syndrome"},
-                    {'pred': 'hasExactSynonym', 'val': 'MFS'},
+                    {
+                        'pred': 'hasExactSynonym',
+                        'val': 'MFS',
+                        'synonymType': 'http://purl.obolibrary.org/obo/mondo#ABBREVIATION',
+                    },
+                    {
+                        'pred': 'hasRelatedSynonym',
+                        'val': 'connective tissue disorder',
+                    },
                 ],
                 'xrefs': [{'val': 'GARD:0016535'}],
                 'basicPropertyValues': [
