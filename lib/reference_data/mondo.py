@@ -286,12 +286,17 @@ def get_mondo_term(
     return term_payload(record, index=index, include_relations=include_relations)
 
 
-def search_mondo_terms(query: str, limit: int = 10) -> list[dict[str, Any]]:
+def search_mondo_terms(
+    query: str,
+    limit: int = 10,
+    score_cutoff: float = 20.0,
+) -> list[dict[str, Any]]:
     """Search MONDO labels and synonyms for agent retrieval.
 
     Args:
         query: Free-text disease query to search.
         limit: Maximum candidates to return.
+        score_cutoff: Minimum fuzzy match score for raw alias matches.
 
     Returns:
         Candidate MONDO terms grouped with label/synonym match evidence.
@@ -312,8 +317,9 @@ def search_mondo_terms(query: str, limit: int = 10) -> list[dict[str, Any]]:
         normalized_query,
         aliases,
         processor=alias_text,
-        scorer=fuzz.WRatio,
-        limit=max(limit * 20, 50),
+        scorer=fuzz.token_sort_ratio,
+        limit=10 * limit,
+        score_cutoff=score_cutoff,
     )
     candidates_by_id: dict[str, MondoCandidate] = {}
     candidate_order: list[str] = []
