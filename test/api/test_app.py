@@ -1315,8 +1315,13 @@ def test_mondo_linking_handler_updates_paper_only_for_paper_scoped_task(
     assert 'mondo_match_context' not in paper_resp
     assert paper_resp['mondo']['value'] == {
         'mondo_id': 'MONDO:0015152',
-        'term': 'limb-girdle muscular dystrophy-dystroglycanopathy type C1',
-        'confidence': 'high',
+        'label': 'limb-girdle muscular dystrophy-dystroglycanopathy type C1',
+        'definition': None,
+        'synonyms': [],
+        'xrefs': [],
+        'exact_matches': [],
+        'parents': [],
+        'children': [],
     }
     assert (
         paper_resp['mondo']['reasoning']
@@ -1405,8 +1410,13 @@ def test_mondo_linking_handler_updates_target_occurrence_only(
     assert 'mondo_match_context' not in occurrence_resp
     assert occurrence_resp['mondo']['value'] == {
         'mondo_id': 'MONDO:0008275',
-        'term': 'epidermolysis bullosa simplex',
-        'confidence': 'high',
+        'label': 'epidermolysis bullosa simplex',
+        'definition': None,
+        'synonyms': [],
+        'xrefs': [],
+        'exact_matches': [],
+        'parents': [],
+        'children': [],
     }
     assert occurrence_resp['mondo']['reasoning'] == 'matched primary label'
 

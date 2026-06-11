@@ -26,6 +26,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from openai import AsyncOpenAI
+from pydantic import ValidationError
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, selectinload
@@ -120,7 +121,6 @@ from lib.models import (
     VariantUpdateRequest,
 )
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
-from lib.models.mondo import mondo_link_to_reasoning_block
 from lib.models.patient import (
     AffectedStatus,
     CountryCode,
@@ -131,6 +131,7 @@ from lib.models.patient import (
     TwinType,
 )
 from lib.models.segregation_analysis import SegregationAnalysisComputedNestedResp
+from lib.reference_data.mondo import MondoTerm
 from lib.tasks import TaskCreateRequest, TaskResp, enqueue_all_instances, enqueue_task
 from lib.tasks.handlers import ensure_conversation_id
 from lib.tasks.models import TaskStatus, TaskType
@@ -397,6 +398,38 @@ def list_papers(
     return [_paper_to_resp(paper) for paper in papers]
 
 
+def _mondo_reasoning_block(
+    mondo_id: str | None,
+    mondo_term: str | None,
+    mondo_match_context: dict | None,
+) -> ReasoningBlock[MondoTerm | None]:
+    """Reconstruct MONDO response reasoning from flattened DB columns."""
+    context = mondo_match_context or {}
+    reasoning = context.get('agent_reasoning')
+    if not isinstance(reasoning, str) or not reasoning.strip():
+        reasoning = 'MONDO linking not yet performed'
+
+    selected = context.get('selected')
+    if isinstance(selected, dict):
+        try:
+            return ReasoningBlock[MondoTerm | None](
+                value=MondoTerm.model_validate(selected),
+                reasoning=reasoning,
+            )
+        except ValidationError:
+            pass
+
+    value = (
+        MondoTerm(mondo_id=mondo_id, label=mondo_term)
+        if mondo_id and mondo_term
+        else None
+    )
+    return ReasoningBlock[MondoTerm | None](
+        value=value,
+        reasoning=reasoning,
+    )
+
+
 def _paper_to_resp(row: PaperDB) -> PaperResp:
     """Convert PaperDB to PaperResp, including reconstructed MONDO reasoning."""
     from lib.models.paper import PaperTag, PaperType
@@ -422,7 +455,7 @@ def _paper_to_resp(row: PaperDB) -> PaperResp:
         )
         if row.disease_inheritance_mode_evidence
         else None,
-        mondo=mondo_link_to_reasoning_block(
+        mondo=_mondo_reasoning_block(
             row.mondo_id,
             row.mondo_term,
             row.mondo_match_context,
@@ -1067,7 +1100,7 @@ def _patient_variant_occurrence_to_resp(
         disease_name_evidence=EvidenceBlock.model_validate(row.disease_name_evidence)
         if row.disease_name_evidence
         else None,
-        mondo=mondo_link_to_reasoning_block(
+        mondo=_mondo_reasoning_block(
             row.mondo_id,
             row.mondo_term,
             row.mondo_match_context,

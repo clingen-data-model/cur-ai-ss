@@ -19,7 +19,6 @@ from lib.models.family import (
     FamilyResp,
     FamilyUpdateRequest,
 )
-from lib.models.mondo import MondoLink
 from lib.models.paper import (
     FileFormat,
     GeneDB,
