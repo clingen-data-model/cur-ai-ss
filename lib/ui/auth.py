@@ -26,6 +26,7 @@ from lib.api.db import session_scope
 from lib.core.environment import env
 from lib.core.security import create_access_token
 from lib.models import UserDB
+from lib.models.user import _EMAIL_RE
 from lib.ui.api import (
     AUTH_TOKEN_KEY,
     change_password,
@@ -59,26 +60,31 @@ def _load_credentials() -> dict:
 
 
 def _render_request_access_form() -> None:
-    """Request-access form — creates an inactive account pending admin approval."""
-    with st.expander('Need access? Request it here'):
-        with st.form('request_access_form'):
-            first_name = st.text_input('First name')
-            last_name = st.text_input('Last name')
-            email = st.text_input('Email')
-            description_of_use_case = st.text_area('Describe your use case')
-            submitted = st.form_submit_button('Request access')
-
-        if not submitted:
-            return
-        if not (first_name and last_name and email and description_of_use_case):
-            st.error('All fields are required.')
+    with st.expander('Need access? Request it here!'):
+        if st.session_state.get('_request_access_submitted'):
+            st.success('Request submitted — an admin will review your request.')
         else:
-            try:
-                register(email, first_name, last_name, description_of_use_case)
-                st.success('Request submitted — an admin will review your request.')
-            except requests.HTTPError as e:
-                st.error(get_http_error_detail(e))
-
+            with st.form('request_access_form'):
+                first_name = st.text_input('First name')
+                last_name = st.text_input('Last name')
+                email = st.text_input('Email')
+                description_of_use_case = st.text_area('Describe your use case')
+                submitted = st.form_submit_button('Request access')
+    
+            if not submitted:
+                return
+            if not (first_name and last_name and email and description_of_use_case):
+                st.error('All fields are required.')
+            elif not _EMAIL_RE.match(email.strip()):
+                st.error('Please enter a valid email address.')
+            else:
+                try:
+                    register(email, first_name, last_name, description_of_use_case)
+                    st.session_state['_request_access_submitted'] = True
+                    st.rerun()
+                except requests.HTTPError as e:
+                    st.error(get_http_error_detail(e))
+    
 
 def _render_change_password_form() -> None:
     """Hand-rolled change-password form posting to /auth/change-password."""
@@ -131,7 +137,6 @@ def require_auth() -> None:
             st.error(str(e))
 
         status = st.session_state.get('authentication_status')
-
         if status is not True:
             # Clear any stale token and offer access request below the login form.
             st.session_state.pop(AUTH_TOKEN_KEY, None)
