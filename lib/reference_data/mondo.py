@@ -17,7 +17,7 @@ from lib.models.mondo import (
     MondoSynonym,
     MondoSynonymScope,
     MondoTerm,
-    MondoTermSummary,
+    MondoTermDetail,
 )
 
 MONDO_ONTOLOGY_ENDPOINT = 'https://purl.obolibrary.org/obo/mondo.json'
@@ -354,7 +354,7 @@ def term_payload(
     include_relations: bool = True,
 ) -> dict[str, Any]:
     """Convert an indexed MONDO record to a tool payload."""
-    return MondoTerm(
+    return MondoTermDetail(
         mondo_id=record.mondo_id,
         label=record.label,
         definition=record.definition,
@@ -379,12 +379,12 @@ def term_payload(
 def related_term_summaries(
     related_ids: list[str],
     index: MondoIndex | None,
-) -> list[MondoTermSummary]:
+) -> list[MondoTerm]:
     """Build compact summaries for related MONDO terms."""
     if index is None:
         return []
     return [
-        MondoTermSummary(
+        MondoTerm(
             mondo_id=related_id,
             label=index.terms_by_id[related_id].label,
         )

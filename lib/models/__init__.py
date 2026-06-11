@@ -28,7 +28,7 @@ from lib.models.mondo import (
     MondoSynonym,
     MondoSynonymScope,
     MondoTerm,
-    MondoTermSummary,
+    MondoTermDetail,
 )
 from lib.models.paper import (
     FileFormat,

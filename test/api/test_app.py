@@ -1316,12 +1316,6 @@ def test_mondo_linking_handler_updates_paper_only_for_paper_scoped_task(
     assert paper_resp['mondo']['value'] == {
         'mondo_id': 'MONDO:0015152',
         'label': 'limb-girdle muscular dystrophy-dystroglycanopathy type C1',
-        'definition': None,
-        'synonyms': [],
-        'xrefs': [],
-        'exact_matches': [],
-        'parents': [],
-        'children': [],
     }
     assert (
         paper_resp['mondo']['reasoning']
@@ -1411,12 +1405,6 @@ def test_mondo_linking_handler_updates_target_occurrence_only(
     assert occurrence_resp['mondo']['value'] == {
         'mondo_id': 'MONDO:0008275',
         'label': 'epidermolysis bullosa simplex',
-        'definition': None,
-        'synonyms': [],
-        'xrefs': [],
-        'exact_matches': [],
-        'parents': [],
-        'children': [],
     }
     assert occurrence_resp['mondo']['reasoning'] == 'matched primary label'
 

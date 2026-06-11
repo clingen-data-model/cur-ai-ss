@@ -30,24 +30,22 @@ class MondoSynonym(BaseModel):
     xrefs: list[str] = Field(default_factory=list)
 
 
-class MondoTermSummary(BaseModel):
-    """A compact related MONDO term summary."""
-
-    mondo_id: str
-    label: str
-
-
 class MondoTerm(BaseModel):
-    """A compact MONDO term payload for agent tools."""
+    """A selected MONDO ontology term."""
 
     mondo_id: str
     label: str
+
+
+class MondoTermDetail(MondoTerm):
+    """Detailed MONDO term payload for agent tools."""
+
     definition: str | None = None
     synonyms: list[MondoSynonym] = Field(default_factory=list)
     xrefs: list[str] = Field(default_factory=list)
     exact_matches: list[str] = Field(default_factory=list)
-    parents: list[MondoTermSummary] = Field(default_factory=list)
-    children: list[MondoTermSummary] = Field(default_factory=list)
+    parents: list[MondoTerm] = Field(default_factory=list)
+    children: list[MondoTerm] = Field(default_factory=list)
 
 
 class MondoMatchEvidence(BaseModel):
