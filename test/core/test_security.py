@@ -1,6 +1,7 @@
 import jwt
 import pytest
 
+from lib.core import security
 from lib.core.security import (
     create_access_token,
     decode_access_token,
@@ -37,8 +38,6 @@ def test_decode_rejects_tampered_token():
 
 
 def test_decode_rejects_expired_token(monkeypatch):
-    from lib.core import security
-
     # Token that expired in the past.
     monkeypatch.setattr(security.env, 'ACCESS_TOKEN_EXPIRE_MINUTES', -1)
     token = create_access_token(user_id=1)

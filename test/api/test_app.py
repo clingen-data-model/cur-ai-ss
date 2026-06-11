@@ -9,6 +9,7 @@ from sqlalchemy import func, select, update
 from lib.api.app import app
 from lib.api.auth import get_current_user
 from lib.api.db import get_session, session_scope
+from lib.core.environment import env
 from lib.models import (
     AgentRunDB,
     AnnotatedVariantDB,
@@ -22,6 +23,7 @@ from lib.models import (
     UserDB,
     VariantDB,
 )
+from lib.tasks import TaskCreateRequest
 from lib.tasks.models import TaskStatus, TaskType
 
 
@@ -262,9 +264,6 @@ def test_search_genes_by_prefix_no_match(client, seeded_genes):
 
 @pytest.fixture
 def seeded_paper(db_session):
-    from lib.core.environment import env
-    from lib.models import AgentRunDB
-
     agent_run = AgentRunDB(
         git_hash='abc123def456',
         description='test run',
@@ -721,8 +720,6 @@ def _ev(value: object = None, quote: str | None = 'test') -> dict:
 @pytest.fixture
 def seeded_agent_run(db_session):
     """Create a test agent run."""
-    from lib.core.environment import env
-
     agent_run = AgentRunDB(
         git_hash='abc123def456',
         description='test run',
@@ -1042,8 +1039,6 @@ def test_enqueue_all_instances_for_splatted_task(
     client, seeded_paper, db_session, agent_run
 ):
     """Test re-enqueueing a splatted task with no entity IDs re-queues all instances."""
-    from lib.tasks import TaskCreateRequest
-
     # Create families and splatted tasks
     family1 = FamilyDB(
         paper_id=seeded_paper.id,
@@ -1100,8 +1095,6 @@ def test_enqueue_clears_conversation_id_without_context(
     client, seeded_paper, db_session, agent_run
 ):
     """Test that re-enqueueing without additional_context clears conversation_id."""
-    from lib.tasks import TaskCreateRequest
-
     # Create a task with existing conversation_id and additional_context
     task = TaskDB(
         paper_id=seeded_paper.id,
@@ -1145,8 +1138,6 @@ def test_update_variant_rejects_harmonized_update_before_harmonization(
 
 def test_cache_headers_on_static_files(client):
     """Test that static files get 24-hour cache headers."""
-    from lib.core.environment import env
-
     # Mock a static file request by calling a path under CAA_ROOT
     response = client.get(f'{env.CAA_ROOT}/extracted_pdfs/1/thumbnail.png')
     # Even if 404, the cache header middleware should have run
