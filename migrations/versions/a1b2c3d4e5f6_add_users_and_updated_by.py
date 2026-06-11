@@ -47,6 +47,10 @@ def upgrade() -> None:
         sa.Column('first_name', sa.String(), nullable=False),
         sa.Column('last_name', sa.String(), nullable=False),
         sa.Column('is_active', sa.Boolean(), server_default='1', nullable=False),
+        sa.Column('is_admin', sa.Boolean(), server_default='0', nullable=False),
+        sa.Column(
+            'description_of_use_case', sa.String(), nullable=False, server_default=''
+        ),
         sa.Column(
             'updated_at',
             sa.DateTime(timezone=True),

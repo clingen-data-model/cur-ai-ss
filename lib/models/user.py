@@ -19,6 +19,10 @@ class UserDB(Base):
     first_name: Mapped[str] = mapped_column(String, nullable=False)
     last_name: Mapped[str] = mapped_column(String, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default='1')
+    is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default='0')
+    description_of_use_case: Mapped[str] = mapped_column(
+        String, nullable=False, server_default=''
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -35,14 +39,16 @@ class UserResp(BaseModel):
     first_name: str
     last_name: str
     is_active: bool
+    is_admin: bool
+    description_of_use_case: str
     updated_at: datetime
 
 
 class UserCreateRequest(BaseModel):
     email: str
-    password: SecretStr
     first_name: str
     last_name: str
+    description_of_use_case: str
 
     @field_validator('email')
     @classmethod
@@ -50,13 +56,6 @@ class UserCreateRequest(BaseModel):
         v = v.strip().lower()
         if not _EMAIL_RE.match(v):
             raise ValueError('Invalid email address')
-        return v
-
-    @field_validator('password')
-    @classmethod
-    def validate_password(cls, v: SecretStr) -> SecretStr:
-        if len(v.get_secret_value()) < 8:
-            raise ValueError('Password must be at least 8 characters')
         return v
 
 

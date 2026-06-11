@@ -42,9 +42,9 @@ MIN_PASSWORD_LENGTH = 8
 
 
 def _load_credentials() -> dict:
-    """Build stauth's credentials structure from the users table."""
+    """Build stauth's credentials structure from active users only."""
     with session_scope() as session:
-        users = session.query(UserDB).all()
+        users = session.query(UserDB).filter(UserDB.is_active.is_(True)).all()
         return {
             'usernames': {
                 user.email: {
@@ -58,29 +58,24 @@ def _load_credentials() -> dict:
         }
 
 
-def _render_register_form() -> None:
-    """Hand-rolled registration form that posts to the API's /auth/register."""
-    with st.expander('New user? Register here'):
-        with st.form('register_form'):
+def _render_request_access_form() -> None:
+    """Request-access form — creates an inactive account pending admin approval."""
+    with st.expander('Need access? Request it here'):
+        with st.form('request_access_form'):
             first_name = st.text_input('First name')
             last_name = st.text_input('Last name')
             email = st.text_input('Email')
-            password = st.text_input('Password', type='password')
-            password_repeat = st.text_input('Repeat password', type='password')
-            submitted = st.form_submit_button('Register')
+            description_of_use_case = st.text_area('Describe your use case')
+            submitted = st.form_submit_button('Request access')
 
         if not submitted:
             return
-        if not (first_name and last_name and email and password):
+        if not (first_name and last_name and email and description_of_use_case):
             st.error('All fields are required.')
-        elif password != password_repeat:
-            st.error('Passwords do not match.')
-        elif len(password) < MIN_PASSWORD_LENGTH:
-            st.error(f'Password must be at least {MIN_PASSWORD_LENGTH} characters.')
         else:
             try:
-                register(email, password, first_name, last_name)
-                st.success('Account created — please sign in above.')
+                register(email, first_name, last_name, description_of_use_case)
+                st.success('Request submitted — an admin will review your request.')
             except requests.HTTPError as e:
                 st.error(get_http_error_detail(e))
 
@@ -138,19 +133,18 @@ def require_auth() -> None:
         status = st.session_state.get('authentication_status')
 
         if status is not True:
-            # Clear any stale token and offer registration below the login form.
+            # Clear any stale token and offer access request below the login form.
             st.session_state.pop(AUTH_TOKEN_KEY, None)
             if status is False:
                 st.error('Email/password is incorrect')
-            _render_register_form()
+            _render_request_access_form()
             st.stop()
 
     # Authenticated: resolve the user and mint a JWT for the API layer.
     username = st.session_state.get('username')
     with session_scope() as session:
         user = session.query(UserDB).filter(UserDB.email == username).one_or_none()
-        if user is None:
-            # Cookie references a user that no longer exists.
+        if user is None or not user.is_active:
             st.session_state.pop(AUTH_TOKEN_KEY, None)
             st.error('Your account could not be found. Please sign in again.')
             authenticator.logout(location='unrendered')

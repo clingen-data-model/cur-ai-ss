@@ -65,14 +65,16 @@ def get_http_error_detail(e: requests.HTTPError) -> str:
     return str(e)
 
 
-def register(email: str, password: str, first_name: str, last_name: str) -> UserResp:
+def register(
+    email: str, first_name: str, last_name: str, description_of_use_case: str
+) -> UserResp:
     resp = _session.post(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/auth/register',
         json={
             'email': email,
-            'password': password,
             'first_name': first_name,
             'last_name': last_name,
+            'description_of_use_case': description_of_use_case,
         },
     )
     resp.raise_for_status()

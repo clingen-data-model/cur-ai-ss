@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import secrets
 import shutil
 import time
 import traceback
@@ -46,9 +47,10 @@ from lib.agents.general_paper_qa_agent import (
     agent as general_paper_qa_agent,
 )
 from lib.agents.run_tracking import ensure_agent_run
-from lib.api.auth import get_current_user, get_current_user_optional
+from lib.api.auth import get_current_admin, get_current_user, get_current_user_optional
 from lib.api.db import get_session, session_scope
 from lib.api.middleware import make_log_request_middleware
+from lib.core.email import send_email
 from lib.core.environment import env
 from lib.core.logging import setup_logging
 from lib.core.security import (
@@ -212,9 +214,11 @@ def register_user(
 ) -> Any:
     user = UserDB(
         email=request.email,
-        hashed_password=hash_password(request.password.get_secret_value()),
+        hashed_password=hash_password(secrets.token_urlsafe(16)),
         first_name=request.first_name,
         last_name=request.last_name,
+        description_of_use_case=request.description_of_use_case,
+        is_active=False,
     )
     session.add(user)
     try:
@@ -224,6 +228,48 @@ def register_user(
             status_code=status.HTTP_409_CONFLICT,
             detail='A user with this email already exists',
         )
+    send_email(
+        to=request.email,
+        subject='Your access request has been received',
+        body=(
+            f'Hi {request.first_name},\n\n'
+            'Your access request has been received and is pending admin approval.\n\n'
+            'You will receive another email with your login details once your account is activated.\n'
+        ),
+    )
+    return user
+
+
+@app.post('/auth/activate/{user_id}', response_model=UserResp, tags=['auth'])
+def activate_user(
+    user_id: int,
+    session: Session = Depends(get_session),
+    _admin: UserDB = Depends(get_current_admin),
+) -> Any:
+    user = session.get(UserDB, user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='User not found'
+        )
+    if user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail='User is already active'
+        )
+    password = secrets.token_urlsafe(16)
+    user.hashed_password = hash_password(password)
+    user.is_active = True
+    session.flush()
+    send_email(
+        to=user.email,
+        subject='Your account has been activated',
+        body=(
+            f'Hi {user.first_name},\n\n'
+            'Your account has been activated. You can now sign in with:\n\n'
+            f'  Email:    {user.email}\n'
+            f'  Password: {password}\n\n'
+            'Please change your password after your first login.\n'
+        ),
+    )
     return user
 
 

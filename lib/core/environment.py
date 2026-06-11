@@ -33,6 +33,13 @@ class Env(BaseSettings):
     OPENAI_VLM: str = 'gpt-5'
     LOG_LEVEL: LogLevel = LogLevel.INFO
 
+    # SMTP (optional — if unset, registration emails are logged but not sent)
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: int = 587
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_FROM: str = 'noreply@localhost'
+
     # Auth / JWT
     JWT_SECRET_KEY: str = Field(...)
     JWT_ALGORITHM: str = 'HS256'

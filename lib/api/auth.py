@@ -18,6 +18,11 @@ _CREDENTIALS_EXCEPTION = HTTPException(
     headers={'WWW-Authenticate': 'Bearer'},
 )
 
+_FORBIDDEN_EXCEPTION = HTTPException(
+    status_code=status.HTTP_403_FORBIDDEN,
+    detail='Admin privileges required',
+)
+
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
@@ -35,6 +40,13 @@ def get_current_user(
     if user is None or not user.is_active:
         raise _CREDENTIALS_EXCEPTION
     return user
+
+
+def get_current_admin(current_user: UserDB = Depends(get_current_user)) -> UserDB:
+    """Like ``get_current_user`` but also requires ``is_admin``, or raises 403."""
+    if not current_user.is_admin:
+        raise _FORBIDDEN_EXCEPTION
+    return current_user
 
 
 def get_current_user_optional(
