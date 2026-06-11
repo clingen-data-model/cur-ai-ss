@@ -26,7 +26,6 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from openai import AsyncOpenAI
-from pydantic import ValidationError
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, selectinload
@@ -121,6 +120,7 @@ from lib.models import (
     VariantUpdateRequest,
 )
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
+from lib.models.mondo import MondoTerm
 from lib.models.patient import (
     AffectedStatus,
     CountryCode,
@@ -131,7 +131,6 @@ from lib.models.patient import (
     TwinType,
 )
 from lib.models.segregation_analysis import SegregationAnalysisComputedNestedResp
-from lib.reference_data.mondo import MondoTerm
 from lib.tasks import TaskCreateRequest, TaskResp, enqueue_all_instances, enqueue_task
 from lib.tasks.handlers import ensure_conversation_id
 from lib.tasks.models import TaskStatus, TaskType
@@ -411,13 +410,10 @@ def _mondo_reasoning_block(
 
     selected = context.get('selected')
     if isinstance(selected, dict):
-        try:
-            return ReasoningBlock[MondoTerm | None](
-                value=MondoTerm.model_validate(selected),
-                reasoning=reasoning,
-            )
-        except ValidationError:
-            pass
+        return ReasoningBlock[MondoTerm | None](
+            value=MondoTerm.model_validate(selected),
+            reasoning=reasoning,
+        )
 
     value = (
         MondoTerm(mondo_id=mondo_id, label=mondo_term)

@@ -58,8 +58,8 @@ from lib.misc.pdf.paths import (
 from lib.models.base import Base, PatchModel
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.gene_disease_relation import GeneDiseaseRelation
+from lib.models.mondo import MondoTerm
 from lib.models.patient_variant_occurrences import Inheritance
-from lib.reference_data.mondo import MondoTerm
 from lib.tasks.models import TaskResp
 
 Color: TypeAlias = Literal[

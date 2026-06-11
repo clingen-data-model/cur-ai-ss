@@ -137,16 +137,16 @@ from lib.models.converters import (
     variant_to_db,
 )
 from lib.models.evidence_block import ReasoningBlock
+from lib.models.mondo import (
+    MondoDiseaseContext,
+    MondoDiseaseScope,
+    MondoLinkingTarget,
+)
 from lib.models.paper import FileFormat
 from lib.models.phenotype import HPOTerm
 from lib.models.variant import HarmonizedVariant, Variant
 from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
-from lib.reference_data.mondo import (
-    MondoDiseaseContext,
-    MondoDiseaseScope,
-    MondoLinkingTarget,
-    get_mondo_term,
-)
+from lib.reference_data.mondo import get_mondo_term
 from lib.tasks.models import TaskType
 
 setup_logging()

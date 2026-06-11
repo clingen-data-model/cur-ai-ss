@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.core.environment import env
 from lib.models.evidence_block import ReasoningBlock
+from lib.models.mondo import MondoLinkingTarget
 from lib.reference_data import mondo
 
 
@@ -186,7 +187,7 @@ agent = Agent(
 )
 
 
-def build_mondo_agent_message(target: mondo.MondoLinkingTarget) -> str:
+def build_mondo_agent_message(target: MondoLinkingTarget) -> str:
     """Build the MONDO linking prompt payload.
 
     Args:

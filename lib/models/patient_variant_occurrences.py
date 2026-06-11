@@ -18,7 +18,7 @@ from typing_extensions import Self
 
 from lib.models.base import Base
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
-from lib.reference_data.mondo import MondoTerm
+from lib.models.mondo import MondoTerm
 
 if TYPE_CHECKING:
     from lib.models.paper import PaperDB
