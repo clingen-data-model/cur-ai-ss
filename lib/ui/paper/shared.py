@@ -10,8 +10,10 @@ from streamlit_pdf_viewer import pdf_viewer
 from lib.misc.pdf.paths import pdf_highlighted_path
 from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock, ReasoningBlock
 from lib.models.paper import PaperResp
+from lib.tasks import TaskType
 from lib.ui.api import (
     clear_highlights,
+    enqueue_paper_task,
     get_http_error_detail,
     grobid_annotations,
     highlight_pdf,
@@ -28,6 +30,50 @@ HEADER_TABS = [
 HEADER_TABS_KEY = 'HEADER_TABS_KEY'
 HUMAN_EDIT_NOTE_DEFAULT = 'Edited by Human'
 CHAT_FEATURE_GATE_TIME = datetime(2026, 5, 17, 12, 0, 0)
+
+
+def render_rerun_popover(
+    *,
+    label: str,
+    key_prefix: str,
+    paper_id: int,
+    task_type: TaskType,
+    help: str,
+    family_id: int | None = None,
+    patient_id: int | None = None,
+    variant_id: int | None = None,
+    phenotype_id: int | None = None,
+    container: Any = None,
+) -> None:
+    """Render a "re-run" control as a popover with an optional additional-context box.
+
+    Mirrors the "Rerun Agents" popover: clicking opens a window with a free-text
+    context field passed to the agent, plus a confirm button that enqueues the
+    scoped task. ``container`` lets callers anchor the popover in a column.
+    """
+    host = container if container is not None else st
+    with host.popover(label, use_container_width=True, help=help):
+        context = st.text_area(
+            'Additional context for agent',
+            value='',
+            placeholder='Enter any additional context or instructions for the agent (optional)',
+            height=100,
+            key=f'{key_prefix}-context',
+        )
+        if st.button('Confirm', type='secondary', key=f'{key_prefix}-confirm'):
+            try:
+                enqueue_paper_task(
+                    paper_id,
+                    task_type,
+                    family_id=family_id,
+                    patient_id=patient_id,
+                    variant_id=variant_id,
+                    phenotype_id=phenotype_id,
+                    additional_context=context or None,
+                )
+                st.toast('Task enqueued', icon=':material/check:')
+            except Exception as e:
+                st.toast(f'Failed to enqueue task: {str(e)}', icon='❌')
 
 
 def get_available_tabs(paper_resp: PaperResp) -> list[str]:

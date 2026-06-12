@@ -8,7 +8,6 @@ from lib.models import PaperResp, VariantResp, VariantUpdateRequest
 from lib.models.variant import VariantType
 from lib.tasks import TaskType, is_task_completed
 from lib.ui.api import (
-    enqueue_paper_task,
     get_occurrences,
     get_variants,
     update_variant,
@@ -19,6 +18,7 @@ from lib.ui.paper.shared import (
     get_clinvar_url,
     get_gnomad_url,
     render_evidence_controls,
+    render_rerun_popover,
 )
 
 
@@ -403,34 +403,24 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                     with st.container():
                         st.subheader('Harmonized Variant Info')
                         reharm_col, reannot_col = st.columns(2)
-                        if reharm_col.button(
-                            '🔄 Re-harmonize',
-                            key=f'{key_prefix}-reharmonize',
-                            use_container_width=True,
+                        render_rerun_popover(
+                            label='🔄 Re-harmonize',
+                            key_prefix=f'{key_prefix}-reharmonize',
+                            paper_id=paper_resp.id,
+                            task_type=TaskType.VARIANT_HARMONIZATION,
+                            variant_id=variant.id,
                             help='Re-run harmonization for this variant (also re-annotates).',
-                        ):
-                            enqueue_paper_task(
-                                paper_resp.id,
-                                TaskType.VARIANT_HARMONIZATION,
-                                variant_id=variant.id,
-                            )
-                            st.toast(
-                                'Harmonization task enqueued', icon=':material/check:'
-                            )
-                        if reannot_col.button(
-                            '🔄 Re-annotate',
-                            key=f'{key_prefix}-reannotate',
-                            use_container_width=True,
+                            container=reharm_col,
+                        )
+                        render_rerun_popover(
+                            label='🔄 Re-annotate',
+                            key_prefix=f'{key_prefix}-reannotate',
+                            paper_id=paper_resp.id,
+                            task_type=TaskType.VARIANT_ANNOTATION,
+                            variant_id=variant.id,
                             help='Re-run annotation for this variant (no re-harmonization).',
-                        ):
-                            enqueue_paper_task(
-                                paper_resp.id,
-                                TaskType.VARIANT_ANNOTATION,
-                                variant_id=variant.id,
-                            )
-                            st.toast(
-                                'Annotation task enqueued', icon=':material/check:'
-                            )
+                            container=reannot_col,
+                        )
                         if harmonized_variant and harmonized_variant.value:
                             hv = harmonized_variant.value
                             if hv.updated_by:

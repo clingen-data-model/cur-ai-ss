@@ -30,7 +30,6 @@ from lib.models.patient import (
 )
 from lib.tasks import TaskType, is_task_completed
 from lib.ui.api import (
-    enqueue_paper_task,
     get_families,
     get_patients,
     get_pedigree,
@@ -45,6 +44,7 @@ from lib.ui.paper.shared import (
     HUMAN_EDIT_NOTE_DEFAULT,
     render_evidence_controls,
     render_highlight_controls,
+    render_rerun_popover,
 )
 
 PATIENTS_KEY = 'patients'
@@ -256,17 +256,15 @@ def _render_phenotypes_table(
             if first_phenotype.hpo and first_phenotype.hpo.reasoning:
                 with st.expander('HPO Match Reasoning', expanded=False):
                     st.text(first_phenotype.hpo.reasoning)
-            if st.button(
-                '🔄 Re-link HPO',
-                key=f'{key_prefix}-relink-hpo-{first_phenotype.id}',
-            ):
-                enqueue_paper_task(
-                    paper_resp.id,
-                    TaskType.HPO_LINKING,
-                    patient_id=patient_id,
-                    phenotype_id=first_phenotype.id,
-                )
-                st.success('HPO linking task enqueued')
+            render_rerun_popover(
+                label='🔄 Re-link HPO',
+                key_prefix=f'{key_prefix}-relink-hpo-{first_phenotype.id}',
+                paper_id=paper_resp.id,
+                task_type=TaskType.HPO_LINKING,
+                patient_id=patient_id,
+                phenotype_id=first_phenotype.id,
+                help='Re-run HPO linking for this phenotype.',
+            )
 
 
 def _save_family_edits(
@@ -443,19 +441,16 @@ def _render_family_group(
         if seg_data:
             seg_header_col, seg_button_col = st.columns([3, 1])
             seg_header_col.subheader('📊 Segregation Analysis')
-            if seg_button_col.button(
-                '🔄 Re-run segregation',
-                key=f'{tab_key}-fam-{family.id}-rerun-segregation',
-                use_container_width=True,
+            render_rerun_popover(
+                label='🔄 Re-run segregation',
+                key_prefix=f'{tab_key}-fam-{family.id}-rerun-segregation',
+                paper_id=paper_resp.id,
+                task_type=TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
+                family_id=family.id,
                 help='Re-run segregation evidence extraction for this family '
                 '(also recomputes the analysis).',
-            ):
-                enqueue_paper_task(
-                    paper_resp.id,
-                    TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
-                    family_id=family.id,
-                )
-                st.toast('Segregation task enqueued', icon=':material/check:')
+                container=seg_button_col,
+            )
 
             # Extracted LOD Score
             col1, col2 = st.columns(2)
@@ -1258,18 +1253,15 @@ def render_patient(
         st.divider()
         header_col, button_col = st.columns([3, 1])
         header_col.markdown('### Phenotypes')
-        if button_col.button(
-            '🔄 Re-extract phenotypes',
-            key=f'{key_prefix}-reextract-phenotypes',
-            use_container_width=True,
+        render_rerun_popover(
+            label='🔄 Re-extract phenotypes',
+            key_prefix=f'{key_prefix}-reextract-phenotypes',
+            paper_id=paper_resp.id,
+            task_type=TaskType.PHENOTYPE_EXTRACTION,
+            patient_id=patient_id,
             help='Re-run phenotype extraction for this patient (also re-links HPO terms).',
-        ):
-            enqueue_paper_task(
-                paper_resp.id,
-                TaskType.PHENOTYPE_EXTRACTION,
-                patient_id=patient_id,
-            )
-            st.toast('Phenotype extraction task enqueued', icon=':material/check:')
+            container=button_col,
+        )
         try:
             phenotypes = get_phenotypes(paper_resp.id, patient.id)
             _render_patient_phenotypes(phenotypes, paper_resp, key_prefix, patient.id)
