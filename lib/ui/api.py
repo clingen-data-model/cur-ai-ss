@@ -65,6 +65,22 @@ def get_http_error_detail(e: requests.HTTPError) -> str:
     return str(e)
 
 
+def login(email: str, password: str) -> str:
+    """POST to /auth/login and return the access token."""
+    resp = requests.post(
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/auth/login',
+        json={'email': email, 'password': password},
+    )
+    resp.raise_for_status()
+    return resp.json()['access_token']
+
+
+def get_me() -> UserResp:
+    resp = _session.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/auth/me')
+    resp.raise_for_status()
+    return UserResp.model_validate(resp.json())
+
+
 def register(
     email: str, first_name: str, last_name: str, description_of_use_case: str
 ) -> UserResp:
