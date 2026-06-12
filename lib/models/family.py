@@ -98,5 +98,7 @@ class FamilyUpdateRequest(PatchModel):
     consanguinity: bool | None = None
     consanguinity_human_edit_note: str | None = None
 
-    def apply_to(self, obj: FamilyDB) -> None:  # type: ignore[override]
-        super().apply_to(obj)
+    def apply_to(  # type: ignore[override]
+        self, obj: FamilyDB, updated_by_user_id: int | None = None
+    ) -> None:
+        super().apply_to(obj, updated_by_user_id)

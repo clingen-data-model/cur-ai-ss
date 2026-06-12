@@ -1,7 +1,7 @@
 import re
 from datetime import datetime
 
-from pydantic import BaseModel, SecretStr, field_validator
+from pydantic import BaseModel, ConfigDict, SecretStr, computed_field, field_validator
 from sqlalchemy import Boolean, DateTime, Index, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -42,6 +42,26 @@ class UserResp(BaseModel):
     is_admin: bool
     description_of_use_case: str
     updated_at: datetime
+
+
+class UserSummaryResp(BaseModel):
+    """Minimal user identity for attribution on other entities' responses.
+
+    Built directly from the ``updated_by`` ORM relationship; deliberately omits
+    sensitive/account fields exposed by ``UserResp``.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    email: str
+    first_name: str
+    last_name: str
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def name(self) -> str:
+        return f'{self.first_name} {self.last_name}'.strip() or self.email
 
 
 class UserCreateRequest(BaseModel):

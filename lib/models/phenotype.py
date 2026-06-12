@@ -17,6 +17,7 @@ from sqlalchemy.types import JSON
 
 from lib.models.base import Base, PatchModel
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
+from lib.models.user import UserSummaryResp
 
 if TYPE_CHECKING:
     from lib.models.paper import PaperDB
@@ -151,6 +152,7 @@ class PhenotypeResp(BaseModel):
     modifier: str | None
     updated_at: datetime
     updated_by_user_id: int | None = None
+    updated_by: UserSummaryResp | None = None
     # Evidence block (from DB JSON column)
     concept_evidence: EvidenceBlock[str]
     # HPO link (always present with ReasoningBlock, value may be None if not yet linked or excluded)

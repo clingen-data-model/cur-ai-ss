@@ -21,6 +21,7 @@ from lib.models.base import Base, PatchModel
 from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock
 from lib.models.family import Family
 from lib.models.paper import PaperDB
+from lib.models.user import UserSummaryResp
 
 if TYPE_CHECKING:
     from lib.models.agent_run import AgentRunDB
@@ -544,6 +545,7 @@ class PatientResp(BaseModel):
     twin_type: TwinType | None
     updated_at: datetime
     updated_by_user_id: int | None = None
+    updated_by: UserSummaryResp | None = None
     # Evidence blocks (from DB JSON columns)
     identifier_evidence: HumanEvidenceBlock[str]
     proband_status_evidence: HumanEvidenceBlock[ProbandStatus]

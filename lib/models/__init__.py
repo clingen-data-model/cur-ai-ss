@@ -73,6 +73,7 @@ from lib.models.user import (
     UserCreateRequest,
     UserDB,
     UserResp,
+    UserSummaryResp,
 )
 from lib.models.variant import (
     AnnotatedVariant,

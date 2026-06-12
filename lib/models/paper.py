@@ -60,6 +60,7 @@ from lib.models.base import Base, PatchModel
 from lib.models.evidence_block import EvidenceBlock
 from lib.models.gene_disease_relation import GeneDiseaseRelation
 from lib.models.patient_variant_occurrences import Inheritance
+from lib.models.user import UserSummaryResp
 from lib.tasks.models import TaskResp
 
 Color: TypeAlias = Literal[
@@ -297,6 +298,7 @@ class PaperResp(PaperExtractionOutput):
     disease_inheritance_mode_evidence: EvidenceBlock[Inheritance] | None = None
     updated_at: datetime
     updated_by_user_id: int | None = None
+    updated_by: UserSummaryResp | None = None
     tasks: list['TaskResp'] = []
     patient_count: int = 0
     variant_count: int = 0

@@ -21,6 +21,7 @@ from sqlalchemy.types import JSON
 from lib.models.base import Base, PatchModel
 from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock, ReasoningBlock
 from lib.models.paper import PaperDB
+from lib.models.user import UserSummaryResp
 
 if TYPE_CHECKING:
     from lib.models.agent_run import AgentRunDB
@@ -156,6 +157,7 @@ class VariantResp(BaseModel):
     main_focus: bool
     updated_at: datetime
     updated_by_user_id: int | None = None
+    updated_by: UserSummaryResp | None = None
     # Evidence blocks (from DB JSON columns)
     transcript_evidence: EvidenceBlock[Optional[str]]
     protein_accession_evidence: EvidenceBlock[Optional[str]]
@@ -204,9 +206,12 @@ class HarmonizedVariantUpdate(PatchModel):
     hgvs_p: str | None = None
     hgvs_g: str | None = None
 
-    def apply_to(self, obj: 'HarmonizedVariantDB') -> None:  # type: ignore[override]
+    def apply_to(  # type: ignore[override]
+        self, obj: 'HarmonizedVariantDB', updated_by_user_id: int | None = None
+    ) -> None:
         for field, value in self.model_dump(exclude_unset=True).items():
             setattr(obj, field, value)
+        self.stamp_updated_by(obj, updated_by_user_id)
 
 
 class VariantUpdateRequest(PatchModel):
@@ -234,7 +239,9 @@ class VariantUpdateRequest(PatchModel):
             raise ValueError('harmonized_variant cannot be null')
         return self
 
-    def apply_to(self, obj: 'VariantDB') -> None:  # type: ignore[override]
+    def apply_to(  # type: ignore[override]
+        self, obj: 'VariantDB', updated_by_user_id: int | None = None
+    ) -> None:
         for field, value in self.model_dump(exclude_unset=True).items():
             if field == 'harmonized_variant':
                 continue
@@ -245,6 +252,7 @@ class VariantUpdateRequest(PatchModel):
                 setattr(obj, evidence_column, evidence_dict)
             else:
                 setattr(obj, field, value)
+        self.stamp_updated_by(obj, updated_by_user_id)
 
 
 class VariantDB(Base):

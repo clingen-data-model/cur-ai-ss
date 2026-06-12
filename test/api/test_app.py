@@ -1188,4 +1188,12 @@ def test_patch_patient_records_updated_by(
         json={'identifier': 'P1-edited'},
     )
     assert resp.status_code == 200
-    assert resp.json()['updated_by_user_id'] == test_user.id
+    body = resp.json()
+    assert body['updated_by_user_id'] == test_user.id
+    assert body['updated_by'] == {
+        'id': test_user.id,
+        'email': 'tester@example.com',
+        'first_name': 'Test',
+        'last_name': 'User',
+        'name': 'Test User',
+    }

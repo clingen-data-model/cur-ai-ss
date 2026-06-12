@@ -128,6 +128,7 @@ from lib.models import (
     UserCreateRequest,
     UserDB,
     UserResp,
+    UserSummaryResp,
     VariantDB,
     VariantResp,
     VariantUpdateRequest,
@@ -432,8 +433,7 @@ def update_paper(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
-    patch_request.apply_to(paper_db)
-    paper_db.updated_by_user_id = current_user.id
+    patch_request.apply_to(paper_db, current_user.id)
     paper_db.patient_count = len(paper_db.patients)
     paper_db.variant_count = len(paper_db.variants)
     paper_db.patient_variant_occurrences_count = len(
@@ -452,6 +452,7 @@ def list_papers(
         selectinload(PaperDB.patients),
         selectinload(PaperDB.variants),
         selectinload(PaperDB.patient_variant_occurrences),
+        selectinload(PaperDB.updated_by),
     )
     papers = query.all()
     for paper in papers:
@@ -521,6 +522,10 @@ def create_task(
     return tasks
 
 
+def _user_summary(user: UserDB | None) -> UserSummaryResp | None:
+    return UserSummaryResp.model_validate(user) if user else None
+
+
 def _patient_to_resp(row: PatientDB) -> PatientResp:
     return PatientResp(
         id=row.id,
@@ -576,6 +581,7 @@ def _patient_to_resp(row: PatientDB) -> PatientResp:
         else None,
         updated_at=row.updated_at,
         updated_by_user_id=row.updated_by_user_id,
+        updated_by=_user_summary(row.updated_by),
         family_id=row.family.id,
         family_identifier=row.family.identifier,
         family_assignment_evidence=HumanEvidenceBlock.model_validate(
@@ -593,7 +599,7 @@ def get_patients(paper_id: int, session: Session = Depends(get_session)) -> Any:
         )
     patients = (
         session.query(PatientDB)
-        .options(selectinload(PatientDB.family))
+        .options(selectinload(PatientDB.family), selectinload(PatientDB.updated_by))
         .filter(PatientDB.paper_id == paper_id)
         .order_by(PatientDB.id)
         .all()
@@ -781,6 +787,7 @@ def get_variants(paper_id: int, session: Session = Depends(get_session)) -> Any:
         .options(
             joinedload(VariantDB.harmonized_variant),
             joinedload(VariantDB.annotated_variant),
+            selectinload(VariantDB.updated_by),
         )
         .filter(VariantDB.paper_id == paper_id)
         .order_by(VariantDB.id)
@@ -849,6 +856,7 @@ def _variant_to_resp(row: VariantDB) -> VariantResp:
         functional_evidence=row.functional_evidence,
         updated_at=row.updated_at,
         updated_by_user_id=row.updated_by_user_id,
+        updated_by=_user_summary(row.updated_by),
         transcript_evidence=EvidenceBlock.model_validate(row.transcript_evidence),
         protein_accession_evidence=EvidenceBlock.model_validate(
             row.protein_accession_evidence
@@ -904,8 +912,7 @@ def update_variant(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Variant not found'
         )
-    patch_request.apply_to(variant_db)
-    variant_db.updated_by_user_id = current_user.id
+    patch_request.apply_to(variant_db, current_user.id)
     # Editing any harmonized field invalidates the downstream enrichment row,
     # which was computed by key lookup from the pre-edit coordinates. Treat
     # all harmonized siblings uniformly so a future enrichment lookup added
@@ -924,8 +931,7 @@ def update_variant(
                 status_code=status.HTTP_409_CONFLICT,
                 detail='Variant has not been harmonized by the server yet',
             )
-        harmonized_update.apply_to(variant_db.harmonized_variant)
-        variant_db.harmonized_variant.updated_by_user_id = current_user.id
+        harmonized_update.apply_to(variant_db.harmonized_variant, current_user.id)
         # delete-orphan cascade removes the row
         variant_db.annotated_variant = None
     session.flush()
@@ -963,6 +969,7 @@ def _phenotype_to_resp(row: PhenotypeDB) -> PhenotypeResp:
         modifier=row.modifier,
         updated_at=row.updated_at,
         updated_by_user_id=row.updated_by_user_id,
+        updated_by=_user_summary(row.updated_by),
         hpo=hpo,
     )
 
@@ -1163,7 +1170,10 @@ def get_phenotypes(
         )
     phenotypes = (
         session.query(PhenotypeDB)
-        .options(joinedload(PhenotypeDB.hpo))
+        .options(
+            joinedload(PhenotypeDB.hpo),
+            selectinload(PhenotypeDB.updated_by),
+        )
         .filter(
             PhenotypeDB.patient_id == patient_id,
         )
@@ -1239,8 +1249,7 @@ def update_phenotype(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Phenotype not found'
         )
-    patch_request.apply_to(phenotype_db)
-    phenotype_db.updated_by_user_id = current_user.id
+    patch_request.apply_to(phenotype_db, current_user.id)
     return phenotype_db
 
 
@@ -1262,8 +1271,7 @@ def update_patient(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Patient not found'
         )
-    patch_request.apply_to(patient_db)
-    patient_db.updated_by_user_id = current_user.id
+    patch_request.apply_to(patient_db, current_user.id)
     return _patient_to_resp(patient_db)
 
 
