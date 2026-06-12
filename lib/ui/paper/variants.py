@@ -7,7 +7,12 @@ import streamlit as st
 from lib.models import PaperResp, VariantResp, VariantUpdateRequest
 from lib.models.variant import VariantType
 from lib.tasks import TaskType, is_task_completed
-from lib.ui.api import get_occurrences, get_variants, update_variant
+from lib.ui.api import (
+    enqueue_paper_task,
+    get_occurrences,
+    get_variants,
+    update_variant,
+)
 from lib.ui.paper.shared import (
     HUMAN_EDIT_NOTE_DEFAULT,
     get_clingen_url,
@@ -397,8 +402,41 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                     harmonized_inputs: dict[str, str] = {}
                     with st.container():
                         st.subheader('Harmonized Variant Info')
+                        reharm_col, reannot_col = st.columns(2)
+                        if reharm_col.button(
+                            '🔄 Re-harmonize',
+                            key=f'{key_prefix}-reharmonize',
+                            use_container_width=True,
+                            help='Re-run harmonization for this variant (also re-annotates).',
+                        ):
+                            enqueue_paper_task(
+                                paper_resp.id,
+                                TaskType.VARIANT_HARMONIZATION,
+                                variant_id=variant.id,
+                            )
+                            st.toast(
+                                'Harmonization task enqueued', icon=':material/check:'
+                            )
+                        if reannot_col.button(
+                            '🔄 Re-annotate',
+                            key=f'{key_prefix}-reannotate',
+                            use_container_width=True,
+                            help='Re-run annotation for this variant (no re-harmonization).',
+                        ):
+                            enqueue_paper_task(
+                                paper_resp.id,
+                                TaskType.VARIANT_ANNOTATION,
+                                variant_id=variant.id,
+                            )
+                            st.toast(
+                                'Annotation task enqueued', icon=':material/check:'
+                            )
                         if harmonized_variant and harmonized_variant.value:
                             hv = harmonized_variant.value
+                            if hv.updated_by:
+                                st.caption(
+                                    f'✏️ Harmonization edited by {hv.updated_by.name}'
+                                )
                             # gnomAD-style coordinates
                             col1, col2 = st.columns(2)
                             with col1:

@@ -19,6 +19,7 @@ from lib.models import (
     PaperDB,
     PatientDB,
     PhenotypeDB,
+    SegregationEvidenceDB,
     TaskDB,
     UserDB,
     VariantDB,
@@ -138,7 +139,9 @@ def test_get_paper_not_found(client):
     assert response.json()['detail'] == 'Paper not found'
 
 
-def test_update_paper_metadata(client, test_pdf, db_session, seeded_genes, agent_run):
+def test_update_paper_metadata(
+    client, test_pdf, db_session, seeded_genes, agent_run, test_user
+):
     response = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
@@ -161,6 +164,40 @@ def test_update_paper_metadata(client, test_pdf, db_session, seeded_genes, agent
         json={'title': 'Another Title'},
     )
     assert response3.status_code == 404
+
+    # A human edit note on the disease field stamps a per-field editor snapshot
+    # into its evidence block (which must already exist — see _apply_field skip).
+    paper_db = db_session.get(PaperDB, paper_id)
+    paper_db.disease_name = 'Marfan syndrome'
+    paper_db.disease_name_evidence = {
+        'value': 'Marfan syndrome',
+        'reasoning': 'Stated in abstract',
+        'quote': 'a patient with Marfan syndrome',
+    }
+    db_session.flush()
+
+    response4 = client.patch(
+        f'/papers/{paper_id}',
+        json={'disease_name_human_edit_note': 'Corrected disease name'},
+    )
+    assert response4.status_code == 200
+    evidence = response4.json()['disease_name_evidence']
+    assert evidence['human_edit_note'] == 'Corrected disease name'
+    assert evidence['edited_by_user_id'] == test_user.id
+    assert evidence['edited_by_name'] == 'Test User'
+    assert evidence['edited_at'] is not None
+
+    # A note on an unextracted (null-evidence) disease field is silently skipped
+    # rather than producing an invalid note-only block.
+    paper_db = db_session.get(PaperDB, paper_id)
+    paper_db.disease_inheritance_mode_evidence = None
+    db_session.flush()
+    response5 = client.patch(
+        f'/papers/{paper_id}',
+        json={'disease_inheritance_mode_human_edit_note': 'should be ignored'},
+    )
+    assert response5.status_code == 200
+    assert response5.json()['disease_inheritance_mode_evidence'] is None
 
 
 def test_list_paper(client, test_pdf, seeded_genes, agent_run):
@@ -396,7 +433,7 @@ def test_get_patients_paper_not_found(client):
 
 
 def test_update_patient_with_human_edit_note(
-    client, db_session, seeded_paper, seeded_agent_run
+    client, db_session, seeded_paper, seeded_agent_run, test_user
 ):
     """Test updating a patient with human_edit_note on evidence."""
     # Get the default family created in seeded_paper fixture
@@ -435,6 +472,15 @@ def test_update_patient_with_human_edit_note(
     )
     # Other evidence should have null notes (only the specified ones were updated)
     assert resp_json['sex_evidence']['human_edit_note'] is None
+
+    # The edited field's evidence block carries a per-field editor snapshot...
+    identifier_evidence = resp_json['identifier_evidence']
+    assert identifier_evidence['edited_by_user_id'] == test_user.id
+    assert identifier_evidence['edited_by_name'] == 'Test User'
+    assert identifier_evidence['edited_at'] is not None
+    # ...while untouched fields stay unattributed.
+    assert resp_json['sex_evidence']['edited_by_user_id'] is None
+    assert resp_json['sex_evidence']['edited_by_name'] is None
 
 
 def test_update_patient_rejects_wrong_paper_scope(
@@ -480,56 +526,6 @@ def test_update_patient_rejects_wrong_paper_scope(
     assert response.json()['detail'] == 'Patient not found'
     db_session.refresh(patient)
     assert patient.identifier == 'P-other'
-
-
-def test_update_phenotype_rejects_wrong_patient_scope(
-    client, db_session, seeded_paper, seeded_agent_run
-):
-    family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
-    patient_1 = PatientDB(
-        paper_id=seeded_paper.id,
-        family_id=family.id,
-        agent_run_id=seeded_agent_run.id,
-        identifier='P1',
-        **_patient_required_fields('P1'),
-    )
-    patient_2 = PatientDB(
-        paper_id=seeded_paper.id,
-        family_id=family.id,
-        agent_run_id=seeded_agent_run.id,
-        identifier='P2',
-        **_patient_required_fields('P2'),
-    )
-    db_session.add_all([patient_1, patient_2])
-    db_session.flush()
-
-    phenotype = PhenotypeDB(
-        paper_id=seeded_paper.id,
-        patient_id=patient_2.id,
-        concept='Seizures',
-        concept_evidence=dict(
-            value='Seizures', reasoning='test evidence', quote='test context'
-        ),
-        negated=False,
-        uncertain=False,
-        family_history=False,
-        onset=None,
-        location=None,
-        severity=None,
-        modifier=None,
-    )
-    db_session.add(phenotype)
-    db_session.flush()
-
-    response = client.patch(
-        f'/papers/{seeded_paper.id}/patients/{patient_1.id}/phenotypes/{phenotype.id}',
-        json={'uncertain': True},
-    )
-
-    assert response.status_code == 404
-    assert response.json()['detail'] == 'Phenotype not found'
-    db_session.refresh(phenotype)
-    assert phenotype.uncertain is False
 
 
 def test_get_variants_harmonized_and_enriched(
@@ -842,7 +838,9 @@ def test_update_variant_extracted_fields(client, seeded_paper, seeded_variant):
     assert data['transcript'] == 'NM_007294.3'
 
 
-def test_update_variant_harmonized_fields(client, seeded_paper, seeded_variant):
+def test_update_variant_harmonized_fields(
+    client, seeded_paper, seeded_variant, test_user
+):
     """PATCH harmonized variant fields through the variant endpoint."""
     response = client.patch(
         f'/papers/{seeded_paper.id}/variants/{seeded_variant.id}',
@@ -861,6 +859,9 @@ def test_update_variant_harmonized_fields(client, seeded_paper, seeded_variant):
     # Other harmonized fields preserved
     assert hv['rsid'] == 'rs80357906'
     assert hv['hgvs_c'] == 'c.68_69delAG'
+    # Harmonized edits surface entity-level attribution on the harmonized block.
+    assert hv['updated_by_user_id'] == test_user.id
+    assert hv['updated_by']['name'] == 'Test User'
 
 
 def test_update_variant_human_edit_note(client, seeded_paper, seeded_variant):
@@ -1122,6 +1123,51 @@ def test_enqueue_clears_conversation_id_without_context(
     assert tasks[0]['status'] == 'Pending'
 
 
+def test_create_task_records_updated_by(client, seeded_paper, test_user):
+    """A user-triggered task records who enqueued it and surfaces updated_by."""
+    response = client.post(
+        f'/papers/{seeded_paper.id}/tasks',
+        json=TaskCreateRequest(type=TaskType.VARIANT_EXTRACTION).model_dump(),
+    )
+    assert response.status_code == 200
+    tasks = response.json()
+    assert len(tasks) == 1
+    assert tasks[0]['updated_by_user_id'] == test_user.id
+    assert tasks[0]['updated_by'] == {
+        'id': test_user.id,
+        'email': 'tester@example.com',
+        'first_name': 'Test',
+        'last_name': 'User',
+        'name': 'Test User',
+    }
+
+
+def test_create_task_scoped_to_variant(client, seeded_paper, seeded_variant, test_user):
+    """A variant-scoped enqueue creates a single task carrying the scope + editor."""
+    response = client.post(
+        f'/papers/{seeded_paper.id}/tasks',
+        json=TaskCreateRequest(
+            type=TaskType.VARIANT_HARMONIZATION,
+            variant_id=seeded_variant.id,
+        ).model_dump(),
+    )
+    assert response.status_code == 200
+    tasks = response.json()
+    assert len(tasks) == 1
+    assert tasks[0]['variant_id'] == seeded_variant.id
+    assert tasks[0]['type'] == TaskType.VARIANT_HARMONIZATION.value
+    assert tasks[0]['updated_by_user_id'] == test_user.id
+
+
+def test_create_task_requires_authentication(unauth_client, seeded_paper):
+    """Anonymous task enqueue is rejected."""
+    response = unauth_client.post(
+        f'/papers/{seeded_paper.id}/tasks',
+        json=TaskCreateRequest(type=TaskType.VARIANT_EXTRACTION).model_dump(),
+    )
+    assert response.status_code == 401
+
+
 def test_update_variant_rejects_harmonized_update_before_harmonization(
     client, seeded_paper, seeded_unharmonized_variant
 ):
@@ -1197,3 +1243,91 @@ def test_patch_patient_records_updated_by(
         'last_name': 'User',
         'name': 'Test User',
     }
+
+
+def test_update_family_records_attribution(client, db_session, seeded_paper, test_user):
+    family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
+    family.identifier_evidence = {
+        'value': 'F1',
+        'reasoning': 'Family label in Table 1',
+        'quote': 'Family F1',
+    }
+    db_session.flush()
+
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/families/{family.id}',
+        json={
+            'identifier': 'F1-edited',
+            'identifier_human_edit_note': 'Corrected label',
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body['identifier'] == 'F1-edited'
+    # Entity-level attribution.
+    assert body['updated_by_user_id'] == test_user.id
+    assert body['updated_by']['name'] == 'Test User'
+    # Per-field snapshot on the edited evidence block.
+    evidence = body['identifier_evidence']
+    assert evidence['human_edit_note'] == 'Corrected label'
+    assert evidence['edited_by_user_id'] == test_user.id
+    assert evidence['edited_by_name'] == 'Test User'
+
+    # Wrong-paper / missing family is a 404.
+    assert (
+        client.patch(
+            f'/papers/{seeded_paper.id}/families/999999',
+            json={'identifier': 'x'},
+        ).status_code
+        == 404
+    )
+
+
+def test_update_segregation_evidence_records_attribution(
+    client, db_session, seeded_paper, test_user
+):
+    family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
+    evidence = SegregationEvidenceDB(
+        family_id=family.id,
+        extracted_lod_score=2.0,
+        extracted_lod_score_evidence={
+            'value': 2.0,
+            'reasoning': 'Reported in text',
+            'quote': 'LOD score of 2.0',
+        },
+        has_unexplainable_non_segregations=False,
+        has_unexplainable_non_segregations_evidence={
+            'value': False,
+            'reasoning': 'No exceptions noted',
+        },
+    )
+    db_session.add(evidence)
+    db_session.flush()
+
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/segregation-analysis/{family.id}',
+        json={
+            'extracted_lod_score': 3.5,
+            'extracted_lod_score_human_edit_note': 'Recomputed',
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    # The edited value is reflected (apply_to writes it into the evidence block
+    # the Resp renders), with the per-field editor snapshot.
+    lod = body['extracted_lod_score']
+    assert lod['value'] == 3.5
+    assert lod['human_edit_note'] == 'Recomputed'
+    assert lod['edited_by_user_id'] == test_user.id
+    assert lod['edited_by_name'] == 'Test User'
+    # Entity-level attribution surfaces on the combined response too.
+    assert body['updated_by_user_id'] == test_user.id
+    assert body['updated_by']['name'] == 'Test User'
+
+    assert (
+        client.patch(
+            f'/papers/{seeded_paper.id}/segregation-analysis/999999',
+            json={'extracted_lod_score': 1.0},
+        ).status_code
+        == 404
+    )

@@ -91,7 +91,6 @@ from lib.models import (
     ChatMessageResp,
     ChatRoutingResponse,
     ConversationDB,
-    ExtractedPhenotype,
     FamilyCreateRequest,
     FamilyDB,
     FamilyResp,
@@ -119,10 +118,10 @@ from lib.models import (
     PedigreeResp,
     PhenotypeDB,
     PhenotypeResp,
-    PhenotypeUpdateRequest,
     SegregationAnalysisComputedDB,
     SegregationAnalysisResp,
     SegregationEvidenceDB,
+    SegregationEvidenceUpdateRequest,
     TaskDB,
     TokenResp,
     UserCreateRequest,
@@ -433,7 +432,7 @@ def update_paper(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
-    patch_request.apply_to(paper_db, current_user.id)
+    patch_request.apply_to(paper_db, current_user)
     paper_db.patient_count = len(paper_db.patients)
     paper_db.variant_count = len(paper_db.variants)
     paper_db.patient_variant_occurrences_count = len(
@@ -448,7 +447,7 @@ def list_papers(
 ) -> Any:
     query = session.query(PaperDB).options(
         selectinload(PaperDB.gene),
-        selectinload(PaperDB.tasks),
+        selectinload(PaperDB.tasks).selectinload(TaskDB.updated_by),
         selectinload(PaperDB.patients),
         selectinload(PaperDB.variants),
         selectinload(PaperDB.patient_variant_occurrences),
@@ -474,6 +473,7 @@ def list_tasks(
         )
     tasks = (
         session.query(TaskDB)
+        .options(selectinload(TaskDB.updated_by))
         .filter(TaskDB.paper_id == paper_id)
         .order_by(TaskDB.id)
         .all()
@@ -486,6 +486,7 @@ def create_task(
     paper_id: int,
     request: TaskCreateRequest,
     session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> Any:
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
@@ -505,6 +506,7 @@ def create_task(
             task_type=request.type,
             skip_successors=request.skip_successors,
             additional_context=request.additional_context,
+            updated_by_user_id=current_user.id,
         )
     else:
         task = enqueue_task(
@@ -517,6 +519,7 @@ def create_task(
             phenotype_id=request.phenotype_id,
             skip_successors=request.skip_successors,
             additional_context=request.additional_context,
+            updated_by_user_id=current_user.id,
         )
         tasks = [task]
     return tasks
@@ -684,10 +687,32 @@ def get_families(paper_id: int, session: Session = Depends(get_session)) -> Any:
         )
     return (
         session.query(FamilyDB)
+        .options(selectinload(FamilyDB.updated_by))
         .filter(FamilyDB.paper_id == paper_id)
         .order_by(FamilyDB.id)
         .all()
     )
+
+
+@app.patch('/papers/{paper_id}/families/{family_id}', response_model=FamilyResp)
+def update_family(
+    paper_id: int,
+    family_id: int,
+    patch_request: FamilyUpdateRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    family_db = (
+        session.query(FamilyDB)
+        .filter(FamilyDB.id == family_id, FamilyDB.paper_id == paper_id)
+        .one_or_none()
+    )
+    if not family_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Family not found'
+        )
+    patch_request.apply_to(family_db, current_user)
+    return family_db
 
 
 @app.get('/papers/{paper_id}/pedigree', response_model=PedigreeResp | None)
@@ -701,6 +726,14 @@ def get_pedigree(paper_id: int, session: Session = Depends(get_session)) -> Any:
         session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).one_or_none()
     )
     return pedigree
+
+
+def _seg_evidence_block(value: Any, evidence_dict: dict | None) -> HumanEvidenceBlock:
+    """Build a segregation evidence block, taking ``value`` from the scalar column
+    (the source of truth for edits) and reasoning/quote/note from the JSON block."""
+    data = dict(evidence_dict or {})
+    data['value'] = value
+    return HumanEvidenceBlock.model_validate(data)
 
 
 def _segregation_analysis_to_resp(
@@ -734,14 +767,17 @@ def _segregation_analysis_to_resp(
     return SegregationAnalysisResp(
         id=computed.id if computed else evidence.id,
         family_id=family.id,
-        extracted_lod_score=HumanEvidenceBlock.model_validate(
-            evidence.extracted_lod_score_evidence or {}
+        extracted_lod_score=_seg_evidence_block(
+            evidence.extracted_lod_score, evidence.extracted_lod_score_evidence
         ),
-        has_unexplainable_non_segregations=HumanEvidenceBlock.model_validate(
-            evidence.has_unexplainable_non_segregations_evidence or {}
+        has_unexplainable_non_segregations=_seg_evidence_block(
+            evidence.has_unexplainable_non_segregations,
+            evidence.has_unexplainable_non_segregations_evidence,
         ),
         computed=computed_nested,
         updated_at=computed.updated_at if computed else evidence.updated_at,
+        updated_by_user_id=evidence.updated_by_user_id,
+        updated_by=_user_summary(evidence.updated_by),
     )
 
 
@@ -775,6 +811,38 @@ def get_segregation_analysis(
     return result
 
 
+@app.patch(
+    '/papers/{paper_id}/segregation-analysis/{family_id}',
+    response_model=SegregationAnalysisResp,
+)
+def update_segregation_evidence(
+    paper_id: int,
+    family_id: int,
+    patch_request: SegregationEvidenceUpdateRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    row = (
+        session.query(FamilyDB, SegregationEvidenceDB)
+        .join(SegregationEvidenceDB, FamilyDB.id == SegregationEvidenceDB.family_id)
+        .filter(FamilyDB.paper_id == paper_id, FamilyDB.id == family_id)
+        .one_or_none()
+    )
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Segregation evidence not found',
+        )
+    family, evidence = row
+    patch_request.apply_to(evidence, current_user)
+    computed = (
+        session.query(SegregationAnalysisComputedDB)
+        .filter(SegregationAnalysisComputedDB.family_id == family_id)
+        .one_or_none()
+    )
+    return _segregation_analysis_to_resp(family, evidence, computed)
+
+
 @app.get('/papers/{paper_id}/variants', response_model=list[VariantResp])
 def get_variants(paper_id: int, session: Session = Depends(get_session)) -> Any:
     paper_db = session.get(PaperDB, paper_id)
@@ -785,7 +853,9 @@ def get_variants(paper_id: int, session: Session = Depends(get_session)) -> Any:
     variants = (
         session.query(VariantDB)
         .options(
-            joinedload(VariantDB.harmonized_variant),
+            joinedload(VariantDB.harmonized_variant).joinedload(
+                HarmonizedVariantDB.updated_by
+            ),
             joinedload(VariantDB.annotated_variant),
             selectinload(VariantDB.updated_by),
         )
@@ -808,6 +878,8 @@ def _variant_to_resp(row: VariantDB) -> VariantResp:
                 hgvs_c=hv.hgvs_c,
                 hgvs_p=hv.hgvs_p,
                 hgvs_g=hv.hgvs_g,
+                updated_by_user_id=hv.updated_by_user_id,
+                updated_by=_user_summary(hv.updated_by),
             ),
             reasoning=hv.reasoning,
         )
@@ -912,7 +984,7 @@ def update_variant(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Variant not found'
         )
-    patch_request.apply_to(variant_db, current_user.id)
+    patch_request.apply_to(variant_db, current_user)
     # Editing any harmonized field invalidates the downstream enrichment row,
     # which was computed by key lookup from the pre-edit coordinates. Treat
     # all harmonized siblings uniformly so a future enrichment lookup added
@@ -931,7 +1003,7 @@ def update_variant(
                 status_code=status.HTTP_409_CONFLICT,
                 detail='Variant has not been harmonized by the server yet',
             )
-        harmonized_update.apply_to(variant_db.harmonized_variant, current_user.id)
+        harmonized_update.apply_to(variant_db.harmonized_variant, current_user)
         # delete-orphan cascade removes the row
         variant_db.annotated_variant = None
     session.flush()
@@ -969,7 +1041,6 @@ def _phenotype_to_resp(row: PhenotypeDB) -> PhenotypeResp:
         modifier=row.modifier,
         updated_at=row.updated_at,
         updated_by_user_id=row.updated_by_user_id,
-        updated_by=_user_summary(row.updated_by),
         hpo=hpo,
     )
 
@@ -1170,10 +1241,7 @@ def get_phenotypes(
         )
     phenotypes = (
         session.query(PhenotypeDB)
-        .options(
-            joinedload(PhenotypeDB.hpo),
-            selectinload(PhenotypeDB.updated_by),
-        )
+        .options(joinedload(PhenotypeDB.hpo))
         .filter(
             PhenotypeDB.patient_id == patient_id,
         )
@@ -1181,76 +1249,6 @@ def get_phenotypes(
         .all()
     )
     return [_phenotype_to_resp(p) for p in phenotypes]
-
-
-@app.post(
-    '/papers/{paper_id}/patients/{patient_id}/phenotypes',
-    response_model=PhenotypeResp,
-)
-def create_phenotype(
-    paper_id: int,
-    patient_id: int,
-    phenotype_data: ExtractedPhenotype,
-    session: Session = Depends(get_session),
-) -> Any:
-    paper_db = session.get(PaperDB, paper_id)
-    if not paper_db:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
-        )
-    patient_db = (
-        session.query(PatientDB).filter(PatientDB.id == patient_id).one_or_none()
-    )
-    if not patient_db:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Patient not found'
-        )
-
-    phenotype_db = PhenotypeDB(
-        paper_id=paper_id,
-        patient_id=patient_id,
-        concept=phenotype_data.concept.value,
-        concept_evidence=phenotype_data.concept.model_dump(),
-        negated=phenotype_data.negated,
-        uncertain=phenotype_data.uncertain,
-        family_history=phenotype_data.family_history,
-        onset=phenotype_data.onset,
-        location=phenotype_data.location,
-        severity=phenotype_data.severity,
-        modifier=phenotype_data.modifier,
-    )
-    session.add(phenotype_db)
-    return phenotype_db
-
-
-@app.patch(
-    '/papers/{paper_id}/patients/{patient_id}/phenotypes/{phenotype_id}',
-    response_model=PhenotypeResp,
-)
-def update_phenotype(
-    paper_id: int,
-    patient_id: int,
-    phenotype_id: int,
-    patch_request: PhenotypeUpdateRequest,
-    session: Session = Depends(get_session),
-    current_user: UserDB = Depends(get_current_user),
-) -> Any:
-    phenotype_db = (
-        session.query(PhenotypeDB)
-        .options(joinedload(PhenotypeDB.hpo))
-        .filter(
-            PhenotypeDB.id == phenotype_id,
-            PhenotypeDB.paper_id == paper_id,
-            PhenotypeDB.patient_id == patient_id,
-        )
-        .one_or_none()
-    )
-    if not phenotype_db:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Phenotype not found'
-        )
-    patch_request.apply_to(phenotype_db, current_user.id)
-    return phenotype_db
 
 
 @app.patch('/papers/{paper_id}/patients/{patient_id}', response_model=PatientResp)
@@ -1271,7 +1269,7 @@ def update_patient(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Patient not found'
         )
-    patch_request.apply_to(patient_db, current_user.id)
+    patch_request.apply_to(patient_db, current_user)
     return _patient_to_resp(patient_db)
 
 

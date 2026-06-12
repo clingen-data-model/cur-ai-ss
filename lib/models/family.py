@@ -11,6 +11,7 @@ from sqlalchemy.types import JSON
 from lib.models.base import Base, PatchModel
 from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock
 from lib.models.paper import PaperDB
+from lib.models.user import UserSummaryResp
 
 if TYPE_CHECKING:
     from lib.models.agent_run import AgentRunDB
@@ -86,6 +87,7 @@ class FamilyResp(BaseModel):
     consanguinity_evidence: HumanEvidenceBlock[bool]
     updated_at: datetime
     updated_by_user_id: int | None = None
+    updated_by: UserSummaryResp | None = None
 
 
 class FamilyCreateRequest(BaseModel):
@@ -97,8 +99,3 @@ class FamilyUpdateRequest(PatchModel):
     identifier_human_edit_note: str | None = None
     consanguinity: bool | None = None
     consanguinity_human_edit_note: str | None = None
-
-    def apply_to(  # type: ignore[override]
-        self, obj: FamilyDB, updated_by_user_id: int | None = None
-    ) -> None:
-        super().apply_to(obj, updated_by_user_id)

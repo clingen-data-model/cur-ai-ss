@@ -55,7 +55,6 @@ from lib.models.phenotype import (
     HPOTerm,
     PhenotypeDB,
     PhenotypeResp,
-    PhenotypeUpdateRequest,
 )
 from lib.models.segregation_analysis import (
     SegregationAnalysisComputedDB,

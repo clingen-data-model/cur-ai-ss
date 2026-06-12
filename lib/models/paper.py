@@ -57,7 +57,7 @@ from lib.misc.pdf.paths import (
     pdf_thumbnail_path,
 )
 from lib.models.base import Base, PatchModel
-from lib.models.evidence_block import EvidenceBlock
+from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock
 from lib.models.gene_disease_relation import GeneDiseaseRelation
 from lib.models.patient_variant_occurrences import Inheritance
 from lib.models.user import UserSummaryResp
@@ -293,9 +293,9 @@ class PaperResp(PaperExtractionOutput):
     is_paper_relevant: bool | None = None
     section_classifications: dict | None = None
     disease_name: str | None = None
-    disease_name_evidence: EvidenceBlock[str] | None = None
+    disease_name_evidence: HumanEvidenceBlock[str] | None = None
     disease_inheritance_mode: Inheritance | None = None
-    disease_inheritance_mode_evidence: EvidenceBlock[Inheritance] | None = None
+    disease_inheritance_mode_evidence: HumanEvidenceBlock[Inheritance] | None = None
     updated_at: datetime
     updated_by_user_id: int | None = None
     updated_by: UserSummaryResp | None = None
@@ -336,6 +336,8 @@ class PaperUpdateRequest(PatchModel):
     tags: list[str] | None = None
     disease_name: str | None = None
     disease_inheritance_mode: Inheritance | None = None
+    disease_name_human_edit_note: str | None = None
+    disease_inheritance_mode_human_edit_note: str | None = None
 
 
 class HighlightRequest(BaseModel):

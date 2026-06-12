@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Generic, Self, TypeVar
 
 from pydantic import BaseModel, model_validator
@@ -54,3 +55,9 @@ class EvidenceBlock(ReasoningBlock[T]):
 
 class HumanEvidenceBlock(EvidenceBlock[T]):
     human_edit_note: str | None = None  # optional annotation by human curator
+    # Per-field edit attribution. ``edited_by_name`` is an immutable snapshot of
+    # the curator's display name at edit time (deletion/rename-proof); the id is
+    # a soft link only (no FK is possible inside a JSON column).
+    edited_by_user_id: int | None = None
+    edited_by_name: str | None = None
+    edited_at: datetime | None = None

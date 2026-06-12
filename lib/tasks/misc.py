@@ -27,12 +27,16 @@ def enqueue_task(
     phenotype_id: int | None = None,
     skip_successors: bool = False,
     additional_context: str | None = None,
+    updated_by_user_id: int | None = None,
 ) -> TaskDB:
     """Create or reset a task to PENDING status.
 
     Checks for existing task and updates it, or creates new one.
     If task is currently running, returns it unchanged.
     Returns the task (either newly created or reset).
+
+    ``updated_by_user_id`` records who triggered the task; leave ``None`` for
+    machine enqueues (worker successors) so they stay unattributed.
     """
     # Get latest agent run
     latest_run = session.query(AgentRunDB).order_by(AgentRunDB.id.desc()).first()
@@ -64,6 +68,7 @@ def enqueue_task(
         existing_task.error_message = None
         existing_task.skip_successors = skip_successors
         existing_task.additional_context = additional_context
+        existing_task.updated_by_user_id = updated_by_user_id
         # Clear conversation_id if not providing new context (start fresh)
         if additional_context is None:
             existing_task.conversation_id = None
@@ -82,6 +87,7 @@ def enqueue_task(
             status=TaskStatus.PENDING,
             skip_successors=skip_successors,
             additional_context=additional_context,
+            updated_by_user_id=updated_by_user_id,
         )
         session.add(new_task)
         session.flush()
@@ -94,6 +100,7 @@ def enqueue_all_instances(
     task_type: TaskType,
     skip_successors: bool = False,
     additional_context: str | None = None,
+    updated_by_user_id: int | None = None,
 ) -> list[TaskDB]:
     """Re-queue all instances of a task type for a paper.
 
@@ -120,6 +127,7 @@ def enqueue_all_instances(
                 task.error_message = None
                 task.skip_successors = skip_successors
                 task.additional_context = additional_context
+                task.updated_by_user_id = updated_by_user_id
                 # Clear conversation_id if not providing new context (start fresh)
                 if additional_context is None:
                     task.conversation_id = None
@@ -134,6 +142,7 @@ def enqueue_all_instances(
             task_type=task_type,
             skip_successors=skip_successors,
             additional_context=additional_context,
+            updated_by_user_id=updated_by_user_id,
         )
         return [task]
 

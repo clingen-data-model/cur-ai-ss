@@ -5,7 +5,7 @@ import streamlit as st
 from lib.models import PaperResp, PaperType, PaperUpdateRequest
 from lib.models.patient_variant_occurrences import Inheritance
 from lib.ui.api import get_http_error_detail, update_paper
-from lib.ui.paper.shared import render_evidence_controls
+from lib.ui.paper.shared import HUMAN_EDIT_NOTE_DEFAULT, render_evidence_controls
 
 
 def render_metadata_tab() -> None:
@@ -51,12 +51,13 @@ def render_metadata_tab() -> None:
     with col1:
         disease_name = st.text_input('Disease Name', paper_resp.disease_name or '')
     with col2:
-        render_evidence_controls(
+        disease_name_note = render_evidence_controls(
             paper_resp.id,
             label='Evidence',
             block=paper_resp.disease_name_evidence,
             color_key='disease-name-color',
             button_key_prefix='disease-name-btn',
+            human_edit_note_key='disease-name-note',
         )
 
     col1, col2 = st.columns([3, 1])
@@ -75,12 +76,13 @@ def render_metadata_tab() -> None:
             else None,
         )
     with col2:
-        render_evidence_controls(
+        disease_inheritance_mode_note = render_evidence_controls(
             paper_resp.id,
             label='Evidence',
             block=paper_resp.disease_inheritance_mode_evidence,
             color_key='disease-inheritance-mode-color',
             button_key_prefix='disease-inheritance-mode-btn',
+            human_edit_note_key='disease-inheritance-mode-note',
         )
 
     changes: dict[str, Any] = {}
@@ -96,13 +98,38 @@ def render_metadata_tab() -> None:
         changes['paper_types'] = paper_types
     if (abstract or None) != paper_resp.abstract:
         changes['abstract'] = abstract or None
+    name_evidence = paper_resp.disease_name_evidence
     if (disease_name or None) != paper_resp.disease_name:
         changes['disease_name'] = disease_name or None
+        # Default-note the field edit, but only when there is an evidence block
+        # to annotate (disease evidence is nullable when never extracted).
+        if name_evidence and not name_evidence.human_edit_note:
+            changes['disease_name_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
+    if (
+        disease_name_note
+        and name_evidence
+        and disease_name_note != name_evidence.human_edit_note
+    ):
+        changes['disease_name_human_edit_note'] = disease_name_note
+
     selected_inheritance = (
         Inheritance(disease_inheritance_mode) if disease_inheritance_mode else None
     )
+    mode_evidence = paper_resp.disease_inheritance_mode_evidence
     if selected_inheritance != paper_resp.disease_inheritance_mode:
         changes['disease_inheritance_mode'] = selected_inheritance
+        if mode_evidence and not mode_evidence.human_edit_note:
+            changes['disease_inheritance_mode_human_edit_note'] = (
+                HUMAN_EDIT_NOTE_DEFAULT
+            )
+    if (
+        disease_inheritance_mode_note
+        and mode_evidence
+        and disease_inheritance_mode_note != mode_evidence.human_edit_note
+    ):
+        changes['disease_inheritance_mode_human_edit_note'] = (
+            disease_inheritance_mode_note
+        )
 
     update_request = PaperUpdateRequest(**changes)
 

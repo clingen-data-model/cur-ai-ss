@@ -282,6 +282,11 @@ def render_evidence_controls(
                     height=20,
                     max_chars=120,
                 )
+                edited_by_name = getattr(block, 'edited_by_name', None)
+                if edited_by_name:
+                    edited_at = getattr(block, 'edited_at', None)
+                    when = f' on {edited_at:%Y-%m-%d}' if edited_at else ''
+                    st.caption(f'✏️ Edited by {edited_by_name}{when}')
         # Only pass EvidenceBlock to highlight controls (ReasoningBlock has no evidence sources)
         highlight_blocks = [block] if isinstance(block, EvidenceBlock) else []
         if highlight_blocks:

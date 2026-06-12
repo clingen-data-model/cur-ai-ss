@@ -11,6 +11,7 @@ from lib.misc.pdf.highlight import GrobidAnnotation
 from lib.models import (
     ChatMessageResp,
     FamilyResp,
+    FamilyUpdateRequest,
     GeneResp,
     PaperResp,
     PaperUpdateRequest,
@@ -19,6 +20,8 @@ from lib.models import (
     PatientVariantOccurrenceResp,
     PedigreeResp,
     PhenotypeResp,
+    SegregationAnalysisResp,
+    SegregationEvidenceUpdateRequest,
     TaskResp,
     UserResp,
     VariantResp,
@@ -231,6 +234,17 @@ def get_families(paper_id: int) -> list[FamilyResp]:
     return TypeAdapter(list[FamilyResp]).validate_python(resp.json())
 
 
+def update_family(
+    paper_id: int, family_id: int, update_request: FamilyUpdateRequest
+) -> FamilyResp:
+    resp = _session.patch(
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/families/{family_id}',
+        json=update_request.model_dump(mode='json', exclude_unset=True),
+    )
+    resp.raise_for_status()
+    return FamilyResp.model_validate(resp.json())
+
+
 def get_pedigree(paper_id: int) -> PedigreeResp | None:
     resp = _session.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/pedigree')
     resp.raise_for_status()
@@ -322,14 +336,23 @@ def get_phenotypes(paper_id: int, patient_id: int) -> list[PhenotypeResp]:
     return TypeAdapter(list[PhenotypeResp]).validate_python(resp.json())
 
 
-def get_segregation_analysis(paper_id: int) -> list:
-    from lib.models.segregation_analysis import SegregationAnalysisResp
-
+def get_segregation_analysis(paper_id: int) -> list[SegregationAnalysisResp]:
     resp = _session.get(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/segregation-analysis'
     )
     resp.raise_for_status()
     return TypeAdapter(list[SegregationAnalysisResp]).validate_python(resp.json())
+
+
+def update_segregation_evidence(
+    paper_id: int, family_id: int, update_request: SegregationEvidenceUpdateRequest
+) -> SegregationAnalysisResp:
+    resp = _session.patch(
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/segregation-analysis/{family_id}',
+        json=update_request.model_dump(mode='json', exclude_unset=True),
+    )
+    resp.raise_for_status()
+    return SegregationAnalysisResp.model_validate(resp.json())
 
 
 def get_paper_tasks(paper_id: int) -> list[TaskResp]:
@@ -341,6 +364,7 @@ def get_paper_tasks(paper_id: int) -> list[TaskResp]:
 def enqueue_paper_task(
     paper_id: int,
     task_type: TaskType,
+    family_id: int | None = None,
     patient_id: int | None = None,
     variant_id: int | None = None,
     phenotype_id: int | None = None,
@@ -351,6 +375,7 @@ def enqueue_paper_task(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/tasks',
         json=TaskCreateRequest(
             type=task_type,
+            family_id=family_id,
             patient_id=patient_id,
             variant_id=variant_id,
             phenotype_id=phenotype_id,
