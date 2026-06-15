@@ -51,6 +51,7 @@ def render_metadata_tab() -> None:
     with col1:
         disease_name = st.text_input('Disease Name', paper_resp.disease_name or '')
     with col2:
+        st.space()
         disease_name_note = render_evidence_controls(
             paper_resp.id,
             label='Evidence',
@@ -76,6 +77,7 @@ def render_metadata_tab() -> None:
             else None,
         )
     with col2:
+        st.space()
         disease_inheritance_mode_note = render_evidence_controls(
             paper_resp.id,
             label='Evidence',
