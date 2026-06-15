@@ -131,6 +131,9 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
         lambda paper_id: f'{get_status_badge_icon(papers_by_id[paper_id].tasks)} {infer_paper_status_detail(papers_by_id[paper_id].tasks)}'
     )
     df['tags'] = df['tags'].apply(lambda x: x if isinstance(x, list) else [])
+    df['updated_by'] = df['updated_by'].apply(
+        lambda u: u['name'] if isinstance(u, dict) else ''
+    )
     st.data_editor(
         df[
             [
@@ -145,6 +148,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
                 'variant_count',
                 'agent_status',
                 'updated_at',
+                'updated_by',
             ]
         ],
         row_height=100,
@@ -191,6 +195,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
                 'Last Modified',
                 format='D MMM YYYY, h:mm a',
             ),
+            'updated_by': st.column_config.Column('Last Modified By'),
         },
         disabled=[
             'gene_symbol',
@@ -203,6 +208,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
             'variant_count',
             'agent_status',
             'updated_at',
+            'updated_by',
         ],
         num_rows='delete',
         key=CURATIONS_DF_KEY,

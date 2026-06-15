@@ -441,6 +441,22 @@ def update_paper(
     return paper_db
 
 
+def _touch_paper(session: Session, paper_id: int, editor: UserDB | None) -> None:
+    """Propagate a child-entity edit up to the parent paper's modification
+    attribution. Editing a nested entity (variant, patient, family, ...) does not
+    otherwise touch the paper row, so the dashboard's "last modified by" reflects
+    whoever last edited anything belonging to the paper. No-op for machine writes
+    (``editor is None``). ``updated_at`` is set explicitly so it bumps even when the
+    same user edits twice (``onupdate`` would not fire on an unchanged FK value)."""
+    if editor is None:
+        return
+    paper_db = session.get(PaperDB, paper_id)
+    if paper_db is None:
+        return
+    paper_db.updated_by_user_id = editor.id
+    paper_db.updated_at = func.now()
+
+
 @app.get('/papers', response_model=list[PaperResp])
 def list_papers(
     session: Session = Depends(get_session),
@@ -619,6 +635,7 @@ def create_patient(
     paper_id: int,
     patient_data: PatientCreateRequest,
     session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> Any:
     from lib.models.evidence_block import EvidenceBlock
 
@@ -667,7 +684,9 @@ def create_patient(
         affected_status=patient_data.affected_status,
         affected_status_evidence=create_evidence_block(patient_data.affected_status),
     )
+    patient_db.updated_by_user_id = current_user.id
     session.add(patient_db)
+    _touch_paper(session, paper_id, current_user)
     session.flush()
     patient_db = (
         session.query(PatientDB)
@@ -712,6 +731,7 @@ def update_family(
             status_code=status.HTTP_404_NOT_FOUND, detail='Family not found'
         )
     patch_request.apply_to(family_db, current_user)
+    _touch_paper(session, paper_id, current_user)
     return family_db
 
 
@@ -835,6 +855,7 @@ def update_segregation_evidence(
         )
     family, evidence = row
     patch_request.apply_to(evidence, current_user)
+    _touch_paper(session, paper_id, current_user)
     computed = (
         session.query(SegregationAnalysisComputedDB)
         .filter(SegregationAnalysisComputedDB.family_id == family_id)
@@ -1006,6 +1027,7 @@ def update_variant(
         harmonized_update.apply_to(variant_db.harmonized_variant, current_user)
         # delete-orphan cascade removes the row
         variant_db.annotated_variant = None
+    _touch_paper(session, paper_id, current_user)
     session.flush()
     return _variant_to_resp(variant_db)
 
@@ -1270,6 +1292,7 @@ def update_patient(
             status_code=status.HTTP_404_NOT_FOUND, detail='Patient not found'
         )
     patch_request.apply_to(patient_db, current_user)
+    _touch_paper(session, paper_id, current_user)
     return _patient_to_resp(patient_db)
 
 

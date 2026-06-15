@@ -111,6 +111,19 @@ def require_auth() -> None:
     a browser cookie, and renders logout / change-password controls in the sidebar.
     """
     cookies: CookieManager = CookieManager()
+    # The CookieManager renders a frontend component that reads the browser's
+    # cookies and ships them back to Python. On the *first* script run of a new
+    # session that round-trip hasn't happened yet, so cookies.get() returns None
+    # for everyone — including returning users who hold a valid auth cookie.
+    # Without this guard we'd fall through to the login form and force them to
+    # re-authenticate on every fresh page load.
+    #
+    # So on the first run we just mount the component and st.stop(). Mounting it
+    # makes the browser send the cookies back, which triggers an automatic rerun;
+    # on that second run _auth_init is set, cookies.get() returns the stored
+    # token, and the session is restored silently. The flag lives in session_state
+    # so it resets per session (exactly when we need to wait for the component
+    # again), not per rerun.
     if '_auth_init' not in st.session_state:
         st.session_state['_auth_init'] = True
         st.stop()
