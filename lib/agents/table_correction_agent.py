@@ -64,6 +64,7 @@ class TableCorrectionResult(BaseModel):
     is_corrupted: bool
     corrected_markdown: str | None = None
     conversion_successful: bool = False
+    is_recoverable: bool = True
 
 
 TABLE_CORRECTION_INSTRUCTIONS = """You are an expert at evaluating table markdown quality from PDF extraction.
@@ -85,7 +86,16 @@ A good table has:
 - Consistent cell alignment
 - Content that makes semantic sense
 
-Always set conversion_successful to true only if the corrected_markdown is a valid markdown table with proper pipe delimiters and header rows. If extraction failed or returned invalid markdown, set it to false."""
+Set conversion_successful to true only if the corrected_markdown is a valid markdown table
+with proper pipe delimiters and header rows. If extraction failed or returned invalid
+markdown, set it to false.
+
+Some tables cannot be faithfully recovered at all -- for example, dense matrices of tiny
+symbols (+/-/*), pedigree/manifestation grids, or images where the cell structure is
+genuinely ambiguous. Do not invent or hallucinate content for these. If the table is
+corrupted and the image does not yield a faithful, trustworthy markdown table, set
+is_recoverable to false and conversion_successful to false. This is an acceptable outcome,
+not a failure -- the original markdown will simply be left in place."""
 
 agent = Agent(
     name='table_corrector',
@@ -146,10 +156,19 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
             logger.info(f'Table {table_id} looks OK')
             continue
 
-        if not result.final_output.conversion_successful:
-            raise ValueError(
-                f'Table {table_id} was detected as corrupted but conversion failed'
+        if (
+            not result.final_output.conversion_successful
+            or not result.final_output.corrected_markdown
+        ):
+            # The table is genuinely unrecoverable (e.g. a dense matrix of
+            # symbols with no faithful tabular structure). Leave the original
+            # markdown in place rather than failing the whole paper extraction.
+            logger.warning(
+                f'Table {table_id} is corrupted but could not be recovered; '
+                f'leaving original markdown in place (recoverable='
+                f'{result.final_output.is_recoverable})'
             )
+            continue
 
         logger.info(f'Table {table_id} was corrupted, corrected version ready')
 
