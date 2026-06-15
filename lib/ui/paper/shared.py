@@ -28,7 +28,7 @@ HEADER_TABS = [
     '💬 Chat with Agent',
 ]
 HEADER_TABS_KEY = 'HEADER_TABS_KEY'
-HUMAN_EDIT_NOTE_DEFAULT = 'Edited by Human'
+HUMAN_EDIT_NOTE_DEFAULT = 'Reasoning behind the change...'
 CHAT_FEATURE_GATE_TIME = datetime(2026, 5, 17, 12, 0, 0)
 
 
@@ -51,8 +51,14 @@ def render_rerun_popover(
     context field passed to the agent, plus a confirm button that enqueues the
     scoped task. ``container`` lets callers anchor the popover in a column.
     """
-    host = container if container is not None else st
-    with host.popover(label, use_container_width=True, help=help):
+    # When anchored in a column, wrap in a right-aligned container so the
+    # content-fit button hugs the right edge instead of floating left.
+    if container is not None:
+        with container:
+            host = st.container(horizontal_alignment='right')
+    else:
+        host = st
+    with host.popover(label, width='content', help=help):
         context = st.text_area(
             'Additional context for agent',
             value='',
@@ -320,8 +326,11 @@ def render_evidence_controls(
                     '📎 This evidence comes from a supplement. PDF highlighting is only available for main document evidence.'
                 )
             if human_edit_note and human_edit_note_key:
+                st.markdown('---')
+                st.markdown('**✏️ Curator Note**')
+                st.caption('Explain why this value was manually overridden.')
                 edited_note = st.text_area(
-                    'Human Edit Note',
+                    'Curator Note',
                     label_visibility='collapsed',
                     value=human_edit_note,
                     key=human_edit_note_key,

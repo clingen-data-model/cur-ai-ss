@@ -401,8 +401,10 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                     # diffed against the current values in the change-detection block below.
                     harmonized_inputs: dict[str, str] = {}
                     with st.container():
-                        st.subheader('Harmonized Variant Info')
-                        reharm_col, reannot_col = st.columns(2)
+                        title_col, reharm_col = st.columns(
+                            [5, 1], vertical_alignment='bottom'
+                        )
+                        title_col.subheader('Harmonized Variant Info')
                         render_rerun_popover(
                             label='🔄 Re-harmonize',
                             key_prefix=f'{key_prefix}-reharmonize',
@@ -411,15 +413,6 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                             variant_id=variant.id,
                             help='Re-run harmonization for this variant (also re-annotates).',
                             container=reharm_col,
-                        )
-                        render_rerun_popover(
-                            label='🔄 Re-annotate',
-                            key_prefix=f'{key_prefix}-reannotate',
-                            paper_id=paper_resp.id,
-                            task_type=TaskType.VARIANT_ANNOTATION,
-                            variant_id=variant.id,
-                            help='Re-run annotation for this variant (no re-harmonization).',
-                            container=reannot_col,
                         )
                         if harmonized_variant and harmonized_variant.value:
                             hv = harmonized_variant.value
@@ -701,7 +694,19 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                 # Annotations (ClinVar + gnomAD + In Silico)
                 # ======================================================
                 with st.container():
-                    st.subheader('Annotations')
+                    title_col, reannot_col2 = st.columns(
+                        [5, 1], vertical_alignment='bottom'
+                    )
+                    title_col.subheader('Annotations')
+                    render_rerun_popover(
+                        label='🔄 Re-annotate',
+                        key_prefix=f'{key_prefix}-reannotate2',
+                        paper_id=paper_resp.id,
+                        task_type=TaskType.VARIANT_ANNOTATION,
+                        variant_id=variant.id,
+                        help='Re-run annotation for this variant (no re-harmonization).',
+                        container=reannot_col2,
+                    )
 
                     if not annotated_variant:
                         st.info('Enrichment not yet completed for this variant')

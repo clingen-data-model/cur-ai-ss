@@ -189,7 +189,18 @@ def _render_phenotypes_table(
         first_phenotype = grouped_phenotypes[0]
 
         st.divider()
-        st.markdown('##### Phenotype Details')
+        pheno_title_col, pheno_btn_col = st.columns([5, 1], vertical_alignment='bottom')
+        pheno_title_col.markdown('##### Phenotype Details')
+        render_rerun_popover(
+            label='🔄 Re-link HPO',
+            key_prefix=f'{key_prefix}-relink-hpo-{first_phenotype.id}',
+            paper_id=paper_resp.id,
+            task_type=TaskType.HPO_LINKING,
+            patient_id=patient_id,
+            phenotype_id=first_phenotype.id,
+            help='Re-run HPO linking for this phenotype.',
+            container=pheno_btn_col,
+        )
 
         # Show grouped concepts
         details_data = {
@@ -256,15 +267,6 @@ def _render_phenotypes_table(
             if first_phenotype.hpo and first_phenotype.hpo.reasoning:
                 with st.expander('HPO Match Reasoning', expanded=False):
                     st.text(first_phenotype.hpo.reasoning)
-            render_rerun_popover(
-                label='🔄 Re-link HPO',
-                key_prefix=f'{key_prefix}-relink-hpo-{first_phenotype.id}',
-                paper_id=paper_resp.id,
-                task_type=TaskType.HPO_LINKING,
-                patient_id=patient_id,
-                phenotype_id=first_phenotype.id,
-                help='Re-run HPO linking for this phenotype.',
-            )
 
 
 def _save_family_edits(
@@ -439,7 +441,7 @@ def _render_family_group(
         # Segregation Analysis
         seg_data = segregation_analysis.get(family.id)
         if seg_data:
-            seg_header_col, seg_button_col = st.columns([3, 1])
+            seg_header_col, seg_button_col = st.columns([5, 1])
             seg_header_col.subheader('📊 Segregation Analysis')
             render_rerun_popover(
                 label='🔄 Re-run segregation',
@@ -1251,7 +1253,7 @@ def render_patient(
 
         # --- Phenotypes Section
         st.divider()
-        header_col, button_col = st.columns([3, 1])
+        header_col, button_col = st.columns([4, 1])
         header_col.markdown('### Phenotypes')
         render_rerun_popover(
             label='🔄 Re-extract phenotypes',
