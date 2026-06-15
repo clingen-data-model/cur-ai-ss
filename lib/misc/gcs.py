@@ -79,8 +79,10 @@ def upload_and_sign_image(image_path: Path) -> str:
         raise FileNotFoundError(f'Image file not found: {image_path}')
 
     if env.DISABLE_GCS_UPLOAD:
-        stored_path = image_path.relative_to(Path(env.CAA_ROOT))
-        local_url = f'{env.PROTOCOL}{env.API_ENDPOINT}/{stored_path}'
+        # Static files are mounted at the full CAA_ROOT URL prefix, so the URL
+        # must include it — don't strip it via relative_to (image_path is
+        # absolute, e.g. /var/caa/...). Mirrors the dashboard thumbnail URL.
+        local_url = f'{env.PROTOCOL}{env.API_ENDPOINT}{image_path}'
         logger.info(f'GCS upload disabled, using local API URL: {local_url}')
         return local_url
 
