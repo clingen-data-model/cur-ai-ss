@@ -68,7 +68,7 @@ Papers flow through this sequence of agents (all triggered by worker):
 3. **Pedigree Description** → Describes family relationships
 4. **Variant Extraction** → Extracts genetic variant information
 5. **Variant Harmonization** → Normalizes variants to standard formats
-6. **Variant Enrichment** → Adds annotations (SpliceAI, etc.)
+6. **Variant Annotation** → Adds annotations (SpliceAI, etc.)
 7. **Phenotype Extraction + HPO Linking** → Links phenotypes to HPO ontology terms
 8. **Patient-Variant Linking** → Links patients to their variants with inheritance info
 
@@ -81,7 +81,7 @@ All models are defined with Pydantic (for serialization) and SQLAlchemy ORM (for
 - **Paper** (`lib/models/paper.py`) - Represents a research paper with pipeline status and path references
 - **Patient** (`lib/models/patient.py`) - Patient demographics and clinical data
 - **Phenotype** (`lib/models/phenotype.py`) - Extracted phenotypes with HPO matching candidates and confidence scores
-- **Variant** (`lib/models/variant.py`) - Extracted, harmonized, and enriched variants
+- **Variant** (`lib/models/variant.py`) - Extracted, harmonized, and annotated variants
 - **PatientVariantLink** (`lib/models/patient_variant_link.py`) - Links patients to variants with inheritance/testing info
 - **Evidence** (`lib/models/evidence_block.py`) - Text blocks from paper supporting extracted data
 
@@ -172,6 +172,35 @@ uv run pytest test/api/test_app.py::test_function  # Specific test
 - Use `session_scope()` context manager in background code
 - Use FastAPI dependency injection in endpoints: `session: Session = Depends(get_session)`
 - Explicitly handle `IntegrityError` for constraint violations
+
+**Database migrations (SQLite safety):**
+
+When using `batch_alter_table()` on any table that has CASCADE foreign keys pointing to it, you **MUST disable foreign key constraints** before the batch operation, then re-enable them. Otherwise, when SQLite drops and recreates the table, CASCADE constraints will delete child rows unexpectedly.
+
+**Safe pattern for batch alterations:**
+```python
+from sqlalchemy import text
+from alembic import op
+
+def upgrade() -> None:
+    connection = op.get_bind()
+    # Disable FK constraints before batch alter
+    connection.execute(text('PRAGMA foreign_keys = OFF'))
+    
+    try:
+        with op.batch_alter_table('table_name', schema=None) as batch_op:
+            batch_op.add_column(...)
+            # ... other operations
+    finally:
+        # Always re-enable FK constraints
+        connection.execute(text('PRAGMA foreign_keys = ON'))
+```
+
+**Additional rules:**
+- **NEVER use `ondelete='CASCADE'` when adding new foreign keys inside batch_alter_table** — add the column first, then the constraint separately in a non-batch operation.
+- Always backup before running complex migrations (especially those involving multiple batches or adding CASCADE constraints).
+- After migrations, verify data integrity: check row counts on tables with cascade relationships.
+- This pattern is critical for tables like `families` (has CASCADE dependents like `patients`) — June 2026 migration `3b2d941d02a2` deleted all patients because FK constraints weren't disabled.
 
 **Agent implementation:**
 - Agents use `openai_agents` library (structured outputs)

@@ -3,7 +3,9 @@ from typing import Any
 import streamlit as st
 
 from lib.models import PaperResp, PaperType, PaperUpdateRequest
+from lib.models.patient_variant_occurrences import Inheritance
 from lib.ui.api import get_http_error_detail, update_paper
+from lib.ui.paper.shared import render_evidence_controls
 
 
 def render_metadata_tab() -> None:
@@ -41,6 +43,46 @@ def render_metadata_tab() -> None:
 
     abstract = st.text_area('Abstract', paper_resp.abstract, height=200)
 
+    # Gene-Disease Information
+    st.divider()
+    st.subheader('Gene-Disease Information')
+
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        disease_name = st.text_input('Disease Name', paper_resp.disease_name or '')
+    with col2:
+        render_evidence_controls(
+            paper_resp.id,
+            label='Evidence',
+            block=paper_resp.disease_name_evidence,
+            color_key='disease-name-color',
+            button_key_prefix='disease-name-btn',
+        )
+
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        inheritance_options = [i.value for i in Inheritance]
+        current_mode = (
+            paper_resp.disease_inheritance_mode.value
+            if paper_resp.disease_inheritance_mode
+            else None
+        )
+        disease_inheritance_mode = st.selectbox(
+            'Disease Inheritance Mode',
+            options=inheritance_options,
+            index=inheritance_options.index(current_mode)
+            if current_mode in inheritance_options
+            else None,
+        )
+    with col2:
+        render_evidence_controls(
+            paper_resp.id,
+            label='Evidence',
+            block=paper_resp.disease_inheritance_mode_evidence,
+            color_key='disease-inheritance-mode-color',
+            button_key_prefix='disease-inheritance-mode-btn',
+        )
+
     changes: dict[str, Any] = {}
     if title != paper_resp.title:
         changes['title'] = title
@@ -54,6 +96,13 @@ def render_metadata_tab() -> None:
         changes['paper_types'] = paper_types
     if (abstract or None) != paper_resp.abstract:
         changes['abstract'] = abstract or None
+    if (disease_name or None) != paper_resp.disease_name:
+        changes['disease_name'] = disease_name or None
+    selected_inheritance = (
+        Inheritance(disease_inheritance_mode) if disease_inheritance_mode else None
+    )
+    if selected_inheritance != paper_resp.disease_inheritance_mode:
+        changes['disease_inheritance_mode'] = selected_inheritance
 
     update_request = PaperUpdateRequest(**changes)
 

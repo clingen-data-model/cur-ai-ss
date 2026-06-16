@@ -23,7 +23,28 @@ from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock, Reasoni
 from lib.models.paper import PaperDB
 
 if TYPE_CHECKING:
-    from lib.models.patient_variant_link import PatientVariantLinkDB
+    from lib.models.agent_run import AgentRunDB
+    from lib.models.patient_variant_occurrences import PatientVariantOccurrenceDB
+
+
+def get_variant_description(
+    variant_id: int,
+    harmonized_variant: 'HarmonizedVariant | HarmonizedVariantDB | HarmonizedVariantResp | None',
+    variant_evidence: dict,
+) -> str:
+    """Generate a human-readable description of a variant, prioritizing harmonized fields."""
+    if harmonized_variant:
+        hv = harmonized_variant
+        return (
+            hv.hgvs_c
+            or hv.hgvs_g
+            or hv.gnomad_style_coordinates
+            or hv.rsid
+            or hv.hgvs_p
+            or variant_evidence.get('value')
+            or f'Variant {variant_id}'
+        )
+    return variant_evidence.get('value') or f'Variant {variant_id}'
 
 
 class VariantType(str, Enum):
@@ -152,25 +173,21 @@ class VariantResp(BaseModel):
     main_focus_evidence: HumanEvidenceBlock[bool]
     # Harmonized variant (always present with ReasoningBlock, but value may be None if not yet harmonized)
     harmonized_variant: ReasoningBlock[HarmonizedVariantResp | None]
-    # Enriched variant (optional, may not yet be enriched)
-    enriched_variant: Optional['EnrichedVariantResp'] = None
+    # Annotated variant (optional, may not yet be annotated)
+    annotated_variant: Optional['AnnotatedVariantResp'] = None
 
     @computed_field  # type: ignore[misc]
     @property
     def variant_description(self) -> str:
         """Generate a human-readable description of the variant, prioritizing harmonized fields."""
-        if self.harmonized_variant and self.harmonized_variant.value:
-            hv = self.harmonized_variant.value
-            return (
-                hv.hgvs_c
-                or hv.hgvs_g
-                or hv.gnomad_style_coordinates
-                or hv.rsid
-                or hv.hgvs_p
-                or self.variant_evidence.value
-                or f'Variant {self.id}'
-            )
-        return self.variant_evidence.value or f'Variant {self.id}'
+        hv_value = self.harmonized_variant.value if self.harmonized_variant else None
+        return get_variant_description(
+            self.id,
+            hv_value,
+            self.variant_evidence.model_dump()
+            if hasattr(self.variant_evidence, 'model_dump')
+            else {'value': self.variant_evidence.value},
+        )
 
 
 class HarmonizedVariantUpdate(PatchModel):
@@ -235,6 +252,12 @@ class VariantDB(Base):
     paper_id: Mapped[int] = mapped_column(
         Integer, ForeignKey('papers.id', ondelete='CASCADE'), nullable=False
     )
+    agent_run_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey('agent_runs.id', ondelete='CASCADE'),
+        nullable=False,
+        index=True,
+    )
 
     # Core fields
     variant: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -288,20 +311,25 @@ class VariantDB(Base):
     )
 
     paper: Mapped[PaperDB] = relationship('PaperDB', back_populates='variants')
+    agent_run: Mapped['AgentRunDB'] = relationship('AgentRunDB')
     harmonized_variant: Mapped['HarmonizedVariantDB | None'] = relationship(
         'HarmonizedVariantDB',
         back_populates='variant',
         uselist=False,
         cascade='all, delete-orphan',
     )
-    enriched_variant: Mapped['EnrichedVariantDB | None'] = relationship(
-        'EnrichedVariantDB',
+    annotated_variant: Mapped['AnnotatedVariantDB | None'] = relationship(
+        'AnnotatedVariantDB',
         back_populates='variant',
         uselist=False,
         cascade='all, delete-orphan',
     )
-    patient_variant_links: Mapped[list['PatientVariantLinkDB']] = relationship(
-        'PatientVariantLinkDB', back_populates='variant', cascade='all, delete-orphan'
+    patient_variant_occurrences: Mapped[list['PatientVariantOccurrenceDB']] = (
+        relationship(
+            'PatientVariantOccurrenceDB',
+            back_populates='variant',
+            cascade='all, delete-orphan',
+        )
     )
 
     __table_args__ = (Index('ix_variants_paper_id', 'paper_id'),)
@@ -368,8 +396,8 @@ class SpliceAI(BaseModel):
         return cls(max_score=max_score, effect_type=effect_type, position=position)
 
 
-class EnrichedVariant(BaseModel):
-    """Enriched variant data from ClinVar, VEP, and gnomAD."""
+class AnnotatedVariant(BaseModel):
+    """Annotated variant data from ClinVar, VEP, and gnomAD."""
 
     gnomad_style_coordinates: Optional[str] = None
     rsid: Optional[str] = None
@@ -389,14 +417,14 @@ class EnrichedVariant(BaseModel):
     gnomad_popmax_population: Optional[str] = None
 
 
-class VariantEnrichmentOutput(BaseModel):
-    """Output from variant enrichment agent."""
+class VariantAnnotationOutput(BaseModel):
+    """Output from variant annotation agent."""
 
-    variants: List[EnrichedVariant]
+    variants: List[AnnotatedVariant]
 
 
-class EnrichedVariantResp(BaseModel):
-    """Response model for enriched variants."""
+class AnnotatedVariantResp(BaseModel):
+    """Response model for annotated variants."""
 
     gnomad_style_coordinates: Optional[str] = None
     rsid: Optional[str] = None
@@ -415,10 +443,10 @@ class EnrichedVariantResp(BaseModel):
     gnomad_popmax_population: Optional[str] = None
 
 
-class EnrichedVariantDB(Base):
-    """Enriched variant data persisted to database."""
+class AnnotatedVariantDB(Base):
+    """Annotated variant data persisted to database."""
 
-    __tablename__ = 'enriched_variants'
+    __tablename__ = 'annotated_variants'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     variant_id: Mapped[int] = mapped_column(
@@ -458,11 +486,11 @@ class EnrichedVariantDB(Base):
 
     variant: Mapped['VariantDB'] = relationship(
         'VariantDB',
-        back_populates='enriched_variant',
+        back_populates='annotated_variant',
         foreign_keys=[variant_id],
     )
 
     __table_args__ = (
-        UniqueConstraint('variant_id', name='uq_enriched_variants_variant_id'),
-        Index('ix_enriched_variants_variant_id', 'variant_id'),
+        UniqueConstraint('variant_id', name='uq_annotated_variants_variant_id'),
+        Index('ix_annotated_variants_variant_id', 'variant_id'),
     )

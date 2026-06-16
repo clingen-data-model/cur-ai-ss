@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from lib.models.base import Base
 
 if TYPE_CHECKING:
+    from lib.models.agent_run import AgentRunDB
     from lib.models.paper import PaperDB
 
 
@@ -17,7 +18,7 @@ class TaskType(StrEnum):
     """Pipeline task types in execution order."""
 
     PDF_PARSING = 'PDF Parsing'
-    PAPER_ACKNOWLEDGEMENT = 'Paper Acknowledgement'
+    PAPER_CLASSIFIER = 'Paper Classifier'
     GENERAL_PAPER_QUESTION = 'General Paper Question'
     PAPER_METADATA = 'Paper Metadata'
     VARIANT_EXTRACTION = 'Variant Extraction'
@@ -27,8 +28,9 @@ class TaskType(StrEnum):
     SEGREGATION_EVIDENCE_EXTRACTION = 'Segregation Evidence Extraction'  # per-family
     SEGREGATION_ANALYSIS_COMPUTED = 'Segregation Analysis Computed'  # per-family
     VARIANT_HARMONIZATION = 'Variant Harmonization'
-    VARIANT_ENRICHMENT = 'Variant Enrichment'
-    PATIENT_VARIANT_LINKING = 'Patient Variant Linking'
+    VARIANT_ANNOTATION = 'Variant Annotation'
+    PATIENT_VARIANT_OCCURRENCES = 'Patient Variant Occurrences'
+    COMPOUND_HET_EVALUATION = 'Compound Het Evaluation'  # per-patient
     PHENOTYPE_EXTRACTION = 'Phenotype Extraction'  # per-patient
     HPO_LINKING = 'HPO Linking'  # per-patient
 
@@ -37,7 +39,7 @@ class TaskType(StrEnum):
         """Return a human-readable description with context about what this task does."""
         descriptions: dict[TaskType, str] = {
             TaskType.PDF_PARSING: 'Parses PDF file and extract text, tables, and images',
-            TaskType.PAPER_ACKNOWLEDGEMENT: 'Acknowledges the paper and classify which sections are relevant for downstream extraction',
+            TaskType.PAPER_CLASSIFIER: 'Classifies paper sections by relevance and evaluates if paper contains extractable patient-variant pairs',
             TaskType.GENERAL_PAPER_QUESTION: 'Answers a general question using the full paper text and all extracted data',
             TaskType.PAPER_METADATA: 'Extracts paper title, authors, publication date, and other metadata; resolve to PubMed article',
             TaskType.VARIANT_EXTRACTION: 'Identifies genetic variants mentioned in the paper',
@@ -46,8 +48,9 @@ class TaskType(StrEnum):
             TaskType.SEGREGATION_EVIDENCE_EXTRACTION: 'Collects segregation analysis evidence within each family',
             TaskType.SEGREGATION_ANALYSIS_COMPUTED: 'Computes segregation analysis results per family',
             TaskType.VARIANT_HARMONIZATION: 'Normalizes variants to standard genomic coordinates using ClinVar, dbSNP, ClinGen Allele Registry, and VariantValidator',
-            TaskType.VARIANT_ENRICHMENT: 'Adds annotations (SpliceAI, conservation scores, etc.) to variants',
-            TaskType.PATIENT_VARIANT_LINKING: 'Associates patients with their variants and inheritance patterns',
+            TaskType.VARIANT_ANNOTATION: 'Adds annotations (SpliceAI, conservation scores, etc.) to variants',
+            TaskType.PATIENT_VARIANT_OCCURRENCES: 'Associates patients with their variants and inheritance patterns',
+            TaskType.COMPOUND_HET_EVALUATION: 'Evaluates pairs of heterozygous variants to identify compound heterozygous genotypes',
             TaskType.PHENOTYPE_EXTRACTION: 'Extracts phenotype text spans per patient',
             TaskType.HPO_LINKING: 'Maps phenotypes to HPO ontology terms for standardization',
         }
@@ -56,6 +59,7 @@ class TaskType(StrEnum):
 
 class TaskStatus(StrEnum):
     PENDING = 'Pending'
+    QUEUED = 'Queued'
     RUNNING = 'Running'
     COMPLETED = 'Completed'
     FAILED = 'Failed'
@@ -76,8 +80,8 @@ class InferredPaperStatus(StrEnum):
 
 # Task dependencies: when a task completes, these become PENDING
 TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
-    TaskType.PDF_PARSING: [TaskType.PAPER_ACKNOWLEDGEMENT],
-    TaskType.PAPER_ACKNOWLEDGEMENT: [
+    TaskType.PDF_PARSING: [TaskType.PAPER_CLASSIFIER],
+    TaskType.PAPER_CLASSIFIER: [
         TaskType.PAPER_METADATA,
         TaskType.VARIANT_EXTRACTION,
         TaskType.PEDIGREE_DESCRIPTION,
@@ -85,16 +89,19 @@ TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
     TaskType.PEDIGREE_DESCRIPTION: [TaskType.PATIENT_EXTRACTION],
     TaskType.PATIENT_EXTRACTION: [
         TaskType.PHENOTYPE_EXTRACTION,
-        TaskType.PATIENT_VARIANT_LINKING,
+        TaskType.PATIENT_VARIANT_OCCURRENCES,
     ],
     TaskType.PAPER_METADATA: [],
     TaskType.VARIANT_EXTRACTION: [
         TaskType.VARIANT_HARMONIZATION,
-        TaskType.PATIENT_VARIANT_LINKING,
+        TaskType.PATIENT_VARIANT_OCCURRENCES,
     ],
-    TaskType.VARIANT_HARMONIZATION: [TaskType.VARIANT_ENRICHMENT],
-    TaskType.VARIANT_ENRICHMENT: [],
-    TaskType.PATIENT_VARIANT_LINKING: [TaskType.SEGREGATION_EVIDENCE_EXTRACTION],
+    TaskType.VARIANT_HARMONIZATION: [TaskType.VARIANT_ANNOTATION],
+    TaskType.VARIANT_ANNOTATION: [],
+    TaskType.PATIENT_VARIANT_OCCURRENCES: [
+        TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
+        TaskType.COMPOUND_HET_EVALUATION,
+    ],
     TaskType.SEGREGATION_EVIDENCE_EXTRACTION: [TaskType.SEGREGATION_ANALYSIS_COMPUTED],
     TaskType.SEGREGATION_ANALYSIS_COMPUTED: [],
     TaskType.PHENOTYPE_EXTRACTION: [TaskType.HPO_LINKING],
@@ -112,7 +119,14 @@ class TaskDB(Base):
         nullable=False,
         index=True,
     )
+    agent_run_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey('agent_runs.id', ondelete='CASCADE'),
+        nullable=False,
+        index=True,
+    )
     paper: Mapped['PaperDB'] = relationship('PaperDB', back_populates='tasks')
+    agent_run: Mapped['AgentRunDB'] = relationship('AgentRunDB')
     type: Mapped[TaskType] = mapped_column(
         SQLEnum(TaskType), nullable=False, index=True
     )

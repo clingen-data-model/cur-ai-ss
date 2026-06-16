@@ -30,6 +30,7 @@ class Env(BaseSettings):
     # Required fields
     OPENAI_API_DEPLOYMENT: str = 'gpt-5-mini'
     OPENAI_API_KEY: str = Field(...)
+    OPENAI_VLM: str = 'gpt-5'
     LOG_LEVEL: LogLevel = LogLevel.INFO
 
     # Directories

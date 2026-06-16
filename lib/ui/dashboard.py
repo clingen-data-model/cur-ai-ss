@@ -17,6 +17,7 @@ from lib.ui.api import (
     get_papers,
     put_paper,
     search_genes,
+    update_paper,
 )
 
 st.set_page_config(page_title='Papers Dashboard', layout='wide')
@@ -36,7 +37,7 @@ if not initial_genes:
 
 
 def papers_df_on_change() -> None:
-    # deleted_rows returns the
+    # Handle deleted rows
     deleted_idxs = st.session_state[CURATIONS_DF_KEY]['deleted_rows']
     for deleted_idx in reversed(
         sorted(deleted_idxs)
@@ -45,6 +46,20 @@ def papers_df_on_change() -> None:
             paper_id = paper_resps[deleted_idx].id
             delete_paper(paper_id)
             paper_resps.pop(deleted_idx)
+
+    # Handle edited rows (particularly tag changes)
+    edited_rows = st.session_state[CURATIONS_DF_KEY].get('edited_rows', {})
+    for row_idx, changes in edited_rows.items():
+        if 'tags' in changes and paper_resps and 0 <= row_idx < len(paper_resps):
+            paper_id = paper_resps[row_idx].id
+            new_tags = changes['tags']
+            try:
+                update_paper(paper_id, PaperUpdateRequest(tags=new_tags))
+                paper_resps[row_idx].tags = new_tags
+            except requests.HTTPError as e:
+                st.error(
+                    f'Failed to update tags for paper {paper_id}: {get_http_error_detail(e)}'
+                )
 
 
 @st.dialog('Upload PDF and Select Gene')
@@ -116,12 +131,12 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
     df['agent_status'] = df['id'].map(
         lambda paper_id: f'{get_status_badge_icon(papers_by_id[paper_id].tasks)} {infer_paper_status_detail(papers_by_id[paper_id].tasks)}'
     )
-    df['tag'] = df['tag'].apply(lambda x: [x] if x else [])
+    df['tags'] = df['tags'].apply(lambda x: x if isinstance(x, list) else [])
     st.data_editor(
         df[
             [
                 'gene_symbol',
-                'tag',
+                'tags',
                 'thumbnail_path',
                 'title',
                 'first_author',
@@ -136,10 +151,10 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
         row_height=100,
         column_config={
             'gene_symbol': st.column_config.Column('Gene Symbol'),
-            'tag': st.column_config.MultiselectColumn(
-                'Tag',
-                options=['TrainingSet', 'ValidationSet'],
-                color=['#ffa421', '#803df5'],
+            'tags': st.column_config.MultiselectColumn(
+                'Tags',
+                options=['TrainingSet', 'ValidationSet', 'FailedPaperRelevancy'],
+                color=['#ffa421', '#803df5', '#ff0000'],
             ),
             'thumbnail_path': st.column_config.ImageColumn(
                 'Thumbnail',
@@ -180,7 +195,6 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
         },
         disabled=[
             'gene_symbol',
-            'tag',
             'thumbnail_path',
             'title',
             'first_author',

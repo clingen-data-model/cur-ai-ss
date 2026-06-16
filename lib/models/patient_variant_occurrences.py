@@ -17,7 +17,7 @@ from sqlalchemy.types import JSON
 from typing_extensions import Self
 
 from lib.models.base import Base
-from lib.models.evidence_block import EvidenceBlock
+from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 
 if TYPE_CHECKING:
     from lib.models.paper import PaperDB
@@ -33,7 +33,6 @@ class Zygosity(str, Enum):
     homozygous = 'Homozygous'
     hemizygous = 'Hemizygous'
     heterozygous = 'Heterozygous'
-    compound_heterozygous = 'Compound Heterozygous'
     unknown = 'Unknown'
 
 
@@ -41,7 +40,6 @@ class Inheritance(str, Enum):
     dominant = 'Dominant'
     recessive = 'Recessive'
     semi_dominant = 'Semi-dominant'
-    compound_heterozygous = 'Compound Heterozygous'
     x_linked = 'X-linked'
     de_novo = 'De Novo'
     somatic_mosaicism = 'Somatic Mosaicism'
@@ -67,18 +65,25 @@ class TestingMethod(str, Enum):
     other = 'Other'
 
 
+class CompoundHetConfidence(str, Enum):
+    confirmed = 'confirmed'
+    assumed = 'assumed'
+    uncertain = 'uncertain'
+
+
 # ==============================
 # Pydantic Models (Agent Input/Output)
 # ==============================
 
 
-class PatientVariantLink(BaseModel):
+class PatientVariantOccurrence(BaseModel):
     patient_id: int
     variant_id: int
     zygosity: EvidenceBlock[Zygosity]
     inheritance: EvidenceBlock[Inheritance]
     de_novo: EvidenceBlock[bool]
     testing_methods: List[EvidenceBlock[TestingMethod]]
+    disease_name: EvidenceBlock[str] | None = None
 
     @model_validator(mode='after')
     def max_two_methods(self) -> Self:
@@ -87,8 +92,19 @@ class PatientVariantLink(BaseModel):
         return self
 
 
-class PatientVariantLinkerOutput(BaseModel):
-    links: List[PatientVariantLink]
+class PatientVariantOccurrenceOutput(BaseModel):
+    links: List[PatientVariantOccurrence]
+    disease_name: EvidenceBlock[str] | None = None
+
+
+class CompoundHetPair(BaseModel):
+    variant_id_a: int
+    variant_id_b: int
+    confidence: ReasoningBlock[CompoundHetConfidence]
+
+
+class CompoundHetEvaluationOutput(BaseModel):
+    pairs: List[CompoundHetPair]
 
 
 # ==============================
@@ -96,8 +112,8 @@ class PatientVariantLinkerOutput(BaseModel):
 # ==============================
 
 
-class PatientVariantLinkDB(Base):
-    __tablename__ = 'patient_variant_links'
+class PatientVariantOccurrenceDB(Base):
+    __tablename__ = 'patient_variant_occurrences'
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     paper_id: Mapped[int] = mapped_column(
@@ -121,6 +137,18 @@ class PatientVariantLinkDB(Base):
     inheritance_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     de_novo_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     testing_methods_evidence: Mapped[list] = mapped_column(JSON, nullable=False)
+    disease_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    disease_name_evidence: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    paired_variant_link_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey('patient_variant_occurrences.id', ondelete='SET NULL'),
+        nullable=True,
+    )
+    paired_variant_confidence: Mapped[str | None] = mapped_column(String, nullable=True)
+    paired_variant_confidence_reasoning: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True
+    )
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -130,23 +158,34 @@ class PatientVariantLinkDB(Base):
     )
 
     paper: Mapped['PaperDB'] = relationship(
-        'PaperDB', back_populates='patient_variant_links'
+        'PaperDB', back_populates='patient_variant_occurrences'
     )
     patient: Mapped['PatientDB'] = relationship(
-        'PatientDB', back_populates='patient_variant_links'
+        'PatientDB', back_populates='patient_variant_occurrences'
     )
     variant: Mapped['VariantDB'] = relationship(
-        'VariantDB', back_populates='patient_variant_links'
+        'VariantDB', back_populates='patient_variant_occurrences'
+    )
+    paired_link: Mapped['PatientVariantOccurrenceDB | None'] = relationship(
+        'PatientVariantOccurrenceDB',
+        foreign_keys=[paired_variant_link_id],
+        primaryjoin='PatientVariantOccurrenceDB.paired_variant_link_id == PatientVariantOccurrenceDB.id',
+        uselist=False,
+        remote_side='PatientVariantOccurrenceDB.id',
     )
 
     __table_args__ = (
         UniqueConstraint(
             'patient_id',
             'variant_id',
-            name='uq_patient_variant_links_patient_variant',
+            name='uq_patient_variant_occurrences_patient_variant',
         ),
-        Index('ix_patient_variant_links_patient_id', 'patient_id'),
-        Index('ix_patient_variant_links_variant_id', 'variant_id'),
+        Index('ix_patient_variant_occurrences_patient_id', 'patient_id'),
+        Index('ix_patient_variant_occurrences_variant_id', 'variant_id'),
+        Index(
+            'ix_patient_variant_occurrences_paired_variant_link_id',
+            'paired_variant_link_id',
+        ),
     )
 
 
@@ -155,7 +194,8 @@ class PatientVariantLinkDB(Base):
 # ==============================
 
 
-class PatientVariantLinkResp(BaseModel):
+class PatientVariantOccurrenceResp(BaseModel):
+    id: int
     paper_id: int
     patient_id: int
     patient_identifier: str
@@ -168,4 +208,11 @@ class PatientVariantLinkResp(BaseModel):
     de_novo_evidence: EvidenceBlock[bool]
     testing_methods: list[TestingMethod]
     testing_methods_evidence: List[EvidenceBlock[TestingMethod]]
+    disease_name: str | None = None
+    disease_name_evidence: EvidenceBlock[str] | None = None
+    paired_variant_link_id: int | None = None
+    paired_variant_confidence: CompoundHetConfidence | None = None
+    paired_variant_confidence_reasoning: (
+        ReasoningBlock[CompoundHetConfidence] | None
+    ) = None
     updated_at: datetime

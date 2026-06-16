@@ -9,7 +9,8 @@ from sqlalchemy import func, select, update
 from lib.api.app import app
 from lib.api.db import get_session, session_scope
 from lib.models import (
-    EnrichedVariantDB,
+    AgentRunDB,
+    AnnotatedVariantDB,
     FamilyDB,
     GeneDB,
     HarmonizedVariantDB,
@@ -87,7 +88,7 @@ def seeded_genes(db_session):
     db_session.flush()
 
 
-def test_queue_new_paper(client, test_pdf, db_session, seeded_genes):
+def test_queue_new_paper(client, test_pdf, db_session, seeded_genes, agent_run):
     count = db_session.scalar(select(func.count(GeneDB.id)))
     assert count == 3
     response = client.put(
@@ -107,7 +108,9 @@ def test_queue_new_paper(client, test_pdf, db_session, seeded_genes):
     assert count == 1
 
 
-def test_queue_existing_paper_fails(client, db_session, test_pdf, seeded_genes):
+def test_queue_existing_paper_fails(
+    client, db_session, test_pdf, seeded_genes, agent_run
+):
     # Second upload: same content/name triggers conflict
     response = client.put(
         '/papers',
@@ -124,7 +127,7 @@ def test_queue_existing_paper_fails(client, db_session, test_pdf, seeded_genes):
     assert response2.json()['detail'] == 'Paper with this content already exists'
 
 
-def test_get_paper_success(client, test_pdf, seeded_genes):
+def test_get_paper_success(client, test_pdf, seeded_genes, agent_run):
     upload_response = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
@@ -151,7 +154,7 @@ def test_get_paper_not_found(client):
     assert response.json()['detail'] == 'Paper not found'
 
 
-def test_update_paper_metadata(client, test_pdf, db_session, seeded_genes):
+def test_update_paper_metadata(client, test_pdf, db_session, seeded_genes, agent_run):
     response = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
@@ -176,7 +179,7 @@ def test_update_paper_metadata(client, test_pdf, db_session, seeded_genes):
     assert response3.status_code == 404
 
 
-def test_list_paper(client, test_pdf, seeded_genes):
+def test_list_paper(client, test_pdf, seeded_genes, agent_run):
     response = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
@@ -201,7 +204,7 @@ def test_list_paper(client, test_pdf, seeded_genes):
         _assert_updated_at_recent(job['updated_at'])
 
 
-def test_list_papers_with_tasks(client, test_pdf, db_session, seeded_genes):
+def test_list_papers_with_tasks(client, test_pdf, db_session, seeded_genes, agent_run):
     response = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
@@ -228,7 +231,7 @@ def test_list_papers_with_tasks(client, test_pdf, db_session, seeded_genes):
         _assert_updated_at_recent(job['updated_at'])
 
 
-def test_delete_paper(client, test_pdf, db_session, seeded_genes):
+def test_delete_paper(client, test_pdf, db_session, seeded_genes, agent_run):
     response = client.delete(
         f'/papers/999',
     )
@@ -277,6 +280,16 @@ def test_search_genes_by_prefix_no_match(client, seeded_genes):
 
 @pytest.fixture
 def seeded_paper(db_session):
+    from lib.core.environment import env
+    from lib.models import AgentRunDB
+
+    agent_run = AgentRunDB(
+        git_hash='abc123def456',
+        description='test run',
+        model=env.OPENAI_API_DEPLOYMENT,
+    )
+    db_session.add(agent_run)
+    db_session.flush()
     gene = GeneDB(symbol='BRCA1')
     db_session.add(gene)
     db_session.flush()
@@ -290,10 +303,13 @@ def seeded_paper(db_session):
     # Create default family for tests
     family = FamilyDB(
         paper_id=paper.id,
+        agent_run_id=agent_run.id,
         identifier='Family 1',
         identifier_evidence=dict(
             value='Family 1', reasoning='test family', quote='Family 1'
         ),
+        consanguinity=False,
+        consanguinity_evidence=dict(value=False, reasoning='test family', quote='test'),
     )
     db_session.add(family)
     db_session.flush()
@@ -347,7 +363,9 @@ def _patient_required_fields(identifier: str = 'P1') -> dict:
     )
 
 
-def test_get_patients_returns_ordered_by_position(client, db_session, seeded_paper):
+def test_get_patients_returns_ordered_by_position(
+    client, db_session, seeded_paper, seeded_agent_run
+):
     # Get the default family created in seeded_paper fixture
     family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
     # Insert patients in order (they'll get auto-incrementing IDs)
@@ -355,6 +373,7 @@ def test_get_patients_returns_ordered_by_position(client, db_session, seeded_pap
         PatientDB(
             paper_id=seeded_paper.id,
             family_id=family.id,
+            agent_run_id=seeded_agent_run.id,
             identifier='P3',
             **_patient_required_fields('P3'),
         )
@@ -363,6 +382,7 @@ def test_get_patients_returns_ordered_by_position(client, db_session, seeded_pap
         PatientDB(
             paper_id=seeded_paper.id,
             family_id=family.id,
+            agent_run_id=seeded_agent_run.id,
             identifier='P1',
             **_patient_required_fields('P1'),
         )
@@ -371,6 +391,7 @@ def test_get_patients_returns_ordered_by_position(client, db_session, seeded_pap
         PatientDB(
             paper_id=seeded_paper.id,
             family_id=family.id,
+            agent_run_id=seeded_agent_run.id,
             identifier='P2',
             **_patient_required_fields('P2'),
         )
@@ -393,7 +414,9 @@ def test_get_patients_paper_not_found(client):
     assert response.json()['detail'] == 'Paper not found'
 
 
-def test_update_patient_with_human_edit_note(client, db_session, seeded_paper):
+def test_update_patient_with_human_edit_note(
+    client, db_session, seeded_paper, seeded_agent_run
+):
     """Test updating a patient with human_edit_note on evidence."""
     # Get the default family created in seeded_paper fixture
     family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
@@ -401,6 +424,7 @@ def test_update_patient_with_human_edit_note(client, db_session, seeded_paper):
     patient = PatientDB(
         paper_id=seeded_paper.id,
         family_id=family.id,
+        agent_run_id=seeded_agent_run.id,
         identifier='P1',
         **_patient_required_fields('P1'),
     )
@@ -432,7 +456,9 @@ def test_update_patient_with_human_edit_note(client, db_session, seeded_paper):
     assert resp_json['sex_evidence']['human_edit_note'] is None
 
 
-def test_update_patient_rejects_wrong_paper_scope(client, db_session, seeded_paper):
+def test_update_patient_rejects_wrong_paper_scope(
+    client, db_session, seeded_paper, seeded_agent_run
+):
     other_paper = PaperDB(
         content_hash='other-paper',
         gene_id=seeded_paper.gene_id,
@@ -443,10 +469,13 @@ def test_update_patient_rejects_wrong_paper_scope(client, db_session, seeded_pap
 
     other_family = FamilyDB(
         paper_id=other_paper.id,
+        agent_run_id=seeded_agent_run.id,
         identifier='Other Family',
         identifier_evidence=dict(
             value='Other Family', reasoning='test family', quote='Other Family'
         ),
+        consanguinity=False,
+        consanguinity_evidence=dict(value=False, reasoning='test family', quote='test'),
     )
     db_session.add(other_family)
     db_session.flush()
@@ -454,6 +483,7 @@ def test_update_patient_rejects_wrong_paper_scope(client, db_session, seeded_pap
     patient = PatientDB(
         paper_id=other_paper.id,
         family_id=other_family.id,
+        agent_run_id=seeded_agent_run.id,
         identifier='P-other',
         **_patient_required_fields('P-other'),
     )
@@ -471,17 +501,21 @@ def test_update_patient_rejects_wrong_paper_scope(client, db_session, seeded_pap
     assert patient.identifier == 'P-other'
 
 
-def test_update_phenotype_rejects_wrong_patient_scope(client, db_session, seeded_paper):
+def test_update_phenotype_rejects_wrong_patient_scope(
+    client, db_session, seeded_paper, seeded_agent_run
+):
     family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
     patient_1 = PatientDB(
         paper_id=seeded_paper.id,
         family_id=family.id,
+        agent_run_id=seeded_agent_run.id,
         identifier='P1',
         **_patient_required_fields('P1'),
     )
     patient_2 = PatientDB(
         paper_id=seeded_paper.id,
         family_id=family.id,
+        agent_run_id=seeded_agent_run.id,
         identifier='P2',
         **_patient_required_fields('P2'),
     )
@@ -517,10 +551,13 @@ def test_update_phenotype_rejects_wrong_patient_scope(client, db_session, seeded
     assert phenotype.uncertain is False
 
 
-def test_get_variants_harmonized_and_enriched(client, db_session, seeded_paper):
+def test_get_variants_harmonized_and_enriched(
+    client, db_session, seeded_paper, seeded_agent_run
+):
     # Create a variant with evidence blocks
     variant = VariantDB(
         paper_id=seeded_paper.id,
+        agent_run_id=seeded_agent_run.id,
         transcript='NM_007294.3',
         protein_accession='NP_009225.1',
         genomic_accession='NC_000017.11',
@@ -615,7 +652,7 @@ def test_get_variants_harmonized_and_enriched(client, db_session, seeded_paper):
     db_session.flush()
 
     # Create enriched variant
-    enriched = EnrichedVariantDB(
+    enriched = AnnotatedVariantDB(
         variant_id=variant.id,
         pathogenicity='Pathogenic',
         submissions=15,
@@ -672,23 +709,23 @@ def test_get_variants_harmonized_and_enriched(client, db_session, seeded_paper):
     )
 
     # Check enriched data
-    assert v['enriched_variant'] is not None
-    assert v['enriched_variant']['pathogenicity'] == 'Pathogenic'
-    assert v['enriched_variant']['submissions'] == 15
-    assert v['enriched_variant']['stars'] == 3
-    assert v['enriched_variant']['exon'] == '1/24'
-    assert v['enriched_variant']['revel'] == 0.89
-    assert v['enriched_variant']['alphamissense_class'] == 'likely_pathogenic'
-    assert v['enriched_variant']['alphamissense_score'] == 0.75
-    assert v['enriched_variant']['spliceai'] == {
+    assert v['annotated_variant'] is not None
+    assert v['annotated_variant']['pathogenicity'] == 'Pathogenic'
+    assert v['annotated_variant']['submissions'] == 15
+    assert v['annotated_variant']['stars'] == 3
+    assert v['annotated_variant']['exon'] == '1/24'
+    assert v['annotated_variant']['revel'] == 0.89
+    assert v['annotated_variant']['alphamissense_class'] == 'likely_pathogenic'
+    assert v['annotated_variant']['alphamissense_score'] == 0.75
+    assert v['annotated_variant']['spliceai'] == {
         'DS_AG': 0.1,
         'DS_AL': 0.05,
         'DS_DG': 0.2,
         'DS_DL': 0.15,
     }
-    assert v['enriched_variant']['gnomad_top_level_af'] == 0.0001
-    assert v['enriched_variant']['gnomad_popmax_af'] == 0.0003
-    assert v['enriched_variant']['gnomad_popmax_population'] == 'eas'
+    assert v['annotated_variant']['gnomad_top_level_af'] == 0.0001
+    assert v['annotated_variant']['gnomad_popmax_af'] == 0.0003
+    assert v['annotated_variant']['gnomad_popmax_population'] == 'eas'
 
 
 def _ev(value: object = None, quote: str | None = 'test') -> dict:
@@ -700,10 +737,26 @@ def _ev(value: object = None, quote: str | None = 'test') -> dict:
 
 
 @pytest.fixture
-def seeded_variant(db_session, seeded_paper):
+def seeded_agent_run(db_session):
+    """Create a test agent run."""
+    from lib.core.environment import env
+
+    agent_run = AgentRunDB(
+        git_hash='abc123def456',
+        description='test run',
+        model=env.OPENAI_API_DEPLOYMENT,
+    )
+    db_session.add(agent_run)
+    db_session.flush()
+    return agent_run
+
+
+@pytest.fixture
+def seeded_variant(db_session, seeded_paper, seeded_agent_run):
     """Create a variant with a harmonized variant for PATCH tests."""
     variant = VariantDB(
         paper_id=seeded_paper.id,
+        agent_run_id=seeded_agent_run.id,
         variant='c.68_69delAG',
         transcript='NM_007294.3',
         genome_build='GRCh38',
@@ -743,7 +796,7 @@ def seeded_variant(db_session, seeded_paper):
     db_session.add(harmonized)
     db_session.flush()
     db_session.add(
-        EnrichedVariantDB(
+        AnnotatedVariantDB(
             variant_id=variant.id,
             pathogenicity='Pathogenic',
             submissions=3,
@@ -756,10 +809,11 @@ def seeded_variant(db_session, seeded_paper):
 
 
 @pytest.fixture
-def seeded_unharmonized_variant(db_session, seeded_paper):
+def seeded_unharmonized_variant(db_session, seeded_paper, seeded_agent_run):
     """Create a variant without a harmonized variant row for PATCH tests."""
     variant = VariantDB(
         paper_id=seeded_paper.id,
+        agent_run_id=seeded_agent_run.id,
         variant='c.100A>G',
         transcript='NM_000000.1',
         genome_build='GRCh38',
@@ -891,11 +945,11 @@ def test_update_variant_edit_harmonized_clears_enrichment(
         json={'harmonized_variant': {'hgvs_g': 'g.41196312_41196313del'}},
     )
     assert response.status_code == 200
-    assert response.json()['enriched_variant'] is None
+    assert response.json()['annotated_variant'] is None
     # Row is actually gone, not just hidden from the response.
     remaining = (
-        db_session.query(EnrichedVariantDB)
-        .filter(EnrichedVariantDB.variant_id == seeded_variant.id)
+        db_session.query(AnnotatedVariantDB)
+        .filter(AnnotatedVariantDB.variant_id == seeded_variant.id)
         .count()
     )
     assert remaining == 0
@@ -913,7 +967,7 @@ def test_update_variant_edit_harmonized_hgvs_p_also_clears_enrichment(
         json={'harmonized_variant': {'hgvs_p': 'p.Glu23Ter'}},
     )
     assert response.status_code == 200
-    assert response.json()['enriched_variant'] is None
+    assert response.json()['annotated_variant'] is None
 
 
 def test_update_variant_edit_harmonized_preserves_reasoning(
@@ -946,8 +1000,8 @@ def test_update_variant_edit_extracted_only_preserves_derived(
     )
     assert response.status_code == 200
     data = response.json()
-    assert data['enriched_variant'] is not None
-    assert data['enriched_variant']['pathogenicity'] == 'Pathogenic'
+    assert data['annotated_variant'] is not None
+    assert data['annotated_variant']['pathogenicity'] == 'Pathogenic'
     assert data['harmonized_variant']['reasoning'] == 'Harmonized via VariantValidator'
 
 
@@ -961,7 +1015,7 @@ def test_update_variant_edit_only_note_preserves_derived(
     )
     assert response.status_code == 200
     data = response.json()
-    assert data['enriched_variant'] is not None
+    assert data['annotated_variant'] is not None
     assert data['harmonized_variant']['reasoning'] == 'Harmonized via VariantValidator'
 
 
@@ -1002,16 +1056,28 @@ def test_update_variant_clears_nested_harmonized_field(
     assert hv['hgvs_c'] == 'c.68_69delAG'
 
 
-def test_enqueue_all_instances_for_splatted_task(client, seeded_paper, db_session):
+def test_enqueue_all_instances_for_splatted_task(
+    client, seeded_paper, db_session, agent_run
+):
     """Test re-enqueueing a splatted task with no entity IDs re-queues all instances."""
     from lib.tasks import TaskCreateRequest
 
     # Create families and splatted tasks
     family1 = FamilyDB(
-        paper_id=seeded_paper.id, identifier='fam1', identifier_evidence={}
+        paper_id=seeded_paper.id,
+        agent_run_id=agent_run.id,
+        identifier='fam1',
+        identifier_evidence={},
+        consanguinity=False,
+        consanguinity_evidence={},
     )
     family2 = FamilyDB(
-        paper_id=seeded_paper.id, identifier='fam2', identifier_evidence={}
+        paper_id=seeded_paper.id,
+        agent_run_id=agent_run.id,
+        identifier='fam2',
+        identifier_evidence={},
+        consanguinity=False,
+        consanguinity_evidence={},
     )
     db_session.add_all([family1, family2])
     db_session.flush()
@@ -1019,12 +1085,14 @@ def test_enqueue_all_instances_for_splatted_task(client, seeded_paper, db_sessio
     # Create per-family tasks and mark them as completed
     task1 = TaskDB(
         paper_id=seeded_paper.id,
+        agent_run_id=agent_run.id,
         type=TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
         family_id=family1.id,
         status=TaskStatus.COMPLETED,
     )
     task2 = TaskDB(
         paper_id=seeded_paper.id,
+        agent_run_id=agent_run.id,
         type=TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
         family_id=family2.id,
         status=TaskStatus.COMPLETED,
@@ -1047,7 +1115,7 @@ def test_enqueue_all_instances_for_splatted_task(client, seeded_paper, db_sessio
 
 
 def test_enqueue_clears_conversation_id_without_context(
-    client, seeded_paper, db_session
+    client, seeded_paper, db_session, agent_run
 ):
     """Test that re-enqueueing without additional_context clears conversation_id."""
     from lib.tasks import TaskCreateRequest
@@ -1055,6 +1123,7 @@ def test_enqueue_clears_conversation_id_without_context(
     # Create a task with existing conversation_id and additional_context
     task = TaskDB(
         paper_id=seeded_paper.id,
+        agent_run_id=agent_run.id,
         type=TaskType.HPO_LINKING,
         status=TaskStatus.COMPLETED,
         conversation_id='conv-123',
@@ -1090,3 +1159,22 @@ def test_update_variant_rejects_harmonized_update_before_harmonization(
     assert (
         response.json()['detail'] == 'Variant has not been harmonized by the server yet'
     )
+
+
+def test_cache_headers_on_static_files(client):
+    """Test that static files get 24-hour cache headers."""
+    from lib.core.environment import env
+
+    # Mock a static file request by calling a path under CAA_ROOT
+    response = client.get(f'{env.CAA_ROOT}/extracted_pdfs/1/thumbnail.png')
+    # Even if 404, the cache header middleware should have run
+    assert response.headers.get('Cache-Control') == 'public, max-age=86400'
+
+
+def test_no_cache_headers_on_api_endpoints(client):
+    """Test that API endpoints don't get static file cache headers."""
+    response = client.get('/status')
+    assert response.status_code == 200
+    # Should not have the static file cache header
+    cache_control = response.headers.get('Cache-Control')
+    assert cache_control != 'public, max-age=86400'

@@ -18,6 +18,7 @@ import requests
 from agents import Agent, function_tool
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
+from lib.agents.variant_annotation_agent import _get_session_with_retries
 from lib.core.environment import env
 from lib.models.evidence_block import ReasoningBlock
 from lib.models.variant import (
@@ -74,7 +75,8 @@ def clinvar_lookup(query: str) -> List[Dict[str, Any]]:
     if env.NCBI_EMAIL:
         esearch_params['email'] = env.NCBI_EMAIL
 
-    r = requests.get(esearch_url, params=esearch_params, headers=headers, timeout=10)
+    session = _get_session_with_retries()
+    r = session.get(esearch_url, params=esearch_params, headers=headers, timeout=10)
     r.raise_for_status()
     search_data = r.json()
 
@@ -97,7 +99,7 @@ def clinvar_lookup(query: str) -> List[Dict[str, Any]]:
     if env.NCBI_EMAIL:
         esummary_params['email'] = env.NCBI_EMAIL
 
-    r = requests.get(esummary_url, params=esummary_params, headers=headers, timeout=10)
+    r = session.get(esummary_url, params=esummary_params, headers=headers, timeout=10)
     r.raise_for_status()
     summary_data = r.json()
 
@@ -143,6 +145,7 @@ def dbsnp_lookup(query: str) -> List[str]:
 
     headers = {'content-type': 'application/json'}
     hgvs_results: List[str] = []
+    session = _get_session_with_retries()
 
     # ---------------------
     # Step 1: ESearch
@@ -161,7 +164,7 @@ def dbsnp_lookup(query: str) -> List[str]:
     if env.NCBI_EMAIL:
         esearch_params['email'] = env.NCBI_EMAIL
 
-    r = requests.get(esearch_url, params=esearch_params, headers=headers, timeout=10)
+    r = session.get(esearch_url, params=esearch_params, headers=headers, timeout=10)
     r.raise_for_status()
     search_data = r.json()
 
@@ -184,7 +187,7 @@ def dbsnp_lookup(query: str) -> List[str]:
     if env.NCBI_EMAIL:
         esummary_params['email'] = env.NCBI_EMAIL
 
-    r = requests.get(esummary_url, params=esummary_params, headers=headers, timeout=10)
+    r = session.get(esummary_url, params=esummary_params, headers=headers, timeout=10)
     r.raise_for_status()
     summary_data = r.json()
 
@@ -202,7 +205,7 @@ def dbsnp_lookup(query: str) -> List[str]:
 
         try:
             variation_url = f'{SPDI_TO_HGVS_BASE}/{spdi}/hgvs'
-            vr = requests.get(variation_url, timeout=10)
+            vr = session.get(variation_url, timeout=10)
             vr.raise_for_status()
             variation_data = vr.json()
 
@@ -256,8 +259,9 @@ def allele_registry_resolver(
 
     url = f'{CLINGEN_ALLELE_REGISTRY_ENDPOINT}/{suffix}'
     headers = {'content-type': 'application/json'}
+    session = _get_session_with_retries()
 
-    r = requests.get(url, headers=headers, timeout=10)
+    r = session.get(url, headers=headers, timeout=10)
     r.raise_for_status()
 
     data = r.json()
@@ -440,8 +444,9 @@ def gnomad_style_ids_from_variant_validator(variant_description: str) -> list[st
     )
     url = f'{endpoint}/{GenomeBuild.GRCh38.value}/{encoded_variant_description}/select'
     headers = {'content-type': 'application/json'}
+    session = _get_session_with_retries()
 
-    r = requests.get(url, headers=headers, timeout=10)
+    r = session.get(url, headers=headers, timeout=10)
     r.raise_for_status()
 
     data = r.json()
@@ -496,8 +501,9 @@ def genomic_accession_for_gene_and_transcript(
 
     url = f'{VV_GENE2TRANSCRIPTSV1_ENDPOINT}/{gene_symbol}'
     headers = {'content-type': 'application/json'}
+    session = _get_session_with_retries()
 
-    r = requests.get(url, headers=headers, timeout=10)
+    r = session.get(url, headers=headers, timeout=10)
     r.raise_for_status()
 
     data = r.json()
@@ -569,8 +575,9 @@ def select_canonical_transcript(
     genome_build = GenomeBuild.GRCh38 if not genome_build else genome_build
     url = f'{VV_GENE2TRANSCRIPTSV2_ENDPOINT}/{gene_symbol}/select/all/{genome_build.value}'
     headers = {'content-type': 'application/json'}
+    session = _get_session_with_retries()
 
-    r = requests.get(url, headers=headers, timeout=10)
+    r = session.get(url, headers=headers, timeout=10)
     r.raise_for_status()
 
     data = r.json()

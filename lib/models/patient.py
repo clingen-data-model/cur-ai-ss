@@ -23,8 +23,9 @@ from lib.models.family import Family
 from lib.models.paper import PaperDB
 
 if TYPE_CHECKING:
+    from lib.models.agent_run import AgentRunDB
     from lib.models.family import FamilyDB
-    from lib.models.patient_variant_link import PatientVariantLinkDB
+    from lib.models.patient_variant_occurrences import PatientVariantOccurrenceDB
     from lib.models.phenotype import PhenotypeDB
 
 
@@ -439,6 +440,12 @@ class PatientDB(Base):
     family_id: Mapped[int] = mapped_column(
         Integer, ForeignKey('families.id', ondelete='CASCADE'), nullable=False
     )
+    agent_run_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey('agent_runs.id', ondelete='CASCADE'),
+        nullable=False,
+        index=True,
+    )
 
     # Extracted values (updateable, strongly typed)
     identifier: Mapped[str] = mapped_column(String, nullable=False)
@@ -491,11 +498,16 @@ class PatientDB(Base):
 
     paper: Mapped[PaperDB] = relationship('PaperDB', back_populates='patients')
     family: Mapped['FamilyDB'] = relationship('FamilyDB', back_populates='patients')
+    agent_run: Mapped['AgentRunDB'] = relationship('AgentRunDB')
     phenotypes: Mapped[list['PhenotypeDB']] = relationship(
         'PhenotypeDB', back_populates='patient', cascade='all, delete-orphan'
     )
-    patient_variant_links: Mapped[list['PatientVariantLinkDB']] = relationship(
-        'PatientVariantLinkDB', back_populates='patient', cascade='all, delete-orphan'
+    patient_variant_occurrences: Mapped[list['PatientVariantOccurrenceDB']] = (
+        relationship(
+            'PatientVariantOccurrenceDB',
+            back_populates='patient',
+            cascade='all, delete-orphan',
+        )
     )
 
     __table_args__ = (

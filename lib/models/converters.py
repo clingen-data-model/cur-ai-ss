@@ -3,7 +3,10 @@ from lib.models import PatientDB, PedigreeDB, VariantDB
 from lib.models.evidence_block import HumanEvidenceBlock, ReasoningBlock
 from lib.models.family import Family, FamilyDB
 from lib.models.patient import Patient
-from lib.models.patient_variant_link import PatientVariantLink, PatientVariantLinkDB
+from lib.models.patient_variant_occurrences import (
+    PatientVariantOccurrence,
+    PatientVariantOccurrenceDB,
+)
 from lib.models.phenotype import (
     ExtractedPhenotype,
     HpoDB,
@@ -24,19 +27,23 @@ from lib.models.variant import (
 )
 
 
-def family_to_db(paper_id: int, family: Family) -> FamilyDB:
+def family_to_db(paper_id: int, agent_run_id: int, family: Family) -> FamilyDB:
     """Convert a Family to FamilyDB, splitting values from evidence."""
     return FamilyDB(
         paper_id=paper_id,
+        agent_run_id=agent_run_id,
         identifier=family.identifier.value,
         identifier_evidence=family.identifier.model_dump(),
+        consanguinity=family.consanguinity.value,
+        consanguinity_evidence=family.consanguinity.model_dump(),
     )
 
 
-def patient_to_db(paper_id: int, patient: Patient) -> PatientDB:
+def patient_to_db(paper_id: int, patient: Patient, agent_run_id: int) -> PatientDB:
     """Convert a Patient to PatientDB, splitting values from evidence."""
     kwargs = {
         'paper_id': paper_id,
+        'agent_run_id': agent_run_id,
         'age_diagnosis_unit': patient.age_diagnosis_unit,
         'age_report_unit': patient.age_report_unit,
         'age_death_unit': patient.age_death_unit,
@@ -102,10 +109,11 @@ def hpo_to_db(
     )
 
 
-def variant_to_db(paper_id: int, variant: Variant) -> VariantDB:
+def variant_to_db(paper_id: int, variant: Variant, agent_run_id: int) -> VariantDB:
     """Convert Variant to VariantDB, extracting values and evidence from EvidenceBlocks."""
     kwargs = {
         'paper_id': paper_id,
+        'agent_run_id': agent_run_id,
     }
 
     # All fields except gene have evidence blocks
@@ -153,11 +161,11 @@ def harmonized_variant_to_db(
     )
 
 
-def patient_variant_link_to_db(
-    paper_id: int, link: PatientVariantLink
-) -> PatientVariantLinkDB:
-    """Convert PatientVariantLink to PatientVariantLinkDB, extracting values and evidence."""
-    return PatientVariantLinkDB(
+def patient_variant_occurrence_to_db(
+    paper_id: int, link: PatientVariantOccurrence
+) -> PatientVariantOccurrenceDB:
+    """Convert PatientVariantOccurrence to PatientVariantOccurrenceDB, extracting values and evidence."""
+    return PatientVariantOccurrenceDB(
         paper_id=paper_id,
         patient_id=link.patient_id,
         variant_id=link.variant_id,
@@ -169,6 +177,10 @@ def patient_variant_link_to_db(
         de_novo_evidence=link.de_novo.model_dump(),
         testing_methods=[m.value.value for m in link.testing_methods],
         testing_methods_evidence=[m.model_dump() for m in link.testing_methods],
+        disease_name=link.disease_name.value if link.disease_name else None,
+        disease_name_evidence=link.disease_name.model_dump()
+        if link.disease_name
+        else None,
     )
 
 

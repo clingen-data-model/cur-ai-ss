@@ -49,6 +49,21 @@ def db_session(mocked_root_dir, monkeypatch):
 
 
 @pytest.fixture
+def agent_run(db_session):
+    from lib.core.environment import env
+    from lib.models import AgentRunDB
+
+    run = AgentRunDB(
+        git_hash='abc123def456',
+        description='test run',
+        model=env.OPENAI_API_DEPLOYMENT,
+    )
+    db_session.add(run)
+    db_session.flush()
+    return run
+
+
+@pytest.fixture
 def docx_with_image():
     from docx import Document
     from docx.shared import Inches

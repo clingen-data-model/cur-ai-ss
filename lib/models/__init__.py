@@ -3,6 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from lib.models.agent_run import AgentRunDB, AgentRunResp
 from lib.models.base import Base, PatchModel
 from lib.models.conversation import (
     ChatMessageRequest,
@@ -38,12 +39,12 @@ from lib.models.patient import (
     PatientResp,
     PatientUpdateRequest,
 )
-from lib.models.patient_variant_link import (
+from lib.models.patient_variant_occurrences import (
     Inheritance,
-    PatientVariantLink,
-    PatientVariantLinkDB,
-    PatientVariantLinkerOutput,
-    PatientVariantLinkResp,
+    PatientVariantOccurrence,
+    PatientVariantOccurrenceDB,
+    PatientVariantOccurrenceOutput,
+    PatientVariantOccurrenceResp,
     TestingMethod,
     Zygosity,
 )
@@ -66,17 +67,17 @@ from lib.models.segregation_analysis import (
     SequencingMethodology,
 )
 from lib.models.variant import (
-    EnrichedVariant,
-    EnrichedVariantDB,
-    EnrichedVariantResp,
+    AnnotatedVariant,
+    AnnotatedVariantDB,
+    AnnotatedVariantResp,
     HarmonizedVariant,
     HarmonizedVariantDB,
     HarmonizedVariantResp,
     HarmonizedVariantUpdate,
     SpliceAI,
     Variant,
+    VariantAnnotationOutput,
     VariantDB,
-    VariantEnrichmentOutput,
     VariantResp,
     VariantUpdateRequest,
 )

@@ -4,10 +4,15 @@ import streamlit as st
 from lib.models import PaperResp, PatientResp, VariantResp
 from lib.models.evidence_block import EvidenceBlock
 from lib.models.patient import AffectedStatus, ProbandStatus
-from lib.models.patient_variant_link import Inheritance, TestingMethod, Zygosity
+from lib.models.patient_variant_occurrences import (
+    CompoundHetConfidence,
+    Inheritance,
+    TestingMethod,
+    Zygosity,
+)
 from lib.tasks import TaskType, is_task_completed
 from lib.ui.api import (
-    get_patient_variant_links,
+    get_occurrences,
     get_patients,
     get_variants,
 )
@@ -15,6 +20,20 @@ from lib.ui.paper.shared import (
     get_gnomad_url,
     render_highlight_controls,
 )
+
+
+def _format_variant_with_protein(
+    variant: VariantResp, include_protein: bool = False
+) -> str:
+    """Format variant description with optional protein notation."""
+    desc = variant.variant_description
+    if include_protein and variant.hgvs_p:
+        # If already formatted with parentheses, use as-is
+        if variant.hgvs_p.startswith('p.('):
+            desc += f' {variant.hgvs_p}'
+        else:
+            desc += f' p.({variant.hgvs_p})'
+    return desc
 
 
 def _render_evidence_block(
@@ -65,18 +84,19 @@ def render_patient_variant_occurrences_tab() -> None:
     if not paper_resp.title:
         st.write(f'{paper_resp.filename} not yet extracted...')
         return
-    elif not is_task_completed(paper_resp.tasks, TaskType.PATIENT_VARIANT_LINKING):
-        st.write(f'Patient/Variant Linking not yet completed...')
+    elif not is_task_completed(paper_resp.tasks, TaskType.PATIENT_VARIANT_OCCURRENCES):
+        st.write(f'Patient/Variant Occurrences not yet completed...')
         return
 
     # Load all data sources via API
     patients: list[PatientResp] = get_patients(paper_resp.id)
     variants: list[VariantResp] = get_variants(paper_resp.id)
-    links = get_patient_variant_links(paper_resp.id)
+    links = get_occurrences(paper_resp.id)
 
     # Create lookup maps by ID
     patients_by_id = {p.id: p for p in patients}
     variants_by_id = {v.id: v for v in variants}
+    links_by_id = {link.id: link for link in links}
 
     # Build a list of rows for the DataFrame
     rows = []
@@ -84,7 +104,12 @@ def render_patient_variant_occurrences_tab() -> None:
         patient = patients_by_id[link.patient_id]
         variant = variants_by_id[link.variant_id]
         harmonized_variant = variant.harmonized_variant
-        variant_desc = variant.variant_description
+        # Show p. notation for paired variants or heterozygous
+        show_protein = (
+            link.paired_variant_link_id is not None
+            or link.zygosity == Zygosity.heterozygous
+        )
+        variant_desc = _format_variant_with_protein(variant, show_protein)
 
         # Format testing methods as a list of values
         testing_methods_list = link.testing_methods
@@ -92,6 +117,32 @@ def render_patient_variant_occurrences_tab() -> None:
         patient_display = link.patient_identifier
         patient_link = f'/paper?paper_id={paper_resp.id}&patient_id={link.patient_id}#{patient_display}'
         variant_link = f'/paper?paper_id={paper_resp.id}&variant_id={link.variant_id}#{variant_desc}'
+
+        # Paired Variant: if paired with another variant, create a link to it
+        paired_variant_link = ''
+        if link.paired_variant_link_id is not None:
+            paired_link = links_by_id.get(link.paired_variant_link_id)
+            if paired_link:
+                paired_variant = variants_by_id.get(paired_link.variant_id)
+                if paired_variant:
+                    # Show p. notation for paired variants
+                    paired_variant_desc = _format_variant_with_protein(
+                        paired_variant, True
+                    )
+                    paired_variant_link = f'/paper?paper_id={paper_resp.id}&variant_id={paired_link.variant_id}#{paired_variant_desc}'
+                    # Include confidence level if less than Confirmed
+                    if (
+                        link.paired_variant_confidence
+                        and link.paired_variant_confidence
+                        != CompoundHetConfidence.confirmed
+                    ):
+                        confidence_text = (
+                            link.paired_variant_confidence.value.capitalize()
+                        )
+                        paired_variant_link += (
+                            f' (Pairing Confidence: {confidence_text})'
+                        )
+
         rows.append(
             {
                 'Select': False,
@@ -103,10 +154,12 @@ def render_patient_variant_occurrences_tab() -> None:
                 else 'N/A',
                 'Patient': patient_link,
                 'Variant': variant_link,
+                'Paired Variant': paired_variant_link,
                 'Zygosity': link.zygosity.value,
                 'Inheritance': link.inheritance.value,
                 'De Novo': link.de_novo,
                 'Testing Methods': testing_methods_list,
+                'Disease Name': link.disease_name or '',
                 # Store full objects for detail panel
                 '_link': link,
                 '_patient': patient,
@@ -119,10 +172,30 @@ def render_patient_variant_occurrences_tab() -> None:
         st.info('No Patient/Variant links found.')
         st.stop()
 
+    # Sort rows by patient_id, then paired_variant_link_id (so pairs are adjacent)
+    def sort_key(r: dict) -> tuple:  # type: ignore[no-untyped-def]
+        link = r['_link']
+        return (link.patient_id, link.paired_variant_link_id or 0)
+
+    rows.sort(key=sort_key)
+
+    # Determine which columns to display based on data
+    has_paired_variants = any(row['Paired Variant'] for row in rows)
+    has_disease_names = any(row['Disease Name'] for row in rows)
+
     # Create DataFrame for display (exclude internal columns)
     display_rows = [
         {k: v for k, v in row.items() if not k.startswith('_')} for row in rows
     ]
+
+    # Remove columns that shouldn't be displayed
+    if not has_paired_variants:
+        for row in display_rows:
+            del row['Paired Variant']
+    if not has_disease_names:
+        for row in display_rows:
+            del row['Disease Name']
+
     df = pd.DataFrame(display_rows)
 
     # Display main table with row selection
@@ -136,52 +209,74 @@ def render_patient_variant_occurrences_tab() -> None:
     proband_options = [e.value for e in ProbandStatus]
     affected_options = [e.value for e in AffectedStatus]
 
+    # Build column_config with conditional columns
+    column_config = {
+        'Select': st.column_config.CheckboxColumn('Select', width=5),
+        'Proband': st.column_config.SelectboxColumn(
+            'Proband',
+            options=proband_options,
+            width='small',
+        ),
+        'Affected': st.column_config.SelectboxColumn(
+            'Affected',
+            options=affected_options,
+            width='small',
+        ),
+        'Patient': st.column_config.LinkColumn(
+            'Patient',
+            display_text=r'.*?#(.+)$',
+        ),
+        'Variant': st.column_config.LinkColumn(
+            'Variant',
+            display_text=r'.*?#(.+)$',
+        ),
+        'Zygosity': st.column_config.SelectboxColumn(
+            'Zygosity',
+            options=zygosity_options,
+            width='small',
+        ),
+        'Inheritance': st.column_config.SelectboxColumn(
+            'Inheritance',
+            options=inheritance_options,
+            width='small',
+        ),
+        'De Novo': st.column_config.CheckboxColumn(
+            'De Novo',
+            width='small',
+        ),
+        'Testing Methods': st.column_config.MultiselectColumn(
+            'Testing Methods',
+            options=testing_method_options,
+            color=['#ffa421', '#803df5', '#00c0f2'],
+            format_func=lambda x: x.capitalize(),
+        ),
+    }
+
+    # Add Paired Variant column only if there are paired variants
+    if has_paired_variants:
+        column_config['Paired Variant'] = st.column_config.LinkColumn(
+            'Paired Variant',
+            display_text=r'.*?#(.+)$',
+        )
+
+    # Add Disease Name column only if there are disease names
+    if has_disease_names:
+        column_config['Disease Name'] = st.column_config.TextColumn(
+            'Disease Name',
+            width='medium',
+        )
+
+    # Build disabled list, excluding columns that don't exist in the DataFrame
+    disabled = ['Proband', 'Affected', 'Patient', 'Variant']
+    if has_paired_variants:
+        disabled.append('Paired Variant')
+
     editted_df = st.data_editor(
         df,
         width='stretch',
         hide_index=True,
-        disabled=['Proband', 'Affected', 'Patient', 'Variant'],
-        column_config={
-            'Select': st.column_config.CheckboxColumn('Select', width=5),
-            'Proband': st.column_config.SelectboxColumn(
-                'Proband',
-                options=proband_options,
-                width='small',
-            ),
-            'Affected': st.column_config.SelectboxColumn(
-                'Affected',
-                options=affected_options,
-                width='small',
-            ),
-            'Patient': st.column_config.LinkColumn(
-                'Patient',
-                display_text=r'.*?#(.+)$',
-            ),
-            'Variant': st.column_config.LinkColumn(
-                'Variant',
-                display_text=r'.*?#(.+)$',
-            ),
-            'Zygosity': st.column_config.SelectboxColumn(
-                'Zygosity',
-                options=zygosity_options,
-                width='small',
-            ),
-            'Inheritance': st.column_config.SelectboxColumn(
-                'Inheritance',
-                options=inheritance_options,
-                width='small',
-            ),
-            'De Novo': st.column_config.CheckboxColumn(
-                'De Novo',
-                width='small',
-            ),
-            'Testing Methods': st.column_config.MultiselectColumn(
-                'Testing Methods',
-                options=testing_method_options,
-                color=['#ffa421', '#803df5', '#00c0f2'],
-                format_func=lambda x: x.capitalize(),
-            ),
-        },
+        disabled=disabled,
+        column_config=column_config,
     )
 
     # Show editable panel when a row is selected
@@ -298,3 +393,45 @@ def render_patient_variant_occurrences_tab() -> None:
                     _render_evidence_block(
                         testing_method_evidence_block, paper_resp.id, f'method_{i}'
                     )
+
+        # Display disease name evidence if present
+        if link.disease_name_evidence:
+            st.divider()
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown('#### Disease Name')
+                st.info(f'**Disease Name:** {link.disease_name or "N/A"}')
+
+            with col2:
+                st.markdown('#### Disease Name Evidence')
+                _render_evidence_block(
+                    link.disease_name_evidence, paper_resp.id, 'disease_name'
+                )
+
+        # Display paired variant confidence if present (compound heterozygous pairing)
+        if link.paired_variant_link_id and link.paired_variant_confidence:
+            st.divider()
+            st.markdown('#### Compound Heterozygous Pairing')
+
+            # Get the paired variant
+            paired_link = links_by_id.get(link.paired_variant_link_id)
+            if paired_link:
+                paired_variant = variants_by_id.get(paired_link.variant_id)
+                if paired_variant:
+                    paired_variant_desc = _format_variant_with_protein(
+                        paired_variant, True
+                    )
+                    paired_variant_link_url = f'/paper?paper_id={paper_resp.id}&variant_id={paired_variant.id}'
+                    st.markdown(
+                        f'**Paired with:** [{paired_variant_desc}]({paired_variant_link_url}) '
+                        f'— Confidence: **{link.paired_variant_confidence.capitalize()}**'
+                    )
+
+            if link.paired_variant_confidence_reasoning:
+                st.text_area(
+                    'Pairing Reasoning',
+                    value=link.paired_variant_confidence_reasoning.reasoning,
+                    height=15,
+                    disabled=True,
+                )

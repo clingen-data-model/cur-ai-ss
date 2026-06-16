@@ -2,6 +2,11 @@ from typing import Literal
 
 from sqlalchemy.orm import Session
 
+from lib.models.agent_run import AgentRunDB
+from lib.models.patient_variant_occurrences import (
+    PatientVariantOccurrenceDB,
+    Zygosity,
+)
 from lib.tasks.models import (
     TASK_SUCCESSORS,
     InferredPaperStatus,
@@ -29,6 +34,12 @@ def enqueue_task(
     If task is currently running, returns it unchanged.
     Returns the task (either newly created or reset).
     """
+    # Get latest agent run
+    latest_run = session.query(AgentRunDB).order_by(AgentRunDB.id.desc()).first()
+    if not latest_run:
+        raise ValueError('No agent runs found. Create one with ensure_agent_run().')
+    agent_run_id = latest_run.id
+
     # Check if task exists (SQLAlchemy converts == None to IS NULL)
     existing_task = (
         session.query(TaskDB)
@@ -44,8 +55,8 @@ def enqueue_task(
     )
 
     if existing_task:
-        # Skip re-queuing if task is already running
-        if existing_task.status == TaskStatus.RUNNING:
+        # Skip re-queuing if task is already running or queued
+        if existing_task.status in (TaskStatus.RUNNING, TaskStatus.QUEUED):
             return existing_task
         # Reset existing task
         existing_task.status = TaskStatus.PENDING
@@ -63,6 +74,7 @@ def enqueue_task(
         new_task = TaskDB(
             type=task_type,
             paper_id=paper_id,
+            agent_run_id=agent_run_id,
             family_id=family_id,
             patient_id=patient_id,
             variant_id=variant_id,
@@ -99,10 +111,10 @@ def enqueue_all_instances(
     )
 
     if existing_tasks:
-        # Re-queue all existing instances, skip if running
+        # Re-queue all existing instances, skip if running or queued
         results = []
         for task in existing_tasks:
-            if task.status != TaskStatus.RUNNING:
+            if task.status not in (TaskStatus.RUNNING, TaskStatus.QUEUED):
                 task.status = TaskStatus.PENDING
                 task.tries = 0
                 task.error_message = None
@@ -130,7 +142,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
     """Create successor tasks when a task completes.
 
     Each case is explicit about what successors to create and any entity ID
-    filtering/expansion needed. PATIENT_VARIANT_LINKING is the only task that
+    filtering/expansion needed. PATIENT_VARIANT_OCCURRENCES is the only task that
     requires checking multiple independent predecessors.
     """
     from lib.models import FamilyDB, PatientDB, PhenotypeDB, VariantDB
@@ -140,10 +152,10 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
             enqueue_task(
                 session,
                 paper_id=task.paper_id,
-                task_type=TaskType.PAPER_ACKNOWLEDGEMENT,
+                task_type=TaskType.PAPER_CLASSIFIER,
             )
 
-        case TaskType.PAPER_ACKNOWLEDGEMENT:
+        case TaskType.PAPER_CLASSIFIER:
             enqueue_task(
                 session,
                 paper_id=task.paper_id,
@@ -182,7 +194,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     patient_id=patient.id,
                 )
 
-            # Gate PATIENT_VARIANT_LINKING on VARIANT_EXTRACTION also being done
+            # Gate PATIENT_VARIANT_OCCURRENCES on VARIANT_EXTRACTION also being done
             variant_task = (
                 session.query(TaskDB)
                 .filter(
@@ -196,7 +208,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 enqueue_task(
                     session,
                     paper_id=task.paper_id,
-                    task_type=TaskType.PATIENT_VARIANT_LINKING,
+                    task_type=TaskType.PATIENT_VARIANT_OCCURRENCES,
                 )
 
         case TaskType.VARIANT_EXTRACTION:
@@ -214,7 +226,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     variant_id=variant.id,
                 )
 
-            # Gate PATIENT_VARIANT_LINKING on PATIENT_EXTRACTION also being done
+            # Gate PATIENT_VARIANT_OCCURRENCES on PATIENT_EXTRACTION also being done
             patient_task = (
                 session.query(TaskDB)
                 .filter(
@@ -228,18 +240,18 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 enqueue_task(
                     session,
                     paper_id=task.paper_id,
-                    task_type=TaskType.PATIENT_VARIANT_LINKING,
+                    task_type=TaskType.PATIENT_VARIANT_OCCURRENCES,
                 )
 
         case TaskType.VARIANT_HARMONIZATION:
             enqueue_task(
                 session,
                 paper_id=task.paper_id,
-                task_type=TaskType.VARIANT_ENRICHMENT,
+                task_type=TaskType.VARIANT_ANNOTATION,
                 variant_id=task.variant_id,
             )
 
-        case TaskType.PATIENT_VARIANT_LINKING:
+        case TaskType.PATIENT_VARIANT_OCCURRENCES:
             # Expand to per-family SEGREGATION_EVIDENCE_EXTRACTION tasks
             families = (
                 session.query(FamilyDB).filter(FamilyDB.paper_id == task.paper_id).all()
@@ -250,6 +262,28 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     paper_id=task.paper_id,
                     task_type=TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
                     family_id=family.id,
+                )
+
+            # Expand to per-patient COMPOUND_HET_EVALUATION for patients with ≥2 heterozygous variants
+            from sqlalchemy import distinct
+            from sqlalchemy import func as sql_func
+
+            het_patient_ids = (
+                session.query(distinct(PatientVariantOccurrenceDB.patient_id))
+                .filter(
+                    PatientVariantOccurrenceDB.paper_id == task.paper_id,
+                    PatientVariantOccurrenceDB.zygosity == Zygosity.heterozygous.value,
+                )
+                .group_by(PatientVariantOccurrenceDB.patient_id)
+                .having(sql_func.count() >= 2)
+                .all()
+            )
+            for (patient_id,) in het_patient_ids:
+                enqueue_task(
+                    session,
+                    paper_id=task.paper_id,
+                    task_type=TaskType.COMPOUND_HET_EVALUATION,
+                    patient_id=patient_id,
                 )
 
         case TaskType.SEGREGATION_EVIDENCE_EXTRACTION:
@@ -280,8 +314,9 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
 
         case (
             TaskType.PAPER_METADATA
-            | TaskType.VARIANT_ENRICHMENT
+            | TaskType.VARIANT_ANNOTATION
             | TaskType.SEGREGATION_ANALYSIS_COMPUTED
+            | TaskType.COMPOUND_HET_EVALUATION
             | TaskType.HPO_LINKING
             | TaskType.GENERAL_PAPER_QUESTION
         ):
@@ -304,8 +339,8 @@ def infer_paper_status(tasks: list[TaskResp]) -> InferredPaperStatus:
     if not tasks:
         return InferredPaperStatus.PENDING
 
-    # Check running tasks
-    if any(t.status == TaskStatus.RUNNING for t in tasks):
+    # Check running or queued tasks
+    if any(t.status in (TaskStatus.RUNNING, TaskStatus.QUEUED) for t in tasks):
         return InferredPaperStatus.RUNNING
 
     # Check failed tasks
@@ -334,8 +369,10 @@ def infer_paper_status_detail(tasks: list[TaskResp]) -> str:
     if not tasks:
         return 'Pending'
 
-    # Check running tasks
-    running_tasks = [t for t in tasks if t.status == TaskStatus.RUNNING]
+    # Check running or queued tasks
+    running_tasks = [
+        t for t in tasks if t.status in (TaskStatus.RUNNING, TaskStatus.QUEUED)
+    ]
     if running_tasks:
         if len(running_tasks) > 1:
             return f'{len(running_tasks)} agents running'

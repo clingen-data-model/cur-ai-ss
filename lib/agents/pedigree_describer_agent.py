@@ -1,6 +1,6 @@
 from typing import Optional
 
-from agents import Agent
+from agents import Agent, function_tool
 from pydantic import BaseModel
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
@@ -14,66 +14,88 @@ class PedigreeExtractionOutput(BaseModel):
     description: Optional[str] = None
 
 
+# --- Vision tool (guardrailed by agent) ---
+@function_tool
+def analyze_pedigree_image(image_url: str) -> str:
+    """Analyze a pedigree image with high detail to extract comprehensive description.
+
+    Only call this tool AFTER confirming the image contains a pedigree diagram.
+    Returns detailed analysis of individuals, relationships, and inheritance patterns.
+    """
+    from openai import OpenAI
+
+    client = OpenAI(api_key=env.OPENAI_API_KEY)
+
+    message = client.chat.completions.create(
+        model=env.OPENAI_VLM,
+        messages=[
+            {
+                'role': 'user',
+                'content': [
+                    {
+                        'type': 'image_url',
+                        'image_url': {'url': image_url, 'detail': 'high'},
+                    },
+                    {
+                        'type': 'text',
+                        'text': """Extract detailed pedigree information from this diagram.
+
+For the pedigree shown, enumerate ALL individuals visible, even if unclear or low resolution:
+- Identifier (if present)
+- Generation
+- Left-to-right position
+- Sex (if discernible, otherwise mark uncertain)
+- Affected status (if discernible, otherwise mark uncertain)
+
+Then describe:
+- Parent-child relationships
+- Sibling groups
+- Affected individuals
+- The proband if present
+- Number of generations
+- Any uncertainties due to image resolution or clarity
+
+IMPORTANT: List every visible individual, even if some details are unclear. Do not infer missing details.""",
+                    },
+                ],
+            }
+        ],
+    )
+
+    content = message.choices[0].message.content
+    return content if content is not None else ''
+
+
 # --- Agent instructions ---
 PEDIGREE_EXTRACTION_INSTRUCTIONS = """
-INPUT: Image URLs (no paper text)
+INPUT: Image URLs with captions
 
 Task Overview
 -------------
-Determine whether any image contains a pedigree diagram.
+Determine whether any image contains a pedigree diagram, and if so, extract detailed pedigree information.
 
-If NO pedigree exists:
-- Set found=False, image_id=None, description=None.
+TWO-STEP PROCESS:
 
-If a pedigree exists (even if low resolution or partially unclear):
-- Set found=True and proceed:
+STEP 1 — IDENTIFY PEDIGREE (examine URLs and captions)
+-------------------------------------------------------
+Review the provided image URLs and their captions to determine if a pedigree diagram is present.
+A pedigree typically has keywords like: pedigree, family tree, family history, hereditary pattern, inheritance, etc.
 
-1. Identify the best pedigree image.
-2. Enumerate all individuals (even if unclear).
-3. Document what you can discern.
-4. Write the pedigree description.
+Decision:
+- If NO pedigree exists: Set found=False, image_id=None, description=None. STOP.
+- If a pedigree exists (confirmed in Step 1): Proceed to Step 2.
 
-Step 1 — Identify the best pedigree image and all individuals
----------------------------------
-Scan the pedigree and list EVERY individual visible, even if symbols are unclear or resolution is low.
+STEP 2 — EXTRACT DETAILS (use analyze_pedigree_image tool)
+-----------------------------------------------------------
+ONLY if you confirmed a pedigree in Step 1, call analyze_pedigree_image with the image_url.
+The tool will return detailed pedigree information.
 
-Record:
-- identifier (if present)
-- generation
-- left-to-right position
-- sex (if discernible, otherwise mark as uncertain)
-- affected status (if discernible, otherwise mark as uncertain)
+Set found=True and populate image_id and description from the tool output.
 
-Example:
-1. I-1 (male, unaffected)
-2. I-2 (female, unaffected)
-3. II-1 (male, affected)
-4. II-2 (female, unaffected or unclear due to resolution)
-
-If identifiers are not present, use positional labels.
-If individuals are difficult to distinguish due to resolution, note this uncertainty but still enumerate them.
-
-Large pedigrees may contain 20–40 individuals.
-You MUST list every visible individual, regardless of clarity.
-
-Step 2 — Completeness check
----------------------------
-Verify that every square or circle in the pedigree has been included in the list.
-If any were missed, add them.
-Note any ambiguities due to resolution or clarity issues.
-
-Step 3 — Pedigree description
------------------------------
-Using the list from Step 1, describe:
-
-- parent-child relationships (even if inferred from positioning)
-- sibling groups
-- affected individuals
-- the proband if present
-- number of generations
-- Any uncertainties or limitations due to image resolution
-
-IMPORTANT: Always set found=True and populate both image_id and description when a pedigree is found, even if the resolution is low or some details are unclear. Only set found=False with None values when no pedigree diagram is present at all.
+IMPORTANT GUARDRAILS:
+- Only call analyze_pedigree_image if you confirmed a pedigree exists
+- found=False with None values ONLY when no pedigree diagram is present
+- found=True even if resolution is low or some details are unclear (the tool handles incomplete clarity)
 """
 
 
@@ -85,4 +107,5 @@ agent = Agent(
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=env.OPENAI_API_DEPLOYMENT,
     output_type=PedigreeExtractionOutput,
+    tools=[analyze_pedigree_image],
 )

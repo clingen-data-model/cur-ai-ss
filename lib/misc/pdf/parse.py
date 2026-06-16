@@ -1,3 +1,4 @@
+import asyncio
 import html
 import json
 import shutil
@@ -29,6 +30,7 @@ from docling_parse.pdf_parser import DoclingPdfParser, PdfDocument
 from pydantic import BaseModel
 from xldown import excel_to_markdown
 
+from lib.agents.table_correction_agent import correct_tables
 from lib.misc.pdf.paths import (
     pdf_extraction_success_path,
     pdf_image_caption_path,
@@ -178,7 +180,7 @@ def _parse_xlsx_content(paper_id: int, content: bytes) -> None:
         pdf_markdown_path(paper_id, supplement=True).write_text(md_text)
 
 
-def parse_content(
+async def parse_content(
     paper_id: int,
     force: bool = False,
     supplement_format: FileFormat | None = None,
@@ -293,6 +295,8 @@ def parse_content(
             pdf_image_caption_path(paper_id, i, supplement=supplement), 'w'
         ) as fp:
             fp.write(caption)
+
+    await correct_tables(paper_id, supplement=supplement)
 
     with open(pdf_extraction_success_path(paper_id, supplement=supplement), 'w') as fp:
         fp.write('')
