@@ -1266,9 +1266,10 @@ def test_mondo_linking_handler_updates_paper_only_for_paper_scoped_task(
     async def fake_runner_run(agent, message, **kwargs):
         assert agent is handlers.mondo_linking_agent
         assert kwargs['max_turns'] == 12
-        payload = json.loads(
-            message.removeprefix('MONDO linking target JSON:\n').split('\n\n', 1)[0]
-        )
+        json_block = message.split('MONDO linking target JSON:\n', 1)[1].split(
+            '\n\n', 1
+        )[0]
+        payload = json.loads(json_block)
         assert payload['scope'] == 'paper'
         assert payload['disease_text'] == 'limb-girdle muscular dystrophy type 2Q'
         return SimpleNamespace(
@@ -1292,6 +1293,7 @@ def test_mondo_linking_handler_updates_paper_only_for_paper_scoped_task(
             'label': 'limb-girdle muscular dystrophy-dystroglycanopathy type C1',
         },
     )
+    monkeypatch.setattr(handlers, 'fulltext_md', lambda *a, **k: 'PAPER MARKDOWN')
     monkeypatch.setattr(handlers.Runner, 'run', fake_runner_run)
 
     asyncio.run(handlers.handle_mondo_linking(task.id))
@@ -1355,12 +1357,13 @@ def test_mondo_linking_handler_updates_target_occurrence_only(
     async def fake_runner_run(agent, message, **kwargs):
         assert agent is handlers.mondo_linking_agent
         assert kwargs['max_turns'] == 12
-        payload = json.loads(
-            message.removeprefix('MONDO linking target JSON:\n').split('\n\n', 1)[0]
-        )
+        json_block = message.split('MONDO linking target JSON:\n', 1)[1].split(
+            '\n\n', 1
+        )[0]
+        payload = json.loads(json_block)
         assert payload['scope'] == 'occurrence'
         assert payload['disease_text'] == 'epidermolysis bullosa simplex'
-        assert payload['context']['inheritance_mode'] == 'Dominant'
+        assert payload['inheritance_mode'] == 'Dominant'
         return SimpleNamespace(
             final_output=SimpleNamespace(
                 value=MondoAgentDecision(
@@ -1382,6 +1385,7 @@ def test_mondo_linking_handler_updates_target_occurrence_only(
             'label': 'epidermolysis bullosa simplex',
         },
     )
+    monkeypatch.setattr(handlers, 'fulltext_md', lambda *a, **k: 'PAPER MARKDOWN')
     monkeypatch.setattr(handlers.Runner, 'run', fake_runner_run)
 
     asyncio.run(handlers.handle_mondo_linking(task.id))
@@ -1521,6 +1525,7 @@ def test_mondo_linking_handler_stores_context_for_invalid_agent_result(
             raw_responses=[],
         )
 
+    monkeypatch.setattr(handlers, 'fulltext_md', lambda *a, **k: 'PAPER MARKDOWN')
     monkeypatch.setattr(handlers.Runner, 'run', fake_runner_run)
     monkeypatch.setattr(handlers, 'get_mondo_term', lambda mondo_id: None)
 

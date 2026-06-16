@@ -117,21 +117,12 @@ class MondoCandidate(BaseModel):
     matches: list[MondoMatchEvidence] = Field(default_factory=list)
 
 
-class MondoDiseaseContext(BaseModel):
-    """Surrounding paper context supplied to the MONDO linking agent.
-
-    This holds non-disease framing only. The disease string to map lives in
-    ``MondoLinkingTarget.disease_text``; it is deliberately not duplicated here.
-    """
-
-    paper_title: str | None = None
-    paper_abstract: str | None = None
-    gene_symbol: str | None = None
-    inheritance_mode: str | None = None
-
-
 class MondoLinkingTarget(BaseModel):
-    """Disease text target for paper- or occurrence-scoped MONDO linking."""
+    """Disease text target for paper- or occurrence-scoped MONDO linking.
+
+    The full paper is supplied to the agent separately (via the cached
+    ``format_paper_context`` prefix), so only non-paper-body framing lives here.
+    """
 
     scope: MondoDiseaseScope
     paper_id: int
@@ -144,4 +135,5 @@ class MondoLinkingTarget(BaseModel):
             'or the occurrence disease for occurrence-scoped tasks.'
         ),
     )
-    context: MondoDiseaseContext = Field(default_factory=MondoDiseaseContext)
+    gene_symbol: str | None = None
+    inheritance_mode: str | None = None

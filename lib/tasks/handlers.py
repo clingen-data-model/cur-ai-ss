@@ -138,7 +138,6 @@ from lib.models.converters import (
 )
 from lib.models.evidence_block import ReasoningBlock
 from lib.models.mondo import (
-    MondoDiseaseContext,
     MondoDiseaseScope,
     MondoLinkingTarget,
 )
@@ -1478,12 +1477,7 @@ def build_mondo_linking_target(
     if not paper:
         return None
 
-    context = MondoDiseaseContext(
-        paper_title=paper.title,
-        paper_abstract=paper.abstract,
-        gene_symbol=paper.gene.symbol,
-        inheritance_mode=paper.disease_inheritance_mode,
-    )
+    gene_symbol = paper.gene.symbol
 
     # Is paper-scoped disease text
     if task.patient_variant_occurrence_id is None:
@@ -1491,7 +1485,8 @@ def build_mondo_linking_target(
             scope=MondoDiseaseScope.PAPER,
             paper_id=task.paper_id,
             disease_text=paper.disease_name,
-            context=context,
+            gene_symbol=gene_symbol,
+            inheritance_mode=paper.disease_inheritance_mode,
         )
 
     occurrence = session.get(
@@ -1506,11 +1501,8 @@ def build_mondo_linking_target(
         paper_id=task.paper_id,
         patient_variant_occurrence_id=occurrence.id,
         disease_text=occurrence.disease_name,
-        context=context.model_copy(
-            update={
-                'inheritance_mode': occurrence.inheritance or context.inheritance_mode,
-            }
-        ),
+        gene_symbol=gene_symbol,
+        inheritance_mode=occurrence.inheritance or paper.disease_inheritance_mode,
     )
 
 
@@ -1523,6 +1515,8 @@ async def handle_mondo_linking(task_id: int) -> None:
         target = build_mondo_linking_target(session, task)
         if target is None:
             return
+        paper = session.get(PaperDB, target.paper_id)
+        supplement_format = paper.supplement_format if paper else None
 
     query = target.disease_text.strip() if target.disease_text else ''
     selected_mondo_id: str | None = None
@@ -1530,14 +1524,19 @@ async def handle_mondo_linking(task_id: int) -> None:
     mondo_match_context: dict | None = None
 
     if query:
+        # Lead with the shared paper-context prefix so the API can reuse the
+        # cache the other paper agents already warmed, then append the
+        # MONDO-specific target and instructions.
+        paper_markdown = fulltext_md(target.paper_id, supplement_format)
+        paper_context = format_paper_context(paper_markdown, target.gene_symbol)
         target_payload = {
             'scope': target.scope.value,
-            'paper_id': target.paper_id,
             'patient_variant_occurrence_id': target.patient_variant_occurrence_id,
             'disease_text': target.disease_text,
-            'context': target.context.model_dump(exclude_none=True),
+            'inheritance_mode': target.inheritance_mode,
         }
         message = (
+            f'{paper_context}\n\n'
             f'MONDO linking target JSON:\n{json.dumps(target_payload, indent=2)}\n\n'
             f'{MONDO_LINKING_AGENT_INSTRUCTIONS}'
         )
@@ -1553,7 +1552,7 @@ async def handle_mondo_linking(task_id: int) -> None:
                         target.patient_variant_occurrence_id or ''
                     ),
                     'disease_text': query,
-                    'gene_symbol': target.context.gene_symbol or '',
+                    'gene_symbol': target.gene_symbol or '',
                 },
             ),
         )

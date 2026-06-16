@@ -23,7 +23,6 @@ from lib.models.mondo import (
     MondoAgentDecision,
     MondoCandidate,
     MondoComponentMapping,
-    MondoDiseaseContext,
     MondoDiseaseScope,
     MondoLinkingTarget,
     MondoMatchEvidence,
