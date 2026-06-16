@@ -1517,6 +1517,8 @@ async def handle_mondo_linking(task_id: int) -> None:
             return
         paper = session.get(PaperDB, target.paper_id)
         supplement_format = paper.supplement_format if paper else None
+        stored_conv_id = task.conversation_id
+        additional_context = task.additional_context
 
     query = target.disease_text.strip() if target.disease_text else ''
     selected_mondo_id: str | None = None
@@ -1524,26 +1526,34 @@ async def handle_mondo_linking(task_id: int) -> None:
     mondo_match_context: dict | None = None
 
     if query:
-        # Lead with the shared paper-context prefix so the API can reuse the
-        # cache the other paper agents already warmed, then append the
-        # MONDO-specific target and instructions.
-        paper_markdown = fulltext_md(target.paper_id, supplement_format)
-        paper_context = format_paper_context(paper_markdown, target.gene_symbol)
-        target_payload = {
-            'scope': target.scope.value,
-            'patient_variant_occurrence_id': target.patient_variant_occurrence_id,
-            'disease_text': target.disease_text,
-            'inheritance_mode': target.inheritance_mode,
-        }
-        message = (
-            f'{paper_context}\n\n'
-            f'MONDO linking target JSON:\n{json.dumps(target_payload, indent=2)}\n\n'
-            f'{MONDO_LINKING_AGENT_INSTRUCTIONS}'
-        )
+        stored_conv_id = await ensure_conversation_id(stored_conv_id)
+        if additional_context is not None:
+            # Rerun with feedback: continue the existing conversation instead of
+            # resending the paper context.
+            message = build_followup_prompt(additional_context)
+        else:
+            # Lead with the shared paper-context prefix so the API can reuse the
+            # cache the other paper agents already warmed, then append the
+            # MONDO-specific target and instructions.
+            paper_markdown = fulltext_md(target.paper_id, supplement_format)
+            paper_context = format_paper_context(paper_markdown, target.gene_symbol)
+            target_payload = {
+                'scope': target.scope.value,
+                'patient_variant_occurrence_id': target.patient_variant_occurrence_id,
+                'disease_text': target.disease_text,
+                'inheritance_mode': target.inheritance_mode,
+            }
+            message = (
+                f'{paper_context}\n\n'
+                f'MONDO linking target JSON:\n'
+                f'{json.dumps(target_payload, indent=2)}\n\n'
+                f'{MONDO_LINKING_AGENT_INSTRUCTIONS}'
+            )
         result = await Runner.run(
             mondo_linking_agent,
             message,
             max_turns=12,
+            conversation_id=stored_conv_id,
             run_config=RunConfig(
                 trace_metadata={
                     'scope': target.scope.value,
@@ -1577,6 +1587,9 @@ async def handle_mondo_linking(task_id: int) -> None:
         task = session.get(TaskDB, task_id)
         if not task:
             return
+
+        if query:
+            task.conversation_id = stored_conv_id
 
         if target.scope is MondoDiseaseScope.PAPER:
             paper = session.get(PaperDB, target.paper_id)
