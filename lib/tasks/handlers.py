@@ -1481,7 +1481,6 @@ def build_mondo_linking_target(
     context = MondoDiseaseContext(
         paper_title=paper.title,
         paper_abstract=paper.abstract,
-        paper_disease_name=paper.disease_name,
         gene_symbol=paper.gene.symbol,
         inheritance_mode=paper.disease_inheritance_mode,
     )
@@ -1509,7 +1508,6 @@ def build_mondo_linking_target(
         disease_text=occurrence.disease_name,
         context=context.model_copy(
             update={
-                'occurrence_disease_text': occurrence.disease_name,
                 'inheritance_mode': occurrence.inheritance or context.inheritance_mode,
             }
         ),

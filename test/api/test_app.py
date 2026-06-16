@@ -1360,9 +1360,6 @@ def test_mondo_linking_handler_updates_target_occurrence_only(
         )
         assert payload['scope'] == 'occurrence'
         assert payload['disease_text'] == 'epidermolysis bullosa simplex'
-        assert payload['context']['occurrence_disease_text'] == (
-            'epidermolysis bullosa simplex'
-        )
         assert payload['context']['inheritance_mode'] == 'Dominant'
         return SimpleNamespace(
             final_output=SimpleNamespace(

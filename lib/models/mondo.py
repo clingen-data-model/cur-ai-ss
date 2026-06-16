@@ -118,12 +118,14 @@ class MondoCandidate(BaseModel):
 
 
 class MondoDiseaseContext(BaseModel):
-    """Context supplied to the MONDO linking agent."""
+    """Surrounding paper context supplied to the MONDO linking agent.
+
+    This holds non-disease framing only. The disease string to map lives in
+    ``MondoLinkingTarget.disease_text``; it is deliberately not duplicated here.
+    """
 
     paper_title: str | None = None
     paper_abstract: str | None = None
-    paper_disease_name: str | None = None
-    occurrence_disease_text: str | None = None
     gene_symbol: str | None = None
     inheritance_mode: str | None = None
 
@@ -134,5 +136,12 @@ class MondoLinkingTarget(BaseModel):
     scope: MondoDiseaseScope
     paper_id: int
     patient_variant_occurrence_id: int | None = None
-    disease_text: str | None = None
+    disease_text: str | None = Field(
+        default=None,
+        description=(
+            'The single disease string this task must map to MONDO. Scope '
+            'determines its source: the paper disease for paper-scoped tasks, '
+            'or the occurrence disease for occurrence-scoped tasks.'
+        ),
+    )
     context: MondoDiseaseContext = Field(default_factory=MondoDiseaseContext)
