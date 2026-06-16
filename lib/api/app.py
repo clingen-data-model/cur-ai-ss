@@ -120,7 +120,7 @@ from lib.models import (
     VariantUpdateRequest,
 )
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
-from lib.models.mondo import MondoTerm
+from lib.models.mondo import MondoComponentMapping, MondoTerm
 from lib.models.patient import (
     AffectedStatus,
     CountryCode,
@@ -419,6 +419,24 @@ def _mondo_reasoning_block(
     )
 
 
+def _mondo_components(
+    mondo_match_context: dict | None,
+) -> list[MondoComponentMapping]:
+    """Extract decomposed disease-text component mappings from stored context.
+
+    The MONDO linker decomposes a disease string into components (e.g. a primary
+    disease mapped to MONDO plus a secondary phenotype mapped to HPO) when no
+    single MONDO term captures the full text. The flattened ``mondo_id`` /
+    ``mondo_term`` columns only carry the primary selection, so the per-component
+    mappings are reconstructed here from ``mondo_match_context``.
+    """
+    context = mondo_match_context or {}
+    raw_components = context.get('components') or []
+    return [
+        MondoComponentMapping.model_validate(component) for component in raw_components
+    ]
+
+
 def _paper_to_resp(row: PaperDB) -> PaperResp:
     """Convert PaperDB to PaperResp, including reconstructed MONDO reasoning."""
     from lib.models.paper import PaperTag, PaperType
@@ -449,6 +467,7 @@ def _paper_to_resp(row: PaperDB) -> PaperResp:
             row.mondo_term,
             row.mondo_match_context,
         ),
+        mondo_components=_mondo_components(row.mondo_match_context),
         updated_at=row.updated_at,
         tasks=[
             TaskResp.model_validate(task, from_attributes=True) for task in row.tasks
@@ -1094,6 +1113,7 @@ def _patient_variant_occurrence_to_resp(
             row.mondo_term,
             row.mondo_match_context,
         ),
+        mondo_components=_mondo_components(row.mondo_match_context),
         paired_variant_link_id=row.paired_variant_link_id,
         paired_variant_confidence=CompoundHetConfidence(row.paired_variant_confidence)
         if row.paired_variant_confidence

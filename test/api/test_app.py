@@ -149,6 +149,74 @@ def test_get_paper_success(client, test_pdf, seeded_genes, agent_run):
     _assert_updated_at_recent(data_get['updated_at'])
 
 
+def test_get_paper_exposes_mondo_components(client, db_session, seeded_paper):
+    """Decomposed MONDO/HPO disease components are surfaced on the paper response."""
+    seeded_paper.mondo_id = 'MONDO:0020757'
+    seeded_paper.mondo_term = 'sporadic hemiplegic migraine'
+    seeded_paper.mondo_match_context = {
+        'match_type': 'primary_partial',
+        'mondo_id': 'MONDO:0020757',
+        'term': 'sporadic hemiplegic migraine',
+        'agent_reasoning': 'decomposed into two clinical axes',
+        'components': [
+            {
+                'text': 'Recurrent hemiplegic migraine',
+                'normalized_text': 'sporadic hemiplegic migraine',
+                'role': 'primary',
+                'category': 'disease',
+                'mapping_status': 'mapped',
+                'mapped_ontology': 'MONDO',
+                'mondo': {
+                    'mondo_id': 'MONDO:0020757',
+                    'label': 'sporadic hemiplegic migraine',
+                },
+                'hpo': None,
+                'confidence': 'high',
+                'relationship': 'exact',
+                'reasoning': 'exact label match',
+            },
+            {
+                'text': 'intractable hypomagnesemia',
+                'normalized_text': 'hypomagnesemia',
+                'role': 'component',
+                'category': 'phenotype',
+                'mapping_status': 'mapped',
+                'mapped_ontology': 'HPO',
+                'mondo': None,
+                'hpo': {'id': 'HP:0002917', 'name': 'Hypomagnesemia'},
+                'confidence': 'high',
+                'relationship': 'exact',
+                'reasoning': 'phenotype maps to HPO',
+            },
+        ],
+    }
+    db_session.flush()
+
+    response = client.get(f'/papers/{seeded_paper.id}')
+    assert response.status_code == 200
+    data = response.json()
+
+    # Primary term still flows through the existing mondo field.
+    assert data['mondo']['value']['mondo_id'] == 'MONDO:0020757'
+
+    components = data['mondo_components']
+    assert len(components) == 2
+    primary, secondary = components
+    assert primary['role'] == 'primary'
+    assert primary['mapped_ontology'] == 'MONDO'
+    assert primary['mondo']['mondo_id'] == 'MONDO:0020757'
+    assert secondary['role'] == 'component'
+    assert secondary['mapped_ontology'] == 'HPO'
+    assert secondary['hpo']['id'] == 'HP:0002917'
+
+
+def test_get_paper_mondo_components_empty_without_context(client, seeded_paper):
+    """Papers without MONDO linking return an empty component list, not null."""
+    response = client.get(f'/papers/{seeded_paper.id}')
+    assert response.status_code == 200
+    assert response.json()['mondo_components'] == []
+
+
 def test_get_paper_not_found(client):
     response = client.get('/papers/999')
     assert response.status_code == 404

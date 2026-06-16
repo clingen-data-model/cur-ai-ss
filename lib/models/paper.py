@@ -58,7 +58,7 @@ from lib.misc.pdf.paths import (
 from lib.models.base import Base, PatchModel
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.gene_disease_relation import GeneDiseaseRelation
-from lib.models.mondo import MondoTerm
+from lib.models.mondo import MondoComponentMapping, MondoTerm
 from lib.models.patient_variant_occurrences import Inheritance
 from lib.tasks.models import TaskResp
 
@@ -292,6 +292,7 @@ class PaperResp(PaperExtractionOutput):
     disease_inheritance_mode: Inheritance | None = None
     disease_inheritance_mode_evidence: EvidenceBlock[Inheritance] | None = None
     mondo: ReasoningBlock[MondoTerm | None]
+    mondo_components: list[MondoComponentMapping] = []
     updated_at: datetime
     tasks: list['TaskResp'] = []
     patient_count: int = 0

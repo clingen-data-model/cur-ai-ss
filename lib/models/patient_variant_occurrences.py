@@ -18,7 +18,7 @@ from typing_extensions import Self
 
 from lib.models.base import Base
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
-from lib.models.mondo import MondoTerm
+from lib.models.mondo import MondoComponentMapping, MondoTerm
 
 if TYPE_CHECKING:
     from lib.models.paper import PaperDB
@@ -215,6 +215,7 @@ class PatientVariantOccurrenceResp(BaseModel):
     disease_name: str | None = None
     disease_name_evidence: EvidenceBlock[str] | None = None
     mondo: ReasoningBlock[MondoTerm | None]
+    mondo_components: list[MondoComponentMapping] = []
     paired_variant_link_id: int | None = None
     paired_variant_confidence: CompoundHetConfidence | None = None
     paired_variant_confidence_reasoning: (
