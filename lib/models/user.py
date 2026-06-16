@@ -23,6 +23,7 @@ class UserDB(Base):
     description_of_use_case: Mapped[str] = mapped_column(
         String, nullable=False, server_default=''
     )
+    max_papers: Mapped[int | None] = mapped_column(nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -41,6 +42,7 @@ class UserResp(BaseModel):
     is_active: bool
     is_admin: bool
     description_of_use_case: str
+    max_papers: int | None
     updated_at: datetime
 
 

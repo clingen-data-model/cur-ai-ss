@@ -314,10 +314,18 @@ def put_paper(
     else:
         latest_run_id = latest_run_db.id
 
+    if current_user.max_papers is not None and current_user.max_papers <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail='Paper upload limit reached',
+        )
+
     paper_db = PaperDB.from_content(main_content)
     paper_db.gene_id = gene.id
     paper_db.filename = uploaded_file.filename or ''
     paper_db.updated_by_user_id = current_user.id
+    if current_user.max_papers is not None:
+        current_user.max_papers -= 1
     session.add(paper_db)
     try:
         # Create initial PDF_PARSING task

@@ -51,6 +51,7 @@ def upgrade() -> None:
         sa.Column(
             'description_of_use_case', sa.String(), nullable=False, server_default=''
         ),
+        sa.Column('max_papers', sa.Integer(), nullable=True),
         sa.Column(
             'updated_at',
             sa.DateTime(timezone=True),

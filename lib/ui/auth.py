@@ -160,6 +160,10 @@ def require_auth() -> None:
     else:
         display_name = ''
     st.sidebar.markdown(f'Signed in as **{display_name}**')
+    if user and user.max_papers is not None:
+        st.sidebar.caption(
+            f'{user.max_papers} paper upload{"s" if user.max_papers != 1 else ""} remaining'
+        )
     pw_col, logout_col = st.sidebar.columns(2)
     if logout_col.button('Log out', use_container_width=True):
         st.session_state.pop(AUTH_TOKEN_KEY, None)
