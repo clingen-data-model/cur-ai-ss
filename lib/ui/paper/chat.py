@@ -38,6 +38,7 @@ def render_chat_with_agent_tab() -> None:
                         msg['role'] == 'assistant'
                         for msg in st.session_state['chat_messages']
                     )
+                    messages: list[dict[str, str]] | None
                     if not has_init:
                         messages, queued_task = init_chat_message(
                             paper_resp.id, user_input

@@ -54,6 +54,7 @@ def render_rerun_popover(
     # When anchored in a column, wrap in a right-aligned container so the
     # content-fit button hugs the right edge instead of floating left.
     popover_key = f'{key_prefix}-popover'
+    host: Any
     if container is not None:
         with container:
             host = st.container(horizontal_alignment='right')
