@@ -1517,7 +1517,7 @@ def clear_chat(
     return {'status': 'cleared'}
 
 
-@app.post('/papers/{paper_id}/chat/init', response_model=list[dict])
+@app.post('/papers/{paper_id}/chat/init', response_model=ChatRoutingResponse)
 async def init_chat(
     paper_id: int,
     request: ChatMessageRequest,
@@ -1567,7 +1567,9 @@ async def init_chat(
                 ],
             )
             session.add(conversation_db)
-            return conversation_db.messages
+            return ChatRoutingResponse(
+                messages=conversation_db.messages, queued_task=True
+            )
 
         # QUESTION (answer path): route to general QA or an existing task conversation.
         any_eligible = session.query(TaskDB).filter(TaskDB.paper_id == paper_id).all()
@@ -1612,7 +1614,9 @@ async def init_chat(
 
         session.add(conversation_db)
 
-    return conversation_db.messages
+    # Answer path (or an already-initialized conversation): a generate call still
+    # owes the actual answer.
+    return ChatRoutingResponse(messages=conversation_db.messages, queued_task=False)
 
 
 def _build_qa_context(

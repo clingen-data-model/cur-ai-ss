@@ -403,14 +403,20 @@ def get_chat_messages(paper_id: int) -> list[dict[str, str]]:
     return TypeAdapter(list[dict[str, str]]).validate_python(resp.json())
 
 
-def init_chat_message(paper_id: int, message: str) -> list[dict[str, str]]:
-    """Initialize chat message (fast, returns immediately with routing result)."""
+def init_chat_message(paper_id: int, message: str) -> tuple[list[dict[str, str]], bool]:
+    """Initialize a chat turn (fast; returns the routing result).
+
+    Returns ``(messages, queued_task)``. When ``queued_task`` is True the turn is
+    terminal (a task was queued) and the caller must NOT call
+    ``generate_chat_response``; otherwise generation still owes the answer.
+    """
     resp = _session.post(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/chat/init',
         json={'message': message},
     )
     resp.raise_for_status()
-    return resp.json()
+    data = resp.json()
+    return data['messages'], data['queued_task']
 
 
 def generate_chat_response(

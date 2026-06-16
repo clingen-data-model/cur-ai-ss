@@ -52,7 +52,13 @@ class ChatMessageResp(BaseModel):
 
 
 class ChatRoutingResponse(BaseModel):
-    task_id: int
-    task_type: str
-    entity_label: str | None
-    selection_summary: str
+    """Result of initializing a chat turn.
+
+    ``queued_task`` is True when the message queued a task: the confirmation in
+    ``messages`` is the final reply and the turn is terminal, so the UI must NOT
+    call the follow-up generate step. When False (the answer path), ``messages``
+    holds only a routing summary and generation still must run to answer.
+    """
+
+    messages: list[dict]
+    queued_task: bool

@@ -39,16 +39,24 @@ def render_chat_with_agent_tab() -> None:
                         for msg in st.session_state['chat_messages']
                     )
                     if not has_init:
-                        messages = init_chat_message(paper_resp.id, user_input)
+                        messages, queued_task = init_chat_message(
+                            paper_resp.id, user_input
+                        )
                         st.session_state['chat_messages'] = messages
                         if messages:
                             st.markdown(messages[-1]['content'])
-                        messages = generate_chat_response(paper_resp.id)
+                        # A queued task is terminal — its confirmation is the final
+                        # reply, so don't run the follow-up answer generation.
+                        if queued_task:
+                            messages = None
+                        else:
+                            messages = generate_chat_response(paper_resp.id)
                     else:
                         messages = generate_chat_response(paper_resp.id, user_input)
-                st.session_state['chat_messages'] = messages
-                if messages:
-                    st.markdown(messages[-1]['content'])
+                if messages is not None:
+                    st.session_state['chat_messages'] = messages
+                    if messages:
+                        st.markdown(messages[-1]['content'])
             except requests.HTTPError as e:
                 st.error(get_http_error_detail(e))
             except Exception as e:
