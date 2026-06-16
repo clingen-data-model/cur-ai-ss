@@ -58,6 +58,32 @@ class MondoSearchAlias:
 
 @dataclass
 class MondoIndex:
+    """In-memory lookup structures built from the MONDO ontology.
+
+    Values below are truncated values from MONDO:0007947 (Marfan syndrome).
+
+    MondoIndex
+    ├── terms_by_id:       'MONDO:0007947' ──► MondoRecord(label='Marfan syndrome',
+    │                                                      definition=..., synonyms=['MFS', ...],
+    │                                                      xrefs=['OMIM:154700', ...],
+    │                                                      exact_matches=['omim:154700', ...])
+    ├── identifier_to_ids: 'omim:154700'   ──► ['MONDO:0007947']   (xref/CURIE → terms)
+    │                      'orphanet:558'  ──► ['MONDO:0007947']
+    ├── search_aliases:    [MondoSearchAlias(text='Marfan syndrome', type='label',
+    │                                         normalized_text='marfan syndrome', mondo_id='MONDO:0007947'),
+    │                       MondoSearchAlias(text='MFS', type='synonym',
+    │                                         normalized_text='mfs', mondo_id='MONDO:0007947'),
+    │                       MondoSearchAlias(text='Marfan syndrome, type 1', type='synonym',
+    │                                         normalized_text='marfan syndrome type 1', mondo_id='MONDO:0007947'),
+    │                       MondoSearchAlias(text="Marfan's syndrome", type='synonym',
+    │                                         normalized_text='marfan s syndrome', mondo_id='MONDO:0007947'), ...]
+    │                                          one row per label/synonym (normalized for fuzzy search)
+    ├── parent_ids_by_id:  'MONDO:0007947' ──► ['MONDO:0005172', 'MONDO:0017310', ...]  (is-a parents)
+    │                                          (skeletal system disorder, Marfan-related disorder)
+    └── child_ids_by_id:   'MONDO:0007947' ──► ['MONDO:0017309']  (inverse of parents)
+                                               (neonatal Marfan syndrome)
+    """
+
     terms_by_id: dict[str, MondoRecord]
     identifier_to_ids: dict[str, list[str]] = field(default_factory=dict)
     search_aliases: list[MondoSearchAlias] = field(default_factory=list)
