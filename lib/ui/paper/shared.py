@@ -53,12 +53,15 @@ def render_rerun_popover(
     """
     # When anchored in a column, wrap in a right-aligned container so the
     # content-fit button hugs the right edge instead of floating left.
+    popover_key = f'{key_prefix}-popover'
     if container is not None:
         with container:
             host = st.container(horizontal_alignment='right')
     else:
         host = st
-    with host.popover(label, width='content', help=help):
+    with host.popover(
+        label, width='content', help=help, key=popover_key, on_change='rerun'
+    ):
         context = st.text_area(
             'Additional context for agent',
             value='',
@@ -66,7 +69,8 @@ def render_rerun_popover(
             height=100,
             key=f'{key_prefix}-context',
         )
-        if st.button('Confirm', type='secondary', key=f'{key_prefix}-confirm'):
+
+        def _on_confirm() -> None:
             try:
                 enqueue_paper_task(
                     paper_id,
@@ -75,11 +79,20 @@ def render_rerun_popover(
                     patient_id=patient_id,
                     variant_id=variant_id,
                     phenotype_id=phenotype_id,
-                    additional_context=context or None,
+                    additional_context=st.session_state.get(f'{key_prefix}-context')
+                    or None,
                 )
                 st.toast('Task enqueued', icon=':material/check:')
+                st.session_state[popover_key] = False
             except Exception as e:
                 st.toast(f'Failed to enqueue task: {str(e)}', icon='❌')
+
+        st.button(
+            'Confirm',
+            type='secondary',
+            key=f'{key_prefix}-confirm',
+            on_click=_on_confirm,
+        )
 
 
 def get_available_tabs(paper_resp: PaperResp) -> list[str]:

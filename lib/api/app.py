@@ -276,6 +276,7 @@ def put_paper(
     uploaded_file: UploadFile = File(...),
     supplement_file: UploadFile | None = File(None),
     session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> Any:
     if uploaded_file.content_type != 'application/pdf':
         raise HTTPException(
@@ -316,6 +317,7 @@ def put_paper(
     paper_db = PaperDB.from_content(main_content)
     paper_db.gene_id = gene.id
     paper_db.filename = uploaded_file.filename or ''
+    paper_db.updated_by_user_id = current_user.id
     session.add(paper_db)
     try:
         # Create initial PDF_PARSING task

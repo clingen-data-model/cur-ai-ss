@@ -69,7 +69,6 @@ class PaperQueryParams(BaseModel):
             )
 
 
-@st.fragment
 def render_queue_tasks_fragment(paper_query_params: PaperQueryParams) -> None:
     task_type = st.selectbox(
         'Select task to rerun:',
