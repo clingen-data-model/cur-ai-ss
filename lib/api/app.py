@@ -334,6 +334,7 @@ def put_paper(
             agent_run_id=latest_run_id,
             type=TaskType.PDF_PARSING,
             status=TaskStatus.PENDING,
+            updated_by_user_id=current_user.id,
         )
         paper_db.tasks.append(task)
         session.flush()
