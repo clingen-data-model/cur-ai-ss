@@ -14,6 +14,11 @@ class Base(DeclarativeBase):
     pass
 
 
+def row_to_dict(obj: Base) -> dict:
+    """Dump all mapped columns of an ORM row to a plain dict."""
+    return {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
+
+
 def _editor_display_name(editor: UserDB) -> str:
     name = f'{editor.first_name} {editor.last_name}'.strip()
     return name or editor.email

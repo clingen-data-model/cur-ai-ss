@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.api.db import session_scope
 from lib.core.environment import env
+from lib.models.base import row_to_dict
 from lib.models.family import FamilyDB
 from lib.models.patient import PatientDB
 from lib.models.phenotype import PhenotypeDB
@@ -74,12 +75,14 @@ If the user wants to RUN, RE-RUN, QUEUE, regenerate, or refresh an extraction/an
 (e.g. "re-run variant extraction", "extract phenotypes for patient III-2 again"):
   → Pick the task_type. It MUST be one of these runnable task types (NOT "General Paper Question"):
 {_RUNNABLE_TASK_TYPE_LIST}
-  → For entity-specific task types, call `list_paper_entities`. Match the human-readable entity
-    the user named (e.g. "patient III-2", a variant's HGVS, a family label) against the returned
-    `label`s — users never reference internal ids. If no label clearly matches, do not guess:
-    ask the user which entity they mean instead of queueing.
-  → Call the `queue_task` tool with the task_type, the matched entity's id in the right field
-    (family_id/patient_id/variant_id/phenotype_id), and its label as entity_label.
+  → For entity-specific task types, call `list_paper_entities` (full records, including each
+    variant's harmonized and annotated records). Match the entity the user named against any
+    field of the returned records — users reference entities by whatever identifier they have
+    (a patient/family label, or any variant identifier), never internal ids. If no record
+    clearly matches, do not guess: ask the user which entity they mean instead of queueing.
+  → Call the `queue_task` tool with the task_type, the matched entity's top-level id in the right
+    field (family_id/patient_id/variant_id/phenotype_id), and a human-readable label for it as
+    entity_label.
   → If the user gives extra guidance for the rerun (e.g. "this time treat patient 3 as the
     proband"), pass it as additional_context.
   → Then return task_type="General Paper Question", task_id=null, entity_label=null,
@@ -218,8 +221,10 @@ def _make_fetch_tasks_tool(paper_id: int) -> Any:
 def _make_list_entities_tool(paper_id: int) -> Any:
     @function_tool
     def list_paper_entities() -> str:
-        """List this paper's families, patients, variants, and phenotypes with their database ids
-        and labels, for resolving entity-specific task queueing. Returns a JSON object."""
+        """List this paper's families, patients, variants, and phenotypes as full records,
+        so an entity the user names can be matched on any of its fields. Each variant also
+        includes its harmonized and annotated records (the transcript-qualified HGVS lives
+        there). Use the top-level ``id`` of the matched entity when queueing. Returns JSON."""
         with session_scope() as session:
             families = (
                 session.query(FamilyDB).filter(FamilyDB.paper_id == paper_id).all()
@@ -235,17 +240,25 @@ def _make_list_entities_tool(paper_id: int) -> Any:
                 .filter(PhenotypeDB.paper_id == paper_id)
                 .all()
             )
+
+            def variant_entry(variant: VariantDB) -> dict:
+                entry = row_to_dict(variant)
+                if variant.harmonized_variant is not None:
+                    entry['harmonized_variant'] = row_to_dict(
+                        variant.harmonized_variant
+                    )
+                if variant.annotated_variant is not None:
+                    entry['annotated_variant'] = row_to_dict(variant.annotated_variant)
+                return entry
+
             return json.dumps(
                 {
-                    'families': [{'id': f.id, 'label': f.identifier} for f in families],
-                    'patients': [{'id': p.id, 'label': p.identifier} for p in patients],
-                    'variants': [
-                        {'id': v.id, 'label': v.hgvs_c or v.variant} for v in variants
-                    ],
-                    'phenotypes': [
-                        {'id': ph.id, 'label': ph.concept} for ph in phenotypes
-                    ],
-                }
+                    'families': [row_to_dict(f) for f in families],
+                    'patients': [row_to_dict(p) for p in patients],
+                    'variants': [variant_entry(v) for v in variants],
+                    'phenotypes': [row_to_dict(ph) for ph in phenotypes],
+                },
+                default=str,
             )
 
     return list_paper_entities

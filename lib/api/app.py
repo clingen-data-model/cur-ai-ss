@@ -133,6 +133,7 @@ from lib.models import (
     VariantResp,
     VariantUpdateRequest,
 )
+from lib.models.base import row_to_dict
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.patient import (
     AffectedStatus,
@@ -1671,22 +1672,19 @@ def _build_qa_context(
         else []
     )
 
-    def _row(row: Any) -> dict:
-        return {c.name: getattr(row, c.name) for c in row.__table__.columns}
-
     db_state = {
-        'paper': _row(paper_db),
-        'families': [_row(r) for r in families],
-        'patients': [_row(r) for r in patients],
-        'pedigrees': [_row(r) for r in pedigrees],
-        'phenotypes': [_row(r) for r in phenotypes],
-        'hpo_terms': [_row(r) for r in hpos],
-        'variants': [_row(r) for r in variants],
-        'harmonized_variants': [_row(r) for r in harmonized],
-        'annotated_variants': [_row(r) for r in enriched],
-        'patient_variant_occurrences': [_row(r) for r in pvlinks],
-        'segregation_evidence': [_row(r) for r in seg_evidence],
-        'segregation_analysis': [_row(r) for r in seg_computed],
+        'paper': row_to_dict(paper_db),
+        'families': [row_to_dict(r) for r in families],
+        'patients': [row_to_dict(r) for r in patients],
+        'pedigrees': [row_to_dict(r) for r in pedigrees],
+        'phenotypes': [row_to_dict(r) for r in phenotypes],
+        'hpo_terms': [row_to_dict(r) for r in hpos],
+        'variants': [row_to_dict(r) for r in variants],
+        'harmonized_variants': [row_to_dict(r) for r in harmonized],
+        'annotated_variants': [row_to_dict(r) for r in enriched],
+        'patient_variant_occurrences': [row_to_dict(r) for r in pvlinks],
+        'segregation_evidence': [row_to_dict(r) for r in seg_evidence],
+        'segregation_analysis': [row_to_dict(r) for r in seg_computed],
     }
 
     paper_md = relevant_sections_md(paper_id, paper_db.supplement_format)
