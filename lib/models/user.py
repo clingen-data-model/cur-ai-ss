@@ -23,7 +23,7 @@ class UserDB(Base):
     description_of_use_case: Mapped[str] = mapped_column(
         String, nullable=False, server_default=''
     )
-    max_papers: Mapped[int | None] = mapped_column(nullable=True)
+    max_papers: Mapped[int | None] = mapped_column(nullable=True, server_default='10')
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
