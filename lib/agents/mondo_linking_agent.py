@@ -1,7 +1,5 @@
 """Tool-using agent for MONDO disease linking."""
 
-import json
-
 from agents import Agent, function_tool
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
@@ -13,7 +11,7 @@ from lib.agents.hpo_linking_agent import (
 )
 from lib.core.environment import env
 from lib.models.evidence_block import ReasoningBlock
-from lib.models.mondo import MondoAgentDecision, MondoLinkingTarget
+from lib.models.mondo import MondoAgentDecision
 from lib.reference_data import mondo
 
 
@@ -242,25 +240,3 @@ agent = Agent(
         get_hpo_children,
     ],
 )
-
-
-def build_mondo_agent_message(target: MondoLinkingTarget) -> str:
-    """Build the MONDO linking prompt payload.
-
-    Args:
-        target: Disease text target to link.
-
-    Returns:
-        JSON payload and agent instructions.
-    """
-    message = {
-        'scope': target.scope.value,
-        'paper_id': target.paper_id,
-        'patient_variant_occurrence_id': target.patient_variant_occurrence_id,
-        'disease_text': target.disease_text,
-        'context': target.context.model_dump(exclude_none=True),
-    }
-    return (
-        f'MONDO linking target JSON:\n{json.dumps(message, indent=2)}\n\n'
-        f'{MONDO_LINKING_AGENT_INSTRUCTIONS}'
-    )

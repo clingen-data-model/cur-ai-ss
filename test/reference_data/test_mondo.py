@@ -4,7 +4,6 @@ from typing import Any
 
 import pytest
 
-from lib.models import MondoDiseaseContext, MondoDiseaseScope, MondoLinkingTarget
 from lib.reference_data import mondo
 
 
@@ -175,31 +174,6 @@ def test_get_mondo_parents_and_children_return_related_terms(
     }
     assert children[0]['parents'] == []
     assert children[0]['children'] == []
-
-
-def test_mondo_agent_message_includes_scoped_target() -> None:
-    from lib.agents.mondo_linking_agent import build_mondo_agent_message
-
-    target = MondoLinkingTarget(
-        scope=MondoDiseaseScope.OCCURRENCE,
-        paper_id=123,
-        patient_variant_occurrence_id=456,
-        disease_text='Marfan syndrome (MONDO:0007947)',
-        context=MondoDiseaseContext(
-            gene_symbol='FBN1',
-            occurrence_disease_text='Marfan syndrome (MONDO:0007947)',
-        ),
-    )
-
-    message = build_mondo_agent_message(target)
-
-    payload = json.loads(
-        message.removeprefix('MONDO linking target JSON:\n').split('\n\n', 1)[0]
-    )
-    assert payload['scope'] == 'occurrence'
-    assert payload['patient_variant_occurrence_id'] == 456
-    assert payload['disease_text'] == 'Marfan syndrome (MONDO:0007947)'
-    assert payload['context']['gene_symbol'] == 'FBN1'
 
 
 def _iri(mondo_id: str) -> str:

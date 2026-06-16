@@ -22,10 +22,10 @@ from lib.agents.hpo_linking_agent import (
     agent as hpo_linking_agent,
 )
 from lib.agents.mondo_linking_agent import (
-    agent as mondo_linking_agent,
+    MONDO_LINKING_AGENT_INSTRUCTIONS,
 )
 from lib.agents.mondo_linking_agent import (
-    build_mondo_agent_message,
+    agent as mondo_linking_agent,
 )
 from lib.agents.paper_extraction_agent import (
     PAPER_EXTRACTION_AGENT_INSTRUCTIONS,
@@ -1482,7 +1482,7 @@ def build_mondo_linking_target(
         paper_title=paper.title,
         paper_abstract=paper.abstract,
         paper_disease_name=paper.disease_name,
-        gene_symbol=paper.gene.symbol if paper.gene else None,
+        gene_symbol=paper.gene.symbol,
         inheritance_mode=paper.disease_inheritance_mode,
     )
 
@@ -1532,9 +1532,20 @@ async def handle_mondo_linking(task_id: int) -> None:
     mondo_match_context: dict | None = None
 
     if query:
+        target_payload = {
+            'scope': target.scope.value,
+            'paper_id': target.paper_id,
+            'patient_variant_occurrence_id': target.patient_variant_occurrence_id,
+            'disease_text': target.disease_text,
+            'context': target.context.model_dump(exclude_none=True),
+        }
+        message = (
+            f'MONDO linking target JSON:\n{json.dumps(target_payload, indent=2)}\n\n'
+            f'{MONDO_LINKING_AGENT_INSTRUCTIONS}'
+        )
         result = await Runner.run(
             mondo_linking_agent,
-            build_mondo_agent_message(target),
+            message,
             max_turns=12,
             run_config=RunConfig(
                 trace_metadata={

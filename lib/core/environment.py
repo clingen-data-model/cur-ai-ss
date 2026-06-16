@@ -39,6 +39,10 @@ class Env(BaseSettings):
     EXTRACTED_PDF_DIR: str = 'extracted_pdfs'
     REFERENCE_DATA_DIR: str = 'reference_data'
 
+    # Reference data
+    MONDO_ONTOLOGY_URL: str = 'https://purl.obolibrary.org/obo/mondo.json'
+    HPO_ONTOLOGY_URL: str = 'https://github.com/obophenotype/human-phenotype-ontology/releases/latest/download/hp.json'
+
     # UI->API
     API_ENDPOINT: str = 'localhost:8000'
     PROTOCOL: str = 'http://'

@@ -20,7 +20,6 @@ from lib.models.mondo import (
     MondoTermDetail,
 )
 
-MONDO_ONTOLOGY_ENDPOINT = 'https://purl.obolibrary.org/obo/mondo.json'
 MONDO_IRI_PREFIX = 'http://purl.obolibrary.org/obo/MONDO_'
 SKOS_EXACT_MATCH = 'http://www.w3.org/2004/02/skos/core#exactMatch'
 
@@ -73,7 +72,7 @@ def ontology_path() -> Path:
 
 def ontology_url() -> str:
     """Return the configured MONDO ontology download URL."""
-    return getattr(env, 'MONDO_ONTOLOGY_URL', MONDO_ONTOLOGY_ENDPOINT)
+    return env.MONDO_ONTOLOGY_URL
 
 
 def download_ontology() -> Path:
@@ -211,9 +210,17 @@ def search_mondo_terms(
 ) -> list[dict[str, Any]]:
     """Search MONDO labels and synonyms for agent retrieval.
 
+    A single MONDO term contributes many aliases (its label plus every
+    synonym), so fuzzy matching runs over aliases and is then collapsed to one
+    candidate per term. We over-fetch a pool of ``10 * limit`` alias matches
+    before collapsing so that a term whose best alias ranks well is not dropped
+    just because lower-scoring aliases of other terms filled the result set;
+    after grouping by ``mondo_id`` we return the top ``limit`` terms. This
+    mirrors the HPO search in ``lib/reference_data/hpo.py``.
+
     Args:
         query: Free-text disease query to search.
-        limit: Maximum candidates to return.
+        limit: Maximum candidates (distinct MONDO terms) to return.
         score_cutoff: Minimum fuzzy match score for raw alias matches.
 
     Returns:
@@ -236,6 +243,7 @@ def search_mondo_terms(
         aliases,
         processor=alias_text,
         scorer=fuzz.token_sort_ratio,
+        # Over-fetch aliases; collapsed to `limit` distinct terms below.
         limit=10 * limit,
         score_cutoff=score_cutoff,
     )
@@ -410,7 +418,7 @@ def extract_synonyms(node: dict[str, Any]) -> list[MondoSynonym]:
             continue
         val = synonym.get('val')
         if isinstance(val, str):
-            append_unique_synonym(
+            append_unique(
                 synonyms,
                 MondoSynonym(
                     text=val,
@@ -561,13 +569,7 @@ def is_deprecated_node(node: dict[str, Any]) -> bool:
     return False
 
 
-def append_unique(values: list[str], value: str) -> None:
-    """Append a value only if it is not already present."""
-    if value not in values:
-        values.append(value)
-
-
-def append_unique_synonym(values: list[MondoSynonym], value: MondoSynonym) -> None:
-    """Append a synonym only if equivalent metadata is not already present."""
+def append_unique(values: list[Any], value: Any) -> None:
+    """Append a value only if an equal value is not already present."""
     if value not in values:
         values.append(value)
