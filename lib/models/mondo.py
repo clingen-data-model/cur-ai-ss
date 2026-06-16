@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from lib.models.phenotype import HPOTerm
+
 
 class MondoSynonymScope(StrEnum):
     """MONDO synonym scope from the synonym predicate."""
@@ -35,6 +37,52 @@ class MondoTerm(BaseModel):
 
     mondo_id: str
     label: str
+
+
+class MondoComponentMapping(BaseModel):
+    """Mapping decision for one decomposed disease-text component."""
+
+    text: str
+    normalized_text: str | None = None
+    role: Literal['primary', 'component', 'modifier']
+    category: Literal['disease', 'phenotype', 'mixed', 'unknown']
+    mapping_status: Literal['mapped', 'unmapped', 'excluded']
+    mapped_ontology: Literal['MONDO', 'HPO'] | None = None
+    mondo: MondoTerm | None = None
+    hpo: HPOTerm | None = None
+    confidence: Literal['high', 'medium', 'low'] | None = None
+    relationship: Literal['exact', 'broad', 'narrow', 'related', 'partial'] | None = (
+        None
+    )
+    reasoning: str
+
+
+class MondoAgentDecision(BaseModel):
+    """The MONDO linker's final decision."""
+
+    # TODO: Add validators once the fallback schema settles. Useful invariants
+    # include exact/broad decisions having no components, component_only having
+    # no top-level MONDO ID, primary_partial having one primary MONDO component,
+    # and mapped components having exactly one ontology payload.
+    match_type: Literal[
+        'exact', 'broad', 'primary_partial', 'component_only', 'none'
+    ] = Field(description='Top-level disease normalization outcome.')
+    mondo_id: str | None = Field(
+        default=None,
+        description='Selected primary MONDO identifier, or null when none is selected.',
+    )
+    term: str | None = Field(
+        default=None,
+        description='Selected primary MONDO label, or null when none is selected.',
+    )
+    confidence: Literal['high', 'medium', 'low'] | None = None
+    components: list[MondoComponentMapping] = Field(
+        default_factory=list,
+        description=(
+            'Fallback decomposition components. Empty when the full disease text '
+            'is appropriately matched by the selected MONDO term.'
+        ),
+    )
 
 
 class MondoTermDetail(MondoTerm):

@@ -1551,18 +1551,18 @@ async def handle_mondo_linking(task_id: int) -> None:
         log_cache_metrics('MONDO_LINKING', result)
 
         decision = result.final_output.value
-        selected_term = None
         if decision.mondo_id:
             selected_term = get_mondo_term(decision.mondo_id)
             if selected_term is not None:
                 selected_mondo_id = selected_term['mondo_id']
                 selected_mondo_term = selected_term['label']
+        # Persist the agent's raw decision (which may differ from the validated
+        # selection above) alongside task provenance for later inspection.
         mondo_match_context = {
+            **decision.model_dump(mode='json'),
             'scope': target.scope.value,
             'query': query,
-            'confidence': decision.confidence,
             'agent_reasoning': result.final_output.reasoning,
-            'selected': selected_term,
         }
 
     with session_scope() as session:

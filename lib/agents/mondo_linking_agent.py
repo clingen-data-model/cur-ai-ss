@@ -1,30 +1,20 @@
 """Tool-using agent for MONDO disease linking."""
 
 import json
-from typing import Literal
 
 from agents import Agent, function_tool
-from pydantic import BaseModel, Field
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
+from lib.agents.hpo_linking_agent import (
+    get_hpo_children,
+    get_hpo_parents,
+    get_hpo_term,
+    search_hpo_terms,
+)
 from lib.core.environment import env
 from lib.models.evidence_block import ReasoningBlock
-from lib.models.mondo import MondoLinkingTarget
+from lib.models.mondo import MondoAgentDecision, MondoLinkingTarget
 from lib.reference_data import mondo
-
-
-class MondoAgentDecision(BaseModel):
-    """The MONDO linker's final decision."""
-
-    mondo_id: str | None = Field(
-        default=None,
-        description='Selected MONDO identifier, or null when no supported match exists.',
-    )
-    term: str | None = Field(
-        default=None,
-        description='Selected MONDO label, or null when no supported match exists.',
-    )
-    confidence: Literal['high', 'medium', 'low'] | None = None
 
 
 @function_tool
@@ -66,18 +56,25 @@ def get_mondo_children(mondo_id: str) -> list[dict]:
 MONDO_LINKING_AGENT_INSTRUCTIONS = """
 You are an expert at mapping disease text from papers to MONDO terms.
 
-Your job is to use tools to normalize the disease text, search candidate MONDO
-terms, inspect promising terms, and return exactly one MondoAgentDecision. The
-source text may be paper-scoped disease text or patient-variant occurrence-
-scoped disease text.
+Your job is to use tools to normalize disease text. The source text may be
+paper-scoped disease text or patient-variant occurrence-scoped disease text.
+
+You must first try to map the full disease_text to one MONDO term. Only if no
+MONDO term appropriately represents the full disease_text should you decompose
+the input into components and map those components.
 
 Core rules:
 - Never invent a MONDO ID.
+- Never invent an HPO ID.
 - Never choose a MONDO term only because it has a high fuzzy score.
 - Before selecting a term, call get_mondo_term() for the selected MONDO ID.
+- Before selecting an HPO component mapping, call get_hpo_term() for the HPO ID.
 - Prefer null over a weak guess.
 - Use paper and occurrence context only to disambiguate supported tool results.
 - Prefer the most specific term fully supported by the disease text and context.
+- Component mappings are supporting normalization details. They are not the same
+  as selecting multiple paper-level MONDO terms.
+- The top-level mondo_id is the only selected primary MONDO term.
 
 Identifier lookup:
 - If the disease text or context includes a database identifier, call
@@ -125,19 +122,63 @@ Known fuzzy-search failure modes:
 - Numbered subtypes matter. Do not treat type 2, type 2B, type 2F, type 19, etc.
   as interchangeable without direct evidence.
 
-Search strategy:
+FULL-STRING MONDO STRATEGY
+
 1. Search the full disease text.
 2. If the text contains parentheses or abbreviations, search both the expanded
    phrase and the abbreviation separately.
 3. If the full-text results are generic, ambiguous, or component-only, run
    additional searches using clinically equivalent wording and core disease
    substrings.
-4. For composite strings with slashes, semicolons, "and", or parenthetical
-   explanations, search the combined phrase and the major components.
-5. Prefer a single MONDO term that covers the full disease concept. If no single
-   term covers a composite phrase, do not arbitrarily choose one component unless
-   the scoped disease text or context clearly makes that component the intended
-   disease.
+4. Prefer a single MONDO term that covers the full disease concept.
+
+If you find a MONDO term that appropriately represents the full disease_text,
+return match_type "exact" or "broad" and leave components empty.
+
+- Use "exact" when the selected MONDO term captures the full disease_text at the
+  same specificity.
+- Use "broad" when the selected MONDO term acceptably represents the full
+  disease concept but is broader than the source wording.
+
+Do not decompose when a full-string MONDO match is appropriate, even if the
+source text itself has multiple clear factors.
+
+FALLBACK DECOMPOSITION STRATEGY
+
+Only use this section when no appropriate full-string MONDO match exists.
+
+1. Decompose the original disease_text into clinically meaningful components.
+2. The components must account for the whole disease_text. Do not silently drop
+   parenthetical modifiers, "and" clauses, secondary disease axes, or severity
+   modifiers.
+3. Mark at most one component as role "primary". Only do this when the text and
+   context clearly support one component as the intended paper-level disease
+   axis.
+4. Mark remaining components as role "component" or "modifier".
+5. Classify each component as category "disease", "phenotype", "mixed", or
+   "unknown".
+6. Try MONDO tools for disease-like and mixed components.
+7. Try HPO tools for phenotype-like and mixed components.
+8. Every component must have mapping_status "mapped", "unmapped", or "excluded".
+9. If a primary component has an acceptable MONDO mapping and should be promoted
+   as the selected paper-level MONDO term, return match_type "primary_partial"
+   and set top-level mondo_id, term, and confidence.
+10. If no component should be promoted as the selected paper-level MONDO term,
+    return match_type "component_only" when at least one component maps to MONDO
+    or HPO.
+11. Return match_type "none" only when no full-string MONDO match exists and no
+    useful component mappings exist.
+
+For mapped components:
+- mapped_ontology must be "MONDO" or "HPO".
+- For MONDO mappings, populate mondo and leave hpo null.
+- For HPO mappings, populate hpo and leave mondo null.
+- relationship should describe the component match: "exact", "broad",
+  "narrow", "related", or "partial".
+
+For unmapped or excluded components:
+- mapped_ontology, mondo, hpo, confidence, and relationship should be null.
+- reasoning must explain why no mapping was selected.
 
 Ontology inspection:
 - Use get_mondo_term() to verify definitions, synonyms, xrefs, parents, and
@@ -156,6 +197,8 @@ Decision guidance:
   and prefer null if selecting would be a guess.
 - Return null when no inspected term represents the disease text without
   over-generalizing, over-specifying, or relying on an ambiguous abbreviation.
+- For component fallback, top-level mondo_id may be null even when component
+  mappings exist.
 
 Reasoning requirements:
 - Explain how you interpreted the disease text.
@@ -163,13 +206,23 @@ Reasoning requirements:
 - State why generic, ambiguous, wrong-gene, animal, or component-only candidates
   were rejected when relevant.
 - State why the final selected term, or null, is supported.
+- If using fallback decomposition, explicitly explain why full-string MONDO
+  matching failed, why each component string was chosen, which component is
+  primary if any, and which components were mapped or unmapped.
 
 Return:
 {
+  "match_type": "exact" | "broad" | "primary_partial" | "component_only" | "none",
   "mondo_id": "MONDO:0000000" or null,
   "term": "label" or null,
-  "confidence": "high" | "medium" | "low" | null
+  "confidence": "high" | "medium" | "low" | null,
+  "components": []
 }
+
+When match_type is "exact" or "broad", components must be empty.
+When match_type is "primary_partial", components must include one component with
+role "primary" and a MONDO mapping matching the top-level selected MONDO term.
+When match_type is "component_only", top-level mondo_id and term must be null.
 """
 
 agent = Agent(
@@ -183,6 +236,10 @@ agent = Agent(
         get_mondo_by_identifier,
         get_mondo_parents,
         get_mondo_children,
+        search_hpo_terms,
+        get_hpo_term,
+        get_hpo_parents,
+        get_hpo_children,
     ],
 )
 

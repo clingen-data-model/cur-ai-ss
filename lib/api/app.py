@@ -408,13 +408,6 @@ def _mondo_reasoning_block(
     if not isinstance(reasoning, str) or not reasoning.strip():
         reasoning = 'MONDO linking not yet performed'
 
-    selected = context.get('selected')
-    if isinstance(selected, dict):
-        return ReasoningBlock[MondoTerm | None](
-            value=MondoTerm.model_validate(selected),
-            reasoning=reasoning,
-        )
-
     value = (
         MondoTerm(mondo_id=mondo_id, label=mondo_term)
         if mondo_id and mondo_term
