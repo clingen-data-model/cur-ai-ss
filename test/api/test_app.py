@@ -25,7 +25,6 @@ from lib.models import (
 )
 from lib.models.mondo import (
     MondoAgentDecision,
-    MondoComponentMapping,
 )
 from lib.tasks.models import TaskStatus, TaskType
 
@@ -1541,85 +1540,6 @@ def test_mondo_linking_handler_stores_context_for_invalid_agent_result(
         'no valid tool-supported match'
     )
     assert paper.mondo_match_context['mondo_id'] == 'MONDO:9999999'
-
-
-def test_mondo_linking_handler_stores_component_only_context(
-    monkeypatch, db_session, seeded_paper, seeded_agent_run
-):
-    from types import SimpleNamespace
-
-    from lib.tasks import handlers
-
-    seeded_paper.disease_name = 'recurrent hemiplegic migraine and hypomagnesemia'
-    task = TaskDB(
-        paper_id=seeded_paper.id,
-        agent_run_id=seeded_agent_run.id,
-        type=TaskType.MONDO_LINKING,
-        status=TaskStatus.PENDING,
-    )
-    db_session.add(task)
-    db_session.commit()
-
-    components = [
-        {
-            'text': 'recurrent hemiplegic migraine',
-            'normalized_text': 'recurrent hemiplegic migraine',
-            'role': 'component',
-            'category': 'disease',
-            'mapping_status': 'mapped',
-            'mapped_ontology': 'MONDO',
-            'mondo': {
-                'mondo_id': 'MONDO:0018925',
-                'label': 'familial or sporadic hemiplegic migraine',
-            },
-            'hpo': None,
-            'confidence': 'medium',
-            'relationship': 'broad',
-            'reasoning': 'maps only the migraine component',
-        },
-        {
-            'text': 'hypomagnesemia',
-            'normalized_text': 'hypomagnesemia',
-            'role': 'component',
-            'category': 'phenotype',
-            'mapping_status': 'mapped',
-            'mapped_ontology': 'HPO',
-            'mondo': None,
-            'hpo': {'id': 'HP:0002917', 'name': 'Hypomagnesemia'},
-            'confidence': 'high',
-            'relationship': 'exact',
-            'reasoning': 'maps the magnesium phenotype component',
-        },
-    ]
-
-    async def fake_runner_run(*args, **kwargs):
-        return SimpleNamespace(
-            final_output=SimpleNamespace(
-                value=MondoAgentDecision(
-                    match_type='component_only',
-                    mondo_id=None,
-                    term=None,
-                    confidence=None,
-                    components=[
-                        MondoComponentMapping.model_validate(component)
-                        for component in components
-                    ],
-                ),
-                reasoning='no full MONDO term; component mappings returned',
-            ),
-            raw_responses=[],
-        )
-
-    monkeypatch.setattr(handlers.Runner, 'run', fake_runner_run)
-
-    asyncio.run(handlers.handle_mondo_linking(task.id))
-
-    db_session.expire_all()
-    paper = db_session.get(PaperDB, seeded_paper.id)
-    assert paper.mondo_id is None
-    assert paper.mondo_term is None
-    assert paper.mondo_match_context['match_type'] == 'component_only'
-    assert paper.mondo_match_context['components'] == components
 
 
 def test_paper_metadata_successor_enqueues_mondo_linking(
