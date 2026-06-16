@@ -153,8 +153,14 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
     Each case is explicit about what successors to create and any entity ID
     filtering/expansion needed. PATIENT_VARIANT_OCCURRENCES is the only task that
     requires checking multiple independent predecessors.
+
+    The triggering user (``task.updated_by_user_id``) is propagated to successor
+    tasks so the attribution chain is preserved end-to-end. Tasks triggered by the
+    worker itself (initial pipeline runs) have no user and stay unattributed.
     """
     from lib.models import FamilyDB, PatientDB, PhenotypeDB, VariantDB
+
+    user_id = task.updated_by_user_id
 
     match task.type:
         case TaskType.PDF_PARSING:
@@ -162,6 +168,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 session,
                 paper_id=task.paper_id,
                 task_type=TaskType.PAPER_CLASSIFIER,
+                updated_by_user_id=user_id,
             )
 
         case TaskType.PAPER_CLASSIFIER:
@@ -169,16 +176,19 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 session,
                 paper_id=task.paper_id,
                 task_type=TaskType.PAPER_METADATA,
+                updated_by_user_id=user_id,
             )
             enqueue_task(
                 session,
                 paper_id=task.paper_id,
                 task_type=TaskType.VARIANT_EXTRACTION,
+                updated_by_user_id=user_id,
             )
             enqueue_task(
                 session,
                 paper_id=task.paper_id,
                 task_type=TaskType.PEDIGREE_DESCRIPTION,
+                updated_by_user_id=user_id,
             )
 
         case TaskType.PEDIGREE_DESCRIPTION:
@@ -186,6 +196,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 session,
                 paper_id=task.paper_id,
                 task_type=TaskType.PATIENT_EXTRACTION,
+                updated_by_user_id=user_id,
             )
 
         case TaskType.PATIENT_EXTRACTION:
@@ -201,6 +212,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     paper_id=task.paper_id,
                     task_type=TaskType.PHENOTYPE_EXTRACTION,
                     patient_id=patient.id,
+                    updated_by_user_id=user_id,
                 )
 
             # Gate PATIENT_VARIANT_OCCURRENCES on VARIANT_EXTRACTION also being done
@@ -218,6 +230,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     session,
                     paper_id=task.paper_id,
                     task_type=TaskType.PATIENT_VARIANT_OCCURRENCES,
+                    updated_by_user_id=user_id,
                 )
 
         case TaskType.VARIANT_EXTRACTION:
@@ -233,6 +246,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     paper_id=task.paper_id,
                     task_type=TaskType.VARIANT_HARMONIZATION,
                     variant_id=variant.id,
+                    updated_by_user_id=user_id,
                 )
 
             # Gate PATIENT_VARIANT_OCCURRENCES on PATIENT_EXTRACTION also being done
@@ -250,6 +264,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     session,
                     paper_id=task.paper_id,
                     task_type=TaskType.PATIENT_VARIANT_OCCURRENCES,
+                    updated_by_user_id=user_id,
                 )
 
         case TaskType.VARIANT_HARMONIZATION:
@@ -258,6 +273,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 paper_id=task.paper_id,
                 task_type=TaskType.VARIANT_ANNOTATION,
                 variant_id=task.variant_id,
+                updated_by_user_id=user_id,
             )
 
         case TaskType.PATIENT_VARIANT_OCCURRENCES:
@@ -271,6 +287,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     paper_id=task.paper_id,
                     task_type=TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
                     family_id=family.id,
+                    updated_by_user_id=user_id,
                 )
 
             # Expand to per-patient COMPOUND_HET_EVALUATION for patients with ≥2 heterozygous variants
@@ -293,6 +310,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     paper_id=task.paper_id,
                     task_type=TaskType.COMPOUND_HET_EVALUATION,
                     patient_id=patient_id,
+                    updated_by_user_id=user_id,
                 )
 
         case TaskType.SEGREGATION_EVIDENCE_EXTRACTION:
@@ -301,6 +319,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 paper_id=task.paper_id,
                 task_type=TaskType.SEGREGATION_ANALYSIS_COMPUTED,
                 family_id=task.family_id,
+                updated_by_user_id=user_id,
             )
 
         case TaskType.PHENOTYPE_EXTRACTION:
@@ -319,6 +338,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     paper_id=task.paper_id,
                     task_type=TaskType.HPO_LINKING,
                     phenotype_id=phenotype.id,
+                    updated_by_user_id=user_id,
                 )
 
         case (
