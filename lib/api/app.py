@@ -146,7 +146,7 @@ from lib.models.patient import (
 )
 from lib.models.segregation_analysis import SegregationAnalysisComputedNestedResp
 from lib.tasks import TaskCreateRequest, TaskResp, enqueue_all_instances, enqueue_task
-from lib.tasks.handlers import ensure_conversation_id
+from lib.tasks.handlers import ensure_conversation_id, format_paper_context
 from lib.tasks.models import TaskStatus, TaskType
 
 logger = logging.getLogger(__name__)
@@ -1692,7 +1692,7 @@ def _build_qa_context(
     }
 
     paper_md = relevant_sections_md(paper_id, paper_db.supplement_format)
-    paper_context = f'PAPER TEXT:\n{paper_md}'
+    paper_context = format_paper_context(paper_md)
     db_state_context = f'CAA Extracted State:\n{json.dumps(db_state, default=str)}'
 
     return paper_context, db_state_context, GENERAL_PAPER_QA_INSTRUCTIONS
