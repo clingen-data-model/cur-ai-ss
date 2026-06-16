@@ -38,6 +38,7 @@ from lib.agents.chat_routing_agent import (
     _GLOBAL_AGENTS,
     CHAT_ROUTING_INSTRUCTIONS,
     ChatRoutingOutput,
+    ChatRunContext,
     make_routing_agent,
 )
 from lib.agents.general_paper_qa_agent import (
@@ -1519,6 +1520,7 @@ def clear_chat(
 async def init_chat(
     paper_id: int,
     request: ChatMessageRequest,
+    current_user: UserDB = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> Any:
     paper_db = session.get(PaperDB, paper_id)
@@ -1534,13 +1536,8 @@ async def init_chat(
     )
 
     if conversation_db is None:
-        any_eligible = session.query(TaskDB).filter(TaskDB.paper_id == paper_id).all()
-        if not any(t.conversation_id for t in any_eligible):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail='No completed task conversations available for this paper.',
-            )
-
+        # Run the chat agent. An ACTION queues a task (recorded in the run context);
+        # a QUESTION returns a routing decision to answer from.
         def build_selection_summary(output: ChatRoutingOutput) -> str:
             parts = [f'Selected the "{output.task_type}" agent']
             if output.entity_label:
@@ -1548,10 +1545,37 @@ async def init_chat(
             parts.append(f'because it {output.task_type.description.lower()}')
             return ' '.join(parts)
 
+        chat_ctx = ChatRunContext()
         routing_input = (
             f'{CHAT_ROUTING_INSTRUCTIONS}\n\nUser question: {request.message}'
         )
-        routing_result = await Runner.run(make_routing_agent(paper_id), routing_input)
+        routing_result = await Runner.run(
+            make_routing_agent(paper_id, current_user.id),
+            routing_input,
+            context=chat_ctx,
+        )
+
+        # ACTION: a task was queued — store the confirmation and return.
+        if chat_ctx.confirmation is not None:
+            conversation_db = ConversationDB(
+                paper_id=paper_id,
+                conversation_id=None,
+                messages=[
+                    {'role': 'user', 'content': request.message},
+                    {'role': 'assistant', 'content': chat_ctx.confirmation},
+                ],
+            )
+            session.add(conversation_db)
+            return conversation_db.messages
+
+        # QUESTION (answer path): route to general QA or an existing task conversation.
+        any_eligible = session.query(TaskDB).filter(TaskDB.paper_id == paper_id).all()
+        if not any(t.conversation_id for t in any_eligible):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail='No completed task conversations available for this paper.',
+            )
+
         routing_output = routing_result.final_output
 
         if routing_output.task_type == TaskType.GENERAL_PAPER_QUESTION:
