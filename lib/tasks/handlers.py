@@ -1461,7 +1461,7 @@ async def handle_hpo_linking(task_id: int) -> None:
         session.add(hpo_to_db(phenotype_id, result.final_output))
 
 
-def build_mondo_linking_target(
+def _build_mondo_linking_target(
     session: Session, task: TaskDB
 ) -> MondoLinkingTarget | None:
     """Build the scoped disease text target for a MONDO linking task.
@@ -1512,7 +1512,7 @@ async def handle_mondo_linking(task_id: int) -> None:
         task = session.get(TaskDB, task_id)
         if not task:
             return
-        target = build_mondo_linking_target(session, task)
+        target = _build_mondo_linking_target(session, task)
         if target is None:
             return
         paper = session.get(PaperDB, target.paper_id)
