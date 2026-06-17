@@ -11,7 +11,7 @@ from pydantic import (
 )
 
 if TYPE_CHECKING:
-    from lib.models.evidence_block import EvidenceBlock
+    from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
     from lib.models.family import FamilyDB
     from lib.models.patient import PatientDB
     from lib.models.patient_variant_occurrences import (
@@ -57,8 +57,13 @@ from lib.misc.pdf.paths import (
     pdf_thumbnail_path,
 )
 from lib.models.base import Base, PatchModel
-from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock
+from lib.models.evidence_block import (
+    EvidenceBlock,
+    HumanEvidenceBlock,
+    ReasoningBlock,
+)
 from lib.models.gene_disease_relation import GeneDiseaseRelation
+from lib.models.mondo import MondoComponentMapping, MondoTerm
 from lib.models.patient_variant_occurrences import Inheritance
 from lib.models.user import UserSummaryResp
 from lib.tasks.models import TaskResp
@@ -197,6 +202,9 @@ class PaperDB(Base):
         JSON,
         nullable=True,
     )
+    mondo_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    mondo_term: Mapped[str | None] = mapped_column(String, nullable=True)
+    mondo_match_context: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     patient_count: int = 0
     variant_count: int = 0
@@ -296,6 +304,8 @@ class PaperResp(PaperExtractionOutput):
     disease_name_evidence: HumanEvidenceBlock[str] | None = None
     disease_inheritance_mode: Inheritance | None = None
     disease_inheritance_mode_evidence: HumanEvidenceBlock[Inheritance] | None = None
+    mondo: ReasoningBlock[MondoTerm | None]
+    mondo_components: list[MondoComponentMapping] = []
     updated_at: datetime
     updated_by_user_id: int | None = None
     updated_by: UserSummaryResp | None = None

@@ -1,7 +1,7 @@
 """add users table and updated_by audit columns
 
 Revision ID: a1b2c3d4e5f6
-Revises: 0ecf9fe1c63b
+Revises: d4e5f6a7b8c9
 Create Date: 2026-06-10 00:00:00.000000
 
 Adds a ``users`` table (email login + bcrypt password + name) and an
@@ -21,7 +21,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = 'a1b2c3d4e5f6'
-down_revision: Union[str, None] = '0ecf9fe1c63b'
+down_revision: Union[str, None] = 'd4e5f6a7b8c9'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
