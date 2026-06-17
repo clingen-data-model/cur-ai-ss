@@ -1,4 +1,6 @@
+import base64
 import logging
+import mimetypes
 from datetime import timedelta
 from pathlib import Path
 
@@ -66,23 +68,32 @@ def get_signed_url(object_path: str) -> str:
     return signed_url
 
 
+def image_to_data_url(image_path: Path) -> str:
+    """Encode a local image as a base64 data URL for direct model consumption.
+
+    See: https://developers.openai.com/api/docs/guides/images-vision?format=base64-encoded
+    """
+    mime_type = mimetypes.guess_type(image_path.name)[0] or 'image/png'
+    image_b64 = base64.b64encode(image_path.read_bytes()).decode('ascii')
+    return f'data:{mime_type};base64,{image_b64}'
+
+
 def upload_and_sign_image(image_path: Path) -> str:
-    """Upload an image to GCS and return a signed URL.
+    """Return an image URL that OpenAI's vision endpoint can consume.
 
     Args:
         image_path: Local path to the image file (from pdf_image_path or pdf_table_image_path)
 
     Returns:
-        Signed URL for the uploaded image, or a local API URL if GCS upload is disabled
+        A signed GCS URL, or a base64 data URL if GCS upload is disabled. (A local
+        API URL is not usable — OpenAI's servers can't reach a localhost host.)
     """
     if not image_path.exists():
         raise FileNotFoundError(f'Image file not found: {image_path}')
 
     if env.DISABLE_GCS_UPLOAD:
-        stored_path = image_path.relative_to(Path(env.CAA_ROOT))
-        local_url = f'{env.PROTOCOL}{env.API_ENDPOINT}/{stored_path}'
-        logger.info(f'GCS upload disabled, using local API URL: {local_url}')
-        return local_url
+        logger.info(f'GCS upload disabled, encoding {image_path} as a data URL')
+        return image_to_data_url(image_path)
 
     logger.info(f'Uploading image {image_path.name} to GCS')
     object_path = upload_image_to_gcs(image_path)
