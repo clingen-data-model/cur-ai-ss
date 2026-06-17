@@ -5,6 +5,8 @@ from pydantic import BaseModel
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.core.environment import env
+from lib.misc.gcs import upload_and_sign_image
+from lib.misc.pdf.paths import pdf_image_path
 
 
 # --- Output schema ---
@@ -14,14 +16,8 @@ class PedigreeExtractionOutput(BaseModel):
     description: Optional[str] = None
 
 
-# --- Vision tool (guardrailed by agent) ---
-@function_tool
-def analyze_pedigree_image(image_url: str) -> str:
-    """Analyze a pedigree image with high detail to extract comprehensive description.
-
-    Only call this tool AFTER confirming the image contains a pedigree diagram.
-    Returns detailed analysis of individuals, relationships, and inheritance patterns.
-    """
+def _analyze_image_url(image_url: str) -> str:
+    """Run the vision model against an image URL and return its description."""
     from openai import OpenAI
 
     client = OpenAI(api_key=env.OPENAI_API_KEY)
@@ -38,7 +34,10 @@ def analyze_pedigree_image(image_url: str) -> str:
                     },
                     {
                         'type': 'text',
-                        'text': """Extract detailed pedigree information from this diagram.
+                        'text': """First determine whether this image is a pedigree (family tree) diagram.
+If it is NOT a pedigree diagram, respond with exactly NOT_A_PEDIGREE and nothing else.
+
+Otherwise, extract detailed pedigree information from this diagram.
 
 For the pedigree shown, enumerate ALL individuals visible, even if unclear or low resolution:
 - Identifier (if present)
@@ -68,44 +67,59 @@ IMPORTANT: List every visible individual, even if some details are unclear. Do n
 
 # --- Agent instructions ---
 PEDIGREE_EXTRACTION_INSTRUCTIONS = """
-INPUT: Image URLs with captions
+INPUT: A list of figures, each with an image_id, whether it is a supplement figure, and a caption.
 
 Task Overview
 -------------
-Determine whether any image contains a pedigree diagram, and if so, extract detailed pedigree information.
+Determine whether any figure contains a pedigree diagram, and if so, extract detailed pedigree information.
 
-TWO-STEP PROCESS:
+PROCESS
+-------
+You MUST evaluate the actual image to decide — never decide from the caption alone.
+For each figure, call analyze_pedigree_image with its image_id and is_supplement flag.
+The tool loads the image and either returns detailed pedigree information or the literal
+string NOT_A_PEDIGREE.
 
-STEP 1 — IDENTIFY PEDIGREE (examine URLs and captions)
--------------------------------------------------------
-Review the provided image URLs and their captions to determine if a pedigree diagram is present.
-A pedigree typically has keywords like: pedigree, family tree, family history, hereditary pattern, inheritance, etc.
+Stop as soon as the tool confirms a pedigree, or once every figure has been evaluated and
+none are pedigrees.
 
-Decision:
-- If NO pedigree exists: Set found=False, image_id=None, description=None. STOP.
-- If a pedigree exists (confirmed in Step 1): Proceed to Step 2.
-
-STEP 2 — EXTRACT DETAILS (use analyze_pedigree_image tool)
------------------------------------------------------------
-ONLY if you confirmed a pedigree in Step 1, call analyze_pedigree_image with the image_url.
-The tool will return detailed pedigree information.
-
-Set found=True and populate image_id and description from the tool output.
+DECISION:
+- If the tool returned pedigree details for a figure: set found=True, and populate image_id
+  and description from that tool output.
+- If the tool returned NOT_A_PEDIGREE for every figure: set found=False, image_id=None,
+  description=None.
 
 IMPORTANT GUARDRAILS:
-- Only call analyze_pedigree_image if you confirmed a pedigree exists
-- found=False with None values ONLY when no pedigree diagram is present
-- found=True even if resolution is low or some details are unclear (the tool handles incomplete clarity)
+- The tool's visual verdict is authoritative — do not report found=True without a tool
+  response that actually contains pedigree details (not NOT_A_PEDIGREE).
+- found=True even if resolution is low or some details are unclear (the tool handles
+  incomplete clarity, and will still return details rather than NOT_A_PEDIGREE).
 """
 
 
-# --- Agent definition ---
+# --- Agent instructions ---
 PEDIGREE_DESCRIBER_AGENT_INSTRUCTIONS = PEDIGREE_EXTRACTION_INSTRUCTIONS
 
-agent = Agent(
-    name='pedigree_describer',
-    instructions=BASE_SYSTEM_INSTRUCTIONS,
-    model=env.OPENAI_API_DEPLOYMENT,
-    output_type=PedigreeExtractionOutput,
-    tools=[analyze_pedigree_image],
-)
+
+def pedigree_describer_agent_for_paper(paper_id: int) -> Agent:
+    """Build a pedigree describer agent bound to a specific paper's images."""
+
+    @function_tool
+    def analyze_pedigree_image(image_id: int, is_supplement: bool = False) -> str:
+        """Evaluate a figure's image to determine whether it is a pedigree.
+
+        Identify the image by its image_id and is_supplement flag (as listed in the
+        input). Returns a detailed analysis of individuals, relationships, and
+        inheritance patterns if the image is a pedigree, or the literal string
+        NOT_A_PEDIGREE if it is not.
+        """
+        image_path = pdf_image_path(paper_id, image_id, supplement=is_supplement)
+        return _analyze_image_url(upload_and_sign_image(image_path))
+
+    return Agent(
+        name='pedigree_describer',
+        instructions=BASE_SYSTEM_INSTRUCTIONS,
+        model=env.OPENAI_API_DEPLOYMENT,
+        output_type=PedigreeExtractionOutput,
+        tools=[analyze_pedigree_image],
+    )

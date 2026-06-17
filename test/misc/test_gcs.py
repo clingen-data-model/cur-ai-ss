@@ -1,27 +1,26 @@
 from pathlib import Path
 from unittest.mock import Mock
 
-from lib.agents import table_correction_agent
+from lib.misc import gcs
 
 
-def test_image_url_for_openai_uses_gcs_when_uploads_enabled(monkeypatch, tmp_path):
+def test_upload_and_sign_image_uses_gcs_when_uploads_enabled(monkeypatch, tmp_path):
     image_path = tmp_path / 'table.png'
     image_path.write_bytes(b'image bytes')
-    upload_and_sign_image = Mock(return_value='https://example.com/signed-table.png')
+    upload_image_to_gcs = Mock(return_value='tables/table.png')
+    get_signed_url = Mock(return_value='https://example.com/signed-table.png')
 
-    monkeypatch.setattr(table_correction_agent.env, 'DISABLE_GCS_UPLOAD', False)
-    monkeypatch.setattr(
-        'lib.misc.gcs.upload_and_sign_image',
-        upload_and_sign_image,
-    )
+    monkeypatch.setattr(gcs.env, 'DISABLE_GCS_UPLOAD', False)
+    monkeypatch.setattr(gcs, 'upload_image_to_gcs', upload_image_to_gcs)
+    monkeypatch.setattr(gcs, 'get_signed_url', get_signed_url)
 
-    image_url = table_correction_agent._image_url_for_openai(image_path)
+    image_url = gcs.upload_and_sign_image(image_path)
 
     assert image_url == 'https://example.com/signed-table.png'
-    upload_and_sign_image.assert_called_once_with(image_path)
+    upload_image_to_gcs.assert_called_once_with(image_path)
 
 
-def test_image_url_for_openai_uses_data_url_when_uploads_disabled(
+def test_upload_and_sign_image_uses_data_url_when_uploads_disabled(
     monkeypatch, tmp_path
 ):
     png_bytes = (
@@ -37,9 +36,9 @@ def test_image_url_for_openai_uses_data_url_when_uploads_disabled(
     image_path = Path(tmp_path) / 'one_pixel.png'
     image_path.write_bytes(png_bytes)
 
-    monkeypatch.setattr(table_correction_agent.env, 'DISABLE_GCS_UPLOAD', True)
+    monkeypatch.setattr(gcs.env, 'DISABLE_GCS_UPLOAD', True)
 
-    image_url = table_correction_agent._image_url_for_openai(image_path)
+    image_url = gcs.upload_and_sign_image(image_path)
 
     assert image_url == (
         'data:image/png;base64,'

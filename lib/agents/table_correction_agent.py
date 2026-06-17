@@ -1,8 +1,6 @@
 """Agent to correct corrupted table markdown using OpenAI vision."""
 
-import base64
 import logging
-import mimetypes
 from pathlib import Path
 
 from agents import Agent, function_tool
@@ -10,6 +8,7 @@ from pydantic import BaseModel
 
 from lib.core.environment import env
 from lib.core.logging import setup_logging
+from lib.misc.gcs import upload_and_sign_image
 from lib.misc.pdf.paths import (
     pdf_markdown_path,
     pdf_table_image_path,
@@ -30,27 +29,6 @@ Return ONLY the markdown table, no other text.
 """
 
 
-def _image_path_to_data_url(image_path: Path) -> str:
-    """Encode a local image path as a data URL for OpenAI image input.
-
-    See: https://developers.openai.com/api/docs/guides/images-vision?format=base64-encoded
-    """
-    mime_type = mimetypes.guess_type(image_path.name)[0] or 'image/png'
-    image_b64 = base64.b64encode(image_path.read_bytes()).decode('ascii')
-    return f'data:{mime_type};base64,{image_b64}'
-
-
-def _image_url_for_openai(image_path: Path) -> str:
-    """Return an OpenAI-readable image URL, using upload or local data URL."""
-    if env.DISABLE_GCS_UPLOAD:
-        logger.info(f'GCS upload disabled, encoding {image_path} as a data URL')
-        return _image_path_to_data_url(image_path)
-
-    from lib.misc.gcs import upload_and_sign_image
-
-    return upload_and_sign_image(image_path)
-
-
 def table_correction_agent_for_image(image_path: Path) -> Agent:
     """Build a table correction agent bound to a specific table image."""
 
@@ -60,7 +38,7 @@ def table_correction_agent_for_image(image_path: Path) -> Agent:
         from openai import OpenAI
 
         client = OpenAI(api_key=env.OPENAI_API_KEY)
-        image_url = _image_url_for_openai(image_path)
+        image_url = upload_and_sign_image(image_path)
 
         message = client.chat.completions.create(
             model=env.OPENAI_VLM,

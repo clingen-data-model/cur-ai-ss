@@ -53,9 +53,7 @@ from lib.agents.patient_variant_occurrence_agent import (
 )
 from lib.agents.pedigree_describer_agent import (
     PEDIGREE_DESCRIBER_AGENT_INSTRUCTIONS,
-)
-from lib.agents.pedigree_describer_agent import (
-    agent as pedigree_describer_agent,
+    pedigree_describer_agent_for_paper,
 )
 from lib.agents.segregation_analysis_computed_agent import (
     SEGREGATION_ANALYSIS_COMPUTED_AGENT_INSTRUCTIONS,
@@ -93,7 +91,6 @@ class RateLimitError(Exception):
 from lib.api.db import session_scope
 from lib.core.environment import env
 from lib.core.logging import setup_logging
-from lib.misc.gcs import upload_and_sign_image
 from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import (
     fulltext_md,
@@ -413,47 +410,27 @@ async def handle_pedigree_description(task_id: int) -> None:
 
     combined_text = ''
 
-    # Process regular images
-    image_id = 0
-    while True:
-        pdf_image = pdf_image_path(paper_id, image_id)
-        if not pdf_image.exists():
-            break
-        caption_path = pdf_image_caption_path(paper_id, image_id)
-        caption_text = (
-            caption_path.read_text() if caption_path.exists() else 'No caption'
-        )
-        # Upload image to GCS and get signed URL
-        logger.info(f'Processing image {image_id} from {pdf_image}')
-        image_url = upload_and_sign_image(pdf_image)
-        logger.info(
-            f'Image {image_id} URL type: {type(image_url)}, starts with: {image_url[:50] if image_url else "None"}'
-        )
-        combined_text += f'[Processing Pipeline Figure {image_id}]\n'
-        combined_text += f'URL: {image_url}\n'
-        combined_text += f'Caption: {caption_text}\n\n'
-        image_id += 1
-
-    # Process supplement images
-    image_id = 0
-    while True:
-        pdf_image = pdf_image_path(paper_id, image_id, supplement=True)
-        if not pdf_image.exists():
-            break
-        caption_path = pdf_image_caption_path(paper_id, image_id, supplement=True)
-        caption_text = (
-            caption_path.read_text() if caption_path.exists() else 'No caption'
-        )
-        # Upload image to GCS and get signed URL
-        logger.info(f'Processing supplement image {image_id} from {pdf_image}')
-        image_url = upload_and_sign_image(pdf_image)
-        logger.info(
-            f'Supplement image {image_id} URL type: {type(image_url)}, starts with: {image_url[:50] if image_url else "None"}'
-        )
-        combined_text += f'[Processing Supplement Figure {image_id}]\n'
-        combined_text += f'URL: {image_url}\n'
-        combined_text += f'Caption: {caption_text}\n\n'
-        image_id += 1
+    # List figures by id + caption. The agent picks a pedigree from the captions,
+    # then the analyze_pedigree_image tool loads the image bytes on demand — so we
+    # never put image URLs (or data URLs) into the prompt text.
+    for is_supplement, label in ((False, 'Pipeline'), (True, 'Supplement')):
+        image_id = 0
+        while True:
+            pdf_image = pdf_image_path(paper_id, image_id, supplement=is_supplement)
+            if not pdf_image.exists():
+                break
+            caption_path = pdf_image_caption_path(
+                paper_id, image_id, supplement=is_supplement
+            )
+            caption_text = (
+                caption_path.read_text() if caption_path.exists() else 'No caption'
+            )
+            logger.info(f'Listing {label.lower()} figure {image_id} from {pdf_image}')
+            combined_text += f'[{label} Figure {image_id}]\n'
+            combined_text += f'image_id: {image_id}\n'
+            combined_text += f'is_supplement: {is_supplement}\n'
+            combined_text += f'Caption: {caption_text}\n\n'
+            image_id += 1
 
     stored_conv_id = await ensure_conversation_id(stored_conv_id)
 
@@ -465,7 +442,7 @@ async def handle_pedigree_description(task_id: int) -> None:
         message = f'{combined_text}\n\n{PEDIGREE_DESCRIBER_AGENT_INSTRUCTIONS}'
 
     result = await Runner.run(
-        pedigree_describer_agent,
+        pedigree_describer_agent_for_paper(paper_id),
         message,
         conversation_id=stored_conv_id,
     )
