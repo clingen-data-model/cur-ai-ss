@@ -33,6 +33,7 @@ class TaskType(StrEnum):
     COMPOUND_HET_EVALUATION = 'Compound Het Evaluation'  # per-patient
     PHENOTYPE_EXTRACTION = 'Phenotype Extraction'  # per-patient
     HPO_LINKING = 'HPO Linking'  # per-patient
+    MONDO_LINKING = 'MONDO Linking'
 
     @property
     def description(self) -> str:
@@ -53,6 +54,7 @@ class TaskType(StrEnum):
             TaskType.COMPOUND_HET_EVALUATION: 'Evaluates pairs of heterozygous variants to identify compound heterozygous genotypes',
             TaskType.PHENOTYPE_EXTRACTION: 'Extracts phenotype text spans per patient',
             TaskType.HPO_LINKING: 'Maps phenotypes to HPO ontology terms for standardization',
+            TaskType.MONDO_LINKING: 'Maps disease names to MONDO ontology terms for standardization',
         }
         return descriptions[self]
 
@@ -91,7 +93,7 @@ TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
         TaskType.PHENOTYPE_EXTRACTION,
         TaskType.PATIENT_VARIANT_OCCURRENCES,
     ],
-    TaskType.PAPER_METADATA: [],
+    TaskType.PAPER_METADATA: [TaskType.MONDO_LINKING],
     TaskType.VARIANT_EXTRACTION: [
         TaskType.VARIANT_HARMONIZATION,
         TaskType.PATIENT_VARIANT_OCCURRENCES,
@@ -101,11 +103,13 @@ TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
     TaskType.PATIENT_VARIANT_OCCURRENCES: [
         TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
         TaskType.COMPOUND_HET_EVALUATION,
+        TaskType.MONDO_LINKING,
     ],
     TaskType.SEGREGATION_EVIDENCE_EXTRACTION: [TaskType.SEGREGATION_ANALYSIS_COMPUTED],
     TaskType.SEGREGATION_ANALYSIS_COMPUTED: [],
     TaskType.PHENOTYPE_EXTRACTION: [TaskType.HPO_LINKING],
     TaskType.HPO_LINKING: [],
+    TaskType.MONDO_LINKING: [],
 }
 
 
@@ -154,6 +158,12 @@ class TaskDB(Base):
         nullable=True,
         index=True,
     )
+    patient_variant_occurrence_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey('patient_variant_occurrences.id', ondelete='CASCADE'),
+        nullable=True,
+        index=True,
+    )
     status: Mapped[TaskStatus] = mapped_column(
         SQLEnum(TaskStatus),
         nullable=False,
@@ -184,6 +194,7 @@ class TaskDB(Base):
             'patient_id',
             'variant_id',
             'phenotype_id',
+            'patient_variant_occurrence_id',
             unique=True,
         ),
     )
@@ -203,6 +214,7 @@ class TaskResp(BaseModel):
     patient_id: int | None
     variant_id: int | None
     phenotype_id: int | None
+    patient_variant_occurrence_id: int | None
     updated_at: datetime
 
 
@@ -212,5 +224,6 @@ class TaskCreateRequest(BaseModel):
     patient_id: int | None = None
     variant_id: int | None = None
     phenotype_id: int | None = None
+    patient_variant_occurrence_id: int | None = None
     skip_successors: bool = False
     additional_context: str | None = None

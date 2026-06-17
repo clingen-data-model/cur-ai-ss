@@ -19,6 +19,18 @@ from lib.models.family import (
     FamilyResp,
     FamilyUpdateRequest,
 )
+from lib.models.mondo import (
+    MondoAgentDecision,
+    MondoCandidate,
+    MondoComponentMapping,
+    MondoDiseaseScope,
+    MondoLinkingTarget,
+    MondoMatchEvidence,
+    MondoSynonym,
+    MondoSynonymScope,
+    MondoTerm,
+    MondoTermDetail,
+)
 from lib.models.paper import (
     FileFormat,
     GeneDB,

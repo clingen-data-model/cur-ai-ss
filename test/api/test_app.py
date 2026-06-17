@@ -16,6 +16,7 @@ from lib.models import (
     HarmonizedVariantDB,
     PaperDB,
     PatientDB,
+    PatientVariantOccurrenceDB,
     PhenotypeDB,
     TaskDB,
     VariantDB,
@@ -146,6 +147,74 @@ def test_get_paper_success(client, test_pdf, seeded_genes, agent_run):
     assert 'tasks' in data_get
     assert len(data_get['tasks']) > 0
     _assert_updated_at_recent(data_get['updated_at'])
+
+
+def test_get_paper_exposes_mondo_components(client, db_session, seeded_paper):
+    """Decomposed MONDO/HPO disease components are surfaced on the paper response."""
+    seeded_paper.mondo_id = 'MONDO:0020757'
+    seeded_paper.mondo_term = 'sporadic hemiplegic migraine'
+    seeded_paper.mondo_match_context = {
+        'match_type': 'primary_partial',
+        'mondo_id': 'MONDO:0020757',
+        'term': 'sporadic hemiplegic migraine',
+        'agent_reasoning': 'decomposed into two clinical axes',
+        'components': [
+            {
+                'text': 'Recurrent hemiplegic migraine',
+                'normalized_text': 'sporadic hemiplegic migraine',
+                'role': 'primary',
+                'category': 'disease',
+                'mapping_status': 'mapped',
+                'mapped_ontology': 'MONDO',
+                'mondo': {
+                    'mondo_id': 'MONDO:0020757',
+                    'label': 'sporadic hemiplegic migraine',
+                },
+                'hpo': None,
+                'confidence': 'high',
+                'relationship': 'exact',
+                'reasoning': 'exact label match',
+            },
+            {
+                'text': 'intractable hypomagnesemia',
+                'normalized_text': 'hypomagnesemia',
+                'role': 'component',
+                'category': 'phenotype',
+                'mapping_status': 'mapped',
+                'mapped_ontology': 'HPO',
+                'mondo': None,
+                'hpo': {'id': 'HP:0002917', 'name': 'Hypomagnesemia'},
+                'confidence': 'high',
+                'relationship': 'exact',
+                'reasoning': 'phenotype maps to HPO',
+            },
+        ],
+    }
+    db_session.flush()
+
+    response = client.get(f'/papers/{seeded_paper.id}')
+    assert response.status_code == 200
+    data = response.json()
+
+    # Primary term still flows through the existing mondo field.
+    assert data['mondo']['value']['mondo_id'] == 'MONDO:0020757'
+
+    components = data['mondo_components']
+    assert len(components) == 2
+    primary, secondary = components
+    assert primary['role'] == 'primary'
+    assert primary['mapped_ontology'] == 'MONDO'
+    assert primary['mondo']['mondo_id'] == 'MONDO:0020757'
+    assert secondary['role'] == 'component'
+    assert secondary['mapped_ontology'] == 'HPO'
+    assert secondary['hpo']['id'] == 'HP:0002917'
+
+
+def test_get_paper_mondo_components_empty_without_context(client, seeded_paper):
+    """Papers without MONDO linking return an empty component list, not null."""
+    response = client.get(f'/papers/{seeded_paper.id}')
+    assert response.status_code == 200
+    assert response.json()['mondo_components'] == []
 
 
 def test_get_paper_not_found(client):
@@ -736,6 +805,45 @@ def _ev(value: object = None, quote: str | None = 'test') -> dict:
     return d
 
 
+def _create_patient_variant_occurrence(
+    db_session,
+    paper: PaperDB,
+    variant: VariantDB,
+    agent_run: AgentRunDB,
+    disease_name: str | None = 'test disease',
+) -> PatientVariantOccurrenceDB:
+    patient_number = db_session.scalar(select(func.count(PatientDB.id))) + 1
+    patient_identifier = f'PVO Test Patient {patient_number}'
+    patient = PatientDB(
+        paper_id=paper.id,
+        family_id=paper.default_family_id,
+        agent_run_id=agent_run.id,
+        identifier=patient_identifier,
+        **_patient_required_fields(patient_identifier),
+    )
+    db_session.add(patient)
+    db_session.flush()
+
+    occurrence = PatientVariantOccurrenceDB(
+        paper_id=paper.id,
+        patient_id=patient.id,
+        variant_id=variant.id,
+        zygosity='Heterozygous',
+        zygosity_evidence=_ev('Heterozygous'),
+        inheritance='Dominant',
+        inheritance_evidence=_ev('Dominant'),
+        de_novo=False,
+        de_novo_evidence=_ev(False),
+        testing_methods=['Sanger Sequencing'],
+        testing_methods_evidence=[_ev('Sanger Sequencing')],
+        disease_name=disease_name,
+        disease_name_evidence=_ev(disease_name) if disease_name is not None else None,
+    )
+    db_session.add(occurrence)
+    db_session.flush()
+    return occurrence
+
+
 @pytest.fixture
 def seeded_agent_run(db_session):
     """Create a test agent run."""
@@ -1145,6 +1253,146 @@ def test_enqueue_clears_conversation_id_without_context(
     assert tasks[0]['conversation_id'] is None
     assert tasks[0]['additional_context'] is None
     assert tasks[0]['status'] == 'Pending'
+
+
+def test_enqueue_task_with_patient_variant_occurrence_scope(
+    client, seeded_paper, seeded_variant, seeded_agent_run, db_session
+):
+    from lib.tasks import TaskCreateRequest
+
+    occurrence = _create_patient_variant_occurrence(
+        db_session,
+        seeded_paper,
+        seeded_variant,
+        seeded_agent_run,
+    )
+
+    response = client.post(
+        f'/papers/{seeded_paper.id}/tasks',
+        json=TaskCreateRequest(
+            type=TaskType.MONDO_LINKING,
+            patient_variant_occurrence_id=occurrence.id,
+        ).model_dump(),
+    )
+    assert response.status_code == 200
+    tasks = response.json()
+    assert len(tasks) == 1
+    assert tasks[0]['patient_variant_occurrence_id'] == occurrence.id
+    assert tasks[0]['status'] == 'Pending'
+
+    task = db_session.get(TaskDB, tasks[0]['id'])
+    task.status = TaskStatus.COMPLETED
+    task.conversation_id = 'conv-123'
+    db_session.commit()
+
+    response = client.post(
+        f'/papers/{seeded_paper.id}/tasks',
+        json=TaskCreateRequest(
+            type=TaskType.MONDO_LINKING,
+            patient_variant_occurrence_id=occurrence.id,
+        ).model_dump(),
+    )
+    assert response.status_code == 200
+    tasks = response.json()
+    assert len(tasks) == 1
+    assert tasks[0]['id'] == task.id
+    assert tasks[0]['patient_variant_occurrence_id'] == occurrence.id
+    assert tasks[0]['status'] == 'Pending'
+    assert tasks[0]['conversation_id'] is None
+
+
+def test_paper_metadata_successor_enqueues_mondo_linking(
+    db_session, seeded_paper, agent_run
+):
+    from lib.tasks.misc import enqueue_successors
+
+    task = TaskDB(
+        paper_id=seeded_paper.id,
+        agent_run_id=agent_run.id,
+        type=TaskType.PAPER_METADATA,
+        status=TaskStatus.COMPLETED,
+    )
+    db_session.add(task)
+    db_session.flush()
+
+    enqueue_successors(db_session, task)
+
+    mondo_task = (
+        db_session.query(TaskDB)
+        .filter(
+            TaskDB.paper_id == seeded_paper.id,
+            TaskDB.type == TaskType.MONDO_LINKING,
+        )
+        .one()
+    )
+    assert mondo_task.status == TaskStatus.PENDING
+
+
+def test_patient_variant_occurrence_successor_enqueues_paper_and_occurrence_mondo(
+    db_session, seeded_paper, seeded_variant, seeded_agent_run
+):
+    """Enqueue MONDO-linking for paper and patient variant occurrences with nonblank disease names."""
+    from lib.tasks.misc import enqueue_successors
+
+    occurrence_one = _create_patient_variant_occurrence(
+        db_session,
+        seeded_paper,
+        seeded_variant,
+        seeded_agent_run,
+        disease_name='disease one',
+    )
+    occurrence_two = _create_patient_variant_occurrence(
+        db_session,
+        seeded_paper,
+        seeded_variant,
+        seeded_agent_run,
+        disease_name='disease two',
+    )
+    # This occurrence has a blank disease name so enqueue_successors
+    # should not queue a MONDO linking task for it.
+    _create_patient_variant_occurrence(
+        db_session,
+        seeded_paper,
+        seeded_variant,
+        seeded_agent_run,
+        disease_name='   ',
+    )
+    task = TaskDB(
+        paper_id=seeded_paper.id,
+        agent_run_id=seeded_agent_run.id,
+        type=TaskType.PATIENT_VARIANT_OCCURRENCES,
+        status=TaskStatus.COMPLETED,
+    )
+    db_session.add(task)
+    db_session.flush()
+
+    enqueue_successors(db_session, task)
+
+    mondo_tasks = (
+        db_session.query(TaskDB)
+        .filter(
+            TaskDB.paper_id == seeded_paper.id,
+            TaskDB.type == TaskType.MONDO_LINKING,
+        )
+        .all()
+    )
+    assert len(mondo_tasks) == 3
+    assert {task.patient_variant_occurrence_id for task in mondo_tasks} == {
+        None,
+        occurrence_one.id,
+        occurrence_two.id,
+    }
+    assert all(task.status == TaskStatus.PENDING for task in mondo_tasks)
+
+    segregation_task = (
+        db_session.query(TaskDB)
+        .filter(
+            TaskDB.paper_id == seeded_paper.id,
+            TaskDB.type == TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
+        )
+        .one()
+    )
+    assert segregation_task.family_id == seeded_paper.default_family_id
 
 
 def test_update_variant_rejects_harmonized_update_before_harmonization(

@@ -120,6 +120,7 @@ from lib.models import (
     VariantUpdateRequest,
 )
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
+from lib.models.mondo import MondoComponentMapping, MondoTerm
 from lib.models.patient import (
     AffectedStatus,
     CountryCode,
@@ -279,7 +280,13 @@ def put_paper(
                 'wb',
             ) as f:
                 f.write(supplement_content)
-        return paper_db
+        # We fill in these counts for the response, they are not persisted to DB.
+        paper_db.patient_count = len(paper_db.patients)
+        paper_db.variant_count = len(paper_db.variants)
+        paper_db.patient_variant_occurrences_count = len(
+            paper_db.patient_variant_occurrences
+        )
+        return _paper_to_resp(paper_db)
     except IntegrityError:
         session.rollback()
         raise HTTPException(
@@ -294,6 +301,7 @@ def get_paper(paper_id: int, session: Session = Depends(get_session)) -> Any:
         session.query(PaperDB)
         .options(
             selectinload(PaperDB.gene),
+            selectinload(PaperDB.tasks),
             selectinload(PaperDB.patients),
             selectinload(PaperDB.variants),
             selectinload(PaperDB.patient_variant_occurrences),
@@ -310,7 +318,7 @@ def get_paper(paper_id: int, session: Session = Depends(get_session)) -> Any:
     paper_db.patient_variant_occurrences_count = len(
         paper_db.patient_variant_occurrences
     )
-    return paper_db
+    return _paper_to_resp(paper_db)
 
 
 @app.delete('/papers/{paper_id}', status_code=status.HTTP_204_NO_CONTENT)
@@ -338,6 +346,7 @@ def update_paper(
         session.query(PaperDB)
         .options(
             selectinload(PaperDB.gene),
+            selectinload(PaperDB.tasks),
             selectinload(PaperDB.patients),
             selectinload(PaperDB.variants),
             selectinload(PaperDB.patient_variant_occurrences),
@@ -350,13 +359,23 @@ def update_paper(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
+    previous_disease_name = paper_db.disease_name
     patch_request.apply_to(paper_db)
+    # Disease MONDO fields are computed from the free-text disease name. Clear
+    # them on manual text edits so clients never see a match for stale text.
+    if (
+        'disease_name' in patch_request.model_fields_set
+        and paper_db.disease_name != previous_disease_name
+    ):
+        paper_db.mondo_id = None
+        paper_db.mondo_term = None
+        paper_db.mondo_match_context = None
     paper_db.patient_count = len(paper_db.patients)
     paper_db.variant_count = len(paper_db.variants)
     paper_db.patient_variant_occurrences_count = len(
         paper_db.patient_variant_occurrences
     )
-    return paper_db
+    return _paper_to_resp(paper_db)
 
 
 @app.get('/papers', response_model=list[PaperResp])
@@ -375,7 +394,97 @@ def list_papers(
         paper.patient_count = len(paper.patients)
         paper.variant_count = len(paper.variants)
         paper.patient_variant_occurrences_count = len(paper.patient_variant_occurrences)
-    return papers
+    return [_paper_to_resp(paper) for paper in papers]
+
+
+def _mondo_reasoning_block(
+    mondo_id: str | None,
+    mondo_term: str | None,
+    mondo_match_context: dict | None,
+) -> ReasoningBlock[MondoTerm | None]:
+    """Reconstruct MONDO response reasoning from flattened DB columns."""
+    context = mondo_match_context or {}
+    reasoning = context.get('agent_reasoning')
+    if not isinstance(reasoning, str) or not reasoning.strip():
+        reasoning = 'MONDO linking not yet performed'
+
+    value = (
+        MondoTerm(mondo_id=mondo_id, label=mondo_term)
+        if mondo_id and mondo_term
+        else None
+    )
+    return ReasoningBlock[MondoTerm | None](
+        value=value,
+        reasoning=reasoning,
+    )
+
+
+def _mondo_components(
+    mondo_match_context: dict | None,
+) -> list[MondoComponentMapping]:
+    """Extract decomposed disease-text component mappings from stored context.
+
+    The MONDO linker decomposes a disease string into components (e.g. a primary
+    disease mapped to MONDO plus a secondary phenotype mapped to HPO) when no
+    single MONDO term captures the full text. The flattened ``mondo_id`` /
+    ``mondo_term`` columns only carry the primary selection, so the per-component
+    mappings are reconstructed here from ``mondo_match_context``.
+    """
+    context = mondo_match_context or {}
+    raw_components = context.get('components') or []
+    return [
+        MondoComponentMapping.model_validate(component) for component in raw_components
+    ]
+
+
+def _paper_to_resp(row: PaperDB) -> PaperResp:
+    """Convert PaperDB to PaperResp, including reconstructed MONDO reasoning."""
+    from lib.models.paper import PaperTag, PaperType
+    from lib.models.patient_variant_occurrences import Inheritance
+
+    return PaperResp(
+        id=row.id,
+        content_hash=row.content_hash,
+        gene_symbol=row.gene.symbol,
+        filename=row.filename,
+        tags=[PaperTag(tag) for tag in row.tags],
+        is_paper_relevant=row.is_paper_relevant,
+        section_classifications=row.section_classifications,
+        disease_name=row.disease_name,
+        disease_name_evidence=EvidenceBlock.model_validate(row.disease_name_evidence)
+        if row.disease_name_evidence
+        else None,
+        disease_inheritance_mode=Inheritance(row.disease_inheritance_mode)
+        if row.disease_inheritance_mode
+        else None,
+        disease_inheritance_mode_evidence=EvidenceBlock.model_validate(
+            row.disease_inheritance_mode_evidence
+        )
+        if row.disease_inheritance_mode_evidence
+        else None,
+        mondo=_mondo_reasoning_block(
+            row.mondo_id,
+            row.mondo_term,
+            row.mondo_match_context,
+        ),
+        mondo_components=_mondo_components(row.mondo_match_context),
+        updated_at=row.updated_at,
+        tasks=[
+            TaskResp.model_validate(task, from_attributes=True) for task in row.tasks
+        ],
+        patient_count=row.patient_count,
+        variant_count=row.variant_count,
+        patient_variant_occurrences_count=row.patient_variant_occurrences_count,
+        title=row.title,
+        first_author=row.first_author,
+        journal_name=row.journal_name,
+        abstract=row.abstract,
+        publication_year=row.publication_year,
+        doi=row.doi,
+        pmid=row.pmid,
+        pmcid=row.pmcid,
+        paper_types=[PaperType(paper_type) for paper_type in row.paper_types],
+    )
 
 
 @app.get('/papers/{paper_id}/tasks', response_model=list[TaskResp])
@@ -414,6 +523,7 @@ def create_task(
         and request.patient_id is None
         and request.variant_id is None
         and request.phenotype_id is None
+        and request.patient_variant_occurrence_id is None
     ):
         tasks = enqueue_all_instances(
             session,
@@ -431,6 +541,7 @@ def create_task(
             patient_id=request.patient_id,
             variant_id=request.variant_id,
             phenotype_id=request.phenotype_id,
+            patient_variant_occurrence_id=request.patient_variant_occurrence_id,
             skip_successors=request.skip_successors,
             additional_context=request.additional_context,
         )
@@ -997,6 +1108,12 @@ def _patient_variant_occurrence_to_resp(
         disease_name_evidence=EvidenceBlock.model_validate(row.disease_name_evidence)
         if row.disease_name_evidence
         else None,
+        mondo=_mondo_reasoning_block(
+            row.mondo_id,
+            row.mondo_term,
+            row.mondo_match_context,
+        ),
+        mondo_components=_mondo_components(row.mondo_match_context),
         paired_variant_link_id=row.paired_variant_link_id,
         paired_variant_confidence=CompoundHetConfidence(row.paired_variant_confidence)
         if row.paired_variant_confidence

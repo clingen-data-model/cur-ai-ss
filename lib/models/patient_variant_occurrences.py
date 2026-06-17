@@ -18,6 +18,7 @@ from typing_extensions import Self
 
 from lib.models.base import Base
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
+from lib.models.mondo import MondoComponentMapping, MondoTerm
 
 if TYPE_CHECKING:
     from lib.models.paper import PaperDB
@@ -139,6 +140,9 @@ class PatientVariantOccurrenceDB(Base):
     testing_methods_evidence: Mapped[list] = mapped_column(JSON, nullable=False)
     disease_name: Mapped[str | None] = mapped_column(String, nullable=True)
     disease_name_evidence: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    mondo_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    mondo_term: Mapped[str | None] = mapped_column(String, nullable=True)
+    mondo_match_context: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     paired_variant_link_id: Mapped[int | None] = mapped_column(
         Integer,
@@ -210,6 +214,8 @@ class PatientVariantOccurrenceResp(BaseModel):
     testing_methods_evidence: List[EvidenceBlock[TestingMethod]]
     disease_name: str | None = None
     disease_name_evidence: EvidenceBlock[str] | None = None
+    mondo: ReasoningBlock[MondoTerm | None]
+    mondo_components: list[MondoComponentMapping] = []
     paired_variant_link_id: int | None = None
     paired_variant_confidence: CompoundHetConfidence | None = None
     paired_variant_confidence_reasoning: (
