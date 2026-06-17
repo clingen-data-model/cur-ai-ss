@@ -91,22 +91,22 @@ class MondoIndex:
     child_ids_by_id: dict[str, list[str]] = field(default_factory=dict)
 
 
-def ontology_path() -> Path:
+def _ontology_path() -> Path:
     """Return the local path for the MONDO ontology JSON file."""
     return env.reference_data_dir / 'mondo.json'
 
 
-def ontology_url() -> str:
+def _ontology_url() -> str:
     """Return the configured MONDO ontology download URL."""
     return env.MONDO_ONTOLOGY_URL
 
 
-def download_ontology() -> Path:
+def _download_ontology() -> Path:
     """Download the MONDO ontology JSON file to the local reference-data path."""
-    path = ontology_path()
+    path = _ontology_path()
     tmp_path = path.with_suffix('.tmp')
     path.parent.mkdir(parents=True, exist_ok=True)
-    with requests.get(ontology_url(), stream=True, timeout=60) as response:
+    with requests.get(_ontology_url(), stream=True, timeout=60) as response:
         response.raise_for_status()
         with open(tmp_path, 'wb') as fh:
             for chunk in response.iter_content(chunk_size=1024 * 1024):
@@ -116,23 +116,23 @@ def download_ontology() -> Path:
     return path
 
 
-def ensure_ontology() -> Path:
+def _ensure_ontology() -> Path:
     """Return the local MONDO ontology path, downloading it if needed."""
-    path = ontology_path()
+    path = _ontology_path()
     if path.exists():
         return path
-    return download_ontology()
+    return _download_ontology()
 
 
-def get_mondo_index() -> MondoIndex:
+def _get_mondo_index() -> MondoIndex:
     """Return the process-local MONDO index, building it on first use."""
     global _mondo_index
     if _mondo_index is None:
-        _mondo_index = build_mondo_index(ensure_ontology())
+        _mondo_index = _build_mondo_index(_ensure_ontology())
     return _mondo_index
 
 
-def build_mondo_index(path: Path) -> MondoIndex:
+def _build_mondo_index(path: Path) -> MondoIndex:
     """Build tool-oriented MONDO lookup structures from OWLGraph JSON.
 
     Args:
@@ -154,13 +154,13 @@ def build_mondo_index(path: Path) -> MondoIndex:
     index = MondoIndex(terms_by_id=terms_by_id)
 
     for node in graph.get('nodes') or []:
-        mondo_id = normalize_mondo_curie(node.get('id', ''))
+        mondo_id = _normalize_mondo_curie(node.get('id', ''))
         label = node.get('lbl')
         if (
             mondo_id is None
             or node.get('type') != 'CLASS'
             or not isinstance(label, str)
-            or is_deprecated_node(node)
+            or _is_deprecated_node(node)
         ):
             continue
 
@@ -168,28 +168,28 @@ def build_mondo_index(path: Path) -> MondoIndex:
         record = MondoRecord(
             mondo_id=mondo_id,
             label=label,
-            definition=extract_definition(node),
-            synonyms=extract_synonyms(node),
-            xrefs=extract_xrefs(meta.get('xrefs') or []),
-            exact_matches=extract_exact_matches(meta.get('basicPropertyValues') or []),
+            definition=_extract_definition(node),
+            synonyms=_extract_synonyms(node),
+            xrefs=_extract_xrefs(meta.get('xrefs') or []),
+            exact_matches=_extract_exact_matches(meta.get('basicPropertyValues') or []),
         )
         terms_by_id[mondo_id] = record
 
     # Build exact identifier lookup and fuzzy label/synonym search aliases.
     for record in terms_by_id.values():
-        add_search_alias(
+        _add_search_alias(
             index,
             mondo_id=record.mondo_id,
             text=record.label,
             alias_type='label',
         )
-        add_identifier(index, record.mondo_id, record.mondo_id)
+        _add_identifier(index, record.mondo_id, record.mondo_id)
         for xref in record.xrefs:
-            add_identifier(index, xref, record.mondo_id)
+            _add_identifier(index, xref, record.mondo_id)
         for exact_match in record.exact_matches:
-            add_identifier(index, exact_match, record.mondo_id)
+            _add_identifier(index, exact_match, record.mondo_id)
         for synonym in record.synonyms:
-            add_search_alias(
+            _add_search_alias(
                 index,
                 mondo_id=record.mondo_id,
                 text=synonym.text,
@@ -198,18 +198,18 @@ def build_mondo_index(path: Path) -> MondoIndex:
                 synonym_type=synonym.synonym_type,
             )
             for xref in synonym.xrefs:
-                add_identifier(index, xref, record.mondo_id)
+                _add_identifier(index, xref, record.mondo_id)
 
     # Build one-hop is_a relation maps for parent/child exploration tools.
     for edge in graph.get('edges') or []:
         if edge.get('pred') != 'is_a':
             continue
-        child_id = normalize_mondo_curie(edge.get('sub', ''))
-        parent_id = normalize_mondo_curie(edge.get('obj', ''))
+        child_id = _normalize_mondo_curie(edge.get('sub', ''))
+        parent_id = _normalize_mondo_curie(edge.get('obj', ''))
         if child_id not in terms_by_id or parent_id not in terms_by_id:
             continue
-        append_unique(index.parent_ids_by_id.setdefault(child_id, []), parent_id)
-        append_unique(index.child_ids_by_id.setdefault(parent_id, []), child_id)
+        _append_unique(index.parent_ids_by_id.setdefault(child_id, []), parent_id)
+        _append_unique(index.child_ids_by_id.setdefault(parent_id, []), child_id)
 
     return index
 
@@ -219,14 +219,14 @@ def get_mondo_term(
     include_relations: bool = True,
 ) -> dict[str, Any] | None:
     """Fetch a MONDO term by CURIE, OBO IRI, or underscore ID."""
-    normalized_id = normalize_mondo_curie(mondo_id)
+    normalized_id = _normalize_mondo_curie(mondo_id)
     if normalized_id is None:
         return None
-    index = get_mondo_index()
+    index = _get_mondo_index()
     record = index.terms_by_id.get(normalized_id)
     if record is None:
         return None
-    return term_payload(record, index=index, include_relations=include_relations)
+    return _term_payload(record, index=index, include_relations=include_relations)
 
 
 def search_mondo_terms(
@@ -252,8 +252,8 @@ def search_mondo_terms(
     Returns:
         Candidate MONDO terms grouped with label/synonym match evidence.
     """
-    index = get_mondo_index()
-    normalized_query = normalize_for_search(query)
+    index = _get_mondo_index()
+    normalized_query = _normalize_for_search(query)
     if not normalized_query or limit <= 0:
         return []
 
@@ -288,14 +288,14 @@ def search_mondo_terms(
         else:
             candidate.score = max(candidate.score, float(score))
 
-        candidate.matches.append(match_evidence(alias, score))
+        candidate.matches.append(_match_evidence(alias, score))
 
     candidates = list(candidates_by_id.values())
     candidates.sort(key=lambda candidate: candidate.score, reverse=True)
     return [candidate.model_dump(mode='json') for candidate in candidates[:limit]]
 
 
-def add_search_alias(
+def _add_search_alias(
     index: MondoIndex,
     *,
     mondo_id: str,
@@ -305,7 +305,7 @@ def add_search_alias(
     synonym_type: str | None = None,
 ) -> None:
     """Add an alias to the search mapping if it has searchable text."""
-    normalized_text = normalize_for_search(text)
+    normalized_text = _normalize_for_search(text)
     if not normalized_text:
         return
     index.search_aliases.append(
@@ -320,7 +320,7 @@ def add_search_alias(
     )
 
 
-def match_evidence(alias: MondoSearchAlias, score: float) -> MondoMatchEvidence:
+def _match_evidence(alias: MondoSearchAlias, score: float) -> MondoMatchEvidence:
     """Build one search match evidence row from an alias."""
     if alias.type == 'synonym':
         return MondoMatchEvidence(
@@ -341,12 +341,12 @@ def match_evidence(alias: MondoSearchAlias, score: float) -> MondoMatchEvidence:
 
 def get_mondo_by_identifier(identifier: str) -> list[dict[str, Any]]:
     """Fetch MONDO terms by MONDO ID, OBO IRI, xref, or exactMatch identifier."""
-    index = get_mondo_index()
-    key = normalize_identifier_key(identifier)
+    index = _get_mondo_index()
+    key = _normalize_identifier_key(identifier)
     if not key:
         return []
     return [
-        term_payload(index.terms_by_id[mondo_id], index=index)
+        _term_payload(index.terms_by_id[mondo_id], index=index)
         for mondo_id in index.identifier_to_ids.get(key, [])
         if mondo_id in index.terms_by_id
     ]
@@ -354,13 +354,13 @@ def get_mondo_by_identifier(identifier: str) -> list[dict[str, Any]]:
 
 def get_mondo_parents(mondo_id: str) -> list[dict[str, Any]]:
     """Fetch parent MONDO terms."""
-    index = get_mondo_index()
+    index = _get_mondo_index()
     return _get_mondo_related_terms(mondo_id, index.parent_ids_by_id, index)
 
 
 def get_mondo_children(mondo_id: str) -> list[dict[str, Any]]:
     """Fetch child MONDO terms."""
-    index = get_mondo_index()
+    index = _get_mondo_index()
     return _get_mondo_related_terms(mondo_id, index.child_ids_by_id, index)
 
 
@@ -370,11 +370,11 @@ def _get_mondo_related_terms(
     index: MondoIndex,
 ) -> list[dict[str, Any]]:
     """Fetch MONDO terms from a precomputed relationship map."""
-    normalized_id = normalize_mondo_curie(mondo_id)
+    normalized_id = _normalize_mondo_curie(mondo_id)
     if normalized_id is None:
         return []
     return [
-        term_payload(
+        _term_payload(
             index.terms_by_id[related_id], index=index, include_relations=False
         )
         for related_id in related_ids_by_id.get(normalized_id, [])
@@ -382,7 +382,7 @@ def _get_mondo_related_terms(
     ]
 
 
-def term_payload(
+def _term_payload(
     record: MondoRecord,
     index: MondoIndex | None = None,
     include_relations: bool = True,
@@ -395,13 +395,13 @@ def term_payload(
         synonyms=record.synonyms,
         xrefs=record.xrefs,
         exact_matches=record.exact_matches,
-        parents=related_term_summaries(
+        parents=_related_term_summaries(
             index.parent_ids_by_id.get(record.mondo_id, []) if index else [],
             index,
         )
         if include_relations
         else [],
-        children=related_term_summaries(
+        children=_related_term_summaries(
             index.child_ids_by_id.get(record.mondo_id, []) if index else [],
             index,
         )
@@ -410,7 +410,7 @@ def term_payload(
     ).model_dump(mode='json')
 
 
-def related_term_summaries(
+def _related_term_summaries(
     related_ids: list[str],
     index: MondoIndex | None,
 ) -> list[MondoTerm]:
@@ -427,7 +427,7 @@ def related_term_summaries(
     ]
 
 
-def extract_definition(node: dict[str, Any]) -> str | None:
+def _extract_definition(node: dict[str, Any]) -> str | None:
     """Extract a MONDO node definition string."""
     definition = (node.get('meta') or {}).get('definition')
     if not isinstance(definition, dict):
@@ -436,7 +436,7 @@ def extract_definition(node: dict[str, Any]) -> str | None:
     return val if isinstance(val, str) else None
 
 
-def extract_synonyms(node: dict[str, Any]) -> list[MondoSynonym]:
+def _extract_synonyms(node: dict[str, Any]) -> list[MondoSynonym]:
     """Extract structured synonym metadata from a MONDO node."""
     synonyms: list[MondoSynonym] = []
     for synonym in (node.get('meta') or {}).get('synonyms') or []:
@@ -444,12 +444,12 @@ def extract_synonyms(node: dict[str, Any]) -> list[MondoSynonym]:
             continue
         val = synonym.get('val')
         if isinstance(val, str):
-            append_unique(
+            _append_unique(
                 synonyms,
                 MondoSynonym(
                     text=val,
-                    scope=synonym_scope_from_predicate(synonym.get('pred')),
-                    synonym_type=normalize_synonym_type(synonym.get('synonymType')),
+                    scope=_synonym_scope_from_predicate(synonym.get('pred')),
+                    synonym_type=_normalize_synonym_type(synonym.get('synonymType')),
                     xrefs=[
                         xref
                         for xref in synonym.get('xrefs') or []
@@ -460,17 +460,17 @@ def extract_synonyms(node: dict[str, Any]) -> list[MondoSynonym]:
     return synonyms
 
 
-def extract_xrefs(values: list[Any]) -> list[str]:
+def _extract_xrefs(values: list[Any]) -> list[str]:
     """Extract xref identifier strings from MONDO metadata."""
     xrefs: list[str] = []
     for xref in values:
         val = xref.get('val') if isinstance(xref, dict) else None
         if isinstance(val, str):
-            append_unique(xrefs, val)
+            _append_unique(xrefs, val)
     return xrefs
 
 
-def extract_exact_matches(values: list[Any]) -> list[str]:
+def _extract_exact_matches(values: list[Any]) -> list[str]:
     """Extract exactMatch identifier strings from MONDO metadata."""
     exact_matches: list[str] = []
     for value in values:
@@ -478,19 +478,19 @@ def extract_exact_matches(values: list[Any]) -> list[str]:
             continue
         val = value.get('val')
         if isinstance(val, str):
-            append_unique(exact_matches, val)
+            _append_unique(exact_matches, val)
     return exact_matches
 
 
-def add_identifier(index: MondoIndex, identifier: str, mondo_id: str) -> None:
+def _add_identifier(index: MondoIndex, identifier: str, mondo_id: str) -> None:
     """Add a MONDO or external identifier to the identifier lookup table."""
-    key = normalize_identifier_key(identifier)
+    key = _normalize_identifier_key(identifier)
     if not key:
         return
-    append_unique(index.identifier_to_ids.setdefault(key, []), mondo_id)
+    _append_unique(index.identifier_to_ids.setdefault(key, []), mondo_id)
 
 
-def synonym_scope_from_predicate(value: Any) -> MondoSynonymScope:
+def _synonym_scope_from_predicate(value: Any) -> MondoSynonymScope:
     """Map a MONDO synonym predicate to a broad evidence scope."""
     if not isinstance(value, str):
         return MondoSynonymScope.UNKNOWN
@@ -506,7 +506,7 @@ def synonym_scope_from_predicate(value: Any) -> MondoSynonymScope:
     return MondoSynonymScope.UNKNOWN
 
 
-def normalize_synonym_type(value: Any) -> str | None:
+def _normalize_synonym_type(value: Any) -> str | None:
     """Return a compact synonym type label from a MONDO synonym type IRI."""
     if not isinstance(value, str) or not value.strip():
         return None
@@ -517,7 +517,7 @@ def normalize_synonym_type(value: Any) -> str | None:
     return text or None
 
 
-def normalize_mondo_curie(value: str) -> str | None:
+def _normalize_mondo_curie(value: str) -> str | None:
     """Normalize a MONDO CURIE, OBO IRI, or underscore ID."""
     if not isinstance(value, str):
         return None
@@ -527,13 +527,13 @@ def normalize_mondo_curie(value: str) -> str | None:
     return f'MONDO:{match.group(1)}'
 
 
-def normalize_identifier_key(identifier: str) -> str:
+def _normalize_identifier_key(identifier: str) -> str:
     """Normalize common external identifier formats for xref lookup."""
-    value = normalize_text(identifier)
+    value = _normalize_text(identifier)
     if not value:
         return ''
 
-    mondo_id = normalize_mondo_curie(value)
+    mondo_id = _normalize_mondo_curie(value)
     if mondo_id is not None:
         return mondo_id.lower()
 
@@ -561,28 +561,28 @@ def normalize_identifier_key(identifier: str) -> str:
     return value.lower()
 
 
-def normalize_for_search(value: str) -> str:
+def _normalize_for_search(value: str) -> str:
     """Normalize disease text for fuzzy retrieval."""
-    normalized = normalize_text(value).lower()
+    normalized = _normalize_text(value).lower()
     normalized = PUNCTUATION_RE.sub(' ', normalized)
     return ' '.join(normalized.split())
 
 
-def normalize_text(value: str) -> str:
+def _normalize_text(value: str) -> str:
     """Normalize Unicode and whitespace while preserving punctuation.
 
     Strip external whitespace, collapse internal whitespace,
     and apply Unicode NFKC normalization.
 
     Example:
-        ``normalize_text('  Marfan\\u00a0syndrome (Orphanet:558)  ')`` returns
+        ``_normalize_text('  Marfan\\u00a0syndrome (Orphanet:558)  ')`` returns
         ``'Marfan syndrome (Orphanet:558)'``.
     """
     normalized = unicodedata.normalize('NFKC', value or '')
     return ' '.join(normalized.strip().split())
 
 
-def is_deprecated_node(node: dict[str, Any]) -> bool:
+def _is_deprecated_node(node: dict[str, Any]) -> bool:
     """Return whether a MONDO node is marked deprecated."""
     meta = node.get('meta') or {}
     if meta.get('deprecated') is True:
@@ -595,7 +595,7 @@ def is_deprecated_node(node: dict[str, Any]) -> bool:
     return False
 
 
-def append_unique(values: list[Any], value: Any) -> None:
+def _append_unique(values: list[Any], value: Any) -> None:
     """Append a value only if an equal value is not already present."""
     if value not in values:
         values.append(value)

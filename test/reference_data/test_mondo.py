@@ -33,7 +33,7 @@ def mondo_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> mondo.MondoI
             }
         )
     )
-    index = mondo.build_mondo_index(path)
+    index = mondo._build_mondo_index(path)
     monkeypatch.setattr(mondo, '_mondo_index', index)
     return index
 
