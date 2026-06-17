@@ -158,7 +158,25 @@ def main():
     total_fp = 0
     total_fn = 0
 
+    # PMIDs present in the training set but absent from the API output are
+    # excluded from evaluation. This covers papers tagged FailedPaperRelevancy
+    # (dropped when generating var/pmid_variants_api.tsv), which the system
+    # correctly determined are not relevant and should not count against accuracy.
+    excluded_pmids = sorted(set(training_variants.keys()) - set(api_variants.keys()))
+    if excluded_pmids:
+        report_lines.append(
+            f"Excluded {len(excluded_pmids)} PMID(s) absent from API output: "
+            f"{', '.join(excluded_pmids)}"
+        )
+        report_lines.append("")
+        print(
+            f"Excluding {len(excluded_pmids)} PMID(s) absent from API output: "
+            f"{', '.join(excluded_pmids)}"
+        )
+
     for pmid in sorted(training_variants.keys()):
+        if pmid not in api_variants:
+            continue
         train_vars = training_variants[pmid]
         api_vars = api_variants.get(pmid, [])
 

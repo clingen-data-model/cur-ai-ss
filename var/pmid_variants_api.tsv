@@ -1,17 +1,15 @@
 pmid	gene	transcript	hgvsc	hgvsp	patient_id	variant_type	zygosity	mode_of_inheritance
 26084686	CTF1	ENST00000279804	c.274G>A	p.Ala92Thr	Unknown	Missense	Unknown	Unknown
-26094573	RNASEH1	NM_002936.6	NM_002936.6:c.424G>A	NP_002927.2:p.Val142Ile	S1	Missense	Heterozygous	Recessive
-26094573	RNASEH1	NM_002936.6	NM_002936.6:c.469C>T	NP_002927.2:p.Arg157Ter	S1	Stop Gained	Heterozygous	Recessive
-26094573	RNASEH1	NM_002936.6	NM_002936.6:c.424G>A	NP_002927.2:p.Val142Ile	S2	Missense	Heterozygous	Recessive
-26094573	RNASEH1	NM_002936.6	NM_002936.6:c.554C>T	NP_002927.2:p.Ala185Val	S2	Missense	Heterozygous	Recessive
+26094573	RNASEH1	NM_002936.6	NM_002936.6:c.424G>A	NP_002927.2:p.Val142Ile	S1	Missense	Compound Heterozygous	Recessive
+26094573	RNASEH1	NM_002936.6	NM_002936.6:c.469C>T	NP_002927.2:p.Arg157Ter	S1	Stop Gained	Compound Heterozygous	Recessive
+26094573	RNASEH1	NM_002936.6	NM_002936.6:c.424G>A	NP_002927.2:p.Val142Ile	S2	Missense	Compound Heterozygous	Recessive
+26094573	RNASEH1	NM_002936.6	NM_002936.6:c.554C>T	NP_002927.2:p.Ala185Val	S2	Missense	Compound Heterozygous	Recessive
 26094573	RNASEH1	NM_002936.6	NM_002936.6:c.424G>A	NP_002927.2:p.Val142Ile	S3	Missense	Homozygous	Recessive
 26094573	RNASEH1	NM_002936.6	NM_002936.6:c.424G>A	NP_002927.2:p.Val142Ile	S4	Missense	Homozygous	Recessive
 26094573	RNASEH1	NM_002936.6	NM_002936.6:c.424G>A	NP_002927.2:p.Val142Ile	S5	Missense	Homozygous	Recessive
 26094573	RNASEH1	NM_002936.6	NM_002936.6:c.424G>A	NP_002927.2:p.Val142Ile	S6	Missense	Homozygous	Recessive
 29271071	EMC1	NM_015047.3	NM_015047.3:c.1212+1G>A	NP_055862.1:n.1212+1G>A	IV-1	Splice Donor	Homozygous	Recessive
 29271071	EMC1	NM_015047.3	NM_015047.3:c.1201C>T	NP_055862.1:p.Arg401Trp	IV-1	Missense	Homozygous	Recessive
-29271071	EMC1	NM_015047.3	NM_015047.3:c.1212+1G>A	NP_055862.1:n.1212+1G>A	III-5	Splice Donor	Heterozygous	Recessive
-29271071	EMC1	NM_015047.3	NM_015047.3:c.1212+1G>A	NP_055862.1:n.1212+1G>A	III-6	Splice Donor	Heterozygous	Recessive
 31768050	DNAJC7	NM_003315.4	NM_003315.4:c.466C>T	NP_003306.3:p.Arg156Ter	ALS 1	Stop Gained	Unknown	Unknown
 31953910	TOP2B	NM_001330700.2	NM_001330700.2:c.187C>T	NP_001317629.1:p.His63Tyr	patient	Missense	Heterozygous	De Novo
 32154054	NDUFA2	NM_002488.5	NM_002488.5:c.170A>C	NP_002479.1:p.Glu57Ala	patient	Missense	Homozygous	Recessive
@@ -24,9 +22,8 @@ pmid	gene	transcript	hgvsc	hgvsp	patient_id	variant_type	zygosity	mode_of_inheri
 32184806	FBN2	NM_001999.4	NM_001999.4:c.3724+3A>C	NP_001990.2:n.3724+3A>C	III-6	Splice Region	Heterozygous	Dominant
 32184806	FBN2	NM_001999.4	NM_001999.4:c.3724+3A>C	NP_001990.2:n.3724+3A>C	III-7	Splice Region	Heterozygous	Dominant
 32639540	EXOC2	NM_018303.6	NM_018303.6:c.1309C>T	NP_060773.3:p.Arg437Ter	Patient 1	Stop Gained	Homozygous	Recessive
-32639540	EXOC2	NM_018303.6	NM_018303.6:c.1309C>T	NP_060773.3:p.Arg437Ter	Patient 2	Stop Gained	Homozygous	Recessive
-32639540	EXOC2	NM_018303.6	NM_018303.6:c.389G>A	NP_060773.3:p.Arg130His	Patient 3	Missense	Heterozygous	Recessive
-32639540	EXOC2	NM_018303.6	NM_018303.6:c.1739T>C	NP_060773.3:p.Leu580Ser	Patient 3	Missense	Heterozygous	Recessive
+32639540	EXOC2	NM_018303.6	NM_018303.6:c.389G>A	NP_060773.3:p.Arg130His	Patient 3	Missense	Compound Heterozygous	Recessive
+32639540	EXOC2	NM_018303.6	NM_018303.6:c.1739T>C	NP_060773.3:p.Leu580Ser	Patient 3	Missense	Compound Heterozygous	Recessive
 32976546	FOXE3	NM_012186.3	NM_012186.3:c.289A>G	NP_036318.1:p.Ile97Val	IV:1	Missense	Unknown	Recessive
 32976546	FOXE3	NM_012186.3	NM_012186.3:c.289A>G	NP_036318.1:p.Ile97Val	IV:2	Missense	Unknown	Recessive
 32976546	FOXE3	NM_012186.3	NM_012186.3:c.289A>G	NP_036318.1:p.Ile97Val	IV:3	Missense	Unknown	Recessive
@@ -35,20 +32,18 @@ pmid	gene	transcript	hgvsc	hgvsp	patient_id	variant_type	zygosity	mode_of_inheri
 33117677	MLH3	NM_001040108.2	NM_001040108.2:c.615del	NP_001035197.1:p.Asp206ThrfsTer18	Patient 4	Frameshift	Unknown	Unknown
 33270637	ZNF423	NM_001379286.1	NM_001379286.1:c.1168T>C	NP_001366215.1:p.Ser390Pro	Case 29	Missense	Heterozygous	Unknown
 33362715	KIF1B	NM_015074.3	c.3649C>T	p.P1217S	Unknown	Missense	Unknown	Unknown
-33528103	GRXCR2	NM_001080516.1	NM_001080516.1:c.251delC	p.(Ile85SerfsTer33)	IV:1	Frameshift	Homozygous	Recessive
-33528103	GRXCR2	NM_001080516.1	NM_001080516.1:c.251delC	p.(Ile85SerfsTer33)	IV:2	Frameshift	Homozygous	Recessive
 33528103	GRXCR2	NM_001080516.1	NM_001080516.1:c.251delC	p.(Ile85SerfsTer33)	B-G2-1	Frameshift	Homozygous	Recessive
-33531950	ZNF423	NM_001379286.1	NM_001379286.1:c.1192C>T	NP_001366215.1:p.Pro398Ser	patient	Missense	Heterozygous	Recessive
-33531950	ZNF423	NM_001379286.1	NM_001379286.1:c.272C>T	NP_001366215.1:p.Thr91Met	patient	Missense	Heterozygous	Recessive
+33531950	ZNF423	NM_001379286.1	NM_001379286.1:c.1192C>T	NP_001366215.1:p.Pro398Ser	patient	Missense	Compound Heterozygous	Recessive
+33531950	ZNF423	NM_001379286.1	NM_001379286.1:c.272C>T	NP_001366215.1:p.Thr91Met	patient	Missense	Compound Heterozygous	Recessive
 34046667	FOXE3	NM_012186.3	NM_012186.3:c.21_24del	NP_036318.1:p.Met7IlefsTer?	Individual 1	Frameshift	Homozygous	Recessive
 34046667	FOXE3	NM_012186.3	NM_012186.3:c.21_24del	NP_036318.1:p.Met7IlefsTer?	Individual 2A	Frameshift	Homozygous	Recessive
 34046667	FOXE3	NM_012186.3	NM_012186.3:c.21_24del	NP_036318.1:p.Met7IlefsTer?	Individual 2B	Frameshift	Homozygous	Recessive
 34046667	FOXE3	NM_012186.3	NM_012186.3:c.21_24del	NP_036318.1:p.Met7IlefsTer?	Individual 2C	Frameshift	Homozygous	Recessive
 34046667	FOXE3	NM_012186.3	NM_012186.3:c.148_170dup	NP_036318.1:p.Gly58ArgfsTer?	Individual 3	Frameshift	Homozygous	Recessive
-34046667	FOXE3	NM_012186.3	NM_012186.3:c.232G>A	NP_036318.1:p.Ala78Thr	Individual 4	Missense	Heterozygous	Recessive
-34046667	FOXE3	NM_012186.3	NM_012186.3:c.286G>A	NP_036318.1:p.Ala96Thr	Individual 4	Missense	Heterozygous	Recessive
-34046667	FOXE3	NM_012186.3	NM_012186.3:c.232G>A	NP_036318.1:p.Ala78Thr	Individual 5	Missense	Heterozygous	Recessive
-34046667	FOXE3	NM_012186.3	NM_012186.3:c.244A>G	NP_036318.1:p.Met82Val	Individual 5	Missense	Heterozygous	Recessive
+34046667	FOXE3	NM_012186.3	NM_012186.3:c.232G>A	NP_036318.1:p.Ala78Thr	Individual 4	Missense	Compound Heterozygous	Recessive
+34046667	FOXE3	NM_012186.3	NM_012186.3:c.286G>A	NP_036318.1:p.Ala96Thr	Individual 4	Missense	Compound Heterozygous	Recessive
+34046667	FOXE3	NM_012186.3	NM_012186.3:c.232G>A	NP_036318.1:p.Ala78Thr	Individual 5	Missense	Compound Heterozygous	Recessive
+34046667	FOXE3	NM_012186.3	NM_012186.3:c.244A>G	NP_036318.1:p.Met82Val	Individual 5	Missense	Compound Heterozygous	Recessive
 34046667	FOXE3	NM_012186.3	NM_012186.3:c.244A>G	NP_036318.1:p.Met82Val	Individual 6	Missense	Homozygous	Recessive
 34046667	FOXE3	NM_012186.3	NM_012186.3:c.244A>G	NP_036318.1:p.Met82Val	Individual 7A	Missense	Heterozygous	Recessive
 34046667	FOXE3	NM_012186.3	NM_012186.3:c.244A>G	NP_036318.1:p.Met82Val	Individual 7B	Missense	Heterozygous	Recessive
@@ -58,8 +53,8 @@ pmid	gene	transcript	hgvsc	hgvsp	patient_id	variant_type	zygosity	mode_of_inheri
 34046667	FOXE3	NM_012186.3	NM_012186.3:c.359G>C	NP_036318.1:p.Arg120Pro	Individual 10A	Missense	Homozygous	Recessive
 34046667	FOXE3	NM_012186.3	NM_012186.3:c.359G>C	NP_036318.1:p.Arg120Pro	Individual 10B	Missense	Homozygous	Recessive
 34046667	FOXE3	NM_012186.3	NM_012186.3:c.359G>C	NP_036318.1:p.Arg120Pro	Individual 10C	Missense	Homozygous	Recessive
-34046667	FOXE3	NM_012186.3	NM_012186.3:c.371C>T	NP_036318.1:p.Thr124Met	Individual 11A	Missense	Heterozygous	Recessive
-34046667	FOXE3	NM_012186.3	NM_012186.3:c.844_850dup	NP_036318.1:p.Glu284AlafsTer3	Individual 11A	Frameshift	Heterozygous	Recessive
+34046667	FOXE3	NM_012186.3	NM_012186.3:c.371C>T	NP_036318.1:p.Thr124Met	Individual 11A	Missense	Compound Heterozygous	Recessive
+34046667	FOXE3	NM_012186.3	NM_012186.3:c.844_850dup	NP_036318.1:p.Glu284AlafsTer3	Individual 11A	Frameshift	Compound Heterozygous	Recessive
 34046667	FOXE3	NM_012186.3	NM_012186.3:c.371C>T	NP_036318.1:p.Thr124Met	Individual 11B	Missense	Heterozygous	Recessive
 34046667	FOXE3	NM_012186.3	NM_012186.3:c.371C>T	NP_036318.1:p.Thr124Met	Individual 12	Missense	Homozygous	Recessive
 34046667	FOXE3	NM_012186.3	NM_012186.3:c.720C>A	NP_036318.1:p.Cys240Ter	Individual 13	Stop Gained	Homozygous	Recessive
@@ -90,8 +85,8 @@ pmid	gene	transcript	hgvsc	hgvsp	patient_id	variant_type	zygosity	mode_of_inheri
 34046667	FOXE3	NM_012186.3	NM_012186.3:c.269G>T	NP_036318.1:p.Arg90Leu	Unknown	Missense	Unknown	Unknown
 34046667	FOXE3	missing	missing	p.Arg120Gly	Unknown	Missense	Unknown	Unknown
 34199176	TOPBP1	NM_007027.3	NM_007027.3:c.951T>G	p.Ile317Met	Unknown	Missense	Unknown	Unknown
-34298581	COG4	NM_015386.3	NM_015386.3:c.1255G>T	NP_056201.2:p.Glu419Ter	P21	Stop Gained	Heterozygous	Recessive
-34298581	COG4	NM_015386.3	NM_015386.3:c.941G>A	NP_056201.2:p.Cys314Tyr	P21	Missense	Heterozygous	Recessive
+34298581	COG4	NM_015386.3	NM_015386.3:c.1255G>T	NP_056201.2:p.Glu419Ter	P21	Stop Gained	Compound Heterozygous	Recessive
+34298581	COG4	NM_015386.3	NM_015386.3:c.941G>A	NP_056201.2:p.Cys314Tyr	P21	Missense	Compound Heterozygous	Recessive
 35743796	TDO2	NM_005651.4	NM_005651.4:c.803T>A	NP_005642.1:p.Phe268Tyr	HYS271	Missense	Heterozygous	Unknown
 35743796	TDO2	NM_005651.4	NM_005651.4:c.803T>A	NP_005642.1:p.Phe268Tyr	HYS272	Missense	Heterozygous	Unknown
 36041817	SARS1	NM_006513.4	NM_006513.4:c.969+1_969+3del	missing	II-1	Splice Donor	Heterozygous	De Novo

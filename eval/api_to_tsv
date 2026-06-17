@@ -24,12 +24,42 @@ BASE_URL = "https://gene-curation-ai.app/api"
 # PMIDs that should output all affected family members (not filtered by proband status)
 PMIDS_SKIP_PROBAND_FILTER = ('26094573', '32184806', '35743796')
 
+# When True, the proband filter is disabled for ALL papers: every patient-variant
+# observation is emitted regardless of proband status.
+DISABLE_PROBAND_FILTER = False
+
+# Papers carrying this tag failed the relevancy check and must be excluded from
+# accuracy evaluation (the system correctly determined they are not relevant).
+EXCLUDE_TAG = 'FailedPaperRelevancy'
+
+
+def paper_has_tag(paper: dict, tag_name: str) -> bool:
+    """Return True if the paper carries the given tag (case-insensitive)."""
+    for tag in paper.get('tags') or []:
+        name = tag.get('name') if isinstance(tag, dict) else tag
+        if name and str(name).lower() == tag_name.lower():
+            return True
+    return False
+
 
 def extract_transcript_from_hgvs(hgvs_notation: str) -> str:
     """Extract transcript accession from HGVS notation (e.g., NM_123456.7:c.123C>T -> NM_123456.7)."""
     if not hgvs_notation or ':' not in hgvs_notation:
         return 'missing'
     return hgvs_notation.split(':')[0]
+
+
+def effective_zygosity(link: dict) -> str:
+    """Derive zygosity, resolving compound-het from the paired-variant link.
+
+    The API stores each compound-het allele as a 'Heterozygous' occurrence carrying
+    a paired_variant_link_id (with paired_variant_confidence 'confirmed'). The curated
+    training set records these as 'Compound Heterozygous', so map them accordingly.
+    """
+    zygosity = link.get('zygosity')
+    if link.get('paired_variant_link_id') is not None and zygosity == 'Heterozygous':
+        return 'Compound Heterozygous'
+    return zygosity
 
 
 def main():
@@ -40,6 +70,7 @@ def main():
     papers_data = papers_response.json()
 
     pmid_to_paper = {}
+    excluded_pmids = {}
     for paper in papers_data:
         pmid = paper.get('pmid')
         if pmid:
@@ -47,8 +78,11 @@ def main():
                 'paper_id': paper['id'],
                 'gene_symbol': paper.get('gene_symbol', 'Unknown')
             }
+            if paper_has_tag(paper, EXCLUDE_TAG):
+                excluded_pmids[pmid] = paper.get('gene_symbol', 'Unknown')
 
     print(f"Found {len(pmid_to_paper)} papers with PMIDs")
+    print(f"Found {len(excluded_pmids)} papers tagged '{EXCLUDE_TAG}' to exclude")
 
     # Read PMIDs from var/pmid_variants.tsv
     print("\nReading var/pmid_variants.tsv...")
@@ -76,13 +110,17 @@ def main():
             print(f"  Skipping {pmid} (not in API)")
             continue
 
+        if pmid in excluded_pmids:
+            print(f"  Skipping {pmid} (tagged {EXCLUDE_TAG})")
+            continue
+
         paper_info = pmid_to_paper[pmid]
         paper_id = paper_info['paper_id']
         gene_symbol = paper_info['gene_symbol']
 
         try:
-            # Try to get patient-variant-links first
-            links_response = requests.get(f"{BASE_URL}/papers/{paper_id}/patient-variant-links")
+            # Try to get patient-variant occurrences first
+            links_response = requests.get(f"{BASE_URL}/papers/{paper_id}/occurrences")
             links_response.raise_for_status()
             links_data = links_response.json()
 
@@ -106,7 +144,7 @@ def main():
                 # Has patient-variant links
                 # If there are identified probands, filter to only proband links
                 # Exception: PMIDs in PMIDS_SKIP_PROBAND_FILTER output all affected family members
-                skip_proband_filter = pmid in PMIDS_SKIP_PROBAND_FILTER
+                skip_proband_filter = DISABLE_PROBAND_FILTER or pmid in PMIDS_SKIP_PROBAND_FILTER
                 if proband_ids and not skip_proband_filter:
                     links_data = [link for link in links_data if link['patient_id'] in proband_ids]
 
@@ -140,7 +178,7 @@ def main():
                         'hgvsp': hgvsp,
                         'patient_id': link['patient_identifier'],
                         'variant_type': variant.get('variant_type', 'Unknown'),
-                        'zygosity': link['zygosity'],
+                        'zygosity': effective_zygosity(link),
                         'mode_of_inheritance': link['inheritance']
                     }
                     api_rows.append(row)
