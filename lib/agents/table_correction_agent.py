@@ -1,6 +1,9 @@
 """Agent to correct corrupted table markdown using OpenAI vision."""
 
+import base64
 import logging
+import mimetypes
+from pathlib import Path
 
 from agents import Agent, function_tool
 from pydantic import BaseModel
@@ -27,34 +30,67 @@ Return ONLY the markdown table, no other text.
 """
 
 
-@function_tool
-def extract_table_from_image(image_url: str) -> str:
-    """Extract table markdown from image URL using vision."""
-    from openai import OpenAI
+def _image_path_to_data_url(image_path: Path) -> str:
+    """Encode a local image path as a data URL for OpenAI image input.
 
-    client = OpenAI(api_key=env.OPENAI_API_KEY)
+    See: https://developers.openai.com/api/docs/guides/images-vision?format=base64-encoded
+    """
+    mime_type = mimetypes.guess_type(image_path.name)[0] or 'image/png'
+    image_b64 = base64.b64encode(image_path.read_bytes()).decode('ascii')
+    return f'data:{mime_type};base64,{image_b64}'
 
-    message = client.chat.completions.create(
-        model=env.OPENAI_VLM,
-        messages=[
-            {
-                'role': 'user',
-                'content': [
-                    {
-                        'type': 'image_url',
-                        'image_url': {'url': image_url, 'detail': 'high'},
-                    },
-                    {
-                        'type': 'text',
-                        'text': VISION_EXTRACTION_PROMPT,
-                    },
-                ],
-            }
-        ],
+
+def _image_url_for_openai(image_path: Path) -> str:
+    """Return an OpenAI-readable image URL, using upload or local data URL."""
+    if env.DISABLE_GCS_UPLOAD:
+        logger.info(f'GCS upload disabled, encoding {image_path} as a data URL')
+        return _image_path_to_data_url(image_path)
+
+    from lib.misc.gcs import upload_and_sign_image
+
+    return upload_and_sign_image(image_path)
+
+
+def table_correction_agent_for_image(image_path: Path) -> Agent:
+    """Build a table correction agent bound to a specific table image."""
+
+    @function_tool
+    def extract_table_from_image() -> str:
+        """Extract the current table image as markdown using vision."""
+        from openai import OpenAI
+
+        client = OpenAI(api_key=env.OPENAI_API_KEY)
+        image_url = _image_url_for_openai(image_path)
+
+        message = client.chat.completions.create(
+            model=env.OPENAI_VLM,
+            messages=[
+                {
+                    'role': 'user',
+                    'content': [
+                        {
+                            'type': 'image_url',
+                            'image_url': {'url': image_url, 'detail': 'high'},
+                        },
+                        {
+                            'type': 'text',
+                            'text': VISION_EXTRACTION_PROMPT,
+                        },
+                    ],
+                }
+            ],
+        )
+
+        content = message.choices[0].message.content
+        return content if content is not None else ''
+
+    return Agent(
+        name='table_corrector',
+        instructions=TABLE_CORRECTION_INSTRUCTIONS,
+        model=env.OPENAI_API_DEPLOYMENT,
+        output_type=TableCorrectionResult,
+        tools=[extract_table_from_image],
     )
-
-    content = message.choices[0].message.content
-    return content if content is not None else ''
 
 
 class TableCorrectionResult(BaseModel):
@@ -87,14 +123,6 @@ A good table has:
 
 Always set conversion_successful to true only if the corrected_markdown is a valid markdown table with proper pipe delimiters and header rows. If extraction failed or returned invalid markdown, set it to false."""
 
-agent = Agent(
-    name='table_corrector',
-    instructions=TABLE_CORRECTION_INSTRUCTIONS,
-    model=env.OPENAI_API_DEPLOYMENT,
-    output_type=TableCorrectionResult,
-    tools=[extract_table_from_image],
-)
-
 
 async def correct_tables(paper_id: int, supplement: bool = False) -> None:
     """Correct corrupted table markdown in paper using agent.
@@ -103,8 +131,6 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
     for corrupted ones, and updates raw.md with corrections.
     """
     from agents import Runner
-
-    from lib.misc.gcs import upload_and_sign_image
 
     tables_dir = pdf_tables_dir(paper_id, supplement=supplement)
     if not tables_dir.exists():
@@ -128,15 +154,13 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
 
         logger.info(f'Checking table {table_id} for corruption...')
 
-        # Upload image and get signed URL
         image_path = pdf_table_image_path(paper_id, table_id, supplement=supplement)
-        image_url = upload_and_sign_image(image_path)
+        agent = table_correction_agent_for_image(image_path)
 
-        # Build prompt with table markdown and image URL
+        # Build prompt with table markdown only. The vision tool reads the image
+        # on demand if the agent decides the markdown is corrupted.
         message = (
-            f'Table ID: {table_id}\n\n'
-            f'Markdown to evaluate:\n```\n{table_markdown}\n```\n\n'
-            f'Image URL for extraction if needed: {image_url}'
+            f'Table ID: {table_id}\n\nMarkdown to evaluate:\n```\n{table_markdown}\n```'
         )
 
         # Run agent
