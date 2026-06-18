@@ -1,0 +1,205 @@
+==============================================================================================================
+HPO TERM EXTRACTION ACCURACY (paper-level recall: GT term found on ANY patient)
+==============================================================================================================
+
+PMID: 26084686  (CTF1)
+--------------------------------------------------------------------------------------------------------------
+  Recall exact: 1/1 = 100%  | within 2 hops: 1/1 = 100%  | API extracted 6 terms
+
+PMID: 26094573  (RNASEH1)
+--------------------------------------------------------------------------------------------------------------
+  Recall exact: 7/10 = 70%  | within 2 hops: 10/10 = 100%  | API extracted 27 terms
+  Near-miss (ontology relative, ≤2 hops):
+    ~ HP:0002094 Dyspnea (hop 1)
+    ~ HP:0002073 Progressive cerebellar ataxia (hop 2)
+    ~ HP:0002793 Abnormal pattern of respiration (hop 2)
+
+PMID: 29271071  (EMC1)
+--------------------------------------------------------------------------------------------------------------
+  Recall exact: 6/7 = 86%  | within 2 hops: 7/7 = 100%  | API extracted 16 terms
+  Near-miss (ontology relative, ≤2 hops):
+    ~ HP:0001250 Epilepsy (hop 2)
+
+PMID: 31768050  (DNAJC7)
+--------------------------------------------------------------------------------------------------------------
+  Recall exact: 0/1 = 0%  | within 2 hops: 0/1 = 0%  | API extracted 1 terms
+  Missed (no related API term):
+    ✗ HP:0007354 Amyotrophic lateral sclerosis
+
+PMID: 31953910  (TOP2B)
+--------------------------------------------------------------------------------------------------------------
+  Recall exact: 4/4 = 100%  | within 2 hops: 4/4 = 100%  | API extracted 11 terms
+
+PMID: 32154054  (NDUFA2)
+--------------------------------------------------------------------------------------------------------------
+  Recall exact: 8/17 = 47%  | within 2 hops: 10/17 = 59%  | API extracted 12 terms
+  Near-miss (ontology relative, ≤2 hops):
+    ~ HP:0002352 Leukoencephalopathy (hop 1)
+    ~ HP:0001250 Seizure (hop 1)
+  Missed (no related API term):
+    ✗ HP:0000478 Abnormality of the eye
+    ✗ HP:0000649 Abnormality of visual evoked potentials
+    ✗ HP:0001348 Brisk reflexes
+    ✗ HP:0033369 Cavitating leukodystrophy
+    ✗ HP:0001508 Failure to thrive
+    ✗ HP:0001263 Global developmental delay
+    ✗ HP:0000365 Hearing impairment
+
+PMID: 32184806  (FBN2)
+--------------------------------------------------------------------------------------------------------------
+  Recall exact: 1/4 = 25%  | within 2 hops: 2/4 = 50%  | API extracted 9 terms
+  Near-miss (ontology relative, ≤2 hops):
+    ~ HP:0006644 ; thoracic dysplasia (hop 2)
+  Missed (no related API term):
+    ✗ HP:0002803 Congenital contracture
+    ✗ HP:0003100 ; slender long bones
+
+PMID: 32639540  (EXOC2)
+--------------------------------------------------------------------------------------------------------------
+  Recall exact: 13/34 = 38%  | within 2 hops: 20/34 = 59%  | API extracted 33 terms
+  Near-miss (ontology relative, ≤2 hops):
+    ~ HP:0004485 Acquired microcephaly (hop 2)
+    ~ HP:0001263 Severe global developmental delay (hop 1)
+    ~ HP:0001258 Spastic quadriplegia (hop 1)
+    ~ HP:0001371 Congenital contractures of joints (hop 1)
+    ~ HP:0001250 Epilepsy (hop 2)
+    ~ HP:0000340 Sloping forehead (hop 2)
+    ~ HP:0012447 Generalized decreased myelination (hop 2)
+  Missed (no related API term):
+    ✗ HP:0001999 Facial dysmorphism
+    ✗ HP:0000582 Upslanting palpebral fissures
+    ✗ HP:0000431 High broad nasal bridge
+    ✗ HP:0000437 Broad depressed nasal tip
+    ✗ HP:0000319 Long flat philtrum
+    ✗ HP:0002119 Large fourth ventricle
+    ✗ HP:0002079 Decreased supratentorial white matter volume and thinning of corpus callosum
+    ✗ HP:0005280 Broad depressed nasal bridge
+    ✗ HP:0030724 Frontal horn cysts
+    ✗ HP:0002365 Hypoplastic brainstem
+    ✗ HP:0000300 Oval face
+    ✗ HP:0002553 Arched eyebrows
+    ✗ HP:0000958 Slightly dry skin
+    ✗ HP:0002870 Obstructive sleep apnea syndrome
+
+PMID: 32976546  (FOXE3)
+--------------------------------------------------------------------------------------------------------------
+  Recall exact: 1/1 = 100%  | within 2 hops: 1/1 = 100%  | API extracted 23 terms
+
+PMID: 33117677  (MLH3)
+--------------------------------------------------------------------------------------------------------------
+  Recall exact: 1/1 = 100%  | within 2 hops: 1/1 = 100%  | API extracted 3 terms
+
+PMID: 33270637  (ZNF423)
+--------------------------------------------------------------------------------------------------------------
+  Recall exact: 1/3 = 33%  | within 2 hops: 2/3 = 67%  | API extracted 80 terms
+  Near-miss (ontology relative, ≤2 hops):
+    ~ HP:0008897 Postnatal growth retardation (hop 1)
+  Missed (no related API term):
+    ✗ HP:0000090 Nephronophthisis
+
+PMID: 33362715  (KIF1B)
+--------------------------------------------------------------------------------------------------------------
+  Recall exact: 0/1 = 0%  | within 2 hops: 0/1 = 0%  | API extracted 0 terms
+  Missed (no related API term):
+    ✗ HP:0002666 Pheochromocytoma
+
+PMID: 33528103  (GRXCR2)
+--------------------------------------------------------------------------------------------------------------
+  Recall exact: 0/1 = 0%  | within 2 hops: 1/1 = 100%  | API extracted 2 terms
+  Near-miss (ontology relative, ≤2 hops):
+    ~ HP:0000407 Sensorineural hearing impairment (hop 1)
+
+PMID: 33531950  (ZNF423)
+--------------------------------------------------------------------------------------------------------------
+  Recall exact: 6/8 = 75%  | within 2 hops: 7/8 = 88%  | API extracted 11 terms
+  Near-miss (ontology relative, ≤2 hops):
+    ~ HP:0011097 Epileptic Spasm (hop 1)
+  Missed (no related API term):
+    ✗ HP:0001257 Spasticity
+
+PMID: 34046667  (FOXE3)
+--------------------------------------------------------------------------------------------------------------
+  Recall exact: 6/6 = 100%  | within 2 hops: 6/6 = 100%  | API extracted 21 terms
+
+PMID: 34199176  (TOPBP1)
+--------------------------------------------------------------------------------------------------------------
+  Recall exact: 1/2 = 50%  | within 2 hops: 1/2 = 50%  | API extracted 26 terms
+  Missed (no related API term):
+    ✗ HP:0003549 Abnormality of connective tissue
+
+PMID: 34298581  (COG4)
+--------------------------------------------------------------------------------------------------------------
+  Recall exact: 2/7 = 29%  | within 2 hops: 5/7 = 71%  | API extracted 55 terms
+  Near-miss (ontology relative, ≤2 hops):
+    ~ HP:0002240 Hepatomegaly (hop 2)
+    ~ HP:0001399 Hepatic failure (hop 1)
+    ~ HP:0001250 Seizure (hop 1)
+  Missed (no related API term):
+    ✗ HP:0012345 Abnormal glycosylation
+    ✗ HP:0000252 Microcephaly
+
+PMID: 35743796  (TDO2)
+--------------------------------------------------------------------------------------------------------------
+  Recall exact: 4/7 = 57%  | within 2 hops: 7/7 = 100%  | API extracted 16 terms
+  Near-miss (ontology relative, ≤2 hops):
+    ~ HP:0002342 Intellectual disability moderate (hop 1)
+    ~ HP:0000717 Autism (hop 1)
+    ~ HP:0100753 Schizophrenia (hop 2)
+
+PMID: 36041817  (SARS1)
+--------------------------------------------------------------------------------------------------------------
+  Recall exact: 8/14 = 57%  | within 2 hops: 13/14 = 93%  | API extracted 17 terms
+  Near-miss (ontology relative, ≤2 hops):
+    ~ HP:0031165 Multifocal seizures (hop 1)
+    ~ HP:0002311 Incoordination (hop 2)
+    ~ HP:0002061 Lower limb spasticity (hop 1)
+    ~ HP:0002395 Lower limb hyperreflexia (hop 1)
+    ~ HP:0002317 Unsteady gait (hop 2)
+  Missed (no related API term):
+    ✗ HP:0001285 Spastic tetraparesis
+
+PMID: 37041648  (SLFN14)
+--------------------------------------------------------------------------------------------------------------
+  Recall exact: 2/4 = 50%  | within 2 hops: 4/4 = 100%  | API extracted 12 terms
+  Near-miss (ontology relative, ≤2 hops):
+    ~ HP:0040185 Macrothrombocytopenia (hop 1)
+    ~ HP:0004406 Spontaneous recurrent epistaxis (hop 1)
+
+PMID: 37371654  (JPH2)
+--------------------------------------------------------------------------------------------------------------
+  Recall exact: 0/4 = 0%  | within 2 hops: 4/4 = 100%  | API extracted 4 terms
+  Near-miss (ontology relative, ≤2 hops):
+    ~ HP:0001671 Abnormal cardiac septum morphology (hop 2)
+    ~ HP:0005162 Abnormal left ventricular function (hop 1)
+    ~ HP:0004756 Ventricular tachycardia (hop 1)
+    ~ HP:0002094 Dyspnea (hop 1)
+
+PMID: 37656691  (MLH3)
+--------------------------------------------------------------------------------------------------------------
+  Recall exact: 1/1 = 100%  | within 2 hops: 1/1 = 100%  | API extracted 3 terms
+
+PMID: 37780619  (KIF1B)
+--------------------------------------------------------------------------------------------------------------
+  Recall exact: 4/14 = 29%  | within 2 hops: 5/14 = 36%  | API extracted 12 terms
+  Near-miss (ontology relative, ≤2 hops):
+    ~ HP:0001891 Iron Deficiency Anemia (hop 2)
+  Missed (no related API term):
+    ✗ HP:0012378 Fatigue
+    ✗ HP:0001903 Anemia
+    ✗ HP:0020062 Decreased hemoglobin concentration
+    ✗ HP:0002668 Paraganglioma
+    ✗ HP:0000969 Edema
+    ✗ HP:0030718 Dilated right atrium
+    ✗ HP:0005180 Tricuspid regurgitation
+    ✗ HP:0001894 Thrombocytosis
+    ✗ HP:0002878 Respiratory failure
+
+==============================================================================================================
+SUMMARY
+==============================================================================================================
+Papers evaluated: 23  (excluded 7 FailedPaperRelevancy; 0 had no curated HPO terms)
+Total GT HPO terms: 152
+
+  MICRO recall  exact: 50.7%   | within 2 hops: 73.7%
+  MACRO recall  exact: 54.2%   | within 2 hops: 77.0%
+  Papers with 100% recall (within 2 hops): 12/23

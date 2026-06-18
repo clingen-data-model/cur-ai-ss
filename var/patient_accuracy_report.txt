@@ -1,0 +1,142 @@
+==============================================================================================================
+PATIENT / PROBAND EXTRACTION ACCURACY REPORT (proband-only, lenient matching)
+==============================================================================================================
+
+PMID: 26084686  (CTF1)
+--------------------------------------------------------------------------------------------------------------
+  GT patients: 1 | API patients: 13 | API probands: 4
+  ✗ 'unknown': NOT LOCATED (ambiguous)
+
+PMID: 26094573  (RNASEH1)
+--------------------------------------------------------------------------------------------------------------
+  GT patients: 6 | API patients: 6 | API probands: 1
+  [id] identifier ✓ GT='S1' API='S1' | proband ✓ expect=Proband API='Proband' | sex ✗ GT=Male API=Unknown | age ✗ GT='Report: 42 years' API=[]
+  [id] identifier ✓ GT='S2' API='S2' | proband ✗ expect=Proband API='Non-Proband' | sex ✗ GT=Male API=Unknown | age ✗ GT='Report: 46 years' API=[]
+  [id] identifier ✓ GT='S3' API='S3' | proband ✗ expect=Proband API='Non-Proband' | sex ✗ GT=Male API=Unknown | age ✓ GT='Death: 60 years' API=[(60.0, 'yr')]
+  [id] identifier ✓ GT='S4' API='S4' | proband ✗ expect=Proband API='Non-Proband' | sex ✗ GT=Female API=Unknown | age ✓ GT='Death: 70 years' API=[(70.0, 'yr')]
+  [id] identifier ✓ GT='S5' API='S5' | proband ✗ expect=Proband API='Non-Proband' | sex ✗ GT=Female API=Unknown | age ✓ GT='Death: 63 years' API=[(63.0, 'yr')]
+  [id] identifier ✓ GT='S6' API='S6' | proband ✗ expect=Proband API='Non-Proband' | sex ✗ GT=Female API=Unknown | age ✓ GT='Report: 65 years' API=[(65.0, 'yr')]
+
+PMID: 29271071  (EMC1)
+--------------------------------------------------------------------------------------------------------------
+  GT patients: 1 | API patients: 3 | API probands: 1
+  [positional] identifier · GT='proband' API='IV-1' | proband ✓ expect=Proband API='Proband' | sex ✗ GT=Female API=Male | age ✓ GT='Report: 4 years' API=[(18.0, 'mo'), (58.0, 'mo')]
+
+PMID: 31953910  (TOP2B)
+--------------------------------------------------------------------------------------------------------------
+  GT patients: 1 | API patients: 1 | API probands: 1
+  [positional] identifier · GT='patient' API='patient' | proband ✓ expect=Proband API='Proband' | sex ✓ GT=Female API=Female | age ✓ GT='Report: 7 years' API=[(7.0, 'yr')] | country ✓ GT='Japan' API='Japan'
+
+PMID: 32154054  (NDUFA2)
+--------------------------------------------------------------------------------------------------------------
+  GT patients: 1 | API patients: 1 | API probands: 1
+  [positional] identifier ~ GT='case 4' API='patient' | proband ✓ expect=Proband API='Proband' | sex ✓ GT=Female API=Female | age ✓ GT='Report: 4 years' API=[(4.0, 'yr')] | race ✗ GT='Asian' API='Other'
+
+PMID: 32184806  (FBN2)
+--------------------------------------------------------------------------------------------------------------
+  GT patients: 9 | API patients: 17 | API probands: 1
+  [id] identifier ✓ GT='I-1' API='I-1' | proband ✗ expect=Proband API='Non-Proband' | sex ✓ GT=Female API=Female | country ✓ GT='China' API='China' | ethnicity ✓ GT='Not Hispanic or Latino' API='East Asian' | race ✓ GT='Asian' API='East Asian'
+  [id] identifier ✓ GT='II-1' API='II-1' | proband ✗ expect=Proband API='Non-Proband' | sex ✓ GT=Female API=Female | country ✓ GT='China' API='China' | ethnicity ✓ GT='Not Hispanic or Latino' API='East Asian' | race ✓ GT='Asian' API='East Asian'
+  [id] identifier ✓ GT='II-3' API='II-3' | proband ✗ expect=Proband API='Non-Proband' | sex ✓ GT=Female API=Female | country ✓ GT='China' API='China' | ethnicity ✓ GT='Not Hispanic or Latino' API='East Asian' | race ✓ GT='Asian' API='East Asian'
+  [id] identifier ✓ GT='II-8' API='II-8' | proband ✗ expect=Proband API='Non-Proband' | sex ✓ GT=Male API=Male | country ✓ GT='China' API='China' | ethnicity ✓ GT='Not Hispanic or Latino' API='East Asian' | race ✓ GT='Asian' API='East Asian'
+  [id] identifier ✓ GT='III-1' API='III-1' | proband ✗ expect=Proband API='Non-Proband' | sex ✓ GT=Male API=Male | country ✓ GT='China' API='China' | ethnicity ✓ GT='Not Hispanic or Latino' API='East Asian' | race ✓ GT='Asian' API='East Asian'
+  [id] identifier ✓ GT='III-3' API='III-3' | proband ✗ expect=Proband API='Non-Proband' | sex ✓ GT=Male API=Male | country ✓ GT='China' API='China' | ethnicity ✓ GT='Not Hispanic or Latino' API='East Asian' | race ✓ GT='Asian' API='East Asian'
+  [id] identifier ✓ GT='III-4' API='III-4' | proband ✓ expect=Proband API='Proband' | sex ✓ GT=Male API=Male | country ✓ GT='China' API='China' | ethnicity ✓ GT='Not Hispanic or Latino' API='East Asian' | race ✓ GT='Asian' API='East Asian'
+  [id] identifier ✓ GT='III-6' API='III-6' | proband ✗ expect=Proband API='Non-Proband' | sex ✓ GT=Male API=Male | country ✓ GT='China' API='China' | ethnicity ✓ GT='Not Hispanic or Latino' API='East Asian' | race ✓ GT='Asian' API='East Asian'
+  [id] identifier ✓ GT='III-7' API='III-7' | proband ✗ expect=Proband API='Non-Proband' | sex ✓ GT=Male API=Male | country ✓ GT='China' API='China' | ethnicity ✓ GT='Not Hispanic or Latino' API='East Asian' | race ✓ GT='Asian' API='East Asian'
+
+PMID: 32639540  (EXOC2)
+--------------------------------------------------------------------------------------------------------------
+  GT patients: 3 | API patients: 3 | API probands: 2
+  ✗ '1:IV-2': NOT LOCATED (no-match)
+  ✗ '1:IV-8': NOT LOCATED (no-match)
+  ✗ '2:II-1': NOT LOCATED (no-match)
+
+PMID: 32976546  (FOXE3)
+--------------------------------------------------------------------------------------------------------------
+  GT patients: 1 | API patients: 32 | API probands: 0
+  ✗ 'IV:1': NOT LOCATED (no-match)
+
+PMID: 33117677  (MLH3)
+--------------------------------------------------------------------------------------------------------------
+  GT patients: 1 | API patients: 7 | API probands: 0
+  [id] identifier ✓ GT='4' API='Patient 4' | proband ✗ expect=Proband API='Non-Proband' | age ✗ GT='median age at diagnosis was 63.5' API=[] | country ✓ GT='China' API='China' | ethnicity ✓ GT='Not Hispanic or Latino' API='East Asian' | race ✓ GT='Asian' API='East Asian'
+
+PMID: 33270637  (ZNF423)
+--------------------------------------------------------------------------------------------------------------
+  GT patients: 1 | API patients: 37 | API probands: 0
+  [id] identifier ✓ GT='29' API='Case 29' | proband ✗ expect=Proband API='Unknown' | sex ✓ GT=Female API=Female | age ✓ GT='Diagnosis: 3 years' API=[(3.0, 'yr')]
+
+PMID: 33362715  (KIF1B)
+--------------------------------------------------------------------------------------------------------------
+  GT patients: 1 | API patients: 0 | API probands: 0
+  ✗ '108': NOT LOCATED (no-match)
+
+PMID: 33528103  (GRXCR2)
+--------------------------------------------------------------------------------------------------------------
+  GT patients: 1 | API patients: 3 | API probands: 1
+  [positional] identifier · GT='unknown' API='B-G2-1' | proband ✓ expect=Proband API='Proband' | country ✓ GT='Cameroon' API='Cameroon'
+
+PMID: 33531950  (ZNF423)
+--------------------------------------------------------------------------------------------------------------
+  GT patients: 1 | API patients: 1 | API probands: 1
+  [positional] identifier · GT='unknown' API='patient' | proband ✓ expect=Proband API='Proband' | sex ✓ GT=Male API=Male | age ✗ GT='Report: 8 years' API=[(8.0, 'mo')] | country ✗ GT='India' API='Unknown' | ethnicity ✓ GT='Not Hispanic or Latino' API='Unknown'
+
+PMID: 34046667  (FOXE3)
+--------------------------------------------------------------------------------------------------------------
+  GT patients: 1 | API patients: 31 | API probands: 0
+  [id] identifier ✓ GT='15A' API='Individual 15A' | proband ✗ expect=Proband API='Unknown' | sex ✗ GT=Female API=Unknown | age ✓ GT='Report: 59 years' API=[(59.0, 'yr')] | country ✗ GT='Czech Republic' API='Other' | race ✗ GT='White' API='Non-Finnish European'
+
+PMID: 34199176  (TOPBP1)
+--------------------------------------------------------------------------------------------------------------
+  GT patients: 1 | API patients: 7 | API probands: 5
+  ✗ '9': NOT LOCATED (no-match)
+
+PMID: 34298581  (COG4)
+--------------------------------------------------------------------------------------------------------------
+  GT patients: 1 | API patients: 13 | API probands: 13
+  [id] identifier ✓ GT='P21' API='P21' | proband ✓ expect=Proband API='Proband' | sex ✓ GT=Female API=Female | age ✓ GT='Report: 9 months' API=[(9.0, 'mo')]
+
+PMID: 35743796  (TDO2)
+--------------------------------------------------------------------------------------------------------------
+  GT patients: 1 | API patients: 4 | API probands: 1
+  [positional] identifier ~ GT='elder brother' API='HYS271' | proband ✓ expect=Proband API='Proband' | sex ✓ GT=Male API=Male | age ✓ GT='Report: 30 years' API=[(10.0, 'yr'), (30.0, 'yr')]
+
+PMID: 36041817  (SARS1)
+--------------------------------------------------------------------------------------------------------------
+  GT patients: 1 | API patients: 3 | API probands: 1
+  [positional] identifier · GT='patient' API='II-1' | proband ✓ expect=Proband API='Proband' | sex ✓ GT=Male API=Male | ethnicity ✓ GT='Not Hispanic or Latino' API='Non-Finnish European' | race ✗ GT='White' API='Non-Finnish European'
+
+PMID: 37041648  (SLFN14)
+--------------------------------------------------------------------------------------------------------------
+  GT patients: 1 | API patients: 3 | API probands: 1
+  [positional] identifier · GT='patient' API='patient' | proband ✓ expect=Proband API='Proband' | sex ✓ GT=Female API=Female | age ✓ GT='Report: 17 years' API=[(17.0, 'yr')]
+
+PMID: 37371654  (JPH2)
+--------------------------------------------------------------------------------------------------------------
+  GT patients: 1 | API patients: 1 | API probands: 1
+  [positional] identifier · GT='patient' API='patient' | proband ✓ expect=Proband API='Proband' | sex ✓ GT=Male API=Male | age ✓ GT='Diagnosis: 14 years' API=[(14.0, 'yr')]
+
+PMID: 37656691  (MLH3)
+--------------------------------------------------------------------------------------------------------------
+  GT patients: 1 | API patients: 15 | API probands: 3
+  [id] identifier ✓ GT='P-13' API='P-13' | proband ✓ expect=Proband API='Proband' | sex ✓ GT=Female API=Female | age ✓ GT='32 years, dx' API=[(32.0, 'yr')] | country ✓ GT='Bahrain' API='Bahrain'
+
+PMID: 37780619  (KIF1B)
+--------------------------------------------------------------------------------------------------------------
+  GT patients: 1 | API patients: 1 | API probands: 1
+  [positional] identifier · GT='patient' API='patient' | proband ✓ expect=Proband API='Proband' | sex ✓ GT=Male API=Male | age ✓ GT='Report: 65 years' API=[(65.0, 'yr')]
+
+==============================================================================================================
+SUMMARY — per-patient field agreement
+==============================================================================================================
+Papers evaluated: 22  (excluded 8 FailedPaperRelevancy: 27536250, 29678925, 30157177, 30992453, 31768050, 34262438, 35001666, 36450898)
+Curated GT patients: 37 | located in API: 30
+
+  Identifier   20/28 = 71.4%   (GT rows with a real identifier)
+  Proband stat 14/30 = 46.7%   (curated rows expected = Proband)
+  Sex          20/28 = 71.4%
+  Age          15/19 = 78.9%   (loose number+unit match)
+  Country      13/15 = 86.7%
+  Ethnicity    12/12 = 100.0%   (Hispanic axis; no dedicated API field)
+  Race         10/13 = 76.9%
