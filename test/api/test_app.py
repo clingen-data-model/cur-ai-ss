@@ -1231,6 +1231,39 @@ def test_enqueue_clears_conversation_id_without_context(
     assert tasks[0]['status'] == 'Pending'
 
 
+def test_enqueue_new_conversation_clears_conversation_id_with_context(
+    seeded_paper, db_session, agent_run
+):
+    """new_conversation=True starts fresh even when additional_context is supplied."""
+    from lib.tasks.misc import enqueue_task
+
+    task = TaskDB(
+        paper_id=seeded_paper.id,
+        agent_run_id=agent_run.id,
+        type=TaskType.HPO_LINKING,
+        status=TaskStatus.COMPLETED,
+        conversation_id='conv-123',
+        additional_context='old context',
+    )
+    db_session.add(task)
+    db_session.commit()
+
+    enqueue_task(
+        db_session,
+        paper_id=seeded_paper.id,
+        task_type=TaskType.HPO_LINKING,
+        additional_context='new guidance',
+        new_conversation=True,
+    )
+    db_session.commit()
+    db_session.refresh(task)
+
+    # New conversation requested: conversation_id cleared, guidance still applied.
+    assert task.conversation_id is None
+    assert task.additional_context == 'new guidance'
+    assert task.status == TaskStatus.PENDING
+
+
 def test_create_task_records_updated_by(client, seeded_paper, test_user):
     """A user-triggered task records who enqueued it and surfaces updated_by."""
     response = client.post(

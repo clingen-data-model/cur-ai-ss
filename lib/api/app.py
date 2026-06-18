@@ -563,13 +563,15 @@ def _paper_to_resp(row: PaperDB) -> PaperResp:
         is_paper_relevant=row.is_paper_relevant,
         section_classifications=row.section_classifications,
         disease_name=row.disease_name,
-        disease_name_evidence=EvidenceBlock.model_validate(row.disease_name_evidence)
+        disease_name_evidence=HumanEvidenceBlock.model_validate(
+            row.disease_name_evidence
+        )
         if row.disease_name_evidence
         else None,
         disease_inheritance_mode=Inheritance(row.disease_inheritance_mode)
         if row.disease_inheritance_mode
         else None,
-        disease_inheritance_mode_evidence=EvidenceBlock.model_validate(
+        disease_inheritance_mode_evidence=HumanEvidenceBlock.model_validate(
             row.disease_inheritance_mode_evidence
         )
         if row.disease_inheritance_mode_evidence
