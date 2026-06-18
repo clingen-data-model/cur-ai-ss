@@ -19,6 +19,7 @@
 #   openai_api_key_secret - Secret Manager name for OpenAI key (default: caa-openai-api-key)
 #   ncbi_api_key_secret   - Secret Manager name for NCBI Api Key (default: caa-ncbi-api-key)
 #   ncbi_email_secret     - Secret Manager name for NCBI Email (default: caa-ncbi-email)
+#   auth_secrets_secret   - Secret Manager name for the auth/SMTP JSON secret (default: caa-auth-secrets)
 #   git_repo              - Git repository URL (default: https://github.com/clingen-data-model/cur-ai-ss.git)
 #   git_version           - Git ref to deploy (default: main)
 #
@@ -56,6 +57,10 @@
 #      # NCBI email
 #      gcloud secrets create caa-ncbi-email --project=PROJECT
 #      echo -n "user@example.com" | gcloud secrets versions add caa-ncbi-email --data-file=- --project=PROJECT
+#      # Auth/SMTP credentials (single JSON secret)
+#      # {"JWT_SECRET_KEY": "...", "SMTP_USER": "...", "SMTP_PASSWORD": "...", "SMTP_FROM": "..."}
+#      gcloud secrets create caa-auth-secrets --project=PROJECT
+#      gcloud secrets versions add caa-auth-secrets --data-file=auth-secrets.json --project=PROJECT
 - name: Configure CAA VM
   hosts: all
   become: yes
@@ -72,6 +77,9 @@
     openai_api_key_secret: caa-openai-api-key
     ncbi_api_key_secret: caa-ncbi-api-key
     ncbi_email_secret: caa-ncbi-email
+    # Single JSON secret holding the auth/SMTP credentials:
+    # {"JWT_SECRET_KEY": "...", "SMTP_USER": "...", "SMTP_PASSWORD": "...", "SMTP_FROM": "..."}
+    auth_secrets_secret: caa-auth-secrets
 
   tasks:
     # --- Package Installation ---
@@ -216,6 +224,22 @@
         --project={{ gcp_project }}
       register: ncbi_email_content
       changed_when: false
+      no_log: true
+
+    - name: Fetch auth/SMTP secrets from Secret Manager
+      delegate_to: localhost
+      become: no
+      command: >
+        gcloud secrets versions access latest
+        --secret={{ auth_secrets_secret }}
+        --project={{ gcp_project }}
+      register: auth_secrets_content
+      changed_when: false
+      no_log: true
+
+    - name: Parse auth/SMTP secrets JSON
+      set_fact:
+        auth_secrets: "{{ auth_secrets_content.stdout | from_json }}"
       no_log: true
 
     - name: Deploy environment file
