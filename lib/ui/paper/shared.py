@@ -10,8 +10,10 @@ from streamlit_pdf_viewer import pdf_viewer
 from lib.misc.pdf.paths import pdf_highlighted_path
 from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock, ReasoningBlock
 from lib.models.paper import PaperResp
+from lib.tasks import TaskType
 from lib.ui.api import (
     clear_highlights,
+    enqueue_paper_task,
     get_http_error_detail,
     grobid_annotations,
     highlight_pdf,
@@ -26,8 +28,72 @@ HEADER_TABS = [
     '💬 Chat with Agent',
 ]
 HEADER_TABS_KEY = 'HEADER_TABS_KEY'
-HUMAN_EDIT_NOTE_DEFAULT = 'Edited by Human'
+HUMAN_EDIT_NOTE_DEFAULT = 'Reasoning behind the change...'
 CHAT_FEATURE_GATE_TIME = datetime(2026, 5, 17, 12, 0, 0)
+
+
+def render_rerun_popover(
+    *,
+    label: str,
+    key_prefix: str,
+    paper_id: int,
+    task_type: TaskType,
+    help: str,
+    family_id: int | None = None,
+    patient_id: int | None = None,
+    variant_id: int | None = None,
+    phenotype_id: int | None = None,
+    container: Any = None,
+) -> None:
+    """Render a "re-run" control as a popover with an optional additional-context box.
+
+    Mirrors the "Rerun Agents" popover: clicking opens a window with a free-text
+    context field passed to the agent, plus a confirm button that enqueues the
+    scoped task. ``container`` lets callers anchor the popover in a column.
+    """
+    # When anchored in a column, wrap in a right-aligned container so the
+    # content-fit button hugs the right edge instead of floating left.
+    popover_key = f'{key_prefix}-popover'
+    host: Any
+    if container is not None:
+        with container:
+            host = st.container(horizontal_alignment='right')
+    else:
+        host = st
+    with host.popover(
+        label, width='content', help=help, key=popover_key, on_change='rerun'
+    ):
+        context = st.text_area(
+            'Additional context for agent',
+            value='',
+            placeholder='Enter any additional context or instructions for the agent (optional)',
+            height=100,
+            key=f'{key_prefix}-context',
+        )
+
+        def _on_confirm() -> None:
+            try:
+                enqueue_paper_task(
+                    paper_id,
+                    task_type,
+                    family_id=family_id,
+                    patient_id=patient_id,
+                    variant_id=variant_id,
+                    phenotype_id=phenotype_id,
+                    additional_context=st.session_state.get(f'{key_prefix}-context')
+                    or None,
+                )
+                st.toast('Task enqueued', icon=':material/check:')
+                st.session_state[popover_key] = False
+            except Exception as e:
+                st.toast(f'Failed to enqueue task: {str(e)}', icon='❌')
+
+        st.button(
+            'Confirm',
+            type='secondary',
+            key=f'{key_prefix}-confirm',
+            on_click=_on_confirm,
+        )
 
 
 def get_available_tabs(paper_resp: PaperResp) -> list[str]:
@@ -274,14 +340,22 @@ def render_evidence_controls(
                     '📎 This evidence comes from a supplement. PDF highlighting is only available for main document evidence.'
                 )
             if human_edit_note and human_edit_note_key:
+                st.markdown('---')
+                st.markdown('**✏️ Curator Note**')
+                st.caption('Explain why this value was manually overridden.')
                 edited_note = st.text_area(
-                    'Human Edit Note',
+                    'Curator Note',
                     label_visibility='collapsed',
                     value=human_edit_note,
                     key=human_edit_note_key,
                     height=20,
                     max_chars=120,
                 )
+                edited_by_name = getattr(block, 'edited_by_name', None)
+                if edited_by_name:
+                    edited_at = getattr(block, 'edited_at', None)
+                    when = f' on {edited_at:%Y-%m-%d}' if edited_at else ''
+                    st.caption(f'✏️ Edited by {edited_by_name}{when}')
         # Only pass EvidenceBlock to highlight controls (ReasoningBlock has no evidence sources)
         highlight_blocks = [block] if isinstance(block, EvidenceBlock) else []
         if highlight_blocks:

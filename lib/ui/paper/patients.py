@@ -10,11 +10,13 @@ from lib.core.environment import env
 from lib.misc.pdf.paths import pdf_image_path
 from lib.models import (
     FamilyResp,
+    FamilyUpdateRequest,
     PaperResp,
     PatientResp,
     PatientUpdateRequest,
     PhenotypeResp,
     SegregationAnalysisResp,
+    SegregationEvidenceUpdateRequest,
 )
 from lib.models.patient import (
     AffectedStatus,
@@ -28,19 +30,21 @@ from lib.models.patient import (
 )
 from lib.tasks import TaskType, is_task_completed
 from lib.ui.api import (
-    enqueue_paper_task,
     get_families,
     get_patients,
     get_pedigree,
     get_phenotypes,
     get_segregation_analysis,
     grobid_annotations,
+    update_family,
     update_patient,
+    update_segregation_evidence,
 )
 from lib.ui.paper.shared import (
     HUMAN_EDIT_NOTE_DEFAULT,
     render_evidence_controls,
     render_highlight_controls,
+    render_rerun_popover,
 )
 
 PATIENTS_KEY = 'patients'
@@ -185,7 +189,18 @@ def _render_phenotypes_table(
         first_phenotype = grouped_phenotypes[0]
 
         st.divider()
-        st.markdown('##### Phenotype Details')
+        pheno_title_col, pheno_btn_col = st.columns([5, 1], vertical_alignment='bottom')
+        pheno_title_col.markdown('##### Phenotype Details')
+        render_rerun_popover(
+            label='🔄 Re-link HPO',
+            key_prefix=f'{key_prefix}-relink-hpo-{first_phenotype.id}',
+            paper_id=paper_resp.id,
+            task_type=TaskType.HPO_LINKING,
+            patient_id=patient_id,
+            phenotype_id=first_phenotype.id,
+            help='Re-run HPO linking for this phenotype.',
+            container=pheno_btn_col,
+        )
 
         # Show grouped concepts
         details_data = {
@@ -252,17 +267,102 @@ def _render_phenotypes_table(
             if first_phenotype.hpo and first_phenotype.hpo.reasoning:
                 with st.expander('HPO Match Reasoning', expanded=False):
                     st.text(first_phenotype.hpo.reasoning)
-            if st.button(
-                '🔄 Re-link HPO',
-                key=f'{key_prefix}-relink-hpo-{first_phenotype.id}',
-            ):
-                enqueue_paper_task(
-                    paper_resp.id,
-                    TaskType.HPO_LINKING,
-                    patient_id=patient_id,
-                    phenotype_id=first_phenotype.id,
-                )
-                st.success('HPO linking task enqueued')
+
+
+def _save_family_edits(
+    paper_resp: PaperResp,
+    family: FamilyResp,
+    identifier: str,
+    identifier_note: str | None,
+    consanguinity: bool,
+    consanguinity_note: str | None,
+) -> None:
+    """Persist family field edits, default-noting changed fields, then refresh cache."""
+    changes: dict[str, str | bool] = {}
+    if identifier != family.identifier:
+        changes['identifier'] = identifier
+        if not family.identifier_evidence.human_edit_note:
+            changes['identifier_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
+    if (
+        identifier_note
+        and identifier_note != family.identifier_evidence.human_edit_note
+    ):
+        changes['identifier_human_edit_note'] = identifier_note
+
+    if consanguinity != family.consanguinity:
+        changes['consanguinity'] = consanguinity
+        if not family.consanguinity_evidence.human_edit_note:
+            changes['consanguinity_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
+    if (
+        consanguinity_note
+        and consanguinity_note != family.consanguinity_evidence.human_edit_note
+    ):
+        changes['consanguinity_human_edit_note'] = consanguinity_note
+
+    if not changes:
+        return
+    try:
+        updated = update_family(
+            paper_resp.id,
+            family.id,
+            FamilyUpdateRequest(**changes),  # type: ignore[arg-type]
+        )
+        families: list[FamilyResp] = st.session_state.get(FAMILIES_KEY, [])
+        for i, f in enumerate(families):
+            if f.id == updated.id:
+                families[i] = updated
+                break
+        st.session_state[FAMILIES_KEY] = families
+        st.toast('Saved!', icon=':material/check:')
+        time.sleep(0.5)
+        st.rerun()
+    except Exception as e:
+        st.toast(f'Failed to save: {str(e)}', icon='❌')
+
+
+def _save_segregation_edits(
+    paper_resp: PaperResp,
+    family_id: int,
+    seg_data: SegregationAnalysisResp,
+    lod_score: float | None,
+    lod_score_note: str | None,
+    has_non_seg: bool,
+    non_seg_note: str | None,
+) -> None:
+    """Persist segregation evidence edits (value + notes) with attribution."""
+    changes: dict[str, float | bool | str | None] = {}
+
+    lod_block = seg_data.extracted_lod_score
+    if lod_score != lod_block.value:
+        changes['extracted_lod_score'] = lod_score
+        if not lod_block.human_edit_note:
+            changes['extracted_lod_score_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
+    if lod_score_note and lod_score_note != lod_block.human_edit_note:
+        changes['extracted_lod_score_human_edit_note'] = lod_score_note
+
+    nonseg_block = seg_data.has_unexplainable_non_segregations
+    if has_non_seg != nonseg_block.value:
+        changes['has_unexplainable_non_segregations'] = has_non_seg
+        if not nonseg_block.human_edit_note:
+            changes['has_unexplainable_non_segregations_human_edit_note'] = (
+                HUMAN_EDIT_NOTE_DEFAULT
+            )
+    if non_seg_note and non_seg_note != nonseg_block.human_edit_note:
+        changes['has_unexplainable_non_segregations_human_edit_note'] = non_seg_note
+
+    if not changes:
+        return
+    try:
+        update_segregation_evidence(
+            paper_resp.id,
+            family_id,
+            SegregationEvidenceUpdateRequest(**changes),  # type: ignore[arg-type]
+        )
+        st.toast('Saved!', icon=':material/check:')
+        time.sleep(0.5)
+        st.rerun()
+    except Exception as e:
+        st.toast(f'Failed to save: {str(e)}', icon='❌')
 
 
 def _render_family_group(
@@ -282,21 +382,49 @@ def _render_family_group(
         # Family identifier + evidence
         col1, col2 = st.columns(2)
         with col1:
-            st.text_input(
+            identifier = st.text_input(
                 'Family Identifier',
                 family.identifier,
-                disabled=True,
                 key=f'{tab_key}-fam-{family.id}-identifier',
             )
         with col2:
             st.space()
-            render_evidence_controls(
+            identifier_note = render_evidence_controls(
                 paper_resp.id,
                 block=family.identifier_evidence,
                 label='Family Identifier Evidence',
                 color_key=f'{tab_key}-fam-{family.id}-color',
                 button_key_prefix=f'{tab_key}-fam-{family.id}-btn',
+                human_edit_note_key=f'{tab_key}-fam-{family.id}-identifier-note',
             )
+
+        # Consanguinity + evidence
+        col1, col2 = st.columns(2)
+        with col1:
+            consanguinity = st.checkbox(
+                'Consanguinity',
+                value=family.consanguinity,
+                key=f'{tab_key}-fam-{family.id}-consanguinity',
+            )
+        with col2:
+            st.space()
+            consanguinity_note = render_evidence_controls(
+                paper_resp.id,
+                block=family.consanguinity_evidence,
+                label='Consanguinity Evidence',
+                color_key=f'{tab_key}-fam-{family.id}-consang-color',
+                button_key_prefix=f'{tab_key}-fam-{family.id}-consang-btn',
+                human_edit_note_key=f'{tab_key}-fam-{family.id}-consanguinity-note',
+            )
+
+        _save_family_edits(
+            paper_resp,
+            family,
+            identifier,
+            identifier_note,
+            consanguinity,
+            consanguinity_note,
+        )
 
         # Patients
         for patient_id, patient in patients_in_family:
@@ -313,50 +441,68 @@ def _render_family_group(
         # Segregation Analysis
         seg_data = segregation_analysis.get(family.id)
         if seg_data:
-            st.subheader('📊 Segregation Analysis')
+            seg_header_col, seg_button_col = st.columns([5, 1])
+            seg_header_col.subheader('📊 Segregation Analysis')
+            render_rerun_popover(
+                label='🔄 Re-run segregation',
+                key_prefix=f'{tab_key}-fam-{family.id}-rerun-segregation',
+                paper_id=paper_resp.id,
+                task_type=TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
+                family_id=family.id,
+                help='Re-run segregation evidence extraction for this family '
+                '(also recomputes the analysis).',
+                container=seg_button_col,
+            )
 
             # Extracted LOD Score
             col1, col2 = st.columns(2)
             with col1:
-                st.metric(
+                lod_score = st.number_input(
                     'Extracted LOD Score',
-                    f'{seg_data.extracted_lod_score.value:.2f}'
-                    if seg_data.extracted_lod_score.value is not None
-                    else '—',
+                    value=seg_data.extracted_lod_score.value,
+                    step=0.1,
+                    format='%.2f',
+                    key=f'{tab_key}-fam-{family.id}-lod-score',
                 )
             with col2:
                 st.space()
-                render_evidence_controls(
+                lod_score_note = render_evidence_controls(
                     paper_resp.id,
                     block=seg_data.extracted_lod_score,
                     label='Extracted LOD Score Evidence',
                     color_key=f'{tab_key}-fam-{family.id}-lod-score-color-evidence',
                     button_key_prefix=f'{tab_key}-fam-{family.id}-lod-score-evidence',
+                    human_edit_note_key=f'{tab_key}-fam-{family.id}-lod-score-note',
                 )
 
             # Unexplainable Non-segregations
             col1, col2 = st.columns(2)
             with col1:
-                non_seg_status = (
-                    '⚠️ Present'
-                    if seg_data.has_unexplainable_non_segregations.value
-                    else '✅ None'
-                )
-                st.text_input(
-                    'Unexplainable Non-segregations',
-                    non_seg_status,
-                    disabled=True,
+                has_non_seg = st.checkbox(
+                    'Unexplainable Non-segregations present',
+                    value=seg_data.has_unexplainable_non_segregations.value,
                     key=f'{tab_key}-fam-{family.id}-non-segregations',
                 )
             with col2:
                 st.space()
-                render_evidence_controls(
+                non_seg_note = render_evidence_controls(
                     paper_resp.id,
                     block=seg_data.has_unexplainable_non_segregations,
                     label='Non-segregations Evidence',
                     color_key=f'{tab_key}-fam-{family.id}-nonseg-color-evidence',
                     button_key_prefix=f'{tab_key}-fam-{family.id}-nonseg-evidence',
+                    human_edit_note_key=f'{tab_key}-fam-{family.id}-nonseg-note',
                 )
+
+            _save_segregation_edits(
+                paper_resp,
+                family.id,
+                seg_data,
+                lod_score,
+                lod_score_note,
+                has_non_seg,
+                non_seg_note,
+            )
 
             if (
                 seg_data.computed
@@ -1107,7 +1253,17 @@ def render_patient(
 
         # --- Phenotypes Section
         st.divider()
-        st.markdown('### Phenotypes')
+        header_col, button_col = st.columns([4, 1])
+        header_col.markdown('### Phenotypes')
+        render_rerun_popover(
+            label='🔄 Re-extract phenotypes',
+            key_prefix=f'{key_prefix}-reextract-phenotypes',
+            paper_id=paper_resp.id,
+            task_type=TaskType.PHENOTYPE_EXTRACTION,
+            patient_id=patient_id,
+            help='Re-run phenotype extraction for this patient (also re-links HPO terms).',
+            container=button_col,
+        )
         try:
             phenotypes = get_phenotypes(paper_resp.id, patient.id)
             _render_patient_phenotypes(phenotypes, paper_resp, key_prefix, patient.id)

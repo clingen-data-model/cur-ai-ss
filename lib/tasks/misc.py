@@ -28,12 +28,21 @@ def enqueue_task(
     patient_variant_occurrence_id: int | None = None,
     skip_successors: bool = False,
     additional_context: str | None = None,
+    updated_by_user_id: int | None = None,
+    new_conversation: bool = False,
 ) -> TaskDB:
     """Create or reset a task to PENDING status.
 
     Checks for existing task and updates it, or creates new one.
     If task is currently running, returns it unchanged.
     Returns the task (either newly created or reset).
+
+    ``updated_by_user_id`` records who triggered the task; leave ``None`` for
+    machine enqueues (worker successors) so they stay unattributed.
+
+    ``new_conversation`` forces the task to start a brand-new agent conversation
+    (clears any stored ``conversation_id``) even when ``additional_context`` is
+    supplied. Used by the paper chat so each chat-queued run begins fresh.
     """
     # Get latest agent run
     latest_run = session.query(AgentRunDB).order_by(AgentRunDB.id.desc()).first()
@@ -66,8 +75,10 @@ def enqueue_task(
         existing_task.error_message = None
         existing_task.skip_successors = skip_successors
         existing_task.additional_context = additional_context
-        # Clear conversation_id if not providing new context (start fresh)
-        if additional_context is None:
+        existing_task.updated_by_user_id = updated_by_user_id
+        # Clear conversation_id if not providing new context (start fresh), or
+        # when the caller explicitly requests a brand-new conversation.
+        if additional_context is None or new_conversation:
             existing_task.conversation_id = None
         session.flush()
         return existing_task
@@ -85,6 +96,7 @@ def enqueue_task(
             status=TaskStatus.PENDING,
             skip_successors=skip_successors,
             additional_context=additional_context,
+            updated_by_user_id=updated_by_user_id,
         )
         session.add(new_task)
         session.flush()
@@ -97,6 +109,7 @@ def enqueue_all_instances(
     task_type: TaskType,
     skip_successors: bool = False,
     additional_context: str | None = None,
+    updated_by_user_id: int | None = None,
 ) -> list[TaskDB]:
     """Re-queue all instances of a task type for a paper.
 
@@ -123,6 +136,7 @@ def enqueue_all_instances(
                 task.error_message = None
                 task.skip_successors = skip_successors
                 task.additional_context = additional_context
+                task.updated_by_user_id = updated_by_user_id
                 # Clear conversation_id if not providing new context (start fresh)
                 if additional_context is None:
                     task.conversation_id = None
@@ -137,6 +151,7 @@ def enqueue_all_instances(
             task_type=task_type,
             skip_successors=skip_successors,
             additional_context=additional_context,
+            updated_by_user_id=updated_by_user_id,
         )
         return [task]
 
@@ -147,8 +162,14 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
     Each case is explicit about what successors to create and any entity ID
     filtering/expansion needed. PATIENT_VARIANT_OCCURRENCES is the only task that
     requires checking multiple independent predecessors.
+
+    The triggering user (``task.updated_by_user_id``) is propagated to successor
+    tasks so the attribution chain is preserved end-to-end. Tasks triggered by the
+    worker itself (initial pipeline runs) have no user and stay unattributed.
     """
     from lib.models import FamilyDB, PatientDB, PhenotypeDB, VariantDB
+
+    user_id = task.updated_by_user_id
 
     match task.type:
         case TaskType.PDF_PARSING:
@@ -156,6 +177,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 session,
                 paper_id=task.paper_id,
                 task_type=TaskType.PAPER_CLASSIFIER,
+                updated_by_user_id=user_id,
             )
 
         case TaskType.PAPER_CLASSIFIER:
@@ -163,16 +185,19 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 session,
                 paper_id=task.paper_id,
                 task_type=TaskType.PAPER_METADATA,
+                updated_by_user_id=user_id,
             )
             enqueue_task(
                 session,
                 paper_id=task.paper_id,
                 task_type=TaskType.VARIANT_EXTRACTION,
+                updated_by_user_id=user_id,
             )
             enqueue_task(
                 session,
                 paper_id=task.paper_id,
                 task_type=TaskType.PEDIGREE_DESCRIPTION,
+                updated_by_user_id=user_id,
             )
 
         case TaskType.PEDIGREE_DESCRIPTION:
@@ -180,6 +205,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 session,
                 paper_id=task.paper_id,
                 task_type=TaskType.PATIENT_EXTRACTION,
+                updated_by_user_id=user_id,
             )
 
         case TaskType.PATIENT_EXTRACTION:
@@ -195,6 +221,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     paper_id=task.paper_id,
                     task_type=TaskType.PHENOTYPE_EXTRACTION,
                     patient_id=patient.id,
+                    updated_by_user_id=user_id,
                 )
 
             # Gate PATIENT_VARIANT_OCCURRENCES on VARIANT_EXTRACTION also being done
@@ -212,6 +239,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     session,
                     paper_id=task.paper_id,
                     task_type=TaskType.PATIENT_VARIANT_OCCURRENCES,
+                    updated_by_user_id=user_id,
                 )
 
         case TaskType.VARIANT_EXTRACTION:
@@ -227,6 +255,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     paper_id=task.paper_id,
                     task_type=TaskType.VARIANT_HARMONIZATION,
                     variant_id=variant.id,
+                    updated_by_user_id=user_id,
                 )
 
             # Gate PATIENT_VARIANT_OCCURRENCES on PATIENT_EXTRACTION also being done
@@ -244,6 +273,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     session,
                     paper_id=task.paper_id,
                     task_type=TaskType.PATIENT_VARIANT_OCCURRENCES,
+                    updated_by_user_id=user_id,
                 )
 
         case TaskType.VARIANT_HARMONIZATION:
@@ -252,6 +282,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 paper_id=task.paper_id,
                 task_type=TaskType.VARIANT_ANNOTATION,
                 variant_id=task.variant_id,
+                updated_by_user_id=user_id,
             )
 
         case TaskType.PATIENT_VARIANT_OCCURRENCES:
@@ -265,6 +296,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     paper_id=task.paper_id,
                     task_type=TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
                     family_id=family.id,
+                    updated_by_user_id=user_id,
                 )
 
             # Expand to per-patient COMPOUND_HET_EVALUATION for patients with ≥2 heterozygous variants
@@ -287,6 +319,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     paper_id=task.paper_id,
                     task_type=TaskType.COMPOUND_HET_EVALUATION,
                     patient_id=patient_id,
+                    updated_by_user_id=user_id,
                 )
 
             # Re-link paper disease context after case-level occurrence extraction,
@@ -319,6 +352,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 paper_id=task.paper_id,
                 task_type=TaskType.SEGREGATION_ANALYSIS_COMPUTED,
                 family_id=task.family_id,
+                updated_by_user_id=user_id,
             )
 
         case TaskType.PHENOTYPE_EXTRACTION:
@@ -337,6 +371,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     paper_id=task.paper_id,
                     task_type=TaskType.HPO_LINKING,
                     phenotype_id=phenotype.id,
+                    updated_by_user_id=user_id,
                 )
 
         case TaskType.PAPER_METADATA:

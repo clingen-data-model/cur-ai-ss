@@ -11,6 +11,7 @@ from sqlalchemy.types import JSON
 from lib.models.base import Base, PatchModel
 from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock
 from lib.models.paper import PaperDB
+from lib.models.user import UserSummaryResp
 
 if TYPE_CHECKING:
     from lib.models.agent_run import AgentRunDB
@@ -19,6 +20,7 @@ if TYPE_CHECKING:
         SegregationAnalysisComputedDB,
         SegregationEvidenceDB,
     )
+    from lib.models.user import UserDB
 
 
 class Family(BaseModel):
@@ -46,8 +48,15 @@ class FamilyDB(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    updated_by_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey('users.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
 
     paper: Mapped[PaperDB] = relationship('PaperDB', back_populates='families')
+    updated_by: Mapped['UserDB | None'] = relationship('UserDB')
     patients: Mapped[list[PatientDB]] = relationship(
         'PatientDB', back_populates='family'
     )
@@ -77,6 +86,8 @@ class FamilyResp(BaseModel):
     consanguinity: bool
     consanguinity_evidence: HumanEvidenceBlock[bool]
     updated_at: datetime
+    updated_by_user_id: int | None = None
+    updated_by: UserSummaryResp | None = None
 
 
 class FamilyCreateRequest(BaseModel):
@@ -88,6 +99,3 @@ class FamilyUpdateRequest(PatchModel):
     identifier_human_edit_note: str | None = None
     consanguinity: bool | None = None
     consanguinity_human_edit_note: str | None = None
-
-    def apply_to(self, obj: FamilyDB) -> None:  # type: ignore[override]
-        super().apply_to(obj)

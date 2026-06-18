@@ -19,6 +19,7 @@ if TYPE_CHECKING:
         PatientVariantOccurrenceDB,
     )
     from lib.models.phenotype import PhenotypeDB
+    from lib.models.user import UserDB
     from lib.models.variant import VariantDB
     from lib.tasks.models import TaskDB
 
@@ -56,10 +57,15 @@ from lib.misc.pdf.paths import (
     pdf_thumbnail_path,
 )
 from lib.models.base import Base, PatchModel
-from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
+from lib.models.evidence_block import (
+    EvidenceBlock,
+    HumanEvidenceBlock,
+    ReasoningBlock,
+)
 from lib.models.gene_disease_relation import GeneDiseaseRelation
 from lib.models.mondo import MondoComponentMapping, MondoTerm
 from lib.models.patient_variant_occurrences import Inheritance
+from lib.models.user import UserSummaryResp
 from lib.tasks.models import TaskResp
 
 Color: TypeAlias = Literal[
@@ -147,6 +153,13 @@ class PaperDB(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    updated_by_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey('users.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
+    updated_by: Mapped['UserDB | None'] = relationship('UserDB')
 
     # Paper extraction metadata (populated asynchronously by extraction agent)
     title: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -288,12 +301,14 @@ class PaperResp(PaperExtractionOutput):
     is_paper_relevant: bool | None = None
     section_classifications: dict | None = None
     disease_name: str | None = None
-    disease_name_evidence: EvidenceBlock[str] | None = None
+    disease_name_evidence: HumanEvidenceBlock[str] | None = None
     disease_inheritance_mode: Inheritance | None = None
-    disease_inheritance_mode_evidence: EvidenceBlock[Inheritance] | None = None
+    disease_inheritance_mode_evidence: HumanEvidenceBlock[Inheritance] | None = None
     mondo: ReasoningBlock[MondoTerm | None]
     mondo_components: list[MondoComponentMapping] = []
     updated_at: datetime
+    updated_by_user_id: int | None = None
+    updated_by: UserSummaryResp | None = None
     tasks: list['TaskResp'] = []
     patient_count: int = 0
     variant_count: int = 0
@@ -331,6 +346,8 @@ class PaperUpdateRequest(PatchModel):
     tags: list[str] | None = None
     disease_name: str | None = None
     disease_inheritance_mode: Inheritance | None = None
+    disease_name_human_edit_note: str | None = None
+    disease_inheritance_mode_human_edit_note: str | None = None
 
 
 class HighlightRequest(BaseModel):

@@ -21,10 +21,12 @@ from sqlalchemy.types import JSON
 from lib.models.base import Base, PatchModel
 from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock, ReasoningBlock
 from lib.models.paper import PaperDB
+from lib.models.user import UserSummaryResp
 
 if TYPE_CHECKING:
     from lib.models.agent_run import AgentRunDB
     from lib.models.patient_variant_occurrences import PatientVariantOccurrenceDB
+    from lib.models.user import UserDB
 
 
 def get_variant_description(
@@ -130,6 +132,8 @@ class HarmonizedVariantResp(BaseModel):
     hgvs_c: Optional[str] = None
     hgvs_p: Optional[str] = None
     hgvs_g: Optional[str] = None
+    updated_by_user_id: int | None = None
+    updated_by: UserSummaryResp | None = None
 
 
 class VariantResp(BaseModel):
@@ -154,6 +158,8 @@ class VariantResp(BaseModel):
     functional_evidence: bool
     main_focus: bool
     updated_at: datetime
+    updated_by_user_id: int | None = None
+    updated_by: UserSummaryResp | None = None
     # Evidence blocks (from DB JSON columns)
     transcript_evidence: EvidenceBlock[Optional[str]]
     protein_accession_evidence: EvidenceBlock[Optional[str]]
@@ -202,9 +208,12 @@ class HarmonizedVariantUpdate(PatchModel):
     hgvs_p: str | None = None
     hgvs_g: str | None = None
 
-    def apply_to(self, obj: 'HarmonizedVariantDB') -> None:  # type: ignore[override]
+    def apply_to(  # type: ignore[override]
+        self, obj: 'HarmonizedVariantDB', editor: 'UserDB | None' = None
+    ) -> None:
         for field, value in self.model_dump(exclude_unset=True).items():
             setattr(obj, field, value)
+        self.stamp_updated_by(obj, editor)
 
 
 class VariantUpdateRequest(PatchModel):
@@ -232,17 +241,14 @@ class VariantUpdateRequest(PatchModel):
             raise ValueError('harmonized_variant cannot be null')
         return self
 
-    def apply_to(self, obj: 'VariantDB') -> None:  # type: ignore[override]
+    def apply_to(  # type: ignore[override]
+        self, obj: 'VariantDB', editor: 'UserDB | None' = None
+    ) -> None:
         for field, value in self.model_dump(exclude_unset=True).items():
             if field == 'harmonized_variant':
                 continue
-            if field.endswith('_human_edit_note'):
-                evidence_column = field.replace('_human_edit_note', '_evidence')
-                evidence_dict = getattr(obj, evidence_column, {}).copy()
-                evidence_dict['human_edit_note'] = value
-                setattr(obj, evidence_column, evidence_dict)
-            else:
-                setattr(obj, field, value)
+            self._apply_field(obj, field, value, editor)
+        self.stamp_updated_by(obj, editor)
 
 
 class VariantDB(Base):
@@ -309,9 +315,16 @@ class VariantDB(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    updated_by_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey('users.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
 
     paper: Mapped[PaperDB] = relationship('PaperDB', back_populates='variants')
     agent_run: Mapped['AgentRunDB'] = relationship('AgentRunDB')
+    updated_by: Mapped['UserDB | None'] = relationship('UserDB')
     harmonized_variant: Mapped['HarmonizedVariantDB | None'] = relationship(
         'HarmonizedVariantDB',
         back_populates='variant',
@@ -358,10 +371,17 @@ class HarmonizedVariantDB(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    updated_by_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey('users.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
 
     variant: Mapped['VariantDB'] = relationship(
         'VariantDB', back_populates='harmonized_variant', foreign_keys=[variant_id]
     )
+    updated_by: Mapped['UserDB | None'] = relationship('UserDB')
 
     __table_args__ = (
         UniqueConstraint('variant_id', name='uq_harmonized_variants_variant_id'),

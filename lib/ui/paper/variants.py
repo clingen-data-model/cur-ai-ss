@@ -7,13 +7,18 @@ import streamlit as st
 from lib.models import PaperResp, VariantResp, VariantUpdateRequest
 from lib.models.variant import VariantType
 from lib.tasks import TaskType, is_task_completed
-from lib.ui.api import get_occurrences, get_variants, update_variant
+from lib.ui.api import (
+    get_occurrences,
+    get_variants,
+    update_variant,
+)
 from lib.ui.paper.shared import (
     HUMAN_EDIT_NOTE_DEFAULT,
     get_clingen_url,
     get_clinvar_url,
     get_gnomad_url,
     render_evidence_controls,
+    render_rerun_popover,
 )
 
 
@@ -396,9 +401,25 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                     # diffed against the current values in the change-detection block below.
                     harmonized_inputs: dict[str, str] = {}
                     with st.container():
-                        st.subheader('Harmonized Variant Info')
+                        title_col, reharm_col = st.columns(
+                            [5, 1], vertical_alignment='bottom'
+                        )
+                        title_col.subheader('Harmonized Variant Info')
+                        render_rerun_popover(
+                            label='🔄 Re-harmonize',
+                            key_prefix=f'{key_prefix}-reharmonize',
+                            paper_id=paper_resp.id,
+                            task_type=TaskType.VARIANT_HARMONIZATION,
+                            variant_id=variant.id,
+                            help='Re-run harmonization for this variant (also re-annotates).',
+                            container=reharm_col,
+                        )
                         if harmonized_variant and harmonized_variant.value:
                             hv = harmonized_variant.value
+                            if hv.updated_by:
+                                st.caption(
+                                    f'✏️ Harmonization edited by {hv.updated_by.name}'
+                                )
                             # gnomAD-style coordinates
                             col1, col2 = st.columns(2)
                             with col1:
@@ -673,7 +694,19 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                 # Annotations (ClinVar + gnomAD + In Silico)
                 # ======================================================
                 with st.container():
-                    st.subheader('Annotations')
+                    title_col, reannot_col2 = st.columns(
+                        [5, 1], vertical_alignment='bottom'
+                    )
+                    title_col.subheader('Annotations')
+                    render_rerun_popover(
+                        label='🔄 Re-annotate',
+                        key_prefix=f'{key_prefix}-reannotate2',
+                        paper_id=paper_resp.id,
+                        task_type=TaskType.VARIANT_ANNOTATION,
+                        variant_id=variant.id,
+                        help='Re-run annotation for this variant (no re-harmonization).',
+                        container=reannot_col2,
+                    )
 
                     if not annotated_variant:
                         st.info('Enrichment not yet completed for this variant')

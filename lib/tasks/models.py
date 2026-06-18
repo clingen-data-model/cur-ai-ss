@@ -8,10 +8,12 @@ from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from lib.models.base import Base
+from lib.models.user import UserSummaryResp
 
 if TYPE_CHECKING:
     from lib.models.agent_run import AgentRunDB
     from lib.models.paper import PaperDB
+    from lib.models.user import UserDB
 
 
 class TaskType(StrEnum):
@@ -183,6 +185,14 @@ class TaskDB(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    # Which user triggered this task (null = machine-enqueued by the worker).
+    updated_by_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey('users.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
+    updated_by: Mapped['UserDB | None'] = relationship('UserDB')
 
     __table_args__ = (
         Index('ix_tasks_paper_id_status', 'paper_id', 'status'),
@@ -216,6 +226,8 @@ class TaskResp(BaseModel):
     phenotype_id: int | None
     patient_variant_occurrence_id: int | None
     updated_at: datetime
+    updated_by_user_id: int | None = None
+    updated_by: UserSummaryResp | None = None
 
 
 class TaskCreateRequest(BaseModel):

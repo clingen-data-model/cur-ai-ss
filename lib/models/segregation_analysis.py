@@ -9,9 +9,11 @@ from sqlalchemy.types import JSON, Float
 
 from lib.models.base import Base, PatchModel
 from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock, ReasoningBlock
+from lib.models.user import UserSummaryResp
 
 if TYPE_CHECKING:
     from lib.models.family import FamilyDB
+    from lib.models.user import UserDB
 
 
 class SequencingMethodology(str, Enum):
@@ -59,10 +61,17 @@ class SegregationEvidenceDB(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    updated_by_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey('users.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
 
     family: Mapped['FamilyDB'] = relationship(
         'FamilyDB', back_populates='segregation_evidence'
     )
+    updated_by: Mapped['UserDB | None'] = relationship('UserDB')
 
     __table_args__ = (Index('ix_segregation_evidence_family_id', 'family_id'),)
 
@@ -73,10 +82,16 @@ class SegregationEvidenceResp(BaseModel):
     extracted_lod_score: HumanEvidenceBlock[float | None]
     has_unexplainable_non_segregations: HumanEvidenceBlock[bool]
     updated_at: datetime
+    updated_by_user_id: int | None = None
 
 
 class SegregationEvidenceUpdateRequest(PatchModel):
-    """Update extracted evidence fields."""
+    """Update extracted evidence fields.
+
+    Values map to scalar columns (the response builds each block's ``value`` from
+    the column), so the inherited ``PatchModel.apply_to`` handles both value edits
+    and ``*_human_edit_note`` attribution without a custom override.
+    """
 
     extracted_lod_score: float | None = None
     has_unexplainable_non_segregations: bool | None = None
@@ -158,6 +173,8 @@ class SegregationAnalysisResp(BaseModel):
     # Computed (from computation agent) - nested like harmonized/enriched variants
     computed: SegregationAnalysisComputedNestedResp | None = None
     updated_at: datetime
+    updated_by_user_id: int | None = None
+    updated_by: UserSummaryResp | None = None
 
 
 # ============================================================================

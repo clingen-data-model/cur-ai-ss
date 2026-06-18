@@ -1,17 +1,20 @@
 import json
+from dataclasses import dataclass
 from typing import Any
 
-from agents import Agent, function_tool
+from agents import Agent, RunContextWrapper, function_tool
 from pydantic import BaseModel
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.api.db import session_scope
 from lib.core.environment import env
+from lib.models.base import row_to_dict
 from lib.models.family import FamilyDB
 from lib.models.patient import PatientDB
 from lib.models.phenotype import PhenotypeDB
 from lib.models.variant import VariantDB
-from lib.tasks.models import TaskDB, TaskType
+from lib.tasks.misc import enqueue_task
+from lib.tasks.models import TaskDB, TaskStatus, TaskType
 
 
 class ChatRoutingOutput(BaseModel):
@@ -21,11 +24,25 @@ class ChatRoutingOutput(BaseModel):
     reasoning: str
 
 
+@dataclass
+class ChatRunContext:
+    """Run context for a chat turn. The ``queue_task`` tool stores its confirmation
+    here, built from the real task, so the API can surface it — and treat a non-None
+    ``confirmation`` as the signal that a task was queued."""
+
+    confirmation: str | None = None
+
+
+# Task types that have no chat conversation to route questions to: PDF parsing and
+# paper classification run before any chat is possible, and variant annotation is a
+# purely mechanical enrichment step with nothing to discuss. Excluded from routing.
 _NON_CONVERSATIONAL = {
     TaskType.PDF_PARSING,
     TaskType.PAPER_CLASSIFIER,
     TaskType.VARIANT_ANNOTATION,
 }
+# Task types that operate on the paper as a whole rather than a single entity. The
+# router returns no entity (task_id/entity_label null) when it picks one of these.
 _GLOBAL_AGENTS = {
     TaskType.GENERAL_PAPER_QUESTION,
     TaskType.PAPER_METADATA,
@@ -34,13 +51,43 @@ _GLOBAL_AGENTS = {
     TaskType.PATIENT_EXTRACTION,
     TaskType.PATIENT_VARIANT_OCCURRENCES,
 }
+# Task types a chat QUESTION can be routed to (everything with a conversation to
+# answer from). Rendered into the routing instructions and used to validate output.
 _CONVERSATIONAL_TASK_TYPES = [t for t in TaskType if t not in _NON_CONVERSATIONAL]
 _TASK_TYPE_LIST = '\n'.join(
     f'- "{t.value}": {t.description}' for t in _CONVERSATIONAL_TASK_TYPES
 )
-_VALID_TASK_TYPE_VALUES = [t.value for t in _CONVERSATIONAL_TASK_TYPES]
 
-CHAT_ROUTING_INSTRUCTIONS = f"""Given a user question about a genomics paper, route to the appropriate task type.
+# Task types a user can queue from chat. General Paper Question is a chat-only
+# pseudo-task (answered live), not something the worker runs, so it is excluded.
+_RUNNABLE_TASK_TYPES = [
+    t for t in _CONVERSATIONAL_TASK_TYPES if t != TaskType.GENERAL_PAPER_QUESTION
+]
+_RUNNABLE_TASK_TYPE_LIST = '\n'.join(
+    f'- "{t.value}": {t.description}' for t in _RUNNABLE_TASK_TYPES
+)
+
+CHAT_ROUTING_INSTRUCTIONS = f"""Handle a user's chat message about a genomics paper. The message is
+either an ACTION (run something) or a QUESTION (route it to be answered).
+
+Step 0 — Action vs. question
+If the user wants to RUN, RE-RUN, QUEUE, regenerate, or refresh an extraction/analysis agent
+(e.g. "re-run variant extraction", "extract phenotypes for patient III-2 again"):
+  → Pick the task_type. It MUST be one of these runnable task types (NOT "General Paper Question"):
+{_RUNNABLE_TASK_TYPE_LIST}
+  → For entity-specific task types, call `list_paper_entities` (full records, including each
+    variant's harmonized and annotated records). Match the entity the user named against any
+    field of the returned records — users reference entities by whatever identifier they have
+    (a patient/family label, or any variant identifier), never internal ids. If no record
+    clearly matches, do not guess: ask the user which entity they mean instead of queueing.
+  → Call the `queue_task` tool with the task_type, the matched entity's top-level id in the right
+    field (family_id/patient_id/variant_id/phenotype_id), and a human-readable label for it as
+    entity_label.
+  → If the user gives extra guidance for the rerun (e.g. "this time treat patient 3 as the
+    proband"), pass it as additional_context.
+  → Then return task_type="General Paper Question", task_id=null, entity_label=null,
+    reasoning="queued" (the queue result is used directly; this output is ignored).
+Otherwise the message is a QUESTION — route it using the steps below.
 
 Step 1 — Identify the question's subject
 Extract key entities (patient/family identifiers, variant descriptions, phenotypes) from the question.
@@ -48,9 +95,6 @@ Extract key entities (patient/family identifiers, variant descriptions, phenotyp
 Step 2 — Select the task type
 Pick the most relevant task type from the list below. Use EXACTLY one of these values for task_type:
 {_TASK_TYPE_LIST}
-
-**IMPORTANT: task_type must be one of these exact values:
-{chr(10).join(f'  - "{v}"' for v in _VALID_TASK_TYPE_VALUES)}
 
 **Important: Agent scopes**
 - **Global agents** perform extraction/analysis at the paper level without associated entity IDs:
@@ -174,12 +218,132 @@ def _make_fetch_tasks_tool(paper_id: int) -> Any:
     return fetch_tasks_for_type
 
 
-def make_routing_agent(paper_id: int) -> Agent:
-    fetch_tasks_for_type = _make_fetch_tasks_tool(paper_id)
+def _make_list_entities_tool(paper_id: int) -> Any:
+    @function_tool
+    def list_paper_entities() -> str:
+        """List this paper's families, patients, variants, and phenotypes as full records,
+        so an entity the user names can be matched on any of its fields. Each variant also
+        includes its harmonized and annotated records (the transcript-qualified HGVS lives
+        there). Use the top-level ``id`` of the matched entity when queueing. Returns JSON."""
+        with session_scope() as session:
+            families = (
+                session.query(FamilyDB).filter(FamilyDB.paper_id == paper_id).all()
+            )
+            patients = (
+                session.query(PatientDB).filter(PatientDB.paper_id == paper_id).all()
+            )
+            variants = (
+                session.query(VariantDB).filter(VariantDB.paper_id == paper_id).all()
+            )
+            phenotypes = (
+                session.query(PhenotypeDB)
+                .filter(PhenotypeDB.paper_id == paper_id)
+                .all()
+            )
+
+            def variant_entry(variant: VariantDB) -> dict:
+                entry = row_to_dict(variant)
+                if variant.harmonized_variant is not None:
+                    entry['harmonized_variant'] = row_to_dict(
+                        variant.harmonized_variant
+                    )
+                if variant.annotated_variant is not None:
+                    entry['annotated_variant'] = row_to_dict(variant.annotated_variant)
+                return entry
+
+            return json.dumps(
+                {
+                    'families': [row_to_dict(f) for f in families],
+                    'patients': [row_to_dict(p) for p in patients],
+                    'variants': [variant_entry(v) for v in variants],
+                    'phenotypes': [row_to_dict(ph) for ph in phenotypes],
+                },
+                default=str,
+            )
+
+    return list_paper_entities
+
+
+def _make_queue_task_tool(paper_id: int, user_id: int) -> Any:
+    @function_tool
+    def queue_task(
+        ctx: RunContextWrapper[ChatRunContext],
+        task_type: TaskType,
+        entity_label: str | None = None,
+        family_id: int | None = None,
+        patient_id: int | None = None,
+        variant_id: int | None = None,
+        phenotype_id: int | None = None,
+        additional_context: str | None = None,
+        skip_successors: bool = False,
+    ) -> str:
+        """Queue an extraction/analysis task for this paper, optionally scoped to one entity.
+        Use entity ids from `list_paper_entities`; pass that entity's label as entity_label.
+        If the user gives extra guidance for the rerun (e.g. "this time treat patient 3 as the
+        proband"), pass it as additional_context; the rerun continues the prior conversation
+        with that guidance instead of starting fresh. Returns a user-facing confirmation."""
+        if task_type not in _RUNNABLE_TASK_TYPES:
+            # Not a runnable pipeline task (e.g. General Paper Question) — don't queue;
+            # leave confirmation unset so the message is handled as a question instead.
+            return f'"{task_type}" is not a runnable task; answer it as a question instead.'
+        with session_scope() as session:
+            task = enqueue_task(
+                session,
+                paper_id=paper_id,
+                task_type=task_type,
+                family_id=family_id,
+                patient_id=patient_id,
+                variant_id=variant_id,
+                phenotype_id=phenotype_id,
+                additional_context=additional_context,
+                skip_successors=skip_successors,
+                updated_by_user_id=user_id,
+                new_conversation=True,
+            )
+            # Build the confirmation from the real task while the session is open.
+            target = f' for "{entity_label}"' if entity_label else ''
+            if task.status in (TaskStatus.RUNNING, TaskStatus.QUEUED):
+                # Already in flight; enqueue_task left it unchanged, so any new
+                # guidance was not applied — don't claim it was.
+                confirmation = (
+                    f'The "{task.type}" task{target} is already '
+                    f'{task.status.value.lower()}. Results will appear on the paper '
+                    f'page when it finishes.'
+                )
+            else:
+                guidance = (
+                    f' with your guidance: "{additional_context}"'
+                    if additional_context
+                    else ''
+                )
+                confirmation = (
+                    f'Queued the "{task.type}" task{target}{guidance}. It will run '
+                    f'shortly and results will appear on the paper page.'
+                )
+        ctx.context.confirmation = confirmation
+        return confirmation
+
+    return queue_task
+
+
+# --- Agent ------------------------------------------------------------------
+
+
+def make_routing_agent(paper_id: int, user_id: int) -> Agent:
+    """Single chat agent. For a QUESTION it returns a ``ChatRoutingOutput`` selecting the
+    task conversation (or General QA) to answer from. For an ACTION it calls the
+    ``queue_task`` tool, which enqueues the task (attributed to ``user_id``) and records a
+    confirmation in the run context; the API treats a populated
+    ``ChatRunContext.confirmation`` as "a task was queued" and ignores the routing output.
+    """
     return Agent(
         name='chat_router',
         instructions=BASE_SYSTEM_INSTRUCTIONS,
         model=env.OPENAI_API_DEPLOYMENT,
         output_type=ChatRoutingOutput,
-        tools=[fetch_tasks_for_type],  # type: ignore[list-item]
+        tools=[  # type: ignore[list-item]
+            _make_fetch_tasks_tool(paper_id),
+            _make_list_entities_tool(paper_id),
+            _make_queue_task_tool(paper_id, user_id),
+        ],
     )

@@ -67,7 +67,6 @@ from lib.models.phenotype import (
     HPOTerm,
     PhenotypeDB,
     PhenotypeResp,
-    PhenotypeUpdateRequest,
 )
 from lib.models.segregation_analysis import (
     SegregationAnalysisComputedDB,
@@ -77,6 +76,15 @@ from lib.models.segregation_analysis import (
     SegregationEvidenceResp,
     SegregationEvidenceUpdateRequest,
     SequencingMethodology,
+)
+from lib.models.user import (
+    ChangePasswordRequest,
+    LoginRequest,
+    TokenResp,
+    UserCreateRequest,
+    UserDB,
+    UserResp,
+    UserSummaryResp,
 )
 from lib.models.variant import (
     AnnotatedVariant,
