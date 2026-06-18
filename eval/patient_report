@@ -1,0 +1,395 @@
+#!/usr/bin/env python3
+"""
+Patient / proband extraction accuracy report.
+
+Compares the curated training set (var/training_raw.csv, proband-centric) against
+patients extracted by the API, and writes var/patient_accuracy_report.txt.
+
+Scope & method (see design decisions):
+- PROBAND-ONLY: only the curated proband row(s) are scored; the training set does
+  not reliably cover non-proband family members, so extra extracted members are
+  not penalized.
+- LENIENT / POSITIONAL matching: a curated proband is matched to an API patient by
+  normalized identifier when possible; when the curated id is a placeholder
+  (unknown / patient / NA / blank), it is matched positionally against the API's
+  identified proband(s).
+- Papers tagged FailedPaperRelevancy in the API are excluded.
+
+Scored dimensions:
+- Proband identification: did the API identify a proband, and is the curated
+  proband matched to a patient flagged 'Proband'?
+- Sex agreement (where the curated sex is known).
+- Demographics: country of origin and ethnicity/race (where curated values exist);
+  age is free-text in the training set and shown for reference only.
+"""
+
+import csv
+import re
+from difflib import SequenceMatcher
+
+import requests
+
+BASE_URL = 'https://gene-curation-ai.app/api'
+EXCLUDE_TAG = 'FailedPaperRelevancy'
+
+# Papers excluded as known ground-truth errors (not extraction failures).
+# 31768050: curator entered a variant *table* as 11 separate patient observations
+# ('table 2 row N'); there is only one real observed patient.
+KNOWN_GT_ERRORS = {'31768050'}
+
+# Curated identifiers that carry no real label (cannot be string-matched).
+PLACEHOLDER_IDS = {'', 'unknown', 'na', 'nan', 'n/a', 'none'}
+# Tokens stripped during identifier normalization ('Case 29' -> '29', 'P-13' -> 'p13').
+DROP_TOKENS = {'case', 'patient', 'pt', 'individual', 'subject', 'family', 'proband', 'no', 'number'}
+
+
+def paper_has_tag(paper: dict, tag_name: str) -> bool:
+    """Return True if the paper carries the given tag (case-insensitive)."""
+    for tag in paper.get('tags') or []:
+        name = tag.get('name') if isinstance(tag, dict) else tag
+        if name and str(name).lower() == tag_name.lower():
+            return True
+    return False
+
+
+def norm_id(raw: str) -> str:
+    """Normalize a patient identifier for comparison.
+
+    Lowercases, unifies separators (: - _ . /), drops common label words, and
+    collapses whitespace, so 'Case 29' -> '29', 'IV:1' -> 'iv1', 'P-13' -> 'p13'.
+    """
+    if not raw:
+        return ''
+    s = raw.strip().lower()
+    for ch in (':', '-', '_', '.', '/', '#'):
+        s = s.replace(ch, ' ')
+    tokens = [t for t in s.split() if t not in DROP_TOKENS]
+    return ''.join(tokens)
+
+
+def is_placeholder(raw: str) -> bool:
+    """True if the curated identifier is a non-label placeholder."""
+    return raw.strip().lower() in PLACEHOLDER_IDS or norm_id(raw) == ''
+
+
+def norm_sex(raw: str) -> str:
+    """Normalize sex to Male / Female / Unknown."""
+    s = (raw or '').strip().lower()
+    if s in ('m', 'male'):
+        return 'Male'
+    if s in ('f', 'female'):
+        return 'Female'
+    return 'Unknown'
+
+
+def norm_text(raw: str) -> str:
+    """Normalize a free-text demographic value for loose comparison."""
+    return re.sub(r'[^a-z0-9]', '', (raw or '').strip().lower())
+
+
+def _unit(raw: str) -> str:
+    """Canonicalize an age unit; defaults to years when only a number is present."""
+    s = (raw or '').lower()
+    if 'month' in s or s.strip() in ('mo', 'mos', 'm'):
+        return 'mo'
+    if 'week' in s or s.strip() in ('wk', 'wks'):
+        return 'wk'
+    if 'day' in s:
+        return 'd'
+    return 'yr'  # year / yr / yo / bare number
+
+
+def parse_age(raw: str) -> tuple:
+    """Extract (number, unit) from a free-text age, or None if not parseable."""
+    if not raw or raw.strip().lower() == 'unknown':
+        return None
+    m = re.search(r'(\d+(?:\.\d+)?)', raw)
+    if not m:
+        return None
+    return float(m.group(1)), _unit(raw[m.end():] or raw)
+
+
+def to_years(num_unit: tuple) -> float:
+    """Convert a (number, unit) age to years."""
+    n, u = num_unit
+    return n * {'yr': 1.0, 'mo': 1 / 12, 'wk': 1 / 52, 'd': 1 / 365}[u]
+
+
+def api_ages(p: dict) -> list:
+    """Collect parseable (number, unit) ages from an API patient."""
+    out = []
+    for k in ('age_diagnosis', 'age_report', 'age_death'):
+        val = p.get(k)
+        if val is None:
+            continue
+        unit = _unit(str(p.get(f'{k}_unit') or ''))
+        try:
+            out.append((float(val), unit))
+        except (TypeError, ValueError):
+            parsed = parse_age(str(val))
+            if parsed:
+                out.append(parsed)
+    return out
+
+
+def ethnicity_agrees(gt_eth: str, api_race_eth: str) -> bool:
+    """Compare GT Ethnicity (Hispanic/Not-Hispanic axis) against the API's
+    race_ethnicity text. The API has no dedicated Hispanic-ethnicity field, so
+    this infers from whether 'hispanic'/'latino' is mentioned."""
+    g = (gt_eth or '').lower()
+    a = (api_race_eth or '').lower()
+    api_hisp = 'hispanic' in a or 'latino' in a
+    if 'not hispanic' in g or 'not latino' in g:
+        return not api_hisp
+    if 'hispanic' in g or 'latino' in g:
+        return api_hisp
+    return False
+
+
+def strip_family_prefix(raw: str) -> str:
+    """Drop a leading 'family:' prefix, e.g. '1:IV-2' -> 'IV-2'."""
+    return raw.split(':', 1)[1] if ':' in raw and raw.split(':', 1)[0].strip().isalnum() \
+        and len(raw.split(':', 1)[0].strip()) <= 2 else raw
+
+
+def locate_patient(gt_id: str, gt_sex: str, api_patients: list) -> tuple:
+    """Locate the API patient corresponding to a curated GT patient.
+
+    Returns (patient_or_None, method, id_status):
+    - id_status 'match'    : a real GT identifier matched an API identifier
+    - id_status 'mismatch' : a real GT identifier matched no API identifier
+    - id_status 'na'       : GT identifier is a placeholder (located positionally
+                             for attribute comparison, identifier not comparable)
+    method is one of 'id', 'id-substr', 'positional', 'no-match', 'ambiguous'.
+    """
+    by_norm = {norm_id(p.get('identifier') or ''): p for p in api_patients}
+    probands = [p for p in api_patients if p.get('proband_status') == 'Proband']
+
+    if not is_placeholder(gt_id):
+        gid = norm_id(strip_family_prefix(gt_id))
+        if gid in by_norm:
+            return by_norm[gid], 'id', 'match'
+        # substring match, but only on fragments >= 3 chars to avoid matching on a
+        # single shared digit (e.g. 'iv2' vs 'patient 2')
+        subs = [p for nid, p in by_norm.items()
+                if nid and min(len(gid), len(nid)) >= 3 and (gid in nid or nid in gid)]
+        if len(subs) == 1:
+            return subs[0], 'id-substr', 'match'
+        # digit-core: only when the GT id is purely numeric (e.g. 'case 4' -> '4'),
+        # matched against a unique API id with the same digits. Skips pedigree ids
+        # like 'IV-2' where the digit is positional, not an identifier.
+        if gid.isdigit():
+            dmatch = [p for nid, p in by_norm.items()
+                      if ''.join(c for c in nid if c.isdigit()) == gid]
+            if len(dmatch) == 1:
+                return dmatch[0], 'digit', 'match'
+        # fuzzy string similarity (near-typos), unique best >= 0.85
+        scored = sorted(((SequenceMatcher(None, gid, nid).ratio(), p)
+                         for nid, p in by_norm.items() if nid), key=lambda t: -t[0])
+        if scored and scored[0][0] >= 0.85 and (len(scored) == 1 or scored[1][0] < 0.85):
+            return scored[0][1], 'fuzzy-str', 'match'
+        # single-candidate positional fallback: label differs but the patient is
+        # unambiguous (one patient, or one proband). Located, identifier not matched.
+        if len(api_patients) == 1:
+            return api_patients[0], 'positional', 'fuzzy'
+        if len(probands) == 1:
+            return probands[0], 'positional', 'fuzzy'
+        return None, 'no-match', 'mismatch'
+
+    # Placeholder GT id: can't compare identifiers; locate positionally so the
+    # other attributes (sex/race/proband-status) can still be checked.
+    if len(probands) == 1:
+        return probands[0], 'positional', 'na'
+    if len(api_patients) == 1:
+        return api_patients[0], 'positional', 'na'
+    if norm_sex(gt_sex) != 'Unknown':
+        same = [p for p in probands if norm_sex(p.get('sex')) == norm_sex(gt_sex)]
+        if len(same) == 1:
+            return same[0], 'positional', 'na'
+    return None, 'ambiguous', 'na'
+
+
+def read_gt() -> dict:
+    """Read curated probands from training_raw.csv, keyed by PMID.
+
+    Probands are enumerated by the distinct 'Proband ID' value: rows sharing a
+    Proband ID (e.g. the same proband with two variants) collapse to one proband.
+    """
+    gt: dict = {}
+    seen: dict = {}
+    with open('var/training_raw.csv') as f:
+        for row in csv.DictReader(f):
+            pmid = (row.get('PMID') or '').strip()
+            if not pmid:
+                continue
+            pid = (row.get('Proband ID') or '').strip()
+            key = (pmid, pid)
+            if key in seen:
+                continue
+            seen[key] = True
+            gt.setdefault(pmid, []).append({
+                'proband_id': pid,
+                'sex': row.get('Sex') or '',
+                'age': (row.get('Age (dx, report, death)') or '').strip(),
+                'country': (row.get('Country of origin') or '').strip(),
+                'ethnicity': (row.get('Ethnicity') or '').strip(),
+                'race': (row.get('Race') or '').strip(),
+            })
+    return gt
+
+
+def main() -> None:
+    print('Fetching papers...')
+    papers = requests.get(f'{BASE_URL}/papers').json()
+    pmid_to_paper = {}
+    excluded = set()
+    for p in papers:
+        pmid = p.get('pmid')
+        if not pmid:
+            continue
+        pmid_to_paper[pmid] = p
+        if paper_has_tag(p, EXCLUDE_TAG):
+            excluded.add(pmid)
+    print(f'  {len(pmid_to_paper)} papers with PMIDs; {len(excluded)} tagged {EXCLUDE_TAG}')
+
+    gt = read_gt()
+
+    lines = []
+    lines.append('=' * 110)
+    lines.append('PATIENT / PROBAND EXTRACTION ACCURACY REPORT (proband-only, lenient matching)')
+    lines.append('=' * 110)
+    lines.append('')
+
+    # counters
+    n_papers = 0
+    n_gt = 0
+    located = 0
+    id_total = id_match = 0          # identifier agreement (real GT ids only)
+    sex_total = sex_agree = 0
+    age_total = age_agree = 0
+    country_total = country_agree = 0
+    eth_total = eth_agree = 0        # ethnicity (Hispanic/Not-Hispanic axis)
+    race_total = race_agree = 0
+    prob_total = prob_agree = 0      # proband-status: curated row expected 'Proband'
+    excluded_in_gt = []
+
+    def fld(ok: bool) -> str:
+        return '✓' if ok else '✗'
+
+    for pmid in sorted(gt):
+        if pmid not in pmid_to_paper:
+            continue
+        if pmid in excluded or pmid in KNOWN_GT_ERRORS:
+            excluded_in_gt.append(pmid)
+            continue
+        paper = pmid_to_paper[pmid]
+        api_patients = requests.get(f"{BASE_URL}/papers/{paper['id']}/patients").json()
+        proband_count = sum(1 for p in api_patients if p.get('proband_status') == 'Proband')
+
+        n_papers += 1
+        lines.append(f'PMID: {pmid}  ({paper.get("gene_symbol", "?")})')
+        lines.append('-' * 110)
+        lines.append(f'  GT patients: {len(gt[pmid])} | API patients: {len(api_patients)} '
+                     f'| API probands: {proband_count}')
+
+        for g in gt[pmid]:
+            n_gt += 1
+            api_p, method, id_status = locate_patient(g['proband_id'], g['sex'], api_patients)
+
+            # identifier agreement (only when GT provides a real identifier)
+            if id_status != 'na':
+                id_total += 1
+                if id_status == 'match':
+                    id_match += 1
+
+            if api_p is None:
+                lines.append(f"  ✗ {g['proband_id']!r}: NOT LOCATED ({method})")
+                continue
+            located += 1
+
+            id_mark = {'match': '✓', 'mismatch': '✗', 'na': '·', 'fuzzy': '~'}[id_status]
+            parts = [f"identifier {id_mark} GT={g['proband_id']!r} API={api_p.get('identifier')!r}"]
+
+            # proband status — curated GT rows are treated as expected 'Proband'
+            prob_total += 1
+            api_status = api_p.get('proband_status')
+            prob_ok = api_status == 'Proband'
+            prob_agree += prob_ok
+            parts.append(f"proband {fld(prob_ok)} expect=Proband API={api_status!r}")
+
+            # sex
+            gs, as_ = norm_sex(g['sex']), norm_sex(api_p.get('sex'))
+            if gs != 'Unknown':
+                sex_total += 1
+                ok = gs == as_
+                sex_agree += ok
+                parts.append(f"sex {fld(ok)} GT={gs} API={as_}")
+
+            # age (loose: matching number + unit across dx/report/death)
+            gt_age = parse_age(g['age'])
+            if gt_age is not None:
+                age_total += 1
+                aa = api_ages(api_p)
+                gy = to_years(gt_age)
+                tol = max(1.0, 0.1 * gy)  # within 1 year (or 10% for older ages)
+                ok = any(abs(gy - to_years(a)) <= tol for a in aa)
+                age_agree += ok
+                parts.append(f"age {fld(ok)} GT={g['age']!r} API={aa}")
+
+            # country
+            if g['country'] and g['country'].lower() != 'unknown':
+                country_total += 1
+                ok = bool(norm_text(g['country']) and (
+                    norm_text(g['country']) in norm_text(api_p.get('country_of_origin') or '')
+                    or norm_text(api_p.get('country_of_origin') or '') in norm_text(g['country'])))
+                country_agree += ok
+                parts.append(f"country {fld(ok)} GT={g['country']!r} API={api_p.get('country_of_origin')!r}")
+
+            # ethnicity (Hispanic/Not-Hispanic axis; no dedicated API field)
+            if g['ethnicity'] and g['ethnicity'].lower() != 'unknown':
+                eth_total += 1
+                ok = ethnicity_agrees(g['ethnicity'], api_p.get('race_ethnicity') or '')
+                eth_agree += ok
+                parts.append(f"ethnicity {fld(ok)} GT={g['ethnicity']!r} API={api_p.get('race_ethnicity')!r}")
+
+            # race (API race_ethnicity vs GT Race column)
+            if g['race'] and g['race'].lower() != 'unknown':
+                race_total += 1
+                ok = bool(norm_text(g['race']) and (
+                    norm_text(g['race']) in norm_text(api_p.get('race_ethnicity') or '')
+                    or norm_text(api_p.get('race_ethnicity') or '') in norm_text(g['race'])))
+                race_agree += ok
+                parts.append(f"race {fld(ok)} GT={g['race']!r} API={api_p.get('race_ethnicity')!r}")
+
+            lines.append(f"  [{method}] " + ' | '.join(parts))
+        lines.append('')
+
+    def pct(a: int, b: int) -> str:
+        return f'{a / b:.1%}' if b else 'n/a'
+
+    lines.append('=' * 110)
+    lines.append('SUMMARY — per-patient field agreement')
+    lines.append('=' * 110)
+    lines.append(f'Papers evaluated: {n_papers}  (excluded {len(excluded_in_gt)} FailedPaperRelevancy: '
+                 f'{", ".join(excluded_in_gt)})')
+    lines.append(f'Curated GT patients: {n_gt} | located in API: {located}')
+    lines.append('')
+    lines.append(f'  Identifier   {id_match}/{id_total} = {pct(id_match, id_total)}   (GT rows with a real identifier)')
+    lines.append(f'  Proband stat {prob_agree}/{prob_total} = {pct(prob_agree, prob_total)}   (curated rows expected = Proband)')
+    lines.append(f'  Sex          {sex_agree}/{sex_total} = {pct(sex_agree, sex_total)}')
+    lines.append(f'  Age          {age_agree}/{age_total} = {pct(age_agree, age_total)}   (loose number+unit match)')
+    lines.append(f'  Country      {country_agree}/{country_total} = {pct(country_agree, country_total)}')
+    lines.append(f'  Ethnicity    {eth_agree}/{eth_total} = {pct(eth_agree, eth_total)}   (Hispanic axis; no dedicated API field)')
+    lines.append(f'  Race         {race_agree}/{race_total} = {pct(race_agree, race_total)}')
+
+    with open('var/patient_accuracy_report.txt', 'w') as f:
+        f.write('\n'.join(lines))
+    print('Report written to var/patient_accuracy_report.txt')
+    print(f'\nGT patients: {n_gt} | located: {located} | id: {pct(id_match, id_total)} | '
+          f'proband: {pct(prob_agree, prob_total)} | sex: {pct(sex_agree, sex_total)} | '
+          f'age: {pct(age_agree, age_total)} | country: {pct(country_agree, country_total)} | '
+          f'ethnicity: {pct(eth_agree, eth_total)} | race: {pct(race_agree, race_total)}')
+
+
+if __name__ == '__main__':
+    main()
