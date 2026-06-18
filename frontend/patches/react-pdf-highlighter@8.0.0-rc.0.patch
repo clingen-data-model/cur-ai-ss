@@ -1,0 +1,14 @@
+diff --git a/dist/src/components/PdfHighlighter.js b/dist/src/components/PdfHighlighter.js
+index d64a8a411b7ddd917be221cff240cca982dac4e7..0c395ecd74a510f95be9740a7e3867c803e2b3c6 100644
+--- a/dist/src/components/PdfHighlighter.js
++++ b/dist/src/components/PdfHighlighter.js
+@@ -271,6 +271,9 @@ class PdfHighlighter extends PureComponent {
+       removePageBorders: true,
+       linkService
+     });
++    // PATCH: when the viewer is reused (e.g. StrictMode double-mount), re-point it at
++    // the fresh eventBus so pagesinit fires on the bus our scrollRef listener is on.
++    this.viewer.eventBus = eventBus;
+     linkService.setDocument(pdfDocument);
+     linkService.setViewer(this.viewer);
+     this.viewer.setDocument(pdfDocument);

@@ -343,7 +343,7 @@ class PaperUpdateRequest(PatchModel):
     pmid: str | None = None
     pmcid: str | None = None
     paper_types: list[PaperType] | None = None
-    tags: list[str] | None = None
+    tags: list[PaperTag] | None = None
     disease_name: str | None = None
     disease_inheritance_mode: Inheritance | None = None
     disease_name_human_edit_note: str | None = None
