@@ -633,6 +633,55 @@ def select_canonical_transcript(
     }
 
 
+@function_tool
+def resolve_transcript_version(transcript: str) -> Optional[dict[str, str]]:
+    """
+    Resolve an unversioned (or any) transcript to the most recent supported version
+    of that SAME base accession using VariantValidator. Use this to preserve the
+    transcript reported in the paper instead of substituting the gene's canonical
+    transcript, since coding (c.) coordinates are transcript-specific.
+
+    Example: "NM_000000" -> {"transcript": "NM_000000.4", "protein_accession": "NP_000000.2"}
+
+    Returns None if the base accession is not supported by VariantValidator (e.g. a
+    retired transcript); callers should fall back to select_canonical_transcript.
+    """
+
+    base = transcript.split('.')[0]
+    if not base:
+        return None
+
+    url = f'{VV_GENE2TRANSCRIPTSV1_ENDPOINT}/{base}'
+    headers = {'content-type': 'application/json'}
+    session = _get_session_with_retries()
+
+    r = session.get(url, headers=headers, timeout=10)
+    r.raise_for_status()
+
+    data = r.json()
+    transcripts = data.get('transcripts', []) if isinstance(data, dict) else []
+    if not transcripts:
+        return None
+
+    # Keep only references for the same base accession, then pick the highest version.
+    best_version = -1
+    best: Optional[dict[str, str]] = None
+    for t in transcripts:
+        reference = t.get('reference', '')
+        ref_base, _, ref_version = reference.partition('.')
+        if ref_base != base or not ref_version.isdigit():
+            continue
+        version = int(ref_version)
+        if version > best_version:
+            best_version = version
+            best = {
+                'transcript': reference,
+                'protein_accession': t.get('translation'),
+            }
+
+    return best
+
+
 VARIANT_HARMONIZATION_INSTRUCTIONS = """
 System: You are an expert genomics curator and deterministic variant normalizer.
 
@@ -744,10 +793,22 @@ hgvs_c present.
 
 Action
 
-    1. If transcript missing OR unversioned:
-        Call select_canonical_transcript(gene, genome_build or GRCh38 default)
-        Replace transcript with returned versioned transcript.
-        Record selected transcript in reasoning.
+    1. Resolve a versioned transcript, preserving the paper's transcript when possible:
+
+        a) If transcript present but UNVERSIONED (e.g. "NM_000000"):
+            Call resolve_transcript_version(transcript) to upgrade it to the most
+            recent supported version of the SAME base accession (e.g. "NM_000000.4").
+            Coding (c.) coordinates are transcript-specific, so the paper's transcript
+            MUST be preserved rather than swapped for the gene's canonical transcript.
+            Replace transcript with the returned versioned transcript.
+            If it returns null (base accession not supported / retired), fall back to
+            select_canonical_transcript(gene, genome_build or GRCh38 default).
+
+        b) If transcript MISSING entirely:
+            Call select_canonical_transcript(gene, genome_build or GRCh38 default)
+            Replace transcript with returned versioned transcript.
+
+        Record the resolved transcript and which path was taken in reasoning.
 
     2. Construct:
         transcript + ":" + hgvs_c
@@ -895,6 +956,7 @@ agent = Agent(
     output_type=ReasoningBlock[HarmonizedVariant],
     tools=[
         select_canonical_transcript,
+        resolve_transcript_version,
         genomic_accession_for_gene_and_transcript,
         allele_registry_resolver,
         gnomad_style_ids_from_variant_validator,
