@@ -24,7 +24,7 @@ async def test_convert_and_extract_creates_outputs(test_file_contents):
 
     with (
         patch(
-            'lib.misc.gcs.upload_and_sign_image',
+            'lib.misc.gcs.resolve_image_url',
             return_value='https://example.com/image.png',
         ),
         patch(

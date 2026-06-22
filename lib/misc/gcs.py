@@ -1,4 +1,6 @@
+import base64
 import logging
+import mimetypes
 from datetime import timedelta
 from pathlib import Path
 
@@ -66,25 +68,38 @@ def get_signed_url(object_path: str) -> str:
     return signed_url
 
 
-def upload_and_sign_image(image_path: Path) -> str:
-    """Upload an image to GCS and return a signed URL.
+def _image_path_to_data_url(image_path: Path) -> str:
+    """Encode a local image path as a base64 data URL for VLM image input.
+
+    See: https://developers.openai.com/api/docs/guides/images-vision?format=base64-encoded
+    """
+    mime_type = mimetypes.guess_type(image_path.name)[0] or 'image/png'
+    image_b64 = base64.b64encode(image_path.read_bytes()).decode('ascii')
+    return f'data:{mime_type};base64,{image_b64}'
+
+
+def resolve_image_url(image_path: Path) -> str:
+    """Return a VLM-readable URL for a local image, per environment.
+
+    In local dev (``DISABLE_GCS_UPLOAD``) returns an inline base64 data URL that
+    OpenAI's servers can read directly — a ``localhost`` static-file URL is
+    unreachable from OpenAI and yields a 400 ``invalid_image_url``. In prod the
+    image is uploaded to GCS and a signed URL is returned (smaller payloads).
+
+    Image token cost is identical either way; base64 only inflates request bytes.
 
     Args:
         image_path: Local path to the image file (from pdf_image_path or pdf_table_image_path)
 
     Returns:
-        Signed URL for the uploaded image, or a local API URL if GCS upload is disabled
+        A base64 data URL (dev) or a GCS signed URL (prod).
     """
     if not image_path.exists():
         raise FileNotFoundError(f'Image file not found: {image_path}')
 
     if env.DISABLE_GCS_UPLOAD:
-        # Static files are mounted at the full CAA_ROOT URL prefix, so the URL
-        # must include it — don't strip it via relative_to (image_path is
-        # absolute, e.g. /var/caa/...). Mirrors the dashboard thumbnail URL.
-        local_url = f'{env.PROTOCOL}{env.API_ENDPOINT}{image_path}'
-        logger.info(f'GCS upload disabled, using local API URL: {local_url}')
-        return local_url
+        logger.info(f'GCS upload disabled, encoding {image_path} as a data URL')
+        return _image_path_to_data_url(image_path)
 
     logger.info(f'Uploading image {image_path.name} to GCS')
     object_path = upload_image_to_gcs(image_path)
