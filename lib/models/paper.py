@@ -345,6 +345,7 @@ class PedigreeDB(Base):
         unique=True,
     )
     image_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_supplement: Mapped[bool] = mapped_column(default=False, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -363,4 +364,5 @@ class PedigreeDB(Base):
 
 class PedigreeResp(BaseModel):
     image_id: int
+    is_supplement: bool
     description: str

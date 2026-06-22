@@ -1248,7 +1248,7 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
             col1, col2, col3 = st.columns([1, 3, 1])
             with col2:
                 st.image(
-                    f'{env.PROTOCOL}{env.API_ENDPOINT}{pdf_image_path(paper_resp.id, pedigree_description.image_id)}',
+                    f'{env.PROTOCOL}{env.API_ENDPOINT}{pdf_image_path(paper_resp.id, pedigree_description.image_id, pedigree_description.is_supplement)}',
                     width='content',
                 )
                 st.write(pedigree_description.description)

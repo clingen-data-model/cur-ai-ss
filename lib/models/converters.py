@@ -75,6 +75,7 @@ def pedigree_to_db(paper_id: int, pedigree: PedigreeExtractionOutput) -> Pedigre
     return PedigreeDB(
         paper_id=paper_id,
         image_id=pedigree.image_id,
+        is_supplement=pedigree.is_supplement,
         description=pedigree.description,
     )
 

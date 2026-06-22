@@ -409,15 +409,17 @@ async def handle_pedigree_description(task_id: int) -> None:
         stored_conv_id = task.conversation_id
         additional_context = task.additional_context
 
-    # Build a flat image reference -> local path map and a text listing of each
-    # candidate image (label + caption only). Regular images come first, in
-    # image_id order, so a regular image's reference equals its image_id — which
-    # the pedigree UI relies on (it renders pdf_image_path(paper_id, image_id)).
+    # Build per-source image maps and a text listing of each candidate image.
+    # Regular images use [Image N] labels; supplement images use [Supplement Image N].
+    # N is always the per-source filesystem index, matching pdf_image_path's image_id
+    # argument directly.
     # The image URL is never put in the prompt; the vision tool resolves it from
     # the path on demand, keeping (large) base64 data URLs out of the LLM context.
+    # idx -> path for main paper images
     image_map: dict[int, Path] = {}
+    # idx -> path for supplement paper images
+    supplement_image_map: dict[int, Path] = {}
     combined_text = ''
-    image_ref = 0
 
     # Process regular images
     image_id = 0
@@ -430,12 +432,11 @@ async def handle_pedigree_description(task_id: int) -> None:
             caption_path.read_text() if caption_path.exists() else 'No caption'
         )
         logger.info(
-            f'Registering image {image_id} as [Image {image_ref}] from {pdf_image}'
+            f'Registering image {image_id} as [Image {image_id}] from {pdf_image}'
         )
-        image_map[image_ref] = pdf_image
-        combined_text += f'[Image {image_ref}]\n'
+        image_map[image_id] = pdf_image
+        combined_text += f'[Image {image_id}]\n'
         combined_text += f'Caption: {caption_text}\n\n'
-        image_ref += 1
         image_id += 1
 
     # Process supplement images
@@ -449,12 +450,11 @@ async def handle_pedigree_description(task_id: int) -> None:
             caption_path.read_text() if caption_path.exists() else 'No caption'
         )
         logger.info(
-            f'Registering supplement image {image_id} as [Image {image_ref}] from {pdf_image}'
+            f'Registering supplement image {image_id} as [Supplement Image {image_id}] from {pdf_image}'
         )
-        image_map[image_ref] = pdf_image
-        combined_text += f'[Image {image_ref}]\n'
+        supplement_image_map[image_id] = pdf_image
+        combined_text += f'[Supplement Image {image_id}]\n'
         combined_text += f'Caption: {caption_text}\n\n'
-        image_ref += 1
         image_id += 1
 
     stored_conv_id = await ensure_conversation_id(stored_conv_id)
@@ -468,7 +468,9 @@ async def handle_pedigree_description(task_id: int) -> None:
 
     # Rebuild the agent each invocation (including follow-ups) so its vision tool
     # is bound to this paper's image map.
-    pedigree_describer_agent = pedigree_describer_agent_for_images(image_map)
+    pedigree_describer_agent = pedigree_describer_agent_for_images(
+        image_map, supplement_image_map
+    )
 
     result = await Runner.run(
         pedigree_describer_agent,
@@ -485,18 +487,22 @@ async def handle_pedigree_description(task_id: int) -> None:
         session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).delete()
         output = result.final_output
         # image_id is NOT NULL in the DB; only persist when the agent reported a
-        # found pedigree with a valid image reference.
+        # found pedigree with a valid image_id in the correct source map.
+        valid_map = (
+            supplement_image_map if (output and output.is_supplement) else image_map
+        )
         if (
             output
             and output.found
             and output.image_id is not None
-            and output.image_id in image_map
+            and output.image_id in valid_map
         ):
             session.add(pedigree_to_db(paper_id, output))
         elif output and output.found:
             logger.warning(
                 f'Pedigree reported found=True for paper {paper_id} but image_id '
-                f'{output.image_id!r} is not a valid reference; skipping persist'
+                f'{output.image_id!r} (is_supplement={output.is_supplement}) is not a '
+                f'valid reference; skipping persist'
             )
 
 
