@@ -1,5 +1,5 @@
 # Curator VM Ansible Playbook
-# 
+#
 # Ansible Installation:
 #   - `brew install ansible` on Mac.
 #
@@ -11,7 +11,7 @@
 #
 # Required variables:
 #   domain           - Domain name for nginx server_name and the certbot lineage
-#   letsencrypt_email - Registration email for Let's Encrypt expiry notices
+#   letsencrypt_email - Email for ACME account registration and revocation/infra notices.
 #
 # Optional variables:
 #   gcp_project           - CAA project name (default: clingen-caa)
@@ -42,7 +42,6 @@
 #   # restarting api/ui/worker). Skips the git pull, uv sync, env, and systemd tasks.
 #   ansible-playbook -i dev-caa, playbook.yml --tags certbot \
 #     -e domain=gene-curation-ai.app -e letsencrypt_email=<ops-email>
-#   (see NOTES.local.md in this dir for the actual prod domain/email values)
 #
 # Note: The trailing comma after the hostname is required for single-host inventory.
 #       The SSH host should be pre-configured in ~/.ssh/config with appropriate
