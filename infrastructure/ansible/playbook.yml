@@ -1,5 +1,5 @@
 # Curator VM Ansible Playbook
-# 
+#
 # Ansible Installation:
 #   - `brew install ansible` on Mac.
 #
@@ -10,16 +10,18 @@
 #   ansible-playbook -i dev-caa.us-east4-a.clingen-caa, infrastructure/ansible/playbook.yml -e gene-curation-ai.app
 #
 # Required variables:
-#   domain        - Domain name for nginx server_name
+#   domain           - Domain name for nginx server_name and the certbot lineage
+#   letsencrypt_email - Email for ACME account registration and revocation/infra notices.
 #
 # Optional variables:
 #   gcp_project           - CAA project name (default: clingen-caa)
-#   ssl_cert_secret       - Secret Manager name for SSL cert (default: caa-ssl-cert)
-#   ssl_key_secret        - Secret Manager name for SSL key (default: caa-ssl-key)
 #   openai_api_key_secret - Secret Manager name for OpenAI key (default: caa-openai-api-key)
 #   ncbi_api_key_secret   - Secret Manager name for NCBI Api Key (default: caa-ncbi-api-key)
 #   ncbi_email_secret     - Secret Manager name for NCBI Email (default: caa-ncbi-email)
 #   auth_secrets_secret   - Secret Manager name for the auth/SMTP JSON secret (default: caa-auth-secrets)
+#   porkbun_api_key_secret    - Secret Manager name for the Porkbun API key (default: caa-certbot-porkbun-api-key)
+#   porkbun_secret_key_secret - Secret Manager name for the Porkbun secret key (default: caa-certbot-porkbun-secret-key)
+#   letsencrypt_propagation_seconds - DNS-01 propagation wait (default: 300)
 #   git_repo              - Git repository URL (default: https://github.com/clingen-data-model/cur-ai-ss.git)
 #   git_version           - Git ref to deploy (default: main)
 #
@@ -36,18 +38,26 @@
 #   ansible-playbook -i dev-caa, playbook.yml --check \
 #     -e domain=myapp.example.com
 #
+#   # Cert-only run (issue/renew TLS + repoint nginx WITHOUT updating app code or
+#   # restarting api/ui/worker). Skips the git pull, uv sync, env, and systemd tasks.
+#   ansible-playbook -i dev-caa, playbook.yml --tags certbot \
+#     -e domain=gene-curation-ai.app -e letsencrypt_email=<ops-email>
+#
 # Note: The trailing comma after the hostname is required for single-host inventory.
 #       The SSH host should be pre-configured in ~/.ssh/config with appropriate
 #       User, IdentityFile, and other connection settings.
 #
 # Prerequisites:
-#   -  Secrets stored in Google Secret Manager:
-#      # SSL certificate
-#      gcloud secrets create caa-ssl-cert --project=PROJECT
-#      gcloud secrets versions add caa-ssl-cert --data-file=fullchain.pem --project=PROJECT
-#      # SSL private key
-#      gcloud secrets create caa-ssl-key --project=PROJECT
-#      gcloud secrets versions add caa-ssl-key --data-file=privkey.pem --project=PROJECT
+#   -  certbot / Let's Encrypt secrets:
+#      # TLS is now owned by certbot on the VM; the old caa-ssl-cert/caa-ssl-key
+#      # manual-upload secrets are no longer used by this playbook.
+#      #
+#      # The secret CONTAINERS (caa-certbot-porkbun-api-key, caa-certbot-porkbun-secret-key,
+#      # caa-certbot-le-archive) plus the VM SA's IAM on the cache secret are created by
+#      # `terraform apply` (infrastructure/terraform/dev). After apply, add the Porkbun
+#      # VALUES (the cache secret's versions are written at runtime by the backup hook):
+#      echo -n "pk1_..." | gcloud secrets versions add caa-certbot-porkbun-api-key --data-file=- --project=PROJECT
+#      echo -n "sk1_..." | gcloud secrets versions add caa-certbot-porkbun-secret-key --data-file=- --project=PROJECT
 #      # OpenAI API key
 #      gcloud secrets create caa-openai-api-key --project=PROJECT
 #      echo -n "sk-..." | gcloud secrets versions add caa-openai-api-key --data-file=- --project=PROJECT
@@ -72,23 +82,45 @@
     git_repo: https://github.com/clingen-data-model/cur-ai-ss.git
     git_version: main
     # Secret Manager secret names (can be overridden via -e)
-    ssl_cert_secret: caa-ssl-cert
-    ssl_key_secret: caa-ssl-key
     openai_api_key_secret: caa-openai-api-key
     ncbi_api_key_secret: caa-ncbi-api-key
     ncbi_email_secret: caa-ncbi-email
     # Single JSON secret holding the auth/SMTP credentials:
     # {"JWT_SECRET_KEY": "...", "SMTP_USER": "...", "SMTP_PASSWORD": "...", "SMTP_FROM": "..."}
     auth_secrets_secret: caa-auth-secrets
+    # certbot / Let's Encrypt DNS-01 (Porkbun) settings
+    porkbun_api_key_secret: caa-certbot-porkbun-api-key
+    porkbun_secret_key_secret: caa-certbot-porkbun-secret-key
+    # Secret Manager cache of the current certbot lineage (restore on reprovision)
+    certbot_archive_secret: caa-certbot-le-archive
+    # DNS-01 propagation wait. Must be >= Porkbun's minimum record TTL of 600s, or the
+    # plugin warns and challenges may fail; 900 gives margin. Fixed sleep, so it only
+    # costs wall-clock time (and is inherited by renewals via the renewal .conf).
+    letsencrypt_propagation_seconds: 900
 
   tasks:
+    # --- Preflight ---
+    # Fail fast before any cert work if a required var is missing (the issuance step
+    # is not freely repeatable — it spends Let's Encrypt rate limit).
+    - name: Require letsencrypt_email and domain
+      tags: always
+      assert:
+        that:
+          - letsencrypt_email is defined and (letsencrypt_email | length) > 0
+          - domain is defined and (domain | length) > 0
+        fail_msg: "Set -e letsencrypt_email=<addr> and -e domain=<fqdn>."
+
     # --- Package Installation ---
     - name: Update apt cache
+      tags: certbot
       apt:
         update_cache: yes
         cache_valid_time: 3600
 
     - name: Install system dependencies
+      # Tagged certbot so a `--tags certbot` cutover still ensures python3.12-venv + curl
+      # are present. state:present is idempotent and won't touch already-installed packages.
+      tags: certbot
       apt:
         name:
           - nginx
@@ -98,6 +130,10 @@
           - build-essential
           - python3.12
           - python3.12-dev
+          # certbot lives in a stdlib venv (python3.12 -m venv needs the venv package,
+          # else "ensurepip is not available"); curl is used by the backup deploy-hook.
+          - python3.12-venv
+          - curl
           # OpenCV dependencies (required by docling for table extraction)
           - libgl1
           - libglib2.0-0
@@ -310,61 +346,203 @@
         - ui
         - worker
 
-    # --- SSL Certificate Setup ---
+    # --- TLS Certificate (certbot + DNS-01 via Porkbun) ---
+    #
+    # certbot owns the wildcard cert on the VM. Issuance uses DNS-01 (only DNS-01 can
+    # issue wildcards, and the firewall blocks the public HTTP-01 validators), so no
+    # nginx/port-80 is needed for issuance — this whole block runs BEFORE nginx config.
+    # Ordering is the prod safety net: if real issuance fails, the play aborts here,
+    # BEFORE nginx is repointed, so the previously-served cert keeps working. Do not
+    # reorder these tasks or add ignore_errors.
 
-    - name: Create nginx SSL directory
+    - name: Install certbot + Porkbun DNS plugin in a root-owned venv
+      tags: certbot
+      # Pinned plugin version for reproducible unattended rebuilds. Root-owned standalone
+      # venv (not apt certbot, not the caa-user uv env): certbot is a root system service
+      # that writes /etc/letsencrypt and reloads nginx.
+      shell: |
+        python3.12 -m venv /opt/certbot/venv
+        /opt/certbot/venv/bin/pip install 'certbot==5.6.0' 'certbot-dns-porkbun==0.11.0'
+        ln -sf /opt/certbot/venv/bin/certbot /usr/local/bin/certbot
+      args:
+        creates: /opt/certbot/venv/bin/certbot
+
+    - name: Ensure /etc/letsencrypt and subdirs exist
+      tags: certbot
+      # certbot only creates these on its first run, and copy/template/unarchive will not
+      # create missing dest dirs — needed before writing porkbun.ini or restoring the cache.
+      # live/ must exist before the lineage-detection `find` task or it will error on a
+      # fresh VM where certbot has never run.
       file:
-        path: /etc/nginx/ssl
+        path: "{{ item }}"
         state: directory
         owner: root
         group: root
-        mode: "0700"
+        mode: "0755"
+      loop:
+        - /etc/letsencrypt
+        - /etc/letsencrypt/live
 
-    - name: Fetch SSL certificate from Secret Manager
+    - name: Fetch Porkbun API key from Secret Manager
+      tags: certbot
       delegate_to: localhost
       become: no
       command: >
         gcloud secrets versions access latest
-        --secret={{ ssl_cert_secret }}
+        --secret={{ porkbun_api_key_secret }}
         --project={{ gcp_project }}
-      register: ssl_cert_content
+      register: porkbun_api_key_content
       changed_when: false
       no_log: true
 
-    - name: Fetch SSL private key from Secret Manager
+    - name: Fetch Porkbun secret key from Secret Manager
+      tags: certbot
       delegate_to: localhost
       become: no
       command: >
         gcloud secrets versions access latest
-        --secret={{ ssl_key_secret }}
+        --secret={{ porkbun_secret_key_secret }}
         --project={{ gcp_project }}
-      register: ssl_key_content
+      register: porkbun_secret_key_content
       changed_when: false
       no_log: true
 
-    - name: Deploy SSL certificate
-      copy:
-        content: "{{ ssl_cert_content.stdout }}"
-        dest: /etc/nginx/ssl/fullchain.pem
-        owner: root
-        group: root
-        mode: "0644"
-      notify: Reload nginx
-      no_log: true
-
-    - name: Deploy SSL private key
-      copy:
-        content: "{{ ssl_key_content.stdout }}"
-        dest: /etc/nginx/ssl/privkey.pem
+    - name: Write Porkbun credentials file
+      tags: certbot
+      template:
+        src: templates/porkbun.ini.j2
+        dest: /etc/letsencrypt/porkbun.ini
         owner: root
         group: root
         mode: "0600"
-      notify: Reload nginx
       no_log: true
+
+    # --- Restore cached lineage (binary-safe, file-based) before issuance ---
+    # On a fresh VM, restore the certbot lineage from Secret Manager so we serve and renew
+    # without burning a real LE issuance. Only runs when the VM has no live cert.
+    # Binary-safety: the bundle is gzip. `gcloud secrets versions access` to stdout formats
+    # its output as UTF-8 and corrupts binary payloads (gcloud's own help warns of this), so
+    # we use the native --out-file flag, which writes the raw bytes straight to the controller
+    # tempfile. Then unarchive (copy+extract) places it onto the VM.
+
+    - name: Check for an existing live cert on the VM
+      tags: certbot
+      stat:
+        path: /etc/letsencrypt/live/{{ domain }}/fullchain.pem
+      register: le_live
+
+    - name: Create controller tempfile for the cached lineage
+      tags: certbot
+      delegate_to: localhost
+      become: no
+      tempfile:
+        state: file
+        suffix: .tgz
+      register: le_tmp
+      when: not le_live.stat.exists
+
+    - name: Fetch cached lineage to the controller tempfile (binary-safe via --out-file)
+      tags: certbot
+      delegate_to: localhost
+      become: no
+      command: >
+        gcloud secrets versions access latest --secret={{ certbot_archive_secret }}
+        --project={{ gcp_project }} --out-file={{ le_tmp.path }}
+      changed_when: false
+      failed_when: false        # empty/absent cache is normal on the first ever run
+      when: not le_live.stat.exists
+      no_log: true
+
+    - name: Stat the fetched tempfile
+      tags: certbot
+      delegate_to: localhost
+      become: no
+      stat:
+        path: "{{ le_tmp.path }}"
+      register: le_tmp_stat
+      when: not le_live.stat.exists
+
+    - name: Restore cached lineage into /etc/letsencrypt
+      tags: certbot
+      unarchive:
+        src: "{{ le_tmp.path }}"     # on the controller; remote_src defaults to no -> copy+extract
+        dest: /etc/letsencrypt
+      when: not le_live.stat.exists and (le_tmp_stat.stat.size | default(0)) > 0
+
+    - name: Remove the controller tempfile (holds key material briefly)
+      tags: certbot
+      delegate_to: localhost
+      become: no
+      file:
+        path: "{{ le_tmp.path }}"
+        state: absent
+      when: le_tmp.path is defined
+
+    # --- Lineage preflight ---
+    # certbot names a lineage after the first -d, but appends -0001, -0002, ... if that
+    # name already exists, which would land the cert in live/{{ domain }}-0001/ while nginx
+    # still points at live/{{ domain }}/. Fail fast if any unexpected lineage exists.
+    - name: Detect existing certbot lineages
+      tags: certbot
+      find:
+        paths: /etc/letsencrypt/live
+        file_type: directory
+      register: le_lineages
+
+    - name: Fail if a stale/suffixed lineage exists (would break the nginx path)
+      tags: certbot
+      assert:
+        that: >
+          le_lineages.files
+          | map(attribute='path') | map('basename')
+          | reject('equalto', domain) | list | length == 0
+        fail_msg: >
+          Unexpected certbot lineage(s) under /etc/letsencrypt/live; nginx expects exactly
+          '{{ domain }}'. Inspect with `certbot certificates` and clean up before proceeding.
+
+    - name: Issue wildcard cert via DNS-01 (skipped once a live cert exists)
+      tags: certbot
+      # RECOVERY NOTE: the `creates:` guard means this NEVER re-issues while a lineage
+      # exists, so it cannot repair a broken/expired cert. Normal renewal is the cron's
+      # job. To force a clean re-issue from a healthy state, on the VM delete the lineage
+      # (`certbot delete --cert-name {{ domain }}`) and re-run the playbook.
+      # No --deploy-hook here: nginx isn't running yet, and a failed hook would abort the
+      # play after the cert was already issued. --keep-until-expiring is a second guard so
+      # even an explicit run won't reissue a still-valid cert (and burn LE rate limit).
+      command: >
+        /usr/local/bin/certbot certonly --non-interactive --agree-tos
+        -m {{ letsencrypt_email }}
+        --authenticator dns-porkbun
+        --dns-porkbun-credentials /etc/letsencrypt/porkbun.ini
+        --dns-porkbun-propagation-seconds {{ letsencrypt_propagation_seconds }}
+        --keep-until-expiring
+        -d {{ domain }} -d '*.{{ domain }}'
+      args:
+        creates: /etc/letsencrypt/live/{{ domain }}/fullchain.pem
 
     # --- Nginx Configuration ---
 
+    # Rollback insurance: snapshot the currently-served cert BEFORE repointing nginx.
+    # On the first cutover this captures the manually-uploaded /etc/nginx/ssl cert (the
+    # pre-certbot served cert). The creates: guard means the ORIGINAL snapshot is taken
+    # once and never overwritten by later runs, so it always points back to the last
+    # known-good non-certbot cert. To roll back: copy this dir back to /etc/nginx/ssl,
+    # revert the ssl_* lines in nginx.conf.j2, and `nginx -t && systemctl reload nginx`.
+    - name: Check for an existing (pre-certbot) nginx cert
+      tags: certbot
+      stat:
+        path: /etc/nginx/ssl/fullchain.pem
+      register: pre_certbot_cert
+
+    - name: Back up the pre-certbot nginx cert (once; rollback insurance)
+      tags: certbot
+      command: cp -a /etc/nginx/ssl /etc/nginx/ssl.pre-certbot.bak
+      args:
+        creates: /etc/nginx/ssl.pre-certbot.bak
+      when: pre_certbot_cert.stat.exists
+
     - name: Deploy nginx site configuration
+      tags: certbot
       template:
         src: templates/nginx.conf.j2
         dest: /etc/nginx/sites-available/caa
@@ -374,6 +552,7 @@
       notify: Reload nginx
 
     - name: Enable nginx site
+      tags: certbot
       file:
         src: /etc/nginx/sites-available/caa
         dest: /etc/nginx/sites-enabled/caa
@@ -381,20 +560,119 @@
       notify: Reload nginx
 
     - name: Remove default nginx site
+      tags: certbot
       file:
         path: /etc/nginx/sites-enabled/default
         state: absent
       notify: Reload nginx
 
     - name: Validate nginx configuration
+      tags: certbot
       command: nginx -t
       changed_when: false
 
     - name: Enable and start nginx
+      tags: certbot
       systemd:
         name: nginx
         enabled: yes
         state: started
+
+    # --- certbot renewal hooks + schedule ---
+    # Installed AFTER nginx is up so the empty hook dir means the first `certonly` above
+    # never attempts a reload (which would fail/abort while nginx was still stopped).
+
+    - name: Ensure certbot deploy-hook dir exists
+      tags: certbot
+      # On a cache-restored box `certonly` was skipped and the Option C bundle excludes
+      # renewal-hooks/, so the dir may not exist yet.
+      file:
+        path: /etc/letsencrypt/renewal-hooks/deploy
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install certbot deploy hook to reload nginx on renewal
+      tags: certbot
+      copy:
+        dest: /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
+        owner: root
+        group: root
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          systemctl reload nginx
+
+    - name: Install certbot deploy hook to back up lineage to Secret Manager
+      tags: certbot
+      # Best-effort, current-version-only backup of the lineage on every successful
+      # renewal, pushed via the Secret Manager REST API (the VM has no gcloud). Authenticates
+      # as the VM SA using a metadata-server token. Fails soft: any error or an oversized
+      # bundle logs via `logger` and exits 0 — renewal correctness must never depend on it.
+      copy:
+        dest: /etc/letsencrypt/renewal-hooks/deploy/backup-lineage.sh
+        owner: root
+        group: root
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          # Best-effort backup of the current lineage; never fail the renewal.
+          set -u
+          DOMAIN="{{ domain }}"
+          PROJECT="{{ gcp_project }}"
+          SECRET="{{ certbot_archive_secret }}"
+          LE=/etc/letsencrypt
+          TMP=$(mktemp) || exit 0
+          # Current archive version only (the files live/ points at), preserving symlinks.
+          CUR=$(readlink -f "$LE/live/$DOMAIN/fullchain.pem" 2>/dev/null) || { rm -f "$TMP"; exit 0; }
+          N=$(basename "$CUR" | sed 's/[^0-9]//g')
+          # Explicit current-version files (avoid glob matching e.g. fullchain15 when N=5).
+          tar -czf "$TMP" -C "$LE" \
+            accounts \
+            "renewal/$DOMAIN.conf" \
+            "live/$DOMAIN" \
+            "archive/$DOMAIN/cert$N.pem" \
+            "archive/$DOMAIN/chain$N.pem" \
+            "archive/$DOMAIN/fullchain$N.pem" \
+            "archive/$DOMAIN/privkey$N.pem" 2>/dev/null || { rm -f "$TMP"; exit 0; }
+          # Guard: skip if bundle exceeds ~60 KiB (Secret Manager hard cap is 64 KiB).
+          SIZE=$(wc -c < "$TMP")
+          if [ "$SIZE" -gt 61440 ]; then
+            logger -t certbot-backup "lineage bundle ${SIZE}B exceeds 60KiB; skipping push"
+            rm -f "$TMP"; exit 0
+          fi
+          # Access token for the VM service account (metadata server). --max-time bounds hangs.
+          TOKEN=$(curl -s --max-time 10 -H "Metadata-Flavor: Google" \
+            "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" \
+            | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
+          if [ -z "$TOKEN" ]; then
+            logger -t certbot-backup "metadata token fetch failed; skipping push"
+            rm -f "$TMP"; exit 0
+          fi
+          # payload.data must be STANDARD base64 (base64 -w0 = no line wrapping).
+          DATA=$(base64 -w0 "$TMP")
+          curl -s --max-time 30 -X POST \
+            "https://secretmanager.googleapis.com/v1/projects/$PROJECT/secrets/$SECRET:addVersion" \
+            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            -d "{\"payload\":{\"data\":\"$DATA\"}}" >/dev/null \
+            || logger -t certbot-backup "secret addVersion failed; continuing"
+          rm -f "$TMP"
+          exit 0
+
+    - name: Create cron job for certbot renewal
+      tags: certbot
+      # Runs as root, twice daily (certbot convention). The cron module REQUIRES user:
+      # whenever cron_file: is set. Hooks above fire on any successful renewal. cron runs
+      # hooks with a minimal PATH, but all binaries used (curl, base64, tar, sed, readlink,
+      # logger, wc, mktemp) live in /usr/bin; certbot is invoked by absolute path here.
+      cron:
+        name: "Renew Let's Encrypt certificate"
+        user: root
+        minute: "17"
+        hour: "1,13"
+        job: "/usr/local/bin/certbot renew --quiet"
+        cron_file: caa_certbot_renew
 
     # --- Database Backup ---
 

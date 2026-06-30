@@ -99,3 +99,50 @@ resource "google_service_account_iam_member" "token_creator" {
   role               = "roles/iam.serviceAccountTokenCreator"
   member             = "serviceAccount:${google_service_account.this.email}"
 }
+
+# --- certbot / Let's Encrypt secret containers ---
+# Terraform owns the secret CONTAINERS only; secret VALUES are never stored in TF state.
+#  - The Porkbun key/secret values are added out-of-band via `gcloud secrets versions add`
+#    (fetched controller-side by the playbook using the operator's creds, so the VM SA
+#    needs no IAM on them).
+#  - The lineage-cache versions are written at runtime by the VM-side backup deploy-hook,
+#    which authenticates as this SA — hence the two IAM grants below, scoped to that one
+#    secret (secretVersionAdder to push, secretAccessor to read back for restore/debug).
+
+resource "google_secret_manager_secret" "porkbun_api_key" {
+  project   = var.project_id
+  secret_id = "caa-certbot-porkbun-api-key"
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret" "porkbun_secret_key" {
+  project   = var.project_id
+  secret_id = "caa-certbot-porkbun-secret-key"
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret" "certbot_archive" {
+  project   = var.project_id
+  secret_id = "caa-certbot-le-archive"
+  replication {
+    auto {}
+  }
+}
+
+resource "google_secret_manager_secret_iam_member" "certbot_archive_writer" {
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.certbot_archive.secret_id
+  role      = "roles/secretmanager.secretVersionAdder"
+  member    = "serviceAccount:${google_service_account.this.email}"
+}
+
+resource "google_secret_manager_secret_iam_member" "certbot_archive_reader" {
+  project   = var.project_id
+  secret_id = google_secret_manager_secret.certbot_archive.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.this.email}"
+}
