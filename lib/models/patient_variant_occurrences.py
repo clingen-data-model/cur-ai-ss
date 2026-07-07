@@ -42,7 +42,6 @@ class Inheritance(str, Enum):
     recessive = 'Recessive'
     semi_dominant = 'Semi-dominant'
     x_linked = 'X-linked'
-    de_novo = 'De Novo'
     somatic_mosaicism = 'Somatic Mosaicism'
     mitochondrial = 'Mitochondrial'
     unknown = 'Unknown'

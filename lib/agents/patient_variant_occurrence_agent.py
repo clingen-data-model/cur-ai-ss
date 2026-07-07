@@ -64,7 +64,6 @@ Note: Compound heterozygous genotype evaluation (determining if two heterozygous
 - `Recessive`: Two mutant copies (homozygous or compound heterozygous) are required to cause disease. Typically inherited from two unaffected carrier parents.
 - `Semi-dominant`: One mutant copy causes disease, but two mutant copies may have different (often more severe) phenotypic consequences.
 - `X-linked`: The variant is on the X chromosome. Males with one mutant copy are affected; females may be affected if homozygous or show variable penetrance due to X-inactivation.
-- `De Novo`: The variant is newly acquired in the patient and not inherited from either parent (occurs in a germ cell or early in development).
 - `Somatic Mosaicism`: The variant is present only in a subset of the patient's cells (somatic cells), not in the germline.
 - `Mitochondrial`: The variant is in mitochondrial DNA, inherited maternally with variable heteroplasmy levels.
 - `Unknown`: The paper does not clearly specify the inheritance pattern.
