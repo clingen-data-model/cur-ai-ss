@@ -67,7 +67,7 @@ resource "google_compute_firewall" "allow_http" {
     ports    = ["80"]
   }
 
-  source_ranges = concat(local.internal_cidrs, ["10.0.0.0/24", "34.86.179.79"])
+  source_ranges = concat(local.internal_cidrs, ["10.0.0.0/24", "34.86.179.79", "71.105.153.118"])
   target_tags   = ["http-server"]
 }
 
@@ -82,6 +82,6 @@ resource "google_compute_firewall" "allow_https" {
     ports    = ["443"]
   }
 
-  source_ranges = concat(local.internal_cidrs, ["10.0.0.0/24", "34.86.179.79"])
+  source_ranges = concat(local.internal_cidrs, ["10.0.0.0/24", "34.86.179.79", "71.105.153.118"])
   target_tags   = ["https-server"]
 }
