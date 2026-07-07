@@ -79,6 +79,7 @@ Each field (except the *_unit fields) is an EvidenceBlock containing:
   - Other: aunt, uncle, cousin, grandparent, or other relative
   - Unknown: relationship not specified
   - Determine relative to the provided Proband Identifier, using text descriptions and pedigree structure.
+  - HARD RULE: if this patient's identifier equals the provided Proband Identifier, relationship_to_proband MUST be Proband (this keeps it consistent with the patient's proband status determined upstream).
 
 - twin_type (EvidenceBlock[enum: Monozygotic, Dizygotic, Unknown] or null):
   - Monozygotic: identical twins (count as 1 segregation)
