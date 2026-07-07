@@ -57,6 +57,14 @@ Each field is an EvidenceBlock containing:
   - Unknown: unclear
   - Proband identification is a comparison across all patients in a family, so decide it here where the whole cohort is visible (not per-patient downstream).
 
+- family_identifier (EvidenceBlock[string]):
+  - The identifier of the biological family this patient belongs to. Its value MUST
+    exactly match the identifier of one of the families in the "families" list below.
+  - Every patient must carry a family_identifier; it is how each patient is linked to
+    its family (see FAMILY GROUPING for how to derive and label families).
+  - reasoning should explain the linkage (e.g., "listed under Family 2 in Table 1",
+    "described as the proband's sibling").
+
 Guidelines:
 
 1. Extract only explicitly stated information. Do NOT infer.
