@@ -415,7 +415,8 @@ def _patient_required_fields(identifier: str = 'P1') -> dict:
         proband_status='Unknown',
         sex='Unknown',
         country_of_origin='Unknown',
-        race_ethnicity='Unknown',
+        race='Unknown',
+        ethnicity='Unknown',
         affected_status='Unknown',
         identifier_evidence=dict(
             value=identifier, reasoning='test evidence', quote='test context'
@@ -438,7 +439,10 @@ def _patient_required_fields(identifier: str = 'P1') -> dict:
         country_of_origin_evidence=dict(
             value='Unknown', reasoning='test evidence', quote='test context'
         ),
-        race_ethnicity_evidence=dict(
+        race_evidence=dict(
+            value='Unknown', reasoning='test evidence', quote='test context'
+        ),
+        ethnicity_evidence=dict(
             value='Unknown', reasoning='test evidence', quote='test context'
         ),
         affected_status_evidence=dict(

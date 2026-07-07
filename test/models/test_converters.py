@@ -5,9 +5,10 @@ from lib.models.patient import (
     AffectedStatus,
     AgeUnit,
     CountryCode,
+    Ethnicity,
     Patient,
     ProbandStatus,
-    RaceEthnicity,
+    Race,
     RelationshipToProband,
     SexAtBirth,
     TwinType,
@@ -105,8 +106,13 @@ def test_patient_to_db_maps_all_fields():
             quote='from Japan',
             reasoning='origin stated',
         ),
-        race_ethnicity=EvidenceBlock(
-            value=RaceEthnicity.East_Asian,
+        race=EvidenceBlock(
+            value=Race.Asian,
+            quote='East Asian descent',
+            reasoning='race stated',
+        ),
+        ethnicity=EvidenceBlock(
+            value=Ethnicity.Not_Hispanic_or_Latino,
             quote='East Asian descent',
             reasoning='ethnicity stated',
         ),
@@ -130,7 +136,8 @@ def test_patient_to_db_maps_all_fields():
     assert row.age_death is None
     assert row.age_death_unit is None
     assert row.country_of_origin == 'Japan'
-    assert row.race_ethnicity == 'East Asian'
+    assert row.race == 'Asian'
+    assert row.ethnicity == 'Not Hispanic or Latino'
     assert row.affected_status == 'Affected'
     # Segregation analysis fields (defaults)
     assert row.is_obligate_carrier is False
@@ -184,8 +191,14 @@ def test_patient_to_db_handles_optional_none_values():
             quote='location not stated',
             reasoning='no origin information',
         ),
-        race_ethnicity=EvidenceBlock(
-            value=RaceEthnicity.Unknown,
+        race=EvidenceBlock(
+            value=Race.Unknown,
+            quote=None,
+            image_id=1,
+            reasoning='race not mentioned',
+        ),
+        ethnicity=EvidenceBlock(
+            value=Ethnicity.Unknown,
             quote=None,
             image_id=1,
             reasoning='ethnicity not mentioned',
@@ -202,7 +215,8 @@ def test_patient_to_db_handles_optional_none_values():
     assert row.proband_status == 'Unknown'
     assert row.sex == 'Unknown'
     assert row.country_of_origin == 'Unknown'
-    assert row.race_ethnicity == 'Unknown'
+    assert row.race == 'Unknown'
+    assert row.ethnicity == 'Unknown'
     assert row.affected_status == 'Unknown'
     assert row.age_diagnosis is None
     assert row.age_report is None
@@ -234,8 +248,9 @@ def test_patient_to_db_maps_segregation_analysis_fields():
         country_of_origin=EvidenceBlock(
             value=CountryCode.Unknown, quote='unknown', reasoning='not stated'
         ),
-        race_ethnicity=EvidenceBlock(
-            value=RaceEthnicity.Unknown, quote='unknown', reasoning='not stated'
+        race=EvidenceBlock(value=Race.Unknown, quote='unknown', reasoning='not stated'),
+        ethnicity=EvidenceBlock(
+            value=Ethnicity.Unknown, quote='unknown', reasoning='not stated'
         ),
         affected_status=EvidenceBlock(
             value=AffectedStatus.Affected, quote='affected', reasoning='disease'
