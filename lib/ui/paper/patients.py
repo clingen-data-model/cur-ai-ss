@@ -22,8 +22,9 @@ from lib.models.patient import (
     AffectedStatus,
     AgeUnit,
     CountryCode,
+    Ethnicity,
     ProbandStatus,
-    RaceEthnicity,
+    Race,
     RelationshipToProband,
     SexAtBirth,
     TwinType,
@@ -964,15 +965,13 @@ def render_patient(
 
         col1, col2 = st.columns(2)
         with col1:
-            race_ethnicity = RaceEthnicity(
+            race = Race(
                 st.selectbox(
-                    'Race/Ethnicity',
-                    [r.value for r in RaceEthnicity],
+                    'Race',
+                    [r.value for r in Race],
                     index=(
-                        [r.value for r in RaceEthnicity].index(
-                            patient.race_ethnicity.value
-                        )
-                        if patient.race_ethnicity
+                        [r.value for r in Race].index(patient.race.value)
+                        if patient.race
                         else 0
                     ),
                     key=f'{key_prefix}-race',
@@ -980,13 +979,38 @@ def render_patient(
             )
         with col2:
             st.space()
-            race_ethnicity_note = render_evidence_controls(
+            race_note = render_evidence_controls(
                 paper_resp.id,
-                block=patient.race_ethnicity_evidence,
-                label='Race/Ethnicity Evidence',
+                block=patient.race_evidence,
+                label='Race Evidence',
                 color_key=f'{key_prefix}-{patient.identifier}-color-race-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-race-evidence',
                 human_edit_note_key=f'{key_prefix}-race-note',
+            )
+
+        col1, col2 = st.columns(2)
+        with col1:
+            ethnicity = Ethnicity(
+                st.selectbox(
+                    'Ethnicity',
+                    [e.value for e in Ethnicity],
+                    index=(
+                        [e.value for e in Ethnicity].index(patient.ethnicity.value)
+                        if patient.ethnicity
+                        else 0
+                    ),
+                    key=f'{key_prefix}-ethnicity',
+                )
+            )
+        with col2:
+            st.space()
+            ethnicity_note = render_evidence_controls(
+                paper_resp.id,
+                block=patient.ethnicity_evidence,
+                label='Ethnicity Evidence',
+                color_key=f'{key_prefix}-{patient.identifier}-color-ethnicity-evidence',
+                button_key_prefix=f'{key_prefix}-{patient.identifier}-ethnicity-evidence',
+                human_edit_note_key=f'{key_prefix}-ethnicity-note',
             )
 
         # --- Segregation Analysis (for LOD scoring)
@@ -1177,15 +1201,22 @@ def render_patient(
         ):
             changes['country_of_origin_human_edit_note'] = country_of_origin_note
 
-        if race_ethnicity != patient.race_ethnicity:
-            changes['race_ethnicity'] = race_ethnicity.value
-            if not patient.race_ethnicity_evidence.human_edit_note:
-                changes['race_ethnicity_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
+        if race != patient.race:
+            changes['race'] = race.value
+            if not patient.race_evidence.human_edit_note:
+                changes['race_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
+        if race_note and race_note != patient.race_evidence.human_edit_note:
+            changes['race_human_edit_note'] = race_note
+
+        if ethnicity != patient.ethnicity:
+            changes['ethnicity'] = ethnicity.value
+            if not patient.ethnicity_evidence.human_edit_note:
+                changes['ethnicity_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
         if (
-            race_ethnicity_note
-            and race_ethnicity_note != patient.race_ethnicity_evidence.human_edit_note
+            ethnicity_note
+            and ethnicity_note != patient.ethnicity_evidence.human_edit_note
         ):
-            changes['race_ethnicity_human_edit_note'] = race_ethnicity_note
+            changes['ethnicity_human_edit_note'] = ethnicity_note
 
         if is_obligate_carrier != (patient.is_obligate_carrier or False):
             changes['is_obligate_carrier'] = is_obligate_carrier

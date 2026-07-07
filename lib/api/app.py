@@ -139,8 +139,9 @@ from lib.models.mondo import MondoComponentMapping, MondoTerm
 from lib.models.patient import (
     AffectedStatus,
     CountryCode,
+    Ethnicity,
     ProbandStatus,
-    RaceEthnicity,
+    Race,
     RelationshipToProband,
     SexAtBirth,
     TwinType,
@@ -698,10 +699,10 @@ def _patient_to_resp(row: PatientDB) -> PatientResp:
         country_of_origin_evidence=HumanEvidenceBlock.model_validate(
             row.country_of_origin_evidence
         ),
-        race_ethnicity=RaceEthnicity(row.race_ethnicity),
-        race_ethnicity_evidence=HumanEvidenceBlock.model_validate(
-            row.race_ethnicity_evidence
-        ),
+        race=Race(row.race),
+        race_evidence=HumanEvidenceBlock.model_validate(row.race_evidence),
+        ethnicity=Ethnicity(row.ethnicity),
+        ethnicity_evidence=HumanEvidenceBlock.model_validate(row.ethnicity_evidence),
         affected_status=AffectedStatus(row.affected_status),
         affected_status_evidence=HumanEvidenceBlock.model_validate(
             row.affected_status_evidence
@@ -805,8 +806,10 @@ def create_patient(
         country_of_origin_evidence=create_evidence_block(
             patient_data.country_of_origin
         ),
-        race_ethnicity=patient_data.race_ethnicity,
-        race_ethnicity_evidence=create_evidence_block(patient_data.race_ethnicity),
+        race=patient_data.race,
+        race_evidence=create_evidence_block(patient_data.race),
+        ethnicity=patient_data.ethnicity,
+        ethnicity_evidence=create_evidence_block(patient_data.ethnicity),
         affected_status=patient_data.affected_status,
         affected_status_evidence=create_evidence_block(patient_data.affected_status),
     )

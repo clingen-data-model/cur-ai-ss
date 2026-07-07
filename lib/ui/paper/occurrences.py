@@ -305,7 +305,8 @@ def render_patient_variant_occurrences_tab() -> None:
                     '**Age at Diagnosis**',
                     '**Age at Report**',
                     '**Country of Origin**',
-                    '**Race/Ethnicity**',
+                    '**Race**',
+                    '**Ethnicity**',
                 ],
                 'Value': [
                     patient.identifier or 'N/A',
@@ -317,7 +318,8 @@ def render_patient_variant_occurrences_tab() -> None:
                     patient.country_of_origin.value
                     if patient.country_of_origin
                     else 'N/A',
-                    patient.race_ethnicity.value if patient.race_ethnicity else 'N/A',
+                    patient.race.value if patient.race else 'N/A',
+                    patient.ethnicity.value if patient.ethnicity else 'N/A',
                 ],
             }
             st.table(pd.DataFrame(patient_data))

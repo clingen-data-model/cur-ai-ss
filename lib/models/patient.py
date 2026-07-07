@@ -76,17 +76,21 @@ class SexAtBirth(str, Enum):
     Unknown = 'Unknown'
 
 
-class RaceEthnicity(str, Enum):
-    African_American = 'African/African American'
-    Latino_Admixed_American = 'Latino/Admixed American'
-    Ashkenazi_Jewish = 'Ashkenazi Jewish'
-    East_Asian = 'East Asian'
-    Finnish = 'Finnish'
-    Non_Finnish_European = 'Non-Finnish European'
-    South_Asian = 'South Asian'
-    Middle_Eastern = 'Middle Eastern'
-    Amish = 'Amish'
-    Other = 'Other'
+class Race(str, Enum):
+    American_Indian_or_Alaska_Native = 'American Indian or Alaska Native'
+    Asian = 'Asian'
+    Black = 'Black'
+    Native_Hawaiian_or_Other_Pacific_Islander = (
+        'Native Hawaiian or Other Pacific Islander'
+    )
+    White = 'White'
+    Mixed = 'Mixed'
+    Unknown = 'Unknown'
+
+
+class Ethnicity(str, Enum):
+    Hispanic_or_Latino = 'Hispanic or Latino'
+    Not_Hispanic_or_Latino = 'Not Hispanic or Latino'
     Unknown = 'Unknown'
 
 
@@ -362,7 +366,8 @@ class Patient(BaseModel):
     age_death: EvidenceBlock[int | None]
     age_death_unit: AgeUnit | None = None
     country_of_origin: EvidenceBlock[CountryCode]
-    race_ethnicity: EvidenceBlock[RaceEthnicity]
+    race: EvidenceBlock[Race]
+    ethnicity: EvidenceBlock[Ethnicity]
     affected_status: EvidenceBlock[AffectedStatus]
     is_obligate_carrier: EvidenceBlock[bool] = Field(
         default_factory=lambda: EvidenceBlock(
@@ -472,7 +477,8 @@ class PatientDB(Base):
         SQLEnum(AgeUnit), nullable=True
     )
     country_of_origin: Mapped[str] = mapped_column(String, nullable=False)
-    race_ethnicity: Mapped[str] = mapped_column(String, nullable=False)
+    race: Mapped[str] = mapped_column(String, nullable=False)
+    ethnicity: Mapped[str] = mapped_column(String, nullable=False)
     affected_status: Mapped[str] = mapped_column(String, nullable=False)
     is_obligate_carrier: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     relationship_to_proband: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -486,7 +492,8 @@ class PatientDB(Base):
     age_report_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     age_death_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     country_of_origin_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
-    race_ethnicity_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    race_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    ethnicity_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     affected_status_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     is_obligate_carrier_evidence: Mapped[dict | None] = mapped_column(
         JSON, nullable=True
@@ -538,7 +545,8 @@ class PatientResp(BaseModel):
     age_death: int | None
     age_death_unit: AgeUnit | None = None
     country_of_origin: CountryCode
-    race_ethnicity: RaceEthnicity
+    race: Race
+    ethnicity: Ethnicity
     affected_status: AffectedStatus
     is_obligate_carrier: bool | None
     relationship_to_proband: RelationshipToProband | None
@@ -554,7 +562,8 @@ class PatientResp(BaseModel):
     age_report_evidence: HumanEvidenceBlock[int | None]
     age_death_evidence: HumanEvidenceBlock[int | None]
     country_of_origin_evidence: HumanEvidenceBlock[CountryCode]
-    race_ethnicity_evidence: HumanEvidenceBlock[RaceEthnicity]
+    race_evidence: HumanEvidenceBlock[Race]
+    ethnicity_evidence: HumanEvidenceBlock[Ethnicity]
     affected_status_evidence: HumanEvidenceBlock[AffectedStatus]
     is_obligate_carrier_evidence: HumanEvidenceBlock[bool] | None
     relationship_to_proband_evidence: HumanEvidenceBlock[RelationshipToProband] | None
@@ -575,7 +584,8 @@ class PatientCreateRequest(BaseModel):
     age_death: int | None = None
     age_death_unit: str | None = None
     country_of_origin: str
-    race_ethnicity: str
+    race: str
+    ethnicity: str
     affected_status: str
     family_id: int
 
@@ -592,7 +602,8 @@ class PatientUpdateRequest(PatchModel):
     age_death: int | None = None
     age_death_unit: str | None = None
     country_of_origin: str | None = None
-    race_ethnicity: str | None = None
+    race: str | None = None
+    ethnicity: str | None = None
     is_obligate_carrier: bool | None = None
     relationship_to_proband: str | None = None
     twin_type: str | None = None
@@ -604,7 +615,8 @@ class PatientUpdateRequest(PatchModel):
     age_report_human_edit_note: str | None = None
     age_death_human_edit_note: str | None = None
     country_of_origin_human_edit_note: str | None = None
-    race_ethnicity_human_edit_note: str | None = None
+    race_human_edit_note: str | None = None
+    ethnicity_human_edit_note: str | None = None
     affected_status_human_edit_note: str | None = None
     is_obligate_carrier_human_edit_note: str | None = None
     relationship_to_proband_human_edit_note: str | None = None

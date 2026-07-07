@@ -73,9 +73,13 @@ Each field is an EvidenceBlock containing:
 - country_of_origin (EvidenceBlock[enum of valid country names]):
   - Extract from explicit geographic references
 
-- race_ethnicity (EvidenceBlock[enum: African/African American, Latino/Admixed American, Ashkenazi Jewish, East Asian, Finnish, Non-Finnish European, South Asian, Middle Eastern, Amish, Other, Unknown]):
+- race (EvidenceBlock[enum: American Indian or Alaska Native, Asian, Black, Native Hawaiian or Other Pacific Islander, White, Mixed, Unknown]):
   - Normalize specific subgroups to the closest enum value when applicable.
   - Extract from demographic tables or textual descriptions
+
+- ethnicity (EvidenceBlock[enum: Hispanic or Latino, Not Hispanic or Latino, Unknown]):
+  - Extract from demographic tables or textual descriptions
+  - This is independent of race; a patient can be any race and Hispanic or Latino, or not
 
 - affected_status (EvidenceBlock[enum: Affected, Unaffected, Unknown]):
   - Affected: explicitly reported condition
