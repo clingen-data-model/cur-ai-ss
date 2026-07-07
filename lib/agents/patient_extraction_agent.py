@@ -3,7 +3,7 @@ from agents import Agent
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
 from lib.core.environment import env
-from lib.models.patient import Patient, PatientExtractionOutput
+from lib.models.patient import PatientExtractionOutput
 
 PATIENT_EXTRACTION_INSTRUCTIONS = f"""
 System: You are an expert clinical data curator.
@@ -12,7 +12,9 @@ CONTEXT:
 - The paper text is provided above in the PAPER AND GENE CONTEXT section.
 - A structured description of a pedigree (if present) will be provided below.
 
-Task: Extract patient-level demographic information for each individual human patient explicitly described in the text, distinguishing clearly between probands and non-probands. ALSO group extracted patients into biological families.
+Task: Identify each individual human patient explicitly described in the text and assign each a stable identifier, distinguishing clearly between probands and non-probands. ALSO group extracted patients into biological families.
+
+Note: This agent extracts ONLY patient identity (identifier + proband status) and family structure. Per-patient demographic and clinical details (sex, ages, country of origin, race, ethnicity, affected status, carrier status, relationship to proband, twin type) are extracted separately by a downstream patient demographics agent — do NOT extract them here.
 
 Pedigree Input (if present):
 - image_id: integer index of the pedigree image
@@ -53,62 +55,7 @@ Each field is an EvidenceBlock containing:
   - Proband: explicitly described as proband/index case, OR the individual discussed in most detail in the paper when no explicit proband is identified (explain the rationale in the reasoning block)
   - Non-Proband: clearly another cohort member or relative
   - Unknown: unclear
-
-- sex (EvidenceBlock[enum: Male, Female, Intersex, MTF/Transwoman/Transgender Female, FTM/Transman/Transgender Male, Ambiguous/Unable to Determine, Other, Unknown]):
-  - Extract sex/gender as explicitly stated in text or pedigree
-
-- age_diagnosis, age_report, age_death (EvidenceBlock[int | None]):
-  - Extract ages as reported in text, tables, or pedigrees
-  - Report the numeric value as an integer
-  - None if not stated
-
-- age_diagnosis_unit, age_report_unit, age_death_unit (enum: Years, Months, Days):
-  - Extract the unit of measurement for the corresponding age field
-  - Match the unit as stated in the source text
-  - Must be populated if the corresponding age field is populated; must be null if age is null
-  - Prefer the unit as explicitly stated; if ambiguous or missing, infer from context (e.g., decimal ages typically indicate years)
-  - If the unit is hours, round to the nearest day for the age value and set unit to Days
-  - Note that these are not EvidenceBlocks, we only expect the raw enum!
-
-- country_of_origin (EvidenceBlock[enum of valid country names]):
-  - Extract from explicit geographic references
-
-- race (EvidenceBlock[enum: American Indian or Alaska Native, Asian, Black, Native Hawaiian or Other Pacific Islander, White, Mixed, Unknown]):
-  - Normalize specific subgroups to the closest enum value when applicable.
-  - Extract from demographic tables or textual descriptions
-
-- ethnicity (EvidenceBlock[enum: Hispanic or Latino, Not Hispanic or Latino, Unknown]):
-  - Extract from demographic tables or textual descriptions
-  - This is independent of race; a patient can be any race and Hispanic or Latino, or not
-
-- affected_status (EvidenceBlock[enum: Affected, Unaffected, Unknown]):
-  - Affected: explicitly reported condition
-  - Unaffected: explicitly reported as not affected
-  - Unknown: not stated or unclear
-
-- is_obligate_carrier (EvidenceBlock[bool]):
-  - True: individual is inferred to carry the variant by virtue of their pedigree position alone
-    (e.g., parent of affected child, sibling of affected individual with affected parent).
-    Do NOT mark as True if genotyping confirms the variant; only for pedigree-inferred carriers.
-  - False: not an obligate carrier (either directly genotyped, affected, or not in obligate position).
-  - Use pedigree description and explicit carrier statements in text as evidence.
-
-- relationship_to_proband (EvidenceBlock[enum: Proband, Parent, Sibling, Half-Sibling, Child, Other, Unknown]):
-  - Proband: this patient IS the proband
-  - Parent: father or mother of the proband
-  - Sibling: brother or sister of the proband (full sibling)
-  - Half-Sibling: shares one parent with the proband
-  - Child: son or daughter of the proband
-  - Other: aunt, uncle, cousin, grandparent, or other relative
-  - Unknown: relationship not specified
-  - Extract from text descriptions and pedigree structure, relative to the proband within this patient's biological family.
-
-- twin_type (EvidenceBlock[enum: Monozygotic, Dizygotic, Unknown] or null):
-  - Monozygotic: identical twins (count as 1 segregation)
-  - Dizygotic: fraternal/non-identical twins (count as 2 segregations)
-  - Unknown: twin status stated but type not specified
-  - null: patient is not a twin
-  - Extract only when explicitly mentioned; if not a twin, return null.
+  - Proband identification is a comparison across all patients in a family, so decide it here where the whole cohort is visible (not per-patient downstream).
 
 Guidelines:
 

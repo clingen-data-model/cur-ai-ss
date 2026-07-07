@@ -354,10 +354,29 @@ class CountryCode(str, Enum):
     Unknown = 'Unknown'
 
 
-class Patient(BaseModel):
+class PatientIdentity(BaseModel):
+    """Identity and cross-patient attributes produced by patient extraction.
+
+    These fields require whole-paper / whole-family context to determine
+    (proband identification is a comparison across all patients in a family,
+    and family assignment relates patients to one another), so they stay in the
+    first-pass extraction agent. Per-patient demographics are attached later by
+    the patient demographics agent (see ``PatientDemographics``).
+    """
+
     identifier: EvidenceBlock[str]
     family_identifier: EvidenceBlock[str]
     proband_status: EvidenceBlock[ProbandStatus]
+
+
+class PatientDemographics(BaseModel):
+    """Per-patient demographic/clinical attributes.
+
+    Attached to an already-identified patient by the patient demographics agent.
+    Each field is knowable from that single patient's own description, so these
+    can be extracted one patient at a time in parallel.
+    """
+
     sex: EvidenceBlock[SexAtBirth]
     age_diagnosis: EvidenceBlock[int | None]
     age_diagnosis_unit: AgeUnit | None = None
@@ -386,7 +405,7 @@ class Patient(BaseModel):
     )
 
     @model_validator(mode='after')
-    def validate_age_units(self) -> 'Patient':
+    def validate_age_units(self) -> 'PatientDemographics':
         """Ensure age fields and their units are both populated or both null."""
         age_pairs = [
             ('age_diagnosis', 'age_diagnosis_unit'),
@@ -403,6 +422,28 @@ class Patient(BaseModel):
         return self
 
 
+def placeholder_demographics() -> 'PatientDemographics':
+    """All-Unknown demographics for a patient whose demographics agent hasn't run.
+
+    Patient extraction inserts the patient row before demographics are known;
+    this fills the required fields with Unknown/None values (which the
+    EvidenceBlock validator allows without an evidence source) until the patient
+    demographics agent overwrites them. ``is_obligate_carrier``,
+    ``relationship_to_proband`` and ``twin_type`` fall back to their field defaults.
+    """
+    reason = 'Not yet extracted'
+    return PatientDemographics(
+        sex=EvidenceBlock(value=SexAtBirth.Unknown, reasoning=reason),
+        age_diagnosis=EvidenceBlock(value=None, reasoning=reason),
+        age_report=EvidenceBlock(value=None, reasoning=reason),
+        age_death=EvidenceBlock(value=None, reasoning=reason),
+        country_of_origin=EvidenceBlock(value=CountryCode.Unknown, reasoning=reason),
+        race=EvidenceBlock(value=Race.Unknown, reasoning=reason),
+        ethnicity=EvidenceBlock(value=Ethnicity.Unknown, reasoning=reason),
+        affected_status=EvidenceBlock(value=AffectedStatus.Unknown, reasoning=reason),
+    )
+
+
 class FamilyEntry(BaseModel):
     """Family grouping with references to patients by their identifier."""
 
@@ -411,7 +452,7 @@ class FamilyEntry(BaseModel):
 
 
 class PatientExtractionOutput(BaseModel):
-    patients: List[Patient]
+    patients: List[PatientIdentity]
     families: List[FamilyEntry]
 
     @model_validator(mode='after')
