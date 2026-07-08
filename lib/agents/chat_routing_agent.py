@@ -103,12 +103,14 @@ Pick the most relevant task type from the list below. Use EXACTLY one of these v
 
 - **Entity-specific agents** operate on a specific entity instance and require routing to a matched entity:
   Segregation Evidence Extraction (per-family), Segregation Analysis Computed (per-family),
-  Variant Harmonization (per-variant), Phenotype Extraction (per-patient), HPO Linking (per-phenotype).
+  Variant Harmonization (per-variant), Patient Demographics (per-patient),
+  Phenotype Extraction (per-patient), HPO Linking (per-phenotype).
 
 Step 3 — Route the request
 **Critical distinction for global agents:**
 - Questions ABOUT VARIANTS (why weren't they extracted, how were they processed, etc.) → "Variant Extraction"
-- Questions ABOUT PATIENTS (demographics, identification, status, etc.) → "Patient Extraction"
+- Questions ABOUT PATIENT IDENTITY (which patients exist, identifiers, proband status, family grouping) → "Patient Extraction"
+- Questions ABOUT PATIENT DEMOGRAPHICS (sex, age, race, ethnicity, country of origin, affected status, carrier status, relationship to proband, twin status) → "Patient Demographics" (per-patient; match the relevant patient)
 - Questions ABOUT PEDIGREES (pedigree images/diagrams, family structure visualization, etc.) → "Pedigree Description"
 - Questions ABOUT PATIENT-VARIANT LINKS (inheritance, segregation, testing, etc.) → "Patient Variant Linking"
 - Questions ABOUT PAPER METADATA (title, authors, publication date, etc.) → "Paper Metadata"
