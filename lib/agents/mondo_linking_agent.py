@@ -200,13 +200,15 @@ Decision guidance:
 
 Reasoning requirements:
 - Explain how you interpreted the disease text.
-- Mention which searches and candidate terms you evaluated.
+- Mention which searches and candidate terms you evaluated (e.g., "Searched for 'dilated cardiomyopathy', top result was MONDO:0005021").
 - State why generic, ambiguous, wrong-gene, animal, or component-only candidates
   were rejected when relevant.
 - State why the final selected term, or null, is supported.
 - If using fallback decomposition, explicitly explain why full-string MONDO
   matching failed, why each component string was chosen, which component is
   primary if any, and which components were mapped or unmapped.
+- Write in plain prose. Do not use function names like get_mondo_term() — describe
+  what you did instead (e.g., "Looked up MONDO:0005021 — confirmed label and definition match").
 
 Return:
 {

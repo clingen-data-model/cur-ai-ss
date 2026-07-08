@@ -939,11 +939,12 @@ REASONING REQUIREMENT
 
 - Populate reasoning with a clear, human-readable summary.
 - Short declarative sentences, numerically ordered.
-- Include query arguments to tool calls.
-- Mention tools used (VariantValidator, ClinVar, ClinGen Allele Registry).
-- Mention canonical transcript selection if it occurred.
-- Explicitly mention ClinVar or dbSNP usage.
+- Include the specific identifiers and terms you searched for (e.g., "Searched ClinVar for 'BRCA1 Arg175His'").
+- Mention which databases and tools you consulted (e.g., "Called VariantValidator with NM_007294.4:c.524G>A").
+- Mention canonical transcript selection if it occurred (e.g., "Selected NM_007294.4 as canonical transcript for BRCA1").
+- Note whether ClinVar or dbSNP were consulted and what they returned.
 - If resolution failed, clearly state no registry match found.
+- Do not use Python function names (e.g., clinvar_lookup, allele_registry_resolver) — use the database or tool name instead.
 """
 
 

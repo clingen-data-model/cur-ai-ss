@@ -348,11 +348,11 @@ Include:
 
 1. How you interpreted the phenotype
 2. Which candidates you evaluated and why
-3. Tool usage (searches, hierarchy exploration, etc.)
+3. What you searched for and what you found (e.g., "Searched for 'agenesis of teeth', found HP:0001321 — too broad")
 4. Why you selected (or rejected) specific terms
 5. Final selection or null reasoning
 
-Do not omit tool calls if they were used.
+Write in plain prose. Do not use function names like get_hpo_term() — describe what you did instead (e.g., "Looked up HP:0001250 — confirmed as seizures").
 
 """
 
