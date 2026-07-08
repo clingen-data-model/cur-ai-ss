@@ -937,13 +937,15 @@ low:
 REASONING REQUIREMENT
 ============================================================
 
-- Populate reasoning with a clear, human-readable summary.
+- Populate reasoning with a clear, human-readable summary written for a human curator.
 - Short declarative sentences, numerically ordered.
+- Lead with which resolution path was taken and why (e.g., "No genomic coordinates or rsID provided, so resolved via transcript HGVS (State 3)" or "rsID present — resolved directly via identifier lookup (State 2)"). This gives the curator an immediate sense of the harmonization approach.
+- Then describe what happened at each step: which states were entered, why each was entered or skipped, and what was found.
 - Include the specific identifiers and terms you searched for (e.g., "Searched ClinVar for 'BRCA1 Arg175His'").
-- Mention which databases and tools you consulted (e.g., "Called VariantValidator with NM_007294.4:c.524G>A").
+- Mention which databases and tools you consulted and what they returned (e.g., "Called VariantValidator with NM_007294.4:c.524G>A — returned gnomAD ID 17-41246481-C-T").
 - Mention canonical transcript selection if it occurred (e.g., "Selected NM_007294.4 as canonical transcript for BRCA1").
 - Note whether ClinVar or dbSNP were consulted and what they returned.
-- If resolution failed, clearly state no registry match found.
+- If resolution failed, clearly state which paths were tried and why none succeeded.
 - Do not use Python function names (e.g., clinvar_lookup, allele_registry_resolver) — use the database or tool name instead.
 """
 
