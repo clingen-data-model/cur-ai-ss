@@ -3,10 +3,8 @@
 # Ansible Installation:
 #   - `brew install ansible` on Mac.
 #
-# Usage:
-#   ansible-playbook -i <ssh-host>, playbook.yml
-# Example:
-#   ansible-playbook -i dev-caa.us-east4-a.clingen-caa, infrastructure/ansible/playbook.yml
+# Usage (run from the repo root; <ssh-host> is your ~/.ssh/config Host for the VM):
+#   ansible-playbook -i <ssh-host>, infrastructure/ansible/playbook.yml
 #
 # Deployment-target values (domain, letsencrypt_email, letsencrypt_propagation_seconds)
 # are defined in group_vars/all.yml and auto-loaded — no -e needed for a normal prod run.
@@ -29,22 +27,22 @@
 #   git_repo              - Git repository URL (default: https://github.com/clingen-data-model/cur-ai-ss.git)
 #   git_version           - Git ref to deploy (default: main)
 #
-# Examples:
-#   ansible-playbook -i dev-caa, playbook.yml
+# Examples (run from the repo root):
+#   ansible-playbook -i <ssh-host>, infrastructure/ansible/playbook.yml
 #
 #   # Deploy a specific tag
-#   ansible-playbook -i dev-caa, playbook.yml \
+#   ansible-playbook -i <ssh-host>, infrastructure/ansible/playbook.yml \
 #     -e git_version=v1.0.0
 #
 #   # Dry run (check mode)
-#   ansible-playbook -i dev-caa, playbook.yml --check
+#   ansible-playbook -i <ssh-host>, infrastructure/ansible/playbook.yml --check
 #
 #   # Cert-only run (issue/renew TLS + repoint nginx WITHOUT updating app code or
 #   # restarting api/ui/worker). Skips the git pull, uv sync, env, and systemd tasks.
-#   ansible-playbook -i dev-caa, playbook.yml --tags certbot
+#   ansible-playbook -i <ssh-host>, infrastructure/ansible/playbook.yml --tags certbot
 #
 #   # Override a deployment-target default (e.g. staging domain)
-#   ansible-playbook -i dev-caa, playbook.yml -e domain=staging.example.com
+#   ansible-playbook -i <ssh-host>, infrastructure/ansible/playbook.yml -e domain=staging.example.com
 #
 # Note: The trailing comma after the hostname is required for single-host inventory.
 #       The SSH host should be pre-configured in ~/.ssh/config with appropriate
@@ -109,7 +107,10 @@
         that:
           - letsencrypt_email is defined and (letsencrypt_email | length) > 0
           - domain is defined and (domain | length) > 0
-        fail_msg: "Set -e letsencrypt_email=<addr> and -e domain=<fqdn>."
+        fail_msg: >-
+          letsencrypt_email and domain must be set. They normally default from
+          group_vars/all.yml — if this fires, that file is missing/empty or was
+          overridden; supply them with -e letsencrypt_email=<addr> -e domain=<fqdn>.
 
     # --- Package Installation ---
     - name: Update apt cache
