@@ -1,0 +1,21 @@
+# Deployment-target values for the CAA VM playbook.
+#
+# These are prod-stable, non-secret values that used to be passed by hand on every
+# run via `-e domain=... -e letsencrypt_email=...`. They are auto-loaded by Ansible
+# for all hosts (group_vars/all is read relative to the playbook), so the cutover /
+# renewal commands no longer need the overrides. Real secrets stay in GCP Secret
+# Manager; only public config lives here.
+#
+# Any value here is still overridable per-run with `-e` (e.g. a staging domain) or
+# with host_vars if a second host is ever added.
+
+# Domain for nginx server_name and the certbot lineage.
+domain: gene-curation-ai.app
+
+# Email for ACME account registration and revocation/infra (expiry) notices.
+letsencrypt_email: clingen-caa@broadinstitute.org
+
+# DNS-01 propagation wait. Must be >= Porkbun's minimum record TTL of 600s, or the
+# plugin warns and challenges may fail; 900 gives margin. Fixed sleep, so it only
+# costs wall-clock time (and is inherited by renewals via the renewal .conf).
+letsencrypt_propagation_seconds: 900
