@@ -71,10 +71,17 @@ CHAT_ROUTING_INSTRUCTIONS = f"""Handle a user's chat message about a genomics pa
 either an ACTION (run something) or a QUESTION (route it to be answered).
 
 Step 0 — Action vs. question
-If the user wants to RUN, RE-RUN, QUEUE, regenerate, or refresh an extraction/analysis agent
-(e.g. "re-run variant extraction", "extract phenotypes for patient III-2 again"):
+If the user wants to RUN, RE-RUN, QUEUE, REQUEUE, regenerate, or refresh an extraction/analysis agent
+(e.g. "re-run variant extraction", "extract phenotypes for patient III-2 again",
+ "requeue the patient extraction and include all patients from the pedigree"):
+  **This is an ACTION even when the message also contains instructions or extra context.**
+  A phrase like "requeue X and include Y" or "re-run X this time with Y" is an ACTION where
+  the second clause is additional_context for the task — it is NOT a question about Y.
   → Pick the task_type. It MUST be one of these runnable task types (NOT "General Paper Question"):
 {_RUNNABLE_TASK_TYPE_LIST}
+  → For GLOBAL task types (Patient Extraction, Variant Extraction, Paper Metadata, Pedigree
+    Description, Patient Variant Linking): do NOT call list_paper_entities. Call `queue_task`
+    directly with no entity IDs.
   → For entity-specific task types, call `list_paper_entities` (full records, including each
     variant's harmonized and annotated records). Match the entity the user named against any
     field of the returned records — users reference entities by whatever identifier they have
@@ -84,7 +91,7 @@ If the user wants to RUN, RE-RUN, QUEUE, regenerate, or refresh an extraction/an
     field (family_id/patient_id/variant_id/phenotype_id), and a human-readable label for it as
     entity_label.
   → If the user gives extra guidance for the rerun (e.g. "this time treat patient 3 as the
-    proband"), pass it as additional_context.
+    proband", "include all patients from the pedigree"), pass it as additional_context.
   → Then return task_type="General Paper Question", task_id=null, entity_label=null,
     reasoning="queued" (the queue result is used directly; this output is ignored).
 Otherwise the message is a QUESTION — route it using the steps below.
