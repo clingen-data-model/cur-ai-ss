@@ -39,6 +39,12 @@ from lib.agents.paper_section_classifier_agent import (
 from lib.agents.paper_section_classifier_agent import (
     agent as paper_classifier_agent,
 )
+from lib.agents.patient_demographics_agent import (
+    PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS,
+)
+from lib.agents.patient_demographics_agent import (
+    agent as patient_demographics_agent,
+)
 from lib.agents.patient_extraction_agent import (
     PATIENT_EXTRACTION_AGENT_INSTRUCTIONS,
 )
@@ -122,10 +128,11 @@ from lib.models import (
     Zygosity,
 )
 from lib.models.converters import (
+    apply_patient_demographics,
     family_to_db,
     harmonized_variant_to_db,
     hpo_to_db,
-    patient_to_db,
+    patient_identity_to_db,
     patient_variant_occurrence_to_db,
     pedigree_to_db,
     phenotype_to_db,
@@ -139,6 +146,7 @@ from lib.models.mondo import (
     MondoLinkingTarget,
 )
 from lib.models.paper import FileFormat
+from lib.models.patient import ProbandStatus
 from lib.models.phenotype import HPOTerm
 from lib.models.variant import HarmonizedVariant, Variant
 from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
@@ -555,9 +563,9 @@ async def handle_patient_extraction(task_id: int) -> None:
             session.flush()
             family_entries_by_id[entry.family.identifier.value] = db_family.id
 
-        # Insert patients with family assignments
+        # Insert patients (identity only; demographics filled by a later agent)
         for patient_info in result.final_output.patients:
-            db_patient = patient_to_db(paper_id, patient_info, agent_run_id)
+            db_patient = patient_identity_to_db(paper_id, patient_info, agent_run_id)
             # Use family_identifier from patient to find correct family
             family_id_value = patient_info.family_identifier.value
             if family_id_value in family_entries_by_id:
@@ -566,6 +574,112 @@ async def handle_patient_extraction(task_id: int) -> None:
                     patient_info.family_identifier.model_dump()
                 )
             session.add(db_patient)
+
+
+async def handle_patient_demographics(task_id: int) -> None:
+    """Extract demographics for a single already-identified patient."""
+    paper_id: int
+    patient_id: int | None = None
+    supplement_format: FileFormat | None = None
+    stored_conv_id: str | None = None
+    additional_context: str | None = None
+    patient_data: dict | None = None
+    proband_identifier: str | None = None
+    pedigree_descriptions_output: dict | None = None
+    section_classifications: dict | None = None
+
+    with session_scope() as session:
+        task = session.get(TaskDB, task_id)
+        if not task:
+            return
+
+        paper_id = task.paper_id
+        patient_id = task.patient_id
+        if patient_id is None:
+            raise ValueError(
+                f'Task {task_id}: PATIENT_DEMOGRAPHICS requires patient_id'
+            )
+
+        stored_conv_id = task.conversation_id
+        additional_context = task.additional_context
+
+        paper = session.get(PaperDB, paper_id)
+        supplement_format = paper.supplement_format if paper else None
+        section_classifications = paper.section_classifications if paper else None
+
+        patient_row = session.get(PatientDB, patient_id)
+        if not patient_row:
+            return
+
+        patient_data = {
+            'patient_id': patient_row.id,
+            'identifier': patient_row.identifier,
+            'identifier_quote': patient_row.identifier_evidence['quote'],
+            'proband_status': patient_row.proband_status,
+        }
+
+        # Find the proband identifier within this patient's family so the agent
+        # can determine relationship_to_proband consistently.
+        proband_row = (
+            session.query(PatientDB)
+            .filter(
+                PatientDB.family_id == patient_row.family_id,
+                PatientDB.proband_status == ProbandStatus.Proband.value,
+            )
+            .first()
+        )
+        proband_identifier = proband_row.identifier if proband_row else None
+
+        pedigree_row = (
+            session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).first()
+        )
+        pedigree_descriptions_output = (
+            {
+                'image_id': pedigree_row.image_id,
+                'description': pedigree_row.description,
+            }
+            if pedigree_row
+            else None
+        )
+
+    stored_conv_id = await ensure_conversation_id(stored_conv_id)
+
+    if additional_context is not None:
+        # Follow-up: agent has context from conversation
+        message = build_followup_prompt(additional_context)
+        agent = patient_demographics_agent
+    else:
+        # Initial query: build full message with paper + patient data + instructions
+        paper_markdown = relevant_sections_md(
+            paper_id, supplement_format, section_classifications
+        )
+        paper_context = format_paper_context(paper_markdown)
+        message = (
+            f'{paper_context}\n\n'
+            f'Patient JSON:\n{patient_data}\n\n'
+            f'Proband Identifier:\n{proband_identifier}\n\n'
+            f'Pedigree Description:\n{pedigree_descriptions_output}\n\n'
+            f'{PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS}'
+        )
+        agent = patient_demographics_agent
+
+    result = await Runner.run(
+        agent,
+        message,
+        conversation_id=stored_conv_id,
+    )
+    log_cache_metrics('PATIENT_DEMOGRAPHICS', result)
+
+    with session_scope() as session:
+        task = session.get(TaskDB, task_id)
+        if not task:
+            return
+        task.conversation_id = stored_conv_id
+
+        patient_row = session.get(PatientDB, patient_id)
+        if not patient_row:
+            return
+        apply_patient_demographics(patient_row, result.final_output)
 
 
 async def handle_segregation_evidence_extraction(task_id: int) -> None:
@@ -1592,6 +1706,7 @@ TASK_HANDLERS: dict[TaskType, Callable[[int], Awaitable[None]]] = {
     TaskType.VARIANT_EXTRACTION: handle_variant_extraction,
     TaskType.PEDIGREE_DESCRIPTION: handle_pedigree_description,
     TaskType.PATIENT_EXTRACTION: handle_patient_extraction,
+    TaskType.PATIENT_DEMOGRAPHICS: handle_patient_demographics,
     TaskType.SEGREGATION_EVIDENCE_EXTRACTION: handle_segregation_evidence_extraction,
     TaskType.SEGREGATION_ANALYSIS_COMPUTED: handle_segregation_analysis_computed,
     TaskType.VARIANT_HARMONIZATION: handle_variant_harmonization,

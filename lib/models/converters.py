@@ -2,7 +2,11 @@ from lib.agents.pedigree_describer_agent import PedigreeExtractionOutput
 from lib.models import PatientDB, PedigreeDB, VariantDB
 from lib.models.evidence_block import HumanEvidenceBlock, ReasoningBlock
 from lib.models.family import Family, FamilyDB
-from lib.models.patient import Patient
+from lib.models.patient import (
+    PatientDemographics,
+    PatientIdentity,
+    placeholder_demographics,
+)
 from lib.models.patient_variant_occurrences import (
     PatientVariantOccurrence,
     PatientVariantOccurrenceDB,
@@ -39,35 +43,56 @@ def family_to_db(paper_id: int, agent_run_id: int, family: Family) -> FamilyDB:
     )
 
 
-def patient_to_db(paper_id: int, patient: Patient, agent_run_id: int) -> PatientDB:
-    """Convert a Patient to PatientDB, splitting values from evidence."""
-    kwargs = {
-        'paper_id': paper_id,
-        'agent_run_id': agent_run_id,
-        'age_diagnosis_unit': patient.age_diagnosis_unit,
-        'age_report_unit': patient.age_report_unit,
-        'age_death_unit': patient.age_death_unit,
-    }
+# Demographic fields carried on both PatientDemographics and PatientDB, each with
+# a paired ``{field}_evidence`` JSON column. ``age_*_unit`` fields are plain enums
+# (no evidence block) and are handled separately.
+_DEMOGRAPHIC_EVIDENCE_FIELDS = [
+    'sex',
+    'age_diagnosis',
+    'age_report',
+    'age_death',
+    'country_of_origin',
+    'race',
+    'ethnicity',
+    'affected_status',
+    'is_obligate_carrier',
+    'relationship_to_proband',
+    'twin_type',
+]
 
-    # Extract values and evidence blocks for evidence block fields
-    # Skip family_identifier (it's handled separately in handlers.py)
-    evidence_fields = [
-        name
-        for name in Patient.model_fields
-        if name
-        not in {
-            'age_diagnosis_unit',
-            'age_report_unit',
-            'age_death_unit',
-            'family_identifier',
-        }
-    ]
-    for field_name in evidence_fields:
-        field_value = getattr(patient, field_name)
-        kwargs[field_name] = field_value.value
-        kwargs[f'{field_name}_evidence'] = field_value.model_dump()
 
-    return PatientDB(**kwargs)
+def patient_identity_to_db(
+    paper_id: int, identity: PatientIdentity, agent_run_id: int
+) -> PatientDB:
+    """Convert a PatientIdentity to PatientDB with placeholder demographics.
+
+    Demographics are filled in later by ``apply_patient_demographics`` once the
+    patient demographics agent runs. ``family_id``/``family_assignment_evidence``
+    are assigned by the caller in handlers.py.
+    """
+    patient_db = PatientDB(
+        paper_id=paper_id,
+        agent_run_id=agent_run_id,
+        identifier=identity.identifier.value,
+        identifier_evidence=identity.identifier.model_dump(),
+        proband_status=identity.proband_status.value,
+        proband_status_evidence=identity.proband_status.model_dump(),
+    )
+    apply_patient_demographics(patient_db, placeholder_demographics())
+    return patient_db
+
+
+def apply_patient_demographics(
+    patient_db: PatientDB, demographics: PatientDemographics
+) -> None:
+    """Overwrite an existing PatientDB row's demographic fields in place."""
+    patient_db.age_diagnosis_unit = demographics.age_diagnosis_unit
+    patient_db.age_report_unit = demographics.age_report_unit
+    patient_db.age_death_unit = demographics.age_death_unit
+    for field_name in _DEMOGRAPHIC_EVIDENCE_FIELDS:
+        block = getattr(demographics, field_name)
+        setattr(patient_db, field_name, block.value)
+        setattr(patient_db, f'{field_name}_evidence', block.model_dump())
 
 
 def pedigree_to_db(paper_id: int, pedigree: PedigreeExtractionOutput) -> PedigreeDB:

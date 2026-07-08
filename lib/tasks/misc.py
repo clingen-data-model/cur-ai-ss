@@ -156,6 +156,41 @@ def enqueue_all_instances(
         return [task]
 
 
+def _task_completed(session: Session, paper_id: int, task_type: TaskType) -> bool:
+    """Whether a (global) task of ``task_type`` has completed for this paper."""
+    return (
+        session.query(TaskDB)
+        .filter(
+            TaskDB.paper_id == paper_id,
+            TaskDB.type == task_type,
+            TaskDB.status == TaskStatus.COMPLETED,
+        )
+        .first()
+        is not None
+    )
+
+
+def _patient_demographics_ready(session: Session, paper_id: int) -> bool:
+    """Whether patient identity + all per-patient demographics are complete.
+
+    True once PATIENT_EXTRACTION has completed and every per-patient
+    PATIENT_DEMOGRAPHICS task (if any) has completed. With zero patients there
+    are no demographics tasks, so this reduces to "patient extraction done",
+    preserving the pre-split behavior for papers with no extractable patients.
+    """
+    if not _task_completed(session, paper_id, TaskType.PATIENT_EXTRACTION):
+        return False
+    demographics_tasks = (
+        session.query(TaskDB)
+        .filter(
+            TaskDB.paper_id == paper_id,
+            TaskDB.type == TaskType.PATIENT_DEMOGRAPHICS,
+        )
+        .all()
+    )
+    return all(t.status == TaskStatus.COMPLETED for t in demographics_tasks)
+
+
 def enqueue_successors(session: Session, task: TaskDB) -> None:
     """Create successor tasks when a task completes.
 
@@ -209,7 +244,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
             )
 
         case TaskType.PATIENT_EXTRACTION:
-            # Expand to per-patient PHENOTYPE_EXTRACTION tasks
+            # Expand to per-patient PATIENT_DEMOGRAPHICS tasks
             patients = (
                 session.query(PatientDB)
                 .filter(PatientDB.paper_id == task.paper_id)
@@ -219,22 +254,38 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 enqueue_task(
                     session,
                     paper_id=task.paper_id,
-                    task_type=TaskType.PHENOTYPE_EXTRACTION,
+                    task_type=TaskType.PATIENT_DEMOGRAPHICS,
                     patient_id=patient.id,
                     updated_by_user_id=user_id,
                 )
 
-            # Gate PATIENT_VARIANT_OCCURRENCES on VARIANT_EXTRACTION also being done
-            variant_task = (
-                session.query(TaskDB)
-                .filter(
-                    TaskDB.paper_id == task.paper_id,
-                    TaskDB.type == TaskType.VARIANT_EXTRACTION,
-                    TaskDB.status == TaskStatus.COMPLETED,
+            # With no patients there will be no demographics tasks to drive
+            # PATIENT_VARIANT_OCCURRENCES, so gate it here (on VARIANT_EXTRACTION).
+            if not patients and _task_completed(
+                session, task.paper_id, TaskType.VARIANT_EXTRACTION
+            ):
+                enqueue_task(
+                    session,
+                    paper_id=task.paper_id,
+                    task_type=TaskType.PATIENT_VARIANT_OCCURRENCES,
+                    updated_by_user_id=user_id,
                 )
-                .first()
+
+        case TaskType.PATIENT_DEMOGRAPHICS:
+            # Per-patient PHENOTYPE_EXTRACTION for this patient
+            enqueue_task(
+                session,
+                paper_id=task.paper_id,
+                task_type=TaskType.PHENOTYPE_EXTRACTION,
+                patient_id=task.patient_id,
+                updated_by_user_id=user_id,
             )
-            if variant_task:
+
+            # Fan-in: once all patients have demographics and variants are
+            # extracted, patient-variant occurrences can run.
+            if _patient_demographics_ready(session, task.paper_id) and _task_completed(
+                session, task.paper_id, TaskType.VARIANT_EXTRACTION
+            ):
                 enqueue_task(
                     session,
                     paper_id=task.paper_id,
@@ -258,17 +309,9 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     updated_by_user_id=user_id,
                 )
 
-            # Gate PATIENT_VARIANT_OCCURRENCES on PATIENT_EXTRACTION also being done
-            patient_task = (
-                session.query(TaskDB)
-                .filter(
-                    TaskDB.paper_id == task.paper_id,
-                    TaskDB.type == TaskType.PATIENT_EXTRACTION,
-                    TaskDB.status == TaskStatus.COMPLETED,
-                )
-                .first()
-            )
-            if patient_task:
+            # Gate PATIENT_VARIANT_OCCURRENCES on patient identity + all per-patient
+            # demographics also being done.
+            if _patient_demographics_ready(session, task.paper_id):
                 enqueue_task(
                     session,
                     paper_id=task.paper_id,

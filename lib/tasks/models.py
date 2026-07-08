@@ -26,6 +26,7 @@ class TaskType(StrEnum):
     VARIANT_EXTRACTION = 'Variant Extraction'
     PEDIGREE_DESCRIPTION = 'Pedigree Description'
     PATIENT_EXTRACTION = 'Patient Extraction'
+    PATIENT_DEMOGRAPHICS = 'Patient Demographics'  # per-patient
 
     SEGREGATION_EVIDENCE_EXTRACTION = 'Segregation Evidence Extraction'  # per-family
     SEGREGATION_ANALYSIS_COMPUTED = 'Segregation Analysis Computed'  # per-family
@@ -47,7 +48,8 @@ class TaskType(StrEnum):
             TaskType.PAPER_METADATA: 'Extracts paper title, authors, publication date, and other metadata; resolve to PubMed article',
             TaskType.VARIANT_EXTRACTION: 'Identifies genetic variants mentioned in the paper',
             TaskType.PEDIGREE_DESCRIPTION: 'Analyzes the images in the paper to determine if there is a describable pedigree',
-            TaskType.PATIENT_EXTRACTION: 'Extracts patient demographic and clinical information',
+            TaskType.PATIENT_EXTRACTION: 'Identifies patients, assigns identifiers and proband status, and groups them into families',
+            TaskType.PATIENT_DEMOGRAPHICS: 'Attaches demographic and clinical details (sex, ages, race, ethnicity, affected status, etc.) to each identified patient',
             TaskType.SEGREGATION_EVIDENCE_EXTRACTION: 'Collects segregation analysis evidence within each family',
             TaskType.SEGREGATION_ANALYSIS_COMPUTED: 'Computes segregation analysis results per family',
             TaskType.VARIANT_HARMONIZATION: 'Normalizes variants to standard genomic coordinates using ClinVar, dbSNP, ClinGen Allele Registry, and VariantValidator',
@@ -91,7 +93,8 @@ TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
         TaskType.PEDIGREE_DESCRIPTION,
     ],
     TaskType.PEDIGREE_DESCRIPTION: [TaskType.PATIENT_EXTRACTION],
-    TaskType.PATIENT_EXTRACTION: [
+    TaskType.PATIENT_EXTRACTION: [TaskType.PATIENT_DEMOGRAPHICS],
+    TaskType.PATIENT_DEMOGRAPHICS: [
         TaskType.PHENOTYPE_EXTRACTION,
         TaskType.PATIENT_VARIANT_OCCURRENCES,
     ],

@@ -1,12 +1,17 @@
 from lib.models import PaperDB, PaperExtractionOutput, PaperType
-from lib.models.converters import harmonized_variant_to_db, patient_to_db
+from lib.models.converters import (
+    apply_patient_demographics,
+    harmonized_variant_to_db,
+    patient_identity_to_db,
+)
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.patient import (
     AffectedStatus,
     AgeUnit,
     CountryCode,
     Ethnicity,
-    Patient,
+    PatientDemographics,
+    PatientIdentity,
     ProbandStatus,
     Race,
     RelationshipToProband,
@@ -63,32 +68,63 @@ def test_apply_to_handles_none_fields():
     assert paper_db.paper_types == ['Unknown']
 
 
-def test_patient_to_db_maps_all_fields():
-    patient = Patient(
+def _identity(
+    identifier: str = 'P1',
+    family: str = 'Family1',
+    proband: ProbandStatus = ProbandStatus.Proband,
+) -> PatientIdentity:
+    return PatientIdentity(
         identifier=EvidenceBlock(
-            value='P1',
-            quote='referred to as P1',
-            reasoning='labeled P1 in table',
+            value=identifier, quote=f'referred to as {identifier}', reasoning='labeled'
         ),
         family_identifier=EvidenceBlock(
-            value='Family1',
-            quote='Family 1',
-            reasoning='belongs to Family 1',
+            value=family, quote=family, reasoning=f'belongs to {family}'
         ),
         proband_status=EvidenceBlock(
-            value=ProbandStatus.Proband,
-            quote='index case',
-            reasoning='first identified',
+            value=proband, quote='index case', reasoning='stated'
         ),
+    )
+
+
+def test_patient_identity_to_db_sets_identity_and_placeholder_demographics():
+    row = patient_identity_to_db('paper123', _identity(), agent_run_id=1)
+
+    assert row.paper_id == 'paper123'
+    assert row.agent_run_id == 1
+    # Identity fields come from the agent
+    assert row.identifier == 'P1'
+    assert row.proband_status == 'Proband'
+    assert row.identifier_evidence['value'] == 'P1'
+    assert row.identifier_evidence['quote'] == 'referred to as P1'
+    assert row.proband_status_evidence['value'] == 'Proband'
+
+    # Demographics are placeholders until the demographics agent runs
+    assert row.sex == 'Unknown'
+    assert row.country_of_origin == 'Unknown'
+    assert row.race == 'Unknown'
+    assert row.ethnicity == 'Unknown'
+    assert row.affected_status == 'Unknown'
+    assert row.age_diagnosis is None
+    assert row.age_diagnosis_unit is None
+    assert row.age_report is None
+    assert row.age_death is None
+    assert row.is_obligate_carrier is False
+    assert row.relationship_to_proband == 'Unknown'
+    assert row.twin_type is None
+    # Placeholder evidence blocks are populated (NOT NULL columns)
+    assert row.sex_evidence['reasoning'] == 'Not yet extracted'
+    assert row.race_evidence['value'] == 'Unknown'
+
+
+def test_apply_patient_demographics_overwrites_placeholders():
+    row = patient_identity_to_db('paper123', _identity(), agent_run_id=1)
+
+    demographics = PatientDemographics(
         sex=EvidenceBlock(
-            value=SexAtBirth.Female,
-            quote='female patient',
-            reasoning='stated female',
+            value=SexAtBirth.Female, quote='female patient', reasoning='stated female'
         ),
         age_diagnosis=EvidenceBlock(
-            value=5,
-            quote='diagnosed at 5',
-            reasoning='age at diagnosis noted',
+            value=5, quote='diagnosed at 5', reasoning='age at diagnosis noted'
         ),
         age_diagnosis_unit=AgeUnit.Years,
         age_report=EvidenceBlock(
@@ -96,20 +132,13 @@ def test_patient_to_db_maps_all_fields():
         ),
         age_report_unit=AgeUnit.Years,
         age_death=EvidenceBlock(
-            value=None,
-            quote=None,
-            image_id=1,
-            reasoning='no death information available',
+            value=None, image_id=1, reasoning='no death information available'
         ),
         country_of_origin=EvidenceBlock(
-            value=CountryCode.Japan,
-            quote='from Japan',
-            reasoning='origin stated',
+            value=CountryCode.Japan, quote='from Japan', reasoning='origin stated'
         ),
         race=EvidenceBlock(
-            value=Race.Asian,
-            quote='East Asian descent',
-            reasoning='race stated',
+            value=Race.Asian, quote='East Asian descent', reasoning='race stated'
         ),
         ethnicity=EvidenceBlock(
             value=Ethnicity.Not_Hispanic_or_Latino,
@@ -122,12 +151,12 @@ def test_patient_to_db_maps_all_fields():
             reasoning='clearly affected',
         ),
     )
-    row = patient_to_db('paper123', patient, agent_run_id=1)
+    apply_patient_demographics(row, demographics)
 
-    assert row.paper_id == 'paper123'
-    # Values
+    # Identity is untouched
     assert row.identifier == 'P1'
     assert row.proband_status == 'Proband'
+    # Demographics now reflect the agent output
     assert row.sex == 'Female'
     assert row.age_diagnosis == 5
     assert row.age_diagnosis_unit == 'Years'
@@ -139,119 +168,24 @@ def test_patient_to_db_maps_all_fields():
     assert row.race == 'Asian'
     assert row.ethnicity == 'Not Hispanic or Latino'
     assert row.affected_status == 'Affected'
-    # Segregation analysis fields (defaults)
-    assert row.is_obligate_carrier is False
-    assert row.relationship_to_proband == 'Unknown'
-    assert row.twin_type is None
-    # Evidence blocks
-    assert row.identifier_evidence['value'] == 'P1'
-    assert row.identifier_evidence['quote'] == 'referred to as P1'
-    assert row.identifier_evidence['reasoning'] == 'labeled P1 in table'
-    # Segregation evidence blocks (defaults)
-    assert row.is_obligate_carrier_evidence is not None
-    assert row.relationship_to_proband_evidence is not None
-    assert row.twin_type_evidence is not None
+    assert row.sex_evidence['value'] == 'Female'
+    assert row.race_evidence['quote'] == 'East Asian descent'
 
 
-def test_patient_to_db_handles_optional_none_values():
-    patient = Patient(
-        identifier=EvidenceBlock(
-            value='II-2',
-            quote='pedigree notation',
-            reasoning='labeled in pedigree',
-        ),
-        family_identifier=EvidenceBlock(
-            value='Family2',
-            quote='Family 2',
-            reasoning='belongs to Family 2',
-        ),
-        proband_status=EvidenceBlock(
-            value=ProbandStatus.Unknown,
-            quote=None,
-            image_id=1,
-            reasoning='unclear from pedigree',
-        ),
-        sex=EvidenceBlock(
-            value=SexAtBirth.Unknown, table_id=2, reasoning='not specified'
-        ),
-        age_diagnosis=EvidenceBlock(
-            value=None, table_id=2, reasoning='no diagnosis age provided'
-        ),
-        age_report=EvidenceBlock(
-            value=None,
-            quote=None,
-            table_id=2,
-            reasoning='no report age available',
-        ),
-        age_death=EvidenceBlock(
-            value=None, table_id=2, reasoning='no death information'
-        ),
-        country_of_origin=EvidenceBlock(
-            value=CountryCode.Unknown,
-            quote='location not stated',
-            reasoning='no origin information',
-        ),
-        race=EvidenceBlock(
-            value=Race.Unknown,
-            quote=None,
-            image_id=1,
-            reasoning='race not mentioned',
-        ),
-        ethnicity=EvidenceBlock(
-            value=Ethnicity.Unknown,
-            quote=None,
-            image_id=1,
-            reasoning='ethnicity not mentioned',
-        ),
-        affected_status=EvidenceBlock(
-            value=AffectedStatus.Unknown,
-            quote='status unclear',
-            reasoning='phenotype not detailed',
-        ),
-    )
-    row = patient_to_db('paper456', patient, agent_run_id=1)
+def test_apply_patient_demographics_maps_segregation_analysis_fields():
+    """Segregation analysis fields carried on demographics are applied."""
+    row = patient_identity_to_db('paper_seg', _identity(), agent_run_id=1)
 
-    assert row.identifier == 'II-2'
-    assert row.proband_status == 'Unknown'
-    assert row.sex == 'Unknown'
-    assert row.country_of_origin == 'Unknown'
-    assert row.race == 'Unknown'
-    assert row.ethnicity == 'Unknown'
-    assert row.affected_status == 'Unknown'
-    assert row.age_diagnosis is None
-    assert row.age_report is None
-    assert row.age_death is None
-    # Evidence always present
-    assert row.identifier_evidence is not None
-    assert row.proband_status_evidence is not None
-    # Segregation analysis fields (defaults)
-    assert row.is_obligate_carrier is False
-    assert row.relationship_to_proband == 'Unknown'
-    assert row.twin_type is None
-
-
-def test_patient_to_db_maps_segregation_analysis_fields():
-    """Test that segregation analysis fields are correctly converted."""
-    patient = Patient(
-        identifier=EvidenceBlock(value='P1', quote='patient 1', reasoning='labeled P1'),
-        family_identifier=EvidenceBlock(
-            value='FamilyA', quote='Family A', reasoning='belongs to Family A'
-        ),
-        proband_status=EvidenceBlock(
-            value=ProbandStatus.Proband, quote='index', reasoning='proband'
-        ),
+    demographics = PatientDemographics(
         sex=EvidenceBlock(value=SexAtBirth.Male, quote='male', reasoning='stated'),
-        age_diagnosis=EvidenceBlock(value=10, quote='age 10', reasoning='at diagnosis'),
-        age_diagnosis_unit=AgeUnit.Years,
+        age_diagnosis=EvidenceBlock(value=None, table_id=1, reasoning='no age'),
         age_report=EvidenceBlock(value=None, table_id=1, reasoning='no age'),
         age_death=EvidenceBlock(value=None, table_id=1, reasoning='no death info'),
         country_of_origin=EvidenceBlock(
-            value=CountryCode.Unknown, quote='unknown', reasoning='not stated'
+            value=CountryCode.Unknown, reasoning='not stated'
         ),
-        race=EvidenceBlock(value=Race.Unknown, quote='unknown', reasoning='not stated'),
-        ethnicity=EvidenceBlock(
-            value=Ethnicity.Unknown, quote='unknown', reasoning='not stated'
-        ),
+        race=EvidenceBlock(value=Race.Unknown, reasoning='not stated'),
+        ethnicity=EvidenceBlock(value=Ethnicity.Unknown, reasoning='not stated'),
         affected_status=EvidenceBlock(
             value=AffectedStatus.Affected, quote='affected', reasoning='disease'
         ),
@@ -271,14 +205,11 @@ def test_patient_to_db_maps_segregation_analysis_fields():
             reasoning='explicitly stated',
         ),
     )
-    row = patient_to_db('paper_seg', patient, agent_run_id=1)
+    apply_patient_demographics(row, demographics)
 
-    # Segregation fields should be set correctly
     assert row.is_obligate_carrier is True
     assert row.relationship_to_proband == 'Parent'
     assert row.twin_type == 'Monozygotic'
-
-    # Evidence blocks should be serialized
     assert row.is_obligate_carrier_evidence['value'] is True
     assert row.is_obligate_carrier_evidence['quote'] == 'mother of affected child'
     assert row.relationship_to_proband_evidence['value'] == 'Parent'
