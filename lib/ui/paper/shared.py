@@ -332,7 +332,8 @@ def render_evidence_controls(
             type='tertiary',
             disabled=not quote and not reasoning and not human_edit_note,
         ):
-            st.markdown('**Evidence**: ' + (quote or ''))
+            if quote:
+                st.markdown('**Evidence**: ' + quote)
             st.markdown('**Reasoning**: ' + (reasoning or ''))
             # Show info message if evidence is from supplement
             if isinstance(block, EvidenceBlock) and block.is_supplement:

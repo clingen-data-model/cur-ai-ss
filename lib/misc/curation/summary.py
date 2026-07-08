@@ -221,7 +221,12 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
 
                 relative_lines = []
                 for relative in affected_relatives:
-                    rel_type = relative.relationship_to_proband or 'Unknown relation'
+                    rel_type = (
+                        relative.relationship_to_proband
+                        if relative.relationship_to_proband
+                        and relative.relationship_to_proband != 'Unknown'
+                        else 'Unknown relation'
+                    )
                     relative_lines.append(f'{rel_type} ({relative.identifier})')
 
                 if relative_lines:

@@ -61,6 +61,31 @@ def render_metadata_tab() -> None:
             human_edit_note_key='disease-name-note',
         )
 
+    # MONDO linked disease
+    mondo_term = paper_resp.mondo.value if paper_resp.mondo else None
+    if mondo_term:
+        mondo_label = f'{mondo_term.mondo_id} — {mondo_term.label}'
+    else:
+        mondo_label = 'Not linked'
+    st.text_input('MONDO Disease', value=mondo_label, disabled=True)
+
+    if paper_resp.mondo_components:
+        with st.expander('MONDO Components', expanded=False):
+            component_rows = [
+                {
+                    'Text': c.text,
+                    'Role': c.role,
+                    'Category': c.category,
+                    'Status': c.mapping_status,
+                    'Ontology': c.mapped_ontology or '',
+                    'Term': (c.mondo.label if c.mondo else c.hpo.name if c.hpo else ''),
+                    'ID': (c.mondo.mondo_id if c.mondo else c.hpo.id if c.hpo else ''),
+                    'Confidence': c.confidence or '',
+                }
+                for c in paper_resp.mondo_components
+            ]
+            st.dataframe(component_rows, use_container_width=True, hide_index=True)
+
     col1, col2 = st.columns([3, 1])
     with col1:
         inheritance_options = [i.value for i in Inheritance]
