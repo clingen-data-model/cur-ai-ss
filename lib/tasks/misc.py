@@ -29,7 +29,6 @@ def enqueue_task(
     skip_successors: bool = False,
     additional_context: str | None = None,
     updated_by_user_id: int | None = None,
-    new_conversation: bool = False,
 ) -> TaskDB:
     """Create or reset a task to PENDING status.
 
@@ -39,10 +38,6 @@ def enqueue_task(
 
     ``updated_by_user_id`` records who triggered the task; leave ``None`` for
     machine enqueues (worker successors) so they stay unattributed.
-
-    ``new_conversation`` forces the task to start a brand-new agent conversation
-    (clears any stored ``conversation_id``) even when ``additional_context`` is
-    supplied. Used by the paper chat so each chat-queued run begins fresh.
     """
     # Get latest agent run
     latest_run = session.query(AgentRunDB).order_by(AgentRunDB.id.desc()).first()
@@ -76,9 +71,8 @@ def enqueue_task(
         existing_task.skip_successors = skip_successors
         existing_task.additional_context = additional_context
         existing_task.updated_by_user_id = updated_by_user_id
-        # Clear conversation_id if not providing new context (start fresh), or
-        # when the caller explicitly requests a brand-new conversation.
-        if additional_context is None or new_conversation:
+        # Clear conversation_id if not providing new context (start fresh).
+        if additional_context is None:
             existing_task.conversation_id = None
         session.flush()
         return existing_task

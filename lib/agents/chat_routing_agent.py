@@ -307,7 +307,6 @@ def _make_queue_task_tool(paper_id: int, user_id: int) -> Any:
                 additional_context=additional_context,
                 skip_successors=skip_successors,
                 updated_by_user_id=user_id,
-                new_conversation=True,
             )
             # Build the confirmation from the real task while the session is open.
             target = f' for "{entity_label}"' if entity_label else ''
