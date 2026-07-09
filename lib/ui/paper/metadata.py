@@ -1,5 +1,6 @@
 from typing import Any
 
+import pandas as pd
 import streamlit as st
 
 from lib.models import PaperResp, PaperType, PaperUpdateRequest
@@ -67,12 +68,25 @@ def render_metadata_tab() -> None:
         mondo_label = f'{mondo_term.mondo_id} — {mondo_term.label}'
     else:
         mondo_label = 'Not linked'
-    st.text_input('MONDO Disease', value=mondo_label, disabled=True)
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.text_input('MONDO Disease', value=mondo_label, disabled=True)
+    with col2:
+        st.space()
+        render_evidence_controls(
+            paper_resp.id,
+            label='Evidence',
+            block=paper_resp.mondo,
+            color_key='mondo-disease-color',
+            button_key_prefix='mondo-disease-btn',
+            human_edit_note_key='mondo-disease-note',
+        )
 
     if paper_resp.mondo_components:
         with st.expander('MONDO Components', expanded=False):
             component_rows = [
                 {
+                    'Select': False,
                     'Text': c.text,
                     'Role': c.role,
                     'Category': c.category,
@@ -84,7 +98,60 @@ def render_metadata_tab() -> None:
                 }
                 for c in paper_resp.mondo_components
             ]
-            st.dataframe(component_rows, use_container_width=True, hide_index=True)
+            edited_df = st.data_editor(
+                pd.DataFrame(component_rows),
+                hide_index=True,
+                use_container_width=True,
+                disabled=[
+                    'Text',
+                    'Role',
+                    'Category',
+                    'Status',
+                    'Ontology',
+                    'Term',
+                    'ID',
+                    'Confidence',
+                ],
+                column_config={
+                    'Select': st.column_config.CheckboxColumn('Select', width='small'),
+                },
+                key='mondo-components-editor',
+            )
+            selected = edited_df[edited_df['Select']].index.tolist()
+            if selected:
+                c = paper_resp.mondo_components[selected[0]]
+                st.divider()
+                st.markdown('##### Component Details')
+                details = {
+                    'Field': [
+                        '**Text**',
+                        '**Normalized**',
+                        '**Role**',
+                        '**Category**',
+                        '**Status**',
+                        '**Ontology**',
+                        '**Term**',
+                        '**ID**',
+                        '**Confidence**',
+                        '**Relationship**',
+                    ],
+                    'Value': [
+                        c.text,
+                        c.normalized_text or '',
+                        c.role,
+                        c.category,
+                        c.mapping_status,
+                        c.mapped_ontology or '',
+                        (c.mondo.label if c.mondo else c.hpo.name if c.hpo else ''),
+                        (c.mondo.mondo_id if c.mondo else c.hpo.id if c.hpo else ''),
+                        c.confidence or '',
+                        c.relationship or '',
+                    ],
+                }
+                st.table(pd.DataFrame(details))
+                if c.reasoning:
+                    with st.expander('Reasoning', expanded=True):
+                        st.text(c.reasoning)
 
     col1, col2 = st.columns([3, 1])
     with col1:
