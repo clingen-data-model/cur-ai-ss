@@ -1643,7 +1643,7 @@ async def handle_mondo_linking(task_id: int) -> None:
         result = await Runner.run(
             mondo_linking_agent,
             message,
-            max_turns=12,
+            max_turns=25,
             conversation_id=stored_conv_id,
             run_config=RunConfig(
                 trace_metadata={
