@@ -63,47 +63,74 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
         for i, ev in enumerate(annotated_variants)
         if ev and _is_pathogenic(ev.pathogenicity)
     ]
-    other_indices = [
-        i for i in range(len(annotated_variants)) if i not in pathogenic_indices
-    ]
 
     # Separate variants into main focus and contextual by index
     main_focus_indices = [i for i in range(len(variants)) if variants[i].main_focus]
-    contextual_indices = [i for i in range(len(variants)) if not variants[i].main_focus]
 
     # Create mapping from variant ID to index for quick lookup
     variant_id_to_index: dict[int, int] = {
         variants[i].id: i for i in range(len(variants))
     }
 
-    # Determine which tab should be open and if variant should be expanded
+    # Determine which variant should be expanded, and default the filters so it's
+    # visible on load.
     selected_variant_index: int | None = None
     if selected_variant_id is not None:
         selected_variant_index = variant_id_to_index.get(selected_variant_id)
 
-    # Create tabs
-    tabs = [
-        f'🔴 Pathogenic ({len(pathogenic_indices)})',
-        f'⚪ Other ({len(other_indices)})',
-        f'📍 Main Focus ({len(main_focus_indices)})',
-        f'📌 Contextual ({len(contextual_indices)})',
-    ]
-    default_tab = tabs[0]  # Default to Pathogenic
-    if selected_variant_index is not None:
-        if selected_variant_index in other_indices:
-            default_tab = tabs[1]
-        elif selected_variant_index in main_focus_indices:
-            default_tab = tabs[2]
-        elif selected_variant_index in contextual_indices:
-            default_tab = tabs[3]
-
-    tab_pathogenic, tab_other, tab_main_focus, tab_contextual = st.tabs(
-        tabs,
-        default=default_tab,
+    pathogenic_default = (
+        'Pathogenic'
+        if selected_variant_index is not None
+        and selected_variant_index in pathogenic_indices
+        else 'Other'
+        if selected_variant_index is not None
+        else 'All'
+    )
+    focus_default = (
+        'Main Focus'
+        if selected_variant_index is not None
+        and selected_variant_index in main_focus_indices
+        else 'Contextual'
+        if selected_variant_index is not None
+        else 'All'
     )
 
+    # Each variant is rendered exactly once (single widget tree per variant id).
+    # Pathogenicity/focus are just filters over that one rendering pass, so
+    # editing a variant never has to reconcile two independent widget copies.
+    col1, col2 = st.columns(2)
+    with col1:
+        pathogenicity_filter = st.pills(
+            'Pathogenicity',
+            options=['All', 'Pathogenic', 'Other'],
+            default=pathogenic_default,
+            key='variants-pathogenicity-filter',
+        )
+    with col2:
+        focus_filter = st.pills(
+            'Focus',
+            options=['All', 'Main Focus', 'Contextual'],
+            default=focus_default,
+            key='variants-focus-filter',
+        )
+
+    pathogenic_index_set = set(pathogenic_indices)
+    main_focus_index_set = set(main_focus_indices)
+    filtered_indices = [
+        idx
+        for idx in range(len(variants))
+        if (
+            pathogenicity_filter == 'All'
+            or (pathogenicity_filter == 'Pathogenic') == (idx in pathogenic_index_set)
+        )
+        and (
+            focus_filter == 'All'
+            or (focus_filter == 'Main Focus') == (idx in main_focus_index_set)
+        )
+    ]
+
     # Helper function to render variants for a given set of indices
-    def render_variant_list(indices: list[int], tab_name: str) -> None:
+    def render_variant_list(indices: list[int]) -> None:
         for idx in indices:
             i = idx + 1  # Convert 0-based to 1-based for display
             variant = variants[idx]
@@ -111,7 +138,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
             annotated_variant = (
                 annotated_variants[idx] if idx < len(annotated_variants) else None
             )
-            key_prefix = f'{tab_name}-variant-{variant.id}'
+            key_prefix = f'variant-{variant.id}'
             st.markdown(f'### Variant {i}')
             expander_title = (
                 (
@@ -838,27 +865,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                                 f'- Patient "{link.patient_identifier}" w/ Zygosity {link.zygosity.value}'
                             )
 
-    # Render variants in tabs
-    with tab_pathogenic:
-        if pathogenic_indices:
-            render_variant_list(pathogenic_indices, 'pathogenic')
-        else:
-            st.info('No pathogenic variants found.')
-
-    with tab_other:
-        if other_indices:
-            render_variant_list(other_indices, 'other')
-        else:
-            st.info('No other variants found.')
-
-    with tab_main_focus:
-        if main_focus_indices:
-            render_variant_list(main_focus_indices, 'main-focus')
-        else:
-            st.info('No main focus variants found.')
-
-    with tab_contextual:
-        if contextual_indices:
-            render_variant_list(contextual_indices, 'contextual')
-        else:
-            st.info('No contextual variants found.')
+    if not filtered_indices:
+        st.info('No variants match the selected filters.')
+    else:
+        render_variant_list(filtered_indices)

@@ -118,7 +118,7 @@ def _render_phenotypes_table(
             all_concepts = ', '.join(p.concept for p in group)
             row = {
                 'Select': False,
-                'Phenotype': all_concepts,
+                'Extracted Phenotype Text': all_concepts,
                 '_phenotypes': group,
             }
             if (
@@ -132,6 +132,7 @@ def _render_phenotypes_table(
                     {
                         'HPO ID': hpo_id_link,
                         'HPO Term': hpo_term_link,
+                        'HPO ID (raw)': first_phenotype.hpo.value.id,
                     }
                 )
             rows.append(row)
@@ -140,7 +141,7 @@ def _render_phenotypes_table(
         rows = [
             {
                 'Select': False,
-                'Phenotype': phenotype.concept,
+                'Extracted Phenotype Text': phenotype.concept,
                 '_phenotypes': [phenotype],
             }
             for phenotype in phenotypes
@@ -155,9 +156,16 @@ def _render_phenotypes_table(
     # Display table
     column_config = {
         'Select': st.column_config.CheckboxColumn('Select', width='small'),
-        'Phenotype': st.column_config.TextColumn('Phenotype', width='large'),
+        'Extracted Phenotype Text': st.column_config.TextColumn(
+            'Extracted Phenotype Text', width='large'
+        ),
     }
+    # Columns to actually show in the table; 'HPO ID (raw)' is kept in the
+    # underlying dataframe (for potential future use/export) but hidden from
+    # view since 'HPO ID' already shows it as a clickable link.
+    column_order = ['Select', 'Extracted Phenotype Text']
     if show_hpo:
+        column_order += ['HPO ID', 'HPO Term']
         column_config.update(
             {
                 'HPO ID': st.column_config.LinkColumn(
@@ -170,6 +178,9 @@ def _render_phenotypes_table(
                     width='medium',
                     display_text=r'.*?#(.+)$',
                 ),
+                'HPO ID (raw)': st.column_config.TextColumn(
+                    'HPO ID (raw)', width='small'
+                ),
             }
         )
 
@@ -177,7 +188,9 @@ def _render_phenotypes_table(
         df,
         width='stretch',
         hide_index=True,
-        disabled=['Phenotype'] + (['HPO ID', 'HPO Term'] if show_hpo else []),
+        column_order=column_order,
+        disabled=['Extracted Phenotype Text']
+        + (['HPO ID', 'HPO Term', 'HPO ID (raw)'] if show_hpo else []),
         column_config=column_config,
         key=f'{key_prefix}-phenotypes-editor',
     )
@@ -205,7 +218,11 @@ def _render_phenotypes_table(
 
         # Show grouped concepts
         details_data = {
-            'Field': ['**Concepts**', '**HPO ID**', '**HPO Term**'],
+            'Field': [
+                '**Extracted Phenotype Text**',
+                '**HPO ID**',
+                '**HPO Term**',
+            ],
             'Value': [
                 ', '.join(p.concept for p in grouped_phenotypes),
                 first_phenotype.hpo.value.id
@@ -636,6 +653,7 @@ def _render_patients_grouped_by_family(
     selected_patient_id: int | None,
     tab_key: str,
     segregation_analysis: dict[int, SegregationAnalysisResp | None],
+    family_sizes: dict[int, int],
 ) -> None:
     """Render patients grouped by family."""
     family_map = {f.id: f for f in families}
@@ -646,7 +664,10 @@ def _render_patients_grouped_by_family(
 
     for family_id, group in sorted(by_family.items()):
         family = family_map.get(family_id)
-        if family:
+        # family_sizes counts across ALL patients (not just the currently
+        # filtered subset), so a genuinely multi-patient family still shows
+        # its outer family display even when a filter narrows this group to 1.
+        if family and (len(group) > 1 or family_sizes.get(family_id, 0) > 1):
             _render_family_group(
                 paper_resp,
                 family,
@@ -656,7 +677,10 @@ def _render_patients_grouped_by_family(
                 segregation_analysis,
             )
         else:
-            # No matching family record found: render patients as-is.
+            # Single-individual family (or no matching family record): skip the
+            # outer family display. For a genuine single-patient family, also
+            # hide the family id/consanguinity fields on the patient itself,
+            # since there's no family structure (or segregation) to show.
             for patient_id, patient in group:
                 st.markdown(f'### {patient.identifier}')
                 render_patient(
@@ -665,7 +689,8 @@ def _render_patients_grouped_by_family(
                     expanded=(patient_id == selected_patient_id),
                     key_prefix=f'{tab_key}-{patient_id}',
                     patient_id=patient_id,
-                    family=None,
+                    family=family,
+                    hide_family_info=family is not None,
                 )
 
 
@@ -676,6 +701,7 @@ def render_patient(
     key_prefix: str,
     patient_id: int,
     family: FamilyResp | None = None,
+    hide_family_info: bool = False,
 ) -> None:
     with st.expander(
         'View Patient Metadata',
@@ -699,43 +725,48 @@ def render_patient(
                 human_edit_note_key=f'{key_prefix}-identifier-note',
             )
 
-        col1, col2 = st.columns(2)
-        with col1:
-            st.text_input(
-                'Family Identifier',
-                patient.family_identifier,
-                disabled=True,
-                key=f'{key_prefix}-family-identifier',
-            )
-        with col2:
-            st.space()
-            render_evidence_controls(
-                paper_resp.id,
-                block=patient.family_assignment_evidence,
-                label='Family Assignment Evidence',
-                color_key=f'{key_prefix}-{patient.identifier}-color-fam-evidence',
-                button_key_prefix=f'{key_prefix}-{patient.identifier}-fam-evidence',
-            )
-
-        # Consanguinity (from family, if available)
-        if family:
+        # Family identifier + consanguinity are only meaningful when the patient
+        # belongs to a family with other members; a single-individual family has
+        # no segregation to speak of, so skip both here (and the segregation
+        # section is never rendered for these patients in the first place).
+        if not hide_family_info:
             col1, col2 = st.columns(2)
             with col1:
-                st.checkbox(
-                    'Consanguineous',
-                    value=family.consanguinity,
+                st.text_input(
+                    'Family Identifier',
+                    patient.family_identifier,
                     disabled=True,
-                    key=f'{key_prefix}-consanguinity',
+                    key=f'{key_prefix}-family-identifier',
                 )
             with col2:
                 st.space()
                 render_evidence_controls(
                     paper_resp.id,
-                    block=family.consanguinity_evidence,
-                    label='Consanguinity Evidence',
-                    color_key=f'{key_prefix}-consanguinity-color',
-                    button_key_prefix=f'{key_prefix}-consanguinity-btn',
+                    block=patient.family_assignment_evidence,
+                    label='Family Assignment Evidence',
+                    color_key=f'{key_prefix}-{patient.identifier}-color-fam-evidence',
+                    button_key_prefix=f'{key_prefix}-{patient.identifier}-fam-evidence',
                 )
+
+            # Consanguinity (from family, if available)
+            if family:
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.checkbox(
+                        'Consanguineous',
+                        value=family.consanguinity,
+                        disabled=True,
+                        key=f'{key_prefix}-consanguinity',
+                    )
+                with col2:
+                    st.space()
+                    render_evidence_controls(
+                        paper_resp.id,
+                        block=family.consanguinity_evidence,
+                        label='Consanguinity Evidence',
+                        color_key=f'{key_prefix}-consanguinity-color',
+                        button_key_prefix=f'{key_prefix}-consanguinity-btn',
+                    )
 
         col1, col2 = st.columns(2)
         with col1:
@@ -1097,10 +1128,11 @@ def render_patient(
                 )
 
         # --- Save edits: only include changed fields so exclude_unset works
-        # Age fields are numeric (int or None). Convert 0 to None for empty values.
-        age_diagnosis_val = age_diagnosis if age_diagnosis else None
-        age_report_val = age_report if age_report else None
-        age_death_val = age_death if age_death else None
+        # Age fields are numeric (int or None); 0 is a legitimate age (e.g. neonates),
+        # so only None (unset) should be treated as empty.
+        age_diagnosis_val = age_diagnosis if age_diagnosis is not None else None
+        age_report_val = age_report if age_report is not None else None
+        age_death_val = age_death if age_death is not None else None
 
         changes: dict[str, str | int | None] = {}
         if identifier != patient.identifier:
@@ -1322,102 +1354,95 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
     # -----------------------------
     # Display Patients
     # -----------------------------
+    # Each patient is rendered exactly once (single widget tree per patient id).
+    # Proband/affected status are just filters over that one rendering pass, so
+    # editing a patient never has to reconcile two independent widget copies.
     indexed_patients = [(p.id, p) for p in patients]
 
-    probands = [
-        (patient_id, p)
-        for patient_id, p in indexed_patients
-        if p.proband_status == ProbandStatus.Proband
-    ]
-    non_probands = [
-        (patient_id, p)
-        for patient_id, p in indexed_patients
-        if p.proband_status != ProbandStatus.Proband
-    ]
-    affecteds = [
-        (patient_id, p)
-        for patient_id, p in indexed_patients
-        if p.affected_status == AffectedStatus.Affected
-    ]
-    unaffecteds = [
-        (patient_id, p)
-        for patient_id, p in indexed_patients
-        if p.affected_status != AffectedStatus.Affected
-    ]
-    tabs = [
-        f'Probands ({len(probands)})',
-        f'Non-Probands ({len(non_probands)})',
-        f'Affecteds ({len(affecteds)})',
-        f'Unaffecteds ({len(unaffecteds)})',
-        'Pedigree Image',
-    ]
-    proband_tab, non_proband_tab, affecteds_tab, unaffecteds_tab, pedigree_image_tab = (
-        st.tabs(
-            tabs,
-            default=tabs[1]
-            if selected_patient_id in {p[0] for p in non_probands}
-            else tabs[0],
-        )
+    # Family size across ALL patients (not just the currently filtered subset),
+    # so filtering doesn't hide the family display for a genuinely
+    # multi-patient family.
+    family_sizes: dict[int, int] = defaultdict(int)
+    for _, p in indexed_patients:
+        family_sizes[p.family_id] += 1
+
+    selected_patient = next(
+        (p for pid, p in indexed_patients if pid == selected_patient_id), None
     )
-    # Load families
-    if FAMILIES_KEY not in st.session_state:
-        st.session_state[FAMILIES_KEY] = get_families(paper_resp.id)
-    families: list[FamilyResp] = st.session_state[FAMILIES_KEY]
+    proband_default = (
+        'Proband'
+        if selected_patient and selected_patient.proband_status == ProbandStatus.Proband
+        else 'Non-Proband'
+        if selected_patient
+        else 'All'
+    )
+    affected_default = (
+        'Affected'
+        if selected_patient
+        and selected_patient.affected_status == AffectedStatus.Affected
+        else 'Unaffected'
+        if selected_patient
+        else 'All'
+    )
 
-    # Load segregation analysis
-    segregation_list = get_segregation_analysis(paper_resp.id)
-    segregation_analysis: dict[int, SegregationAnalysisResp | None] = {
-        seg.family_id: seg for seg in segregation_list
-    }
+    patients_tab, pedigree_image_tab = st.tabs(['Patients', 'Pedigree Image'])
 
-    with proband_tab:
-        if not probands:
-            st.info('No probands detected.')
+    with patients_tab:
+        col1, col2 = st.columns(2)
+        with col1:
+            proband_filter = st.pills(
+                'Proband Status',
+                options=['All', 'Proband', 'Non-Proband'],
+                default=proband_default,
+                key='patients-proband-filter',
+            )
+        with col2:
+            affected_filter = st.pills(
+                'Affected Status',
+                options=['All', 'Affected', 'Unaffected'],
+                default=affected_default,
+                key='patients-affected-filter',
+            )
+
+        filtered_patients = [
+            (patient_id, p)
+            for patient_id, p in indexed_patients
+            if (
+                proband_filter == 'All'
+                or (proband_filter == 'Proband')
+                == (p.proband_status == ProbandStatus.Proband)
+            )
+            and (
+                affected_filter == 'All'
+                or (affected_filter == 'Affected')
+                == (p.affected_status == AffectedStatus.Affected)
+            )
+        ]
+
+        # Load families
+        if FAMILIES_KEY not in st.session_state:
+            st.session_state[FAMILIES_KEY] = get_families(paper_resp.id)
+        families: list[FamilyResp] = st.session_state[FAMILIES_KEY]
+
+        # Load segregation analysis
+        segregation_list = get_segregation_analysis(paper_resp.id)
+        segregation_analysis: dict[int, SegregationAnalysisResp | None] = {
+            seg.family_id: seg for seg in segregation_list
+        }
+
+        if not filtered_patients:
+            st.info('No patients match the selected filters.')
         else:
             _render_patients_grouped_by_family(
                 paper_resp,
                 families,
-                probands,
+                filtered_patients,
                 selected_patient_id,
-                'patient-proband',
+                'patient',
                 segregation_analysis,
+                family_sizes,
             )
-    with non_proband_tab:
-        if not non_probands:
-            st.info('No non-probands detected.')
-        else:
-            _render_patients_grouped_by_family(
-                paper_resp,
-                families,
-                non_probands,
-                selected_patient_id,
-                'patient-non-proband',
-                segregation_analysis,
-            )
-    with affecteds_tab:
-        if not affecteds:
-            st.info('No affected patients detected.')
-        else:
-            _render_patients_grouped_by_family(
-                paper_resp,
-                families,
-                affecteds,
-                selected_patient_id,
-                'patient-affected',
-                segregation_analysis,
-            )
-    with unaffecteds_tab:
-        if not unaffecteds:
-            st.info('No unaffected patients detected.')
-        else:
-            _render_patients_grouped_by_family(
-                paper_resp,
-                families,
-                unaffecteds,
-                selected_patient_id,
-                'patient-unaffected',
-                segregation_analysis,
-            )
+
     with pedigree_image_tab:
         if not pedigree_description:
             st.info('No pedigree image available')

@@ -377,6 +377,13 @@ def put_paper(
                 f.write(supplement_content)
         # We fill in these counts for the response, they are not persisted to DB.
         paper_db.patient_count = len(paper_db.patients)
+        paper_db.proband_count = len(
+            [
+                p
+                for p in paper_db.patients
+                if p.proband_status == ProbandStatus.Proband.value
+            ]
+        )
         paper_db.variant_count = len(paper_db.variants)
         paper_db.patient_variant_occurrences_count = len(
             paper_db.patient_variant_occurrences
@@ -409,6 +416,13 @@ def get_paper(paper_id: int, session: Session = Depends(get_session)) -> Any:
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
     paper_db.patient_count = len(paper_db.patients)
+    paper_db.proband_count = len(
+        [
+            p
+            for p in paper_db.patients
+            if p.proband_status == ProbandStatus.Proband.value
+        ]
+    )
     paper_db.variant_count = len(paper_db.variants)
     paper_db.patient_variant_occurrences_count = len(
         paper_db.patient_variant_occurrences
@@ -467,6 +481,13 @@ def update_paper(
         paper_db.mondo_term = None
         paper_db.mondo_match_context = None
     paper_db.patient_count = len(paper_db.patients)
+    paper_db.proband_count = len(
+        [
+            p
+            for p in paper_db.patients
+            if p.proband_status == ProbandStatus.Proband.value
+        ]
+    )
     paper_db.variant_count = len(paper_db.variants)
     paper_db.patient_variant_occurrences_count = len(
         paper_db.patient_variant_occurrences
@@ -505,6 +526,13 @@ def list_papers(
     papers = query.all()
     for paper in papers:
         paper.patient_count = len(paper.patients)
+        paper.proband_count = len(
+            [
+                p
+                for p in paper.patients
+                if p.proband_status == ProbandStatus.Proband.value
+            ]
+        )
         paper.variant_count = len(paper.variants)
         paper.patient_variant_occurrences_count = len(paper.patient_variant_occurrences)
     return [_paper_to_resp(paper) for paper in papers]
@@ -584,10 +612,13 @@ def _paper_to_resp(row: PaperDB) -> PaperResp:
         ),
         mondo_components=_mondo_components(row.mondo_match_context),
         updated_at=row.updated_at,
+        updated_by_user_id=row.updated_by_user_id,
+        updated_by=_user_summary(row.updated_by),
         tasks=[
             TaskResp.model_validate(task, from_attributes=True) for task in row.tasks
         ],
         patient_count=row.patient_count,
+        proband_count=row.proband_count,
         variant_count=row.variant_count,
         patient_variant_occurrences_count=row.patient_variant_occurrences_count,
         title=row.title,

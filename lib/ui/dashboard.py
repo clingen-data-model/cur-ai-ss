@@ -138,6 +138,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
         df[
             [
                 'gene_symbol',
+                'disease_name',
                 'tags',
                 'thumbnail_path',
                 'title',
@@ -145,6 +146,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
                 'pmid',
                 'filename',
                 'patient_count',
+                'proband_count',
                 'variant_count',
                 'agent_status',
                 'updated_at',
@@ -154,6 +156,7 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
         row_height=100,
         column_config={
             'gene_symbol': st.column_config.Column('Gene Symbol'),
+            'disease_name': st.column_config.Column('Disease'),
             'tags': st.column_config.MultiselectColumn(
                 'Tags',
                 options=['TrainingSet', 'ValidationSet', 'FailedPaperRelevancy'],
@@ -186,6 +189,10 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
                 '👥 Patients',
                 format='%d',
             ),
+            'proband_count': st.column_config.NumberColumn(
+                '🎯 Probands',
+                format='%d',
+            ),
             'variant_count': st.column_config.NumberColumn(
                 '🧬 Variants',
                 format='%d',
@@ -199,12 +206,14 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
         },
         disabled=[
             'gene_symbol',
+            'disease_name',
             'thumbnail_path',
             'title',
             'first_author',
             'pmid',
             'filename',
             'patient_count',
+            'proband_count',
             'variant_count',
             'agent_status',
             'updated_at',

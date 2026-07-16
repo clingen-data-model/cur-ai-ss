@@ -207,6 +207,7 @@ class PaperDB(Base):
     mondo_match_context: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     patient_count: int = 0
+    proband_count: int = 0
     variant_count: int = 0
     patient_variant_occurrences_count: int = 0
 
@@ -311,6 +312,7 @@ class PaperResp(PaperExtractionOutput):
     updated_by: UserSummaryResp | None = None
     tasks: list['TaskResp'] = []
     patient_count: int = 0
+    proband_count: int = 0
     variant_count: int = 0
     patient_variant_occurrences_count: int = 0
 
