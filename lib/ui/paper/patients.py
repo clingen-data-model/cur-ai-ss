@@ -126,13 +126,11 @@ def _render_phenotypes_table(
                 and first_phenotype.hpo.value
                 and first_phenotype.hpo.value.id
             ):
-                hpo_id_link = f'https://hpo.jax.org/app/browse/term/{first_phenotype.hpo.value.id}#{first_phenotype.hpo.value.id}'
                 hpo_term_link = f'https://hpo.jax.org/app/browse/term/{first_phenotype.hpo.value.id}#{first_phenotype.hpo.value.name}'
                 row.update(
                     {
-                        'HPO ID': hpo_id_link,
+                        'HPO ID': first_phenotype.hpo.value.id,
                         'HPO Term': hpo_term_link,
-                        'HPO ID (raw)': first_phenotype.hpo.value.id,
                     }
                 )
             rows.append(row)
@@ -160,26 +158,14 @@ def _render_phenotypes_table(
             'Extracted Phenotype Text', width='large'
         ),
     }
-    # Columns to actually show in the table; 'HPO ID (raw)' is kept in the
-    # underlying dataframe (for potential future use/export) but hidden from
-    # view since 'HPO ID' already shows it as a clickable link.
-    column_order = ['Select', 'Extracted Phenotype Text']
     if show_hpo:
-        column_order += ['HPO ID', 'HPO Term']
         column_config.update(
             {
-                'HPO ID': st.column_config.LinkColumn(
-                    'HPO ID',
-                    width='small',
-                    display_text=r'.*?#(.+)$',
-                ),
+                'HPO ID': st.column_config.TextColumn('HPO ID', width='small'),
                 'HPO Term': st.column_config.LinkColumn(
                     'HPO Term',
                     width='medium',
                     display_text=r'.*?#(.+)$',
-                ),
-                'HPO ID (raw)': st.column_config.TextColumn(
-                    'HPO ID (raw)', width='small'
                 ),
             }
         )
@@ -188,9 +174,8 @@ def _render_phenotypes_table(
         df,
         width='stretch',
         hide_index=True,
-        column_order=column_order,
         disabled=['Extracted Phenotype Text']
-        + (['HPO ID', 'HPO Term', 'HPO ID (raw)'] if show_hpo else []),
+        + (['HPO ID', 'HPO Term'] if show_hpo else []),
         column_config=column_config,
         key=f'{key_prefix}-phenotypes-editor',
     )
