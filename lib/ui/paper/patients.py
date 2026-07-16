@@ -1029,88 +1029,103 @@ def render_patient(
             )
 
         # --- Segregation Analysis (for LOD scoring)
-        st.divider()
-        with st.expander('Segregation Analysis (for LOD Scoring)', expanded=False):
-            # --- Is Obligate Carrier
-            col1, col2 = st.columns(2)
-            with col1:
-                is_obligate_carrier = st.checkbox(
-                    'Is Obligate Carrier',
-                    value=patient.is_obligate_carrier or False,
-                    key=f'{key_prefix}-obligate-carrier',
-                )
-            with col2:
-                st.space()
-                is_obligate_carrier_note = render_evidence_controls(
-                    paper_resp.id,
-                    block=patient.is_obligate_carrier_evidence,
-                    label='Is Obligate Carrier Evidence',
-                    color_key=f'{key_prefix}-{patient.identifier}-color-oc-evidence',
-                    button_key_prefix=f'{key_prefix}-{patient.identifier}-oc-evidence',
-                    human_edit_note_key=f'{key_prefix}-obligate-carrier-note',
-                )
+        # A single-individual family has no segregation to analyze, so skip
+        # this section entirely and keep the underlying values unchanged
+        # (mirrors hide_family_info above).
+        if hide_family_info:
+            is_obligate_carrier = patient.is_obligate_carrier or False
+            is_obligate_carrier_note = None
+            relationship_to_proband = patient.relationship_to_proband
+            relationship_note = None
+            twin_type = patient.twin_type
+            twin_type_note = None
+        else:
+            st.divider()
+            with st.expander('Segregation Analysis (for LOD Scoring)', expanded=False):
+                # --- Is Obligate Carrier
+                col1, col2 = st.columns(2)
+                with col1:
+                    is_obligate_carrier = st.checkbox(
+                        'Is Obligate Carrier',
+                        value=patient.is_obligate_carrier or False,
+                        key=f'{key_prefix}-obligate-carrier',
+                    )
+                with col2:
+                    st.space()
+                    is_obligate_carrier_note = render_evidence_controls(
+                        paper_resp.id,
+                        block=patient.is_obligate_carrier_evidence,
+                        label='Is Obligate Carrier Evidence',
+                        color_key=f'{key_prefix}-{patient.identifier}-color-oc-evidence',
+                        button_key_prefix=f'{key_prefix}-{patient.identifier}-oc-evidence',
+                        human_edit_note_key=f'{key_prefix}-obligate-carrier-note',
+                    )
 
-            # --- Relationship to Proband
-            col1, col2 = st.columns(2)
-            with col1:
-                rel_options = [None] + [r.value for r in RelationshipToProband]
-                rel_current = (
-                    patient.relationship_to_proband.value
-                    if patient.relationship_to_proband
-                    else None
-                )
-                rel_idx = (
-                    rel_options.index(rel_current) if rel_current in rel_options else 0
-                )
-                relationship_raw = st.selectbox(
-                    'Relationship to Proband',
-                    options=rel_options,
-                    index=rel_idx,
-                    key=f'{key_prefix}-relationship',
-                )
-                relationship_to_proband = (
-                    RelationshipToProband(relationship_raw)
-                    if relationship_raw
-                    else None
-                )
-            with col2:
-                st.space()
-                relationship_note = render_evidence_controls(
-                    paper_resp.id,
-                    block=patient.relationship_to_proband_evidence,
-                    label='Relationship to Proband Evidence',
-                    color_key=f'{key_prefix}-{patient.identifier}-color-rel-evidence',
-                    button_key_prefix=f'{key_prefix}-{patient.identifier}-rel-evidence',
-                    human_edit_note_key=f'{key_prefix}-relationship-note',
-                )
+                # --- Relationship to Proband
+                col1, col2 = st.columns(2)
+                with col1:
+                    rel_options = [None] + [r.value for r in RelationshipToProband]
+                    rel_current = (
+                        patient.relationship_to_proband.value
+                        if patient.relationship_to_proband
+                        else None
+                    )
+                    rel_idx = (
+                        rel_options.index(rel_current)
+                        if rel_current in rel_options
+                        else 0
+                    )
+                    relationship_raw = st.selectbox(
+                        'Relationship to Proband',
+                        options=rel_options,
+                        index=rel_idx,
+                        key=f'{key_prefix}-relationship',
+                    )
+                    relationship_to_proband = (
+                        RelationshipToProband(relationship_raw)
+                        if relationship_raw
+                        else None
+                    )
+                with col2:
+                    st.space()
+                    relationship_note = render_evidence_controls(
+                        paper_resp.id,
+                        block=patient.relationship_to_proband_evidence,
+                        label='Relationship to Proband Evidence',
+                        color_key=f'{key_prefix}-{patient.identifier}-color-rel-evidence',
+                        button_key_prefix=f'{key_prefix}-{patient.identifier}-rel-evidence',
+                        human_edit_note_key=f'{key_prefix}-relationship-note',
+                    )
 
-            # --- Twin Type
-            col1, col2 = st.columns(2)
-            with col1:
-                twin_options = [None] + [t.value for t in TwinType]
-                twin_current = patient.twin_type.value if patient.twin_type else None
-                twin_idx = (
-                    twin_options.index(twin_current)
-                    if twin_current in twin_options
-                    else 0
-                )
-                twin_raw = st.selectbox(
-                    'Twin Type',
-                    options=twin_options,
-                    index=twin_idx,
-                    key=f'{key_prefix}-twin-type',
-                )
-                twin_type = TwinType(twin_raw) if twin_raw else None
-            with col2:
-                st.space()
-                twin_type_note = render_evidence_controls(
-                    paper_resp.id,
-                    block=patient.twin_type_evidence,
-                    label='Twin Type Evidence',
-                    color_key=f'{key_prefix}-{patient.identifier}-color-twin-evidence',
-                    button_key_prefix=f'{key_prefix}-{patient.identifier}-twin-evidence',
-                    human_edit_note_key=f'{key_prefix}-twin-type-note',
-                )
+                # --- Twin Type
+                col1, col2 = st.columns(2)
+                with col1:
+                    twin_options = [None] + [t.value for t in TwinType]
+                    twin_current = (
+                        patient.twin_type.value if patient.twin_type else None
+                    )
+                    twin_idx = (
+                        twin_options.index(twin_current)
+                        if twin_current in twin_options
+                        else 0
+                    )
+                    twin_raw = st.selectbox(
+                        'Twin Type',
+                        options=twin_options,
+                        index=twin_idx,
+                        key=f'{key_prefix}-twin-type',
+                    )
+                    twin_type = TwinType(twin_raw) if twin_raw else None
+                with col2:
+                    st.space()
+                    twin_type_note = render_evidence_controls(
+                        paper_resp.id,
+                        block=patient.twin_type_evidence,
+                        label='Twin Type Evidence',
+                        color_key=f'{key_prefix}-{patient.identifier}-color-twin-evidence',
+                        button_key_prefix=f'{key_prefix}-{patient.identifier}-twin-evidence',
+                        human_edit_note_key=f'{key_prefix}-twin-type-note',
+                    )
 
         # --- Save edits: only include changed fields so exclude_unset works
         # Age fields are numeric (int or None); 0 is a legitimate age (e.g. neonates),
