@@ -735,24 +735,40 @@ def render_patient(
 
         # Consanguinity (from family, if available) is shown regardless of
         # family size, since it applies to the patient even in a
-        # single-individual family record.
+        # single-individual family record. For a single-patient family there
+        # is no separate family group UI to edit it in, so make it editable
+        # here; multi-patient families already expose an editable checkbox
+        # in the family group header, so keep this one read-only there.
         if family:
             col1, col2 = st.columns(2)
             with col1:
-                st.checkbox(
+                consanguinity = st.checkbox(
                     'Consanguineous',
                     value=family.consanguinity,
-                    disabled=True,
+                    disabled=not hide_family_info,
                     key=f'{key_prefix}-consanguinity',
                 )
             with col2:
                 st.space()
-                render_evidence_controls(
+                consanguinity_note = render_evidence_controls(
                     paper_resp.id,
                     block=family.consanguinity_evidence,
                     label='Consanguinity Evidence',
                     color_key=f'{key_prefix}-consanguinity-color',
                     button_key_prefix=f'{key_prefix}-consanguinity-btn',
+                    human_edit_note_key=(
+                        f'{key_prefix}-consanguinity-note' if hide_family_info else None
+                    ),
+                )
+
+            if hide_family_info:
+                _save_family_edits(
+                    paper_resp,
+                    family,
+                    family.identifier,
+                    None,
+                    consanguinity,
+                    consanguinity_note,
                 )
 
         col1, col2 = st.columns(2)

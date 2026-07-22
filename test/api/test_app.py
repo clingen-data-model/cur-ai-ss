@@ -1313,6 +1313,49 @@ def test_create_task_requires_authentication(unauth_client, seeded_paper):
     assert response.status_code == 401
 
 
+def test_update_occurrence(
+    client, db_session, seeded_paper, seeded_variant, seeded_agent_run, test_user
+):
+    occurrence = _create_patient_variant_occurrence(
+        db_session, seeded_paper, seeded_variant, seeded_agent_run
+    )
+
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/occurrences/{occurrence.id}',
+        json={
+            'zygosity': 'Homozygous',
+            'testing_methods': ['Exome Sequencing'],
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body['zygosity'] == 'Homozygous'
+    assert body['testing_methods'] == ['Exome Sequencing']
+    # Untouched fields are preserved.
+    assert body['inheritance'] == 'Dominant'
+    assert body['de_novo'] is False
+
+    # More than two testing methods is rejected.
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/occurrences/{occurrence.id}',
+        json={
+            'testing_methods': [
+                'Exome Sequencing',
+                'Sanger Sequencing',
+                'Genotyping',
+            ]
+        },
+    )
+    assert resp.status_code == 422
+
+    # Missing occurrence is a 404.
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/occurrences/999999',
+        json={'zygosity': 'Hemizygous'},
+    )
+    assert resp.status_code == 404
+
+
 def test_enqueue_task_with_patient_variant_occurrence_scope(
     client, seeded_paper, seeded_variant, seeded_agent_run, db_session
 ):

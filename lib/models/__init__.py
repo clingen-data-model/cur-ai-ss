@@ -57,6 +57,7 @@ from lib.models.patient_variant_occurrences import (
     PatientVariantOccurrenceDB,
     PatientVariantOccurrenceOutput,
     PatientVariantOccurrenceResp,
+    PatientVariantOccurrenceUpdateRequest,
     TestingMethod,
     Zygosity,
 )

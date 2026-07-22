@@ -16,7 +16,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 from typing_extensions import Self
 
-from lib.models.base import Base
+from lib.models.base import Base, PatchModel
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.mondo import MondoComponentMapping, MondoTerm
 
@@ -95,6 +95,19 @@ class PatientVariantOccurrence(BaseModel):
 class PatientVariantOccurrenceOutput(BaseModel):
     links: List[PatientVariantOccurrence]
     disease_name: EvidenceBlock[str] | None = None
+
+
+class PatientVariantOccurrenceUpdateRequest(PatchModel):
+    zygosity: Zygosity | None = None
+    inheritance: Inheritance | None = None
+    de_novo: bool | None = None
+    testing_methods: list[TestingMethod] | None = None
+
+    @model_validator(mode='after')
+    def max_two_methods(self) -> Self:
+        if self.testing_methods is not None and len(self.testing_methods) > 2:
+            raise ValueError('testing_methods must contain at most two items')
+        return self
 
 
 class CompoundHetPair(BaseModel):

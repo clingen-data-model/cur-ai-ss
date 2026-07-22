@@ -18,6 +18,7 @@ from lib.models import (
     PatientResp,
     PatientUpdateRequest,
     PatientVariantOccurrenceResp,
+    PatientVariantOccurrenceUpdateRequest,
     PedigreeResp,
     PhenotypeResp,
     SegregationAnalysisResp,
@@ -296,6 +297,19 @@ def get_occurrences(
     )
     resp.raise_for_status()
     return TypeAdapter(list[PatientVariantOccurrenceResp]).validate_python(resp.json())
+
+
+def update_occurrence(
+    paper_id: int,
+    occurrence_id: int,
+    update_request: PatientVariantOccurrenceUpdateRequest,
+) -> PatientVariantOccurrenceResp:
+    resp = _session.patch(
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/occurrences/{occurrence_id}',
+        json=update_request.model_dump(mode='json', exclude_unset=True),
+    )
+    resp.raise_for_status()
+    return PatientVariantOccurrenceResp.model_validate(resp.json())
 
 
 def get_variant_occurrences(

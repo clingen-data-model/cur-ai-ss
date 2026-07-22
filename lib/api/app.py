@@ -115,6 +115,7 @@ from lib.models import (
     PatientUpdateRequest,
     PatientVariantOccurrenceDB,
     PatientVariantOccurrenceResp,
+    PatientVariantOccurrenceUpdateRequest,
     PedigreeDB,
     PedigreeResp,
     PhenotypeDB,
@@ -1315,6 +1316,37 @@ def get_patient_occurrences(
         _patient_variant_occurrence_to_resp(link[0], patient_identifier=link[1])
         for link in links
     ]
+
+
+@app.patch(
+    '/papers/{paper_id}/occurrences/{occurrence_id}',
+    response_model=PatientVariantOccurrenceResp,
+)
+def update_occurrence(
+    paper_id: int,
+    occurrence_id: int,
+    patch_request: PatientVariantOccurrenceUpdateRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    occurrence_db = (
+        session.query(PatientVariantOccurrenceDB)
+        .filter(
+            PatientVariantOccurrenceDB.id == occurrence_id,
+            PatientVariantOccurrenceDB.paper_id == paper_id,
+        )
+        .one_or_none()
+    )
+    if not occurrence_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Occurrence not found'
+        )
+    patch_request.apply_to(occurrence_db, current_user)
+    _touch_paper(session, paper_id, current_user)
+    patient = session.get(PatientDB, occurrence_db.patient_id)
+    return _patient_variant_occurrence_to_resp(
+        occurrence_db, patient_identifier=patient.identifier if patient else ''
+    )
 
 
 def _patient_variant_occurrence_to_resp(
