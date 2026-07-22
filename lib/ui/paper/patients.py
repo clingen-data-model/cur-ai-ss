@@ -710,9 +710,9 @@ def render_patient(
                 human_edit_note_key=f'{key_prefix}-identifier-note',
             )
 
-        # Family identifier + consanguinity are only meaningful when the patient
-        # belongs to a family with other members; a single-individual family has
-        # no segregation to speak of, so skip both here (and the segregation
+        # Family identifier is only meaningful when the patient belongs to a
+        # family with other members; a single-individual family has no
+        # segregation to speak of, so skip it here (and the segregation
         # section is never rendered for these patients in the first place).
         if not hide_family_info:
             col1, col2 = st.columns(2)
@@ -733,25 +733,27 @@ def render_patient(
                     button_key_prefix=f'{key_prefix}-{patient.identifier}-fam-evidence',
                 )
 
-            # Consanguinity (from family, if available)
-            if family:
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.checkbox(
-                        'Consanguineous',
-                        value=family.consanguinity,
-                        disabled=True,
-                        key=f'{key_prefix}-consanguinity',
-                    )
-                with col2:
-                    st.space()
-                    render_evidence_controls(
-                        paper_resp.id,
-                        block=family.consanguinity_evidence,
-                        label='Consanguinity Evidence',
-                        color_key=f'{key_prefix}-consanguinity-color',
-                        button_key_prefix=f'{key_prefix}-consanguinity-btn',
-                    )
+        # Consanguinity (from family, if available) is shown regardless of
+        # family size, since it applies to the patient even in a
+        # single-individual family record.
+        if family:
+            col1, col2 = st.columns(2)
+            with col1:
+                st.checkbox(
+                    'Consanguineous',
+                    value=family.consanguinity,
+                    disabled=True,
+                    key=f'{key_prefix}-consanguinity',
+                )
+            with col2:
+                st.space()
+                render_evidence_controls(
+                    paper_resp.id,
+                    block=family.consanguinity_evidence,
+                    label='Consanguinity Evidence',
+                    color_key=f'{key_prefix}-consanguinity-color',
+                    button_key_prefix=f'{key_prefix}-consanguinity-btn',
+                )
 
         col1, col2 = st.columns(2)
         with col1:

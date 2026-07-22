@@ -90,6 +90,17 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
         .all()
     )
 
+    # Family size across ALL patients in this paper (not just probands), so a
+    # genuinely single-patient family skips the family header below - mirrors
+    # the UI's treatment of single-individual families (no segregation to show).
+    family_patient_counts: dict[int, int] = {}
+    for family in families:
+        family_patient_counts[family.id] = (
+            session.query(PatientDB)
+            .filter(PatientDB.family_id == family.id, PatientDB.paper_id == paper_id)
+            .count()
+        )
+
     family_segregation_map: dict[int, list[SectionContent]] = {}
     family_score_map: dict[int, list[SectionContent]] = {}
 
@@ -175,12 +186,23 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
         )
         demographic = ', '.join(filter(None, [sex_str, age_str, country_str]))
 
-        family_header = f'Family "{family.identifier}"'
-        if family.consanguinity:
-            family_header += ' (Consanguineous)'
-        proband_lines = [family_header, f'  - {proband.identifier}']
-        if demographic:
-            proband_lines[-1] += f' ({demographic})'
+        is_single_patient_family = family_patient_counts.get(family.id, 0) <= 1
+        if is_single_patient_family:
+            # No family structure to speak of - skip the family header, but
+            # keep the consanguinity note on the proband line itself.
+            proband_line = f'  - {proband.identifier}'
+            if demographic:
+                proband_line += f' ({demographic})'
+            if family.consanguinity:
+                proband_line += ' (Consanguineous)'
+            proband_lines = [proband_line]
+        else:
+            family_header = f'Family "{family.identifier}"'
+            if family.consanguinity:
+                family_header += ' (Consanguineous)'
+            proband_lines = [family_header, f'  - {proband.identifier}']
+            if demographic:
+                proband_lines[-1] += f' ({demographic})'
 
         proband_section.append(
             SectionContent(title='', content='\n'.join(proband_lines))
