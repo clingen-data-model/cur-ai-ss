@@ -202,17 +202,23 @@ def vep_lookup(
     if not transcripts:
         return result_variant
 
-    # Prioritize MANE Select transcript
+    # Prioritize MANE Select transcript. A variant near two genes can have a
+    # MANE Select transcript for each (e.g. downstream_gene_variant in one,
+    # missense_variant in the other), so break ties by highest impact rather
+    # than taking the first MANE Select hit VEP happens to return. Within an
+    # impact tie, prefer the transcript that actually carries predictor scores
+    # (REVEL/AlphaMissense/SpliceAI are consequence-specific and can be absent
+    # on one equally-severe transcript but present on another).
+    IMPACT_RANK = {'HIGH': 3, 'MODERATE': 2, 'LOW': 1, 'MODIFIER': 0}
     mane_transcripts = [t for t in transcripts if t.get('mane_select')]
-    if mane_transcripts:
-        tx = mane_transcripts[0]
-    else:
-        # Fallback: highest impact transcript
-        IMPACT_RANK = {'HIGH': 3, 'MODERATE': 2, 'LOW': 1, 'MODIFIER': 0}
-        tx = max(
-            transcripts,
-            key=lambda t: IMPACT_RANK.get(t.get('impact', 'MODIFIER').upper(), 0),
-        )
+    candidates = mane_transcripts or transcripts
+    tx = max(
+        candidates,
+        key=lambda t: (
+            IMPACT_RANK.get(t.get('impact', 'MODIFIER').upper(), 0),
+            bool(t.get('revel') or t.get('alphamissense') or t.get('spliceai')),
+        ),
+    )
 
     # Populate fields
     result_variant.exon = tx.get('exon')
