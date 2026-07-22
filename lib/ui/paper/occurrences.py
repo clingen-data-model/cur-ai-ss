@@ -31,7 +31,6 @@ from lib.ui.paper.shared import (
     render_highlight_controls,
 )
 
-NO_TESTING_METHOD = 'None'
 OCCURRENCES_EDITOR_KEY = 'occurrences-editor'
 
 
@@ -292,6 +291,7 @@ def render_patient_variant_occurrences_tab() -> None:
         edited_rows/on_change pattern used for the paper dashboard's grid."""
         edited_rows = st.session_state[OCCURRENCES_EDITOR_KEY].get('edited_rows', {})
         errors = []
+        saved_count = 0
         for row_idx, cell_changes in edited_rows.items():
             if row_idx >= len(rows):
                 continue
@@ -305,18 +305,21 @@ def render_patient_variant_occurrences_tab() -> None:
                 patch['de_novo'] = bool(cell_changes['De Novo'])
             if 'Testing Methods' in cell_changes:
                 patch['testing_methods'] = list(cell_changes['Testing Methods'] or [])
-            if patch:
-                try:
-                    update_occurrence(
-                        paper_resp.id,
-                        link.id,
-                        PatientVariantOccurrenceUpdateRequest(**patch),
-                    )
-                except Exception as e:
-                    errors.append(str(e))
+            if not patch:
+                # Only the (non-persisted) Select checkbox changed - nothing to save.
+                continue
+            try:
+                update_occurrence(
+                    paper_resp.id,
+                    link.id,
+                    PatientVariantOccurrenceUpdateRequest(**patch),
+                )
+                saved_count += 1
+            except Exception as e:
+                errors.append(str(e))
         if errors:
             st.toast(f'Failed to save {len(errors)} row(s): {errors[0]}', icon='❌')
-        elif edited_rows:
+        elif saved_count:
             st.toast('Saved!', icon=':material/check:')
 
     editted_df = st.data_editor(
@@ -470,14 +473,16 @@ def render_patient_variant_occurrences_tab() -> None:
                 button_key_prefix=f'occ-{link.id}-de-novo',
             )
 
-        # Testing Methods (up to two slots)
-        testing_method_options = [NO_TESTING_METHOD] + [m.value for m in TestingMethod]
+        # Testing Methods (up to two slots). An unset slot is shown as an empty
+        # placeholder (index=None) rather than a fake 'None' option in the list,
+        # matching the Disease Inheritance Mode selectbox on the metadata page.
+        testing_method_options = [m.value for m in TestingMethod]
         testing_method_vals = []
         for method_idx in range(2):
             current = (
                 link.testing_methods[method_idx].value
                 if method_idx < len(link.testing_methods)
-                else NO_TESTING_METHOD
+                else None
             )
             method_evidence = (
                 link.testing_methods_evidence[method_idx]
@@ -489,7 +494,9 @@ def render_patient_variant_occurrences_tab() -> None:
                 selected_method = st.selectbox(
                     f'Testing Method #{method_idx + 1}',
                     testing_method_options,
-                    index=testing_method_options.index(current),
+                    index=testing_method_options.index(current)
+                    if current is not None
+                    else None,
                     key=f'occ-{link.id}-testing-method-{method_idx}',
                 )
             with col2:
@@ -501,7 +508,7 @@ def render_patient_variant_occurrences_tab() -> None:
                     color_key=f'occ-{link.id}-testing-method-{method_idx}-color',
                     button_key_prefix=f'occ-{link.id}-testing-method-{method_idx}',
                 )
-            if selected_method != NO_TESTING_METHOD:
+            if selected_method is not None:
                 testing_method_vals.append(selected_method)
 
         # Save edits made in the detail panel above.
