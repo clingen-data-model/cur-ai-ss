@@ -1041,11 +1041,14 @@ async def handle_variant_annotation(task_id: int) -> None:
     """Enrich harmonized variants with annotations."""
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
-        if not task:
+        paper = session.get(PaperDB, task.paper_id) if task else None
+        if not task or not paper:
             return
 
         if task.variant_id is None:
             raise ValueError(f'Task {task_id}: VARIANT_ANNOTATION requires variant_id')
+
+        gene_symbol = paper.gene.symbol
 
         query = (
             session.query(HarmonizedVariantDB)
@@ -1094,6 +1097,7 @@ async def handle_variant_annotation(task_id: int) -> None:
     enriched_variants = await asyncio.to_thread(
         enrich_variants_batch,
         harmonized_variants,
+        gene_symbol,
     )
 
     # Store results in new session
