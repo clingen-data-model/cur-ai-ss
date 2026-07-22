@@ -502,6 +502,7 @@ def render_patient_variant_occurrences_tab() -> None:
         # matching the Disease Inheritance Mode selectbox on the metadata page.
         testing_method_options = [m.value for m in TestingMethod]
         testing_method_vals = []
+        testing_methods_note_edits = []
         for method_idx in range(2):
             current = (
                 link.testing_methods[method_idx].value
@@ -525,22 +526,29 @@ def render_patient_variant_occurrences_tab() -> None:
                 )
             with col2:
                 st.space()
-                render_evidence_controls(
+                # The one note covering both slots is shown in both slots'
+                # popovers (each needs its own widget key), via the
+                # human_edit_note_value override - testing_methods_note lives
+                # on the occurrence, not on either per-slot EvidenceBlock.
+                note_result = render_evidence_controls(
                     paper_resp.id,
                     block=method_evidence,
                     label='📋 Evidence & Reasoning',
                     color_key=f'occ-{link.id}-testing-method-{method_idx}-color',
                     button_key_prefix=f'occ-{link.id}-testing-method-{method_idx}',
+                    human_edit_note_key=f'occ-{link.id}-testing-methods-note-{method_idx}',
+                    human_edit_note_value=link.testing_methods_note,
                 )
+                testing_methods_note_edits.append(note_result)
             if selected_method is not None:
                 testing_method_vals.append(selected_method)
 
-        testing_methods_note_val = st.text_area(
-            'Testing Methods Note',
-            value=link.testing_methods_note or '',
-            key=f'occ-{link.id}-testing-methods-note',
-            height=20,
-        )
+        # Whichever popover's note was actually edited wins; if both were
+        # touched, the later slot takes precedence.
+        testing_methods_note_val = link.testing_methods_note
+        for note_edit in testing_methods_note_edits:
+            if note_edit and note_edit != link.testing_methods_note:
+                testing_methods_note_val = note_edit
 
         # Save edits made in the detail panel above.
         detail_changes: dict = {}
@@ -570,8 +578,13 @@ def render_patient_variant_occurrences_tab() -> None:
 
         if testing_method_vals != [m.value for m in link.testing_methods]:
             detail_changes['testing_methods'] = testing_method_vals
-        if (testing_methods_note_val or None) != link.testing_methods_note:
-            detail_changes['testing_methods_note'] = testing_methods_note_val or None
+            if not link.testing_methods_note:
+                detail_changes['testing_methods_note'] = HUMAN_EDIT_NOTE_DEFAULT
+        if (
+            testing_methods_note_val
+            and testing_methods_note_val != link.testing_methods_note
+        ):
+            detail_changes['testing_methods_note'] = testing_methods_note_val
 
         if detail_changes:
             try:

@@ -298,6 +298,7 @@ def render_evidence_controls(
     button_key_prefix: str,
     block: EvidenceBlock[Any] | ReasoningBlock[Any] | None = None,
     human_edit_note_key: str | None = None,
+    human_edit_note_value: str | None = None,
 ) -> str | None:
     """Render popover + color picker + Highlight + Focus & Switch Tab buttons.
 
@@ -308,6 +309,10 @@ def render_evidence_controls(
         color_key: Session state key for color picker.
         button_key_prefix: Prefix for highlight/focus button keys.
         human_edit_note_key: Session state key for human edit note text area.
+        human_edit_note_value: Explicit curator note value to show, overriding
+            ``block.human_edit_note``. Use when the note lives on a different
+            field than ``block`` (e.g. one note shared across a list of
+            blocks that don't carry a ``human_edit_note`` themselves).
 
     Returns:
         The edited human edit note value if present, otherwise None.
@@ -322,6 +327,8 @@ def render_evidence_controls(
             quote = block.quote
         if hasattr(block, 'human_edit_note'):
             human_edit_note = block.human_edit_note
+    if human_edit_note_value is not None:
+        human_edit_note = human_edit_note_value
 
     edited_note: str | None = None
     with st.container(
