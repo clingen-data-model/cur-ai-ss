@@ -1257,7 +1257,6 @@ def test_enqueue_new_conversation_clears_conversation_id_with_context(
         paper_id=seeded_paper.id,
         task_type=TaskType.HPO_LINKING,
         additional_context='new guidance',
-        new_conversation=True,
     )
     db_session.commit()
     db_session.refresh(task)
