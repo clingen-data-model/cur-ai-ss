@@ -1,4 +1,5 @@
 import time
+from typing import Any
 
 import pandas as pd
 import streamlit as st
@@ -32,6 +33,7 @@ from lib.ui.paper.shared import (
 )
 
 OCCURRENCES_EDITOR_KEY = 'occurrences-editor'
+SELECTED_OCCURRENCE_KEY = 'selected_occurrence_id'
 
 
 def _format_variant_with_protein(
@@ -113,7 +115,7 @@ def render_patient_variant_occurrences_tab() -> None:
     families_by_id = {f.id: f for f in families}
 
     # Build a list of rows for the DataFrame
-    rows = []
+    rows: list[dict[str, Any]] = []
     for link in links:
         patient = patients_by_id[link.patient_id]
         variant = variants_by_id[link.variant_id]
@@ -290,6 +292,20 @@ def render_patient_variant_occurrences_tab() -> None:
         De Novo, Testing Methods are all editable columns above). Mirrors the
         edited_rows/on_change pattern used for the paper dashboard's grid."""
         edited_rows = st.session_state[OCCURRENCES_EDITOR_KEY].get('edited_rows', {})
+
+        # Remember which row is selected by its stable link id, not its row
+        # index, so the detail panel keeps showing the right occurrence across
+        # the rerun triggered by any edit (row order in `rows` is otherwise
+        # not guaranteed to stay identical across reruns).
+        for row_idx, cell_changes in edited_rows.items():
+            if 'Select' not in cell_changes or row_idx >= len(rows):
+                continue
+            link_id = rows[row_idx]['_link'].id
+            if cell_changes['Select']:
+                st.session_state[SELECTED_OCCURRENCE_KEY] = link_id
+            elif st.session_state.get(SELECTED_OCCURRENCE_KEY) == link_id:
+                st.session_state[SELECTED_OCCURRENCE_KEY] = None
+
         errors = []
         saved_count = 0
         for row_idx, cell_changes in edited_rows.items():
@@ -322,7 +338,7 @@ def render_patient_variant_occurrences_tab() -> None:
         elif saved_count:
             st.toast('Saved!', icon=':material/check:')
 
-    editted_df = st.data_editor(
+    st.data_editor(
         df,
         width='stretch',
         hide_index=True,
@@ -332,10 +348,14 @@ def render_patient_variant_occurrences_tab() -> None:
         on_change=_on_occurrences_edit,
     )
 
-    # Show editable panel when a row is selected
-    selected_rows = editted_df[editted_df['Select']].index.tolist()
-    if selected_rows:
-        idx = selected_rows[0]
+    # Show editable panel for the selected row, tracked by link id so it
+    # survives the rerun triggered by any edit above.
+    selected_occurrence_id = st.session_state.get(SELECTED_OCCURRENCE_KEY)
+    idx = next(
+        (i for i, row in enumerate(rows) if row['_link'].id == selected_occurrence_id),
+        None,
+    )
+    if idx is not None:
         link = rows[idx]['_link']
         patient = rows[idx].get('_patient') or patients_by_id[link.patient_id]
         variant = rows[idx]['_variant']
