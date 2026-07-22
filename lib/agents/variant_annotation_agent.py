@@ -22,8 +22,8 @@ def _get_session_with_retries() -> requests.Session:
     """Create requests session with automatic retry logic."""
     session = requests.Session()
     retry_strategy = Retry(
-        total=3,
-        backoff_factor=1,
+        total=5,
+        backoff_factor=2,
         status_forcelist=[429, 500, 502, 503, 504],
         allowed_methods=['GET', 'POST'],
     )
@@ -181,7 +181,7 @@ def vep_lookup(
     headers = {'Content-Type': 'application/json'}
 
     try:
-        r = session.get(VEP_BASE + ext, headers=headers, timeout=10)
+        r = session.get(VEP_BASE + ext, headers=headers, timeout=30)
         r.raise_for_status()
         data = r.json()
     except requests.exceptions.RequestException as e:
