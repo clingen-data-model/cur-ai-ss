@@ -181,6 +181,7 @@ def vep_lookup(
     headers = {'Content-Type': 'application/json'}
 
     try:
+        logger.info(f'VEP request: {VEP_BASE + ext}')
         r = session.get(VEP_BASE + ext, headers=headers, timeout=30)
         r.raise_for_status()
         data = r.json()
