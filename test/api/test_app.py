@@ -1324,16 +1324,25 @@ def test_update_occurrence(
         f'/papers/{seeded_paper.id}/occurrences/{occurrence.id}',
         json={
             'zygosity': 'Homozygous',
+            'zygosity_human_edit_note': 'Corrected from Table 2',
             'testing_methods': ['Exome Sequencing'],
+            'testing_methods_note': 'Confirmed via supplement',
         },
     )
     assert resp.status_code == 200
     body = resp.json()
     assert body['zygosity'] == 'Homozygous'
     assert body['testing_methods'] == ['Exome Sequencing']
+    assert body['testing_methods_note'] == 'Confirmed via supplement'
     # Untouched fields are preserved.
     assert body['inheritance'] == 'Dominant'
     assert body['de_novo'] is False
+
+    # Per-field attribution snapshot on the edited evidence block.
+    zygosity_evidence = body['zygosity_evidence']
+    assert zygosity_evidence['human_edit_note'] == 'Corrected from Table 2'
+    assert zygosity_evidence['edited_by_user_id'] == test_user.id
+    assert zygosity_evidence['edited_by_name'] == 'Test User'
 
     # More than two testing methods is rejected.
     resp = client.patch(

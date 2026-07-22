@@ -27,6 +27,7 @@ from lib.ui.api import (
     update_occurrence,
 )
 from lib.ui.paper.shared import (
+    HUMAN_EDIT_NOTE_DEFAULT,
     get_gnomad_url,
     render_evidence_controls,
     render_highlight_controls,
@@ -445,12 +446,13 @@ def render_patient_variant_occurrences_tab() -> None:
             )
         with col2:
             st.space()
-            render_evidence_controls(
+            zygosity_note = render_evidence_controls(
                 paper_resp.id,
                 block=link.zygosity_evidence,
                 label='📋 Evidence & Reasoning',
                 color_key=f'occ-{link.id}-zygosity-color',
                 button_key_prefix=f'occ-{link.id}-zygosity',
+                human_edit_note_key=f'occ-{link.id}-zygosity-note',
             )
 
         # Inheritance
@@ -467,12 +469,13 @@ def render_patient_variant_occurrences_tab() -> None:
             )
         with col2:
             st.space()
-            render_evidence_controls(
+            inheritance_note = render_evidence_controls(
                 paper_resp.id,
                 block=link.inheritance_evidence,
                 label='📋 Evidence & Reasoning',
                 color_key=f'occ-{link.id}-inheritance-color',
                 button_key_prefix=f'occ-{link.id}-inheritance',
+                human_edit_note_key=f'occ-{link.id}-inheritance-note',
             )
 
         # De Novo
@@ -485,12 +488,13 @@ def render_patient_variant_occurrences_tab() -> None:
             )
         with col2:
             st.space()
-            render_evidence_controls(
+            de_novo_note = render_evidence_controls(
                 paper_resp.id,
                 block=link.de_novo_evidence,
                 label='📋 Evidence & Reasoning',
                 color_key=f'occ-{link.id}-de-novo-color',
                 button_key_prefix=f'occ-{link.id}-de-novo',
+                human_edit_note_key=f'occ-{link.id}-de-novo-note',
             )
 
         # Testing Methods (up to two slots). An unset slot is shown as an empty
@@ -531,16 +535,43 @@ def render_patient_variant_occurrences_tab() -> None:
             if selected_method is not None:
                 testing_method_vals.append(selected_method)
 
+        testing_methods_note_val = st.text_area(
+            'Testing Methods Note',
+            value=link.testing_methods_note or '',
+            key=f'occ-{link.id}-testing-methods-note',
+            height=20,
+        )
+
         # Save edits made in the detail panel above.
         detail_changes: dict = {}
         if zygosity_val.value != link.zygosity.value:
             detail_changes['zygosity'] = zygosity_val.value
+            if not link.zygosity_evidence.human_edit_note:
+                detail_changes['zygosity_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
+        if zygosity_note and zygosity_note != link.zygosity_evidence.human_edit_note:
+            detail_changes['zygosity_human_edit_note'] = zygosity_note
+
         if inheritance_val.value != link.inheritance.value:
             detail_changes['inheritance'] = inheritance_val.value
+            if not link.inheritance_evidence.human_edit_note:
+                detail_changes['inheritance_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
+        if (
+            inheritance_note
+            and inheritance_note != link.inheritance_evidence.human_edit_note
+        ):
+            detail_changes['inheritance_human_edit_note'] = inheritance_note
+
         if de_novo_val != link.de_novo:
             detail_changes['de_novo'] = de_novo_val
+            if not link.de_novo_evidence.human_edit_note:
+                detail_changes['de_novo_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
+        if de_novo_note and de_novo_note != link.de_novo_evidence.human_edit_note:
+            detail_changes['de_novo_human_edit_note'] = de_novo_note
+
         if testing_method_vals != [m.value for m in link.testing_methods]:
             detail_changes['testing_methods'] = testing_method_vals
+        if (testing_methods_note_val or None) != link.testing_methods_note:
+            detail_changes['testing_methods_note'] = testing_methods_note_val or None
 
         if detail_changes:
             try:

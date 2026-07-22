@@ -17,7 +17,7 @@ from sqlalchemy.types import JSON
 from typing_extensions import Self
 
 from lib.models.base import Base, PatchModel
-from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
+from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock, ReasoningBlock
 from lib.models.mondo import MondoComponentMapping, MondoTerm
 
 if TYPE_CHECKING:
@@ -99,9 +99,13 @@ class PatientVariantOccurrenceOutput(BaseModel):
 
 class PatientVariantOccurrenceUpdateRequest(PatchModel):
     zygosity: Zygosity | None = None
+    zygosity_human_edit_note: str | None = None
     inheritance: Inheritance | None = None
+    inheritance_human_edit_note: str | None = None
     de_novo: bool | None = None
+    de_novo_human_edit_note: str | None = None
     testing_methods: list[TestingMethod] | None = None
+    testing_methods_note: str | None = None
 
     @model_validator(mode='after')
     def max_two_methods(self) -> Self:
@@ -150,6 +154,10 @@ class PatientVariantOccurrenceDB(Base):
     inheritance_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     de_novo_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     testing_methods_evidence: Mapped[list] = mapped_column(JSON, nullable=False)
+    # A single curator note covering both testing method slots - not per-item
+    # attribution like HumanEvidenceBlock, since testing_methods_evidence is a
+    # list rather than one block.
+    testing_methods_note: Mapped[str | None] = mapped_column(String, nullable=True)
     disease_name: Mapped[str | None] = mapped_column(String, nullable=True)
     disease_name_evidence: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     mondo_id: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -217,13 +225,14 @@ class PatientVariantOccurrenceResp(BaseModel):
     patient_identifier: str
     variant_id: int
     zygosity: Zygosity
-    zygosity_evidence: EvidenceBlock[Zygosity]
+    zygosity_evidence: HumanEvidenceBlock[Zygosity]
     inheritance: Inheritance
-    inheritance_evidence: EvidenceBlock[Inheritance]
+    inheritance_evidence: HumanEvidenceBlock[Inheritance]
     de_novo: bool
-    de_novo_evidence: EvidenceBlock[bool]
+    de_novo_evidence: HumanEvidenceBlock[bool]
     testing_methods: list[TestingMethod]
     testing_methods_evidence: List[EvidenceBlock[TestingMethod]]
+    testing_methods_note: str | None = None
     disease_name: str | None = None
     disease_name_evidence: EvidenceBlock[str] | None = None
     mondo: ReasoningBlock[MondoTerm | None]
