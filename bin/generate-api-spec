@@ -5,6 +5,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SPEC_PATH="$ROOT_DIR/frontend/api-spec.json"
 
+# Run from the project root so pydantic-settings picks up .env. This matters because
+# `pnpm build` invokes this script from frontend/ via the prebuild hook.
+cd "$ROOT_DIR"
+
 uv run python3 << EOF
 from lib.api.app import app
 import json

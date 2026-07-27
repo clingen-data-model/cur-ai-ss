@@ -42,12 +42,16 @@ const STATUS_BADGE: Record<NodeStatus, { label: string; variant: BadgeVariant; c
   failed:    { label: 'Failed',      variant: 'destructive' },
 }
 
+// Every task type is rerunnable except 'General Paper Question', which is only
+// ever created ad hoc by the chat router. Mirrors lib/ui/paper/header.py.
 const RERUNNABLE_TASK_TYPES: TaskType[] = [
   'PDF Parsing', 'Paper Classifier', 'Paper Metadata',
   'Variant Extraction', 'Pedigree Description', 'Patient Extraction',
+  'Patient Demographics',
   'Segregation Evidence Extraction', 'Segregation Analysis Computed',
   'Variant Harmonization', 'Variant Annotation', 'Patient Variant Occurrences',
-  'Phenotype Extraction', 'HPO Linking',
+  'Compound Het Evaluation',
+  'Phenotype Extraction', 'HPO Linking', 'MONDO Linking',
 ]
 
 function RerunTaskButton({ paper }: { paper: PaperResp }) {

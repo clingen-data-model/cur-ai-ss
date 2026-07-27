@@ -7,8 +7,9 @@ import {
   AffectedStatus,
   AgeUnit,
   CountryCode,
+  Ethnicity,
   ProbandStatus,
-  RaceEthnicity,
+  Race,
   RelationshipToProband,
   SexAtBirth,
   TwinType,
@@ -50,7 +51,8 @@ const PROBAND_STATUS_OPTIONS = Object.values(ProbandStatus)
 const AFFECTED_STATUS_OPTIONS = Object.values(AffectedStatus)
 const SEX_OPTIONS = Object.values(SexAtBirth)
 const AGE_UNIT_OPTIONS: (AgeUnit | '')[] = ['', ...Object.values(AgeUnit)]
-const RACE_ETHNICITY_OPTIONS = Object.values(RaceEthnicity)
+const RACE_OPTIONS = Object.values(Race)
+const ETHNICITY_OPTIONS = Object.values(Ethnicity)
 const RELATIONSHIP_OPTIONS: (RelationshipToProband | '')[] = ['', ...Object.values(RelationshipToProband)]
 const TWIN_TYPE_OPTIONS: (TwinType | '')[] = ['', ...Object.values(TwinType)]
 const COUNTRY_CODES = Object.values(CountryCode)
@@ -183,7 +185,8 @@ type FormState = {
   age_death: number | null
   age_death_unit: AgeUnit | null
   country_of_origin: CountryCode
-  race_ethnicity: RaceEthnicity
+  race: Race
+  ethnicity: Ethnicity
   is_obligate_carrier: boolean | null
   relationship_to_proband: RelationshipToProband | null
   twin_type: TwinType | null
@@ -202,7 +205,8 @@ function patientToForm(patient: PatientResp): FormState {
     age_death: patient.age_death,
     age_death_unit: patient.age_death_unit ?? null,
     country_of_origin: patient.country_of_origin,
-    race_ethnicity: patient.race_ethnicity,
+    race: patient.race,
+    ethnicity: patient.ethnicity,
     is_obligate_carrier: patient.is_obligate_carrier,
     relationship_to_proband: patient.relationship_to_proband,
     twin_type: patient.twin_type,
@@ -222,7 +226,8 @@ function isDirty(form: FormState, patient: PatientResp): boolean {
     form.age_death !== patient.age_death ||
     form.age_death_unit !== (patient.age_death_unit ?? null) ||
     form.country_of_origin !== patient.country_of_origin ||
-    form.race_ethnicity !== patient.race_ethnicity ||
+    form.race !== patient.race ||
+    form.ethnicity !== patient.ethnicity ||
     form.is_obligate_carrier !== patient.is_obligate_carrier ||
     form.relationship_to_proband !== patient.relationship_to_proband ||
     form.twin_type !== patient.twin_type
@@ -367,10 +372,17 @@ export function PatientDetails({ patient, paperId, onHighlight }: PatientDetails
             </Combobox>
           </FieldRow>
 
-          <FieldRow label="Race / Ethnicity" evidence={patient.race_ethnicity_evidence} onHighlight={onHighlight}>
-            <Select value={form.race_ethnicity} onValueChange={(v) => set('race_ethnicity', v as RaceEthnicity)}>
+          <FieldRow label="Race" evidence={patient.race_evidence} onHighlight={onHighlight}>
+            <Select value={form.race} onValueChange={(v) => set('race', v as Race)}>
               <SelectTrigger className="h-8 text-sm w-full"><SelectValue /></SelectTrigger>
-              <SelectContent>{RACE_ETHNICITY_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+              <SelectContent>{RACE_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
+            </Select>
+          </FieldRow>
+
+          <FieldRow label="Ethnicity" evidence={patient.ethnicity_evidence} onHighlight={onHighlight}>
+            <Select value={form.ethnicity} onValueChange={(v) => set('ethnicity', v as Ethnicity)}>
+              <SelectTrigger className="h-8 text-sm w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>{ETHNICITY_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
             </Select>
           </FieldRow>
 
