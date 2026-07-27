@@ -69,7 +69,6 @@ class PaperQueryParams(BaseModel):
             )
 
 
-@st.fragment
 def render_queue_tasks_fragment(paper_query_params: PaperQueryParams) -> None:
     task_type = st.selectbox(
         'Select task to rerun:',
@@ -128,7 +127,6 @@ def _strip_trailing_punctuation(text: str) -> str:
     return re.sub(r'[.,;:!?]+$', '', text)
 
 
-st.set_page_config(layout='wide')
 paper_query_params = PaperQueryParams.from_query_params()
 with st.spinner('Loading paper...'):
     try:

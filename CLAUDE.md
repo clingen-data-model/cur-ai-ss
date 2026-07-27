@@ -122,12 +122,15 @@ Configuration is in `lib/core/environment.py` using Pydantic BaseSettings:
 **Required:**
 - `OPENAI_API_KEY` - OpenAI API key (Bearer token)
 - `OPENAI_API_DEPLOYMENT` - Model to use (default: `gpt-5-mini`)
+- `JWT_SECRET_KEY` - Secret used to sign auth access tokens (set a strong value in prod)
 
 **Optional:**
 - `NCBI_API_KEY` / `NCBI_EMAIL` - For variant enrichment
 - `API_ENDPOINT` - Where UI reaches API (default: `localhost:8000`)
 - `CORS_ALLOWED_ORIGINS` - CORS origins (default: `http://localhost:8501`)
 - `LOG_LEVEL` - Logging level (default: `INFO`)
+- `JWT_ALGORITHM` - JWT signing algorithm (default: `HS256`)
+- `ACCESS_TOKEN_EXPIRE_MINUTES` - Access token lifetime (default: `1440`)
 
 **Directories (relative to `CAA_ROOT`, default `/var/caa`):**
 - `sqllite/` - Database file
@@ -181,10 +184,33 @@ uv run pytest test/api/test_app.py::test_function  # Specific test
 - Explicitly handle `IntegrityError` for constraint violations
 
 **Database migrations (SQLite safety):**
-- **NEVER use `ondelete='CASCADE'` when adding new foreign keys in batch_alter_table** — SQLite's table rebuild process can trigger cascading deletes unexpectedly, wiping child table data even if parent rows are intact. This happened with `patient_variant_links` in May 2026.
-- If adding a CASCADE constraint: write a manual migration outside batch mode that adds the column first, then the constraint separately.
+
+When using `batch_alter_table()` on any table that has CASCADE foreign keys pointing to it, you **MUST disable foreign key constraints** before the batch operation, then re-enable them. Otherwise, when SQLite drops and recreates the table, CASCADE constraints will delete child rows unexpectedly.
+
+**Safe pattern for batch alterations:**
+```python
+from sqlalchemy import text
+from alembic import op
+
+def upgrade() -> None:
+    connection = op.get_bind()
+    # Disable FK constraints before batch alter
+    connection.execute(text('PRAGMA foreign_keys = OFF'))
+    
+    try:
+        with op.batch_alter_table('table_name', schema=None) as batch_op:
+            batch_op.add_column(...)
+            # ... other operations
+    finally:
+        # Always re-enable FK constraints
+        connection.execute(text('PRAGMA foreign_keys = ON'))
+```
+
+**Additional rules:**
+- **NEVER use `ondelete='CASCADE'` when adding new foreign keys inside batch_alter_table** — add the column first, then the constraint separately in a non-batch operation.
 - Always backup before running complex migrations (especially those involving multiple batches or adding CASCADE constraints).
 - After migrations, verify data integrity: check row counts on tables with cascade relationships.
+- This pattern is critical for tables like `families` (has CASCADE dependents like `patients`) — June 2026 migration `3b2d941d02a2` deleted all patients because FK constraints weren't disabled.
 
 **Agent implementation:**
 - Agents use `openai_agents` library (structured outputs)

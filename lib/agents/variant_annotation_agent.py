@@ -22,8 +22,8 @@ def _get_session_with_retries() -> requests.Session:
     """Create requests session with automatic retry logic."""
     session = requests.Session()
     retry_strategy = Retry(
-        total=3,
-        backoff_factor=1,
+        total=5,
+        backoff_factor=2,
         status_forcelist=[429, 500, 502, 503, 504],
         allowed_methods=['GET', 'POST'],
     )
@@ -161,6 +161,7 @@ def vep_lookup(
     rsid: str | None,
     hgvs_g: str | None,
     hgvs_c: str | None,
+    gene_symbol: str,
 ) -> AnnotatedVariant:
     """Query Ensembl VEP for a given variant identifier and extract key annotations from the most relevant transcript."""
     if hgvs_g is not None:
@@ -181,7 +182,8 @@ def vep_lookup(
     headers = {'Content-Type': 'application/json'}
 
     try:
-        r = session.get(VEP_BASE + ext, headers=headers, timeout=10)
+        logger.info(f'VEP request: {VEP_BASE + ext}')
+        r = session.get(VEP_BASE + ext, headers=headers, timeout=30)
         r.raise_for_status()
         data = r.json()
     except requests.exceptions.RequestException as e:
@@ -201,17 +203,26 @@ def vep_lookup(
     if not transcripts:
         return result_variant
 
-    # Prioritize MANE Select transcript
+    # A variant near two genes gets a transcript_consequences entry per gene
+    # (e.g. downstream_gene_variant in one, missense_variant in the other),
+    # so restrict to the paper's curated gene before ranking transcripts.
+    gene_transcripts = [t for t in transcripts if t.get('gene_symbol') == gene_symbol]
+    transcripts = gene_transcripts or transcripts
+
+    # Prioritize MANE Select transcript within the gene; break ties by highest
+    # impact, then by whether the transcript actually carries predictor scores
+    # (REVEL/AlphaMissense/SpliceAI are consequence-specific and can be absent
+    # on one equally-severe transcript but present on another).
+    IMPACT_RANK = {'HIGH': 3, 'MODERATE': 2, 'LOW': 1, 'MODIFIER': 0}
     mane_transcripts = [t for t in transcripts if t.get('mane_select')]
-    if mane_transcripts:
-        tx = mane_transcripts[0]
-    else:
-        # Fallback: highest impact transcript
-        IMPACT_RANK = {'HIGH': 3, 'MODERATE': 2, 'LOW': 1, 'MODIFIER': 0}
-        tx = max(
-            transcripts,
-            key=lambda t: IMPACT_RANK.get(t.get('impact', 'MODIFIER').upper(), 0),
-        )
+    candidates = mane_transcripts or transcripts
+    tx = max(
+        candidates,
+        key=lambda t: (
+            IMPACT_RANK.get(t.get('impact', 'MODIFIER').upper(), 0),
+            bool(t.get('revel') or t.get('alphamissense') or t.get('spliceai')),
+        ),
+    )
 
     # Populate fields
     result_variant.exon = tx.get('exon')
@@ -338,7 +349,7 @@ def gnomad_lookup(gnomad_style_coordinates: str) -> AnnotatedVariant:
     return result_variant
 
 
-def enrich_variant(hv: HarmonizedVariant) -> AnnotatedVariant:
+def enrich_variant(hv: HarmonizedVariant, gene_symbol: str) -> AnnotatedVariant:
     annotated = AnnotatedVariant(
         gnomad_style_coordinates=hv.gnomad_style_coordinates,
         rsid=hv.rsid,
@@ -359,7 +370,9 @@ def enrich_variant(hv: HarmonizedVariant) -> AnnotatedVariant:
             )
 
         if hv.rsid or hv.hgvs_g or hv.hgvs_c:
-            futures.append(executor.submit(vep_lookup, hv.rsid, hv.hgvs_g, hv.hgvs_c))
+            futures.append(
+                executor.submit(vep_lookup, hv.rsid, hv.hgvs_g, hv.hgvs_c, gene_symbol)
+            )
 
         # Collect results as they complete
         for future in as_completed(futures):
@@ -389,6 +402,7 @@ def enrich_variant(hv: HarmonizedVariant) -> AnnotatedVariant:
 
 def enrich_variants_batch(
     harmonized_variants: List[HarmonizedVariant],
+    gene_symbol: str,
 ) -> List[AnnotatedVariant]:
     results: List[AnnotatedVariant] = []
 
@@ -397,7 +411,7 @@ def enrich_variants_batch(
             f'Enriching variant {i}/{len(harmonized_variants)}: {hv.gnomad_style_coordinates or hv.rsid}'
         )
         try:
-            annotated = enrich_variant(hv)
+            annotated = enrich_variant(hv, gene_symbol)
             results.append(annotated)
         except Exception as e:
             logger.exception(f'Failed to enrich variant: {e}')

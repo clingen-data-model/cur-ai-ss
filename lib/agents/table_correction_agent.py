@@ -1,12 +1,14 @@
 """Agent to correct corrupted table markdown using OpenAI vision."""
 
 import logging
+from pathlib import Path
 
 from agents import Agent, function_tool
 from pydantic import BaseModel
 
 from lib.core.environment import env
 from lib.core.logging import setup_logging
+from lib.misc.gcs import upload_and_sign_image
 from lib.misc.pdf.paths import (
     pdf_markdown_path,
     pdf_table_image_path,
@@ -27,34 +29,46 @@ Return ONLY the markdown table, no other text.
 """
 
 
-@function_tool
-def extract_table_from_image(image_url: str) -> str:
-    """Extract table markdown from image URL using vision."""
-    from openai import OpenAI
+def table_correction_agent_for_image(image_path: Path) -> Agent:
+    """Build a table correction agent bound to a specific table image."""
 
-    client = OpenAI(api_key=env.OPENAI_API_KEY)
+    @function_tool
+    def extract_table_from_image() -> str:
+        """Extract the current table image as markdown using vision."""
+        from openai import OpenAI
 
-    message = client.chat.completions.create(
-        model=env.OPENAI_VLM,
-        messages=[
-            {
-                'role': 'user',
-                'content': [
-                    {
-                        'type': 'image_url',
-                        'image_url': {'url': image_url, 'detail': 'high'},
-                    },
-                    {
-                        'type': 'text',
-                        'text': VISION_EXTRACTION_PROMPT,
-                    },
-                ],
-            }
-        ],
+        client = OpenAI(api_key=env.OPENAI_API_KEY)
+        image_url = upload_and_sign_image(image_path)
+
+        message = client.chat.completions.create(
+            model=env.OPENAI_VLM,
+            messages=[
+                {
+                    'role': 'user',
+                    'content': [
+                        {
+                            'type': 'image_url',
+                            'image_url': {'url': image_url, 'detail': 'high'},
+                        },
+                        {
+                            'type': 'text',
+                            'text': VISION_EXTRACTION_PROMPT,
+                        },
+                    ],
+                }
+            ],
+        )
+
+        content = message.choices[0].message.content
+        return content if content is not None else ''
+
+    return Agent(
+        name='table_corrector',
+        instructions=TABLE_CORRECTION_INSTRUCTIONS,
+        model=env.OPENAI_API_DEPLOYMENT,
+        output_type=TableCorrectionResult,
+        tools=[extract_table_from_image],
     )
-
-    content = message.choices[0].message.content
-    return content if content is not None else ''
 
 
 class TableCorrectionResult(BaseModel):
@@ -64,6 +78,7 @@ class TableCorrectionResult(BaseModel):
     is_corrupted: bool
     corrected_markdown: str | None = None
     conversion_successful: bool = False
+    is_recoverable: bool = True
 
 
 TABLE_CORRECTION_INSTRUCTIONS = """You are an expert at evaluating table markdown quality from PDF extraction.
@@ -85,15 +100,16 @@ A good table has:
 - Consistent cell alignment
 - Content that makes semantic sense
 
-Always set conversion_successful to true only if the corrected_markdown is a valid markdown table with proper pipe delimiters and header rows. If extraction failed or returned invalid markdown, set it to false."""
+Set conversion_successful to true only if the corrected_markdown is a valid markdown table
+with proper pipe delimiters and header rows. If extraction failed or returned invalid
+markdown, set it to false.
 
-agent = Agent(
-    name='table_corrector',
-    instructions=TABLE_CORRECTION_INSTRUCTIONS,
-    model=env.OPENAI_API_DEPLOYMENT,
-    output_type=TableCorrectionResult,
-    tools=[extract_table_from_image],
-)
+Some tables cannot be faithfully recovered at all -- for example, dense matrices of tiny
+symbols (+/-/*), pedigree/manifestation grids, or images where the cell structure is
+genuinely ambiguous. Do not invent or hallucinate content for these. If the table is
+corrupted and the image does not yield a faithful, trustworthy markdown table, set
+is_recoverable to false and conversion_successful to false. This is an acceptable outcome,
+not a failure -- the original markdown will simply be left in place."""
 
 
 async def correct_tables(paper_id: int, supplement: bool = False) -> None:
@@ -103,8 +119,6 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
     for corrupted ones, and updates raw.md with corrections.
     """
     from agents import Runner
-
-    from lib.misc.gcs import upload_and_sign_image
 
     tables_dir = pdf_tables_dir(paper_id, supplement=supplement)
     if not tables_dir.exists():
@@ -128,15 +142,13 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
 
         logger.info(f'Checking table {table_id} for corruption...')
 
-        # Upload image and get signed URL
         image_path = pdf_table_image_path(paper_id, table_id, supplement=supplement)
-        image_url = upload_and_sign_image(image_path)
+        agent = table_correction_agent_for_image(image_path)
 
-        # Build prompt with table markdown and image URL
+        # Build prompt with table markdown only. The vision tool reads the image
+        # on demand if the agent decides the markdown is corrupted.
         message = (
-            f'Table ID: {table_id}\n\n'
-            f'Markdown to evaluate:\n```\n{table_markdown}\n```\n\n'
-            f'Image URL for extraction if needed: {image_url}'
+            f'Table ID: {table_id}\n\nMarkdown to evaluate:\n```\n{table_markdown}\n```'
         )
 
         # Run agent
@@ -146,10 +158,19 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
             logger.info(f'Table {table_id} looks OK')
             continue
 
-        if not result.final_output.conversion_successful:
-            raise ValueError(
-                f'Table {table_id} was detected as corrupted but conversion failed'
+        if (
+            not result.final_output.conversion_successful
+            or not result.final_output.corrected_markdown
+        ):
+            # The table is genuinely unrecoverable (e.g. a dense matrix of
+            # symbols with no faithful tabular structure). Leave the original
+            # markdown in place rather than failing the whole paper extraction.
+            logger.warning(
+                f'Table {table_id} is corrupted but could not be recovered; '
+                f'leaving original markdown in place (recoverable='
+                f'{result.final_output.is_recoverable})'
             )
+            continue
 
         logger.info(f'Table {table_id} was corrupted, corrected version ready')
 

@@ -19,6 +19,18 @@ from lib.models.family import (
     FamilyResp,
     FamilyUpdateRequest,
 )
+from lib.models.mondo import (
+    MondoAgentDecision,
+    MondoCandidate,
+    MondoComponentMapping,
+    MondoDiseaseScope,
+    MondoLinkingTarget,
+    MondoMatchEvidence,
+    MondoSynonym,
+    MondoSynonymScope,
+    MondoTerm,
+    MondoTermDetail,
+)
 from lib.models.paper import (
     FileFormat,
     GeneDB,
@@ -45,6 +57,7 @@ from lib.models.patient_variant_occurrences import (
     PatientVariantOccurrenceDB,
     PatientVariantOccurrenceOutput,
     PatientVariantOccurrenceResp,
+    PatientVariantOccurrenceUpdateRequest,
     TestingMethod,
     Zygosity,
 )
@@ -55,7 +68,6 @@ from lib.models.phenotype import (
     HPOTerm,
     PhenotypeDB,
     PhenotypeResp,
-    PhenotypeUpdateRequest,
 )
 from lib.models.segregation_analysis import (
     SegregationAnalysisComputedDB,
@@ -65,6 +77,15 @@ from lib.models.segregation_analysis import (
     SegregationEvidenceResp,
     SegregationEvidenceUpdateRequest,
     SequencingMethodology,
+)
+from lib.models.user import (
+    ChangePasswordRequest,
+    LoginRequest,
+    TokenResp,
+    UserCreateRequest,
+    UserDB,
+    UserResp,
+    UserSummaryResp,
 )
 from lib.models.variant import (
     AnnotatedVariant,

@@ -1,20 +1,40 @@
+import time
+from typing import Any
+
 import pandas as pd
 import streamlit as st
 
-from lib.models import PaperResp, PatientResp, VariantResp
+from lib.models import (
+    PaperResp,
+    PatientResp,
+    PatientVariantOccurrenceUpdateRequest,
+    VariantResp,
+)
 from lib.models.evidence_block import EvidenceBlock
 from lib.models.patient import AffectedStatus, ProbandStatus
-from lib.models.patient_variant_occurrences import Inheritance, TestingMethod, Zygosity
+from lib.models.patient_variant_occurrences import (
+    CompoundHetConfidence,
+    Inheritance,
+    TestingMethod,
+    Zygosity,
+)
 from lib.tasks import TaskType, is_task_completed
 from lib.ui.api import (
+    get_families,
     get_occurrences,
     get_patients,
     get_variants,
+    update_occurrence,
 )
 from lib.ui.paper.shared import (
+    HUMAN_EDIT_NOTE_DEFAULT,
     get_gnomad_url,
+    render_evidence_controls,
     render_highlight_controls,
 )
+
+OCCURRENCES_EDITOR_KEY = 'occurrences-editor'
+SELECTED_OCCURRENCE_KEY = 'selected_occurrence_id'
 
 
 def _format_variant_with_protein(
@@ -87,14 +107,16 @@ def render_patient_variant_occurrences_tab() -> None:
     patients: list[PatientResp] = get_patients(paper_resp.id)
     variants: list[VariantResp] = get_variants(paper_resp.id)
     links = get_occurrences(paper_resp.id)
+    families = get_families(paper_resp.id)
 
     # Create lookup maps by ID
     patients_by_id = {p.id: p for p in patients}
     variants_by_id = {v.id: v for v in variants}
     links_by_id = {link.id: link for link in links}
+    families_by_id = {f.id: f for f in families}
 
     # Build a list of rows for the DataFrame
-    rows = []
+    rows: list[dict[str, Any]] = []
     for link in links:
         patient = patients_by_id[link.patient_id]
         variant = variants_by_id[link.variant_id]
@@ -125,10 +147,11 @@ def render_patient_variant_occurrences_tab() -> None:
                         paired_variant, True
                     )
                     paired_variant_link = f'/paper?paper_id={paper_resp.id}&variant_id={paired_link.variant_id}#{paired_variant_desc}'
-                    # Include confidence level if less than High
+                    # Include confidence level if less than Confirmed
                     if (
                         link.paired_variant_confidence
-                        and link.paired_variant_confidence != 'high'
+                        and link.paired_variant_confidence
+                        != CompoundHetConfidence.confirmed
                     ):
                         confidence_text = (
                             link.paired_variant_confidence.value.capitalize()
@@ -265,18 +288,75 @@ def render_patient_variant_occurrences_tab() -> None:
     if has_paired_variants:
         disabled.append('Paired Variant')
 
-    editted_df = st.data_editor(
+    def _on_occurrences_edit() -> None:
+        """Persist inline edits made directly in the grid (Zygosity, Inheritance,
+        De Novo, Testing Methods are all editable columns above). Mirrors the
+        edited_rows/on_change pattern used for the paper dashboard's grid."""
+        edited_rows = st.session_state[OCCURRENCES_EDITOR_KEY].get('edited_rows', {})
+
+        # Remember which row is selected by its stable link id, not its row
+        # index, so the detail panel keeps showing the right occurrence across
+        # the rerun triggered by any edit (row order in `rows` is otherwise
+        # not guaranteed to stay identical across reruns).
+        for row_idx, cell_changes in edited_rows.items():
+            if 'Select' not in cell_changes or row_idx >= len(rows):
+                continue
+            link_id = rows[row_idx]['_link'].id
+            if cell_changes['Select']:
+                st.session_state[SELECTED_OCCURRENCE_KEY] = link_id
+            elif st.session_state.get(SELECTED_OCCURRENCE_KEY) == link_id:
+                st.session_state[SELECTED_OCCURRENCE_KEY] = None
+
+        errors = []
+        saved_count = 0
+        for row_idx, cell_changes in edited_rows.items():
+            if row_idx >= len(rows):
+                continue
+            link = rows[row_idx]['_link']
+            patch: dict = {}
+            if 'Zygosity' in cell_changes:
+                patch['zygosity'] = cell_changes['Zygosity']
+            if 'Inheritance' in cell_changes:
+                patch['inheritance'] = cell_changes['Inheritance']
+            if 'De Novo' in cell_changes:
+                patch['de_novo'] = bool(cell_changes['De Novo'])
+            if 'Testing Methods' in cell_changes:
+                patch['testing_methods'] = list(cell_changes['Testing Methods'] or [])
+            if not patch:
+                # Only the (non-persisted) Select checkbox changed - nothing to save.
+                continue
+            try:
+                update_occurrence(
+                    paper_resp.id,
+                    link.id,
+                    PatientVariantOccurrenceUpdateRequest(**patch),
+                )
+                saved_count += 1
+            except Exception as e:
+                errors.append(str(e))
+        if errors:
+            st.toast(f'Failed to save {len(errors)} row(s): {errors[0]}', icon='❌')
+        elif saved_count:
+            st.toast('Saved!', icon=':material/check:')
+
+    st.data_editor(
         df,
         width='stretch',
         hide_index=True,
         disabled=disabled,
         column_config=column_config,
+        key=OCCURRENCES_EDITOR_KEY,
+        on_change=_on_occurrences_edit,
     )
 
-    # Show editable panel when a row is selected
-    selected_rows = editted_df[editted_df['Select']].index.tolist()
-    if selected_rows:
-        idx = selected_rows[0]
+    # Show editable panel for the selected row, tracked by link id so it
+    # survives the rerun triggered by any edit above.
+    selected_occurrence_id = st.session_state.get(SELECTED_OCCURRENCE_KEY)
+    idx = next(
+        (i for i, row in enumerate(rows) if row['_link'].id == selected_occurrence_id),
+        None,
+    )
+    if idx is not None:
         link = rows[idx]['_link']
         patient = rows[idx].get('_patient') or patients_by_id[link.patient_id]
         variant = rows[idx]['_variant']
@@ -290,6 +370,7 @@ def render_patient_variant_occurrences_tab() -> None:
 
         with col1:
             st.markdown('#### Patient Info')
+            family = families_by_id.get(patient.family_id)
             patient_data = {
                 'Field': [
                     '**Identifier**',
@@ -299,7 +380,9 @@ def render_patient_variant_occurrences_tab() -> None:
                     '**Age at Diagnosis**',
                     '**Age at Report**',
                     '**Country of Origin**',
-                    '**Race/Ethnicity**',
+                    '**Race**',
+                    '**Ethnicity**',
+                    '**Consanguineous**',
                 ],
                 'Value': [
                     patient.identifier or 'N/A',
@@ -311,7 +394,9 @@ def render_patient_variant_occurrences_tab() -> None:
                     patient.country_of_origin.value
                     if patient.country_of_origin
                     else 'N/A',
-                    patient.race_ethnicity.value if patient.race_ethnicity else 'N/A',
+                    patient.race.value if patient.race else 'N/A',
+                    patient.ethnicity.value if patient.ethnicity else 'N/A',
+                    ('Yes' if family.consanguinity else 'No') if family else 'N/A',
                 ],
             }
             st.table(pd.DataFrame(patient_data))
@@ -345,48 +430,174 @@ def render_patient_variant_occurrences_tab() -> None:
                 st.info('Harmonized variant data not available')
 
         st.divider()
+        st.markdown('#### Occurrence Properties')
 
-        # Display evidence blocks for zygosity and inheritance
+        # Zygosity
         col1, col2 = st.columns(2)
-
         with col1:
-            st.markdown('#### Zygosity Evidence')
-            _render_evidence_block(link.zygosity_evidence, paper_resp.id, 'zygosity')
-
+            zygosity_options = [z.value for z in Zygosity]
+            zygosity_val = Zygosity(
+                st.selectbox(
+                    'Zygosity',
+                    zygosity_options,
+                    index=zygosity_options.index(link.zygosity.value),
+                    key=f'occ-{link.id}-zygosity',
+                )
+            )
         with col2:
-            st.markdown('#### Inheritance Evidence')
-            _render_evidence_block(
-                link.inheritance_evidence, paper_resp.id, 'inheritance'
+            st.space()
+            zygosity_note = render_evidence_controls(
+                paper_resp.id,
+                block=link.zygosity_evidence,
+                label='📋 Evidence & Reasoning',
+                color_key=f'occ-{link.id}-zygosity-color',
+                button_key_prefix=f'occ-{link.id}-zygosity',
+                human_edit_note_key=f'occ-{link.id}-zygosity-note',
             )
 
-        st.divider()
-
-        # Display de novo evidence
+        # Inheritance
         col1, col2 = st.columns(2)
-
         with col1:
-            st.markdown('#### De Novo')
-            st.info(f'**De Novo Status:** {"Yes" if link.de_novo else "No"}')
-
+            inheritance_options = [i.value for i in Inheritance]
+            inheritance_val = Inheritance(
+                st.selectbox(
+                    'Inheritance',
+                    inheritance_options,
+                    index=inheritance_options.index(link.inheritance.value),
+                    key=f'occ-{link.id}-inheritance',
+                )
+            )
         with col2:
-            st.markdown('#### De Novo Evidence')
-            _render_evidence_block(link.de_novo_evidence, paper_resp.id, 'de_novo')
+            st.space()
+            inheritance_note = render_evidence_controls(
+                paper_resp.id,
+                block=link.inheritance_evidence,
+                label='📋 Evidence & Reasoning',
+                color_key=f'occ-{link.id}-inheritance-color',
+                button_key_prefix=f'occ-{link.id}-inheritance',
+                human_edit_note_key=f'occ-{link.id}-inheritance-note',
+            )
 
-        st.divider()
+        # De Novo
+        col1, col2 = st.columns(2)
+        with col1:
+            de_novo_val = st.checkbox(
+                'De Novo',
+                value=link.de_novo,
+                key=f'occ-{link.id}-de-novo',
+            )
+        with col2:
+            st.space()
+            de_novo_note = render_evidence_controls(
+                paper_resp.id,
+                block=link.de_novo_evidence,
+                label='📋 Evidence & Reasoning',
+                color_key=f'occ-{link.id}-de-novo-color',
+                button_key_prefix=f'occ-{link.id}-de-novo',
+                human_edit_note_key=f'occ-{link.id}-de-novo-note',
+            )
 
-        # Display testing methods evidence
-        if link.testing_methods_evidence:
-            st.markdown('#### Testing Methods Evidence')
-            for i, testing_method_evidence_block in enumerate(
-                link.testing_methods_evidence, start=1
-            ):
-                with st.expander(
-                    f'Method {i}: {testing_method_evidence_block.value.value}',
-                    expanded=False,
-                ):
-                    _render_evidence_block(
-                        testing_method_evidence_block, paper_resp.id, f'method_{i}'
-                    )
+        # Testing Methods (up to two slots). An unset slot is shown as an empty
+        # placeholder (index=None) rather than a fake 'None' option in the list,
+        # matching the Disease Inheritance Mode selectbox on the metadata page.
+        testing_method_options = [m.value for m in TestingMethod]
+        testing_method_vals = []
+        testing_methods_note_edits = []
+        for method_idx in range(2):
+            current = (
+                link.testing_methods[method_idx].value
+                if method_idx < len(link.testing_methods)
+                else None
+            )
+            method_evidence = (
+                link.testing_methods_evidence[method_idx]
+                if method_idx < len(link.testing_methods_evidence)
+                else None
+            )
+            col1, col2 = st.columns(2)
+            with col1:
+                selected_method = st.selectbox(
+                    f'Testing Method #{method_idx + 1}',
+                    testing_method_options,
+                    index=testing_method_options.index(current)
+                    if current is not None
+                    else None,
+                    key=f'occ-{link.id}-testing-method-{method_idx}',
+                )
+            with col2:
+                st.space()
+                # The one note covering both slots is shown in both slots'
+                # popovers (each needs its own widget key), via the
+                # human_edit_note_value override - testing_methods_note lives
+                # on the occurrence, not on either per-slot EvidenceBlock.
+                note_result = render_evidence_controls(
+                    paper_resp.id,
+                    block=method_evidence,
+                    label='📋 Evidence & Reasoning',
+                    color_key=f'occ-{link.id}-testing-method-{method_idx}-color',
+                    button_key_prefix=f'occ-{link.id}-testing-method-{method_idx}',
+                    human_edit_note_key=f'occ-{link.id}-testing-methods-note-{method_idx}',
+                    human_edit_note_value=link.testing_methods_note,
+                )
+                testing_methods_note_edits.append(note_result)
+            if selected_method is not None:
+                testing_method_vals.append(selected_method)
+
+        # Whichever popover's note was actually edited wins; if both were
+        # touched, the later slot takes precedence.
+        testing_methods_note_val = link.testing_methods_note
+        for note_edit in testing_methods_note_edits:
+            if note_edit and note_edit != link.testing_methods_note:
+                testing_methods_note_val = note_edit
+
+        # Save edits made in the detail panel above.
+        detail_changes: dict = {}
+        if zygosity_val.value != link.zygosity.value:
+            detail_changes['zygosity'] = zygosity_val.value
+            if not link.zygosity_evidence.human_edit_note:
+                detail_changes['zygosity_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
+        if zygosity_note and zygosity_note != link.zygosity_evidence.human_edit_note:
+            detail_changes['zygosity_human_edit_note'] = zygosity_note
+
+        if inheritance_val.value != link.inheritance.value:
+            detail_changes['inheritance'] = inheritance_val.value
+            if not link.inheritance_evidence.human_edit_note:
+                detail_changes['inheritance_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
+        if (
+            inheritance_note
+            and inheritance_note != link.inheritance_evidence.human_edit_note
+        ):
+            detail_changes['inheritance_human_edit_note'] = inheritance_note
+
+        if de_novo_val != link.de_novo:
+            detail_changes['de_novo'] = de_novo_val
+            if not link.de_novo_evidence.human_edit_note:
+                detail_changes['de_novo_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
+        if de_novo_note and de_novo_note != link.de_novo_evidence.human_edit_note:
+            detail_changes['de_novo_human_edit_note'] = de_novo_note
+
+        if testing_method_vals != [m.value for m in link.testing_methods]:
+            detail_changes['testing_methods'] = testing_method_vals
+            if not link.testing_methods_note:
+                detail_changes['testing_methods_note'] = HUMAN_EDIT_NOTE_DEFAULT
+        if (
+            testing_methods_note_val
+            and testing_methods_note_val != link.testing_methods_note
+        ):
+            detail_changes['testing_methods_note'] = testing_methods_note_val
+
+        if detail_changes:
+            try:
+                update_occurrence(
+                    paper_resp.id,
+                    link.id,
+                    PatientVariantOccurrenceUpdateRequest(**detail_changes),
+                )
+                st.toast('Saved!', icon=':material/check:')
+                time.sleep(0.5)
+                st.rerun()
+            except Exception as e:
+                st.toast(f'Failed to save: {str(e)}', icon='❌')
 
         # Display disease name evidence if present
         if link.disease_name_evidence:

@@ -31,6 +31,17 @@ Key Variant Extraction Principles:
 - Extract all explicit identifiers: rsIDs (e.g., rs123), ClinVar Allele IDs (e.g., CA123456)
 
 ------------------------------
+IDENTIFIERS (rsid / caid)
+------------------------------
+Rules:
+- rsid: Must start with "rs" followed by digits only (e.g., rs80357382). No other format is valid.
+- caid: ClinGen Allele Registry ID. Must start with "CA" followed by digits only (e.g., CA123456).
+  - ClinVar submission IDs (starting with "SCV") are NOT CAIDs — set caid to null.
+  - ClinVar submission batch IDs (starting with "SUB") are NOT CAIDs — set caid to null.
+  - ClinVar Variation IDs (plain integers, e.g., "12345") are NOT CAIDs — set caid to null.
+  - Only populate caid when the paper explicitly provides a CA-prefixed identifier.
+
+------------------------------
 REFERENCE SEQUENCES
 ------------------------------
 Supported accession types:
@@ -199,8 +210,8 @@ Output rules:
   - hgvs_c: "c.NNNT>N" or similar cDNA nomenclature
   - hgvs_p: "p.AaaNN..." or similar protein nomenclature
   - hgvs_g: "g.NNNT>N" or similar genomic nomenclature
-  - rsid: "rs" followed by numbers
-  - caid: "CA" followed by numbers
+  - rsid: "rs" followed by numbers only (e.g., rs80357382)
+  - caid: "CA" followed by numbers only (e.g., CA123456) — SCV/SUB/plain integers do NOT qualify
   - genomic_coordinates: "chr:position" or equivalent formatted coordinates
   - variant: Structured variant identifier (not general text like "VUS in GENE")
 - Do NOT output variants based solely on accessions (transcript, protein_accession, genomic_accession, lrg_accession, gene_accession)—these support but cannot alone identify a variant

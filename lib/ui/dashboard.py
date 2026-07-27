@@ -20,7 +20,6 @@ from lib.ui.api import (
     update_paper,
 )
 
-st.set_page_config(page_title='Papers Dashboard', layout='wide')
 left, center, right = st.columns([2, 7, 2])
 
 CURATIONS_DF_KEY = 'CURATIONS_DF_KEY'
@@ -132,10 +131,14 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
         lambda paper_id: f'{get_status_badge_icon(papers_by_id[paper_id].tasks)} {infer_paper_status_detail(papers_by_id[paper_id].tasks)}'
     )
     df['tags'] = df['tags'].apply(lambda x: x if isinstance(x, list) else [])
+    df['updated_by'] = df['updated_by'].apply(
+        lambda u: u['name'] if isinstance(u, dict) else ''
+    )
     st.data_editor(
         df[
             [
                 'gene_symbol',
+                'disease_name',
                 'tags',
                 'thumbnail_path',
                 'title',
@@ -143,14 +146,17 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
                 'pmid',
                 'filename',
                 'patient_count',
+                'proband_count',
                 'variant_count',
                 'agent_status',
                 'updated_at',
+                'updated_by',
             ]
         ],
         row_height=100,
         column_config={
             'gene_symbol': st.column_config.Column('Gene Symbol'),
+            'disease_name': st.column_config.Column('Disease'),
             'tags': st.column_config.MultiselectColumn(
                 'Tags',
                 options=['TrainingSet', 'ValidationSet', 'FailedPaperRelevancy'],
@@ -183,6 +189,10 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
                 '👥 Patients',
                 format='%d',
             ),
+            'proband_count': st.column_config.NumberColumn(
+                '🎯 Probands',
+                format='%d',
+            ),
             'variant_count': st.column_config.NumberColumn(
                 '🧬 Variants',
                 format='%d',
@@ -192,18 +202,22 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
                 'Last Modified',
                 format='D MMM YYYY, h:mm a',
             ),
+            'updated_by': st.column_config.Column('Last Modified By'),
         },
         disabled=[
             'gene_symbol',
+            'disease_name',
             'thumbnail_path',
             'title',
             'first_author',
             'pmid',
             'filename',
             'patient_count',
+            'proband_count',
             'variant_count',
             'agent_status',
             'updated_at',
+            'updated_by',
         ],
         num_rows='delete',
         key=CURATIONS_DF_KEY,

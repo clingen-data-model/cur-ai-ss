@@ -21,12 +21,14 @@ from lib.models.base import Base, PatchModel
 from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock
 from lib.models.family import Family
 from lib.models.paper import PaperDB
+from lib.models.user import UserSummaryResp
 
 if TYPE_CHECKING:
     from lib.models.agent_run import AgentRunDB
     from lib.models.family import FamilyDB
     from lib.models.patient_variant_occurrences import PatientVariantOccurrenceDB
     from lib.models.phenotype import PhenotypeDB
+    from lib.models.user import UserDB
 
 
 class ProbandStatus(str, Enum):
@@ -74,17 +76,21 @@ class SexAtBirth(str, Enum):
     Unknown = 'Unknown'
 
 
-class RaceEthnicity(str, Enum):
-    African_American = 'African/African American'
-    Latino_Admixed_American = 'Latino/Admixed American'
-    Ashkenazi_Jewish = 'Ashkenazi Jewish'
-    East_Asian = 'East Asian'
-    Finnish = 'Finnish'
-    Non_Finnish_European = 'Non-Finnish European'
-    South_Asian = 'South Asian'
-    Middle_Eastern = 'Middle Eastern'
-    Amish = 'Amish'
-    Other = 'Other'
+class Race(str, Enum):
+    American_Indian_or_Alaska_Native = 'American Indian or Alaska Native'
+    Asian = 'Asian'
+    Black = 'Black'
+    Native_Hawaiian_or_Other_Pacific_Islander = (
+        'Native Hawaiian or Other Pacific Islander'
+    )
+    White = 'White'
+    Mixed = 'Mixed'
+    Unknown = 'Unknown'
+
+
+class Ethnicity(str, Enum):
+    Hispanic_or_Latino = 'Hispanic or Latino'
+    Not_Hispanic_or_Latino = 'Not Hispanic or Latino'
     Unknown = 'Unknown'
 
 
@@ -348,10 +354,29 @@ class CountryCode(str, Enum):
     Unknown = 'Unknown'
 
 
-class Patient(BaseModel):
+class PatientIdentity(BaseModel):
+    """Identity and cross-patient attributes produced by patient extraction.
+
+    These fields require whole-paper / whole-family context to determine
+    (proband identification is a comparison across all patients in a family,
+    and family assignment relates patients to one another), so they stay in the
+    first-pass extraction agent. Per-patient demographics are attached later by
+    the patient demographics agent (see ``PatientDemographics``).
+    """
+
     identifier: EvidenceBlock[str]
     family_identifier: EvidenceBlock[str]
     proband_status: EvidenceBlock[ProbandStatus]
+
+
+class PatientDemographics(BaseModel):
+    """Per-patient demographic/clinical attributes.
+
+    Attached to an already-identified patient by the patient demographics agent.
+    Each field is knowable from that single patient's own description, so these
+    can be extracted one patient at a time in parallel.
+    """
+
     sex: EvidenceBlock[SexAtBirth]
     age_diagnosis: EvidenceBlock[int | None]
     age_diagnosis_unit: AgeUnit | None = None
@@ -360,7 +385,8 @@ class Patient(BaseModel):
     age_death: EvidenceBlock[int | None]
     age_death_unit: AgeUnit | None = None
     country_of_origin: EvidenceBlock[CountryCode]
-    race_ethnicity: EvidenceBlock[RaceEthnicity]
+    race: EvidenceBlock[Race]
+    ethnicity: EvidenceBlock[Ethnicity]
     affected_status: EvidenceBlock[AffectedStatus]
     is_obligate_carrier: EvidenceBlock[bool] = Field(
         default_factory=lambda: EvidenceBlock(
@@ -379,7 +405,7 @@ class Patient(BaseModel):
     )
 
     @model_validator(mode='after')
-    def validate_age_units(self) -> 'Patient':
+    def validate_age_units(self) -> 'PatientDemographics':
         """Ensure age fields and their units are both populated or both null."""
         age_pairs = [
             ('age_diagnosis', 'age_diagnosis_unit'),
@@ -396,6 +422,28 @@ class Patient(BaseModel):
         return self
 
 
+def placeholder_demographics() -> 'PatientDemographics':
+    """All-Unknown demographics for a patient whose demographics agent hasn't run.
+
+    Patient extraction inserts the patient row before demographics are known;
+    this fills the required fields with Unknown/None values (which the
+    EvidenceBlock validator allows without an evidence source) until the patient
+    demographics agent overwrites them. ``is_obligate_carrier``,
+    ``relationship_to_proband`` and ``twin_type`` fall back to their field defaults.
+    """
+    reason = 'Not yet extracted'
+    return PatientDemographics(
+        sex=EvidenceBlock(value=SexAtBirth.Unknown, reasoning=reason),
+        age_diagnosis=EvidenceBlock(value=None, reasoning=reason),
+        age_report=EvidenceBlock(value=None, reasoning=reason),
+        age_death=EvidenceBlock(value=None, reasoning=reason),
+        country_of_origin=EvidenceBlock(value=CountryCode.Unknown, reasoning=reason),
+        race=EvidenceBlock(value=Race.Unknown, reasoning=reason),
+        ethnicity=EvidenceBlock(value=Ethnicity.Unknown, reasoning=reason),
+        affected_status=EvidenceBlock(value=AffectedStatus.Unknown, reasoning=reason),
+    )
+
+
 class FamilyEntry(BaseModel):
     """Family grouping with references to patients by their identifier."""
 
@@ -404,7 +452,7 @@ class FamilyEntry(BaseModel):
 
 
 class PatientExtractionOutput(BaseModel):
-    patients: List[Patient]
+    patients: List[PatientIdentity]
     families: List[FamilyEntry]
 
     @model_validator(mode='after')
@@ -446,6 +494,12 @@ class PatientDB(Base):
         nullable=False,
         index=True,
     )
+    updated_by_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey('users.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
 
     # Extracted values (updateable, strongly typed)
     identifier: Mapped[str] = mapped_column(String, nullable=False)
@@ -464,7 +518,8 @@ class PatientDB(Base):
         SQLEnum(AgeUnit), nullable=True
     )
     country_of_origin: Mapped[str] = mapped_column(String, nullable=False)
-    race_ethnicity: Mapped[str] = mapped_column(String, nullable=False)
+    race: Mapped[str] = mapped_column(String, nullable=False)
+    ethnicity: Mapped[str] = mapped_column(String, nullable=False)
     affected_status: Mapped[str] = mapped_column(String, nullable=False)
     is_obligate_carrier: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     relationship_to_proband: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -478,7 +533,8 @@ class PatientDB(Base):
     age_report_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     age_death_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     country_of_origin_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
-    race_ethnicity_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    race_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    ethnicity_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     affected_status_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     is_obligate_carrier_evidence: Mapped[dict | None] = mapped_column(
         JSON, nullable=True
@@ -499,6 +555,7 @@ class PatientDB(Base):
     paper: Mapped[PaperDB] = relationship('PaperDB', back_populates='patients')
     family: Mapped['FamilyDB'] = relationship('FamilyDB', back_populates='patients')
     agent_run: Mapped['AgentRunDB'] = relationship('AgentRunDB')
+    updated_by: Mapped['UserDB | None'] = relationship('UserDB')
     phenotypes: Mapped[list['PhenotypeDB']] = relationship(
         'PhenotypeDB', back_populates='patient', cascade='all, delete-orphan'
     )
@@ -529,12 +586,15 @@ class PatientResp(BaseModel):
     age_death: int | None
     age_death_unit: AgeUnit | None = None
     country_of_origin: CountryCode
-    race_ethnicity: RaceEthnicity
+    race: Race
+    ethnicity: Ethnicity
     affected_status: AffectedStatus
     is_obligate_carrier: bool | None
     relationship_to_proband: RelationshipToProband | None
     twin_type: TwinType | None
     updated_at: datetime
+    updated_by_user_id: int | None = None
+    updated_by: UserSummaryResp | None = None
     # Evidence blocks (from DB JSON columns)
     identifier_evidence: HumanEvidenceBlock[str]
     proband_status_evidence: HumanEvidenceBlock[ProbandStatus]
@@ -543,7 +603,8 @@ class PatientResp(BaseModel):
     age_report_evidence: HumanEvidenceBlock[int | None]
     age_death_evidence: HumanEvidenceBlock[int | None]
     country_of_origin_evidence: HumanEvidenceBlock[CountryCode]
-    race_ethnicity_evidence: HumanEvidenceBlock[RaceEthnicity]
+    race_evidence: HumanEvidenceBlock[Race]
+    ethnicity_evidence: HumanEvidenceBlock[Ethnicity]
     affected_status_evidence: HumanEvidenceBlock[AffectedStatus]
     is_obligate_carrier_evidence: HumanEvidenceBlock[bool] | None
     relationship_to_proband_evidence: HumanEvidenceBlock[RelationshipToProband] | None
@@ -564,7 +625,8 @@ class PatientCreateRequest(BaseModel):
     age_death: int | None = None
     age_death_unit: str | None = None
     country_of_origin: str
-    race_ethnicity: str
+    race: str
+    ethnicity: str
     affected_status: str
     family_id: int
 
@@ -581,7 +643,8 @@ class PatientUpdateRequest(PatchModel):
     age_death: int | None = None
     age_death_unit: str | None = None
     country_of_origin: str | None = None
-    race_ethnicity: str | None = None
+    race: str | None = None
+    ethnicity: str | None = None
     is_obligate_carrier: bool | None = None
     relationship_to_proband: str | None = None
     twin_type: str | None = None
@@ -593,7 +656,8 @@ class PatientUpdateRequest(PatchModel):
     age_report_human_edit_note: str | None = None
     age_death_human_edit_note: str | None = None
     country_of_origin_human_edit_note: str | None = None
-    race_ethnicity_human_edit_note: str | None = None
+    race_human_edit_note: str | None = None
+    ethnicity_human_edit_note: str | None = None
     affected_status_human_edit_note: str | None = None
     is_obligate_carrier_human_edit_note: str | None = None
     relationship_to_proband_human_edit_note: str | None = None

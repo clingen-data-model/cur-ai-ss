@@ -35,7 +35,10 @@ CRITICAL:
     - Avoid partial identifiers that are ambiguous (e.g., "Case 2" when "Case 2", "Case 23", "Case 24" exist; instead quote the full row or full context)
 - A verbatim quote means an exact substring of the input source text with no modifications.
 - reasoning MAY include verbatim quotes from the input source text if helpful.
-  - reasoning should primarily explain how the value was derived.
+  - reasoning should primarily explain how the value was derived and why it was chosen.
+  - reasoning is read by human curators reviewing extracted data — write it in plain language
+    as if explaining your decision to a colleague. Do not use raw function or tool names
+    (e.g. get_hpo_term, clinvar_lookup); describe what you looked up and what you found instead.
   - Any quoted text in reasoning must be copied exactly from the input source text.
 - Do NOT place interpretive commentary inside quote.
 - Do NOT paraphrase text inside quote.

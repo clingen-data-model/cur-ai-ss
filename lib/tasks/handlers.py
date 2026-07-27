@@ -21,6 +21,12 @@ from lib.agents.hpo_linking_agent import (
 from lib.agents.hpo_linking_agent import (
     agent as hpo_linking_agent,
 )
+from lib.agents.mondo_linking_agent import (
+    MONDO_LINKING_AGENT_INSTRUCTIONS,
+)
+from lib.agents.mondo_linking_agent import (
+    agent as mondo_linking_agent,
+)
 from lib.agents.paper_extraction_agent import (
     PAPER_EXTRACTION_AGENT_INSTRUCTIONS,
 )
@@ -32,6 +38,12 @@ from lib.agents.paper_section_classifier_agent import (
 )
 from lib.agents.paper_section_classifier_agent import (
     agent as paper_classifier_agent,
+)
+from lib.agents.patient_demographics_agent import (
+    PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS,
+)
+from lib.agents.patient_demographics_agent import (
+    agent as patient_demographics_agent,
 )
 from lib.agents.patient_extraction_agent import (
     PATIENT_EXTRACTION_AGENT_INSTRUCTIONS,
@@ -53,9 +65,7 @@ from lib.agents.patient_variant_occurrence_agent import (
 )
 from lib.agents.pedigree_describer_agent import (
     PEDIGREE_DESCRIBER_AGENT_INSTRUCTIONS,
-)
-from lib.agents.pedigree_describer_agent import (
-    agent as pedigree_describer_agent,
+    pedigree_describer_agent_for_paper,
 )
 from lib.agents.segregation_analysis_computed_agent import (
     SEGREGATION_ANALYSIS_COMPUTED_AGENT_INSTRUCTIONS,
@@ -93,7 +103,6 @@ class RateLimitError(Exception):
 from lib.api.db import session_scope
 from lib.core.environment import env
 from lib.core.logging import setup_logging
-from lib.misc.gcs import upload_and_sign_image
 from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import (
     fulltext_md,
@@ -119,10 +128,11 @@ from lib.models import (
     Zygosity,
 )
 from lib.models.converters import (
+    apply_patient_demographics,
     family_to_db,
     harmonized_variant_to_db,
     hpo_to_db,
-    patient_to_db,
+    patient_identity_to_db,
     patient_variant_occurrence_to_db,
     pedigree_to_db,
     phenotype_to_db,
@@ -131,10 +141,16 @@ from lib.models.converters import (
     variant_to_db,
 )
 from lib.models.evidence_block import ReasoningBlock
+from lib.models.mondo import (
+    MondoDiseaseScope,
+    MondoLinkingTarget,
+)
 from lib.models.paper import FileFormat
+from lib.models.patient import ProbandStatus
 from lib.models.phenotype import HPOTerm
 from lib.models.variant import HarmonizedVariant, Variant
 from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
+from lib.reference_data.mondo import get_mondo_term
 from lib.tasks.models import TaskType
 
 setup_logging()
@@ -413,47 +429,27 @@ async def handle_pedigree_description(task_id: int) -> None:
 
     combined_text = ''
 
-    # Process regular images
-    image_id = 0
-    while True:
-        pdf_image = pdf_image_path(paper_id, image_id)
-        if not pdf_image.exists():
-            break
-        caption_path = pdf_image_caption_path(paper_id, image_id)
-        caption_text = (
-            caption_path.read_text() if caption_path.exists() else 'No caption'
-        )
-        # Upload image to GCS and get signed URL
-        logger.info(f'Processing image {image_id} from {pdf_image}')
-        image_url = upload_and_sign_image(pdf_image)
-        logger.info(
-            f'Image {image_id} URL type: {type(image_url)}, starts with: {image_url[:50] if image_url else "None"}'
-        )
-        combined_text += f'[Processing Pipeline Figure {image_id}]\n'
-        combined_text += f'URL: {image_url}\n'
-        combined_text += f'Caption: {caption_text}\n\n'
-        image_id += 1
-
-    # Process supplement images
-    image_id = 0
-    while True:
-        pdf_image = pdf_image_path(paper_id, image_id, supplement=True)
-        if not pdf_image.exists():
-            break
-        caption_path = pdf_image_caption_path(paper_id, image_id, supplement=True)
-        caption_text = (
-            caption_path.read_text() if caption_path.exists() else 'No caption'
-        )
-        # Upload image to GCS and get signed URL
-        logger.info(f'Processing supplement image {image_id} from {pdf_image}')
-        image_url = upload_and_sign_image(pdf_image)
-        logger.info(
-            f'Supplement image {image_id} URL type: {type(image_url)}, starts with: {image_url[:50] if image_url else "None"}'
-        )
-        combined_text += f'[Processing Supplement Figure {image_id}]\n'
-        combined_text += f'URL: {image_url}\n'
-        combined_text += f'Caption: {caption_text}\n\n'
-        image_id += 1
+    # List figures by id + caption. The agent picks a pedigree from the captions,
+    # then the analyze_pedigree_image tool loads the image bytes on demand — so we
+    # never put image URLs (or data URLs) into the prompt text.
+    for is_supplement, label in ((False, 'Pipeline'), (True, 'Supplement')):
+        image_id = 0
+        while True:
+            pdf_image = pdf_image_path(paper_id, image_id, supplement=is_supplement)
+            if not pdf_image.exists():
+                break
+            caption_path = pdf_image_caption_path(
+                paper_id, image_id, supplement=is_supplement
+            )
+            caption_text = (
+                caption_path.read_text() if caption_path.exists() else 'No caption'
+            )
+            logger.info(f'Listing {label.lower()} figure {image_id} from {pdf_image}')
+            combined_text += f'[{label} Figure {image_id}]\n'
+            combined_text += f'image_id: {image_id}\n'
+            combined_text += f'is_supplement: {is_supplement}\n'
+            combined_text += f'Caption: {caption_text}\n\n'
+            image_id += 1
 
     stored_conv_id = await ensure_conversation_id(stored_conv_id)
 
@@ -465,7 +461,7 @@ async def handle_pedigree_description(task_id: int) -> None:
         message = f'{combined_text}\n\n{PEDIGREE_DESCRIBER_AGENT_INSTRUCTIONS}'
 
     result = await Runner.run(
-        pedigree_describer_agent,
+        pedigree_describer_agent_for_paper(paper_id),
         message,
         conversation_id=stored_conv_id,
     )
@@ -567,9 +563,9 @@ async def handle_patient_extraction(task_id: int) -> None:
             session.flush()
             family_entries_by_id[entry.family.identifier.value] = db_family.id
 
-        # Insert patients with family assignments
+        # Insert patients (identity only; demographics filled by a later agent)
         for patient_info in result.final_output.patients:
-            db_patient = patient_to_db(paper_id, patient_info, agent_run_id)
+            db_patient = patient_identity_to_db(paper_id, patient_info, agent_run_id)
             # Use family_identifier from patient to find correct family
             family_id_value = patient_info.family_identifier.value
             if family_id_value in family_entries_by_id:
@@ -578,6 +574,112 @@ async def handle_patient_extraction(task_id: int) -> None:
                     patient_info.family_identifier.model_dump()
                 )
             session.add(db_patient)
+
+
+async def handle_patient_demographics(task_id: int) -> None:
+    """Extract demographics for a single already-identified patient."""
+    paper_id: int
+    patient_id: int | None = None
+    supplement_format: FileFormat | None = None
+    stored_conv_id: str | None = None
+    additional_context: str | None = None
+    patient_data: dict | None = None
+    proband_identifier: str | None = None
+    pedigree_descriptions_output: dict | None = None
+    section_classifications: dict | None = None
+
+    with session_scope() as session:
+        task = session.get(TaskDB, task_id)
+        if not task:
+            return
+
+        paper_id = task.paper_id
+        patient_id = task.patient_id
+        if patient_id is None:
+            raise ValueError(
+                f'Task {task_id}: PATIENT_DEMOGRAPHICS requires patient_id'
+            )
+
+        stored_conv_id = task.conversation_id
+        additional_context = task.additional_context
+
+        paper = session.get(PaperDB, paper_id)
+        supplement_format = paper.supplement_format if paper else None
+        section_classifications = paper.section_classifications if paper else None
+
+        patient_row = session.get(PatientDB, patient_id)
+        if not patient_row:
+            return
+
+        patient_data = {
+            'patient_id': patient_row.id,
+            'identifier': patient_row.identifier,
+            'identifier_quote': patient_row.identifier_evidence['quote'],
+            'proband_status': patient_row.proband_status,
+        }
+
+        # Find the proband identifier within this patient's family so the agent
+        # can determine relationship_to_proband consistently.
+        proband_row = (
+            session.query(PatientDB)
+            .filter(
+                PatientDB.family_id == patient_row.family_id,
+                PatientDB.proband_status == ProbandStatus.Proband.value,
+            )
+            .first()
+        )
+        proband_identifier = proband_row.identifier if proband_row else None
+
+        pedigree_row = (
+            session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).first()
+        )
+        pedigree_descriptions_output = (
+            {
+                'image_id': pedigree_row.image_id,
+                'description': pedigree_row.description,
+            }
+            if pedigree_row
+            else None
+        )
+
+    stored_conv_id = await ensure_conversation_id(stored_conv_id)
+
+    if additional_context is not None:
+        # Follow-up: agent has context from conversation
+        message = build_followup_prompt(additional_context)
+        agent = patient_demographics_agent
+    else:
+        # Initial query: build full message with paper + patient data + instructions
+        paper_markdown = relevant_sections_md(
+            paper_id, supplement_format, section_classifications
+        )
+        paper_context = format_paper_context(paper_markdown)
+        message = (
+            f'{paper_context}\n\n'
+            f'Patient JSON:\n{patient_data}\n\n'
+            f'Proband Identifier:\n{proband_identifier}\n\n'
+            f'Pedigree Description:\n{pedigree_descriptions_output}\n\n'
+            f'{PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS}'
+        )
+        agent = patient_demographics_agent
+
+    result = await Runner.run(
+        agent,
+        message,
+        conversation_id=stored_conv_id,
+    )
+    log_cache_metrics('PATIENT_DEMOGRAPHICS', result)
+
+    with session_scope() as session:
+        task = session.get(TaskDB, task_id)
+        if not task:
+            return
+        task.conversation_id = stored_conv_id
+
+        patient_row = session.get(PatientDB, patient_id)
+        if not patient_row:
+            return
+        apply_patient_demographics(patient_row, result.final_output)
 
 
 async def handle_segregation_evidence_extraction(task_id: int) -> None:
@@ -939,11 +1041,14 @@ async def handle_variant_annotation(task_id: int) -> None:
     """Enrich harmonized variants with annotations."""
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
-        if not task:
+        paper = session.get(PaperDB, task.paper_id) if task else None
+        if not task or not paper:
             return
 
         if task.variant_id is None:
             raise ValueError(f'Task {task_id}: VARIANT_ANNOTATION requires variant_id')
+
+        gene_symbol = paper.gene.symbol
 
         query = (
             session.query(HarmonizedVariantDB)
@@ -992,6 +1097,7 @@ async def handle_variant_annotation(task_id: int) -> None:
     enriched_variants = await asyncio.to_thread(
         enrich_variants_batch,
         harmonized_variants,
+        gene_symbol,
     )
 
     # Store results in new session
@@ -1450,6 +1556,153 @@ async def handle_hpo_linking(task_id: int) -> None:
         session.add(hpo_to_db(phenotype_id, result.final_output))
 
 
+def _build_mondo_linking_target(
+    session: Session, task: TaskDB
+) -> MondoLinkingTarget | None:
+    """Build the scoped disease text target for a MONDO linking task.
+
+    Args:
+        session: Active database session.
+        task: MONDO linking task row.
+
+    Returns:
+        A paper- or occurrence-scoped target, or None if the task target is gone.
+    """
+    paper = session.get(PaperDB, task.paper_id)
+    if not paper:
+        return None
+
+    gene_symbol = paper.gene.symbol
+
+    # Is paper-scoped disease text
+    if task.patient_variant_occurrence_id is None:
+        return MondoLinkingTarget(
+            scope=MondoDiseaseScope.PAPER,
+            paper_id=task.paper_id,
+            disease_text=paper.disease_name,
+            gene_symbol=gene_symbol,
+            inheritance_mode=paper.disease_inheritance_mode,
+        )
+
+    occurrence = session.get(
+        PatientVariantOccurrenceDB, task.patient_variant_occurrence_id
+    )
+    if not occurrence or occurrence.paper_id != task.paper_id:
+        return None
+
+    # Is occurrence-scoped disease text
+    return MondoLinkingTarget(
+        scope=MondoDiseaseScope.OCCURRENCE,
+        paper_id=task.paper_id,
+        patient_variant_occurrence_id=occurrence.id,
+        disease_text=occurrence.disease_name,
+        gene_symbol=gene_symbol,
+        inheritance_mode=occurrence.inheritance or paper.disease_inheritance_mode,
+    )
+
+
+async def handle_mondo_linking(task_id: int) -> None:
+    """Link a paper or patient-variant occurrence disease name to a MONDO term."""
+    with session_scope() as session:
+        task = session.get(TaskDB, task_id)
+        if not task:
+            return
+        target = _build_mondo_linking_target(session, task)
+        if target is None:
+            return
+        paper = session.get(PaperDB, target.paper_id)
+        supplement_format = paper.supplement_format if paper else None
+        stored_conv_id = task.conversation_id
+        additional_context = task.additional_context
+
+    query = target.disease_text.strip() if target.disease_text else ''
+    selected_mondo_id: str | None = None
+    selected_mondo_term: str | None = None
+    mondo_match_context: dict | None = None
+
+    if query:
+        stored_conv_id = await ensure_conversation_id(stored_conv_id)
+        if additional_context is not None:
+            # Rerun with feedback: continue the existing conversation instead of
+            # resending the paper context.
+            message = build_followup_prompt(additional_context)
+        else:
+            # Lead with the shared paper-context prefix so the API can reuse the
+            # cache the other paper agents already warmed, then append the
+            # MONDO-specific target and instructions.
+            paper_markdown = fulltext_md(target.paper_id, supplement_format)
+            paper_context = format_paper_context(paper_markdown, target.gene_symbol)
+            target_payload = {
+                'scope': target.scope.value,
+                'patient_variant_occurrence_id': target.patient_variant_occurrence_id,
+                'disease_text': target.disease_text,
+                'inheritance_mode': target.inheritance_mode,
+            }
+            message = (
+                f'{paper_context}\n\n'
+                f'MONDO linking target JSON:\n'
+                f'{json.dumps(target_payload, indent=2)}\n\n'
+                f'{MONDO_LINKING_AGENT_INSTRUCTIONS}'
+            )
+        result = await Runner.run(
+            mondo_linking_agent,
+            message,
+            max_turns=25,
+            conversation_id=stored_conv_id,
+            run_config=RunConfig(
+                trace_metadata={
+                    'scope': target.scope.value,
+                    'paper_id': str(target.paper_id),
+                    'patient_variant_occurrence_id': str(
+                        target.patient_variant_occurrence_id or ''
+                    ),
+                    'disease_text': query,
+                    'gene_symbol': target.gene_symbol or '',
+                },
+            ),
+        )
+        log_cache_metrics('MONDO_LINKING', result)
+
+        decision = result.final_output.value
+        if decision.mondo_id:
+            selected_term = get_mondo_term(decision.mondo_id)
+            if selected_term is not None:
+                selected_mondo_id = selected_term['mondo_id']
+                selected_mondo_term = selected_term['label']
+        # Persist the agent's raw decision (which may differ from the validated
+        # selection above) alongside task provenance for later inspection.
+        mondo_match_context = {
+            **decision.model_dump(mode='json'),
+            'scope': target.scope.value,
+            'query': query,
+            'agent_reasoning': result.final_output.reasoning,
+        }
+
+    with session_scope() as session:
+        task = session.get(TaskDB, task_id)
+        if not task:
+            return
+
+        if query:
+            task.conversation_id = stored_conv_id
+
+        if target.scope is MondoDiseaseScope.PAPER:
+            paper = session.get(PaperDB, target.paper_id)
+            if paper and paper.disease_name == target.disease_text:
+                paper.mondo_id = selected_mondo_id
+                paper.mondo_term = selected_mondo_term
+                paper.mondo_match_context = mondo_match_context
+            return
+
+        occurrence = session.get(
+            PatientVariantOccurrenceDB, target.patient_variant_occurrence_id
+        )
+        if occurrence and occurrence.disease_name == target.disease_text:
+            occurrence.mondo_id = selected_mondo_id
+            occurrence.mondo_term = selected_mondo_term
+            occurrence.mondo_match_context = mondo_match_context
+
+
 TASK_HANDLERS: dict[TaskType, Callable[[int], Awaitable[None]]] = {
     TaskType.PDF_PARSING: handle_pdf_parsing,
     TaskType.PAPER_CLASSIFIER: handle_paper_section_classifier,
@@ -1457,6 +1710,7 @@ TASK_HANDLERS: dict[TaskType, Callable[[int], Awaitable[None]]] = {
     TaskType.VARIANT_EXTRACTION: handle_variant_extraction,
     TaskType.PEDIGREE_DESCRIPTION: handle_pedigree_description,
     TaskType.PATIENT_EXTRACTION: handle_patient_extraction,
+    TaskType.PATIENT_DEMOGRAPHICS: handle_patient_demographics,
     TaskType.SEGREGATION_EVIDENCE_EXTRACTION: handle_segregation_evidence_extraction,
     TaskType.SEGREGATION_ANALYSIS_COMPUTED: handle_segregation_analysis_computed,
     TaskType.VARIANT_HARMONIZATION: handle_variant_harmonization,
@@ -1465,4 +1719,5 @@ TASK_HANDLERS: dict[TaskType, Callable[[int], Awaitable[None]]] = {
     TaskType.COMPOUND_HET_EVALUATION: handle_compound_het_evaluation,
     TaskType.PHENOTYPE_EXTRACTION: handle_phenotype_extraction,
     TaskType.HPO_LINKING: handle_hpo_linking,
+    TaskType.MONDO_LINKING: handle_mondo_linking,
 }

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import secrets
 import shutil
 import time
 import traceback
@@ -37,6 +38,7 @@ from lib.agents.chat_routing_agent import (
     _GLOBAL_AGENTS,
     CHAT_ROUTING_INSTRUCTIONS,
     ChatRoutingOutput,
+    ChatRunContext,
     make_routing_agent,
 )
 from lib.agents.general_paper_qa_agent import (
@@ -46,10 +48,16 @@ from lib.agents.general_paper_qa_agent import (
     agent as general_paper_qa_agent,
 )
 from lib.agents.run_tracking import ensure_agent_run
+from lib.api.auth import get_current_user, get_current_user_optional
 from lib.api.db import get_session, session_scope
 from lib.api.middleware import make_log_request_middleware
 from lib.core.environment import env
 from lib.core.logging import setup_logging
+from lib.core.security import (
+    create_access_token,
+    hash_password,
+    verify_password,
+)
 from lib.misc.curation.models import CurationSummaryRow
 from lib.misc.curation.pptx import build_curation_pptx
 from lib.misc.curation.summary import build_curation_row
@@ -79,11 +87,11 @@ from lib.models import (
     AgentRunDB,
     AnnotatedVariantDB,
     AnnotatedVariantResp,
+    ChangePasswordRequest,
     ChatMessageRequest,
     ChatMessageResp,
     ChatRoutingResponse,
     ConversationDB,
-    ExtractedPhenotype,
     FamilyCreateRequest,
     FamilyDB,
     FamilyResp,
@@ -97,6 +105,7 @@ from lib.models import (
     HpoDB,
     HPOTerm,
     HumanEvidenceBlock,
+    LoginRequest,
     PaperDB,
     PaperResp,
     PaperUpdateRequest,
@@ -106,32 +115,41 @@ from lib.models import (
     PatientUpdateRequest,
     PatientVariantOccurrenceDB,
     PatientVariantOccurrenceResp,
+    PatientVariantOccurrenceUpdateRequest,
     PedigreeDB,
     PedigreeResp,
     PhenotypeDB,
     PhenotypeResp,
-    PhenotypeUpdateRequest,
     SegregationAnalysisComputedDB,
     SegregationAnalysisResp,
     SegregationEvidenceDB,
+    SegregationEvidenceUpdateRequest,
     TaskDB,
+    TokenResp,
+    UserCreateRequest,
+    UserDB,
+    UserResp,
+    UserSummaryResp,
     VariantDB,
     VariantResp,
     VariantUpdateRequest,
 )
+from lib.models.base import row_to_dict
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
+from lib.models.mondo import MondoComponentMapping, MondoTerm
 from lib.models.patient import (
     AffectedStatus,
     CountryCode,
+    Ethnicity,
     ProbandStatus,
-    RaceEthnicity,
+    Race,
     RelationshipToProband,
     SexAtBirth,
     TwinType,
 )
 from lib.models.segregation_analysis import SegregationAnalysisComputedNestedResp
 from lib.tasks import TaskCreateRequest, TaskResp, enqueue_all_instances, enqueue_task
-from lib.tasks.handlers import ensure_conversation_id
+from lib.tasks.handlers import ensure_conversation_id, format_paper_context
 from lib.tasks.models import TaskStatus, TaskType
 
 logger = logging.getLogger(__name__)
@@ -189,12 +207,81 @@ def get_status() -> dict[str, str]:
     return {'status': 'ok'}
 
 
+@app.post(
+    '/auth/register',
+    response_model=UserResp,
+    status_code=status.HTTP_201_CREATED,
+    tags=['auth'],
+)
+def register_user(
+    request: UserCreateRequest, session: Session = Depends(get_session)
+) -> Any:
+    user = UserDB(
+        email=request.email,
+        hashed_password=hash_password(secrets.token_urlsafe(16)),
+        first_name=request.first_name,
+        last_name=request.last_name,
+        description_of_use_case=request.description_of_use_case,
+        is_active=False,
+    )
+    session.add(user)
+    try:
+        session.flush()
+    except IntegrityError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail='A user with this email already exists',
+        )
+    return user
+
+
+@app.post('/auth/login', response_model=TokenResp, tags=['auth'])
+def login(request: LoginRequest, session: Session = Depends(get_session)) -> Any:
+    user = session.query(UserDB).filter(UserDB.email == request.email).one_or_none()
+    if (
+        user is None
+        or not user.is_active
+        or not verify_password(
+            request.password.get_secret_value(), user.hashed_password
+        )
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail='Incorrect email or password',
+        )
+    return TokenResp(access_token=create_access_token(user.id))
+
+
+@app.get('/auth/me', response_model=UserResp, tags=['auth'])
+def get_me(current_user: UserDB = Depends(get_current_user)) -> Any:
+    return current_user
+
+
+@app.post('/auth/change-password', response_model=UserResp, tags=['auth'])
+def change_password(
+    request: ChangePasswordRequest,
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    if not verify_password(
+        request.current_password.get_secret_value(), current_user.hashed_password
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail='Current password is incorrect',
+        )
+    current_user.hashed_password = hash_password(
+        request.new_password.get_secret_value()
+    )
+    return current_user
+
+
 @app.put('/papers', response_model=PaperResp, status_code=status.HTTP_201_CREATED)
 def put_paper(
     gene_symbol: str = Form(...),
     uploaded_file: UploadFile = File(...),
     supplement_file: UploadFile | None = File(None),
     session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> Any:
     if uploaded_file.content_type != 'application/pdf':
         raise HTTPException(
@@ -232,9 +319,18 @@ def put_paper(
     else:
         latest_run_id = latest_run_db.id
 
+    if current_user.max_papers is not None and current_user.max_papers <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail='Paper upload limit reached',
+        )
+
     paper_db = PaperDB.from_content(main_content)
     paper_db.gene_id = gene.id
     paper_db.filename = uploaded_file.filename or ''
+    paper_db.updated_by_user_id = current_user.id
+    if current_user.max_papers is not None:
+        current_user.max_papers -= 1
     session.add(paper_db)
     try:
         # Create initial PDF_PARSING task
@@ -243,6 +339,7 @@ def put_paper(
             agent_run_id=latest_run_id,
             type=TaskType.PDF_PARSING,
             status=TaskStatus.PENDING,
+            updated_by_user_id=current_user.id,
         )
         paper_db.tasks.append(task)
         session.flush()
@@ -279,7 +376,20 @@ def put_paper(
                 'wb',
             ) as f:
                 f.write(supplement_content)
-        return paper_db
+        # We fill in these counts for the response, they are not persisted to DB.
+        paper_db.patient_count = len(paper_db.patients)
+        paper_db.proband_count = len(
+            [
+                p
+                for p in paper_db.patients
+                if p.proband_status == ProbandStatus.Proband.value
+            ]
+        )
+        paper_db.variant_count = len(paper_db.variants)
+        paper_db.patient_variant_occurrences_count = len(
+            paper_db.patient_variant_occurrences
+        )
+        return _paper_to_resp(paper_db)
     except IntegrityError:
         session.rollback()
         raise HTTPException(
@@ -294,6 +404,7 @@ def get_paper(paper_id: int, session: Session = Depends(get_session)) -> Any:
         session.query(PaperDB)
         .options(
             selectinload(PaperDB.gene),
+            selectinload(PaperDB.tasks),
             selectinload(PaperDB.patients),
             selectinload(PaperDB.variants),
             selectinload(PaperDB.patient_variant_occurrences),
@@ -306,11 +417,18 @@ def get_paper(paper_id: int, session: Session = Depends(get_session)) -> Any:
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
     paper_db.patient_count = len(paper_db.patients)
+    paper_db.proband_count = len(
+        [
+            p
+            for p in paper_db.patients
+            if p.proband_status == ProbandStatus.Proband.value
+        ]
+    )
     paper_db.variant_count = len(paper_db.variants)
     paper_db.patient_variant_occurrences_count = len(
         paper_db.patient_variant_occurrences
     )
-    return paper_db
+    return _paper_to_resp(paper_db)
 
 
 @app.delete('/papers/{paper_id}', status_code=status.HTTP_204_NO_CONTENT)
@@ -333,11 +451,13 @@ def update_paper(
     paper_id: int,
     patch_request: PaperUpdateRequest,
     session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> Any:
     paper_db = (
         session.query(PaperDB)
         .options(
             selectinload(PaperDB.gene),
+            selectinload(PaperDB.tasks),
             selectinload(PaperDB.patients),
             selectinload(PaperDB.variants),
             selectinload(PaperDB.patient_variant_occurrences),
@@ -350,13 +470,46 @@ def update_paper(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
-    patch_request.apply_to(paper_db)
+    previous_disease_name = paper_db.disease_name
+    patch_request.apply_to(paper_db, current_user)
+    # Disease MONDO fields are computed from the free-text disease name. Clear
+    # them on manual text edits so clients never see a match for stale text.
+    if (
+        'disease_name' in patch_request.model_fields_set
+        and paper_db.disease_name != previous_disease_name
+    ):
+        paper_db.mondo_id = None
+        paper_db.mondo_term = None
+        paper_db.mondo_match_context = None
     paper_db.patient_count = len(paper_db.patients)
+    paper_db.proband_count = len(
+        [
+            p
+            for p in paper_db.patients
+            if p.proband_status == ProbandStatus.Proband.value
+        ]
+    )
     paper_db.variant_count = len(paper_db.variants)
     paper_db.patient_variant_occurrences_count = len(
         paper_db.patient_variant_occurrences
     )
-    return paper_db
+    return _paper_to_resp(paper_db)
+
+
+def _touch_paper(session: Session, paper_id: int, editor: UserDB | None) -> None:
+    """Propagate a child-entity edit up to the parent paper's modification
+    attribution. Editing a nested entity (variant, patient, family, ...) does not
+    otherwise touch the paper row, so the dashboard's "last modified by" reflects
+    whoever last edited anything belonging to the paper. No-op for machine writes
+    (``editor is None``). ``updated_at`` is set explicitly so it bumps even when the
+    same user edits twice (``onupdate`` would not fire on an unchanged FK value)."""
+    if editor is None:
+        return
+    paper_db = session.get(PaperDB, paper_id)
+    if paper_db is None:
+        return
+    paper_db.updated_by_user_id = editor.id
+    paper_db.updated_at = func.now()
 
 
 @app.get('/papers', response_model=list[PaperResp])
@@ -365,17 +518,120 @@ def list_papers(
 ) -> Any:
     query = session.query(PaperDB).options(
         selectinload(PaperDB.gene),
-        selectinload(PaperDB.tasks),
+        selectinload(PaperDB.tasks).selectinload(TaskDB.updated_by),
         selectinload(PaperDB.patients),
         selectinload(PaperDB.variants),
         selectinload(PaperDB.patient_variant_occurrences),
+        selectinload(PaperDB.updated_by),
     )
     papers = query.all()
     for paper in papers:
         paper.patient_count = len(paper.patients)
+        paper.proband_count = len(
+            [
+                p
+                for p in paper.patients
+                if p.proband_status == ProbandStatus.Proband.value
+            ]
+        )
         paper.variant_count = len(paper.variants)
         paper.patient_variant_occurrences_count = len(paper.patient_variant_occurrences)
-    return papers
+    return [_paper_to_resp(paper) for paper in papers]
+
+
+def _mondo_reasoning_block(
+    mondo_id: str | None,
+    mondo_term: str | None,
+    mondo_match_context: dict | None,
+) -> ReasoningBlock[MondoTerm | None]:
+    """Reconstruct MONDO response reasoning from flattened DB columns."""
+    context = mondo_match_context or {}
+    reasoning = context.get('agent_reasoning')
+    if not isinstance(reasoning, str) or not reasoning.strip():
+        reasoning = 'MONDO linking not yet performed'
+
+    value = (
+        MondoTerm(mondo_id=mondo_id, label=mondo_term)
+        if mondo_id and mondo_term
+        else None
+    )
+    return ReasoningBlock[MondoTerm | None](
+        value=value,
+        reasoning=reasoning,
+    )
+
+
+def _mondo_components(
+    mondo_match_context: dict | None,
+) -> list[MondoComponentMapping]:
+    """Extract decomposed disease-text component mappings from stored context.
+
+    The MONDO linker decomposes a disease string into components (e.g. a primary
+    disease mapped to MONDO plus a secondary phenotype mapped to HPO) when no
+    single MONDO term captures the full text. The flattened ``mondo_id`` /
+    ``mondo_term`` columns only carry the primary selection, so the per-component
+    mappings are reconstructed here from ``mondo_match_context``.
+    """
+    context = mondo_match_context or {}
+    raw_components = context.get('components') or []
+    return [
+        MondoComponentMapping.model_validate(component) for component in raw_components
+    ]
+
+
+def _paper_to_resp(row: PaperDB) -> PaperResp:
+    """Convert PaperDB to PaperResp, including reconstructed MONDO reasoning."""
+    from lib.models.paper import PaperTag, PaperType
+    from lib.models.patient_variant_occurrences import Inheritance
+
+    return PaperResp(
+        id=row.id,
+        content_hash=row.content_hash,
+        gene_symbol=row.gene.symbol,
+        filename=row.filename,
+        tags=[PaperTag(tag) for tag in row.tags],
+        is_paper_relevant=row.is_paper_relevant,
+        section_classifications=row.section_classifications,
+        disease_name=row.disease_name,
+        disease_name_evidence=HumanEvidenceBlock.model_validate(
+            row.disease_name_evidence
+        )
+        if row.disease_name_evidence
+        else None,
+        disease_inheritance_mode=Inheritance(row.disease_inheritance_mode)
+        if row.disease_inheritance_mode
+        else None,
+        disease_inheritance_mode_evidence=HumanEvidenceBlock.model_validate(
+            row.disease_inheritance_mode_evidence
+        )
+        if row.disease_inheritance_mode_evidence
+        else None,
+        mondo=_mondo_reasoning_block(
+            row.mondo_id,
+            row.mondo_term,
+            row.mondo_match_context,
+        ),
+        mondo_components=_mondo_components(row.mondo_match_context),
+        updated_at=row.updated_at,
+        updated_by_user_id=row.updated_by_user_id,
+        updated_by=_user_summary(row.updated_by),
+        tasks=[
+            TaskResp.model_validate(task, from_attributes=True) for task in row.tasks
+        ],
+        patient_count=row.patient_count,
+        proband_count=row.proband_count,
+        variant_count=row.variant_count,
+        patient_variant_occurrences_count=row.patient_variant_occurrences_count,
+        title=row.title,
+        first_author=row.first_author,
+        journal_name=row.journal_name,
+        abstract=row.abstract,
+        publication_year=row.publication_year,
+        doi=row.doi,
+        pmid=row.pmid,
+        pmcid=row.pmcid,
+        paper_types=[PaperType(paper_type) for paper_type in row.paper_types],
+    )
 
 
 @app.get('/papers/{paper_id}/tasks', response_model=list[TaskResp])
@@ -390,6 +646,7 @@ def list_tasks(
         )
     tasks = (
         session.query(TaskDB)
+        .options(selectinload(TaskDB.updated_by))
         .filter(TaskDB.paper_id == paper_id)
         .order_by(TaskDB.id)
         .all()
@@ -402,6 +659,7 @@ def create_task(
     paper_id: int,
     request: TaskCreateRequest,
     session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> Any:
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
@@ -414,6 +672,7 @@ def create_task(
         and request.patient_id is None
         and request.variant_id is None
         and request.phenotype_id is None
+        and request.patient_variant_occurrence_id is None
     ):
         tasks = enqueue_all_instances(
             session,
@@ -421,6 +680,7 @@ def create_task(
             task_type=request.type,
             skip_successors=request.skip_successors,
             additional_context=request.additional_context,
+            updated_by_user_id=current_user.id,
         )
     else:
         task = enqueue_task(
@@ -431,11 +691,17 @@ def create_task(
             patient_id=request.patient_id,
             variant_id=request.variant_id,
             phenotype_id=request.phenotype_id,
+            patient_variant_occurrence_id=request.patient_variant_occurrence_id,
             skip_successors=request.skip_successors,
             additional_context=request.additional_context,
+            updated_by_user_id=current_user.id,
         )
         tasks = [task]
     return tasks
+
+
+def _user_summary(user: UserDB | None) -> UserSummaryResp | None:
+    return UserSummaryResp.model_validate(user) if user else None
 
 
 def _patient_to_resp(row: PatientDB) -> PatientResp:
@@ -465,10 +731,10 @@ def _patient_to_resp(row: PatientDB) -> PatientResp:
         country_of_origin_evidence=HumanEvidenceBlock.model_validate(
             row.country_of_origin_evidence
         ),
-        race_ethnicity=RaceEthnicity(row.race_ethnicity),
-        race_ethnicity_evidence=HumanEvidenceBlock.model_validate(
-            row.race_ethnicity_evidence
-        ),
+        race=Race(row.race),
+        race_evidence=HumanEvidenceBlock.model_validate(row.race_evidence),
+        ethnicity=Ethnicity(row.ethnicity),
+        ethnicity_evidence=HumanEvidenceBlock.model_validate(row.ethnicity_evidence),
         affected_status=AffectedStatus(row.affected_status),
         affected_status_evidence=HumanEvidenceBlock.model_validate(
             row.affected_status_evidence
@@ -492,6 +758,8 @@ def _patient_to_resp(row: PatientDB) -> PatientResp:
         if row.twin_type_evidence
         else None,
         updated_at=row.updated_at,
+        updated_by_user_id=row.updated_by_user_id,
+        updated_by=_user_summary(row.updated_by),
         family_id=row.family.id,
         family_identifier=row.family.identifier,
         family_assignment_evidence=HumanEvidenceBlock.model_validate(
@@ -509,7 +777,7 @@ def get_patients(paper_id: int, session: Session = Depends(get_session)) -> Any:
         )
     patients = (
         session.query(PatientDB)
-        .options(selectinload(PatientDB.family))
+        .options(selectinload(PatientDB.family), selectinload(PatientDB.updated_by))
         .filter(PatientDB.paper_id == paper_id)
         .order_by(PatientDB.id)
         .all()
@@ -526,6 +794,7 @@ def create_patient(
     paper_id: int,
     patient_data: PatientCreateRequest,
     session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> Any:
     from lib.models.evidence_block import EvidenceBlock
 
@@ -569,12 +838,16 @@ def create_patient(
         country_of_origin_evidence=create_evidence_block(
             patient_data.country_of_origin
         ),
-        race_ethnicity=patient_data.race_ethnicity,
-        race_ethnicity_evidence=create_evidence_block(patient_data.race_ethnicity),
+        race=patient_data.race,
+        race_evidence=create_evidence_block(patient_data.race),
+        ethnicity=patient_data.ethnicity,
+        ethnicity_evidence=create_evidence_block(patient_data.ethnicity),
         affected_status=patient_data.affected_status,
         affected_status_evidence=create_evidence_block(patient_data.affected_status),
     )
+    patient_db.updated_by_user_id = current_user.id
     session.add(patient_db)
+    _touch_paper(session, paper_id, current_user)
     session.flush()
     patient_db = (
         session.query(PatientDB)
@@ -594,10 +867,33 @@ def get_families(paper_id: int, session: Session = Depends(get_session)) -> Any:
         )
     return (
         session.query(FamilyDB)
+        .options(selectinload(FamilyDB.updated_by))
         .filter(FamilyDB.paper_id == paper_id)
         .order_by(FamilyDB.id)
         .all()
     )
+
+
+@app.patch('/papers/{paper_id}/families/{family_id}', response_model=FamilyResp)
+def update_family(
+    paper_id: int,
+    family_id: int,
+    patch_request: FamilyUpdateRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    family_db = (
+        session.query(FamilyDB)
+        .filter(FamilyDB.id == family_id, FamilyDB.paper_id == paper_id)
+        .one_or_none()
+    )
+    if not family_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Family not found'
+        )
+    patch_request.apply_to(family_db, current_user)
+    _touch_paper(session, paper_id, current_user)
+    return family_db
 
 
 @app.get('/papers/{paper_id}/pedigree', response_model=PedigreeResp | None)
@@ -611,6 +907,14 @@ def get_pedigree(paper_id: int, session: Session = Depends(get_session)) -> Any:
         session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).one_or_none()
     )
     return pedigree
+
+
+def _seg_evidence_block(value: Any, evidence_dict: dict | None) -> HumanEvidenceBlock:
+    """Build a segregation evidence block, taking ``value`` from the scalar column
+    (the source of truth for edits) and reasoning/quote/note from the JSON block."""
+    data = dict(evidence_dict or {})
+    data['value'] = value
+    return HumanEvidenceBlock.model_validate(data)
 
 
 def _segregation_analysis_to_resp(
@@ -644,14 +948,17 @@ def _segregation_analysis_to_resp(
     return SegregationAnalysisResp(
         id=computed.id if computed else evidence.id,
         family_id=family.id,
-        extracted_lod_score=HumanEvidenceBlock.model_validate(
-            evidence.extracted_lod_score_evidence or {}
+        extracted_lod_score=_seg_evidence_block(
+            evidence.extracted_lod_score, evidence.extracted_lod_score_evidence
         ),
-        has_unexplainable_non_segregations=HumanEvidenceBlock.model_validate(
-            evidence.has_unexplainable_non_segregations_evidence or {}
+        has_unexplainable_non_segregations=_seg_evidence_block(
+            evidence.has_unexplainable_non_segregations,
+            evidence.has_unexplainable_non_segregations_evidence,
         ),
         computed=computed_nested,
         updated_at=computed.updated_at if computed else evidence.updated_at,
+        updated_by_user_id=evidence.updated_by_user_id,
+        updated_by=_user_summary(evidence.updated_by),
     )
 
 
@@ -685,6 +992,39 @@ def get_segregation_analysis(
     return result
 
 
+@app.patch(
+    '/papers/{paper_id}/segregation-analysis/{family_id}',
+    response_model=SegregationAnalysisResp,
+)
+def update_segregation_evidence(
+    paper_id: int,
+    family_id: int,
+    patch_request: SegregationEvidenceUpdateRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    row = (
+        session.query(FamilyDB, SegregationEvidenceDB)
+        .join(SegregationEvidenceDB, FamilyDB.id == SegregationEvidenceDB.family_id)
+        .filter(FamilyDB.paper_id == paper_id, FamilyDB.id == family_id)
+        .one_or_none()
+    )
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Segregation evidence not found',
+        )
+    family, evidence = row
+    patch_request.apply_to(evidence, current_user)
+    _touch_paper(session, paper_id, current_user)
+    computed = (
+        session.query(SegregationAnalysisComputedDB)
+        .filter(SegregationAnalysisComputedDB.family_id == family_id)
+        .one_or_none()
+    )
+    return _segregation_analysis_to_resp(family, evidence, computed)
+
+
 @app.get('/papers/{paper_id}/variants', response_model=list[VariantResp])
 def get_variants(paper_id: int, session: Session = Depends(get_session)) -> Any:
     paper_db = session.get(PaperDB, paper_id)
@@ -695,8 +1035,11 @@ def get_variants(paper_id: int, session: Session = Depends(get_session)) -> Any:
     variants = (
         session.query(VariantDB)
         .options(
-            joinedload(VariantDB.harmonized_variant),
+            joinedload(VariantDB.harmonized_variant).joinedload(
+                HarmonizedVariantDB.updated_by
+            ),
             joinedload(VariantDB.annotated_variant),
+            selectinload(VariantDB.updated_by),
         )
         .filter(VariantDB.paper_id == paper_id)
         .order_by(VariantDB.id)
@@ -717,6 +1060,8 @@ def _variant_to_resp(row: VariantDB) -> VariantResp:
                 hgvs_c=hv.hgvs_c,
                 hgvs_p=hv.hgvs_p,
                 hgvs_g=hv.hgvs_g,
+                updated_by_user_id=hv.updated_by_user_id,
+                updated_by=_user_summary(hv.updated_by),
             ),
             reasoning=hv.reasoning,
         )
@@ -764,6 +1109,8 @@ def _variant_to_resp(row: VariantDB) -> VariantResp:
         variant_type=row.variant_type,
         functional_evidence=row.functional_evidence,
         updated_at=row.updated_at,
+        updated_by_user_id=row.updated_by_user_id,
+        updated_by=_user_summary(row.updated_by),
         transcript_evidence=EvidenceBlock.model_validate(row.transcript_evidence),
         protein_accession_evidence=EvidenceBlock.model_validate(
             row.protein_accession_evidence
@@ -804,6 +1151,7 @@ def update_variant(
     variant_id: int,
     patch_request: VariantUpdateRequest,
     session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> Any:
     variant_db = (
         session.query(VariantDB)
@@ -818,7 +1166,7 @@ def update_variant(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Variant not found'
         )
-    patch_request.apply_to(variant_db)
+    patch_request.apply_to(variant_db, current_user)
     # Editing any harmonized field invalidates the downstream enrichment row,
     # which was computed by key lookup from the pre-edit coordinates. Treat
     # all harmonized siblings uniformly so a future enrichment lookup added
@@ -837,9 +1185,10 @@ def update_variant(
                 status_code=status.HTTP_409_CONFLICT,
                 detail='Variant has not been harmonized by the server yet',
             )
-        harmonized_update.apply_to(variant_db.harmonized_variant)
+        harmonized_update.apply_to(variant_db.harmonized_variant, current_user)
         # delete-orphan cascade removes the row
         variant_db.annotated_variant = None
+    _touch_paper(session, paper_id, current_user)
     session.flush()
     return _variant_to_resp(variant_db)
 
@@ -874,6 +1223,7 @@ def _phenotype_to_resp(row: PhenotypeDB) -> PhenotypeResp:
         severity=row.severity,
         modifier=row.modifier,
         updated_at=row.updated_at,
+        updated_by_user_id=row.updated_by_user_id,
         hpo=hpo,
     )
 
@@ -968,6 +1318,37 @@ def get_patient_occurrences(
     ]
 
 
+@app.patch(
+    '/papers/{paper_id}/occurrences/{occurrence_id}',
+    response_model=PatientVariantOccurrenceResp,
+)
+def update_occurrence(
+    paper_id: int,
+    occurrence_id: int,
+    patch_request: PatientVariantOccurrenceUpdateRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    occurrence_db = (
+        session.query(PatientVariantOccurrenceDB)
+        .filter(
+            PatientVariantOccurrenceDB.id == occurrence_id,
+            PatientVariantOccurrenceDB.paper_id == paper_id,
+        )
+        .one_or_none()
+    )
+    if not occurrence_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Occurrence not found'
+        )
+    patch_request.apply_to(occurrence_db, current_user)
+    _touch_paper(session, paper_id, current_user)
+    patient = session.get(PatientDB, occurrence_db.patient_id)
+    return _patient_variant_occurrence_to_resp(
+        occurrence_db, patient_identifier=patient.identifier if patient else ''
+    )
+
+
 def _patient_variant_occurrence_to_resp(
     row: PatientVariantOccurrenceDB,
     patient_identifier: str,
@@ -984,19 +1365,28 @@ def _patient_variant_occurrence_to_resp(
         patient_identifier=patient_identifier,
         variant_id=row.variant_id,
         zygosity=Zygosity(row.zygosity),
-        zygosity_evidence=EvidenceBlock.model_validate(row.zygosity_evidence),
+        zygosity_evidence=HumanEvidenceBlock.model_validate(row.zygosity_evidence),
         inheritance=Inheritance(row.inheritance),
-        inheritance_evidence=EvidenceBlock.model_validate(row.inheritance_evidence),
+        inheritance_evidence=HumanEvidenceBlock.model_validate(
+            row.inheritance_evidence
+        ),
         de_novo=row.de_novo,
-        de_novo_evidence=EvidenceBlock.model_validate(row.de_novo_evidence),
+        de_novo_evidence=HumanEvidenceBlock.model_validate(row.de_novo_evidence),
         testing_methods=[TestingMethod(m) for m in row.testing_methods],
         testing_methods_evidence=[
             EvidenceBlock.model_validate(m) for m in row.testing_methods_evidence
         ],
+        testing_methods_note=row.testing_methods_note,
         disease_name=row.disease_name,
         disease_name_evidence=EvidenceBlock.model_validate(row.disease_name_evidence)
         if row.disease_name_evidence
         else None,
+        mondo=_mondo_reasoning_block(
+            row.mondo_id,
+            row.mondo_term,
+            row.mondo_match_context,
+        ),
+        mondo_components=_mondo_components(row.mondo_match_context),
         paired_variant_link_id=row.paired_variant_link_id,
         paired_variant_confidence=CompoundHetConfidence(row.paired_variant_confidence)
         if row.paired_variant_confidence
@@ -1040,8 +1430,8 @@ def get_curation_export(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
     try:
-        row = build_curation_row(paper_id, session)
-        pptx_bytes = build_curation_pptx([row])
+        rows = build_curation_row(paper_id, session)
+        pptx_bytes = build_curation_pptx(rows)
         return Response(
             content=pptx_bytes,
             media_type='application/vnd.openxmlformats-officedocument.presentationml.presentation',
@@ -1084,81 +1474,13 @@ def get_phenotypes(
     return [_phenotype_to_resp(p) for p in phenotypes]
 
 
-@app.post(
-    '/papers/{paper_id}/patients/{patient_id}/phenotypes',
-    response_model=PhenotypeResp,
-)
-def create_phenotype(
-    paper_id: int,
-    patient_id: int,
-    phenotype_data: ExtractedPhenotype,
-    session: Session = Depends(get_session),
-) -> Any:
-    paper_db = session.get(PaperDB, paper_id)
-    if not paper_db:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
-        )
-    patient_db = (
-        session.query(PatientDB).filter(PatientDB.id == patient_id).one_or_none()
-    )
-    if not patient_db:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Patient not found'
-        )
-
-    phenotype_db = PhenotypeDB(
-        paper_id=paper_id,
-        patient_id=patient_id,
-        concept=phenotype_data.concept.value,
-        concept_evidence=phenotype_data.concept.model_dump(),
-        negated=phenotype_data.negated,
-        uncertain=phenotype_data.uncertain,
-        family_history=phenotype_data.family_history,
-        onset=phenotype_data.onset,
-        location=phenotype_data.location,
-        severity=phenotype_data.severity,
-        modifier=phenotype_data.modifier,
-    )
-    session.add(phenotype_db)
-    return phenotype_db
-
-
-@app.patch(
-    '/papers/{paper_id}/patients/{patient_id}/phenotypes/{phenotype_id}',
-    response_model=PhenotypeResp,
-)
-def update_phenotype(
-    paper_id: int,
-    patient_id: int,
-    phenotype_id: int,
-    patch_request: PhenotypeUpdateRequest,
-    session: Session = Depends(get_session),
-) -> Any:
-    phenotype_db = (
-        session.query(PhenotypeDB)
-        .options(joinedload(PhenotypeDB.hpo))
-        .filter(
-            PhenotypeDB.id == phenotype_id,
-            PhenotypeDB.paper_id == paper_id,
-            PhenotypeDB.patient_id == patient_id,
-        )
-        .one_or_none()
-    )
-    if not phenotype_db:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Phenotype not found'
-        )
-    patch_request.apply_to(phenotype_db)
-    return phenotype_db
-
-
 @app.patch('/papers/{paper_id}/patients/{patient_id}', response_model=PatientResp)
 def update_patient(
     paper_id: int,
     patient_id: int,
     patch_request: PatientUpdateRequest,
     session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> Any:
     patient_db = (
         session.query(PatientDB)
@@ -1170,7 +1492,8 @@ def update_patient(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Patient not found'
         )
-    patch_request.apply_to(patient_db)
+    patch_request.apply_to(patient_db, current_user)
+    _touch_paper(session, paper_id, current_user)
     return _patient_to_resp(patient_db)
 
 
@@ -1382,10 +1705,11 @@ def clear_chat(
     return {'status': 'cleared'}
 
 
-@app.post('/papers/{paper_id}/chat/init', response_model=list[dict])
+@app.post('/papers/{paper_id}/chat/init', response_model=ChatRoutingResponse)
 async def init_chat(
     paper_id: int,
     request: ChatMessageRequest,
+    current_user: UserDB = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> Any:
     paper_db = session.get(PaperDB, paper_id)
@@ -1401,13 +1725,8 @@ async def init_chat(
     )
 
     if conversation_db is None:
-        any_eligible = session.query(TaskDB).filter(TaskDB.paper_id == paper_id).all()
-        if not any(t.conversation_id for t in any_eligible):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail='No completed task conversations available for this paper.',
-            )
-
+        # Run the chat agent. An ACTION queues a task (recorded in the run context);
+        # a QUESTION returns a routing decision to answer from.
         def build_selection_summary(output: ChatRoutingOutput) -> str:
             parts = [f'Selected the "{output.task_type}" agent']
             if output.entity_label:
@@ -1415,10 +1734,39 @@ async def init_chat(
             parts.append(f'because it {output.task_type.description.lower()}')
             return ' '.join(parts)
 
+        chat_ctx = ChatRunContext()
         routing_input = (
             f'{CHAT_ROUTING_INSTRUCTIONS}\n\nUser question: {request.message}'
         )
-        routing_result = await Runner.run(make_routing_agent(paper_id), routing_input)
+        routing_result = await Runner.run(
+            make_routing_agent(paper_id, current_user.id),
+            routing_input,
+            context=chat_ctx,
+        )
+
+        # ACTION: a task was queued — store the confirmation and return.
+        if chat_ctx.confirmation is not None:
+            conversation_db = ConversationDB(
+                paper_id=paper_id,
+                conversation_id=None,
+                messages=[
+                    {'role': 'user', 'content': request.message},
+                    {'role': 'assistant', 'content': chat_ctx.confirmation},
+                ],
+            )
+            session.add(conversation_db)
+            return ChatRoutingResponse(
+                messages=conversation_db.messages, queued_task=True
+            )
+
+        # QUESTION (answer path): route to general QA or an existing task conversation.
+        any_eligible = session.query(TaskDB).filter(TaskDB.paper_id == paper_id).all()
+        if not any(t.conversation_id for t in any_eligible):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail='No completed task conversations available for this paper.',
+            )
+
         routing_output = routing_result.final_output
 
         if routing_output.task_type == TaskType.GENERAL_PAPER_QUESTION:
@@ -1454,7 +1802,9 @@ async def init_chat(
 
         session.add(conversation_db)
 
-    return conversation_db.messages
+    # Answer path (or an already-initialized conversation): a generate call still
+    # owes the actual answer.
+    return ChatRoutingResponse(messages=conversation_db.messages, queued_task=False)
 
 
 def _build_qa_context(
@@ -1514,26 +1864,23 @@ def _build_qa_context(
         else []
     )
 
-    def _row(row: Any) -> dict:
-        return {c.name: getattr(row, c.name) for c in row.__table__.columns}
-
     db_state = {
-        'paper': _row(paper_db),
-        'families': [_row(r) for r in families],
-        'patients': [_row(r) for r in patients],
-        'pedigrees': [_row(r) for r in pedigrees],
-        'phenotypes': [_row(r) for r in phenotypes],
-        'hpo_terms': [_row(r) for r in hpos],
-        'variants': [_row(r) for r in variants],
-        'harmonized_variants': [_row(r) for r in harmonized],
-        'annotated_variants': [_row(r) for r in enriched],
-        'patient_variant_occurrences': [_row(r) for r in pvlinks],
-        'segregation_evidence': [_row(r) for r in seg_evidence],
-        'segregation_analysis': [_row(r) for r in seg_computed],
+        'paper': row_to_dict(paper_db),
+        'families': [row_to_dict(r) for r in families],
+        'patients': [row_to_dict(r) for r in patients],
+        'pedigrees': [row_to_dict(r) for r in pedigrees],
+        'phenotypes': [row_to_dict(r) for r in phenotypes],
+        'hpo_terms': [row_to_dict(r) for r in hpos],
+        'variants': [row_to_dict(r) for r in variants],
+        'harmonized_variants': [row_to_dict(r) for r in harmonized],
+        'annotated_variants': [row_to_dict(r) for r in enriched],
+        'patient_variant_occurrences': [row_to_dict(r) for r in pvlinks],
+        'segregation_evidence': [row_to_dict(r) for r in seg_evidence],
+        'segregation_analysis': [row_to_dict(r) for r in seg_computed],
     }
 
     paper_md = relevant_sections_md(paper_id, paper_db.supplement_format)
-    paper_context = f'PAPER TEXT:\n{paper_md}'
+    paper_context = format_paper_context(paper_md)
     db_state_context = f'CAA Extracted State:\n{json.dumps(db_state, default=str)}'
 
     return paper_context, db_state_context, GENERAL_PAPER_QA_INSTRUCTIONS

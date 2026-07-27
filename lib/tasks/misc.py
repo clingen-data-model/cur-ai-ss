@@ -25,14 +25,19 @@ def enqueue_task(
     patient_id: int | None = None,
     variant_id: int | None = None,
     phenotype_id: int | None = None,
+    patient_variant_occurrence_id: int | None = None,
     skip_successors: bool = False,
     additional_context: str | None = None,
+    updated_by_user_id: int | None = None,
 ) -> TaskDB:
     """Create or reset a task to PENDING status.
 
     Checks for existing task and updates it, or creates new one.
     If task is currently running, returns it unchanged.
     Returns the task (either newly created or reset).
+
+    ``updated_by_user_id`` records who triggered the task; leave ``None`` for
+    machine enqueues (worker successors) so they stay unattributed.
     """
     # Get latest agent run
     latest_run = session.query(AgentRunDB).order_by(AgentRunDB.id.desc()).first()
@@ -50,6 +55,7 @@ def enqueue_task(
             TaskDB.patient_id == patient_id,
             TaskDB.variant_id == variant_id,
             TaskDB.phenotype_id == phenotype_id,
+            TaskDB.patient_variant_occurrence_id == patient_variant_occurrence_id,
         )
         .first()
     )
@@ -64,7 +70,8 @@ def enqueue_task(
         existing_task.error_message = None
         existing_task.skip_successors = skip_successors
         existing_task.additional_context = additional_context
-        # Clear conversation_id if not providing new context (start fresh)
+        existing_task.updated_by_user_id = updated_by_user_id
+        # Clear conversation_id if not providing new context (start fresh).
         if additional_context is None:
             existing_task.conversation_id = None
         session.flush()
@@ -79,9 +86,11 @@ def enqueue_task(
             patient_id=patient_id,
             variant_id=variant_id,
             phenotype_id=phenotype_id,
+            patient_variant_occurrence_id=patient_variant_occurrence_id,
             status=TaskStatus.PENDING,
             skip_successors=skip_successors,
             additional_context=additional_context,
+            updated_by_user_id=updated_by_user_id,
         )
         session.add(new_task)
         session.flush()
@@ -94,6 +103,7 @@ def enqueue_all_instances(
     task_type: TaskType,
     skip_successors: bool = False,
     additional_context: str | None = None,
+    updated_by_user_id: int | None = None,
 ) -> list[TaskDB]:
     """Re-queue all instances of a task type for a paper.
 
@@ -120,6 +130,7 @@ def enqueue_all_instances(
                 task.error_message = None
                 task.skip_successors = skip_successors
                 task.additional_context = additional_context
+                task.updated_by_user_id = updated_by_user_id
                 # Clear conversation_id if not providing new context (start fresh)
                 if additional_context is None:
                     task.conversation_id = None
@@ -134,8 +145,44 @@ def enqueue_all_instances(
             task_type=task_type,
             skip_successors=skip_successors,
             additional_context=additional_context,
+            updated_by_user_id=updated_by_user_id,
         )
         return [task]
+
+
+def _task_completed(session: Session, paper_id: int, task_type: TaskType) -> bool:
+    """Whether a (global) task of ``task_type`` has completed for this paper."""
+    return (
+        session.query(TaskDB)
+        .filter(
+            TaskDB.paper_id == paper_id,
+            TaskDB.type == task_type,
+            TaskDB.status == TaskStatus.COMPLETED,
+        )
+        .first()
+        is not None
+    )
+
+
+def _patient_demographics_ready(session: Session, paper_id: int) -> bool:
+    """Whether patient identity + all per-patient demographics are complete.
+
+    True once PATIENT_EXTRACTION has completed and every per-patient
+    PATIENT_DEMOGRAPHICS task (if any) has completed. With zero patients there
+    are no demographics tasks, so this reduces to "patient extraction done",
+    preserving the pre-split behavior for papers with no extractable patients.
+    """
+    if not _task_completed(session, paper_id, TaskType.PATIENT_EXTRACTION):
+        return False
+    demographics_tasks = (
+        session.query(TaskDB)
+        .filter(
+            TaskDB.paper_id == paper_id,
+            TaskDB.type == TaskType.PATIENT_DEMOGRAPHICS,
+        )
+        .all()
+    )
+    return all(t.status == TaskStatus.COMPLETED for t in demographics_tasks)
 
 
 def enqueue_successors(session: Session, task: TaskDB) -> None:
@@ -144,8 +191,14 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
     Each case is explicit about what successors to create and any entity ID
     filtering/expansion needed. PATIENT_VARIANT_OCCURRENCES is the only task that
     requires checking multiple independent predecessors.
+
+    The triggering user (``task.updated_by_user_id``) is propagated to successor
+    tasks so the attribution chain is preserved end-to-end. Tasks triggered by the
+    worker itself (initial pipeline runs) have no user and stay unattributed.
     """
     from lib.models import FamilyDB, PatientDB, PhenotypeDB, VariantDB
+
+    user_id = task.updated_by_user_id
 
     match task.type:
         case TaskType.PDF_PARSING:
@@ -153,6 +206,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 session,
                 paper_id=task.paper_id,
                 task_type=TaskType.PAPER_CLASSIFIER,
+                updated_by_user_id=user_id,
             )
 
         case TaskType.PAPER_CLASSIFIER:
@@ -160,16 +214,19 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 session,
                 paper_id=task.paper_id,
                 task_type=TaskType.PAPER_METADATA,
+                updated_by_user_id=user_id,
             )
             enqueue_task(
                 session,
                 paper_id=task.paper_id,
                 task_type=TaskType.VARIANT_EXTRACTION,
+                updated_by_user_id=user_id,
             )
             enqueue_task(
                 session,
                 paper_id=task.paper_id,
                 task_type=TaskType.PEDIGREE_DESCRIPTION,
+                updated_by_user_id=user_id,
             )
 
         case TaskType.PEDIGREE_DESCRIPTION:
@@ -177,10 +234,11 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 session,
                 paper_id=task.paper_id,
                 task_type=TaskType.PATIENT_EXTRACTION,
+                updated_by_user_id=user_id,
             )
 
         case TaskType.PATIENT_EXTRACTION:
-            # Expand to per-patient PHENOTYPE_EXTRACTION tasks
+            # Expand to per-patient PATIENT_DEMOGRAPHICS tasks
             patients = (
                 session.query(PatientDB)
                 .filter(PatientDB.paper_id == task.paper_id)
@@ -190,25 +248,43 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 enqueue_task(
                     session,
                     paper_id=task.paper_id,
-                    task_type=TaskType.PHENOTYPE_EXTRACTION,
+                    task_type=TaskType.PATIENT_DEMOGRAPHICS,
                     patient_id=patient.id,
+                    updated_by_user_id=user_id,
                 )
 
-            # Gate PATIENT_VARIANT_OCCURRENCES on VARIANT_EXTRACTION also being done
-            variant_task = (
-                session.query(TaskDB)
-                .filter(
-                    TaskDB.paper_id == task.paper_id,
-                    TaskDB.type == TaskType.VARIANT_EXTRACTION,
-                    TaskDB.status == TaskStatus.COMPLETED,
-                )
-                .first()
-            )
-            if variant_task:
+            # With no patients there will be no demographics tasks to drive
+            # PATIENT_VARIANT_OCCURRENCES, so gate it here (on VARIANT_EXTRACTION).
+            if not patients and _task_completed(
+                session, task.paper_id, TaskType.VARIANT_EXTRACTION
+            ):
                 enqueue_task(
                     session,
                     paper_id=task.paper_id,
                     task_type=TaskType.PATIENT_VARIANT_OCCURRENCES,
+                    updated_by_user_id=user_id,
+                )
+
+        case TaskType.PATIENT_DEMOGRAPHICS:
+            # Per-patient PHENOTYPE_EXTRACTION for this patient
+            enqueue_task(
+                session,
+                paper_id=task.paper_id,
+                task_type=TaskType.PHENOTYPE_EXTRACTION,
+                patient_id=task.patient_id,
+                updated_by_user_id=user_id,
+            )
+
+            # Fan-in: once all patients have demographics and variants are
+            # extracted, patient-variant occurrences can run.
+            if _patient_demographics_ready(session, task.paper_id) and _task_completed(
+                session, task.paper_id, TaskType.VARIANT_EXTRACTION
+            ):
+                enqueue_task(
+                    session,
+                    paper_id=task.paper_id,
+                    task_type=TaskType.PATIENT_VARIANT_OCCURRENCES,
+                    updated_by_user_id=user_id,
                 )
 
         case TaskType.VARIANT_EXTRACTION:
@@ -224,23 +300,17 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     paper_id=task.paper_id,
                     task_type=TaskType.VARIANT_HARMONIZATION,
                     variant_id=variant.id,
+                    updated_by_user_id=user_id,
                 )
 
-            # Gate PATIENT_VARIANT_OCCURRENCES on PATIENT_EXTRACTION also being done
-            patient_task = (
-                session.query(TaskDB)
-                .filter(
-                    TaskDB.paper_id == task.paper_id,
-                    TaskDB.type == TaskType.PATIENT_EXTRACTION,
-                    TaskDB.status == TaskStatus.COMPLETED,
-                )
-                .first()
-            )
-            if patient_task:
+            # Gate PATIENT_VARIANT_OCCURRENCES on patient identity + all per-patient
+            # demographics also being done.
+            if _patient_demographics_ready(session, task.paper_id):
                 enqueue_task(
                     session,
                     paper_id=task.paper_id,
                     task_type=TaskType.PATIENT_VARIANT_OCCURRENCES,
+                    updated_by_user_id=user_id,
                 )
 
         case TaskType.VARIANT_HARMONIZATION:
@@ -249,6 +319,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 paper_id=task.paper_id,
                 task_type=TaskType.VARIANT_ANNOTATION,
                 variant_id=task.variant_id,
+                updated_by_user_id=user_id,
             )
 
         case TaskType.PATIENT_VARIANT_OCCURRENCES:
@@ -262,6 +333,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     paper_id=task.paper_id,
                     task_type=TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
                     family_id=family.id,
+                    updated_by_user_id=user_id,
                 )
 
             # Expand to per-patient COMPOUND_HET_EVALUATION for patients with ≥2 heterozygous variants
@@ -284,6 +356,31 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     paper_id=task.paper_id,
                     task_type=TaskType.COMPOUND_HET_EVALUATION,
                     patient_id=patient_id,
+                    updated_by_user_id=user_id,
+                )
+
+            # Re-link paper disease context after case-level occurrence extraction,
+            # which may update paper.disease_name.
+            enqueue_task(
+                session,
+                paper_id=task.paper_id,
+                task_type=TaskType.MONDO_LINKING,
+            )
+
+            # Expand to per-occurrence MONDO_LINKING tasks for extracted disease names.
+            occurrences = (
+                session.query(PatientVariantOccurrenceDB)
+                .filter(PatientVariantOccurrenceDB.paper_id == task.paper_id)
+                .all()
+            )
+            for occurrence in occurrences:
+                if not occurrence.disease_name or not occurrence.disease_name.strip():
+                    continue
+                enqueue_task(
+                    session,
+                    paper_id=task.paper_id,
+                    task_type=TaskType.MONDO_LINKING,
+                    patient_variant_occurrence_id=occurrence.id,
                 )
 
         case TaskType.SEGREGATION_EVIDENCE_EXTRACTION:
@@ -292,6 +389,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 paper_id=task.paper_id,
                 task_type=TaskType.SEGREGATION_ANALYSIS_COMPUTED,
                 family_id=task.family_id,
+                updated_by_user_id=user_id,
             )
 
         case TaskType.PHENOTYPE_EXTRACTION:
@@ -310,14 +408,22 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     paper_id=task.paper_id,
                     task_type=TaskType.HPO_LINKING,
                     phenotype_id=phenotype.id,
+                    updated_by_user_id=user_id,
                 )
 
+        case TaskType.PAPER_METADATA:
+            enqueue_task(
+                session,
+                paper_id=task.paper_id,
+                task_type=TaskType.MONDO_LINKING,
+            )
+
         case (
-            TaskType.PAPER_METADATA
-            | TaskType.VARIANT_ANNOTATION
+            TaskType.VARIANT_ANNOTATION
             | TaskType.SEGREGATION_ANALYSIS_COMPUTED
             | TaskType.COMPOUND_HET_EVALUATION
             | TaskType.HPO_LINKING
+            | TaskType.MONDO_LINKING
             | TaskType.GENERAL_PAPER_QUESTION
         ):
             # These tasks have no successors

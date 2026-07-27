@@ -8,10 +8,12 @@ from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from lib.models.base import Base
+from lib.models.user import UserSummaryResp
 
 if TYPE_CHECKING:
     from lib.models.agent_run import AgentRunDB
     from lib.models.paper import PaperDB
+    from lib.models.user import UserDB
 
 
 class TaskType(StrEnum):
@@ -24,6 +26,7 @@ class TaskType(StrEnum):
     VARIANT_EXTRACTION = 'Variant Extraction'
     PEDIGREE_DESCRIPTION = 'Pedigree Description'
     PATIENT_EXTRACTION = 'Patient Extraction'
+    PATIENT_DEMOGRAPHICS = 'Patient Demographics'  # per-patient
 
     SEGREGATION_EVIDENCE_EXTRACTION = 'Segregation Evidence Extraction'  # per-family
     SEGREGATION_ANALYSIS_COMPUTED = 'Segregation Analysis Computed'  # per-family
@@ -33,6 +36,7 @@ class TaskType(StrEnum):
     COMPOUND_HET_EVALUATION = 'Compound Het Evaluation'  # per-patient
     PHENOTYPE_EXTRACTION = 'Phenotype Extraction'  # per-patient
     HPO_LINKING = 'HPO Linking'  # per-patient
+    MONDO_LINKING = 'MONDO Linking'
 
     @property
     def description(self) -> str:
@@ -44,7 +48,8 @@ class TaskType(StrEnum):
             TaskType.PAPER_METADATA: 'Extracts paper title, authors, publication date, and other metadata; resolve to PubMed article',
             TaskType.VARIANT_EXTRACTION: 'Identifies genetic variants mentioned in the paper',
             TaskType.PEDIGREE_DESCRIPTION: 'Analyzes the images in the paper to determine if there is a describable pedigree',
-            TaskType.PATIENT_EXTRACTION: 'Extracts patient demographic and clinical information',
+            TaskType.PATIENT_EXTRACTION: 'Identifies patients, assigns identifiers and proband status, and groups them into families',
+            TaskType.PATIENT_DEMOGRAPHICS: 'Attaches demographic and clinical details (sex, ages, race, ethnicity, affected status, etc.) to each identified patient',
             TaskType.SEGREGATION_EVIDENCE_EXTRACTION: 'Collects segregation analysis evidence within each family',
             TaskType.SEGREGATION_ANALYSIS_COMPUTED: 'Computes segregation analysis results per family',
             TaskType.VARIANT_HARMONIZATION: 'Normalizes variants to standard genomic coordinates using ClinVar, dbSNP, ClinGen Allele Registry, and VariantValidator',
@@ -53,6 +58,7 @@ class TaskType(StrEnum):
             TaskType.COMPOUND_HET_EVALUATION: 'Evaluates pairs of heterozygous variants to identify compound heterozygous genotypes',
             TaskType.PHENOTYPE_EXTRACTION: 'Extracts phenotype text spans per patient',
             TaskType.HPO_LINKING: 'Maps phenotypes to HPO ontology terms for standardization',
+            TaskType.MONDO_LINKING: 'Maps disease names to MONDO ontology terms for standardization',
         }
         return descriptions[self]
 
@@ -87,11 +93,12 @@ TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
         TaskType.PEDIGREE_DESCRIPTION,
     ],
     TaskType.PEDIGREE_DESCRIPTION: [TaskType.PATIENT_EXTRACTION],
-    TaskType.PATIENT_EXTRACTION: [
+    TaskType.PATIENT_EXTRACTION: [TaskType.PATIENT_DEMOGRAPHICS],
+    TaskType.PATIENT_DEMOGRAPHICS: [
         TaskType.PHENOTYPE_EXTRACTION,
         TaskType.PATIENT_VARIANT_OCCURRENCES,
     ],
-    TaskType.PAPER_METADATA: [],
+    TaskType.PAPER_METADATA: [TaskType.MONDO_LINKING],
     TaskType.VARIANT_EXTRACTION: [
         TaskType.VARIANT_HARMONIZATION,
         TaskType.PATIENT_VARIANT_OCCURRENCES,
@@ -101,11 +108,13 @@ TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
     TaskType.PATIENT_VARIANT_OCCURRENCES: [
         TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
         TaskType.COMPOUND_HET_EVALUATION,
+        TaskType.MONDO_LINKING,
     ],
     TaskType.SEGREGATION_EVIDENCE_EXTRACTION: [TaskType.SEGREGATION_ANALYSIS_COMPUTED],
     TaskType.SEGREGATION_ANALYSIS_COMPUTED: [],
     TaskType.PHENOTYPE_EXTRACTION: [TaskType.HPO_LINKING],
     TaskType.HPO_LINKING: [],
+    TaskType.MONDO_LINKING: [],
 }
 
 
@@ -154,6 +163,12 @@ class TaskDB(Base):
         nullable=True,
         index=True,
     )
+    patient_variant_occurrence_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey('patient_variant_occurrences.id', ondelete='CASCADE'),
+        nullable=True,
+        index=True,
+    )
     status: Mapped[TaskStatus] = mapped_column(
         SQLEnum(TaskStatus),
         nullable=False,
@@ -173,6 +188,14 @@ class TaskDB(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    # Which user triggered this task (null = machine-enqueued by the worker).
+    updated_by_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey('users.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
+    updated_by: Mapped['UserDB | None'] = relationship('UserDB')
 
     __table_args__ = (
         Index('ix_tasks_paper_id_status', 'paper_id', 'status'),
@@ -184,6 +207,7 @@ class TaskDB(Base):
             'patient_id',
             'variant_id',
             'phenotype_id',
+            'patient_variant_occurrence_id',
             unique=True,
         ),
     )
@@ -203,7 +227,10 @@ class TaskResp(BaseModel):
     patient_id: int | None
     variant_id: int | None
     phenotype_id: int | None
+    patient_variant_occurrence_id: int | None
     updated_at: datetime
+    updated_by_user_id: int | None = None
+    updated_by: UserSummaryResp | None = None
 
 
 class TaskCreateRequest(BaseModel):
@@ -212,5 +239,6 @@ class TaskCreateRequest(BaseModel):
     patient_id: int | None = None
     variant_id: int | None = None
     phenotype_id: int | None = None
+    patient_variant_occurrence_id: int | None = None
     skip_successors: bool = False
     additional_context: str | None = None

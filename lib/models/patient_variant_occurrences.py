@@ -16,8 +16,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 from typing_extensions import Self
 
-from lib.models.base import Base
-from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
+from lib.models.base import Base, PatchModel
+from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock, ReasoningBlock
+from lib.models.mondo import MondoComponentMapping, MondoTerm
 
 if TYPE_CHECKING:
     from lib.models.paper import PaperDB
@@ -41,7 +42,6 @@ class Inheritance(str, Enum):
     recessive = 'Recessive'
     semi_dominant = 'Semi-dominant'
     x_linked = 'X-linked'
-    de_novo = 'De Novo'
     somatic_mosaicism = 'Somatic Mosaicism'
     mitochondrial = 'Mitochondrial'
     unknown = 'Unknown'
@@ -66,9 +66,9 @@ class TestingMethod(str, Enum):
 
 
 class CompoundHetConfidence(str, Enum):
-    high = 'high'
-    medium = 'medium'
-    low = 'low'
+    confirmed = 'confirmed'
+    assumed = 'assumed'
+    uncertain = 'uncertain'
 
 
 # ==============================
@@ -95,6 +95,23 @@ class PatientVariantOccurrence(BaseModel):
 class PatientVariantOccurrenceOutput(BaseModel):
     links: List[PatientVariantOccurrence]
     disease_name: EvidenceBlock[str] | None = None
+
+
+class PatientVariantOccurrenceUpdateRequest(PatchModel):
+    zygosity: Zygosity | None = None
+    zygosity_human_edit_note: str | None = None
+    inheritance: Inheritance | None = None
+    inheritance_human_edit_note: str | None = None
+    de_novo: bool | None = None
+    de_novo_human_edit_note: str | None = None
+    testing_methods: list[TestingMethod] | None = None
+    testing_methods_note: str | None = None
+
+    @model_validator(mode='after')
+    def max_two_methods(self) -> Self:
+        if self.testing_methods is not None and len(self.testing_methods) > 2:
+            raise ValueError('testing_methods must contain at most two items')
+        return self
 
 
 class CompoundHetPair(BaseModel):
@@ -137,8 +154,15 @@ class PatientVariantOccurrenceDB(Base):
     inheritance_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     de_novo_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     testing_methods_evidence: Mapped[list] = mapped_column(JSON, nullable=False)
+    # A single curator note covering both testing method slots - not per-item
+    # attribution like HumanEvidenceBlock, since testing_methods_evidence is a
+    # list rather than one block.
+    testing_methods_note: Mapped[str | None] = mapped_column(String, nullable=True)
     disease_name: Mapped[str | None] = mapped_column(String, nullable=True)
     disease_name_evidence: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    mondo_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    mondo_term: Mapped[str | None] = mapped_column(String, nullable=True)
+    mondo_match_context: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     paired_variant_link_id: Mapped[int | None] = mapped_column(
         Integer,
@@ -201,15 +225,18 @@ class PatientVariantOccurrenceResp(BaseModel):
     patient_identifier: str
     variant_id: int
     zygosity: Zygosity
-    zygosity_evidence: EvidenceBlock[Zygosity]
+    zygosity_evidence: HumanEvidenceBlock[Zygosity]
     inheritance: Inheritance
-    inheritance_evidence: EvidenceBlock[Inheritance]
+    inheritance_evidence: HumanEvidenceBlock[Inheritance]
     de_novo: bool
-    de_novo_evidence: EvidenceBlock[bool]
+    de_novo_evidence: HumanEvidenceBlock[bool]
     testing_methods: list[TestingMethod]
     testing_methods_evidence: List[EvidenceBlock[TestingMethod]]
+    testing_methods_note: str | None = None
     disease_name: str | None = None
     disease_name_evidence: EvidenceBlock[str] | None = None
+    mondo: ReasoningBlock[MondoTerm | None]
+    mondo_components: list[MondoComponentMapping] = []
     paired_variant_link_id: int | None = None
     paired_variant_confidence: CompoundHetConfidence | None = None
     paired_variant_confidence_reasoning: (

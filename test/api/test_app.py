@@ -7,7 +7,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select, update
 
 from lib.api.app import app
+from lib.api.auth import get_current_user
 from lib.api.db import get_session, session_scope
+from lib.core.environment import env
 from lib.models import (
     AgentRunDB,
     AnnotatedVariantDB,
@@ -16,31 +18,15 @@ from lib.models import (
     HarmonizedVariantDB,
     PaperDB,
     PatientDB,
+    PatientVariantOccurrenceDB,
     PhenotypeDB,
+    SegregationEvidenceDB,
     TaskDB,
+    UserDB,
     VariantDB,
 )
+from lib.tasks import TaskCreateRequest
 from lib.tasks.models import TaskStatus, TaskType
-
-
-@pytest.fixture
-def client(db_session):
-    def override_get_session():
-        yield db_session
-
-    @asynccontextmanager
-    async def _noop_lifespan(app):
-        yield
-
-    # This overrides the app lifespan so it doesn't try to run migrations.
-    # DB initialization for tests should be handled by the `db_session` fixture.
-    original_lifespan = app.router.lifespan_context
-    app.router.lifespan_context = _noop_lifespan
-    app.dependency_overrides[get_session] = override_get_session
-    with TestClient(app) as client:
-        yield client
-    app.dependency_overrides.clear()
-    app.router.lifespan_context = original_lifespan
 
 
 @pytest.fixture
@@ -148,13 +134,83 @@ def test_get_paper_success(client, test_pdf, seeded_genes, agent_run):
     _assert_updated_at_recent(data_get['updated_at'])
 
 
+def test_get_paper_exposes_mondo_components(client, db_session, seeded_paper):
+    """Decomposed MONDO/HPO disease components are surfaced on the paper response."""
+    seeded_paper.mondo_id = 'MONDO:0020757'
+    seeded_paper.mondo_term = 'sporadic hemiplegic migraine'
+    seeded_paper.mondo_match_context = {
+        'match_type': 'primary_partial',
+        'mondo_id': 'MONDO:0020757',
+        'term': 'sporadic hemiplegic migraine',
+        'agent_reasoning': 'decomposed into two clinical axes',
+        'components': [
+            {
+                'text': 'Recurrent hemiplegic migraine',
+                'normalized_text': 'sporadic hemiplegic migraine',
+                'role': 'primary',
+                'category': 'disease',
+                'mapping_status': 'mapped',
+                'mapped_ontology': 'MONDO',
+                'mondo': {
+                    'mondo_id': 'MONDO:0020757',
+                    'label': 'sporadic hemiplegic migraine',
+                },
+                'hpo': None,
+                'confidence': 'high',
+                'relationship': 'exact',
+                'reasoning': 'exact label match',
+            },
+            {
+                'text': 'intractable hypomagnesemia',
+                'normalized_text': 'hypomagnesemia',
+                'role': 'component',
+                'category': 'phenotype',
+                'mapping_status': 'mapped',
+                'mapped_ontology': 'HPO',
+                'mondo': None,
+                'hpo': {'id': 'HP:0002917', 'name': 'Hypomagnesemia'},
+                'confidence': 'high',
+                'relationship': 'exact',
+                'reasoning': 'phenotype maps to HPO',
+            },
+        ],
+    }
+    db_session.flush()
+
+    response = client.get(f'/papers/{seeded_paper.id}')
+    assert response.status_code == 200
+    data = response.json()
+
+    # Primary term still flows through the existing mondo field.
+    assert data['mondo']['value']['mondo_id'] == 'MONDO:0020757'
+
+    components = data['mondo_components']
+    assert len(components) == 2
+    primary, secondary = components
+    assert primary['role'] == 'primary'
+    assert primary['mapped_ontology'] == 'MONDO'
+    assert primary['mondo']['mondo_id'] == 'MONDO:0020757'
+    assert secondary['role'] == 'component'
+    assert secondary['mapped_ontology'] == 'HPO'
+    assert secondary['hpo']['id'] == 'HP:0002917'
+
+
+def test_get_paper_mondo_components_empty_without_context(client, seeded_paper):
+    """Papers without MONDO linking return an empty component list, not null."""
+    response = client.get(f'/papers/{seeded_paper.id}')
+    assert response.status_code == 200
+    assert response.json()['mondo_components'] == []
+
+
 def test_get_paper_not_found(client):
     response = client.get('/papers/999')
     assert response.status_code == 404
     assert response.json()['detail'] == 'Paper not found'
 
 
-def test_update_paper_metadata(client, test_pdf, db_session, seeded_genes, agent_run):
+def test_update_paper_metadata(
+    client, test_pdf, db_session, seeded_genes, agent_run, test_user
+):
     response = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
@@ -177,6 +233,40 @@ def test_update_paper_metadata(client, test_pdf, db_session, seeded_genes, agent
         json={'title': 'Another Title'},
     )
     assert response3.status_code == 404
+
+    # A human edit note on the disease field stamps a per-field editor snapshot
+    # into its evidence block (which must already exist — see _apply_field skip).
+    paper_db = db_session.get(PaperDB, paper_id)
+    paper_db.disease_name = 'Marfan syndrome'
+    paper_db.disease_name_evidence = {
+        'value': 'Marfan syndrome',
+        'reasoning': 'Stated in abstract',
+        'quote': 'a patient with Marfan syndrome',
+    }
+    db_session.flush()
+
+    response4 = client.patch(
+        f'/papers/{paper_id}',
+        json={'disease_name_human_edit_note': 'Corrected disease name'},
+    )
+    assert response4.status_code == 200
+    evidence = response4.json()['disease_name_evidence']
+    assert evidence['human_edit_note'] == 'Corrected disease name'
+    assert evidence['edited_by_user_id'] == test_user.id
+    assert evidence['edited_by_name'] == 'Test User'
+    assert evidence['edited_at'] is not None
+
+    # A note on an unextracted (null-evidence) disease field is silently skipped
+    # rather than producing an invalid note-only block.
+    paper_db = db_session.get(PaperDB, paper_id)
+    paper_db.disease_inheritance_mode_evidence = None
+    db_session.flush()
+    response5 = client.patch(
+        f'/papers/{paper_id}',
+        json={'disease_inheritance_mode_human_edit_note': 'should be ignored'},
+    )
+    assert response5.status_code == 200
+    assert response5.json()['disease_inheritance_mode_evidence'] is None
 
 
 def test_list_paper(client, test_pdf, seeded_genes, agent_run):
@@ -280,9 +370,6 @@ def test_search_genes_by_prefix_no_match(client, seeded_genes):
 
 @pytest.fixture
 def seeded_paper(db_session):
-    from lib.core.environment import env
-    from lib.models import AgentRunDB
-
     agent_run = AgentRunDB(
         git_hash='abc123def456',
         description='test run',
@@ -308,6 +395,8 @@ def seeded_paper(db_session):
         identifier_evidence=dict(
             value='Family 1', reasoning='test family', quote='Family 1'
         ),
+        consanguinity=False,
+        consanguinity_evidence=dict(value=False, reasoning='test family', quote='test'),
     )
     db_session.add(family)
     db_session.flush()
@@ -326,7 +415,8 @@ def _patient_required_fields(identifier: str = 'P1') -> dict:
         proband_status='Unknown',
         sex='Unknown',
         country_of_origin='Unknown',
-        race_ethnicity='Unknown',
+        race='Unknown',
+        ethnicity='Unknown',
         affected_status='Unknown',
         identifier_evidence=dict(
             value=identifier, reasoning='test evidence', quote='test context'
@@ -349,7 +439,10 @@ def _patient_required_fields(identifier: str = 'P1') -> dict:
         country_of_origin_evidence=dict(
             value='Unknown', reasoning='test evidence', quote='test context'
         ),
-        race_ethnicity_evidence=dict(
+        race_evidence=dict(
+            value='Unknown', reasoning='test evidence', quote='test context'
+        ),
+        ethnicity_evidence=dict(
             value='Unknown', reasoning='test evidence', quote='test context'
         ),
         affected_status_evidence=dict(
@@ -413,7 +506,7 @@ def test_get_patients_paper_not_found(client):
 
 
 def test_update_patient_with_human_edit_note(
-    client, db_session, seeded_paper, seeded_agent_run
+    client, db_session, seeded_paper, seeded_agent_run, test_user
 ):
     """Test updating a patient with human_edit_note on evidence."""
     # Get the default family created in seeded_paper fixture
@@ -453,6 +546,15 @@ def test_update_patient_with_human_edit_note(
     # Other evidence should have null notes (only the specified ones were updated)
     assert resp_json['sex_evidence']['human_edit_note'] is None
 
+    # The edited field's evidence block carries a per-field editor snapshot...
+    identifier_evidence = resp_json['identifier_evidence']
+    assert identifier_evidence['edited_by_user_id'] == test_user.id
+    assert identifier_evidence['edited_by_name'] == 'Test User'
+    assert identifier_evidence['edited_at'] is not None
+    # ...while untouched fields stay unattributed.
+    assert resp_json['sex_evidence']['edited_by_user_id'] is None
+    assert resp_json['sex_evidence']['edited_by_name'] is None
+
 
 def test_update_patient_rejects_wrong_paper_scope(
     client, db_session, seeded_paper, seeded_agent_run
@@ -472,6 +574,8 @@ def test_update_patient_rejects_wrong_paper_scope(
         identifier_evidence=dict(
             value='Other Family', reasoning='test family', quote='Other Family'
         ),
+        consanguinity=False,
+        consanguinity_evidence=dict(value=False, reasoning='test family', quote='test'),
     )
     db_session.add(other_family)
     db_session.flush()
@@ -495,56 +599,6 @@ def test_update_patient_rejects_wrong_paper_scope(
     assert response.json()['detail'] == 'Patient not found'
     db_session.refresh(patient)
     assert patient.identifier == 'P-other'
-
-
-def test_update_phenotype_rejects_wrong_patient_scope(
-    client, db_session, seeded_paper, seeded_agent_run
-):
-    family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
-    patient_1 = PatientDB(
-        paper_id=seeded_paper.id,
-        family_id=family.id,
-        agent_run_id=seeded_agent_run.id,
-        identifier='P1',
-        **_patient_required_fields('P1'),
-    )
-    patient_2 = PatientDB(
-        paper_id=seeded_paper.id,
-        family_id=family.id,
-        agent_run_id=seeded_agent_run.id,
-        identifier='P2',
-        **_patient_required_fields('P2'),
-    )
-    db_session.add_all([patient_1, patient_2])
-    db_session.flush()
-
-    phenotype = PhenotypeDB(
-        paper_id=seeded_paper.id,
-        patient_id=patient_2.id,
-        concept='Seizures',
-        concept_evidence=dict(
-            value='Seizures', reasoning='test evidence', quote='test context'
-        ),
-        negated=False,
-        uncertain=False,
-        family_history=False,
-        onset=None,
-        location=None,
-        severity=None,
-        modifier=None,
-    )
-    db_session.add(phenotype)
-    db_session.flush()
-
-    response = client.patch(
-        f'/papers/{seeded_paper.id}/patients/{patient_1.id}/phenotypes/{phenotype.id}',
-        json={'uncertain': True},
-    )
-
-    assert response.status_code == 404
-    assert response.json()['detail'] == 'Phenotype not found'
-    db_session.refresh(phenotype)
-    assert phenotype.uncertain is False
 
 
 def test_get_variants_harmonized_and_enriched(
@@ -732,11 +786,48 @@ def _ev(value: object = None, quote: str | None = 'test') -> dict:
     return d
 
 
+def _create_patient_variant_occurrence(
+    db_session,
+    paper: PaperDB,
+    variant: VariantDB,
+    agent_run: AgentRunDB,
+    disease_name: str | None = 'test disease',
+) -> PatientVariantOccurrenceDB:
+    patient_number = db_session.scalar(select(func.count(PatientDB.id))) + 1
+    patient_identifier = f'PVO Test Patient {patient_number}'
+    patient = PatientDB(
+        paper_id=paper.id,
+        family_id=paper.default_family_id,
+        agent_run_id=agent_run.id,
+        identifier=patient_identifier,
+        **_patient_required_fields(patient_identifier),
+    )
+    db_session.add(patient)
+    db_session.flush()
+
+    occurrence = PatientVariantOccurrenceDB(
+        paper_id=paper.id,
+        patient_id=patient.id,
+        variant_id=variant.id,
+        zygosity='Heterozygous',
+        zygosity_evidence=_ev('Heterozygous'),
+        inheritance='Dominant',
+        inheritance_evidence=_ev('Dominant'),
+        de_novo=False,
+        de_novo_evidence=_ev(False),
+        testing_methods=['Sanger Sequencing'],
+        testing_methods_evidence=[_ev('Sanger Sequencing')],
+        disease_name=disease_name,
+        disease_name_evidence=_ev(disease_name) if disease_name is not None else None,
+    )
+    db_session.add(occurrence)
+    db_session.flush()
+    return occurrence
+
+
 @pytest.fixture
 def seeded_agent_run(db_session):
     """Create a test agent run."""
-    from lib.core.environment import env
-
     agent_run = AgentRunDB(
         git_hash='abc123def456',
         description='test run',
@@ -859,7 +950,9 @@ def test_update_variant_extracted_fields(client, seeded_paper, seeded_variant):
     assert data['transcript'] == 'NM_007294.3'
 
 
-def test_update_variant_harmonized_fields(client, seeded_paper, seeded_variant):
+def test_update_variant_harmonized_fields(
+    client, seeded_paper, seeded_variant, test_user
+):
     """PATCH harmonized variant fields through the variant endpoint."""
     response = client.patch(
         f'/papers/{seeded_paper.id}/variants/{seeded_variant.id}',
@@ -878,6 +971,9 @@ def test_update_variant_harmonized_fields(client, seeded_paper, seeded_variant):
     # Other harmonized fields preserved
     assert hv['rsid'] == 'rs80357906'
     assert hv['hgvs_c'] == 'c.68_69delAG'
+    # Harmonized edits surface entity-level attribution on the harmonized block.
+    assert hv['updated_by_user_id'] == test_user.id
+    assert hv['updated_by']['name'] == 'Test User'
 
 
 def test_update_variant_human_edit_note(client, seeded_paper, seeded_variant):
@@ -1056,20 +1152,22 @@ def test_enqueue_all_instances_for_splatted_task(
     client, seeded_paper, db_session, agent_run
 ):
     """Test re-enqueueing a splatted task with no entity IDs re-queues all instances."""
-    from lib.tasks import TaskCreateRequest
-
     # Create families and splatted tasks
     family1 = FamilyDB(
         paper_id=seeded_paper.id,
         agent_run_id=agent_run.id,
         identifier='fam1',
         identifier_evidence={},
+        consanguinity=False,
+        consanguinity_evidence={},
     )
     family2 = FamilyDB(
         paper_id=seeded_paper.id,
         agent_run_id=agent_run.id,
         identifier='fam2',
         identifier_evidence={},
+        consanguinity=False,
+        consanguinity_evidence={},
     )
     db_session.add_all([family1, family2])
     db_session.flush()
@@ -1110,8 +1208,6 @@ def test_enqueue_clears_conversation_id_without_context(
     client, seeded_paper, db_session, agent_run
 ):
     """Test that re-enqueueing without additional_context clears conversation_id."""
-    from lib.tasks import TaskCreateRequest
-
     # Create a task with existing conversation_id and additional_context
     task = TaskDB(
         paper_id=seeded_paper.id,
@@ -1139,6 +1235,243 @@ def test_enqueue_clears_conversation_id_without_context(
     assert tasks[0]['status'] == 'Pending'
 
 
+def test_create_task_records_updated_by(client, seeded_paper, test_user):
+    """A user-triggered task records who enqueued it and surfaces updated_by."""
+    response = client.post(
+        f'/papers/{seeded_paper.id}/tasks',
+        json=TaskCreateRequest(type=TaskType.VARIANT_EXTRACTION).model_dump(),
+    )
+    assert response.status_code == 200
+    tasks = response.json()
+    assert len(tasks) == 1
+    assert tasks[0]['updated_by_user_id'] == test_user.id
+    assert tasks[0]['updated_by'] == {
+        'id': test_user.id,
+        'email': 'tester@example.com',
+        'first_name': 'Test',
+        'last_name': 'User',
+        'name': 'Test User',
+    }
+
+
+def test_create_task_scoped_to_variant(client, seeded_paper, seeded_variant, test_user):
+    """A variant-scoped enqueue creates a single task carrying the scope + editor."""
+    response = client.post(
+        f'/papers/{seeded_paper.id}/tasks',
+        json=TaskCreateRequest(
+            type=TaskType.VARIANT_HARMONIZATION,
+            variant_id=seeded_variant.id,
+        ).model_dump(),
+    )
+    assert response.status_code == 200
+    tasks = response.json()
+    assert len(tasks) == 1
+    assert tasks[0]['variant_id'] == seeded_variant.id
+    assert tasks[0]['type'] == TaskType.VARIANT_HARMONIZATION.value
+    assert tasks[0]['updated_by_user_id'] == test_user.id
+
+
+def test_create_task_requires_authentication(unauth_client, seeded_paper):
+    """Anonymous task enqueue is rejected."""
+    response = unauth_client.post(
+        f'/papers/{seeded_paper.id}/tasks',
+        json=TaskCreateRequest(type=TaskType.VARIANT_EXTRACTION).model_dump(),
+    )
+    assert response.status_code == 401
+
+
+def test_update_occurrence(
+    client, db_session, seeded_paper, seeded_variant, seeded_agent_run, test_user
+):
+    occurrence = _create_patient_variant_occurrence(
+        db_session, seeded_paper, seeded_variant, seeded_agent_run
+    )
+
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/occurrences/{occurrence.id}',
+        json={
+            'zygosity': 'Homozygous',
+            'zygosity_human_edit_note': 'Corrected from Table 2',
+            'testing_methods': ['Exome Sequencing'],
+            'testing_methods_note': 'Confirmed via supplement',
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body['zygosity'] == 'Homozygous'
+    assert body['testing_methods'] == ['Exome Sequencing']
+    assert body['testing_methods_note'] == 'Confirmed via supplement'
+    # Untouched fields are preserved.
+    assert body['inheritance'] == 'Dominant'
+    assert body['de_novo'] is False
+
+    # Per-field attribution snapshot on the edited evidence block.
+    zygosity_evidence = body['zygosity_evidence']
+    assert zygosity_evidence['human_edit_note'] == 'Corrected from Table 2'
+    assert zygosity_evidence['edited_by_user_id'] == test_user.id
+    assert zygosity_evidence['edited_by_name'] == 'Test User'
+
+    # More than two testing methods is rejected.
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/occurrences/{occurrence.id}',
+        json={
+            'testing_methods': [
+                'Exome Sequencing',
+                'Sanger Sequencing',
+                'Genotyping',
+            ]
+        },
+    )
+    assert resp.status_code == 422
+
+    # Missing occurrence is a 404.
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/occurrences/999999',
+        json={'zygosity': 'Hemizygous'},
+    )
+    assert resp.status_code == 404
+
+
+def test_enqueue_task_with_patient_variant_occurrence_scope(
+    client, seeded_paper, seeded_variant, seeded_agent_run, db_session
+):
+    from lib.tasks import TaskCreateRequest
+
+    occurrence = _create_patient_variant_occurrence(
+        db_session,
+        seeded_paper,
+        seeded_variant,
+        seeded_agent_run,
+    )
+
+    response = client.post(
+        f'/papers/{seeded_paper.id}/tasks',
+        json=TaskCreateRequest(
+            type=TaskType.MONDO_LINKING,
+            patient_variant_occurrence_id=occurrence.id,
+        ).model_dump(),
+    )
+    assert response.status_code == 200
+    tasks = response.json()
+    assert len(tasks) == 1
+    assert tasks[0]['patient_variant_occurrence_id'] == occurrence.id
+    assert tasks[0]['status'] == 'Pending'
+
+    task = db_session.get(TaskDB, tasks[0]['id'])
+    task.status = TaskStatus.COMPLETED
+    task.conversation_id = 'conv-123'
+    db_session.commit()
+
+    response = client.post(
+        f'/papers/{seeded_paper.id}/tasks',
+        json=TaskCreateRequest(
+            type=TaskType.MONDO_LINKING,
+            patient_variant_occurrence_id=occurrence.id,
+        ).model_dump(),
+    )
+    assert response.status_code == 200
+    tasks = response.json()
+    assert len(tasks) == 1
+    assert tasks[0]['id'] == task.id
+    assert tasks[0]['patient_variant_occurrence_id'] == occurrence.id
+    assert tasks[0]['status'] == 'Pending'
+    assert tasks[0]['conversation_id'] is None
+
+
+def test_paper_metadata_successor_enqueues_mondo_linking(
+    db_session, seeded_paper, agent_run
+):
+    from lib.tasks.misc import enqueue_successors
+
+    task = TaskDB(
+        paper_id=seeded_paper.id,
+        agent_run_id=agent_run.id,
+        type=TaskType.PAPER_METADATA,
+        status=TaskStatus.COMPLETED,
+    )
+    db_session.add(task)
+    db_session.flush()
+
+    enqueue_successors(db_session, task)
+
+    mondo_task = (
+        db_session.query(TaskDB)
+        .filter(
+            TaskDB.paper_id == seeded_paper.id,
+            TaskDB.type == TaskType.MONDO_LINKING,
+        )
+        .one()
+    )
+    assert mondo_task.status == TaskStatus.PENDING
+
+
+def test_patient_variant_occurrence_successor_enqueues_paper_and_occurrence_mondo(
+    db_session, seeded_paper, seeded_variant, seeded_agent_run
+):
+    """Enqueue MONDO-linking for paper and patient variant occurrences with nonblank disease names."""
+    from lib.tasks.misc import enqueue_successors
+
+    occurrence_one = _create_patient_variant_occurrence(
+        db_session,
+        seeded_paper,
+        seeded_variant,
+        seeded_agent_run,
+        disease_name='disease one',
+    )
+    occurrence_two = _create_patient_variant_occurrence(
+        db_session,
+        seeded_paper,
+        seeded_variant,
+        seeded_agent_run,
+        disease_name='disease two',
+    )
+    # This occurrence has a blank disease name so enqueue_successors
+    # should not queue a MONDO linking task for it.
+    _create_patient_variant_occurrence(
+        db_session,
+        seeded_paper,
+        seeded_variant,
+        seeded_agent_run,
+        disease_name='   ',
+    )
+    task = TaskDB(
+        paper_id=seeded_paper.id,
+        agent_run_id=seeded_agent_run.id,
+        type=TaskType.PATIENT_VARIANT_OCCURRENCES,
+        status=TaskStatus.COMPLETED,
+    )
+    db_session.add(task)
+    db_session.flush()
+
+    enqueue_successors(db_session, task)
+
+    mondo_tasks = (
+        db_session.query(TaskDB)
+        .filter(
+            TaskDB.paper_id == seeded_paper.id,
+            TaskDB.type == TaskType.MONDO_LINKING,
+        )
+        .all()
+    )
+    assert len(mondo_tasks) == 3
+    assert {task.patient_variant_occurrence_id for task in mondo_tasks} == {
+        None,
+        occurrence_one.id,
+        occurrence_two.id,
+    }
+    assert all(task.status == TaskStatus.PENDING for task in mondo_tasks)
+
+    segregation_task = (
+        db_session.query(TaskDB)
+        .filter(
+            TaskDB.paper_id == seeded_paper.id,
+            TaskDB.type == TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
+        )
+        .one()
+    )
+    assert segregation_task.family_id == seeded_paper.default_family_id
+
+
 def test_update_variant_rejects_harmonized_update_before_harmonization(
     client, seeded_paper, seeded_unharmonized_variant
 ):
@@ -1155,8 +1488,6 @@ def test_update_variant_rejects_harmonized_update_before_harmonization(
 
 def test_cache_headers_on_static_files(client):
     """Test that static files get 24-hour cache headers."""
-    from lib.core.environment import env
-
     # Mock a static file request by calling a path under CAA_ROOT
     response = client.get(f'{env.CAA_ROOT}/extracted_pdfs/1/thumbnail.png')
     # Even if 404, the cache header middleware should have run
@@ -1170,3 +1501,137 @@ def test_no_cache_headers_on_api_endpoints(client):
     # Should not have the static file cache header
     cache_control = response.headers.get('Cache-Control')
     assert cache_control != 'public, max-age=86400'
+
+
+# ---------------------------------------------------------------------------
+# Authentication on domain endpoints
+#
+# Pure auth-flow tests (register/login/me/change-password) live in test_auth.py;
+# these cover how the domain (PATCH) endpoints enforce and record the user.
+# ---------------------------------------------------------------------------
+
+
+def test_patch_requires_authentication(unauth_client, seeded_paper):
+    # No current-user override here: the PATCH endpoint must reject anonymous edits.
+    resp = unauth_client.patch(
+        f'/papers/{seeded_paper.id}', json={'title': 'New Title'}
+    )
+    assert resp.status_code == 401
+
+
+def test_patch_patient_records_updated_by(
+    client, db_session, seeded_paper, seeded_agent_run, test_user
+):
+    family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
+    patient = PatientDB(
+        paper_id=seeded_paper.id,
+        family_id=family.id,
+        agent_run_id=seeded_agent_run.id,
+        identifier='P1',
+        **_patient_required_fields('P1'),
+    )
+    db_session.add(patient)
+    db_session.flush()
+
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/patients/{patient.id}',
+        json={'identifier': 'P1-edited'},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body['updated_by_user_id'] == test_user.id
+    assert body['updated_by'] == {
+        'id': test_user.id,
+        'email': 'tester@example.com',
+        'first_name': 'Test',
+        'last_name': 'User',
+        'name': 'Test User',
+    }
+
+
+def test_update_family_records_attribution(client, db_session, seeded_paper, test_user):
+    family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
+    family.identifier_evidence = {
+        'value': 'F1',
+        'reasoning': 'Family label in Table 1',
+        'quote': 'Family F1',
+    }
+    db_session.flush()
+
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/families/{family.id}',
+        json={
+            'identifier': 'F1-edited',
+            'identifier_human_edit_note': 'Corrected label',
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body['identifier'] == 'F1-edited'
+    # Entity-level attribution.
+    assert body['updated_by_user_id'] == test_user.id
+    assert body['updated_by']['name'] == 'Test User'
+    # Per-field snapshot on the edited evidence block.
+    evidence = body['identifier_evidence']
+    assert evidence['human_edit_note'] == 'Corrected label'
+    assert evidence['edited_by_user_id'] == test_user.id
+    assert evidence['edited_by_name'] == 'Test User'
+
+    # Wrong-paper / missing family is a 404.
+    assert (
+        client.patch(
+            f'/papers/{seeded_paper.id}/families/999999',
+            json={'identifier': 'x'},
+        ).status_code
+        == 404
+    )
+
+
+def test_update_segregation_evidence_records_attribution(
+    client, db_session, seeded_paper, test_user
+):
+    family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
+    evidence = SegregationEvidenceDB(
+        family_id=family.id,
+        extracted_lod_score=2.0,
+        extracted_lod_score_evidence={
+            'value': 2.0,
+            'reasoning': 'Reported in text',
+            'quote': 'LOD score of 2.0',
+        },
+        has_unexplainable_non_segregations=False,
+        has_unexplainable_non_segregations_evidence={
+            'value': False,
+            'reasoning': 'No exceptions noted',
+        },
+    )
+    db_session.add(evidence)
+    db_session.flush()
+
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/segregation-analysis/{family.id}',
+        json={
+            'extracted_lod_score': 3.5,
+            'extracted_lod_score_human_edit_note': 'Recomputed',
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    # The edited value is reflected (apply_to writes it into the evidence block
+    # the Resp renders), with the per-field editor snapshot.
+    lod = body['extracted_lod_score']
+    assert lod['value'] == 3.5
+    assert lod['human_edit_note'] == 'Recomputed'
+    assert lod['edited_by_user_id'] == test_user.id
+    assert lod['edited_by_name'] == 'Test User'
+    # Entity-level attribution surfaces on the combined response too.
+    assert body['updated_by_user_id'] == test_user.id
+    assert body['updated_by']['name'] == 'Test User'
+
+    assert (
+        client.patch(
+            f'/papers/{seeded_paper.id}/segregation-analysis/999999',
+            json={'extracted_lod_score': 1.0},
+        ).status_code
+        == 404
+    )

@@ -12,7 +12,6 @@ from lib.models import HpoCandidate
 # Lazy-loaded ontology
 _ontology: hpotk.MinimalOntology | None = None
 
-ONTOLOGY_ENDPOINT = 'https://github.com/obophenotype/human-phenotype-ontology/releases/latest/download/hp.json'
 MAX_AGE_S = 7 * 24 * 60 * 60  # 7 days
 
 
@@ -20,11 +19,16 @@ def ontology_path() -> Path:
     return env.reference_data_dir / 'hpo.json'
 
 
+def ontology_url() -> str:
+    """Return the configured HPO ontology download URL."""
+    return env.HPO_ONTOLOGY_URL
+
+
 def download_ontology() -> Path:
     path = ontology_path()
     tmp_path = path.with_suffix('.tmp')
     path.parent.mkdir(parents=True, exist_ok=True)
-    with requests.get(ONTOLOGY_ENDPOINT, stream=True, timeout=60) as r:
+    with requests.get(ontology_url(), stream=True, timeout=60) as r:
         r.raise_for_status()
         with open(tmp_path, 'wb') as f:
             for chunk in r.iter_content(chunk_size=8192):

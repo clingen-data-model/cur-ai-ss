@@ -288,6 +288,8 @@ Your task:
 
 Output all six computed values with clear reasoning: segregation_count, affected_count, unaffected_count, computed_lod_score, points_assigned, meets_minimum_criteria.
 
+Reasoning is read by human curators — write it in plain language. Do not use raw tool or function names (e.g. compute_scoring_method, assign_points); describe what was computed and why instead (e.g., "Inheritance values indicate dominant pattern, so dominant LOD formula applied").
+
 ## Edge Cases
 
 - **Segregation count = 0**: Family has no segregations (only proband affected). LOD tools will handle gracefully.

@@ -4,11 +4,16 @@ import random
 from pathlib import Path
 from typing import Optional
 
+import openpyxl
 import pytest
+from docx import Document
+from docx.shared import Inches
 from PIL import Image
 from sqlalchemy.orm import Session
 
 from lib.api import db
+from lib.core.environment import env
+from lib.models import AgentRunDB, Base
 
 
 @pytest.fixture
@@ -34,8 +39,6 @@ def mocked_root_dir(monkeypatch, tmpdir):
 
 @pytest.fixture
 def db_session(mocked_root_dir, monkeypatch):
-    from lib.models import Base
-
     db.env.SQLLITE_DIR = ''
     monkeypatch.setattr(db, '_engine', None)
     monkeypatch.setattr(db, '_session_factory', None)
@@ -50,9 +53,6 @@ def db_session(mocked_root_dir, monkeypatch):
 
 @pytest.fixture
 def agent_run(db_session):
-    from lib.core.environment import env
-    from lib.models import AgentRunDB
-
     run = AgentRunDB(
         git_hash='abc123def456',
         description='test run',
@@ -65,9 +65,6 @@ def agent_run(db_session):
 
 @pytest.fixture
 def docx_with_image():
-    from docx import Document
-    from docx.shared import Inches
-
     doc = Document()
     doc.add_heading('Test Document with Image', 0)
     doc.add_paragraph('This is a test DOCX document with an embedded image.')
@@ -90,8 +87,6 @@ def docx_with_image():
 
 @pytest.fixture
 def xlsx_with_data():
-    import openpyxl
-
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = 'Sheet1'

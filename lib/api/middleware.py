@@ -7,6 +7,26 @@ from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.responses import Response
 
+# Request-body keys whose values must never be logged. Matched as substrings so
+# `current_password` / `new_password` are covered alongside `password`.
+_REDACTED = '***'
+_SENSITIVE_TOKENS = ('password',)
+
+
+def _redact_sensitive(value: object) -> object:
+    """Recursively mask any field whose key looks like a credential."""
+    if isinstance(value, dict):
+        return {
+            key: _REDACTED
+            if isinstance(key, str)
+            and any(token in key.lower() for token in _SENSITIVE_TOKENS)
+            else _redact_sensitive(val)
+            for key, val in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_sensitive(item) for item in value]
+    return value
+
 
 def make_log_request_middleware(logger: logging.Logger) -> Callable:
     async def log_request_middleware(request: Request, call_next: Callable) -> Response:
@@ -23,7 +43,10 @@ def make_log_request_middleware(logger: logging.Logger) -> Callable:
             except Exception:
                 request_body = '<invalid json>'
 
-        request_body_str = str(request_body) if request_body is not None else None
+        if request_body is not None:
+            request_body_str = str(_redact_sensitive(request_body))
+        else:
+            request_body_str = None
 
         # Log request start
         logger.info(

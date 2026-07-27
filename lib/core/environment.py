@@ -33,11 +33,27 @@ class Env(BaseSettings):
     OPENAI_VLM: str = 'gpt-5'
     LOG_LEVEL: LogLevel = LogLevel.INFO
 
+    # SMTP (optional — if unset, registration emails are logged but not sent)
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: int = 587
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_FROM: str = 'noreply@localhost'
+
+    # Auth / JWT
+    JWT_SECRET_KEY: str = Field(...)
+    JWT_ALGORITHM: str = 'HS256'
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
+
     # Directories
     CAA_ROOT: str = '/var/caa'
     SQLLITE_DIR: str = 'sqllite'
     EXTRACTED_PDF_DIR: str = 'extracted_pdfs'
     REFERENCE_DATA_DIR: str = 'reference_data'
+
+    # Reference data
+    MONDO_ONTOLOGY_URL: str = 'https://purl.obolibrary.org/obo/mondo.json'
+    HPO_ONTOLOGY_URL: str = 'https://github.com/obophenotype/human-phenotype-ontology/releases/latest/download/hp.json'
 
     # UI->API
     API_ENDPOINT: str = 'localhost:8000'

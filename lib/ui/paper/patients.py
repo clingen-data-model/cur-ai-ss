@@ -10,37 +10,42 @@ from lib.core.environment import env
 from lib.misc.pdf.paths import pdf_image_path
 from lib.models import (
     FamilyResp,
+    FamilyUpdateRequest,
     PaperResp,
     PatientResp,
     PatientUpdateRequest,
     PhenotypeResp,
     SegregationAnalysisResp,
+    SegregationEvidenceUpdateRequest,
 )
 from lib.models.patient import (
     AffectedStatus,
     AgeUnit,
     CountryCode,
+    Ethnicity,
     ProbandStatus,
-    RaceEthnicity,
+    Race,
     RelationshipToProband,
     SexAtBirth,
     TwinType,
 )
 from lib.tasks import TaskType, is_task_completed
 from lib.ui.api import (
-    enqueue_paper_task,
     get_families,
     get_patients,
     get_pedigree,
     get_phenotypes,
     get_segregation_analysis,
     grobid_annotations,
+    update_family,
     update_patient,
+    update_segregation_evidence,
 )
 from lib.ui.paper.shared import (
     HUMAN_EDIT_NOTE_DEFAULT,
     render_evidence_controls,
     render_highlight_controls,
+    render_rerun_popover,
 )
 
 PATIENTS_KEY = 'patients'
@@ -113,7 +118,7 @@ def _render_phenotypes_table(
             all_concepts = ', '.join(p.concept for p in group)
             row = {
                 'Select': False,
-                'Phenotype': all_concepts,
+                'Extracted Phenotype Text': all_concepts,
                 '_phenotypes': group,
             }
             if (
@@ -121,11 +126,10 @@ def _render_phenotypes_table(
                 and first_phenotype.hpo.value
                 and first_phenotype.hpo.value.id
             ):
-                hpo_id_link = f'https://hpo.jax.org/app/browse/term/{first_phenotype.hpo.value.id}#{first_phenotype.hpo.value.id}'
                 hpo_term_link = f'https://hpo.jax.org/app/browse/term/{first_phenotype.hpo.value.id}#{first_phenotype.hpo.value.name}'
                 row.update(
                     {
-                        'HPO ID': hpo_id_link,
+                        'HPO ID': first_phenotype.hpo.value.id,
                         'HPO Term': hpo_term_link,
                     }
                 )
@@ -135,7 +139,7 @@ def _render_phenotypes_table(
         rows = [
             {
                 'Select': False,
-                'Phenotype': phenotype.concept,
+                'Extracted Phenotype Text': phenotype.concept,
                 '_phenotypes': [phenotype],
             }
             for phenotype in phenotypes
@@ -150,16 +154,14 @@ def _render_phenotypes_table(
     # Display table
     column_config = {
         'Select': st.column_config.CheckboxColumn('Select', width='small'),
-        'Phenotype': st.column_config.TextColumn('Phenotype', width='large'),
+        'Extracted Phenotype Text': st.column_config.TextColumn(
+            'Extracted Phenotype Text', width='large'
+        ),
     }
     if show_hpo:
         column_config.update(
             {
-                'HPO ID': st.column_config.LinkColumn(
-                    'HPO ID',
-                    width='small',
-                    display_text=r'.*?#(.+)$',
-                ),
+                'HPO ID': st.column_config.TextColumn('HPO ID', width='small'),
                 'HPO Term': st.column_config.LinkColumn(
                     'HPO Term',
                     width='medium',
@@ -172,7 +174,8 @@ def _render_phenotypes_table(
         df,
         width='stretch',
         hide_index=True,
-        disabled=['Phenotype'] + (['HPO ID', 'HPO Term'] if show_hpo else []),
+        disabled=['Extracted Phenotype Text']
+        + (['HPO ID', 'HPO Term'] if show_hpo else []),
         column_config=column_config,
         key=f'{key_prefix}-phenotypes-editor',
     )
@@ -185,11 +188,26 @@ def _render_phenotypes_table(
         first_phenotype = grouped_phenotypes[0]
 
         st.divider()
-        st.markdown('##### Phenotype Details')
+        pheno_title_col, pheno_btn_col = st.columns([5, 1], vertical_alignment='bottom')
+        pheno_title_col.markdown('##### Phenotype Details')
+        render_rerun_popover(
+            label='🔄 Re-link HPO',
+            key_prefix=f'{key_prefix}-relink-hpo-{first_phenotype.id}',
+            paper_id=paper_resp.id,
+            task_type=TaskType.HPO_LINKING,
+            patient_id=patient_id,
+            phenotype_id=first_phenotype.id,
+            help='Re-run HPO linking for this phenotype.',
+            container=pheno_btn_col,
+        )
 
         # Show grouped concepts
         details_data = {
-            'Field': ['**Concepts**', '**HPO ID**', '**HPO Term**'],
+            'Field': [
+                '**Extracted Phenotype Text**',
+                '**HPO ID**',
+                '**HPO Term**',
+            ],
             'Value': [
                 ', '.join(p.concept for p in grouped_phenotypes),
                 first_phenotype.hpo.value.id
@@ -252,17 +270,102 @@ def _render_phenotypes_table(
             if first_phenotype.hpo and first_phenotype.hpo.reasoning:
                 with st.expander('HPO Match Reasoning', expanded=False):
                     st.text(first_phenotype.hpo.reasoning)
-            if st.button(
-                '🔄 Re-link HPO',
-                key=f'{key_prefix}-relink-hpo-{first_phenotype.id}',
-            ):
-                enqueue_paper_task(
-                    paper_resp.id,
-                    TaskType.HPO_LINKING,
-                    patient_id=patient_id,
-                    phenotype_id=first_phenotype.id,
-                )
-                st.success('HPO linking task enqueued')
+
+
+def _save_family_edits(
+    paper_resp: PaperResp,
+    family: FamilyResp,
+    identifier: str,
+    identifier_note: str | None,
+    consanguinity: bool,
+    consanguinity_note: str | None,
+) -> None:
+    """Persist family field edits, default-noting changed fields, then refresh cache."""
+    changes: dict[str, str | bool] = {}
+    if identifier != family.identifier:
+        changes['identifier'] = identifier
+        if not family.identifier_evidence.human_edit_note:
+            changes['identifier_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
+    if (
+        identifier_note
+        and identifier_note != family.identifier_evidence.human_edit_note
+    ):
+        changes['identifier_human_edit_note'] = identifier_note
+
+    if consanguinity != family.consanguinity:
+        changes['consanguinity'] = consanguinity
+        if not family.consanguinity_evidence.human_edit_note:
+            changes['consanguinity_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
+    if (
+        consanguinity_note
+        and consanguinity_note != family.consanguinity_evidence.human_edit_note
+    ):
+        changes['consanguinity_human_edit_note'] = consanguinity_note
+
+    if not changes:
+        return
+    try:
+        updated = update_family(
+            paper_resp.id,
+            family.id,
+            FamilyUpdateRequest(**changes),  # type: ignore[arg-type]
+        )
+        families: list[FamilyResp] = st.session_state.get(FAMILIES_KEY, [])
+        for i, f in enumerate(families):
+            if f.id == updated.id:
+                families[i] = updated
+                break
+        st.session_state[FAMILIES_KEY] = families
+        st.toast('Saved!', icon=':material/check:')
+        time.sleep(0.5)
+        st.rerun()
+    except Exception as e:
+        st.toast(f'Failed to save: {str(e)}', icon='❌')
+
+
+def _save_segregation_edits(
+    paper_resp: PaperResp,
+    family_id: int,
+    seg_data: SegregationAnalysisResp,
+    lod_score: float | None,
+    lod_score_note: str | None,
+    has_non_seg: bool,
+    non_seg_note: str | None,
+) -> None:
+    """Persist segregation evidence edits (value + notes) with attribution."""
+    changes: dict[str, float | bool | str | None] = {}
+
+    lod_block = seg_data.extracted_lod_score
+    if lod_score != lod_block.value:
+        changes['extracted_lod_score'] = lod_score
+        if not lod_block.human_edit_note:
+            changes['extracted_lod_score_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
+    if lod_score_note and lod_score_note != lod_block.human_edit_note:
+        changes['extracted_lod_score_human_edit_note'] = lod_score_note
+
+    nonseg_block = seg_data.has_unexplainable_non_segregations
+    if has_non_seg != nonseg_block.value:
+        changes['has_unexplainable_non_segregations'] = has_non_seg
+        if not nonseg_block.human_edit_note:
+            changes['has_unexplainable_non_segregations_human_edit_note'] = (
+                HUMAN_EDIT_NOTE_DEFAULT
+            )
+    if non_seg_note and non_seg_note != nonseg_block.human_edit_note:
+        changes['has_unexplainable_non_segregations_human_edit_note'] = non_seg_note
+
+    if not changes:
+        return
+    try:
+        update_segregation_evidence(
+            paper_resp.id,
+            family_id,
+            SegregationEvidenceUpdateRequest(**changes),  # type: ignore[arg-type]
+        )
+        st.toast('Saved!', icon=':material/check:')
+        time.sleep(0.5)
+        st.rerun()
+    except Exception as e:
+        st.toast(f'Failed to save: {str(e)}', icon='❌')
 
 
 def _render_family_group(
@@ -282,21 +385,49 @@ def _render_family_group(
         # Family identifier + evidence
         col1, col2 = st.columns(2)
         with col1:
-            st.text_input(
+            identifier = st.text_input(
                 'Family Identifier',
                 family.identifier,
-                disabled=True,
                 key=f'{tab_key}-fam-{family.id}-identifier',
             )
         with col2:
             st.space()
-            render_evidence_controls(
+            identifier_note = render_evidence_controls(
                 paper_resp.id,
                 block=family.identifier_evidence,
                 label='Family Identifier Evidence',
                 color_key=f'{tab_key}-fam-{family.id}-color',
                 button_key_prefix=f'{tab_key}-fam-{family.id}-btn',
+                human_edit_note_key=f'{tab_key}-fam-{family.id}-identifier-note',
             )
+
+        # Consanguinity + evidence
+        col1, col2 = st.columns(2)
+        with col1:
+            consanguinity = st.checkbox(
+                'Consanguinity',
+                value=family.consanguinity,
+                key=f'{tab_key}-fam-{family.id}-consanguinity',
+            )
+        with col2:
+            st.space()
+            consanguinity_note = render_evidence_controls(
+                paper_resp.id,
+                block=family.consanguinity_evidence,
+                label='Consanguinity Evidence',
+                color_key=f'{tab_key}-fam-{family.id}-consang-color',
+                button_key_prefix=f'{tab_key}-fam-{family.id}-consang-btn',
+                human_edit_note_key=f'{tab_key}-fam-{family.id}-consanguinity-note',
+            )
+
+        _save_family_edits(
+            paper_resp,
+            family,
+            identifier,
+            identifier_note,
+            consanguinity,
+            consanguinity_note,
+        )
 
         # Patients
         for patient_id, patient in patients_in_family:
@@ -307,55 +438,74 @@ def _render_family_group(
                 expanded=(patient_id == selected_patient_id),
                 key_prefix=f'{tab_key}-{patient_id}',
                 patient_id=patient_id,
+                family=family,
             )
 
         # Segregation Analysis
         seg_data = segregation_analysis.get(family.id)
         if seg_data:
-            st.subheader('📊 Segregation Analysis')
+            seg_header_col, seg_button_col = st.columns([5, 1])
+            seg_header_col.subheader('📊 Segregation Analysis')
+            render_rerun_popover(
+                label='🔄 Re-run segregation',
+                key_prefix=f'{tab_key}-fam-{family.id}-rerun-segregation',
+                paper_id=paper_resp.id,
+                task_type=TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
+                family_id=family.id,
+                help='Re-run segregation evidence extraction for this family '
+                '(also recomputes the analysis).',
+                container=seg_button_col,
+            )
 
             # Extracted LOD Score
             col1, col2 = st.columns(2)
             with col1:
-                st.metric(
+                lod_score = st.number_input(
                     'Extracted LOD Score',
-                    f'{seg_data.extracted_lod_score.value:.2f}'
-                    if seg_data.extracted_lod_score.value is not None
-                    else '—',
+                    value=seg_data.extracted_lod_score.value,
+                    step=0.1,
+                    format='%.2f',
+                    key=f'{tab_key}-fam-{family.id}-lod-score',
                 )
             with col2:
                 st.space()
-                render_evidence_controls(
+                lod_score_note = render_evidence_controls(
                     paper_resp.id,
                     block=seg_data.extracted_lod_score,
                     label='Extracted LOD Score Evidence',
                     color_key=f'{tab_key}-fam-{family.id}-lod-score-color-evidence',
                     button_key_prefix=f'{tab_key}-fam-{family.id}-lod-score-evidence',
+                    human_edit_note_key=f'{tab_key}-fam-{family.id}-lod-score-note',
                 )
 
             # Unexplainable Non-segregations
             col1, col2 = st.columns(2)
             with col1:
-                non_seg_status = (
-                    '⚠️ Present'
-                    if seg_data.has_unexplainable_non_segregations.value
-                    else '✅ None'
-                )
-                st.text_input(
-                    'Unexplainable Non-segregations',
-                    non_seg_status,
-                    disabled=True,
+                has_non_seg = st.checkbox(
+                    'Unexplainable Non-segregations present',
+                    value=seg_data.has_unexplainable_non_segregations.value,
                     key=f'{tab_key}-fam-{family.id}-non-segregations',
                 )
             with col2:
                 st.space()
-                render_evidence_controls(
+                non_seg_note = render_evidence_controls(
                     paper_resp.id,
                     block=seg_data.has_unexplainable_non_segregations,
                     label='Non-segregations Evidence',
                     color_key=f'{tab_key}-fam-{family.id}-nonseg-color-evidence',
                     button_key_prefix=f'{tab_key}-fam-{family.id}-nonseg-evidence',
+                    human_edit_note_key=f'{tab_key}-fam-{family.id}-nonseg-note',
                 )
+
+            _save_segregation_edits(
+                paper_resp,
+                family.id,
+                seg_data,
+                lod_score,
+                lod_score_note,
+                has_non_seg,
+                non_seg_note,
+            )
 
             if (
                 seg_data.computed
@@ -499,6 +649,9 @@ def _render_patients_grouped_by_family(
 
     for family_id, group in sorted(by_family.items()):
         family = family_map.get(family_id)
+        # family_sizes counts across ALL patients (not just the currently
+        # filtered subset), so a genuinely multi-patient family still shows
+        # its outer family display even when a filter narrows this group to 1.
         if family and (len(group) > 1 or family_sizes.get(family_id, 0) > 1):
             _render_family_group(
                 paper_resp,
@@ -509,16 +662,21 @@ def _render_patients_grouped_by_family(
                 segregation_analysis,
             )
         else:
-            # Single patient: render as-is (family assignment evidence already in render_patient)
-            patient_id, patient = group[0]
-            st.markdown(f'### {patient.identifier}')
-            render_patient(
-                paper_resp,
-                patient,
-                expanded=(patient_id == selected_patient_id),
-                key_prefix=f'{tab_key}-{patient_id}',
-                patient_id=patient_id,
-            )
+            # Single-individual family (or no matching family record): skip the
+            # outer family display. For a genuine single-patient family, also
+            # hide the family id/consanguinity fields on the patient itself,
+            # since there's no family structure (or segregation) to show.
+            for patient_id, patient in group:
+                st.markdown(f'### {patient.identifier}')
+                render_patient(
+                    paper_resp,
+                    patient,
+                    expanded=(patient_id == selected_patient_id),
+                    key_prefix=f'{tab_key}-{patient_id}',
+                    patient_id=patient_id,
+                    family=family,
+                    hide_family_info=family is not None,
+                )
 
 
 def render_patient(
@@ -527,6 +685,8 @@ def render_patient(
     expanded: bool,
     key_prefix: str,
     patient_id: int,
+    family: FamilyResp | None = None,
+    hide_family_info: bool = False,
 ) -> None:
     with st.expander(
         'View Patient Metadata',
@@ -550,23 +710,66 @@ def render_patient(
                 human_edit_note_key=f'{key_prefix}-identifier-note',
             )
 
-        col1, col2 = st.columns(2)
-        with col1:
-            st.text_input(
-                'Family Identifier',
-                patient.family_identifier,
-                disabled=True,
-                key=f'{key_prefix}-family-identifier',
-            )
-        with col2:
-            st.space()
-            render_evidence_controls(
-                paper_resp.id,
-                block=patient.family_assignment_evidence,
-                label='Family Assignment Evidence',
-                color_key=f'{key_prefix}-{patient.identifier}-color-fam-evidence',
-                button_key_prefix=f'{key_prefix}-{patient.identifier}-fam-evidence',
-            )
+        # Family identifier is only meaningful when the patient belongs to a
+        # family with other members; a single-individual family has no
+        # segregation to speak of, so skip it here (and the segregation
+        # section is never rendered for these patients in the first place).
+        if not hide_family_info:
+            col1, col2 = st.columns(2)
+            with col1:
+                st.text_input(
+                    'Family Identifier',
+                    patient.family_identifier,
+                    disabled=True,
+                    key=f'{key_prefix}-family-identifier',
+                )
+            with col2:
+                st.space()
+                render_evidence_controls(
+                    paper_resp.id,
+                    block=patient.family_assignment_evidence,
+                    label='Family Assignment Evidence',
+                    color_key=f'{key_prefix}-{patient.identifier}-color-fam-evidence',
+                    button_key_prefix=f'{key_prefix}-{patient.identifier}-fam-evidence',
+                )
+
+        # Consanguinity (from family, if available) is shown regardless of
+        # family size, since it applies to the patient even in a
+        # single-individual family record. For a single-patient family there
+        # is no separate family group UI to edit it in, so make it editable
+        # here; multi-patient families already expose an editable checkbox
+        # in the family group header, so keep this one read-only there.
+        if family:
+            col1, col2 = st.columns(2)
+            with col1:
+                consanguinity = st.checkbox(
+                    'Consanguineous',
+                    value=family.consanguinity,
+                    disabled=not hide_family_info,
+                    key=f'{key_prefix}-consanguinity',
+                )
+            with col2:
+                st.space()
+                consanguinity_note = render_evidence_controls(
+                    paper_resp.id,
+                    block=family.consanguinity_evidence,
+                    label='Consanguinity Evidence',
+                    color_key=f'{key_prefix}-consanguinity-color',
+                    button_key_prefix=f'{key_prefix}-consanguinity-btn',
+                    human_edit_note_key=(
+                        f'{key_prefix}-consanguinity-note' if hide_family_info else None
+                    ),
+                )
+
+            if hide_family_info:
+                _save_family_edits(
+                    paper_resp,
+                    family,
+                    family.identifier,
+                    None,
+                    consanguinity,
+                    consanguinity_note,
+                )
 
         col1, col2 = st.columns(2)
         with col1:
@@ -795,15 +998,13 @@ def render_patient(
 
         col1, col2 = st.columns(2)
         with col1:
-            race_ethnicity = RaceEthnicity(
+            race = Race(
                 st.selectbox(
-                    'Race/Ethnicity',
-                    [r.value for r in RaceEthnicity],
+                    'Race',
+                    [r.value for r in Race],
                     index=(
-                        [r.value for r in RaceEthnicity].index(
-                            patient.race_ethnicity.value
-                        )
-                        if patient.race_ethnicity
+                        [r.value for r in Race].index(patient.race.value)
+                        if patient.race
                         else 0
                     ),
                     key=f'{key_prefix}-race',
@@ -811,104 +1012,145 @@ def render_patient(
             )
         with col2:
             st.space()
-            race_ethnicity_note = render_evidence_controls(
+            race_note = render_evidence_controls(
                 paper_resp.id,
-                block=patient.race_ethnicity_evidence,
-                label='Race/Ethnicity Evidence',
+                block=patient.race_evidence,
+                label='Race Evidence',
                 color_key=f'{key_prefix}-{patient.identifier}-color-race-evidence',
                 button_key_prefix=f'{key_prefix}-{patient.identifier}-race-evidence',
                 human_edit_note_key=f'{key_prefix}-race-note',
             )
 
+        col1, col2 = st.columns(2)
+        with col1:
+            ethnicity = Ethnicity(
+                st.selectbox(
+                    'Ethnicity',
+                    [e.value for e in Ethnicity],
+                    index=(
+                        [e.value for e in Ethnicity].index(patient.ethnicity.value)
+                        if patient.ethnicity
+                        else 0
+                    ),
+                    key=f'{key_prefix}-ethnicity',
+                )
+            )
+        with col2:
+            st.space()
+            ethnicity_note = render_evidence_controls(
+                paper_resp.id,
+                block=patient.ethnicity_evidence,
+                label='Ethnicity Evidence',
+                color_key=f'{key_prefix}-{patient.identifier}-color-ethnicity-evidence',
+                button_key_prefix=f'{key_prefix}-{patient.identifier}-ethnicity-evidence',
+                human_edit_note_key=f'{key_prefix}-ethnicity-note',
+            )
+
         # --- Segregation Analysis (for LOD scoring)
-        st.divider()
-        with st.expander('Segregation Analysis (for LOD Scoring)', expanded=False):
-            # --- Is Obligate Carrier
-            col1, col2 = st.columns(2)
-            with col1:
-                is_obligate_carrier = st.checkbox(
-                    'Is Obligate Carrier',
-                    value=patient.is_obligate_carrier or False,
-                    key=f'{key_prefix}-obligate-carrier',
-                )
-            with col2:
-                st.space()
-                is_obligate_carrier_note = render_evidence_controls(
-                    paper_resp.id,
-                    block=patient.is_obligate_carrier_evidence,
-                    label='Is Obligate Carrier Evidence',
-                    color_key=f'{key_prefix}-{patient.identifier}-color-oc-evidence',
-                    button_key_prefix=f'{key_prefix}-{patient.identifier}-oc-evidence',
-                    human_edit_note_key=f'{key_prefix}-obligate-carrier-note',
-                )
+        # A single-individual family has no segregation to analyze, so skip
+        # this section entirely and keep the underlying values unchanged
+        # (mirrors hide_family_info above).
+        if hide_family_info:
+            is_obligate_carrier = patient.is_obligate_carrier or False
+            is_obligate_carrier_note = None
+            relationship_to_proband = patient.relationship_to_proband
+            relationship_note = None
+            twin_type = patient.twin_type
+            twin_type_note = None
+        else:
+            st.divider()
+            with st.expander('Segregation Analysis (for LOD Scoring)', expanded=False):
+                # --- Is Obligate Carrier
+                col1, col2 = st.columns(2)
+                with col1:
+                    is_obligate_carrier = st.checkbox(
+                        'Is Obligate Carrier',
+                        value=patient.is_obligate_carrier or False,
+                        key=f'{key_prefix}-obligate-carrier',
+                    )
+                with col2:
+                    st.space()
+                    is_obligate_carrier_note = render_evidence_controls(
+                        paper_resp.id,
+                        block=patient.is_obligate_carrier_evidence,
+                        label='Is Obligate Carrier Evidence',
+                        color_key=f'{key_prefix}-{patient.identifier}-color-oc-evidence',
+                        button_key_prefix=f'{key_prefix}-{patient.identifier}-oc-evidence',
+                        human_edit_note_key=f'{key_prefix}-obligate-carrier-note',
+                    )
 
-            # --- Relationship to Proband
-            col1, col2 = st.columns(2)
-            with col1:
-                rel_options = [None] + [r.value for r in RelationshipToProband]
-                rel_current = (
-                    patient.relationship_to_proband.value
-                    if patient.relationship_to_proband
-                    else None
-                )
-                rel_idx = (
-                    rel_options.index(rel_current) if rel_current in rel_options else 0
-                )
-                relationship_raw = st.selectbox(
-                    'Relationship to Proband',
-                    options=rel_options,
-                    index=rel_idx,
-                    key=f'{key_prefix}-relationship',
-                )
-                relationship_to_proband = (
-                    RelationshipToProband(relationship_raw)
-                    if relationship_raw
-                    else None
-                )
-            with col2:
-                st.space()
-                relationship_note = render_evidence_controls(
-                    paper_resp.id,
-                    block=patient.relationship_to_proband_evidence,
-                    label='Relationship to Proband Evidence',
-                    color_key=f'{key_prefix}-{patient.identifier}-color-rel-evidence',
-                    button_key_prefix=f'{key_prefix}-{patient.identifier}-rel-evidence',
-                    human_edit_note_key=f'{key_prefix}-relationship-note',
-                )
+                # --- Relationship to Proband
+                col1, col2 = st.columns(2)
+                with col1:
+                    rel_options = [None] + [r.value for r in RelationshipToProband]
+                    rel_current = (
+                        patient.relationship_to_proband.value
+                        if patient.relationship_to_proband
+                        else None
+                    )
+                    rel_idx = (
+                        rel_options.index(rel_current)
+                        if rel_current in rel_options
+                        else 0
+                    )
+                    relationship_raw = st.selectbox(
+                        'Relationship to Proband',
+                        options=rel_options,
+                        index=rel_idx,
+                        key=f'{key_prefix}-relationship',
+                    )
+                    relationship_to_proband = (
+                        RelationshipToProband(relationship_raw)
+                        if relationship_raw
+                        else None
+                    )
+                with col2:
+                    st.space()
+                    relationship_note = render_evidence_controls(
+                        paper_resp.id,
+                        block=patient.relationship_to_proband_evidence,
+                        label='Relationship to Proband Evidence',
+                        color_key=f'{key_prefix}-{patient.identifier}-color-rel-evidence',
+                        button_key_prefix=f'{key_prefix}-{patient.identifier}-rel-evidence',
+                        human_edit_note_key=f'{key_prefix}-relationship-note',
+                    )
 
-            # --- Twin Type
-            col1, col2 = st.columns(2)
-            with col1:
-                twin_options = [None] + [t.value for t in TwinType]
-                twin_current = patient.twin_type.value if patient.twin_type else None
-                twin_idx = (
-                    twin_options.index(twin_current)
-                    if twin_current in twin_options
-                    else 0
-                )
-                twin_raw = st.selectbox(
-                    'Twin Type',
-                    options=twin_options,
-                    index=twin_idx,
-                    key=f'{key_prefix}-twin-type',
-                )
-                twin_type = TwinType(twin_raw) if twin_raw else None
-            with col2:
-                st.space()
-                twin_type_note = render_evidence_controls(
-                    paper_resp.id,
-                    block=patient.twin_type_evidence,
-                    label='Twin Type Evidence',
-                    color_key=f'{key_prefix}-{patient.identifier}-color-twin-evidence',
-                    button_key_prefix=f'{key_prefix}-{patient.identifier}-twin-evidence',
-                    human_edit_note_key=f'{key_prefix}-twin-type-note',
-                )
+                # --- Twin Type
+                col1, col2 = st.columns(2)
+                with col1:
+                    twin_options = [None] + [t.value for t in TwinType]
+                    twin_current = (
+                        patient.twin_type.value if patient.twin_type else None
+                    )
+                    twin_idx = (
+                        twin_options.index(twin_current)
+                        if twin_current in twin_options
+                        else 0
+                    )
+                    twin_raw = st.selectbox(
+                        'Twin Type',
+                        options=twin_options,
+                        index=twin_idx,
+                        key=f'{key_prefix}-twin-type',
+                    )
+                    twin_type = TwinType(twin_raw) if twin_raw else None
+                with col2:
+                    st.space()
+                    twin_type_note = render_evidence_controls(
+                        paper_resp.id,
+                        block=patient.twin_type_evidence,
+                        label='Twin Type Evidence',
+                        color_key=f'{key_prefix}-{patient.identifier}-color-twin-evidence',
+                        button_key_prefix=f'{key_prefix}-{patient.identifier}-twin-evidence',
+                        human_edit_note_key=f'{key_prefix}-twin-type-note',
+                    )
 
         # --- Save edits: only include changed fields so exclude_unset works
-        # Age fields are numeric (int or None). Convert 0 to None for empty values.
-        age_diagnosis_val = age_diagnosis if age_diagnosis else None
-        age_report_val = age_report if age_report else None
-        age_death_val = age_death if age_death else None
+        # Age fields are numeric (int or None); 0 is a legitimate age (e.g. neonates),
+        # so only None (unset) should be treated as empty.
+        age_diagnosis_val = age_diagnosis if age_diagnosis is not None else None
+        age_report_val = age_report if age_report is not None else None
+        age_death_val = age_death if age_death is not None else None
 
         changes: dict[str, str | int | None] = {}
         if identifier != patient.identifier:
@@ -1008,15 +1250,22 @@ def render_patient(
         ):
             changes['country_of_origin_human_edit_note'] = country_of_origin_note
 
-        if race_ethnicity != patient.race_ethnicity:
-            changes['race_ethnicity'] = race_ethnicity.value
-            if not patient.race_ethnicity_evidence.human_edit_note:
-                changes['race_ethnicity_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
+        if race != patient.race:
+            changes['race'] = race.value
+            if not patient.race_evidence.human_edit_note:
+                changes['race_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
+        if race_note and race_note != patient.race_evidence.human_edit_note:
+            changes['race_human_edit_note'] = race_note
+
+        if ethnicity != patient.ethnicity:
+            changes['ethnicity'] = ethnicity.value
+            if not patient.ethnicity_evidence.human_edit_note:
+                changes['ethnicity_human_edit_note'] = HUMAN_EDIT_NOTE_DEFAULT
         if (
-            race_ethnicity_note
-            and race_ethnicity_note != patient.race_ethnicity_evidence.human_edit_note
+            ethnicity_note
+            and ethnicity_note != patient.ethnicity_evidence.human_edit_note
         ):
-            changes['race_ethnicity_human_edit_note'] = race_ethnicity_note
+            changes['ethnicity_human_edit_note'] = ethnicity_note
 
         if is_obligate_carrier != (patient.is_obligate_carrier or False):
             changes['is_obligate_carrier'] = is_obligate_carrier
@@ -1084,7 +1333,17 @@ def render_patient(
 
         # --- Phenotypes Section
         st.divider()
-        st.markdown('### Phenotypes')
+        header_col, button_col = st.columns([4, 1])
+        header_col.markdown('### Phenotypes')
+        render_rerun_popover(
+            label='🔄 Re-extract phenotypes',
+            key_prefix=f'{key_prefix}-reextract-phenotypes',
+            paper_id=paper_resp.id,
+            task_type=TaskType.PHENOTYPE_EXTRACTION,
+            patient_id=patient_id,
+            help='Re-run phenotype extraction for this patient (also re-links HPO terms).',
+            container=button_col,
+        )
         try:
             phenotypes = get_phenotypes(paper_resp.id, patient.id)
             _render_patient_phenotypes(phenotypes, paper_resp, key_prefix, patient.id)
@@ -1113,111 +1372,95 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
     # -----------------------------
     # Display Patients
     # -----------------------------
+    # Each patient is rendered exactly once (single widget tree per patient id).
+    # Proband/affected status are just filters over that one rendering pass, so
+    # editing a patient never has to reconcile two independent widget copies.
     indexed_patients = [(p.id, p) for p in patients]
 
-    # Build family size map from all patients (used for grouping logic)
+    # Family size across ALL patients (not just the currently filtered subset),
+    # so filtering doesn't hide the family display for a genuinely
+    # multi-patient family.
     family_sizes: dict[int, int] = defaultdict(int)
     for _, p in indexed_patients:
         family_sizes[p.family_id] += 1
 
-    probands = [
-        (patient_id, p)
-        for patient_id, p in indexed_patients
-        if p.proband_status == ProbandStatus.Proband
-    ]
-    non_probands = [
-        (patient_id, p)
-        for patient_id, p in indexed_patients
-        if p.proband_status != ProbandStatus.Proband
-    ]
-    affecteds = [
-        (patient_id, p)
-        for patient_id, p in indexed_patients
-        if p.affected_status == AffectedStatus.Affected
-    ]
-    unaffecteds = [
-        (patient_id, p)
-        for patient_id, p in indexed_patients
-        if p.affected_status != AffectedStatus.Affected
-    ]
-    tabs = [
-        f'Probands ({len(probands)})',
-        f'Non-Probands ({len(non_probands)})',
-        f'Affecteds ({len(affecteds)})',
-        f'Unaffecteds ({len(unaffecteds)})',
-        'Pedigree Image',
-    ]
-    proband_tab, non_proband_tab, affecteds_tab, unaffecteds_tab, pedigree_image_tab = (
-        st.tabs(
-            tabs,
-            default=tabs[1]
-            if selected_patient_id in {p[0] for p in non_probands}
-            else tabs[0],
-        )
+    selected_patient = next(
+        (p for pid, p in indexed_patients if pid == selected_patient_id), None
     )
-    # Load families
-    if FAMILIES_KEY not in st.session_state:
-        st.session_state[FAMILIES_KEY] = get_families(paper_resp.id)
-    families: list[FamilyResp] = st.session_state[FAMILIES_KEY]
+    proband_default = (
+        'Proband'
+        if selected_patient and selected_patient.proband_status == ProbandStatus.Proband
+        else 'Non-Proband'
+        if selected_patient
+        else 'All'
+    )
+    affected_default = (
+        'Affected'
+        if selected_patient
+        and selected_patient.affected_status == AffectedStatus.Affected
+        else 'Unaffected'
+        if selected_patient
+        else 'All'
+    )
 
-    # Load segregation analysis
-    segregation_list = get_segregation_analysis(paper_resp.id)
-    segregation_analysis: dict[int, SegregationAnalysisResp | None] = {
-        seg.family_id: seg for seg in segregation_list
-    }
+    patients_tab, pedigree_image_tab = st.tabs(['Patients', 'Pedigree Image'])
 
-    with proband_tab:
-        if not probands:
-            st.info('No probands detected.')
+    with patients_tab:
+        col1, col2 = st.columns(2)
+        with col1:
+            proband_filter = st.pills(
+                'Proband Status',
+                options=['All', 'Proband', 'Non-Proband'],
+                default=proband_default,
+                key='patients-proband-filter',
+            )
+        with col2:
+            affected_filter = st.pills(
+                'Affected Status',
+                options=['All', 'Affected', 'Unaffected'],
+                default=affected_default,
+                key='patients-affected-filter',
+            )
+
+        filtered_patients = [
+            (patient_id, p)
+            for patient_id, p in indexed_patients
+            if (
+                proband_filter == 'All'
+                or (proband_filter == 'Proband')
+                == (p.proband_status == ProbandStatus.Proband)
+            )
+            and (
+                affected_filter == 'All'
+                or (affected_filter == 'Affected')
+                == (p.affected_status == AffectedStatus.Affected)
+            )
+        ]
+
+        # Load families
+        if FAMILIES_KEY not in st.session_state:
+            st.session_state[FAMILIES_KEY] = get_families(paper_resp.id)
+        families: list[FamilyResp] = st.session_state[FAMILIES_KEY]
+
+        # Load segregation analysis
+        segregation_list = get_segregation_analysis(paper_resp.id)
+        segregation_analysis: dict[int, SegregationAnalysisResp | None] = {
+            seg.family_id: seg for seg in segregation_list
+        }
+
+        if not filtered_patients:
+            st.info('No patients match the selected filters.')
         else:
             _render_patients_grouped_by_family(
                 paper_resp,
                 families,
-                probands,
+                filtered_patients,
                 selected_patient_id,
-                'patient-proband',
+                'patient',
                 segregation_analysis,
                 family_sizes,
             )
-    with non_proband_tab:
-        if not non_probands:
-            st.info('No non-probands detected.')
-        else:
-            _render_patients_grouped_by_family(
-                paper_resp,
-                families,
-                non_probands,
-                selected_patient_id,
-                'patient-non-proband',
-                segregation_analysis,
-                family_sizes,
-            )
-    with affecteds_tab:
-        if not affecteds:
-            st.info('No affected patients detected.')
-        else:
-            _render_patients_grouped_by_family(
-                paper_resp,
-                families,
-                affecteds,
-                selected_patient_id,
-                'patient-affected',
-                segregation_analysis,
-                family_sizes,
-            )
-    with unaffecteds_tab:
-        if not unaffecteds:
-            st.info('No unaffected patients detected.')
-        else:
-            _render_patients_grouped_by_family(
-                paper_resp,
-                families,
-                unaffecteds,
-                selected_patient_id,
-                'patient-unaffected',
-                segregation_analysis,
-                family_sizes,
-            )
+
     with pedigree_image_tab:
         if not pedigree_description:
             st.info('No pedigree image available')
