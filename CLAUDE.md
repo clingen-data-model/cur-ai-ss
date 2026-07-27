@@ -26,6 +26,13 @@ uv run pytest test/path/to/test_file.py  # Run a specific test
 ./bin/worker    # Background job processor
 ```
 
+**Frontend setup (first time only):**
+```bash
+cd frontend
+pnpm install
+pnpm dlx skills add shadcn/ui   # Install shadcn/ui AI skill (gitignored, run once per machine)
+```
+
 **Database migrations:**
 ```bash
 alembic current             # Check current migration version
@@ -236,6 +243,12 @@ def upgrade() -> None:
 2. Use Streamlit data editors for user input
 3. Call API endpoints to save changes
 4. Use PDF highlighting via `lib/misc/pdf/highlight.py` utilities
+
+**Generating API specification:**
+```bash
+./bin/generate-api-spec
+```
+Extracts OpenAPI schema from FastAPI app and generates `frontend/api-spec.json`. Does not require running the API server.
 
 ## Important Notes
 
