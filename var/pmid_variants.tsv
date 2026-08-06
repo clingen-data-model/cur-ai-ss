@@ -1,0 +1,61 @@
+pmid	gene	transcript	hgvsc	hgvsp	proband_id	variant_type	zygosity	mode_of_inheritance
+34298581	COG4	NM_015386.3	c.1255G>T	p.Glu419Ter	P21	Stop gained	Compound Heterozygous	Recessive
+30157177	GRXCR2	NM_001080516.1	c.155G>A	p.Ser52Asn	unknown	Missense	Unknown	Undetermined Moi
+33117677	MLH3	NM_001040108.2	c.615del	p.Asp206fs	4	Frameshift	Unknown	Undetermined Moi
+37656691	MLH3	NM_001040108.2	c.3343C>T	p.Arg1115Ter	P-13	Stop gained	Heterozygous	Dominant
+32154054	NDUFA2	NM_002488.5	c.170A>C	p.Glu57Ala	case 4	Missense	Homozygous	Recessive
+33531950	ZNF423	NM_001379286.1	c.1192C>T	p.Arg398Trp	unknown	Missense	Compound Heterozygous In Trans	Compound Heterozygous
+33531950	ZNF423	NM_001379286.1	c.272C>T	p.Pro91Leu	unknown	Missense	Compound Heterozygous In Trans	Compound Heterozygous
+30992453	PRPH	NM_006262.4	c.996+1G>A	N/A	unknown	Splice donor	Homozygous	Recessive
+36041817	SARS1	NM_006513.4	c.969+1_969+3del	p.Lys323_Ile324insSerArgTrpValArg	patient	Splice donor	Heterozygous	Dominant
+35743796	TDO2	NM_005651.4	c.803T>A	p.Phe268Tyr	elder brother	Missense	Heterozygous	Dominant
+31953910	TOP2B	NM_001330700.2	c.187C>T	p.His63Tyr	patient	Missense	Heterozygous	Dominant
+36450898	TOP2B	NP_001059.2	c.172C>T	p.His58Tyr	unknown	Missense	Heterozygous	Dominant
+26084686	CTF1	NM_001330.5	c.274G>A	p.Ala92Thr	unknown	Missense	Heterozygous	Undetermined Moi
+34046667	FOXE3	NM_012186.3	c.959G>C	p.∗320Serext∗72	15A	Stop lost	Heterozygous	Dominant
+32976546	FOXE3	NM_012186	c.289A>G	p.Ile97Val	IV:1	Missense	Homozygous	Recessive
+33528103	GRXCR2	NM_001080516.1	c.251delC	p.Ile85SerfsTer33	unknown	Frameshift	Homozygous	Recessive
+37371654	JPH2	NM_020433.5	c.482C>A	p.Thr161Lys	patient	Missense	Heterozygous	Dominant
+35001666	JPH2	NM_020433.5	c.2011-1G>T	N/A	unknown	Splice acceptor	Unknown	Undetermined Moi
+37780619	KIF1B	NM_015047.3	c.4660G>C	p.Val1554Leu	patient	Missense	Heterozygous	Dominant
+27536250	LRRC10				NA		Unknown	
+34262438	NLGN3	NM_018977.4	c.1351C>T	p.Arg451Cys	unknown	Missense	Unknown	X-Linked
+29678925	SLFN14	NM_001129820.2	c.652A>G	p.Lys218Glu	unknown	Missense	Unknown	Undetermined Moi
+37041648	SLFN14	NM_001129820.2	c.655A>G	p.Lys219Glu	patient	Missense	Heterozygous	Dominant
+34199176	TOPBP1	NM_007027.3	c.951T>G	p.Ile317Met	9	Missense	Heterozygous	Undetermined Moi
+33270637	ZNF423	NM_015069.5	c.1144T>C	p.Ser382Pro	29	Missense	Heterozygous	Undetermined Moi
+33362715	KIF1B	NM_015074.3	c.3649C>T	p.Pro1217Ser	108	Missense	None	Undetermined Moi
+29271071	EMC1	NM_015047.2	c.1212+1G>A	N/A	proband	Splice donor	Homozygous	Recessive
+29271071	EMC1	NM_015047.3	c.1201C>T	p.Arg401Trp	proband	Missense	Unknown	Undetermined Moi
+32184806	FBN2	NM_001999.4	c.3724+3A>C	p.1200_1241del	I-1	Splice donor	Heterozygous	Dominant
+32184806	FBN2	NM_001999.4	c.3724+3A>C	p.1200_1241del	II-1	Splice donor	Heterozygous	Dominant
+32184806	FBN2	NM_001999.4	c.3724+3A>C	p.1200_1241del	II-3	Splice donor	Heterozygous	Dominant
+32184806	FBN2	NM_001999.4	c.3724+3A>C	p.1200_1241del	II-8	Splice donor	Heterozygous	Dominant
+32184806	FBN2	NM_001999.4	c.3724+3A>C	p.1200_1241del	III-1	Splice donor	Heterozygous	Dominant
+32184806	FBN2	NM_001999.4	c.3724+3A>C	p.1200_1241del	III-3	Splice donor	Heterozygous	Dominant
+32184806	FBN2	NM_001999.4	c.3724+3A>C	p.1200_1241del	III-4	Splice donor	Heterozygous	Dominant
+32184806	FBN2	NM_001999.4	c.3724+3A>C	p.1200_1241del	III-6	Splice donor	Heterozygous	Dominant
+32184806	FBN2	NM_001999.4	c.3724+3A>C	p.1200_1241del	III-7	Splice donor	Heterozygous	Dominant
+26094573	RNASEH1	NM_002936.4	c.424G>A	p.Val142Ile	S1	Missense	Compound Heterozyous	Recessive
+26094573	RNASEH1	NM_002936.4	c.469C>T	p.Arg157∗	S1	Stop gained	Compound Heterozyous	Recessive
+26094573	RNASEH1	NM_002936.4	c.424G>A	p.Val142Ile	S2	Missense	Compound Heterozyous	Recessive
+26094573	RNASEH1	NM_002936.4	c.554C>T	p.Ala185Val	S2	Missense	Compound Heterozyous	Recessive
+26094573	RNASEH1	NM_002936.4	c.424G>A	p.Val142Ile	S3	Missense	Homozygous	Recessive
+26094573	RNASEH1	NM_002936.4	c.424G>A	p.Val142Ile	S4	Missense	Homozygous	Recessive
+26094573	RNASEH1	NM_002936.4	c.424G>A	p.Val142Ile	S5	Missense	Homozygous	Recessive
+26094573	RNASEH1	NM_002936.4	c.424G>A	p.Val142Ile	S6	Missense	Homozygous	Recessive
+31768050	DNAJC7	NM_003315.4	c.466C>T	p.Arg156*	table 2 row 4	Stop gained	Heterozygous	Undetermined Moi
+31768050	DNAJC7	NM_003315.4	c.97G>T	p.Glu33*	table 2 row 2	Stop gained	Heterozygous	Undetermined Moi
+31768050	DNAJC7	NM_003315.4	c.358C>T	p.Gln120*	table 2 row 3	Stop gained	Heterozygous	Undetermined Moi
+31768050	DNAJC7	NM_003315.4	c.488delT	p.Phe163fs	table 2 row 5	Frameshift	Heterozygous	Undetermined Moi
+31768050	DNAJC7	NM_003315.4	c.646C>T	p.Arg216*	table 2 row 6	Stop gained	Heterozygous	Undetermined Moi
+31768050	DNAJC7	NM_003315.4	c.1011–2A>G	N/A	table 2 row 7	Splice acceptor	Heterozygous	Undetermined Moi
+31768050	DNAJC7	NM_003315.4	c.22G>C	p.Asp8His	table 2 row 8	Missense	Heterozygous	Undetermined Moi
+31768050	DNAJC7	NM_003315.4	c.235C>T	p.Arg79Trp	table 2 row 9	Missense	Heterozygous	Undetermined Moi
+31768050	DNAJC7	NM_003315.4	c.631G>A	p.Asp211Asn	table 2 row 10	Missense	Heterozygous	Undetermined Moi
+31768050	DNAJC7	NM_003315.4	c.1234C>T	p.Arg412Trp	table 2 row 11	Missense	Heterozygous	Undetermined Moi
+31768050	DNAJC7	NM_003315.4	c.1273G>A	p.Glu425Lys	table 2 row 12	Missense	Heterozygous	Undetermined Moi
+32639540	EXOC2	NM_018303.6	c.1309C>T	p.Arg437*	1:IV-2	Stop gained	Homozygous	Recessive
+32639540	EXOC2	NM_018303.6	c.1309C>T	p.Arg437*	1:IV-8	Stop gained	Homozygous	Recessive
+32639540	EXOC2	NM_018303.5	c.389G>A	p.Arg130His	2:II-1	Missense	Compound Heterozygous	Recessive
+32639540	EXOC2	NM_018303.5	c.1739T>C	p.Leu580Ser	2:II-1	Missense	Compound Heterozygous	Recessive
