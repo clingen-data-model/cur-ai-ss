@@ -5,21 +5,14 @@ from lib.ui.auth import require_auth
 # set_page_config must be the first Streamlit command in a run, and it can only
 # be called once — so it lives here (before the auth gate renders any widgets)
 # rather than in the individual pages.
-st.set_page_config(page_title='Gene Curation', layout='wide')
-
-# Widen the sidebar so the signed-in/change-password controls aren't cramped.
-# Streamlit has no config option for this, so it's a CSS override on the
-# sidebar container (min-width beats the component's own inline width).
-st.markdown(
-    """
-    <style>
-    section[data-testid="stSidebar"] {
-        width: 380px !important;
-        min-width: 380px !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
+st.set_page_config(
+    page_title='Gene Curation',
+    layout='wide',
+    # An int here sets the sidebar's starting width in pixels (Streamlit clamps
+    # it to 200-600) — wide enough that the change-password / log-out controls
+    # aren't cramped. Users can still drag the sidebar edge; once they do, their
+    # width is remembered in localStorage and wins over this default.
+    initial_sidebar_state=380,
 )
 
 # Declare navigation BEFORE the auth gate, and keep pg.run() AFTER it.
