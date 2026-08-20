@@ -233,7 +233,6 @@ def _seed_record(paper_id: int, table_id: int, **fields) -> None:
         'conversion_successful': False,
         'is_recoverable': False,
         'corrected': False,
-        'rotation': None,
     }
     record.update(fields)
     pdf_table_correction_path(paper_id, table_id).write_text(json.dumps(record))
@@ -264,7 +263,7 @@ def test_recovered_table_is_not_flagged():
 
     _seed_table(paper_id, 0, garbled, f'intro\n\n{garbled}\n\noutro')
     pdf_table_vision_markdown_path(paper_id, 0).write_text(corrected)
-    _seed_record(paper_id, 0, conversion_successful=True, corrected=True, rotation=270)
+    _seed_record(paper_id, 0, conversion_successful=True, corrected=True)
 
     result = fulltext_md(paper_id)
 

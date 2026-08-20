@@ -78,32 +78,6 @@ def image_to_data_url(image_path: Path) -> str:
     return f'data:{mime_type};base64,{image_b64}'
 
 
-def upload_bytes_to_gcs(
-    data: bytes, object_path: str, content_type: str = 'image/png'
-) -> str:
-    """Upload in-memory image bytes to GCS and return the object path."""
-    client = storage.Client()
-    bucket = client.bucket(env.GCS_BUCKET_NAME)
-    blob = bucket.blob(object_path)
-    blob.upload_from_string(data, content_type=content_type)
-
-    logger.info(f'Uploaded image to gs://{env.GCS_BUCKET_NAME}/{object_path}')
-    return object_path
-
-
-def upload_and_sign_image_bytes(data: bytes, object_path: str) -> str:
-    """Return a vision-consumable URL for an image held only in memory.
-
-    Used for derived images -- rotated table crops -- which are uploaded for
-    the model to read but deliberately never written to local disk.
-    """
-    if env.DISABLE_GCS_UPLOAD:
-        logger.info('GCS upload disabled, encoding rotated image as a data URL')
-        return f'data:image/png;base64,{base64.b64encode(data).decode("ascii")}'
-
-    return get_signed_url(upload_bytes_to_gcs(data, object_path))
-
-
 def upload_and_sign_image(image_path: Path) -> str:
     """Return an image URL that OpenAI's vision endpoint can consume.
 
