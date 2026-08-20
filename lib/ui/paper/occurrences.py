@@ -43,11 +43,15 @@ def _format_variant_with_protein(
     """Format variant description with optional protein notation."""
     desc = variant.variant_description
     if include_protein and variant.hgvs_p:
-        # If already formatted with parentheses, use as-is
-        if variant.hgvs_p.startswith('p.('):
-            desc += f' {variant.hgvs_p}'
-        else:
-            desc += f' p.({variant.hgvs_p})'
+        # Normalize to a single `p.(...)` form: strip any existing prefix and
+        # parentheses so values like `p.Pro582His` or `p.(Pro582His)` don't
+        # end up doubled as `p.(p.Pro582His)`.
+        change = variant.hgvs_p.strip()
+        if change.startswith('p.'):
+            change = change[2:]
+        change = change.strip().removeprefix('(').removesuffix(')').strip()
+        if change:
+            desc += f' p.({change})'
     return desc
 
 
