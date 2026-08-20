@@ -7,6 +7,7 @@ import streamlit as st
 
 from lib.models import PaperResp
 from lib.tasks import TaskResp, TaskStatus, TaskType
+from lib.tasks.models import TASK_SUCCESSORS
 
 # Icons follow the paper status badge (see get_status_badge_icon); QUEUED has no
 # badge equivalent, so it borrows the amber dot used elsewhere in the UI.
@@ -18,11 +19,55 @@ STATUS_ICONS: dict[TaskStatus, str] = {
     TaskStatus.FAILED: '❌',
 }
 
-# Declaration order of TaskType is pipeline execution order, which is far more
-# useful to sort by than the alphabetical order of the labels.
 _PIPELINE_TYPES: list[TaskType] = list(TaskType)
-PIPELINE_ORDER: dict[TaskType, int] = {
+_DECLARATION_INDEX: dict[TaskType, int] = {
     task_type: index for index, task_type in enumerate(_PIPELINE_TYPES)
+}
+
+
+def _pipeline_depths() -> dict[TaskType, int]:
+    """Depth of each task in the dependency graph, so prerequisites sort first.
+
+    TaskType's declaration order calls itself execution order but is not: the
+    segregation tasks are declared ahead of Patient Variant Occurrences, which
+    TASK_SUCCESSORS makes their prerequisite. Depth is the longest path from a
+    root, so a task always follows everything it waits on.
+    """
+    depths: dict[TaskType, int] = dict.fromkeys(_PIPELINE_TYPES, 0)
+
+    # Small DAG; relax until it settles.
+    for _ in range(len(_PIPELINE_TYPES)):
+        changed = False
+        for task, successors in TASK_SUCCESSORS.items():
+            for successor in successors:
+                if depths[successor] < depths[task] + 1:
+                    depths[successor] = depths[task] + 1
+                    changed = True
+        if not changed:
+            break
+
+    # A type absent from the graph has no prerequisites and would tie with PDF
+    # Parsing at depth zero, sorting above the task that actually starts the
+    # pipeline. Send those to the end instead. Today the only such member is
+    # General Paper Question, which is a chat routing outcome and never queued
+    # as a task at all; the guard is really for a task type added here before
+    # its successors are wired up.
+    connected = set(TASK_SUCCESSORS) | {
+        successor for successors in TASK_SUCCESSORS.values() for successor in successors
+    }
+    tail = max(depths.values(), default=0) + 1
+    for task in _PIPELINE_TYPES:
+        if task not in connected:
+            depths[task] = tail
+
+    return depths
+
+
+# Depth first, then declaration order so tasks that can run concurrently keep a
+# stable, readable grouping.
+PIPELINE_ORDER: dict[TaskType, tuple[int, int]] = {
+    task_type: (depth, _DECLARATION_INDEX[task_type])
+    for task_type, depth in _pipeline_depths().items()
 }
 
 
@@ -51,7 +96,7 @@ def _task_rows(tasks: list[TaskResp]) -> list[dict[str, Any]]:
     ordered = sorted(
         tasks,
         key=lambda t: (
-            PIPELINE_ORDER.get(t.type, len(PIPELINE_ORDER)),
+            PIPELINE_ORDER.get(t.type, (len(PIPELINE_ORDER), 0)),
             t.updated_at,
             t.id,
         ),

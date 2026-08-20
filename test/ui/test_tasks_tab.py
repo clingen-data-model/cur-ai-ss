@@ -56,6 +56,34 @@ def test_scope_label_names_the_entity():
     assert _scope_label(_task(TaskType.PDF_PARSING)) == ''
 
 
+def test_every_task_sorts_after_its_prerequisites():
+    """The grid must never show a task above something it waits on.
+
+    TaskType declaration order does not satisfy this -- the segregation tasks
+    are declared ahead of Patient Variant Occurrences, their prerequisite -- so
+    the order is derived from TASK_SUCCESSORS instead. This guards that.
+    """
+    from lib.tasks.models import TASK_SUCCESSORS
+    from lib.ui.paper.tasks import PIPELINE_ORDER
+
+    for task, successors in TASK_SUCCESSORS.items():
+        for successor in successors:
+            assert PIPELINE_ORDER[task] < PIPELINE_ORDER[successor], (
+                f'{task.value} must sort before its successor {successor.value}'
+            )
+
+
+def test_segregation_sorts_after_occurrences():
+    """The specific inversion that declaration order got wrong."""
+    from lib.ui.paper.tasks import PIPELINE_ORDER
+
+    assert (
+        PIPELINE_ORDER[TaskType.PATIENT_VARIANT_OCCURRENCES]
+        < PIPELINE_ORDER[TaskType.SEGREGATION_EVIDENCE_EXTRACTION]
+        < PIPELINE_ORDER[TaskType.SEGREGATION_ANALYSIS_COMPUTED]
+    )
+
+
 def test_rows_sorted_by_pipeline_order_not_alphabetically():
     """MONDO Linking runs last but sorts first alphabetically."""
     tasks = [
