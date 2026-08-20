@@ -1,6 +1,7 @@
 import json
 import time
 from collections import defaultdict
+from typing import Any
 
 import pandas as pd
 import requests
@@ -117,7 +118,6 @@ def _render_phenotypes_table(
             first_phenotype = group[0]
             all_concepts = ', '.join(p.concept for p in group)
             row = {
-                'Select': False,
                 'Extracted Phenotype Text': all_concepts,
                 '_phenotypes': group,
             }
@@ -138,7 +138,6 @@ def _render_phenotypes_table(
         # For unmatched, keep individual phenotypes
         rows = [
             {
-                'Select': False,
                 'Extracted Phenotype Text': phenotype.concept,
                 '_phenotypes': [phenotype],
             }
@@ -153,7 +152,6 @@ def _render_phenotypes_table(
 
     # Display table
     column_config = {
-        'Select': st.column_config.CheckboxColumn('Select', width='small'),
         'Extracted Phenotype Text': st.column_config.TextColumn(
             'Extracted Phenotype Text', width='large'
         ),
@@ -170,20 +168,22 @@ def _render_phenotypes_table(
             }
         )
 
-    editted_df = st.data_editor(
+    # The table is read-only, so `st.dataframe`'s native single-row selection
+    # replaces the checkbox column. (`Any`: st.dataframe's return type is a
+    # union that only resolves to the selection state when on_select is set.)
+    event: Any = st.dataframe(
         df,
         width='stretch',
         hide_index=True,
-        disabled=['Extracted Phenotype Text']
-        + (['HPO ID', 'HPO Term'] if show_hpo else []),
         column_config=column_config,
-        key=f'{key_prefix}-phenotypes-editor',
+        key=f'{key_prefix}-phenotypes-table',
+        on_select='rerun',
+        selection_mode='single-row',
     )
 
     # Show detail panel when a row is selected
-    selected_rows = editted_df[editted_df['Select']].index.tolist()
-    if selected_rows:
-        idx = selected_rows[0]
+    if event.selection.rows:
+        idx = event.selection.rows[0]
         grouped_phenotypes = rows[idx]['_phenotypes']
         first_phenotype = grouped_phenotypes[0]
 
