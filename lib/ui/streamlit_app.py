@@ -15,6 +15,28 @@ st.set_page_config(
     initial_sidebar_state=380,
 )
 
+# Backstop for the above. Streamlit's frontend only reads initial_sidebar_width
+# in a useState initializer, and a width previously stored in the browser's
+# localStorage["sidebarWidth"] (written on every sidebar drag) takes precedence
+# over it — so in practice the page-config value often loses and the sidebar
+# falls back to its 300px default. This pins the floor in CSS instead.
+#
+# The [aria-expanded="true"] scope matters: the collapsed sidebar is hidden with
+# a JS-computed transform: translateX(-<width>px). Forcing a width the JS doesn't
+# know about leaves a sliver on screen and misplaces the ">>" expand control, so
+# the override must drop away the moment the sidebar collapses. min-width (not
+# width) also leaves users free to drag it wider.
+st.markdown(
+    """
+    <style>
+    section[data-testid="stSidebar"][aria-expanded="true"] {
+        min-width: 380px !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # Declare navigation BEFORE the auth gate, and keep pg.run() AFTER it.
 #
 # A full page load (clicking a dashboard LinkColumn link, or refreshing /paper)
