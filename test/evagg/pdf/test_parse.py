@@ -1,8 +1,10 @@
+import json
 from unittest.mock import MagicMock, patch
 
 from lib.agents.table_correction_agent import TableCorrectionResult, correct_tables
 from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import (
+    UNRECOVERED_TABLE_MARKER,
     apply_table_corrections,
     fulltext_md,
     pdf_extraction_success_path,
@@ -11,6 +13,7 @@ from lib.misc.pdf.paths import (
     pdf_markdown_path,
     pdf_raw_path,
     pdf_section_markdown_path,
+    pdf_table_correction_path,
     pdf_table_image_path,
     pdf_table_markdown_path,
     pdf_table_vision_markdown_path,
@@ -221,3 +224,140 @@ async def test_correct_tables_writes_vision_file_without_touching_raw_md():
     assert pdf_markdown_path(paper_id).read_text() == raw_body
     # ...but readers see the correction.
     assert fulltext_md(paper_id) == f'intro\n\n{corrected}\n\noutro'
+
+
+def _seed_record(paper_id: int, table_id: int, **fields) -> None:
+    record = {
+        'table_id': table_id,
+        'is_corrupted': True,
+        'conversion_successful': False,
+        'is_recoverable': False,
+        'corrected': False,
+        'rotation': None,
+    }
+    record.update(fields)
+    pdf_table_correction_path(paper_id, table_id).write_text(json.dumps(record))
+
+
+def test_unrecovered_table_is_flagged_for_downstream_agents():
+    """A table that failed correction is announced, not passed off as clean."""
+    paper_id = 987010
+    garbled = '| b | Clin mt1 |\n|---|---|\n| IVI | * |'
+
+    _seed_table(paper_id, 0, garbled, f'intro\n\n{garbled}\n\noutro')
+    _seed_record(paper_id, 0)
+
+    result = fulltext_md(paper_id)
+
+    assert UNRECOVERED_TABLE_MARKER.format(table_id=0) in result
+    # The garbled rows are kept -- some content is still real.
+    assert garbled in result
+    # And the warning precedes them.
+    assert result.index('EXTRACTION WARNING') < result.index(garbled)
+
+
+def test_recovered_table_is_not_flagged():
+    """A table that was corrected needs no warning."""
+    paper_id = 987011
+    garbled = '| b | Clin mt1 |\n|---|---|\n| IVI | * |'
+    corrected = '| Individual | Age |\n|---|---|\n| HN-F25 | 8 (11) |'
+
+    _seed_table(paper_id, 0, garbled, f'intro\n\n{garbled}\n\noutro')
+    pdf_table_vision_markdown_path(paper_id, 0).write_text(corrected)
+    _seed_record(paper_id, 0, conversion_successful=True, corrected=True, rotation=270)
+
+    result = fulltext_md(paper_id)
+
+    assert 'EXTRACTION WARNING' not in result
+    assert corrected in result
+
+
+def test_clean_table_is_not_flagged():
+    paper_id = 987012
+    table = '| Individual | Age |\n|---|---|\n| HN-F25 | 8 (11) |'
+
+    _seed_table(paper_id, 0, table, f'intro\n\n{table}\n\noutro')
+    _seed_record(paper_id, 0, is_corrupted=False, is_recoverable=True)
+
+    assert 'EXTRACTION WARNING' not in fulltext_md(paper_id)
+
+
+def test_unreadable_correction_record_is_ignored():
+    """A truncated record must not break reading the paper."""
+    paper_id = 987013
+    garbled = '| b | Clin mt1 |\n|---|---|\n| IVI | * |'
+
+    _seed_table(paper_id, 0, garbled, f'intro\n\n{garbled}\n\noutro')
+    pdf_table_correction_path(paper_id, 0).write_text('{not json')
+
+    assert fulltext_md(paper_id) == f'intro\n\n{garbled}\n\noutro'
+
+
+async def _run_correct_tables(paper_id: int, result: TableCorrectionResult) -> None:
+    mock_result = MagicMock()
+    mock_result.final_output = result
+    with (
+        patch(
+            'lib.misc.gcs.upload_and_sign_image',
+            return_value='https://example.com/image.png',
+        ),
+        patch('agents.Runner.run', return_value=mock_result),
+    ):
+        await correct_tables(paper_id)
+
+
+async def test_correction_record_written_when_unrecoverable():
+    """The give-up path leaves a record, not just a log line."""
+    paper_id = 987020
+    garbled = '| b | Clin mt1 |\n|---|---|\n| IVI | * |'
+    _seed_table(paper_id, 0, garbled, f'intro\n\n{garbled}\n\noutro')
+
+    await _run_correct_tables(
+        paper_id,
+        TableCorrectionResult(
+            is_corrupted=True,
+            corrected_markdown=None,
+            conversion_successful=False,
+            is_recoverable=False,
+        ),
+    )
+
+    record = json.loads(pdf_table_correction_path(paper_id, 0).read_text())
+    assert record['is_corrupted'] is True
+    assert record['is_recoverable'] is False
+    assert record['corrected'] is False
+    # ...and the paper now warns readers about it.
+    assert 'EXTRACTION WARNING' in fulltext_md(paper_id)
+
+
+async def test_correction_record_written_when_recovered():
+    paper_id = 987021
+    garbled = '| b | Clin mt1 |\n|---|---|\n| IVI | * |'
+    corrected = '| Individual | Age |\n|---|---|\n| HN-F25 | 8 (11) |'
+    _seed_table(paper_id, 0, garbled, f'intro\n\n{garbled}\n\noutro')
+
+    await _run_correct_tables(
+        paper_id,
+        TableCorrectionResult(
+            is_corrupted=True,
+            corrected_markdown=corrected,
+            conversion_successful=True,
+            is_recoverable=True,
+        ),
+    )
+
+    record = json.loads(pdf_table_correction_path(paper_id, 0).read_text())
+    assert record['corrected'] is True
+    assert 'EXTRACTION WARNING' not in fulltext_md(paper_id)
+
+
+async def test_correction_record_written_when_table_is_clean():
+    paper_id = 987022
+    table = '| Individual | Age |\n|---|---|\n| HN-F25 | 8 (11) |'
+    _seed_table(paper_id, 0, table, f'intro\n\n{table}\n\noutro')
+
+    await _run_correct_tables(paper_id, TableCorrectionResult(is_corrupted=False))
+
+    record = json.loads(pdf_table_correction_path(paper_id, 0).read_text())
+    assert record['is_corrupted'] is False
+    assert record['corrected'] is False

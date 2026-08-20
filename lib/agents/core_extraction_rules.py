@@ -65,4 +65,11 @@ TABLE EVIDENCE RULES:
 
 - Do NOT paraphrase table content into quote as a substitute for a verbatim quote.
 - Do NOT use markdown table numbers (e.g., "Table 3") as table_id; always use 0-based sequential indexing.
+
+- A table may be preceded by an "EXTRACTION WARNING" marker, meaning the automated
+  extraction of that table failed and its rows are scrambled.
+  - Values read from such a table are unreliable; prefer any other source in the paper.
+  - Crucially, do NOT treat a value's absence from a flagged table as evidence that the
+    paper does not report it. Say the value could not be read, rather than that it was
+    not reported.
 """

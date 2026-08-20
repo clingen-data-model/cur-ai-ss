@@ -99,6 +99,13 @@ def pdf_table_vision_markdown_path(
     return pdf_tables_dir(paper_id, supplement) / f'{table_id}.vision.md'
 
 
+def pdf_table_correction_path(
+    paper_id: int, table_id: int, supplement: bool = False
+) -> Path:
+    """Record of what the correction agent decided about one table."""
+    return pdf_tables_dir(paper_id, supplement) / f'{table_id}.correction.json'
+
+
 def pdf_section_markdown_path(
     paper_id: int, section_id: int, supplement: bool = False
 ) -> Path:
@@ -133,6 +140,52 @@ def apply_table_corrections(
         original = original_path.read_text()
         if original and original in markdown:
             markdown = markdown.replace(original, vision_path.read_text(), 1)
+
+    return _flag_unrecovered_tables(paper_id, markdown, supplement=supplement)
+
+
+# Deliberately asks for nothing the reader cannot do: the extraction agents have
+# no tools, so telling them to check the table image would invite claiming an
+# image they never saw -- the same confabulation this marker exists to prevent.
+UNRECOVERED_TABLE_MARKER = (
+    '**[EXTRACTION WARNING - TABLE {table_id}: this table could not be read '
+    'reliably. The rows below are scrambled: cells may be missing, misaligned, '
+    'or under the wrong header. Treat values here as unreliable and prefer any '
+    'other source in the paper. Do NOT conclude that a value is absent from the '
+    'paper because it is absent from this table -- report it as unreadable '
+    'instead.]**'
+)
+
+
+def _flag_unrecovered_tables(
+    paper_id: int, markdown: str, supplement: bool = False
+) -> str:
+    """Mark tables the correction agent judged corrupted but could not recover.
+
+    Without this the scrambled table is indistinguishable from a table that
+    genuinely lacks the value, and extraction agents report a confident
+    "not stated in the paper" for data that is present but unreadable.
+    """
+    tables_dir = pdf_tables_dir(paper_id, supplement=supplement)
+
+    for record_path in sorted(tables_dir.glob('*.correction.json')):
+        table_id = record_path.name.removesuffix('.correction.json')
+        try:
+            record = json.loads(record_path.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+
+        if not record.get('is_corrupted') or record.get('corrected'):
+            continue
+
+        original_path = tables_dir / f'{table_id}.md'
+        if not original_path.exists():
+            continue
+        original = original_path.read_text()
+        if original and original in markdown:
+            marker = UNRECOVERED_TABLE_MARKER.format(table_id=table_id)
+            markdown = markdown.replace(original, f'{marker}\n\n{original}', 1)
+
     return markdown
 
 

@@ -1,9 +1,11 @@
 """Agent to correct corrupted table markdown using OpenAI vision."""
 
 import io
+import json
 import logging
 import re
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path
 
 from agents import Agent, Runner, function_tool
@@ -15,6 +17,7 @@ from lib.core.environment import env
 from lib.core.logging import setup_logging
 from lib.misc.gcs import upload_and_sign_image, upload_and_sign_image_bytes
 from lib.misc.pdf.paths import (
+    pdf_table_correction_path,
     pdf_table_image_path,
     pdf_table_vision_markdown_path,
     pdf_tables_dir,
@@ -41,6 +44,13 @@ Return ONLY the markdown table, no other text.
 ROTATIONS = (0, 90, 180, 270)
 
 _SEPARATOR_ROW = re.compile(r'^[\s:|-]+$')
+
+
+@dataclass
+class RotationOutcome:
+    """Which rotation the tool settled on, for the on-disk record."""
+
+    rotation: int | None = None
 
 
 class RotationChoice(BaseModel):
@@ -132,7 +142,9 @@ def _rotated_object_path(image_path: Path, degrees: int) -> str:
     return str(relative.with_name(f'{image_path.stem}.rot{degrees}.png'))
 
 
-def extract_best_rotation(image_path: Path, original_markdown: str) -> str:
+def extract_best_rotation(
+    image_path: Path, original_markdown: str, outcome: RotationOutcome | None = None
+) -> str:
     """Transcribe a table crop, trying all four rotations.
 
     Uploads every rotation, transcribes each, and returns whichever yields
@@ -188,11 +200,15 @@ def extract_best_rotation(image_path: Path, original_markdown: str) -> str:
         return results[0]
 
     logger.info(f'Using rotation {choice.best_rotation}: {choice.reasoning}')
+    if outcome is not None:
+        outcome.rotation = choice.best_rotation
     # Return the chosen candidate verbatim -- never a model's re-rendering of it.
     return results[choice.best_rotation]
 
 
-def table_correction_agent_for_image(image_path: Path, table_markdown: str) -> Agent:
+def table_correction_agent_for_image(
+    image_path: Path, table_markdown: str, outcome: RotationOutcome | None = None
+) -> Agent:
     """Build a table correction agent bound to a specific table image."""
 
     @function_tool
@@ -201,7 +217,7 @@ def table_correction_agent_for_image(image_path: Path, table_markdown: str) -> A
 
         Every rotation of the crop is tried; the best-reading one wins.
         """
-        return extract_best_rotation(image_path, table_markdown)
+        return extract_best_rotation(image_path, table_markdown, outcome)
 
     return Agent(
         name='table_corrector',
@@ -255,6 +271,27 @@ is_recoverable to false and conversion_successful to false. This is an acceptabl
 not a failure -- the original markdown will simply be left in place."""
 
 
+def _write_correction_record(
+    paper_id: int,
+    table_id: int,
+    result: TableCorrectionResult,
+    rotation: int | None,
+    corrected: bool,
+    supplement: bool = False,
+) -> None:
+    """Persist what was decided about one table, so it is not only a log line."""
+    record = {
+        'table_id': table_id,
+        'is_corrupted': result.is_corrupted,
+        'conversion_successful': result.conversion_successful,
+        'is_recoverable': result.is_recoverable,
+        'corrected': corrected,
+        'rotation': rotation,
+    }
+    path = pdf_table_correction_path(paper_id, table_id, supplement=supplement)
+    path.write_text(json.dumps(record, indent=2))
+
+
 async def correct_tables(paper_id: int, supplement: bool = False) -> None:
     """Correct corrupted table markdown in paper using agent.
 
@@ -283,7 +320,8 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
         logger.info(f'Checking table {table_id} for corruption...')
 
         image_path = pdf_table_image_path(paper_id, table_id, supplement=supplement)
-        agent = table_correction_agent_for_image(image_path, table_markdown)
+        outcome = RotationOutcome()
+        agent = table_correction_agent_for_image(image_path, table_markdown, outcome)
 
         # Build prompt with table markdown only. The vision tool reads the image
         # on demand if the agent decides the markdown is corrupted.
@@ -296,6 +334,14 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
 
         if not result.final_output.is_corrupted:
             logger.info(f'Table {table_id} looks OK')
+            _write_correction_record(
+                paper_id,
+                table_id,
+                result.final_output,
+                outcome.rotation,
+                corrected=False,
+                supplement=supplement,
+            )
             continue
 
         if (
@@ -310,6 +356,14 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
                 f'leaving original markdown in place (recoverable='
                 f'{result.final_output.is_recoverable})'
             )
+            _write_correction_record(
+                paper_id,
+                table_id,
+                result.final_output,
+                outcome.rotation,
+                corrected=False,
+                supplement=supplement,
+            )
             continue
 
         logger.info(f'Table {table_id} was corrupted, corrected version ready')
@@ -320,3 +374,11 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
         )
         vision_path.write_text(result.final_output.corrected_markdown)
         logger.info(f'Wrote {vision_path}')
+        _write_correction_record(
+            paper_id,
+            table_id,
+            result.final_output,
+            outcome.rotation,
+            corrected=True,
+            supplement=supplement,
+        )
