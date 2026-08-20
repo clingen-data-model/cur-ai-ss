@@ -96,19 +96,29 @@ def render_rerun_popover(
         )
 
 
+TAB_METADATA = '📝 Metadata'
+TAB_PATIENTS = '👤 Patients'
+TAB_VARIANTS = '🧬 Variants'
+TAB_OCCURRENCES = '🔗 Occurrences'
+TAB_CHAT = '💬 Chat with Agent'
+TAB_TASKS = '⚙️ Tasks'
+
+
 def get_available_tabs(paper_resp: PaperResp) -> list[str]:
     """Get available tabs for a paper, conditionally excluding chat based on update time.
 
     The chat feature is only available for papers updated after CHAT_FEATURE_GATE_TIME.
     """
     tabs = [
-        '📝 Metadata',
-        '👤 Patients',
-        '🧬 Variants',
-        '🔗 Occurrences',
+        TAB_METADATA,
+        TAB_PATIENTS,
+        TAB_VARIANTS,
+        TAB_OCCURRENCES,
     ]
     if paper_resp.updated_at > CHAT_FEATURE_GATE_TIME:
-        tabs.append('💬 Chat with Agent')
+        tabs.append(TAB_CHAT)
+    # Appended last so existing ?tab_id= deep links keep pointing at the same tab.
+    tabs.append(TAB_TASKS)
     return tabs
 
 

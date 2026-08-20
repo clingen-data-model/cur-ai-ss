@@ -32,8 +32,15 @@ from lib.ui.paper.patients import render_patients_tab
 from lib.ui.paper.shared import (
     CURRENT_ANNOTATIONS_KEY,
     HEADER_TABS_KEY,
+    TAB_CHAT,
+    TAB_METADATA,
+    TAB_OCCURRENCES,
+    TAB_PATIENTS,
+    TAB_TASKS,
+    TAB_VARIANTS,
     get_available_tabs,
 )
+from lib.ui.paper.tasks import render_tasks_tab
 from lib.ui.paper.variants import render_variants_tab
 
 RERUN_POPOVER_STATE_KEY = 'RERUN_POPOVER_STATE_KEY'
@@ -210,34 +217,37 @@ with center:
                     else available_tabs[0]
                 )
             elif paper_query_params.patient_id:
-                default_tab = '👤 Patients'
+                default_tab = TAB_PATIENTS
             elif paper_query_params.variant_id:
-                default_tab = '🧬 Variants'
+                default_tab = TAB_VARIANTS
             else:
-                default_tab = '📝 Metadata'
+                default_tab = TAB_METADATA
             tabs = st.tabs(
                 available_tabs,
                 on_change='rerun',
                 default=default_tab,
                 key=HEADER_TABS_KEY,
             )
-            metadata_tab = tabs[0]
-            patients_tab = tabs[1]
-            variants_tab = tabs[2]
-            occurrences_tab = tabs[3]
-            chat_tab = tabs[4] if len(tabs) > 4 else None
+            # Resolve by label: the tab list is conditional, so positions shift.
+            tab_by_label = dict(zip(available_tabs, tabs))
+
+            def is_open(label: str) -> bool:
+                tab = tab_by_label.get(label)
+                return bool(tab and tab.open)
 
             with center:
-                if metadata_tab.open:
+                if is_open(TAB_METADATA):
                     render_metadata_tab()
-                elif patients_tab.open:
+                elif is_open(TAB_PATIENTS):
                     render_patients_tab(paper_query_params.patient_id)
-                elif variants_tab.open:
+                elif is_open(TAB_VARIANTS):
                     render_variants_tab(paper_query_params.variant_id)
-                elif occurrences_tab.open:
+                elif is_open(TAB_OCCURRENCES):
                     render_patient_variant_occurrences_tab()
-                elif chat_tab and chat_tab.open:
+                elif is_open(TAB_CHAT):
                     render_chat_with_agent_tab()
+                elif is_open(TAB_TASKS):
+                    render_tasks_tab()
 
     with right:
         with st.container(
