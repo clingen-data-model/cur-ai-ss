@@ -10,7 +10,6 @@ from lib.core.environment import env
 from lib.core.logging import setup_logging
 from lib.misc.gcs import upload_and_sign_image
 from lib.misc.pdf.paths import (
-    pdf_markdown_path,
     pdf_table_image_path,
     pdf_table_vision_markdown_path,
     pdf_tables_dir,
@@ -74,7 +73,6 @@ def table_correction_agent_for_image(image_path: Path) -> Agent:
 class TableCorrectionResult(BaseModel):
     """Result of table corruption check and correction."""
 
-    original_markdown: str
     is_corrupted: bool
     corrected_markdown: str | None = None
     conversion_successful: bool = False
@@ -115,8 +113,10 @@ not a failure -- the original markdown will simply be left in place."""
 async def correct_tables(paper_id: int, supplement: bool = False) -> None:
     """Correct corrupted table markdown in paper using agent.
 
-    Scans all tables, checks each with agent, generates .vision.md files
-    for corrupted ones, and updates raw.md with corrections.
+    Scans all tables, checks each with the agent, and writes a .vision.md
+    beside every table it recovers. ``raw.md`` is deliberately left untouched:
+    corrections are applied at read time by
+    ``lib.misc.pdf.paths.apply_table_corrections``.
     """
     from agents import Runner
 
@@ -128,9 +128,6 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
     table_files = sorted(tables_dir.glob('*.md'))
     if not table_files:
         return
-
-    # Track corrections: table_id -> (original_markdown, corrected_markdown)
-    corrections: dict[int, tuple[str, str]] = {}
 
     for table_path in table_files:
         # Skip vision files
@@ -180,27 +177,3 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
         )
         vision_path.write_text(result.final_output.corrected_markdown)
         logger.info(f'Wrote {vision_path}')
-
-        corrections[table_id] = (
-            result.final_output.original_markdown,
-            result.final_output.corrected_markdown,
-        )
-
-    if not corrections:
-        return
-
-    # Replace corrupted tables in raw.md
-    raw_md_path = pdf_markdown_path(paper_id, supplement=supplement)
-    raw_md = raw_md_path.read_text()
-
-    # For each correction, find exact byte-for-byte match and replace
-    for table_id, (original_md, corrected_md) in corrections.items():
-        if original_md in raw_md:
-            raw_md = raw_md.replace(original_md, corrected_md, 1)
-            logger.info(f'Replaced table {table_id} in raw.md')
-        else:
-            logger.warning(f'Could not find table {table_id} byte-for-byte in raw.md')
-
-    # Write updated markdown
-    raw_md_path.write_text(raw_md)
-    logger.info(f'Updated {raw_md_path} with corrected tables')

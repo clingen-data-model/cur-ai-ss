@@ -109,8 +109,41 @@ def paper_section_classification_path(paper_id: int) -> Path:
     return pdf_dir(paper_id) / 'paper_section_classification.json'
 
 
+def apply_table_corrections(
+    paper_id: int, markdown: str, supplement: bool = False
+) -> str:
+    """Replace corrupted table markdown with its vision-corrected version.
+
+    ``correct_tables`` writes a ``<table_id>.vision.md`` beside every table it
+    re-extracted from the table image, and leaves ``raw.md`` untouched. The
+    substitution happens here, at read time, keyed on the on-disk table
+    markdown -- which is byte-identical to the copy docling inlined into
+    ``raw.md`` -- so the match is exact by construction. Tables with no vision
+    file are left as they are.
+    """
+    tables_dir = pdf_tables_dir(paper_id, supplement=supplement)
+    if not tables_dir.exists():
+        return markdown
+
+    for vision_path in sorted(tables_dir.glob('*.vision.md')):
+        table_id = vision_path.name.removesuffix('.vision.md')
+        original_path = tables_dir / f'{table_id}.md'
+        if not original_path.exists():
+            continue
+        original = original_path.read_text()
+        if original and original in markdown:
+            markdown = markdown.replace(original, vision_path.read_text(), 1)
+    return markdown
+
+
+def raw_md(paper_id: int, supplement: bool = False) -> str:
+    """Read a paper's extracted markdown with table corrections applied."""
+    path = pdf_markdown_path(paper_id, supplement=supplement)
+    return apply_table_corrections(paper_id, path.read_text(), supplement=supplement)
+
+
 def fulltext_md(paper_id: int, supplement_format: 'FileFormat | None' = None) -> str:
-    main_md = pdf_markdown_path(paper_id).read_text()
+    main_md = raw_md(paper_id)
     supplement_md = pdf_markdown_path(paper_id, supplement=True)
     if supplement_md.exists():
         supplement_header = SUPPLEMENTARY_MATERIAL_HEADER
@@ -121,7 +154,7 @@ def fulltext_md(paper_id: int, supplement_format: 'FileFormat | None' = None) ->
             + '\n\n---\n\n'
             + supplement_header
             + '\n\n'
-            + supplement_md.read_text()
+            + raw_md(paper_id, supplement=True)
         )
     return main_md
 
@@ -153,7 +186,7 @@ def relevant_sections_md(
         for s in section_classifications.get('sections', [])
     }
 
-    main_md = pdf_markdown_path(paper_id).read_text()
+    main_md = raw_md(paper_id)
     lines = main_md.splitlines(keepends=True)
     result_lines: list[str] = []
     skip = False
@@ -178,7 +211,7 @@ def relevant_sections_md(
             + '\n\n---\n\n'
             + supplement_header
             + '\n\n'
-            + supplement_md.read_text()
+            + raw_md(paper_id, supplement=True)
         )
 
     return filtered_md
