@@ -164,8 +164,7 @@ def require_auth() -> None:
         st.sidebar.caption(
             f'{user.max_papers} paper upload{"s" if user.max_papers != 1 else ""} remaining'
         )
-    pw_col, logout_col = st.sidebar.columns(2)
-    if logout_col.button('Log out', use_container_width=True):
+    if st.sidebar.button('Log out', use_container_width=True):
         st.session_state.pop(AUTH_TOKEN_KEY, None)
         st.session_state.pop(_CURRENT_USER_KEY, None)
         st.session_state['_logged_out'] = True
@@ -173,4 +172,6 @@ def require_auth() -> None:
             cookies.delete(AUTH_TOKEN_KEY)
             time.sleep(2)
         st.rerun()
-    _render_change_password_form(pw_col)
+    # Full sidebar width, not a half-width column — the form has three inputs
+    # and a button, and halving the width squeezes every label onto two lines.
+    _render_change_password_form(st.sidebar)

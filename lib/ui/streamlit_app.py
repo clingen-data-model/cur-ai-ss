@@ -12,7 +12,7 @@ st.set_page_config(
     # it to 200-600) — wide enough that the change-password / log-out controls
     # aren't cramped. Users can still drag the sidebar edge; once they do, their
     # width is remembered in localStorage and wins over this default.
-    initial_sidebar_state=380,
+    initial_sidebar_state=440,
 )
 
 # Backstop for the above. Streamlit's frontend only reads initial_sidebar_width
@@ -30,7 +30,7 @@ st.markdown(
     """
     <style>
     section[data-testid="stSidebar"][aria-expanded="true"] {
-        min-width: 380px !important;
+        min-width: 440px !important;
     }
     </style>
     """,
