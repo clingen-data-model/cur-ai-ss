@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, List
 
 from pydantic import (
     BaseModel,
+    Field,
     computed_field,
     model_validator,
 )
@@ -264,7 +265,10 @@ class PaperExtractionOutput(BaseModel):
     doi: str | None = None
     pmid: str | None = None
     pmcid: str | None = None
-    paper_types: list[PaperType]
+    # max_length reaches the model: it serialises to JSON Schema "maxItems", which
+    # structured outputs enforce. The validator below still guards the paths that
+    # never see a schema (PATCH requests, converters).
+    paper_types: list[PaperType] = Field(max_length=2)
     gene_disease_relation: GeneDiseaseRelation | None = None
 
     @model_validator(mode='after')

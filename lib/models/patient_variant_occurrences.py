@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, List
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import (
     DateTime,
     ForeignKey,
@@ -82,7 +82,8 @@ class PatientVariantOccurrence(BaseModel):
     zygosity: EvidenceBlock[Zygosity]
     inheritance: EvidenceBlock[Inheritance]
     de_novo: EvidenceBlock[bool]
-    testing_methods: List[EvidenceBlock[TestingMethod]]
+    # See PaperExtractionOutput.paper_types: max_length is what the model sees.
+    testing_methods: List[EvidenceBlock[TestingMethod]] = Field(max_length=2)
     disease_name: EvidenceBlock[str] | None = None
 
     @model_validator(mode='after')
@@ -104,7 +105,7 @@ class PatientVariantOccurrenceUpdateRequest(PatchModel):
     inheritance_human_edit_note: str | None = None
     de_novo: bool | None = None
     de_novo_human_edit_note: str | None = None
-    testing_methods: list[TestingMethod] | None = None
+    testing_methods: list[TestingMethod] | None = Field(default=None, max_length=2)
     testing_methods_note: str | None = None
 
     @model_validator(mode='after')
