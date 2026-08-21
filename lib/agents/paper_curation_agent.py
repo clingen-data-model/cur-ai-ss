@@ -25,6 +25,7 @@ import logging
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
+from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
 from lib.core.environment import env
 from lib.core.logging import setup_logging
 from lib.misc.pdf.paths import pdf_raw_path
@@ -157,7 +158,14 @@ segregation entries refer to families the same way, by position in the families 
 
 If the paper genuinely does not report something, leave it null -- but check the tables
 and figures before concluding a value is absent. A value you could not read is not the
-same as a value the paper does not report."""
+same as a value the paper does not report.
+
+Every EvidenceBlock you return must carry at least one of quote, table_id or image_id.
+Reasoning alone is rejected. Sex read off a pedigree figure needs its image_id; a value
+read from a table needs that table's id.
+"""
+
+CURATION_INSTRUCTIONS += CORE_EXTRACTION_SPEC
 
 
 def _client() -> OpenAI:
