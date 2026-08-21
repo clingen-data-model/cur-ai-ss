@@ -64,7 +64,7 @@ def _render_evidence_block(
     evidence_sources = []
     if evidence_block.quote:
         evidence_sources.append(('Text Evidence', evidence_block.quote))
-    if evidence_block.table_id is not None:
+    if evidence_block.table_id is not None:  # legacy blocks only
         evidence_sources.append(
             ('Table', f'Table #{evidence_block.table_id + 1}')
         )  # note table indexes are extracted as zero-indexed, but displayed to user here.
