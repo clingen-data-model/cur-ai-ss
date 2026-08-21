@@ -48,7 +48,7 @@ class RateLimitError(Exception):
     pass
 
 
-from lib.agents.one_shot_paper_extraction_agent import extract_paper_one_shot
+from lib.agents.paper_extraction import extract_paper
 from lib.api.db import session_scope
 from lib.core.environment import env
 from lib.core.logging import setup_logging
@@ -99,7 +99,7 @@ from lib.models.variant import HarmonizedVariant, Variant
 from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
 from lib.reference_data.mondo import get_mondo_term
 from lib.tasks.models import TaskType
-from lib.tasks.paper_extraction import persist_curation
+from lib.tasks.paper_extraction import persist_extraction
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -815,17 +815,17 @@ async def handle_paper_extraction(task_id: int) -> None:
         paper = session.get(PaperDB, paper_id)
         supplement_format = paper.supplement_format if paper else None
 
-    curation = await extract_paper_one_shot(paper_id, supplement_format)
-    if curation is None:
-        raise ValueError(f'Curation for paper {paper_id} returned no parsed output')
+    extraction = await extract_paper(paper_id, supplement_format)
+    if extraction is None:
+        raise ValueError(f'Extraction for paper {paper_id} returned no parsed output')
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
             return
-        stored = persist_curation(session, paper_id, task.agent_run_id, curation)
+        stored = persist_extraction(session, paper_id, task.agent_run_id, extraction)
 
-    logger.info(f'Paper {paper_id} curated: {stored}')
+    logger.info(f'Paper {paper_id} extracted: {stored}')
 
 
 TASK_HANDLERS: dict[TaskType, Callable[[int], Awaitable[None]]] = {

@@ -1,16 +1,16 @@
-"""Persist a single-pass curation.
+"""Persist what the extraction passes produced.
 
-Kept out of handlers.py because it is mostly index resolution: the curation
-agent refers to patients and variants by their position in its own response,
-since the database ids the split pipeline hands its agents do not exist when a
-paper is curated in one pass.
+Mostly resolution: each pass refers to patients, variants and families by name
+or by position in a list it was given, because none of them exist in the
+database when the passes run. The mapping differs per pass, so each site says
+which one it is using.
 """
 
 import logging
 
 from sqlalchemy.orm import Session
 
-from lib.agents.one_shot_paper_extraction_agent import OneShotPaperExtraction
+from lib.agents.paper_extraction import PaperExtraction
 from lib.models import (
     FamilyDB,
     PaperDB,
@@ -23,6 +23,7 @@ from lib.models import (
 from lib.models.converters import (
     apply_patient_demographics,
     family_to_db,
+    patient_identity_to_db,
     patient_variant_occurrence_to_db,
     phenotype_to_db,
     segregation_evidence_to_db,
@@ -34,7 +35,12 @@ logger = logging.getLogger(__name__)
 
 
 def _clear_previous_run(session: Session, paper_id: int, agent_run_id: int) -> None:
-    """Make the task idempotent, mirroring the split handlers' delete-then-insert."""
+    """Make the task idempotent: delete what this run produced, then re-insert."""
+    session.query(SegregationEvidenceDB).filter(
+        SegregationEvidenceDB.family_id.in_(
+            session.query(FamilyDB.id).filter(FamilyDB.paper_id == paper_id)
+        )
+    ).delete(synchronize_session=False)
     session.query(PatientVariantOccurrenceDB).filter(
         PatientVariantOccurrenceDB.paper_id == paper_id
     ).delete()
@@ -52,101 +58,105 @@ def _clear_previous_run(session: Session, paper_id: int, agent_run_id: int) -> N
     session.flush()
 
 
-def persist_curation(
+def persist_extraction(
     session: Session,
     paper_id: int,
     agent_run_id: int,
-    curation: OneShotPaperExtraction,
+    extraction: PaperExtraction,
 ) -> dict[str, int]:
-    """Write a whole curation, returning what was stored for logging."""
+    """Write a whole extraction, returning what was stored for logging."""
     _clear_previous_run(session, paper_id, agent_run_id)
 
     paper = session.get(PaperDB, paper_id)
     if paper:
-        curation.classification.apply_to(paper)
+        extraction.classification.apply_to(paper)
 
-    session.query(SegregationEvidenceDB).filter(
-        SegregationEvidenceDB.family_id.in_(
-            session.query(FamilyDB.id).filter(FamilyDB.paper_id == paper_id)
-        )
-    ).delete(synchronize_session=False)
-
+    # Families keep the order pass 1 returned them in: pass 4 refers to that order.
     family_ids: dict[str, int] = {}
-    segregations = 0
-    for entry in curation.families:
+    family_order: list[int] = []
+    for entry in extraction.patients.families:
         db_family = family_to_db(paper_id, agent_run_id, entry.family)
         session.add(db_family)
         session.flush()
         family_ids[entry.family.identifier.value] = db_family.id
-        if entry.segregation is not None:
-            session.add(segregation_evidence_to_db(db_family.id, entry.segregation))
-            segregations += 1
+        family_order.append(db_family.id)
 
-    # Patients keep their list position so occurrences can resolve against it.
+    # Patients likewise: pass 3 refers to them by position in this list.
     patient_ids: list[int] = []
-    for patient in curation.patients:
-        db_patient = PatientDB(
-            paper_id=paper_id,
-            agent_run_id=agent_run_id,
-            identifier=patient.identifier.value,
-            identifier_evidence=patient.identifier.model_dump(),
-            proband_status=patient.proband_status.value.value,
-            proband_status_evidence=patient.proband_status.model_dump(),
-            family_assignment_evidence=patient.family_identifier.model_dump(),
-        )
-        family_id = family_ids.get(patient.family_identifier.value)
+    patient_by_identifier: dict[str, PatientDB] = {}
+    for identity in extraction.patients.patients:
+        db_patient = patient_identity_to_db(paper_id, identity, agent_run_id)
+        family_id = family_ids.get(identity.family_identifier.value)
         if family_id is None:
-            # families is NOT NULL on patients, so a family named by a patient but
+            # patients.family_id is NOT NULL, so a family named by a patient but
             # missing from the families list gets created rather than costing us
             # the patient.
             logger.warning(
-                f'Paper {paper_id}: patient {patient.identifier.value} names family '
-                f'{patient.family_identifier.value!r}, which was not in the families '
-                'list; creating it'
+                f'Paper {paper_id}: patient {identity.identifier.value} names family '
+                f'{identity.family_identifier.value!r}, which was not returned; '
+                'creating it'
             )
             fallback = FamilyDB(
                 paper_id=paper_id,
                 agent_run_id=agent_run_id,
-                identifier=patient.family_identifier.value,
-                identifier_evidence=patient.family_identifier.model_dump(),
+                identifier=identity.family_identifier.value,
+                identifier_evidence=identity.family_identifier.model_dump(),
                 consanguinity=False,
-                consanguinity_evidence=patient.family_identifier.model_dump(),
+                consanguinity_evidence=identity.family_identifier.model_dump(),
             )
             session.add(fallback)
             session.flush()
             family_id = fallback.id
-            family_ids[patient.family_identifier.value] = family_id
+            family_ids[identity.family_identifier.value] = family_id
+            family_order.append(family_id)
         db_patient.family_id = family_id
-        apply_patient_demographics(db_patient, patient.demographics)
+        db_patient.family_assignment_evidence = identity.family_identifier.model_dump()
         session.add(db_patient)
         session.flush()
         patient_ids.append(db_patient.id)
+        patient_by_identifier[identity.identifier.value] = db_patient
 
-    phenotypes = 0
-    for phenotype in curation.phenotypes:
-        # patient_id is an index into curation.patients here, not a database id
-        if not (0 <= phenotype.patient_id < len(patient_ids)):
+    # Pass 2 was given the identifiers rather than positions, so it keys by name.
+    described = 0
+    detail_owners: list[PatientDB | None] = []
+    for detail in extraction.details.patients:
+        detail_owner = patient_by_identifier.get(detail.identifier)
+        detail_owners.append(detail_owner)
+        if detail_owner is None:
             logger.warning(
-                f'Paper {paper_id}: phenotype names patient_id '
-                f'{phenotype.patient_id}, out of range; skipped'
+                f'Paper {paper_id}: demographics returned for {detail.identifier!r}, '
+                'who is not among the identified patients; skipped'
             )
             continue
-        db_phenotype = phenotype_to_db(paper_id, phenotype)
-        db_phenotype.patient_id = patient_ids[phenotype.patient_id]
-        session.add(db_phenotype)
-        phenotypes += 1
+        apply_patient_demographics(detail_owner, detail.demographics)
+        described += 1
+
+    # Phenotypes hang off the patient they were returned under, so their
+    # patient_id field is not consulted: the nesting is the more reliable of the
+    # two, and a mismatch between them would otherwise be silent.
+    phenotypes = 0
+    for index, detail in enumerate(extraction.details.patients):
+        owner = detail_owners[index]
+        if owner is None:
+            continue
+        for phenotype in detail.phenotypes:
+            db_phenotype = phenotype_to_db(paper_id, phenotype)
+            db_phenotype.patient_id = owner.id
+            session.add(db_phenotype)
+            phenotypes += 1
 
     variant_ids: list[int] = []
-    for variant in curation.variants:
+    for variant in extraction.variants:
         db_variant = variant_to_db(paper_id, variant, agent_run_id)
         session.add(db_variant)
         session.flush()
         variant_ids.append(db_variant.id)
 
+    # Pass 3 was handed patients and variants as numbered lists; its patient_id
+    # and variant_id are positions in those lists, not database ids.
     occurrence_rows: dict[tuple[int, int], PatientVariantOccurrenceDB] = {}
     occurrences = 0
-    for occurrence in curation.occurrences:
-        # patient_id / variant_id are indices into this response, not db ids
+    for occurrence in extraction.genotypes.occurrences:
         if not (0 <= occurrence.patient_id < len(patient_ids)):
             logger.warning(
                 f'Paper {paper_id}: occurrence names patient index '
@@ -167,17 +177,16 @@ def persist_curation(
         occurrence_rows[(occurrence.patient_id, occurrence.variant_id)] = db_occurrence
         occurrences += 1
 
-    # Compound het pairs are nested on the patient that carries them, and link
-    # two of that patient's occurrence rows to each other.
+    # A compound het pair links two of one patient's occurrence rows to each other.
     paired = 0
-    for patient_index, patient in enumerate(curation.patients):
-        for pair in patient.compound_het:
-            a = occurrence_rows.get((patient_index, pair.variant_id_a))
-            b = occurrence_rows.get((patient_index, pair.variant_id_b))
+    for het in extraction.genotypes.compound_het:
+        for pair in het.pairs:
+            a = occurrence_rows.get((het.patient_index, pair.variant_id_a))
+            b = occurrence_rows.get((het.patient_index, pair.variant_id_b))
             if a is None or b is None:
                 logger.warning(
                     f'Paper {paper_id}: compound het for patient index '
-                    f'{patient_index} names variants {pair.variant_id_a}/'
+                    f'{het.patient_index} names variants {pair.variant_id_a}/'
                     f'{pair.variant_id_b} with no occurrence; skipped'
                 )
                 continue
@@ -187,18 +196,36 @@ def persist_curation(
                 first.paired_variant_confidence_reasoning = pair.confidence.model_dump()
             paired += 1
 
-    if curation.pedigree.found and curation.pedigree.description:
+    segregations = 0
+    for finding in extraction.segregation.families:
+        if not (0 <= finding.family_index < len(family_order)):
+            logger.warning(
+                f'Paper {paper_id}: segregation names family index '
+                f'{finding.family_index}, out of range; skipped'
+            )
+            continue
+        session.add(
+            segregation_evidence_to_db(
+                family_order[finding.family_index], finding.evidence
+            )
+        )
+        segregations += 1
+
+    if extraction.pedigree.found and extraction.pedigree.description:
+        # image_id was chosen from the figures the parse step extracted, so it
+        # indexes a file that exists rather than a number the model invented.
         session.add(
             PedigreeDB(
                 paper_id=paper_id,
-                image_id=curation.pedigree.image_id or 0,
-                description=curation.pedigree.description,
+                image_id=extraction.pedigree.image_id or 0,
+                description=extraction.pedigree.description,
             )
         )
 
     return {
-        'families': len(family_ids),
+        'families': len(family_order),
         'patients': len(patient_ids),
+        'described': described,
         'phenotypes': phenotypes,
         'variants': len(variant_ids),
         'occurrences': occurrences,
