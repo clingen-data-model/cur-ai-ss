@@ -5,16 +5,12 @@ in its own response, so these tests are mostly about index resolution and the
 failure modes around it.
 """
 
-from lib.agents.paper_curation_agent import (
-    CuratedCompoundHet,
-    CuratedFamily,
-    CuratedOccurrence,
-    CuratedPatient,
-    CuratedPedigree,
-    CuratedPhenotype,
-    CuratedSegregation,
-    FullCuration,
+from lib.agents.one_shot_paper_extraction_agent import (
+    OneShotFamily,
+    OneShotPaperExtraction,
+    OneShotPatient,
 )
+from lib.agents.pedigree_describer_agent import PedigreeExtractionOutput
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.paper import PaperExtractionOutput, PaperType
 from lib.models.patient import (
@@ -23,6 +19,7 @@ from lib.models.patient import (
     CountryCode,
     Ethnicity,
     Family,
+    FamilyEntry,
     PatientDemographics,
     ProbandStatus,
     Race,
@@ -30,10 +27,13 @@ from lib.models.patient import (
 )
 from lib.models.patient_variant_occurrences import (
     CompoundHetConfidence,
+    CompoundHetPair,
     Inheritance,
+    PatientVariantOccurrence,
     TestingMethod,
     Zygosity,
 )
+from lib.models.phenotype import ExtractedPhenotype
 from lib.models.segregation_analysis import SegregationEvidenceExtractionOutput
 from lib.models.variant import Variant, VariantType
 
@@ -58,13 +58,13 @@ def demographics(**overrides) -> PatientDemographics:
     return PatientDemographics(**fields)
 
 
-def patient(identifier: str, family: str, phenotypes=()) -> CuratedPatient:
-    return CuratedPatient(
+def patient(identifier: str, family: str) -> OneShotPatient:
+    """PatientIdentity fields plus the demographics for that patient."""
+    return OneShotPatient(
         identifier=block(identifier),
         family_identifier=block(family),
         proband_status=block(ProbandStatus.Proband),
         demographics=demographics(),
-        phenotypes=list(phenotypes),
     )
 
 
@@ -90,10 +90,11 @@ def variant(hgvs: str) -> Variant:
     )
 
 
-def occurrence(pi: int, vi: int, zygosity=Zygosity.heterozygous) -> CuratedOccurrence:
-    return CuratedOccurrence(
-        patient_index=pi,
-        variant_index=vi,
+def occurrence(pi: int, vi: int, zygosity=Zygosity.heterozygous):
+    """patient_id/variant_id carry INDICES here, not database ids."""
+    return PatientVariantOccurrence(
+        patient_id=pi,
+        variant_id=vi,
         zygosity=block(zygosity),
         inheritance=block(Inheritance.unknown),
         de_novo=block(False),
@@ -101,7 +102,7 @@ def occurrence(pi: int, vi: int, zygosity=Zygosity.heterozygous) -> CuratedOccur
     )
 
 
-def curation(**overrides) -> FullCuration:
+def curation(**overrides) -> OneShotPaperExtraction:
     fields = dict(
         metadata=PaperExtractionOutput(
             title='A paper',
@@ -110,18 +111,18 @@ def curation(**overrides) -> FullCuration:
             paper_types=[PaperType.Case_study],
         ),
         families=[
-            CuratedFamily(
+            OneShotFamily(
                 family=Family(identifier=block('F1'), consanguinity=block(False)),
                 patient_identifiers=[block('P1')],
             )
         ],
         patients=[patient('P1', 'F1')],
-        pedigree=CuratedPedigree(found=False),
+        pedigree=PedigreeExtractionOutput(found=False),
         variants=[variant('c.1A>G')],
         occurrences=[occurrence(0, 0)],
     )
     fields.update(overrides)
-    return FullCuration(**fields)
+    return OneShotPaperExtraction(**fields)
 
 
 def test_curation_model_accepts_a_minimal_paper():
@@ -130,69 +131,84 @@ def test_curation_model_accepts_a_minimal_paper():
     assert c.patients[0].demographics.age_diagnosis.value == 9
 
 
-def test_demographics_cannot_be_missing_for_a_patient():
-    """Demographics are nested, so the 'identity without demographics' gap is unrepresentable."""
-    fields = set(CuratedPatient.model_fields)
-    assert 'demographics' in fields
-    assert CuratedPatient.model_fields['demographics'].is_required()
+def test_patient_is_identity_plus_demographics():
+    """OneShotPatient reuses PatientIdentity and adds the demographics to it."""
+    from lib.models.patient import PatientIdentity
+
+    assert issubclass(OneShotPatient, PatientIdentity)
+    assert set(PatientIdentity.model_fields) <= set(OneShotPatient.model_fields)
+    # nesting is what makes 'identified but undescribed' unrepresentable
+    assert OneShotPatient.model_fields['demographics'].is_required()
 
 
-def test_phenotypes_hang_off_their_patient():
+def test_phenotypes_reuse_the_existing_model_keyed_by_index():
     c = curation(
-        patients=[
-            patient(
-                'P1', 'F1', phenotypes=[CuratedPhenotype(concept=block('seizures'))]
+        phenotypes=[
+            ExtractedPhenotype(
+                patient_id=0,
+                concept=block('seizures'),
+                onset=None,
+                location=None,
+                severity=None,
+                modifier=None,
             )
         ]
     )
-    assert c.patients[0].phenotypes[0].concept.value == 'seizures'
+    # patient_id is a position in curation.patients, not a database id
+    assert c.phenotypes[0].patient_id == 0
+    assert c.phenotypes[0].concept.value == 'seizures'
 
 
 def test_testing_methods_capped_at_two_in_the_schema():
-    schema = CuratedOccurrence.model_json_schema()
+    schema = PatientVariantOccurrence.model_json_schema()
     assert schema['properties']['testing_methods']['maxItems'] == 2
 
 
-def test_segregation_is_per_family_not_per_paper():
-    """SegregationEvidenceDB is keyed by family, so the curation must be too."""
+def test_segregation_hangs_off_its_family():
+    """SegregationEvidenceDB is keyed by family, so the evidence nests there."""
     c = curation(
-        segregation=[
-            CuratedSegregation(
-                family_index=0,
-                evidence=SegregationEvidenceExtractionOutput(
+        families=[
+            OneShotFamily(
+                family=Family(identifier=block('F1'), consanguinity=block(False)),
+                patient_identifiers=[block('P1')],
+                segregation=SegregationEvidenceExtractionOutput(
                     extracted_lod_score=block(3.1),
                     has_unexplainable_non_segregations=block(False),
                 ),
             )
         ]
     )
-    assert c.segregation[0].family_index == 0
+    assert c.families[0].segregation.extracted_lod_score.value == 3.1
+    # and a family without segregation evidence is fine
+    assert curation().families[0].segregation is None
 
 
-def test_compound_het_names_two_variants_of_one_patient():
+def test_compound_het_hangs_off_its_patient():
+    carrier = patient('P1', 'F1')
+    carrier.compound_het = [
+        CompoundHetPair(
+            variant_id_a=0,
+            variant_id_b=1,
+            confidence=ReasoningBlock(
+                value=CompoundHetConfidence.confirmed, reasoning='in trans'
+            ),
+        )
+    ]
     c = curation(
+        patients=[carrier],
         variants=[variant('c.1A>G'), variant('c.2C>T')],
         occurrences=[occurrence(0, 0), occurrence(0, 1)],
-        compound_het=[
-            CuratedCompoundHet(
-                patient_index=0,
-                variant_index_a=0,
-                variant_index_b=1,
-                confidence=ReasoningBlock(
-                    value=CompoundHetConfidence.confirmed, reasoning='in trans'
-                ),
-            )
-        ],
     )
-    pair = c.compound_het[0]
-    assert (pair.variant_index_a, pair.variant_index_b) == (0, 1)
+    pair = c.patients[0].compound_het[0]
+    # variant ids are indices into curation.variants here
+    assert (pair.variant_id_a, pair.variant_id_b) == (0, 1)
 
 
 def test_full_schema_stays_within_structured_output_limits():
     """The combined schema is the whole point; guard it against creeping growth."""
     import json
 
-    size = len(json.dumps(FullCuration.model_json_schema()))
+    size = len(json.dumps(OneShotPaperExtraction.model_json_schema()))
     assert size < 60_000, f'schema grew to {size} bytes'
 
 

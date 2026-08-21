@@ -10,7 +10,7 @@ import logging
 
 from sqlalchemy.orm import Session
 
-from lib.agents.paper_curation_agent import FullCuration
+from lib.agents.one_shot_paper_extraction_agent import OneShotPaperExtraction
 from lib.models import (
     FamilyDB,
     PaperDB,
@@ -23,6 +23,8 @@ from lib.models import (
 from lib.models.converters import (
     apply_patient_demographics,
     family_to_db,
+    patient_variant_occurrence_to_db,
+    phenotype_to_db,
     segregation_evidence_to_db,
     variant_to_db,
 )
@@ -80,7 +82,7 @@ def persist_curation(
     session: Session,
     paper_id: int,
     agent_run_id: int,
-    curation: FullCuration,
+    curation: OneShotPaperExtraction,
 ) -> dict[str, int]:
     """Write a whole curation, returning what was stored for logging."""
     superseded = clear_superseded_tasks(session, paper_id)
@@ -97,13 +99,15 @@ def persist_curation(
     ).delete(synchronize_session=False)
 
     family_ids: dict[str, int] = {}
-    family_order: list[int] = []
+    segregations = 0
     for entry in curation.families:
         db_family = family_to_db(paper_id, agent_run_id, entry.family)
         session.add(db_family)
         session.flush()
         family_ids[entry.family.identifier.value] = db_family.id
-        family_order.append(db_family.id)
+        if entry.segregation is not None:
+            session.add(segregation_evidence_to_db(db_family.id, entry.segregation))
+            segregations += 1
 
     # Patients keep their list position so occurrences can resolve against it.
     patient_ids: list[int] = []
@@ -145,22 +149,19 @@ def persist_curation(
         session.flush()
         patient_ids.append(db_patient.id)
 
-        for phenotype in patient.phenotypes:
-            session.add(
-                PhenotypeDB(
-                    paper_id=paper_id,
-                    patient_id=db_patient.id,
-                    concept=phenotype.concept.value,
-                    concept_evidence=phenotype.concept.model_dump(),
-                    negated=phenotype.negated,
-                    uncertain=phenotype.uncertain,
-                    family_history=phenotype.family_history,
-                    onset=phenotype.onset,
-                    location=phenotype.location,
-                    severity=phenotype.severity,
-                    modifier=phenotype.modifier,
-                )
+    phenotypes = 0
+    for phenotype in curation.phenotypes:
+        # patient_id is an index into curation.patients here, not a database id
+        if not (0 <= phenotype.patient_id < len(patient_ids)):
+            logger.warning(
+                f'Paper {paper_id}: phenotype names patient_id '
+                f'{phenotype.patient_id}, out of range; skipped'
             )
+            continue
+        db_phenotype = phenotype_to_db(paper_id, phenotype)
+        db_phenotype.patient_id = patient_ids[phenotype.patient_id]
+        session.add(db_phenotype)
+        phenotypes += 1
 
     variant_ids: list[int] = []
     for variant in curation.variants:
@@ -172,77 +173,52 @@ def persist_curation(
     occurrence_rows: dict[tuple[int, int], PatientVariantOccurrenceDB] = {}
     occurrences = 0
     for occurrence in curation.occurrences:
-        if not (0 <= occurrence.patient_index < len(patient_ids)):
+        # patient_id / variant_id are indices into this response, not db ids
+        if not (0 <= occurrence.patient_id < len(patient_ids)):
             logger.warning(
-                f'Paper {paper_id}: occurrence names patient_index '
-                f'{occurrence.patient_index}, out of range; skipped'
+                f'Paper {paper_id}: occurrence names patient index '
+                f'{occurrence.patient_id}, out of range; skipped'
             )
             continue
-        if not (0 <= occurrence.variant_index < len(variant_ids)):
+        if not (0 <= occurrence.variant_id < len(variant_ids)):
             logger.warning(
-                f'Paper {paper_id}: occurrence names variant_index '
-                f'{occurrence.variant_index}, out of range; skipped'
+                f'Paper {paper_id}: occurrence names variant index '
+                f'{occurrence.variant_id}, out of range; skipped'
             )
             continue
-        db_occurrence = PatientVariantOccurrenceDB(
-            paper_id=paper_id,
-            patient_id=patient_ids[occurrence.patient_index],
-            variant_id=variant_ids[occurrence.variant_index],
-            zygosity=occurrence.zygosity.value.value,
-            zygosity_evidence=occurrence.zygosity.model_dump(),
-            inheritance=occurrence.inheritance.value.value,
-            inheritance_evidence=occurrence.inheritance.model_dump(),
-            de_novo=occurrence.de_novo.value,
-            de_novo_evidence=occurrence.de_novo.model_dump(),
-            testing_methods=[m.value.value for m in occurrence.testing_methods],
-            testing_methods_evidence=[
-                m.model_dump() for m in occurrence.testing_methods
-            ],
-        )
+        db_occurrence = patient_variant_occurrence_to_db(paper_id, occurrence)
+        db_occurrence.patient_id = patient_ids[occurrence.patient_id]
+        db_occurrence.variant_id = variant_ids[occurrence.variant_id]
         session.add(db_occurrence)
         session.flush()
-        occurrence_rows[(occurrence.patient_index, occurrence.variant_index)] = (
-            db_occurrence
-        )
+        occurrence_rows[(occurrence.patient_id, occurrence.variant_id)] = db_occurrence
         occurrences += 1
 
-    # Compound het links two of a patient's occurrence rows to each other.
+    # Compound het pairs are nested on the patient that carries them, and link
+    # two of that patient's occurrence rows to each other.
     paired = 0
-    for pair in curation.compound_het:
-        a = occurrence_rows.get((pair.patient_index, pair.variant_index_a))
-        b = occurrence_rows.get((pair.patient_index, pair.variant_index_b))
-        if a is None or b is None:
-            logger.warning(
-                f'Paper {paper_id}: compound het names indices without occurrences '
-                f'(patient {pair.patient_index}, variants {pair.variant_index_a}/'
-                f'{pair.variant_index_b}); skipped'
-            )
-            continue
-        for first, second in ((a, b), (b, a)):
-            first.paired_variant_link_id = second.id
-            first.paired_variant_confidence = pair.confidence.value.value
-            first.paired_variant_confidence_reasoning = pair.confidence.model_dump()
-        paired += 1
-
-    # Segregation evidence is stored per family.
-    segregations = 0
-    for seg in curation.segregation:
-        if not (0 <= seg.family_index < len(family_order)):
-            logger.warning(
-                f'Paper {paper_id}: segregation names family_index '
-                f'{seg.family_index}, out of range; skipped'
-            )
-            continue
-        session.add(
-            segregation_evidence_to_db(family_order[seg.family_index], seg.evidence)
-        )
-        segregations += 1
+    for patient_index, patient in enumerate(curation.patients):
+        for pair in patient.compound_het:
+            a = occurrence_rows.get((patient_index, pair.variant_id_a))
+            b = occurrence_rows.get((patient_index, pair.variant_id_b))
+            if a is None or b is None:
+                logger.warning(
+                    f'Paper {paper_id}: compound het for patient index '
+                    f'{patient_index} names variants {pair.variant_id_a}/'
+                    f'{pair.variant_id_b} with no occurrence; skipped'
+                )
+                continue
+            for first, second in ((a, b), (b, a)):
+                first.paired_variant_link_id = second.id
+                first.paired_variant_confidence = pair.confidence.value.value
+                first.paired_variant_confidence_reasoning = pair.confidence.model_dump()
+            paired += 1
 
     if curation.pedigree.found and curation.pedigree.description:
         session.add(
             PedigreeDB(
                 paper_id=paper_id,
-                image_id=0,
+                image_id=curation.pedigree.image_id or 0,
                 description=curation.pedigree.description,
             )
         )
@@ -250,7 +226,7 @@ def persist_curation(
     return {
         'families': len(family_ids),
         'patients': len(patient_ids),
-        'phenotypes': sum(len(p.phenotypes) for p in curation.patients),
+        'phenotypes': phenotypes,
         'variants': len(variant_ids),
         'occurrences': occurrences,
         'compound_het_pairs': paired,

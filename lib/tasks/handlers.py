@@ -100,7 +100,7 @@ class RateLimitError(Exception):
     pass
 
 
-from lib.agents.paper_curation_agent import curate_paper
+from lib.agents.one_shot_paper_extraction_agent import extract_paper_one_shot
 from lib.api.db import session_scope
 from lib.core.environment import env
 from lib.core.logging import setup_logging
@@ -1721,7 +1721,7 @@ async def handle_paper_extraction(task_id: int) -> None:
         paper = session.get(PaperDB, paper_id)
         supplement_format = paper.supplement_format if paper else None
 
-    curation = await curate_paper(paper_id, supplement_format)
+    curation = await extract_paper_one_shot(paper_id, supplement_format)
     if curation is None:
         raise ValueError(f'Curation for paper {paper_id} returned no parsed output')
 

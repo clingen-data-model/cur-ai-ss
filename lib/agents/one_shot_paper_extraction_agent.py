@@ -23,25 +23,25 @@ import base64
 import logging
 
 from openai import OpenAI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+from typing_extensions import Self
 
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
+from lib.agents.pedigree_describer_agent import PedigreeExtractionOutput
 from lib.core.environment import env
 from lib.core.logging import setup_logging
 from lib.misc.pdf.paths import pdf_raw_path
-from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.paper import FileFormat, PaperExtractionOutput
 from lib.models.patient import (
-    Family,
+    FamilyEntry,
     PatientDemographics,
-    ProbandStatus,
+    PatientIdentity,
 )
 from lib.models.patient_variant_occurrences import (
-    CompoundHetConfidence,
-    Inheritance,
-    TestingMethod,
-    Zygosity,
+    CompoundHetPair,
+    PatientVariantOccurrence,
 )
+from lib.models.phenotype import ExtractedPhenotype
 from lib.models.segregation_analysis import SegregationEvidenceExtractionOutput
 from lib.models.variant import Variant
 
@@ -49,88 +49,59 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 
-class CuratedPhenotype(BaseModel):
-    """A phenotype as the paper states it, before any HPO linking."""
+class OneShotPatient(PatientIdentity):
+    """A patient's identity, plus what the split pipeline attached to it later.
 
-    concept: EvidenceBlock[str]
-    negated: bool = False
-    uncertain: bool = False
-    family_history: bool = False
-    onset: str | None = None
-    location: str | None = None
-    severity: str | None = None
-    modifier: str | None = None
-
-
-class CuratedPatient(BaseModel):
-    """One individual, with everything knowable about them from the paper.
-
-    Demographics and phenotypes are nested rather than collected by separate
-    passes: a patient cannot end up with an identity but no demographics.
+    Demographics came from a PATIENT_DEMOGRAPHICS task per patient, and compound
+    het pairs from a COMPOUND_HET_EVALUATION task per patient. Nesting them here
+    means a patient cannot come back identified but undescribed, and a pair
+    cannot be orphaned from the patient carrying it.
     """
 
-    identifier: EvidenceBlock[str]
-    family_identifier: EvidenceBlock[str]
-    proband_status: EvidenceBlock[ProbandStatus]
     demographics: PatientDemographics
-    phenotypes: list[CuratedPhenotype] = Field(default_factory=list)
+    compound_het: list[CompoundHetPair] = Field(default_factory=list)
 
 
-class CuratedFamily(BaseModel):
-    family: Family
-    patient_identifiers: list[EvidenceBlock[str]]
+class OneShotFamily(FamilyEntry):
+    """A family, plus the segregation evidence its own task used to produce."""
+
+    segregation: SegregationEvidenceExtractionOutput | None = None
 
 
-class CuratedOccurrence(BaseModel):
-    """Which patient carries which variant.
+class OneShotPaperExtraction(BaseModel):
+    """Everything one paper yields that needs no secondary tool call.
 
-    Keyed by position in this response's own ``patients`` and ``variants``
-    lists. The database ids the pipeline's occurrence agent is handed do not
-    exist yet when this runs.
+    IMPORTANT -- index convention. ExtractedPhenotype.patient_id,
+    PatientVariantOccurrence.patient_id/variant_id and CompoundHetPair's
+    variant_id_a/variant_id_b are database ids everywhere else in the codebase.
+    Here they are POSITIONS in this response's own patients and variants lists,
+    counting from zero, because nothing has been written to the database when
+    this is produced. persist_curation resolves them to real ids.
+
+    Anything belonging to a single patient or family is nested inside it rather
+    than carrying an index of its own.
     """
-
-    patient_index: int
-    variant_index: int
-    zygosity: EvidenceBlock[Zygosity]
-    inheritance: EvidenceBlock[Inheritance]
-    de_novo: EvidenceBlock[bool]
-    testing_methods: list[EvidenceBlock[TestingMethod]] = Field(max_length=2)
-
-
-class CuratedCompoundHet(BaseModel):
-    patient_index: int
-    variant_index_a: int
-    variant_index_b: int
-    confidence: ReasoningBlock[CompoundHetConfidence]
-
-
-class CuratedSegregation(BaseModel):
-    """Segregation evidence for one family.
-
-    SegregationEvidenceDB is keyed by family, so this cannot be a single
-    paper-level object the way the rest of the metadata is.
-    """
-
-    family_index: int
-    evidence: SegregationEvidenceExtractionOutput
-
-
-class CuratedPedigree(BaseModel):
-    found: bool
-    description: str | None = None
-
-
-class FullCuration(BaseModel):
-    """Everything one paper yields that needs no secondary tool call."""
 
     metadata: PaperExtractionOutput
-    families: list[CuratedFamily]
-    patients: list[CuratedPatient]
-    pedigree: CuratedPedigree
+    families: list[OneShotFamily]
+    patients: list[OneShotPatient]
+    pedigree: PedigreeExtractionOutput
     variants: list[Variant]
-    occurrences: list[CuratedOccurrence]
-    compound_het: list[CuratedCompoundHet] = Field(default_factory=list)
-    segregation: list[CuratedSegregation] = Field(default_factory=list)
+    phenotypes: list[ExtractedPhenotype] = Field(default_factory=list)
+    occurrences: list[PatientVariantOccurrence] = Field(default_factory=list)
+
+    @model_validator(mode='after')
+    def validate_family_coverage(self) -> Self:
+        """Mirrors PatientExtractionOutput: every patient belongs to a family."""
+        named = {entry.family.identifier.value for entry in self.families}
+        missing = {
+            p.family_identifier.value
+            for p in self.patients
+            if p.family_identifier.value not in named
+        }
+        if missing:
+            raise ValueError(f'Patients assigned to unlisted families: {missing}')
+        return self
 
 
 CURATION_INSTRUCTIONS = """You are a genetics curator extracting structured data from a
@@ -154,7 +125,8 @@ never give a number without saying whether it is years or months.
 
 occurrences and compound_het refer to patients and variants by their position in the
 patients and variants lists you return in this same response, counting from zero.
-segregation entries refer to families the same way, by position in the families list.
+Nest what belongs to one individual or family inside it: a patient's demographics and
+compound het pairs go on that patient, a family's segregation evidence on that family.
 
 If the paper genuinely does not report something, leave it null -- but check the tables
 and figures before concluding a value is absent. A value you could not read is not the
@@ -172,7 +144,7 @@ def _client() -> OpenAI:
     return OpenAI(api_key=env.OPENAI_API_KEY)
 
 
-def _curate_sync(paper_id: int, pdf_bytes: bytes) -> FullCuration | None:
+def _extract_sync(paper_id: int, pdf_bytes: bytes) -> OneShotPaperExtraction | None:
     completion = _client().chat.completions.parse(
         model=env.OPENAI_VLM,
         messages=[
@@ -195,7 +167,7 @@ def _curate_sync(paper_id: int, pdf_bytes: bytes) -> FullCuration | None:
                 ],
             },
         ],
-        response_format=FullCuration,
+        response_format=OneShotPaperExtraction,
     )
     usage = completion.usage
     if usage:
@@ -206,9 +178,9 @@ def _curate_sync(paper_id: int, pdf_bytes: bytes) -> FullCuration | None:
     return completion.choices[0].message.parsed
 
 
-async def curate_paper(
+async def extract_paper_one_shot(
     paper_id: int, supplement_format: FileFormat | None = None
-) -> FullCuration | None:
+) -> OneShotPaperExtraction | None:
     """Run the single-pass curation for a paper.
 
     The supplement, when there is one, is appended as a second attachment so the
@@ -216,4 +188,4 @@ async def curate_paper(
     """
     pdf_bytes = pdf_raw_path(paper_id).read_bytes()
     logger.info(f'Curating paper {paper_id} from PDF ({len(pdf_bytes)} bytes)')
-    return await asyncio.to_thread(_curate_sync, paper_id, pdf_bytes)
+    return await asyncio.to_thread(_extract_sync, paper_id, pdf_bytes)
