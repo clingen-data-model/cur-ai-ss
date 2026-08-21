@@ -89,6 +89,27 @@ class InferredPaperStatus(StrEnum):
     COMPLETED = 'Completed'
 
 
+# Task types PAPER_EXTRACTION replaces. Nothing schedules these any more, but
+# they stay in TaskType because historical rows reference them by name. When a
+# paper is re-extracted, its own rows of these types are cleared so its Tasks
+# tab reflects the pipeline that actually produced its data -- other papers are
+# left alone.
+SUPERSEDED_BY_PAPER_EXTRACTION: frozenset[TaskType] = frozenset(
+    {
+        TaskType.PAPER_CLASSIFIER,
+        TaskType.PAPER_METADATA,
+        TaskType.VARIANT_EXTRACTION,
+        TaskType.PEDIGREE_DESCRIPTION,
+        TaskType.PATIENT_EXTRACTION,
+        TaskType.PATIENT_DEMOGRAPHICS,
+        TaskType.PHENOTYPE_EXTRACTION,
+        TaskType.PATIENT_VARIANT_OCCURRENCES,
+        TaskType.COMPOUND_HET_EVALUATION,
+        TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
+    }
+)
+
+
 # Task dependencies: when a task completes, these become PENDING
 TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
     TaskType.PDF_PARSING: [TaskType.PAPER_EXTRACTION],

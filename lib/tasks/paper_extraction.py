@@ -27,6 +27,7 @@ from lib.models.converters import (
     variant_to_db,
 )
 from lib.models.segregation_analysis import SegregationEvidenceDB
+from lib.tasks.models import SUPERSEDED_BY_PAPER_EXTRACTION, TaskDB
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,31 @@ def _clear_previous_run(session: Session, paper_id: int, agent_run_id: int) -> N
     session.flush()
 
 
+def clear_superseded_tasks(session: Session, paper_id: int) -> int:
+    """Drop this paper's rows for the task types PAPER_EXTRACTION replaced.
+
+    Scoped to the one paper, on purpose: papers still curated by the old
+    pipeline keep their history. Entity-scoped rows (per patient, per family)
+    would mostly cascade away when their entities are replaced, but the
+    paper-level ones would not, so both are removed explicitly rather than
+    relying on the foreign keys.
+    """
+    deleted = (
+        session.query(TaskDB)
+        .filter(
+            TaskDB.paper_id == paper_id,
+            TaskDB.type.in_(SUPERSEDED_BY_PAPER_EXTRACTION),
+        )
+        .delete(synchronize_session=False)
+    )
+    if deleted:
+        logger.info(
+            f'Paper {paper_id}: removed {deleted} task rows superseded by '
+            'single-pass extraction'
+        )
+    return deleted
+
+
 def persist_curation(
     session: Session,
     paper_id: int,
@@ -57,6 +83,7 @@ def persist_curation(
     curation: FullCuration,
 ) -> dict[str, int]:
     """Write a whole curation, returning what was stored for logging."""
+    superseded = clear_superseded_tasks(session, paper_id)
     _clear_previous_run(session, paper_id, agent_run_id)
 
     paper = session.get(PaperDB, paper_id)
@@ -228,4 +255,5 @@ def persist_curation(
         'occurrences': occurrences,
         'compound_het_pairs': paired,
         'segregation_families': segregations,
+        'superseded_tasks_removed': superseded,
     }
