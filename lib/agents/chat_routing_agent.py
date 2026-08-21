@@ -50,6 +50,7 @@ _GLOBAL_AGENTS = {
     TaskType.PEDIGREE_DESCRIPTION,
     TaskType.PATIENT_EXTRACTION,
     TaskType.PATIENT_VARIANT_OCCURRENCES,
+    TaskType.PAPER_EXTRACTION,
 }
 # Task types a chat QUESTION can be routed to (everything with a conversation to
 # answer from). Rendered into the routing instructions and used to validate output.

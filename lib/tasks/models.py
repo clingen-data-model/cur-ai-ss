@@ -38,6 +38,10 @@ class TaskType(StrEnum):
     HPO_LINKING = 'HPO Linking'  # per-patient
     MONDO_LINKING = 'MONDO Linking'
 
+    # Single-pass curation from the PDF. Replaces the chain of reading agents
+    # above; those members remain so historical task rows still load.
+    PAPER_EXTRACTION = 'Paper Extraction'
+
     @property
     def description(self) -> str:
         """Return a human-readable description with context about what this task does."""
@@ -59,6 +63,7 @@ class TaskType(StrEnum):
             TaskType.PHENOTYPE_EXTRACTION: 'Extracts phenotype text spans per patient',
             TaskType.HPO_LINKING: 'Maps phenotypes to HPO ontology terms for standardization',
             TaskType.MONDO_LINKING: 'Maps disease names to MONDO ontology terms for standardization',
+            TaskType.PAPER_EXTRACTION: 'Reads the paper PDF and extracts the whole curation in one pass -- metadata, patients, families, demographics, pedigree, variants, phenotypes, patient-variant occurrences and segregation evidence',
         }
         return descriptions[self]
 
@@ -86,7 +91,13 @@ class InferredPaperStatus(StrEnum):
 
 # Task dependencies: when a task completes, these become PENDING
 TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
-    TaskType.PDF_PARSING: [TaskType.PAPER_CLASSIFIER],
+    TaskType.PDF_PARSING: [TaskType.PAPER_EXTRACTION],
+    TaskType.PAPER_EXTRACTION: [
+        TaskType.VARIANT_HARMONIZATION,
+        TaskType.HPO_LINKING,
+        TaskType.MONDO_LINKING,
+        TaskType.SEGREGATION_ANALYSIS_COMPUTED,
+    ],
     TaskType.PAPER_CLASSIFIER: [
         TaskType.PAPER_METADATA,
         TaskType.VARIANT_EXTRACTION,

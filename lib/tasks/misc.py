@@ -205,9 +205,71 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
             enqueue_task(
                 session,
                 paper_id=task.paper_id,
-                task_type=TaskType.PAPER_CLASSIFIER,
+                task_type=TaskType.PAPER_EXTRACTION,
                 updated_by_user_id=user_id,
             )
+
+        case TaskType.PAPER_EXTRACTION:
+            # One pass produced every entity at once, so the fan-out needs none
+            # of the readiness gating the split extraction chain required.
+            for variant in (
+                session.query(VariantDB)
+                .filter(VariantDB.paper_id == task.paper_id)
+                .all()
+            ):
+                enqueue_task(
+                    session,
+                    paper_id=task.paper_id,
+                    task_type=TaskType.VARIANT_HARMONIZATION,
+                    variant_id=variant.id,
+                    updated_by_user_id=user_id,
+                )
+
+            for phenotype in (
+                session.query(PhenotypeDB)
+                .filter(PhenotypeDB.paper_id == task.paper_id)
+                .all()
+            ):
+                enqueue_task(
+                    session,
+                    paper_id=task.paper_id,
+                    task_type=TaskType.HPO_LINKING,
+                    phenotype_id=phenotype.id,
+                    updated_by_user_id=user_id,
+                )
+
+            for family in (
+                session.query(FamilyDB).filter(FamilyDB.paper_id == task.paper_id).all()
+            ):
+                enqueue_task(
+                    session,
+                    paper_id=task.paper_id,
+                    task_type=TaskType.SEGREGATION_ANALYSIS_COMPUTED,
+                    family_id=family.id,
+                    updated_by_user_id=user_id,
+                )
+
+            enqueue_task(
+                session,
+                paper_id=task.paper_id,
+                task_type=TaskType.MONDO_LINKING,
+                updated_by_user_id=user_id,
+            )
+
+            for occurrence in (
+                session.query(PatientVariantOccurrenceDB)
+                .filter(PatientVariantOccurrenceDB.paper_id == task.paper_id)
+                .all()
+            ):
+                if not occurrence.disease_name or not occurrence.disease_name.strip():
+                    continue
+                enqueue_task(
+                    session,
+                    paper_id=task.paper_id,
+                    task_type=TaskType.MONDO_LINKING,
+                    patient_variant_occurrence_id=occurrence.id,
+                    updated_by_user_id=user_id,
+                )
 
         case TaskType.PAPER_CLASSIFIER:
             enqueue_task(
