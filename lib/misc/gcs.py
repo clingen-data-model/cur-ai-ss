@@ -82,7 +82,7 @@ def upload_and_sign_image(image_path: Path) -> str:
     """Return an image URL that OpenAI's vision endpoint can consume.
 
     Args:
-        image_path: Local path to the image file (from pdf_image_path or pdf_table_image_path)
+        image_path: Local path to the image file (from pdf_image_path)
 
     Returns:
         A signed GCS URL, or a base64 data URL if GCS upload is disabled. (A local

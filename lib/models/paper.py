@@ -52,7 +52,6 @@ from lib.misc.pdf.paths import (
     pdf_highlighted_path,
     pdf_image_path,
     pdf_raw_path,
-    pdf_sections_dir,
     pdf_thumbnail_path,
 )
 from lib.models.base import Base, PatchModel

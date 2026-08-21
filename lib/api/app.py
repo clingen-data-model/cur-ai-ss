@@ -1581,7 +1581,6 @@ def highlight_pdf(
     highlight_figures_in_pdf(
         paper_id,
         request.image_ids,
-        request.table_ids,
         rgb_color,
     )
 
@@ -1647,7 +1646,6 @@ def grobid_annotation(
         figures_to_grobid_annotations(
             paper_id,
             request.image_ids,
-            request.table_ids,
             rgb_color,
         )
     )

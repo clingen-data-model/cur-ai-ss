@@ -55,7 +55,6 @@ from lib.core.logging import setup_logging
 from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import (
     fulltext_md,
-    pdf_image_caption_path,
     pdf_image_path,
 )
 from lib.models import (
