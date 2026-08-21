@@ -47,17 +47,39 @@ def test_the_graph_is_acyclic():
     assert seen == set(TaskType) - NOT_PIPELINE
 
 
-def test_extraction_feeds_every_tool_backed_task():
-    """The tool-backed tasks were kept out of extraction because they need a
-    lookup; each still has to be fed by it."""
-    successors = set(TASK_SUCCESSORS[TaskType.PAPER_EXTRACTION])
-    assert successors == {
-        TaskType.VARIANT_HARMONIZATION,
-        TaskType.HPO_LINKING,
-        TaskType.MONDO_LINKING,
-        TaskType.SEGREGATION_ANALYSIS_COMPUTED,
-    }
+def test_each_reading_pass_feeds_the_lookups_that_need_it():
+    """The tool-backed tasks were kept out of the reading passes because they
+    need a lookup. Each now hangs off the pass that produces what it reads, so
+    nothing waits on an entity it does not use."""
+    assert TASK_SUCCESSORS[TaskType.PATIENT_DETAILS] == [TaskType.HPO_LINKING]
+    assert TASK_SUCCESSORS[TaskType.PATIENT_GENOTYPES] == [TaskType.MONDO_LINKING]
+    assert TASK_SUCCESSORS[TaskType.SEGREGATION_EVIDENCE] == [
+        TaskType.SEGREGATION_ANALYSIS_COMPUTED
+    ]
+    # Harmonization needs only the variants, which structure produces.
+    assert TaskType.VARIANT_HARMONIZATION in TASK_SUCCESSORS[TaskType.PAPER_STRUCTURE]
     # Annotation needs harmonized coordinates, so it hangs off harmonization.
     assert TASK_SUCCESSORS[TaskType.VARIANT_HARMONIZATION] == [
         TaskType.VARIANT_ANNOTATION
     ]
+
+
+def test_the_reading_passes_run_in_a_chain_then_a_fork():
+    """Structure is the only fork: the passes after it need it and nothing
+    else, so the worker runs all three at once."""
+    assert TASK_SUCCESSORS[TaskType.PDF_PARSING] == [
+        TaskType.PEDIGREE_IDENTIFICATION,
+        TaskType.PAPER_METADATA,
+    ]
+    assert TASK_SUCCESSORS[TaskType.PEDIGREE_IDENTIFICATION] == [
+        TaskType.PAPER_STRUCTURE
+    ]
+    reading_passes = {
+        TaskType.PATIENT_DETAILS,
+        TaskType.PATIENT_GENOTYPES,
+        TaskType.SEGREGATION_EVIDENCE,
+    }
+    assert reading_passes < set(TASK_SUCCESSORS[TaskType.PAPER_STRUCTURE])
+    for pass_type in reading_passes:
+        predecessors = [t for t, succ in TASK_SUCCESSORS.items() if pass_type in succ]
+        assert predecessors == [TaskType.PAPER_STRUCTURE]

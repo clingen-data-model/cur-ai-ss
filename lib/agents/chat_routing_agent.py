@@ -45,7 +45,11 @@ _NON_CONVERSATIONAL = {
 _GLOBAL_AGENTS = {
     TaskType.GENERAL_PAPER_QUESTION,
     TaskType.PAPER_METADATA,
-    TaskType.PAPER_EXTRACTION,
+    TaskType.PEDIGREE_IDENTIFICATION,
+    TaskType.PAPER_STRUCTURE,
+    TaskType.PATIENT_DETAILS,
+    TaskType.PATIENT_GENOTYPES,
+    TaskType.SEGREGATION_EVIDENCE,
 }
 # Task types a chat QUESTION can be routed to (everything with a conversation to
 # answer from). Rendered into the routing instructions and used to validate output.

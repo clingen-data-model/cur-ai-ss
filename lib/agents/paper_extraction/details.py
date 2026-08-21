@@ -9,15 +9,14 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from lib.agents.paper_extraction._shared import READING_THE_PAPER, _pdf_part, _run
-from lib.models.paper import PedigreeExtractionOutput
 from lib.models.patient import PatientDemographics
 from lib.models.phenotype import ExtractedPhenotype
 
 
 class PatientDetail(BaseModel):
-    """One patient, keyed by the identifier pass 1 assigned."""
+    """One patient, named by the database id the structure pass created."""
 
-    identifier: str
+    patient_id: int
     demographics: PatientDemographics
     phenotypes: list[ExtractedPhenotype] = Field(default_factory=list)
 
@@ -30,9 +29,9 @@ DETAIL_INSTRUCTIONS = f"""You are an expert clinical genetics curator reading on
 
 {READING_THE_PAPER}
 
-You are given the individuals already identified in this paper. Describe each of them.
-Return one entry per individual, using exactly the identifier you were given -- do not
-rename, merge or add individuals, and do not leave any out. Unaffected relatives are
+You are given the individuals already identified in this paper, each with a patient_id.
+Describe each of them. Return one entry per individual, carrying back the patient_id you
+were given -- do not renumber, merge or add individuals, and do not leave any out. Unaffected relatives are
 included: they carry the segregation evidence.
 
 DEMOGRAPHICS
@@ -75,20 +74,20 @@ PHENOTYPES
   complications and treatment effects last. Do not invent phenotypes to reach twelve.
 - Keep the most specific of overlapping findings ("global developmental delay" over
   "developmental delay") and avoid redundant entries.
-- patient_id on each phenotype is the position of its individual in the list you return,
-  counting from zero."""
+- Phenotypes are returned nested under the individual they belong to, so their patient_id
+  is the same one as that individual's."""
 
 
 def _extract_details_sync(
     paper_id: int,
     pdf_bytes: bytes,
-    identifiers: list[str],
-    pedigree: PedigreeExtractionOutput,
+    patients: list[tuple[int, str]],
+    pedigree_description: str | None = None,
 ) -> PatientDetails | None:
-    listing = '\n'.join(f'- {name}' for name in identifiers)
+    listing = '\n'.join(f'- patient_id {pid}: {name}' for pid, name in patients)
     prompt = f'Individuals identified in this paper:\n{listing}\n\nDescribe each.'
-    if pedigree.found and pedigree.description:
-        prompt += f'\n\nThe pedigree figure shows:\n{pedigree.description}'
+    if pedigree_description:
+        prompt += f'\n\nThe pedigree figure shows:\n{pedigree_description}'
     return _run(
         'details',
         paper_id,

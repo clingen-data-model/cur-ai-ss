@@ -17,13 +17,17 @@ from lib.tasks.models import TaskStatus, TaskType
 
 LEASE_TIMEOUT_S = 1800
 
-# Extraction reads an entire PDF several times over, so it runs in minutes
-# where the rest of the queue runs in seconds: paper 1 took ~7.5 minutes for a
-# 1 MB PDF and the corpus holds PDFs three times that size. Give
-# it room here rather than raising the global lease, which would also delay
-# recovery for the thousands of short lookup tasks.
+# Each reading pass is one model call over a whole PDF, so it runs in minutes
+# where the rest of the queue runs in seconds. One call bounded at 480s with a
+# single retry cannot exceed 960s, so 1200s leaves room for the request to be
+# built and the result written without waiting an extra ten minutes on the
+# global lease before recovery.
 LEASE_TIMEOUT_OVERRIDES_S: dict[TaskType, int] = {
-    TaskType.PAPER_EXTRACTION: 3600,
+    TaskType.PEDIGREE_IDENTIFICATION: 1200,
+    TaskType.PAPER_STRUCTURE: 1200,
+    TaskType.PATIENT_DETAILS: 1200,
+    TaskType.PATIENT_GENOTYPES: 1200,
+    TaskType.SEGREGATION_EVIDENCE: 1200,
 }
 
 

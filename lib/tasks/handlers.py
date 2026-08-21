@@ -48,14 +48,23 @@ class RateLimitError(Exception):
     pass
 
 
-from lib.agents.paper_extraction import extract_paper
+from lib.agents.paper_extraction import (
+    _extract_details_sync,
+    _extract_genotypes_sync,
+    _extract_segregation_sync,
+    _extract_structure_sync,
+    _identify_pedigree_sync,
+    variant_label,
+)
 from lib.api.db import session_scope
 from lib.core.environment import env
 from lib.core.logging import setup_logging
 from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import (
     fulltext_md,
+    pdf_figures_json_path,
     pdf_image_path,
+    pdf_raw_path,
 )
 from lib.models import (
     AnnotatedVariantDB,
@@ -92,14 +101,20 @@ from lib.models.mondo import (
     MondoDiseaseScope,
     MondoLinkingTarget,
 )
-from lib.models.paper import FileFormat
+from lib.models.paper import FileFormat, PedigreeExtractionOutput
 from lib.models.patient import ProbandStatus
 from lib.models.phenotype import HPOTerm
 from lib.models.variant import HarmonizedVariant, Variant
 from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
 from lib.reference_data.mondo import get_mondo_term
 from lib.tasks.models import TaskType
-from lib.tasks.paper_extraction import persist_extraction
+from lib.tasks.paper_extraction import (
+    persist_details,
+    persist_genotypes,
+    persist_pedigree,
+    persist_segregation,
+    persist_structure,
+)
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -799,43 +814,168 @@ async def handle_mondo_linking(task_id: int) -> None:
             occurrence.mondo_match_context = mondo_match_context
 
 
-async def handle_paper_extraction(task_id: int) -> None:
-    """Curate a whole paper straight from the PDF.
+async def _paper_context(task_id: int) -> tuple[int, bytes, str | None, int]:
+    """What every reading pass needs: the paper, its PDF, and the run to bill."""
+    with session_scope() as session:
+        task = session.get(TaskDB, task_id)
+        if not task:
+            raise ValueError(f'Task {task_id} no longer exists')
+        paper_id = task.paper_id
+        agent_run_id = task.agent_run_id
+        pedigree = (
+            session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).first()
+        )
+        description = pedigree.description if pedigree else None
+    return paper_id, pdf_raw_path(paper_id).read_bytes(), description, agent_run_id
 
-    Replaces the chain of reading agents. Internally this is several passes over
-    the same PDF, split by entity so no single response has to carry the whole
-    curation, but the DAG sees one task: a pass failing fails the task and a
-    retry re-runs all of them.
 
-    The parse step still runs first -- docling-parse word positions drive PDF
-    highlighting and fitz supplies the figures a pedigree is chosen from -- but
-    none of its text is used here. The model reads the PDF itself, which is how
-    it can follow a table printed sideways or continued across pages.
+async def handle_pedigree_identification(task_id: int) -> None:
+    """Find the pedigree figure and describe it.
+
+    First of the reading passes because the rest are given its description: it
+    names individuals the text leaves out, and settles sex and affected status
+    the prose only implies.
     """
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
             return
         paper_id = task.paper_id
-        paper = session.get(PaperDB, paper_id)
-        supplement_format = paper.supplement_format if paper else None
 
-    extraction = await extract_paper(paper_id, supplement_format)
-    if extraction is None:
-        raise ValueError(f'Extraction for paper {paper_id} returned no parsed output')
+    figures_file = pdf_figures_json_path(paper_id)
+    figures = json.loads(figures_file.read_text()) if figures_file.exists() else []
+    if not figures:
+        logger.info(
+            f'Paper {paper_id} has no extracted figures; it may predate the current '
+            'parse step and need re-parsing before a pedigree can be found'
+        )
+
+    result = await asyncio.to_thread(_identify_pedigree_sync, paper_id, figures)
+    result = result or PedigreeExtractionOutput(found=False)
 
     with session_scope() as session:
-        task = session.get(TaskDB, task_id)
-        if not task:
-            return
-        stored = persist_extraction(session, paper_id, task.agent_run_id, extraction)
+        stored = persist_pedigree(session, paper_id, result)
+    logger.info(f'Paper {paper_id} pedigree: {stored}')
 
-    logger.info(f'Paper {paper_id} extracted: {stored}')
+
+async def handle_paper_structure(task_id: int) -> None:
+    """Read the PDF for what the paper contains.
+
+    The only fork in the reading chain: it produces the patients, families and
+    variants the remaining passes are handed.
+    """
+    paper_id, pdf_bytes, description, agent_run_id = await _paper_context(task_id)
+
+    with session_scope() as session:
+        pedigree = (
+            session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).first()
+        )
+        image_id = pedigree.image_id if pedigree else None
+
+    structure = await asyncio.to_thread(
+        _extract_structure_sync, paper_id, pdf_bytes, description, image_id
+    )
+    if structure is None:
+        raise ValueError(f'Paper {paper_id}: structure pass returned no parsed output')
+
+    with session_scope() as session:
+        stored = persist_structure(session, paper_id, agent_run_id, structure)
+    logger.info(f'Paper {paper_id} structure: {stored}')
+
+
+async def handle_patient_details(task_id: int) -> None:
+    """Read the PDF for each identified patient's demographics and phenotypes."""
+    paper_id, pdf_bytes, description, _ = await _paper_context(task_id)
+
+    with session_scope() as session:
+        patients = [
+            (row.id, row.identifier)
+            for row in session.query(PatientDB)
+            .filter(PatientDB.paper_id == paper_id)
+            .order_by(PatientDB.id)
+        ]
+    if not patients:
+        logger.info(f'Paper {paper_id}: no patients to describe')
+        return
+
+    details = await asyncio.to_thread(
+        _extract_details_sync, paper_id, pdf_bytes, patients, description
+    )
+    if details is None:
+        raise ValueError(f'Paper {paper_id}: details pass returned no parsed output')
+
+    with session_scope() as session:
+        stored = persist_details(session, paper_id, details)
+    logger.info(f'Paper {paper_id} details: {stored}')
+
+
+async def handle_patient_genotypes(task_id: int) -> None:
+    """Read the PDF for which patient carries which variant."""
+    paper_id, pdf_bytes, description, _ = await _paper_context(task_id)
+
+    with session_scope() as session:
+        patients = [
+            (row.id, row.identifier)
+            for row in session.query(PatientDB)
+            .filter(PatientDB.paper_id == paper_id)
+            .order_by(PatientDB.id)
+        ]
+        variants = [
+            (row.id, variant_label(row))
+            for row in session.query(VariantDB)
+            .filter(VariantDB.paper_id == paper_id)
+            .order_by(VariantDB.id)
+        ]
+    if not patients or not variants:
+        logger.info(f'Paper {paper_id}: nothing to genotype')
+        return
+
+    genotypes = await asyncio.to_thread(
+        _extract_genotypes_sync, paper_id, pdf_bytes, patients, variants, description
+    )
+    if genotypes is None:
+        raise ValueError(f'Paper {paper_id}: genotypes pass returned no parsed output')
+
+    with session_scope() as session:
+        stored = persist_genotypes(session, paper_id, genotypes)
+    logger.info(f'Paper {paper_id} genotypes: {stored}')
+
+
+async def handle_segregation_evidence(task_id: int) -> None:
+    """Read the PDF for each family's reported segregation evidence."""
+    paper_id, pdf_bytes, description, _ = await _paper_context(task_id)
+
+    with session_scope() as session:
+        families = [
+            (row.id, row.identifier)
+            for row in session.query(FamilyDB)
+            .filter(FamilyDB.paper_id == paper_id)
+            .order_by(FamilyDB.id)
+        ]
+    if not families:
+        logger.info(f'Paper {paper_id}: no families to read segregation for')
+        return
+
+    findings = await asyncio.to_thread(
+        _extract_segregation_sync, paper_id, pdf_bytes, families, description
+    )
+    if findings is None:
+        raise ValueError(
+            f'Paper {paper_id}: segregation pass returned no parsed output'
+        )
+
+    with session_scope() as session:
+        stored = persist_segregation(session, paper_id, findings)
+    logger.info(f'Paper {paper_id} segregation: {stored}')
 
 
 TASK_HANDLERS: dict[TaskType, Callable[[int], Awaitable[None]]] = {
     TaskType.PDF_PARSING: handle_pdf_parsing,
-    TaskType.PAPER_EXTRACTION: handle_paper_extraction,
+    TaskType.PEDIGREE_IDENTIFICATION: handle_pedigree_identification,
+    TaskType.PAPER_STRUCTURE: handle_paper_structure,
+    TaskType.PATIENT_DETAILS: handle_patient_details,
+    TaskType.PATIENT_GENOTYPES: handle_patient_genotypes,
+    TaskType.SEGREGATION_EVIDENCE: handle_segregation_evidence,
     TaskType.PAPER_METADATA: handle_paper_metadata,
     TaskType.SEGREGATION_ANALYSIS_COMPUTED: handle_segregation_analysis_computed,
     TaskType.VARIANT_HARMONIZATION: handle_variant_harmonization,

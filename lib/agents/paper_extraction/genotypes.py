@@ -5,7 +5,6 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from lib.agents.paper_extraction._shared import READING_THE_PAPER, _pdf_part, _run
-from lib.models.paper import PedigreeExtractionOutput
 from lib.models.patient_variant_occurrences import (
     CompoundHetPair,
     PatientVariantOccurrence,
@@ -15,12 +14,12 @@ from lib.models.patient_variant_occurrences import (
 class CompoundHetForPatient(BaseModel):
     """CompoundHetPair carries no patient; the per-patient task did not need one."""
 
-    patient_index: int
+    patient_id: int
     pairs: list[CompoundHetPair]
 
 
 class Genotypes(BaseModel):
-    """Indices refer to the lists passed in, not database ids."""
+    """Ids are the database ids the structure pass created."""
 
     occurrences: list[PatientVariantOccurrence] = Field(default_factory=list)
     compound_het: list[CompoundHetForPatient] = Field(default_factory=list)
@@ -52,28 +51,28 @@ COMPOUND HETEROZYGOSITY
 - Two heterozygous variants alone are not a pair. If phase is unknown and the paper does not
   say which variants pair, return none.
 
-INDICES
-- patient_id is the position of the individual in the list you were given, counting from
-  zero. variant_id is the position of the variant in the variant list you were given. These
-  are positions, not database identifiers."""
+IDENTIFIERS
+- patient_id and variant_id are the ids you were given for that individual and that variant.
+  Carry them back exactly. Never invent an id, and never use one that was not in your
+  lists."""
 
 
 def _extract_genotypes_sync(
     paper_id: int,
     pdf_bytes: bytes,
-    identifiers: list[str],
-    variants: list[str],
-    pedigree: PedigreeExtractionOutput,
+    patients: list[tuple[int, str]],
+    variants: list[tuple[int, str]],
+    pedigree_description: str | None = None,
 ) -> Genotypes | None:
-    people = '\n'.join(f'{i}. {name}' for i, name in enumerate(identifiers))
-    variant_list = '\n'.join(f'{i}. {v}' for i, v in enumerate(variants))
+    people = '\n'.join(f'patient_id {pid}: {name}' for pid, name in patients)
+    variant_list = '\n'.join(f'variant_id {vid}: {label}' for vid, label in variants)
     prompt = (
-        f'Individuals (by index):\n{people}\n\n'
-        f'Variants (by index):\n{variant_list}\n\n'
+        f'Individuals:\n{people}\n\n'
+        f'Variants:\n{variant_list}\n\n'
         'Record which individual carries which variant.'
     )
-    if pedigree.found and pedigree.description:
-        prompt += f'\n\nThe pedigree figure shows:\n{pedigree.description}'
+    if pedigree_description:
+        prompt += f'\n\nThe pedigree figure shows:\n{pedigree_description}'
     return _run(
         'genotypes',
         paper_id,

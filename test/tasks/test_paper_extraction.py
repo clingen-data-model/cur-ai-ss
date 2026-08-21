@@ -1,20 +1,30 @@
-"""The extraction passes and how their results resolve to database rows.
+"""Persisting what each reading pass returned.
 
-Each pass names patients, variants and families differently -- pass 2 by
-identifier, passes 3 and 4 by position in a list they were handed -- because
-none of them exist in the database yet. Getting that wrong attaches a phenotype
-to the wrong patient silently, so it is what these tests are about.
+Splitting the passes into separate tasks means every entity a later pass refers
+to is a database row by the time it runs, so the passes are handed real ids and
+hand them back. What is left to get wrong is an id we never supplied -- a model
+can still return one -- and the binding between a patient and its phenotypes.
 """
 
-from lib.agents.paper_extraction import PaperExtraction, _variant_label
-from lib.agents.paper_extraction.details import PatientDetail, PatientDetails
-from lib.agents.paper_extraction.genotypes import CompoundHetForPatient, Genotypes
-from lib.agents.paper_extraction.segregation import (
+import pytest
+
+from lib.agents.paper_extraction import (
+    CompoundHetForPatient,
     FamilySegregation,
+    Genotypes,
+    PaperStructure,
+    PatientDetail,
+    PatientDetails,
     SegregationFindings,
+    variant_label,
 )
+from lib.models import FamilyDB, GeneDB, PaperDB, PatientDB, VariantDB
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
-from lib.models.paper import PaperClassification, PaperType, PedigreeExtractionOutput
+from lib.models.paper import (
+    PaperClassification,
+    PaperType,
+    PedigreeExtractionOutput,
+)
 from lib.models.patient import (
     AffectedStatus,
     AgeUnit,
@@ -34,16 +44,38 @@ from lib.models.patient_variant_occurrences import (
     CompoundHetPair,
     Inheritance,
     PatientVariantOccurrence,
+    PatientVariantOccurrenceDB,
     TestingMethod,
     Zygosity,
 )
-from lib.models.phenotype import ExtractedPhenotype
-from lib.models.segregation_analysis import SegregationEvidenceExtractionOutput
+from lib.models.phenotype import ExtractedPhenotype, PhenotypeDB
+from lib.models.segregation_analysis import (
+    SegregationEvidenceDB,
+    SegregationEvidenceExtractionOutput,
+)
 from lib.models.variant import Variant, VariantType
+from lib.tasks.paper_extraction import (
+    persist_details,
+    persist_genotypes,
+    persist_pedigree,
+    persist_segregation,
+    persist_structure,
+)
 
 
 def block(value):
     return EvidenceBlock(value=value, reasoning='r', quote='q')
+
+
+@pytest.fixture
+def paper(db_session):
+    gene = GeneDB(symbol='CAD')
+    db_session.add(gene)
+    db_session.flush()
+    row = PaperDB(id=89, gene_id=gene.id, filename='p.pdf', content_hash='h')
+    db_session.add(row)
+    db_session.flush()
+    return row
 
 
 def demographics(**overrides) -> PatientDemographics:
@@ -70,13 +102,6 @@ def identity(name: str, family: str) -> PatientIdentity:
     )
 
 
-def family_entry(name: str, members: list[str]) -> FamilyEntry:
-    return FamilyEntry(
-        family=Family(identifier=block(name), consanguinity=block(False)),
-        patient_identifiers=[block(m) for m in members],
-    )
-
-
 def variant(hgvs: str) -> Variant:
     empty = block(None)
     return Variant(
@@ -99,95 +124,162 @@ def variant(hgvs: str) -> Variant:
     )
 
 
-def occurrence(patient_index: int, variant_index: int) -> PatientVariantOccurrence:
-    """patient_id/variant_id carry POSITIONS here, not database ids."""
-    return PatientVariantOccurrence(
-        patient_id=patient_index,
-        variant_id=variant_index,
-        zygosity=block(Zygosity.heterozygous),
-        inheritance=block(Inheritance.unknown),
-        de_novo=block(False),
-        testing_methods=[block(TestingMethod.exome_sequencing)],
-    )
-
-
-def extraction(**overrides) -> PaperExtraction:
-    fields = dict(
+def structure(patients: list[str], families: list[str], variants: list[str]):
+    return PaperStructure(
         classification=PaperClassification(
             paper_types=[PaperType.Case_study],
             is_paper_relevant=ReasoningBlock(value=True, reasoning='has cases'),
         ),
-        pedigree=PedigreeExtractionOutput(found=False),
         patients=PatientExtractionOutput(
-            patients=[identity('P1', 'F1')],
-            families=[family_entry('F1', ['P1'])],
+            patients=[identity(name, families[0]) for name in patients],
+            families=[
+                FamilyEntry(
+                    family=Family(identifier=block(f), consanguinity=block(False)),
+                    patient_identifiers=[block(p) for p in patients],
+                )
+                for f in families
+            ],
         ),
-        details=PatientDetails(
-            patients=[PatientDetail(identifier='P1', demographics=demographics())]
-        ),
-        variants=[variant('c.1A>G')],
-        genotypes=Genotypes(occurrences=[occurrence(0, 0)]),
-        segregation=SegregationFindings(),
+        variants=[variant(v) for v in variants],
     )
-    fields.update(overrides)
-    return PaperExtraction(**fields)
 
 
-def test_extraction_assembles_from_the_passes():
-    e = extraction()
-    assert e.patients.patients[0].identifier.value == 'P1'
-    assert e.details.patients[0].demographics.age_diagnosis.value == 9
+def seed(session, run, paper_id=89):
+    """The state the later passes are handed: one family, two patients, one variant."""
+    stored = persist_structure(
+        session,
+        paper_id,
+        run.id,
+        structure(['III-1', 'III-2'], ['Family 1'], ['c.1A>G']),
+    )
+    session.flush()
+    patients = session.query(PatientDB).order_by(PatientDB.id).all()
+    variants = session.query(VariantDB).order_by(VariantDB.id).all()
+    return stored, patients, variants
 
 
-def test_pass_two_keys_by_identifier_not_position():
-    """Pass 2 is handed names, so a reordered response still lands correctly."""
-    e = extraction(
-        patients=PatientExtractionOutput(
-            patients=[identity('P1', 'F1'), identity('P2', 'F1')],
-            families=[family_entry('F1', ['P1', 'P2'])],
-        ),
-        details=PatientDetails(
+def test_structure_writes_the_entities_later_passes_are_keyed_to(
+    db_session, agent_run, paper
+):
+    stored, patients, variants = seed(db_session, agent_run)
+    assert stored == {'families': 1, 'patients': 2, 'variants': 1}
+    assert [p.identifier for p in patients] == ['III-1', 'III-2']
+    assert db_session.get(PaperDB, 89).is_paper_relevant is True
+
+
+def test_a_patient_naming_an_unlisted_family_still_lands(db_session, agent_run, paper):
+    """patients.family_id is NOT NULL, so the family is created rather than the
+    patient being dropped."""
+    s = structure(['III-1'], ['Family 1'], [])
+    s.patients.patients[0].family_identifier = block('Family 9')
+
+    stored = persist_structure(db_session, 89, agent_run.id, s)
+
+    assert stored['patients'] == 1
+    assert stored['families'] == 2
+    patient = db_session.query(PatientDB).one()
+    assert db_session.get(FamilyDB, patient.family_id).identifier == 'Family 9'
+
+
+def test_rerunning_structure_replaces_what_the_other_passes_produced(
+    db_session, agent_run, paper
+):
+    """The later passes were keyed to entities this pass replaces, so their
+    output cannot outlive it."""
+    _, patients, variants = seed(db_session, agent_run)
+    persist_details(
+        db_session,
+        89,
+        PatientDetails(
             patients=[
-                PatientDetail(identifier='P2', demographics=demographics()),
-                PatientDetail(identifier='P1', demographics=demographics()),
+                PatientDetail(
+                    patient_id=patients[0].id,
+                    demographics=demographics(),
+                    phenotypes=[phenotype(patients[0].id, 'seizures')],
+                )
             ]
         ),
     )
-    assert [d.identifier for d in e.details.patients] == ['P2', 'P1']
+    db_session.flush()
+    assert db_session.query(PhenotypeDB).count() == 1
 
-
-def test_phenotypes_are_nested_under_their_patient():
-    """Nesting is what persistence trusts; the patient_id field is not consulted."""
-    detail = PatientDetail(
-        identifier='P1',
-        demographics=demographics(),
-        phenotypes=[
-            ExtractedPhenotype(
-                patient_id=0,
-                concept=block('seizures'),
-                onset=None,
-                location=None,
-                severity=None,
-                modifier=None,
-            )
-        ],
+    persist_structure(
+        db_session, 89, agent_run.id, structure(['III-1'], ['Family 1'], [])
     )
-    e = extraction(details=PatientDetails(patients=[detail]))
-    assert e.details.patients[0].phenotypes[0].concept.value == 'seizures'
+    db_session.flush()
+
+    assert db_session.query(PhenotypeDB).count() == 0
+    assert db_session.query(PatientDB).count() == 1
 
 
-def test_compound_het_names_a_patient_and_two_variants():
-    e = extraction(
-        variants=[variant('c.1A>G'), variant('c.2C>T')],
-        genotypes=Genotypes(
-            occurrences=[occurrence(0, 0), occurrence(0, 1)],
+def test_details_bind_phenotypes_by_nesting(db_session, agent_run, paper):
+    """A phenotype's own patient_id disagreeing with the patient it was
+    returned under would otherwise be silent, so the nesting decides."""
+    _, patients, _ = seed(db_session, agent_run)
+    stored = persist_details(
+        db_session,
+        89,
+        PatientDetails(
+            patients=[
+                PatientDetail(
+                    patient_id=patients[1].id,
+                    demographics=demographics(),
+                    phenotypes=[
+                        # patient_id disagrees with the nesting on purpose
+                        phenotype(patients[0].id, 'seizures')
+                    ],
+                )
+            ]
+        ),
+    )
+    db_session.flush()
+
+    assert stored == {'described': 1, 'phenotypes': 1}
+    assert db_session.query(PhenotypeDB).one().patient_id == patients[1].id
+    assert db_session.get(PatientDB, patients[1].id).age_diagnosis == 9
+
+
+def test_details_for_a_patient_we_never_sent_are_dropped(db_session, agent_run, paper):
+    _, patients, _ = seed(db_session, agent_run)
+    stored = persist_details(
+        db_session,
+        89,
+        PatientDetails(
+            patients=[
+                PatientDetail(patient_id=999_999, demographics=demographics()),
+                PatientDetail(patient_id=patients[0].id, demographics=demographics()),
+            ]
+        ),
+    )
+    assert stored['described'] == 1
+
+
+def test_genotypes_link_real_rows_and_pair_compound_hets(db_session, agent_run, paper):
+    persist_structure(
+        db_session,
+        89,
+        agent_run.id,
+        structure(['III-1'], ['Family 1'], ['c.1A>G', 'c.2C>T']),
+    )
+    db_session.flush()
+    patient = db_session.query(PatientDB).one()
+    variants = db_session.query(VariantDB).order_by(VariantDB.id).all()
+
+    stored = persist_genotypes(
+        db_session,
+        89,
+        Genotypes(
+            occurrences=[
+                occurrence(patient.id, variants[0].id),
+                occurrence(patient.id, variants[1].id),
+            ],
             compound_het=[
                 CompoundHetForPatient(
-                    patient_index=0,
+                    patient_id=patient.id,
                     pairs=[
                         CompoundHetPair(
-                            variant_id_a=0,
-                            variant_id_b=1,
+                            variant_id_a=variants[0].id,
+                            variant_id_b=variants[1].id,
                             confidence=ReasoningBlock(
                                 value=CompoundHetConfidence.confirmed,
                                 reasoning='in trans',
@@ -198,39 +290,85 @@ def test_compound_het_names_a_patient_and_two_variants():
             ],
         ),
     )
-    pair = e.genotypes.compound_het[0].pairs[0]
-    assert (pair.variant_id_a, pair.variant_id_b) == (0, 1)
+    db_session.flush()
 
-
-def test_segregation_is_keyed_by_family_position():
-    """SegregationEvidenceDB is keyed by family, so the pass is too."""
-    e = extraction(
-        segregation=SegregationFindings(
-            families=[
-                FamilySegregation(
-                    family_index=0,
-                    evidence=SegregationEvidenceExtractionOutput(
-                        extracted_lod_score=block(3.1),
-                        has_unexplainable_non_segregations=block(False),
-                    ),
-                )
-            ]
-        )
+    assert stored == {'occurrences': 2, 'compound_het_pairs': 1}
+    rows = (
+        db_session.query(PatientVariantOccurrenceDB)
+        .order_by(PatientVariantOccurrenceDB.id)
+        .all()
     )
-    assert e.segregation.families[0].evidence.extracted_lod_score.value == 3.1
+    # The pairing points both ways, so either row shows the other.
+    assert rows[0].paired_variant_link_id == rows[1].id
+    assert rows[1].paired_variant_link_id == rows[0].id
 
 
-def test_variant_label_prefers_the_most_identifying_form():
-    """Later passes see variants by name, so the name has to identify them."""
-    v = variant('c.1A>G')
-    assert _variant_label(v) == 'c.1A>G'
+def test_genotypes_naming_an_id_we_never_sent_are_dropped(db_session, agent_run, paper):
+    _, patients, variants = seed(db_session, agent_run)
+    stored = persist_genotypes(
+        db_session,
+        89,
+        Genotypes(
+            occurrences=[
+                occurrence(patients[0].id, 999_999),
+                occurrence(999_999, variants[0].id),
+                occurrence(patients[0].id, variants[0].id),
+            ]
+        ),
+    )
+    assert stored['occurrences'] == 1
 
-    empty = block(None)
-    unnamed = v.model_copy(update={'hgvs_c': empty, 'variant': empty})
-    assert _variant_label(unnamed) == 'unnamed variant'
+
+def test_segregation_is_stored_against_the_family_it_names(
+    db_session, agent_run, paper
+):
+    seed(db_session, agent_run)
+    family = db_session.query(FamilyDB).one()
+
+    stored = persist_segregation(
+        db_session,
+        89,
+        SegregationFindings(
+            families=[
+                FamilySegregation(family_id=family.id, evidence=evidence(3.1)),
+                FamilySegregation(family_id=999_999, evidence=evidence(9.9)),
+            ]
+        ),
+    )
+    db_session.flush()
+
+    assert stored == {'segregation_families': 1}
+    row = db_session.query(SegregationEvidenceDB).one()
+    assert row.family_id == family.id
+    assert row.extracted_lod_score == 3.1
+
+
+def test_pedigree_is_replaced_not_appended(db_session, agent_run, paper):
+    found = PedigreeExtractionOutput(found=True, image_id=2, description='II-1 male')
+    assert persist_pedigree(db_session, 89, found) == {'pedigrees': 1}
+    db_session.flush()
+    assert persist_pedigree(db_session, 89, found) == {'pedigrees': 1}
+    db_session.flush()
+
+    assert persist_pedigree(db_session, 89, PedigreeExtractionOutput(found=False)) == {
+        'pedigrees': 0
+    }
+
+
+def test_variant_label_names_a_row_the_model_can_find_in_the_paper(
+    db_session, agent_run, paper
+):
+    _, _, variants = seed(db_session, agent_run)
+    assert variant_label(variants[0]) == 'c.1A>G'
+
+    variants[0].hgvs_c = None
+    variants[0].variant = None
+    assert variant_label(variants[0]) == 'unnamed variant'
 
 
 def test_testing_methods_capped_at_two_in_the_schema():
+    """A Pydantic validator would be invisible to structured outputs; maxItems
+    is not."""
     schema = PatientVariantOccurrence.model_json_schema()
     assert schema['properties']['testing_methods']['maxItems'] == 2
 
@@ -255,27 +393,51 @@ def test_no_pass_embeds_the_shared_evidence_contract():
         assert len(prompt) > 200
 
 
-def test_the_split_does_not_change_the_pipeline_graph():
-    """Passes live inside one task, so successors are unaffected."""
-    from lib.tasks.models import TASK_SUCCESSORS, TaskType
-    from lib.ui.paper.tasks import PIPELINE_ORDER
-
-    for task, successors in TASK_SUCCESSORS.items():
-        for successor in successors:
-            assert PIPELINE_ORDER[task] < PIPELINE_ORDER[successor]
-
-    assert TaskType.PAPER_EXTRACTION in TASK_SUCCESSORS
-
-
 def test_every_pass_is_bounded_in_time():
     """A run once sat blocked on one pass for 2h47m with the socket still open.
 
-    The bound also has to fit the worker's lease for this task: the longest
-    chain is pedigree, then structure, then one of the three concurrent passes.
+    Each pass is its own task now, so the bound it has to fit is that task's
+    lease rather than the whole chain's.
     """
     from lib.agents.paper_extraction import _shared
     from lib.bin.worker import lease_timeout_for
     from lib.tasks.models import TaskType
 
-    worst_case_per_pass = _shared._ATTEMPT_TIMEOUT_S * (_shared._MAX_RETRIES + 1)
-    assert worst_case_per_pass * 3 < lease_timeout_for(TaskType.PAPER_EXTRACTION)
+    worst_case = _shared._ATTEMPT_TIMEOUT_S * (_shared._MAX_RETRIES + 1)
+    for task_type in (
+        TaskType.PEDIGREE_IDENTIFICATION,
+        TaskType.PAPER_STRUCTURE,
+        TaskType.PATIENT_DETAILS,
+        TaskType.PATIENT_GENOTYPES,
+        TaskType.SEGREGATION_EVIDENCE,
+    ):
+        assert worst_case < lease_timeout_for(task_type)
+
+
+def occurrence(patient_id: int, variant_id: int) -> PatientVariantOccurrence:
+    return PatientVariantOccurrence(
+        patient_id=patient_id,
+        variant_id=variant_id,
+        zygosity=block(Zygosity.heterozygous),
+        inheritance=block(Inheritance.unknown),
+        de_novo=block(False),
+        testing_methods=[block(TestingMethod.exome_sequencing)],
+    )
+
+
+def phenotype(patient_id: int, concept: str) -> ExtractedPhenotype:
+    return ExtractedPhenotype(
+        patient_id=patient_id,
+        concept=block(concept),
+        onset=None,
+        location=None,
+        severity=None,
+        modifier=None,
+    )
+
+
+def evidence(lod: float) -> SegregationEvidenceExtractionOutput:
+    return SegregationEvidenceExtractionOutput(
+        extracted_lod_score=block(lod),
+        has_unexplainable_non_segregations=block(False),
+    )

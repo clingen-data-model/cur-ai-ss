@@ -5,12 +5,11 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from lib.agents.paper_extraction._shared import READING_THE_PAPER, _pdf_part, _run
-from lib.models.paper import PedigreeExtractionOutput
 from lib.models.segregation_analysis import SegregationEvidenceExtractionOutput
 
 
 class FamilySegregation(BaseModel):
-    family_index: int
+    family_id: int
     evidence: SegregationEvidenceExtractionOutput
 
 
@@ -29,22 +28,20 @@ family, extract its segregation evidence.
   legends. Null with reasoning where the paper reports none -- most papers do not report one.
 - has_unexplainable_non_segregations: true where an affected member of the family does not
   carry the variant. Say who, or why segregation is unclear.
-- family_index is the position of the family in the list you were given, counting from
-  zero."""
+- family_id is the id you were given for that family. Carry it back exactly, and never use
+  one that was not in your list."""
 
 
 def _extract_segregation_sync(
     paper_id: int,
     pdf_bytes: bytes,
-    families: list[str],
-    pedigree: PedigreeExtractionOutput,
+    families: list[tuple[int, str]],
+    pedigree_description: str | None = None,
 ) -> SegregationFindings | None:
-    listing = '\n'.join(f'{i}. {name}' for i, name in enumerate(families))
-    prompt = (
-        f'Families (by index):\n{listing}\n\nExtract segregation evidence for each.'
-    )
-    if pedigree.found and pedigree.description:
-        prompt += f'\n\nThe pedigree figure shows:\n{pedigree.description}'
+    listing = '\n'.join(f'family_id {fid}: {name}' for fid, name in families)
+    prompt = f'Families:\n{listing}\n\nExtract segregation evidence for each.'
+    if pedigree_description:
+        prompt += f'\n\nThe pedigree figure shows:\n{pedigree_description}'
     return _run(
         'segregation',
         paper_id,

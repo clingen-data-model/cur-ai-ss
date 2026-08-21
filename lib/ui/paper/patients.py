@@ -1337,7 +1337,7 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
     if not paper_resp.title:
         st.write(f'{paper_resp.filename} not yet extracted...')
         return
-    if not is_task_completed(paper_resp.tasks, TaskType.PAPER_EXTRACTION):
+    if not is_task_completed(paper_resp.tasks, TaskType.PAPER_STRUCTURE):
         st.write(f'Patient Extraction not yet completed...')
         return
     # -----------------------------

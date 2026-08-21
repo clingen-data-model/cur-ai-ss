@@ -76,7 +76,7 @@ def test_harmonization_sorts_before_annotation():
     from lib.ui.paper.tasks import PIPELINE_ORDER
 
     assert (
-        PIPELINE_ORDER[TaskType.PAPER_EXTRACTION]
+        PIPELINE_ORDER[TaskType.PAPER_STRUCTURE]
         < PIPELINE_ORDER[TaskType.VARIANT_HARMONIZATION]
         < PIPELINE_ORDER[TaskType.VARIANT_ANNOTATION]
     )
@@ -87,14 +87,14 @@ def test_rows_sorted_by_pipeline_order_not_alphabetically():
     tasks = [
         _task(TaskType.MONDO_LINKING),
         _task(TaskType.PDF_PARSING),
-        _task(TaskType.PAPER_EXTRACTION),
+        _task(TaskType.PAPER_STRUCTURE),
     ]
 
     types = [row['Task Type'] for row in _task_rows(tasks)]
 
     assert types == [
         TaskType.PDF_PARSING.value,
-        TaskType.PAPER_EXTRACTION.value,
+        TaskType.PAPER_STRUCTURE.value,
         TaskType.MONDO_LINKING.value,
     ]
 

@@ -103,7 +103,7 @@ def render_patient_variant_occurrences_tab() -> None:
     if not paper_resp.title:
         st.write(f'{paper_resp.filename} not yet extracted...')
         return
-    elif not is_task_completed(paper_resp.tasks, TaskType.PAPER_EXTRACTION):
+    elif not is_task_completed(paper_resp.tasks, TaskType.PATIENT_GENOTYPES):
         st.write(f'Patient/Variant Occurrences not yet completed...')
         return
 

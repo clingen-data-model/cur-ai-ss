@@ -5,7 +5,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from lib.agents.paper_extraction._shared import READING_THE_PAPER, _pdf_part, _run
-from lib.models.paper import PaperClassification, PedigreeExtractionOutput
+from lib.models.paper import PaperClassification
 from lib.models.patient import PatientExtractionOutput
 from lib.models.variant import Variant
 
@@ -93,13 +93,16 @@ VARIANTS
 
 
 def _extract_structure_sync(
-    paper_id: int, pdf_bytes: bytes, pedigree: PedigreeExtractionOutput
+    paper_id: int,
+    pdf_bytes: bytes,
+    pedigree_description: str | None = None,
+    pedigree_image_id: int | None = None,
 ) -> PaperStructure | None:
     prompt = 'Identify what this paper contains.'
-    if pedigree.found and pedigree.description:
+    if pedigree_description:
         prompt += (
-            f'\n\nA pedigree figure in this paper (image_id {pedigree.image_id}) shows:\n'
-            f'{pedigree.description}\n\n'
+            f'\n\nA pedigree figure in this paper (image_id {pedigree_image_id}) shows:\n'
+            f'{pedigree_description}\n\n'
             'Use it: it names individuals the text may not, and gives their sex, '
             'affected status and relationships. Cite it with that image_id.'
         )

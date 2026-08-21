@@ -1434,16 +1434,25 @@ def test_patient_variant_occurrence_successor_enqueues_paper_and_occurrence_mond
         seeded_agent_run,
         disease_name='   ',
     )
-    task = TaskDB(
+    # Occurrences come from the genotypes pass, so that is what queues the
+    # MONDO lookups; the family's segregation analysis waits on its own pass.
+    genotypes = TaskDB(
         paper_id=seeded_paper.id,
         agent_run_id=seeded_agent_run.id,
-        type=TaskType.PAPER_EXTRACTION,
+        type=TaskType.PATIENT_GENOTYPES,
         status=TaskStatus.COMPLETED,
     )
-    db_session.add(task)
+    segregation = TaskDB(
+        paper_id=seeded_paper.id,
+        agent_run_id=seeded_agent_run.id,
+        type=TaskType.SEGREGATION_EVIDENCE,
+        status=TaskStatus.COMPLETED,
+    )
+    db_session.add_all([genotypes, segregation])
     db_session.flush()
 
-    enqueue_successors(db_session, task)
+    enqueue_successors(db_session, genotypes)
+    enqueue_successors(db_session, segregation)
 
     mondo_tasks = (
         db_session.query(TaskDB)

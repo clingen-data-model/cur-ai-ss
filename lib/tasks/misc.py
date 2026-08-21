@@ -154,8 +154,10 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
     """Create successor tasks when a task completes.
 
     Each case is explicit about what successors to create and any entity ID
-    filtering/expansion needed. PATIENT_VARIANT_OCCURRENCES is the only task that
-    requires checking multiple independent predecessors.
+    filtering/expansion needed. Since the reading passes are separate tasks,
+    each feeds only the lookups that need what it produced -- nothing waits on
+    an entity it does not use, and no case has to check whether a second
+    predecessor has landed.
 
     The triggering user (``task.updated_by_user_id``) is propagated to successor
     tasks so the attribution chain is preserved end-to-end. Tasks triggered by the
@@ -170,7 +172,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
             enqueue_task(
                 session,
                 paper_id=task.paper_id,
-                task_type=TaskType.PAPER_EXTRACTION,
+                task_type=TaskType.PEDIGREE_IDENTIFICATION,
                 updated_by_user_id=user_id,
             )
             # Bibliographic metadata resolves against PubMed, so it stays its own
@@ -182,9 +184,34 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 updated_by_user_id=user_id,
             )
 
-        case TaskType.PAPER_EXTRACTION:
-            # One pass produced every entity at once, so the fan-out needs none
-            # of the readiness gating the split extraction chain required.
+        case TaskType.PEDIGREE_IDENTIFICATION:
+            # Every later pass is given the pedigree description, so the reading
+            # chain starts here rather than forking from parsing.
+            enqueue_task(
+                session,
+                paper_id=task.paper_id,
+                task_type=TaskType.PAPER_STRUCTURE,
+                updated_by_user_id=user_id,
+            )
+
+        case TaskType.PAPER_STRUCTURE:
+            # The three remaining reading passes need this pass and nothing
+            # else, so they go out together and the worker runs them in
+            # parallel.
+            for task_type in (
+                TaskType.PATIENT_DETAILS,
+                TaskType.PATIENT_GENOTYPES,
+                TaskType.SEGREGATION_EVIDENCE,
+            ):
+                enqueue_task(
+                    session,
+                    paper_id=task.paper_id,
+                    task_type=task_type,
+                    updated_by_user_id=user_id,
+                )
+
+            # Harmonization needs the variants and nothing else, so it need not
+            # wait behind the passes that read the rest of the paper.
             for variant in (
                 session.query(VariantDB)
                 .filter(VariantDB.paper_id == task.paper_id)
@@ -198,6 +225,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     updated_by_user_id=user_id,
                 )
 
+        case TaskType.PATIENT_DETAILS:
             for phenotype in (
                 session.query(PhenotypeDB)
                 .filter(PhenotypeDB.paper_id == task.paper_id)
@@ -211,17 +239,10 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     updated_by_user_id=user_id,
                 )
 
-            for family in (
-                session.query(FamilyDB).filter(FamilyDB.paper_id == task.paper_id).all()
-            ):
-                enqueue_task(
-                    session,
-                    paper_id=task.paper_id,
-                    task_type=TaskType.SEGREGATION_ANALYSIS_COMPUTED,
-                    family_id=family.id,
-                    updated_by_user_id=user_id,
-                )
-
+        case TaskType.PATIENT_GENOTYPES:
+            # The paper-level disease name comes from metadata, which runs in
+            # parallel with the whole reading chain; queueing it from both is
+            # harmless, since enqueue_task keys on the same scope.
             enqueue_task(
                 session,
                 paper_id=task.paper_id,
@@ -241,6 +262,18 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     paper_id=task.paper_id,
                     task_type=TaskType.MONDO_LINKING,
                     patient_variant_occurrence_id=occurrence.id,
+                    updated_by_user_id=user_id,
+                )
+
+        case TaskType.SEGREGATION_EVIDENCE:
+            for family in (
+                session.query(FamilyDB).filter(FamilyDB.paper_id == task.paper_id).all()
+            ):
+                enqueue_task(
+                    session,
+                    paper_id=task.paper_id,
+                    task_type=TaskType.SEGREGATION_ANALYSIS_COMPUTED,
+                    family_id=family.id,
                     updated_by_user_id=user_id,
                 )
 

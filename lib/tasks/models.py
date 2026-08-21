@@ -29,9 +29,13 @@ class TaskType(StrEnum):
     HPO_LINKING = 'HPO Linking'  # per-patient
     MONDO_LINKING = 'MONDO Linking'
 
-    # Curation read from the PDF itself. Replaces the chain of reading agents
-    # above; those members remain so historical task rows still load.
-    PAPER_EXTRACTION = 'Paper Extraction'
+    # Reading the paper, split by entity. Each is one model call over the PDF
+    # itself, so the queue can retry, rerun and time them separately.
+    PEDIGREE_IDENTIFICATION = 'Pedigree Identification'
+    PAPER_STRUCTURE = 'Paper Structure'
+    PATIENT_DETAILS = 'Patient Details'
+    PATIENT_GENOTYPES = 'Patient Genotypes'
+    SEGREGATION_EVIDENCE = 'Segregation Evidence'
 
     @property
     def description(self) -> str:
@@ -45,7 +49,11 @@ class TaskType(StrEnum):
             TaskType.VARIANT_ANNOTATION: 'Adds annotations (SpliceAI, conservation scores, etc.) to variants',
             TaskType.HPO_LINKING: 'Maps phenotypes to HPO ontology terms for standardization',
             TaskType.MONDO_LINKING: 'Maps disease names to MONDO ontology terms for standardization',
-            TaskType.PAPER_EXTRACTION: 'Reads the paper PDF and extracts the whole curation -- metadata, patients, families, demographics, pedigree, variants, phenotypes, patient-variant occurrences and segregation evidence',
+            TaskType.PEDIGREE_IDENTIFICATION: 'Finds which extracted figure is the pedigree and describes it individual by individual',
+            TaskType.PAPER_STRUCTURE: 'Reads the PDF for what the paper contains: classification, relevance, families, patients and variants',
+            TaskType.PATIENT_DETAILS: 'Reads the PDF for each identified patient\'s demographics, ages and phenotypes',
+            TaskType.PATIENT_GENOTYPES: 'Reads the PDF for which patient carries which variant, and which variant pairs are in trans',
+            TaskType.SEGREGATION_EVIDENCE: 'Reads the PDF for each family\'s reported LOD score and non-segregations',
         }
         return descriptions[self]
 
@@ -73,13 +81,24 @@ class InferredPaperStatus(StrEnum):
 
 # Task dependencies: when a task completes, these become PENDING
 TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
-    TaskType.PDF_PARSING: [TaskType.PAPER_EXTRACTION, TaskType.PAPER_METADATA],
-    TaskType.PAPER_EXTRACTION: [
+    TaskType.PDF_PARSING: [TaskType.PEDIGREE_IDENTIFICATION, TaskType.PAPER_METADATA],
+    # The pedigree is read first because every later pass is given its
+    # description: it names individuals the text leaves out, and it settles sex
+    # and affected status the prose only implies.
+    TaskType.PEDIGREE_IDENTIFICATION: [TaskType.PAPER_STRUCTURE],
+    # Structure produces the patients, families and variants the remaining
+    # passes are given, so it is the only fork in the reading chain.
+    TaskType.PAPER_STRUCTURE: [
+        TaskType.PATIENT_DETAILS,
+        TaskType.PATIENT_GENOTYPES,
+        TaskType.SEGREGATION_EVIDENCE,
         TaskType.VARIANT_HARMONIZATION,
-        TaskType.HPO_LINKING,
-        TaskType.MONDO_LINKING,
-        TaskType.SEGREGATION_ANALYSIS_COMPUTED,
     ],
+    # Each reading pass now feeds only the lookups that need what it produced,
+    # rather than every lookup waiting on every entity.
+    TaskType.PATIENT_DETAILS: [TaskType.HPO_LINKING],
+    TaskType.PATIENT_GENOTYPES: [TaskType.MONDO_LINKING],
+    TaskType.SEGREGATION_EVIDENCE: [TaskType.SEGREGATION_ANALYSIS_COMPUTED],
     TaskType.PAPER_METADATA: [TaskType.MONDO_LINKING],
     TaskType.VARIANT_HARMONIZATION: [TaskType.VARIANT_ANNOTATION],
     TaskType.VARIANT_ANNOTATION: [],
