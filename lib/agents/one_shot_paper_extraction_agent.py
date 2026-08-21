@@ -173,9 +173,9 @@ DEMOGRAPHICS (on each patient)
   is populated and null when it is null. If an age is given in hours, round to days.
 - is_obligate_carrier: true only where pedigree position alone implies carriage (parent of
   an affected child), not where genotyping confirmed it.
-- relationship_to_proband: Proband, Parent, Sibling, Half-Sibling, Child, Other, Unknown,
-  judged against the proband of that patient's own family. A patient who is the proband
-  must be Proband.
+- relationship_to_proband: Proband, Parent, Sibling, Half-Sibling (shares one parent),
+  Child, Other (aunt, uncle, cousin, grandparent), Unknown -- judged against the proband
+  of that patient's own family. A patient who is the proband must be Proband.
 - twin_type: Monozygotic, Dizygotic or Unknown only when twinning is mentioned; null
   otherwise.
 
@@ -186,8 +186,9 @@ VARIANTS
 - Populate transcript (NM_, ENST), protein_accession (NP_, ENSP), genomic_accession
   (NC_, NG_), lrg_accession (LRG_), gene_accession (ENSG), genomic_coordinates and
   genome_build ONLY where explicitly written. Never convert between them, never assume a
-  build. Where an accession is embedded in HGVS, keep the HGVS intact and also record the
-  accession.
+  build. Coordinates are copied exactly as printed; accepted forms look like
+  chr7:140453136, 7-140453136-A-T or chr3:g.150928107A>C. Where an accession is embedded
+  in HGVS, keep the HGVS intact and also record the accession.
 - rsid must be "rs" followed by digits. caid must be "CA" followed by digits -- SCV, SUB
   and bare ClinVar Variation IDs are not CAIDs.
 - HGVS: copy explicit notation exactly. You may infer only where the description is
@@ -221,9 +222,11 @@ PHENOTYPES
   a diagnosis.
 - One phenotype per entry. A sentence listing three findings becomes three entries sharing
   that quote, never one entry holding a list.
-- negated: the paper states the patient does NOT have it. uncertain: described as possible
-  or suspected. family_history: stated of a relative and not of this patient. onset,
-  location, severity and modifier where given.
+- negated: the paper states the patient does NOT have it ("no tremor was observed").
+  uncertain: described as possible or suspected ("possible seizure activity",
+  "suggestive of hearing loss"). family_history: stated of a relative and not of this
+  patient ("the patient's mother had hearing loss"). onset, location (body site or
+  laterality), severity and modifier where given.
 - At most TWELVE phenotypes per patient. Where more exist, keep the most clinically
   informative: congenital and structural anomalies, neurologic and developmental
   abnormalities, dysmorphic features and organ dysfunction first; persistent symptoms and
