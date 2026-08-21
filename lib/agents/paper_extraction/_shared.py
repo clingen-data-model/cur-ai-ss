@@ -26,13 +26,20 @@ part of the same table and describe the same series of patients. A value you cou
 is not the same as a value the paper does not report."""
 
 
+# Passing the PDF is cheap: an 850KB paper is ~16.5k tokens, only 1.5x the
+# reconstructed text. It also caches at 99.5% -- but only against an identical
+# request, because response_format is part of the cache key and every pass has
+# its own schema. Measured: same schema and different trailing text cached
+# 16,384 of 16,507 tokens; same prefix with a different schema cached 0. So a
+# pass caches against its own retries and reruns, never against another pass,
+# and no amount of reordering the message changes that.
+
+
 # Left to itself the SDK will wait on a socket indefinitely: a paper 89 run sat
 # blocked on the details pass for two hours and 47 minutes at 0% CPU with the
-# connection still ESTABLISHED. The bound has to hold against the worker's
-# 3600s lease for this task, and passes 2-4 run concurrently, so the worst case
-# is pedigree + structure + one of the concurrent three -- three legs at
-# 2 * 480s each, which fits with room to spare. The observed slowest pass was
-# 163s, so this is roughly 3x headroom before a retry, not a tight collar.
+# connection still ESTABLISHED. The observed slowest pass was 163s, so this is
+# roughly 3x headroom before a retry, not a tight collar, and two attempts stay
+# well inside the worker's lease.
 _ATTEMPT_TIMEOUT_S = 480.0
 _MAX_RETRIES = 1
 
@@ -77,8 +84,12 @@ def _run(
     )
     usage = completion.usage
     if usage:
+        details = usage.prompt_tokens_details
+        cached = getattr(details, 'cached_tokens', 0) or 0
+        share = cached / usage.prompt_tokens if usage.prompt_tokens else 0.0
         logger.info(
-            f'Paper {paper_id} {label}: {usage.prompt_tokens} prompt, '
+            f'Paper {paper_id} {label}: {usage.prompt_tokens} prompt '
+            f'({cached} cached, {share:.1%}), '
             f'{usage.completion_tokens} completion tokens'
         )
     return completion.choices[0].message.parsed

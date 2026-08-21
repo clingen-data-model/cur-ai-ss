@@ -51,9 +51,9 @@ class TaskType(StrEnum):
             TaskType.MONDO_LINKING: 'Maps disease names to MONDO ontology terms for standardization',
             TaskType.PEDIGREE_IDENTIFICATION: 'Finds which extracted figure is the pedigree and describes it individual by individual',
             TaskType.PAPER_STRUCTURE: 'Reads the PDF for what the paper contains: classification, relevance, families, patients and variants',
-            TaskType.PATIENT_DETAILS: 'Reads the PDF for each identified patient\'s demographics, ages and phenotypes',
+            TaskType.PATIENT_DETAILS: "Reads the PDF for each identified patient's demographics, ages and phenotypes",
             TaskType.PATIENT_GENOTYPES: 'Reads the PDF for which patient carries which variant, and which variant pairs are in trans',
-            TaskType.SEGREGATION_EVIDENCE: 'Reads the PDF for each family\'s reported LOD score and non-segregations',
+            TaskType.SEGREGATION_EVIDENCE: "Reads the PDF for each family's reported LOD score and non-segregations",
         }
         return descriptions[self]
 
