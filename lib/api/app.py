@@ -75,13 +75,13 @@ from lib.misc.pdf.misc import (
 )
 from lib.misc.pdf.parse import WordLoc
 from lib.misc.pdf.paths import (
+    fulltext_md,
     pdf_dir,
     pdf_highlighted_path,
     pdf_raw_path,
     pdf_supplements_dir,
     pdf_thumbnail_path,
     pdf_words_json_path,
-    relevant_sections_md,
 )
 from lib.models import (
     AgentRunDB,
@@ -1879,7 +1879,7 @@ def _build_qa_context(
         'segregation_analysis': [row_to_dict(r) for r in seg_computed],
     }
 
-    paper_md = relevant_sections_md(paper_id, paper_db.supplement_format)
+    paper_md = fulltext_md(paper_id, paper_db.supplement_format)
     paper_context = format_paper_context(paper_md)
     db_state_context = f'CAA Extracted State:\n{json.dumps(db_state, default=str)}'
 

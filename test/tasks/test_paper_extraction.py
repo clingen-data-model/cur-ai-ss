@@ -10,9 +10,12 @@ from lib.agents.one_shot_paper_extraction_agent import (
     OneShotPaperExtraction,
     OneShotPatient,
 )
-from lib.agents.pedigree_describer_agent import PedigreeExtractionOutput
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
-from lib.models.paper import PaperExtractionOutput, PaperType
+from lib.models.paper import (
+    PaperClassification,
+    PaperType,
+    PedigreeExtractionOutput,
+)
 from lib.models.patient import (
     AffectedStatus,
     AgeUnit,
@@ -104,12 +107,7 @@ def occurrence(pi: int, vi: int, zygosity=Zygosity.heterozygous):
 
 def curation(**overrides) -> OneShotPaperExtraction:
     fields = dict(
-        metadata=PaperExtractionOutput(
-            title='A paper',
-            first_author='Author',
-            journal_name='A journal',
-            paper_types=[PaperType.Case_study],
-        ),
+        classification=PaperClassification(paper_types=[PaperType.Case_study]),
         families=[
             OneShotFamily(
                 family=Family(identifier=block('F1'), consanguinity=block(False)),
@@ -210,99 +208,3 @@ def test_full_schema_stays_within_structured_output_limits():
 
     size = len(json.dumps(OneShotPaperExtraction.model_json_schema()))
     assert size < 60_000, f'schema grew to {size} bytes'
-
-
-# --- superseded task cleanup -------------------------------------------------
-
-
-def _task(session, agent_run, paper_id: int, task_type, **kw):
-    from lib.tasks.models import TaskDB, TaskStatus
-
-    row = TaskDB(
-        paper_id=paper_id,
-        type=task_type,
-        status=kw.pop('status', TaskStatus.COMPLETED),
-        agent_run_id=agent_run.id,
-        **kw,
-    )
-    session.add(row)
-    session.flush()
-    return row
-
-
-def test_superseded_tasks_cleared_only_for_the_re_extracted_paper(
-    db_session, agent_run
-):
-    """Other papers keep their history; this one loses rows nothing will run again."""
-    from lib.models import GeneDB, PaperDB
-    from lib.tasks.models import TaskDB, TaskType
-    from lib.tasks.paper_extraction import clear_superseded_tasks
-
-    gene = GeneDB(symbol='BRCA1')
-    db_session.add(gene)
-    db_session.flush()
-    for pid in (1, 2):
-        db_session.add(
-            PaperDB(
-                id=pid,
-                filename=f'p{pid}.pdf',
-                content_hash=f'hash{pid}',
-                gene_id=gene.id,
-            )
-        )
-    db_session.flush()
-
-    # the paper being re-extracted
-    _task(db_session, agent_run, 1, TaskType.PATIENT_EXTRACTION)
-    _task(db_session, agent_run, 1, TaskType.PAPER_METADATA)
-    _task(db_session, agent_run, 1, TaskType.PDF_PARSING)
-    _task(db_session, agent_run, 1, TaskType.HPO_LINKING)
-    _task(db_session, agent_run, 1, TaskType.PAPER_EXTRACTION)
-    # a different paper, still on the old pipeline
-    _task(db_session, agent_run, 2, TaskType.PATIENT_EXTRACTION)
-
-    removed = clear_superseded_tasks(db_session, paper_id=1)
-
-    assert removed == 2
-    remaining = {
-        t.type for t in db_session.query(TaskDB).filter(TaskDB.paper_id == 1).all()
-    }
-    # still-scheduled types survive, including the task doing the work
-    assert remaining == {
-        TaskType.PDF_PARSING,
-        TaskType.HPO_LINKING,
-        TaskType.PAPER_EXTRACTION,
-    }
-    # the other paper is untouched
-    assert db_session.query(TaskDB).filter(TaskDB.paper_id == 2).count() == 1
-
-
-def test_paper_extraction_never_deletes_itself():
-    from lib.tasks.models import SUPERSEDED_BY_PAPER_EXTRACTION, TaskType
-
-    assert TaskType.PAPER_EXTRACTION not in SUPERSEDED_BY_PAPER_EXTRACTION
-
-
-def test_superseded_set_matches_what_the_graph_no_longer_reaches():
-    """Every type unreachable from PDF_PARSING should be one we clean up."""
-    from lib.tasks.models import (
-        SUPERSEDED_BY_PAPER_EXTRACTION,
-        TASK_SUCCESSORS,
-        TaskType,
-    )
-
-    reachable, frontier = set(), [TaskType.PDF_PARSING]
-    while frontier:
-        t = frontier.pop()
-        if t in reachable:
-            continue
-        reachable.add(t)
-        frontier.extend(TASK_SUCCESSORS.get(t, []))
-
-    # GENERAL_PAPER_QUESTION is a chat pseudo-task, never scheduled by the worker
-    orphaned = {
-        t
-        for t in TaskType
-        if t not in reachable and t != TaskType.GENERAL_PAPER_QUESTION
-    }
-    assert orphaned == SUPERSEDED_BY_PAPER_EXTRACTION

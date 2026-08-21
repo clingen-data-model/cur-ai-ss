@@ -212,64 +212,6 @@ def fulltext_md(paper_id: int, supplement_format: 'FileFormat | None' = None) ->
     return main_md
 
 
-def relevant_sections_md(
-    paper_id: int,
-    supplement_format: 'FileFormat | None' = None,
-    section_classifications: dict | None = None,
-) -> str:
-    """Return paper markdown with irrelevant sections removed.
-
-    Falls back to fulltext_md if section classification has not been run yet.
-    Splices directly from raw.md: when a classified irrelevant section header is
-    encountered, lines are skipped until the next classified relevant section header.
-    Unclassified headings do not change skip state.
-
-    Args:
-        paper_id: ID of the paper
-        supplement_format: Format of supplement if present
-        section_classifications: Classification data (from paper.section_classifications).
-                                If not provided, returns fulltext.
-    """
-    # If no classifications provided, return fulltext
-    if section_classifications is None:
-        return fulltext_md(paper_id, supplement_format)
-
-    classified: dict[str, bool] = {
-        s['header'].lower(): s.get('relevant', True)
-        for s in section_classifications.get('sections', [])
-    }
-
-    main_md = raw_md(paper_id)
-    lines = main_md.splitlines(keepends=True)
-    result_lines: list[str] = []
-    skip = False
-    for line in lines:
-        heading_match = re.match(r'^#{1,3} (.+)', line.rstrip())
-        if heading_match:
-            header_text = heading_match.group(1).strip().lower()
-            if header_text in classified:
-                skip = not classified[header_text]
-        if not skip:
-            result_lines.append(line)
-
-    filtered_md = ''.join(result_lines)
-
-    supplement_md = pdf_markdown_path(paper_id, supplement=True)
-    if supplement_md.exists():
-        supplement_header = SUPPLEMENTARY_MATERIAL_HEADER
-        if supplement_format:
-            supplement_header += f' ({supplement_format.value.upper()})'
-        return (
-            filtered_md
-            + '\n\n---\n\n'
-            + supplement_header
-            + '\n\n'
-            + raw_md(paper_id, supplement=True)
-        )
-
-    return filtered_md
-
-
 def sections_md(paper_id: int) -> list[str]:
     sections = []
     for section_path in pdf_sections_dir(paper_id).iterdir():

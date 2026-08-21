@@ -38,7 +38,6 @@ class ChatRunContext:
 # purely mechanical enrichment step with nothing to discuss. Excluded from routing.
 _NON_CONVERSATIONAL = {
     TaskType.PDF_PARSING,
-    TaskType.PAPER_CLASSIFIER,
     TaskType.VARIANT_ANNOTATION,
 }
 # Task types that operate on the paper as a whole rather than a single entity. The
@@ -46,10 +45,6 @@ _NON_CONVERSATIONAL = {
 _GLOBAL_AGENTS = {
     TaskType.GENERAL_PAPER_QUESTION,
     TaskType.PAPER_METADATA,
-    TaskType.VARIANT_EXTRACTION,
-    TaskType.PEDIGREE_DESCRIPTION,
-    TaskType.PATIENT_EXTRACTION,
-    TaskType.PATIENT_VARIANT_OCCURRENCES,
     TaskType.PAPER_EXTRACTION,
 }
 # Task types a chat QUESTION can be routed to (everything with a conversation to

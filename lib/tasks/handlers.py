@@ -9,12 +9,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
-from lib.agents.compound_het_agent import (
-    COMPOUND_HET_AGENT_INSTRUCTIONS,
-)
-from lib.agents.compound_het_agent import (
-    agent as compound_het_agent,
-)
 from lib.agents.hpo_linking_agent import (
     HPO_LINKING_AGENT_INSTRUCTIONS,
 )
@@ -33,59 +27,13 @@ from lib.agents.paper_extraction_agent import (
 from lib.agents.paper_extraction_agent import (
     agent as paper_extraction_agent,
 )
-from lib.agents.paper_section_classifier_agent import (
-    PAPER_CLASSIFIER_AGENT_INSTRUCTIONS,
-)
-from lib.agents.paper_section_classifier_agent import (
-    agent as paper_classifier_agent,
-)
-from lib.agents.patient_demographics_agent import (
-    PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS,
-)
-from lib.agents.patient_demographics_agent import (
-    agent as patient_demographics_agent,
-)
-from lib.agents.patient_extraction_agent import (
-    PATIENT_EXTRACTION_AGENT_INSTRUCTIONS,
-)
-from lib.agents.patient_extraction_agent import (
-    agent as patient_extraction_agent,
-)
-from lib.agents.patient_phenotype_linking_agent import (
-    PATIENT_PHENOTYPE_LINKING_AGENT_INSTRUCTIONS,
-)
-from lib.agents.patient_phenotype_linking_agent import (
-    agent as patient_phenotype_linking_agent,
-)
-from lib.agents.patient_variant_occurrence_agent import (
-    PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS,
-)
-from lib.agents.patient_variant_occurrence_agent import (
-    agent as patient_variant_occurrence_agent,
-)
-from lib.agents.pedigree_describer_agent import (
-    PEDIGREE_DESCRIBER_AGENT_INSTRUCTIONS,
-    pedigree_describer_agent_for_paper,
-)
 from lib.agents.segregation_analysis_computed_agent import (
     SEGREGATION_ANALYSIS_COMPUTED_AGENT_INSTRUCTIONS,
 )
 from lib.agents.segregation_analysis_computed_agent import (
     agent as segregation_analysis_computed_agent,
 )
-from lib.agents.segregation_evidence_extractor import (
-    SEGREGATION_EVIDENCE_AGENT_INSTRUCTIONS,
-)
-from lib.agents.segregation_evidence_extractor import (
-    agent as segregation_evidence_extractor,
-)
 from lib.agents.variant_annotation_agent import enrich_variants_batch
-from lib.agents.variant_extraction_agent import (
-    VARIANT_EXTRACTION_AGENT_INSTRUCTIONS,
-)
-from lib.agents.variant_extraction_agent import (
-    agent as variant_extraction_agent,
-)
 from lib.agents.variant_harmonization_agent import (
     VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS,
 )
@@ -109,7 +57,6 @@ from lib.misc.pdf.paths import (
     fulltext_md,
     pdf_image_caption_path,
     pdf_image_path,
-    relevant_sections_md,
 )
 from lib.models import (
     AnnotatedVariantDB,
@@ -247,58 +194,6 @@ async def handle_pdf_parsing(task_id: int) -> None:
         await parse_content(paper_id, force=True, supplement_format=supplement_format)
 
 
-async def handle_paper_section_classifier(task_id: int) -> None:
-    """Classify paper sections as relevant or irrelevant for downstream extraction."""
-    paper_id: int
-    gene_symbol: str
-    stored_conv_id: str | None
-    additional_context: str | None
-    supplement_format: FileFormat | None
-    with session_scope() as session:
-        task = session.get(TaskDB, task_id)
-        paper = session.get(PaperDB, task.paper_id) if task else None
-        if not task or not paper:
-            return
-        paper_id = task.paper_id
-        gene_symbol = paper.gene.symbol
-        stored_conv_id = task.conversation_id
-        additional_context = task.additional_context
-        supplement_format = paper.supplement_format
-
-    stored_conv_id = await ensure_conversation_id(stored_conv_id)
-
-    if additional_context is not None:
-        # Follow-up: agent has context from conversation
-        message = build_followup_prompt(additional_context)
-        agent = paper_classifier_agent
-    else:
-        # Initial query: build full message with paper + instructions
-        paper_markdown = fulltext_md(paper_id, supplement_format)
-        paper_context = format_paper_context(paper_markdown, gene_symbol)
-        message = f'{paper_context}\n\n{PAPER_CLASSIFIER_AGENT_INSTRUCTIONS}'
-        agent = paper_classifier_agent
-
-    result = await Runner.run(agent, message, conversation_id=stored_conv_id)
-    log_cache_metrics('PAPER_SECTION_CLASSIFIER', result)
-
-    with session_scope() as session:
-        task = session.get(TaskDB, task_id)
-        paper = session.get(PaperDB, paper_id)
-        if task:
-            task.conversation_id = stored_conv_id
-            # If paper is not relevant, skip enqueuing successors
-            if not result.final_output.is_paper_relevant.value:
-                task.skip_successors = True
-        if paper:
-            paper.is_paper_relevant = result.final_output.is_paper_relevant.value
-            paper.section_classifications = result.final_output.model_dump()
-            # Add FailedPaperRelevancy tag if paper is not relevant
-            if not result.final_output.is_paper_relevant.value:
-                if PaperTag.FailedPaperRelevancy.value not in paper.tags:
-                    paper.tags.append(PaperTag.FailedPaperRelevancy.value)
-                    flag_modified(paper, 'tags')
-
-
 async def handle_paper_metadata(task_id: int) -> None:
     """Extract paper metadata (title, authors, abstract, etc)."""
     paper_id: int
@@ -306,7 +201,6 @@ async def handle_paper_metadata(task_id: int) -> None:
     stored_conv_id: str | None
     additional_context: str | None
     supplement_format: FileFormat | None
-    section_classifications: dict | None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
@@ -321,7 +215,6 @@ async def handle_paper_metadata(task_id: int) -> None:
         stored_conv_id = task.conversation_id
         additional_context = task.additional_context
         supplement_format = paper.supplement_format
-        section_classifications = paper.section_classifications
 
     stored_conv_id = await ensure_conversation_id(stored_conv_id)
 
@@ -331,9 +224,7 @@ async def handle_paper_metadata(task_id: int) -> None:
         agent = paper_extraction_agent
     else:
         # Initial query: build full message with paper + instructions
-        paper_markdown = relevant_sections_md(
-            paper_id, supplement_format, section_classifications
-        )
+        paper_markdown = fulltext_md(paper_id, supplement_format)
         paper_context = format_paper_context(paper_markdown, gene_symbol)
         message = f'{paper_context}\n\n{PAPER_EXTRACTION_AGENT_INSTRUCTIONS}'
         agent = paper_extraction_agent
@@ -354,452 +245,6 @@ async def handle_paper_metadata(task_id: int) -> None:
             result.final_output.apply_to(paper)
 
 
-async def handle_variant_extraction(task_id: int) -> None:
-    """Extract genetic variants from paper."""
-    paper_id: int
-    gene_symbol: str
-    stored_conv_id: str | None
-    additional_context: str | None
-    supplement_format: FileFormat | None
-    section_classifications: dict | None
-    with session_scope() as session:
-        task = session.get(TaskDB, task_id)
-        if not task:
-            return
-
-        paper = session.get(PaperDB, task.paper_id)
-        if not paper:
-            return
-
-        paper_id = task.paper_id
-        gene_symbol = paper.gene.symbol
-        stored_conv_id = task.conversation_id
-        additional_context = task.additional_context
-        supplement_format = paper.supplement_format
-        section_classifications = paper.section_classifications
-
-    stored_conv_id = await ensure_conversation_id(stored_conv_id)
-
-    if additional_context is not None:
-        # Follow-up: agent has context from conversation
-        message = build_followup_prompt(additional_context)
-        agent = variant_extraction_agent
-    else:
-        # Initial query: build full message with paper + instructions
-        paper_markdown = relevant_sections_md(
-            paper_id, supplement_format, section_classifications
-        )
-        paper_context = format_paper_context(paper_markdown, gene_symbol)
-        message = f'{paper_context}\n\n{VARIANT_EXTRACTION_AGENT_INSTRUCTIONS}'
-        agent = variant_extraction_agent
-
-    result = await Runner.run(
-        agent,
-        message,
-        conversation_id=stored_conv_id,
-    )
-    log_cache_metrics('VARIANT_EXTRACTION', result)
-
-    with session_scope() as session:
-        task = session.get(TaskDB, task_id)
-        if not task:
-            return
-        agent_run_id = task.agent_run_id
-        task.conversation_id = stored_conv_id
-
-        # Idempotent: delete-then-insert (only from current run)
-        session.query(VariantDB).filter(
-            VariantDB.paper_id == paper_id,
-            VariantDB.agent_run_id == agent_run_id,
-        ).delete()
-        for variant in result.final_output.variants:
-            session.add(variant_to_db(paper_id, variant, agent_run_id))
-
-
-async def handle_pedigree_description(task_id: int) -> None:
-    """Describe pedigree images from paper."""
-    paper_id: int
-    stored_conv_id: str | None
-    additional_context: str | None
-    with session_scope() as session:
-        task = session.get(TaskDB, task_id)
-        if not task:
-            return
-        paper_id = task.paper_id
-        stored_conv_id = task.conversation_id
-        additional_context = task.additional_context
-
-    combined_text = ''
-
-    # List figures by id + caption. The agent picks a pedigree from the captions,
-    # then the analyze_pedigree_image tool loads the image bytes on demand — so we
-    # never put image URLs (or data URLs) into the prompt text.
-    for is_supplement, label in ((False, 'Pipeline'), (True, 'Supplement')):
-        image_id = 0
-        while True:
-            pdf_image = pdf_image_path(paper_id, image_id, supplement=is_supplement)
-            if not pdf_image.exists():
-                break
-            caption_path = pdf_image_caption_path(
-                paper_id, image_id, supplement=is_supplement
-            )
-            caption_text = (
-                caption_path.read_text() if caption_path.exists() else 'No caption'
-            )
-            logger.info(f'Listing {label.lower()} figure {image_id} from {pdf_image}')
-            combined_text += f'[{label} Figure {image_id}]\n'
-            combined_text += f'image_id: {image_id}\n'
-            combined_text += f'is_supplement: {is_supplement}\n'
-            combined_text += f'Caption: {caption_text}\n\n'
-            image_id += 1
-
-    stored_conv_id = await ensure_conversation_id(stored_conv_id)
-
-    if additional_context is not None:
-        # Follow-up: agent has context from conversation
-        message = build_followup_prompt(additional_context)
-    else:
-        # Initial query: build full message with pedigree images + instructions
-        message = f'{combined_text}\n\n{PEDIGREE_DESCRIBER_AGENT_INSTRUCTIONS}'
-
-    result = await Runner.run(
-        pedigree_describer_agent_for_paper(paper_id),
-        message,
-        conversation_id=stored_conv_id,
-    )
-    log_cache_metrics('PEDIGREE_DESCRIPTION', result)
-
-    with session_scope() as session:
-        task = session.get(TaskDB, task_id)
-        if task:
-            task.conversation_id = stored_conv_id
-        # Idempotent: delete-then-insert
-        session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).delete()
-        if result.final_output and result.final_output.found:
-            session.add(pedigree_to_db(paper_id, result.final_output))
-
-
-async def handle_patient_extraction(task_id: int) -> None:
-    """Extract patient information from paper."""
-    paper_id: int
-    pedigree_descriptions_output: dict | None
-    stored_conv_id: str | None
-    additional_context: str | None
-    supplement_format: FileFormat | None = None
-    section_classifications: dict | None = None
-    with session_scope() as session:
-        task = session.get(TaskDB, task_id)
-        if not task:
-            return
-
-        paper_id = task.paper_id
-        stored_conv_id = task.conversation_id
-        additional_context = task.additional_context
-
-        # Load paper and pedigree from DB
-        paper = session.get(PaperDB, paper_id)
-        supplement_format = paper.supplement_format if paper else None
-        section_classifications = paper.section_classifications if paper else None
-
-        pedigree_row = (
-            session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).first()
-        )
-        pedigree_descriptions_output = (
-            {
-                'image_id': pedigree_row.image_id,
-                'description': pedigree_row.description,
-            }
-            if pedigree_row
-            else None
-        )
-
-    stored_conv_id = await ensure_conversation_id(stored_conv_id)
-
-    if additional_context is not None:
-        # Follow-up: agent has context from conversation, just pass new instructions
-        message = build_followup_prompt(additional_context)
-        agent = patient_extraction_agent
-    else:
-        # Initial query: build full message with paper + task input + instructions
-        paper_markdown = relevant_sections_md(
-            paper_id, supplement_format, section_classifications
-        )
-        paper_context = format_paper_context(paper_markdown)
-        message = (
-            f'{paper_context}\n\n'
-            f'Pedigree Description:\n{pedigree_descriptions_output}\n\n'
-            f'{PATIENT_EXTRACTION_AGENT_INSTRUCTIONS}'
-        )
-        agent = patient_extraction_agent
-
-    result = await Runner.run(
-        agent,
-        message,
-        conversation_id=stored_conv_id,
-    )
-    log_cache_metrics('PATIENT_EXTRACTION', result)
-
-    with session_scope() as session:
-        task = session.get(TaskDB, task_id)
-        if not task:
-            return
-        agent_run_id = task.agent_run_id
-        task.conversation_id = stored_conv_id
-
-        # Idempotent: delete existing families and patients from current run, then re-insert both
-        session.query(FamilyDB).filter(
-            FamilyDB.paper_id == paper_id,
-            FamilyDB.agent_run_id == agent_run_id,
-        ).delete()
-        session.query(PatientDB).filter(
-            PatientDB.paper_id == paper_id,
-            PatientDB.agent_run_id == agent_run_id,
-        ).delete()
-        session.flush()
-
-        # Insert families first so we have family IDs for patient assignment
-        family_entries_by_id: dict[str, int] = {}
-        for entry in result.final_output.families:
-            db_family = family_to_db(paper_id, agent_run_id, entry.family)
-            session.add(db_family)
-            session.flush()
-            family_entries_by_id[entry.family.identifier.value] = db_family.id
-
-        # Insert patients (identity only; demographics filled by a later agent)
-        for patient_info in result.final_output.patients:
-            db_patient = patient_identity_to_db(paper_id, patient_info, agent_run_id)
-            # Use family_identifier from patient to find correct family
-            family_id_value = patient_info.family_identifier.value
-            if family_id_value in family_entries_by_id:
-                db_patient.family_id = family_entries_by_id[family_id_value]
-                db_patient.family_assignment_evidence = (
-                    patient_info.family_identifier.model_dump()
-                )
-            session.add(db_patient)
-
-
-async def handle_patient_demographics(task_id: int) -> None:
-    """Extract demographics for a single already-identified patient."""
-    paper_id: int
-    patient_id: int | None = None
-    supplement_format: FileFormat | None = None
-    stored_conv_id: str | None = None
-    additional_context: str | None = None
-    patient_data: dict | None = None
-    proband_identifier: str | None = None
-    pedigree_descriptions_output: dict | None = None
-    section_classifications: dict | None = None
-
-    with session_scope() as session:
-        task = session.get(TaskDB, task_id)
-        if not task:
-            return
-
-        paper_id = task.paper_id
-        patient_id = task.patient_id
-        if patient_id is None:
-            raise ValueError(
-                f'Task {task_id}: PATIENT_DEMOGRAPHICS requires patient_id'
-            )
-
-        stored_conv_id = task.conversation_id
-        additional_context = task.additional_context
-
-        paper = session.get(PaperDB, paper_id)
-        supplement_format = paper.supplement_format if paper else None
-        section_classifications = paper.section_classifications if paper else None
-
-        patient_row = session.get(PatientDB, patient_id)
-        if not patient_row:
-            return
-
-        patient_data = {
-            'patient_id': patient_row.id,
-            'identifier': patient_row.identifier,
-            'identifier_quote': patient_row.identifier_evidence['quote'],
-            'proband_status': patient_row.proband_status,
-        }
-
-        # Find the proband identifier within this patient's family so the agent
-        # can determine relationship_to_proband consistently.
-        proband_row = (
-            session.query(PatientDB)
-            .filter(
-                PatientDB.family_id == patient_row.family_id,
-                PatientDB.proband_status == ProbandStatus.Proband.value,
-            )
-            .first()
-        )
-        proband_identifier = proband_row.identifier if proband_row else None
-
-        pedigree_row = (
-            session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).first()
-        )
-        pedigree_descriptions_output = (
-            {
-                'image_id': pedigree_row.image_id,
-                'description': pedigree_row.description,
-            }
-            if pedigree_row
-            else None
-        )
-
-    stored_conv_id = await ensure_conversation_id(stored_conv_id)
-
-    if additional_context is not None:
-        # Follow-up: agent has context from conversation
-        message = build_followup_prompt(additional_context)
-        agent = patient_demographics_agent
-    else:
-        # Initial query: build full message with paper + patient data + instructions
-        paper_markdown = relevant_sections_md(
-            paper_id, supplement_format, section_classifications
-        )
-        paper_context = format_paper_context(paper_markdown)
-        message = (
-            f'{paper_context}\n\n'
-            f'Patient JSON:\n{patient_data}\n\n'
-            f'Proband Identifier:\n{proband_identifier}\n\n'
-            f'Pedigree Description:\n{pedigree_descriptions_output}\n\n'
-            f'{PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS}'
-        )
-        agent = patient_demographics_agent
-
-    result = await Runner.run(
-        agent,
-        message,
-        conversation_id=stored_conv_id,
-    )
-    log_cache_metrics('PATIENT_DEMOGRAPHICS', result)
-
-    with session_scope() as session:
-        task = session.get(TaskDB, task_id)
-        if not task:
-            return
-        task.conversation_id = stored_conv_id
-
-        patient_row = session.get(PatientDB, patient_id)
-        if not patient_row:
-            return
-        apply_patient_demographics(patient_row, result.final_output)
-
-
-async def handle_segregation_evidence_extraction(task_id: int) -> None:
-    """Extract segregation evidence from paper for a specific family."""
-    paper_id: int = 0
-    family_id: int | None = None
-    supplement_format: FileFormat | None = None
-    stored_conv_id: str | None = None
-    additional_context: str | None = None
-    family_info: dict | None = None
-    section_classifications: dict | None = None
-
-    with session_scope() as session:
-        task = session.get(TaskDB, task_id)
-        if not task:
-            return
-
-        family_id = task.family_id
-        if family_id is None:
-            raise ValueError(
-                f'Task {task_id}: SEGREGATION_EVIDENCE_EXTRACTION requires family_id'
-            )
-
-        paper_id = task.paper_id
-        paper = session.get(PaperDB, task.paper_id)
-        if not paper:
-            return
-
-        supplement_format = paper.supplement_format
-        section_classifications = paper.section_classifications
-        stored_conv_id = task.conversation_id
-        additional_context = task.additional_context
-
-        family = session.get(FamilyDB, family_id)
-        if not family:
-            return
-
-        # Load patients in family
-        patients = (
-            session.query(PatientDB).filter(PatientDB.family_id == family_id).all()
-        )
-
-        # Load variant links for this family
-        patient_ids = [p.id for p in patients]
-        variant_links = (
-            session.query(PatientVariantOccurrenceDB)
-            .filter(PatientVariantOccurrenceDB.patient_id.in_(patient_ids))
-            .all()
-            if patient_ids
-            else []
-        )
-
-        # Build family structure info
-        family_info = {
-            'family_identifier': family.identifier,
-            'patients': [
-                {
-                    'id': p.id,
-                    'identifier': p.identifier,
-                    'affected_status': p.affected_status,
-                    'proband_status': p.proband_status,
-                }
-                for p in patients
-            ],
-            'patient_variant_occurrences': [
-                {
-                    'patient_id': vl.patient_id,
-                    'variant_id': vl.variant_id,
-                    'zygosity': vl.zygosity,
-                }
-                for vl in variant_links
-            ],
-        }
-
-    stored_conv_id = await ensure_conversation_id(stored_conv_id)
-
-    if additional_context is not None:
-        # Follow-up: agent has context from conversation
-        message = build_followup_prompt(additional_context)
-        agent = segregation_evidence_extractor
-    else:
-        # Initial query: build full message with paper + family data + instructions
-        paper_markdown = relevant_sections_md(
-            paper_id, supplement_format, section_classifications
-        )
-        paper_context = format_paper_context(paper_markdown)
-        message = (
-            f'{paper_context}\n\n'
-            f'Family Structure: {json.dumps(family_info, indent=2, default=str)}\n\n'
-            f'{SEGREGATION_EVIDENCE_AGENT_INSTRUCTIONS}'
-        )
-        agent = segregation_evidence_extractor
-
-    result = await Runner.run(
-        agent,
-        message,
-        conversation_id=stored_conv_id,
-    )
-    log_cache_metrics('SEGREGATION_EVIDENCE_EXTRACTION', result)
-
-    # Store results in new session
-    with session_scope() as session:
-        task = session.get(TaskDB, task_id)
-        if not task:
-            return
-
-        task.conversation_id = stored_conv_id
-
-        session.query(SegregationEvidenceDB).filter(
-            SegregationEvidenceDB.family_id == family_id
-        ).delete()
-        session.flush()
-
-        # Convert and insert
-        db_evidence = segregation_evidence_to_db(family_id, result.final_output)
-        session.add(db_evidence)
-
-
 async def handle_segregation_analysis_computed(task_id: int) -> None:
     """Compute segregation analysis metrics for a specific family using ClinGen methodology."""
     family_id: int | None = None
@@ -808,7 +253,6 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
     family_info: dict | None = None
     paper_id: int | None = None
     supplement_format: FileFormat | None = None
-    section_classifications: dict | None = None
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -827,7 +271,6 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
 
         paper_id = task.paper_id
         supplement_format = paper.supplement_format
-        section_classifications = paper.section_classifications
         stored_conv_id = task.conversation_id
         additional_context = task.additional_context
 
@@ -899,9 +342,7 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
         message = build_followup_prompt(additional_context)
     else:
         # Initial query: build full message with paper + family data + instructions
-        paper_markdown = relevant_sections_md(
-            paper_id, supplement_format, section_classifications
-        )
+        paper_markdown = fulltext_md(paper_id, supplement_format)
         paper_context = format_paper_context(paper_markdown)
         message = (
             f'{paper_context}\n\n'
@@ -1133,352 +574,6 @@ async def handle_variant_annotation(task_id: int) -> None:
                     gnomad_popmax_population=ev.gnomad_popmax_population,
                 )
             )
-
-
-async def handle_patient_variant_occurrence(task_id: int) -> None:
-    """Link patients to variants with inheritance info."""
-    paper_id: int
-    structured_variants: list
-    structured_patients: list
-    pedigree_descriptions_output: dict | None
-    stored_conv_id: str | None
-    additional_context: str | None
-    supplement_format: FileFormat | None = None
-    section_classifications: dict | None = None
-    with session_scope() as session:
-        task = session.get(TaskDB, task_id)
-        if not task:
-            return
-
-        paper_id = task.paper_id
-        stored_conv_id = task.conversation_id
-        additional_context = task.additional_context
-
-        paper = session.get(PaperDB, paper_id)
-        supplement_format = paper.supplement_format if paper else None
-        section_classifications = paper.section_classifications if paper else None
-
-        variant_rows = (
-            session.query(VariantDB)
-            .filter(VariantDB.paper_id == paper_id)
-            .order_by(VariantDB.id)
-            .all()
-        )
-        structured_variants = [
-            {
-                'variant_id': v.id,
-                'variant_quote': v.variant_evidence['value'],
-            }
-            for v in variant_rows
-        ]
-
-        patient_rows = (
-            session.query(PatientDB)
-            .filter(PatientDB.paper_id == paper_id)
-            .order_by(PatientDB.id)
-            .all()
-        )
-        structured_patients = [
-            {
-                'patient_id': p.id,
-                'identifier': p.identifier,
-                'identifier_quote': p.identifier_evidence['quote'],
-            }
-            for p in patient_rows
-        ]
-
-        pedigree_row = (
-            session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).first()
-        )
-        pedigree_descriptions_output = (
-            {
-                'image_id': pedigree_row.image_id,
-                'description': pedigree_row.description,
-            }
-            if pedigree_row
-            else None
-        )
-
-    stored_conv_id = await ensure_conversation_id(stored_conv_id)
-
-    if additional_context is not None:
-        # Follow-up: agent has context from conversation
-        message = build_followup_prompt(additional_context)
-        agent = patient_variant_occurrence_agent
-    else:
-        # Initial query: build full message with paper + variant/patient data + instructions
-        paper_markdown = relevant_sections_md(
-            paper_id, supplement_format, section_classifications
-        )
-        paper_context = format_paper_context(paper_markdown)
-        message = (
-            f'{paper_context}\n\n'
-            f'Variants JSON:\n{structured_variants}\n\n'
-            f'Patients JSON:\n{structured_patients}\n\n'
-            f'Pedigree Description:\n{pedigree_descriptions_output}\n\n'
-            f'{PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS}'
-        )
-        agent = patient_variant_occurrence_agent
-
-    result = await Runner.run(
-        agent,
-        message,
-        conversation_id=stored_conv_id,
-    )
-    log_cache_metrics('PATIENT_VARIANT_OCCURRENCE', result)
-
-    with session_scope() as session:
-        task = session.get(TaskDB, task_id)
-        if task:
-            task.conversation_id = stored_conv_id
-        # Idempotent: delete-then-insert
-        session.query(PatientVariantOccurrenceDB).filter(
-            PatientVariantOccurrenceDB.paper_id == paper_id
-        ).delete()
-        for link in result.final_output.links:
-            session.add(patient_variant_occurrence_to_db(paper_id, link))
-        session.flush()
-
-        # Clear any existing pairing and reasoning (idempotent re-run support)
-        # Compound het evaluation will be done by a separate agent
-        links = (
-            session.query(PatientVariantOccurrenceDB)
-            .filter(PatientVariantOccurrenceDB.paper_id == paper_id)
-            .all()
-        )
-        for link in links:
-            link.paired_variant_link_id = None
-            link.paired_variant_confidence = None
-            link.paired_variant_confidence_reasoning = None
-        session.flush()
-
-        # Update paper-level disease_name if provided by the agent (case-level context)
-        if result.final_output.disease_name is not None:
-            paper = session.get(PaperDB, paper_id)
-            if paper:
-                paper.disease_name = result.final_output.disease_name.value
-                paper.disease_name_evidence = (
-                    result.final_output.disease_name.model_dump()
-                )
-
-
-async def handle_compound_het_evaluation(task_id: int) -> None:
-    """Evaluate heterozygous variant pairs for compound heterozygous genotypes."""
-    paper_id: int
-    patient_id: int | None = None
-    stored_conv_id: str | None = None
-    supplement_format: FileFormat | None = None
-    section_classifications: dict | None = None
-
-    with session_scope() as session:
-        task = session.get(TaskDB, task_id)
-        if not task:
-            return
-
-        paper_id = task.paper_id
-        patient_id = task.patient_id
-        if patient_id is None:
-            raise ValueError(
-                f'Task {task_id}: COMPOUND_HET_EVALUATION requires patient_id'
-            )
-
-        stored_conv_id = task.conversation_id
-
-        # Load all heterozygous variants for this patient
-        het_links = (
-            session.query(PatientVariantOccurrenceDB)
-            .filter(
-                PatientVariantOccurrenceDB.patient_id == patient_id,
-                PatientVariantOccurrenceDB.paper_id == paper_id,
-                PatientVariantOccurrenceDB.zygosity == Zygosity.heterozygous.value,
-            )
-            .all()
-        )
-
-        # If fewer than 2 heterozygous variants, nothing to evaluate
-        if len(het_links) < 2:
-            return
-
-        # Load patient and paper data
-        patient = session.get(PatientDB, patient_id)
-        paper = session.get(PaperDB, paper_id)
-        if not patient or not paper:
-            return
-
-        supplement_format = paper.supplement_format
-        section_classifications = paper.section_classifications
-
-        # Get pedigree description
-        pedigree_row = (
-            session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).first()
-        )
-        pedigree_description = (
-            pedigree_row.description if pedigree_row else 'No pedigree information'
-        )
-
-        # Build message with patient info, variants, and pedigree
-        variants_json = [
-            {
-                'variant_id': link.variant_id,
-                'description': (
-                    link.variant.variant_evidence.get('value', '')
-                    if isinstance(link.variant.variant_evidence, dict)
-                    else ''
-                ),
-            }
-            for link in het_links
-        ]
-
-        # Get paper markdown
-        paper_markdown = relevant_sections_md(
-            paper_id, supplement_format, section_classifications
-        )
-        paper_context = format_paper_context(paper_markdown)
-
-        message = (
-            f'{paper_context}\n\n'
-            f'Patient: {patient.identifier}\n\n'
-            f'Pedigree Description:\n{pedigree_description}\n\n'
-            f'Heterozygous Variants for This Patient:\n'
-            f'{json.dumps(variants_json, indent=2)}\n\n'
-            f'{COMPOUND_HET_AGENT_INSTRUCTIONS}'
-        )
-
-        agent_to_use = compound_het_agent
-
-    result = await Runner.run(
-        agent_to_use,
-        message,
-        conversation_id=stored_conv_id,
-    )
-    log_cache_metrics('COMPOUND_HET_EVALUATION', result)
-
-    with session_scope() as session:
-        task = session.get(TaskDB, task_id)
-        if task:
-            task.conversation_id = stored_conv_id
-
-        # For each pair in the result, set the pairing and reasoning
-        for pair in result.final_output.pairs:
-            link_a = (
-                session.query(PatientVariantOccurrenceDB)
-                .filter(
-                    PatientVariantOccurrenceDB.patient_id == patient_id,
-                    PatientVariantOccurrenceDB.paper_id == paper_id,
-                    PatientVariantOccurrenceDB.variant_id == pair.variant_id_a,
-                )
-                .first()
-            )
-            link_b = (
-                session.query(PatientVariantOccurrenceDB)
-                .filter(
-                    PatientVariantOccurrenceDB.patient_id == patient_id,
-                    PatientVariantOccurrenceDB.paper_id == paper_id,
-                    PatientVariantOccurrenceDB.variant_id == pair.variant_id_b,
-                )
-                .first()
-            )
-
-            if link_a and link_b:
-                # Bidirectionally set pairing
-                link_a.paired_variant_link_id = link_b.id
-                link_b.paired_variant_link_id = link_a.id
-                # Set confidence value and reasoning on both
-                link_a.paired_variant_confidence = pair.confidence.value
-                link_b.paired_variant_confidence = pair.confidence.value
-                reasoning_block = pair.confidence.model_dump()
-                link_a.paired_variant_confidence_reasoning = reasoning_block
-                link_b.paired_variant_confidence_reasoning = reasoning_block
-                # JSON columns require flag_modified to track changes
-                flag_modified(link_a, 'paired_variant_confidence_reasoning')
-                flag_modified(link_b, 'paired_variant_confidence_reasoning')
-
-        session.flush()
-
-
-async def handle_phenotype_extraction(task_id: int) -> None:
-    """Extract phenotypes for a specific patient in paper."""
-    paper_id: int
-    patient_id: int | None = None
-    supplement_format: FileFormat | None = None
-    stored_conv_id: str | None = None
-    additional_context: str | None = None
-    patient_data: dict | None = None
-    section_classifications: dict | None = None
-
-    with session_scope() as session:
-        task = session.get(TaskDB, task_id)
-        if not task:
-            return
-
-        paper_id = task.paper_id
-        patient_id = task.patient_id
-        if patient_id is None:
-            raise ValueError(
-                f'Task {task_id}: PHENOTYPE_EXTRACTION requires patient_id'
-            )
-
-        stored_conv_id = task.conversation_id
-        additional_context = task.additional_context
-
-        paper = session.get(PaperDB, paper_id)
-        supplement_format = paper.supplement_format if paper else None
-        section_classifications = paper.section_classifications if paper else None
-
-        patient_row = session.get(PatientDB, patient_id)
-        if not patient_row:
-            return
-
-        patient_data = {
-            'patient_id': patient_row.id,
-            'identifier': patient_row.identifier,
-            'identifier_quote': patient_row.identifier_evidence['quote'],
-        }
-
-    stored_conv_id = await ensure_conversation_id(stored_conv_id)
-
-    if additional_context is not None:
-        # Follow-up: agent has context from conversation
-        message = build_followup_prompt(additional_context)
-        agent = patient_phenotype_linking_agent
-    else:
-        # Initial query: build full message with paper + patient data + instructions
-        paper_markdown = relevant_sections_md(
-            paper_id, supplement_format, section_classifications
-        )
-        paper_context = format_paper_context(paper_markdown)
-        message = (
-            f'{paper_context}\n\n'
-            f'Structured Patient JSON:\n{[patient_data]}\n\n'
-            f'{PATIENT_PHENOTYPE_LINKING_AGENT_INSTRUCTIONS}'
-        )
-        agent = patient_phenotype_linking_agent
-
-    result = await Runner.run(
-        agent,
-        message,
-        conversation_id=stored_conv_id,
-    )
-    log_cache_metrics('PHENOTYPE_EXTRACTION', result)
-
-    # Update DB with results
-    with session_scope() as session:
-        task = session.get(TaskDB, task_id)
-        if not task:
-            return
-
-        task.conversation_id = stored_conv_id
-
-        # Idempotent: delete-then-insert
-        # Phenotypes are scoped by patient_id, which is already run-versioned
-        session.query(PhenotypeDB).filter(PhenotypeDB.patient_id == patient_id).delete()
-
-        # Insert results
-        for phenotype in result.final_output:
-            # Ensure patient_id is set on the phenotype
-            if phenotype.patient_id is None or phenotype.patient_id != patient_id:
-                phenotype.patient_id = patient_id
-            session.add(phenotype_to_db(paper_id, phenotype))
 
 
 async def handle_hpo_linking(task_id: int) -> None:
@@ -1737,19 +832,10 @@ async def handle_paper_extraction(task_id: int) -> None:
 TASK_HANDLERS: dict[TaskType, Callable[[int], Awaitable[None]]] = {
     TaskType.PDF_PARSING: handle_pdf_parsing,
     TaskType.PAPER_EXTRACTION: handle_paper_extraction,
-    TaskType.PAPER_CLASSIFIER: handle_paper_section_classifier,
     TaskType.PAPER_METADATA: handle_paper_metadata,
-    TaskType.VARIANT_EXTRACTION: handle_variant_extraction,
-    TaskType.PEDIGREE_DESCRIPTION: handle_pedigree_description,
-    TaskType.PATIENT_EXTRACTION: handle_patient_extraction,
-    TaskType.PATIENT_DEMOGRAPHICS: handle_patient_demographics,
-    TaskType.SEGREGATION_EVIDENCE_EXTRACTION: handle_segregation_evidence_extraction,
     TaskType.SEGREGATION_ANALYSIS_COMPUTED: handle_segregation_analysis_computed,
     TaskType.VARIANT_HARMONIZATION: handle_variant_harmonization,
     TaskType.VARIANT_ANNOTATION: handle_variant_annotation,
-    TaskType.PATIENT_VARIANT_OCCURRENCES: handle_patient_variant_occurrence,
-    TaskType.COMPOUND_HET_EVALUATION: handle_compound_het_evaluation,
-    TaskType.PHENOTYPE_EXTRACTION: handle_phenotype_extraction,
     TaskType.HPO_LINKING: handle_hpo_linking,
     TaskType.MONDO_LINKING: handle_mondo_linking,
 }

@@ -1176,14 +1176,14 @@ def test_enqueue_all_instances_for_splatted_task(
     task1 = TaskDB(
         paper_id=seeded_paper.id,
         agent_run_id=agent_run.id,
-        type=TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
+        type=TaskType.SEGREGATION_ANALYSIS_COMPUTED,
         family_id=family1.id,
         status=TaskStatus.COMPLETED,
     )
     task2 = TaskDB(
         paper_id=seeded_paper.id,
         agent_run_id=agent_run.id,
-        type=TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
+        type=TaskType.SEGREGATION_ANALYSIS_COMPUTED,
         family_id=family2.id,
         status=TaskStatus.COMPLETED,
     )
@@ -1194,7 +1194,7 @@ def test_enqueue_all_instances_for_splatted_task(
     response = client.post(
         f'/papers/{seeded_paper.id}/tasks',
         json=TaskCreateRequest(
-            type=TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
+            type=TaskType.SEGREGATION_ANALYSIS_COMPUTED,
         ).model_dump(),
     )
     assert response.status_code == 200
@@ -1239,7 +1239,7 @@ def test_create_task_records_updated_by(client, seeded_paper, test_user):
     """A user-triggered task records who enqueued it and surfaces updated_by."""
     response = client.post(
         f'/papers/{seeded_paper.id}/tasks',
-        json=TaskCreateRequest(type=TaskType.VARIANT_EXTRACTION).model_dump(),
+        json=TaskCreateRequest(type=TaskType.VARIANT_HARMONIZATION).model_dump(),
     )
     assert response.status_code == 200
     tasks = response.json()
@@ -1275,7 +1275,7 @@ def test_create_task_requires_authentication(unauth_client, seeded_paper):
     """Anonymous task enqueue is rejected."""
     response = unauth_client.post(
         f'/papers/{seeded_paper.id}/tasks',
-        json=TaskCreateRequest(type=TaskType.VARIANT_EXTRACTION).model_dump(),
+        json=TaskCreateRequest(type=TaskType.VARIANT_HARMONIZATION).model_dump(),
     )
     assert response.status_code == 401
 
@@ -1437,7 +1437,7 @@ def test_patient_variant_occurrence_successor_enqueues_paper_and_occurrence_mond
     task = TaskDB(
         paper_id=seeded_paper.id,
         agent_run_id=seeded_agent_run.id,
-        type=TaskType.PATIENT_VARIANT_OCCURRENCES,
+        type=TaskType.PAPER_EXTRACTION,
         status=TaskStatus.COMPLETED,
     )
     db_session.add(task)
@@ -1465,7 +1465,7 @@ def test_patient_variant_occurrence_successor_enqueues_paper_and_occurrence_mond
         db_session.query(TaskDB)
         .filter(
             TaskDB.paper_id == seeded_paper.id,
-            TaskDB.type == TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
+            TaskDB.type == TaskType.SEGREGATION_ANALYSIS_COMPUTED,
         )
         .one()
     )

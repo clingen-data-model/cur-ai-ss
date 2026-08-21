@@ -189,11 +189,9 @@ with center:
         st.caption(' • '.join(parts))
     else:
         st.markdown(f'# {paper_resp.filename}')
-    # Show warning if paper classifier ran and marked paper as irrelevant
-    if (
-        is_task_completed(paper_resp.tasks, TaskType.PAPER_CLASSIFIER)
-        and paper_resp.is_paper_relevant is False
-    ):
+    # Nothing sets is_paper_relevant any more -- the classifier task is gone --
+    # but papers classified before the change still carry the flag.
+    if paper_resp.is_paper_relevant is False:
         reasoning = ''
         if paper_resp.section_classifications:
             relevance_block = paper_resp.section_classifications.get(

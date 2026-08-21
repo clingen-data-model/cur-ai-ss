@@ -173,24 +173,6 @@ Use a four-phase search strategy, collecting candidates from each phase in order
     - doi: PubmedData/ArticleIdList/ArticleId with IdType=”doi”
     - pmcid: PubmedData/ArticleIdList/ArticleId with IdType=”pmc”
 
-2. **Paper Type Selection**
-Classify the paper into at MOST two of the following types:
-    - Letter: Short correspondence or “Letter to the Editor”; brief report or commentary with limited data and minimal methodological detail.
-    - Research: Full original research article presenting novel experimental, computational, or clinical findings with complete methods, results, and discussion.
-    - Case_series: Descriptive report of multiple patients or families with shared phenotypes or variants, without a control group or formal statistical comparison.
-    - Case_study: Detailed report of a single patient or a single family, often describing a rare phenotype or novel genetic variant.
-    - Cohort_analysis: Observational analysis of a defined group of individuals selected by shared criteria, focusing on frequencies, outcomes, or genotype–phenotype correlations.
-    - Case_control: Observational study comparing affected individuals (cases) to unaffected individuals (controls) to test genetic association or variant enrichment.
-    - Unknown: The paper type cannot be confidently determined from the provided text.
-    - Other: Does not fit the above categories (e.g., review, meta-analysis, guideline, methods, or database/resource paper).
-
-3. **Gene-Disease Relationship Extraction**
-Extract the disease name and mode of inheritance associated with this gene in the paper:
-- **disease_name**: The name or description of the disease/phenotype caused by variants in this gene (e.g., "Stargardt disease", "retinitis pigmentosa", "dilated cardiomyopathy"). Extract from the abstract, introduction, or case descriptions.
-- **disease_inheritance_mode**: The primary mode of inheritance for this gene-disease relationship as stated or implied in the paper (e.g., "Autosomal Recessive", "Autosomal Dominant", "X-linked Recessive"). Extract from the abstract or clinical findings.
-- Include reasoning that identifies where in the paper this information was found.
-- If the disease name or inheritance mode cannot be confidently identified, omit the gene_disease_relation field entirely.
-
 Important Guidelines:
 - When a field cannot be confidently identified, fail rather than guess.
 - Always use the `(pmid, title)` pairs to deterministically select the correct PubMed record.
