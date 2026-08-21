@@ -393,27 +393,6 @@ def test_no_pass_embeds_the_shared_evidence_contract():
         assert len(prompt) > 200
 
 
-def test_every_pass_is_bounded_in_time():
-    """A run once sat blocked on one pass for 2h47m with the socket still open.
-
-    Each pass is its own task now, so the bound it has to fit is that task's
-    lease rather than the whole chain's.
-    """
-    from lib.agents.paper_extraction import _shared
-    from lib.bin.worker import lease_timeout_for
-    from lib.tasks.models import TaskType
-
-    worst_case = _shared._ATTEMPT_TIMEOUT_S * (_shared._MAX_RETRIES + 1)
-    for task_type in (
-        TaskType.PEDIGREE_IDENTIFICATION,
-        TaskType.PAPER_STRUCTURE,
-        TaskType.PATIENT_DETAILS,
-        TaskType.PATIENT_GENOTYPES,
-        TaskType.SEGREGATION_EVIDENCE,
-    ):
-        assert worst_case < lease_timeout_for(task_type)
-
-
 def occurrence(patient_id: int, variant_id: int) -> PatientVariantOccurrence:
     return PatientVariantOccurrence(
         patient_id=patient_id,

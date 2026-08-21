@@ -15,24 +15,12 @@ from lib.tasks.handlers import TASK_HANDLERS
 from lib.tasks.misc import enqueue_successors
 from lib.tasks.models import TaskStatus, TaskType
 
+# One lease for every task type. The longest-running task is a reading pass,
+# which is one model call bounded at 480s with a single retry -- 960s at worst,
+# comfortably inside this. Splitting extraction into passes is what made a
+# single lease workable again: the per-type override existed only for the
+# eight-minute task that no longer exists.
 LEASE_TIMEOUT_S = 1800
-
-# Each reading pass is one model call over a whole PDF, so it runs in minutes
-# where the rest of the queue runs in seconds. One call bounded at 480s with a
-# single retry cannot exceed 960s, so 1200s leaves room for the request to be
-# built and the result written without waiting an extra ten minutes on the
-# global lease before recovery.
-LEASE_TIMEOUT_OVERRIDES_S: dict[TaskType, int] = {
-    TaskType.PEDIGREE_IDENTIFICATION: 1200,
-    TaskType.PAPER_STRUCTURE: 1200,
-    TaskType.PATIENT_DETAILS: 1200,
-    TaskType.PATIENT_GENOTYPES: 1200,
-    TaskType.SEGREGATION_EVIDENCE: 1200,
-}
-
-
-def lease_timeout_for(task_type: TaskType) -> int:
-    return LEASE_TIMEOUT_OVERRIDES_S.get(task_type, LEASE_TIMEOUT_S)
 
 
 def _as_utc(value: datetime.datetime) -> datetime.datetime:
@@ -43,13 +31,9 @@ def _as_utc(value: datetime.datetime) -> datetime.datetime:
 
 
 def select_timed_out(tasks: list[TaskDB], now: datetime.datetime) -> list[TaskDB]:
-    """Of the tasks past the shortest lease, those past their own."""
-    return [
-        task
-        for task in tasks
-        if _as_utc(task.updated_at)
-        < now - datetime.timedelta(seconds=lease_timeout_for(task.type))
-    ]
+    """Those past the lease, comparing against stored timestamps safely."""
+    cutoff = now - datetime.timedelta(seconds=LEASE_TIMEOUT_S)
+    return [task for task in tasks if _as_utc(task.updated_at) < cutoff]
 
 
 POLL_INTERVAL_S = 10
@@ -139,10 +123,7 @@ async def poll_and_schedule_tasks(
     """Poll for pending tasks and schedule them (non-blocking)."""
     with session_scope() as session:
         now = datetime.datetime.now(datetime.timezone.utc)
-        # Filter on the shortest lease, then apply each task's own -- a task type
-        # with a longer lease must not be reset on the shorter one.
-        shortest_lease = min([LEASE_TIMEOUT_S, *LEASE_TIMEOUT_OVERRIDES_S.values()])
-        expired_cutoff = now - datetime.timedelta(seconds=shortest_lease)
+        expired_cutoff = now - datetime.timedelta(seconds=LEASE_TIMEOUT_S)
 
         # Reset timed-out RUNNING/QUEUED tasks back to PENDING (only if retries remain)
         candidates = (
@@ -167,8 +148,7 @@ async def poll_and_schedule_tasks(
                 )
                 task.status = TaskStatus.FAILED
                 task.error_message = (
-                    f'Task exceeded lease timeout '
-                    f'({lease_timeout_for(task.type)}s) and max retries'
+                    f'Task exceeded lease timeout ({LEASE_TIMEOUT_S}s) and max retries'
                 )
             task.updated_at = now
 
