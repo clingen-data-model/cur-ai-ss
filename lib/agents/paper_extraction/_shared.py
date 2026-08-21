@@ -68,7 +68,7 @@ def _run(
 ) -> T | None:
     logger.info(f'Paper {paper_id} {label}: requesting')
     completion = _client().chat.completions.parse(
-        model=env.OPENAI_VLM,
+        model=env.OPENAI_API_DEPLOYMENT,
         messages=[
             {'role': 'system', 'content': instructions + CORE_EXTRACTION_SPEC},
             {'role': 'user', 'content': content},  # type: ignore[misc,list-item]

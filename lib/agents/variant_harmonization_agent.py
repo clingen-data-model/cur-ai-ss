@@ -955,7 +955,7 @@ VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS = VARIANT_HARMONIZATION_INSTRUCTIONS
 agent = Agent(
     name='variant_harmonizer',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
-    model=env.OPENAI_API_DEPLOYMENT,
+    model=env.OPENAI_LINKING_MODEL,
     output_type=ReasoningBlock[HarmonizedVariant],
     tools=[
         select_canonical_transcript,

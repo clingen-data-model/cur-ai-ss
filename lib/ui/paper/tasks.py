@@ -29,9 +29,9 @@ def _pipeline_depths() -> dict[TaskType, int]:
     """Depth of each task in the dependency graph, so prerequisites sort first.
 
     TaskType's declaration order calls itself execution order but is not: the
-    segregation tasks are declared ahead of Patient Variant Occurrences, which
-    TASK_SUCCESSORS makes their prerequisite. Depth is the longest path from a
-    root, so a task always follows everything it waits on.
+    lookup tasks are declared ahead of the reading passes that produce what
+    they read. Depth is the longest path from a root, so a task always follows
+    everything it waits on.
     """
     depths: dict[TaskType, int] = dict.fromkeys(_PIPELINE_TYPES, 0)
 
