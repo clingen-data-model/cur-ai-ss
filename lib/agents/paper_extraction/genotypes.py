@@ -62,7 +62,6 @@ def _extract_genotypes_sync(
     pdf_bytes: bytes,
     patients: list[tuple[int, str]],
     variants: list[tuple[int, str]],
-    pedigree_description: str | None = None,
 ) -> Genotypes | None:
     people = '\n'.join(f'patient_id {pid}: {name}' for pid, name in patients)
     variant_list = '\n'.join(f'variant_id {vid}: {label}' for vid, label in variants)
@@ -71,8 +70,6 @@ def _extract_genotypes_sync(
         f'Variants:\n{variant_list}\n\n'
         'Record which individual carries which variant.'
     )
-    if pedigree_description:
-        prompt += f'\n\nThe pedigree figure shows:\n{pedigree_description}'
     return _run(
         'genotypes',
         paper_id,

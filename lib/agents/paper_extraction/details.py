@@ -82,12 +82,9 @@ def _extract_details_sync(
     paper_id: int,
     pdf_bytes: bytes,
     patients: list[tuple[int, str]],
-    pedigree_description: str | None = None,
 ) -> PatientDetails | None:
     listing = '\n'.join(f'- patient_id {pid}: {name}' for pid, name in patients)
     prompt = f'Individuals identified in this paper:\n{listing}\n\nDescribe each.'
-    if pedigree_description:
-        prompt += f'\n\nThe pedigree figure shows:\n{pedigree_description}'
     return _run(
         'details',
         paper_id,

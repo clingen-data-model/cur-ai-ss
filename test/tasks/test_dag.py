@@ -68,12 +68,12 @@ def test_the_reading_passes_run_in_a_chain_then_a_fork():
     """Structure is the only fork: the passes after it need it and nothing
     else, so the worker runs all three at once."""
     assert TASK_SUCCESSORS[TaskType.PDF_PARSING] == [
+        TaskType.PAPER_STRUCTURE,
         TaskType.PEDIGREE_IDENTIFICATION,
         TaskType.PAPER_METADATA,
     ]
-    assert TASK_SUCCESSORS[TaskType.PEDIGREE_IDENTIFICATION] == [
-        TaskType.PAPER_STRUCTURE
-    ]
+    # The pedigree reading is for the UI; no pass waits on it.
+    assert TASK_SUCCESSORS[TaskType.PEDIGREE_IDENTIFICATION] == []
     reading_passes = {
         TaskType.PATIENT_DETAILS,
         TaskType.PATIENT_GENOTYPES,

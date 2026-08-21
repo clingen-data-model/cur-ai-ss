@@ -445,37 +445,29 @@ def placeholder_demographics() -> 'PatientDemographics':
 
 
 class FamilyEntry(BaseModel):
-    """Family grouping with references to patients by their identifier."""
+    """One family the paper reports.
+
+    It used to carry a second list naming its members, cross-checked against the
+    patients by a validator. Nothing read that list -- a patient's own
+    family_identifier is what assigns it, and persistence creates a family a
+    patient names but the model forgot to return. So the list was redundant
+    data, and requiring the same identifier string in two places meant the pass
+    died whenever the two drifted: paper 92 lost three full generations to
+    "Family assignments reference non-existent patients" while the model was
+    reconciling pedigree positions against table IDs, which is exactly the work
+    we want it doing.
+
+    A validator is invisible to structured outputs, so the model cannot comply
+    with it by construction -- it can only be told after the fact that a
+    complete answer was thrown away.
+    """
 
     family: Family
-    patient_identifiers: List[EvidenceBlock[str]]
 
 
 class PatientExtractionOutput(BaseModel):
     patients: List[PatientIdentity]
     families: List[FamilyEntry]
-
-    @model_validator(mode='after')
-    def validate_family_coverage(self) -> 'PatientExtractionOutput':
-        """Ensure every patient is assigned to exactly one family."""
-        patient_identifiers = {p.identifier.value for p in self.patients}
-        assigned_identifiers: set[str] = set()
-        for entry in self.families:
-            assigned_identifiers.update(
-                id_block.value for id_block in entry.patient_identifiers
-            )
-
-        missing = patient_identifiers - assigned_identifiers
-        if missing:
-            raise ValueError(f'Patients not assigned to any family: {missing}')
-
-        extra = assigned_identifiers - patient_identifiers
-        if extra:
-            raise ValueError(
-                f'Family assignments reference non-existent patients: {extra}'
-            )
-
-        return self
 
 
 class PatientDB(Base):

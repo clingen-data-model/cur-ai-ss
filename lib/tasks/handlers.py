@@ -814,27 +814,31 @@ async def handle_mondo_linking(task_id: int) -> None:
             occurrence.mondo_match_context = mondo_match_context
 
 
-async def _paper_context(task_id: int) -> tuple[int, bytes, str | None, int]:
-    """What every reading pass needs: the paper, its PDF, and the run to bill."""
+async def _paper_context(task_id: int) -> tuple[int, bytes, int]:
+    """What every reading pass needs: the paper, its PDF, and the run to bill.
+
+    Deliberately not the pedigree description. Every pass is sent the PDF, which
+    contains the figure, so a prose summary of it was an intermediary standing
+    between the model and the image -- and on paper 92 that summary became the
+    patient roster: eight unlabelled symbols from a figure that turned out to be
+    IHC panels arranged in a family tree, while Table 1's twenty-three patients
+    went unread. The model reads the figure itself now.
+    """
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
             raise ValueError(f'Task {task_id} no longer exists')
         paper_id = task.paper_id
         agent_run_id = task.agent_run_id
-        pedigree = (
-            session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).first()
-        )
-        description = pedigree.description if pedigree else None
-    return paper_id, pdf_raw_path(paper_id).read_bytes(), description, agent_run_id
+    return paper_id, pdf_raw_path(paper_id).read_bytes(), agent_run_id
 
 
 async def handle_pedigree_identification(task_id: int) -> None:
     """Find the pedigree figure and describe it.
 
-    First of the reading passes because the rest are given its description: it
-    names individuals the text leaves out, and settles sex and affected status
-    the prose only implies.
+    Nothing downstream consumes this: the passes read the figure out of the PDF
+    themselves. It runs to tell the UI which image to show a curator, and to
+    give them a written reading of it beside the picture.
     """
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -861,20 +865,12 @@ async def handle_pedigree_identification(task_id: int) -> None:
 async def handle_paper_structure(task_id: int) -> None:
     """Read the PDF for what the paper contains.
 
-    The only fork in the reading chain: it produces the patients, families and
+    The fork in the reading chain: it produces the patients, families and
     variants the remaining passes are handed.
     """
-    paper_id, pdf_bytes, description, agent_run_id = await _paper_context(task_id)
+    paper_id, pdf_bytes, agent_run_id = await _paper_context(task_id)
 
-    with session_scope() as session:
-        pedigree = (
-            session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).first()
-        )
-        image_id = pedigree.image_id if pedigree else None
-
-    structure = await asyncio.to_thread(
-        _extract_structure_sync, paper_id, pdf_bytes, description, image_id
-    )
+    structure = await asyncio.to_thread(_extract_structure_sync, paper_id, pdf_bytes)
     if structure is None:
         raise ValueError(f'Paper {paper_id}: structure pass returned no parsed output')
 
@@ -885,7 +881,7 @@ async def handle_paper_structure(task_id: int) -> None:
 
 async def handle_patient_details(task_id: int) -> None:
     """Read the PDF for each identified patient's demographics and phenotypes."""
-    paper_id, pdf_bytes, description, _ = await _paper_context(task_id)
+    paper_id, pdf_bytes, _ = await _paper_context(task_id)
 
     with session_scope() as session:
         patients = [
@@ -899,7 +895,7 @@ async def handle_patient_details(task_id: int) -> None:
         return
 
     details = await asyncio.to_thread(
-        _extract_details_sync, paper_id, pdf_bytes, patients, description
+        _extract_details_sync, paper_id, pdf_bytes, patients
     )
     if details is None:
         raise ValueError(f'Paper {paper_id}: details pass returned no parsed output')
@@ -911,7 +907,7 @@ async def handle_patient_details(task_id: int) -> None:
 
 async def handle_patient_genotypes(task_id: int) -> None:
     """Read the PDF for which patient carries which variant."""
-    paper_id, pdf_bytes, description, _ = await _paper_context(task_id)
+    paper_id, pdf_bytes, _ = await _paper_context(task_id)
 
     with session_scope() as session:
         patients = [
@@ -931,7 +927,7 @@ async def handle_patient_genotypes(task_id: int) -> None:
         return
 
     genotypes = await asyncio.to_thread(
-        _extract_genotypes_sync, paper_id, pdf_bytes, patients, variants, description
+        _extract_genotypes_sync, paper_id, pdf_bytes, patients, variants
     )
     if genotypes is None:
         raise ValueError(f'Paper {paper_id}: genotypes pass returned no parsed output')
@@ -943,7 +939,7 @@ async def handle_patient_genotypes(task_id: int) -> None:
 
 async def handle_segregation_evidence(task_id: int) -> None:
     """Read the PDF for each family's reported segregation evidence."""
-    paper_id, pdf_bytes, description, _ = await _paper_context(task_id)
+    paper_id, pdf_bytes, _ = await _paper_context(task_id)
 
     with session_scope() as session:
         families = [
@@ -957,7 +953,7 @@ async def handle_segregation_evidence(task_id: int) -> None:
         return
 
     findings = await asyncio.to_thread(
-        _extract_segregation_sync, paper_id, pdf_bytes, families, description
+        _extract_segregation_sync, paper_id, pdf_bytes, families
     )
     if findings is None:
         raise ValueError(

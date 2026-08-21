@@ -36,12 +36,9 @@ def _extract_segregation_sync(
     paper_id: int,
     pdf_bytes: bytes,
     families: list[tuple[int, str]],
-    pedigree_description: str | None = None,
 ) -> SegregationFindings | None:
     listing = '\n'.join(f'family_id {fid}: {name}' for fid, name in families)
     prompt = f'Families:\n{listing}\n\nExtract segregation evidence for each.'
-    if pedigree_description:
-        prompt += f'\n\nThe pedigree figure shows:\n{pedigree_description}'
     return _run(
         'segregation',
         paper_id,

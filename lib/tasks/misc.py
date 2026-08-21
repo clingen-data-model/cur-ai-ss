@@ -169,28 +169,22 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
 
     match task.type:
         case TaskType.PDF_PARSING:
-            enqueue_task(
-                session,
-                paper_id=task.paper_id,
-                task_type=TaskType.PEDIGREE_IDENTIFICATION,
-                updated_by_user_id=user_id,
-            )
+            for task_type in (
+                TaskType.PAPER_STRUCTURE,
+                TaskType.PEDIGREE_IDENTIFICATION,
+            ):
+                enqueue_task(
+                    session,
+                    paper_id=task.paper_id,
+                    task_type=task_type,
+                    updated_by_user_id=user_id,
+                )
             # Bibliographic metadata resolves against PubMed, so it stays its own
             # tool-backed task rather than folding into the one-shot extraction.
             enqueue_task(
                 session,
                 paper_id=task.paper_id,
                 task_type=TaskType.PAPER_METADATA,
-                updated_by_user_id=user_id,
-            )
-
-        case TaskType.PEDIGREE_IDENTIFICATION:
-            # Every later pass is given the pedigree description, so the reading
-            # chain starts here rather than forking from parsing.
-            enqueue_task(
-                session,
-                paper_id=task.paper_id,
-                task_type=TaskType.PAPER_STRUCTURE,
                 updated_by_user_id=user_id,
             )
 
@@ -294,7 +288,8 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
             )
 
         case (
-            TaskType.VARIANT_ANNOTATION
+            TaskType.PEDIGREE_IDENTIFICATION
+            | TaskType.VARIANT_ANNOTATION
             | TaskType.SEGREGATION_ANALYSIS_COMPUTED
             | TaskType.HPO_LINKING
             | TaskType.MONDO_LINKING

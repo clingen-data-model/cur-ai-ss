@@ -48,6 +48,16 @@ PAPER RELEVANCE
 PATIENTS AND FAMILIES
 - Identify every individual the paper reports data about, including unaffected relatives --
   they carry the segregation evidence.
+- Work through every place the paper names individuals, and start with its tables. A paper
+  reporting a series or cohort lists its patients as table rows, one per individual, under
+  the paper's own IDs -- enumerate every row of every such table, including rows under
+  sub-headings, and do not stop at the ones discussed in the text. A pedigree figure in the
+  same paper usually illustrates one family out of that series; read it for relationships,
+  sex and affected status, and for relatives the text does not name -- but it is never the
+  roster on its own. Read such figures yourself: a family tree drawn only to arrange images
+  by relative may label nobody, and unlabelled symbols are not patients you can name. Where
+  a figure individual is a patient the paper names elsewhere, use that name, not the
+  figure position, so one person does not become two.
 - Proband: the primary affected individual through whom a family was ascertained. If none
   is named, the individual discussed in most detail is the proband; say so in the reasoning.
 - Identifiers: the paper's own label exactly as written ("P1", "II-2", "TX-02", "Case 1"),
@@ -56,9 +66,10 @@ PATIENTS AND FAMILIES
   the proband ("Patient 2's brother"). For a single case report use "patient", proband.
 - Skip individuals with no usable identifier, and skip aggregate statistics ("5 males").
   Do not extract authors, animal models or non-clinical mentions.
-- Every patient belongs to exactly one family, named by family_identifier, matching one of
-  the families you return. Group by the paper's own labels, by pedigree structure, by
-  relational language and by shared family history. An individual with no identified
+- Every patient belongs to exactly one family, named by family_identifier, which must match
+  the identifier of one of the families you return -- that field alone assigns them, so
+  spell it identically in both places. Group by the paper's own labels, by pedigree
+  structure, by relational language and by shared family history. An individual with no identified
   relatives gets their own singleton family. Never merge unrelated patients, never split one
   family in two, never leave a patient unassigned.
 - Family labels: the paper's own ("Family 1", "FAM-001") exactly; otherwise number them in
@@ -92,24 +103,14 @@ VARIANTS
   identify a variant, and neither does prose like "a VUS in this gene"."""
 
 
-def _extract_structure_sync(
-    paper_id: int,
-    pdf_bytes: bytes,
-    pedigree_description: str | None = None,
-    pedigree_image_id: int | None = None,
-) -> PaperStructure | None:
-    prompt = 'Identify what this paper contains.'
-    if pedigree_description:
-        prompt += (
-            f'\n\nA pedigree figure in this paper (image_id {pedigree_image_id}) shows:\n'
-            f'{pedigree_description}\n\n'
-            'Use it: it names individuals the text may not, and gives their sex, '
-            'affected status and relationships. Cite it with that image_id.'
-        )
+def _extract_structure_sync(paper_id: int, pdf_bytes: bytes) -> PaperStructure | None:
     return _run(
         'structure',
         paper_id,
         PaperStructure,
         STRUCTURE_INSTRUCTIONS,
-        [_pdf_part(paper_id, pdf_bytes), {'type': 'text', 'text': prompt}],
+        [
+            _pdf_part(paper_id, pdf_bytes),
+            {'type': 'text', 'text': 'Identify what this paper contains.'},
+        ],
     )

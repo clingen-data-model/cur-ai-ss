@@ -134,8 +134,7 @@ def structure(patients: list[str], families: list[str], variants: list[str]):
             patients=[identity(name, families[0]) for name in patients],
             families=[
                 FamilyEntry(
-                    family=Family(identifier=block(f), consanguinity=block(False)),
-                    patient_identifiers=[block(p) for p in patients],
+                    family=Family(identifier=block(f), consanguinity=block(False))
                 )
                 for f in families
             ],

@@ -81,13 +81,17 @@ class InferredPaperStatus(StrEnum):
 
 # Task dependencies: when a task completes, these become PENDING
 TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
-    TaskType.PDF_PARSING: [TaskType.PEDIGREE_IDENTIFICATION, TaskType.PAPER_METADATA],
-    # The pedigree is read first because every later pass is given its
-    # description: it names individuals the text leaves out, and it settles sex
-    # and affected status the prose only implies.
-    TaskType.PEDIGREE_IDENTIFICATION: [TaskType.PAPER_STRUCTURE],
+    TaskType.PDF_PARSING: [
+        TaskType.PAPER_STRUCTURE,
+        TaskType.PEDIGREE_IDENTIFICATION,
+        TaskType.PAPER_METADATA,
+    ],
+    # Nothing consumes the pedigree reading -- the passes read the figure out of
+    # the PDF themselves -- so it is a leaf that runs for the UI's benefit
+    # rather than a step the rest of the pipeline waits behind.
+    TaskType.PEDIGREE_IDENTIFICATION: [],
     # Structure produces the patients, families and variants the remaining
-    # passes are given, so it is the only fork in the reading chain.
+    # passes are given, so it is the fork in the reading chain.
     TaskType.PAPER_STRUCTURE: [
         TaskType.PATIENT_DETAILS,
         TaskType.PATIENT_GENOTYPES,
