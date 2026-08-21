@@ -16,6 +16,38 @@ from lib.tasks.misc import enqueue_successors
 from lib.tasks.models import TaskStatus, TaskType
 
 LEASE_TIMEOUT_S = 1800
+
+# Single-pass curation reads an entire PDF and emits the whole curation, so it
+# runs in minutes where the rest of the queue runs in seconds: paper 1 took ~7.5
+# minutes for a 1 MB PDF and the corpus holds PDFs three times that size. Give
+# it room here rather than raising the global lease, which would also delay
+# recovery for the thousands of short lookup tasks.
+LEASE_TIMEOUT_OVERRIDES_S: dict[TaskType, int] = {
+    TaskType.PAPER_EXTRACTION: 3600,
+}
+
+
+def lease_timeout_for(task_type: TaskType) -> int:
+    return LEASE_TIMEOUT_OVERRIDES_S.get(task_type, LEASE_TIMEOUT_S)
+
+
+def _as_utc(value: datetime.datetime) -> datetime.datetime:
+    """SQLite hands back naive datetimes even for timezone-aware columns."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=datetime.timezone.utc)
+    return value
+
+
+def select_timed_out(tasks: list[TaskDB], now: datetime.datetime) -> list[TaskDB]:
+    """Of the tasks past the shortest lease, those past their own."""
+    return [
+        task
+        for task in tasks
+        if _as_utc(task.updated_at)
+        < now - datetime.timedelta(seconds=lease_timeout_for(task.type))
+    ]
+
+
 POLL_INTERVAL_S = 10
 MAX_RETRIES = 2
 RETRY_DELAY_S = 30
@@ -103,10 +135,13 @@ async def poll_and_schedule_tasks(
     """Poll for pending tasks and schedule them (non-blocking)."""
     with session_scope() as session:
         now = datetime.datetime.now(datetime.timezone.utc)
-        expired_cutoff = now - datetime.timedelta(seconds=LEASE_TIMEOUT_S)
+        # Filter on the shortest lease, then apply each task's own -- a task type
+        # with a longer lease must not be reset on the shorter one.
+        shortest_lease = min([LEASE_TIMEOUT_S, *LEASE_TIMEOUT_OVERRIDES_S.values()])
+        expired_cutoff = now - datetime.timedelta(seconds=shortest_lease)
 
         # Reset timed-out RUNNING/QUEUED tasks back to PENDING (only if retries remain)
-        timed_out_tasks = (
+        candidates = (
             session.query(TaskDB)
             .filter(
                 TaskDB.status.in_([TaskStatus.RUNNING, TaskStatus.QUEUED]),
@@ -114,6 +149,7 @@ async def poll_and_schedule_tasks(
             )
             .all()
         )
+        timed_out_tasks = select_timed_out(candidates, now)
         for task in timed_out_tasks:
             if task.tries < MAX_RETRIES:
                 logger.info(
@@ -127,7 +163,8 @@ async def poll_and_schedule_tasks(
                 )
                 task.status = TaskStatus.FAILED
                 task.error_message = (
-                    f'Task exceeded lease timeout ({LEASE_TIMEOUT_S}s) and max retries'
+                    f'Task exceeded lease timeout '
+                    f'({lease_timeout_for(task.type)}s) and max retries'
                 )
             task.updated_at = now
 
