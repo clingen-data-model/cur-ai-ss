@@ -17,9 +17,9 @@ from lib.tasks.models import TaskStatus, TaskType
 
 LEASE_TIMEOUT_S = 1800
 
-# Single-pass curation reads an entire PDF and emits the whole curation, so it
-# runs in minutes where the rest of the queue runs in seconds: paper 1 took ~7.5
-# minutes for a 1 MB PDF and the corpus holds PDFs three times that size. Give
+# Extraction reads an entire PDF several times over, so it runs in minutes
+# where the rest of the queue runs in seconds: paper 1 took ~7.5 minutes for a
+# 1 MB PDF and the corpus holds PDFs three times that size. Give
 # it room here rather than raising the global lease, which would also delay
 # recovery for the thousands of short lookup tasks.
 LEASE_TIMEOUT_OVERRIDES_S: dict[TaskType, int] = {

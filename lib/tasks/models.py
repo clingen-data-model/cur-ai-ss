@@ -29,7 +29,7 @@ class TaskType(StrEnum):
     HPO_LINKING = 'HPO Linking'  # per-patient
     MONDO_LINKING = 'MONDO Linking'
 
-    # Single-pass curation from the PDF. Replaces the chain of reading agents
+    # Curation read from the PDF itself. Replaces the chain of reading agents
     # above; those members remain so historical task rows still load.
     PAPER_EXTRACTION = 'Paper Extraction'
 
@@ -45,7 +45,7 @@ class TaskType(StrEnum):
             TaskType.VARIANT_ANNOTATION: 'Adds annotations (SpliceAI, conservation scores, etc.) to variants',
             TaskType.HPO_LINKING: 'Maps phenotypes to HPO ontology terms for standardization',
             TaskType.MONDO_LINKING: 'Maps disease names to MONDO ontology terms for standardization',
-            TaskType.PAPER_EXTRACTION: 'Reads the paper PDF and extracts the whole curation in one pass -- metadata, patients, families, demographics, pedigree, variants, phenotypes, patient-variant occurrences and segregation evidence',
+            TaskType.PAPER_EXTRACTION: 'Reads the paper PDF and extracts the whole curation -- metadata, patients, families, demographics, pedigree, variants, phenotypes, patient-variant occurrences and segregation evidence',
         }
         return descriptions[self]
 

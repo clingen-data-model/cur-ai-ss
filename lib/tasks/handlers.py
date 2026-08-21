@@ -800,12 +800,17 @@ async def handle_mondo_linking(task_id: int) -> None:
 
 
 async def handle_paper_extraction(task_id: int) -> None:
-    """Curate a whole paper in one pass, straight from the PDF.
+    """Curate a whole paper straight from the PDF.
 
-    Replaces the chain of reading agents. docling still runs before this (its
-    word positions drive PDF highlighting), but its markdown and table
-    extraction are not used here -- the model reads the PDF itself, which is how
-    it can follow a table continued across pages.
+    Replaces the chain of reading agents. Internally this is several passes over
+    the same PDF, split by entity so no single response has to carry the whole
+    curation, but the DAG sees one task: a pass failing fails the task and a
+    retry re-runs all of them.
+
+    The parse step still runs first -- docling-parse word positions drive PDF
+    highlighting and fitz supplies the figures a pedigree is chosen from -- but
+    none of its text is used here. The model reads the PDF itself, which is how
+    it can follow a table printed sideways or continued across pages.
     """
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
