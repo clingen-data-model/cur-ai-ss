@@ -189,18 +189,14 @@ with center:
         st.caption(' • '.join(parts))
     else:
         st.markdown(f'# {paper_resp.filename}')
-    # Nothing sets is_paper_relevant any more -- the classifier task is gone --
-    # but papers classified before the change still carry the flag.
+    # Set by the single-pass extraction; the reasoning lives in the same column
+    # the section classifier used to write.
     if paper_resp.is_paper_relevant is False:
-        reasoning = ''
-        if paper_resp.section_classifications:
-            relevance_block = paper_resp.section_classifications.get(
-                'is_paper_relevant', {}
-            )
-            reasoning = relevance_block.get('reasoning', '')
+        evidence = paper_resp.is_paper_relevant_evidence
+        reasoning = evidence.reasoning if evidence else ''
         st.warning(
             f'**Paper Classification Alert**: This paper was classified as not relevant for extraction (no clear patient-variant pairs found). {reasoning} '
-            'You can still process this paper using the **Rerun Agents** panel if needed, skipping the Paper Classification task.',
+            'You can still work with whatever the extraction did find.',
             icon='⚠️',
         )
 

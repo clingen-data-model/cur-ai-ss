@@ -303,7 +303,8 @@ def test_paper_classification_applies_type_and_disease():
     assert 'gene_disease_relation' not in PaperExtractionOutput.model_fields
 
     classification = PaperClassification(
-        paper_types=[PaperType.Research, PaperType.Case_study]
+        paper_types=[PaperType.Research, PaperType.Case_study],
+        is_paper_relevant=ReasoningBlock(value=True, reasoning='identifiable cases'),
     )
     paper_db = PaperDB(id='test-id-3', gene_id='1', filename='test3.pdf')
     classification.apply_to(paper_db)
@@ -320,5 +321,6 @@ def test_paper_classification_still_caps_types_at_two():
     assert schema['properties']['paper_types']['maxItems'] == 2
     with pytest.raises(ValueError):
         PaperClassification(
-            paper_types=[PaperType.Research, PaperType.Case_study, PaperType.Letter]
+            paper_types=[PaperType.Research, PaperType.Case_study, PaperType.Letter],
+            is_paper_relevant=ReasoningBlock(value=True, reasoning='x'),
         )

@@ -137,6 +137,30 @@ PAPER TYPE AND GENE-DISEASE RELATIONSHIP
   the abstract, introduction or case descriptions. Omit the gene-disease relation entirely
   where neither can be identified confidently.
 
+PAPER RELEVANCE
+- Judge whether this paper supports extracting patient-variant pairs at all, and say why
+  in a sentence or two.
+- The requirement is case-level or family-level identifiers that let variants and
+  phenotypes be tied to specific individuals: "Patient 1", "Case 3", "Proband",
+  "Family 1", pedigree labels like "II-2", subject IDs, or unique table row labels.
+  Without them, extraction cannot proceed.
+- Relevant: case reports and case series with identifiable cases; family studies linking
+  genetic data to phenotypes; clinical studies reporting individual genotypes and
+  phenotypes; cohort studies ONLY where individual patients or families can be
+  distinguished and linked to variants.
+- Not relevant: reviews and literature surveys without original case-level data;
+  meta-analyses reporting only aggregates; methods or technical papers without cases;
+  editorials and commentaries; population genetics without phenotype correlation; papers
+  describing gene function with no patients; papers giving only aggregate statistics,
+  diagnostic yields or variant counts; large cohort studies with no individual-level data;
+  and papers that mention patients but give no stable identifier tying variants and
+  phenotypes to specific cases.
+- A paper does not need full demographics for every patient to be relevant. What matters
+  is that specific variants and phenotypes can be connected to identifiable individuals
+  or families.
+- Judging a paper irrelevant does not excuse you from extracting whatever it does report;
+  fill in everything the paper supports either way.
+
 PATIENTS AND FAMILIES
 - Identify every individual human the paper reports data about, including unaffected
   relatives -- they carry the segregation evidence.

@@ -592,6 +592,11 @@ def _paper_to_resp(row: PaperDB) -> PaperResp:
         tags=[PaperTag(tag) for tag in row.tags],
         is_paper_relevant=row.is_paper_relevant,
         section_classifications=row.section_classifications,
+        is_paper_relevant_evidence=ReasoningBlock[bool].model_validate(
+            row.is_paper_relevant_evidence
+        )
+        if row.is_paper_relevant_evidence
+        else None,
         disease_name=row.disease_name,
         disease_name_evidence=HumanEvidenceBlock.model_validate(
             row.disease_name_evidence

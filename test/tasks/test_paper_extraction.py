@@ -107,7 +107,10 @@ def occurrence(pi: int, vi: int, zygosity=Zygosity.heterozygous):
 
 def curation(**overrides) -> OneShotPaperExtraction:
     fields = dict(
-        classification=PaperClassification(paper_types=[PaperType.Case_study]),
+        classification=PaperClassification(
+            paper_types=[PaperType.Case_study],
+            is_paper_relevant=ReasoningBlock(value=True, reasoning='has cases'),
+        ),
         families=[
             OneShotFamily(
                 family=Family(identifier=block('F1'), consanguinity=block(False)),

@@ -186,6 +186,7 @@ class PaperDB(Base):
         JSON,
         nullable=True,
     )
+    is_paper_relevant_evidence: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     # Gene-disease relationship (extracted from paper text and case data)
     disease_name: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -282,6 +283,7 @@ class PaperResp(PaperExtractionOutput):
     filename: str
     tags: list[PaperTag] = []
     is_paper_relevant: bool | None = None
+    is_paper_relevant_evidence: ReasoningBlock[bool] | None = None
     section_classifications: dict | None = None
     disease_name: str | None = None
     disease_name_evidence: HumanEvidenceBlock[str] | None = None
@@ -331,6 +333,7 @@ class PaperClassification(BaseModel):
     # never see a schema (PATCH requests, converters).
     paper_types: list[PaperType] = Field(max_length=2)
     gene_disease_relation: GeneDiseaseRelation | None = None
+    is_paper_relevant: ReasoningBlock[bool]
 
     @model_validator(mode='after')
     def max_two_paper_types(self) -> Self:
@@ -340,6 +343,8 @@ class PaperClassification(BaseModel):
 
     def apply_to(self, paper_db: 'PaperDB') -> None:
         paper_db.paper_types = [pt.value for pt in self.paper_types]
+        paper_db.is_paper_relevant = self.is_paper_relevant.value
+        paper_db.is_paper_relevant_evidence = self.is_paper_relevant.model_dump()
         if self.gene_disease_relation is not None:
             relation = self.gene_disease_relation.model_dump()
             paper_db.disease_name = relation['disease_name']['value']
