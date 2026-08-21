@@ -1,6 +1,7 @@
 """Plumbing common to every extraction pass."""
 
 import base64
+import functools
 import logging
 from typing import Any, TypeVar
 
@@ -25,8 +26,26 @@ part of the same table and describe the same series of patients. A value you cou
 is not the same as a value the paper does not report."""
 
 
+# Left to itself the SDK will wait on a socket indefinitely: a paper 89 run sat
+# blocked on the details pass for two hours and 47 minutes at 0% CPU with the
+# connection still ESTABLISHED. The bound has to hold against the worker's
+# 3600s lease for this task, and passes 2-4 run concurrently, so the worst case
+# is pedigree + structure + one of the concurrent three -- three legs at
+# 2 * 480s each, which fits with room to spare. The observed slowest pass was
+# 163s, so this is roughly 3x headroom before a retry, not a tight collar.
+_ATTEMPT_TIMEOUT_S = 480.0
+_MAX_RETRIES = 1
+
+
+@functools.cache
 def _client() -> OpenAI:
-    return OpenAI(api_key=env.OPENAI_API_KEY)
+    """One client for the process: each pass otherwise built its own connection
+    pool, which is how a single hung run held five sockets open."""
+    return OpenAI(
+        api_key=env.OPENAI_API_KEY,
+        timeout=_ATTEMPT_TIMEOUT_S,
+        max_retries=_MAX_RETRIES,
+    )
 
 
 def _pdf_part(paper_id: int, pdf_bytes: bytes) -> dict[str, Any]:
@@ -47,6 +66,7 @@ def _run(
     instructions: str,
     content: list[dict[str, Any]],
 ) -> T | None:
+    logger.info(f'Paper {paper_id} {label}: requesting')
     completion = _client().chat.completions.parse(
         model=env.OPENAI_VLM,
         messages=[

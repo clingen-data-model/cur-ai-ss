@@ -265,3 +265,17 @@ def test_the_split_does_not_change_the_pipeline_graph():
             assert PIPELINE_ORDER[task] < PIPELINE_ORDER[successor]
 
     assert TaskType.PAPER_EXTRACTION in TASK_SUCCESSORS
+
+
+def test_every_pass_is_bounded_in_time():
+    """A run once sat blocked on one pass for 2h47m with the socket still open.
+
+    The bound also has to fit the worker's lease for this task: the longest
+    chain is pedigree, then structure, then one of the three concurrent passes.
+    """
+    from lib.agents.paper_extraction import _shared
+    from lib.bin.worker import lease_timeout_for
+    from lib.tasks.models import TaskType
+
+    worst_case_per_pass = _shared._ATTEMPT_TIMEOUT_S * (_shared._MAX_RETRIES + 1)
+    assert worst_case_per_pass * 3 < lease_timeout_for(TaskType.PAPER_EXTRACTION)
