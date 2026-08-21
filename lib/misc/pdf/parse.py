@@ -115,6 +115,34 @@ def parse_words_json(stream: BytesIO) -> list[WordLoc]:
     return words_json
 
 
+def extract_text(stream: BytesIO) -> str:
+    """Reconstruct the paper's text, page by page.
+
+    Extraction reads the PDF directly, but the tasks that call tools -- PubMed
+    lookup, MONDO linking, segregation scoring -- run through the agents
+    framework and take text. This is what they read.
+
+    Line cells come out in reading order; words hyphenated across a line break
+    are rejoined, since a split "gene-\nspecific" otherwise reaches the model as
+    two tokens that match nothing.
+    """
+    parser = DoclingPdfParser()
+    pdf_doc: PdfDocument = parser.load(path_or_stream=stream)
+
+    pages: list[str] = []
+    for _, pred_page in pdf_doc.iterate_pages():
+        lines = [c.text for c in pred_page.iterate_cells(unit_type=TextCellUnit.LINE)]
+        joined: list[str] = []
+        for line in lines:
+            if joined and joined[-1].endswith('-'):
+                joined[-1] = joined[-1][:-1] + line
+            else:
+                joined.append(line)
+        pages.append('\n'.join(joined))
+
+    return '\n\n'.join(pages)
+
+
 # Journal banners and rules are extracted as images too. They are wide, short
 # and never a figure anyone cites, so they are skipped rather than shown to the
 # model as candidate pedigrees.
@@ -273,6 +301,10 @@ async def parse_content(
     figures = extract_figures(paper_id, content, supplement=supplement)
     pdf_figures_json_path(paper_id, supplement=supplement).write_text(
         '[' + ',\n'.join(f.model_dump_json() for f in figures) + ']'
+    )
+
+    pdf_markdown_path(paper_id, supplement=supplement).write_text(
+        extract_text(BytesIO(content))
     )
 
     words = parse_words_json(BytesIO(content))

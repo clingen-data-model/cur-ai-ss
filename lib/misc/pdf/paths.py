@@ -73,17 +73,20 @@ def pdf_image_caption_path(
 
 
 def fulltext_md(paper_id: int, supplement_format: 'FileFormat | None' = None) -> str:
-    """Supplement text, for the tasks that still read text rather than the PDF.
+    """The paper's text, for the tasks that read text rather than the PDF.
 
-    The main paper has no markdown any more -- extraction reads its PDF -- but
-    DOCX and XLSX supplements are still converted, because neither is a format
-    the model can be handed directly.
+    Reconstructed by the parse step from the PDF's own text layer. Extraction
+    reads the PDF directly; this exists for the tool-using tasks that run
+    through the agents framework.
     """
+    main = pdf_markdown_path(paper_id)
+    text = main.read_text() if main.exists() else ''
+
     supplement_md = pdf_markdown_path(paper_id, supplement=True)
     if not supplement_md.exists():
-        return ''
+        return text
 
     header = SUPPLEMENTARY_MATERIAL_HEADER
     if supplement_format:
         header += f' ({supplement_format.value.upper()})'
-    return f'{header}\n\n{supplement_md.read_text()}'
+    return f'{text}\n\n---\n\n{header}\n\n{supplement_md.read_text()}'

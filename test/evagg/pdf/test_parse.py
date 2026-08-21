@@ -102,11 +102,14 @@ async def test_docx_supplement_converts_without_inlining_images(
     assert fulltext_md(4, FileFormat.DOCX).endswith(md)
 
 
-async def test_fulltext_md_is_empty_without_a_supplement(
+async def test_paper_text_is_reconstructed_for_the_tool_using_tasks(
     test_file_contents, mocked_root_dir
 ):
-    """The main paper has no markdown any more -- its PDF is read directly."""
+    """Extraction reads the PDF, but PubMed/MONDO/segregation take text."""
     content = test_file_contents('ACN3-7-1962.pdf', mode='rb')
     await _parse(5, content)
 
-    assert fulltext_md(5) == ''
+    text = fulltext_md(5)
+    assert len(text) > 1000
+    # words split across a line break are rejoined, not left as two tokens
+    assert '-\n' not in text
