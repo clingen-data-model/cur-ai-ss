@@ -43,6 +43,7 @@ from lib.models.paper import (
     PaperType,
     PaperUpdateRequest,
     PedigreeDB,
+    PedigreeExtractionOutput,
     PedigreeResp,
 )
 from lib.models.patient import (

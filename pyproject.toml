@@ -25,7 +25,9 @@ dependencies = [
     "alembic>=1.18.4",
     "ipython",
     # pdf parsing
-    "docling==2.82.0",
+    "docling-parse>=5.6.1",
+    "docling-core>=2.70.2",
+    "mammoth>=1.8.0",
     "xldown>=0.1.0",
     "biopython>=1.86",
     "pymupdf>=1.26.7",
@@ -47,6 +49,7 @@ dev = [
     "types-requests==2.32.0.*",
     "pytest==8.2.2",
     "pytest-cov==5.0.0",
+    "pytest-asyncio==0.23.8",
     "watchdog>=6.0.0",
     "python-docx>=0.8.11",
 ]

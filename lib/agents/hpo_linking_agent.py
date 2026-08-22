@@ -361,7 +361,7 @@ HPO_LINKING_AGENT_INSTRUCTIONS = INSTRUCTIONS
 agent = Agent(
     name='hpo_linker',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
-    model=env.OPENAI_API_DEPLOYMENT,
+    model=env.OPENAI_LINKING_MODEL,
     output_type=ReasoningBlock[HPOTerm],
     tools=[search_hpo_terms, get_hpo_term, get_hpo_parents, get_hpo_children],
 )

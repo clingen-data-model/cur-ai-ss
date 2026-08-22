@@ -15,7 +15,27 @@ from lib.tasks.handlers import TASK_HANDLERS
 from lib.tasks.misc import enqueue_successors
 from lib.tasks.models import TaskStatus, TaskType
 
+# One lease for every task type. The longest-running task is a reading pass,
+# which is one model call bounded at 480s with a single retry -- 960s at worst,
+# comfortably inside this. Splitting extraction into passes is what made a
+# single lease workable again: the per-type override existed only for the
+# eight-minute task that no longer exists.
 LEASE_TIMEOUT_S = 1800
+
+
+def _as_utc(value: datetime.datetime) -> datetime.datetime:
+    """SQLite hands back naive datetimes even for timezone-aware columns."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=datetime.timezone.utc)
+    return value
+
+
+def select_timed_out(tasks: list[TaskDB], now: datetime.datetime) -> list[TaskDB]:
+    """Those past the lease, comparing against stored timestamps safely."""
+    cutoff = now - datetime.timedelta(seconds=LEASE_TIMEOUT_S)
+    return [task for task in tasks if _as_utc(task.updated_at) < cutoff]
+
+
 POLL_INTERVAL_S = 10
 MAX_RETRIES = 2
 RETRY_DELAY_S = 30
@@ -106,7 +126,7 @@ async def poll_and_schedule_tasks(
         expired_cutoff = now - datetime.timedelta(seconds=LEASE_TIMEOUT_S)
 
         # Reset timed-out RUNNING/QUEUED tasks back to PENDING (only if retries remain)
-        timed_out_tasks = (
+        candidates = (
             session.query(TaskDB)
             .filter(
                 TaskDB.status.in_([TaskStatus.RUNNING, TaskStatus.QUEUED]),
@@ -114,6 +134,7 @@ async def poll_and_schedule_tasks(
             )
             .all()
         )
+        timed_out_tasks = select_timed_out(candidates, now)
         for task in timed_out_tasks:
             if task.tries < MAX_RETRIES:
                 logger.info(

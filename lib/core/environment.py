@@ -28,9 +28,19 @@ class Env(BaseSettings):
     DISABLE_GCS_UPLOAD: bool = False
 
     # Required fields
-    OPENAI_API_DEPLOYMENT: str = 'gpt-5-mini'
+    # The model that reads papers. Every reading pass sends it a whole PDF and
+    # asks it to resolve sideways tables, tables continued across pages and
+    # figures, which is why the pipeline no longer runs on a mini tier.
+    OPENAI_API_DEPLOYMENT: str = 'gpt-5.6-sol'
     OPENAI_API_KEY: str = Field(...)
-    OPENAI_VLM: str = 'gpt-5.6-sol'
+    # HPO linking and variant harmonization never see the paper: they are given
+    # a phenotype string or an HGVS expression and match it against a reference,
+    # largely through tool calls. That is a cheaper tier's work, and there are
+    # ~50 of them per paper against 5 reading passes, so it is most of the bill.
+    #
+    # MONDO linking is deliberately not on this tier despite the name: it sends
+    # the whole paper as context to judge which disease the authors mean.
+    OPENAI_LINKING_MODEL: str = 'gpt-5.6-luna'
     LOG_LEVEL: LogLevel = LogLevel.INFO
 
     # SMTP (optional — if unset, registration emails are logged but not sent)

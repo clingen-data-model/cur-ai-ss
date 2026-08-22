@@ -20,45 +20,40 @@ class TaskType(StrEnum):
     """Pipeline task types in execution order."""
 
     PDF_PARSING = 'PDF Parsing'
-    PAPER_CLASSIFIER = 'Paper Classifier'
     GENERAL_PAPER_QUESTION = 'General Paper Question'
     PAPER_METADATA = 'Paper Metadata'
-    VARIANT_EXTRACTION = 'Variant Extraction'
-    PEDIGREE_DESCRIPTION = 'Pedigree Description'
-    PATIENT_EXTRACTION = 'Patient Extraction'
-    PATIENT_DEMOGRAPHICS = 'Patient Demographics'  # per-patient
 
-    SEGREGATION_EVIDENCE_EXTRACTION = 'Segregation Evidence Extraction'  # per-family
     SEGREGATION_ANALYSIS_COMPUTED = 'Segregation Analysis Computed'  # per-family
     VARIANT_HARMONIZATION = 'Variant Harmonization'
     VARIANT_ANNOTATION = 'Variant Annotation'
-    PATIENT_VARIANT_OCCURRENCES = 'Patient Variant Occurrences'
-    COMPOUND_HET_EVALUATION = 'Compound Het Evaluation'  # per-patient
-    PHENOTYPE_EXTRACTION = 'Phenotype Extraction'  # per-patient
     HPO_LINKING = 'HPO Linking'  # per-patient
     MONDO_LINKING = 'MONDO Linking'
+
+    # Reading the paper, split by entity. Each is one model call over the PDF
+    # itself, so the queue can retry, rerun and time them separately.
+    PEDIGREE_IDENTIFICATION = 'Pedigree Identification'
+    PAPER_STRUCTURE = 'Paper Structure'
+    PATIENT_DETAILS = 'Patient Details'
+    PATIENT_GENOTYPES = 'Patient Genotypes'
+    SEGREGATION_EVIDENCE = 'Segregation Evidence'
 
     @property
     def description(self) -> str:
         """Return a human-readable description with context about what this task does."""
         descriptions: dict[TaskType, str] = {
             TaskType.PDF_PARSING: 'Parses PDF file and extract text, tables, and images',
-            TaskType.PAPER_CLASSIFIER: 'Classifies paper sections by relevance and evaluates if paper contains extractable patient-variant pairs',
             TaskType.GENERAL_PAPER_QUESTION: 'Answers a general question using the full paper text and all extracted data',
             TaskType.PAPER_METADATA: 'Extracts paper title, authors, publication date, and other metadata; resolve to PubMed article',
-            TaskType.VARIANT_EXTRACTION: 'Identifies genetic variants mentioned in the paper',
-            TaskType.PEDIGREE_DESCRIPTION: 'Analyzes the images in the paper to determine if there is a describable pedigree',
-            TaskType.PATIENT_EXTRACTION: 'Identifies patients, assigns identifiers and proband status, and groups them into families',
-            TaskType.PATIENT_DEMOGRAPHICS: 'Attaches demographic and clinical details (sex, ages, race, ethnicity, affected status, etc.) to each identified patient',
-            TaskType.SEGREGATION_EVIDENCE_EXTRACTION: 'Collects segregation analysis evidence within each family',
             TaskType.SEGREGATION_ANALYSIS_COMPUTED: 'Computes segregation analysis results per family',
             TaskType.VARIANT_HARMONIZATION: 'Normalizes variants to standard genomic coordinates using ClinVar, dbSNP, ClinGen Allele Registry, and VariantValidator',
             TaskType.VARIANT_ANNOTATION: 'Adds annotations (SpliceAI, conservation scores, etc.) to variants',
-            TaskType.PATIENT_VARIANT_OCCURRENCES: 'Associates patients with their variants and inheritance patterns',
-            TaskType.COMPOUND_HET_EVALUATION: 'Evaluates pairs of heterozygous variants to identify compound heterozygous genotypes',
-            TaskType.PHENOTYPE_EXTRACTION: 'Extracts phenotype text spans per patient',
             TaskType.HPO_LINKING: 'Maps phenotypes to HPO ontology terms for standardization',
             TaskType.MONDO_LINKING: 'Maps disease names to MONDO ontology terms for standardization',
+            TaskType.PEDIGREE_IDENTIFICATION: 'Finds which extracted figure is the pedigree and describes it individual by individual',
+            TaskType.PAPER_STRUCTURE: 'Reads the PDF for what the paper contains: classification, relevance, families, patients and variants',
+            TaskType.PATIENT_DETAILS: "Reads the PDF for each identified patient's demographics, ages and phenotypes",
+            TaskType.PATIENT_GENOTYPES: 'Reads the PDF for which patient carries which variant, and which variant pairs are in trans',
+            TaskType.SEGREGATION_EVIDENCE: "Reads the PDF for each family's reported LOD score and non-segregations",
         }
         return descriptions[self]
 
@@ -86,33 +81,32 @@ class InferredPaperStatus(StrEnum):
 
 # Task dependencies: when a task completes, these become PENDING
 TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
-    TaskType.PDF_PARSING: [TaskType.PAPER_CLASSIFIER],
-    TaskType.PAPER_CLASSIFIER: [
+    TaskType.PDF_PARSING: [
+        TaskType.PAPER_STRUCTURE,
+        TaskType.PEDIGREE_IDENTIFICATION,
         TaskType.PAPER_METADATA,
-        TaskType.VARIANT_EXTRACTION,
-        TaskType.PEDIGREE_DESCRIPTION,
     ],
-    TaskType.PEDIGREE_DESCRIPTION: [TaskType.PATIENT_EXTRACTION],
-    TaskType.PATIENT_EXTRACTION: [TaskType.PATIENT_DEMOGRAPHICS],
-    TaskType.PATIENT_DEMOGRAPHICS: [
-        TaskType.PHENOTYPE_EXTRACTION,
-        TaskType.PATIENT_VARIANT_OCCURRENCES,
-    ],
-    TaskType.PAPER_METADATA: [TaskType.MONDO_LINKING],
-    TaskType.VARIANT_EXTRACTION: [
+    # Nothing consumes the pedigree reading -- the passes read the figure out of
+    # the PDF themselves -- so it is a leaf that runs for the UI's benefit
+    # rather than a step the rest of the pipeline waits behind.
+    TaskType.PEDIGREE_IDENTIFICATION: [],
+    # Structure produces the patients, families and variants the remaining
+    # passes are given, so it is the fork in the reading chain.
+    TaskType.PAPER_STRUCTURE: [
+        TaskType.PATIENT_DETAILS,
+        TaskType.PATIENT_GENOTYPES,
+        TaskType.SEGREGATION_EVIDENCE,
         TaskType.VARIANT_HARMONIZATION,
-        TaskType.PATIENT_VARIANT_OCCURRENCES,
     ],
+    # Each reading pass now feeds only the lookups that need what it produced,
+    # rather than every lookup waiting on every entity.
+    TaskType.PATIENT_DETAILS: [TaskType.HPO_LINKING],
+    TaskType.PATIENT_GENOTYPES: [TaskType.MONDO_LINKING],
+    TaskType.SEGREGATION_EVIDENCE: [TaskType.SEGREGATION_ANALYSIS_COMPUTED],
+    TaskType.PAPER_METADATA: [TaskType.MONDO_LINKING],
     TaskType.VARIANT_HARMONIZATION: [TaskType.VARIANT_ANNOTATION],
     TaskType.VARIANT_ANNOTATION: [],
-    TaskType.PATIENT_VARIANT_OCCURRENCES: [
-        TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
-        TaskType.COMPOUND_HET_EVALUATION,
-        TaskType.MONDO_LINKING,
-    ],
-    TaskType.SEGREGATION_EVIDENCE_EXTRACTION: [TaskType.SEGREGATION_ANALYSIS_COMPUTED],
     TaskType.SEGREGATION_ANALYSIS_COMPUTED: [],
-    TaskType.PHENOTYPE_EXTRACTION: [TaskType.HPO_LINKING],
     TaskType.HPO_LINKING: [],
     TaskType.MONDO_LINKING: [],
 }

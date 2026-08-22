@@ -13,7 +13,11 @@ class ReasoningBlock(BaseModel, Generic[T]):
 
 class EvidenceBlock(ReasoningBlock[T]):
     quote: str | None = None  # verbatim quote from text
-    table_id: int | None = None  # table-based evidence
+    # Legacy. Nothing produces a table_id any more: table-derived values are
+    # quoted instead, which highlights the value rather than the table around
+    # it. Kept because 37 stored blocks on dev cite a table and nothing else,
+    # and removing the field would stop them loading.
+    table_id: int | None = None
     image_id: int | None = None  # figure/pedigree evidence
     is_supplement: bool = (
         False  # whether evidence came from a supplement (non-renderable in PDF view)
@@ -42,11 +46,10 @@ class EvidenceBlock(ReasoningBlock[T]):
             and self.image_id is None
         ):
             raise ValueError(
-                'At least one evidence source must be provided: '
-                'quote, table_id, or image_id'
+                'At least one evidence source must be provided: quote or image_id'
             )
 
-        # Prioritize table_id if both are provided
+        # Legacy blocks may carry both; the table reference is the weaker one.
         if self.table_id is not None and self.image_id is not None:
             self.image_id = None
 

@@ -446,16 +446,6 @@ def _render_family_group(
         if seg_data:
             seg_header_col, seg_button_col = st.columns([5, 1])
             seg_header_col.subheader('📊 Segregation Analysis')
-            render_rerun_popover(
-                label='🔄 Re-run segregation',
-                key_prefix=f'{tab_key}-fam-{family.id}-rerun-segregation',
-                paper_id=paper_resp.id,
-                task_type=TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
-                family_id=family.id,
-                help='Re-run segregation evidence extraction for this family '
-                '(also recomputes the analysis).',
-                container=seg_button_col,
-            )
 
             # Extracted LOD Score
             col1, col2 = st.columns(2)
@@ -1335,15 +1325,6 @@ def render_patient(
         st.divider()
         header_col, button_col = st.columns([4, 1])
         header_col.markdown('### Phenotypes')
-        render_rerun_popover(
-            label='🔄 Re-extract phenotypes',
-            key_prefix=f'{key_prefix}-reextract-phenotypes',
-            paper_id=paper_resp.id,
-            task_type=TaskType.PHENOTYPE_EXTRACTION,
-            patient_id=patient_id,
-            help='Re-run phenotype extraction for this patient (also re-links HPO terms).',
-            container=button_col,
-        )
         try:
             phenotypes = get_phenotypes(paper_resp.id, patient.id)
             _render_patient_phenotypes(phenotypes, paper_resp, key_prefix, patient.id)
@@ -1356,7 +1337,7 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
     if not paper_resp.title:
         st.write(f'{paper_resp.filename} not yet extracted...')
         return
-    if not is_task_completed(paper_resp.tasks, TaskType.PATIENT_EXTRACTION):
+    if not is_task_completed(paper_resp.tasks, TaskType.PAPER_STRUCTURE):
         st.write(f'Patient Extraction not yet completed...')
         return
     # -----------------------------
