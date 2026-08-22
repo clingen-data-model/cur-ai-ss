@@ -330,6 +330,15 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
                     'affected_status': p.affected_status,
                     'proband_status': p.proband_status,
                     'sex': p.sex,
+                    # The scoring rules turn on these three: siblings are
+                    # counted and parents are not, obligate carriers are counted
+                    # separately, and monozygotic twins share a meiosis. Without
+                    # them the agent could only recover the family structure by
+                    # reading the paper, which is why the whole text was being
+                    # sent after them.
+                    'relationship_to_proband': p.relationship_to_proband,
+                    'is_obligate_carrier': p.is_obligate_carrier,
+                    'twin_type': p.twin_type,
                 }
                 for p in patients
             ],
@@ -361,11 +370,12 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
         # Follow-up: agent has context from conversation
         message = build_followup_prompt(additional_context)
     else:
-        # Initial query: build full message with paper + family data + instructions
-        paper_markdown = fulltext_md(paper_id, supplement_format)
-        paper_context = format_paper_context(paper_markdown)
+        # No paper text: the agent's own instructions open "INPUT
+        # (database-derived, no paper text)", and everything they list is in
+        # family_info. Sending it anyway cost 1.16M input tokens on paper 92
+        # alone -- the whole paper, once per family, through a multi-turn agent,
+        # which was 76% of that paper's entire input budget.
         message = (
-            f'{paper_context}\n\n'
             f'Family Structure and Data: {json.dumps(family_info, indent=2, default=str)}\n\n'
             f'{SEGREGATION_ANALYSIS_COMPUTED_AGENT_INSTRUCTIONS}'
         )
