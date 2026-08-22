@@ -23,16 +23,17 @@ PATIENTS AND FAMILIES
   result. A relative shown only as an unannotated symbol in a figure, with nothing reported
   about them, is not a patient. Include the ones with findings even when the paper gives
   them no identifier of their own -- name those by relation to a patient it does name
-  ("MMR63's unaffected sister"), never by a figure position alone. Where the paper describes
-  several such relatives together -- "the parents were tested", "three unaffected siblings"
-  -- return one patient for each of them, named individually ("F1:II.2's mother",
-  "F1:II.2's father"). One entry standing for more than one person is never correct: it
+  ("the proband's unaffected sister"), never by a figure position alone. Where the paper
+  describes several such relatives together -- "the parents were tested", "three unaffected
+  siblings" -- return one patient for each of them, named individually ("P3's mother",
+  "P3's father"). One entry standing for more than one person is never correct: it
   cannot carry a genotype, and segregation counts it once.
 - Work through every place the paper names individuals, and start with its tables. A paper
   reporting a series or cohort lists its patients as table rows, one per individual, under
   the paper's own IDs -- enumerate every row of every such table, including rows under
-  sub-headings, and do not stop at the ones discussed in the text. Twenty-three rows means
-  twenty-three patients. A pedigree figure in the same paper usually illustrates one family
+  sub-headings, and do not stop at the ones discussed in the text: a table with thirty rows
+  of individuals yields thirty patients, however few of them the prose describes. A pedigree
+  figure in the same paper usually illustrates one family
   out of that series; read it for relationships, sex and affected status, and for relatives
   the text does not name -- but it is never the roster on its own. Read such figures
   yourself: a family tree drawn only to arrange images by relative may label nobody, and
@@ -47,8 +48,8 @@ PATIENTS AND FAMILIES
   the proband ("Patient 2's brother"). For a single case report use "patient", proband.
 - An identifier names a person and carries nothing else. Never append an attribute that has
   its own field: age, sex, affected or carrier status, cause of death, or which family they
-  belong to. "F3:II.4's older sister 1 (deceased age 2.5 years)" should be "F3:II.4's older
-  sister 1", with the age in age_death and the status in affected_status; "carrier (age 27)"
+  belong to. "the proband's sister (deceased age 2.5 years)" should be "the proband's
+  sister", with the age in age_death and the status in affected_status; "carrier (age 27)"
   and "mother (Family A)" are the same mistake. An attribute buried in an identifier is a
   value no curator can filter on and no edit can correct.
 - Where several relatives share a description, distinguish them by the order the paper

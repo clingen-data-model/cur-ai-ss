@@ -35,15 +35,15 @@ CRITICAL:
     - Avoid partial identifiers that are ambiguous (e.g., "Case 2" when "Case 2", "Case 23", "Case 24" exist; instead quote the full row or full context)
 - A verbatim quote means an exact substring of the input source text with no modifications.
 - The value and the quote answer to different sources, and this matters where a PDF's
-  embedded text layer is corrupt -- broken font mappings render ">" as "4", "<=" as "5", a
-  minus sign as the letter I.
-  - value is what the page shows a reader. If the page prints c.98T>G, the value is
-    c.98T>G, whatever the text layer extracted. Never store a value carrying such an
-    artifact: it is not what the paper reports.
+  embedded text layer is corrupt, which happens when a paper's fonts carry a broken
+  character mapping and an operator or symbol extracts as an unrelated character.
+  - value is what the page shows a reader. Where the page prints an operator that the
+    extracted text renders as a digit or a space, the value keeps the operator. Never store
+    a value carrying such an artifact: it is not what the paper reports.
   - quote is a locator, used to find and highlight the text on the page for a curator, so
     it stays an exact substring of the source text even where that text is corrupt.
-  - So a corrupt source yields value "c.98T>G" with quote "c.98T 4 G", and both are
-    correct. Say so in reasoning when the two differ.
+  - So the value reads as the page prints it while its quote still matches the mangled
+    source, and both are correct. Say so in reasoning when the two differ.
 - reasoning MAY include verbatim quotes from the input source text if helpful.
   - reasoning should primarily explain how the value was derived and why it was chosen.
   - reasoning is read by human curators reviewing extracted data — write it in plain language

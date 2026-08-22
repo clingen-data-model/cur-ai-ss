@@ -27,9 +27,10 @@ is not the same as a value the paper does not report.
 
 The PDF carries an embedded text layer as well as the printed pages, and that text layer is
 often wrong: papers are typeset with fonts whose character mapping is broken, so a
-character reads as something else entirely. Seen in these papers: ">" extracted as "4" or
-as a space, so c.98T>G reads "c.98T 4 G"; "<=" extracted as "5", so an onset of "<=1 y"
-reads "51 y"; a minus sign extracted as the letter I. Read every value off the printed page
+character extracts as something else entirely. Operators and symbols are what break --
+">", "<=", ">=", the minus sign, superscripts -- each arriving as an unrelated digit,
+letter or space. An HGVS operator turning into a digit and an age comparator turning into
+a leading digit are both common. Read every value off the printed page
 as it appears to the eye. Where the two disagree, the page is right and the text layer is
 wrong. Never copy a value carrying an artifact like these -- a nonsensical HGVS operator, a
 biologically impossible age -- and never let one merge two values into one field."""
