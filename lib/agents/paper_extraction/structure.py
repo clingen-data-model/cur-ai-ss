@@ -52,7 +52,11 @@ PATIENTS AND FAMILIES
   result. A relative shown only as an unannotated symbol in a figure, with nothing reported
   about them, is not a patient. Include the ones with findings even when the paper gives
   them no identifier of their own -- name those by relation to a patient it does name
-  ("MMR63's unaffected sister"), never by a figure position alone.
+  ("MMR63's unaffected sister"), never by a figure position alone. Where the paper describes
+  several such relatives together -- "the parents were tested", "three unaffected siblings"
+  -- return one patient for each of them, named individually ("F1:II.2's mother",
+  "F1:II.2's father"). One entry standing for more than one person is never correct: it
+  cannot carry a genotype, and segregation counts it once.
 - Work through every place the paper names individuals, and start with its tables. A paper
   reporting a series or cohort lists its patients as table rows, one per individual, under
   the paper's own IDs -- enumerate every row of every such table, including rows under
