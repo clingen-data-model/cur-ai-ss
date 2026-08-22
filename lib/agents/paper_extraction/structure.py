@@ -47,7 +47,12 @@ PAPER RELEVANCE
 
 PATIENTS AND FAMILIES
 - Identify every individual the paper reports data about, including unaffected relatives --
-  they carry the segregation evidence.
+  they carry the segregation evidence. What qualifies someone is that the paper reports
+  something about them: a genotype, a phenotype, an affected or carrier status, a test
+  result. A relative shown only as an unannotated symbol in a figure, with nothing reported
+  about them, is not a patient. Include the ones with findings even when the paper gives
+  them no identifier of their own -- name those by relation to a patient it does name
+  ("MMR63's unaffected sister"), never by a figure position alone.
 - Work through every place the paper names individuals, and start with its tables. A paper
   reporting a series or cohort lists its patients as table rows, one per individual, under
   the paper's own IDs -- enumerate every row of every such table, including rows under

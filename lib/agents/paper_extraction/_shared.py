@@ -23,7 +23,16 @@ so never supply a value the paper does not print.
 Clinical values, especially ages, frequently appear only in tables. A table may be printed
 sideways, or continued across pages under a "Continued" heading -- continuation pages are
 part of the same table and describe the same series of patients. A value you could not read
-is not the same as a value the paper does not report."""
+is not the same as a value the paper does not report.
+
+The PDF carries an embedded text layer as well as the printed pages, and that text layer is
+often wrong: papers are typeset with fonts whose character mapping is broken, so a
+character reads as something else entirely. Seen in these papers: ">" extracted as "4" or
+as a space, so c.98T>G reads "c.98T 4 G"; "<=" extracted as "5", so an onset of "<=1 y"
+reads "51 y"; a minus sign extracted as the letter I. Read every value off the printed page
+as it appears to the eye. Where the two disagree, the page is right and the text layer is
+wrong. Never copy a value carrying an artifact like these -- a nonsensical HGVS operator, a
+biologically impossible age -- and never let one merge two values into one field."""
 
 
 # Passing the PDF is cheap: an 850KB paper is ~16.5k tokens, only 1.5x the
@@ -88,8 +97,7 @@ def _run(
         cached = getattr(details, 'cached_tokens', 0) or 0
         share = cached / usage.prompt_tokens if usage.prompt_tokens else 0.0
         logger.info(
-            f'Paper {paper_id} {label}: {usage.prompt_tokens} prompt '
-            f'({cached} cached, {share:.1%}), '
-            f'{usage.completion_tokens} completion tokens'
+            f'[TOKENS] {label.upper()}: input={usage.prompt_tokens} '
+            f'cached={cached} ({share:.1%}) output={usage.completion_tokens}'
         )
     return completion.choices[0].message.parsed

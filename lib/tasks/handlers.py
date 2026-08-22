@@ -121,12 +121,17 @@ logger = logging.getLogger(__name__)
 
 
 def log_cache_metrics(task_type: str, result: Any) -> None:
-    """Log prompt cache metrics from agent response."""
+    """Log token usage for one agent run, summed across its turns.
+
+    Output tokens are here too, not just cache metrics: they are the expensive
+    half, and a run's cost cannot be worked out from input alone.
+    """
     if not hasattr(result, 'raw_responses') or not result.raw_responses:
         return
 
     total_input = 0
     total_cache_read = 0
+    total_output = 0
 
     for resp in result.raw_responses:
         if not hasattr(resp, 'usage'):
@@ -142,13 +147,14 @@ def log_cache_metrics(task_type: str, result: Any) -> None:
 
         total_input += input_tokens
         total_cache_read += cache_read
+        total_output += usage.output_tokens or 0
 
     if total_input > 0:
         cache_pct = (total_cache_read / total_input * 100) if total_input > 0 else 0
         logger.info(
-            f'[CACHE] {task_type}: '
+            f'[TOKENS] {task_type}: '
             f'input={total_input} cached={total_cache_read} '
-            f'({cache_pct:.1f}%)'
+            f'({cache_pct:.1f}%) output={total_output}'
         )
 
 
