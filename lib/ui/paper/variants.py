@@ -41,7 +41,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
     if not paper_resp.title:
         st.write(f'{paper_resp.filename} not yet extracted...')
         return
-    elif not is_task_completed(paper_resp.tasks, TaskType.PAPER_STRUCTURE):
+    elif not is_task_completed(paper_resp.tasks, TaskType.VARIANT_EXTRACTION):
         st.write(f'Variant Extraction not yet completed...')
         return
     variant_rows = get_variants(paper_resp.id)

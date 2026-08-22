@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session
 
 from lib.agents.paper_extraction import (
     Genotypes,
-    PaperStructure,
     PatientDetails,
     SegregationFindings,
 )
@@ -35,8 +34,10 @@ from lib.models.converters import (
     segregation_evidence_to_db,
     variant_to_db,
 )
-from lib.models.paper import PedigreeExtractionOutput
+from lib.models.paper import PaperClassification, PedigreeExtractionOutput
+from lib.models.patient import PatientExtractionOutput
 from lib.models.segregation_analysis import SegregationEvidenceDB
+from lib.models.variant import Variant
 
 logger = logging.getLogger(__name__)
 
@@ -59,39 +60,47 @@ def persist_pedigree(
     return {'pedigrees': 1}
 
 
-def persist_structure(
-    session: Session, paper_id: int, agent_run_id: int, structure: PaperStructure
+def persist_classification(
+    session: Session, paper_id: int, classification: PaperClassification
 ) -> dict[str, int]:
-    """Families, patients and variants -- everything the later passes are given.
+    """Paper-level fields; nothing is keyed to these, so nothing is cleared."""
+    paper = session.get(PaperDB, paper_id)
+    if paper:
+        classification.apply_to(paper)
+    return {'classified': 1 if paper else 0}
 
-    Rerunning this replaces the entities the other passes were keyed to, so
-    their output goes too. The database does most of that itself: patients,
-    phenotypes and occurrences all cascade from what is deleted here, as do the
-    scoped task rows pointing at them.
+
+def persist_patients(
+    session: Session,
+    paper_id: int,
+    agent_run_id: int,
+    extraction: PatientExtractionOutput,
+) -> dict[str, int]:
+    """The roster the later passes are keyed to.
+
+    Rerunning it replaces the patients and families those passes referred to, so
+    their output goes too. The database does most of that itself: phenotypes,
+    occurrences and segregation evidence all cascade from what is deleted here,
+    as do the scoped task rows pointing at them.
     """
     session.query(SegregationEvidenceDB).filter(
         SegregationEvidenceDB.family_id.in_(
             session.query(FamilyDB.id).filter(FamilyDB.paper_id == paper_id)
         )
     ).delete(synchronize_session=False)
-    session.query(VariantDB).filter(VariantDB.paper_id == paper_id).delete()
     session.query(PatientDB).filter(PatientDB.paper_id == paper_id).delete()
     session.query(FamilyDB).filter(FamilyDB.paper_id == paper_id).delete()
     session.flush()
 
-    paper = session.get(PaperDB, paper_id)
-    if paper:
-        structure.classification.apply_to(paper)
-
     family_ids: dict[str, int] = {}
-    for entry in structure.patients.families:
+    for entry in extraction.families:
         db_family = family_to_db(paper_id, agent_run_id, entry.family)
         session.add(db_family)
         session.flush()
         family_ids[entry.family.identifier.value] = db_family.id
 
     patients = 0
-    for identity in structure.patients.patients:
+    for identity in extraction.patients:
         db_patient = patient_identity_to_db(paper_id, identity, agent_run_id)
         family_id = family_ids.get(identity.family_identifier.value)
         if family_id is None:
@@ -120,17 +129,21 @@ def persist_structure(
         session.add(db_patient)
         patients += 1
 
-    variants = 0
-    for variant in structure.variants:
-        session.add(variant_to_db(paper_id, variant, agent_run_id))
-        variants += 1
-
     session.flush()
-    return {
-        'families': len(family_ids),
-        'patients': patients,
-        'variants': variants,
-    }
+    return {'families': len(family_ids), 'patients': patients}
+
+
+def persist_variants(
+    session: Session, paper_id: int, agent_run_id: int, variants: list[Variant]
+) -> dict[str, int]:
+    """Rerunning this drops the occurrences keyed to the old variant rows."""
+    session.query(VariantDB).filter(VariantDB.paper_id == paper_id).delete()
+    session.flush()
+
+    for variant in variants:
+        session.add(variant_to_db(paper_id, variant, agent_run_id))
+    session.flush()
+    return {'variants': len(variants)}
 
 
 def persist_details(

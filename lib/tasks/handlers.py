@@ -49,10 +49,12 @@ class RateLimitError(Exception):
 
 
 from lib.agents.paper_extraction import (
+    _classify_paper_sync,
     _extract_details_sync,
     _extract_genotypes_sync,
+    _extract_patients_sync,
     _extract_segregation_sync,
-    _extract_structure_sync,
+    _extract_variants_sync,
     _identify_pedigree_sync,
     variant_label,
 )
@@ -109,11 +111,13 @@ from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
 from lib.reference_data.mondo import get_mondo_term
 from lib.tasks.models import TaskType
 from lib.tasks.paper_extraction import (
+    persist_classification,
     persist_details,
     persist_genotypes,
+    persist_patients,
     persist_pedigree,
     persist_segregation,
-    persist_structure,
+    persist_variants,
 )
 
 setup_logging()
@@ -878,21 +882,48 @@ async def handle_pedigree_identification(task_id: int) -> None:
     logger.info(f'Paper {paper_id} pedigree: {stored}')
 
 
-async def handle_paper_structure(task_id: int) -> None:
-    """Read the PDF for what the paper contains.
+async def handle_paper_classification(task_id: int) -> None:
+    """Read the PDF for paper type, relevance and the gene-disease relation."""
+    paper_id, pdf_bytes, _ = await _paper_context(task_id)
 
-    The fork in the reading chain: it produces the patients, families and
-    variants the remaining passes are handed.
+    classification = await asyncio.to_thread(_classify_paper_sync, paper_id, pdf_bytes)
+    if classification is None:
+        raise ValueError(f'Paper {paper_id}: classification returned no parsed output')
+
+    with session_scope() as session:
+        stored = persist_classification(session, paper_id, classification)
+    logger.info(f'Paper {paper_id} classification: {stored}')
+
+
+async def handle_patient_extraction(task_id: int) -> None:
+    """Read the PDF for every individual it reports on, and their families.
+
+    The roster the later passes are keyed to, which is why it gets a response to
+    itself: sharing one with the classification and the variants is how a paper
+    with twenty-three patients in a table came back with none.
     """
     paper_id, pdf_bytes, agent_run_id = await _paper_context(task_id)
 
-    structure = await asyncio.to_thread(_extract_structure_sync, paper_id, pdf_bytes)
-    if structure is None:
-        raise ValueError(f'Paper {paper_id}: structure pass returned no parsed output')
+    patients = await asyncio.to_thread(_extract_patients_sync, paper_id, pdf_bytes)
+    if patients is None:
+        raise ValueError(f'Paper {paper_id}: patient extraction returned no output')
 
     with session_scope() as session:
-        stored = persist_structure(session, paper_id, agent_run_id, structure)
-    logger.info(f'Paper {paper_id} structure: {stored}')
+        stored = persist_patients(session, paper_id, agent_run_id, patients)
+    logger.info(f'Paper {paper_id} patients: {stored}')
+
+
+async def handle_variant_extraction(task_id: int) -> None:
+    """Read the PDF for every variant it reports."""
+    paper_id, pdf_bytes, agent_run_id = await _paper_context(task_id)
+
+    variants = await asyncio.to_thread(_extract_variants_sync, paper_id, pdf_bytes)
+    if variants is None:
+        raise ValueError(f'Paper {paper_id}: variant extraction returned no output')
+
+    with session_scope() as session:
+        stored = persist_variants(session, paper_id, agent_run_id, variants.variants)
+    logger.info(f'Paper {paper_id} variants: {stored}')
 
 
 async def handle_patient_details(task_id: int) -> None:
@@ -983,11 +1014,13 @@ async def handle_segregation_evidence(task_id: int) -> None:
 
 TASK_HANDLERS: dict[TaskType, Callable[[int], Awaitable[None]]] = {
     TaskType.PDF_PARSING: handle_pdf_parsing,
-    TaskType.PEDIGREE_IDENTIFICATION: handle_pedigree_identification,
-    TaskType.PAPER_STRUCTURE: handle_paper_structure,
-    TaskType.PATIENT_DETAILS: handle_patient_details,
-    TaskType.PATIENT_GENOTYPES: handle_patient_genotypes,
-    TaskType.SEGREGATION_EVIDENCE: handle_segregation_evidence,
+    TaskType.PEDIGREE_DESCRIPTION: handle_pedigree_identification,
+    TaskType.PAPER_CLASSIFIER: handle_paper_classification,
+    TaskType.PATIENT_EXTRACTION: handle_patient_extraction,
+    TaskType.VARIANT_EXTRACTION: handle_variant_extraction,
+    TaskType.PATIENT_DEMOGRAPHICS: handle_patient_details,
+    TaskType.PATIENT_VARIANT_OCCURRENCES: handle_patient_genotypes,
+    TaskType.SEGREGATION_EVIDENCE_EXTRACTION: handle_segregation_evidence,
     TaskType.PAPER_METADATA: handle_paper_metadata,
     TaskType.SEGREGATION_ANALYSIS_COMPUTED: handle_segregation_analysis_computed,
     TaskType.VARIANT_HARMONIZATION: handle_variant_harmonization,

@@ -170,8 +170,10 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
     match task.type:
         case TaskType.PDF_PARSING:
             for task_type in (
-                TaskType.PAPER_STRUCTURE,
-                TaskType.PEDIGREE_IDENTIFICATION,
+                TaskType.PAPER_CLASSIFIER,
+                TaskType.PATIENT_EXTRACTION,
+                TaskType.VARIANT_EXTRACTION,
+                TaskType.PEDIGREE_DESCRIPTION,
             ):
                 enqueue_task(
                     session,
@@ -188,14 +190,14 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 updated_by_user_id=user_id,
             )
 
-        case TaskType.PAPER_STRUCTURE:
-            # The three remaining reading passes need this pass and nothing
-            # else, so they go out together and the worker runs them in
-            # parallel.
+        case TaskType.PAPER_CLASSIFIER:
+            # Writes paper-level fields; nothing waits on it.
+            pass
+
+        case TaskType.PATIENT_EXTRACTION:
             for task_type in (
-                TaskType.PATIENT_DETAILS,
-                TaskType.PATIENT_GENOTYPES,
-                TaskType.SEGREGATION_EVIDENCE,
+                TaskType.PATIENT_DEMOGRAPHICS,
+                TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
             ):
                 enqueue_task(
                     session,
@@ -203,9 +205,21 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     task_type=task_type,
                     updated_by_user_id=user_id,
                 )
+            # Genotypes needs variants too, so it waits for whichever of the two
+            # extractions finishes second.
+            if (
+                session.query(VariantDB)
+                .filter(VariantDB.paper_id == task.paper_id)
+                .first()
+            ):
+                enqueue_task(
+                    session,
+                    paper_id=task.paper_id,
+                    task_type=TaskType.PATIENT_VARIANT_OCCURRENCES,
+                    updated_by_user_id=user_id,
+                )
 
-            # Harmonization needs the variants and nothing else, so it need not
-            # wait behind the passes that read the rest of the paper.
+        case TaskType.VARIANT_EXTRACTION:
             for variant in (
                 session.query(VariantDB)
                 .filter(VariantDB.paper_id == task.paper_id)
@@ -218,8 +232,19 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     variant_id=variant.id,
                     updated_by_user_id=user_id,
                 )
+            if (
+                session.query(PatientDB)
+                .filter(PatientDB.paper_id == task.paper_id)
+                .first()
+            ):
+                enqueue_task(
+                    session,
+                    paper_id=task.paper_id,
+                    task_type=TaskType.PATIENT_VARIANT_OCCURRENCES,
+                    updated_by_user_id=user_id,
+                )
 
-        case TaskType.PATIENT_DETAILS:
+        case TaskType.PATIENT_DEMOGRAPHICS:
             for phenotype in (
                 session.query(PhenotypeDB)
                 .filter(PhenotypeDB.paper_id == task.paper_id)
@@ -233,7 +258,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     updated_by_user_id=user_id,
                 )
 
-        case TaskType.PATIENT_GENOTYPES:
+        case TaskType.PATIENT_VARIANT_OCCURRENCES:
             # The paper-level disease name comes from metadata, which runs in
             # parallel with the whole reading chain; queueing it from both is
             # harmless, since enqueue_task keys on the same scope.
@@ -259,7 +284,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     updated_by_user_id=user_id,
                 )
 
-        case TaskType.SEGREGATION_EVIDENCE:
+        case TaskType.SEGREGATION_EVIDENCE_EXTRACTION:
             for family in (
                 session.query(FamilyDB).filter(FamilyDB.paper_id == task.paper_id).all()
             ):
@@ -288,7 +313,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
             )
 
         case (
-            TaskType.PEDIGREE_IDENTIFICATION
+            TaskType.PEDIGREE_DESCRIPTION
             | TaskType.VARIANT_ANNOTATION
             | TaskType.SEGREGATION_ANALYSIS_COMPUTED
             | TaskType.HPO_LINKING

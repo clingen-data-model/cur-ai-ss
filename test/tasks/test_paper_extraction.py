@@ -12,7 +12,6 @@ from lib.agents.paper_extraction import (
     CompoundHetForPatient,
     FamilySegregation,
     Genotypes,
-    PaperStructure,
     PatientDetail,
     PatientDetails,
     SegregationFindings,
@@ -55,11 +54,13 @@ from lib.models.segregation_analysis import (
 )
 from lib.models.variant import Variant, VariantType
 from lib.tasks.paper_extraction import (
+    persist_classification,
     persist_details,
     persist_genotypes,
+    persist_patients,
     persist_pedigree,
     persist_segregation,
-    persist_structure,
+    persist_variants,
 )
 
 
@@ -124,33 +125,29 @@ def variant(hgvs: str) -> Variant:
     )
 
 
-def structure(patients: list[str], families: list[str], variants: list[str]):
-    return PaperStructure(
-        classification=PaperClassification(
-            paper_types=[PaperType.Case_study],
-            is_paper_relevant=ReasoningBlock(value=True, reasoning='has cases'),
-        ),
-        patients=PatientExtractionOutput(
-            patients=[identity(name, families[0]) for name in patients],
-            families=[
-                FamilyEntry(
-                    family=Family(identifier=block(f), consanguinity=block(False))
-                )
-                for f in families
-            ],
-        ),
-        variants=[variant(v) for v in variants],
+def roster(patients: list[str], families: list[str]) -> PatientExtractionOutput:
+    return PatientExtractionOutput(
+        patients=[identity(name, families[0]) for name in patients],
+        families=[
+            FamilyEntry(family=Family(identifier=block(f), consanguinity=block(False)))
+            for f in families
+        ],
+    )
+
+
+def classification() -> PaperClassification:
+    return PaperClassification(
+        paper_types=[PaperType.Case_study],
+        is_paper_relevant=ReasoningBlock(value=True, reasoning='has cases'),
     )
 
 
 def seed(session, run, paper_id=89):
     """The state the later passes are handed: one family, two patients, one variant."""
-    stored = persist_structure(
-        session,
-        paper_id,
-        run.id,
-        structure(['III-1', 'III-2'], ['Family 1'], ['c.1A>G']),
+    stored = persist_patients(
+        session, paper_id, run.id, roster(['III-1', 'III-2'], ['Family 1'])
     )
+    stored |= persist_variants(session, paper_id, run.id, [variant('c.1A>G')])
     session.flush()
     patients = session.query(PatientDB).order_by(PatientDB.id).all()
     variants = session.query(VariantDB).order_by(VariantDB.id).all()
@@ -163,16 +160,19 @@ def test_structure_writes_the_entities_later_passes_are_keyed_to(
     stored, patients, variants = seed(db_session, agent_run)
     assert stored == {'families': 1, 'patients': 2, 'variants': 1}
     assert [p.identifier for p in patients] == ['III-1', 'III-2']
+
+    # Classification is its own pass and writes only paper-level fields.
+    assert persist_classification(db_session, 89, classification()) == {'classified': 1}
     assert db_session.get(PaperDB, 89).is_paper_relevant is True
 
 
 def test_a_patient_naming_an_unlisted_family_still_lands(db_session, agent_run, paper):
     """patients.family_id is NOT NULL, so the family is created rather than the
     patient being dropped."""
-    s = structure(['III-1'], ['Family 1'], [])
-    s.patients.patients[0].family_identifier = block('Family 9')
+    r = roster(['III-1'], ['Family 1'])
+    r.patients[0].family_identifier = block('Family 9')
 
-    stored = persist_structure(db_session, 89, agent_run.id, s)
+    stored = persist_patients(db_session, 89, agent_run.id, r)
 
     assert stored['patients'] == 1
     assert stored['families'] == 2
@@ -202,9 +202,7 @@ def test_rerunning_structure_replaces_what_the_other_passes_produced(
     db_session.flush()
     assert db_session.query(PhenotypeDB).count() == 1
 
-    persist_structure(
-        db_session, 89, agent_run.id, structure(['III-1'], ['Family 1'], [])
-    )
+    persist_patients(db_session, 89, agent_run.id, roster(['III-1'], ['Family 1']))
     db_session.flush()
 
     assert db_session.query(PhenotypeDB).count() == 0
@@ -254,11 +252,9 @@ def test_details_for_a_patient_we_never_sent_are_dropped(db_session, agent_run, 
 
 
 def test_genotypes_link_real_rows_and_pair_compound_hets(db_session, agent_run, paper):
-    persist_structure(
-        db_session,
-        89,
-        agent_run.id,
-        structure(['III-1'], ['Family 1'], ['c.1A>G', 'c.2C>T']),
+    persist_patients(db_session, 89, agent_run.id, roster(['III-1'], ['Family 1']))
+    persist_variants(
+        db_session, 89, agent_run.id, [variant('c.1A>G'), variant('c.2C>T')]
     )
     db_session.flush()
     patient = db_session.query(PatientDB).one()
@@ -375,15 +371,19 @@ def test_testing_methods_capped_at_two_in_the_schema():
 def test_no_pass_embeds_the_shared_evidence_contract():
     """_run appends it, so a prompt embedding it too would send it twice."""
     from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
+    from lib.agents.paper_extraction.classification import CLASSIFICATION_INSTRUCTIONS
     from lib.agents.paper_extraction.details import DETAIL_INSTRUCTIONS
     from lib.agents.paper_extraction.genotypes import GENOTYPE_INSTRUCTIONS
+    from lib.agents.paper_extraction.patients import PATIENT_INSTRUCTIONS
     from lib.agents.paper_extraction.pedigree import PEDIGREE_INSTRUCTIONS
     from lib.agents.paper_extraction.segregation import SEGREGATION_INSTRUCTIONS
-    from lib.agents.paper_extraction.structure import STRUCTURE_INSTRUCTIONS
+    from lib.agents.paper_extraction.variants import VARIANT_INSTRUCTIONS
 
     for prompt in (
         PEDIGREE_INSTRUCTIONS,
-        STRUCTURE_INSTRUCTIONS,
+        CLASSIFICATION_INSTRUCTIONS,
+        PATIENT_INSTRUCTIONS,
+        VARIANT_INSTRUCTIONS,
         DETAIL_INSTRUCTIONS,
         GENOTYPE_INSTRUCTIONS,
         SEGREGATION_INSTRUCTIONS,

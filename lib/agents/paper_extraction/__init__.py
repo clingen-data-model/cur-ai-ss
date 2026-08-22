@@ -11,15 +11,17 @@ patients across four runs.
 So the PDF stays as the input to every pass -- that is where the perception win
 came from -- but each pass returns a bounded amount, and each is its own task:
 
-    PEDIGREE_IDENTIFICATION  figures                 -> which figure, and what it shows
-    PAPER_STRUCTURE          PDF + pedigree          -> classification, families,
-                                                        patients, variants
-    PATIENT_DETAILS          PDF + patients          -> demographics and phenotypes
-    PATIENT_GENOTYPES        PDF + patients+variants -> occurrences and compound het
-    SEGREGATION_EVIDENCE     PDF + families          -> segregation evidence
+    PEDIGREE_DESCRIPTION  figures                 -> which figure, and what it shows
+    PAPER_CLASSIFIER     PDF                     -> paper type, relevance, disease
+    PATIENT_EXTRACTION       PDF                     -> patients and families
+    VARIANT_EXTRACTION       PDF                     -> variants
+    PATIENT_DEMOGRAPHICS          PDF + patients          -> demographics and phenotypes
+    PATIENT_VARIANT_OCCURRENCES        PDF + patients+variants -> occurrences and compound het
+    SEGREGATION_EVIDENCE_EXTRACTION     PDF + families          -> segregation evidence
 
-The last three depend on the structure pass and on nothing else, so the queue
-runs them concurrently. Being separate tasks also means each is retried, rerun
+The first four need only the PDF, so the queue runs them all at once. Those
+three were one pass until a response carrying classification, twenty-three
+patients and eleven variants started producing the classification and stopping. Being separate tasks also means each is retried, rerun
 and timed on its own, and -- because the entities it needs are database rows by
 then -- each is handed real ids rather than positions in a list.
 
@@ -31,6 +33,7 @@ Excluded throughout, because they need a tool or are deterministic: HPO linking,
 MONDO linking, variant harmonization, variant annotation, segregation scoring.
 """
 
+from lib.agents.paper_extraction.classification import _classify_paper_sync
 from lib.agents.paper_extraction.details import (
     PatientDetail,
     PatientDetails,
@@ -41,15 +44,16 @@ from lib.agents.paper_extraction.genotypes import (
     Genotypes,
     _extract_genotypes_sync,
 )
+from lib.agents.paper_extraction.patients import _extract_patients_sync
 from lib.agents.paper_extraction.pedigree import _identify_pedigree_sync
 from lib.agents.paper_extraction.segregation import (
     FamilySegregation,
     SegregationFindings,
     _extract_segregation_sync,
 )
-from lib.agents.paper_extraction.structure import (
-    PaperStructure,
-    _extract_structure_sync,
+from lib.agents.paper_extraction.variants import (
+    VariantExtraction,
+    _extract_variants_sync,
 )
 from lib.models.variant import VariantDB
 
@@ -57,14 +61,16 @@ __all__ = [
     'CompoundHetForPatient',
     'FamilySegregation',
     'Genotypes',
-    'PaperStructure',
     'PatientDetail',
     'PatientDetails',
     'SegregationFindings',
+    'VariantExtraction',
+    '_classify_paper_sync',
     '_extract_details_sync',
     '_extract_genotypes_sync',
+    '_extract_patients_sync',
     '_extract_segregation_sync',
-    '_extract_structure_sync',
+    '_extract_variants_sync',
     '_identify_pedigree_sync',
     'variant_label',
 ]

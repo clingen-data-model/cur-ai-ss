@@ -1439,13 +1439,13 @@ def test_patient_variant_occurrence_successor_enqueues_paper_and_occurrence_mond
     genotypes = TaskDB(
         paper_id=seeded_paper.id,
         agent_run_id=seeded_agent_run.id,
-        type=TaskType.PATIENT_GENOTYPES,
+        type=TaskType.PATIENT_VARIANT_OCCURRENCES,
         status=TaskStatus.COMPLETED,
     )
     segregation = TaskDB(
         paper_id=seeded_paper.id,
         agent_run_id=seeded_agent_run.id,
-        type=TaskType.SEGREGATION_EVIDENCE,
+        type=TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
         status=TaskStatus.COMPLETED,
     )
     db_session.add_all([genotypes, segregation])
