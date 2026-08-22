@@ -45,6 +45,14 @@ PATIENTS AND FAMILIES
   preserving capitalisation; otherwise a descriptive label as written ("proband", "sister").
   Never a bare number. Where someone is only described by relation, name them relative to
   the proband ("Patient 2's brother"). For a single case report use "patient", proband.
+- An identifier names a person and carries nothing else. Never append an attribute that has
+  its own field: age, sex, affected or carrier status, cause of death, or which family they
+  belong to. "F3:II.4's older sister 1 (deceased age 2.5 years)" should be "F3:II.4's older
+  sister 1", with the age in age_death and the status in affected_status; "carrier (age 27)"
+  and "mother (Family A)" are the same mistake. An attribute buried in an identifier is a
+  value no curator can filter on and no edit can correct.
+- Where several relatives share a description, distinguish them by the order the paper
+  introduces them -- "older sister 1", "older sister 2" -- not by an attribute of theirs.
 - Skip individuals with no usable identifier, and skip aggregate statistics ("5 males").
   Do not extract authors, animal models or non-clinical mentions.
 - Every patient belongs to exactly one family, named by family_identifier, which must match
