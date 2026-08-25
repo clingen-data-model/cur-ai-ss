@@ -59,7 +59,9 @@ def test_each_reading_pass_feeds_the_lookups_that_need_it():
         TaskType.SEGREGATION_ANALYSIS_COMPUTED
     ]
     # Harmonization needs only the variants.
-    assert TaskType.VARIANT_HARMONIZATION in TASK_SUCCESSORS[TaskType.VARIANT_EXTRACTION]
+    assert (
+        TaskType.VARIANT_HARMONIZATION in TASK_SUCCESSORS[TaskType.VARIANT_EXTRACTION]
+    )
     # Annotation needs harmonized coordinates, so it hangs off harmonization.
     assert TASK_SUCCESSORS[TaskType.VARIANT_HARMONIZATION] == [
         TaskType.VARIANT_ANNOTATION
