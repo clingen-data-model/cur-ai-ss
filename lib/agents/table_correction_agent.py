@@ -31,11 +31,6 @@ Return ONLY the markdown table, no other text.
 """
 
 
-# docling crops a table exactly as it sits on the page, so a table typeset
-# sideways yields a sideways crop. The vision model refuses to transcribe those
-# ("the text ... is too low-resolution and partially cut off"), and its stated
-# reason is unreliable -- the same crop upright reads perfectly. Rather than
-# infer the angle, try all four and keep the best.
 def table_correction_agent_for_image(image_path: Path) -> Agent:
     """Build a table correction agent bound to a specific table image."""
 
