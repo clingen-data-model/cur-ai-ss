@@ -48,9 +48,7 @@ def test_status_label_is_readable():
 
 
 def test_scope_label_names_the_entity():
-    assert (
-        _scope_label(_task(TaskType.PATIENT_DEMOGRAPHICS, patient_id=7)) == 'Patient 7'
-    )
+    assert _scope_label(_task(TaskType.HPO_LINKING, patient_id=7)) == 'Patient 7'
     assert _scope_label(_task(TaskType.HPO_LINKING, phenotype_id=3)) == 'Phenotype 3'
     # Paper-wide tasks have no scope.
     assert _scope_label(_task(TaskType.PDF_PARSING)) == ''
@@ -73,14 +71,14 @@ def test_every_task_sorts_after_its_prerequisites():
             )
 
 
-def test_segregation_sorts_after_occurrences():
-    """The specific inversion that declaration order got wrong."""
+def test_harmonization_sorts_before_annotation():
+    """The specific ordering the dependency graph must preserve."""
     from lib.ui.paper.tasks import PIPELINE_ORDER
 
     assert (
-        PIPELINE_ORDER[TaskType.PATIENT_VARIANT_OCCURRENCES]
-        < PIPELINE_ORDER[TaskType.SEGREGATION_EVIDENCE_EXTRACTION]
-        < PIPELINE_ORDER[TaskType.SEGREGATION_ANALYSIS_COMPUTED]
+        PIPELINE_ORDER[TaskType.PATIENT_EXTRACTION]
+        < PIPELINE_ORDER[TaskType.VARIANT_HARMONIZATION]
+        < PIPELINE_ORDER[TaskType.VARIANT_ANNOTATION]
     )
 
 

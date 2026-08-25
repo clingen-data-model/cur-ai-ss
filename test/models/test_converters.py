@@ -31,7 +31,6 @@ def test_apply_to_maps_all_fields():
         doi='10.1234/ng.5678',
         pmid='12345678',
         pmcid='PMC9999999',
-        paper_types=[PaperType.Research, PaperType.Case_study],
     )
     paper_db = PaperDB(id='test-id', gene_id='1', filename='test.pdf')
     output.apply_to(paper_db)
@@ -44,7 +43,6 @@ def test_apply_to_maps_all_fields():
     assert paper_db.doi == '10.1234/ng.5678'
     assert paper_db.pmid == '12345678'
     assert paper_db.pmcid == 'PMC9999999'
-    assert paper_db.paper_types == ['Research', 'Case Study']
 
 
 def test_apply_to_handles_none_fields():
@@ -52,7 +50,6 @@ def test_apply_to_handles_none_fields():
         title='Minimal Paper',
         first_author='Doe',
         journal_name=None,
-        paper_types=[PaperType.Unknown],
     )
     paper_db = PaperDB(id='test-id-2', gene_id='1', filename='test2.pdf')
     output.apply_to(paper_db)
@@ -65,7 +62,8 @@ def test_apply_to_handles_none_fields():
     assert paper_db.doi is None
     assert paper_db.pmid is None
     assert paper_db.pmcid is None
-    assert paper_db.paper_types == ['Unknown']
+    # paper_types is PaperClassification's now, so this apply_to leaves it alone
+    assert paper_db.paper_types is None
 
 
 def _identity(
@@ -290,3 +288,39 @@ def test_harmonized_variant_to_db_with_partial_fields():
     assert result.hgvs_p is None
     assert result.hgvs_g is None
     assert result.reasoning == 'Normalized via transcript-based projection.'
+
+
+def test_paper_classification_applies_type_and_disease():
+    """paper_types and the gene-disease relation moved off the PubMed model.
+
+    They are judged from the paper's own text, so the one-shot extraction owns
+    them; PaperExtractionOutput resolves bibliographic fields against PubMed.
+    Both used to write these columns, and whichever task finished last won.
+    """
+    from lib.models.paper import PaperClassification
+
+    assert 'paper_types' not in PaperExtractionOutput.model_fields
+    assert 'gene_disease_relation' not in PaperExtractionOutput.model_fields
+
+    classification = PaperClassification(
+        paper_types=[PaperType.Research, PaperType.Case_study],
+        is_paper_relevant=ReasoningBlock(value=True, reasoning='identifiable cases'),
+    )
+    paper_db = PaperDB(id='test-id-3', gene_id='1', filename='test3.pdf')
+    classification.apply_to(paper_db)
+
+    assert paper_db.paper_types == ['Research', 'Case Study']
+
+
+def test_paper_classification_still_caps_types_at_two():
+    import pytest
+
+    from lib.models.paper import PaperClassification
+
+    schema = PaperClassification.model_json_schema()
+    assert schema['properties']['paper_types']['maxItems'] == 2
+    with pytest.raises(ValueError):
+        PaperClassification(
+            paper_types=[PaperType.Research, PaperType.Case_study, PaperType.Letter],
+            is_paper_relevant=ReasoningBlock(value=True, reasoning='x'),
+        )

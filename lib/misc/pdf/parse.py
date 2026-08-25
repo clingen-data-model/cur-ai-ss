@@ -1,55 +1,46 @@
-import asyncio
-import html
-import json
+"""Turn an uploaded document into the artifacts a model cannot produce itself.
+
+Extraction reads the PDF directly now, so this step no longer converts anything
+to markdown. What it does produce is geometry and images: word positions for
+highlighting evidence on the page, and figures for the pedigree pass and for
+figure-derived evidence.
+
+Two libraries, each for what it is good at:
+
+- docling-parse gives word quads that follow rotated text, which matters because
+  this corpus contains sideways tables. PyMuPDF's word boxes are axis-aligned
+  and would draw upright rectangles over rotated words.
+- PyMuPDF extracts embedded figures and their page rectangles.
+
+The heavy docling converter is deliberately absent. It supplied page markdown,
+table crops and table structure, none of which anything reads any more, and it
+brought torch and torchvision with it for the privilege.
+"""
+
+import itertools
 import shutil
 import tempfile
-from enum import StrEnum
 from io import BytesIO
 from pathlib import Path
+from typing import Any
 
-from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
-from docling.datamodel.base_models import DocumentStream, InputFormat
-from docling.datamodel.pipeline_options import PdfPipelineOptions
-from docling.document_converter import (
-    DocumentConverter,
-    FormatOption,
-    PdfFormatOption,
-    WordFormatOption,
-)
-from docling_core.types.doc import (
-    DocItemLabel,
-    DoclingDocument,
-    ImageRefMode,
-    PictureItem,
-    SectionHeaderItem,
-    TableItem,
-    TextItem,
-)
+import fitz
+import mammoth
 from docling_core.types.doc.page import TextCellUnit
 from docling_parse.pdf_parser import DoclingPdfParser, PdfDocument
 from pydantic import BaseModel
 from xldown import excel_to_markdown
 
-from lib.agents.table_correction_agent import correct_tables
 from lib.misc.pdf.paths import (
     pdf_extraction_success_path,
-    pdf_image_caption_path,
+    pdf_figures_json_path,
     pdf_image_path,
     pdf_images_dir,
-    pdf_json_path,
     pdf_markdown_path,
     pdf_raw_path,
-    pdf_section_markdown_path,
-    pdf_sections_dir,
-    pdf_table_image_path,
-    pdf_table_markdown_path,
-    pdf_tables_dir,
     pdf_words_json_path,
 )
-from lib.models import PaperDB
 from lib.models.paper import FileFormat
-
-IMAGE_RESOLUTION_SCALE = 4.0
 
 
 class Polygon(BaseModel):
@@ -83,6 +74,24 @@ class WordLoc(Polygon):
         )
 
 
+class FigureLoc(BaseModel):
+    """An extracted figure and where it sits on the page.
+
+    image_id indexes the figures this step wrote, in page order. It is the only
+    figure numbering in the system: the extraction agent is shown these images
+    and picks from them, rather than inventing an index it cannot know.
+    """
+
+    image_id: int
+    page_idx: int
+    x0: float
+    y0: float
+    x1: float
+    y1: float
+    width: int
+    height: int
+
+
 def parse_words_json(stream: BytesIO) -> list[WordLoc]:
     words_json = []
     parser = DoclingPdfParser()
@@ -106,44 +115,119 @@ def parse_words_json(stream: BytesIO) -> list[WordLoc]:
     return words_json
 
 
-def split_by_sections(
-    document: DoclingDocument,
-) -> tuple[list[tuple[str, str]], dict[int, str]]:
-    sections: list[tuple[str, str]] = []
-    image_captions: dict[int, str] = {}
-    current_header = None
-    current_text: list[str] = []
+def extract_text(stream: BytesIO) -> str:
+    """Reconstruct the paper's text, page by page.
 
-    for item, _ in document.iterate_items():
-        if isinstance(item, SectionHeaderItem):
-            # flush previous section
-            if current_header is not None:
-                sections.append((current_header.text, '\n\n'.join(current_text)))
+    Extraction reads the PDF directly, but the tasks that call tools -- PubMed
+    lookup, MONDO linking, segregation scoring -- run through the agents
+    framework and take text. This is what they read.
 
-            current_header = item
-            current_text = []
+    Line cells come out in reading order; words hyphenated across a line break
+    are rejoined, since a split "gene-\nspecific" otherwise reaches the model as
+    two tokens that match nothing.
+    """
+    parser = DoclingPdfParser()
+    pdf_doc: PdfDocument = parser.load(path_or_stream=stream)
 
-        elif isinstance(item, TextItem):
-            if item.label == DocItemLabel.CAPTION:
-                if not item.parent:
-                    continue
-                if item.parent.cref.startswith('#/pictures/'):
-                    image_captions[int(item.parent.cref.split('/')[-1])] = item.text
-                elif item.parent.cref.startswith('#/tables/'):
-                    # Skip table headers as they are included in table markdown.
-                    continue
-                else:
-                    print(
-                        f'Caption for non-image or non-table found {item.parent.cref}, violating assumption.'
-                    )
+    pages: list[str] = []
+    for _, pred_page in pdf_doc.iterate_pages():
+        lines = [c.text for c in pred_page.iterate_cells(unit_type=TextCellUnit.LINE)]
+        joined: list[str] = []
+        for line in lines:
+            if joined and joined[-1].endswith('-'):
+                joined[-1] = joined[-1][:-1] + line
             else:
-                current_text.append(item.text)
+                joined.append(line)
+        pages.append('\n'.join(joined))
 
-    # flush final section
-    if current_header is not None:
-        sections.append((current_header.text, '\n\n'.join(current_text)))
+    return '\n\n'.join(pages)
 
-    return sections, image_captions
+
+# Journal banners and rules are extracted as images too. They are wide, short
+# and never a figure anyone cites, so they are skipped rather than shown to the
+# model as candidate pedigrees.
+_MIN_FIGURE_PIXELS = 40_000
+_MAX_FIGURE_ASPECT = 8.0
+
+
+def _is_probably_a_figure(width: int, height: int) -> bool:
+    if width * height < _MIN_FIGURE_PIXELS:
+        return False
+    long_side, short_side = max(width, height), min(width, height)
+    return short_side > 0 and long_side / short_side <= _MAX_FIGURE_ASPECT
+
+
+def extract_figures(
+    paper_id: int, content: bytes, supplement: bool = False
+) -> list[FigureLoc]:
+    """Write each embedded figure to images/<id>.png and record where it sits."""
+    figures: list[FigureLoc] = []
+    image_id = 0
+
+    with fitz.open(stream=content, filetype='pdf') as doc:
+        for page_idx in range(doc.page_count):
+            page = doc[page_idx]
+            for info in page.get_image_info(xrefs=True):
+                xref = info.get('xref')
+                if not xref:
+                    continue
+                # Rendered through a Pixmap rather than written straight from
+                # extract_image(): the embedded stream is often JPEG and
+                # sometimes CMYK, and these are saved as .png.
+                pixmap = fitz.Pixmap(doc, xref)
+                if pixmap.n - pixmap.alpha >= 4:
+                    pixmap = fitz.Pixmap(fitz.csRGB, pixmap)
+                width, height = pixmap.width, pixmap.height
+                if not _is_probably_a_figure(width, height):
+                    continue
+
+                path = pdf_image_path(paper_id, image_id, supplement=supplement)
+                pixmap.save(path)
+
+                bbox = info.get('bbox') or (0.0, 0.0, 0.0, 0.0)
+                figures.append(
+                    FigureLoc(
+                        image_id=image_id,
+                        page_idx=page_idx,
+                        x0=bbox[0],
+                        y0=bbox[1],
+                        x1=bbox[2],
+                        y1=bbox[3],
+                        width=width,
+                        height=height,
+                    )
+                )
+                image_id += 1
+
+    return figures
+
+
+def _parse_docx_content(paper_id: int, content: bytes) -> None:
+    """Convert a DOCX supplement to markdown, saving its images alongside.
+
+    Images are written to files and referenced, never inlined: mammoth
+    base64-inlines them by default, which turned one 2.6 MB supplement into
+    12.6 MB of text.
+    """
+    counter = itertools.count()
+
+    @mammoth.images.img_element
+    def save_image(image: Any) -> dict[str, str]:
+        image_id = next(counter)
+        path = pdf_image_path(paper_id, image_id, supplement=True)
+        with image.open() as src:
+            data = src.read()
+        try:
+            with fitz.open(stream=data) as doc:
+                doc[0].get_pixmap().save(path)
+        except Exception:
+            # Not something fitz opens; keep the original bytes under the name
+            # the markdown will reference.
+            path.write_bytes(data)
+        return {'src': f'images/{image_id}.png'}
+
+    result = mammoth.convert_to_markdown(BytesIO(content), convert_image=save_image)
+    pdf_markdown_path(paper_id, supplement=True).write_text(result.value)
 
 
 def _parse_xlsx_content(paper_id: int, content: bytes) -> None:
@@ -202,101 +286,30 @@ async def parse_content(
         return
 
     content = raw.read_bytes()
+    pdf_images_dir(paper_id, supplement=supplement).mkdir(parents=True, exist_ok=True)
 
     if supplement_format == FileFormat.XLSX:
         _parse_xlsx_content(paper_id, content)
         pdf_extraction_success_path(paper_id, supplement=True).touch()
         return
 
-    pdf_images_dir(paper_id, supplement=supplement).mkdir(parents=True, exist_ok=True)
-    pdf_tables_dir(paper_id, supplement=supplement).mkdir(parents=True, exist_ok=True)
-    pdf_sections_dir(paper_id, supplement=supplement).mkdir(parents=True, exist_ok=True)
-
-    format_options: dict[InputFormat, FormatOption]
     if supplement_format == FileFormat.DOCX:
-        format_options = {InputFormat.DOCX: WordFormatOption()}
-    else:
-        format_options = {
-            InputFormat.PDF: PdfFormatOption(
-                backend=PyPdfiumDocumentBackend,
-                pipeline_options=PdfPipelineOptions(
-                    images_scale=IMAGE_RESOLUTION_SCALE,
-                    generate_page_images=True,
-                    generate_picture_images=True,
-                ),
-            ),
-        }
+        _parse_docx_content(paper_id, content)
+        pdf_extraction_success_path(paper_id, supplement=True).touch()
+        return
 
-    doc_converter = DocumentConverter(format_options=format_options)
-
-    document: DoclingDocument = doc_converter.convert(
-        source=DocumentStream(name='content', stream=BytesIO(content)),
-    ).document
-
-    document.save_as_markdown(
-        pdf_markdown_path(paper_id, supplement=supplement),
-        image_mode=ImageRefMode.REFERENCED,
-        escape_html=False,
-        escaping_underscores=False,
+    figures = extract_figures(paper_id, content, supplement=supplement)
+    pdf_figures_json_path(paper_id, supplement=supplement).write_text(
+        '[' + ',\n'.join(f.model_dump_json() for f in figures) + ']'
     )
 
-    document.save_as_json(
-        pdf_json_path(paper_id, supplement=supplement),
-        image_mode=ImageRefMode.REFERENCED,
+    pdf_markdown_path(paper_id, supplement=supplement).write_text(
+        extract_text(BytesIO(content))
     )
 
-    table_id, image_id = 0, 0
+    words = parse_words_json(BytesIO(content))
+    pdf_words_json_path(paper_id, supplement=supplement).write_text(
+        '[' + ',\n'.join(w.model_dump_json() for w in words) + ']'
+    )
 
-    for element, _level in document.iterate_items():
-        if (
-            isinstance(element, TableItem)
-            and (table_image := element.get_image(document)) is not None
-        ):
-            with open(
-                pdf_table_image_path(paper_id, table_id, supplement=supplement), 'wb'
-            ) as fp:
-                table_image.save(fp, 'PNG')
-
-            with open(
-                pdf_table_markdown_path(paper_id, table_id, supplement=supplement), 'w'
-            ) as fp:
-                fp.write(element.export_to_markdown(document))
-
-            table_id += 1
-
-        if (
-            isinstance(element, PictureItem)
-            and (image := element.get_image(document)) is not None
-        ):
-            with open(
-                pdf_image_path(paper_id, image_id, supplement=supplement), 'wb'
-            ) as fp:
-                image.save(fp, 'PNG')
-
-            image_id += 1
-
-    words_json = parse_words_json(BytesIO(content))
-
-    with open(pdf_words_json_path(paper_id, supplement=supplement), 'w') as fp:
-        json.dump([w.model_dump() for w in words_json], fp, indent=2)
-
-    section_mds, image_captions = split_by_sections(document)
-
-    for i, section_md in enumerate(section_mds):
-        with open(
-            pdf_section_markdown_path(paper_id, i, supplement=supplement), 'w'
-        ) as fp:
-            fp.write('## ' + section_md[0])
-            fp.write('\n\n')
-            fp.write(section_md[1])
-
-    for i, caption in image_captions.items():
-        with open(
-            pdf_image_caption_path(paper_id, i, supplement=supplement), 'w'
-        ) as fp:
-            fp.write(caption)
-
-    await correct_tables(paper_id, supplement=supplement)
-
-    with open(pdf_extraction_success_path(paper_id, supplement=supplement), 'w') as fp:
-        fp.write('')
+    pdf_extraction_success_path(paper_id, supplement=supplement).touch()

@@ -41,7 +41,7 @@ A web-based tool for extracting and curating genetic evidence from scientific pa
 
 ```bash
 export OPENAI_API_KEY=”your_key_here”
-export OPENAI_API_DEPLOYMENT=”gpt-5-mini”
+export OPENAI_API_DEPLOYMENT=”gpt-5.6-sol”
 ```
 
 ### Install and Run

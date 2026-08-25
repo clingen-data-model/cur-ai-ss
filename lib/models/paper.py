@@ -2,10 +2,11 @@ import hashlib
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Optional
 
 from pydantic import (
     BaseModel,
+    Field,
     computed_field,
     model_validator,
 )
@@ -51,7 +52,6 @@ from lib.misc.pdf.paths import (
     pdf_highlighted_path,
     pdf_image_path,
     pdf_raw_path,
-    pdf_sections_dir,
     pdf_thumbnail_path,
 )
 from lib.models.base import Base, PatchModel
@@ -185,6 +185,7 @@ class PaperDB(Base):
         JSON,
         nullable=True,
     )
+    is_paper_relevant_evidence: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     # Gene-disease relationship (extracted from paper text and case data)
     disease_name: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -264,40 +265,24 @@ class PaperExtractionOutput(BaseModel):
     doi: str | None = None
     pmid: str | None = None
     pmcid: str | None = None
-    paper_types: list[PaperType]
-    gene_disease_relation: GeneDiseaseRelation | None = None
-
-    @model_validator(mode='after')
-    def max_two_paper_types(self) -> Self:
-        if len(self.paper_types) > 2:
-            raise ValueError('paper_types must contain at most two items')
-        return self
 
     def apply_to(self, paper_db: PaperDB) -> None:
-        data = self.model_dump()
-        data['paper_types'] = [pt.value for pt in self.paper_types]
-        gene_disease_relation = data.pop('gene_disease_relation', None)
-        for key, value in data.items():
+        for key, value in self.model_dump().items():
             setattr(paper_db, key, value)
-        if gene_disease_relation is not None:
-            paper_db.disease_name = gene_disease_relation['disease_name']['value']
-            paper_db.disease_name_evidence = gene_disease_relation['disease_name']
-            paper_db.disease_inheritance_mode = gene_disease_relation[
-                'disease_inheritance_mode'
-            ]['value']
-            paper_db.disease_inheritance_mode_evidence = gene_disease_relation[
-                'disease_inheritance_mode'
-            ]
 
 
 class PaperResp(PaperExtractionOutput):
     # From DB
+    # paper_types lives on PaperClassification now, but the column and every
+    # reader of it are unchanged, so the response still carries it.
+    paper_types: list[PaperType] = []
     id: int
     content_hash: str
     gene_symbol: str
     filename: str
     tags: list[PaperTag] = []
     is_paper_relevant: bool | None = None
+    is_paper_relevant_evidence: ReasoningBlock[bool] | None = None
     section_classifications: dict | None = None
     disease_name: str | None = None
     disease_name_evidence: HumanEvidenceBlock[str] | None = None
@@ -333,6 +318,44 @@ class PaperResp(PaperExtractionOutput):
         return str(pdf_raw_path(self.id))
 
 
+class PaperClassification(BaseModel):
+    """What the paper says about itself, judged from its text.
+
+    Split from PaperExtractionOutput because that model's other fields are
+    resolved against PubMed by a tool-backed task, while these two are read
+    straight off the paper. Both wrote the same columns when they lived
+    together, so whichever task finished last won.
+    """
+
+    # max_length reaches the model: it serialises to JSON Schema "maxItems", which
+    # structured outputs enforce. The validator below still guards the paths that
+    # never see a schema (PATCH requests, converters).
+    paper_types: list[PaperType] = Field(max_length=2)
+    gene_disease_relation: GeneDiseaseRelation | None = None
+    is_paper_relevant: ReasoningBlock[bool]
+
+    @model_validator(mode='after')
+    def max_two_paper_types(self) -> Self:
+        if len(self.paper_types) > 2:
+            raise ValueError('paper_types must contain at most two items')
+        return self
+
+    def apply_to(self, paper_db: 'PaperDB') -> None:
+        paper_db.paper_types = [pt.value for pt in self.paper_types]
+        paper_db.is_paper_relevant = self.is_paper_relevant.value
+        paper_db.is_paper_relevant_evidence = self.is_paper_relevant.model_dump()
+        if self.gene_disease_relation is not None:
+            relation = self.gene_disease_relation.model_dump()
+            paper_db.disease_name = relation['disease_name']['value']
+            paper_db.disease_name_evidence = relation['disease_name']
+            paper_db.disease_inheritance_mode = relation['disease_inheritance_mode'][
+                'value'
+            ]
+            paper_db.disease_inheritance_mode_evidence = relation[
+                'disease_inheritance_mode'
+            ]
+
+
 class PaperUpdateRequest(PatchModel):
     title: str | None = None
     first_author: str | None = None
@@ -355,6 +378,14 @@ class HighlightRequest(BaseModel):
     image_ids: list[int]
     table_ids: list[int]
     color: str
+
+
+class PedigreeExtractionOutput(BaseModel):
+    """A pedigree figure found in the paper, and what it shows."""
+
+    found: bool
+    image_id: Optional[int] = None
+    description: Optional[str] = None
 
 
 class PedigreeDB(Base):

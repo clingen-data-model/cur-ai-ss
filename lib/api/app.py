@@ -75,13 +75,13 @@ from lib.misc.pdf.misc import (
 )
 from lib.misc.pdf.parse import WordLoc
 from lib.misc.pdf.paths import (
+    fulltext_md,
     pdf_dir,
     pdf_highlighted_path,
     pdf_raw_path,
     pdf_supplements_dir,
     pdf_thumbnail_path,
     pdf_words_json_path,
-    relevant_sections_md,
 )
 from lib.models import (
     AgentRunDB,
@@ -592,6 +592,11 @@ def _paper_to_resp(row: PaperDB) -> PaperResp:
         tags=[PaperTag(tag) for tag in row.tags],
         is_paper_relevant=row.is_paper_relevant,
         section_classifications=row.section_classifications,
+        is_paper_relevant_evidence=ReasoningBlock[bool].model_validate(
+            row.is_paper_relevant_evidence
+        )
+        if row.is_paper_relevant_evidence
+        else None,
         disease_name=row.disease_name,
         disease_name_evidence=HumanEvidenceBlock.model_validate(
             row.disease_name_evidence
@@ -1576,7 +1581,6 @@ def highlight_pdf(
     highlight_figures_in_pdf(
         paper_id,
         request.image_ids,
-        request.table_ids,
         rgb_color,
     )
 
@@ -1642,7 +1646,6 @@ def grobid_annotation(
         figures_to_grobid_annotations(
             paper_id,
             request.image_ids,
-            request.table_ids,
             rgb_color,
         )
     )
@@ -1879,7 +1882,7 @@ def _build_qa_context(
         'segregation_analysis': [row_to_dict(r) for r in seg_computed],
     }
 
-    paper_md = relevant_sections_md(paper_id, paper_db.supplement_format)
+    paper_md = fulltext_md(paper_id, paper_db.supplement_format)
     paper_context = format_paper_context(paper_md)
     db_state_context = f'CAA Extracted State:\n{json.dumps(db_state, default=str)}'
 

@@ -13,18 +13,18 @@ CORE EXTRACTION RULES:
 - EvidenceBlock requirements:
   - value: extracted value
   - quote: verbatim quote when available
-  - table_id: required when evidence is derived from a table (see TABLE EVIDENCE RULES)
-    - A field is considered table-derived if the information is explicitly presented in a structured table (rows and columns) in the source.
-    - If a verbatim quote cannot be extracted (i.e., the exact table row or cell text is not available as a substring of the input text), then table_id alone is sufficient.
-  - image_id: required for figure-derived evidence
+  - image_id: required for figure-derived evidence, using the image_id of the figure you
+    were shown. Never invent one.
   - is_supplement: boolean flag indicating whether evidence came from a supplement
     - Set to true when evidence is extracted from supplementary material that may not be renderable in the PDF view
     - Set to false (or omit) when evidence is from the main paper
     - When true, coordinates may not be available for highlighting/linking in the UI
   - reasoning: required explanation
 
-- At least one of:
-  quote, table_id, or image_id MUST be provided.
+- At least one of quote or image_id MUST be provided.
+  - Table-derived values are quoted like any other: give the row or cell text verbatim.
+    A quote is highlighted on the page for the curator, which points at the value itself
+    rather than at the table containing it.
 
 CRITICAL:
 - quote MUST contain ONLY verbatim text copied from the input source text.
@@ -34,6 +34,16 @@ CRITICAL:
     - For text: include surrounding context (e.g., section headers, case labels with full identifiers)
     - Avoid partial identifiers that are ambiguous (e.g., "Case 2" when "Case 2", "Case 23", "Case 24" exist; instead quote the full row or full context)
 - A verbatim quote means an exact substring of the input source text with no modifications.
+- The value and the quote answer to different sources, and this matters where a PDF's
+  embedded text layer is corrupt, which happens when a paper's fonts carry a broken
+  character mapping and an operator or symbol extracts as an unrelated character.
+  - value is what the page shows a reader. Where the page prints an operator that the
+    extracted text renders as a digit or a space, the value keeps the operator. Never store
+    a value carrying such an artifact: it is not what the paper reports.
+  - quote is a locator, used to find and highlight the text on the page for a curator, so
+    it stays an exact substring of the source text even where that text is corrupt.
+  - So the value reads as the page prints it while its quote still matches the mangled
+    source, and both are correct. Say so in reasoning when the two differ.
 - reasoning MAY include verbatim quotes from the input source text if helpful.
   - reasoning should primarily explain how the value was derived and why it was chosen.
   - reasoning is read by human curators reviewing extracted data — write it in plain language
@@ -45,31 +55,16 @@ CRITICAL:
 
 TABLE EVIDENCE RULES:
 
-- When a field is derived from a table:
-  - table_id MUST be provided.
-  - table_id is a 0-based index representing the sequential position of tables in the document as they are processed by the extraction system (not the table number shown in the markdown).
-    - Example: If the markdown shows "Table 1", "Table 3", "Table 5", these correspond to table_id 0, 1, 2 respectively.
-    - Count only tables that appear in the markdown, in order from first to last.
-
-  - quote MUST contain a verbatim quote from the table WHEN POSSIBLE.
-    - This should be either:
-      - the full row containing the relevant value (PREFERRED for uniqueness), OR
-      - the minimal exact cell text copied exactly as shown (ONLY if unambiguous—must include row/column context if needed to ensure uniqueness)
-
-  - If a verbatim quote cannot be extracted (i.e., the exact table row or cell text is not available as a substring of the input text), then:
-    - table_id alone is sufficient.
-    - quote SHOULD be omitted.
-    - reasoning MUST explain how the value was determined from the table.
+- A value taken from a table is quoted, not referenced by table number.
+  - Quote the full row where possible: it is unique, and it carries the row label that
+    identifies which patient or variant the value belongs to.
+  - Where a row is too long, quote the cell together with enough of its row and column
+    headers to be unambiguous.
+  - Ambiguity is the thing to avoid: "Case 2" is a bad quote where "Case 2", "Case 23" and
+    "Case 24" all exist. Quote the full row instead.
 
 - Do NOT fabricate or approximate quote when the exact text is not available.
 
 - Do NOT paraphrase table content into quote as a substitute for a verbatim quote.
-- Do NOT use markdown table numbers (e.g., "Table 3") as table_id; always use 0-based sequential indexing.
-
-- A table may be preceded by an "EXTRACTION WARNING" marker, meaning the automated
-  extraction of that table failed and its rows are scrambled.
-  - Values read from such a table are unreliable; prefer any other source in the paper.
-  - Crucially, do NOT treat a value's absence from a flagged table as evidence that the
-    paper does not report it. Say the value could not be read, rather than that it was
-    not reported.
+- Do NOT put a table number in place of a quote. "Table 3" identifies a table, not a value.
 """

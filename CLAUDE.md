@@ -114,7 +114,8 @@ Configuration is in `lib/core/environment.py` using Pydantic BaseSettings:
 
 **Required:**
 - `OPENAI_API_KEY` - OpenAI API key (Bearer token)
-- `OPENAI_API_DEPLOYMENT` - Model to use (default: `gpt-5-mini`)
+- `OPENAI_API_DEPLOYMENT` - Model that reads papers, used by the extraction passes and the paper-level agents (default: `gpt-5.6-sol`)
+- `OPENAI_LINKING_MODEL` - Cheaper model for HPO linking and variant harmonization, neither of which reads the paper (default: `gpt-5.6-luna`)
 - `JWT_SECRET_KEY` - Secret used to sign auth access tokens (set a strong value in prod)
 
 **Optional:**

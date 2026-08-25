@@ -1,7 +1,7 @@
-from lib.agents.pedigree_describer_agent import PedigreeExtractionOutput
 from lib.models import PatientDB, PedigreeDB, VariantDB
 from lib.models.evidence_block import HumanEvidenceBlock, ReasoningBlock
 from lib.models.family import Family, FamilyDB
+from lib.models.paper import PedigreeExtractionOutput
 from lib.models.patient import (
     PatientDemographics,
     PatientIdentity,

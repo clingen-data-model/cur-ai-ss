@@ -11,7 +11,11 @@ from pydantic import BaseModel
 from rapidfuzz import fuzz
 
 from lib.misc.pdf.parse import Polygon, WordLoc
-from lib.misc.pdf.paths import pdf_highlighted_path, pdf_json_path, pdf_raw_path
+from lib.misc.pdf.paths import (
+    pdf_figures_json_path,
+    pdf_highlighted_path,
+    pdf_raw_path,
+)
 
 
 class GrobidAnnotation(BaseModel):
@@ -143,52 +147,37 @@ def find_best_match(query: str, words: list[WordLoc]) -> list[WordLoc] | None:
     return get_words_from_alignment(alignments[0].aligned[1], word_to_offset, words)
 
 
+def _figure_boxes(paper_id: int, image_ids: list[int]) -> list[dict]:
+    """Page rectangles for the requested figures, from our own figure index.
+
+    These used to come from docling's document dump. They come from the parse
+    step now, which records each figure's page and rectangle as it extracts it.
+    """
+    figures_file = pdf_figures_json_path(paper_id)
+    if not figures_file.exists():
+        return []
+    by_id = {f['image_id']: f for f in json.loads(figures_file.read_text())}
+    return [by_id[i] for i in image_ids if i in by_id]
+
+
 def figures_to_grobid_annotations(
     paper_id: int,
     image_ids: list[int],
-    table_ids: list[int],
     color: tuple[float, float, float],
 ) -> list[GrobidAnnotation]:
-    pdf_path = pdf_highlighted_path(paper_id)
-    pdf_doc = fitz.open(pdf_path)
-
-    docling_json_file = pdf_json_path(paper_id)
-    with open(docling_json_file, 'r') as f:
-        docling_json = json.load(f)
-
     annotations = []
-    for key, ids in (('pictures', image_ids), ('tables', table_ids)):
-        for item_id in ids:
-            for prov in docling_json[key][item_id]['prov']:
-                page = pdf_doc[prov['page_no'] - 1]
-                h = page.rect.height
-
-                l, t, r, b = (
-                    prov['bbox']['l'],
-                    prov['bbox']['t'],
-                    prov['bbox']['r'],
-                    prov['bbox']['b'],
-                )
-
-                x = l
-                y = h - t
-                width = r - l
-                height = t - b  # docling's inverted Y axis
-
-                annotations.append(
-                    GrobidAnnotation(
-                        page=prov['page_no'],
-                        x=x,
-                        y=y,
-                        width=width,
-                        height=height,
-                        color=f'rgb({color[0] * 255.0},{color[1] * 255.0},{color[2] * 255.0})',
-                        border='solid',
-                    )
-                )
-
-    pdf_doc.close()
-
+    for fig in _figure_boxes(paper_id, image_ids):
+        annotations.append(
+            GrobidAnnotation(
+                page=fig['page_idx'] + 1,
+                x=fig['x0'],
+                y=fig['y0'],
+                width=fig['x1'] - fig['x0'],
+                height=fig['y1'] - fig['y0'],
+                color=f'rgb({color[0] * 255.0},{color[1] * 255.0},{color[2] * 255.0})',
+                border='solid',
+            )
+        )
     return annotations
 
 
@@ -239,49 +228,29 @@ def words_to_grobid_annotations(
 def highlight_figures_in_pdf(
     paper_id: int,
     image_ids: list[int],
-    table_ids: list[int],
     rgb_color: tuple[float, float, float],
 ) -> None:
     if not image_ids:
-        return
+        return None
 
-    # Load PDF
-    pdf_path = pdf_highlighted_path(paper_id)
-    pdf_doc = fitz.open(pdf_path)
+    pdf_doc = fitz.open(pdf_highlighted_path(paper_id))
 
-    docling_json_file = pdf_json_path(paper_id)
-    with open(docling_json_file, 'r') as f:
-        docling_json = json.load(f)
+    for fig in _figure_boxes(paper_id, image_ids):
+        page = pdf_doc[fig['page_idx']]
+        poly = [
+            (fig['x0'], fig['y0']),
+            (fig['x1'], fig['y0']),
+            (fig['x1'], fig['y1']),
+            (fig['x0'], fig['y1']),
+        ]
+        page.draw_polyline(poly, color=rgb_color, fill=rgb_color, fill_opacity=0.3)
 
-    for key, ids in (('pictures', image_ids), ('tables', table_ids)):
-        for item_id in ids:
-            for prov in docling_json[key][item_id]['prov']:
-                page = pdf_doc[prov['page_no'] - 1]
-                h = page.rect.height
-                l, t, r, b = (
-                    prov['bbox']['l'],
-                    prov['bbox']['t'],
-                    prov['bbox']['r'],
-                    prov['bbox']['b'],
-                )
-                poly = [
-                    (l, h - t),
-                    (r, h - t),
-                    (r, h - b),
-                    (l, h - b),
-                ]
-                page.draw_polyline(
-                    poly,
-                    color=rgb_color,
-                    fill=rgb_color,
-                    fill_opacity=0.3,
-                )
-
-    # Save highlighted PDF
-    output_path = pdf_highlighted_path(paper_id)
-    pdf_doc.save(output_path, incremental=True, encryption=fitz.PDF_ENCRYPT_KEEP)
+    pdf_doc.save(
+        pdf_highlighted_path(paper_id),
+        incremental=True,
+        encryption=fitz.PDF_ENCRYPT_KEEP,
+    )
     pdf_doc.close()
-
     return None
 
 
