@@ -28,6 +28,7 @@ from lib.ui.api import (
 )
 from lib.ui.paper.shared import (
     HUMAN_EDIT_NOTE_DEFAULT,
+    clean_quote,
     get_gnomad_url,
     render_evidence_controls,
     render_highlight_controls,
@@ -63,7 +64,7 @@ def _render_evidence_block(
     # Display evidence sources
     evidence_sources = []
     if evidence_block.quote:
-        evidence_sources.append(('Text Evidence', evidence_block.quote))
+        evidence_sources.append(('Text Evidence', clean_quote(evidence_block.quote)))
     if evidence_block.table_id is not None:
         evidence_sources.append(
             ('Table', f'Table #{evidence_block.table_id + 1}')

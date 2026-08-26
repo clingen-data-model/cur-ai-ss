@@ -44,6 +44,7 @@ from lib.ui.api import (
 )
 from lib.ui.paper.shared import (
     HUMAN_EDIT_NOTE_DEFAULT,
+    clean_quote,
     render_evidence_controls,
     render_highlight_controls,
     render_rerun_popover,
@@ -239,7 +240,7 @@ def _render_phenotypes_table(
                 with st.expander('Extracted Phenotype Evidence', expanded=False):
                     for block in evidence_blocks:
                         if block.quote:
-                            st.text(block.quote)
+                            st.text(clean_quote(block.quote))
                 with st.container(
                     horizontal=True,
                     vertical_alignment='center',

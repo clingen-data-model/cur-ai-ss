@@ -8,7 +8,12 @@ import streamlit as st
 from streamlit_pdf_viewer import pdf_viewer
 
 from lib.misc.pdf.paths import pdf_highlighted_path
-from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock, ReasoningBlock
+from lib.models.evidence_block import (
+    EvidenceBlock,
+    HumanEvidenceBlock,
+    ReasoningBlock,
+    strip_markup,
+)
 from lib.models.paper import PaperResp
 from lib.tasks import TaskType
 from lib.ui.api import (
@@ -30,6 +35,12 @@ HEADER_TABS = [
 HEADER_TABS_KEY = 'HEADER_TABS_KEY'
 HUMAN_EDIT_NOTE_DEFAULT = 'Reasoning behind the change...'
 CHAT_FEATURE_GATE_TIME = datetime(2026, 5, 17, 12, 0, 0)
+
+
+def clean_quote(quote: str) -> str:
+    """Kept as a display-time safety net for rows written before the model
+    layer started stripping markup on the way in."""
+    return strip_markup(quote)
 
 
 def render_rerun_popover(
@@ -350,7 +361,7 @@ def render_evidence_controls(
             disabled=not quote and not reasoning and not human_edit_note,
         ):
             if quote:
-                st.markdown('**Evidence**: ' + quote)
+                st.markdown('**Evidence**: ' + clean_quote(quote))
             st.markdown('**Reasoning**: ' + (reasoning or ''))
             # Show info message if evidence is from supplement
             if isinstance(block, EvidenceBlock) and block.is_supplement:
