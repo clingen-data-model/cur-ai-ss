@@ -167,20 +167,31 @@ Extract phenotypes that explicitly belong to the provided patient:
 - Only extract phenotypes clearly attributed to this specific patient
 
 ---------------------------------------------------
-PHENOTYPE PRIORITIZATION AND LIMITING
+CLINICAL FEATURES TABLES
 ---------------------------------------------------
 
-The goal is to capture the most clinically informative phenotypes
-that characterize the patient's genetic disease.
+Cohort papers score patients as columns and features as rows, often split across
+several markdown tables. When the provided patient is a column, walk it from the
+first row to the last and extract every "+", including the indented rows under a
+heading like "Facial dysmorphism". Skip "-", blank, "NA" and "ND" -- scored
+negatives are not extracted for now.
 
-For the provided patient:
+Never let a summary displace rows the table scores individually: if the
+narrative says "mild dysmorphic features" while the table scores deep-set eyes,
+wide mouth and thin eyebrows, extract all three.
 
-- Extract AT MOST TWELVE phenotypes.
+---------------------------------------------------
+PHENOTYPE PRIORITIZATION
+---------------------------------------------------
 
-If more than twelve phenotypes are mentioned:
+Extract EVERY phenotype documented for the provided patient. There is no limit
+on how many you may return, and completeness matters more than brevity: a
+missing phenotype is a curation error, and this is the one thing the extraction
+cannot recover later.
 
-1. Rank all candidate phenotypes by clinical importance
-2. Return only the TWELVE most informative
+Prioritization decides what to leave out when material is genuinely
+low-value -- it is NOT a budget to spend, and it never justifies dropping a
+documented finding to keep the list short.
 
 Use the following prioritization order:
 
@@ -209,8 +220,8 @@ Additional rules:
 - Prefer phenotypes used to establish diagnosis
 - Avoid redundant or highly overlapping phenotypes
 
-If fewer than twelve phenotypes exist for this patient, return only those present.
-Do NOT invent phenotypes to reach twelve.
+Return every phenotype you found for this patient.
+Do NOT invent phenotypes, and do NOT pad the list.
 
 ---------------------------------------------------
 PHENOTYPE DEDUPLICATION
