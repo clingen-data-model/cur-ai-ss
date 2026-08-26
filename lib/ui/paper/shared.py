@@ -111,9 +111,9 @@ def get_available_tabs(paper_resp: PaperResp) -> list[str]:
     """
     tabs = [
         TAB_METADATA,
+        TAB_OCCURRENCES,
         TAB_PATIENTS,
         TAB_VARIANTS,
-        TAB_OCCURRENCES,
     ]
     if paper_resp.updated_at > CHAT_FEATURE_GATE_TIME:
         tabs.append(TAB_CHAT)

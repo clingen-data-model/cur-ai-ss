@@ -142,8 +142,8 @@ def test_tasks_tab_offered_with_and_without_chat():
 
     assert TAB_TASKS in without_chat and TAB_TASKS in with_chat
     assert TAB_CHAT not in without_chat and TAB_CHAT in with_chat
-    # The four original positions are unchanged in both cases.
-    expected = [TAB_METADATA, TAB_PATIENTS, TAB_VARIANTS, TAB_OCCURRENCES]
+    # The four leading positions are unchanged in both cases.
+    expected = [TAB_METADATA, TAB_OCCURRENCES, TAB_PATIENTS, TAB_VARIANTS]
     assert without_chat[:4] == expected
     assert with_chat[:4] == expected
     assert with_chat.index(TAB_CHAT) == 4

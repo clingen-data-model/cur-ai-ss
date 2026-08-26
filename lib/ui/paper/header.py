@@ -238,12 +238,12 @@ with center:
             with center:
                 if is_open(TAB_METADATA):
                     render_metadata_tab()
+                elif is_open(TAB_OCCURRENCES):
+                    render_patient_variant_occurrences_tab()
                 elif is_open(TAB_PATIENTS):
                     render_patients_tab(paper_query_params.patient_id)
                 elif is_open(TAB_VARIANTS):
                     render_variants_tab(paper_query_params.variant_id)
-                elif is_open(TAB_OCCURRENCES):
-                    render_patient_variant_occurrences_tab()
                 elif is_open(TAB_CHAT):
                     render_chat_with_agent_tab()
                 elif is_open(TAB_TASKS):
