@@ -252,7 +252,7 @@ requires-dist = [
     { name = "streamlit-pdf-viewer", specifier = ">=0.0.27" },
     { name = "streamlit-searchbox", specifier = ">=0.1.24" },
     { name = "uvicorn", specifier = ">=0.38.0" },
-    { name = "xldown", specifier = ">=0.1.0" },
+    { name = "xldown", specifier = ">=0.1.1" },
 ]
 
 [package.metadata.requires-dev]
@@ -2983,7 +2983,7 @@ wheels = [
 
 [[package]]
 name = "xldown"
-version = "0.1.0"
+version = "0.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -2993,9 +2993,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "tabulate" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/13/81/b6b08b32ce4cb2bea2958d9bd084da58ecef15297fc9ecc264db19947b66/xldown-0.1.0.tar.gz", hash = "sha256:03a567d876d9f373cd4665ec831c30b6a91c3f40e058d1048889410e57f348d9", size = 23750, upload-time = "2026-05-09T20:16:06.96Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f2/db/5bbd2292c03ae6b3eaf15070e019dd98de0fdeded130b00db5291c4bca74/xldown-0.1.1.tar.gz", hash = "sha256:515023a24e5a4cf534325928bf463520627d0072daf4d43b3531e8c14d8a8b2e", size = 24448, upload-time = "2026-08-26T00:17:26.149Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/3d/30/9d90eeb1cdedb44ab6ceb8b1f7e61d002497113e99a7b00bf752fe2427e9/xldown-0.1.0-py3-none-any.whl", hash = "sha256:43cbe09e03151a40d0a1a588b113b6eed79bc8ddbd23b15aa0f66b86060bff10", size = 16101, upload-time = "2026-05-09T20:16:05.734Z" },
+    { url = "https://files.pythonhosted.org/packages/3f/65/a7d7a8231e048c6436087627c046c52275bfcf13d62c50d5208564325295/xldown-0.1.1-py3-none-any.whl", hash = "sha256:a19ad877dff2ff8475016a0d13fca4d05e70b4c396010e723c2b7fb2f9b53985", size = 16228, upload-time = "2026-08-26T00:17:25.004Z" },
 ]
 
 [[package]]
