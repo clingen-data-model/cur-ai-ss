@@ -167,6 +167,29 @@ Extract phenotypes that explicitly belong to the provided patient:
 - Only extract phenotypes clearly attributed to this specific patient
 
 ---------------------------------------------------
+FINDING THE PHENOTYPES
+---------------------------------------------------
+
+Work in two steps. A patient's findings are written down in more than one
+place, and no single place holds all of them.
+
+1. LIST the candidate findings for this patient, going to each source in turn:
+   - the case description that names them by identifier;
+   - their column in each clinical features table;
+   - figure captions, pedigree legends and patient summaries naming them.
+2. Extract from the list you built.
+
+Do not skip step 1. Listing first is what makes the extraction complete: a
+finding you never wrote down is one you cannot decide to keep or drop.
+
+A statement about the cohort as a whole -- "all the individuals presented with
+ID", "the 17 patients shared a wide mouth and deep-set eyes" -- is evidence
+about this patient too, and extracting it is correct. But it is never the whole
+answer, because it names what everyone shares and says nothing about what
+distinguishes this patient. It does not stand in for their column or their case
+description, and finding one is not a reason to stop looking.
+
+---------------------------------------------------
 CLINICAL FEATURES TABLES
 ---------------------------------------------------
 
