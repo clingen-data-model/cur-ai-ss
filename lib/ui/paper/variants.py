@@ -59,6 +59,14 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
             links_by_variant[link.variant_id] = []
         links_by_variant[link.variant_id].append(link)
 
+    # A variant is "unharmonized" when harmonization produced no row for it at
+    # all: it is in the extracted table but not the harmonized one.
+    unharmonized_index_set = {
+        i
+        for i, v in enumerate(variants)
+        if not (v.harmonized_variant and v.harmonized_variant.value)
+    }
+
     # Separate variants into pathogenic and other by index
     pathogenic_indices = [
         i
@@ -155,10 +163,21 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                 if harmonized_variant and harmonized_variant.value
                 else (variant.variant_evidence.value or f'Variant {i}')
             )
+            is_unharmonized = idx in unharmonized_index_set
+            if is_unharmonized:
+                expander_title = f'⚠️ {expander_title} — not harmonized'
             with st.expander(
                 expander_title,
                 expanded=(variant.id == selected_variant_id),
             ):
+                if is_unharmonized:
+                    st.warning(
+                        'Harmonization produced no record for this variant, so it '
+                        'has no standard identifiers and was not annotated. Use '
+                        '🔄 Re-harmonize on the Harmonized tab to try again.',
+                        icon='⚠️',
+                    )
+
                 # Create tabs for Harmonized vs Raw display
                 tab_harmonized, tab_raw = st.tabs(
                     ['🔧 Harmonized', 'Raw (as extracted from the paper)']
