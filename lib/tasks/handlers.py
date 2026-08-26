@@ -148,7 +148,7 @@ from lib.models.mondo import (
 from lib.models.paper import FileFormat
 from lib.models.patient import ProbandStatus
 from lib.models.phenotype import HPOTerm
-from lib.models.variant import HarmonizedVariant, Variant
+from lib.models.variant import HarmonizedVariant, Variant, is_harmonized
 from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
 from lib.reference_data.mondo import get_mondo_term
 from lib.tasks.models import TaskType
@@ -1059,20 +1059,7 @@ async def handle_variant_annotation(task_id: int) -> None:
         rows = query.order_by(VariantDB.id).all()
 
         # Skip enrichment if harmonization did not succeed
-        # A successful harmonization must have at least one meaningful identifier
-        rows = [
-            r
-            for r in rows
-            if any(
-                [
-                    r.gnomad_style_coordinates,
-                    r.rsid,
-                    r.caid,
-                    r.hgvs_g,
-                    r.hgvs_c,
-                ]
-            )
-        ]
+        rows = [r for r in rows if is_harmonized(r)]
 
         if not rows:
             logger.info(

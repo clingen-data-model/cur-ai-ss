@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 
 from lib.models import PaperResp, VariantResp, VariantUpdateRequest
-from lib.models.variant import VariantType
+from lib.models.variant import VariantType, is_harmonized, malformed_identifiers
 from lib.tasks import TaskType, is_task_completed
 from lib.ui.api import (
     get_occurrences,
@@ -59,13 +59,26 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
             links_by_variant[link.variant_id] = []
         links_by_variant[link.variant_id].append(link)
 
-    # A variant is "unharmonized" when harmonization produced no row for it at
-    # all: it is in the extracted table but not the harmonized one.
-    unharmonized_index_set = {
-        i
-        for i, v in enumerate(variants)
-        if not (v.harmonized_variant and v.harmonized_variant.value)
-    }
+    # Harmonization writes a row for every variant, so its failures show up in
+    # the row's contents rather than its absence: either no identifier the
+    # annotation step can look up, or one it echoed back without normalizing.
+    harmonization_warnings: dict[int, str] = {}
+    for i, v in enumerate(variants):
+        hv = v.harmonized_variant.value if v.harmonized_variant else None
+        if not is_harmonized(hv):
+            harmonization_warnings[i] = (
+                'Harmonization produced no gnomAD coordinates, rsID, CAID or '
+                'HGVS g./c. for this variant, so it could not be annotated.'
+            )
+            continue
+        malformed = malformed_identifiers(hv)
+        if malformed:
+            fields = ', '.join(f'{k} = "{v}"' for k, v in malformed.items())
+            harmonization_warnings[i] = (
+                f'Harmonized notation looks malformed ({fields}). It was most '
+                'likely copied from the paper rather than normalized, so any '
+                'annotation for this variant may be wrong.'
+            )
 
     # Separate variants into pathogenic and other by index
     pathogenic_indices = [
@@ -163,18 +176,17 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                 if harmonized_variant and harmonized_variant.value
                 else (variant.variant_evidence.value or f'Variant {i}')
             )
-            is_unharmonized = idx in unharmonized_index_set
-            if is_unharmonized:
-                expander_title = f'⚠️ {expander_title} — not harmonized'
+            harmonization_warning = harmonization_warnings.get(idx)
+            if harmonization_warning:
+                expander_title = f'⚠️ {expander_title} — check harmonization'
             with st.expander(
                 expander_title,
                 expanded=(variant.id == selected_variant_id),
             ):
-                if is_unharmonized:
+                if harmonization_warning:
                     st.warning(
-                        'Harmonization produced no record for this variant, so it '
-                        'has no standard identifiers and was not annotated. Use '
-                        '🔄 Re-harmonize on the Harmonized tab to try again.',
+                        f'{harmonization_warning} Use 🔄 Re-harmonize on the '
+                        'Harmonized tab to try again.',
                         icon='⚠️',
                     )
 
