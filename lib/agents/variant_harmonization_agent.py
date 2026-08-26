@@ -837,7 +837,15 @@ STATE 4 — CLINVAR & DBSNP LOOKUP
 ============================================================
 
 Condition:
-Previous projections failed but hgvs_p is present.
+Previous projections failed AND a protein change is available, either as hgvs_p
+or as a protein change written into the variant string -- "C331Y", "Cys331Tyr",
+"Trp66Gly". Older papers frequently report changes only that way, and a variant
+whose protein change sits in the variant string is as searchable as one whose
+sits in hgvs_p: the query below is built from the amino acids and the position,
+and both forms carry them.
+
+Do not skip this state because hgvs_p is null. That is the difference between
+returning a normalized allele and returning nothing, for a whole class of paper.
 
 You may call clinvar_lookup EXACTLY ONCE.
 You may call dbsnp_lookup EXACTLY ONCE.
@@ -845,7 +853,8 @@ You may call dbsnp_lookup EXACTLY ONCE.
 Step 5A — Construct Query
 
 Query includes:
-    gene AND all protein representations:
+    gene AND all protein representations of the change, taken from hgvs_p where
+    it is populated and from the variant string otherwise:
         hgvs_p
         3-letter format (p.Arg157Ser)
         1-letter format (p.R157S)
