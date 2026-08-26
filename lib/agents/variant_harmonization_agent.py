@@ -720,6 +720,24 @@ Use the following fields of the provided structured input:
 - hgvs_p
 - hgvs_g
 
+Notation in these fields is sometimes wrong in a way the paper itself is not.
+It was read out of a PDF, and a text layer can declare the wrong character for a
+glyph, drop one, split a token with a stray space, or merge two together. Which
+character goes wrong depends on the document's fonts, so there is no fixed list
+to check against: an operator arriving as a digit is one form ("c.98T 4G" or
+"c.3733T4G" for "c.98T>G"), a superscript or minus sign lost from a position is
+another. Separately, older papers are written to older conventions -- the
+reference base ahead of the position, "c.C2665G" for "c.2665C>G" -- which is not
+corruption but still is not HGVS.
+
+So when a c./g./p. string does not read as valid HGVS, that is evidence about
+how the text reached you, not evidence that the variant cannot be resolved. Work
+out what the paper meant and continue with that reading, within two limits: use
+only the characters already present, never inventing a change the paper does not
+state, and never return the unreadable string as your answer. The lookups are
+the check -- a reading that is wrong will not resolve, which is the signal to
+try another one rather than to stop.
+
 Proceed to State 1.
 
 ============================================================
