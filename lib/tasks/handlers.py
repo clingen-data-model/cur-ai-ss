@@ -460,12 +460,30 @@ async def handle_pedigree_description(task_id: int) -> None:
         # Initial query: build full message with pedigree images + instructions
         message = f'{combined_text}\n\n{PEDIGREE_DESCRIBER_AGENT_INSTRUCTIONS}'
 
+    agent, capture = pedigree_describer_agent_for_paper(paper_id)
     result = await Runner.run(
-        pedigree_describer_agent_for_paper(paper_id),
+        agent,
         message,
         conversation_id=stored_conv_id,
     )
     log_cache_metrics('PEDIGREE_DESCRIPTION', result)
+
+    output = result.final_output
+    # The analysis is the vision model's; the agent only routes figures to it and
+    # copies the answer back, so store what the tool returned rather than the
+    # copy. Follow-ups are left alone: there the curator asked for a rewrite.
+    if (
+        additional_context is None
+        and output
+        and output.found
+        and capture.description is not None
+    ):
+        output = output.model_copy(
+            update={
+                'image_id': capture.image_id,
+                'description': capture.description,
+            }
+        )
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -473,8 +491,8 @@ async def handle_pedigree_description(task_id: int) -> None:
             task.conversation_id = stored_conv_id
         # Idempotent: delete-then-insert
         session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).delete()
-        if result.final_output and result.final_output.found:
-            session.add(pedigree_to_db(paper_id, result.final_output))
+        if output and output.found:
+            session.add(pedigree_to_db(paper_id, output))
 
 
 async def handle_patient_extraction(task_id: int) -> None:

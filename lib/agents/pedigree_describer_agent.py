@@ -16,6 +16,31 @@ class PedigreeExtractionOutput(BaseModel):
     description: Optional[str] = None
 
 
+# The vision model answers with exactly this when a figure is not a pedigree.
+NOT_A_PEDIGREE = 'NOT_A_PEDIGREE'
+
+
+class PedigreeCapture:
+    """The first genuine pedigree analysis the vision tool returned.
+
+    The wrapper agent never sees the image: it routes figures to the tool and
+    copies the answer into the output schema. Copying is a model step, so the
+    description it reports can drift from what the vision model actually said.
+    Recording the tool's own return value lets the caller store that verbatim.
+    """
+
+    def __init__(self) -> None:
+        self.image_id: int | None = None
+        self.description: str | None = None
+
+    def record(self, image_id: int, description: str) -> None:
+        # The agent is told to stop at the first pedigree, so the first
+        # confirmed figure is the one it reports.
+        if self.image_id is None:
+            self.image_id = image_id
+            self.description = description
+
+
 def _analyze_image_url(image_url: str) -> str:
     """Run the vision model against an image URL and return its description."""
     from openai import OpenAI
@@ -101,8 +126,15 @@ IMPORTANT GUARDRAILS:
 PEDIGREE_DESCRIBER_AGENT_INSTRUCTIONS = PEDIGREE_EXTRACTION_INSTRUCTIONS
 
 
-def pedigree_describer_agent_for_paper(paper_id: int) -> Agent:
-    """Build a pedigree describer agent bound to a specific paper's images."""
+def pedigree_describer_agent_for_paper(
+    paper_id: int,
+) -> tuple[Agent, PedigreeCapture]:
+    """Build a pedigree describer agent bound to a specific paper's images.
+
+    Returns the agent and the capture recording what the vision tool answered,
+    so the caller can store that analysis rather than the agent's copy of it.
+    """
+    capture = PedigreeCapture()
 
     @function_tool
     def analyze_pedigree_image(image_id: int, is_supplement: bool = False) -> str:
@@ -114,12 +146,16 @@ def pedigree_describer_agent_for_paper(paper_id: int) -> Agent:
         NOT_A_PEDIGREE if it is not.
         """
         image_path = pdf_image_path(paper_id, image_id, supplement=is_supplement)
-        return _analyze_image_url(upload_and_sign_image(image_path))
+        description = _analyze_image_url(upload_and_sign_image(image_path))
+        if description.strip() != NOT_A_PEDIGREE:
+            capture.record(image_id, description)
+        return description
 
-    return Agent(
+    agent = Agent(
         name='pedigree_describer',
         instructions=BASE_SYSTEM_INSTRUCTIONS,
         model=env.OPENAI_API_DEPLOYMENT,
         output_type=PedigreeExtractionOutput,
         tools=[analyze_pedigree_image],
     )
+    return agent, capture
