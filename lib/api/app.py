@@ -1084,8 +1084,12 @@ def _variant_to_resp(row: VariantDB) -> VariantResp:
             alphamissense_score=row.annotated_variant.alphamissense_score,
             spliceai=row.annotated_variant.spliceai,
             gnomad_top_level_af=row.annotated_variant.gnomad_top_level_af,
+            gnomad_ac=row.annotated_variant.gnomad_ac,
+            gnomad_an=row.annotated_variant.gnomad_an,
             gnomad_popmax_af=row.annotated_variant.gnomad_popmax_af,
             gnomad_popmax_population=row.annotated_variant.gnomad_popmax_population,
+            gnomad_popmax_ac=row.annotated_variant.gnomad_popmax_ac,
+            gnomad_popmax_an=row.annotated_variant.gnomad_popmax_an,
         )
         if row.annotated_variant
         else None

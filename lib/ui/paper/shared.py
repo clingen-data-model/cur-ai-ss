@@ -179,6 +179,36 @@ def get_gnomad_url(variant_id: str) -> str:
     return f'https://gnomad.broadinstitute.org/variant/{variant_id}?dataset=gnomad_r4'
 
 
+# gnomAD v4 genetic ancestry group IDs mapped to their full names.
+GNOMAD_POPULATION_NAMES = {
+    'afr': 'African/African American',
+    'ami': 'Amish',
+    'amr': 'Admixed American',
+    'asj': 'Ashkenazi Jewish',
+    'eas': 'East Asian',
+    'fin': 'European (Finnish)',
+    'mid': 'Middle Eastern',
+    'nfe': 'European (non-Finnish)',
+    'sas': 'South Asian',
+    'remaining': 'Remaining',
+}
+
+
+def format_gnomad_population(population: str | None) -> str:
+    """Render a gnomAD population ID as its full name, e.g. ``eas`` -> ``East Asian (eas)``."""
+    if not population:
+        return 'N/A'
+    full_name = GNOMAD_POPULATION_NAMES.get(population.lower())
+    return f'{full_name} ({population})' if full_name else population
+
+
+def format_allele_counts(ac: int | None, an: int | None) -> str:
+    """Render allele counts as ``AC / AN`` (alleles observed / alleles tested)."""
+    if ac is None or an is None:
+        return 'N/A'
+    return f'{ac:,} / {an:,}'
+
+
 def get_clingen_url(caid: str) -> str:
     return f'https://reg.clinicalgenome.org/redmine/projects/registry/genboree_registry/by_canonicalid?canonicalid={caid}'
 

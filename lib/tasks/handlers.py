@@ -1127,8 +1127,12 @@ async def handle_variant_annotation(task_id: int) -> None:
                     alphamissense_score=ev.alphamissense_score,
                     spliceai=ev.spliceai.model_dump() if ev.spliceai else None,
                     gnomad_top_level_af=ev.gnomad_top_level_af,
+                    gnomad_ac=ev.gnomad_ac,
+                    gnomad_an=ev.gnomad_an,
                     gnomad_popmax_af=ev.gnomad_popmax_af,
                     gnomad_popmax_population=ev.gnomad_popmax_population,
+                    gnomad_popmax_ac=ev.gnomad_popmax_ac,
+                    gnomad_popmax_an=ev.gnomad_popmax_an,
                 )
             )
 

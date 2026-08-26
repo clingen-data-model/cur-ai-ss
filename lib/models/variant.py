@@ -433,8 +433,12 @@ class AnnotatedVariant(BaseModel):
 
     # gnomAD
     gnomad_top_level_af: Optional[float] = None
+    gnomad_ac: Optional[int] = None
+    gnomad_an: Optional[int] = None
     gnomad_popmax_af: Optional[float] = None
     gnomad_popmax_population: Optional[str] = None
+    gnomad_popmax_ac: Optional[int] = None
+    gnomad_popmax_an: Optional[int] = None
 
 
 class VariantAnnotationOutput(BaseModel):
@@ -459,8 +463,12 @@ class AnnotatedVariantResp(BaseModel):
     spliceai: Optional[dict] = None  # Serialized SpliceAI
 
     gnomad_top_level_af: Optional[float] = None
+    gnomad_ac: Optional[int] = None
+    gnomad_an: Optional[int] = None
     gnomad_popmax_af: Optional[float] = None
     gnomad_popmax_population: Optional[str] = None
+    gnomad_popmax_ac: Optional[int] = None
+    gnomad_popmax_an: Optional[int] = None
 
 
 class AnnotatedVariantDB(Base):
@@ -494,8 +502,12 @@ class AnnotatedVariantDB(Base):
 
     # gnomAD
     gnomad_top_level_af: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gnomad_ac: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    gnomad_an: Mapped[int | None] = mapped_column(Integer, nullable=True)
     gnomad_popmax_af: Mapped[float | None] = mapped_column(Float, nullable=True)
     gnomad_popmax_population: Mapped[str | None] = mapped_column(String, nullable=True)
+    gnomad_popmax_ac: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    gnomad_popmax_an: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

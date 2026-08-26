@@ -308,6 +308,9 @@ def gnomad_lookup(gnomad_style_coordinates: str) -> AnnotatedVariant:
     ac = joint.get('ac') or 0
     an = joint.get('an') or 0
 
+    result_variant.gnomad_ac = ac
+    result_variant.gnomad_an = an
+
     if an:
         result_variant.gnomad_top_level_af = ac / an
 
@@ -315,7 +318,7 @@ def gnomad_lookup(gnomad_style_coordinates: str) -> AnnotatedVariant:
     # Step 3: Filter populations
     # ---------------------
     populations = joint.get('populations') or []
-    valid_pops: List[Tuple[str, float]] = []
+    valid_pops: List[Tuple[str, float, int, int]] = []
 
     for pop in populations:
         pop_id = pop.get('id')
@@ -336,15 +339,19 @@ def gnomad_lookup(gnomad_style_coordinates: str) -> AnnotatedVariant:
             continue
 
         af = pop_ac / pop_an
-        valid_pops.append((pop_id, af))
+        valid_pops.append((pop_id, af, pop_ac, pop_an))
 
     if not valid_pops:
         return result_variant
 
-    popmax_population, popmax_af = max(valid_pops, key=lambda x: x[1])
+    popmax_population, popmax_af, popmax_ac, popmax_an = max(
+        valid_pops, key=lambda x: x[1]
+    )
 
     result_variant.gnomad_popmax_population = popmax_population
     result_variant.gnomad_popmax_af = popmax_af
+    result_variant.gnomad_popmax_ac = popmax_ac
+    result_variant.gnomad_popmax_an = popmax_an
 
     return result_variant
 

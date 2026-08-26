@@ -14,6 +14,8 @@ from lib.ui.api import (
 )
 from lib.ui.paper.shared import (
     HUMAN_EDIT_NOTE_DEFAULT,
+    format_allele_counts,
+    format_gnomad_population,
     get_clingen_url,
     get_clinvar_url,
     get_gnomad_url,
@@ -842,16 +844,30 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                                     'Top-level AF': ev.gnomad_top_level_af
                                     if ev.gnomad_top_level_af is not None
                                     else 'N/A',
+                                    'Top-level Alleles (AC / AN)': format_allele_counts(
+                                        ev.gnomad_ac, ev.gnomad_an
+                                    ),
                                     'Popmax AF': ev.gnomad_popmax_af
                                     if ev.gnomad_popmax_af is not None
                                     else 'N/A',
-                                    'Popmax Population': ev.gnomad_popmax_population
-                                    or 'N/A',
+                                    'Popmax Population': format_gnomad_population(
+                                        ev.gnomad_popmax_population
+                                    ),
+                                    'Popmax Alleles (AC / AN)': format_allele_counts(
+                                        ev.gnomad_popmax_ac, ev.gnomad_popmax_an
+                                    ),
                                 }
                             ]
                         )
 
                         st.dataframe(gnomad_df, width='stretch', hide_index=True)
+                        st.caption(
+                            'AC = allele count (copies of the alternate allele observed); '
+                            'AN = allele number (total alleles tested). '
+                            'AF = allele frequency (AC / AN). '
+                            'Popmax = the genetic ancestry group with the highest allele '
+                            'frequency (groups with fewer than 2,000 alleles tested are excluded).'
+                        )
 
                 # ======================================================
                 # Associated Patients
@@ -861,8 +877,13 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                     with st.container():
                         st.subheader('Associated Patients')
                         for link in variant_links:
+                            patient_url = (
+                                f'/paper?paper_id={paper_resp.id}'
+                                f'&patient_id={link.patient_id}'
+                            )
                             st.markdown(
-                                f'- Patient "{link.patient_identifier}" w/ Zygosity {link.zygosity.value}'
+                                f'- Patient ["{link.patient_identifier}"]({patient_url}) '
+                                f'w/ Zygosity {link.zygosity.value}'
                             )
 
     if not filtered_indices:
