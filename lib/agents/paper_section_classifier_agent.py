@@ -1,5 +1,5 @@
 from agents import Agent
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.core.environment import env
@@ -38,6 +38,16 @@ Mark everything else as RELEVANT (relevant=true), including:
 - Any other section containing clinical, variant, or phenotype information
 
 Return a complete list of ALL section headers you find. Do not skip any sections.
+
+Copy each header exactly as the document writes it -- same words, same
+punctuation, same capitalization, nothing added and nothing tidied. A header is
+the text of a heading line with its leading # marks removed, and it is compared
+literally against those lines afterwards, so any embellishment stops it from
+being recognised: describing what a section contains, appending its caption or a
+note like "(table)", or dropping a trailing period all turn a heading the
+document has into one it does not. An unrecognised header takes the relevance of
+whichever section preceded it, so a rewritten header near an irrelevant one can
+silently remove a section you meant to keep.
 
 Part 2: Assess Paper Relevance
 
@@ -92,7 +102,13 @@ Also provide a brief reasoning (1-2 sentences) explaining your assessment.
 
 
 class SectionClassification(BaseModel):
-    header: str
+    header: str = Field(
+        description=(
+            'The heading line exactly as written in the document, without its '
+            'leading # marks. Matched literally against the text, so it must '
+            'not be reworded, captioned or otherwise tidied.'
+        )
+    )
     relevant: bool
 
 

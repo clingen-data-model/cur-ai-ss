@@ -221,8 +221,12 @@ def relevant_sections_md(
 
     Falls back to fulltext_md if section classification has not been run yet.
     Splices directly from raw.md: when a classified irrelevant section header is
-    encountered, lines are skipped until the next classified relevant section header.
-    Unclassified headings do not change skip state.
+    encountered, lines are skipped until the next heading that is not.
+
+    A heading the classifier never named ends the skip rather than continuing it.
+    The classifier's job is to name the sections worth dropping, so a heading it
+    did not name is not one it judged irrelevant, and inheriting the previous
+    verdict would be this function deciding that on its behalf.
 
     Args:
         paper_id: ID of the paper
@@ -249,6 +253,16 @@ def relevant_sections_md(
             header_text = heading_match.group(1).strip().lower()
             if header_text in classified:
                 skip = not classified[header_text]
+            else:
+                # Headings go unmatched routinely: the classifier is asked for
+                # the headers it finds and writes them back in its own words,
+                # expanding "Table 1" to the caption underneath it or adding a
+                # note like "(table)", so the string no longer matches the line
+                # it came from. Carrying the previous verdict through those made
+                # one irrelevant section swallow the rest of the file -- papers
+                # that print their tables after the references lost every one of
+                # them, with nothing to show it had happened.
+                skip = False
         if not skip:
             result_lines.append(line)
 
