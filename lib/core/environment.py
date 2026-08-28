@@ -28,7 +28,7 @@ class Env(BaseSettings):
     DISABLE_GCS_UPLOAD: bool = False
 
     # Required fields
-    OPENAI_API_DEPLOYMENT: str = 'gpt-5-mini'
+    OPENAI_API_DEPLOYMENT: str = 'gpt-5.6-luna'
     OPENAI_API_KEY: str = Field(...)
     OPENAI_VLM: str = 'gpt-5.6-sol'
     LOG_LEVEL: LogLevel = LogLevel.INFO
