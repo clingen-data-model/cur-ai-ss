@@ -48,8 +48,13 @@ Each field is an EvidenceBlock containing:
     1. Prefer explicit alphanumeric identifiers exactly as written (e.g., "P1", "II-2", "Case 1").
        - Preserve capitalization and punctuation.
        - Do NOT normalize or reinterpret.
-    2. If none exists, use descriptive labels (e.g., "proband", "sister") as written.
-    3. Preserve exact wording when multiple probands or cases are distinguished.
+    2. A table that lists patients names the series in its header and numbers
+       the members in its cells, so the identifier is the two read together
+       (a "Proband No." column holding 3 gives "Proband 3"). Both halves are
+       already written down, which makes this reading rather than inventing:
+       the result is a textual identifier, not a numeric-only one.
+    3. If none exists, use descriptive labels (e.g., "proband", "sister") as written.
+    4. Preserve exact wording when multiple probands or cases are distinguished.
 
 - proband_status (EvidenceBlock[enum: Proband, Non-Proband, Unknown]):
   - Proband: explicitly described as proband/index case, OR the individual discussed in most detail in the paper when no explicit proband is identified (explain the rationale in the reasoning block)
@@ -80,6 +85,19 @@ Guidelines:
 9. Do not extract authors, non-clinical mentions, or animal models.
 10. Use enum values when possible; otherwise use "Other" or "Unknown".
 11. Missing fields should be returned as null (not omitted from the structured output).
+
+TABLES LISTING PATIENTS:
+
+A cohort paper usually holds its full series in a table, as rows or as columns,
+while the narrative describes only some of them at length. Both are sources and
+neither replaces the other: walk the table end to end and extract every patient
+it lists, then add anyone the text or the pedigree describes who is not in it.
+Where the paper states how many patients it studied, that count is what the
+extraction should account for.
+
+A patient listed only in a table is still a patient. Its row or column is the
+evidence, cited with table_id, and having no narrative paragraph is not a reason
+to skip it.
 
 FAMILY GROUPING:
 
