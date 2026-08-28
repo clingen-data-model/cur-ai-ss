@@ -27,7 +27,10 @@ Definitions:
 
 Notes:
 - Some papers may contain multiple unrelated probands; extract each separately.
-- Extract only individuals with explicitly stated demographic or clinical information.
+- Extract individuals the paper reports something individual about: demographics,
+  clinical findings, or a genotype attributed to them by name. A table row giving
+  a proband and the variant they carry is such a report -- a patient identified
+  by their genotype and nothing else is still identified.
 
 Fields to extract (for each patient):
 
@@ -74,8 +77,12 @@ Guidelines:
 
 1. Extract only explicitly stated information. Do NOT infer.
 2. Distinguish probands from non-probands.
-3. Extract only individuals with identifiable patient-level information.
-4. If only aggregate statistics are provided (e.g., "5 males"), do not extract individuals.
+3. Extract individuals with patient-level information, which a genotype
+   attributed to a named individual is.
+4. If only aggregate statistics are provided (e.g., "5 males"), do not extract
+   individuals. The distinction is whether the paper says anything about a
+   particular person: "130 IPAH patients" names nobody, while a table row
+   reporting one proband's variant names someone.
 5. Each patient must have an identifier; otherwise skip.
 6. If no identifiable human patients are present, return "unknown".
 7. For relational descriptions (e.g., "proband's sister"), simplify identifier to the role (e.g., "sister").
