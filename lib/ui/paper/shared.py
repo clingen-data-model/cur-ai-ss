@@ -418,12 +418,15 @@ def render_evidence_controls(
         # Only pass EvidenceBlock to highlight controls (ReasoningBlock has no evidence sources)
         highlight_blocks = [block] if isinstance(block, EvidenceBlock) else []
         if highlight_blocks:
+            # Whether there is anything to show is decided in there, across every
+            # source a block may carry. Gating on the quote here disabled Focus
+            # for evidence cited by table_id or image_id, which highlights just
+            # as well -- a figure or a table row is locatable on the page.
             render_highlight_controls(
                 paper_id,
                 blocks=highlight_blocks,
                 color_key=color_key,
                 button_key_prefix=button_key_prefix,
-                disabled=not quote,
             )
 
     return edited_note
