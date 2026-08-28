@@ -92,12 +92,19 @@ A cohort paper usually holds its full series in a table, as rows or as columns,
 while the narrative describes only some of them at length. Both are sources and
 neither replaces the other: walk the table end to end and extract every patient
 it lists, then add anyone the text or the pedigree describes who is not in it.
-Where the paper states how many patients it studied, that count is what the
-extraction should account for.
+
+A count stated in the text is a hint, not a target. If a paper says it studied
+eleven probands and you have found four, that is worth a look at the tables for
+the other seven. But studies routinely count people they never identify one by
+one -- a cohort of several hundred, described only in aggregate -- and those are
+not extractable, so the count is not a number to reach and falling short of it
+is not an error. Extract the individuals the paper identifies, however many that
+turns out to be.
 
 A patient listed only in a table is still a patient. Its row or column is the
 evidence, cited with table_id, and having no narrative paragraph is not a reason
-to skip it.
+to skip it. One patient may occupy several rows, one per variant reported for
+them; that is one patient, not several.
 
 FAMILY GROUPING:
 
