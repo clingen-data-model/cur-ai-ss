@@ -1,0 +1,29 @@
+# Dependencies
+node_modules
+.pnpm-store
+pnpm-lock.yaml
+
+# Build outputs
+dist
+build
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+
+# Development
+.agents
+.env.local
+.env.*.local
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Testing
+coverage
+.nyc_output
+
+# API client and spec (generated, not checked in)
+api-spec.json
+src/api/generated
