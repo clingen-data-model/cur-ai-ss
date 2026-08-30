@@ -1,0 +1,206 @@
+#!/usr/bin/env python3
+"""
+HPO term extraction accuracy report (paper-level recall).
+
+For each paper, for each HPO term in the curated truth set
+(training_raw.csv 'Clinical presentation (HPO)'), check whether the API
+identified that term on ANY patient in the paper (the union of HPO terms across
+all of the paper's patients).
+
+Writes var/hpo_accuracy_report.txt.
+
+Method:
+- GT HPO terms are parsed as HP:####### ids from the curated column (unioned
+  across all rows of a paper).
+- API HPO terms are the union of hpo.value.id across every patient's phenotypes.
+- Matching is exact HP id (see caveat: ontology parent/child near-misses are not
+  credited in this version).
+- Papers tagged FailedPaperRelevancy are excluded.
+"""
+
+import csv
+import re
+
+import hpotk
+import requests
+
+BASE_URL = 'https://gene-curation-ai.app/api'
+EXCLUDE_TAG = 'FailedPaperRelevancy'
+HP_RE = re.compile(r'HP:\d{7}')
+ONTOLOGY_PATH = '/var/caa/reference_data/hpo.json'
+MAX_HOPS = 2  # credit a GT term if an API term is within this many parent/child hops
+
+_hpo = hpotk.load_minimal_ontology(ONTOLOGY_PATH)
+_graph = _hpo.graph
+
+
+def relation_distance(gt_id: str, api_ids: set) -> int | None:
+    """Minimum parent/child hop distance from gt_id to any API term, or None if
+    not within MAX_HOPS. 0 == exact match."""
+    if gt_id in api_ids:
+        return 0
+    try:
+        start = hpotk.TermId.from_curie(gt_id)
+    except ValueError:
+        return None
+    if start not in _graph:
+        return None
+    seen = {gt_id}
+    frontier = [start]
+    for hop in range(1, MAX_HOPS + 1):
+        nxt = []
+        for tid in frontier:
+            for nb in list(_graph.get_parents(tid)) + list(_graph.get_children(tid)):
+                cur = str(nb)
+                if cur in seen:
+                    continue
+                if cur in api_ids:
+                    return hop
+                seen.add(cur)
+                nxt.append(nb)
+        frontier = nxt
+    return None
+
+
+def paper_has_tag(paper: dict, tag_name: str) -> bool:
+    for tag in paper.get('tags') or []:
+        name = tag.get('name') if isinstance(tag, dict) else tag
+        if name and str(name).lower() == tag_name.lower():
+            return True
+    return False
+
+
+def read_gt_hpo() -> dict:
+    """Return {pmid: {hp_id: name}} from the curated HPO column."""
+    gt: dict = {}
+    with open('var/training_raw.csv') as f:
+        for row in csv.DictReader(f):
+            pmid = (row.get('PMID') or '').strip()
+            if not pmid:
+                continue
+            cell = row.get('Clinical presentation (HPO)') or ''
+            terms = gt.setdefault(pmid, {})
+            # capture "Name (HP:#######)" where possible, else bare id
+            for m in re.finditer(r'([^,\n(]+?)\s*\((HP:\d{7})\)', cell):
+                terms[m.group(2)] = m.group(1).strip()
+            for hp in HP_RE.findall(cell):
+                terms.setdefault(hp, '')
+    return gt
+
+
+def api_hpo_for_paper(paper_id: int) -> dict:
+    """Return {hp_id: name} unioned across all patients' phenotypes."""
+    out: dict = {}
+    patients = requests.get(f'{BASE_URL}/papers/{paper_id}/patients').json()
+    for p in patients:
+        phenos = requests.get(
+            f"{BASE_URL}/papers/{paper_id}/patients/{p['id']}/phenotypes"
+        ).json()
+        for ph in phenos:
+            hpo = (ph.get('hpo') or {}).get('value') or {}
+            hp_id = hpo.get('id')
+            if hp_id:
+                out[hp_id] = hpo.get('name') or ''
+    return out
+
+
+def main() -> None:
+    print('Fetching papers...')
+    papers = requests.get(f'{BASE_URL}/papers').json()
+    pmid_to_paper = {}
+    excluded = set()
+    for p in papers:
+        pmid = p.get('pmid')
+        if not pmid:
+            continue
+        pmid_to_paper[pmid] = p
+        if paper_has_tag(p, EXCLUDE_TAG):
+            excluded.add(pmid)
+
+    gt = read_gt_hpo()
+
+    lines = ['=' * 110,
+             'HPO TERM EXTRACTION ACCURACY (paper-level recall: GT term found on ANY patient)',
+             '=' * 110, '']
+
+    n_papers = 0
+    total_gt = 0
+    total_exact = total_lenient = 0     # micro: exact ids, and exact + within-MAX_HOPS
+    macro_exact = macro_lenient = 0.0
+    perfect_lenient = 0
+    excluded_in_gt = []
+    no_gt = []
+
+    for pmid in sorted(gt):
+        if pmid not in pmid_to_paper:
+            continue
+        if pmid in excluded:
+            excluded_in_gt.append(pmid)
+            continue
+        gt_terms = gt[pmid]
+        if not gt_terms:
+            no_gt.append(pmid)
+            continue
+
+        paper = pmid_to_paper[pmid]
+        api_terms = api_hpo_for_paper(paper['id'])
+        api_ids = set(api_terms)
+
+        # classify each GT term by hop distance to the nearest API term
+        dist = {hp: relation_distance(hp, api_ids) for hp in gt_terms}
+        exact = [hp for hp, d in dist.items() if d == 0]
+        near = [hp for hp, d in dist.items() if d is not None and d > 0]
+        missed = [hp for hp, d in dist.items() if d is None]
+        lenient = len(exact) + len(near)
+
+        n_papers += 1
+        total_gt += len(gt_terms)
+        total_exact += len(exact)
+        total_lenient += lenient
+        macro_exact += len(exact) / len(gt_terms)
+        macro_lenient += lenient / len(gt_terms)
+        if not missed:
+            perfect_lenient += 1
+
+        lines.append(f'PMID: {pmid}  ({paper.get("gene_symbol", "?")})')
+        lines.append('-' * 110)
+        lines.append(f'  Recall exact: {len(exact)}/{len(gt_terms)} = {len(exact) / len(gt_terms):.0%}'
+                     f'  | within {MAX_HOPS} hops: {lenient}/{len(gt_terms)} = {lenient / len(gt_terms):.0%}'
+                     f'  | API extracted {len(api_terms)} terms')
+        if near:
+            lines.append(f'  Near-miss (ontology relative, ≤{MAX_HOPS} hops):')
+            for hp in near:
+                lines.append(f'    ~ {hp} {gt_terms[hp]} (hop {dist[hp]})')
+        if missed:
+            lines.append('  Missed (no related API term):')
+            for hp in missed:
+                lines.append(f'    ✗ {hp} {gt_terms[hp]}')
+        lines.append('')
+
+    def pct(a: int, b: int) -> str:
+        return f'{a / b:.1%}' if b else 'n/a'
+
+    lines.append('=' * 110)
+    lines.append('SUMMARY')
+    lines.append('=' * 110)
+    lines.append(f'Papers evaluated: {n_papers}  '
+                 f'(excluded {len(excluded_in_gt)} FailedPaperRelevancy; '
+                 f'{len(no_gt)} had no curated HPO terms)')
+    lines.append(f'Total GT HPO terms: {total_gt}')
+    lines.append('')
+    lines.append(f'  MICRO recall  exact: {pct(total_exact, total_gt)}'
+                 f'   | within {MAX_HOPS} hops: {pct(total_lenient, total_gt)}')
+    lines.append(f'  MACRO recall  exact: {macro_exact / n_papers:.1%}'
+                 f'   | within {MAX_HOPS} hops: {macro_lenient / n_papers:.1%}')
+    lines.append(f'  Papers with 100% recall (within {MAX_HOPS} hops): {perfect_lenient}/{n_papers}')
+
+    with open('var/hpo_accuracy_report.txt', 'w') as f:
+        f.write('\n'.join(lines))
+    print('Report written to var/hpo_accuracy_report.txt')
+    print(f'\nPapers: {n_papers} | GT terms: {total_gt} | '
+          f'micro recall exact: {pct(total_exact, total_gt)} / ≤{MAX_HOPS}hops: {pct(total_lenient, total_gt)} | '
+          f'macro ≤{MAX_HOPS}hops: {macro_lenient / n_papers:.1%}')
+
+
+if __name__ == '__main__':
+    main()
