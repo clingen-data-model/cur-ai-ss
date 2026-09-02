@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -465,6 +466,36 @@ def test_schema_drift_tolerated_and_guarded(db_session, test_user, snapshot_pape
     path.write_text(json.dumps(data))
     with pytest.raises(SnapshotIncompatibleError):
         restore_snapshot(paper.id, path.name, db_session, test_user)
+
+
+def test_snapshot_descriptions(db_session, test_user, snapshot_paper):
+    paper = snapshot_paper['paper']
+    # First snapshot: the newest user-stamped task is the PDF_PARSING upload.
+    snapshot_paper['paper_task'].updated_by_user_id = test_user.id
+    db_session.flush()
+    write_snapshot(paper.id, db_session)
+    assert list_snapshots(paper.id)[0].description == 'Initial extraction'
+
+    # A user rerun of a scoped task labels the next snapshot with type + scope.
+    # updated_at is set explicitly: SQLite's onupdate timestamp is
+    # second-granular, so within a test it wouldn't sort after the previous
+    # snapshot's microsecond-granular created_at.
+    scoped = snapshot_paper['scoped_task']
+    scoped.updated_by_user_id = test_user.id
+    scoped.updated_at = datetime.now(timezone.utc) + timedelta(seconds=2)
+    snapshot_paper['p1'].identifier = 'CHANGED'
+    db_session.flush()
+    write_snapshot(paper.id, db_session)
+    assert (
+        list_snapshots(paper.id)[0].description
+        == f'Patient Demographics re-run (patient {scoped.patient_id})'
+    )
+
+    # An explicit description (e.g. the backfill script) wins over the heuristic.
+    snapshot_paper['p1'].identifier = 'CHANGED AGAIN'
+    db_session.flush()
+    write_snapshot(paper.id, db_session, description='Manual snapshot backfill')
+    assert list_snapshots(paper.id)[0].description == 'Manual snapshot backfill'
 
 
 def test_v1_snapshot_rejected(db_session, test_user, snapshot_paper):

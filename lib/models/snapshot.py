@@ -14,6 +14,7 @@ class SnapshotMeta(BaseModel):
     paper_id: int
     alembic_revision: str | None = None
     model: str | None = None
+    description: str | None = None
     git_hash: str | None = None
     state_hash: str
     # Set by the API when listing: whether the paper's current state already

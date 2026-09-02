@@ -38,7 +38,9 @@ def backfill() -> None:
         # One session per paper so a single failure doesn't roll back the rest.
         try:
             with session_scope() as session:
-                path = write_snapshot(paper_id, session)
+                path = write_snapshot(
+                    paper_id, session, description='Manual snapshot backfill'
+                )
         except Exception:
             logger.exception(f'Paper {paper_id}: snapshot failed')
             failed += 1

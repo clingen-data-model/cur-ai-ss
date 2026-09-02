@@ -158,6 +158,7 @@ def render_reset_fragment(paper_query_params: PaperQueryParams) -> None:
         options=snapshots,
         index=0,
         format_func=lambda s: f'{s.created_at:%Y-%m-%d %H:%M} UTC'
+        + (f' — {s.description}' if s.description else '')
         + (f' — {s.model}' if s.model else '')
         + (' — current state' if s.matches_current else ''),
     )

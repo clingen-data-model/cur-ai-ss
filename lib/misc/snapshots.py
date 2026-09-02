@@ -282,7 +282,57 @@ def list_snapshots(paper_id: int) -> list[SnapshotMeta]:
     return metas
 
 
-def write_snapshot(paper_id: int, session: Session) -> Path | None:
+# tasks scope columns and the label used for them in snapshot descriptions
+_SCOPE_LABELS = (
+    ('family_id', 'family'),
+    ('patient_id', 'patient'),
+    ('variant_id', 'variant'),
+    ('phenotype_id', 'phenotype'),
+    ('patient_variant_occurrence_id', 'occurrence'),
+)
+
+
+def _snapshot_description(
+    paper_id: int, session: Session, previous: SnapshotMeta | None
+) -> str:
+    """Heuristic label for what produced this snapshot.
+
+    Uploads and rerun requests stamp ``tasks.updated_by_user_id``; worker
+    successor enqueues do not. So the most recent user-stamped task is the
+    action that kicked off the pipeline cycle this snapshot captures."""
+    root = (
+        session.query(TaskDB)
+        .filter(
+            TaskDB.paper_id == paper_id,
+            TaskDB.type != TaskType.GENERAL_PAPER_QUESTION,
+            TaskDB.updated_by_user_id.isnot(None),
+        )
+        .order_by(TaskDB.updated_at.desc(), TaskDB.id.desc())
+        .first()
+    )
+    if root is None:
+        return 'Pipeline run'
+    if previous is not None:
+        # SQLite returns naive UTC datetimes; snapshot timestamps are aware.
+        root_updated = root.updated_at
+        if root_updated.tzinfo is None:
+            root_updated = root_updated.replace(tzinfo=timezone.utc)
+        if root_updated <= previous.created_at:
+            # No user action since the last snapshot caused this one.
+            return 'Pipeline run'
+    if previous is None and root.type == TaskType.PDF_PARSING:
+        return 'Initial extraction'
+    scope = ', '.join(
+        f'{label} {getattr(root, column)}'
+        for column, label in _SCOPE_LABELS
+        if getattr(root, column) is not None
+    )
+    return f'{root.type.value} re-run' + (f' ({scope})' if scope else '')
+
+
+def write_snapshot(
+    paper_id: int, session: Session, description: str | None = None
+) -> Path | None:
     """Write a new snapshot unless the latest one already matches current state."""
     paper_db = session.get(PaperDB, paper_id)
     if paper_db is None:
@@ -293,6 +343,10 @@ def write_snapshot(paper_id: int, session: Session) -> Path | None:
     existing = list_snapshots(paper_id)
     if existing and existing[0].state_hash == state_hash:
         return None
+
+    previous = existing[0] if existing else None
+    if description is None:
+        description = _snapshot_description(paper_id, session, previous)
 
     now = datetime.now(timezone.utc)
     # Model and git hash come from the writing process's environment, not the
@@ -306,6 +360,7 @@ def write_snapshot(paper_id: int, session: Session) -> Path | None:
         'model': env.OPENAI_API_DEPLOYMENT,
         'git_hash': _safe_git_hash(),
         'state_hash': state_hash,
+        'description': description,
     }
 
     name = f'extraction_{now:%Y%m%dT%H%M%S%f}Z.json'
