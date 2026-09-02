@@ -476,13 +476,25 @@ def test_snapshot_descriptions(db_session, test_user, snapshot_paper):
     write_snapshot(paper.id, db_session)
     assert list_snapshots(paper.id)[0].description == 'Initial extraction'
 
-    # A user rerun of a scoped task labels the next snapshot with type + scope.
+    # A user rerun labels the next snapshot with the cascade ROOT's type and
+    # scope. enqueue_successors propagates the user stamp down the cascade, so
+    # a stamped terminal task finishing later must not win (it used to:
+    # a Patient Extraction rerun got labeled "Segregation Analysis Computed").
     # updated_at is set explicitly: SQLite's onupdate timestamp is
     # second-granular, so within a test it wouldn't sort after the previous
     # snapshot's microsecond-granular created_at.
     scoped = snapshot_paper['scoped_task']
     scoped.updated_by_user_id = test_user.id
     scoped.updated_at = datetime.now(timezone.utc) + timedelta(seconds=2)
+    propagated_leaf = TaskDB(
+        paper_id=paper.id,
+        type=TaskType.SEGREGATION_ANALYSIS_COMPUTED,
+        status=TaskStatus.COMPLETED,
+        family_id=snapshot_paper['family'].id,
+        updated_by_user_id=test_user.id,
+        updated_at=datetime.now(timezone.utc) + timedelta(seconds=4),
+    )
+    db_session.add(propagated_leaf)
     snapshot_paper['p1'].identifier = 'CHANGED'
     db_session.flush()
     write_snapshot(paper.id, db_session)

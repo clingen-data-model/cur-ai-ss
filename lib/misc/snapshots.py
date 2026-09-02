@@ -297,29 +297,25 @@ def _snapshot_description(
 ) -> str:
     """Heuristic label for what produced this snapshot.
 
-    Uploads and rerun requests stamp ``tasks.updated_by_user_id``; worker
-    successor enqueues do not. So the most recent user-stamped task is the
-    action that kicked off the pipeline cycle this snapshot captures."""
-    root = (
-        session.query(TaskDB)
-        .filter(
-            TaskDB.paper_id == paper_id,
-            TaskDB.type != TaskType.GENERAL_PAPER_QUESTION,
-            TaskDB.updated_by_user_id.isnot(None),
-        )
-        .order_by(TaskDB.updated_at.desc(), TaskDB.id.desc())
-        .first()
+    User actions stamp ``tasks.updated_by_user_id``, and enqueue_successors
+    propagates that stamp down the whole cascade -- so within the current
+    pipeline cycle (tasks updated since the previous snapshot) the task the
+    user actually clicked is the stamped one that finished FIRST, not last.
+    A terminal leaf like Segregation Analysis Computed always finishes last;
+    ordering ascending keeps the label on the root (e.g. Patient Extraction)."""
+    query = session.query(TaskDB).filter(
+        TaskDB.paper_id == paper_id,
+        TaskDB.type != TaskType.GENERAL_PAPER_QUESTION,
+        TaskDB.updated_by_user_id.isnot(None),
     )
+    if previous is not None:
+        # Only this cycle's tasks. SQLite returns naive UTC datetimes, so the
+        # aware snapshot timestamp is converted for the comparison.
+        prev_created = previous.created_at.astimezone(timezone.utc).replace(tzinfo=None)
+        query = query.filter(TaskDB.updated_at > prev_created)
+    root = query.order_by(TaskDB.updated_at.asc(), TaskDB.id.asc()).first()
     if root is None:
         return 'Pipeline run'
-    if previous is not None:
-        # SQLite returns naive UTC datetimes; snapshot timestamps are aware.
-        root_updated = root.updated_at
-        if root_updated.tzinfo is None:
-            root_updated = root_updated.replace(tzinfo=timezone.utc)
-        if root_updated <= previous.created_at:
-            # No user action since the last snapshot caused this one.
-            return 'Pipeline run'
     if previous is None and root.type == TaskType.PDF_PARSING:
         return 'Initial extraction'
     scope = ', '.join(
