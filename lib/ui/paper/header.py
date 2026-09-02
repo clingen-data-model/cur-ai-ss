@@ -19,7 +19,6 @@ from lib.tasks import (
     is_task_completed,
 )
 from lib.ui.api import (
-    AUTH_TOKEN_KEY,
     delete_paper,
     enqueue_paper_task,
     get_curation_pptx,
@@ -28,6 +27,7 @@ from lib.ui.api import (
     list_snapshots,
     reset_paper,
 )
+from lib.ui.auth import clear_session_state_keeping_auth
 from lib.ui.paper.chat import render_chat_with_agent_tab
 from lib.ui.paper.metadata import render_metadata_tab
 from lib.ui.paper.occurrences import render_patient_variant_occurrences_tab
@@ -177,14 +177,11 @@ def render_reset_fragment(paper_query_params: PaperQueryParams) -> None:
         try:
             result = reset_paper(paper_query_params.paper_id, chosen.name)
             if result.changed:
-                # Wipe ALL widget/session state (except auth): tab editors
-                # save-on-diff against values cached in session state, so any
-                # surviving pre-reset widget value would be PATCHed straight
-                # back over the freshly restored data on the next render.
-                auth_token = st.session_state.get(AUTH_TOKEN_KEY)
-                st.session_state.clear()
-                if auth_token is not None:
-                    st.session_state[AUTH_TOKEN_KEY] = auth_token
+                # Wipe widget/session state: tab editors save-on-diff against
+                # values cached in session state, so any surviving pre-reset
+                # widget value would be PATCHed straight back over the freshly
+                # restored data on the next render.
+                clear_session_state_keeping_auth()
                 st.toast('Paper reset to extraction snapshot', icon='⏪')
             else:
                 st.toast(

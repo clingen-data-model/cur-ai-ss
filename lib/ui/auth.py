@@ -28,6 +28,28 @@ from lib.ui.api import (
 MIN_PASSWORD_LENGTH = 8
 _CURRENT_USER_KEY = '_current_user'
 
+# Session keys require_auth depends on. '_auth_init' guards the first-run
+# cookie-component round-trip (require_auth st.stop()s a blank page when it is
+# missing), so wiping it mid-session blanks the next render.
+_AUTH_SESSION_KEYS = (AUTH_TOKEN_KEY, _CURRENT_USER_KEY, '_auth_init', '_logged_out')
+
+
+def clear_session_state_keeping_auth() -> None:
+    """Wipe all widget/session state without logging the user out or
+    re-triggering require_auth's first-run blank render.
+
+    For flows that invalidate everything on screen (e.g. resetting a paper to
+    a snapshot): stale widget values must not survive, because save-on-diff
+    editors would write them back over the fresh data."""
+    preserved = {
+        key: st.session_state[key]
+        for key in _AUTH_SESSION_KEYS
+        if key in st.session_state
+    }
+    st.session_state.clear()
+    for key, value in preserved.items():
+        st.session_state[key] = value
+
 
 def _render_login_form(cookies: CookieManager) -> None:
     with st.form('login_form'):
