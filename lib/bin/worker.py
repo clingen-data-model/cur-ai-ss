@@ -97,6 +97,11 @@ def _maybe_write_snapshot(session: Session, paper_id: int) -> None:
     Several terminal tasks can finish in quick succession; write_snapshot
     dedupes on a state hash, so repeat calls for an unchanged paper are no-ops.
     A snapshot failure must never fail the task bookkeeping around it."""
+    # The session runs with autoflush=False, and the caller has just set the
+    # completing task's status to COMPLETED in memory only. Without this flush
+    # the query below reads the stale RUNNING row and the check can never pass
+    # for the final task of a pipeline -- the exact task meant to trigger it.
+    session.flush()
     pipeline_statuses = [
         task_status
         for (task_status, task_type) in session.query(

@@ -475,6 +475,21 @@ def test_worker_hook_writes_snapshot_when_pipeline_done(db_session, snapshot_pap
     assert len(list_snapshots(paper.id)) == 1
 
 
+def test_worker_hook_sees_unflushed_completion(db_session, snapshot_paper):
+    """Regression: execute_task sets the finishing task's status in memory only
+    (the session has autoflush=False). The hook must flush before checking, or
+    the final task of a pipeline always reads as still RUNNING and no snapshot
+    is ever written."""
+    paper = snapshot_paper['paper']
+    task = snapshot_paper['scoped_task']
+    task.status = TaskStatus.RUNNING
+    db_session.flush()
+    # Mimic execute_task's completion bookkeeping: in-memory only, no flush.
+    task.status = TaskStatus.COMPLETED
+    _maybe_write_snapshot(db_session, paper.id)
+    assert len(list_snapshots(paper.id)) == 1
+
+
 def test_worker_hook_skips_incomplete_pipeline(db_session, snapshot_paper):
     paper = snapshot_paper['paper']
     snapshot_paper['scoped_task'].status = TaskStatus.PENDING
