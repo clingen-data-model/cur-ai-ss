@@ -23,6 +23,7 @@ from lib.models import (
     PhenotypeResp,
     SegregationAnalysisResp,
     SegregationEvidenceUpdateRequest,
+    SnapshotMeta,
     TaskResp,
     UserResp,
     VariantResp,
@@ -180,6 +181,21 @@ def delete_paper(paper_id: int) -> None:
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}',
     )
     resp.raise_for_status()
+
+
+def list_snapshots(paper_id: int) -> list[SnapshotMeta]:
+    resp = _session.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/snapshots')
+    resp.raise_for_status()
+    return TypeAdapter(list[SnapshotMeta]).validate_python(resp.json())
+
+
+def reset_paper(paper_id: int, snapshot_name: str) -> PaperResp:
+    resp = _session.post(
+        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/reset',
+        json={'snapshot_name': snapshot_name},
+    )
+    resp.raise_for_status()
+    return PaperResp.model_validate(resp.json())
 
 
 def highlight_pdf(

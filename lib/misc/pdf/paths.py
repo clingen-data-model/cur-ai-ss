@@ -19,6 +19,10 @@ def pdf_supplements_dir(paper_id: int) -> Path:
     return pdf_dir(paper_id) / 'supplements'
 
 
+def snapshots_dir(paper_id: int) -> Path:
+    return pdf_dir(paper_id) / 'snapshots'
+
+
 def pdf_raw_path(
     paper_id: int, supplement: bool = False, file_format: str | None = None
 ) -> Path:

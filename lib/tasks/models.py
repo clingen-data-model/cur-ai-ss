@@ -117,6 +117,14 @@ TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
     TaskType.MONDO_LINKING: [],
 }
 
+# Pipeline leaves: task types with no successors. GENERAL_PAPER_QUESTION is
+# excluded because chat tasks are not part of the extraction pipeline.
+TERMINAL_TASK_TYPES: frozenset[TaskType] = frozenset(
+    t
+    for t in TaskType
+    if not TASK_SUCCESSORS.get(t) and t is not TaskType.GENERAL_PAPER_QUESTION
+)
+
 
 class TaskDB(Base):
     __tablename__ = 'tasks'

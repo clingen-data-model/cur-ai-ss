@@ -24,6 +24,8 @@ from lib.ui.api import (
     get_curation_pptx,
     get_http_error_detail,
     get_paper,
+    list_snapshots,
+    reset_paper,
 )
 from lib.ui.paper.chat import render_chat_with_agent_tab
 from lib.ui.paper.metadata import render_metadata_tab
@@ -127,6 +129,48 @@ def render_queue_tasks_fragment(paper_query_params: PaperQueryParams) -> None:
             st.toast(f'Failed to enqueue task: {str(e)}', icon='❌')
 
     st.button('Confirm Rerun', type='secondary', on_click=on_confirm)
+
+
+def render_reset_fragment(paper_query_params: PaperQueryParams) -> None:
+    st.markdown(
+        'Each time the extraction pipeline finishes, the extracted data '
+        '(patients, variants, phenotypes, links, ...) is saved as a snapshot. '
+        'Rerunning agents produces a new snapshot when the results change, so '
+        'older ones stay available. Resetting restores the paper exactly as '
+        'the chosen snapshot recorded it, discarding any manual edits and any '
+        'agent results produced after it.'
+    )
+    try:
+        snapshots = list_snapshots(paper_query_params.paper_id)
+    except requests.HTTPError as e:
+        st.caption(f'Failed to load snapshots: {get_http_error_detail(e)}')
+        return
+    if not snapshots:
+        st.caption(
+            'No extraction snapshots yet. A snapshot is written each time the '
+            'extraction pipeline completes.'
+        )
+        return
+
+    chosen = st.selectbox(
+        'Restore snapshot:',
+        options=snapshots,
+        index=0,
+        format_func=lambda s: f'{s.created_at:%Y-%m-%d %H:%M} UTC'
+        + (f' — {s.model}' if s.model else ''),
+    )
+    st.caption(
+        '⚠️ Resetting cannot be undone. Chat history and PDF highlights are kept.'
+    )
+    if st.button('Reset paper', type='primary'):
+        try:
+            reset_paper(paper_query_params.paper_id, chosen.name)
+            st.session_state.pop('paper_resp', None)
+            st.session_state.pop('pptx_bytes', None)
+            st.toast('Paper reset to extraction snapshot', icon='⏪')
+            st.rerun()
+        except requests.HTTPError as e:
+            st.toast(f'Failed to reset: {get_http_error_detail(e)}', icon='❌')
 
 
 def _strip_trailing_punctuation(text: str) -> str:
@@ -270,6 +314,17 @@ with center:
                 on_change='rerun',
             ):
                 render_queue_tasks_fragment(paper_query_params)
+            with st.popover(
+                '⏪ Reset',
+                type='tertiary',
+                disabled=any(
+                    t.status
+                    in (TaskStatus.PENDING, TaskStatus.QUEUED, TaskStatus.RUNNING)
+                    for t in paper_resp.tasks
+                ),
+                help='Restore the paper to a saved extraction snapshot',
+            ):
+                render_reset_fragment(paper_query_params)
             title = paper_resp.title or f'paper_{paper_query_params.paper_id}'
             clean_title = _strip_trailing_punctuation(title)
             st.download_button(

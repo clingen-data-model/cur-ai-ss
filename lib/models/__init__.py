@@ -78,6 +78,7 @@ from lib.models.segregation_analysis import (
     SegregationEvidenceUpdateRequest,
     SequencingMethodology,
 )
+from lib.models.snapshot import PaperResetRequest, SnapshotMeta
 from lib.models.user import (
     ChangePasswordRequest,
     LoginRequest,

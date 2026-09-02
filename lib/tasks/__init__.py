@@ -10,6 +10,7 @@ from lib.tasks.misc import (
 )
 from lib.tasks.models import (
     TASK_SUCCESSORS,
+    TERMINAL_TASK_TYPES,
     InferredPaperStatus,
     TaskCreateRequest,
     TaskDB,
@@ -23,6 +24,7 @@ __all__ = [
     'TaskStatus',
     'TaskType',
     'TASK_SUCCESSORS',
+    'TERMINAL_TASK_TYPES',
     'TaskResp',
     'TaskCreateRequest',
     'InferredPaperStatus',

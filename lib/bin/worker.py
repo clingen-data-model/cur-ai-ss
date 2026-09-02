@@ -7,13 +7,16 @@ import signal
 from types import FrameType
 from typing import Any
 
+from sqlalchemy.orm import Session
+
 from lib.api.db import session_scope
 from lib.core.logging import setup_logging
+from lib.misc.snapshots import write_snapshot
 from lib.models import TaskDB
 from lib.models.paper import PaperDB
 from lib.tasks.handlers import TASK_HANDLERS
 from lib.tasks.misc import enqueue_successors
-from lib.tasks.models import TaskStatus, TaskType
+from lib.tasks.models import TERMINAL_TASK_TYPES, TaskStatus, TaskType
 
 LEASE_TIMEOUT_S = 1800
 POLL_INTERVAL_S = 10
@@ -84,6 +87,29 @@ async def execute_task(task_id: int) -> None:
             paper = session.get(PaperDB, task.paper_id)
             if paper:
                 paper.updated_at = now
+            if error_msg is None and task.type in TERMINAL_TASK_TYPES:
+                _maybe_write_snapshot(session, task.paper_id)
+
+
+def _maybe_write_snapshot(session: Session, paper_id: int) -> None:
+    """Snapshot the paper's extracted state once every pipeline task is done.
+
+    Several terminal tasks can finish in quick succession; write_snapshot
+    dedupes on a state hash, so repeat calls for an unchanged paper are no-ops.
+    A snapshot failure must never fail the task bookkeeping around it."""
+    pipeline_statuses = [
+        task_status
+        for (task_status, task_type) in session.query(
+            TaskDB.status, TaskDB.type
+        ).filter(TaskDB.paper_id == paper_id)
+        if task_type != TaskType.GENERAL_PAPER_QUESTION
+    ]
+    if not all(s == TaskStatus.COMPLETED for s in pipeline_statuses):
+        return
+    try:
+        write_snapshot(paper_id, session)
+    except Exception:
+        logger.exception(f'Failed to write extraction snapshot for paper {paper_id}')
 
 
 async def execute_task_with_semaphore(
