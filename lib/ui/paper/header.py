@@ -46,6 +46,7 @@ from lib.ui.paper.tasks import render_tasks_tab
 from lib.ui.paper.variants import render_variants_tab
 
 RERUN_POPOVER_STATE_KEY = 'RERUN_POPOVER_STATE_KEY'
+RESET_POPOVER_STATE_KEY = 'RESET_POPOVER_STATE_KEY'
 
 
 class PaperQueryParams(BaseModel):
@@ -157,26 +158,38 @@ def render_reset_fragment(paper_query_params: PaperQueryParams) -> None:
         options=snapshots,
         index=0,
         format_func=lambda s: f'{s.created_at:%Y-%m-%d %H:%M} UTC'
-        + (f' — {s.model}' if s.model else ''),
+        + (f' — {s.model}' if s.model else '')
+        + (' — current state' if s.matches_current else ''),
     )
     st.caption(
         '⚠️ Resetting cannot be undone. Chat history and PDF highlights are kept.'
     )
-    if st.button('Reset paper', type='primary'):
+
+    def on_confirm() -> None:
         try:
             result = reset_paper(paper_query_params.paper_id, chosen.name)
             if result.changed:
                 st.session_state.pop('paper_resp', None)
                 st.session_state.pop('pptx_bytes', None)
                 st.toast('Paper reset to extraction snapshot', icon='⏪')
-                st.rerun()
             else:
                 st.toast(
                     'Paper already matches this snapshot — nothing to reset',
                     icon='ℹ️',
                 )
+            st.session_state[RESET_POPOVER_STATE_KEY] = False
         except requests.HTTPError as e:
             st.toast(f'Failed to reset: {get_http_error_detail(e)}', icon='❌')
+
+    st.button(
+        'Reset paper',
+        type='primary',
+        on_click=on_confirm,
+        disabled=chosen.matches_current,
+        help='The paper already matches this snapshot — nothing to reset'
+        if chosen.matches_current
+        else None,
+    )
 
 
 def _strip_trailing_punctuation(text: str) -> str:
@@ -328,6 +341,8 @@ with center:
                 '⏪ Reset',
                 type='tertiary',
                 disabled=tasks_active,
+                key=RESET_POPOVER_STATE_KEY,
+                on_change='rerun',
                 help=(
                     '⏳ Reset is disabled while extraction tasks are queued or '
                     'running — a task finishing mid-reset would overwrite the '

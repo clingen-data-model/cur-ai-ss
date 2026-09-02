@@ -227,6 +227,12 @@ def _state_hash(encoded_tables: dict) -> str:
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 
+def current_state_hash(paper_id: int, paper_db: PaperDB, session: Session) -> str:
+    """Hash of the paper's current extracted state, comparable to a snapshot's
+    ``meta.state_hash``."""
+    return _state_hash(_encode_tables(dump_paper_state(paper_id, paper_db, session)))
+
+
 def _current_alembic_revision(session: Session) -> str | None:
     bind = session.get_bind()
     if not sa_inspect(bind).has_table('alembic_version'):
@@ -407,10 +413,9 @@ def restore_snapshot(
     if paper_db is None:
         raise SnapshotNotFoundError(f'Paper {paper_id} not found')
 
-    current_hash = _state_hash(
-        _encode_tables(dump_paper_state(paper_id, paper_db, session))
-    )
-    if current_hash == data.get('meta', {}).get('state_hash'):
+    if current_state_hash(paper_id, paper_db, session) == data.get('meta', {}).get(
+        'state_hash'
+    ):
         return False
 
     # Detach task scope FKs so deleting domain rows cannot cascade into tasks.

@@ -17,6 +17,9 @@ class SnapshotMeta(BaseModel):
     model: str | None = None
     git_hash: str | None = None
     state_hash: str
+    # Set by the API when listing: whether the paper's current state already
+    # matches this snapshot (resetting to it would be a no-op).
+    matches_current: bool = False
 
 
 class PaperResetRequest(BaseModel):

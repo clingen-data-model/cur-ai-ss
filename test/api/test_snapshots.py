@@ -388,6 +388,13 @@ def test_list_snapshots_endpoint(client, db_session, snapshot_paper):
     (meta,) = response.json()
     assert meta['paper_id'] == paper.id
     assert meta['name'].startswith('extraction_')
+    assert meta['matches_current'] is True
+
+    # Once the state diverges, the snapshot no longer matches.
+    snapshot_paper['p1'].identifier = 'EDITED'
+    db_session.flush()
+    (meta,) = client.get(f'/papers/{paper.id}/snapshots').json()
+    assert meta['matches_current'] is False
 
     assert client.get('/papers/999999/snapshots').status_code == 404
 

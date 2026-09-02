@@ -87,6 +87,7 @@ from lib.misc.snapshots import (
     InvalidSnapshotNameError,
     SnapshotIncompatibleError,
     SnapshotNotFoundError,
+    current_state_hash,
     dump_paper_state,
     list_snapshots,
     restore_snapshot,
@@ -458,11 +459,17 @@ def delete_paper(paper_id: int, session: Session = Depends(get_session)) -> None
 
 @app.get('/papers/{paper_id}/snapshots', response_model=list[SnapshotMeta])
 def get_paper_snapshots(paper_id: int, session: Session = Depends(get_session)) -> Any:
-    if session.get(PaperDB, paper_id) is None:
+    paper_db = session.get(PaperDB, paper_id)
+    if paper_db is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
-    return list_snapshots(paper_id)
+    snapshots = list_snapshots(paper_id)
+    if snapshots:
+        state_hash = current_state_hash(paper_id, paper_db, session)
+        for snapshot in snapshots:
+            snapshot.matches_current = snapshot.state_hash == state_hash
+    return snapshots
 
 
 @app.post('/papers/{paper_id}/reset', response_model=PaperResetResp)
