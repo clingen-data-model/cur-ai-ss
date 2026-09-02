@@ -45,7 +45,6 @@ from lib.models.paper import (
     PedigreeResp,
 )
 from lib.models.patient import (
-    PatientCreateRequest,
     PatientDB,
     PatientResp,
     PatientUpdateRequest,

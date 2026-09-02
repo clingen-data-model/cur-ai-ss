@@ -606,23 +606,6 @@ class PatientResp(BaseModel):
     family_assignment_evidence: HumanEvidenceBlock[str]
 
 
-class PatientCreateRequest(BaseModel):
-    identifier: str
-    proband_status: str
-    sex: str
-    age_diagnosis: int | None = None
-    age_diagnosis_unit: str | None = None
-    age_report: int | None = None
-    age_report_unit: str | None = None
-    age_death: int | None = None
-    age_death_unit: str | None = None
-    country_of_origin: str
-    race: str
-    ethnicity: str
-    affected_status: str
-    family_id: int
-
-
 class PatientUpdateRequest(PatchModel):
     identifier: str | None = None
     proband_status: str | None = None
