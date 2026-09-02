@@ -19,6 +19,7 @@ from lib.tasks import (
     is_task_completed,
 )
 from lib.ui.api import (
+    AUTH_TOKEN_KEY,
     delete_paper,
     enqueue_paper_task,
     get_curation_pptx,
@@ -153,10 +154,15 @@ def render_reset_fragment(paper_query_params: PaperQueryParams) -> None:
         )
         return
 
+    # Default to the snapshot matching the current state (harmless to
+    # re-apply), so restoring anything else is a deliberate choice — with the
+    # newest as default, a reflexive second reset re-applied the state the
+    # user had just escaped.
+    default_index = next((i for i, s in enumerate(snapshots) if s.matches_current), 0)
     chosen = st.selectbox(
         'Restore snapshot:',
         options=snapshots,
-        index=0,
+        index=default_index,
         format_func=lambda s: f'{s.created_at:%Y-%m-%d %H:%M} UTC'
         + (f' — {s.description}' if s.description else '')
         + (f' — {s.model}' if s.model else '')
@@ -171,8 +177,14 @@ def render_reset_fragment(paper_query_params: PaperQueryParams) -> None:
         try:
             result = reset_paper(paper_query_params.paper_id, chosen.name)
             if result.changed:
-                st.session_state.pop('paper_resp', None)
-                st.session_state.pop('pptx_bytes', None)
+                # Wipe ALL widget/session state (except auth): tab editors
+                # save-on-diff against values cached in session state, so any
+                # surviving pre-reset widget value would be PATCHed straight
+                # back over the freshly restored data on the next render.
+                auth_token = st.session_state.get(AUTH_TOKEN_KEY)
+                st.session_state.clear()
+                if auth_token is not None:
+                    st.session_state[AUTH_TOKEN_KEY] = auth_token
                 st.toast('Paper reset to extraction snapshot', icon='⏪')
             else:
                 st.toast(
