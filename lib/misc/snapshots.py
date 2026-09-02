@@ -2,9 +2,10 @@
 
 A snapshot is one JSON file under ``<pdf_dir>/snapshots/`` holding a faithful
 column dump of every paper-scoped table, written when the extraction pipeline
-completes. Restoring wipes the paper's domain rows and re-inserts them with
-their original primary keys, so ``tasks`` rows (whose scope FKs point at those
-ids) survive a reset.
+completes. Restoring wipes the paper's domain rows -- tasks included -- and re-inserts
+them with their original primary keys, so every snapshot is a self-consistent
+reality: entities, links, and the task history that produced them. Chat tasks
+and the conversations table are left alone.
 """
 
 import hashlib
@@ -43,10 +44,14 @@ from lib.models import (
     VariantDB,
 )
 from lib.models.base import row_to_dict
+from lib.tasks.models import TaskType
 
 logger = logging.getLogger(__name__)
 
-SNAPSHOT_FILE_VERSION = 1
+# Version 2: tasks are part of the snapshot (restored wholesale with the domain
+# rows). Version-1 files predate that and cannot be restored safely -- doing so
+# would delete the paper's task history and restore nothing in its place.
+SNAPSHOT_FILE_VERSION = 2
 
 _SNAPSHOT_NAME_RE = re.compile(r'^extraction_\d{8}T\d{12}Z\.json$')
 
@@ -64,16 +69,10 @@ _INSERT_ORDER: list[tuple[str, type[Base]]] = [
     ('patient_variant_occurrences', PatientVariantOccurrenceDB),
     ('segregation_evidence', SegregationEvidenceDB),
     ('segregation_analysis_computed', SegregationAnalysisComputedDB),
+    # Last: tasks FK every entity table above. Chat tasks are excluded (kept
+    # through resets, like the conversations table).
+    ('tasks', TaskDB),
 ]
-
-# tasks scope column -> snapshot table its values must exist in after restore
-_TASK_SCOPE_COLUMNS: dict[str, str] = {
-    'family_id': 'families',
-    'patient_id': 'patients',
-    'variant_id': 'variants',
-    'phenotype_id': 'phenotypes',
-    'patient_variant_occurrence_id': 'patient_variant_occurrences',
-}
 
 # Extracted/editable paper columns a reset restores. Identity and file
 # bookkeeping (content_hash, gene_id, filename, supplement_format) stay put.
@@ -99,9 +98,16 @@ _PAPER_RESTORE_COLUMNS = (
     'mondo_match_context',
 )
 
-# Attribution columns churn on every task completion without representing
-# extraction output, so they don't participate in change detection.
-_HASH_EXCLUDED_KEYS = {'updated_at', 'updated_by_user_id'}
+# Attribution and task-bookkeeping columns churn on every run without
+# representing extraction output, so they don't participate in change
+# detection (they are still stored in and restored from the snapshot).
+_HASH_EXCLUDED_KEYS = {
+    'updated_at',
+    'updated_by_user_id',
+    'tries',
+    'conversation_id',
+    'error_message',
+}
 
 
 def _model_table(model: type[Base]) -> Table:
@@ -178,6 +184,14 @@ def dump_paper_state(paper_id: int, paper_db: PaperDB, session: Session) -> dict
         if family_ids
         else []
     )
+    tasks = (
+        session.query(TaskDB)
+        .filter(
+            TaskDB.paper_id == paper_id,
+            TaskDB.type != TaskType.GENERAL_PAPER_QUESTION,
+        )
+        .all()
+    )
 
     return {
         'paper': row_to_dict(paper_db),
@@ -192,6 +206,7 @@ def dump_paper_state(paper_id: int, paper_db: PaperDB, session: Session) -> dict
         'patient_variant_occurrences': [row_to_dict(r) for r in pvlinks],
         'segregation_evidence': [row_to_dict(r) for r in seg_evidence],
         'segregation_analysis_computed': [row_to_dict(r) for r in seg_computed],
+        'tasks': [row_to_dict(r) for r in tasks],
     }
 
 
@@ -341,8 +356,8 @@ def _coerce_row(table: Table, row: dict) -> dict:
 
 
 def _delete_paper_domain_rows(session: Session, paper_id: int) -> None:
-    """Bulk-delete the paper's domain rows child-first (task FKs must already
-    be detached so nothing cascades into ``tasks``)."""
+    """Bulk-delete the paper's domain rows child-first, tasks before the
+    entities their scope FKs point at. Chat tasks are kept."""
     family_ids = [
         i for (i,) in session.query(FamilyDB.id).filter(FamilyDB.paper_id == paper_id)
     ]
@@ -356,6 +371,10 @@ def _delete_paper_domain_rows(session: Session, paper_id: int) -> None:
         i for (i,) in session.query(VariantDB.id).filter(VariantDB.paper_id == paper_id)
     ]
 
+    session.query(TaskDB).filter(
+        TaskDB.paper_id == paper_id,
+        TaskDB.type != TaskType.GENERAL_PAPER_QUESTION,
+    ).delete(synchronize_session=False)
     session.query(PatientVariantOccurrenceDB).filter(
         PatientVariantOccurrenceDB.paper_id == paper_id
     ).delete(synchronize_session=False)
@@ -422,17 +441,6 @@ def restore_snapshot(
     ):
         return False
 
-    # Detach task scope FKs so deleting domain rows cannot cascade into tasks.
-    tasks = session.query(TaskDB).filter(TaskDB.paper_id == paper_id).all()
-    saved_scopes: dict[int, dict[str, int | None]] = {}
-    for task in tasks:
-        scope = {col: getattr(task, col) for col in _TASK_SCOPE_COLUMNS}
-        if any(v is not None for v in scope.values()):
-            saved_scopes[task.id] = scope
-            for col in _TASK_SCOPE_COLUMNS:
-                setattr(task, col, None)
-    session.flush()
-
     _delete_paper_domain_rows(session, paper_id)
 
     pair_links: dict[int, int] = {}
@@ -455,23 +463,6 @@ def restore_snapshot(
             .where(pvo_table.c.id == pvo_id)
             .values(paired_variant_link_id=link_id)
         )
-    session.flush()
-
-    # Re-attach task scopes that resolve in the restored state; drop scoped
-    # tasks pointing at post-snapshot entities (what CASCADE would have done).
-    restored_ids = {
-        col: {r['id'] for r in tables.get(key, [])}
-        for col, key in _TASK_SCOPE_COLUMNS.items()
-    }
-    for task in tasks:
-        saved = saved_scopes.get(task.id)
-        if saved is None:
-            continue
-        if all(v is None or v in restored_ids[col] for col, v in saved.items()):
-            for col, v in saved.items():
-                setattr(task, col, v)
-        else:
-            session.delete(task)
     session.flush()
 
     paper_row = tables.get('paper', {})

@@ -41,9 +41,9 @@ def test_snapshot_covers_every_paper_scoped_table():
     snapshot (lib.misc.snapshots._INSERT_ORDER) or to the exclusions below."""
     from lib.misc.snapshots import _INSERT_ORDER
 
-    # Deliberately not snapshotted: tasks are preserved through a reset,
-    # conversations are chat history the user keeps.
-    excluded = {'tasks', 'conversations'}
+    # Deliberately not snapshotted: conversations are chat history the user
+    # keeps through resets (chat tasks are likewise excluded in the dump).
+    excluded = {'conversations'}
     snapshotted = {model.__table__.name for _, model in _INSERT_ORDER} | {'papers'}
 
     reachable = {'papers'}
@@ -302,7 +302,12 @@ def test_reset_roundtrip(client, db_session, test_user, snapshot_paper):
         status=TaskStatus.COMPLETED,
         patient_id=new_patient.id,
     )
-    db_session.add(new_scoped_task)
+    chat_task = TaskDB(
+        paper_id=paper.id,
+        type=TaskType.GENERAL_PAPER_QUESTION,
+        status=TaskStatus.COMPLETED,
+    )
+    db_session.add_all([new_scoped_task, chat_task])
     db_session.flush()
 
     response = client.post(f'/papers/{paper.id}/reset', json={'snapshot_name': name})
@@ -336,14 +341,16 @@ def test_reset_roundtrip(client, db_session, test_user, snapshot_paper):
     assert db_session.query(SegregationAnalysisComputedDB).count() == 1
     assert db_session.query(PedigreeDB).count() == 1
 
-    # Task history: pre-snapshot tasks survive with scope intact; the task
-    # scoped to the post-snapshot patient is gone.
+    # Task history reverts with the snapshot: pre-snapshot tasks are back with
+    # scope intact, the post-snapshot task is gone, chat tasks survive.
     tasks = db_session.query(TaskDB).filter_by(paper_id=paper.id).all()
     types = {t.type for t in tasks}
     assert TaskType.PDF_PARSING in types
     scoped = next(t for t in tasks if t.type == TaskType.PATIENT_DEMOGRAPHICS)
     assert scoped.patient_id == snapshot_paper['p1'].id
+    assert scoped.id == snapshot_paper['scoped_task'].id  # PK preserved
     assert TaskType.PHENOTYPE_EXTRACTION not in types
+    assert TaskType.GENERAL_PAPER_QUESTION in types  # chat task kept
 
     # Conversation untouched.
     assert db_session.query(ConversationDB).filter_by(paper_id=paper.id).count() == 1
@@ -455,6 +462,19 @@ def test_schema_drift_tolerated_and_guarded(db_session, test_user, snapshot_pape
     db_session.flush()
     for row in data['tables']['patients']:
         del row['identifier']
+    path.write_text(json.dumps(data))
+    with pytest.raises(SnapshotIncompatibleError):
+        restore_snapshot(paper.id, path.name, db_session, test_user)
+
+
+def test_v1_snapshot_rejected(db_session, test_user, snapshot_paper):
+    """Version-1 files predate tasks-in-snapshot; restoring one would delete
+    the paper's task history and restore nothing in its place."""
+    paper = snapshot_paper['paper']
+    path = write_snapshot(paper.id, db_session)
+    assert path is not None
+    data = json.loads(path.read_text())
+    data['meta']['version'] = 1
     path.write_text(json.dumps(data))
     with pytest.raises(SnapshotIncompatibleError):
         restore_snapshot(paper.id, path.name, db_session, test_user)

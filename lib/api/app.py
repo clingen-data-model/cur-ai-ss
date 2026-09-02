@@ -1875,6 +1875,7 @@ def _build_qa_context(
         Tuple of (paper_context, db_state_context, agent_instructions)
     """
     db_state = dump_paper_state(paper_id, paper_db, session)
+    db_state.pop('tasks')  # pipeline bookkeeping, not extraction state
     db_state['hpo_terms'] = db_state.pop('hpos')
     db_state['segregation_analysis'] = db_state.pop('segregation_analysis_computed')
 

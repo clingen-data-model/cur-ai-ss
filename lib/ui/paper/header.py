@@ -162,7 +162,8 @@ def render_reset_fragment(paper_query_params: PaperQueryParams) -> None:
         + (' — current state' if s.matches_current else ''),
     )
     st.caption(
-        '⚠️ Resetting cannot be undone. Chat history and PDF highlights are kept.'
+        '⚠️ Resetting cannot be undone. Task history reverts with the snapshot; '
+        'chat history and PDF highlights are kept.'
     )
 
     def on_confirm() -> None:
