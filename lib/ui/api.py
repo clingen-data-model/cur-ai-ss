@@ -13,6 +13,7 @@ from lib.models import (
     FamilyResp,
     FamilyUpdateRequest,
     GeneResp,
+    PaperResetResp,
     PaperResp,
     PaperUpdateRequest,
     PatientResp,
@@ -189,13 +190,13 @@ def list_snapshots(paper_id: int) -> list[SnapshotMeta]:
     return TypeAdapter(list[SnapshotMeta]).validate_python(resp.json())
 
 
-def reset_paper(paper_id: int, snapshot_name: str) -> PaperResp:
+def reset_paper(paper_id: int, snapshot_name: str) -> PaperResetResp:
     resp = _session.post(
         f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/reset',
         json={'snapshot_name': snapshot_name},
     )
     resp.raise_for_status()
-    return PaperResp.model_validate(resp.json())
+    return PaperResetResp.model_validate(resp.json())
 
 
 def highlight_pdf(

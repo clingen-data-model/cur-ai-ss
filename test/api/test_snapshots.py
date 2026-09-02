@@ -317,7 +317,8 @@ def test_reset_roundtrip(client, db_session, test_user, snapshot_paper):
 
     response = client.post(f'/papers/{paper.id}/reset', json={'snapshot_name': name})
     assert response.status_code == 200, response.text
-    body = response.json()
+    assert response.json()['changed'] is True
+    body = response.json()['paper']
     assert body['title'] == 'Original Title'
     assert body['disease_name'] == 'Original disease'
     assert body['updated_by_user_id'] == test_user.id
@@ -424,18 +425,36 @@ def test_snapshot_name_validation():
         snapshot_path(1, 'extraction_bogus.json')
 
 
+def test_reset_noop_when_state_unchanged(client, db_session, snapshot_paper):
+    paper = snapshot_paper['paper']
+    path = write_snapshot(paper.id, db_session)
+    assert path is not None
+    response = client.post(
+        f'/papers/{paper.id}/reset', json={'snapshot_name': path.name}
+    )
+    assert response.status_code == 200
+    assert response.json()['changed'] is False
+    # Nothing was touched: attribution was not re-stamped.
+    assert response.json()['paper']['updated_by_user_id'] is None
+
+
 def test_schema_drift_tolerated_and_guarded(db_session, test_user, snapshot_paper):
     paper = snapshot_paper['paper']
     path = write_snapshot(paper.id, db_session)
     assert path is not None
     data = json.loads(path.read_text())
 
-    # An extra key from a dropped column is tolerated.
+    # An extra key from a dropped column is tolerated. (Mutate first so the
+    # restore isn't short-circuited by the unchanged-state check.)
+    snapshot_paper['p1'].identifier = 'EDITED'
+    db_session.flush()
     data['tables']['patients'][0]['bogus_removed_column'] = 'x'
     path.write_text(json.dumps(data))
-    restore_snapshot(paper.id, path.name, db_session, test_user)
+    assert restore_snapshot(paper.id, path.name, db_session, test_user) is True
 
     # A missing NOT-NULL-without-default column is rejected.
+    snapshot_paper['p1'].identifier = 'EDITED AGAIN'
+    db_session.flush()
     for row in data['tables']['patients']:
         del row['identifier']
     path.write_text(json.dumps(data))

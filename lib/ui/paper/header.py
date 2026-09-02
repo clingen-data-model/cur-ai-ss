@@ -164,11 +164,17 @@ def render_reset_fragment(paper_query_params: PaperQueryParams) -> None:
     )
     if st.button('Reset paper', type='primary'):
         try:
-            reset_paper(paper_query_params.paper_id, chosen.name)
-            st.session_state.pop('paper_resp', None)
-            st.session_state.pop('pptx_bytes', None)
-            st.toast('Paper reset to extraction snapshot', icon='⏪')
-            st.rerun()
+            result = reset_paper(paper_query_params.paper_id, chosen.name)
+            if result.changed:
+                st.session_state.pop('paper_resp', None)
+                st.session_state.pop('pptx_bytes', None)
+                st.toast('Paper reset to extraction snapshot', icon='⏪')
+                st.rerun()
+            else:
+                st.toast(
+                    'Paper already matches this snapshot — nothing to reset',
+                    icon='ℹ️',
+                )
         except requests.HTTPError as e:
             st.toast(f'Failed to reset: {get_http_error_detail(e)}', icon='❌')
 

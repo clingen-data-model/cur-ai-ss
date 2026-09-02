@@ -116,6 +116,7 @@ from lib.models import (
     LoginRequest,
     PaperDB,
     PaperResetRequest,
+    PaperResetResp,
     PaperResp,
     PaperUpdateRequest,
     PatientCreateRequest,
@@ -464,7 +465,7 @@ def get_paper_snapshots(paper_id: int, session: Session = Depends(get_session)) 
     return list_snapshots(paper_id)
 
 
-@app.post('/papers/{paper_id}/reset', response_model=PaperResp)
+@app.post('/papers/{paper_id}/reset', response_model=PaperResetResp)
 def reset_paper(
     paper_id: int,
     request: PaperResetRequest,
@@ -492,17 +493,20 @@ def reset_paper(
             detail='Cannot reset while extraction tasks are pending or running',
         )
     try:
-        restore_snapshot(paper_id, request.snapshot_name, session, current_user)
+        applied = restore_snapshot(
+            paper_id, request.snapshot_name, session, current_user
+        )
     except InvalidSnapshotNameError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except SnapshotNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except SnapshotIncompatibleError as e:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
-    # Bulk deletes/inserts bypass the identity map; expire so the response
-    # below reads the restored rows, not stale in-session objects.
-    session.expire_all()
-    return get_paper(paper_id, session)
+    if applied:
+        # Bulk deletes/inserts bypass the identity map; expire so the response
+        # below reads the restored rows, not stale in-session objects.
+        session.expire_all()
+    return {'changed': applied, 'paper': get_paper(paper_id, session)}
 
 
 @app.patch('/papers/{paper_id}', response_model=PaperResp)

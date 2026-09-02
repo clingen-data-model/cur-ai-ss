@@ -387,10 +387,13 @@ def _delete_paper_domain_rows(session: Session, paper_id: int) -> None:
 
 def restore_snapshot(
     paper_id: int, name: str, session: Session, editor: UserDB
-) -> None:
+) -> bool:
     """Replace the paper's domain rows with a snapshot's, preserving PKs.
 
     Runs in the caller's transaction; any failure rolls the whole reset back.
+    Returns False without touching anything when the current state already
+    matches the snapshot (same state hash the write-side dedupe uses), so a
+    pointless reset neither churns rows nor re-stamps attribution.
     """
     path = snapshot_path(paper_id, name)
     if not path.exists():
@@ -403,6 +406,12 @@ def restore_snapshot(
     paper_db = session.get(PaperDB, paper_id)
     if paper_db is None:
         raise SnapshotNotFoundError(f'Paper {paper_id} not found')
+
+    current_hash = _state_hash(
+        _encode_tables(dump_paper_state(paper_id, paper_db, session))
+    )
+    if current_hash == data.get('meta', {}).get('state_hash'):
+        return False
 
     # Detach task scope FKs so deleting domain rows cannot cascade into tasks.
     tasks = session.query(TaskDB).filter(TaskDB.paper_id == paper_id).all()
@@ -465,3 +474,4 @@ def restore_snapshot(
     paper_db.updated_by_user_id = editor.id
     paper_db.updated_at = datetime.now(timezone.utc)
     session.flush()
+    return True

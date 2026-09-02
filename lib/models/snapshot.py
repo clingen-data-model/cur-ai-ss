@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from lib.models.paper import PaperResp
+
 
 class SnapshotMeta(BaseModel):
     """Metadata block of one on-disk extraction snapshot."""
@@ -19,3 +21,8 @@ class SnapshotMeta(BaseModel):
 
 class PaperResetRequest(BaseModel):
     snapshot_name: str
+
+
+class PaperResetResp(BaseModel):
+    changed: bool
+    paper: PaperResp
