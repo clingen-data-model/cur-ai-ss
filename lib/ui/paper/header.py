@@ -314,15 +314,21 @@ with center:
                 on_change='rerun',
             ):
                 render_queue_tasks_fragment(paper_query_params)
+            tasks_active = any(
+                t.status in (TaskStatus.PENDING, TaskStatus.QUEUED, TaskStatus.RUNNING)
+                for t in paper_resp.tasks
+            )
             with st.popover(
                 '⏪ Reset',
                 type='tertiary',
-                disabled=any(
-                    t.status
-                    in (TaskStatus.PENDING, TaskStatus.QUEUED, TaskStatus.RUNNING)
-                    for t in paper_resp.tasks
+                disabled=tasks_active,
+                help=(
+                    '⏳ Reset is disabled while extraction tasks are queued or '
+                    'running — a task finishing mid-reset would overwrite the '
+                    'restored data. Wait for the pipeline to finish (or fail).'
+                    if tasks_active
+                    else 'Restore the paper to a saved extraction snapshot'
                 ),
-                help='Restore the paper to a saved extraction snapshot',
             ):
                 render_reset_fragment(paper_query_params)
             title = paper_resp.title or f'paper_{paper_query_params.paper_id}'

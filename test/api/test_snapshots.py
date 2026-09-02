@@ -14,6 +14,7 @@ from lib.misc.snapshots import (
 )
 from lib.models import (
     AnnotatedVariantDB,
+    Base,
     ConversationDB,
     FamilyDB,
     GeneDB,
@@ -31,6 +32,37 @@ from lib.models import (
 )
 from lib.models.patient import AgeUnit
 from lib.tasks.models import TaskStatus, TaskType
+
+
+def test_snapshot_covers_every_paper_scoped_table():
+    """Guard: a new table reachable from papers via FKs must be added to the
+    snapshot (lib.misc.snapshots._INSERT_ORDER) or to the exclusions below."""
+    from lib.misc.snapshots import _INSERT_ORDER
+
+    # Deliberately not snapshotted: tasks are preserved through a reset,
+    # conversations are chat history the user keeps.
+    excluded = {'tasks', 'conversations'}
+    snapshotted = {model.__table__.name for _, model in _INSERT_ORDER} | {'papers'}
+
+    reachable = {'papers'}
+    changed = True
+    while changed:
+        changed = False
+        for table in Base.metadata.tables.values():
+            if table.name in reachable:
+                continue
+            for fk in table.foreign_keys:
+                if fk.column.table.name in reachable:
+                    reachable.add(table.name)
+                    changed = True
+                    break
+
+    missing = reachable - snapshotted - excluded
+    assert not missing, (
+        f'Paper-scoped tables missing from snapshot: {sorted(missing)}. '
+        f'Add them to _INSERT_ORDER (and the restore delete order) or to the '
+        f'exclusions in this test.'
+    )
 
 
 def _ev(value: object = None) -> dict:
