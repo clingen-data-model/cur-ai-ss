@@ -2,7 +2,9 @@ import json
 
 import pytest
 
+from lib.agents.run_tracking import get_current_git_hash
 from lib.bin.worker import _maybe_write_snapshot
+from lib.core.environment import env
 from lib.misc.pdf.paths import snapshots_dir
 from lib.misc.snapshots import (
     InvalidSnapshotNameError,
@@ -124,7 +126,7 @@ def _variant_fields(hgvs_c: str) -> dict:
 
 
 @pytest.fixture
-def snapshot_paper(db_session, agent_run):
+def snapshot_paper(db_session):
     """A paper with a full domain graph across every snapshotted table."""
     gene = GeneDB(symbol='TP53')
     db_session.add(gene)
@@ -141,7 +143,6 @@ def snapshot_paper(db_session, agent_run):
     db_session.flush()
     family = FamilyDB(
         paper_id=paper.id,
-        agent_run_id=agent_run.id,
         identifier='Family 1',
         identifier_evidence=_ev('Family 1'),
         consanguinity=False,
@@ -152,7 +153,6 @@ def snapshot_paper(db_session, agent_run):
     p1 = PatientDB(
         paper_id=paper.id,
         family_id=family.id,
-        agent_run_id=agent_run.id,
         age_diagnosis=5,
         age_diagnosis_unit=AgeUnit.Years,
         **_patient_fields('P1'),
@@ -160,7 +160,6 @@ def snapshot_paper(db_session, agent_run):
     p2 = PatientDB(
         paper_id=paper.id,
         family_id=family.id,
-        agent_run_id=agent_run.id,
         **_patient_fields('P2'),
     )
     db_session.add_all([p1, p2])
@@ -182,12 +181,8 @@ def snapshot_paper(db_session, agent_run):
             reasoning='match',
         )
     )
-    v1 = VariantDB(
-        paper_id=paper.id, agent_run_id=agent_run.id, **_variant_fields('c.1A>G')
-    )
-    v2 = VariantDB(
-        paper_id=paper.id, agent_run_id=agent_run.id, **_variant_fields('c.2T>C')
-    )
+    v1 = VariantDB(paper_id=paper.id, **_variant_fields('c.1A>G'))
+    v2 = VariantDB(paper_id=paper.id, **_variant_fields('c.2T>C'))
     db_session.add_all([v1, v2])
     db_session.flush()
     db_session.add(
@@ -245,13 +240,11 @@ def snapshot_paper(db_session, agent_run):
     )
     paper_task = TaskDB(
         paper_id=paper.id,
-        agent_run_id=agent_run.id,
         type=TaskType.PDF_PARSING,
         status=TaskStatus.COMPLETED,
     )
     scoped_task = TaskDB(
         paper_id=paper.id,
-        agent_run_id=agent_run.id,
         type=TaskType.PATIENT_DEMOGRAPHICS,
         status=TaskStatus.COMPLETED,
         patient_id=p1.id,
@@ -277,7 +270,6 @@ def snapshot_paper(db_session, agent_run):
         'pvo2': pvo2,
         'paper_task': paper_task,
         'scoped_task': scoped_task,
-        'agent_run': agent_run,
     }
 
 
@@ -300,14 +292,12 @@ def test_reset_roundtrip(client, db_session, test_user, snapshot_paper):
     new_patient = PatientDB(
         paper_id=paper.id,
         family_id=snapshot_paper['family'].id,
-        agent_run_id=snapshot_paper['agent_run'].id,
         **_patient_fields('P-new'),
     )
     db_session.add(new_patient)
     db_session.flush()
     new_scoped_task = TaskDB(
         paper_id=paper.id,
-        agent_run_id=snapshot_paper['agent_run'].id,
         type=TaskType.PHENOTYPE_EXTRACTION,
         status=TaskStatus.COMPLETED,
         patient_id=new_patient.id,
@@ -370,10 +360,11 @@ def test_write_snapshot_idempotent(db_session, snapshot_paper):
     assert write_snapshot(paper.id, db_session) is not None
     snapshots = list_snapshots(paper.id)
     assert len(snapshots) == 2
-    # Newest first, and metadata carries the agent run info.
+    # Newest first, and the label comes from the writer's environment (the
+    # agent_runs table is stale by construction and must not be consulted).
     assert snapshots[0].created_at >= snapshots[1].created_at
-    assert snapshots[0].model == snapshot_paper['agent_run'].model
-    assert snapshots[0].git_hash == snapshot_paper['agent_run'].git_hash
+    assert snapshots[0].model == env.OPENAI_API_DEPLOYMENT
+    assert snapshots[0].git_hash == get_current_git_hash()
 
 
 def test_list_snapshots_endpoint(client, db_session, snapshot_paper):
@@ -503,7 +494,6 @@ def test_worker_hook_ignores_chat_tasks(db_session, snapshot_paper):
     db_session.add(
         TaskDB(
             paper_id=paper.id,
-            agent_run_id=snapshot_paper['agent_run'].id,
             type=TaskType.GENERAL_PAPER_QUESTION,
             status=TaskStatus.PENDING,
         )

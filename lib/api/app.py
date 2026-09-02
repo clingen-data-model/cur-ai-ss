@@ -47,7 +47,6 @@ from lib.agents.general_paper_qa_agent import (
 from lib.agents.general_paper_qa_agent import (
     agent as general_paper_qa_agent,
 )
-from lib.agents.run_tracking import ensure_agent_run
 from lib.api.auth import get_current_user, get_current_user_optional
 from lib.api.db import get_session, session_scope
 from lib.api.middleware import make_log_request_middleware
@@ -93,7 +92,6 @@ from lib.misc.snapshots import (
     restore_snapshot,
 )
 from lib.models import (
-    AgentRunDB,
     AnnotatedVariantDB,
     AnnotatedVariantResp,
     ChangePasswordRequest,
@@ -318,18 +316,6 @@ def put_paper(
         )
     main_content = uploaded_file.file.read()
 
-    # Ensure agent run exists
-    latest_run_db = session.query(AgentRunDB).order_by(AgentRunDB.id.desc()).first()
-    if not latest_run_db:
-        latest_run_resp = ensure_agent_run(
-            session=session,
-            description='Web UI upload',
-            model=env.OPENAI_API_DEPLOYMENT,
-        )
-        latest_run_id = latest_run_resp.id
-    else:
-        latest_run_id = latest_run_db.id
-
     if current_user.max_papers is not None and current_user.max_papers <= 0:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -347,7 +333,6 @@ def put_paper(
         # Create initial PDF_PARSING task
         task = TaskDB(
             paper_id=paper_db.id,
-            agent_run_id=latest_run_id,
             type=TaskType.PDF_PARSING,
             status=TaskStatus.PENDING,
             updated_by_user_id=current_user.id,

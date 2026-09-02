@@ -11,7 +11,6 @@ from lib.models.base import Base
 from lib.models.user import UserSummaryResp
 
 if TYPE_CHECKING:
-    from lib.models.agent_run import AgentRunDB
     from lib.models.paper import PaperDB
     from lib.models.user import UserDB
 
@@ -136,14 +135,7 @@ class TaskDB(Base):
         nullable=False,
         index=True,
     )
-    agent_run_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey('agent_runs.id', ondelete='CASCADE'),
-        nullable=False,
-        index=True,
-    )
     paper: Mapped['PaperDB'] = relationship('PaperDB', back_populates='tasks')
-    agent_run: Mapped['AgentRunDB'] = relationship('AgentRunDB')
     type: Mapped[TaskType] = mapped_column(
         SQLEnum(TaskType), nullable=False, index=True
     )

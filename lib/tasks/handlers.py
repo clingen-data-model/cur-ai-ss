@@ -402,16 +402,14 @@ async def handle_variant_extraction(task_id: int) -> None:
         task = session.get(TaskDB, task_id)
         if not task:
             return
-        agent_run_id = task.agent_run_id
         task.conversation_id = stored_conv_id
 
-        # Idempotent: delete-then-insert (only from current run)
+        # Idempotent: delete-then-insert
         session.query(VariantDB).filter(
             VariantDB.paper_id == paper_id,
-            VariantDB.agent_run_id == agent_run_id,
         ).delete()
         for variant in result.final_output.variants:
-            session.add(variant_to_db(paper_id, variant, agent_run_id))
+            session.add(variant_to_db(paper_id, variant))
 
 
 async def handle_pedigree_description(task_id: int) -> None:
@@ -559,31 +557,28 @@ async def handle_patient_extraction(task_id: int) -> None:
         task = session.get(TaskDB, task_id)
         if not task:
             return
-        agent_run_id = task.agent_run_id
         task.conversation_id = stored_conv_id
 
-        # Idempotent: delete existing families and patients from current run, then re-insert both
+        # Idempotent: delete existing families and patients, then re-insert both
         session.query(FamilyDB).filter(
             FamilyDB.paper_id == paper_id,
-            FamilyDB.agent_run_id == agent_run_id,
         ).delete()
         session.query(PatientDB).filter(
             PatientDB.paper_id == paper_id,
-            PatientDB.agent_run_id == agent_run_id,
         ).delete()
         session.flush()
 
         # Insert families first so we have family IDs for patient assignment
         family_entries_by_id: dict[str, int] = {}
         for entry in result.final_output.families:
-            db_family = family_to_db(paper_id, agent_run_id, entry.family)
+            db_family = family_to_db(paper_id, entry.family)
             session.add(db_family)
             session.flush()
             family_entries_by_id[entry.family.identifier.value] = db_family.id
 
         # Insert patients (identity only; demographics filled by a later agent)
         for patient_info in result.final_output.patients:
-            db_patient = patient_identity_to_db(paper_id, patient_info, agent_run_id)
+            db_patient = patient_identity_to_db(paper_id, patient_info)
             # Use family_identifier from patient to find correct family
             family_id_value = patient_info.family_identifier.value
             if family_id_value in family_entries_by_id:

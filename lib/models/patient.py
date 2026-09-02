@@ -24,7 +24,6 @@ from lib.models.paper import PaperDB
 from lib.models.user import UserSummaryResp
 
 if TYPE_CHECKING:
-    from lib.models.agent_run import AgentRunDB
     from lib.models.family import FamilyDB
     from lib.models.patient_variant_occurrences import PatientVariantOccurrenceDB
     from lib.models.phenotype import PhenotypeDB
@@ -488,12 +487,6 @@ class PatientDB(Base):
     family_id: Mapped[int] = mapped_column(
         Integer, ForeignKey('families.id', ondelete='CASCADE'), nullable=False
     )
-    agent_run_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey('agent_runs.id', ondelete='CASCADE'),
-        nullable=False,
-        index=True,
-    )
     updated_by_user_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey('users.id', ondelete='SET NULL'),
@@ -554,7 +547,6 @@ class PatientDB(Base):
 
     paper: Mapped[PaperDB] = relationship('PaperDB', back_populates='patients')
     family: Mapped['FamilyDB'] = relationship('FamilyDB', back_populates='patients')
-    agent_run: Mapped['AgentRunDB'] = relationship('AgentRunDB')
     updated_by: Mapped['UserDB | None'] = relationship('UserDB')
     phenotypes: Mapped[list['PhenotypeDB']] = relationship(
         'PhenotypeDB', back_populates='patient', cascade='all, delete-orphan'

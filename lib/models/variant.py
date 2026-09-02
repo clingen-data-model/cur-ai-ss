@@ -24,7 +24,6 @@ from lib.models.paper import PaperDB
 from lib.models.user import UserSummaryResp
 
 if TYPE_CHECKING:
-    from lib.models.agent_run import AgentRunDB
     from lib.models.patient_variant_occurrences import PatientVariantOccurrenceDB
     from lib.models.user import UserDB
 
@@ -320,12 +319,6 @@ class VariantDB(Base):
     paper_id: Mapped[int] = mapped_column(
         Integer, ForeignKey('papers.id', ondelete='CASCADE'), nullable=False
     )
-    agent_run_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey('agent_runs.id', ondelete='CASCADE'),
-        nullable=False,
-        index=True,
-    )
 
     # Core fields
     variant: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -385,7 +378,6 @@ class VariantDB(Base):
     )
 
     paper: Mapped[PaperDB] = relationship('PaperDB', back_populates='variants')
-    agent_run: Mapped['AgentRunDB'] = relationship('AgentRunDB')
     updated_by: Mapped['UserDB | None'] = relationship('UserDB')
     harmonized_variant: Mapped['HarmonizedVariantDB | None'] = relationship(
         'HarmonizedVariantDB',

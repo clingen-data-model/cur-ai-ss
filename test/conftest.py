@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from lib.api import db
 from lib.core.environment import env
-from lib.models import AgentRunDB, Base
+from lib.models import Base
 
 
 @pytest.fixture
@@ -49,18 +49,6 @@ def db_session(mocked_root_dir, monkeypatch):
     yield session
     session.rollback()
     session.close()
-
-
-@pytest.fixture
-def agent_run(db_session):
-    run = AgentRunDB(
-        git_hash='abc123def456',
-        description='test run',
-        model=env.OPENAI_API_DEPLOYMENT,
-    )
-    db_session.add(run)
-    db_session.flush()
-    return run
 
 
 @pytest.fixture

@@ -2,7 +2,6 @@ from typing import Literal
 
 from sqlalchemy.orm import Session
 
-from lib.models.agent_run import AgentRunDB
 from lib.models.patient_variant_occurrences import (
     PatientVariantOccurrenceDB,
     Zygosity,
@@ -39,12 +38,6 @@ def enqueue_task(
     ``updated_by_user_id`` records who triggered the task; leave ``None`` for
     machine enqueues (worker successors) so they stay unattributed.
     """
-    # Get latest agent run
-    latest_run = session.query(AgentRunDB).order_by(AgentRunDB.id.desc()).first()
-    if not latest_run:
-        raise ValueError('No agent runs found. Create one with ensure_agent_run().')
-    agent_run_id = latest_run.id
-
     # Check if task exists (SQLAlchemy converts == None to IS NULL)
     existing_task = (
         session.query(TaskDB)
@@ -81,7 +74,6 @@ def enqueue_task(
         new_task = TaskDB(
             type=task_type,
             paper_id=paper_id,
-            agent_run_id=agent_run_id,
             family_id=family_id,
             patient_id=patient_id,
             variant_id=variant_id,

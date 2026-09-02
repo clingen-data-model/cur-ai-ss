@@ -21,9 +21,10 @@ from sqlalchemy import Enum as SQLEnum
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session
 
+from lib.agents.run_tracking import get_current_git_hash
+from lib.core.environment import env
 from lib.misc.pdf.paths import snapshots_dir
 from lib.models import (
-    AgentRunDB,
     AnnotatedVariantDB,
     Base,
     FamilyDB,
@@ -227,6 +228,14 @@ def _state_hash(encoded_tables: dict) -> str:
     return hashlib.sha256(canonical.encode()).hexdigest()
 
 
+def _safe_git_hash() -> str | None:
+    """Current git commit, or None where git or the repo is unavailable."""
+    try:
+        return get_current_git_hash()
+    except Exception:
+        return None
+
+
 def current_state_hash(paper_id: int, paper_db: PaperDB, session: Session) -> str:
     """Hash of the paper's current extracted state, comparable to a snapshot's
     ``meta.state_hash``."""
@@ -270,22 +279,17 @@ def write_snapshot(paper_id: int, session: Session) -> Path | None:
     if existing and existing[0].state_hash == state_hash:
         return None
 
-    agent_run = (
-        session.query(AgentRunDB)
-        .join(TaskDB, TaskDB.agent_run_id == AgentRunDB.id)
-        .filter(TaskDB.paper_id == paper_id)
-        .order_by(AgentRunDB.updated_at.desc(), AgentRunDB.id.desc())
-        .first()
-    )
     now = datetime.now(timezone.utc)
+    # Model and git hash come from the writing process's environment, not the
+    # agent_runs table -- that table's rows are stale (a run row is only ever
+    # created when the table is empty) and would mislabel every snapshot.
     meta = {
         'version': SNAPSHOT_FILE_VERSION,
         'created_at': now.isoformat(),
         'paper_id': paper_id,
         'alembic_revision': _current_alembic_revision(session),
-        'agent_run_id': agent_run.id if agent_run else None,
-        'model': agent_run.model if agent_run else None,
-        'git_hash': agent_run.git_hash if agent_run else None,
+        'model': env.OPENAI_API_DEPLOYMENT,
+        'git_hash': _safe_git_hash(),
         'state_hash': state_hash,
     }
 
