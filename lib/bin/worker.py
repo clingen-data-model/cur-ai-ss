@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from lib.api.db import session_scope
+from lib.core.agents_init import init_agents_sdk
 from lib.core.logging import setup_logging
 from lib.misc.snapshots import write_snapshot
 from lib.models import TaskDB
@@ -32,6 +33,7 @@ TASK_CONCURRENCY: dict[TaskType, int] = {
 DEFAULT_CONCURRENCY = 20
 
 setup_logging()
+init_agents_sdk()
 logger = logging.getLogger(__name__)
 
 

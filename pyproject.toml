@@ -17,7 +17,8 @@ dependencies = [
     "pyjwt>=2.10.0",
     # AI/ML
     "openai==2.15.0",
-    "openai-agents==0.7.0",
+    "openai-agents[litellm]==0.7.0",
+    "litellm>=1.75",
     "fastapi>=0.126.0",
     "sqlalchemy>=2.0.45",
     "uvicorn>=0.38.0",
@@ -46,6 +47,7 @@ dev = [
     "mypy==1.10.1",
     "types-requests==2.32.0.*",
     "pytest==8.2.2",
+    "pytest-asyncio==0.23.8",
     "pytest-cov==5.0.0",
     "watchdog>=6.0.0",
     "python-docx>=0.8.11",

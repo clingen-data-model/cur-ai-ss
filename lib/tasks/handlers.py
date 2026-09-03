@@ -3,7 +3,7 @@ import json
 import logging
 from typing import Any, Awaitable, Callable
 
-from agents import Agent, RunConfig, Runner
+from agents import Agent, Runner
 from openai import AsyncOpenAI
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -169,13 +169,12 @@ def log_cache_metrics(task_type: str, result: Any) -> None:
         if not hasattr(resp, 'usage'):
             continue
 
+        # Usage shape differs by provider (LiteLLM responses may omit the
+        # details object entirely); absent fields mean 0, never an error.
         usage = resp.usage
-        input_tokens = usage.input_tokens or 0
-        cache_read = (
-            usage.input_tokens_details.cached_tokens
-            if usage.input_tokens_details and usage.input_tokens_details.cached_tokens
-            else 0
-        )
+        input_tokens = getattr(usage, 'input_tokens', None) or 0
+        details = getattr(usage, 'input_tokens_details', None)
+        cache_read = getattr(details, 'cached_tokens', None) or 0
 
         total_input += input_tokens
         total_cache_read += cache_read
@@ -1537,13 +1536,6 @@ async def handle_hpo_linking(task_id: int) -> None:
         message,
         max_turns=15,
         conversation_id=stored_conv_id,
-        run_config=RunConfig(
-            trace_metadata={
-                'paper_id': str(task_id),
-                'phenotype_id': str(phenotype_id),
-                'concept': phenotype_data['concept'],
-            },
-        ),
     )
     log_cache_metrics('HPO_LINKING', result)
 
@@ -1653,17 +1645,6 @@ async def handle_mondo_linking(task_id: int) -> None:
             message,
             max_turns=25,
             conversation_id=stored_conv_id,
-            run_config=RunConfig(
-                trace_metadata={
-                    'scope': target.scope.value,
-                    'paper_id': str(target.paper_id),
-                    'patient_variant_occurrence_id': str(
-                        target.patient_variant_occurrence_id or ''
-                    ),
-                    'disease_text': query,
-                    'gene_symbol': target.gene_symbol or '',
-                },
-            ),
         )
         log_cache_metrics('MONDO_LINKING', result)
 

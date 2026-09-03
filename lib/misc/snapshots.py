@@ -353,7 +353,7 @@ def write_snapshot(
         'created_at': now.isoformat(),
         'paper_id': paper_id,
         'alembic_revision': _current_alembic_revision(session),
-        'model': env.OPENAI_API_DEPLOYMENT,
+        'model': env.EXTRACTION_MODEL,
         'git_hash': _safe_git_hash(),
         'state_hash': state_hash,
         'description': description,

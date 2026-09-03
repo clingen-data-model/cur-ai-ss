@@ -38,7 +38,7 @@ EDGE CASES
 agent = Agent(
     name='my_agent',
     instructions=INSTRUCTIONS,
-    model=env.OPENAI_API_DEPLOYMENT,
+    model=extraction_model(),  # from lib.agents.model_factory
     output_type=MyOutput,
     tools=[my_tool],
 )
@@ -117,4 +117,4 @@ Agents are invoked from `lib/bin/worker.py` as part of the extraction pipeline.
 - **Full example:** See `lib/agents/hpo_linking_agent.py` for a complete agent with multiple tools and edge-case handling
 - **Output storage:** `lib/misc/pdf/paths.py` has path builders for storing JSON outputs
 - **Database conversion:** `lib/models/converters.py` converts agent outputs to database models
-- **Config:** `lib/core/environment.py` provides `OPENAI_API_KEY`, `OPENAI_API_DEPLOYMENT`
+- **Config:** `lib/core/environment.py` provides `EXTRACTION_MODEL` / `VLM_MODEL` (LiteLLM-style names; provider-prefixed routes to that provider, bare names to OpenAI) plus `OPENAI_API_KEY` / `ANTHROPIC_API_KEY`. Agents get their model via `lib/agents/model_factory.extraction_model()`; vision tools call `lib/agents/vision.vlm_describe()`.

@@ -1,9 +1,10 @@
 from typing import Literal
 
-from agents import Agent, ModelSettings
+from agents import Agent
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
+from lib.agents.model_factory import extraction_model
 from lib.core.environment import env
 from lib.models.variant import (
     VariantExtractionOutput,
@@ -241,6 +242,6 @@ VARIANT_EXTRACTION_AGENT_INSTRUCTIONS = (
 agent = Agent(
     name='variant_extractor',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
-    model=env.OPENAI_API_DEPLOYMENT,
+    model=extraction_model(),
     output_type=VariantExtractionOutput,
 )

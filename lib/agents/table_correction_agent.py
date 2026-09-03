@@ -5,9 +5,10 @@ import logging
 from pathlib import Path
 
 from agents import Agent, Runner, function_tool
-from openai import OpenAI
 from pydantic import BaseModel
 
+from lib.agents.model_factory import extraction_model
+from lib.agents.vision import vlm_describe
 from lib.core.environment import env
 from lib.core.logging import setup_logging
 from lib.misc.gcs import upload_and_sign_image
@@ -37,35 +38,14 @@ def table_correction_agent_for_image(image_path: Path) -> Agent:
     @function_tool
     def extract_table_from_image() -> str:
         """Extract the current table image as markdown using vision."""
-        client = OpenAI(api_key=env.OPENAI_API_KEY)
         image_url = upload_and_sign_image(image_path)
-
-        message = client.chat.completions.create(
-            model=env.OPENAI_VLM,
-            messages=[
-                {
-                    'role': 'user',
-                    'content': [
-                        {
-                            'type': 'image_url',
-                            'image_url': {'url': image_url, 'detail': 'high'},
-                        },
-                        {
-                            'type': 'text',
-                            'text': VISION_EXTRACTION_PROMPT,
-                        },
-                    ],
-                }
-            ],
-        )
-
-        content = message.choices[0].message.content
+        content = vlm_describe(image_url, VISION_EXTRACTION_PROMPT)
         return content if content is not None else ''
 
     return Agent(
         name='table_corrector',
         instructions=TABLE_CORRECTION_INSTRUCTIONS,
-        model=env.OPENAI_API_DEPLOYMENT,
+        model=extraction_model(),
         output_type=TableCorrectionResult,
         tools=[extract_table_from_image],
     )
