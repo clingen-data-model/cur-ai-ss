@@ -41,7 +41,10 @@ A web-based tool for extracting and curating genetic evidence from scientific pa
 
 ```bash
 export OPENAI_API_KEY=”your_key_here”
-export OPENAI_API_DEPLOYMENT=”gpt-5-mini”
+# Model names are '<provider>/<model>' (LiteLLM style); prefix required.
+export EXTRACTION_MODEL=”openai/gpt-5.6-luna”
+export VLM_MODEL=”openai/gpt-5.6-sol”
+# For Anthropic models instead: ANTHROPIC_API_KEY + e.g. anthropic/claude-sonnet-5
 ```
 
 ### Install and Run
