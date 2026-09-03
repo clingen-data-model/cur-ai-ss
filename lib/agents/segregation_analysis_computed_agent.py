@@ -6,6 +6,7 @@ from collections import Counter
 from agents import Agent, function_tool
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
+from lib.agents.model_factory import extraction_model
 from lib.core.environment import env
 from lib.models.patient_variant_occurrences import TestingMethod
 from lib.models.segregation_analysis import (
@@ -307,7 +308,7 @@ SEGREGATION_ANALYSIS_COMPUTED_AGENT_INSTRUCTIONS = (
 agent = Agent(
     name='segregation_analysis_computed',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
-    model=env.OPENAI_API_DEPLOYMENT,
+    model=extraction_model(),
     output_type=SegregationAnalysisComputedOutput,
     tools=[
         compute_scoring_method,

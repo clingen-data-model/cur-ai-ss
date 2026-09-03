@@ -2,6 +2,7 @@ from agents import Agent
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
+from lib.agents.model_factory import extraction_model
 from lib.core.environment import env
 from lib.models.patient_variant_occurrences import (
     PatientVariantOccurrenceOutput,
@@ -92,6 +93,6 @@ PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS = (
 agent = Agent(
     name='patient_variant_occurrence',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
-    model=env.OPENAI_API_DEPLOYMENT,
+    model=extraction_model(),
     output_type=PatientVariantOccurrenceOutput,
 )

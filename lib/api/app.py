@@ -47,9 +47,11 @@ from lib.agents.general_paper_qa_agent import (
 from lib.agents.general_paper_qa_agent import (
     agent as general_paper_qa_agent,
 )
+from lib.agents.model_factory import split_provider
 from lib.api.auth import get_current_user, get_current_user_optional
 from lib.api.db import get_session, session_scope
 from lib.api.middleware import make_log_request_middleware
+from lib.core.agents_init import init_agents_sdk
 from lib.core.environment import env
 from lib.core.logging import setup_logging
 from lib.core.security import (
@@ -172,6 +174,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await asyncio.to_thread(command.upgrade, alembic_cfg, 'head')
 
     setup_logging()  # NB: run setup logging after the alembic setup to prevent it from overriding.
+    init_agents_sdk()
     yield
 
 
@@ -1876,7 +1879,7 @@ async def generate_chat_response(
     else:
         client = AsyncOpenAI(api_key=env.OPENAI_API_KEY)
         resp = await client.responses.create(
-            model=env.OPENAI_API_DEPLOYMENT,
+            model=split_provider(env.EXTRACTION_MODEL)[1],
             input=last_user_message,
             conversation=conversation_db.conversation_id,
         )

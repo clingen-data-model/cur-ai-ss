@@ -113,8 +113,9 @@ Key tables:
 Configuration is in `lib/core/environment.py` using Pydantic BaseSettings:
 
 **Required:**
-- `OPENAI_API_KEY` - OpenAI API key (Bearer token)
-- `OPENAI_API_DEPLOYMENT` - Model to use (default: `gpt-5-mini`)
+- `EXTRACTION_MODEL` - Text-extraction model as `<provider>/<model>` (default: `openai/gpt-5.6-luna`); prefix required
+- `VLM_MODEL` - Vision model, same form (default: `openai/gpt-5.6-sol`)
+- `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` - required for whichever provider the configured models name
 - `JWT_SECRET_KEY` - Secret used to sign auth access tokens (set a strong value in prod)
 
 **Optional:**

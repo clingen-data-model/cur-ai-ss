@@ -18,6 +18,7 @@ import requests
 from agents import Agent, function_tool
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
+from lib.agents.model_factory import extraction_model
 from lib.agents.variant_annotation_agent import _get_session_with_retries
 from lib.core.environment import env
 from lib.models.evidence_block import ReasoningBlock
@@ -982,7 +983,7 @@ VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS = VARIANT_HARMONIZATION_INSTRUCTIONS
 agent = Agent(
     name='variant_harmonizer',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
-    model=env.OPENAI_API_DEPLOYMENT,
+    model=extraction_model(),
     output_type=ReasoningBlock[HarmonizedVariant],
     tools=[
         select_canonical_transcript,

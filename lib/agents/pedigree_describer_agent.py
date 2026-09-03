@@ -4,6 +4,8 @@ from agents import Agent, function_tool
 from pydantic import BaseModel
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
+from lib.agents.model_factory import extraction_model
+from lib.agents.vision import vlm_describe
 from lib.core.environment import env
 from lib.misc.gcs import upload_and_sign_image
 from lib.misc.pdf.paths import pdf_image_path
@@ -41,25 +43,7 @@ class PedigreeCapture:
             self.description = description
 
 
-def _analyze_image_url(image_url: str) -> str:
-    """Run the vision model against an image URL and return its description."""
-    from openai import OpenAI
-
-    client = OpenAI(api_key=env.OPENAI_API_KEY)
-
-    message = client.chat.completions.create(
-        model=env.OPENAI_VLM,
-        messages=[
-            {
-                'role': 'user',
-                'content': [
-                    {
-                        'type': 'image_url',
-                        'image_url': {'url': image_url, 'detail': 'high'},
-                    },
-                    {
-                        'type': 'text',
-                        'text': """First determine whether this image is a pedigree (family tree) diagram.
+PEDIGREE_VISION_PROMPT = """First determine whether this image is a pedigree (family tree) diagram.
 If it is NOT a pedigree diagram, respond with exactly NOT_A_PEDIGREE and nothing else.
 
 Otherwise, extract detailed pedigree information from this diagram.
@@ -79,15 +63,15 @@ Then describe:
 - Number of generations
 - Any uncertainties due to image resolution or clarity
 
-IMPORTANT: List every visible individual, even if some details are unclear. Do not infer missing details.""",
-                    },
-                ],
-            }
-        ],
-    )
+IMPORTANT: List every visible individual, even if some details are unclear. Do not infer missing details."""
 
-    content = message.choices[0].message.content
-    return content if content is not None else ''
+
+def _analyze_image_url(image_url: str) -> str:
+    """Run the vision model against an image URL and return its description."""
+    content = vlm_describe(image_url, PEDIGREE_VISION_PROMPT)
+    # A model decline is treated like a non-pedigree: the describer agent
+    # moves on to the next figure instead of failing the task.
+    return content if content is not None else NOT_A_PEDIGREE
 
 
 # --- Agent instructions ---
@@ -154,7 +138,7 @@ def pedigree_describer_agent_for_paper(
     agent = Agent(
         name='pedigree_describer',
         instructions=BASE_SYSTEM_INSTRUCTIONS,
-        model=env.OPENAI_API_DEPLOYMENT,
+        model=extraction_model(),
         output_type=PedigreeExtractionOutput,
         tools=[analyze_pedigree_image],
     )

@@ -2,6 +2,7 @@ from agents import Agent
 from pydantic import BaseModel, Field
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
+from lib.agents.model_factory import extraction_model
 from lib.core.environment import env
 from lib.models.evidence_block import ReasoningBlock
 
@@ -122,6 +123,6 @@ PAPER_CLASSIFIER_AGENT_INSTRUCTIONS = PAPER_CLASSIFIER_INSTRUCTIONS
 agent = Agent(
     name='paper_classifier',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
-    model=env.OPENAI_API_DEPLOYMENT,
+    model=extraction_model(),
     output_type=PaperSectionClassificationOutput,
 )

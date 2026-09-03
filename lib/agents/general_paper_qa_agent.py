@@ -1,6 +1,7 @@
 from agents import Agent
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
+from lib.agents.model_factory import extraction_model
 from lib.core.environment import env
 
 GENERAL_PAPER_QA_INSTRUCTIONS = """
@@ -13,5 +14,5 @@ GENERAL_PAPER_QA_AGENT_INSTRUCTIONS = GENERAL_PAPER_QA_INSTRUCTIONS
 agent = Agent(
     name='general_paper_qa',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
-    model=env.OPENAI_API_DEPLOYMENT,
+    model=extraction_model(),
 )
