@@ -2,7 +2,7 @@
 
 Both VLM tools (pedigree description, table extraction) call this instead of
 constructing a provider client themselves, so the model is switchable via
-env.VLM_MODEL ('gpt-5.6-sol' or 'anthropic/claude-fable-5-1') without touching
+env.VLM_MODEL ('openai/gpt-5.6-sol' or 'anthropic/claude-fable-5-1') without touching
 the tools.
 """
 
@@ -10,17 +10,10 @@ import logging
 
 import litellm
 
+from lib.agents.model_factory import provider_api_key
 from lib.core.environment import env
 
 logger = logging.getLogger(__name__)
-
-
-def _vlm_api_key() -> str | None:
-    if env.VLM_MODEL.startswith('anthropic/'):
-        return env.ANTHROPIC_API_KEY
-    if '/' not in env.VLM_MODEL:
-        return env.OPENAI_API_KEY
-    return None
 
 
 def vlm_describe(image_url: str, prompt: str) -> str | None:
@@ -34,7 +27,7 @@ def vlm_describe(image_url: str, prompt: str) -> str | None:
     """
     response = litellm.completion(
         model=env.VLM_MODEL,
-        api_key=_vlm_api_key(),
+        api_key=provider_api_key(env.VLM_MODEL),
         messages=[
             {
                 'role': 'user',

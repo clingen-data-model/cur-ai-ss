@@ -117,4 +117,4 @@ Agents are invoked from `lib/bin/worker.py` as part of the extraction pipeline.
 - **Full example:** See `lib/agents/hpo_linking_agent.py` for a complete agent with multiple tools and edge-case handling
 - **Output storage:** `lib/misc/pdf/paths.py` has path builders for storing JSON outputs
 - **Database conversion:** `lib/models/converters.py` converts agent outputs to database models
-- **Config:** `lib/core/environment.py` provides `EXTRACTION_MODEL` / `VLM_MODEL` (LiteLLM-style names; provider-prefixed routes to that provider, bare names to OpenAI) plus `OPENAI_API_KEY` / `ANTHROPIC_API_KEY`. Agents get their model via `lib/agents/model_factory.extraction_model()`; vision tools call `lib/agents/vision.vlm_describe()`.
+- **Config:** `lib/core/environment.py` provides `EXTRACTION_MODEL` / `VLM_MODEL` ('<provider>/<model>' names, prefix required, e.g. `openai/gpt-5.6-luna`, `anthropic/claude-sonnet-5`) plus `OPENAI_API_KEY` / `ANTHROPIC_API_KEY`. Agents get their model via `lib/agents/model_factory.extraction_model()`; vision tools call `lib/agents/vision.vlm_describe()`.

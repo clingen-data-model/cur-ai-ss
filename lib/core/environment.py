@@ -27,13 +27,12 @@ class Env(BaseSettings):
     GCS_SIGNED_URL_EXPIRY_HOURS: int = 12
     DISABLE_GCS_UPLOAD: bool = False
 
-    # Model selection. Names route through LiteLLM: a provider-prefixed name
-    # ('anthropic/claude-sonnet-5') targets that provider; a bare name
-    # ('gpt-5.6-luna') uses the default OpenAI provider. Defaults stay on
-    # OpenAI until the client-side-sessions work lands (conversation_id is an
-    # OpenAI server-side feature the Anthropic path cannot use).
-    EXTRACTION_MODEL: str = 'gpt-5.6-luna'
-    VLM_MODEL: str = 'gpt-5.6-sol'
+    # Model selection: LiteLLM-style '<provider>/<model>' names, prefix
+    # required ('openai/gpt-5.6-luna', 'anthropic/claude-sonnet-5'). Defaults
+    # stay on OpenAI until the client-side-sessions work lands (conversation_id
+    # is an OpenAI server-side feature the Anthropic path cannot use).
+    EXTRACTION_MODEL: str = 'openai/gpt-5.6-luna'
+    VLM_MODEL: str = 'openai/gpt-5.6-sol'
     OPENAI_API_KEY: Optional[str] = None
     ANTHROPIC_API_KEY: Optional[str] = None
     LOG_LEVEL: LogLevel = LogLevel.INFO
@@ -80,10 +79,16 @@ class Env(BaseSettings):
     def validate_model_keys(self) -> 'Env':
         """Each configured model must have its provider's API key present."""
         for model in (self.EXTRACTION_MODEL, self.VLM_MODEL):
-            if model.startswith('anthropic/') and not self.ANTHROPIC_API_KEY:
-                raise ValueError(f'Model {model!r} requires ANTHROPIC_API_KEY.')
-            if '/' not in model and not self.OPENAI_API_KEY:
+            provider, sep, bare = model.partition('/')
+            if not sep or not provider or not bare:
+                raise ValueError(
+                    f'Model {model!r} must carry a provider prefix, '
+                    f"e.g. 'openai/gpt-5.6-luna' or 'anthropic/claude-sonnet-5'."
+                )
+            if provider == 'openai' and not self.OPENAI_API_KEY:
                 raise ValueError(f'Model {model!r} requires OPENAI_API_KEY.')
+            if provider == 'anthropic' and not self.ANTHROPIC_API_KEY:
+                raise ValueError(f'Model {model!r} requires ANTHROPIC_API_KEY.')
         return self
 
     @field_validator('NCBI_EMAIL', mode='after')

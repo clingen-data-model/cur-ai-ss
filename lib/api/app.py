@@ -47,6 +47,7 @@ from lib.agents.general_paper_qa_agent import (
 from lib.agents.general_paper_qa_agent import (
     agent as general_paper_qa_agent,
 )
+from lib.agents.model_factory import split_provider
 from lib.api.auth import get_current_user, get_current_user_optional
 from lib.api.db import get_session, session_scope
 from lib.api.middleware import make_log_request_middleware
@@ -1878,7 +1879,7 @@ async def generate_chat_response(
     else:
         client = AsyncOpenAI(api_key=env.OPENAI_API_KEY)
         resp = await client.responses.create(
-            model=env.EXTRACTION_MODEL,
+            model=split_provider(env.EXTRACTION_MODEL)[1],
             input=last_user_message,
             conversation=conversation_db.conversation_id,
         )
