@@ -73,7 +73,7 @@ separate `claude-fable-5-1` concern: `forced_tool_use_unsupported` means no forc
 
 **Caveat: the bump is verified to fix the routing, not verified to be safe.** The
 overlay imported cleanly and `get_optional_params` behaved, but the test suite has
-not been run under 1.100.0. That is the next step, against the 156-test baseline
+not been run under 1.100.0. That is the next step, against the 163-test baseline
 below.
 
 ### Our schemas were never the problem
@@ -225,12 +225,12 @@ Anthropic provider documents, and an HTTPS URL would also have worked (LiteLLM m
 it to Anthropic's native `source.type: "url"`). `detail: 'high'` is ignored on
 Anthropic and still meaningful on OpenAI, so it is harmless.
 
-### Open bug: truncation is treated as success
+### Fixed: truncation was treated as success
 
-**Executed** — `vlm_describe`'s guard is
+`vlm_describe`'s original guard was
 `finish_reason not in (None, 'stop', 'length', 'end_turn')`, and litellm's
-`_FINISH_REASON_MAP` maps Anthropic `max_tokens` → `'length'`, which is in the
-*allowed* list:
+`_FINISH_REASON_MAP` maps Anthropic `max_tokens` → `'length'` — which sat in the
+*allowed* list. **Executed** against the original code:
 
 ```
 normal completion  finish_reason=stop           -> returned content: 'complete table'
@@ -238,18 +238,19 @@ TRUNCATED          finish_reason=length         -> returned content: '| A | B |\
 Anthropic refusal  finish_reason=content_filter -> declined (None)
 ```
 
-So a cut-off response is returned as valid content. For `extract_table_from_image`
-that is a silently truncated markdown table accepted as a complete extraction.
-`'length'` should be a failure.
+So a cut-off response came back as valid content, and for
+`extract_table_from_image` that meant a truncated markdown table indistinguishable
+from a complete extraction. Truncation is now a decline, logged separately from a
+refusal. `'end_turn'` is gone from the accepted set — litellm normalizes it to
+`'stop'`, so the branch was dead. The refusal path was already correct.
 
-Two notes alongside it: the refusal handling *does* work (`refusal` →
-`'content_filter'` → declines correctly), and `'end_turn'` in that tuple is dead —
-litellm normalizes it to `'stop'`, so it never appears.
+`max_tokens` is now bounded at 16384. **Executed**:
+`get_max_tokens_for_model('claude-sonnet-5')` returns `128000`, not the 4096 the
+LiteLLM docs claim — so the risk was never truncation at 4096 but a 128k ceiling on
+a non-streaming call inviting HTTP timeouts.
 
-Also **executed**: `get_max_tokens_for_model('claude-sonnet-5')` returns `128000`,
-not the 4096 the LiteLLM docs claim. So truncation at 4096 is not the risk; a 128k
-`max_tokens` on a *non-streaming* call inviting HTTP timeouts is. `vlm_describe`
-should set an explicit, modest `max_tokens`.
+This module previously had no tests; it now covers all four `finish_reason` paths
+plus the `max_tokens` bound.
 
 ### Before flipping `VLM_MODEL`
 
@@ -299,9 +300,10 @@ uv sync && uv pip install -e .        # Python 3.12.14
 ENV_FILE=.env.test uv run pytest test -q
 ```
 
-**Executed**: 156 passed on the PR's own commits; 157 after the base64 change (two
-GCS branch tests out, three data-URL tests in). ruff, format and mypy clean. Runtime
-was 265s cold and 28s warm.
+**Executed**: 156 passed on the routing commits alone; 157 after the base64 change
+(two GCS branch tests out, three data-URL tests in); 163 after the `vlm_describe`
+fix added the first tests for that module. ruff, format and mypy clean. Runtime was
+265s cold and 28s warm.
 
 One wrinkle: `uv run` re-syncs from the lockfile and undoes `uv pip install -e .`,
 so the README's two-step is partly self-defeating.
@@ -324,15 +326,13 @@ so the README's two-step is partly self-defeating.
 ## Suggested order
 
 1. Merge PR #137. CI is green, no conflicts; it needs an approving review.
-2. Fix the `vlm_describe` truncation bug and set an explicit `max_tokens` — a live
-   correctness bug on the current OpenAI path, independent of the migration.
-3. Bump `litellm` and re-run the suite against the 156-test baseline. Add an upper
+2. Bump `litellm` and re-run the suite against the 163-test baseline. Add an upper
    bound.
-4. Get an OpenAI key and run the pipeline end-to-end for a known-good reference.
-5. Flip `VLM_MODEL` behind the retention check.
-6. Check whether the `openai-agents` bump moots Blocker 2, then do the sessions
+3. Get an OpenAI key and run the pipeline end-to-end for a known-good reference.
+4. Flip `VLM_MODEL` behind the retention check.
+5. Check whether the `openai-agents` bump moots Blocker 2, then do the sessions
    refactor.
-7. Caching, once something is actually running on Anthropic.
+6. Caching, once something is actually running on Anthropic.
 
 ## Reproducing the offline findings
 
