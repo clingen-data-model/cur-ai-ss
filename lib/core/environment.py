@@ -8,6 +8,8 @@ from urllib.parse import quote
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from lib.core.model_names import ROUTABLE_PROVIDERS, split_provider
+
 
 class LogLevel(str, Enum):
     DEBUG = 'DEBUG'
@@ -28,6 +30,8 @@ class Env(BaseSettings):
     EXTRACTION_MODEL: str = 'openai/gpt-5.6-luna'
     VLM_MODEL: str = 'openai/gpt-5.6-sol'
     OPENAI_API_KEY: Optional[str] = None
+    # Accepted so a deployment can carry the key ahead of the routing work.
+    # Unused until then: an 'anthropic/' model is rejected below.
     ANTHROPIC_API_KEY: Optional[str] = None
     LOG_LEVEL: LogLevel = LogLevel.INFO
 
@@ -70,19 +74,28 @@ class Env(BaseSettings):
         return self
 
     @model_validator(mode='after')
-    def validate_model_keys(self) -> 'Env':
-        """Each configured model must have its provider's API key present."""
-        for model in (self.EXTRACTION_MODEL, self.VLM_MODEL):
-            provider, sep, bare = model.partition('/')
-            if not sep or not provider or not bare:
+    def validate_models(self) -> 'Env':
+        """Each configured model must name a routable provider and have its key.
+
+        Checking routability here is what makes a bad provider fail loudly: it
+        raises at settings load, before any agent exists. Left to resolve_model,
+        the same error reaches the vision tools inside a function_tool body,
+        where the SDK's default handler turns it into text for the model and the
+        run persists a plausible-looking empty result instead of failing.
+        """
+        for setting, model in (
+            ('EXTRACTION_MODEL', self.EXTRACTION_MODEL),
+            ('VLM_MODEL', self.VLM_MODEL),
+        ):
+            provider, _ = split_provider(model)
+            if provider not in ROUTABLE_PROVIDERS:
+                supported = ', '.join(sorted(ROUTABLE_PROVIDERS))
                 raise ValueError(
-                    f'Model {model!r} must carry a provider prefix, '
-                    f"e.g. 'openai/gpt-5.6-luna' or 'anthropic/claude-sonnet-5'."
+                    f'{setting}={model!r} names provider {provider!r}, which has '
+                    f'no route yet. Supported: {supported}.'
                 )
             if provider == 'openai' and not self.OPENAI_API_KEY:
-                raise ValueError(f'Model {model!r} requires OPENAI_API_KEY.')
-            if provider == 'anthropic' and not self.ANTHROPIC_API_KEY:
-                raise ValueError(f'Model {model!r} requires ANTHROPIC_API_KEY.')
+                raise ValueError(f'{setting}={model!r} requires OPENAI_API_KEY.')
         return self
 
     @field_validator('NCBI_EMAIL', mode='after')

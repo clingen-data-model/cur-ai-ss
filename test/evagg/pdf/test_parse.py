@@ -30,7 +30,7 @@ async def test_convert_and_extract_creates_outputs(test_file_contents):
 
     with (
         patch(
-            'lib.misc.images.image_to_data_url',
+            'lib.agents.table_correction_agent.image_to_data_url',
             return_value='https://example.com/image.png',
         ),
         patch(
@@ -138,7 +138,7 @@ async def test_correct_tables_leaves_unrecoverable_tables_in_place():
 
     with (
         patch(
-            'lib.misc.images.image_to_data_url',
+            'lib.agents.table_correction_agent.image_to_data_url',
             return_value='https://example.com/image.png',
         ),
         patch('agents.Runner.run', return_value=mock_result),
@@ -213,7 +213,7 @@ async def test_correct_tables_writes_vision_file_without_touching_raw_md():
 
     with (
         patch(
-            'lib.misc.images.image_to_data_url',
+            'lib.agents.table_correction_agent.image_to_data_url',
             return_value='https://example.com/image.png',
         ),
         patch('agents.Runner.run', return_value=mock_result),
@@ -297,7 +297,7 @@ async def _run_correct_tables(paper_id: int, result: TableCorrectionResult) -> N
     mock_result.final_output = result
     with (
         patch(
-            'lib.misc.images.image_to_data_url',
+            'lib.agents.table_correction_agent.image_to_data_url',
             return_value='https://example.com/image.png',
         ),
         patch('agents.Runner.run', return_value=mock_result),

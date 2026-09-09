@@ -40,10 +40,10 @@ A web-based tool for extracting and curating genetic evidence from scientific pa
 4. Copy the key and set environment variables:
 
 ```bash
-export OPENAI_API_KEY=”your_key_here”
+export OPENAI_API_KEY="your_key_here"
 # Model names are '<provider>/<model>'; the prefix is required.
-export EXTRACTION_MODEL=”openai/gpt-5.6-luna”
-export VLM_MODEL=”openai/gpt-5.6-sol”
+export EXTRACTION_MODEL="openai/gpt-5.6-luna"
+export VLM_MODEL="openai/gpt-5.6-sol"
 ```
 
 ### Install and Run
