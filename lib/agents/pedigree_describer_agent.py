@@ -4,6 +4,7 @@ from agents import Agent, function_tool
 from pydantic import BaseModel
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
+from lib.agents.model_factory import extraction_model, vlm_model
 from lib.core.environment import env
 from lib.misc.images import image_to_data_url
 from lib.misc.pdf.paths import pdf_image_path
@@ -48,7 +49,7 @@ def _analyze_image_url(image_url: str) -> str:
     client = OpenAI(api_key=env.OPENAI_API_KEY)
 
     message = client.chat.completions.create(
-        model=env.OPENAI_VLM,
+        model=vlm_model(),
         messages=[
             {
                 'role': 'user',
@@ -154,7 +155,7 @@ def pedigree_describer_agent_for_paper(
     agent = Agent(
         name='pedigree_describer',
         instructions=BASE_SYSTEM_INSTRUCTIONS,
-        model=env.OPENAI_API_DEPLOYMENT,
+        model=extraction_model(),
         output_type=PedigreeExtractionOutput,
         tools=[analyze_pedigree_image],
     )

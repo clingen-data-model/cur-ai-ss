@@ -2,7 +2,7 @@ from agents import Agent
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
-from lib.core.environment import env
+from lib.agents.model_factory import extraction_model
 from lib.models.patient import PatientExtractionOutput
 
 PATIENT_EXTRACTION_INSTRUCTIONS = f"""
@@ -174,6 +174,6 @@ PATIENT_EXTRACTION_AGENT_INSTRUCTIONS = (
 agent = Agent(
     name='patient_info_extractor',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
-    model=env.OPENAI_API_DEPLOYMENT,
+    model=extraction_model(),
     output_type=PatientExtractionOutput,
 )

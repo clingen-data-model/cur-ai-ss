@@ -8,6 +8,7 @@ from agents import Agent, Runner, function_tool
 from openai import OpenAI
 from pydantic import BaseModel
 
+from lib.agents.model_factory import extraction_model, vlm_model
 from lib.core.environment import env
 from lib.core.logging import setup_logging
 from lib.misc.images import image_to_data_url
@@ -41,7 +42,7 @@ def table_correction_agent_for_image(image_path: Path) -> Agent:
         image_url = image_to_data_url(image_path)
 
         message = client.chat.completions.create(
-            model=env.OPENAI_VLM,
+            model=vlm_model(),
             messages=[
                 {
                     'role': 'user',
@@ -65,7 +66,7 @@ def table_correction_agent_for_image(image_path: Path) -> Agent:
     return Agent(
         name='table_corrector',
         instructions=TABLE_CORRECTION_INSTRUCTIONS,
-        model=env.OPENAI_API_DEPLOYMENT,
+        model=extraction_model(),
         output_type=TableCorrectionResult,
         tools=[extract_table_from_image],
     )
