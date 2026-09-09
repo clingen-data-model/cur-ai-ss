@@ -29,7 +29,6 @@ A web-based tool for extracting and curating genetic evidence from scientific pa
 - **Python** 3.12 or above
 - **git**
 - **uv** — [installation guide](https://docs.astral.sh/uv/getting-started/installation/)
-- **make** (optional, for development tasks)
 - **OpenAI API key** with available billing (the free tier doesn't work)
 
 ### Set Up OpenAI API Key
@@ -64,8 +63,10 @@ uv pip install -e .
 ### Testing & Linting
 
 ```bash
-make ci                                    # Run all checks (linting, type checking, tests)
-make test                                  # Run tests with coverage report
+uv run ruff check lib                         # Lint
+uv run ruff format --check lib test           # Check formatting
+uv run mypy lib                               # Type check
+uv run pytest test --cov=lib --cov-report=term-missing  # Tests with coverage
 uv run pytest test/models/test_converters.py  # Run a specific test file
 ```
 

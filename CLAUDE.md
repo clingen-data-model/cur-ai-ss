@@ -143,7 +143,7 @@ Load from `.env` file or environment variables. Override with `ENV_FILE=.env.tes
 
 Run tests:
 ```bash
-make test                    # All tests with coverage
+uv run pytest test --cov=lib --cov-report=term-missing  # All tests with coverage
 uv run pytest test/          # All tests (no coverage)
 uv run pytest test/api/test_app.py::test_function  # Specific test
 ```
