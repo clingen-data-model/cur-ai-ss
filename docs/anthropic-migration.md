@@ -203,11 +203,24 @@ to prove the mechanism; see below for why the recommended config differs):
 ```
 
 ```python
+_CONTROL = {'type': 'ephemeral', 'ttl': '1h'}
 ModelSettings(extra_args={'cache_control_injection_points': [
-    {'location': 'message', 'role': 'system', 'control': {'type': 'ephemeral'}},
-    {'location': 'message', 'index': -1, 'control': {'type': 'ephemeral'}},
+    {'location': 'message', 'role': 'system', 'control': _CONTROL},
+    {'location': 'message', 'index': -1, 'control': _CONTROL},
 ]})
 ```
+
+**This must be gated on the provider.** `extra_args` is not LiteLLM-specific — the
+SDK splats it into the OpenAI Responses call too (`models/openai_responses.py:309`
+and `:344`, **source-read**). Since `openai/` names deliberately bypass
+`LitellmModel` and go to the default provider, attaching these settings
+unconditionally would send `cache_control_injection_points` to OpenAI, which does
+not know the parameter — plausibly a 400 on every agent call. `model_factory`
+already knows the provider via `split_provider`, so that is where the gate belongs.
+
+Nothing consumes this yet, and deliberately so: it is dead config until
+`EXTRACTION_MODEL` names an Anthropic model, and it cannot be exercised without a
+key. It lands with the flip, not before.
 
 **Use `index: -1`, not `role: 'user'`.** Role targeting returns *every* matching
 index (`anthropic_cache_control_hook.py:336`) and the cap is
@@ -260,6 +273,8 @@ stating because it is an easy inference to make. Anthropic's cache is server-sid
 and ephemeral, and a read only finds an entry a *prior request wrote* that has not
 expired; it is not content-addressed. A byte-identical prefix sent after the TTL is
 a miss, not a hit.
+
+**Decision: use `ttl: "1h"`.**
 
 **One hour is the ceiling — there is no longer option.** Anthropic offers exactly
 two TTLs, `5m` (the default) and `1h`. A day-long or indefinite cache is not
@@ -441,7 +456,9 @@ so the README's two-step is partly self-defeating.
    a decision on legacy `conversation_id` values. This is the last thing standing
    between the branch and an `EXTRACTION_MODEL` flip, and it is too large to add to
    #137.
-5. Caching, once something is actually running on Anthropic.
+5. Caching, wired in with the `EXTRACTION_MODEL` flip: `ttl: "1h"`, breakpoints at
+   `index: -1` and the system prompt, gated on the provider in `model_factory`.
+   Confirm nonzero `cache_read_input_tokens` before assuming any of it works.
 
 Done: Blocker 1 (the `litellm` bump, pinned at 1.100.0) and the `vlm_describe`
 truncation fix are both on the branch.
