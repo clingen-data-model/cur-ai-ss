@@ -5,11 +5,10 @@ import logging
 from pathlib import Path
 
 from agents import Agent, Runner, function_tool
-from openai import OpenAI
 from pydantic import BaseModel
 
-from lib.agents.model_factory import extraction_model, vlm_model
-from lib.core.environment import env
+from lib.agents.model_factory import extraction_model
+from lib.agents.vision import vlm_describe
 from lib.core.logging import setup_logging
 from lib.misc.images import image_to_data_url
 from lib.misc.pdf.paths import (
@@ -38,29 +37,10 @@ def table_correction_agent_for_image(image_path: Path) -> Agent:
     @function_tool
     def extract_table_from_image() -> str:
         """Extract the current table image as markdown using vision."""
-        client = OpenAI(api_key=env.OPENAI_API_KEY)
         image_url = image_to_data_url(image_path)
-
-        message = client.chat.completions.create(
-            model=vlm_model(),
-            messages=[
-                {
-                    'role': 'user',
-                    'content': [
-                        {
-                            'type': 'image_url',
-                            'image_url': {'url': image_url, 'detail': 'high'},
-                        },
-                        {
-                            'type': 'text',
-                            'text': VISION_EXTRACTION_PROMPT,
-                        },
-                    ],
-                }
-            ],
-        )
-
-        content = message.choices[0].message.content
+        content = vlm_describe(image_url, VISION_EXTRACTION_PROMPT)
+        # An empty string, never a partial table: the agent reports the table
+        # unrecoverable rather than accepting half of one as the extraction.
         return content if content is not None else ''
 
     return Agent(
