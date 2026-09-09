@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from lib.core.environment import env
 from lib.core.logging import setup_logging
-from lib.misc.gcs import upload_and_sign_image
+from lib.misc.images import image_to_data_url
 from lib.misc.pdf.paths import (
     pdf_table_correction_path,
     pdf_table_image_path,
@@ -38,7 +38,7 @@ def table_correction_agent_for_image(image_path: Path) -> Agent:
     def extract_table_from_image() -> str:
         """Extract the current table image as markdown using vision."""
         client = OpenAI(api_key=env.OPENAI_API_KEY)
-        image_url = upload_and_sign_image(image_path)
+        image_url = image_to_data_url(image_path)
 
         message = client.chat.completions.create(
             model=env.OPENAI_VLM,

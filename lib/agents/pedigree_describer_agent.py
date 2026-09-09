@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.core.environment import env
-from lib.misc.gcs import upload_and_sign_image
+from lib.misc.images import image_to_data_url
 from lib.misc.pdf.paths import pdf_image_path
 
 
@@ -146,7 +146,7 @@ def pedigree_describer_agent_for_paper(
         NOT_A_PEDIGREE if it is not.
         """
         image_path = pdf_image_path(paper_id, image_id, supplement=is_supplement)
-        description = _analyze_image_url(upload_and_sign_image(image_path))
+        description = _analyze_image_url(image_to_data_url(image_path))
         if description.strip() != NOT_A_PEDIGREE:
             capture.record(image_id, description)
         return description
