@@ -22,11 +22,6 @@ class Env(BaseSettings):
     NCBI_API_KEY: Optional[str] = None
     NCBI_EMAIL: Optional[str] = None
 
-    # GCS configuration
-    GCS_BUCKET_NAME: str = 'caa-static-resources'
-    GCS_SIGNED_URL_EXPIRY_HOURS: int = 12
-    DISABLE_GCS_UPLOAD: bool = False
-
     # Model selection: LiteLLM-style '<provider>/<model>' names, prefix
     # required ('openai/gpt-5.6-luna', 'anthropic/claude-sonnet-5'). Defaults
     # stay on OpenAI until the client-side-sessions work lands (conversation_id

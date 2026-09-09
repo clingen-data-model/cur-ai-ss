@@ -11,7 +11,7 @@ from lib.agents.model_factory import extraction_model
 from lib.agents.vision import vlm_describe
 from lib.core.environment import env
 from lib.core.logging import setup_logging
-from lib.misc.gcs import upload_and_sign_image
+from lib.misc.images import image_to_data_url
 from lib.misc.pdf.paths import (
     pdf_table_correction_path,
     pdf_table_image_path,
@@ -38,7 +38,7 @@ def table_correction_agent_for_image(image_path: Path) -> Agent:
     @function_tool
     def extract_table_from_image() -> str:
         """Extract the current table image as markdown using vision."""
-        image_url = upload_and_sign_image(image_path)
+        image_url = image_to_data_url(image_path)
         content = vlm_describe(image_url, VISION_EXTRACTION_PROMPT)
         return content if content is not None else ''
 

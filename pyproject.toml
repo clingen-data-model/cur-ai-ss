@@ -31,8 +31,6 @@ dependencies = [
     "biopython>=1.86",
     "pymupdf>=1.26.7",
     "hpo-toolkit>=0.7.0",
-    # Cloud storage
-    "google-cloud-storage>=2.10.0",
     # Streamlit components
     "streamlit-pdf-viewer>=0.0.27",
     "streamlit-searchbox>=0.1.24",
