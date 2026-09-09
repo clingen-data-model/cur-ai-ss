@@ -5,7 +5,8 @@ Status as of 2026-09-09, written against the `litellm-model-routing` branch (PR 
 Findings below marked **confirmed** were verified by running the locked
 dependencies (`litellm==1.83.0`, `openai-agents==0.7.0`) — no API key needed.
 Line citations are into `.venv/lib/python3.12/site-packages` at those versions
-and will drift if either is bumped.
+and will drift if either is bumped. Claims about what Anthropic accepts come from
+`platform.claude.com/docs/en/build-with-claude/structured-outputs`.
 
 ## Where we are
 
@@ -69,31 +70,64 @@ loop matters most: MONDO linking has 9 tools, variant harmonization 7, HPO linki
 *fine* on this path — a single forced tool is precisely Anthropic's documented JSON
 mode.
 
-**b) `$defs`/`$ref` reach Anthropic unresolved.** All five real output types emit
-them, because `ensure_strict_json_schema` (`agents/agent_output.py:113`) applies
-strict rules *through* refs without inlining them. LiteLLM's *native* path
-deep-copies and calls `unpack_defs` (`transformation.py:805`, `:811`) with an
-explicit comment that Anthropic does not support external schema references — the
-emulation path does a bare `_input_schema.update(json_schema)` (`:1109`) and
-unpacks nothing.
+**b) `$defs`/`$ref` are forwarded unresolved — but this turns out to be harmless.**
+All output types emit them, because `ensure_strict_json_schema`
+(`agents/agent_output.py:113`) applies strict rules *through* refs without inlining
+them. The emulation path does a bare `_input_schema.update(json_schema)`
+(`transformation.py:1109`) and unpacks nothing, where the native path deep-copies
+and calls `unpack_defs` (`:805`, `:811`).
 
-Our `ReasoningBlock[T]` generics are the main source of refs, but note the plain
-models emit them too, so this is not a generics-only problem.
+Per Anthropic's structured-outputs documentation, **internal `$ref`/`$defs` are
+supported**; only *external* refs (`http://...`) are not. LiteLLM's `unpack_defs`
+comment refers to the external case. **Confirmed** that every one of our schemas
+uses internal refs only, and that none of them carry any of the unsupported
+keywords (`minimum`, `maximum`, `multipleOf`, `minLength`, `maxLength`, `pattern`,
+`maxItems`, `uniqueItems`, or a `minItems` other than 0/1) — a scan across 13
+agents came back completely clean. So no Pydantic model in this repo needs to
+change.
 
-Three ways out, roughly in order of appeal:
+### This is a LiteLLM gap, not an Anthropic limitation
 
-1. Get the model onto the native path. Confirm whether a newer LiteLLM has
-   `sonnet-5` in the allowlist; if so, bump and pin. This fixes both defects at
-   once and is the only option that needs no code in this repo.
-2. Enable thinking. Per `:1017`, no `tool_choice` is set when thinking is enabled,
-   so the model is merely nudged toward the output tool and can still call real
-   tools. Non-deterministic, and does not address the refs.
-3. Stop using `output_type` on the tool-using agents and parse a final message
-   instead. Largest change, but provider-independent.
+Anthropic natively supports exactly the shape this pipeline needs:
+
+- **Structured outputs and tool use compose in one request.** Claude either calls a
+  tool (`stop_reason: "tool_use"`) or returns structured JSON (`end_turn`),
+  deciding per turn. No forced `tool_choice`, so the tool loop survives intact.
+- `claude-sonnet-5` is on the supported-model list, as are `claude-opus-5` and
+  `claude-fable-5-1`.
+- The current parameter is `output_config.format`; `output_format` — which is what
+  LiteLLM's native branch emits — is deprecated but accepted during a transition
+  period.
+
+So the capability exists, our schemas qualify for it, and the only obstacle is
+LiteLLM's routing. **Confirmed** that the gate (`transformation.py:988`-`:1005`) is
+a bare hardcoded set of model-name substrings with no model-registry lookup, no
+config flag, and no override hook — so `litellm.register_model` cannot reach it
+either. The set is stale on LiteLLM `main` as well, so there is no version to
+upgrade to.
+
+Ways out, roughly in order of appeal:
+
+1. Upstream a patch to LiteLLM adding the current model names to that set (or
+   making it consult `supports_response_schema` in the model registry). Three
+   lines, and correct for everyone.
+2. Carry a small local shim overriding that one branch until upstream lands. This
+   is the only option that unblocks `EXTRACTION_MODEL` without touching agent code.
+3. Enable thinking. Per `:1017` no `tool_choice` is set when thinking is enabled,
+   so the model is merely nudged toward the output tool and can still reach the
+   real tools. Keeps the loop alive, but stays on the emulation path and is
+   non-deterministic.
+4. Stop using `output_type` on the tool-using agents and parse a final message
+   instead. Largest change, provider-independent.
 
 `claude-fable-5-1` additionally rejects forced `tool_choice` outright, so it cannot
 be `EXTRACTION_MODEL` on the emulation path at all. Worth rejecting that
 combination in `Env` validation rather than discovering it in production.
+
+Two smaller notes: structured outputs add a system prompt, so enabling them shifts
+input token counts and invalidates any existing prompt cache for the thread; and
+compiled grammars are cached for 24h but invalidated by a change to the schema *or
+to the set of tools in the request*.
 
 ## Blocker 2: `conversation_id` → sessions
 
@@ -221,15 +255,19 @@ either direction. This wants an upper bound.
 
 Everything above is settled. These are not:
 
-1. Does Anthropic accept the SDK's strict-schema dialect, specifically `$ref`/`$defs`
-   inside a tool `input_schema`? One small call. Determines whether Blocker 1b is
-   fatal or theoretical.
+1. Does a shimmed native path actually work end-to-end — `output_config.format`
+   (or LiteLLM's `output_format`) plus real tools, with the agents SDK parsing the
+   result and the tool loop still running? This is the go/no-go for
+   `EXTRACTION_MODEL`. The documentation says yes; nobody has run it here.
 2. Does `claude-fable-5-1` actually 400 on forced `tool_choice`? One call.
 3. Does `cache_control_injection_points` via `extra_args` produce nonzero
    `cache_read_input_tokens`, and does the default TTL survive our task gaps? Two
    calls plus a gap.
 4. Fable 5.1 vs Sonnet 5 quality on pedigree and table images. Needs a real eval
    set, not a spike.
+
+Schema conformance is *no longer* on this list — Anthropic's documented
+restrictions plus the offline scan settle it without a call.
 
 Note LiteLLM authenticates with a raw `x-api-key`; an `ant auth login` OAuth
 profile will not be picked up. This needs an actual `ANTHROPIC_API_KEY`.
@@ -240,8 +278,8 @@ profile will not be picked up. This needs an actual `ANTHROPIC_API_KEY`.
 2. Pin an upper bound on `litellm`.
 3. Flip `VLM_MODEL` to Anthropic behind the retention check — real signal, and it
    depends on none of the blockers.
-4. Resolve Blocker 1 — this is the go/no-go for `EXTRACTION_MODEL`, and option 1
-   (get onto the native path) may make it a version bump rather than a code change.
+4. Resolve Blocker 1 — the go/no-go for `EXTRACTION_MODEL`. Shim the LiteLLM gate
+   locally to unblock, and upstream the fix in parallel so the shim is temporary.
 5. Sessions refactor, in the two steps above.
 6. Caching, once a model is actually running on Anthropic.
 
