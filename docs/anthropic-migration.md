@@ -7,8 +7,9 @@ Status as of 2026-09-09, written against the `litellm-model-routing` branch (PR 
 Claims here fall into three tiers, and the difference matters:
 
 - **Executed** — code was run locally against the locked dependencies
-  (`litellm==1.83.0`, `openai-agents==0.7.0`, Python 3.12.14) and the output is
-  quoted. Trustworthy.
+  (`litellm==1.100.0`, `openai==2.20.0`, `openai-agents==0.7.0`, Python 3.12.14)
+  and the output is quoted. Trustworthy. Where a finding predates the litellm bump
+  it says so.
 - **Source-read** — a dependency's source was read but not run. High confidence,
   not proof.
 - **Documented** — taken from Anthropic's docs. Describes what the provider
@@ -38,7 +39,7 @@ at `litellm_model.py:161` and `:271`, never referenced in either body.
 This was the top risk. It is a LiteLLM defect, not an Anthropic limitation or a
 problem with our models, and a version bump resolves it.
 
-Under the locked 1.83.0, the native-vs-emulated decision is a hardcoded set of
+Under 1.83.0, which this branch started on, the native-vs-emulated decision is a hardcoded set of
 model-name substrings (`llms/anthropic/chat/transformation.py:988`-`:1005`) that
 `claude-sonnet-5`, `claude-opus-5` and `claude-fable-5-1` all miss. **Executed**,
 against the real agents' real output types:
@@ -71,10 +72,10 @@ Native path, no forced tool choice, only the real tool. That also removes the
 separate `claude-fable-5-1` concern: `forced_tool_use_unsupported` means no forced
 `tool_choice` is ever set for it, so it cannot 400 on one.
 
-**Caveat: the bump is verified to fix the routing, not verified to be safe.** The
-overlay imported cleanly and `get_optional_params` behaved, but the test suite has
-not been run under 1.100.0. That is the next step, against the 163-test baseline
-below.
+**The bump is now on this branch**, pinned at `litellm==1.100.0`, and the result
+above was re-confirmed against the locked resolution rather than the overlay. The
+full suite passes unchanged at 163. See *Dependency versions* for the cascade it
+forced.
 
 ### Our schemas were never the problem
 
@@ -109,34 +110,77 @@ swap, not a layering. Two independently verifiable steps:
    into one helper.
 2. Swap the implementation for a local session.
 
-**Check the `openai-agents` bump before writing any of this.** We are on 0.7.0
-against a latest of 0.22.2. The `# unused` annotation on `LitellmModel`'s
-`conversation_id` may well have been implemented across fifteen minor versions,
-which would shrink or eliminate this blocker entirely.
+**The `openai-agents` bump does not help here.** **Source-read** at the released
+`v0.22.2` tag: `LitellmModel`'s `conversation_id` is *still* annotated `# unused`
+(`litellm_model.py:219` and `:392`). An earlier revision of this doc guessed it
+might have been implemented across fifteen minor versions. It has not. The sessions
+refactor is genuinely required, and it does not need the bump either.
 
-### Two constraints on step 2
+### Use `SQLiteSession`, not `SQLAlchemySession`
 
-**Source-read**: `SQLAlchemySession`
-(`agents/extensions/memory/sqlalchemy_session.py:59`) is
-`(session_id, *, engine: AsyncEngine, create_tables=False, sessions_table='agent_sessions', messages_table='agent_messages')`.
-`AsyncEngine` requires an async driver (`sqlite+aiosqlite://`); the sync engine in
-`lib/api/db.py` cannot be reused, so this means adding `aiosqlite` and a second
-engine against the same file. Its `agent_messages` → `agent_sessions` foreign key
-carries `ondelete="CASCADE"`, and `create_tables` defaults to `False`, so it wants
-an Alembic migration — see the `batch_alter_table` + `PRAGMA foreign_keys` rules in
-`CLAUDE.md` and the June 2026 incident behind them.
+`SQLiteSession` ships in the **locked 0.7.0** (`agents/memory/sqlite_session.py:21`):
+
+```python
+SQLiteSession(session_id, db_path=':memory:',
+              sessions_table='agent_sessions', messages_table='agent_messages')
+```
+
+A plain filesystem path — no `AsyncEngine`, no async driver, no second engine, and
+portable across platforms. That is the deciding factor.
+
+`SQLAlchemySession` is the wrong tool here: **source-read**, in both 0.7.0
+(`agents/extensions/memory/sqlalchemy_session.py:59`) and 0.22.2 (`:146`) it still
+requires `engine: AsyncEngine`, so it would force an `aiosqlite` dependency and a
+second async engine alongside the sync one in `lib/api/db.py`.
+
+**Point `db_path` at its own file** — e.g. `{CAA_ROOT}/sqllite/agent_sessions.db`
+— rather than the app database. The SDK creates and owns `agent_sessions` /
+`agent_messages` itself, and tables outside Alembic's model metadata sitting in
+`app.db` invite `alembic revision --autogenerate` proposing to drop them. A
+separate file keeps the SDK's schema and ours from fighting, and sidesteps the
+`ondelete="CASCADE"` hazard in `CLAUDE.md` entirely.
+
+### The `additional_context` branch has to change too
+
+This is not a pure swap, and it is the part most likely to bite. Handlers currently
+branch: when `additional_context` is set they send *only* the follow-up prompt and
+rely on OpenAI's server-side history to supply the paper. A freshly created
+client-side session is **empty**, so that branch would send a bare "Please review
+your previous analysis in light of..." with no paper attached.
+
+Two things follow:
+
+1. The follow-up branch must seed or detect an empty session and send the full
+   initial message when there is no local history. Turn 0 is reconstructible —
+   `format_paper_context(fulltext_md(paper_id, supplement_format), gene_symbol)`
+   plus the agent's instructions — so this is cheap, just not automatic.
+2. **Every `conversation_id` already persisted becomes unreachable.** Those
+   histories live on OpenAI's servers and cannot be imported into a local session.
+   Decide deliberately whether to accept that in-flight reruns lose their prior
+   context, or to keep reading `task.conversation_id` for legacy tasks during a
+   transition. Doing nothing silently degrades reruns on existing papers.
 
 ### Storage design worth deciding first
 
-`SQLAlchemySession` persists full transcripts. With the paper markdown in every
-initial message and roughly 40 agent runs per paper, that grows fast.
+`SQLiteSession` persists whatever the run produced, verbatim. With the paper
+markdown in every initial message and roughly 40 agent runs per paper, that file
+grows fast — and the same reconstructibility that solves the empty-session problem
+above also means we do not have to store turn 0 at all.
 
-Turn 0 is deterministically reconstructible — it is
-`format_paper_context(fulltext_md(paper_id, supplement_format), gene_symbol)` plus
-the agent's instructions, all already in the database. A custom session storing
-only assistant outputs and follow-up turns, rebuilding turn 0 on demand, would be
-far lighter and sidesteps both constraints above. The tradeoff is losing the
-intermediate tool-call transcript the Conversations API replays today.
+So there is a choice, and it is worth making deliberately rather than by default:
+
+- **Store everything** (plain `SQLiteSession`). Simplest, closest to today's
+  behavior, and the session file carries the full tool-call transcript. Costs disk
+  roughly linear in papers × agents × paper size.
+- **Store only what is not reconstructible** — a thin `Session` implementation
+  wrapping `SQLiteSession` that drops turn 0 on write and rebuilds it on read.
+  Much smaller, and the `Session` protocol is only four methods
+  (`get_items`, `add_items`, `pop_item`, `clear_session`), so this is not a large
+  piece of code. The tradeoff is losing the intermediate tool-call transcript that
+  the Conversations API replays today.
+
+Worth measuring one paper's session file under the simple option before building
+the second.
 
 ## Blocker 3: prompt caching
 
@@ -194,8 +238,10 @@ the paper cannot be pre-warmed ahead of a run.
 
 ## Corrections log
 
-Three claims in earlier revisions of this document were wrong. Recorded so the
-reasoning is auditable.
+Five claims in earlier revisions of this document were wrong. Recorded so the
+reasoning is auditable — and note that three of the five clustered on the same
+subject, LiteLLM's structured-output routing, which is a signal about where the
+guessing was happening.
 
 1. **`log_cache_metrics` needs fixing.** Retracted. `litellm_model.py:212`-`:214`
    translates litellm's `prompt_tokens_details.cached_tokens` into the SDK's
@@ -211,6 +257,14 @@ reasoning is auditable.
    suffices. It came from a grep for `sonnet-5` returning nothing on `main`; the
    control term `sonnet-4.6` also returned nothing, which should have revealed
    immediately that the mechanism had been refactored rather than left stale.
+4. **"The `litellm` bump is surgical and should not be bundled with the `openai`
+   bump."** Retracted. It cannot be unbundled: 1.100.0 requires
+   `openai>=2.20.0` and `pydantic-settings>=2.14.1`, so three pins move together
+   or none do. The claim was made without attempting the resolution.
+5. **"The `openai-agents` bump may moot Blocker 2."** Retracted. `conversation_id`
+   is still annotated `# unused` on `LitellmModel` at the released `v0.22.2` tag.
+   This was a guess about fifteen versions of changelog, offered as a reason to
+   defer the sessions work; checking took one HTTP request.
 
 ## The VLM path
 
@@ -261,22 +315,29 @@ plus the `max_tokens` bound.
 
 ## Dependency versions
 
-| package | pinned | resolved | latest |
+| package | pinned | latest | note |
 |---|---|---|---|
-| `litellm` | `>=1.75` | 1.83.0 | 1.100.0 |
-| `openai-agents` | `==0.7.0` | 0.7.0 | 0.22.2 |
-| `openai` | `==2.15.0` | 2.15.0 | 3.11.0 |
+| `litellm` | `==1.100.0` | 1.100.0 | bumped on this branch |
+| `openai` | `==2.20.0` | 3.11.0 | dragged up by litellm; 2.x only |
+| `openai-agents` | `==0.7.0` | 0.22.2 | still behind |
+| `pydantic-settings` | `==2.14.1` | — | dragged up by litellm |
 
-Three separate jobs, and they should not be bundled — if something breaks you want
-to know which bump did it. The `litellm` bump is surgical, already a loose pin, and
-fixes Blocker 1. `openai-agents` and `openai` are a hard-pinned fifteen-minor and a
-major respectively, under the library the whole of `lib/tasks/handlers.py` is built
-on; that wants its own change with the test suite as the gate.
+**The `litellm` bump was not surgical, contrary to an earlier revision here.**
+1.100.0 requires `pydantic-settings>=2.14.1` and `openai>=2.20.0`, so three pins
+moved together and there was no way to isolate them. `openai` went to 2.20.0 —
+litellm's minimum — rather than the newest 2.x, to keep the change attributable;
+litellm caps it below 3.0.0 regardless. It also pulls in botocore, s3transfer and
+jmespath, which is real install weight.
 
-Whatever happens, `litellm` should get an upper bound. The behavior that decides
-native-vs-emulated structured output is undocumented and version-specific, and an
-unbounded pin can silently move every agent between the two paths in either
-direction.
+`litellm` is now pinned exactly rather than floating, matching its neighbours. The
+behavior that decides native-vs-emulated structured output is undocumented and
+version-specific, and an unbounded pin can silently move every agent between the
+two paths in either direction — which is exactly how this branch came to be broken.
+
+`openai-agents` is still fifteen minor versions behind and is the library the whole
+of `lib/tasks/handlers.py` is built on. It wants its own change with the test suite
+as the gate — and per Blocker 2, it buys nothing for the sessions work, so there is
+no urgency.
 
 ## Observability gap
 
@@ -325,14 +386,18 @@ so the README's two-step is partly self-defeating.
 
 ## Suggested order
 
-1. Merge PR #137. CI is green, no conflicts; it needs an approving review.
-2. Bump `litellm` and re-run the suite against the 163-test baseline. Add an upper
-   bound.
-3. Get an OpenAI key and run the pipeline end-to-end for a known-good reference.
-4. Flip `VLM_MODEL` behind the retention check.
-5. Check whether the `openai-agents` bump moots Blocker 2, then do the sessions
-   refactor.
-6. Caching, once something is actually running on Anthropic.
+1. Merge PR #137. It needs an approving review; that is the only thing blocking it.
+2. Get an OpenAI key and run the pipeline end-to-end for a known-good reference —
+   this also gives the base64 image path its first real exercise.
+3. Flip `VLM_MODEL` behind the retention check.
+4. Sessions refactor, as its own PR — `SQLiteSession`, the two-step swap above, and
+   a decision on legacy `conversation_id` values. This is the last thing standing
+   between the branch and an `EXTRACTION_MODEL` flip, and it is too large to add to
+   #137.
+5. Caching, once something is actually running on Anthropic.
+
+Done: Blocker 1 (the `litellm` bump, pinned at 1.100.0) and the `vlm_describe`
+truncation fix are both on the branch.
 
 ## Reproducing the offline findings
 
