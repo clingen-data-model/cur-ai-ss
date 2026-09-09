@@ -173,14 +173,19 @@ So there is a choice, and it is worth making deliberately rather than by default
   behavior, and the session file carries the full tool-call transcript. Costs disk
   roughly linear in papers × agents × paper size.
 - **Store only what is not reconstructible** — a thin `Session` implementation
-  wrapping `SQLiteSession` that drops turn 0 on write and rebuilds it on read.
-  Much smaller, and the `Session` protocol is only four methods
-  (`get_items`, `add_items`, `pop_item`, `clear_session`), so this is not a large
-  piece of code. The tradeoff is losing the intermediate tool-call transcript that
-  the Conversations API replays today.
+  wrapping `SQLiteSession` that drops turn 0 on write and rebuilds it on read. Much
+  smaller, and the `Session` protocol is only four methods (`get_items`,
+  `add_items`, `pop_item`, `clear_session`). **But rebuilding must be
+  byte-identical** or the prefix hash changes and prompt caching stops working —
+  which makes `fulltext_md()` determinism and every agent's instructions constant
+  load-bearing for cost. Worse, it fails silently and asymmetrically: edit an
+  agent's prompt and every stored session now replays a history the model never
+  actually saw. It also loses the intermediate tool-call transcript the
+  Conversations API replays today.
 
-Worth measuring one paper's session file under the simple option before building
-the second.
+**Start with store-everything.** The thin option trades disk for a fragile coupling
+between prompt text and cache correctness, and the failure mode is invisible. Measure
+one paper's session file first — if it is not actually a problem, the question is moot.
 
 ## Blocker 3: prompt caching
 
@@ -198,9 +203,19 @@ onto the paper-bearing message, targeting by role so no index is hardcoded:
 
 ```python
 ModelSettings(extra_args={'cache_control_injection_points': [
-    {'location': 'message', 'role': 'user', 'control': {'type': 'ephemeral'}},
+    {'location': 'message', 'role': 'system', 'control': {'type': 'ephemeral'}},
+    {'location': 'message', 'index': -1, 'control': {'type': 'ephemeral'}},
 ]})
 ```
+
+**Use `index: -1`, not `role: 'user'`.** Role targeting returns *every* matching
+index (`anthropic_cache_control_hook.py:336`) and the cap is
+`MAX_CACHE_CONTROL_BLOCKS = 4`, with injection stopping once reached rather than
+erroring. On a thread that accumulates follow-ups — paper, follow-up 1, follow-up 2
+— the first four user messages get stamped and the **last** one does not, which is
+exactly the position the incremental read needs. `index: -1` moves the breakpoint to
+the end of each request, which is the documented incremental pattern and what
+LiteLLM itself defaults to.
 
 `ttl` goes in that same `control` dict. There is no per-message hook in the agents
 SDK — messages are built wholly by the converter — so `extra_args` is the only seam.
@@ -230,8 +245,24 @@ against it. Fine within one tool loop; risky across tasks. The worker runs
 sequentially under a 900s lease, and demographics / phenotype extraction / HPO
 linking fan out per patient. If consecutive runs land more than ~5 minutes apart,
 every one pays a fresh write at 1.25x and never reads — worse than not caching at
-all. `ttl: "1h"` (2x write, still 0.1x read) is likely right, but it is a
-measurement call once something is actually running.
+all.
+
+The stronger argument for `ttl: "1h"` is the **human review loop**, not pipeline
+gaps. A curator reads an extraction in the UI and asks a follow-up; that reruns the
+agent against a session whose prefix is byte-identical to the original run's. Under
+a 5-minute TTL that is essentially always a miss plus a fresh write. Under an hour
+it plausibly hits, and a hit there is worth much more than one inside a tool loop
+because the whole paper is in the replayed prefix.
+
+**Saving the transcript locally does not by itself produce a cache hit** — worth
+stating because it is an easy inference to make. Anthropic's cache is server-side
+and ephemeral, and a read only finds an entry a *prior request wrote* that has not
+expired; it is not content-addressed. A byte-identical prefix sent after the TTL is
+a miss, not a hit.
+
+This is measurable before committing to anything: task timestamps are already in
+the database, so the real distribution of extraction→rerun intervals is a query.
+That distribution, not a guess, should pick the TTL.
 
 Minor: `max_tokens: 0` pre-warming is rejected when structured outputs are on, so
 the paper cannot be pre-warmed ahead of a run.
