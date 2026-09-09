@@ -34,7 +34,12 @@ Return ONLY the markdown table, no other text.
 def table_correction_agent_for_image(image_path: Path) -> Agent:
     """Build a table correction agent bound to a specific table image."""
 
-    @function_tool
+    # failure_error_function=None so a raised exception propagates instead of
+    # being handed to the model as text. vlm_describe returns None for the
+    # outcomes that are findings (a decline, a truncated answer); anything it
+    # raises means the call itself did not happen, which is a task failure and
+    # not a fact about the paper.
+    @function_tool(failure_error_function=None)
     def extract_table_from_image() -> str:
         """Extract the current table image as markdown using vision."""
         image_url = image_to_data_url(image_path)

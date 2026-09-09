@@ -121,7 +121,12 @@ def pedigree_describer_agent_for_paper(
     """
     capture = PedigreeCapture()
 
-    @function_tool
+    # failure_error_function=None so a raised exception propagates instead of
+    # being handed to the model as text. vlm_describe returns None for the
+    # outcomes that are findings (a decline, a truncated answer); anything it
+    # raises means the call itself did not happen, which is a task failure and
+    # not a fact about the paper.
+    @function_tool(failure_error_function=None)
     def analyze_pedigree_image(image_id: int, is_supplement: bool = False) -> str:
         """Evaluate a figure's image to determine whether it is a pedigree.
 

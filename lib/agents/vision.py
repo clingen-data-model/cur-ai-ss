@@ -27,10 +27,14 @@ def vlm_describe(image_url: str, prompt: str) -> str | None:
     is -- a half-extracted table is worse than an admitted failure, because
     nothing distinguishes it from a complete one.
 
-    Provider and network errors do still propagate out of here. Be aware that
-    they do not reach the task retry machinery either: both callers are
-    function tools, and the agents SDK's default failure_error_function catches
-    whatever a tool body raises and hands it to the model as text.
+    Provider and network errors propagate, and are meant to: not reaching the
+    model at all is a task failure, not a finding about the paper. Both callers
+    pass failure_error_function=None so the exception is not converted into tool
+    output, which puts it in front of the worker -- FAILED with the message
+    stored, successors not enqueued, and retried up to MAX_RETRIES.
+
+    So the split is: None for anything the model said, an exception for anything
+    that stopped us asking it.
     """
     model = vlm_model()
     client = OpenAI(api_key=env.OPENAI_API_KEY)
