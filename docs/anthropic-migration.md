@@ -2,11 +2,24 @@
 
 Status as of 2026-09-09, written against the `litellm-model-routing` branch (PR #137).
 
-Findings below marked **confirmed** were verified by running the locked
-dependencies (`litellm==1.83.0`, `openai-agents==0.7.0`) — no API key needed.
-Line citations are into `.venv/lib/python3.12/site-packages` at those versions
-and will drift if either is bumped. Claims about what Anthropic accepts come from
-`platform.claude.com/docs/en/build-with-claude/structured-outputs`.
+## How to read this document
+
+Claims here fall into three tiers, and the difference matters:
+
+- **Executed** — code was run locally against the locked dependencies
+  (`litellm==1.83.0`, `openai-agents==0.7.0`, Python 3.12.14) and the output is
+  quoted. Trustworthy.
+- **Source-read** — a dependency's source was read but not run. High confidence,
+  not proof.
+- **Documented** — taken from Anthropic's docs. Describes what the provider
+  *should* do; we have not observed it.
+
+**Nothing in this migration has made an API call to any provider.** There is no
+`ANTHROPIC_API_KEY` and no `OPENAI_API_KEY` in this environment; `.env.test`
+carries a fake one. The app has never been started against a real model and no
+paper has been processed. So the **request-construction** layer is empirically
+verified and the **provider-response** layer is not verified at all. Line
+citations point into `.venv/lib/python3.12/site-packages` and will drift on a bump.
 
 ## Where we are
 
@@ -16,148 +29,102 @@ SDK's default provider) or a `LitellmModel`. All 17 agents take
 `model=extraction_model()`; both VLM tools go through `lib/agents/vision.vlm_describe()`.
 Defaults still name OpenAI models, so behavior is unchanged.
 
-The `openai/` special case in `resolve_model()` exists because `LitellmModel`
-ignores `conversation_id` — **confirmed**, it is literally annotated
-`conversation_id: str | None = None,  # unused` at `litellm_model.py:161` and
-`:271`, and never referenced in either body.
+The `openai/` special case exists because `LitellmModel` ignores `conversation_id`
+— **source-read**: literally annotated `conversation_id: str | None = None,  # unused`
+at `litellm_model.py:161` and `:271`, never referenced in either body.
 
-## Blocker 1: structured output collapses the tool loop (highest risk)
+## Blocker 1: structured output — fixed by bumping LiteLLM
 
-This was filed as a schema-conformance question. It is not. The schemas are fine;
-the *delivery mechanism* is broken for our target models.
+This was the top risk. It is a LiteLLM defect, not an Anthropic limitation or a
+problem with our models, and a version bump resolves it.
 
-LiteLLM decides between Anthropic's native structured outputs and a
-forced-tool-call emulation using a **hardcoded model-substring allowlist**
-(`llms/anthropic/chat/transformation.py`, around `:995`-`:1010`): `sonnet-4.5`,
-`sonnet-4-6`, `opus-4.1`, `opus-4.5`, `opus-4.6`, `opus-4.7` and spelling
-variants. **`claude-sonnet-5`, `claude-opus-5` and `claude-fable-5-1` match
-nothing in that list**, so all three of our intended targets fall to the
-emulation branch, which:
-
-- appends a synthetic tool named `json_tool_call` to whatever tools are already
-  there — `_add_tools_to_optional_params` appends, it does not replace; and
-- sets `tool_choice = {"name": "json_tool_call", "type": "tool"}`, forcing it
-  (`:1017`-`:1019`) — but **only when thinking is disabled**.
-
-**Confirmed** by running the real agents' real output types through
-`litellm.utils.get_optional_params(model='claude-sonnet-5', custom_llm_provider='anthropic', ...)`:
+Under the locked 1.83.0, the native-vs-emulated decision is a hardcoded set of
+model-name substrings (`llms/anthropic/chat/transformation.py:988`-`:1005`) that
+`claude-sonnet-5`, `claude-opus-5` and `claude-fable-5-1` all miss. **Executed**,
+against the real agents' real output types:
 
 ```
-hpo_linking_agent                strict=True defs=True ref=True tools=4
-mondo_linking_agent              strict=True defs=True ref=True tools=9
-patient_phenotype_linking_agent  strict=True defs=True ref=True tools=0
-variant_harmonization_agent      strict=True defs=True ref=True tools=7
-patient_extraction_agent         strict=True defs=True ref=True tools=0
-
+# litellm 1.83.0
 tool_choice: {"name": "json_tool_call", "type": "tool"}
-json_mode: True
-num tools sent: 2
-  tool='json_tool_call'   has_$ref=True  has_$defs=True
-  tool='search_hpo_terms' has_$ref=False has_$defs=False
+tools sent : ['json_tool_call', 'search_hpo_terms']
+has $ref   : True
 ```
 
-Two independent defects fall out of that:
+A forced `tool_choice` alongside the real tools means the model must emit the JSON
+tool immediately and can never reach `search_hpo_terms`. No error is raised — the
+task succeeds with structured output derived from zero ontology lookups. HPO
+linking has 4 tools and `max_turns=15`; MONDO 9 tools and 25; harmonization 7.
 
-**a) The tool-using agents lose their tool loop.** `json_tool_call` is sent
-*alongside* `search_hpo_terms`, with `tool_choice` compelling the JSON tool. The
-model cannot reach the search tool. This raises no error — the task succeeds and
-returns well-formed structured output derived from zero ontology lookups. Silently
-worse extraction, no failed task, no exception.
+LiteLLM `main` has since replaced that substring set with a capability lookup
+(`_supports_model_capability(model, "supports_native_structured_output", ...)`) and
+guarded the forced `tool_choice` behind `AnthropicModelInfo.forced_tool_use_unsupported(model)`.
+**Executed** under 1.100.0 via an ephemeral overlay:
 
-The damage is confined to the agents that have tools, and it is worst where the
-loop matters most: MONDO linking has 9 tools, variant harmonization 7, HPO linking
-4 (and is configured for `max_turns=15`; MONDO for 25). The 8 zero-tool agents are
-*fine* on this path — a single forced tool is precisely Anthropic's documented JSON
-mode.
+```
+claude-sonnet-5    native=True  tool_choice=null  tools=['search_hpo_terms']
+claude-opus-5      native=True  tool_choice=null  tools=['search_hpo_terms']
+claude-fable-5-1   native=True  tool_choice=null  tools=['search_hpo_terms']
+claude-sonnet-4-6  native=True  tool_choice=null  tools=['search_hpo_terms']
+```
 
-**b) `$defs`/`$ref` are forwarded unresolved — but this turns out to be harmless.**
-All output types emit them, because `ensure_strict_json_schema`
-(`agents/agent_output.py:113`) applies strict rules *through* refs without inlining
-them. The emulation path does a bare `_input_schema.update(json_schema)`
-(`transformation.py:1109`) and unpacks nothing, where the native path deep-copies
-and calls `unpack_defs` (`:805`, `:811`).
+Native path, no forced tool choice, only the real tool. That also removes the
+separate `claude-fable-5-1` concern: `forced_tool_use_unsupported` means no forced
+`tool_choice` is ever set for it, so it cannot 400 on one.
 
-Per Anthropic's structured-outputs documentation, **internal `$ref`/`$defs` are
-supported**; only *external* refs (`http://...`) are not. LiteLLM's `unpack_defs`
-comment refers to the external case. **Confirmed** that every one of our schemas
-uses internal refs only, and that none of them carry any of the unsupported
-keywords (`minimum`, `maximum`, `multipleOf`, `minLength`, `maxLength`, `pattern`,
-`maxItems`, `uniqueItems`, or a `minItems` other than 0/1) — a scan across 13
-agents came back completely clean. So no Pydantic model in this repo needs to
-change.
+**Caveat: the bump is verified to fix the routing, not verified to be safe.** The
+overlay imported cleanly and `get_optional_params` behaved, but the test suite has
+not been run under 1.100.0. That is the next step, against the 156-test baseline
+below.
 
-### This is a LiteLLM gap, not an Anthropic limitation
+### Our schemas were never the problem
 
-Anthropic natively supports exactly the shape this pipeline needs:
+**Executed** — a scan across 13 agents found every output schema clean: no
+`minimum`, `maximum`, `multipleOf`, `minLength`, `maxLength`, `pattern`,
+`maxItems`, `uniqueItems`, no `minItems` outside 0/1, and no external `$ref`.
 
-- **Structured outputs and tool use compose in one request.** Claude either calls a
-  tool (`stop_reason: "tool_use"`) or returns structured JSON (`end_turn`),
-  deciding per turn. No forced `tool_choice`, so the tool loop survives intact.
-- `claude-sonnet-5` is on the supported-model list, as are `claude-opus-5` and
-  `claude-fable-5-1`.
-- The current parameter is `output_config.format`; `output_format` — which is what
-  LiteLLM's native branch emits — is deprecated but accepted during a transition
-  period.
+`$defs`/`$ref` are present in all of them (`ensure_strict_json_schema` at
+`agents/agent_output.py:113` applies strict rules *through* refs without inlining
+them), but **documented**: internal refs are supported and only external
+(`http://...`) refs are not. No Pydantic model in this repo needs to change.
 
-So the capability exists, our schemas qualify for it, and the only obstacle is
-LiteLLM's routing. **Confirmed** that the gate (`transformation.py:988`-`:1005`) is
-a bare hardcoded set of model-name substrings with no model-registry lookup, no
-config flag, and no override hook — so `litellm.register_model` cannot reach it
-either. The set is stale on LiteLLM `main` as well, so there is no version to
-upgrade to.
-
-Ways out, roughly in order of appeal:
-
-1. Upstream a patch to LiteLLM adding the current model names to that set (or
-   making it consult `supports_response_schema` in the model registry). Three
-   lines, and correct for everyone.
-2. Carry a small local shim overriding that one branch until upstream lands. This
-   is the only option that unblocks `EXTRACTION_MODEL` without touching agent code.
-3. Enable thinking. Per `:1017` no `tool_choice` is set when thinking is enabled,
-   so the model is merely nudged toward the output tool and can still reach the
-   real tools. Keeps the loop alive, but stays on the emulation path and is
-   non-deterministic.
-4. Stop using `output_type` on the tool-using agents and parse a final message
-   instead. Largest change, provider-independent.
-
-`claude-fable-5-1` additionally rejects forced `tool_choice` outright, so it cannot
-be `EXTRACTION_MODEL` on the emulation path at all. Worth rejecting that
-combination in `Env` validation rather than discovering it in production.
-
-Two smaller notes: structured outputs add a system prompt, so enabling them shifts
-input token counts and invalidates any existing prompt cache for the thread; and
-compiled grammars are cached for 24h but invalidated by a change to the schema *or
-to the set of tools in the request*.
+Also **documented**, and relevant either way: structured outputs and tool use
+compose in one request — Claude either calls a tool (`stop_reason: "tool_use"`) or
+returns structured JSON (`end_turn`), deciding per turn. The current parameter is
+`output_config.format`; LiteLLM's native branch still emits the deprecated
+`output_format`, accepted during a transition period.
 
 ## Blocker 2: `conversation_id` → sessions
 
 `lib/tasks/handlers.py` repeats the same six-step dance in ~12 handlers: read
-`task.conversation_id`, call `ensure_conversation_id()`, branch on
+`task.conversation_id`, `ensure_conversation_id()`, branch on
 `additional_context`, `Runner.run(..., conversation_id=...)`, persist the id back.
 
 Sessions and `conversation_id` are mutually exclusive within a run, so this is a
 swap, not a layering. Two independently verifiable steps:
 
 1. Replace `conversation_id=X` with `session=OpenAIConversationsSession(conversation_id=X)`.
-   **Confirmed** that its constructor accepts an existing id
-   (`agents/memory/openai_conversations_session.py:23`, created lazily when
-   `None`) — so this step is behavior-preserving on our already-persisted ids,
-   and it collapses 12 copies into one helper.
+   **Source-read**: the constructor accepts an existing id
+   (`agents/memory/openai_conversations_session.py:23`, created lazily when `None`),
+   so this is behavior-preserving on already-persisted ids and collapses 12 copies
+   into one helper.
 2. Swap the implementation for a local session.
+
+**Check the `openai-agents` bump before writing any of this.** We are on 0.7.0
+against a latest of 0.22.2. The `# unused` annotation on `LitellmModel`'s
+`conversation_id` may well have been implemented across fifteen minor versions,
+which would shrink or eliminate this blocker entirely.
 
 ### Two constraints on step 2
 
-**`SQLAlchemySession` needs an async engine.** Its constructor
+**Source-read**: `SQLAlchemySession`
 (`agents/extensions/memory/sqlalchemy_session.py:59`) is
 `(session_id, *, engine: AsyncEngine, create_tables=False, sessions_table='agent_sessions', messages_table='agent_messages')`.
-`AsyncEngine` means an async driver — `sqlite+aiosqlite://`. Our `lib/api/db.py`
-engine is sync and **cannot be reused**; this means adding `aiosqlite` and running
-a second, parallel engine against the same file.
-
-**Its schema trips our known SQLite hazard.** `agent_messages` → `agent_sessions`
-carries `ondelete="CASCADE"`. `create_tables` defaults to `False`, so these want
+`AsyncEngine` requires an async driver (`sqlite+aiosqlite://`); the sync engine in
+`lib/api/db.py` cannot be reused, so this means adding `aiosqlite` and a second
+engine against the same file. Its `agent_messages` → `agent_sessions` foreign key
+carries `ondelete="CASCADE"`, and `create_tables` defaults to `False`, so it wants
 an Alembic migration — see the `batch_alter_table` + `PRAGMA foreign_keys` rules in
-`CLAUDE.md`, and the June 2026 incident that motivated them.
+`CLAUDE.md` and the June 2026 incident behind them.
 
 ### Storage design worth deciding first
 
@@ -168,29 +135,22 @@ Turn 0 is deterministically reconstructible — it is
 `format_paper_context(fulltext_md(paper_id, supplement_format), gene_symbol)` plus
 the agent's instructions, all already in the database. A custom session storing
 only assistant outputs and follow-up turns, rebuilding turn 0 on demand, would be
-far lighter and would sidestep both constraints above.
-
-The tradeoff: we lose the intermediate tool-call transcript the Conversations API
-currently replays. For a follow-up that asks the model to revisit its own
-conclusion, replaying `[initial message, final output, follow-up]` is probably
-enough — but that is a judgment call.
+far lighter and sidesteps both constraints above. The tradeoff is losing the
+intermediate tool-call transcript the Conversations API replays today.
 
 ## Blocker 3: prompt caching
 
-OpenAI caches automatically. Anthropic requires explicit `cache_control`
-breakpoints. HPO linking runs `max_turns=15` and MONDO 25, and every turn re-sends
-the full paper markdown, so this is real money.
-
-**The seam exists and is confirmed.** LiteLLM accepts a top-level
-`cache_control_injection_points` parameter, consumed by
-`integrations/anthropic_cache_control_hook.py:55`. Injection points are shaped
-`{"location": "message", "role": ..., "index": int|str (negatives allowed), "control": {"type": "ephemeral"}}`.
-`cache_control` keys inside message content blocks are honored too. Nothing is
-automatic — it must be requested.
-
-And it reaches LiteLLM through the agents SDK: `ModelSettings.extra_args` is
+**The mechanism works and is one line.** LiteLLM accepts a top-level
+`cache_control_injection_points` parameter, and `ModelSettings.extra_args` is
 splatted into the `litellm.acompletion` call as top-level kwargs
-(`litellm_model.py:475`-`:476`). So:
+(`litellm_model.py:475`-`:476`). **Executed** — the hook injects the breakpoint
+onto the paper-bearing message, targeting by role so no index is hardcoded:
+
+```json
+{"role": "user",
+ "content": "PAPER AND GENE CONTEXT ...",
+ "cache_control": {"type": "ephemeral"}}
+```
 
 ```python
 ModelSettings(extra_args={'cache_control_injection_points': [
@@ -198,39 +158,124 @@ ModelSettings(extra_args={'cache_control_injection_points': [
 ]})
 ```
 
-There is **no** per-message or per-content-block hook in the SDK — messages are
-built wholly by the converter — so `extra_args` is the only seam. Note the hook
-deep-copies messages on every call.
+`ttl` goes in that same `control` dict. There is no per-message hook in the agents
+SDK — messages are built wholly by the converter — so `extra_args` is the only seam.
 
-Remaining unknown: whether that actually yields nonzero cache reads in practice,
-and whether the 5-minute default TTL survives our inter-task gaps or needs the
-1-hour TTL. Needs a live key.
+Why this should pay off well here (**documented**): the tool loop is exactly
+Anthropic's incremental multi-turn pattern — write at the breakpoint, next
+request's lookback finds the prior write. HPO's 15 turns and MONDO's 25 re-send the
+paper every turn, so everything after turn 1 reads at 0.1x. For one HPO run over an
+~80k-token paper that is roughly $2.40 uncached against ~$0.42 cached. Our prompt
+is already ordered correctly: `message = f'{paper_context}\n\n{INSTRUCTIONS}'` puts
+the stable paper first in a *single* user block, which avoids the documented
+headline mistake of putting a breakpoint on content that changes per request.
+Sonnet 5's minimum cacheable prefix is 1,024 tokens; a paper is far above it.
 
-## Correction: `log_cache_metrics` needs no change
+Two real limits:
 
-An earlier revision of this doc claimed the metric would silently report `0.0%` on
-Anthropic and had to be fixed before any flip. **That was wrong.**
-`litellm_model.py:212`-`:214` translates litellm's
-`prompt_tokens_details.cached_tokens` into the SDK's
-`input_tokens_details.cached_tokens` — exactly what `log_cache_metrics` already
-reads. litellm's `prompt_tokens` also already includes cached tokens, so the
-percentage denominator is right too. No change required.
+**Cross-agent reuse is structurally impossible.** Prefix order is
+`tools → system → messages`. Each agent has different instructions and a different
+tool set, so the paper always sits behind a divergent prefix and the cumulative
+hash at that block differs per agent. You get one cache entry per *agent run*, not
+per paper — and it cannot be fixed by reordering, because `system` always renders
+before `messages`. With ~40 runs per paper, that is the ceiling on savings.
 
-## The VLM path is already migratable
+**The 5-minute default TTL probably does not fit this pipeline.** It is measured
+from the *start* of the writing or reading request, and generation time counts
+against it. Fine within one tool loop; risky across tasks. The worker runs
+sequentially under a 900s lease, and demographics / phenotype extraction / HPO
+linking fan out per patient. If consecutive runs land more than ~5 minutes apart,
+every one pays a fresh write at 1.25x and never reads — worse than not caching at
+all. `ttl: "1h"` (2x write, still 0.1x read) is likely right, but it is a
+measurement call once something is actually running.
 
-`vlm_describe` calls `litellm.completion` directly — no `conversation_id`, no
-structured output, no tools. It is the one seam in PR #137 that touches none of
-the three blockers, so flipping `VLM_MODEL` is a one-line env change that buys real
-production signal (auth, latency, refusal handling, billing shape) while the rest
-proceeds.
+Minor: `max_tokens: 0` pre-warming is rejected when structured outputs are on, so
+the paper cannot be pre-warmed ahead of a run.
 
-Two things to confirm first, since either could invalidate the target:
+## Corrections log
+
+Three claims in earlier revisions of this document were wrong. Recorded so the
+reasoning is auditable.
+
+1. **`log_cache_metrics` needs fixing.** Retracted. `litellm_model.py:212`-`:214`
+   translates litellm's `prompt_tokens_details.cached_tokens` into the SDK's
+   `input_tokens_details.cached_tokens` — exactly what the function already reads —
+   and litellm's `prompt_tokens` already includes cached tokens, so the denominator
+   is right too. (Raw Anthropic `input_tokens` *excludes* cached tokens, which is
+   where the confusion came from; litellm normalizes to OpenAI semantics.)
+2. **Unresolved `$defs`/`$ref` would be rejected.** Retracted. Internal refs are
+   supported; only external ones are not. LiteLLM's `unpack_defs` comment refers to
+   the external case.
+3. **"There is no LiteLLM version to upgrade to."** Retracted, and it was the
+   costliest error — it argued for a local shim and an upstream PR when a bump
+   suffices. It came from a grep for `sonnet-5` returning nothing on `main`; the
+   control term `sonnet-4.6` also returned nothing, which should have revealed
+   immediately that the mechanism had been refactored rather than left stale.
+
+## The VLM path
+
+Still the best first move: `vlm_describe` calls `litellm.completion` directly — no
+`conversation_id`, no structured output, no tools — so it touches none of the
+blockers and `VLM_MODEL` is a one-line env change.
+
+Images now go as base64 data URLs rather than signed GCS URLs, which removed
+`google-cloud-storage`, ADC credentials, the bucket, and a 12-hour URL expiry that
+could lapse before a retry. **Documented**: a data URL is the form LiteLLM's
+Anthropic provider documents, and an HTTPS URL would also have worked (LiteLLM maps
+it to Anthropic's native `source.type: "url"`). `detail: 'high'` is ignored on
+Anthropic and still meaningful on OpenAI, so it is harmless.
+
+### Open bug: truncation is treated as success
+
+**Executed** — `vlm_describe`'s guard is
+`finish_reason not in (None, 'stop', 'length', 'end_turn')`, and litellm's
+`_FINISH_REASON_MAP` maps Anthropic `max_tokens` → `'length'`, which is in the
+*allowed* list:
+
+```
+normal completion  finish_reason=stop           -> returned content: 'complete table'
+TRUNCATED          finish_reason=length         -> returned content: '| A | B |\n| 1 |'
+Anthropic refusal  finish_reason=content_filter -> declined (None)
+```
+
+So a cut-off response is returned as valid content. For `extract_table_from_image`
+that is a silently truncated markdown table accepted as a complete extraction.
+`'length'` should be a failure.
+
+Two notes alongside it: the refusal handling *does* work (`refusal` →
+`'content_filter'` → declines correctly), and `'end_turn'` in that tuple is dead —
+litellm normalizes it to `'stop'`, so it never appears.
+
+Also **executed**: `get_max_tokens_for_model('claude-sonnet-5')` returns `128000`,
+not the 4096 the LiteLLM docs claim. So truncation at 4096 is not the risk; a 128k
+`max_tokens` on a *non-streaming* call inviting HTTP timeouts is. `vlm_describe`
+should set an explicit, modest `max_tokens`.
+
+### Before flipping `VLM_MODEL`
 
 - **Data retention.** `claude-fable-5-1` requires 30-day retention and is not
   available under zero data retention without Anthropic's express authorization.
 - **Cost.** Fable 5.1 is $10/$50 per MTok against Sonnet 5 at $2/$10. Worth
-  checking whether Sonnet 5 clears the bar on pedigrees and tables before
-  committing to the premium tier.
+  checking whether Sonnet 5 clears the bar on pedigrees and tables first.
+
+## Dependency versions
+
+| package | pinned | resolved | latest |
+|---|---|---|---|
+| `litellm` | `>=1.75` | 1.83.0 | 1.100.0 |
+| `openai-agents` | `==0.7.0` | 0.7.0 | 0.22.2 |
+| `openai` | `==2.15.0` | 2.15.0 | 3.11.0 |
+
+Three separate jobs, and they should not be bundled — if something breaks you want
+to know which bump did it. The `litellm` bump is surgical, already a loose pin, and
+fixes Blocker 1. `openai-agents` and `openai` are a hard-pinned fifteen-minor and a
+major respectively, under the library the whole of `lib/tasks/handlers.py` is built
+on; that wants its own change with the test suite as the gate.
+
+Whatever happens, `litellm` should get an upper bound. The behavior that decides
+native-vs-emulated structured output is undocumented and version-specific, and an
+unbounded pin can silently move every agent between the two paths in either
+direction.
 
 ## Observability gap
 
@@ -241,47 +286,53 @@ OpenAI by default. But it removes run-level observability immediately before the
 migration where we would most want to compare runs across providers. Structured
 logging off `result.raw_responses` would fill it cheaply.
 
-Worth pairing with a check that the tool loop actually ran — given Blocker 1a, an
-HPO linking run that makes zero tool calls is the failure signature to alarm on.
+Worth pairing with an alarm on a tool-using agent that completes with zero tool
+calls — that is the signature of Blocker 1 recurring after a dependency bump.
 
-## Dependency pin hazard
+## Local environment
 
-`pyproject.toml` pins `litellm>=1.75` with no upper bound, and the allowlist that
-decides native-vs-emulated structured output is version-specific and undocumented.
-A routine resolver bump can silently move every agent between the two paths in
-either direction. This wants an upper bound.
+Verified working, and the README's prerequisites are now accurate (the `make ci` /
+`make test` references were removed — there is no Makefile):
 
-## What still needs a live API key
+```bash
+uv sync && uv pip install -e .        # Python 3.12.14
+ENV_FILE=.env.test uv run pytest test -q
+```
 
-Everything above is settled. These are not:
+**Executed**: 156 passed on the PR's own commits; 157 after the base64 change (two
+GCS branch tests out, three data-URL tests in). ruff, format and mypy clean. Runtime
+was 265s cold and 28s warm.
 
-1. Does a shimmed native path actually work end-to-end — `output_config.format`
-   (or LiteLLM's `output_format`) plus real tools, with the agents SDK parsing the
-   result and the tool loop still running? This is the go/no-go for
-   `EXTRACTION_MODEL`. The documentation says yes; nobody has run it here.
-2. Does `claude-fable-5-1` actually 400 on forced `tool_choice`? One call.
-3. Does `cache_control_injection_points` via `extra_args` produce nonzero
-   `cache_read_input_tokens`, and does the default TTL survive our task gaps? Two
-   calls plus a gap.
+One wrinkle: `uv run` re-syncs from the lockfile and undoes `uv pip install -e .`,
+so the README's two-step is partly self-defeating.
+
+## What still needs a live key
+
+1. **End-to-end on OpenAI first.** This needs only an `OPENAI_API_KEY` and no
+   Anthropic involvement, and it would exercise the real pipeline plus the base64
+   image change — which currently has no end-to-end coverage for *either* provider.
+   The README has a ready case (MASP1, PMID 26419238). Do this before any switch,
+   to establish a known-good reference.
+2. Does the native structured-output path work end-to-end on Anthropic — schema
+   accepted, tool loop still running, SDK parsing the result? The go/no-go for
+   `EXTRACTION_MODEL`.
+3. Does `cache_control_injection_points` produce nonzero `cache_read_input_tokens`,
+   and does the TTL survive our task gaps?
 4. Fable 5.1 vs Sonnet 5 quality on pedigree and table images. Needs a real eval
    set, not a spike.
-
-Schema conformance is *no longer* on this list — Anthropic's documented
-restrictions plus the offline scan settle it without a call.
-
-Note LiteLLM authenticates with a raw `x-api-key`; an `ant auth login` OAuth
-profile will not be picked up. This needs an actual `ANTHROPIC_API_KEY`.
 
 ## Suggested order
 
 1. Merge PR #137. CI is green, no conflicts; it needs an approving review.
-2. Pin an upper bound on `litellm`.
-3. Flip `VLM_MODEL` to Anthropic behind the retention check — real signal, and it
-   depends on none of the blockers.
-4. Resolve Blocker 1 — the go/no-go for `EXTRACTION_MODEL`. Shim the LiteLLM gate
-   locally to unblock, and upstream the fix in parallel so the shim is temporary.
-5. Sessions refactor, in the two steps above.
-6. Caching, once a model is actually running on Anthropic.
+2. Fix the `vlm_describe` truncation bug and set an explicit `max_tokens` — a live
+   correctness bug on the current OpenAI path, independent of the migration.
+3. Bump `litellm` and re-run the suite against the 156-test baseline. Add an upper
+   bound.
+4. Get an OpenAI key and run the pipeline end-to-end for a known-good reference.
+5. Flip `VLM_MODEL` behind the retention check.
+6. Check whether the `openai-agents` bump moots Blocker 2, then do the sessions
+   refactor.
+7. Caching, once something is actually running on Anthropic.
 
 ## Reproducing the offline findings
 
@@ -308,3 +359,5 @@ print('tools sent :', [t.get('name') or t['function']['name'] for t in op.get('t
 print('has $ref   :', '"$ref"' in json.dumps(op.get('tools')))
 PY
 ```
+
+Add `--with 'litellm==1.100.0'` after `uv run` to see the native path instead.
