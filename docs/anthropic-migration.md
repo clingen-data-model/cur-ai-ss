@@ -192,8 +192,9 @@ one paper's session file first — if it is not actually a problem, the question
 **The mechanism works and is one line.** LiteLLM accepts a top-level
 `cache_control_injection_points` parameter, and `ModelSettings.extra_args` is
 splatted into the `litellm.acompletion` call as top-level kwargs
-(`litellm_model.py:475`-`:476`). **Executed** — the hook injects the breakpoint
-onto the paper-bearing message, targeting by role so no index is hardcoded:
+(`litellm_model.py:475`-`:476`). **Executed** — the hook rewrites the outgoing
+messages to carry a real breakpoint (this probe targeted the paper message by role
+to prove the mechanism; see below for why the recommended config differs):
 
 ```json
 {"role": "user",
@@ -260,9 +261,24 @@ and ephemeral, and a read only finds an entry a *prior request wrote* that has n
 expired; it is not content-addressed. A byte-identical prefix sent after the TTL is
 a miss, not a hit.
 
-This is measurable before committing to anything: task timestamps are already in
-the database, so the real distribution of extraction→rerun intervals is a query.
-That distribution, not a guess, should pick the TTL.
+**One hour is the ceiling — there is no longer option.** Anthropic offers exactly
+two TTLs, `5m` (the default) and `1h`. A day-long or indefinite cache is not
+something we can opt into, so this is a choice between two values, not a tunable.
+
+The one thing that softens that: **the TTL is measured from the start of the request
+that writes *or reads* the entry**, so a read refreshes it (the pricing table calls
+it "cache read (hit/refresh)"). The limit is on *idle* time, not total age. A prefix
+touched at least hourly stays hot indefinitely — a paper being worked continuously
+could hold its cache all afternoon — while a follow-up the next morning is cold
+regardless of configuration.
+
+So the measurement question is not "how long do we want" but "what fraction of
+extraction→rerun gaps fall under an hour." Task timestamps are already in the
+database, so that is a query. If most reruns are next-day, `1h` buys nothing for the
+review loop and we would be paying **2x on every write instead of 1.25x** to get it.
+The intra-pipeline case is the more reliable payoff: roughly 40 runs per paper very
+likely span more than 5 minutes and less than an hour, which is precisely the band
+`1h` covers and `5m` misses.
 
 Minor: `max_tokens: 0` pre-warming is rejected when structured outputs are on, so
 the paper cannot be pre-warmed ahead of a run.
