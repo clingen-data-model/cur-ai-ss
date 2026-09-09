@@ -7,7 +7,7 @@ from pathlib import Path
 from agents import Agent, Runner, function_tool
 from pydantic import BaseModel
 
-from lib.agents.model_factory import extraction_model
+from lib.agents.model_factory import extraction_model, extraction_model_settings
 from lib.agents.vision import vlm_describe
 from lib.core.environment import env
 from lib.core.logging import setup_logging
@@ -46,6 +46,7 @@ def table_correction_agent_for_image(image_path: Path) -> Agent:
         name='table_corrector',
         instructions=TABLE_CORRECTION_INSTRUCTIONS,
         model=extraction_model(),
+        model_settings=extraction_model_settings(),
         output_type=TableCorrectionResult,
         tools=[extract_table_from_image],
     )

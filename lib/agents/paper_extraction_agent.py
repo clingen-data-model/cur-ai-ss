@@ -8,7 +8,7 @@ from agents import Agent, function_tool
 from pydantic import BaseModel
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
-from lib.agents.model_factory import extraction_model
+from lib.agents.model_factory import extraction_model, extraction_model_settings
 from lib.core.environment import env
 from lib.models import PaperExtractionOutput
 
@@ -205,6 +205,7 @@ agent = Agent(
     name='paper_extractor',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
+    model_settings=extraction_model_settings(),
     output_type=PaperExtractionOutput,
     tools=[pubmed_search_and_titles, pubmed_fetch_one],
 )

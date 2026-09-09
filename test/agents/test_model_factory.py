@@ -1,7 +1,12 @@
 import pytest
 from agents.extensions.models.litellm_model import LitellmModel
 
-from lib.agents.model_factory import provider_api_key, resolve_model, split_provider
+from lib.agents.model_factory import (
+    model_settings_for,
+    provider_api_key,
+    resolve_model,
+    split_provider,
+)
 from lib.core.environment import env
 
 
@@ -34,3 +39,29 @@ def test_provider_api_key(monkeypatch):
     assert provider_api_key('openai/gpt-5.6-sol') == 'sk-openai'
     assert provider_api_key('anthropic/claude-fable-5-1') == 'sk-ant'
     assert provider_api_key('gemini/x') is None
+
+
+@pytest.mark.parametrize('name', ['openai/gpt-5.6-luna', 'gemini/some-model'])
+def test_non_anthropic_models_get_no_cache_args(name):
+    """extra_args reaches the OpenAI Responses call too, where
+    cache_control_injection_points is an unrecognized parameter."""
+    assert model_settings_for(name).extra_args is None
+
+
+def test_anthropic_models_get_hour_long_cache_breakpoints():
+    settings = model_settings_for('anthropic/claude-sonnet-5')
+
+    points = (settings.extra_args or {})['cache_control_injection_points']
+    assert [p.get('role') or p.get('index') for p in points] == ['system', -1]
+    assert {p['control']['ttl'] for p in points} == {'1h'}
+
+
+def test_cache_breakpoint_targets_the_last_message_not_a_role():
+    """Role targeting marks every match against a cap of four, which on a thread
+    accumulating follow-ups skips the newest message."""
+    points = (model_settings_for('anthropic/claude-sonnet-5').extra_args or {})[
+        'cache_control_injection_points'
+    ]
+
+    assert not any(p.get('role') == 'user' for p in points)
+    assert any(p.get('index') == -1 for p in points)

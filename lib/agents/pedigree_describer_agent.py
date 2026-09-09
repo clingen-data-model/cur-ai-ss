@@ -4,7 +4,7 @@ from agents import Agent, function_tool
 from pydantic import BaseModel
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
-from lib.agents.model_factory import extraction_model
+from lib.agents.model_factory import extraction_model, extraction_model_settings
 from lib.agents.vision import vlm_describe
 from lib.core.environment import env
 from lib.misc.images import image_to_data_url
@@ -139,6 +139,7 @@ def pedigree_describer_agent_for_paper(
         name='pedigree_describer',
         instructions=BASE_SYSTEM_INSTRUCTIONS,
         model=extraction_model(),
+        model_settings=extraction_model_settings(),
         output_type=PedigreeExtractionOutput,
         tools=[analyze_pedigree_image],
     )

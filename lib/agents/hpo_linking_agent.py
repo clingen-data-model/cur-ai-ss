@@ -2,7 +2,7 @@ import hpotk
 from agents import Agent, function_tool
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
-from lib.agents.model_factory import extraction_model
+from lib.agents.model_factory import extraction_model, extraction_model_settings
 from lib.core.environment import env
 from lib.models.evidence_block import ReasoningBlock
 from lib.models.phenotype import HPOTerm
@@ -363,6 +363,7 @@ agent = Agent(
     name='hpo_linker',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
+    model_settings=extraction_model_settings(),
     output_type=ReasoningBlock[HPOTerm],
     tools=[search_hpo_terms, get_hpo_term, get_hpo_parents, get_hpo_children],
 )

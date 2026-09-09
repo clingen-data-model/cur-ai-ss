@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
-from lib.agents.model_factory import extraction_model
+from lib.agents.model_factory import extraction_model, extraction_model_settings
 from lib.core.environment import env
 from lib.models import ExtractedPhenotype
 
@@ -392,5 +392,6 @@ agent = Agent(
     name='phenotype_patient_linker',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
+    model_settings=extraction_model_settings(),
     output_type=list[ExtractedPhenotype],
 )

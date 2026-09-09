@@ -6,7 +6,7 @@ from agents import Agent, RunContextWrapper, function_tool
 from pydantic import BaseModel
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
-from lib.agents.model_factory import extraction_model
+from lib.agents.model_factory import extraction_model, extraction_model_settings
 from lib.api.db import session_scope
 from lib.core.environment import env
 from lib.models.base import row_to_dict
@@ -349,6 +349,7 @@ def make_routing_agent(paper_id: int, user_id: int) -> Agent:
         name='chat_router',
         instructions=BASE_SYSTEM_INSTRUCTIONS,
         model=extraction_model(),
+        model_settings=extraction_model_settings(),
         output_type=ChatRoutingOutput,
         tools=[  # type: ignore[list-item]
             _make_fetch_tasks_tool(paper_id),

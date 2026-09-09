@@ -6,7 +6,7 @@ from collections import Counter
 from agents import Agent, function_tool
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
-from lib.agents.model_factory import extraction_model
+from lib.agents.model_factory import extraction_model, extraction_model_settings
 from lib.core.environment import env
 from lib.models.patient_variant_occurrences import TestingMethod
 from lib.models.segregation_analysis import (
@@ -309,6 +309,7 @@ agent = Agent(
     name='segregation_analysis_computed',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
+    model_settings=extraction_model_settings(),
     output_type=SegregationAnalysisComputedOutput,
     tools=[
         compute_scoring_method,

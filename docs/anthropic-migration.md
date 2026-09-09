@@ -218,9 +218,17 @@ unconditionally would send `cache_control_injection_points` to OpenAI, which doe
 not know the parameter — plausibly a 400 on every agent call. `model_factory`
 already knows the provider via `split_provider`, so that is where the gate belongs.
 
-Nothing consumes this yet, and deliberately so: it is dead config until
-`EXTRACTION_MODEL` names an Anthropic model, and it cannot be exercised without a
-key. It lands with the flip, not before.
+**Wired in `model_factory.model_settings_for()`**, gated on the provider, and every
+agent takes `model_settings=extraction_model_settings()`. **Executed** against real
+agents under both providers:
+
+```
+openai/gpt-8               hpo_linking_agent   extra_args=none
+anthropic/claude-sonnet-5  hpo_linking_agent   extra_args=[{... "ttl": "1h"}, {"index": -1, ...}]
+```
+
+Whether Anthropic then reports nonzero `cache_read_input_tokens` is still
+unobserved — that needs a key.
 
 **Use `index: -1`, not `role: 'user'`.** Role targeting returns *every* matching
 index (`anthropic_cache_control_hook.py:336`) and the cap is
