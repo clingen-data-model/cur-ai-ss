@@ -27,6 +27,11 @@ type HumanEvidenceBlock<T = string> = {
   image_id?: number | null
   is_supplement?: boolean
   human_edit_note?: string | null
+  // Per-field edit attribution. edited_by_name is an immutable snapshot of the
+  // editor's name, so it survives the user being renamed or deleted.
+  edited_by_user_id?: number | null
+  edited_by_name?: string | null
+  edited_at?: string | null
 }
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -76,8 +81,11 @@ function EvidenceCell({
   evidence: HumanEvidenceBlock<unknown>
   onHighlight?: (args: HighlightArgs) => void
 }) {
-  const { reasoning, quote } = evidence
+  const { reasoning, quote, edited_by_name, edited_at } = evidence
   const query = quote || (evidence.value != null ? String(evidence.value) : null)
+  // edited_at is an ISO timestamp; slice rather than parse so the date shown is
+  // the one stored, not the viewer's timezone shifted off it.
+  const editedWhen = edited_at ? ` on ${edited_at.slice(0, 10)}` : ''
   return (
     <div className="pt-5 text-xs text-muted-foreground space-y-1">
       <div className="flex items-start justify-between gap-1">
@@ -95,6 +103,12 @@ function EvidenceCell({
       </div>
       {quote ? <p className="text-muted-foreground/60 leading-snug">"{quote}"</p> : null}
       {!reasoning && !quote ? <p className="text-muted-foreground/30">—</p> : null}
+      {edited_by_name ? (
+        <p className="text-muted-foreground/60 leading-snug">
+          ✏️ Edited by {edited_by_name}
+          {editedWhen}
+        </p>
+      ) : null}
     </div>
   )
 }
