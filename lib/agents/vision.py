@@ -4,18 +4,24 @@ Both VLM tools (pedigree description, table extraction) call this instead of
 constructing a client and reading the response themselves, so the stop-reason
 handling below exists once rather than twice.
 
-The signature matches the LiteLLM-routed version on the model-routing branch, so
-that work replaces this module's internals without touching either call site.
+Calls go through litellm rather than the OpenAI client so VLM_MODEL is a
+one-line env change: the vision path has no conversation_id, no structured
+output and no tools, so it touches none of what still pins the extraction
+agents to the Responses API.
 """
 
 import logging
 
-from openai import OpenAI
+import litellm
 
-from lib.agents.model_factory import vlm_model
-from lib.core.environment import env
+from lib.agents.model_factory import provider_api_key, vlm_model
 
 logger = logging.getLogger(__name__)
+
+# Bound the reply explicitly. Left unset, litellm fills in the model's ceiling
+# (128k on Anthropic), and a non-streaming call with that much headroom invites
+# an HTTP timeout rather than an answer.
+MAX_TOKENS = 16384
 
 
 def vlm_describe(image_url: str, prompt: str) -> str | None:
@@ -37,16 +43,18 @@ def vlm_describe(image_url: str, prompt: str) -> str | None:
     that stopped us asking it.
     """
     model = vlm_model()
-    client = OpenAI(api_key=env.OPENAI_API_KEY)
 
-    response = client.chat.completions.create(
+    response = litellm.completion(
         model=model,
+        api_key=provider_api_key(model),
+        max_tokens=MAX_TOKENS,
         messages=[
             {
                 'role': 'user',
                 'content': [
                     {
                         'type': 'image_url',
+                        # detail is ignored on Anthropic, still meaningful on OpenAI.
                         'image_url': {'url': image_url, 'detail': 'high'},
                     },
                     {'type': 'text', 'text': prompt},
@@ -63,6 +71,8 @@ def vlm_describe(image_url: str, prompt: str) -> str | None:
             f'discarding partial output'
         )
         return None
+    # litellm normalizes Anthropic's 'end_turn' to 'stop', so the accepted set
+    # stays the same across providers.
     if finish_reason not in (None, 'stop'):
         logger.warning(
             f'VLM call declined (finish_reason={finish_reason}, model={model})'

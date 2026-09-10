@@ -169,13 +169,13 @@ def log_cache_metrics(task_type: str, result: Any) -> None:
         if not hasattr(resp, 'usage'):
             continue
 
+        # Usage shape differs by provider -- a LiteLLM-routed response may omit
+        # the details object entirely. Absent fields mean 0, never an
+        # AttributeError: this is logging, and it must not be what fails a run.
         usage = resp.usage
-        input_tokens = usage.input_tokens or 0
-        cache_read = (
-            usage.input_tokens_details.cached_tokens
-            if usage.input_tokens_details and usage.input_tokens_details.cached_tokens
-            else 0
-        )
+        input_tokens = getattr(usage, 'input_tokens', None) or 0
+        details = getattr(usage, 'input_tokens_details', None)
+        cache_read = getattr(details, 'cached_tokens', None) or 0
 
         total_input += input_tokens
         total_cache_read += cache_read

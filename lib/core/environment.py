@@ -8,7 +8,11 @@ from urllib.parse import quote
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from lib.core.model_names import ROUTABLE_PROVIDERS, split_provider
+from lib.core.model_names import (
+    PROVIDER_KEY_SETTINGS,
+    ROUTABLE_PROVIDERS,
+    split_provider,
+)
 
 
 class LogLevel(str, Enum):
@@ -25,13 +29,12 @@ class Env(BaseSettings):
     NCBI_EMAIL: Optional[str] = None
 
     # Model selection: LiteLLM-style '<provider>/<model>' names, prefix
-    # required ('openai/gpt-5.6-luna', 'anthropic/claude-sonnet-5'). Only
-    # 'openai/' has a route today -- see lib/agents/model_factory.py.
+    # required ('openai/gpt-5.6-luna', 'anthropic/claude-sonnet-5').
+    # 'openai/' goes to the agents SDK's default provider, 'anthropic/'
+    # through LiteLLM -- see lib/agents/model_factory.py.
     EXTRACTION_MODEL: str = 'openai/gpt-5.6-luna'
     VLM_MODEL: str = 'openai/gpt-5.6-sol'
     OPENAI_API_KEY: Optional[str] = None
-    # Accepted so a deployment can carry the key ahead of the routing work.
-    # Unused until then: an 'anthropic/' model is rejected below.
     ANTHROPIC_API_KEY: Optional[str] = None
     LOG_LEVEL: LogLevel = LogLevel.INFO
 
@@ -94,8 +97,9 @@ class Env(BaseSettings):
                     f'{setting}={model!r} names provider {provider!r}, which has '
                     f'no route yet. Supported: {supported}.'
                 )
-            if provider == 'openai' and not self.OPENAI_API_KEY:
-                raise ValueError(f'{setting}={model!r} requires OPENAI_API_KEY.')
+            key_setting = PROVIDER_KEY_SETTINGS[provider]
+            if not getattr(self, key_setting):
+                raise ValueError(f'{setting}={model!r} requires {key_setting}.')
         return self
 
     @field_validator('NCBI_EMAIL', mode='after')
