@@ -139,11 +139,11 @@ Configuration is in `lib/core/environment.py` using Pydantic BaseSettings:
 **Required:**
 - `EXTRACTION_MODEL` - Text-extraction model as `<provider>/<model>` (default: `openai/gpt-5.6-luna`); prefix required
 - `VLM_MODEL` - Vision model, same form (default: `openai/gpt-5.6-sol`)
-- `OPENAI_API_KEY` - required for whichever provider the configured models name (only `openai/` resolves today)
+- `OPENAI_API_KEY` - required whenever a configured model names `openai/`
 - `JWT_SECRET_KEY` - Secret used to sign auth access tokens (set a strong value in prod)
 
 **Optional:**
-- `ANTHROPIC_API_KEY` - accepted, but `anthropic/` models have no route until model routing lands
+- `ANTHROPIC_API_KEY` - required whenever a configured model names `anthropic/`. `anthropic/` routes through LiteLLM; `openai/` goes to the agents SDK's default provider. The two settings may name different providers, so vision can run on Claude while extraction stays on OpenAI. Extraction itself cannot move to `anthropic/` yet — it still depends on OpenAI's server-side `conversation_id` (see `docs/anthropic-migration.md`)
 - `NCBI_API_KEY` / `NCBI_EMAIL` - For variant enrichment
 - `API_ENDPOINT` - Where UI reaches API (default: `localhost:8000`)
 - `CORS_ALLOWED_ORIGINS` - CORS origins (default: `http://localhost:8501`)

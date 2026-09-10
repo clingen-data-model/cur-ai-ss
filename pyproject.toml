@@ -9,15 +9,19 @@ authors = [
 dependencies = [
     # General utilities
     "pydantic==2.12.5",
-    "pydantic-settings==2.12.0",
+    "pydantic-settings==2.14.1",
     "requests>=2.32.5",
     "rapidfuzz>=3.0",
     # Auth
     "bcrypt>=4.2.0",
     "pyjwt>=2.10.0",
     # AI/ML
-    "openai==2.15.0",
-    "openai-agents==0.7.0",
+    "openai==2.20.0",
+    "openai-agents[litellm]==0.7.0",
+    # Pinned exactly: whether a model gets Anthropic's native structured
+    # outputs or a forced-tool emulation is undocumented and version-specific,
+    # and the emulation silently starves tool-using agents of their tools.
+    "litellm==1.100.0",
     "fastapi>=0.126.0",
     "sqlalchemy>=2.0.45",
     "uvicorn>=0.38.0",

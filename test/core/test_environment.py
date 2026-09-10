@@ -36,14 +36,27 @@ def test_openai_model_requires_openai_key():
         _env(EXTRACTION_MODEL='openai/gpt-5.6-luna', OPENAI_API_KEY=None)
 
 
-def test_unroutable_provider_is_rejected_even_with_its_key():
+def test_anthropic_models_validate_with_their_key():
+    env = _env(
+        EXTRACTION_MODEL='anthropic/claude-sonnet-5',
+        ANTHROPIC_API_KEY='sk-ant',
+    )
+
+    assert env.EXTRACTION_MODEL == 'anthropic/claude-sonnet-5'
+
+
+def test_anthropic_model_requires_anthropic_key():
+    """The key check follows the provider, so configuring a Claude model with
+    only an OpenAI key fails at load rather than on the first API call."""
+    with pytest.raises(ValidationError, match='requires ANTHROPIC_API_KEY'):
+        _env(EXTRACTION_MODEL='anthropic/claude-sonnet-5')
+
+
+def test_unroutable_provider_is_rejected_even_with_a_key():
     """Settings load is the only place this can fail loudly -- resolve_model is
     called from inside function_tool bodies, which swallow exceptions."""
     with pytest.raises(ValidationError, match='no route yet'):
-        _env(
-            EXTRACTION_MODEL='anthropic/claude-sonnet-5',
-            ANTHROPIC_API_KEY='sk-ant',
-        )
+        _env(EXTRACTION_MODEL='gemini/some-model')
 
 
 def test_misspelled_provider_cannot_skip_the_key_check():
@@ -55,8 +68,20 @@ def test_misspelled_provider_cannot_skip_the_key_check():
 
 def test_vlm_model_is_validated_too():
     """Both configured models are checked, not just the extraction one."""
-    with pytest.raises(ValidationError, match='no route yet'):
-        _env(VLM_MODEL='anthropic/claude-sonnet-5', ANTHROPIC_API_KEY='sk-ant')
+    with pytest.raises(ValidationError, match='requires ANTHROPIC_API_KEY'):
+        _env(VLM_MODEL='anthropic/claude-sonnet-5')
+
+
+def test_the_two_models_may_name_different_providers():
+    """The point of the routing work: run vision on Claude while extraction
+    stays on OpenAI."""
+    env = _env(
+        EXTRACTION_MODEL='openai/gpt-5.6-luna',
+        VLM_MODEL='anthropic/claude-sonnet-5',
+        ANTHROPIC_API_KEY='sk-ant',
+    )
+
+    assert env.VLM_MODEL == 'anthropic/claude-sonnet-5'
 
 
 def test_the_failing_setting_is_named():
