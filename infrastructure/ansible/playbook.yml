@@ -329,10 +329,11 @@
 
     - name: Install frontend dependencies
       become_user: "{{ caa_user }}"
-      # NOTE: frontend/.gitignore excludes pnpm-lock.yaml, so there is no lockfile on
-      # the VM and this resolves the ^-ranged dependencies fresh on every deploy. See
-      # the reproducibility note in frontend/README.md.
-      command: pnpm install
+      # --frozen-lockfile installs exactly what frontend/pnpm-lock.yaml pins and fails
+      # if the lockfile and package.json disagree, rather than silently re-resolving.
+      # Without it a deploy that changed nothing could pick up a bad upstream minor,
+      # since every runtime dependency is ^-ranged.
+      command: pnpm install --frozen-lockfile
       args:
         chdir: "/opt/{{ caa_user }}/frontend"
       environment:
