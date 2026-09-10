@@ -18,7 +18,8 @@ A web-based tool for extracting and curating genetic evidence from scientific pa
 
 **Pipeline Architecture**
 - **Backend API**: FastAPI server managing data storage and retrieval
-- **Frontend UI**: Streamlit dashboard for browsing papers and curating data
+- **Streamlit UI**: The current dashboard for browsing papers and curating data
+- **React SPA**: Its replacement, in progress — served alongside it under `/v2`
 - **Background Worker**: Runs extraction agents in sequence, updating progress in real-time
 - **SQLite Database**: Stores papers, patients, variants, phenotypes, and all extracted data
 
@@ -31,6 +32,7 @@ A web-based tool for extracting and curating genetic evidence from scientific pa
 - **uv** — [installation guide](https://docs.astral.sh/uv/getting-started/installation/)
 - **make** (optional, for development tasks)
 - **OpenAI API key** with available billing (the free tier doesn't work)
+- **Node** 24 (see `.node-version`) and **pnpm** 12 — only needed to work on the React frontend
 
 ### Set Up OpenAI API Key
 
@@ -70,7 +72,7 @@ uv run pytest test/models/test_converters.py  # Run a specific test file
 
 ### Running the Full Application
 
-Start the backend, frontend, and worker in three separate terminals:
+Start the backend, UI, and worker in separate terminals:
 
 **Terminal 1 — Backend API** (runs on `http://localhost:8000`)
 ```bash
@@ -86,6 +88,17 @@ Start the backend, frontend, and worker in three separate terminals:
 ```bash
 ./bin/worker
 ```
+
+**Terminal 4 — React frontend** (optional, runs on `http://localhost:8501`)
+```bash
+cd frontend
+pnpm install
+pnpm dev
+```
+
+Note that `./bin/ui` (Streamlit) and `pnpm dev` (Vite) both bind port 8501, so run one or
+the other locally. See `frontend/README.md` for the frontend toolchain and its
+dependencies.
 
 ### Example: Extract Evidence from a Paper with MASP1 Gene
 
@@ -124,10 +137,19 @@ curl -L -o masp1_paper.pdf “https://pmc.ncbi.nlm.nih.gov/articles/PMC4657649/p
 - Serves the frontend and manages database access
 - CORS configured for Streamlit UI
 
-**Frontend UI** (`lib/ui/streamlit_app.py`)
+**Streamlit UI** (`lib/ui/streamlit_app.py`)
 - Dashboard: Browse papers and view extraction status
 - Paper pages: Edit patients, variants, phenotypes, and HPO assignments
 - PDF viewer: Highlight and view supporting evidence
+- Still the primary UI, served at `/`
+
+**React SPA** (`frontend/`)
+- React 19 + TypeScript, built with Vite, styled with Tailwind v4 and shadcn/ui
+- TanStack Router for type-safe file-based routing, TanStack Query for server state
+- Calls the API through a client generated from the FastAPI OpenAPI schema, so a backend
+  schema change becomes a frontend type error rather than a runtime 404
+- In-progress replacement for the Streamlit UI; deployed in parallel under `/v2`
+- Architecture and a description of every JavaScript dependency: `frontend/README.md`
 
 **Background Worker** (`lib/bin/worker.py`)
 - Polls database for papers awaiting extraction
@@ -165,5 +187,36 @@ See `lib/models/` for full model definitions and `CLAUDE.md` for code patterns.
 - **Engine**: SQLite with foreign key constraints
 - **Location**: `{CAA_ROOT}/sqllite/app.db` (default `CAA_ROOT=/var/caa`)
 - **Migrations**: Alembic under `migrations/versions/`
+
+## Deployment
+
+Everything runs on a single GCP VM (`dev-caa`, defined in
+`infrastructure/terraform/dev`) behind nginx, which terminates TLS and routes by path:
+
+| Path | Served by | Notes |
+| --- | --- | --- |
+| `/` | Streamlit UI on `127.0.0.1:8001` | Proxied, with WebSocket upgrade for `/_stcore/stream` |
+| `/api/` | FastAPI on `127.0.0.1:8000` | Proxied; the `/api` prefix is stripped before it reaches FastAPI |
+| `/v2/` | `frontend/dist/` on disk | Static files. Unknown paths fall back to `/v2/index.html` so the SPA router can resolve deep links |
+
+The API, Streamlit UI, and worker run as systemd **user** services (`api`, `ui`,
+`worker`) under the `caa` user. TLS is a Let's Encrypt wildcard managed by certbot on the
+VM, renewed twice-daily by cron via a Porkbun DNS-01 challenge.
+
+Deploying pulls `main` from GitHub onto the VM, syncs Python dependencies, writes `.env`
+from GCP Secret Manager, builds the React SPA, then restarts the services:
+
+```bash
+ansible-playbook -i dev-caa.us-east4-a.clingen-caa, infrastructure/ansible/playbook.yml
+```
+
+The frontend build step runs after `.env` is written, because regenerating the OpenAPI
+spec imports the FastAPI app and therefore needs a valid environment. It builds with
+`VITE_BASE_PATH=/v2/` and `VITE_API_URL=/api`; see `frontend/README.md` for what those
+control and for the build's known caveats.
+
+Deploy a specific ref with `-e git_version=<ref>`, preview with `--check`, or run
+`--tags certbot` to touch only TLS and nginx without restarting the app. The playbook
+header documents every variable and the one-time Secret Manager setup.
 
 For more details, see `CLAUDE.md` in the repository.

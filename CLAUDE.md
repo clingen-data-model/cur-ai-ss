@@ -26,6 +26,21 @@ uv run pytest test/path/to/test_file.py  # Run a specific test
 ./bin/worker    # Background job processor
 ```
 
+**Frontend setup (first time only):**
+```bash
+cd frontend
+pnpm install
+pnpm dlx skills add shadcn/ui   # Install shadcn/ui AI skill (gitignored, run once per machine)
+```
+
+**Frontend commands** (from `frontend/`; not covered by CI, so run them before deploying):
+```bash
+pnpm dev          # Vite dev server on port 8501 (conflicts with ./bin/ui)
+pnpm type-check   # tsc --noEmit
+pnpm lint         # eslint
+pnpm build        # regenerates the API client, then tsc -b && vite build
+```
+
 **Database migrations:**
 ```bash
 alembic current             # Check current migration version
@@ -39,7 +54,7 @@ This is a research paper analysis system that extracts genetic information (pati
 
 ### Core Components
 
-**Three-tier application:**
+**Four components:**
 
 1. **Backend API** (`lib/api/app.py`)
    - FastAPI server handling PDF uploads, data storage, and retrieval
@@ -53,7 +68,16 @@ This is a research paper analysis system that extracts genetic information (pati
    - Paper pages show extracted patients, variants, phenotypes with editing capabilities
    - Renders PDF highlighting and thumbnails via API
 
-3. **Background Worker** (`lib/bin/worker.py`)
+3. **React SPA** (`frontend/`)
+   - React 19 + TypeScript + Vite, Tailwind v4, shadcn/ui primitives vendored into `src/components/ui/`
+   - TanStack Router (file-based, `routeTree.gen.ts` is generated) and TanStack Query
+   - The API client in `src/api/generated/` is generated from the FastAPI OpenAPI schema
+     by `pnpm build` — never edit it by hand, and regenerate after changing API models
+   - In-progress replacement for the Streamlit UI, deployed in parallel under `/v2`
+   - **See `frontend/README.md`** for architecture, the base-path rules, and a
+     description of every JavaScript dependency
+
+4. **Background Worker** (`lib/bin/worker.py`)
    - Polls database for papers with extraction tasks
    - Runs extraction agents sequentially in a pipeline
    - Updates paper `pipeline_status` as tasks progress
@@ -239,6 +263,12 @@ def upgrade() -> None:
 3. Call API endpoints to save changes
 4. Use PDF highlighting via `lib/misc/pdf/highlight.py` utilities
 
+**Generating API specification:**
+```bash
+./bin/generate-api-spec
+```
+Extracts OpenAPI schema from FastAPI app and generates `frontend/api-spec.json`. Does not require running the API server.
+
 ## Important Notes
 
 **PDF file organization:** All extracted content for a paper is stored in a directory named after the paper ID. Use path functions from `lib/misc/pdf/paths.py` to build consistent paths:
@@ -260,3 +290,18 @@ def upgrade() -> None:
 **PDF highlighting:** Words/images can be highlighted in PDFs with colors (red, orange, yellow, blue, green, violet, gray, primary). Uses Grobid annotations for word positioning.
 
 **OpenAI agents:** Uses `openai_agents.Runner` for structured outputs. Models must have Pydantic schema for OpenAI to use as response schema.
+
+**Deployment:** One GCP VM (`dev-caa`, domain `gene-curation-ai.app`) behind nginx:
+Streamlit at `/`, FastAPI at `/api/` (prefix stripped), the React SPA's static build at
+`/v2/`. Deploy with `ansible-playbook -i dev-caa.us-east4-a.clingen-caa, infrastructure/ansible/playbook.yml`,
+which pulls `main` from GitHub — so changes must be merged and pushed before deploying.
+See the Deployment section of `README.md`.
+
+**The SPA is served under a path prefix**, so anything root-relative in `frontend/` must
+be built from `import.meta.env.BASE_URL` or it escapes `/v2` and hits the Streamlit app:
+
+- Navigate with `<Link>` from TanStack Router, never `<a href="/...">`
+- Reference `public/` assets as `` `${import.meta.env.BASE_URL}<file>` `` in TSX, or
+  `%BASE_URL%<file>` in `index.html`
+- Build API-served URLs (PDFs, thumbnails) from `API_BASE_URL` exported by `lib/api.ts`,
+  not from `import.meta.env.VITE_API_URL` directly

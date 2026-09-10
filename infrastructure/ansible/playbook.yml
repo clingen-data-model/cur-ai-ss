@@ -289,6 +289,56 @@
         mode: "0600"
       notify: Restart services
 
+    # --- Frontend (React SPA served at /v2) ---
+    #
+    # Ordered after the env file on purpose: `pnpm build` runs a prebuild hook that
+    # imports lib.api.app to regenerate the OpenAPI spec, and that import reads .env
+    # (OPENAI_API_KEY, JWT_SECRET_KEY) via pydantic-settings. Building earlier fails.
+
+    - name: Add NodeSource repository for Node.js 24
+      # Node major is pinned to match .node-version; the frontend toolchain (Vite 8,
+      # TypeScript 6) needs a current runtime, and Ubuntu 24.04 ships Node 18.
+      shell: curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
+      args:
+        creates: /etc/apt/sources.list.d/nodesource.list
+
+    - name: Install Node.js
+      apt:
+        name: nodejs
+        state: present
+
+    - name: Install pnpm
+      # Major-pinned to match the version used locally. Always runs (npm -g has no
+      # cheap idempotence check) but is a no-op reinstall when already current.
+      command: npm install -g pnpm@12
+      changed_when: false
+
+    - name: Install frontend dependencies
+      become_user: "{{ caa_user }}"
+      # NOTE: frontend/.gitignore excludes pnpm-lock.yaml, so there is no lockfile on
+      # the VM and this resolves the ^-ranged dependencies fresh on every deploy. See
+      # the reproducibility note in frontend/README.md.
+      command: pnpm install
+      args:
+        chdir: "/opt/{{ caa_user }}/frontend"
+      environment:
+        PATH: "/home/{{ caa_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+      changed_when: true
+
+    - name: Build frontend
+      become_user: "{{ caa_user }}"
+      # VITE_BASE_PATH puts every asset URL under /v2/ to match the nginx location;
+      # VITE_API_URL keeps API calls same-origin so nginx proxies them to the API.
+      # uv must be on PATH for the prebuild spec generation.
+      command: pnpm build
+      args:
+        chdir: "/opt/{{ caa_user }}/frontend"
+      environment:
+        PATH: "/home/{{ caa_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
+        VITE_BASE_PATH: "/v2/"
+        VITE_API_URL: "/api"
+      changed_when: true
+
     # --- Systemd User Services ---
 
     - name: Create systemd user config directory
