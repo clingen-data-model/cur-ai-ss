@@ -371,7 +371,7 @@ def test_write_snapshot_idempotent(db_session, snapshot_paper):
     # Newest first, and the label comes from the writer's environment (the
     # agent_runs table is stale by construction and must not be consulted).
     assert snapshots[0].created_at >= snapshots[1].created_at
-    assert snapshots[0].model == env.OPENAI_API_DEPLOYMENT
+    assert snapshots[0].model == env.EXTRACTION_MODEL
     assert snapshots[0].git_hash == get_current_git_hash()
 
 

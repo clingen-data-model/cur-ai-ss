@@ -9,7 +9,7 @@ from lib.agents.hpo_linking_agent import (
     get_hpo_term,
     search_hpo_terms,
 )
-from lib.core.environment import env
+from lib.agents.model_factory import extraction_model
 from lib.models.evidence_block import ReasoningBlock
 from lib.models.mondo import MondoAgentDecision
 from lib.reference_data import mondo
@@ -228,7 +228,7 @@ When match_type is "component_only", top-level mondo_id and term must be null.
 agent = Agent(
     name='mondo_linker',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
-    model=env.OPENAI_API_DEPLOYMENT,
+    model=extraction_model(),
     output_type=ReasoningBlock[MondoAgentDecision],
     tools=[
         get_mondo_term,
