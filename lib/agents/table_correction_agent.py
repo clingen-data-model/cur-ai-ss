@@ -1,16 +1,18 @@
 """Agent to correct corrupted table markdown using OpenAI vision."""
 
+import json
 import logging
 from pathlib import Path
 
-from agents import Agent, function_tool
+from agents import Agent, Runner, function_tool
 from pydantic import BaseModel
 
-from lib.core.environment import env
+from lib.agents.model_factory import extraction_model
+from lib.agents.vision import vlm_describe
 from lib.core.logging import setup_logging
-from lib.misc.gcs import upload_and_sign_image
+from lib.misc.images import image_to_data_url
 from lib.misc.pdf.paths import (
-    pdf_markdown_path,
+    pdf_table_correction_path,
     pdf_table_image_path,
     pdf_table_vision_markdown_path,
     pdf_tables_dir,
@@ -32,40 +34,24 @@ Return ONLY the markdown table, no other text.
 def table_correction_agent_for_image(image_path: Path) -> Agent:
     """Build a table correction agent bound to a specific table image."""
 
-    @function_tool
+    # failure_error_function=None so a raised exception propagates instead of
+    # being handed to the model as text. vlm_describe returns None for the
+    # outcomes that are findings (a decline, a truncated answer); anything it
+    # raises means the call itself did not happen, which is a task failure and
+    # not a fact about the paper.
+    @function_tool(failure_error_function=None)
     def extract_table_from_image() -> str:
         """Extract the current table image as markdown using vision."""
-        from openai import OpenAI
-
-        client = OpenAI(api_key=env.OPENAI_API_KEY)
-        image_url = upload_and_sign_image(image_path)
-
-        message = client.chat.completions.create(
-            model=env.OPENAI_VLM,
-            messages=[
-                {
-                    'role': 'user',
-                    'content': [
-                        {
-                            'type': 'image_url',
-                            'image_url': {'url': image_url, 'detail': 'high'},
-                        },
-                        {
-                            'type': 'text',
-                            'text': VISION_EXTRACTION_PROMPT,
-                        },
-                    ],
-                }
-            ],
-        )
-
-        content = message.choices[0].message.content
+        image_url = image_to_data_url(image_path)
+        content = vlm_describe(image_url, VISION_EXTRACTION_PROMPT)
+        # An empty string, never a partial table: the agent reports the table
+        # unrecoverable rather than accepting half of one as the extraction.
         return content if content is not None else ''
 
     return Agent(
         name='table_corrector',
         instructions=TABLE_CORRECTION_INSTRUCTIONS,
-        model=env.OPENAI_API_DEPLOYMENT,
+        model=extraction_model(),
         output_type=TableCorrectionResult,
         tools=[extract_table_from_image],
     )
@@ -74,7 +60,6 @@ def table_correction_agent_for_image(image_path: Path) -> Agent:
 class TableCorrectionResult(BaseModel):
     """Result of table corruption check and correction."""
 
-    original_markdown: str
     is_corrupted: bool
     corrected_markdown: str | None = None
     conversion_successful: bool = False
@@ -112,14 +97,33 @@ is_recoverable to false and conversion_successful to false. This is an acceptabl
 not a failure -- the original markdown will simply be left in place."""
 
 
+def _write_correction_record(
+    paper_id: int,
+    table_id: int,
+    result: TableCorrectionResult,
+    corrected: bool,
+    supplement: bool = False,
+) -> None:
+    """Persist what was decided about one table, so it is not only a log line."""
+    record = {
+        'table_id': table_id,
+        'is_corrupted': result.is_corrupted,
+        'conversion_successful': result.conversion_successful,
+        'is_recoverable': result.is_recoverable,
+        'corrected': corrected,
+    }
+    path = pdf_table_correction_path(paper_id, table_id, supplement=supplement)
+    path.write_text(json.dumps(record, indent=2))
+
+
 async def correct_tables(paper_id: int, supplement: bool = False) -> None:
     """Correct corrupted table markdown in paper using agent.
 
-    Scans all tables, checks each with agent, generates .vision.md files
-    for corrupted ones, and updates raw.md with corrections.
+    Scans all tables, checks each with the agent, and writes a .vision.md
+    beside every table it recovers. ``raw.md`` is deliberately left untouched:
+    corrections are applied at read time by
+    ``lib.misc.pdf.paths.apply_table_corrections``.
     """
-    from agents import Runner
-
     tables_dir = pdf_tables_dir(paper_id, supplement=supplement)
     if not tables_dir.exists():
         return
@@ -128,9 +132,6 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
     table_files = sorted(tables_dir.glob('*.md'))
     if not table_files:
         return
-
-    # Track corrections: table_id -> (original_markdown, corrected_markdown)
-    corrections: dict[int, tuple[str, str]] = {}
 
     for table_path in table_files:
         # Skip vision files
@@ -156,6 +157,13 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
 
         if not result.final_output.is_corrupted:
             logger.info(f'Table {table_id} looks OK')
+            _write_correction_record(
+                paper_id,
+                table_id,
+                result.final_output,
+                corrected=False,
+                supplement=supplement,
+            )
             continue
 
         if (
@@ -170,6 +178,13 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
                 f'leaving original markdown in place (recoverable='
                 f'{result.final_output.is_recoverable})'
             )
+            _write_correction_record(
+                paper_id,
+                table_id,
+                result.final_output,
+                corrected=False,
+                supplement=supplement,
+            )
             continue
 
         logger.info(f'Table {table_id} was corrupted, corrected version ready')
@@ -180,27 +195,10 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
         )
         vision_path.write_text(result.final_output.corrected_markdown)
         logger.info(f'Wrote {vision_path}')
-
-        corrections[table_id] = (
-            result.final_output.original_markdown,
-            result.final_output.corrected_markdown,
+        _write_correction_record(
+            paper_id,
+            table_id,
+            result.final_output,
+            corrected=True,
+            supplement=supplement,
         )
-
-    if not corrections:
-        return
-
-    # Replace corrupted tables in raw.md
-    raw_md_path = pdf_markdown_path(paper_id, supplement=supplement)
-    raw_md = raw_md_path.read_text()
-
-    # For each correction, find exact byte-for-byte match and replace
-    for table_id, (original_md, corrected_md) in corrections.items():
-        if original_md in raw_md:
-            raw_md = raw_md.replace(original_md, corrected_md, 1)
-            logger.info(f'Replaced table {table_id} in raw.md')
-        else:
-            logger.warning(f'Could not find table {table_id} byte-for-byte in raw.md')
-
-    # Write updated markdown
-    raw_md_path.write_text(raw_md)
-    logger.info(f'Updated {raw_md_path} with corrected tables')

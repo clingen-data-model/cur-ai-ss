@@ -28,6 +28,28 @@ from lib.ui.api import (
 MIN_PASSWORD_LENGTH = 8
 _CURRENT_USER_KEY = '_current_user'
 
+# Session keys require_auth depends on. '_auth_init' guards the first-run
+# cookie-component round-trip (require_auth st.stop()s a blank page when it is
+# missing), so wiping it mid-session blanks the next render.
+_AUTH_SESSION_KEYS = (AUTH_TOKEN_KEY, _CURRENT_USER_KEY, '_auth_init', '_logged_out')
+
+
+def clear_session_state_keeping_auth() -> None:
+    """Wipe all widget/session state without logging the user out or
+    re-triggering require_auth's first-run blank render.
+
+    For flows that invalidate everything on screen (e.g. resetting a paper to
+    a snapshot): stale widget values must not survive, because save-on-diff
+    editors would write them back over the fresh data."""
+    preserved = {
+        key: st.session_state[key]
+        for key in _AUTH_SESSION_KEYS
+        if key in st.session_state
+    }
+    st.session_state.clear()
+    for key, value in preserved.items():
+        st.session_state[key] = value
+
 
 def _render_login_form(cookies: CookieManager) -> None:
     with st.form('login_form'):
@@ -164,8 +186,10 @@ def require_auth() -> None:
         st.sidebar.caption(
             f'{user.max_papers} paper upload{"s" if user.max_papers != 1 else ""} remaining'
         )
-    pw_col, logout_col = st.sidebar.columns(2)
-    if logout_col.button('Log out', use_container_width=True):
+    # Full sidebar width, not a half-width column — the form has three inputs
+    # and a button, and halving the width squeezes every label onto two lines.
+    _render_change_password_form(st.sidebar)
+    if st.sidebar.button('Log out', use_container_width=True):
         st.session_state.pop(AUTH_TOKEN_KEY, None)
         st.session_state.pop(_CURRENT_USER_KEY, None)
         st.session_state['_logged_out'] = True
@@ -173,4 +197,3 @@ def require_auth() -> None:
             cookies.delete(AUTH_TOKEN_KEY)
             time.sleep(2)
         st.rerun()
-    _render_change_password_form(pw_col)

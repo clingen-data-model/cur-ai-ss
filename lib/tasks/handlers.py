@@ -148,7 +148,7 @@ from lib.models.mondo import (
 from lib.models.paper import FileFormat
 from lib.models.patient import ProbandStatus
 from lib.models.phenotype import HPOTerm
-from lib.models.variant import HarmonizedVariant, Variant
+from lib.models.variant import HarmonizedVariant, Variant, is_harmonized
 from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
 from lib.reference_data.mondo import get_mondo_term
 from lib.tasks.models import TaskType
@@ -402,16 +402,14 @@ async def handle_variant_extraction(task_id: int) -> None:
         task = session.get(TaskDB, task_id)
         if not task:
             return
-        agent_run_id = task.agent_run_id
         task.conversation_id = stored_conv_id
 
-        # Idempotent: delete-then-insert (only from current run)
+        # Idempotent: delete-then-insert
         session.query(VariantDB).filter(
             VariantDB.paper_id == paper_id,
-            VariantDB.agent_run_id == agent_run_id,
         ).delete()
         for variant in result.final_output.variants:
-            session.add(variant_to_db(paper_id, variant, agent_run_id))
+            session.add(variant_to_db(paper_id, variant))
 
 
 async def handle_pedigree_description(task_id: int) -> None:
@@ -460,12 +458,30 @@ async def handle_pedigree_description(task_id: int) -> None:
         # Initial query: build full message with pedigree images + instructions
         message = f'{combined_text}\n\n{PEDIGREE_DESCRIBER_AGENT_INSTRUCTIONS}'
 
+    agent, capture = pedigree_describer_agent_for_paper(paper_id)
     result = await Runner.run(
-        pedigree_describer_agent_for_paper(paper_id),
+        agent,
         message,
         conversation_id=stored_conv_id,
     )
     log_cache_metrics('PEDIGREE_DESCRIPTION', result)
+
+    output = result.final_output
+    # The analysis is the vision model's; the agent only routes figures to it and
+    # copies the answer back, so store what the tool returned rather than the
+    # copy. Follow-ups are left alone: there the curator asked for a rewrite.
+    if (
+        additional_context is None
+        and output
+        and output.found
+        and capture.description is not None
+    ):
+        output = output.model_copy(
+            update={
+                'image_id': capture.image_id,
+                'description': capture.description,
+            }
+        )
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -473,8 +489,8 @@ async def handle_pedigree_description(task_id: int) -> None:
             task.conversation_id = stored_conv_id
         # Idempotent: delete-then-insert
         session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).delete()
-        if result.final_output and result.final_output.found:
-            session.add(pedigree_to_db(paper_id, result.final_output))
+        if output and output.found:
+            session.add(pedigree_to_db(paper_id, output))
 
 
 async def handle_patient_extraction(task_id: int) -> None:
@@ -541,31 +557,28 @@ async def handle_patient_extraction(task_id: int) -> None:
         task = session.get(TaskDB, task_id)
         if not task:
             return
-        agent_run_id = task.agent_run_id
         task.conversation_id = stored_conv_id
 
-        # Idempotent: delete existing families and patients from current run, then re-insert both
+        # Idempotent: delete existing families and patients, then re-insert both
         session.query(FamilyDB).filter(
             FamilyDB.paper_id == paper_id,
-            FamilyDB.agent_run_id == agent_run_id,
         ).delete()
         session.query(PatientDB).filter(
             PatientDB.paper_id == paper_id,
-            PatientDB.agent_run_id == agent_run_id,
         ).delete()
         session.flush()
 
         # Insert families first so we have family IDs for patient assignment
         family_entries_by_id: dict[str, int] = {}
         for entry in result.final_output.families:
-            db_family = family_to_db(paper_id, agent_run_id, entry.family)
+            db_family = family_to_db(paper_id, entry.family)
             session.add(db_family)
             session.flush()
             family_entries_by_id[entry.family.identifier.value] = db_family.id
 
         # Insert patients (identity only; demographics filled by a later agent)
         for patient_info in result.final_output.patients:
-            db_patient = patient_identity_to_db(paper_id, patient_info, agent_run_id)
+            db_patient = patient_identity_to_db(paper_id, patient_info)
             # Use family_identifier from patient to find correct family
             family_id_value = patient_info.family_identifier.value
             if family_id_value in family_entries_by_id:
@@ -1059,20 +1072,7 @@ async def handle_variant_annotation(task_id: int) -> None:
         rows = query.order_by(VariantDB.id).all()
 
         # Skip enrichment if harmonization did not succeed
-        # A successful harmonization must have at least one meaningful identifier
-        rows = [
-            r
-            for r in rows
-            if any(
-                [
-                    r.gnomad_style_coordinates,
-                    r.rsid,
-                    r.caid,
-                    r.hgvs_g,
-                    r.hgvs_c,
-                ]
-            )
-        ]
+        rows = [r for r in rows if is_harmonized(r)]
 
         if not rows:
             logger.info(
@@ -1127,8 +1127,12 @@ async def handle_variant_annotation(task_id: int) -> None:
                     alphamissense_score=ev.alphamissense_score,
                     spliceai=ev.spliceai.model_dump() if ev.spliceai else None,
                     gnomad_top_level_af=ev.gnomad_top_level_af,
+                    gnomad_ac=ev.gnomad_ac,
+                    gnomad_an=ev.gnomad_an,
                     gnomad_popmax_af=ev.gnomad_popmax_af,
                     gnomad_popmax_population=ev.gnomad_popmax_population,
+                    gnomad_popmax_ac=ev.gnomad_popmax_ac,
+                    gnomad_popmax_an=ev.gnomad_popmax_an,
                 )
             )
 

@@ -28,6 +28,7 @@ from lib.ui.api import (
 )
 from lib.ui.paper.shared import (
     HUMAN_EDIT_NOTE_DEFAULT,
+    clean_quote,
     get_gnomad_url,
     render_evidence_controls,
     render_highlight_controls,
@@ -43,11 +44,15 @@ def _format_variant_with_protein(
     """Format variant description with optional protein notation."""
     desc = variant.variant_description
     if include_protein and variant.hgvs_p:
-        # If already formatted with parentheses, use as-is
-        if variant.hgvs_p.startswith('p.('):
-            desc += f' {variant.hgvs_p}'
-        else:
-            desc += f' p.({variant.hgvs_p})'
+        # Normalize to a single `p.(...)` form: strip any existing prefix and
+        # parentheses so values like `p.Pro582His` or `p.(Pro582His)` don't
+        # end up doubled as `p.(p.Pro582His)`.
+        change = variant.hgvs_p.strip()
+        if change.startswith('p.'):
+            change = change[2:]
+        change = change.strip().removeprefix('(').removesuffix(')').strip()
+        if change:
+            desc += f' p.({change})'
     return desc
 
 
@@ -59,7 +64,7 @@ def _render_evidence_block(
     # Display evidence sources
     evidence_sources = []
     if evidence_block.quote:
-        evidence_sources.append(('Text Evidence', evidence_block.quote))
+        evidence_sources.append(('Text Evidence', clean_quote(evidence_block.quote)))
     if evidence_block.table_id is not None:
         evidence_sources.append(
             ('Table', f'Table #{evidence_block.table_id + 1}')
@@ -162,7 +167,7 @@ def render_patient_variant_occurrences_tab() -> None:
 
         rows.append(
             {
-                'Select': False,
+                'Select': link.id == st.session_state.get(SELECTED_OCCURRENCE_KEY),
                 'Proband': patient.proband_status.value
                 if patient.proband_status
                 else 'N/A',
@@ -288,11 +293,18 @@ def render_patient_variant_occurrences_tab() -> None:
     if has_paired_variants:
         disabled.append('Paired Variant')
 
+    # Re-key on selection change so the grid remounts from `df` (exactly one
+    # row checked); otherwise Streamlit keeps prior rows' checkbox edits and the
+    # grid behaves as multi-select.
+    editor_key = (
+        f'{OCCURRENCES_EDITOR_KEY}-{st.session_state.get(SELECTED_OCCURRENCE_KEY)}'
+    )
+
     def _on_occurrences_edit() -> None:
         """Persist inline edits made directly in the grid (Zygosity, Inheritance,
         De Novo, Testing Methods are all editable columns above). Mirrors the
         edited_rows/on_change pattern used for the paper dashboard's grid."""
-        edited_rows = st.session_state[OCCURRENCES_EDITOR_KEY].get('edited_rows', {})
+        edited_rows = st.session_state[editor_key].get('edited_rows', {})
 
         # Remember which row is selected by its stable link id, not its row
         # index, so the detail panel keeps showing the right occurrence across
@@ -345,7 +357,7 @@ def render_patient_variant_occurrences_tab() -> None:
         hide_index=True,
         disabled=disabled,
         column_config=column_config,
-        key=OCCURRENCES_EDITOR_KEY,
+        key=editor_key,
         on_change=_on_occurrences_edit,
     )
 

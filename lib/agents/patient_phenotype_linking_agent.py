@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
-from lib.core.environment import env
+from lib.agents.model_factory import extraction_model
 from lib.models import ExtractedPhenotype
 
 INSTRUCTIONS = """
@@ -167,20 +167,54 @@ Extract phenotypes that explicitly belong to the provided patient:
 - Only extract phenotypes clearly attributed to this specific patient
 
 ---------------------------------------------------
-PHENOTYPE PRIORITIZATION AND LIMITING
+FINDING THE PHENOTYPES
 ---------------------------------------------------
 
-The goal is to capture the most clinically informative phenotypes
-that characterize the patient's genetic disease.
+Work in two steps. A patient's findings are written down in more than one
+place, and no single place holds all of them.
 
-For the provided patient:
+1. LIST the candidate findings for this patient, going to each source in turn:
+   - the case description that names them by identifier;
+   - their column in each clinical features table;
+   - figure captions, pedigree legends and patient summaries naming them.
+2. Extract from the list you built.
 
-- Extract AT MOST TWELVE phenotypes.
+Do not skip step 1. Listing first is what makes the extraction complete: a
+finding you never wrote down is one you cannot decide to keep or drop.
 
-If more than twelve phenotypes are mentioned:
+A statement about the cohort as a whole -- "all the individuals presented with
+ID", "the 17 patients shared a wide mouth and deep-set eyes" -- is evidence
+about this patient too, and extracting it is correct. But it is never the whole
+answer, because it names what everyone shares and says nothing about what
+distinguishes this patient. It does not stand in for their column or their case
+description, and finding one is not a reason to stop looking.
 
-1. Rank all candidate phenotypes by clinical importance
-2. Return only the TWELVE most informative
+---------------------------------------------------
+CLINICAL FEATURES TABLES
+---------------------------------------------------
+
+Cohort papers score patients as columns and features as rows, often split across
+several markdown tables. When the provided patient is a column, walk it from the
+first row to the last and extract every "+", including the indented rows under a
+heading like "Facial dysmorphism". Skip "-", blank, "NA" and "ND" -- scored
+negatives are not extracted for now.
+
+Never let a summary displace rows the table scores individually: if the
+narrative says "mild dysmorphic features" while the table scores deep-set eyes,
+wide mouth and thin eyebrows, extract all three.
+
+---------------------------------------------------
+PHENOTYPE PRIORITIZATION
+---------------------------------------------------
+
+Extract EVERY phenotype documented for the provided patient. There is no limit
+on how many you may return, and completeness matters more than brevity: a
+missing phenotype is a curation error, and this is the one thing the extraction
+cannot recover later.
+
+Prioritization decides what to leave out when material is genuinely
+low-value -- it is NOT a budget to spend, and it never justifies dropping a
+documented finding to keep the list short.
 
 Use the following prioritization order:
 
@@ -209,8 +243,8 @@ Additional rules:
 - Prefer phenotypes used to establish diagnosis
 - Avoid redundant or highly overlapping phenotypes
 
-If fewer than twelve phenotypes exist for this patient, return only those present.
-Do NOT invent phenotypes to reach twelve.
+Return every phenotype you found for this patient.
+Do NOT invent phenotypes, and do NOT pad the list.
 
 ---------------------------------------------------
 PHENOTYPE DEDUPLICATION
@@ -356,6 +390,6 @@ PATIENT_PHENOTYPE_LINKING_AGENT_INSTRUCTIONS = (
 agent = Agent(
     name='phenotype_patient_linker',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
-    model=env.OPENAI_API_DEPLOYMENT,
+    model=extraction_model(),
     output_type=list[ExtractedPhenotype],
 )

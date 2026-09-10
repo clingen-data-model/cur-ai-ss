@@ -24,7 +24,10 @@ from lib.ui.api import (
     get_curation_pptx,
     get_http_error_detail,
     get_paper,
+    list_snapshots,
+    reset_paper,
 )
+from lib.ui.auth import clear_session_state_keeping_auth
 from lib.ui.paper.chat import render_chat_with_agent_tab
 from lib.ui.paper.metadata import render_metadata_tab
 from lib.ui.paper.occurrences import render_patient_variant_occurrences_tab
@@ -32,11 +35,19 @@ from lib.ui.paper.patients import render_patients_tab
 from lib.ui.paper.shared import (
     CURRENT_ANNOTATIONS_KEY,
     HEADER_TABS_KEY,
+    TAB_CHAT,
+    TAB_METADATA,
+    TAB_OCCURRENCES,
+    TAB_PATIENTS,
+    TAB_TASKS,
+    TAB_VARIANTS,
     get_available_tabs,
 )
+from lib.ui.paper.tasks import render_tasks_tab
 from lib.ui.paper.variants import render_variants_tab
 
 RERUN_POPOVER_STATE_KEY = 'RERUN_POPOVER_STATE_KEY'
+RESET_POPOVER_STATE_KEY = 'RESET_POPOVER_STATE_KEY'
 
 
 class PaperQueryParams(BaseModel):
@@ -120,6 +131,76 @@ def render_queue_tasks_fragment(paper_query_params: PaperQueryParams) -> None:
             st.toast(f'Failed to enqueue task: {str(e)}', icon='❌')
 
     st.button('Confirm Rerun', type='secondary', on_click=on_confirm)
+
+
+def render_reset_fragment(paper_query_params: PaperQueryParams) -> None:
+    st.markdown(
+        'Each time the extraction pipeline finishes, the extracted data '
+        '(patients, variants, phenotypes, links, ...) is saved as a snapshot. '
+        'Rerunning agents produces a new snapshot when the results change, so '
+        'older ones stay available. Resetting restores the paper exactly as '
+        'the chosen snapshot recorded it, discarding any manual edits and any '
+        'agent results produced after it.'
+    )
+    try:
+        snapshots = list_snapshots(paper_query_params.paper_id)
+    except requests.HTTPError as e:
+        st.caption(f'Failed to load snapshots: {get_http_error_detail(e)}')
+        return
+    if not snapshots:
+        st.caption(
+            'No extraction snapshots yet. A snapshot is written each time the '
+            'extraction pipeline completes.'
+        )
+        return
+
+    # Default to the snapshot matching the current state (harmless to
+    # re-apply), so restoring anything else is a deliberate choice — with the
+    # newest as default, a reflexive second reset re-applied the state the
+    # user had just escaped.
+    default_index = next((i for i, s in enumerate(snapshots) if s.matches_current), 0)
+    chosen = st.selectbox(
+        'Restore snapshot:',
+        options=snapshots,
+        index=default_index,
+        format_func=lambda s: f'{s.created_at:%Y-%m-%d %H:%M} UTC'
+        + (f' — {s.description}' if s.description else '')
+        + (f' — {s.model}' if s.model else '')
+        + (' — current state' if s.matches_current else ''),
+    )
+    st.caption(
+        '⚠️ Resetting cannot be undone. Task history reverts with the snapshot; '
+        'chat history and PDF highlights are kept.'
+    )
+
+    def on_confirm() -> None:
+        try:
+            result = reset_paper(paper_query_params.paper_id, chosen.name)
+            if result.changed:
+                # Wipe widget/session state: tab editors save-on-diff against
+                # values cached in session state, so any surviving pre-reset
+                # widget value would be PATCHed straight back over the freshly
+                # restored data on the next render.
+                clear_session_state_keeping_auth()
+                st.toast('Paper reset to extraction snapshot', icon='⏪')
+            else:
+                st.toast(
+                    'Paper already matches this snapshot — nothing to reset',
+                    icon='ℹ️',
+                )
+            st.session_state[RESET_POPOVER_STATE_KEY] = False
+        except requests.HTTPError as e:
+            st.toast(f'Failed to reset: {get_http_error_detail(e)}', icon='❌')
+
+    st.button(
+        'Reset paper',
+        type='primary',
+        on_click=on_confirm,
+        disabled=chosen.matches_current,
+        help='The paper already matches this snapshot — nothing to reset'
+        if chosen.matches_current
+        else None,
+    )
 
 
 def _strip_trailing_punctuation(text: str) -> str:
@@ -210,34 +291,37 @@ with center:
                     else available_tabs[0]
                 )
             elif paper_query_params.patient_id:
-                default_tab = '👤 Patients'
+                default_tab = TAB_PATIENTS
             elif paper_query_params.variant_id:
-                default_tab = '🧬 Variants'
+                default_tab = TAB_VARIANTS
             else:
-                default_tab = '📝 Metadata'
+                default_tab = TAB_METADATA
             tabs = st.tabs(
                 available_tabs,
                 on_change='rerun',
                 default=default_tab,
                 key=HEADER_TABS_KEY,
             )
-            metadata_tab = tabs[0]
-            patients_tab = tabs[1]
-            variants_tab = tabs[2]
-            occurrences_tab = tabs[3]
-            chat_tab = tabs[4] if len(tabs) > 4 else None
+            # Resolve by label: the tab list is conditional, so positions shift.
+            tab_by_label = dict(zip(available_tabs, tabs))
+
+            def is_open(label: str) -> bool:
+                tab = tab_by_label.get(label)
+                return bool(tab and tab.open)
 
             with center:
-                if metadata_tab.open:
+                if is_open(TAB_METADATA):
                     render_metadata_tab()
-                elif patients_tab.open:
-                    render_patients_tab(paper_query_params.patient_id)
-                elif variants_tab.open:
-                    render_variants_tab(paper_query_params.variant_id)
-                elif occurrences_tab.open:
+                elif is_open(TAB_OCCURRENCES):
                     render_patient_variant_occurrences_tab()
-                elif chat_tab and chat_tab.open:
+                elif is_open(TAB_PATIENTS):
+                    render_patients_tab(paper_query_params.patient_id)
+                elif is_open(TAB_VARIANTS):
+                    render_variants_tab(paper_query_params.variant_id)
+                elif is_open(TAB_CHAT):
                     render_chat_with_agent_tab()
+                elif is_open(TAB_TASKS):
+                    render_tasks_tab()
 
     with right:
         with st.container(
@@ -260,6 +344,25 @@ with center:
                 on_change='rerun',
             ):
                 render_queue_tasks_fragment(paper_query_params)
+            tasks_active = any(
+                t.status in (TaskStatus.PENDING, TaskStatus.QUEUED, TaskStatus.RUNNING)
+                for t in paper_resp.tasks
+            )
+            with st.popover(
+                '⏪ Reset',
+                type='tertiary',
+                disabled=tasks_active,
+                key=RESET_POPOVER_STATE_KEY,
+                on_change='rerun',
+                help=(
+                    '⏳ Reset is disabled while extraction tasks are queued or '
+                    'running — a task finishing mid-reset would overwrite the '
+                    'restored data. Wait for the pipeline to finish (or fail).'
+                    if tasks_active
+                    else 'Restore the paper to a saved extraction snapshot'
+                ),
+            ):
+                render_reset_fragment(paper_query_params)
             title = paper_resp.title or f'paper_{paper_query_params.paper_id}'
             clean_title = _strip_trailing_punctuation(title)
             st.download_button(

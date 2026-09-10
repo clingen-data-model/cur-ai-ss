@@ -2,7 +2,7 @@ from agents import Agent
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
-from lib.core.environment import env
+from lib.agents.model_factory import extraction_model
 from lib.models.patient import PatientExtractionOutput
 
 PATIENT_EXTRACTION_INSTRUCTIONS = f"""
@@ -27,7 +27,10 @@ Definitions:
 
 Notes:
 - Some papers may contain multiple unrelated probands; extract each separately.
-- Extract only individuals with explicitly stated demographic or clinical information.
+- Extract individuals the paper reports something individual about: demographics,
+  clinical findings, or a genotype attributed to them by name. A table row giving
+  a proband and the variant they carry is such a report -- a patient identified
+  by their genotype and nothing else is still identified.
 
 Fields to extract (for each patient):
 
@@ -48,8 +51,13 @@ Each field is an EvidenceBlock containing:
     1. Prefer explicit alphanumeric identifiers exactly as written (e.g., "P1", "II-2", "Case 1").
        - Preserve capitalization and punctuation.
        - Do NOT normalize or reinterpret.
-    2. If none exists, use descriptive labels (e.g., "proband", "sister") as written.
-    3. Preserve exact wording when multiple probands or cases are distinguished.
+    2. A table that lists patients names the series in its header and numbers
+       the members in its cells, so the identifier is the two read together
+       (a "Proband No." column holding 3 gives "Proband 3"). Both halves are
+       already written down, which makes this reading rather than inventing:
+       the result is a textual identifier, not a numeric-only one.
+    3. If none exists, use descriptive labels (e.g., "proband", "sister") as written.
+    4. Preserve exact wording when multiple probands or cases are distinguished.
 
 - proband_status (EvidenceBlock[enum: Proband, Non-Proband, Unknown]):
   - Proband: explicitly described as proband/index case, OR the individual discussed in most detail in the paper when no explicit proband is identified (explain the rationale in the reasoning block)
@@ -69,8 +77,12 @@ Guidelines:
 
 1. Extract only explicitly stated information. Do NOT infer.
 2. Distinguish probands from non-probands.
-3. Extract only individuals with identifiable patient-level information.
-4. If only aggregate statistics are provided (e.g., "5 males"), do not extract individuals.
+3. Extract individuals with patient-level information, which a genotype
+   attributed to a named individual is.
+4. If only aggregate statistics are provided (e.g., "5 males"), do not extract
+   individuals. The distinction is whether the paper says anything about a
+   particular person: "130 IPAH patients" names nobody, while a table row
+   reporting one proband's variant names someone.
 5. Each patient must have an identifier; otherwise skip.
 6. If no identifiable human patients are present, return "unknown".
 7. For relational descriptions (e.g., "proband's sister"), simplify identifier to the role (e.g., "sister").
@@ -80,6 +92,26 @@ Guidelines:
 9. Do not extract authors, non-clinical mentions, or animal models.
 10. Use enum values when possible; otherwise use "Other" or "Unknown".
 11. Missing fields should be returned as null (not omitted from the structured output).
+
+TABLES LISTING PATIENTS:
+
+A cohort paper usually holds its full series in a table, as rows or as columns,
+while the narrative describes only some of them at length. Both are sources and
+neither replaces the other: walk the table end to end and extract every patient
+it lists, then add anyone the text or the pedigree describes who is not in it.
+
+A count stated in the text is a hint, not a target. If a paper says it studied
+eleven probands and you have found four, that is worth a look at the tables for
+the other seven. But studies routinely count people they never identify one by
+one -- a cohort of several hundred, described only in aggregate -- and those are
+not extractable, so the count is not a number to reach and falling short of it
+is not an error. Extract the individuals the paper identifies, however many that
+turns out to be.
+
+A patient listed only in a table is still a patient. Its row or column is the
+evidence, cited with table_id, and having no narrative paragraph is not a reason
+to skip it. One patient may occupy several rows, one per variant reported for
+them; that is one patient, not several.
 
 FAMILY GROUPING:
 
@@ -142,6 +174,6 @@ PATIENT_EXTRACTION_AGENT_INSTRUCTIONS = (
 agent = Agent(
     name='patient_info_extractor',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
-    model=env.OPENAI_API_DEPLOYMENT,
+    model=extraction_model(),
     output_type=PatientExtractionOutput,
 )

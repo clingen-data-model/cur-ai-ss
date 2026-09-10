@@ -4,7 +4,7 @@ from agents import Agent, ModelSettings
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
-from lib.core.environment import env
+from lib.agents.model_factory import extraction_model
 from lib.models.variant import (
     VariantExtractionOutput,
 )
@@ -95,6 +95,21 @@ HGVS fields may be populated in TWO ways:
 ALLOWED inference examples:
 - "Val600Glu" → p.Val600Glu
 - "glycine to arginine at position 12" → p.Gly12Arg
+- "C331Y" → p.Cys331Tyr
+- "W66G" → p.Trp66Gly
+
+One-letter amino acid codes expand to three-letter ones: the mapping is fixed and
+the position is written down, so nothing is being chosen and the inference is
+allowed. Populate hgvs_p whenever the paper gives a protein change in this form,
+not only the variant string. hgvs_p is the field downstream normalization
+searches on; a variant carrying only a free-text description cannot be looked up
+at all, and older papers frequently report changes this way and in no other.
+
+Keep the position exactly as the paper prints it. Papers predating current
+nomenclature often number from the mature protein rather than the initiator
+methionine, so their positions differ from the modern ones by the length of the
+signal peptide. Correcting that requires knowing the protein and is not this
+task's job; record what is written and let normalization resolve it.
 
 DISALLOWED inference:
 - Exon-level descriptions without transcript specified
@@ -226,6 +241,6 @@ VARIANT_EXTRACTION_AGENT_INSTRUCTIONS = (
 agent = Agent(
     name='variant_extractor',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
-    model=env.OPENAI_API_DEPLOYMENT,
+    model=extraction_model(),
     output_type=VariantExtractionOutput,
 )

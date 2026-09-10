@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 
 from lib.models import PaperResp, VariantResp, VariantUpdateRequest
-from lib.models.variant import VariantType
+from lib.models.variant import VariantType, is_harmonized, malformed_identifiers
 from lib.tasks import TaskType, is_task_completed
 from lib.ui.api import (
     get_occurrences,
@@ -14,6 +14,8 @@ from lib.ui.api import (
 )
 from lib.ui.paper.shared import (
     HUMAN_EDIT_NOTE_DEFAULT,
+    format_allele_counts,
+    format_gnomad_population,
     get_clingen_url,
     get_clinvar_url,
     get_gnomad_url,
@@ -56,6 +58,27 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
         if link.variant_id not in links_by_variant:
             links_by_variant[link.variant_id] = []
         links_by_variant[link.variant_id].append(link)
+
+    # Harmonization writes a row for every variant, so its failures show up in
+    # the row's contents rather than its absence: either no identifier the
+    # annotation step can look up, or one it echoed back without normalizing.
+    harmonization_warnings: dict[int, str] = {}
+    for i, v in enumerate(variants):
+        hv = v.harmonized_variant.value if v.harmonized_variant else None
+        if not is_harmonized(hv):
+            harmonization_warnings[i] = (
+                'Harmonization produced no gnomAD coordinates, rsID, CAID or '
+                'HGVS g./c. for this variant, so it could not be annotated.'
+            )
+            continue
+        malformed = malformed_identifiers(hv)
+        if malformed:
+            fields = ', '.join(f'{k} = "{v}"' for k, v in malformed.items())
+            harmonization_warnings[i] = (
+                f'Harmonized notation looks malformed ({fields}). It was most '
+                'likely copied from the paper rather than normalized, so any '
+                'annotation for this variant may be wrong.'
+            )
 
     # Separate variants into pathogenic and other by index
     pathogenic_indices = [
@@ -153,10 +176,20 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                 if harmonized_variant and harmonized_variant.value
                 else (variant.variant_evidence.value or f'Variant {i}')
             )
+            harmonization_warning = harmonization_warnings.get(idx)
+            if harmonization_warning:
+                expander_title = f'⚠️ {expander_title} — check harmonization'
             with st.expander(
                 expander_title,
                 expanded=(variant.id == selected_variant_id),
             ):
+                if harmonization_warning:
+                    st.warning(
+                        f'{harmonization_warning} Use 🔄 Re-harmonize on the '
+                        'Harmonized tab to try again.',
+                        icon='⚠️',
+                    )
+
                 # Create tabs for Harmonized vs Raw display
                 tab_harmonized, tab_raw = st.tabs(
                     ['🔧 Harmonized', 'Raw (as extracted from the paper)']
@@ -842,16 +875,30 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                                     'Top-level AF': ev.gnomad_top_level_af
                                     if ev.gnomad_top_level_af is not None
                                     else 'N/A',
+                                    'Top-level Alleles (AC / AN)': format_allele_counts(
+                                        ev.gnomad_ac, ev.gnomad_an
+                                    ),
                                     'Popmax AF': ev.gnomad_popmax_af
                                     if ev.gnomad_popmax_af is not None
                                     else 'N/A',
-                                    'Popmax Population': ev.gnomad_popmax_population
-                                    or 'N/A',
+                                    'Popmax Population': format_gnomad_population(
+                                        ev.gnomad_popmax_population
+                                    ),
+                                    'Popmax Alleles (AC / AN)': format_allele_counts(
+                                        ev.gnomad_popmax_ac, ev.gnomad_popmax_an
+                                    ),
                                 }
                             ]
                         )
 
                         st.dataframe(gnomad_df, width='stretch', hide_index=True)
+                        st.caption(
+                            'AC = allele count (copies of the alternate allele observed); '
+                            'AN = allele number (total alleles tested). '
+                            'AF = allele frequency (AC / AN). '
+                            'Popmax = the genetic ancestry group with the highest allele '
+                            'frequency (groups with fewer than 2,000 alleles tested are excluded).'
+                        )
 
                 # ======================================================
                 # Associated Patients
@@ -861,8 +908,13 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                     with st.container():
                         st.subheader('Associated Patients')
                         for link in variant_links:
+                            patient_url = (
+                                f'/paper?paper_id={paper_resp.id}'
+                                f'&patient_id={link.patient_id}'
+                            )
                             st.markdown(
-                                f'- Patient "{link.patient_identifier}" w/ Zygosity {link.zygosity.value}'
+                                f'- Patient ["{link.patient_identifier}"]({patient_url}) '
+                                f'w/ Zygosity {link.zygosity.value}'
                             )
 
     if not filtered_indices:

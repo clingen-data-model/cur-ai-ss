@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, computed_field, model_validator
 from sqlalchemy import (
@@ -24,7 +24,6 @@ from lib.models.paper import PaperDB
 from lib.models.user import UserSummaryResp
 
 if TYPE_CHECKING:
-    from lib.models.agent_run import AgentRunDB
     from lib.models.patient_variant_occurrences import PatientVariantOccurrenceDB
     from lib.models.user import UserDB
 
@@ -47,6 +46,68 @@ def get_variant_description(
             or f'Variant {variant_id}'
         )
     return variant_evidence.get('value') or f'Variant {variant_id}'
+
+
+# Harmonization succeeded only if it produced at least one identifier the
+# downstream lookups can use. hgvs_p is deliberately not in this list: a protein
+# change alone cannot be annotated against gnomAD, ClinVar or VEP, which is why
+# variant annotation skips these rows.
+HARMONIZED_IDENTIFIER_FIELDS = (
+    'gnomad_style_coordinates',
+    'rsid',
+    'caid',
+    'hgvs_g',
+    'hgvs_c',
+)
+
+# Every HGVS c./g. description names the change with one of these. A string
+# without any of them is not HGVS -- usually legacy notation that puts the
+# reference base before the position ("c.C2665G" for "c.2665C>G"), or a quote
+# the PDF mangled ("c.1843-3C 4T", where ">" was read as "4").
+_HGVS_CHANGE_OPERATORS = ('>', 'del', 'dup', 'ins', 'inv', 'con', '=')
+
+# Checked for whitespace: no identifier in any of these notations contains a
+# space, so one means the value was copied out of a broken table cell.
+_UNSPACED_IDENTIFIER_FIELDS = HARMONIZED_IDENTIFIER_FIELDS + ('hgvs_p',)
+
+HarmonizedLike: TypeAlias = (
+    'HarmonizedVariant | HarmonizedVariantDB | HarmonizedVariantResp | None'
+)
+
+
+def is_harmonized(harmonized_variant: HarmonizedLike) -> bool:
+    """True if harmonization produced at least one usable identifier."""
+    if harmonized_variant is None:
+        return False
+    return any(
+        getattr(harmonized_variant, field, None)
+        for field in HARMONIZED_IDENTIFIER_FIELDS
+    )
+
+
+def malformed_identifiers(harmonized_variant: HarmonizedLike) -> dict[str, str]:
+    """Harmonized identifiers that are not well-formed, keyed by field name.
+
+    Catches what harmonization echoed back rather than normalized. Empty when
+    every identifier present looks right, so a truthy result is the warning.
+    """
+    if harmonized_variant is None:
+        return {}
+
+    malformed: dict[str, str] = {}
+    for field in _UNSPACED_IDENTIFIER_FIELDS:
+        value = getattr(harmonized_variant, field, None)
+        if value and any(character.isspace() for character in value):
+            malformed[field] = value
+
+    for field in ('hgvs_c', 'hgvs_g'):
+        value = getattr(harmonized_variant, field, None)
+        if not value or field in malformed:
+            continue
+        if not any(operator in value for operator in _HGVS_CHANGE_OPERATORS):
+            malformed[field] = value
+
+    return malformed
 
 
 class VariantType(str, Enum):
@@ -258,12 +319,6 @@ class VariantDB(Base):
     paper_id: Mapped[int] = mapped_column(
         Integer, ForeignKey('papers.id', ondelete='CASCADE'), nullable=False
     )
-    agent_run_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey('agent_runs.id', ondelete='CASCADE'),
-        nullable=False,
-        index=True,
-    )
 
     # Core fields
     variant: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -323,7 +378,6 @@ class VariantDB(Base):
     )
 
     paper: Mapped[PaperDB] = relationship('PaperDB', back_populates='variants')
-    agent_run: Mapped['AgentRunDB'] = relationship('AgentRunDB')
     updated_by: Mapped['UserDB | None'] = relationship('UserDB')
     harmonized_variant: Mapped['HarmonizedVariantDB | None'] = relationship(
         'HarmonizedVariantDB',
@@ -433,8 +487,12 @@ class AnnotatedVariant(BaseModel):
 
     # gnomAD
     gnomad_top_level_af: Optional[float] = None
+    gnomad_ac: Optional[int] = None
+    gnomad_an: Optional[int] = None
     gnomad_popmax_af: Optional[float] = None
     gnomad_popmax_population: Optional[str] = None
+    gnomad_popmax_ac: Optional[int] = None
+    gnomad_popmax_an: Optional[int] = None
 
 
 class VariantAnnotationOutput(BaseModel):
@@ -459,8 +517,12 @@ class AnnotatedVariantResp(BaseModel):
     spliceai: Optional[dict] = None  # Serialized SpliceAI
 
     gnomad_top_level_af: Optional[float] = None
+    gnomad_ac: Optional[int] = None
+    gnomad_an: Optional[int] = None
     gnomad_popmax_af: Optional[float] = None
     gnomad_popmax_population: Optional[str] = None
+    gnomad_popmax_ac: Optional[int] = None
+    gnomad_popmax_an: Optional[int] = None
 
 
 class AnnotatedVariantDB(Base):
@@ -494,8 +556,12 @@ class AnnotatedVariantDB(Base):
 
     # gnomAD
     gnomad_top_level_af: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gnomad_ac: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    gnomad_an: Mapped[int | None] = mapped_column(Integer, nullable=True)
     gnomad_popmax_af: Mapped[float | None] = mapped_column(Float, nullable=True)
     gnomad_popmax_population: Mapped[str | None] = mapped_column(String, nullable=True)
+    gnomad_popmax_ac: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    gnomad_popmax_an: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

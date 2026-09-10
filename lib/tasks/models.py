@@ -11,7 +11,6 @@ from lib.models.base import Base
 from lib.models.user import UserSummaryResp
 
 if TYPE_CHECKING:
-    from lib.models.agent_run import AgentRunDB
     from lib.models.paper import PaperDB
     from lib.models.user import UserDB
 
@@ -117,6 +116,14 @@ TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
     TaskType.MONDO_LINKING: [],
 }
 
+# Pipeline leaves: task types with no successors. GENERAL_PAPER_QUESTION is
+# excluded because chat tasks are not part of the extraction pipeline.
+TERMINAL_TASK_TYPES: frozenset[TaskType] = frozenset(
+    t
+    for t in TaskType
+    if not TASK_SUCCESSORS.get(t) and t is not TaskType.GENERAL_PAPER_QUESTION
+)
+
 
 class TaskDB(Base):
     __tablename__ = 'tasks'
@@ -128,14 +135,7 @@ class TaskDB(Base):
         nullable=False,
         index=True,
     )
-    agent_run_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey('agent_runs.id', ondelete='CASCADE'),
-        nullable=False,
-        index=True,
-    )
     paper: Mapped['PaperDB'] = relationship('PaperDB', back_populates='tasks')
-    agent_run: Mapped['AgentRunDB'] = relationship('AgentRunDB')
     type: Mapped[TaskType] = mapped_column(
         SQLEnum(TaskType), nullable=False, index=True
     )

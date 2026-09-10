@@ -4,8 +4,9 @@ from agents import Agent, function_tool
 from pydantic import BaseModel
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
-from lib.core.environment import env
-from lib.misc.gcs import upload_and_sign_image
+from lib.agents.model_factory import extraction_model
+from lib.agents.vision import vlm_describe
+from lib.misc.images import image_to_data_url
 from lib.misc.pdf.paths import pdf_image_path
 
 
@@ -16,25 +17,32 @@ class PedigreeExtractionOutput(BaseModel):
     description: Optional[str] = None
 
 
-def _analyze_image_url(image_url: str) -> str:
-    """Run the vision model against an image URL and return its description."""
-    from openai import OpenAI
+# The vision model answers with exactly this when a figure is not a pedigree.
+NOT_A_PEDIGREE = 'NOT_A_PEDIGREE'
 
-    client = OpenAI(api_key=env.OPENAI_API_KEY)
 
-    message = client.chat.completions.create(
-        model=env.OPENAI_VLM,
-        messages=[
-            {
-                'role': 'user',
-                'content': [
-                    {
-                        'type': 'image_url',
-                        'image_url': {'url': image_url, 'detail': 'high'},
-                    },
-                    {
-                        'type': 'text',
-                        'text': """First determine whether this image is a pedigree (family tree) diagram.
+class PedigreeCapture:
+    """The first genuine pedigree analysis the vision tool returned.
+
+    The wrapper agent never sees the image: it routes figures to the tool and
+    copies the answer into the output schema. Copying is a model step, so the
+    description it reports can drift from what the vision model actually said.
+    Recording the tool's own return value lets the caller store that verbatim.
+    """
+
+    def __init__(self) -> None:
+        self.image_id: int | None = None
+        self.description: str | None = None
+
+    def record(self, image_id: int, description: str) -> None:
+        # The agent is told to stop at the first pedigree, so the first
+        # confirmed figure is the one it reports.
+        if self.image_id is None:
+            self.image_id = image_id
+            self.description = description
+
+
+PEDIGREE_VISION_PROMPT = """First determine whether this image is a pedigree (family tree) diagram.
 If it is NOT a pedigree diagram, respond with exactly NOT_A_PEDIGREE and nothing else.
 
 Otherwise, extract detailed pedigree information from this diagram.
@@ -54,15 +62,17 @@ Then describe:
 - Number of generations
 - Any uncertainties due to image resolution or clarity
 
-IMPORTANT: List every visible individual, even if some details are unclear. Do not infer missing details.""",
-                    },
-                ],
-            }
-        ],
-    )
+IMPORTANT: List every visible individual, even if some details are unclear. Do not infer missing details."""
 
-    content = message.choices[0].message.content
-    return content if content is not None else ''
+
+def _analyze_image_url(image_url: str) -> str:
+    """Run the vision model against an image URL and return its description."""
+    content = vlm_describe(image_url, PEDIGREE_VISION_PROMPT)
+    # No usable answer is treated like a non-pedigree: the describer agent moves
+    # on to the next figure instead of failing the task. A truncated answer must
+    # land here rather than be recorded -- half a pedigree analysis stored as
+    # the authoritative one is worse than reporting nothing for this figure.
+    return content if content is not None else NOT_A_PEDIGREE
 
 
 # --- Agent instructions ---
@@ -101,10 +111,22 @@ IMPORTANT GUARDRAILS:
 PEDIGREE_DESCRIBER_AGENT_INSTRUCTIONS = PEDIGREE_EXTRACTION_INSTRUCTIONS
 
 
-def pedigree_describer_agent_for_paper(paper_id: int) -> Agent:
-    """Build a pedigree describer agent bound to a specific paper's images."""
+def pedigree_describer_agent_for_paper(
+    paper_id: int,
+) -> tuple[Agent, PedigreeCapture]:
+    """Build a pedigree describer agent bound to a specific paper's images.
 
-    @function_tool
+    Returns the agent and the capture recording what the vision tool answered,
+    so the caller can store that analysis rather than the agent's copy of it.
+    """
+    capture = PedigreeCapture()
+
+    # failure_error_function=None so a raised exception propagates instead of
+    # being handed to the model as text. vlm_describe returns None for the
+    # outcomes that are findings (a decline, a truncated answer); anything it
+    # raises means the call itself did not happen, which is a task failure and
+    # not a fact about the paper.
+    @function_tool(failure_error_function=None)
     def analyze_pedigree_image(image_id: int, is_supplement: bool = False) -> str:
         """Evaluate a figure's image to determine whether it is a pedigree.
 
@@ -114,12 +136,16 @@ def pedigree_describer_agent_for_paper(paper_id: int) -> Agent:
         NOT_A_PEDIGREE if it is not.
         """
         image_path = pdf_image_path(paper_id, image_id, supplement=is_supplement)
-        return _analyze_image_url(upload_and_sign_image(image_path))
+        description = _analyze_image_url(image_to_data_url(image_path))
+        if description.strip() != NOT_A_PEDIGREE:
+            capture.record(image_id, description)
+        return description
 
-    return Agent(
+    agent = Agent(
         name='pedigree_describer',
         instructions=BASE_SYSTEM_INSTRUCTIONS,
-        model=env.OPENAI_API_DEPLOYMENT,
+        model=extraction_model(),
         output_type=PedigreeExtractionOutput,
         tools=[analyze_pedigree_image],
     )
+    return agent, capture

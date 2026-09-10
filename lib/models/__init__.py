@@ -3,7 +3,6 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from lib.models.agent_run import AgentRunDB, AgentRunResp
 from lib.models.base import Base, PatchModel
 from lib.models.conversation import (
     ChatMessageRequest,
@@ -46,7 +45,6 @@ from lib.models.paper import (
     PedigreeResp,
 )
 from lib.models.patient import (
-    PatientCreateRequest,
     PatientDB,
     PatientResp,
     PatientUpdateRequest,
@@ -78,6 +76,7 @@ from lib.models.segregation_analysis import (
     SegregationEvidenceUpdateRequest,
     SequencingMethodology,
 )
+from lib.models.snapshot import PaperResetRequest, PaperResetResp, SnapshotMeta
 from lib.models.user import (
     ChangePasswordRequest,
     LoginRequest,

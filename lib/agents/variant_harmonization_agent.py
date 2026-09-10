@@ -18,6 +18,7 @@ import requests
 from agents import Agent, function_tool
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
+from lib.agents.model_factory import extraction_model
 from lib.agents.variant_annotation_agent import _get_session_with_retries
 from lib.core.environment import env
 from lib.models.evidence_block import ReasoningBlock
@@ -720,6 +721,24 @@ Use the following fields of the provided structured input:
 - hgvs_p
 - hgvs_g
 
+Notation in these fields is sometimes wrong in a way the paper itself is not.
+It was read out of a PDF, and a text layer can declare the wrong character for a
+glyph, drop one, split a token with a stray space, or merge two together. Which
+character goes wrong depends on the document's fonts, so there is no fixed list
+to check against: an operator arriving as a digit is one form ("c.98T 4G" or
+"c.3733T4G" for "c.98T>G"), a superscript or minus sign lost from a position is
+another. Separately, older papers are written to older conventions -- the
+reference base ahead of the position, "c.C2665G" for "c.2665C>G" -- which is not
+corruption but still is not HGVS.
+
+So when a c./g./p. string does not read as valid HGVS, that is evidence about
+how the text reached you, not evidence that the variant cannot be resolved. Work
+out what the paper meant and continue with that reading, within two limits: use
+only the characters already present, never inventing a change the paper does not
+state, and never return the unreadable string as your answer. The lookups are
+the check -- a reading that is wrong will not resolve, which is the signal to
+try another one rather than to stop.
+
 Proceed to State 1.
 
 ============================================================
@@ -837,7 +856,15 @@ STATE 4 — CLINVAR & DBSNP LOOKUP
 ============================================================
 
 Condition:
-Previous projections failed but hgvs_p is present.
+Previous projections failed AND a protein change is available, either as hgvs_p
+or as a protein change written into the variant string -- "C331Y", "Cys331Tyr",
+"Trp66Gly". Older papers frequently report changes only that way, and a variant
+whose protein change sits in the variant string is as searchable as one whose
+sits in hgvs_p: the query below is built from the amino acids and the position,
+and both forms carry them.
+
+Do not skip this state because hgvs_p is null. That is the difference between
+returning a normalized allele and returning nothing, for a whole class of paper.
 
 You may call clinvar_lookup EXACTLY ONCE.
 You may call dbsnp_lookup EXACTLY ONCE.
@@ -845,7 +872,8 @@ You may call dbsnp_lookup EXACTLY ONCE.
 Step 5A — Construct Query
 
 Query includes:
-    gene AND all protein representations:
+    gene AND all protein representations of the change, taken from hgvs_p where
+    it is populated and from the variant string otherwise:
         hgvs_p
         3-letter format (p.Arg157Ser)
         1-letter format (p.R157S)
@@ -955,7 +983,7 @@ VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS = VARIANT_HARMONIZATION_INSTRUCTIONS
 agent = Agent(
     name='variant_harmonizer',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
-    model=env.OPENAI_API_DEPLOYMENT,
+    model=extraction_model(),
     output_type=ReasoningBlock[HarmonizedVariant],
     tools=[
         select_canonical_transcript,

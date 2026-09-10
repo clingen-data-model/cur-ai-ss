@@ -43,6 +43,17 @@ CRITICAL:
 - Do NOT place interpretive commentary inside quote.
 - Do NOT paraphrase text inside quote.
 
+PEDIGREE DESCRIPTION RULES:
+
+- Some messages carry a "Pedigree Description" alongside the paper. It is a
+  reading of a figure, written for you, and is NOT part of the paper's text.
+- Never quote it. A quote is checked against the paper and highlighted there, so
+  a sentence copied from the description points the curator at something the
+  document does not contain.
+- For a value taken from it, give the image_id it names and leave quote empty.
+  image_id alone is sufficient evidence, exactly as table_id is for a table.
+- Its wording may still inform reasoning, which is yours to write.
+
 TABLE EVIDENCE RULES:
 
 - When a field is derived from a table:
@@ -65,4 +76,11 @@ TABLE EVIDENCE RULES:
 
 - Do NOT paraphrase table content into quote as a substitute for a verbatim quote.
 - Do NOT use markdown table numbers (e.g., "Table 3") as table_id; always use 0-based sequential indexing.
+
+- A table may be preceded by an "EXTRACTION WARNING" marker, meaning the automated
+  extraction of that table failed and its rows are scrambled.
+  - Values read from such a table are unreliable; prefer any other source in the paper.
+  - Crucially, do NOT treat a value's absence from a flagged table as evidence that the
+    paper does not report it. Say the value could not be read, rather than that it was
+    not reported.
 """

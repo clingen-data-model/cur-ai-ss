@@ -31,11 +31,10 @@ from lib.models.variant import (
 )
 
 
-def family_to_db(paper_id: int, agent_run_id: int, family: Family) -> FamilyDB:
+def family_to_db(paper_id: int, family: Family) -> FamilyDB:
     """Convert a Family to FamilyDB, splitting values from evidence."""
     return FamilyDB(
         paper_id=paper_id,
-        agent_run_id=agent_run_id,
         identifier=family.identifier.value,
         identifier_evidence=family.identifier.model_dump(),
         consanguinity=family.consanguinity.value,
@@ -61,9 +60,7 @@ _DEMOGRAPHIC_EVIDENCE_FIELDS = [
 ]
 
 
-def patient_identity_to_db(
-    paper_id: int, identity: PatientIdentity, agent_run_id: int
-) -> PatientDB:
+def patient_identity_to_db(paper_id: int, identity: PatientIdentity) -> PatientDB:
     """Convert a PatientIdentity to PatientDB with placeholder demographics.
 
     Demographics are filled in later by ``apply_patient_demographics`` once the
@@ -72,7 +69,6 @@ def patient_identity_to_db(
     """
     patient_db = PatientDB(
         paper_id=paper_id,
-        agent_run_id=agent_run_id,
         identifier=identity.identifier.value,
         identifier_evidence=identity.identifier.model_dump(),
         proband_status=identity.proband_status.value,
@@ -134,11 +130,10 @@ def hpo_to_db(
     )
 
 
-def variant_to_db(paper_id: int, variant: Variant, agent_run_id: int) -> VariantDB:
+def variant_to_db(paper_id: int, variant: Variant) -> VariantDB:
     """Convert Variant to VariantDB, extracting values and evidence from EvidenceBlocks."""
     kwargs = {
         'paper_id': paper_id,
-        'agent_run_id': agent_run_id,
     }
 
     # All fields except gene have evidence blocks

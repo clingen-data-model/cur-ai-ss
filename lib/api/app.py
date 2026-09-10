@@ -47,7 +47,7 @@ from lib.agents.general_paper_qa_agent import (
 from lib.agents.general_paper_qa_agent import (
     agent as general_paper_qa_agent,
 )
-from lib.agents.run_tracking import ensure_agent_run
+from lib.agents.model_factory import extraction_model
 from lib.api.auth import get_current_user, get_current_user_optional
 from lib.api.db import get_session, session_scope
 from lib.api.middleware import make_log_request_middleware
@@ -83,8 +83,16 @@ from lib.misc.pdf.paths import (
     pdf_words_json_path,
     relevant_sections_md,
 )
+from lib.misc.snapshots import (
+    InvalidSnapshotNameError,
+    SnapshotIncompatibleError,
+    SnapshotNotFoundError,
+    current_state_hash,
+    dump_paper_state,
+    list_snapshots,
+    restore_snapshot,
+)
 from lib.models import (
-    AgentRunDB,
     AnnotatedVariantDB,
     AnnotatedVariantResp,
     ChangePasswordRequest,
@@ -107,9 +115,10 @@ from lib.models import (
     HumanEvidenceBlock,
     LoginRequest,
     PaperDB,
+    PaperResetRequest,
+    PaperResetResp,
     PaperResp,
     PaperUpdateRequest,
-    PatientCreateRequest,
     PatientDB,
     PatientResp,
     PatientUpdateRequest,
@@ -124,6 +133,7 @@ from lib.models import (
     SegregationAnalysisResp,
     SegregationEvidenceDB,
     SegregationEvidenceUpdateRequest,
+    SnapshotMeta,
     TaskDB,
     TokenResp,
     UserCreateRequest,
@@ -134,7 +144,6 @@ from lib.models import (
     VariantResp,
     VariantUpdateRequest,
 )
-from lib.models.base import row_to_dict
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.mondo import MondoComponentMapping, MondoTerm
 from lib.models.patient import (
@@ -307,18 +316,6 @@ def put_paper(
         )
     main_content = uploaded_file.file.read()
 
-    # Ensure agent run exists
-    latest_run_db = session.query(AgentRunDB).order_by(AgentRunDB.id.desc()).first()
-    if not latest_run_db:
-        latest_run_resp = ensure_agent_run(
-            session=session,
-            description='Web UI upload',
-            model=env.OPENAI_API_DEPLOYMENT,
-        )
-        latest_run_id = latest_run_resp.id
-    else:
-        latest_run_id = latest_run_db.id
-
     if current_user.max_papers is not None and current_user.max_papers <= 0:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -336,7 +333,6 @@ def put_paper(
         # Create initial PDF_PARSING task
         task = TaskDB(
             paper_id=paper_db.id,
-            agent_run_id=latest_run_id,
             type=TaskType.PDF_PARSING,
             status=TaskStatus.PENDING,
             updated_by_user_id=current_user.id,
@@ -444,6 +440,65 @@ def delete_paper(paper_id: int, session: Session = Depends(get_session)) -> None
 
     session.delete(paper_db)
     session.flush()
+
+
+@app.get('/papers/{paper_id}/snapshots', response_model=list[SnapshotMeta])
+def get_paper_snapshots(paper_id: int, session: Session = Depends(get_session)) -> Any:
+    paper_db = session.get(PaperDB, paper_id)
+    if paper_db is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    snapshots = list_snapshots(paper_id)
+    if snapshots:
+        state_hash = current_state_hash(paper_id, paper_db, session)
+        for snapshot in snapshots:
+            snapshot.matches_current = snapshot.state_hash == state_hash
+    return snapshots
+
+
+@app.post('/papers/{paper_id}/reset', response_model=PaperResetResp)
+def reset_paper(
+    paper_id: int,
+    request: PaperResetRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    paper_db = session.get(PaperDB, paper_id)
+    if paper_db is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    active_tasks = (
+        session.query(TaskDB)
+        .filter(
+            TaskDB.paper_id == paper_id,
+            TaskDB.status.in_(
+                [TaskStatus.PENDING, TaskStatus.QUEUED, TaskStatus.RUNNING]
+            ),
+        )
+        .count()
+    )
+    if active_tasks:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail='Cannot reset while extraction tasks are pending or running',
+        )
+    try:
+        applied = restore_snapshot(
+            paper_id, request.snapshot_name, session, current_user
+        )
+    except InvalidSnapshotNameError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except SnapshotNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except SnapshotIncompatibleError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+    if applied:
+        # Bulk deletes/inserts bypass the identity map; expire so the response
+        # below reads the restored rows, not stale in-session objects.
+        session.expire_all()
+    return {'changed': applied, 'paper': get_paper(paper_id, session)}
 
 
 @app.patch('/papers/{paper_id}', response_model=PaperResp)
@@ -785,79 +840,6 @@ def get_patients(paper_id: int, session: Session = Depends(get_session)) -> Any:
     return [_patient_to_resp(p) for p in patients]
 
 
-@app.post(
-    '/papers/{paper_id}/patients',
-    response_model=PatientResp,
-    status_code=status.HTTP_201_CREATED,
-)
-def create_patient(
-    paper_id: int,
-    patient_data: PatientCreateRequest,
-    session: Session = Depends(get_session),
-    current_user: UserDB = Depends(get_current_user),
-) -> Any:
-    from lib.models.evidence_block import EvidenceBlock
-
-    paper_db = session.get(PaperDB, paper_id)
-    if not paper_db:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
-        )
-
-    family_db = session.get(FamilyDB, patient_data.family_id)
-    if not family_db or family_db.paper_id != paper_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Family not found'
-        )
-
-    def create_evidence_block(value: Any) -> dict:
-        """Create an evidence block for human-created data."""
-        block = EvidenceBlock(
-            value=value,
-            reasoning='Created by human',
-            quote='Created manually',
-        )
-        return block.model_dump()
-
-    patient_db = PatientDB(
-        paper_id=paper_id,
-        family_id=patient_data.family_id,
-        identifier=patient_data.identifier,
-        identifier_evidence=create_evidence_block(patient_data.identifier),
-        proband_status=patient_data.proband_status,
-        proband_status_evidence=create_evidence_block(patient_data.proband_status),
-        sex=patient_data.sex,
-        sex_evidence=create_evidence_block(patient_data.sex),
-        age_diagnosis=patient_data.age_diagnosis,
-        age_diagnosis_evidence=create_evidence_block(patient_data.age_diagnosis),
-        age_report=patient_data.age_report,
-        age_report_evidence=create_evidence_block(patient_data.age_report),
-        age_death=patient_data.age_death,
-        age_death_evidence=create_evidence_block(patient_data.age_death),
-        country_of_origin=patient_data.country_of_origin,
-        country_of_origin_evidence=create_evidence_block(
-            patient_data.country_of_origin
-        ),
-        race=patient_data.race,
-        race_evidence=create_evidence_block(patient_data.race),
-        ethnicity=patient_data.ethnicity,
-        ethnicity_evidence=create_evidence_block(patient_data.ethnicity),
-        affected_status=patient_data.affected_status,
-        affected_status_evidence=create_evidence_block(patient_data.affected_status),
-    )
-    patient_db.updated_by_user_id = current_user.id
-    session.add(patient_db)
-    _touch_paper(session, paper_id, current_user)
-    session.flush()
-    patient_db = (
-        session.query(PatientDB)
-        .options(selectinload(PatientDB.family))
-        .filter(PatientDB.id == patient_db.id)
-        .one()
-    )
-    return _patient_to_resp(patient_db)
-
-
 @app.get('/papers/{paper_id}/families', response_model=list[FamilyResp])
 def get_families(paper_id: int, session: Session = Depends(get_session)) -> Any:
     paper_db = session.get(PaperDB, paper_id)
@@ -1084,8 +1066,12 @@ def _variant_to_resp(row: VariantDB) -> VariantResp:
             alphamissense_score=row.annotated_variant.alphamissense_score,
             spliceai=row.annotated_variant.spliceai,
             gnomad_top_level_af=row.annotated_variant.gnomad_top_level_af,
+            gnomad_ac=row.annotated_variant.gnomad_ac,
+            gnomad_an=row.annotated_variant.gnomad_an,
             gnomad_popmax_af=row.annotated_variant.gnomad_popmax_af,
             gnomad_popmax_population=row.annotated_variant.gnomad_popmax_population,
+            gnomad_popmax_ac=row.annotated_variant.gnomad_popmax_ac,
+            gnomad_popmax_an=row.annotated_variant.gnomad_popmax_an,
         )
         if row.annotated_variant
         else None
@@ -1815,69 +1801,10 @@ def _build_qa_context(
     Returns:
         Tuple of (paper_context, db_state_context, agent_instructions)
     """
-    families = session.query(FamilyDB).filter(FamilyDB.paper_id == paper_id).all()
-    family_ids = [f.id for f in families]
-    patients = session.query(PatientDB).filter(PatientDB.paper_id == paper_id).all()
-    pedigrees = session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).all()
-    phenotypes = (
-        session.query(PhenotypeDB).filter(PhenotypeDB.paper_id == paper_id).all()
-    )
-    phenotype_ids = [p.id for p in phenotypes]
-    hpos = (
-        session.query(HpoDB).filter(HpoDB.phenotype_id.in_(phenotype_ids)).all()
-        if phenotype_ids
-        else []
-    )
-    variants = session.query(VariantDB).filter(VariantDB.paper_id == paper_id).all()
-    variant_ids = [v.id for v in variants]
-    harmonized = (
-        session.query(HarmonizedVariantDB)
-        .filter(HarmonizedVariantDB.variant_id.in_(variant_ids))
-        .all()
-        if variant_ids
-        else []
-    )
-    enriched = (
-        session.query(AnnotatedVariantDB)
-        .filter(AnnotatedVariantDB.variant_id.in_(variant_ids))
-        .all()
-        if variant_ids
-        else []
-    )
-    pvlinks = (
-        session.query(PatientVariantOccurrenceDB)
-        .filter(PatientVariantOccurrenceDB.paper_id == paper_id)
-        .all()
-    )
-    seg_evidence = (
-        session.query(SegregationEvidenceDB)
-        .filter(SegregationEvidenceDB.family_id.in_(family_ids))
-        .all()
-        if family_ids
-        else []
-    )
-    seg_computed = (
-        session.query(SegregationAnalysisComputedDB)
-        .filter(SegregationAnalysisComputedDB.family_id.in_(family_ids))
-        .all()
-        if family_ids
-        else []
-    )
-
-    db_state = {
-        'paper': row_to_dict(paper_db),
-        'families': [row_to_dict(r) for r in families],
-        'patients': [row_to_dict(r) for r in patients],
-        'pedigrees': [row_to_dict(r) for r in pedigrees],
-        'phenotypes': [row_to_dict(r) for r in phenotypes],
-        'hpo_terms': [row_to_dict(r) for r in hpos],
-        'variants': [row_to_dict(r) for r in variants],
-        'harmonized_variants': [row_to_dict(r) for r in harmonized],
-        'annotated_variants': [row_to_dict(r) for r in enriched],
-        'patient_variant_occurrences': [row_to_dict(r) for r in pvlinks],
-        'segregation_evidence': [row_to_dict(r) for r in seg_evidence],
-        'segregation_analysis': [row_to_dict(r) for r in seg_computed],
-    }
+    db_state = dump_paper_state(paper_id, paper_db, session)
+    db_state.pop('tasks')  # pipeline bookkeeping, not extraction state
+    db_state['hpo_terms'] = db_state.pop('hpos')
+    db_state['segregation_analysis'] = db_state.pop('segregation_analysis_computed')
 
     paper_md = relevant_sections_md(paper_id, paper_db.supplement_format)
     paper_context = format_paper_context(paper_md)
@@ -1950,7 +1877,7 @@ async def generate_chat_response(
     else:
         client = AsyncOpenAI(api_key=env.OPENAI_API_KEY)
         resp = await client.responses.create(
-            model=env.OPENAI_API_DEPLOYMENT,
+            model=extraction_model(),
             input=last_user_message,
             conversation=conversation_db.conversation_id,
         )

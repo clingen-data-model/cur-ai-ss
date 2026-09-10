@@ -87,10 +87,9 @@ def _identity(
 
 
 def test_patient_identity_to_db_sets_identity_and_placeholder_demographics():
-    row = patient_identity_to_db('paper123', _identity(), agent_run_id=1)
+    row = patient_identity_to_db('paper123', _identity())
 
     assert row.paper_id == 'paper123'
-    assert row.agent_run_id == 1
     # Identity fields come from the agent
     assert row.identifier == 'P1'
     assert row.proband_status == 'Proband'
@@ -117,7 +116,7 @@ def test_patient_identity_to_db_sets_identity_and_placeholder_demographics():
 
 
 def test_apply_patient_demographics_overwrites_placeholders():
-    row = patient_identity_to_db('paper123', _identity(), agent_run_id=1)
+    row = patient_identity_to_db('paper123', _identity())
 
     demographics = PatientDemographics(
         sex=EvidenceBlock(
@@ -174,7 +173,7 @@ def test_apply_patient_demographics_overwrites_placeholders():
 
 def test_apply_patient_demographics_maps_segregation_analysis_fields():
     """Segregation analysis fields carried on demographics are applied."""
-    row = patient_identity_to_db('paper_seg', _identity(), agent_run_id=1)
+    row = patient_identity_to_db('paper_seg', _identity())
 
     demographics = PatientDemographics(
         sex=EvidenceBlock(value=SexAtBirth.Male, quote='male', reasoning='stated'),

@@ -11,7 +11,6 @@ from lib.api.auth import get_current_user
 from lib.api.db import get_session, session_scope
 from lib.core.environment import env
 from lib.models import (
-    AgentRunDB,
     AnnotatedVariantDB,
     FamilyDB,
     GeneDB,
@@ -74,7 +73,7 @@ def seeded_genes(db_session):
     db_session.flush()
 
 
-def test_queue_new_paper(client, test_pdf, db_session, seeded_genes, agent_run):
+def test_queue_new_paper(client, test_pdf, db_session, seeded_genes):
     count = db_session.scalar(select(func.count(GeneDB.id)))
     assert count == 3
     response = client.put(
@@ -94,9 +93,7 @@ def test_queue_new_paper(client, test_pdf, db_session, seeded_genes, agent_run):
     assert count == 1
 
 
-def test_queue_existing_paper_fails(
-    client, db_session, test_pdf, seeded_genes, agent_run
-):
+def test_queue_existing_paper_fails(client, db_session, test_pdf, seeded_genes):
     # Second upload: same content/name triggers conflict
     response = client.put(
         '/papers',
@@ -113,7 +110,7 @@ def test_queue_existing_paper_fails(
     assert response2.json()['detail'] == 'Paper with this content already exists'
 
 
-def test_get_paper_success(client, test_pdf, seeded_genes, agent_run):
+def test_get_paper_success(client, test_pdf, seeded_genes):
     upload_response = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
@@ -208,9 +205,7 @@ def test_get_paper_not_found(client):
     assert response.json()['detail'] == 'Paper not found'
 
 
-def test_update_paper_metadata(
-    client, test_pdf, db_session, seeded_genes, agent_run, test_user
-):
+def test_update_paper_metadata(client, test_pdf, db_session, seeded_genes, test_user):
     response = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
@@ -269,7 +264,7 @@ def test_update_paper_metadata(
     assert response5.json()['disease_inheritance_mode_evidence'] is None
 
 
-def test_list_paper(client, test_pdf, seeded_genes, agent_run):
+def test_list_paper(client, test_pdf, seeded_genes):
     response = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
@@ -294,7 +289,7 @@ def test_list_paper(client, test_pdf, seeded_genes, agent_run):
         _assert_updated_at_recent(job['updated_at'])
 
 
-def test_list_papers_with_tasks(client, test_pdf, db_session, seeded_genes, agent_run):
+def test_list_papers_with_tasks(client, test_pdf, db_session, seeded_genes):
     response = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
@@ -321,7 +316,7 @@ def test_list_papers_with_tasks(client, test_pdf, db_session, seeded_genes, agen
         _assert_updated_at_recent(job['updated_at'])
 
 
-def test_delete_paper(client, test_pdf, db_session, seeded_genes, agent_run):
+def test_delete_paper(client, test_pdf, db_session, seeded_genes):
     response = client.delete(
         f'/papers/999',
     )
@@ -370,13 +365,6 @@ def test_search_genes_by_prefix_no_match(client, seeded_genes):
 
 @pytest.fixture
 def seeded_paper(db_session):
-    agent_run = AgentRunDB(
-        git_hash='abc123def456',
-        description='test run',
-        model=env.OPENAI_API_DEPLOYMENT,
-    )
-    db_session.add(agent_run)
-    db_session.flush()
     gene = GeneDB(symbol='BRCA1')
     db_session.add(gene)
     db_session.flush()
@@ -390,7 +378,6 @@ def seeded_paper(db_session):
     # Create default family for tests
     family = FamilyDB(
         paper_id=paper.id,
-        agent_run_id=agent_run.id,
         identifier='Family 1',
         identifier_evidence=dict(
             value='Family 1', reasoning='test family', quote='Family 1'
@@ -454,9 +441,7 @@ def _patient_required_fields(identifier: str = 'P1') -> dict:
     )
 
 
-def test_get_patients_returns_ordered_by_position(
-    client, db_session, seeded_paper, seeded_agent_run
-):
+def test_get_patients_returns_ordered_by_position(client, db_session, seeded_paper):
     # Get the default family created in seeded_paper fixture
     family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
     # Insert patients in order (they'll get auto-incrementing IDs)
@@ -464,7 +449,6 @@ def test_get_patients_returns_ordered_by_position(
         PatientDB(
             paper_id=seeded_paper.id,
             family_id=family.id,
-            agent_run_id=seeded_agent_run.id,
             identifier='P3',
             **_patient_required_fields('P3'),
         )
@@ -473,7 +457,6 @@ def test_get_patients_returns_ordered_by_position(
         PatientDB(
             paper_id=seeded_paper.id,
             family_id=family.id,
-            agent_run_id=seeded_agent_run.id,
             identifier='P1',
             **_patient_required_fields('P1'),
         )
@@ -482,7 +465,6 @@ def test_get_patients_returns_ordered_by_position(
         PatientDB(
             paper_id=seeded_paper.id,
             family_id=family.id,
-            agent_run_id=seeded_agent_run.id,
             identifier='P2',
             **_patient_required_fields('P2'),
         )
@@ -506,7 +488,7 @@ def test_get_patients_paper_not_found(client):
 
 
 def test_update_patient_with_human_edit_note(
-    client, db_session, seeded_paper, seeded_agent_run, test_user
+    client, db_session, seeded_paper, test_user
 ):
     """Test updating a patient with human_edit_note on evidence."""
     # Get the default family created in seeded_paper fixture
@@ -515,7 +497,6 @@ def test_update_patient_with_human_edit_note(
     patient = PatientDB(
         paper_id=seeded_paper.id,
         family_id=family.id,
-        agent_run_id=seeded_agent_run.id,
         identifier='P1',
         **_patient_required_fields('P1'),
     )
@@ -556,9 +537,7 @@ def test_update_patient_with_human_edit_note(
     assert resp_json['sex_evidence']['edited_by_name'] is None
 
 
-def test_update_patient_rejects_wrong_paper_scope(
-    client, db_session, seeded_paper, seeded_agent_run
-):
+def test_update_patient_rejects_wrong_paper_scope(client, db_session, seeded_paper):
     other_paper = PaperDB(
         content_hash='other-paper',
         gene_id=seeded_paper.gene_id,
@@ -569,7 +548,6 @@ def test_update_patient_rejects_wrong_paper_scope(
 
     other_family = FamilyDB(
         paper_id=other_paper.id,
-        agent_run_id=seeded_agent_run.id,
         identifier='Other Family',
         identifier_evidence=dict(
             value='Other Family', reasoning='test family', quote='Other Family'
@@ -583,7 +561,6 @@ def test_update_patient_rejects_wrong_paper_scope(
     patient = PatientDB(
         paper_id=other_paper.id,
         family_id=other_family.id,
-        agent_run_id=seeded_agent_run.id,
         identifier='P-other',
         **_patient_required_fields('P-other'),
     )
@@ -601,13 +578,10 @@ def test_update_patient_rejects_wrong_paper_scope(
     assert patient.identifier == 'P-other'
 
 
-def test_get_variants_harmonized_and_enriched(
-    client, db_session, seeded_paper, seeded_agent_run
-):
+def test_get_variants_harmonized_and_enriched(client, db_session, seeded_paper):
     # Create a variant with evidence blocks
     variant = VariantDB(
         paper_id=seeded_paper.id,
-        agent_run_id=seeded_agent_run.id,
         transcript='NM_007294.3',
         protein_accession='NP_009225.1',
         genomic_accession='NC_000017.11',
@@ -790,7 +764,6 @@ def _create_patient_variant_occurrence(
     db_session,
     paper: PaperDB,
     variant: VariantDB,
-    agent_run: AgentRunDB,
     disease_name: str | None = 'test disease',
 ) -> PatientVariantOccurrenceDB:
     patient_number = db_session.scalar(select(func.count(PatientDB.id))) + 1
@@ -798,7 +771,6 @@ def _create_patient_variant_occurrence(
     patient = PatientDB(
         paper_id=paper.id,
         family_id=paper.default_family_id,
-        agent_run_id=agent_run.id,
         identifier=patient_identifier,
         **_patient_required_fields(patient_identifier),
     )
@@ -826,24 +798,10 @@ def _create_patient_variant_occurrence(
 
 
 @pytest.fixture
-def seeded_agent_run(db_session):
-    """Create a test agent run."""
-    agent_run = AgentRunDB(
-        git_hash='abc123def456',
-        description='test run',
-        model=env.OPENAI_API_DEPLOYMENT,
-    )
-    db_session.add(agent_run)
-    db_session.flush()
-    return agent_run
-
-
-@pytest.fixture
-def seeded_variant(db_session, seeded_paper, seeded_agent_run):
+def seeded_variant(db_session, seeded_paper):
     """Create a variant with a harmonized variant for PATCH tests."""
     variant = VariantDB(
         paper_id=seeded_paper.id,
-        agent_run_id=seeded_agent_run.id,
         variant='c.68_69delAG',
         transcript='NM_007294.3',
         genome_build='GRCh38',
@@ -896,11 +854,10 @@ def seeded_variant(db_session, seeded_paper, seeded_agent_run):
 
 
 @pytest.fixture
-def seeded_unharmonized_variant(db_session, seeded_paper, seeded_agent_run):
+def seeded_unharmonized_variant(db_session, seeded_paper):
     """Create a variant without a harmonized variant row for PATCH tests."""
     variant = VariantDB(
         paper_id=seeded_paper.id,
-        agent_run_id=seeded_agent_run.id,
         variant='c.100A>G',
         transcript='NM_000000.1',
         genome_build='GRCh38',
@@ -1148,14 +1105,11 @@ def test_update_variant_clears_nested_harmonized_field(
     assert hv['hgvs_c'] == 'c.68_69delAG'
 
 
-def test_enqueue_all_instances_for_splatted_task(
-    client, seeded_paper, db_session, agent_run
-):
+def test_enqueue_all_instances_for_splatted_task(client, seeded_paper, db_session):
     """Test re-enqueueing a splatted task with no entity IDs re-queues all instances."""
     # Create families and splatted tasks
     family1 = FamilyDB(
         paper_id=seeded_paper.id,
-        agent_run_id=agent_run.id,
         identifier='fam1',
         identifier_evidence={},
         consanguinity=False,
@@ -1163,7 +1117,6 @@ def test_enqueue_all_instances_for_splatted_task(
     )
     family2 = FamilyDB(
         paper_id=seeded_paper.id,
-        agent_run_id=agent_run.id,
         identifier='fam2',
         identifier_evidence={},
         consanguinity=False,
@@ -1175,14 +1128,12 @@ def test_enqueue_all_instances_for_splatted_task(
     # Create per-family tasks and mark them as completed
     task1 = TaskDB(
         paper_id=seeded_paper.id,
-        agent_run_id=agent_run.id,
         type=TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
         family_id=family1.id,
         status=TaskStatus.COMPLETED,
     )
     task2 = TaskDB(
         paper_id=seeded_paper.id,
-        agent_run_id=agent_run.id,
         type=TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
         family_id=family2.id,
         status=TaskStatus.COMPLETED,
@@ -1205,13 +1156,12 @@ def test_enqueue_all_instances_for_splatted_task(
 
 
 def test_enqueue_clears_conversation_id_without_context(
-    client, seeded_paper, db_session, agent_run
+    client, seeded_paper, db_session
 ):
     """Test that re-enqueueing without additional_context clears conversation_id."""
     # Create a task with existing conversation_id and additional_context
     task = TaskDB(
         paper_id=seeded_paper.id,
-        agent_run_id=agent_run.id,
         type=TaskType.HPO_LINKING,
         status=TaskStatus.COMPLETED,
         conversation_id='conv-123',
@@ -1280,11 +1230,9 @@ def test_create_task_requires_authentication(unauth_client, seeded_paper):
     assert response.status_code == 401
 
 
-def test_update_occurrence(
-    client, db_session, seeded_paper, seeded_variant, seeded_agent_run, test_user
-):
+def test_update_occurrence(client, db_session, seeded_paper, seeded_variant, test_user):
     occurrence = _create_patient_variant_occurrence(
-        db_session, seeded_paper, seeded_variant, seeded_agent_run
+        db_session, seeded_paper, seeded_variant
     )
 
     resp = client.patch(
@@ -1333,7 +1281,7 @@ def test_update_occurrence(
 
 
 def test_enqueue_task_with_patient_variant_occurrence_scope(
-    client, seeded_paper, seeded_variant, seeded_agent_run, db_session
+    client, seeded_paper, seeded_variant, db_session
 ):
     from lib.tasks import TaskCreateRequest
 
@@ -1341,7 +1289,6 @@ def test_enqueue_task_with_patient_variant_occurrence_scope(
         db_session,
         seeded_paper,
         seeded_variant,
-        seeded_agent_run,
     )
 
     response = client.post(
@@ -1378,14 +1325,11 @@ def test_enqueue_task_with_patient_variant_occurrence_scope(
     assert tasks[0]['conversation_id'] is None
 
 
-def test_paper_metadata_successor_enqueues_mondo_linking(
-    db_session, seeded_paper, agent_run
-):
+def test_paper_metadata_successor_enqueues_mondo_linking(db_session, seeded_paper):
     from lib.tasks.misc import enqueue_successors
 
     task = TaskDB(
         paper_id=seeded_paper.id,
-        agent_run_id=agent_run.id,
         type=TaskType.PAPER_METADATA,
         status=TaskStatus.COMPLETED,
     )
@@ -1406,7 +1350,7 @@ def test_paper_metadata_successor_enqueues_mondo_linking(
 
 
 def test_patient_variant_occurrence_successor_enqueues_paper_and_occurrence_mondo(
-    db_session, seeded_paper, seeded_variant, seeded_agent_run
+    db_session, seeded_paper, seeded_variant
 ):
     """Enqueue MONDO-linking for paper and patient variant occurrences with nonblank disease names."""
     from lib.tasks.misc import enqueue_successors
@@ -1415,14 +1359,12 @@ def test_patient_variant_occurrence_successor_enqueues_paper_and_occurrence_mond
         db_session,
         seeded_paper,
         seeded_variant,
-        seeded_agent_run,
         disease_name='disease one',
     )
     occurrence_two = _create_patient_variant_occurrence(
         db_session,
         seeded_paper,
         seeded_variant,
-        seeded_agent_run,
         disease_name='disease two',
     )
     # This occurrence has a blank disease name so enqueue_successors
@@ -1431,12 +1373,10 @@ def test_patient_variant_occurrence_successor_enqueues_paper_and_occurrence_mond
         db_session,
         seeded_paper,
         seeded_variant,
-        seeded_agent_run,
         disease_name='   ',
     )
     task = TaskDB(
         paper_id=seeded_paper.id,
-        agent_run_id=seeded_agent_run.id,
         type=TaskType.PATIENT_VARIANT_OCCURRENCES,
         status=TaskStatus.COMPLETED,
     )
@@ -1519,14 +1459,11 @@ def test_patch_requires_authentication(unauth_client, seeded_paper):
     assert resp.status_code == 401
 
 
-def test_patch_patient_records_updated_by(
-    client, db_session, seeded_paper, seeded_agent_run, test_user
-):
+def test_patch_patient_records_updated_by(client, db_session, seeded_paper, test_user):
     family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
     patient = PatientDB(
         paper_id=seeded_paper.id,
         family_id=family.id,
-        agent_run_id=seeded_agent_run.id,
         identifier='P1',
         **_patient_required_fields('P1'),
     )

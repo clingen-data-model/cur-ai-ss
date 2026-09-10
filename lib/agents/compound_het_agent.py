@@ -1,7 +1,7 @@
 from agents import Agent
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
-from lib.core.environment import env
+from lib.agents.model_factory import extraction_model
 from lib.models.patient_variant_occurrences import CompoundHetEvaluationOutput
 
 COMPOUND_HET_AGENT_INSTRUCTIONS = """
@@ -53,6 +53,6 @@ RULES:
 agent = Agent(
     name='compound_het_evaluator',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
-    model=env.OPENAI_API_DEPLOYMENT,
+    model=extraction_model(),
     output_type=CompoundHetEvaluationOutput,
 )

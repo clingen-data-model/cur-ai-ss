@@ -8,7 +8,12 @@ import streamlit as st
 from streamlit_pdf_viewer import pdf_viewer
 
 from lib.misc.pdf.paths import pdf_highlighted_path
-from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock, ReasoningBlock
+from lib.models.evidence_block import (
+    EvidenceBlock,
+    HumanEvidenceBlock,
+    ReasoningBlock,
+    strip_markup,
+)
 from lib.models.paper import PaperResp
 from lib.tasks import TaskType
 from lib.ui.api import (
@@ -30,6 +35,12 @@ HEADER_TABS = [
 HEADER_TABS_KEY = 'HEADER_TABS_KEY'
 HUMAN_EDIT_NOTE_DEFAULT = 'Reasoning behind the change...'
 CHAT_FEATURE_GATE_TIME = datetime(2026, 5, 17, 12, 0, 0)
+
+
+def clean_quote(quote: str) -> str:
+    """Kept as a display-time safety net for rows written before the model
+    layer started stripping markup on the way in."""
+    return strip_markup(quote)
 
 
 def render_rerun_popover(
@@ -96,19 +107,29 @@ def render_rerun_popover(
         )
 
 
+TAB_METADATA = '📝 Metadata'
+TAB_PATIENTS = '👤 Patients'
+TAB_VARIANTS = '🧬 Variants'
+TAB_OCCURRENCES = '🔗 Occurrences'
+TAB_CHAT = '💬 Chat with Agent'
+TAB_TASKS = '⚙️ Tasks'
+
+
 def get_available_tabs(paper_resp: PaperResp) -> list[str]:
     """Get available tabs for a paper, conditionally excluding chat based on update time.
 
     The chat feature is only available for papers updated after CHAT_FEATURE_GATE_TIME.
     """
     tabs = [
-        '📝 Metadata',
-        '👤 Patients',
-        '🧬 Variants',
-        '🔗 Occurrences',
+        TAB_METADATA,
+        TAB_OCCURRENCES,
+        TAB_PATIENTS,
+        TAB_VARIANTS,
     ]
     if paper_resp.updated_at > CHAT_FEATURE_GATE_TIME:
-        tabs.append('💬 Chat with Agent')
+        tabs.append(TAB_CHAT)
+    # Appended last so existing ?tab_id= deep links keep pointing at the same tab.
+    tabs.append(TAB_TASKS)
     return tabs
 
 
@@ -156,6 +177,36 @@ def get_clinvar_url(
 
 def get_gnomad_url(variant_id: str) -> str:
     return f'https://gnomad.broadinstitute.org/variant/{variant_id}?dataset=gnomad_r4'
+
+
+# gnomAD v4 genetic ancestry group IDs mapped to their full names.
+GNOMAD_POPULATION_NAMES = {
+    'afr': 'African/African American',
+    'ami': 'Amish',
+    'amr': 'Admixed American',
+    'asj': 'Ashkenazi Jewish',
+    'eas': 'East Asian',
+    'fin': 'European (Finnish)',
+    'mid': 'Middle Eastern',
+    'nfe': 'European (non-Finnish)',
+    'sas': 'South Asian',
+    'remaining': 'Remaining',
+}
+
+
+def format_gnomad_population(population: str | None) -> str:
+    """Render a gnomAD population ID as its full name, e.g. ``eas`` -> ``East Asian (eas)``."""
+    if not population:
+        return 'N/A'
+    full_name = GNOMAD_POPULATION_NAMES.get(population.lower())
+    return f'{full_name} ({population})' if full_name else population
+
+
+def format_allele_counts(ac: int | None, an: int | None) -> str:
+    """Render allele counts as ``AC / AN`` (alleles observed / alleles tested)."""
+    if ac is None or an is None:
+        return 'N/A'
+    return f'{ac:,} / {an:,}'
 
 
 def get_clingen_url(caid: str) -> str:
@@ -340,7 +391,7 @@ def render_evidence_controls(
             disabled=not quote and not reasoning and not human_edit_note,
         ):
             if quote:
-                st.markdown('**Evidence**: ' + quote)
+                st.markdown('**Evidence**: ' + clean_quote(quote))
             st.markdown('**Reasoning**: ' + (reasoning or ''))
             # Show info message if evidence is from supplement
             if isinstance(block, EvidenceBlock) and block.is_supplement:
@@ -367,12 +418,15 @@ def render_evidence_controls(
         # Only pass EvidenceBlock to highlight controls (ReasoningBlock has no evidence sources)
         highlight_blocks = [block] if isinstance(block, EvidenceBlock) else []
         if highlight_blocks:
+            # Whether there is anything to show is decided in there, across every
+            # source a block may carry. Gating on the quote here disabled Focus
+            # for evidence cited by table_id or image_id, which highlights just
+            # as well -- a figure or a table row is locatable on the page.
             render_highlight_controls(
                 paper_id,
                 blocks=highlight_blocks,
                 color_key=color_key,
                 button_key_prefix=button_key_prefix,
-                disabled=not quote,
             )
 
     return edited_note
