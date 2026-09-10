@@ -210,10 +210,20 @@ from GCP Secret Manager, builds the React SPA, then restarts the services:
 ansible-playbook -i dev-caa.us-east4-a.clingen-caa, infrastructure/ansible/playbook.yml
 ```
 
-That direct form only works from inside the VPC. The VPC has **no port-22 ingress
-rule** (`infrastructure/terraform/shared/network.tf` opens only 80, 443, and ICMP), so
-SSH to the public IP times out from anywhere else. Reach it over an IAP TCP-forwarding
-tunnel instead, with an inventory file that sets a `ProxyCommand`:
+That direct form needs SSH to the VM's public IP, which works **from the Broad network
+(including VPN)**. Port 22 is not opened by this repo's terraform — it is granted by a
+Broad org-level firewall policy allowing tcp:22 from Broad's IP ranges, which is why
+`gcloud compute firewall-rules list` shows only 80, 443, and ICMP. Inspect the real
+picture with:
+
+```bash
+gcloud compute instances network-interfaces get-effective-firewalls dev-caa \
+  --zone=us-east4-a --project=clingen-caa
+```
+
+From any other network SSH times out. That same org policy also allows tcp:22 from the
+IAP range (`35.235.240.0/20`), so an IAP TCP-forwarding tunnel works from anywhere and
+is the off-VPN option. Use an inventory file that supplies a `ProxyCommand`:
 
 ```ini
 # inventory.ini
@@ -225,10 +235,10 @@ dev-caa.us-east4-a.clingen-caa ansible_ssh_common_args='-o ProxyCommand="gcloud 
 ansible-playbook -i inventory.ini infrastructure/ansible/playbook.yml
 ```
 
-Note also that ports 80 and 443 are allowlisted to Broad internal ranges plus two
-hardcoded addresses, so **the site is not reachable from an arbitrary network** — being
-unable to load it is usually a firewall rule, not an outage. Verify a deploy from the VM
-itself (its own IP is allowlisted) or from the Broad network.
+Ports 80 and 443 are likewise allowlisted to Broad internal ranges plus two hardcoded
+addresses in `network.tf`, so **the site is not reachable from an arbitrary network** —
+being unable to load it is usually a firewall rule, not an outage. Verify a deploy from
+the Broad network, or from the VM itself (its own IP is allowlisted).
 
 The frontend build step runs after `.env` is written, because regenerating the OpenAPI
 spec imports the FastAPI app and therefore needs a valid environment. It builds with
