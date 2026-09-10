@@ -48,6 +48,15 @@
 #       The SSH host should be pre-configured in ~/.ssh/config with appropriate
 #       User, IdentityFile, and other connection settings.
 #
+# Reaching the VM: the VPC has no port-22 ingress rule (see terraform/shared/network.tf),
+# so direct SSH to the public IP times out from outside 10.0.0.0/24. Run over an IAP
+# tunnel instead, using an inventory file that sets a ProxyCommand:
+#
+#   [all]
+#   dev-caa.us-east4-a.clingen-caa ansible_ssh_common_args='-o ProxyCommand="gcloud compute start-iap-tunnel dev-caa 22 --listen-on-stdin --project=clingen-caa --zone=us-east4-a"'
+#
+#   ansible-playbook -i inventory.ini infrastructure/ansible/playbook.yml
+#
 # Prerequisites:
 #   -  certbot / Let's Encrypt secrets:
 #      # TLS is now owned by certbot on the VM; the old caa-ssl-cert/caa-ssl-key

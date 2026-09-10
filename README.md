@@ -210,6 +210,26 @@ from GCP Secret Manager, builds the React SPA, then restarts the services:
 ansible-playbook -i dev-caa.us-east4-a.clingen-caa, infrastructure/ansible/playbook.yml
 ```
 
+That direct form only works from inside the VPC. The VPC has **no port-22 ingress
+rule** (`infrastructure/terraform/shared/network.tf` opens only 80, 443, and ICMP), so
+SSH to the public IP times out from anywhere else. Reach it over an IAP TCP-forwarding
+tunnel instead, with an inventory file that sets a `ProxyCommand`:
+
+```ini
+# inventory.ini
+[all]
+dev-caa.us-east4-a.clingen-caa ansible_ssh_common_args='-o ProxyCommand="gcloud compute start-iap-tunnel dev-caa 22 --listen-on-stdin --project=clingen-caa --zone=us-east4-a"'
+```
+
+```bash
+ansible-playbook -i inventory.ini infrastructure/ansible/playbook.yml
+```
+
+Note also that ports 80 and 443 are allowlisted to Broad internal ranges plus two
+hardcoded addresses, so **the site is not reachable from an arbitrary network** — being
+unable to load it is usually a firewall rule, not an outage. Verify a deploy from the VM
+itself (its own IP is allowlisted) or from the Broad network.
+
 The frontend build step runs after `.env` is written, because regenerating the OpenAPI
 spec imports the FastAPI app and therefore needs a valid environment. It builds with
 `VITE_BASE_PATH=/v2/` and `VITE_API_URL=/api`; see `frontend/README.md` for what those
