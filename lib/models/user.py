@@ -88,6 +88,20 @@ class UserSummaryResp(BaseModel):
     email: str
     first_name: str
     last_name: str
+    avatar_updated_at: datetime | None = None
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def avatar_url(self) -> str | None:
+        """Same contract as UserResp.avatar_url; see that docstring.
+
+        Present here too because attribution renders an avatar wherever it
+        appears, not only for the signed-in user.
+        """
+        if self.avatar_updated_at is None:
+            return None
+        version = int(self.avatar_updated_at.timestamp() * 1_000_000)
+        return f'/users/{self.id}/avatar?v={version}'
 
     @computed_field  # type: ignore[misc]
     @property

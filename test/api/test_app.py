@@ -1230,6 +1230,8 @@ def test_create_task_records_updated_by(client, seeded_paper, test_user):
         'first_name': 'Test',
         'last_name': 'User',
         'name': 'Test User',
+        'avatar_updated_at': None,
+        'avatar_url': None,
     }
 
 
@@ -1512,6 +1514,10 @@ def test_patch_patient_records_updated_by(client, db_session, seeded_paper, test
         'first_name': 'Test',
         'last_name': 'User',
         'name': 'Test User',
+        # Attribution renders an avatar wherever it appears, so the summary
+        # carries the same avatar fields as the signed-in user's response.
+        'avatar_updated_at': None,
+        'avatar_url': None,
     }
 
 
@@ -1632,3 +1638,98 @@ def test_update_me_cannot_grant_admin(client, test_user):
 
     assert response.status_code == 422
     assert test_user.is_admin is False
+
+
+def _seed_two_users(db_session):
+    from lib.models import UserDB
+
+    a = UserDB(
+        email='a@example.com', hashed_password='x', first_name='Ada', last_name='L'
+    )
+    b = UserDB(
+        email='b@example.com', hashed_password='x', first_name='Bo', last_name='R'
+    )
+    db_session.add_all([a, b])
+    db_session.flush()
+    return a, b
+
+
+def test_papers_list_reports_every_toucher(
+    client, test_pdf, db_session, seeded_genes, test_user
+):
+    """A paper can have several collaborators; papers.updated_by_user_id alone
+    would only ever name the most recent one."""
+    other, _ = _seed_two_users(db_session)
+    paper_id = client.put(
+        '/papers',
+        files={'uploaded_file': ('p.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
+    ).json()['id']
+
+    # A second user touches the same paper through a task.
+    task = db_session.query(TaskDB).filter(TaskDB.paper_id == paper_id).first()
+    task.updated_by_user_id = other.id
+    db_session.flush()
+
+    collaborators = client.get('/papers').json()[0]['collaborators']
+
+    assert {c['id'] for c in collaborators} == {test_user.id, other.id}
+
+
+def test_papers_list_filters_to_one_users_papers(
+    client, test_pdf, db_session, seeded_genes, test_user
+):
+    other, _ = _seed_two_users(db_session)
+    mine = client.put(
+        '/papers',
+        files={'uploaded_file': ('mine.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
+    ).json()['id']
+    theirs = client.put(
+        '/papers',
+        files={
+            'uploaded_file': (
+                'theirs.pdf',
+                io.BytesIO(test_pdf.getvalue().replace(b'9 9', b'10 9')),
+                'application/pdf',
+            )
+        },
+        data={'gene_symbol': 'BRCA2'},
+    ).json()['id']
+    # Reassign the second paper wholesale to the other user.
+    db_session.get(PaperDB, theirs).updated_by_user_id = other.id
+    for task in db_session.query(TaskDB).filter(TaskDB.paper_id == theirs):
+        task.updated_by_user_id = other.id
+    db_session.flush()
+
+    ids = [p['id'] for p in client.get(f'/papers?touched_by={test_user.id}').json()]
+
+    assert ids == [mine]
+    assert theirs not in ids
+
+
+def test_papers_filter_is_empty_for_a_user_who_has_touched_nothing(
+    client, test_pdf, db_session, seeded_genes
+):
+    """65 of 95 papers on dev have no human toucher, so an empty result is a
+    normal outcome rather than an error."""
+    stranger, _ = _seed_two_users(db_session)
+    client.put(
+        '/papers',
+        files={'uploaded_file': ('p.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
+    )
+
+    assert client.get(f'/papers?touched_by={stranger.id}').json() == []
+
+
+def test_papers_list_is_unfiltered_without_the_param(
+    client, test_pdf, db_session, seeded_genes
+):
+    client.put(
+        '/papers',
+        files={'uploaded_file': ('p.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
+    )
+
+    assert len(client.get('/papers').json()) == 1
