@@ -5,7 +5,7 @@
  * password used to live in a dialog behind the header's UserMenu; it moved here
  * so there is one place account state is managed.
  */
-import React, { useState } from 'react'
+import React, { useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -20,13 +20,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { UserAvatar } from '@/components/UserAvatar'
-import { DropZone } from '@/components/DropZone'
 import { Spinner } from '@/components/ui/spinner'
 import { MIN_PASSWORD_LENGTH, errorDetail, useAuth } from '@/lib/auth'
 
 function ProfileCard() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
+  const fileInput = useRef<HTMLInputElement>(null)
 
   const invalidateMe = () =>
     queryClient.invalidateQueries({ queryKey: ['auth', 'me'] })
@@ -75,33 +75,41 @@ function ProfileCard() {
               </p>
             )}
           </div>
-          {user.avatar_url && (
+          <div className="ml-auto flex shrink-0 items-center gap-2">
             <Button
               variant="outline"
               size="sm"
-              className="ml-auto shrink-0"
               disabled={busy}
-              onClick={() => removeAvatar.mutate()}
+              onClick={() => fileInput.current?.click()}
             >
-              Remove
+              {busy && <Spinner className="mr-2" />}
+              {user.avatar_url ? 'Change' : 'Add picture'}
             </Button>
-          )}
-        </div>
-
-        <div className="mt-4">
-          {busy ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Spinner />
-              Updating picture...
-            </div>
-          ) : (
-            <DropZone
-              accept="image/png,image/jpeg,image/webp"
-              hint="PNG, JPEG, or WebP — square images look best"
-              onFile={(image) => image && uploadAvatar.mutate(image)}
-              padding="py-6"
-            />
-          )}
+            {user.avatar_url && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={() => removeAvatar.mutate()}
+              >
+                Remove
+              </Button>
+            )}
+          </div>
+          {/* The button is the affordance; this only exists to open the picker.
+              Resetting value on change means re-picking the same file after a
+              failed upload still fires, which it would not otherwise. */}
+          <input
+            ref={fileInput}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            className="sr-only"
+            onChange={(e) => {
+              const image = e.target.files?.[0]
+              e.target.value = ''
+              if (image) uploadAvatar.mutate(image)
+            }}
+          />
         </div>
       </CardContent>
     </Card>
