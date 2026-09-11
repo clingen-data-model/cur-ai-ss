@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
+import { ELLIPSIS, pageItems } from '@/lib/pagination'
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
@@ -56,6 +57,9 @@ export function DataTable<TData, TValue>({
     getRowCanExpand: getRowCanExpand ? (row) => getRowCanExpand(row.original) : undefined,
     initialState: { pagination: { pageSize } },
   })
+
+  const pageIndex = table.getState().pagination.pageIndex
+  const pageCount = table.getPageCount()
 
   return (
     <div className={cn('space-y-2', className)}>
@@ -125,27 +129,53 @@ export function DataTable<TData, TValue>({
           </TableBody>
         </Table>
       </div>
-      <div className="flex items-center justify-end gap-2">
-          <span className="text-sm text-muted-foreground">
-            Page {table.getState().pagination.pageIndex + 1} of {Math.max(table.getPageCount(), 1)}
-          </span>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-          >
-            <ChevronLeft />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-          >
-            <ChevronRight />
-          </Button>
-      </div>
+      <nav
+        className="flex items-center justify-end gap-1"
+        aria-label="Table pagination"
+      >
+        <Button
+          variant="outline"
+          size="icon-sm"
+          aria-label="Previous page"
+          onClick={() => table.previousPage()}
+          disabled={!table.getCanPreviousPage()}
+        >
+          <ChevronLeft />
+        </Button>
+        {pageItems(pageIndex, pageCount).map((item, i) =>
+          item === ELLIPSIS ? (
+            // Keyed by position: the ellipses are interchangeable and there is
+            // nothing stabler to key them by.
+            <span
+              key={`gap-${i}`}
+              className="px-1 text-sm text-muted-foreground select-none"
+              aria-hidden
+            >
+              &hellip;
+            </span>
+          ) : (
+            <Button
+              key={item}
+              variant={item === pageIndex + 1 ? 'default' : 'outline'}
+              size="icon-sm"
+              aria-label={`Page ${item}`}
+              aria-current={item === pageIndex + 1 ? 'page' : undefined}
+              onClick={() => table.setPageIndex(item - 1)}
+            >
+              {item}
+            </Button>
+          ),
+        )}
+        <Button
+          variant="outline"
+          size="icon-sm"
+          aria-label="Next page"
+          onClick={() => table.nextPage()}
+          disabled={!table.getCanNextPage()}
+        >
+          <ChevronRight />
+        </Button>
+      </nav>
     </div>
   )
 }
