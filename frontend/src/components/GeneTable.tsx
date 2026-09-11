@@ -16,31 +16,20 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogMedia, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { UploadPaperDialog } from '@/components/UploadPaperDialog'
-import { TaskDAG, type NodeStatus } from '@/components/TaskDAG'
+import { TaskDAG } from '@/components/TaskDAG'
+import { STATUS_BADGE } from '@/components/StatusBadge'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import type { GeneRow, PaperSummaryResp, TaskType } from '@/hooks/useGeneTable'
 import type { PaperTag } from '@/api/generated/types.gen'
-import type { badgeVariants } from '@/components/ui/badge'
-import type { VariantProps } from 'class-variance-authority'
 import { API_BASE_URL } from '@/lib/api'
 
 
-type BadgeVariant = VariantProps<typeof badgeVariants>['variant']
 
 const TAG_COLORS: Record<PaperTag, string> = {
   'TrainingSet': 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
   'ValidationSet': 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300',
   'FailedPaperRelevancy': 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300',
-}
-
-const STATUS_BADGE: Record<NodeStatus, { label: string; variant: BadgeVariant; className?: string }> = {
-  idle:      { label: 'Not started', variant: 'secondary' },
-  pending:   { label: 'Pending',     variant: 'secondary' },
-  running:   { label: 'Running',     variant: 'default' },
-  partial:   { label: 'In progress', variant: 'outline', className: 'border-amber-500 text-amber-600' },
-  completed: { label: 'Done',        variant: 'outline', className: 'border-green-500 text-green-600' },
-  failed:    { label: 'Failed',      variant: 'destructive' },
 }
 
 // Every task type is rerunnable except 'General Paper Question', which is only
