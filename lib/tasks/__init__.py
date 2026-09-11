@@ -6,6 +6,7 @@ from lib.tasks.misc import (
     get_status_badge_icon,
     infer_paper_status,
     infer_paper_status_detail,
+    invalidate_descendants,
     is_task_completed,
 )
 from lib.tasks.models import (
@@ -31,6 +32,7 @@ __all__ = [
     'enqueue_all_instances',
     'enqueue_task',
     'get_all_successor_levels',
+    'invalidate_descendants',
     'infer_paper_status',
     'infer_paper_status_detail',
     'is_task_completed',

@@ -181,6 +181,55 @@ def _patient_demographics_ready(session: Session, paper_id: int) -> bool:
     return all(t.status == TaskStatus.COMPLETED for t in demographics_tasks)
 
 
+def invalidate_descendants(session: Session, paper_id: int, task_type: TaskType) -> int:
+    """Delete every downstream task row for a paper before a user-triggered re-run.
+
+    The readiness gates (``_task_completed``, ``_patient_demographics_ready``)
+    ask only whether a COMPLETED row of some type exists for the paper -- a
+    question with no notion of *this* run. On a re-run the previous run's rows
+    are still present and still COMPLETED, so a fan-in successor can be enqueued
+    against state the re-run is about to replace.
+
+    That is not hypothetical. Re-running PAPER_CLASSIFIER lets VARIANT_EXTRACTION
+    (fast) satisfy the gate using the *previous* run's PATIENT_EXTRACTION and
+    PATIENT_DEMOGRAPHICS rows, because PATIENT_EXTRACTION sits behind the slow
+    PEDIGREE_DESCRIPTION and has not been re-queued yet. PATIENT_VARIANT_OCCURRENCES
+    then runs concurrently with PATIENT_EXTRACTION -- which deletes and recreates
+    the paper's patients -- and its INSERT dies on a FOREIGN KEY constraint
+    against a patient that no longer exists.
+
+    Rows are **deleted rather than reset to PENDING** because the worker claims
+    any PENDING task without checking predecessors, so resetting the subtree
+    would start the whole pipeline at once and out of order. Deleting clears the
+    stale COMPLETED signal without making anything runnable; enqueue_successors
+    recreates each row when its predecessor actually finishes.
+
+    RUNNING and QUEUED rows are left alone: a handler is mid-flight against them,
+    and deleting the row out from under it would relocate the failure rather than
+    remove it. Those rows can still go COMPLETED and re-stale the gate, which is
+    a far narrower window than the one this closes.
+
+    Returns the number of rows deleted.
+    """
+    descendants = {t for level in get_all_successor_levels(task_type) for t in level}
+    if not descendants:
+        return 0
+
+    stale = (
+        session.query(TaskDB)
+        .filter(
+            TaskDB.paper_id == paper_id,
+            TaskDB.type.in_(descendants),
+            TaskDB.status.notin_([TaskStatus.RUNNING, TaskStatus.QUEUED]),
+        )
+        .all()
+    )
+    for task in stale:
+        session.delete(task)
+    session.flush()
+    return len(stale)
+
+
 def enqueue_successors(session: Session, task: TaskDB) -> None:
     """Create successor tasks when a task completes.
 

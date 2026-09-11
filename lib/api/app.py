@@ -160,7 +160,13 @@ from lib.models.patient import (
     TwinType,
 )
 from lib.models.segregation_analysis import SegregationAnalysisComputedNestedResp
-from lib.tasks import TaskCreateRequest, TaskResp, enqueue_all_instances, enqueue_task
+from lib.tasks import (
+    TaskCreateRequest,
+    TaskResp,
+    enqueue_all_instances,
+    enqueue_task,
+    invalidate_descendants,
+)
 from lib.tasks.handlers import ensure_conversation_id, format_paper_context
 from lib.tasks.misc import summarize_paper_task_status
 from lib.tasks.models import TaskStatus, TaskType
@@ -759,6 +765,14 @@ def create_task(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
+
+    # Clear the previous run's downstream rows first. Their COMPLETED status is
+    # what the fan-in readiness gates read, and left in place it lets a successor
+    # start against state this re-run is about to replace -- see
+    # invalidate_descendants. Skipped when the caller asked for this task alone,
+    # since nothing downstream will run.
+    if not request.skip_successors:
+        invalidate_descendants(session, paper_id, request.type)
 
     if (
         request.family_id is None
