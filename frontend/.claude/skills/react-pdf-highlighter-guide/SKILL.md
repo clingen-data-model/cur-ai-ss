@@ -367,3 +367,28 @@ window.addEventListener('hashchange', () => scrollViewerTo.current(highlight))
 **Area selection disabled:** Check `enableAreaSelection` returns true on the right event.
 
 **Popup not visible:** Check z-index and that `setTip` is being called correctly.
+
+**Scroll-to-highlight does nothing, and the PDF does not scale to fit:** this is the
+bug `patches/react-pdf-highlighter@8.0.0-rc.0.patch` exists to fix. Check the patch is
+applied before debugging anything else:
+
+```bash
+grep -n "this.viewer.eventBus = eventBus" \
+  node_modules/react-pdf-highlighter/dist/src/components/PdfHighlighter.js
+```
+
+`init()` creates a fresh `EventBus` every call but builds the `PDFViewer` only once
+(`this.viewer = this.viewer || new pdfjs.PDFViewer({ eventBus, ... })`), and
+`componentWillUnmount` never clears `this.viewer`. On any second `init()` the viewer
+still emits `pagesinit` on the *original* bus while `attachRef` has subscribed the
+listener to the *new* one, so `onDocumentReady` never runs — and that handler is what
+calls both `handleScaleValue()` and `scrollRef(this.scrollTo)`. The parent's
+`scrollTo` ref stays `null` and every scroll call is a silent no-op.
+
+A second `init()` happens in two ways, and **only the first is development-only**:
+`React.StrictMode`'s deliberate mount/unmount/remount, and `componentDidUpdate`
+re-running `init()` whenever the `pdfDocument` prop changes — which happens in
+production whenever one `PdfHighlighter` instance is handed a different document.
+
+Full reasoning, the alternatives considered, and the lockfile-hash caveat when editing
+the patch: see **The react-pdf-highlighter patch** in `frontend/README.md`.

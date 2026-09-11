@@ -10,6 +10,8 @@ import { Link } from '@tanstack/react-router'
 import { DataTable } from '@/components/ui/data-table'
 import { Collaborators } from '@/components/Collaborators'
 import { StatusBadge } from '@/components/StatusBadge'
+import { DeletePaperButton, RerunTaskButton } from '@/components/PaperActions'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { PaperSummaryResp } from '@/api/generated/types.gen'
 
 /** "3 days ago" from an ISO timestamp; absolute once it stops being useful. */
@@ -28,15 +30,28 @@ export function PapersTable({ papers }: { papers: PaperSummaryResp[] }) {
       {
         accessorKey: 'title',
         header: 'Paper',
-        cell: ({ row }) => (
-          <Link
-            to="/papers/$paperId/patients"
-            params={{ paperId: String(row.original.id) }}
-            className="font-medium hover:underline underline-offset-4"
-          >
-            {row.original.title ?? row.original.filename}
-          </Link>
-        ),
+        cell: ({ row }) => {
+          const label = row.original.title ?? row.original.filename
+          return (
+            // Capped and truncated: paper titles run to well over a hundred
+            // characters and would otherwise push every other column off the
+            // row. The tooltip is the only way to read the rest.
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Link
+                    to="/papers/$paperId/patients"
+                    params={{ paperId: String(row.original.id) }}
+                    className="block max-w-[28rem] truncate font-medium hover:underline underline-offset-4"
+                  />
+                }
+              >
+                {label}
+              </TooltipTrigger>
+              <TooltipContent className="max-w-sm">{label}</TooltipContent>
+            </Tooltip>
+          )
+        },
       },
       {
         accessorKey: 'gene_symbol',
@@ -68,6 +83,20 @@ export function PapersTable({ papers }: { papers: PaperSummaryResp[] }) {
           <span className="text-muted-foreground whitespace-nowrap">
             {relativeTime(getValue() as string)}
           </span>
+        ),
+      },
+      {
+        id: 'actions',
+        size: 80,
+        enableSorting: false,
+        header: () => null,
+        // The same two controls the paper cards carry, so the action is in the
+        // same place whichever view you reached the paper from.
+        cell: ({ row }) => (
+          <div className="flex justify-end gap-1">
+            <RerunTaskButton paper={row.original} />
+            <DeletePaperButton paper={row.original} />
+          </div>
         ),
       },
     ],

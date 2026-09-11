@@ -76,7 +76,7 @@ export function HomePage() {
       <Tabs defaultValue="genes">
         <TabsList>
           <TabsTrigger value="genes">Genes</TabsTrigger>
-          <TabsTrigger value="mine">My papers</TabsTrigger>
+          <TabsTrigger value="mine">My Papers</TabsTrigger>
         </TabsList>
         <TabsContent value="genes" className="mt-4">
           <GeneTable rows={rows} papersByGene={papersByGene} />
