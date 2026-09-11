@@ -35,9 +35,9 @@ Python checks only, so run `pnpm type-check` and `pnpm build` yourself before de
 src/
   main.tsx              Entry point: QueryClient + RouterProvider, router basepath
   index.css             Tailwind v4 entry, font imports, theme tokens
-  routeTree.gen.ts      Route table. Despite the name, hand-maintained --
-                        there is no TanStack Router plugin in vite.config.ts,
-                        so adding a route under routes/ means adding it here too
+  routeTree.ts          Route table, hand-written. No TanStack Router codegen
+                        plugin is installed, so a new component under routes/
+                        must also be registered here to be reachable
   routes/               File-based routes
     __root.tsx          Shared layout: header, footer, AuthGate, Toaster
     index.tsx           Paper list (dashboard)
@@ -113,7 +113,7 @@ declared but not imported anywhere in `src/` yet.
 | --- | --- | --- |
 | `react` | UI library (v19) | Everything. |
 | `react-dom` | React's DOM renderer | `main.tsx` mounts the app with `createRoot`. |
-| `@tanstack/react-router` | Type-safe router | Routes live in `routes/` and are registered by hand in `routeTree.gen.ts` (the codegen plugin is not installed). Given a `basepath` so the app works under `/v2`. |
+| `@tanstack/react-router` | Type-safe router | Route components live in `routes/`, registered by hand in `routeTree.ts` (the codegen plugin is not installed). Given a `basepath` so the app works under `/v2`. |
 | `@tanstack/react-query` | Server-state cache | All API reads/mutations: caching, deduping, background refetch, invalidation. Used in 7 files. |
 | `@tanstack/react-table` | Headless table logic (no markup) | Sorting/filtering/row models behind `GeneTable` and `ui/data-table`. |
 | `@tanstack/react-form` | Form state and validation | **Unused** — no imports yet. |

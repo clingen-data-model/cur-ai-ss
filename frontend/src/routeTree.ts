@@ -1,12 +1,19 @@
-/* TanStack Router route tree
- * This file defines the structure of your routes
- * Generated from src/routes/ directory structure
+/* The app's route table, assembled by hand.
  *
- * File-based routing convention:
- *   __root.tsx  → Root layout (always rendered)
- *   index.tsx   → Root path (/)
- *   papers/$paperId/graph.tsx  → /papers/:paperId/graph
- *   etc.
+ * TanStack Router ships a codegen plugin that writes this file from the
+ * filenames under routes/. It is not installed -- vite.config.ts loads only
+ * react() and tailwindcss() -- so adding a component under routes/ does nothing
+ * on its own. A new route needs three edits here: import it, declare a Route,
+ * and list it in addChildren below.
+ *
+ * Previously named routeTree.gen.ts, which said the opposite: the docs told
+ * people not to edit a file that nothing generates, and adding a route is
+ * impossible without editing it. Not named routes.ts either -- that would sit
+ * beside the routes/ directory and its index.tsx, and the two resolve
+ * differently for the same import specifier.
+ *
+ * Every route nests under rootRoute, whose component is RootLayout -- which is
+ * why the header, footer, auth gate and toaster render on every page.
  */
 import { RootRoute, Route } from '@tanstack/react-router'
 import { RootLayout } from './routes/__root'
