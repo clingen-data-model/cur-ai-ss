@@ -151,6 +151,13 @@ class PaperDB(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    # Set the first time a completion email goes out, so the notification fires
+    # exactly once. The "all tasks complete" check is re-evaluated on every
+    # terminal task and stays true once it passes, so without this the same
+    # paper would be mailed repeatedly.
+    completion_notified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     updated_by_user_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey('users.id', ondelete='SET NULL'),

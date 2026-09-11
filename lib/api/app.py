@@ -142,6 +142,7 @@ from lib.models import (
     UserCreateRequest,
     UserDB,
     UserResp,
+    UserSettingsUpdateRequest,
     UserSummaryResp,
     VariantDB,
     VariantResp,
@@ -273,6 +274,25 @@ def login(request: LoginRequest, session: Session = Depends(get_session)) -> Any
 
 @app.get('/auth/me', response_model=UserResp, tags=['auth'])
 def get_me(current_user: UserDB = Depends(get_current_user)) -> Any:
+    return current_user
+
+
+@app.patch('/auth/me', response_model=UserResp, tags=['auth'])
+def update_me(
+    request: UserSettingsUpdateRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """Update the signed-in user's own settings.
+
+    Scoped to current_user rather than taking an id: this is self-service, and
+    the request model carries only fields a user may change about themselves --
+    is_admin, is_active and max_papers are administrative and deliberately
+    absent from it.
+    """
+    if request.notify_on_paper_complete is not None:
+        current_user.notify_on_paper_complete = request.notify_on_paper_complete
+    session.flush()
     return current_user
 
 

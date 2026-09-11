@@ -8,11 +8,11 @@ function Switch({
   onCheckedChange,
   disabled,
   ...props
-}: {
+}: Omit<SwitchPrimitive.Root.Props, "onCheckedChange"> & {
   checked: boolean
+  // Narrowed from the primitive's (checked, event) signature: no caller here
+  // needs the event, and the one-arg form matches the other vendored controls.
   onCheckedChange?: (checked: boolean) => void
-  disabled?: boolean
-  className?: string
 }) {
   return (
     <SwitchPrimitive.Root

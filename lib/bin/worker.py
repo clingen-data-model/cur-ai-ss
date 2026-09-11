@@ -10,6 +10,8 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from lib.api.db import session_scope
+from lib.core.email import send_email
+from lib.core.environment import env
 from lib.core.logging import setup_logging
 from lib.misc.snapshots import write_snapshot
 from lib.models import TaskDB
@@ -89,6 +91,7 @@ async def execute_task(task_id: int) -> None:
                 paper.updated_at = now
             if error_msg is None and task.type in TERMINAL_TASK_TYPES:
                 _maybe_write_snapshot(session, task.paper_id)
+                _maybe_notify_completion(session, task.paper_id)
 
 
 def _maybe_write_snapshot(session: Session, paper_id: int) -> None:
@@ -115,6 +118,71 @@ def _maybe_write_snapshot(session: Session, paper_id: int) -> None:
         write_snapshot(paper_id, session)
     except Exception:
         logger.exception(f'Failed to write extraction snapshot for paper {paper_id}')
+
+
+def _maybe_notify_completion(session: Session, paper_id: int) -> None:
+    """Email the paper's owner the first time its pipeline finishes.
+
+    Shares the "every pipeline task is COMPLETED" condition with
+    _maybe_write_snapshot, but not its tolerance for repeat calls: that dedupes
+    on a state hash, whereas a second email is simply a second email. The
+    condition stays true once it passes and is re-checked on every terminal
+    task, so papers.completion_notified_at is what makes this fire exactly once.
+
+    The recipient is the paper's updated_by user. That is the uploader at upload
+    time and the last editor afterwards; in practice the pipeline finishes
+    before anyone can meaningfully edit extractions that do not exist yet, so at
+    this moment it is almost always the person who queued it.
+
+    A mail failure must never fail the task bookkeeping around it, so everything
+    here is best-effort -- but the row is only stamped after send_email returns,
+    so a transient SMTP outage leaves the paper eligible on the next terminal
+    task rather than silently swallowing the notification.
+    """
+    session.flush()  # see _maybe_write_snapshot: the caller's status is in-memory only
+    paper = session.get(PaperDB, paper_id)
+    if paper is None or paper.completion_notified_at is not None:
+        return
+
+    pipeline_statuses = [
+        task_status
+        for (task_status, task_type) in session.query(
+            TaskDB.status, TaskDB.type
+        ).filter(TaskDB.paper_id == paper_id)
+        if task_type != TaskType.GENERAL_PAPER_QUESTION
+    ]
+    if not pipeline_statuses or not all(
+        s == TaskStatus.COMPLETED for s in pipeline_statuses
+    ):
+        return
+
+    user = paper.updated_by
+    if user is None or not user.notify_on_paper_complete or not user.email:
+        # Still stamp: the pipeline did complete, and flipping the preference on
+        # later should not retroactively mail about work already finished.
+        paper.completion_notified_at = datetime.datetime.now(datetime.timezone.utc)
+        return
+
+    title = paper.title or paper.filename
+    try:
+        send_email(
+            to=user.email,
+            subject=f'Extraction complete: {title}',
+            body=(
+                f'Extraction finished for "{title}".\n\n'
+                f'{env.PROTOCOL}{env.API_ENDPOINT}\n\n'
+                'You are receiving this because paper completion notifications '
+                'are enabled in your settings.'
+            ),
+        )
+    except Exception:
+        logger.exception(
+            f'Failed to send completion email for paper {paper_id}; '
+            f'leaving it eligible for retry'
+        )
+        return
+
+    paper.completion_notified_at = datetime.datetime.now(datetime.timezone.utc)
 
 
 async def execute_task_with_semaphore(
