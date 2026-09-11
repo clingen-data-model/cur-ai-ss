@@ -24,6 +24,12 @@ interface UploadPaperDialogProps {
   initialGene?: string
 }
 
+// nginx caps the request body at `client_max_body_size 200M` (binary MB), and
+// Streamlit's uploader has always passed max_upload_size=200. Without a check here
+// an oversized file uploads in full before nginx 413s it, which on a slow link means
+// minutes of progress bar followed by a failure that says nothing useful.
+const MAX_UPLOAD_BYTES = 200 * 1024 * 1024
+
 const SUPPLEMENT_TYPES = [
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -149,6 +155,7 @@ export function UploadPaperDialog({ open, setDialogOpen, initialGene }: UploadPa
       toast.error('Please upload a PDF file.')
       return
     }
+    if (oversized(incoming)) return
     setFile(incoming)
   }
 
@@ -158,8 +165,25 @@ export function UploadPaperDialog({ open, setDialogOpen, initialGene }: UploadPa
       toast.error('Supplement must be a PDF, DOCX, or XLSX file.')
       return
     }
+    if (oversized(incoming)) return
     setSupplement(incoming)
   }
+
+  /** Reject a single file up front; the combined check below catches the rest. */
+  const oversized = (candidate: File): boolean => {
+    if (candidate.size <= MAX_UPLOAD_BYTES) return false
+    toast.error(
+      `${candidate.name} is ${formatFileSize(candidate.size)}. The limit is ` +
+        `${formatFileSize(MAX_UPLOAD_BYTES)}.`,
+    )
+    return true
+  }
+
+  // Both files travel in one multipart body, so two individually-legal files can
+  // still exceed the limit together. Checked at submit rather than on selection,
+  // since which file to blame is the user's call, not ours.
+  const totalBytes = (file?.size ?? 0) + (supplement?.size ?? 0)
+  const overCombinedLimit = totalBytes > MAX_UPLOAD_BYTES
 
   const resetFile = () => setFile(null)
   const resetSupplement = () => setSupplement(null)
@@ -231,6 +255,12 @@ export function UploadPaperDialog({ open, setDialogOpen, initialGene }: UploadPa
             {selectedGene && !file && (
               <p className="text-xs text-destructive mr-auto">Please upload a PDF.</p>
             )}
+            {overCombinedLimit && (
+              <p className="text-xs text-destructive mr-auto">
+                Together these files are {formatFileSize(totalBytes)}, over the{' '}
+                {formatFileSize(MAX_UPLOAD_BYTES)} limit.
+              </p>
+            )}
             <Button
               variant="outline"
               onClick={() => setDialogOpen(false)}
@@ -240,7 +270,12 @@ export function UploadPaperDialog({ open, setDialogOpen, initialGene }: UploadPa
             </Button>
             <Button
               onClick={() => uploadMutation.mutate()}
-              disabled={uploadMutation.isPending || !selectedGene || !file}
+              disabled={
+                uploadMutation.isPending ||
+                !selectedGene ||
+                !file ||
+                overCombinedLimit
+              }
             >
               {uploadMutation.isPending ? (
                 <>
