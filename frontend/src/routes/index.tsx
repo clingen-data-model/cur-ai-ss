@@ -1,8 +1,10 @@
 import { useState } from 'react'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useGeneTable } from '@/hooks/useGeneTable'
-import { useMyPapers } from '@/hooks/useMyPapers'
+import { usePapers } from '@/hooks/usePapers'
 import { GeneTable } from '@/components/GeneTable'
 import { PapersTable } from '@/components/PapersTable'
+import { WorkedByFilter } from '@/components/WorkedByFilter'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Spinner } from '@/components/ui/spinner'
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
@@ -76,13 +78,13 @@ export function HomePage() {
       <Tabs defaultValue="genes">
         <TabsList>
           <TabsTrigger value="genes">Genes</TabsTrigger>
-          <TabsTrigger value="mine">My Papers</TabsTrigger>
+          <TabsTrigger value="papers">All Papers</TabsTrigger>
         </TabsList>
         <TabsContent value="genes" className="mt-4">
           <GeneTable rows={rows} papersByGene={papersByGene} />
         </TabsContent>
-        <TabsContent value="mine" className="mt-4">
-          <MyPapersTab />
+        <TabsContent value="papers" className="mt-4">
+          <AllPapersTab />
         </TabsContent>
       </Tabs>
 
@@ -93,8 +95,10 @@ export function HomePage() {
 
 /** Split out so its query only runs once the tab is opened, rather than on
  *  every visit to the genes view. */
-function MyPapersTab() {
-  const { papers, isLoading, isError, error } = useMyPapers()
+function AllPapersTab() {
+  const { worked_by: workedBy = 'anyone' } = useSearch({ from: '/' })
+  const navigate = useNavigate({ from: '/' })
+  const { papers, people, total, isLoading, isError, error } = usePapers(workedBy)
 
   if (isLoading) {
     return (
@@ -106,27 +110,57 @@ function MyPapersTab() {
   if (isError) {
     return (
       <div className="py-12 text-center text-red-500">
-        Error loading your papers: {error?.message || 'Unknown error'}
+        Error loading papers: {error?.message || 'Unknown error'}
       </div>
     )
   }
-  if (papers.length === 0) {
-    // The common case for a new account, and for most papers: two thirds of
-    // them on dev have no recorded human toucher at all.
-    return (
-      <Empty>
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <UserRoundSearch />
-          </EmptyMedia>
-          <EmptyTitle>Nothing here yet</EmptyTitle>
-          <EmptyDescription>
-            Papers appear here once you upload one, run an agent on it, or edit
-            its extracted data.
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
-    )
-  }
-  return <PapersTable papers={papers} />
+
+  const filtered = workedBy !== 'anyone'
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          {filtered ? `${papers.length} of ${total} papers` : `${total} papers`}
+        </p>
+        <WorkedByFilter
+          value={workedBy}
+          people={people}
+          onChange={(next) =>
+            // Written to the URL, so the current view is a link worth keeping.
+            // 'anyone' clears the param rather than spelling out the default.
+            navigate({
+              search: next === 'anyone' ? {} : { worked_by: next },
+              replace: true,
+            })
+          }
+        />
+      </div>
+
+      {papers.length === 0 ? (
+        <Empty>
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <UserRoundSearch />
+            </EmptyMedia>
+            <EmptyTitle>No papers match that filter</EmptyTitle>
+            <EmptyDescription>
+              Papers are listed here once someone uploads one, runs an agent on
+              it, or edits its extracted data.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent className="flex-row justify-center">
+            <Button
+              variant="outline"
+              onClick={() => navigate({ search: {}, replace: true })}
+            >
+              Show all papers
+            </Button>
+          </EmptyContent>
+        </Empty>
+      ) : (
+        <PapersTable papers={papers} />
+      )}
+    </div>
+  )
 }
