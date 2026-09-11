@@ -28,6 +28,12 @@ class UserDB(Base):
     notify_on_paper_complete: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default='0'
     )
+    # NULL means "no avatar". Doubles as the cache-buster: the file always lives
+    # at the same path, so without a changing query parameter a browser would keep
+    # showing the old image after an upload.
+    avatar_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -39,6 +45,8 @@ class UserDB(Base):
 
 
 class UserResp(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     email: str
     first_name: str
@@ -48,7 +56,23 @@ class UserResp(BaseModel):
     description_of_use_case: str
     max_papers: int | None
     notify_on_paper_complete: bool
+    avatar_updated_at: datetime | None
     updated_at: datetime
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def avatar_url(self) -> str | None:
+        """Path to the avatar, or None when the user has not set one.
+
+        Carries avatar_updated_at as a query parameter because the file path is
+        stable: the static mount sends a 24-hour Cache-Control, so a fresh upload
+        would otherwise stay invisible until that expired.
+        """
+        if self.avatar_updated_at is None:
+            return None
+        from lib.misc.avatars import avatar_path
+
+        return f'{avatar_path(self.id)}?v={int(self.avatar_updated_at.timestamp())}'
 
 
 class UserSummaryResp(BaseModel):

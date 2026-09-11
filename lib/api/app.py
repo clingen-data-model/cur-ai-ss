@@ -7,6 +7,7 @@ import time
 import traceback
 from collections import defaultdict
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncGenerator, Optional
 
@@ -58,6 +59,11 @@ from lib.core.security import (
     create_access_token,
     hash_password,
     verify_password,
+)
+from lib.misc.avatars import (
+    InvalidAvatarError,
+    delete_avatar,
+    store_avatar,
 )
 from lib.misc.curation.models import CurationSummaryRow
 from lib.misc.curation.pptx import build_curation_pptx
@@ -292,6 +298,54 @@ def update_me(
     """
     if request.notify_on_paper_complete is not None:
         current_user.notify_on_paper_complete = request.notify_on_paper_complete
+    session.flush()
+    return current_user
+
+
+@app.put('/auth/me/avatar', response_model=UserResp, tags=['auth'])
+async def upload_my_avatar(
+    image: UploadFile = File(...),
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """Replace the signed-in user's avatar.
+
+    Scoped to current_user like the rest of /auth/me -- there is no id to
+    tamper with, so one user cannot overwrite another's image.
+
+    The uploaded content type is not consulted. store_avatar decides validity by
+    decoding the bytes with Pillow and re-encoding them as PNG, so a file that
+    merely claims to be an image cannot reach disk. That is a stronger check
+    than the content_type comparison the paper upload does, and deliberately so:
+    this one accepts input that is rendered straight back to other users.
+    """
+    try:
+        store_avatar(current_user.id, await image.read())
+    except InvalidAvatarError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+
+    # Written after the file lands, so the column never advertises an avatar
+    # that is not on disk. Also cache-busts the URL, whose path never changes.
+    current_user.avatar_updated_at = datetime.now(timezone.utc)
+    session.flush()
+    return current_user
+
+
+@app.delete('/auth/me/avatar', response_model=UserResp, tags=['auth'])
+def delete_my_avatar(
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """Drop the signed-in user's avatar, falling back to initials.
+
+    Clearing the column is what makes the avatar disappear, so it happens even
+    if no file was found -- that combination means the two had drifted, and the
+    column is the one the UI reads.
+    """
+    delete_avatar(current_user.id)
+    current_user.avatar_updated_at = None
     session.flush()
     return current_user
 

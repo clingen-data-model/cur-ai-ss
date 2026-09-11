@@ -8,19 +8,53 @@
 import React, { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { changePasswordAuthChangePasswordPost, updateMeAuthMePatch } from '@/api/generated'
+import {
+  changePasswordAuthChangePasswordPost,
+  deleteMyAvatarAuthMeAvatarDelete,
+  updateMeAuthMePatch,
+  uploadMyAvatarAuthMeAvatarPut,
+} from '@/api/generated'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { UserAvatar } from '@/components/UserAvatar'
+import { DropZone } from '@/components/DropZone'
+import { Spinner } from '@/components/ui/spinner'
 import { MIN_PASSWORD_LENGTH, errorDetail, useAuth } from '@/lib/auth'
 
 function ProfileCard() {
   const { user } = useAuth()
+  const queryClient = useQueryClient()
+
+  const invalidateMe = () =>
+    queryClient.invalidateQueries({ queryKey: ['auth', 'me'] })
+
+  const uploadAvatar = useMutation({
+    mutationFn: (image: File) =>
+      uploadMyAvatarAuthMeAvatarPut({ body: { image }, throwOnError: true }),
+    onSuccess: () => {
+      invalidateMe()
+      toast.success('Picture updated.')
+    },
+    // The server decodes the bytes rather than trusting the type, so its message
+    // ("Not a readable image.") is more accurate than anything guessable here.
+    onError: (err) => toast.error(errorDetail(err, 'Could not update picture.')),
+  })
+
+  const removeAvatar = useMutation({
+    mutationFn: () => deleteMyAvatarAuthMeAvatarDelete({ throwOnError: true }),
+    onSuccess: () => {
+      invalidateMe()
+      toast.success('Picture removed.')
+    },
+    onError: (err) => toast.error(errorDetail(err, 'Could not remove picture.')),
+  })
+
   if (!user) return null
 
+  const busy = uploadAvatar.isPending || removeAvatar.isPending
   const fullName = `${user.first_name} ${user.last_name}`.trim()
 
   return (
@@ -41,6 +75,33 @@ function ProfileCard() {
               </p>
             )}
           </div>
+          {user.avatar_url && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-auto shrink-0"
+              disabled={busy}
+              onClick={() => removeAvatar.mutate()}
+            >
+              Remove
+            </Button>
+          )}
+        </div>
+
+        <div className="mt-4">
+          {busy ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Spinner />
+              Updating picture...
+            </div>
+          ) : (
+            <DropZone
+              accept="image/png,image/jpeg,image/webp"
+              hint="PNG, JPEG, or WebP — square images look best"
+              onFile={(image) => image && uploadAvatar.mutate(image)}
+              padding="py-6"
+            />
+          )}
         </div>
       </CardContent>
     </Card>
