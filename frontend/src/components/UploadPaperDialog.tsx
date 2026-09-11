@@ -12,7 +12,9 @@ import {
   ComboboxItem,
   ComboboxList,
 } from '@/components/ui/combobox'
-import { searchGenesGenesSearchGet, putPaperPapersPut } from '@/api/generated'
+import { searchGenesGenesSearchGet } from '@/api/generated'
+import { uploadPaper } from '@/lib/api'
+import { Progress, ProgressLabel, ProgressValue } from '@/components/ui/progress'
 import { Spinner } from '@/components/ui/spinner'
 import { formatFileSize } from '@/lib/utils'
 
@@ -93,6 +95,9 @@ export function UploadPaperDialog({ open, setDialogOpen, initialGene }: UploadPa
   const [genePrefix, setGenePrefix] = useState<string>('')
   const [file, setFile] = useState<File | null>(null)
   const [supplement, setSupplement] = useState<File | null>(null)
+  // null until the first progress event, and again whenever the browser cannot
+  // size the body -- the bar falls back to indeterminate rather than showing 0%.
+  const [percent, setPercent] = useState<number | null>(null)
   const queryClient = useQueryClient()
 
   // Sync selectedGene whenever the dialog opens (handles the gene-locked case)
@@ -112,16 +117,18 @@ export function UploadPaperDialog({ open, setDialogOpen, initialGene }: UploadPa
       if (!selectedGene || !file) {
         throw new Error('Please select a gene and upload file')
       }
-      return putPaperPapersPut({
-        body: {
+      setPercent(0)
+      return uploadPaper(
+        {
           gene_symbol: selectedGene,
           uploaded_file: file,
-          ...(supplement ? { supplement_file: supplement } : {}),
+          supplement_file: supplement,
         },
-        throwOnError: true,
-      })
+        (progress) => setPercent(progress.percent),
+      )
     },
     onSuccess: () => {
+      setPercent(null)
       toast.success('Paper uploaded successfully')
       queryClient.invalidateQueries({ queryKey: ['papers'] })
       setDialogOpen(false)
@@ -131,6 +138,7 @@ export function UploadPaperDialog({ open, setDialogOpen, initialGene }: UploadPa
       setSupplement(null)
     },
     onError: (error) => {
+      setPercent(null)
       toast.error(`Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
     },
   })
@@ -203,6 +211,16 @@ export function UploadPaperDialog({ open, setDialogOpen, initialGene }: UploadPa
                 <FileCard file={supplement} onRemove={resetSupplement} />
               )}
             </div>
+          )}
+
+          {/* Upload progress — only while in flight. `value={null}` is Base UI's
+              indeterminate state, which is what a body the browser cannot size
+              leaves us with. */}
+          {uploadMutation.isPending && (
+            <Progress value={percent}>
+              <ProgressLabel>Uploading {file?.name}</ProgressLabel>
+              <ProgressValue />
+            </Progress>
           )}
 
           {/* Actions — inline validation hints + cancel/submit */}
