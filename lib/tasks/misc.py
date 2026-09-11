@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import TYPE_CHECKING, Iterable, Literal
 
 from sqlalchemy.orm import Session
 
@@ -6,6 +6,10 @@ from lib.models.patient_variant_occurrences import (
     PatientVariantOccurrenceDB,
     Zygosity,
 )
+
+if TYPE_CHECKING:
+    from lib.models.paper import PaperTaskStatus
+
 from lib.tasks.models import (
     TASK_SUCCESSORS,
     InferredPaperStatus,
@@ -452,6 +456,39 @@ def infer_paper_status(tasks: list[TaskResp]) -> InferredPaperStatus:
 
     # Otherwise pending
     return InferredPaperStatus.PENDING
+
+
+def summarize_paper_task_status(
+    statuses: Iterable[TaskStatus],
+) -> 'PaperTaskStatus':
+    """Summarise a paper's task statuses into one badge value for list views.
+
+    Takes bare statuses rather than TaskResp so callers can pass the result of a
+    two-column query instead of hydrating task rows -- which is the whole point
+    at the GET /papers call site, where materialising them cost ~90% of the
+    response.
+
+    Ordering matters and is not arbitrary: running wins over failed so an active
+    retry does not read as broken, and failed wins over completed so one failure
+    is never hidden by its siblings succeeding.
+
+    Mirrors computeStatus in the frontend's TaskDAG.tsx. Distinct from
+    infer_paper_status above, which has four states; see PaperTaskStatus.
+    """
+    from lib.models.paper import PaperTaskStatus
+
+    statuses = list(statuses)
+    if not statuses:
+        return PaperTaskStatus.IDLE
+    if any(s in (TaskStatus.RUNNING, TaskStatus.QUEUED) for s in statuses):
+        return PaperTaskStatus.RUNNING
+    if any(s == TaskStatus.FAILED for s in statuses):
+        return PaperTaskStatus.FAILED
+    if all(s == TaskStatus.COMPLETED for s in statuses):
+        return PaperTaskStatus.COMPLETED
+    if any(s == TaskStatus.COMPLETED for s in statuses):
+        return PaperTaskStatus.PARTIAL
+    return PaperTaskStatus.PENDING
 
 
 def infer_paper_status_detail(tasks: list[TaskResp]) -> str:

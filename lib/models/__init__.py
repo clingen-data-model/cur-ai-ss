@@ -38,6 +38,7 @@ from lib.models.paper import (
     PaperDB,
     PaperExtractionOutput,
     PaperResp,
+    PaperSummaryResp,
     PaperTag,
     PaperType,
     PaperUpdateRequest,

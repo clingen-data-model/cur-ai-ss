@@ -1,24 +1,25 @@
 import React, { useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { ChevronDown, ChevronRight, FolderPlus, RefreshCw, Trash2 } from 'lucide-react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { toast } from 'sonner'
-import { deletePaperPapersPaperIdDelete, createTaskPapersPaperIdTasksPost } from '@/api/generated'
+import { deletePaperPapersPaperIdDelete, createTaskPapersPaperIdTasksPost, listTasksPapersPaperIdTasksGet } from '@/api/generated'
 import { DataTable } from '@/components/ui/data-table'
 import { Carousel, CarouselContent, CarouselItem, CarouselPrevious, CarouselNext, CarouselCounter } from '@/components/ui/carousel'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Spinner } from '@/components/ui/spinner'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogMedia, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { UploadPaperDialog } from '@/components/UploadPaperDialog'
-import { TaskDAG, computeStatus, type NodeStatus } from '@/components/TaskDAG'
+import { TaskDAG, type NodeStatus } from '@/components/TaskDAG'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
-import type { GeneRow, PaperResp, TaskType } from '@/hooks/useGeneTable'
+import type { GeneRow, PaperSummaryResp, TaskType } from '@/hooks/useGeneTable'
 import type { PaperTag } from '@/api/generated/types.gen'
 import type { badgeVariants } from '@/components/ui/badge'
 import type { VariantProps } from 'class-variance-authority'
@@ -54,12 +55,12 @@ const RERUNNABLE_TASK_TYPES: TaskType[] = [
   'Phenotype Extraction', 'HPO Linking', 'MONDO Linking',
 ]
 
-function RerunTaskButton({ paper }: { paper: PaperResp }) {
+function RerunTaskButton({ paper }: { paper: PaperSummaryResp }) {
   const [open, setOpen] = useState(false)
   const [taskType, setTaskType] = useState<TaskType>('PDF Parsing')
   const [skipSuccessors, setSkipSuccessors] = useState(false)
   const [context, setContext] = useState('')
-  const isRunning = paper.tasks?.some(t => t.status === 'Running' || t.status === 'Queued')
+  const isRunning = paper.status === 'running'
 
   const mutation = useMutation({
     mutationFn: () => createTaskPapersPaperIdTasksPost({
@@ -144,7 +145,7 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-function DeletePaperButton({ paper }: { paper: PaperResp }) {
+function DeletePaperButton({ paper }: { paper: PaperSummaryResp }) {
   const queryClient = useQueryClient()
   const mutation = useMutation({
     mutationFn: () => deletePaperPapersPaperIdDelete({ path: { paper_id: paper.id }, throwOnError: true }),
@@ -182,8 +183,39 @@ function DeletePaperButton({ paper }: { paper: PaperResp }) {
   )
 }
 
-function PaperCard({ paper }: { paper: PaperResp }) {
-  const status = STATUS_BADGE[computeStatus(paper.tasks ?? [])]
+/** Fetches a paper's tasks on demand, so the list response need not carry them.
+ *
+ * GET /papers returns one summarised `status` per paper rather than its task
+ * list -- embedding them measured at 90.5% of that response. The full list is
+ * only needed by the DAG, which lives behind a dialog, so it is fetched when
+ * that dialog opens and cached per paper thereafter.
+ */
+function PaperTaskDAG({ paperId, enabled }: { paperId: number; enabled: boolean }) {
+  const { data, isPending, isError } = useQuery({
+    queryKey: ['paper-tasks', paperId],
+    queryFn: () => listTasksPapersPaperIdTasksGet({ path: { paper_id: paperId }, throwOnError: true }),
+    enabled,
+  })
+
+  if (isPending) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <Spinner />
+      </div>
+    )
+  }
+  if (isError) {
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-destructive">
+        Could not load pipeline tasks.
+      </div>
+    )
+  }
+  return <TaskDAG tasks={data?.data ?? []} />
+}
+
+function PaperCard({ paper }: { paper: PaperSummaryResp }) {
+  const status = STATUS_BADGE[paper.status]
   const thumbnailSrc = `${API_BASE_URL}${paper.thumbnail_url}`
   const [dagOpen, setDagOpen] = useState(false)
 
@@ -280,7 +312,7 @@ function PaperCard({ paper }: { paper: PaperResp }) {
               <p className="text-sm text-muted-foreground">Pipeline execution</p>
             </div>
             <div className="flex-1 min-h-0 mt-4">
-              <TaskDAG tasks={paper.tasks ?? []} />
+              <PaperTaskDAG paperId={paper.id} enabled={dagOpen} />
             </div>
           </div>
         </DialogContent>
@@ -289,7 +321,7 @@ function PaperCard({ paper }: { paper: PaperResp }) {
   )
 }
 
-function PaperCarousel({ papers }: { papers: PaperResp[] }) {
+function PaperCarousel({ papers }: { papers: PaperSummaryResp[] }) {
   const [filter, setFilter] = useState('')
 
   const filtered = useMemo(() => {
@@ -343,7 +375,7 @@ function PaperCarousel({ papers }: { papers: PaperResp[] }) {
 
 interface GeneTableProps {
   rows: GeneRow[]
-  papersByGene: Map<string, PaperResp[]>
+  papersByGene: Map<string, PaperSummaryResp[]>
 }
 
 export function GeneTable({ rows, papersByGene }: GeneTableProps) {

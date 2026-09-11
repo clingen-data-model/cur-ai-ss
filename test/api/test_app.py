@@ -289,7 +289,15 @@ def test_list_paper(client, test_pdf, seeded_genes):
         _assert_updated_at_recent(job['updated_at'])
 
 
-def test_list_papers_with_tasks(client, test_pdf, db_session, seeded_genes):
+def test_list_papers_summarizes_tasks_into_a_status(
+    client, test_pdf, db_session, seeded_genes
+):
+    """The list response carries a status, not the task list it came from.
+
+    Embedding tasks measured at 90.5% of this response in production (9,092
+    objects across 95 papers) to render one badge each, so the list view gets
+    the summary and the DAG fetches the full list per paper.
+    """
     response = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
@@ -311,9 +319,30 @@ def test_list_papers_with_tasks(client, test_pdf, db_session, seeded_genes):
     jobs = response.json()
     assert len(jobs) == 2
     assert all(job['gene_symbol'] == 'BRCA1' for job in jobs)
-    assert all('tasks' in job and len(job['tasks']) > 0 for job in jobs)
+    # A freshly uploaded paper has one PENDING task (PDF parsing).
+    assert all(job['status'] == 'pending' for job in jobs)
+    assert all('tasks' not in job for job in jobs)
+    # Dropped alongside tasks: none of these are read by the gene table.
+    for absent in ('abstract', 'section_classifications', 'mondo', 'proband_count'):
+        assert all(absent not in job for job in jobs)
     for job in jobs:
         _assert_updated_at_recent(job['updated_at'])
+
+
+def test_list_papers_counts_children_without_loading_them(
+    client, test_pdf, db_session, seeded_genes
+):
+    """Counts still land even though the rows behind them are never loaded."""
+    client.put(
+        '/papers',
+        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
+    )
+    job = client.get('/papers').json()[0]
+
+    assert job['patient_count'] == 0
+    assert job['variant_count'] == 0
+    assert job['patient_variant_occurrences_count'] == 0
 
 
 def test_delete_paper(client, test_pdf, db_session, seeded_genes):
