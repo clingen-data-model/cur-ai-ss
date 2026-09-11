@@ -126,6 +126,77 @@ prefix and lands on the Streamlit app:
 - **The main chunk is ~1.4 MB** (~440 kB gzipped) and Vite warns about it. No code
   splitting is configured yet.
 
+## The react-pdf-highlighter patch
+
+`patches/react-pdf-highlighter@8.0.0-rc.0.patch` is a one-line fix applied by pnpm at
+install time. It is recorded in `pnpm-lock.yaml` under `patchedDependencies` with a
+content hash, and pnpm 12 discovers the `patches/` directory on its own — there is no
+`pnpm.patchedDependencies` block in `package.json`, and none is needed.
+
+**Editing the patch changes that hash**, so a patch edit must be followed by a
+`pnpm install` that rewrites the lockfile, or the next `pnpm install --frozen-lockfile`
+(which is what the deploy runs) will fail.
+
+### What breaks without it
+
+Scroll-to-highlight silently stops working, and the PDF stops scaling to fit its
+container. No error is raised and nothing appears in the console — clicking a piece of
+evidence just does not move the PDF.
+
+### Why
+
+In `PdfHighlighter.init()` the library creates a **fresh** `EventBus` on every call, but
+creates the `PDFViewer` only once:
+
+```js
+const eventBus = new pdfjs.EventBus();              // new bus on every init()
+this.viewer = this.viewer || new pdfjs.PDFViewer({  // viewer built once, keeps bus #1
+  eventBus, ...
+});
+this.viewer.setDocument(pdfDocument);               // emits `pagesinit` on the viewer's bus
+this.attachRef(eventBus);                           // subscribes the listener to the NEW bus
+```
+
+`componentWillUnmount` only calls `unsubscribe()`; it never clears `this.viewer`. So on any
+**second** `init()` on the same component instance, the viewer still holds bus #1 while the
+`pagesinit` listener sits on bus #2. The event fires where nobody is listening.
+
+That matters because `onDocumentReady` — the `pagesinit` handler — is what calls
+`handleScaleValue()` and, crucially, `scrollRef(this.scrollTo)`. If it never runs, the
+parent is never handed its scroll function. In `TwoColumnWithBottomRightPdf.tsx` that
+leaves `scrollToRef.current` at `null`, so `PdfViewer.scrollTo()` is a silent no-op.
+
+### When a second `init()` happens
+
+Two ways, and **only the first is development-only**:
+
+1. **`React.StrictMode`** (`src/main.tsx`) deliberately mounts, unmounts and remounts in
+   development, so `componentDidMount` runs twice on the same instance.
+2. **`componentDidUpdate` re-runs `init()` whenever the `pdfDocument` prop changes.** This
+   happens in production — the same `PdfHighlighter` instance being handed a different
+   document takes exactly the same broken path.
+
+The patch's own inline comment cites StrictMode, which is how it was found; the second
+case is the one that matters in a deployed build.
+
+### The fix, and what else was possible
+
+```js
+this.viewer.eventBus = eventBus;  // re-point the reused viewer at the current bus
+```
+
+Two alternatives, both larger and neither attempted:
+
+- **Stop reusing the viewer** (drop the `this.viewer ||` guard). Correct, but throws away
+  already-rendered pages on every document change.
+- **Stop recreating the bus** — hoist the `EventBus` onto the instance so viewer and
+  listener always share one. Probably the right upstream fix, but it changes the
+  subscribe/unsubscribe lifecycle rather than one assignment.
+
+Not reported upstream. `8.0.0-rc.0` is a pre-release, so the first thing to check on any
+version bump is whether this is still needed — re-test by switching between two papers
+in one session and confirming that clicking evidence still scrolls the PDF.
+
 ## JavaScript dependencies
 
 Every package in `package.json`, what it does, and where it is used. "Unused" means
@@ -159,7 +230,7 @@ declared but not imported anywhere in `src/` yet.
 | `@dagrejs/dagre` | Directed-graph layout algorithm | Computes node positions for that DAG before React Flow draws it — React Flow does not do layout itself. |
 | `pdfjs-dist` | Mozilla PDF.js engine | Pinned to exactly `4.4.168` because `react-pdf` and `react-pdf-highlighter` are compiled against that API. Also used directly for Grobid coordinate work. |
 | `react-pdf` | React wrapper around PDF.js | Renders paper pages in `TwoColumnWithBottomRightPdf.tsx`. |
-| `react-pdf-highlighter` | Highlight overlay for PDF.js pages | Draws evidence highlights on the rendered paper. Pinned to the pre-release `8.0.0-rc.0`. |
+| `react-pdf-highlighter` | Highlight overlay for PDF.js pages | Draws evidence highlights on the rendered paper. Pinned to the pre-release `8.0.0-rc.0`, and **patched** — see [The react-pdf-highlighter patch](#the-react-pdf-highlighter-patch). |
 | `zustand` | Minimal global state store | `stores/ui.ts`, for UI state that shouldn't live in the URL or the query cache. |
 | `zod` | Runtime schema validation | **Unused** — the generated client provides types, and nothing validates at runtime yet. |
 | `shadcn` | CLI that vendors shadcn/ui components | A tool, not a library: `pnpm dlx shadcn add <component>` copies source into `components/ui/`. Pinned to `latest`, so it can change under you. |
