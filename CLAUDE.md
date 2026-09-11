@@ -70,7 +70,9 @@ This is a research paper analysis system that extracts genetic information (pati
 
 3. **React SPA** (`frontend/`)
    - React 19 + TypeScript + Vite, Tailwind v4, shadcn/ui primitives vendored into `src/components/ui/`
-   - TanStack Router (file-based, `routeTree.gen.ts` is generated) and TanStack Query
+   - TanStack Router and TanStack Query. Routes live in `src/routes/`, but
+     `routeTree.gen.ts` is **hand-maintained despite its name** — the codegen
+     plugin is not installed, so a new route must be registered there by hand
    - The API client in `src/api/generated/` is generated from the FastAPI OpenAPI schema
      by `pnpm build` — never edit it by hand, and regenerate after changing API models
    - In-progress replacement for the Streamlit UI, deployed in parallel under `/v2`

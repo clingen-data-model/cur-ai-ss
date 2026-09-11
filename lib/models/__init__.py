@@ -85,6 +85,7 @@ from lib.models.user import (
     UserCreateRequest,
     UserDB,
     UserResp,
+    UserSettingsUpdateRequest,
     UserSummaryResp,
 )
 from lib.models.variant import (

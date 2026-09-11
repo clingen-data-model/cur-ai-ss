@@ -1601,3 +1601,34 @@ def test_update_segregation_evidence_records_attribution(
         ).status_code
         == 404
     )
+
+
+def test_update_me_toggles_notification_preference(client, test_user):
+    assert test_user.notify_on_paper_complete is False
+
+    response = client.patch('/auth/me', json={'notify_on_paper_complete': True})
+
+    assert response.status_code == 200
+    assert response.json()['notify_on_paper_complete'] is True
+    assert test_user.notify_on_paper_complete is True
+
+
+def test_update_me_ignores_omitted_fields(client, test_user):
+    """A partial body leaves everything it does not name alone."""
+    test_user.notify_on_paper_complete = True
+
+    response = client.patch('/auth/me', json={})
+
+    assert response.status_code == 200
+    assert test_user.notify_on_paper_complete is True
+
+
+def test_update_me_cannot_grant_admin(client, test_user):
+    """Administrative fields are absent from the request model, so naming one
+    is rejected rather than quietly ignored."""
+    assert test_user.is_admin is False
+
+    response = client.patch('/auth/me', json={'is_admin': True, 'max_papers': 9999})
+
+    assert response.status_code == 422
+    assert test_user.is_admin is False

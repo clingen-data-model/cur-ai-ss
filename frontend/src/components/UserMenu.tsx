@@ -1,118 +1,14 @@
 /* Signed-in user controls in the header.
  *
- * Mirrors the Streamlit sidebar in lib/ui/auth.py: display name, remaining
- * paper uploads, change-password, and log out.
+ * Identity and sign-out only. Change password used to live here behind a
+ * dialog; it moved to /settings, which the avatar links to -- the header should
+ * say who you are and get out of the way, not host account forms.
  */
-import React, { useState } from 'react'
-import { toast } from 'sonner'
-import { changePasswordAuthChangePasswordPost } from '@/api/generated'
+import { Link } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { MIN_PASSWORD_LENGTH, errorDetail, useAuth } from '@/lib/auth'
-
-function ChangePasswordDialog() {
-  const [open, setOpen] = useState(false)
-  const [current, setCurrent] = useState('')
-  const [next, setNext] = useState('')
-  const [repeat, setRepeat] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [pending, setPending] = useState(false)
-
-  const reset = () => {
-    setCurrent('')
-    setNext('')
-    setRepeat('')
-    setError(null)
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
-    if (!(current && next)) {
-      setError('All fields are required.')
-      return
-    }
-    if (next !== repeat) {
-      setError('New passwords do not match.')
-      return
-    }
-    if (next.length < MIN_PASSWORD_LENGTH) {
-      setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`)
-      return
-    }
-    setPending(true)
-    try {
-      await changePasswordAuthChangePasswordPost({
-        body: { current_password: current, new_password: next },
-      })
-      toast.success('Password updated.')
-      setOpen(false)
-      reset()
-    } catch (err) {
-      setError(errorDetail(err, 'Could not update password.'))
-    } finally {
-      setPending(false)
-    }
-  }
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(v) => {
-        setOpen(v)
-        if (!v) reset()
-      }}
-    >
-      <DialogTrigger
-        render={<Button variant="ghost" size="sm" className="text-white hover:bg-white/10" />}
-      >
-        Change password
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Change password</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <Input
-            type="password"
-            placeholder="Current password"
-            value={current}
-            onChange={(e) => setCurrent(e.target.value)}
-            autoComplete="current-password"
-          />
-          <Input
-            type="password"
-            placeholder="New password"
-            value={next}
-            onChange={(e) => setNext(e.target.value)}
-            autoComplete="new-password"
-          />
-          <Input
-            type="password"
-            placeholder="Repeat new password"
-            value={repeat}
-            onChange={(e) => setRepeat(e.target.value)}
-            autoComplete="new-password"
-          />
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <DialogFooter>
-            <Button type="submit" disabled={pending}>
-              {pending ? 'Updating…' : 'Update password'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  )
-}
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { UserAvatar } from '@/components/UserAvatar'
+import { useAuth } from '@/lib/auth'
 
 export function UserMenu() {
   const { user, signOut } = useAuth()
@@ -133,7 +29,20 @@ export function UserMenu() {
           </p>
         )}
       </div>
-      <ChangePasswordDialog />
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Link
+              to="/settings"
+              aria-label="Account settings"
+              className="rounded-full ring-offset-2 ring-offset-transparent transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            />
+          }
+        >
+          <UserAvatar user={user} />
+        </TooltipTrigger>
+        <TooltipContent>Settings</TooltipContent>
+      </Tooltip>
       <Button variant="ghost" size="sm" className="text-white hover:bg-white/10" onClick={signOut}>
         Log out
       </Button>

@@ -13,6 +13,7 @@ import { RootLayout } from './routes/__root'
 import { HomePage } from './routes/index'
 import { LoginPage } from './routes/login'
 import { PatientsPage } from './routes/papers.$paperId.patients'
+import { SettingsPage } from './routes/settings'
 
 const rootRoute = new RootRoute({
   component: RootLayout,
@@ -30,6 +31,12 @@ const loginRoute = new Route({
   component: LoginPage,
 })
 
+const settingsRoute = new Route({
+  getParentRoute: () => rootRoute,
+  path: '/settings',
+  component: SettingsPage,
+})
+
 const papersPatientRoute = new Route({
   getParentRoute: () => rootRoute,
   path: '/papers/$paperId/patients',
@@ -39,6 +46,7 @@ const papersPatientRoute = new Route({
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
+  settingsRoute,
   papersPatientRoute,
 ])
 

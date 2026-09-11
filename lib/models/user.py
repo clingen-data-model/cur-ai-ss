@@ -24,6 +24,10 @@ class UserDB(Base):
         String, nullable=False, server_default=''
     )
     max_papers: Mapped[int | None] = mapped_column(nullable=True, server_default='10')
+    # Opt-in: email is intrusive, and existing users never asked for it.
+    notify_on_paper_complete: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default='0'
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -43,6 +47,7 @@ class UserResp(BaseModel):
     is_admin: bool
     description_of_use_case: str
     max_papers: int | None
+    notify_on_paper_complete: bool
     updated_at: datetime
 
 
@@ -79,6 +84,24 @@ class UserCreateRequest(BaseModel):
         if not _EMAIL_RE.match(v):
             raise ValueError('Invalid email address')
         return v
+
+
+class UserSettingsUpdateRequest(BaseModel):
+    """Self-service account settings. Deliberately narrow.
+
+    Only fields a user may change about themselves live here -- is_admin,
+    is_active and max_papers are administrative and must not be settable by the
+    account they apply to.
+
+    extra='forbid' so an unknown field is a 422 rather than a silent no-op.
+    Pydantic's default would drop it, which for a settings toggle is the worst
+    outcome: a misspelled field name returns 200 and changes nothing, and the UI
+    reports success.
+    """
+
+    model_config = ConfigDict(extra='forbid')
+
+    notify_on_paper_complete: bool | None = None
 
 
 class ChangePasswordRequest(BaseModel):
