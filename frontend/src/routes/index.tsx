@@ -121,7 +121,9 @@ function AllPapersTab() {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          {filtered ? `${papers.length} of ${total} papers` : `${total} papers`}
+          {filtered && total !== undefined
+            ? `${papers.length} of ${total} papers`
+            : `${papers.length} papers`}
         </p>
         <WorkedByFilter
           value={workedBy}

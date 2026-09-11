@@ -1,6 +1,9 @@
 import { useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { listPapersPapersGet } from '@/api/generated'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  listPaperCollaboratorsPapersCollaboratorsGet,
+  listPapersPapersGet,
+} from '@/api/generated'
 import type { PaperSummaryResp, UserSummaryResp } from '@/api/generated/types.gen'
 import { useAuth } from '@/lib/auth'
 import type { IndexSearch } from '@/routeTree'
@@ -9,59 +12,65 @@ const STALE_TIME = 5 * 60 * 1000
 
 /** Every paper, newest activity first, optionally narrowed to one person.
  *
- * Fetches the full list and filters in memory rather than refetching with
- * `?touched_by=`, for two reasons: the query key matches useGeneTable's, so the
- * genes tab and this one share a single cached response and switching between
- * them costs nothing; and changing the filter is then instant instead of a
- * round trip. At 94 papers the whole list is ~43 KB.
+ * Filtering happens in the database via `?touched_by=`, not in memory. At 94
+ * papers either would do, but this is the shape that survives server-side
+ * pagination: once the list is paginated, filtering a page you already hold is
+ * wrong, and a client-side filter would have to be torn out. Doing it here
+ * means only the query changes.
  *
- * The endpoint's `touched_by` is the escape hatch for when this list is large
- * enough to paginate server-side -- at which point filtering has to move back
- * to the database.
+ * Each filter is its own query key, so switching back to a scope you have
+ * already viewed is served from cache rather than refetched, and the unfiltered
+ * key matches useGeneTable's -- the genes tab and the unfiltered papers tab
+ * share one response.
  */
 export function usePapers(workedBy: IndexSearch['worked_by']) {
   const { user } = useAuth()
-
-  const query = useQuery({
-    queryKey: ['papers'],
-    queryFn: () => listPapersPapersGet({}),
-    staleTime: STALE_TIME,
-  })
-
-  const all = useMemo(() => {
-    const papers = (Array.isArray(query.data) ? query.data : []) as PaperSummaryResp[]
-    return [...papers].sort((a, b) =>
-      (b.updated_at ?? '').localeCompare(a.updated_at ?? ''),
-    )
-  }, [query.data])
-
-  // Only people who have actually touched something: an option that filters to
-  // nothing is worse than no option, and this needs no users endpoint.
-  const people = useMemo(() => {
-    const byId = new Map<number, UserSummaryResp>()
-    for (const paper of all) {
-      for (const person of paper.collaborators ?? []) byId.set(person.id, person)
-    }
-    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name))
-  }, [all])
+  const queryClient = useQueryClient()
 
   const targetId =
     workedBy === 'me' ? user?.id : typeof workedBy === 'number' ? workedBy : undefined
 
-  const papers = useMemo(
-    () =>
-      targetId === undefined
-        ? all
-        : all.filter((p) =>
-            (p.collaborators ?? []).some((c) => c.id === targetId),
-          ),
-    [all, targetId],
-  )
+  // Same key as useGeneTable when unfiltered, so the two tabs share a response.
+  const query = useQuery({
+    queryKey: targetId === undefined ? ['papers'] : ['papers', { touched_by: targetId }],
+    queryFn: () =>
+      listPapersPapersGet(
+        targetId === undefined ? {} : { query: { touched_by: targetId } },
+      ),
+    staleTime: STALE_TIME,
+  })
+
+  const papers = useMemo(() => {
+    const rows = (Array.isArray(query.data) ? query.data : []) as PaperSummaryResp[]
+    return [...rows].sort((a, b) =>
+      (b.updated_at ?? '').localeCompare(a.updated_at ?? ''),
+    )
+  }, [query.data])
+
+  // Its own endpoint rather than the collaborators present in the rows: the
+  // options must be everyone who could narrow the list, and deriving them from
+  // a filtered response would shrink the menu to whoever is already visible.
+  // Server-side for the same reason the filter is -- enumerating collaborators
+  // client-side would mean holding every paper.
+  const peopleQuery = useQuery({
+    queryKey: ['paper-collaborators'],
+    queryFn: () => listPaperCollaboratorsPapersCollaboratorsGet(),
+    staleTime: STALE_TIME,
+  })
+  const people = (
+    Array.isArray(peopleQuery.data) ? peopleQuery.data : []
+  ) as UserSummaryResp[]
+
+  // Known only when the unfiltered response is already cached -- usually true,
+  // since the genes tab populates that key. undefined otherwise, so the caller
+  // can say "18 papers" rather than inventing "18 of 0".
+  const cachedAll = queryClient.getQueryData<unknown>(['papers'])
+  const total = Array.isArray(cachedAll) ? cachedAll.length : undefined
 
   return {
     papers,
     people,
-    total: all.length,
+    total,
     isLoading: query.isPending,
     isError: query.isError,
     error: query.error,

@@ -1733,3 +1733,41 @@ def test_papers_list_is_unfiltered_without_the_param(
     )
 
     assert len(client.get('/papers').json()) == 1
+
+
+def test_collaborators_lists_only_people_who_touched_something(
+    client, test_pdf, db_session, seeded_genes, test_user
+):
+    """The filter's options should be everyone who can usefully narrow the list
+    -- not every account, and not only those visible in the current rows."""
+    toucher, bystander = _seed_two_users(db_session)
+    paper_id = client.put(
+        '/papers',
+        files={'uploaded_file': ('p.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
+    ).json()['id']
+    task = db_session.query(TaskDB).filter(TaskDB.paper_id == paper_id).first()
+    task.updated_by_user_id = toucher.id
+    db_session.flush()
+
+    people = client.get('/papers/collaborators').json()
+    ids = {p['id'] for p in people}
+
+    assert test_user.id in ids
+    assert toucher.id in ids
+    assert bystander.id not in ids
+
+
+def test_collaborators_is_empty_when_nothing_is_touched(client, db_session):
+    assert client.get('/papers/collaborators').json() == []
+
+
+def test_collaborators_are_name_sorted(client, test_pdf, db_session, seeded_genes):
+    client.put(
+        '/papers',
+        files={'uploaded_file': ('p.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
+    )
+    names = [p['name'] for p in client.get('/papers/collaborators').json()]
+
+    assert names == sorted(names, key=str.lower)
