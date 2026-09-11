@@ -26,10 +26,32 @@ const rootRoute = new RootRoute({
   component: RootLayout,
 })
 
+/** `?worked_by=` narrows the papers table to one person's work.
+ *
+ * In the URL rather than component state so a personal view is a link someone
+ * can bookmark -- which is what replaced a separate "My Papers" tab -- and so
+ * it survives a reload.
+ *
+ * Values: absent or 'anyone' for everything, 'me' for the signed-in user, or a
+ * numeric user id. 'me' is a distinct value rather than that user's id so a
+ * bookmarked link keeps meaning "mine" for whoever opens it.
+ */
+export interface IndexSearch {
+  worked_by?: 'anyone' | 'me' | number
+}
+
 const indexRoute = new Route({
   getParentRoute: () => rootRoute,
   path: '/',
   component: HomePage,
+  validateSearch: (search: Record<string, unknown>): IndexSearch => {
+    const raw = search.worked_by
+    if (raw === 'me' || raw === 'anyone') return { worked_by: raw }
+    const id = Number(raw)
+    // A junk value falls through to the default rather than erroring: this is a
+    // filter, and an unreadable one should show everything, not a broken page.
+    return Number.isInteger(id) && id > 0 ? { worked_by: id } : {}
+  },
 })
 
 const loginRoute = new Route({

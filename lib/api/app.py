@@ -478,6 +478,36 @@ def put_paper(
         )
 
 
+@app.get('/papers/collaborators', response_model=list[UserSummaryResp])
+def list_paper_collaborators(
+    session: Session = Depends(get_session),
+) -> Any:
+    """Everyone who has touched at least one paper.
+
+    Backs the "worked on by" filter, whose options must be the full set of
+    people regardless of which papers are currently listed -- deriving them from
+    a filtered response would shrink the options to whoever is already visible.
+
+    Not GET /users: this is the set that can usefully filter something, which is
+    5 of 9 accounts on dev, and it exposes only UserSummaryResp rather than
+    account fields.
+
+    **Must stay above /papers/{paper_id}.** FastAPI matches in declaration
+    order, so the parameterised route would otherwise take 'collaborators' as a
+    paper_id and 422 trying to parse it as an int -- an int annotation narrows
+    validation, not matching. A test covers this.
+    """
+    touchers = _paper_touchers(session)
+    user_ids = {uid for uids in touchers.values() for uid in uids}
+    if not user_ids:
+        return []
+    users = session.query(UserDB).filter(UserDB.id.in_(user_ids)).all()
+    return sorted(
+        (UserSummaryResp.model_validate(user) for user in users),
+        key=lambda u: u.name.lower(),
+    )
+
+
 @app.get('/papers/{paper_id}', response_model=PaperResp)
 def get_paper(paper_id: int, session: Session = Depends(get_session)) -> Any:
     paper_db = (
