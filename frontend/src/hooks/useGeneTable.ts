@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { listPapersPapersGet } from '@/api/generated'
-import type { PaperResp, TaskType } from '@/api/generated/types.gen'
+import type { PaperSummaryResp, TaskType } from '@/api/generated/types.gen'
 
-export type { PaperResp, TaskType }
+export type { PaperSummaryResp, TaskType }
 
 const STALE_TIME = 5 * 60 * 1000
 
@@ -24,11 +24,11 @@ export function useGeneTable() {
   })
 
   const { rows, papersByGene } = useMemo(() => {
-    if (!papersQuery.data) return { rows: [], papersByGene: new Map<string, PaperResp[]>() }
+    if (!papersQuery.data) return { rows: [], papersByGene: new Map<string, PaperSummaryResp[]>() }
 
     const papers = Array.isArray(papersQuery.data) ? papersQuery.data : []
 
-    const papersByGene = new Map<string, PaperResp[]>()
+    const papersByGene = new Map<string, PaperSummaryResp[]>()
     const geneStats = new Map<string, { paper_count: number; patient_count: number; variant_count: number; occurrences_count: number }>()
 
     for (const paper of papers) {

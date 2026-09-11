@@ -333,6 +333,63 @@ class PaperResp(PaperExtractionOutput):
         return str(pdf_raw_path(self.id))
 
 
+class PaperTaskStatus(StrEnum):
+    """A paper's pipeline state, summarised from its tasks for list views.
+
+    Distinct from tasks.InferredPaperStatus, which Streamlit uses and which has
+    four states: it folds "no tasks yet" and "some tasks done" both into
+    Pending. The React table draws those as separate badges ("Not started" and
+    an amber "In progress"), so it needs the finer split.
+
+    Values are lowercase to match the NodeStatus union in the frontend's
+    TaskDAG.tsx, which keys its badge map off them directly -- so the API hands
+    back exactly the string the UI already switches on, with nothing to map.
+    """
+
+    IDLE = 'idle'
+    PENDING = 'pending'
+    RUNNING = 'running'
+    PARTIAL = 'partial'
+    COMPLETED = 'completed'
+    FAILED = 'failed'
+
+
+class PaperSummaryResp(BaseModel):
+    """The shape GET /papers returns: what a list view needs, and no more.
+
+    Deliberately not PaperResp. That model embeds every task belonging to the
+    paper, which measured at 90.5% of a 4.97 MB response across 95 papers --
+    9,092 task objects -- to render one status badge per paper. `status` below
+    replaces all of it; the full task list is fetched per paper from
+    GET /papers/{paper_id}/tasks when the DAG dialog opens.
+
+    Fields track what the gene table actually reads. abstract,
+    section_classifications, mondo, the disease_* group, proband_count and
+    updated_by are all in PaperResp and none are read here, so they are omitted
+    rather than serialised and discarded.
+    """
+
+    id: int
+    gene_symbol: str
+    filename: str
+    title: str | None = None
+    first_author: str | None = None
+    journal_name: str | None = None
+    tags: list[PaperTag] = []
+    updated_at: datetime
+    status: PaperTaskStatus
+    patient_count: int = 0
+    variant_count: int = 0
+    patient_variant_occurrences_count: int = 0
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def thumbnail_url(self) -> str:
+        from lib.misc.pdf.paths import pdf_thumbnail_path
+
+        return str(pdf_thumbnail_path(self.id))
+
+
 class PaperUpdateRequest(PatchModel):
     title: str | None = None
     first_author: str | None = None
