@@ -26,7 +26,7 @@ function useCarousel() {
   return ctx
 }
 
-function Carousel({ className, children, ...props }: React.ComponentProps<'div'>) {
+function Carousel({ className, children, onKeyDown, ...props }: React.ComponentProps<'div'>) {
   const [emblaRef, api] = useEmblaCarousel()
   const [canScrollPrev, setCanScrollPrev] = React.useState(false)
   const [canScrollNext, setCanScrollNext] = React.useState(false)
@@ -49,6 +49,34 @@ function Carousel({ className, children, ...props }: React.ComponentProps<'div'>
     return () => { api.off('select', onSelect); api.off('reInit', onSelect) }
   }, [api, onSelect])
 
+  /* Left/right arrows step the carousel while it has focus.
+   *
+   * Scoped to the container rather than a window listener on purpose: a gene row
+   * expands into its own carousel, so several can be open at once and a global
+   * handler would have no way to say which one an arrow press meant. Focus is the
+   * disambiguator, which is also the ARIA carousel pattern.
+   *
+   * Vertical arrows are left alone -- the carousel only moves horizontally, and
+   * swallowing up/down would break scrolling the page from inside it.
+   */
+  const handleKeyDown = React.useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      onKeyDown?.(event)
+      if (event.defaultPrevented) return
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+      // Never steal an arrow from a caret. Cards hold links and the filter row a
+      // text input; in any of those, horizontal arrows mean "move the cursor".
+      const target = event.target as HTMLElement | null
+      if (target?.closest('input, textarea, select, [contenteditable="true"]')) {
+        return
+      }
+      event.preventDefault()
+      if (event.key === 'ArrowLeft') api?.scrollPrev()
+      else api?.scrollNext()
+    },
+    [api, onKeyDown],
+  )
+
   return (
     <CarouselContext.Provider value={{
       emblaRef, api,
@@ -57,7 +85,17 @@ function Carousel({ className, children, ...props }: React.ComponentProps<'div'>
       scrollPrev: () => api?.scrollPrev(),
       scrollNext: () => api?.scrollNext(),
     }}>
-      <div className={cn('relative', className)} {...props}>
+      <div
+        className={cn(
+          'relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-sm',
+          className,
+        )}
+        role="region"
+        aria-roledescription="carousel"
+        tabIndex={0}
+        onKeyDown={handleKeyDown}
+        {...props}
+      >
         {children}
       </div>
     </CarouselContext.Provider>

@@ -321,7 +321,13 @@ function PaperCard({ paper }: { paper: PaperSummaryResp }) {
   )
 }
 
-function PaperCarousel({ papers }: { papers: PaperSummaryResp[] }) {
+function PaperCarousel({
+  papers,
+  geneSymbol,
+}: {
+  papers: PaperSummaryResp[]
+  geneSymbol: string
+}) {
   const [filter, setFilter] = useState('')
 
   const filtered = useMemo(() => {
@@ -350,7 +356,7 @@ function PaperCarousel({ papers }: { papers: PaperSummaryResp[] }) {
           No results.
         </div>
       ) : (
-        <Carousel key={filter}>
+        <Carousel key={filter} aria-label={`Papers for ${geneSymbol}`}>
           <CarouselContent className={filtered.length <= 2 ? '-ml-1 justify-center' : '-ml-1'}>
             {filtered.map((p) => (
               <CarouselItem key={p.id} className="pl-1 basis-1/3">
@@ -430,7 +436,10 @@ export function GeneTable({ rows, papersByGene }: GeneTableProps) {
         filterPlaceholder="Filter genes..."
         getRowCanExpand={() => true}
         renderSubComponent={({ row }) => (
-          <PaperCarousel papers={papersByGene.get(row.gene_symbol) ?? []} />
+          <PaperCarousel
+            papers={papersByGene.get(row.gene_symbol) ?? []}
+            geneSymbol={row.gene_symbol}
+          />
         )}
       />
       <UploadPaperDialog
