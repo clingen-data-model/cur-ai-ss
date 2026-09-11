@@ -11,6 +11,9 @@ vite.config.d.ts
 
 # Development
 .agents
+# Per-machine, installed by `pnpm dlx skills add shadcn/ui`. CLAUDE.md already
+# describes these as gitignored; they were not.
+.claude/skills
 .env.local
 .env.*.local
 .vscode

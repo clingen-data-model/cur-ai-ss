@@ -15,6 +15,30 @@ pnpm install
 pnpm dlx skills add shadcn/ui
 ```
 
+## Adding a shadcn/ui component
+
+```bash
+pnpm dlx shadcn@latest add <name>
+```
+
+**Check the diff before committing.** As of shadcn 4.21.0 the CLI fails to
+resolve the `utils` alias from `components.json` and writes
+
+```ts
+import { cn } from "cn"        // wrong
+import { cn } from "@/lib/utils"  // what every other primitive uses
+```
+
+then installs an unrelated npm package named `cn` to satisfy the bare specifier.
+That package is a genuine clsx + tailwind-merge replacement, so nothing crashes
+-- the new component just merges classes with a different engine than the rest
+of the app, silently. Repoint the import and `pnpm remove cn`.
+
+Take components from the **base** registry, not `radix`: this project is Base UI
+(`components.json` -> `"style": "base-nova"`) and carries no `@radix-ui`
+packages, so a Radix component pulls in a second primitive library. The docs URL
+is `ui.shadcn.com/docs/components/base/<name>`.
+
 ## Development
 
 ```bash

@@ -385,6 +385,9 @@ class PaperSummaryResp(BaseModel):
     tags: list[PaperTag] = []
     updated_at: datetime
     status: PaperTaskStatus
+    # Everyone who has touched this paper. Measured at most two per paper on
+    # dev, so unlike the task list this replaced it does not bloat the response.
+    collaborators: list['UserSummaryResp'] = []
     patient_count: int = 0
     variant_count: int = 0
     patient_variant_occurrences_count: int = 0
