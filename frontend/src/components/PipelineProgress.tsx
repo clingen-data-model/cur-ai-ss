@@ -55,8 +55,14 @@ function valueLabel(track: TrackProgress): string {
   if (track.elapsedSeconds === null) return formatDuration(budget)
 
   // Running. Minutes bare on the left so the unit is said once: "3 / 9 min".
-  // Past an hour the short form stops being readable, so both sides spell out.
-  if (budget >= 3600) {
+  //
+  // Only when both sides are genuinely in minutes, which is the condition the
+  // first version of this got wrong -- it keyed off the budget alone, so a
+  // track running far past a short budget rendered as "4218 / 9 min": a count
+  // with no unit, which reads as a quantity of tasks. Whenever the two sides
+  // would not share a unit, both spell it out.
+  const sameUnit = budget < 3600 && track.elapsedSeconds < 3600
+  if (!sameUnit) {
     return `${formatDuration(track.elapsedSeconds)} / ${formatDuration(budget)}`
   }
   return `${Math.floor(track.elapsedSeconds / 60)} / ${formatDuration(budget)}`

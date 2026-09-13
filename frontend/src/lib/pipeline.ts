@@ -66,6 +66,31 @@ function pipelineComplete(tasks: TaskResp[], terminalTypes: string[]): boolean {
   )
 }
 
+/** The run a paper's progress is about: the most recent one it holds.
+ *
+ * A paper accumulates tasks across runs. Re-running one agent leaves the rest
+ * of the pipeline in whatever run produced it, and the migration that
+ * introduced run ids stamped existing history with inferred ones -- so a paper
+ * can hold a run from today beside one from Tuesday.
+ *
+ * Without this the bars measured from the earliest start across all of them.
+ * Paper 27 read "4218 / 9 min": a 9-minute track measured from a run 2.9 days
+ * old. /stats has grouped by run since it was added, for exactly this reason;
+ * the live bars were still spanning a paper's whole history.
+ */
+function currentRun(tasks: TaskResp[]): string | null {
+  let latest: { run: string; at: number } | null = null
+  for (const task of tasks) {
+    // started_at is absent until a handler picks the task up, so a run that has
+    // only just been enqueued is recognised by when its rows were written.
+    const stamp = task.started_at ?? task.updated_at
+    if (!task.run_id || !stamp) continue
+    const at = new Date(stamp).getTime()
+    if (!latest || at > latest.at) latest = { run: task.run_id, at }
+  }
+  return latest?.run ?? null
+}
+
 function earliestStart(tasks: TaskResp[]): number | null {
   const times = tasks
     .map((t) => t.started_at)
@@ -82,6 +107,7 @@ export function trackProgress(
   const tracks: TrackDurationStat[] = stats?.tracks ?? []
   // One judgement for the whole paper, applied to every track.
   const finished = pipelineComplete(tasks, stats?.terminal_task_types ?? [])
+  const run = currentRun(tasks)
 
   return tracks.map((track) => {
     const mine = tasks.filter((t) => track.task_types.includes(t.type))
@@ -89,7 +115,12 @@ export function trackProgress(
     const complete = finished && mine.length > 0
     const budget = track.median_seconds
 
-    const startedAt = earliestStart(mine)
+    // Counts above describe the paper; elapsed describes the run in progress.
+    // A track with nothing in the current run has not started as far as this
+    // measurement goes, which is the truth -- no work is happening in it now.
+    const startedAt = earliestStart(
+      run === null ? mine : mine.filter((t) => t.run_id === run),
+    )
     // Floored at zero. Elapsed should never be negative, but it was for months:
     // the API sent timestamps with no timezone and the browser read them as
     // local, putting every start time hours in the future. That is fixed at the
