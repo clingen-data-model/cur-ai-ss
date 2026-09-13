@@ -19,7 +19,7 @@ P, Q, R, C, F = (
         ([], PaperTaskStatus.IDLE),
         ([P, P], PaperTaskStatus.PENDING),
         ([R, P], PaperTaskStatus.RUNNING),
-        ([Q, P], PaperTaskStatus.RUNNING),
+        ([Q, P], PaperTaskStatus.PENDING),
         ([F, P], PaperTaskStatus.FAILED),
         ([C, C], PaperTaskStatus.COMPLETED),
         ([C, P], PaperTaskStatus.PARTIAL),
@@ -27,6 +27,14 @@ P, Q, R, C, F = (
 )
 def test_summarizes_to_the_expected_badge(statuses, expected):
     assert summarize_paper_task_status(statuses) == expected
+
+
+def test_queued_is_indistinguishable_from_pending():
+    """QUEUED means the scheduler has claimed the task, not that it is
+    executing. That is its own bookkeeping -- a badge reading 'Running' for it
+    promises work that has not begun -- so the two summarise identically."""
+    assert summarize_paper_task_status([Q]) == summarize_paper_task_status([P])
+    assert summarize_paper_task_status([Q, C]) == summarize_paper_task_status([P, C])
 
 
 def test_running_outranks_failed():

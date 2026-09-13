@@ -8,7 +8,6 @@ import { Spinner } from '@/components/ui/spinner'
 import { TwoColumnWithBottomRightPdf, annotationsToHighlights, type Highlight, type PdfViewerRef } from '@/components/TwoColumnWithBottomRightPdf'
 import { PatientDetails, type HighlightArgs } from '@/components/PatientDetails'
 import { grobidAnnotationPapersPaperIdGrobidAnnotationPost } from '@/api/generated'
-import * as pdfjs from 'pdfjs-dist'
 import { API_BASE_URL } from '@/lib/api'
 
 
@@ -75,10 +74,9 @@ export function PatientsPage() {
           color: '#FFE28F',
         },
       })
-      const annotations = (Array.isArray(result.data) ? result.data : result) as any[]
       const newHighlights = await annotationsToHighlights(
         pdfViewerRef.current.pdfDocument!,
-        annotations,
+        result ?? [],
         query,
       )
       setHighlights(newHighlights)
@@ -90,7 +88,7 @@ export function PatientsPage() {
 
   const handlePatientClick = async (patient: PatientResp) => {
     setSelectedPatient(patient)
-    const query = (patient as any).identifier_evidence?.quote ?? patient.identifier
+    const query = patient.identifier_evidence?.quote ?? patient.identifier
     if (query) highlight({ query })
   }
 
@@ -112,7 +110,7 @@ export function PatientsPage() {
     )
   }
 
-  const pdfUrl = paper ? `${API_BASE_URL}${(paper as any).pdf_url}` : null
+  const pdfUrl = paper ? `${API_BASE_URL}${paper.pdf_url}` : null
 
   const leftSidebar = (
     <>

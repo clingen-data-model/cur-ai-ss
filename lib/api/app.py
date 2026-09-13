@@ -183,7 +183,12 @@ from lib.tasks import (
 )
 from lib.tasks.handlers import ensure_conversation_id, format_paper_context
 from lib.tasks.misc import summarize_paper_task_status
-from lib.tasks.models import TERMINAL_TASK_TYPES, TaskStatus, TaskType
+from lib.tasks.models import (
+    ACTIVE_STATUSES,
+    TERMINAL_TASK_TYPES,
+    TaskStatus,
+    TaskType,
+)
 from lib.tasks.tracks import PIPELINE_TRACKS, TRACK_OF_TYPE
 
 logger = logging.getLogger(__name__)
@@ -591,16 +596,20 @@ def list_active_papers(
     QUEUED are indexed, so it reads a handful of rows rather than 94 papers.
     That matters: this is the one endpoint the UI polls.
 
-    PENDING counts, not just RUNNING. It is the state a task sits in between
-    being enqueued and the worker claiming it, which it polls for every 10
-    seconds -- and with PDF parsing limited to one at a time, a second paper can
-    wait there for the length of the first paper's parse. That is work the user
-    is waiting on, so the indicator should already be lit.
+    All three waiting states count, which is the whole of the task lifecycle
+    before a handler finishes:
 
-    QUEUED is listed for completeness and currently never occurs: nothing in the
-    codebase assigns it, and the dev database has only ever held COMPLETED,
-    PENDING and RUNNING. Matching on it alone -- which this did at first -- meant
-    a paper the user had just queued showed as idle.
+      PENDING  enqueued, not yet claimed. The scheduler polls every 10s, and
+               with PDF parsing limited to one at a time a second paper waits
+               here for the length of the first paper's parse.
+      QUEUED   claimed by the scheduler, about to execute. Set at
+               worker.py:282 to stop a task being scheduled twice, so it is
+               brief -- but a poll can land inside it.
+      RUNNING  a handler is executing it.
+
+    Matching only the last two -- which this did at first -- left a paper the
+    user had just queued reading as idle, because PENDING is where it spends the
+    wait.
 
     Chat tasks are excluded. A question being answered is not the paper being
     extracted, and counting it would light up the indicator for something the
@@ -610,9 +619,7 @@ def list_active_papers(
         row[0]
         for row in session.query(TaskDB.paper_id)
         .filter(
-            TaskDB.status.in_(
-                [TaskStatus.PENDING, TaskStatus.QUEUED, TaskStatus.RUNNING]
-            ),
+            TaskDB.status.in_(ACTIVE_STATUSES),
             TaskDB.type != TaskType.GENERAL_PAPER_QUESTION,
         )
         .distinct()
@@ -801,9 +808,7 @@ def reset_paper(
         session.query(TaskDB)
         .filter(
             TaskDB.paper_id == paper_id,
-            TaskDB.status.in_(
-                [TaskStatus.PENDING, TaskStatus.QUEUED, TaskStatus.RUNNING]
-            ),
+            TaskDB.status.in_(ACTIVE_STATUSES),
         )
         .count()
     )

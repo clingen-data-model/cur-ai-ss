@@ -4,7 +4,7 @@ import {
   listPaperCollaboratorsPapersCollaboratorsGet,
   listPapersPapersGet,
 } from '@/api/generated'
-import type { PaperSummaryResp, UserSummaryResp } from '@/api/generated/types.gen'
+import type { PaperSummaryResp } from '@/api/generated/types.gen'
 import { useAuth } from '@/lib/auth'
 import type { IndexSearch } from '@/routeTree'
 
@@ -50,7 +50,7 @@ export function usePapers(
   })
 
   const papers = useMemo(() => {
-    const rows = (Array.isArray(query.data) ? query.data : []) as PaperSummaryResp[]
+    const rows = query.data ?? []
     // Status is filtered here rather than in the query, unlike touched_by.
     // It is computed per paper from that paper's tasks, not stored -- so the
     // server would have to derive every status before it could drop any, which
@@ -72,19 +72,17 @@ export function usePapers(
     queryFn: () => listPaperCollaboratorsPapersCollaboratorsGet(),
     staleTime: STALE_TIME,
   })
-  const people = (
-    Array.isArray(peopleQuery.data) ? peopleQuery.data : []
-  ) as UserSummaryResp[]
+  const people = peopleQuery.data ?? []
 
   // Known only when the unfiltered response is already cached -- usually true,
   // since the genes tab populates that key. undefined otherwise, so the caller
   // can say "18 papers" rather than inventing "18 of 0".
-  const cachedAll = queryClient.getQueryData<unknown>(['papers'])
-  const total = Array.isArray(cachedAll) ? cachedAll.length : undefined
+  const cachedAll = queryClient.getQueryData<PaperSummaryResp[]>(['papers'])
+  const total = cachedAll?.length
 
   // What the person filter alone returned, so the count can say "3 of 21" when
   // a status is also applied rather than jumping straight to the grand total.
-  const beforeStatus = Array.isArray(query.data) ? query.data.length : undefined
+  const beforeStatus = query.data?.length
 
   return {
     papers,

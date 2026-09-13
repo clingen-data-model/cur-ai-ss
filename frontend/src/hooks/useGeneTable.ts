@@ -26,7 +26,7 @@ export function useGeneTable() {
   const { rows, papersByGene } = useMemo(() => {
     if (!papersQuery.data) return { rows: [], papersByGene: new Map<string, PaperSummaryResp[]>() }
 
-    const papers = Array.isArray(papersQuery.data) ? papersQuery.data : []
+    const papers = papersQuery.data
 
     const papersByGene = new Map<string, PaperSummaryResp[]>()
     const geneStats = new Map<string, { paper_count: number; patient_count: number; variant_count: number; occurrences_count: number }>()

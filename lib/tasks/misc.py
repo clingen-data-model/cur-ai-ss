@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from lib.models.paper import PaperTaskStatus
 
 from lib.tasks.models import (
+    CLAIMED_STATUSES,
     TASK_SUCCESSORS,
     InferredPaperStatus,
     TaskDB,
@@ -61,7 +62,7 @@ def enqueue_task(
 
     if existing_task:
         # Skip re-queuing if task is already running or queued
-        if existing_task.status in (TaskStatus.RUNNING, TaskStatus.QUEUED):
+        if existing_task.status in CLAIMED_STATUSES:
             return existing_task
         # Reset existing task
         existing_task.status = TaskStatus.PENDING
@@ -130,7 +131,7 @@ def enqueue_all_instances(
         # Re-queue all existing instances, skip if running or queued
         results = []
         for task in existing_tasks:
-            if task.status not in (TaskStatus.RUNNING, TaskStatus.QUEUED):
+            if task.status not in CLAIMED_STATUSES:
                 task.status = TaskStatus.PENDING
                 task.tries = 0
                 task.error_message = None
@@ -215,9 +216,9 @@ def invalidate_descendants(session: Session, paper_id: int, task_type: TaskType)
     stale COMPLETED signal without making anything runnable; enqueue_successors
     recreates each row when its predecessor actually finishes.
 
-    RUNNING and QUEUED rows are left alone: a handler is mid-flight against them,
-    and deleting the row out from under it would relocate the failure rather than
-    remove it. Those rows can still go COMPLETED and re-stale the gate, which is
+    Claimed rows are left alone: the scheduler is mid-flight against them, and
+    deleting one out from under it would relocate the failure rather than remove
+    it. Those rows can still go COMPLETED and re-stale the gate, which is
     a far narrower window than the one this closes.
 
     Returns the number of rows deleted.
@@ -231,7 +232,7 @@ def invalidate_descendants(session: Session, paper_id: int, task_type: TaskType)
         .filter(
             TaskDB.paper_id == paper_id,
             TaskDB.type.in_(descendants),
-            TaskDB.status.notin_([TaskStatus.RUNNING, TaskStatus.QUEUED]),
+            TaskDB.status.notin_(CLAIMED_STATUSES),
         )
         .all()
     )
@@ -524,8 +525,9 @@ def infer_paper_status(tasks: list[TaskResp]) -> InferredPaperStatus:
     if not tasks:
         return InferredPaperStatus.PENDING
 
-    # Check running or queued tasks
-    if any(t.status in (TaskStatus.RUNNING, TaskStatus.QUEUED) for t in tasks):
+    # Only RUNNING; see summarize_paper_task_status. A claimed-but-not-started
+    # task is waiting as far as anyone reading this is concerned.
+    if any(t.status == TaskStatus.RUNNING for t in tasks):
         return InferredPaperStatus.RUNNING
 
     # Check failed tasks
@@ -563,7 +565,10 @@ def summarize_paper_task_status(
     statuses = list(statuses)
     if not statuses:
         return PaperTaskStatus.IDLE
-    if any(s in (TaskStatus.RUNNING, TaskStatus.QUEUED) for s in statuses):
+    # Only RUNNING: a QUEUED task has been claimed but is not executing, so
+    # calling it "Running" tells the user something that is not yet true. It
+    # falls through to the waiting branches below, alongside PENDING.
+    if any(s == TaskStatus.RUNNING for s in statuses):
         return PaperTaskStatus.RUNNING
     if any(s == TaskStatus.FAILED for s in statuses):
         return PaperTaskStatus.FAILED
@@ -587,10 +592,9 @@ def infer_paper_status_detail(tasks: list[TaskResp]) -> str:
     if not tasks:
         return 'Pending'
 
-    # Check running or queued tasks
-    running_tasks = [
-        t for t in tasks if t.status in (TaskStatus.RUNNING, TaskStatus.QUEUED)
-    ]
+    # Only tasks a handler is actually executing: "3 agents running" should not
+    # count rows that are merely claimed.
+    running_tasks = [t for t in tasks if t.status == TaskStatus.RUNNING]
     if running_tasks:
         if len(running_tasks) > 1:
             return f'{len(running_tasks)} agents running'

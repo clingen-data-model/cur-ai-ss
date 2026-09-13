@@ -45,7 +45,7 @@ function PaperRow({ paper, stats }: { paper: PaperSummaryResp; stats?: TaskStats
       >
         {paper.title ?? paper.filename}
       </Link>
-      <PipelineProgress tasks={data?.data ?? []} stats={stats} />
+      <PipelineProgress tasks={data ?? []} stats={stats} />
     </div>
   )
 }
@@ -56,15 +56,11 @@ export function ActivityIndicator() {
     queryFn: () => listActivePapersPapersActiveGet(),
     // Slow while idle, brisk while something runs. A fixed fast interval would
     // be a permanent request stream for a state that is almost always empty.
-    refetchInterval: (query) => {
-      const rows = query.state.data
-      return Array.isArray(rows) && rows.length
-        ? POLL_WHILE_ACTIVE_MS
-        : POLL_WHILE_IDLE_MS
-    },
+    refetchInterval: (query) =>
+      query.state.data?.length ? POLL_WHILE_ACTIVE_MS : POLL_WHILE_IDLE_MS,
   })
 
-  const papers = (Array.isArray(data) ? data : []) as PaperSummaryResp[]
+  const papers = data ?? []
 
   // Shared with the card popovers, and only fetched once something is running.
   const { data: stats } = useQuery({
@@ -87,11 +83,7 @@ export function ActivityIndicator() {
       </PopoverTrigger>
       <PopoverContent align="end" className="w-96 divide-y">
         {papers.map((paper) => (
-          <PaperRow
-            key={paper.id}
-            paper={paper}
-            stats={stats as TaskStatsResp | undefined}
-          />
+          <PaperRow key={paper.id} paper={paper} stats={stats} />
         ))}
         {/* Worth having only because the target actually answers the question:
             the papers table filtered to what is running, rather than the whole

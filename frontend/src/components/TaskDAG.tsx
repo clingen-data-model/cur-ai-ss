@@ -80,7 +80,10 @@ export type NodeStatus = 'idle' | 'pending' | 'running' | 'partial' | 'completed
 export function computeStatus(tasks: TaskResp[]): NodeStatus {
   if (!tasks || tasks.length === 0) return 'idle'
   const statuses = tasks.map(t => t.status)
-  if (statuses.some(s => s === 'Running' || s === 'Queued')) return 'running'
+  // Running only. A Queued task has been claimed by the scheduler but has not
+  // started, so it falls through to 'pending' with the tasks still waiting to
+  // be claimed -- the two are the same thing to anyone reading the graph.
+  if (statuses.some(s => s === 'Running')) return 'running'
   if (statuses.some(s => s === 'Failed')) return 'failed'
   if (statuses.every(s => s === 'Completed')) return 'completed'
   if (statuses.some(s => s === 'Completed')) return 'partial'

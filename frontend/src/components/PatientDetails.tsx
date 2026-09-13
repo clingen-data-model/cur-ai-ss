@@ -14,7 +14,7 @@ import {
   SexAtBirth,
   TwinType,
 } from '@/api/generated'
-import type { PatientResp } from '@/api/generated/types.gen'
+import type { PatientResp, PatientUpdateRequest } from '@/api/generated/types.gen'
 
 // The generator expands EvidenceBlock[T] into a separate type per T (HumanEvidenceBlockStr,
 // HumanEvidenceBlockProbandStatus, etc.). This generic reconstructs the original shape so
@@ -258,8 +258,13 @@ export function PatientDetails({ patient, paperId, onHighlight }: PatientDetails
   const [form, setForm] = useState<FormState>(() => patientToForm(patient))
   const queryClient = useQueryClient()
 
+  // On patient.id alone, deliberately. This resets the form, so it must fire
+  // when a different patient is selected and not when the same one is refetched
+  // -- the patients query is invalidated on every save, and depending on the
+  // whole object would discard whatever the user had typed since.
   useEffect(() => {
     setForm(patientToForm(patient))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see comment above
   }, [patient.id])
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
@@ -269,14 +274,14 @@ export function PatientDetails({ patient, paperId, onHighlight }: PatientDetails
     mutationFn: (body: Record<string, unknown>) =>
       updatePatientPapersPaperIdPatientsPatientIdPatch({
         path: { paper_id: paperId, patient_id: patient.id },
-        body: body as any,
+        body: body as PatientUpdateRequest,
       }),
     onSuccess: () => {
       toast.success('Patient saved')
       queryClient.invalidateQueries({ queryKey: ['patients', paperId] })
     },
-    onError: (err: any) => {
-      toast.error(`Save failed: ${err?.message ?? 'Unknown error'}`)
+    onError: (err) => {
+      toast.error(`Save failed: ${err.message}`)
     },
   })
 
