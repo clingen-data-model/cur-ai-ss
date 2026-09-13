@@ -6,6 +6,7 @@ import secrets
 import shutil
 import time
 import traceback
+import uuid
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -427,6 +428,9 @@ def put_paper(
             type=TaskType.PDF_PARSING,
             status=TaskStatus.PENDING,
             updated_by_user_id=current_user.id,
+            # The paper's first run. Everything enqueue_successors cascades
+            # from here inherits it, so this id spans the whole extraction.
+            run_id=str(uuid.uuid4()),
         )
         paper_db.tasks.append(task)
         session.flush()
@@ -1097,6 +1101,11 @@ def create_task(
     if not request.skip_successors:
         invalidate_descendants(session, paper_id, request.type)
 
+    # A re-run is its own run, even though the paper's earlier tasks remain:
+    # ancestors survive invalidate_descendants, so without a new id this run's
+    # elapsed time would be measured from whenever the paper was first uploaded.
+    run_id = str(uuid.uuid4())
+
     if (
         request.family_id is None
         and request.patient_id is None
@@ -1111,6 +1120,7 @@ def create_task(
             skip_successors=request.skip_successors,
             additional_context=request.additional_context,
             updated_by_user_id=current_user.id,
+            run_id=run_id,
         )
     else:
         task = enqueue_task(
@@ -1125,6 +1135,7 @@ def create_task(
             skip_successors=request.skip_successors,
             additional_context=request.additional_context,
             updated_by_user_id=current_user.id,
+            run_id=run_id,
         )
         tasks = [task]
     return tasks
