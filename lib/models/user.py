@@ -6,6 +6,7 @@ from sqlalchemy import Boolean, DateTime, Index, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from lib.models.base import Base
+from lib.models.datetimes import UtcDatetime
 
 _EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
 
@@ -56,8 +57,8 @@ class UserResp(BaseModel):
     description_of_use_case: str
     max_papers: int | None
     notify_on_paper_complete: bool
-    avatar_updated_at: datetime | None
-    updated_at: datetime
+    avatar_updated_at: UtcDatetime | None
+    updated_at: UtcDatetime
 
     @computed_field  # type: ignore[misc]
     @property
@@ -88,7 +89,7 @@ class UserSummaryResp(BaseModel):
     email: str
     first_name: str
     last_name: str
-    avatar_updated_at: datetime | None = None
+    avatar_updated_at: UtcDatetime | None = None
 
     @computed_field  # type: ignore[misc]
     @property

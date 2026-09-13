@@ -7,7 +7,20 @@ be a silently mis-scaled bar rather than an error -- so the grouping travels
 with the statistics that depend on it.
 """
 
+from typing import NamedTuple
+
 from lib.tasks.models import TaskType
+
+
+class PipelineTrack(NamedTuple):
+    id: str
+    label: str
+    task_types: list[TaskType]
+    # Where this track sits in the pipeline's ordering, read off TASK_SUCCESSORS.
+    # Tracks sharing a stage genuinely overlap in time; a later stage waits on an
+    # earlier one. See STAGES below for why an estimate needs this.
+    stage: int
+
 
 # After Paper Classifier the pipeline forks into branches that run
 # concurrently and rejoin at Patient Variant Occurrences, so these are parallel
@@ -17,8 +30,22 @@ from lib.tasks.models import TaskType
 # GENERAL_PAPER_QUESTION is in no track: it is ad-hoc chat created by the
 # router, not pipeline work, and counting it would make a paper look unfinished
 # every time someone asked a question about it.
-PIPELINE_TRACKS: list[tuple[str, str, list[TaskType]]] = [
-    (
+# STAGES. The four tracks are not all concurrent, and treating them as though
+# they were is what made "time left" wrong in both directions.
+#
+# Reading TASK_SUCCESSORS: nothing starts until PDF Parsing and Paper Classifier
+# have run, and Patients and Variants both hang off the classifier -- so Paper
+# comes first and those two fork from it. Analysis begins at Patient Variant
+# Occurrences, which waits on Patient Demographics *and* Variant Extraction, so
+# it joins after both.
+#
+#     Paper -> { Patients || Variants } -> Analysis
+#
+# An estimate therefore adds the stages and takes the longest track within each,
+# rather than the longest track overall (which ignores that three of them queue
+# behind each other) or the sum of all four (which ignores the fork).
+PIPELINE_TRACKS: list[PipelineTrack] = [
+    PipelineTrack(
         'paper',
         'Paper',
         [
@@ -26,8 +53,9 @@ PIPELINE_TRACKS: list[tuple[str, str, list[TaskType]]] = [
             TaskType.PAPER_CLASSIFIER,
             TaskType.PAPER_METADATA,
         ],
+        stage=0,
     ),
-    (
+    PipelineTrack(
         'patients',
         'Patients',
         [
@@ -37,8 +65,9 @@ PIPELINE_TRACKS: list[tuple[str, str, list[TaskType]]] = [
             TaskType.PHENOTYPE_EXTRACTION,
             TaskType.HPO_LINKING,
         ],
+        stage=1,
     ),
-    (
+    PipelineTrack(
         'variants',
         'Variants',
         [
@@ -46,8 +75,9 @@ PIPELINE_TRACKS: list[tuple[str, str, list[TaskType]]] = [
             TaskType.VARIANT_HARMONIZATION,
             TaskType.VARIANT_ANNOTATION,
         ],
+        stage=1,
     ),
-    (
+    PipelineTrack(
         'analysis',
         'Analysis',
         [
@@ -57,11 +87,10 @@ PIPELINE_TRACKS: list[tuple[str, str, list[TaskType]]] = [
             TaskType.COMPOUND_HET_EVALUATION,
             TaskType.MONDO_LINKING,
         ],
+        stage=2,
     ),
 ]
 
 TRACK_OF_TYPE: dict[TaskType, str] = {
-    task_type: track_id
-    for track_id, _, task_types in PIPELINE_TRACKS
-    for task_type in task_types
+    task_type: track.id for track in PIPELINE_TRACKS for task_type in track.task_types
 }

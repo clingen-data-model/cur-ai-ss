@@ -4,6 +4,8 @@ from typing import Generic, Self, TypeVar
 
 from pydantic import BaseModel, field_validator, model_validator
 
+from lib.models.datetimes import UtcDatetime
+
 T = TypeVar('T')
 
 # A table rebuilt from its image comes back as rich markdown: footnote markers
@@ -121,4 +123,4 @@ class HumanEvidenceBlock(EvidenceBlock[T]):
     # a soft link only (no FK is possible inside a JSON column).
     edited_by_user_id: int | None = None
     edited_by_name: str | None = None
-    edited_at: datetime | None = None
+    edited_at: UtcDatetime | None = None

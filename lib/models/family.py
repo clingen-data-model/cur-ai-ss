@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
 from lib.models.base import Base, PatchModel
+from lib.models.datetimes import UtcDatetime
 from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock
 from lib.models.paper import PaperDB
 from lib.models.user import UserSummaryResp
@@ -77,7 +78,7 @@ class FamilyResp(BaseModel):
     identifier_evidence: HumanEvidenceBlock[str]
     consanguinity: bool
     consanguinity_evidence: HumanEvidenceBlock[bool]
-    updated_at: datetime
+    updated_at: UtcDatetime
     updated_by_user_id: int | None = None
     updated_by: UserSummaryResp | None = None
 

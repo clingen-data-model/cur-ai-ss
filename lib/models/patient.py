@@ -18,6 +18,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
 from lib.models.base import Base, PatchModel
+from lib.models.datetimes import UtcDatetime
 from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock
 from lib.models.family import Family
 from lib.models.paper import PaperDB
@@ -584,7 +585,7 @@ class PatientResp(BaseModel):
     is_obligate_carrier: bool | None
     relationship_to_proband: RelationshipToProband | None
     twin_type: TwinType | None
-    updated_at: datetime
+    updated_at: UtcDatetime
     updated_by_user_id: int | None = None
     updated_by: UserSummaryResp | None = None
     # Evidence blocks (from DB JSON columns)
