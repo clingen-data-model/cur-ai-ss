@@ -68,6 +68,13 @@ def enqueue_task(
         existing_task.status = TaskStatus.PENDING
         existing_task.tries = 0
         existing_task.error_message = None
+        # The previous attempt's start time belongs to the previous attempt.
+        # Left in place it makes a task that has not begun look like one that
+        # started when the last run did -- which is what the progress bars
+        # measure elapsed time from, so a re-queued task rendered as a bar
+        # parked at 99% with nothing running. execute_task stamps it again the
+        # moment a handler picks the task up.
+        existing_task.started_at = None
         existing_task.skip_successors = skip_successors
         existing_task.additional_context = additional_context
         existing_task.updated_by_user_id = updated_by_user_id
@@ -138,6 +145,17 @@ def enqueue_all_instances(
                 task.skip_successors = skip_successors
                 task.additional_context = additional_context
                 task.updated_by_user_id = updated_by_user_id
+                # Reassigned, not preserved -- the same reason enqueue_task
+                # reassigns it. This row is being reused for new work, and a
+                # re-run that kept the old id would be measured from whenever
+                # the previous run started. The parameter was accepted here and
+                # then ignored, so every re-run through this path silently
+                # joined the run it was replacing.
+                if run_id is not None:
+                    task.run_id = run_id
+                # See enqueue_task: the previous attempt's start time is not
+                # this one's.
+                task.started_at = None
                 # Clear conversation_id if not providing new context (start fresh)
                 if additional_context is None:
                     task.conversation_id = None
