@@ -327,9 +327,18 @@ def _snapshot_description(
 
 
 def write_snapshot(
-    paper_id: int, session: Session, description: str | None = None
+    paper_id: int,
+    session: Session,
+    description: str | None = None,
+    run_id: str | None = None,
 ) -> Path | None:
-    """Write a new snapshot unless the latest one already matches current state."""
+    """Write a new snapshot unless the latest one already matches current state.
+
+    ``run_id`` is the run whose completion produced this state, so a later
+    "revert to before that re-run" can name a snapshot rather than guess one
+    from timestamps. Left None by callers outside a run, such as the backfill
+    script.
+    """
     paper_db = session.get(PaperDB, paper_id)
     if paper_db is None:
         return None
@@ -357,6 +366,7 @@ def write_snapshot(
         'git_hash': _safe_git_hash(),
         'state_hash': state_hash,
         'description': description,
+        'run_id': run_id,
     }
 
     name = f'extraction_{now:%Y%m%dT%H%M%S%f}Z.json'
