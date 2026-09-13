@@ -7,6 +7,7 @@ import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-route
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Spinner } from '@/components/ui/spinner'
+import { ActivityIndicator } from '@/components/ActivityIndicator'
 import { UserMenu } from '@/components/UserMenu'
 import { AuthProvider, useAuth } from '@/lib/auth'
 
@@ -58,7 +59,10 @@ function Layout() {
               className="h-8 brightness-0 invert"
             />
           </Link>
-          <nav className="flex gap-4">{token && <UserMenu />}</nav>
+          <nav className="flex items-center gap-4">
+            {token && <ActivityIndicator />}
+            {token && <UserMenu />}
+          </nav>
         </div>
       </header>
 
