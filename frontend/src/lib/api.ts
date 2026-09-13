@@ -28,9 +28,11 @@ export function onUnauthorized(handler: () => void): () => void {
   return () => unauthorizedHandlers.delete(handler)
 }
 
-// Reads are open, but every mutating endpoint is behind HTTPBearer. Supplying `auth`
-// lets the generated SDK attach the token to exactly those operations that declare
-// the security scheme. Returning undefined simply omits the header.
+// Every endpoint except login, register and the health check is behind HTTPBearer.
+// Supplying `auth` lets the generated SDK attach the token to exactly those
+// operations that declare the security scheme, so this must be regenerated after
+// an endpoint's auth changes -- otherwise the client keeps omitting a header the
+// server has started requiring. Returning undefined simply omits it.
 client.setConfig({
   baseUrl: API_BASE_URL,
   responseStyle: 'data',

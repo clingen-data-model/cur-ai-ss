@@ -492,6 +492,7 @@ def _percentile(sorted_values: list[float], fraction: float) -> float:
 @app.get('/stats', response_model=TaskStatsResp, tags=['stats'])
 def get_task_stats(
     session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> Any:
     """How long each kind of task has historically taken.
 
@@ -546,6 +547,7 @@ def get_task_stats(
 @app.get('/papers/collaborators', response_model=list[UserSummaryResp])
 def list_paper_collaborators(
     session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> Any:
     """Everyone who has touched at least one paper.
 
@@ -574,7 +576,11 @@ def list_paper_collaborators(
 
 
 @app.get('/papers/{paper_id}', response_model=PaperResp)
-def get_paper(paper_id: int, session: Session = Depends(get_session)) -> Any:
+def get_paper(
+    paper_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
     paper_db = (
         session.query(PaperDB)
         .options(
@@ -607,7 +613,11 @@ def get_paper(paper_id: int, session: Session = Depends(get_session)) -> Any:
 
 
 @app.delete('/papers/{paper_id}', status_code=status.HTTP_204_NO_CONTENT)
-def delete_paper(paper_id: int, session: Session = Depends(get_session)) -> None:
+def delete_paper(
+    paper_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> None:
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
         return
@@ -622,7 +632,11 @@ def delete_paper(paper_id: int, session: Session = Depends(get_session)) -> None
 
 
 @app.get('/papers/{paper_id}/snapshots', response_model=list[SnapshotMeta])
-def get_paper_snapshots(paper_id: int, session: Session = Depends(get_session)) -> Any:
+def get_paper_snapshots(
+    paper_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
     paper_db = session.get(PaperDB, paper_id)
     if paper_db is None:
         raise HTTPException(
@@ -806,6 +820,7 @@ def _paper_touchers(session: Session) -> dict[int, list[int]]:
 def list_papers(
     touched_by: int | None = None,
     session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> Any:
     """Summaries for the gene table -- deliberately not the full PaperResp.
 
@@ -978,6 +993,7 @@ def _paper_to_resp(row: PaperDB) -> PaperResp:
 def list_tasks(
     paper_id: int,
     session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> Any:
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
@@ -1117,7 +1133,11 @@ def _patient_to_resp(row: PatientDB) -> PatientResp:
 
 
 @app.get('/papers/{paper_id}/patients', response_model=list[PatientResp])
-def get_patients(paper_id: int, session: Session = Depends(get_session)) -> Any:
+def get_patients(
+    paper_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
         raise HTTPException(
@@ -1134,7 +1154,11 @@ def get_patients(paper_id: int, session: Session = Depends(get_session)) -> Any:
 
 
 @app.get('/papers/{paper_id}/families', response_model=list[FamilyResp])
-def get_families(paper_id: int, session: Session = Depends(get_session)) -> Any:
+def get_families(
+    paper_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
         raise HTTPException(
@@ -1172,7 +1196,11 @@ def update_family(
 
 
 @app.get('/papers/{paper_id}/pedigree', response_model=PedigreeResp | None)
-def get_pedigree(paper_id: int, session: Session = Depends(get_session)) -> Any:
+def get_pedigree(
+    paper_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
         raise HTTPException(
@@ -1242,7 +1270,9 @@ def _segregation_analysis_to_resp(
     response_model=list[SegregationAnalysisResp],
 )
 def get_segregation_analysis(
-    paper_id: int, session: Session = Depends(get_session)
+    paper_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> Any:
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
@@ -1301,7 +1331,11 @@ def update_segregation_evidence(
 
 
 @app.get('/papers/{paper_id}/variants', response_model=list[VariantResp])
-def get_variants(paper_id: int, session: Session = Depends(get_session)) -> Any:
+def get_variants(
+    paper_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
         raise HTTPException(
@@ -1511,7 +1545,11 @@ def _phenotype_to_resp(row: PhenotypeDB) -> PhenotypeResp:
     '/papers/{paper_id}/occurrences',
     response_model=list[PatientVariantOccurrenceResp],
 )
-def get_occurrences(paper_id: int, session: Session = Depends(get_session)) -> Any:
+def get_occurrences(
+    paper_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
     """Get all patient-variant occurrences for a paper."""
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
@@ -1540,7 +1578,10 @@ def get_occurrences(paper_id: int, session: Session = Depends(get_session)) -> A
     response_model=list[PatientVariantOccurrenceResp],
 )
 def get_variant_occurrences(
-    paper_id: int, variant_id: int, session: Session = Depends(get_session)
+    paper_id: int,
+    variant_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> Any:
     """Get all patient occurrences of a specific variant."""
     variant_db = session.get(VariantDB, variant_id)
@@ -1571,7 +1612,10 @@ def get_variant_occurrences(
     response_model=list[PatientVariantOccurrenceResp],
 )
 def get_patient_occurrences(
-    paper_id: int, patient_id: int, session: Session = Depends(get_session)
+    paper_id: int,
+    patient_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> Any:
     """Get all variant occurrences for a specific patient."""
     patient_db = session.get(PatientDB, patient_id)
@@ -1683,7 +1727,11 @@ def _patient_variant_occurrence_to_resp(
     '/papers/{paper_id}/curation-row',
     response_model=CurationSummaryRow,
 )
-def get_curation_row(paper_id: int, session: Session = Depends(get_session)) -> Any:
+def get_curation_row(
+    paper_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
     """Get a curation summary row for a single paper."""
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
@@ -1700,7 +1748,9 @@ def get_curation_row(paper_id: int, session: Session = Depends(get_session)) -> 
     '/papers/{paper_id}/curation-export',
 )
 def get_curation_export(
-    paper_id: int, session: Session = Depends(get_session)
+    paper_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> Response:
     """Export a curation summary as a PPTX file."""
     paper_db = session.get(PaperDB, paper_id)
@@ -1727,7 +1777,10 @@ def get_curation_export(
     response_model=list[PhenotypeResp],
 )
 def get_phenotypes(
-    paper_id: int, patient_id: int, session: Session = Depends(get_session)
+    paper_id: int,
+    patient_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> Any:
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
@@ -1781,6 +1834,7 @@ def search_genes(
     prefix: str = Query(...),
     limit: int = Query(10),
     session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> Any:
     query = (
         session.query(GeneDB)
@@ -1795,6 +1849,7 @@ def search_genes(
 def list_genes(
     limit: int | None = Query(None),
     session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> Any:
     query = session.query(GeneDB).order_by(GeneDB.symbol)
     if limit is not None:
@@ -1807,6 +1862,7 @@ def highlight_pdf(
     paper_id: int,
     request: HighlightRequest,
     session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> None:
     """
     Highlight text in a PDF and save the highlighted version.
@@ -1865,6 +1921,7 @@ def grobid_annotation(
     paper_id: int,
     request: HighlightRequest,
     session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> list[GrobidAnnotation]:
     """
     Find best text matches and return their coordinates in GROBID format.
@@ -1933,6 +1990,7 @@ def grobid_annotation(
 def clear_highlights(
     paper_id: int,
     session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> None:
     """
     Clear all highlights from a paper by replacing the highlighted PDF with the raw PDF.
@@ -1960,6 +2018,7 @@ def clear_highlights(
 def get_chat_messages(
     paper_id: int,
     session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> Any:
     conversation_db = (
         session.query(ConversationDB)
@@ -1973,6 +2032,7 @@ def get_chat_messages(
 def clear_chat(
     paper_id: int,
     session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> Any:
     conversation_db = (
         session.query(ConversationDB)
@@ -2111,6 +2171,7 @@ async def generate_chat_response(
     paper_id: int,
     request: ChatMessageRequest | None = None,
     session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
 ) -> Any:
     conversation_db = (
         session.query(ConversationDB)
