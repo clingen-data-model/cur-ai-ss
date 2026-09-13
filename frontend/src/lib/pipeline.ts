@@ -112,15 +112,31 @@ export function trackProgress(
   return tracks.map((track) => {
     const mine = tasks.filter((t) => track.task_types.includes(t.type))
     const done = mine.filter((t) => t.status === DONE).length
-    const complete = finished && mine.length > 0
     const budget = track.median_seconds
 
     // Counts above describe the paper; elapsed describes the run in progress.
-    // A track with nothing in the current run has not started as far as this
-    // measurement goes, which is the truth -- no work is happening in it now.
-    const startedAt = earliestStart(
-      run === null ? mine : mine.filter((t) => t.run_id === run),
-    )
+    const inRun = run === null ? mine : mine.filter((t) => t.run_id === run)
+
+    // A track can be finished while the paper is not. Re-running one agent
+    // leaves every other track's work standing, and the whole-paper judgement
+    // called all of them unfinished -- so queueing HPO Linking alone showed
+    // Paper, Variants and Analysis as waiting, and quoted 34 minutes for work
+    // that was already done.
+    //
+    // Safe because of what enqueueing does first: invalidate_descendants
+    // deletes the completed rows anything downstream of the request will redo.
+    // So a track still holding a full set of completed tasks, none of them in
+    // the current run, is one this run will not touch.
+    //
+    // Deliberately not extended to tracks the run *is* touching, even when all
+    // their current tasks have landed: that is the backwards jump this file
+    // exists to prevent, where Patients reads "1 of 1 done" as Pedigree
+    // finishes and then grows to 15.
+    const untouched =
+      mine.length > 0 && inRun.length === 0 && mine.every((t) => t.status === DONE)
+    const complete = untouched || (finished && mine.length > 0)
+
+    const startedAt = earliestStart(inRun)
     // Floored at zero. Elapsed should never be negative, but it was for months:
     // the API sent timestamps with no timezone and the browser read them as
     // local, putting every start time hours in the future. That is fixed at the
