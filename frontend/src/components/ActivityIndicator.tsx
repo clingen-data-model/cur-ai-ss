@@ -93,6 +93,16 @@ export function ActivityIndicator() {
             stats={stats as TaskStatsResp | undefined}
           />
         ))}
+        {/* Worth having only because the target actually answers the question:
+            the papers table filtered to what is running, rather than the whole
+            table with the running ones somewhere in it. */}
+        <Link
+          to="/"
+          search={{ status: 'running' }}
+          className="block pt-2 text-sm text-muted-foreground hover:text-foreground hover:underline underline-offset-4"
+        >
+          See all in the papers table
+        </Link>
       </PopoverContent>
     </Popover>
   )

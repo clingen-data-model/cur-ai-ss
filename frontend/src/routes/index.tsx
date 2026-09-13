@@ -4,6 +4,7 @@ import { useGeneTable } from '@/hooks/useGeneTable'
 import { usePapers } from '@/hooks/usePapers'
 import { GeneTable } from '@/components/GeneTable'
 import { PapersTable } from '@/components/PapersTable'
+import { StatusFilter } from '@/components/StatusFilter'
 import { WorkedByFilter } from '@/components/WorkedByFilter'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Spinner } from '@/components/ui/spinner'
@@ -96,12 +97,20 @@ export function HomePage() {
 /** Split out so its query only runs once the tab is opened, rather than on
  *  every visit to the genes view. */
 function AllPapersTab() {
-  const { worked_by: workedBy = 'anyone' } = useSearch({ from: '/' })
+  const search = useSearch({ from: '/' })
+  const { worked_by: workedBy = 'anyone', status } = search
   const navigate = useNavigate({ from: '/' })
-  const { papers, people, total, isLoading, isRefreshing, isError, error } =
-    usePapers(workedBy)
+  const { papers, people, total, beforeStatus, isLoading, isRefreshing, isError, error } =
+    usePapers(workedBy, status)
 
-  const filtered = workedBy !== 'anyone'
+  const filtered = workedBy !== 'anyone' || status !== undefined
+  // Preserve the other filter when changing one -- they compose.
+  const withSearch = (next: Partial<typeof search>) => {
+    const merged = { ...search, ...next }
+    return Object.fromEntries(
+      Object.entries(merged).filter(([, v]) => v !== undefined && v !== 'anyone'),
+    )
+  }
 
   // The header renders unconditionally, above every branch below. Returning
   // early on a loading state used to take the filter down with the table, so
@@ -114,23 +123,28 @@ function AllPapersTab() {
         <p className="text-sm text-muted-foreground">
           {isLoading
             ? '\u00a0'
-            : filtered && total !== undefined
-              ? `${papers.length} of ${total} papers`
+            : filtered
+              ? `${papers.length} of ${beforeStatus && status ? beforeStatus : (total ?? papers.length)} papers`
               : `${papers.length} papers`}
           {/* A quiet hint rather than a spinner: the rows on screen are the
               previous scope's and still readable while the new ones load. */}
           {isRefreshing && <span className="ml-2 opacity-60">updating…</span>}
         </p>
-        <WorkedByFilter
-          value={workedBy}
-          people={people}
-          onChange={(next) =>
-            navigate({
-              search: next === 'anyone' ? {} : { worked_by: next },
-              replace: true,
-            })
-          }
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          <StatusFilter
+            value={status}
+            onChange={(next) =>
+              navigate({ search: withSearch({ status: next }), replace: true })
+            }
+          />
+          <WorkedByFilter
+            value={workedBy}
+            people={people}
+            onChange={(next) =>
+              navigate({ search: withSearch({ worked_by: next }), replace: true })
+            }
+          />
+        </div>
       </div>
 
       <div
