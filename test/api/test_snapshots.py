@@ -578,3 +578,48 @@ def test_snapshots_dir_removed_with_paper(client, db_session, snapshot_paper):
     assert directory.exists()
     assert client.delete(f'/papers/{paper.id}').status_code == 204
     assert not directory.exists()
+
+
+def test_snapshot_records_the_run_that_produced_it(db_session, snapshot_paper):
+    """Reverting "to before that re-run" needs to name a snapshot rather than
+    guess one from timestamps, which is all a flat list of them supports."""
+    write_snapshot(snapshot_paper['paper'].id, db_session, run_id='run-abc')
+
+    assert list_snapshots(snapshot_paper['paper'].id)[0].run_id == 'run-abc'
+
+
+def test_snapshot_run_id_is_optional(db_session, snapshot_paper):
+    """Callers outside a run -- the backfill script -- have none to record."""
+    write_snapshot(snapshot_paper['paper'].id, db_session)
+
+    assert list_snapshots(snapshot_paper['paper'].id)[0].run_id is None
+
+
+def test_snapshots_written_before_run_ids_still_read(db_session, snapshot_paper):
+    """Existing files on disk have no run_id key at all. They have to keep
+    loading, or upgrading would hide every restore point a paper already had."""
+    path = write_snapshot(snapshot_paper['paper'].id, db_session, run_id='run-abc')
+    assert path is not None
+    payload = json.loads(path.read_text())
+    del payload['meta']['run_id']
+    path.write_text(json.dumps(payload))
+
+    snapshots = list_snapshots(snapshot_paper['paper'].id)
+
+    assert len(snapshots) == 1
+    assert snapshots[0].run_id is None
+
+
+def test_worker_stamps_the_completing_runs_id(db_session, snapshot_paper):
+    """The worker passes the run of the terminal task that finished -- the one
+    whose work the snapshot reflects."""
+    for task in db_session.query(TaskDB).filter(
+        TaskDB.paper_id == snapshot_paper['paper'].id
+    ):
+        task.status = TaskStatus.COMPLETED
+        task.run_id = 'run-xyz'
+    db_session.flush()
+
+    _maybe_write_snapshot(db_session, snapshot_paper['paper'].id, 'run-xyz')
+
+    assert list_snapshots(snapshot_paper['paper'].id)[0].run_id == 'run-xyz'

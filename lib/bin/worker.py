@@ -96,11 +96,13 @@ async def execute_task(task_id: int) -> None:
             if paper:
                 paper.updated_at = now
             if error_msg is None and task.type in TERMINAL_TASK_TYPES:
-                _maybe_write_snapshot(session, task.paper_id)
+                _maybe_write_snapshot(session, task.paper_id, task.run_id)
                 _maybe_notify_completion(session, task.paper_id)
 
 
-def _maybe_write_snapshot(session: Session, paper_id: int) -> None:
+def _maybe_write_snapshot(
+    session: Session, paper_id: int, run_id: str | None = None
+) -> None:
     """Snapshot the paper's extracted state once every pipeline task is done.
 
     Several terminal tasks can finish in quick succession; write_snapshot
@@ -121,7 +123,9 @@ def _maybe_write_snapshot(session: Session, paper_id: int) -> None:
     if not all(s == TaskStatus.COMPLETED for s in pipeline_statuses):
         return
     try:
-        write_snapshot(paper_id, session)
+        # The run of the terminal task that completed last -- the one whose
+        # work this state reflects.
+        write_snapshot(paper_id, session, run_id=run_id)
     except Exception:
         logger.exception(f'Failed to write extraction snapshot for paper {paper_id}')
 
