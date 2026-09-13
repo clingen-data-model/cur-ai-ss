@@ -1804,18 +1804,24 @@ def test_active_papers_lists_only_work_in_flight(
     assert [p['id'] for p in active] == [busy]
 
 
-def test_active_papers_counts_queued_as_in_flight(
-    client, test_pdf, db_session, seeded_genes
+@pytest.mark.parametrize('waiting', [TaskStatus.PENDING, TaskStatus.QUEUED])
+def test_active_papers_counts_waiting_work_as_in_flight(
+    client, test_pdf, db_session, seeded_genes, waiting
 ):
-    """A queued task is work the user is waiting on, even though nothing is
-    executing it yet -- the indicator should already be lit."""
+    """Work the user is waiting on counts even though nothing executes it yet.
+
+    PENDING is the case that actually happens -- the worker polls every 10s, and
+    PDF parsing runs one at a time, so a second paper waits there for the whole
+    of the first one's parse. An earlier version matched only QUEUED, which
+    nothing in the codebase ever assigns, so a paper just queued read as idle.
+    """
     paper_id = client.put(
         '/papers',
         files={'uploaded_file': ('p.pdf', test_pdf, 'application/pdf')},
         data={'gene_symbol': 'BRCA1'},
     ).json()['id']
     for task in db_session.query(TaskDB).filter(TaskDB.paper_id == paper_id):
-        task.status = TaskStatus.QUEUED
+        task.status = waiting
     db_session.flush()
 
     assert [p['id'] for p in client.get('/papers/active').json()] == [paper_id]
