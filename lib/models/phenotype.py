@@ -16,6 +16,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
 from lib.models.base import Base
+from lib.models.datetimes import UtcDatetime
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 
 if TYPE_CHECKING:
@@ -149,7 +150,7 @@ class PhenotypeResp(BaseModel):
     location: str | None
     severity: str | None
     modifier: str | None
-    updated_at: datetime
+    updated_at: UtcDatetime
     updated_by_user_id: int | None = None
     # Evidence block (from DB JSON column)
     concept_evidence: EvidenceBlock[str]

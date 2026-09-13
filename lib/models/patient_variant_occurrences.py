@@ -17,6 +17,7 @@ from sqlalchemy.types import JSON
 from typing_extensions import Self
 
 from lib.models.base import Base, PatchModel
+from lib.models.datetimes import UtcDatetime
 from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock, ReasoningBlock
 from lib.models.mondo import MondoComponentMapping, MondoTerm
 
@@ -242,4 +243,4 @@ class PatientVariantOccurrenceResp(BaseModel):
     paired_variant_confidence_reasoning: (
         ReasoningBlock[CompoundHetConfidence] | None
     ) = None
-    updated_at: datetime
+    updated_at: UtcDatetime

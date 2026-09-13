@@ -2,6 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from lib.models.datetimes import UtcDatetime
 from lib.models.paper import PaperResp
 
 
@@ -10,7 +11,7 @@ class SnapshotMeta(BaseModel):
 
     name: str
     version: int
-    created_at: datetime
+    created_at: UtcDatetime
     paper_id: int
     alembic_revision: str | None = None
     model: str | None = None

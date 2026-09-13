@@ -33,6 +33,35 @@ const TRACK_ACCENT: Record<string, string> = {
   analysis: 'var(--color-chart-4)',
 }
 
+/* What the number beside a bar says.
+ *
+ * A time, because that is what the bar measures. It showed finished/total tasks
+ * before, which contradicted the bar sitting next to it -- the bar is elapsed
+ * over a historical budget, so "0/1" could sit beside a bar a third of the way
+ * along and both be correct. Task counts are a real fact about a paper, but
+ * they belong in the DAG view, where they are the subject rather than a caption
+ * on something else.
+ */
+function valueLabel(track: TrackProgress): string {
+  const budget = track.budgetSeconds
+  // Never measured. Inventing a denominator is worse than admitting there is
+  // none, and the bar is already indeterminate in this case.
+  if (!budget || budget <= 0) return '—'
+
+  // Done: what it actually took, which is a measurement rather than a forecast.
+  if (track.complete) return formatDuration(track.elapsedSeconds ?? budget)
+
+  // Waiting. Its budget is what it is expected to cost once it starts.
+  if (track.elapsedSeconds === null) return formatDuration(budget)
+
+  // Running. Minutes bare on the left so the unit is said once: "3 / 9 min".
+  // Past an hour the short form stops being readable, so both sides spell out.
+  if (budget >= 3600) {
+    return `${formatDuration(track.elapsedSeconds)} / ${formatDuration(budget)}`
+  }
+  return `${Math.floor(track.elapsedSeconds / 60)} / ${formatDuration(budget)}`
+}
+
 function TrackBar({ track }: { track: TrackProgress }) {
   // Read by the fill, and by the sweep an indeterminate track draws across
   // itself -- so a waiting track shimmers in its own colour instead of
@@ -60,15 +89,8 @@ function TrackBar({ track }: { track: TrackProgress }) {
     >
       <ProgressLabel className="text-xs font-normal">{track.label}</ProgressLabel>
       <ProgressValue
-        className="text-xs"
-        render={
-          <span>
-            {/* Counts, not the percentage the bar is drawn from. The bar is
-                weighted by expected duration, so showing that number here would
-                contradict "2 of 8" sitting beside it. */}
-            {track.total === 0 ? '—' : `${track.done}/${track.total}`}
-          </span>
-        }
+        className="text-xs tabular-nums"
+        render={<span>{valueLabel(track)}</span>}
       />
     </Progress>
   )

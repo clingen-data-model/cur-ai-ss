@@ -66,6 +66,10 @@ class TrackDurationStat(BaseModel):
     id: str
     label: str
     task_types: list[TaskType]
+    # Pipeline ordering; see PIPELINE_TRACKS. Tracks sharing a stage overlap, a
+    # later stage waits on an earlier one, and a whole-pipeline estimate has to
+    # add the stages rather than treat all four as concurrent.
+    stage: int
     median_seconds: float | None = None
     p90_seconds: float | None = None
     # Papers this was measured over. None of the above is trustworthy at 1.

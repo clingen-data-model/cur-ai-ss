@@ -8,6 +8,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON, Float
 
 from lib.models.base import Base, PatchModel
+from lib.models.datetimes import UtcDatetime
 from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock, ReasoningBlock
 from lib.models.user import UserSummaryResp
 
@@ -81,7 +82,7 @@ class SegregationEvidenceResp(BaseModel):
     family_id: int
     extracted_lod_score: HumanEvidenceBlock[float | None]
     has_unexplainable_non_segregations: HumanEvidenceBlock[bool]
-    updated_at: datetime
+    updated_at: UtcDatetime
     updated_by_user_id: int | None = None
 
 
@@ -172,7 +173,7 @@ class SegregationAnalysisResp(BaseModel):
     has_unexplainable_non_segregations: HumanEvidenceBlock[bool]
     # Computed (from computation agent) - nested like harmonized/enriched variants
     computed: SegregationAnalysisComputedNestedResp | None = None
-    updated_at: datetime
+    updated_at: UtcDatetime
     updated_by_user_id: int | None = None
     updated_by: UserSummaryResp | None = None
 

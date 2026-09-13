@@ -24,11 +24,17 @@ import type {
 export interface TrackProgress {
   id: string
   label: string
+  /** Pipeline ordering from /stats; tracks sharing a stage overlap in time. */
+  stage: number
   done: number
   total: number
   /** 0-100, or null when there is nothing honest to show. */
   percent: number | null
-  /** Expected seconds left, or null without a budget to subtract from. */
+  /** Seconds since this track's earliest task started, or null before that. */
+  elapsedSeconds: number | null
+  /** What history says this track takes, or null if it has never been measured. */
+  budgetSeconds: number | null
+  /** Expected seconds left, or null when there is no honest estimate. */
   remainingSeconds: number | null
   running: boolean
   failed: boolean
@@ -84,7 +90,12 @@ export function trackProgress(
     const budget = track.median_seconds
 
     const startedAt = earliestStart(mine)
-    const elapsed = startedAt === null ? null : (now - startedAt) / 1000
+    // Floored at zero. Elapsed should never be negative, but it was for months:
+    // the API sent timestamps with no timezone and the browser read them as
+    // local, putting every start time hours in the future. That is fixed at the
+    // source (lib/models/datetimes.py); this keeps a clock-skewed machine from
+    // reviving the same symptom -- an empty bar and an absurd estimate.
+    const elapsed = startedAt === null ? null : Math.max(0, (now - startedAt) / 1000)
 
     let percent: number | null
     let remainingSeconds: number | null = null
@@ -94,10 +105,13 @@ export function trackProgress(
       percent = 100
       remainingSeconds = 0
     } else if (startedAt === null) {
-      // Not started. Deliberately null rather than 0 -- the track renders
-      // indeterminate, which reads as "waiting" where an empty bar reads as
-      // stalled. Analysis sits here legitimately until its inputs finish.
+      // Not started. percent is deliberately null rather than 0 -- the track
+      // renders indeterminate, which reads as "waiting" where an empty bar
+      // reads as stalled. Analysis sits here legitimately until its inputs
+      // finish. It still owes its whole budget, though, which is what makes it
+      // count toward the estimate instead of being invisible to it.
       percent = null
+      remainingSeconds = budget && budget > 0 ? budget : null
     } else if (budget && budget > 0 && elapsed !== null) {
       // Capped below 100 while work remains, so the bar never claims to be
       // finished before it is. A track over its budget parks just short, which
@@ -117,9 +131,12 @@ export function trackProgress(
     return {
       id: track.id,
       label: track.label,
+      stage: track.stage,
       done,
       total: mine.length,
       percent,
+      elapsedSeconds: elapsed,
+      budgetSeconds: budget ?? null,
       remainingSeconds,
       running: mine.some((t) => t.status === RUNNING),
       failed: mine.some((t) => t.status === 'Failed'),
@@ -130,15 +147,40 @@ export function trackProgress(
 
 /** Expected seconds until the whole pipeline finishes.
  *
- * The longest remaining track, not their sum: they run concurrently, and adding
- * them would roughly quadruple the estimate.
+ * Stages in sequence, tracks within a stage in parallel:
+ *
+ *     Paper -> { Patients || Variants } -> Analysis
+ *
+ * so the total adds one term per stage and takes the longest track inside each.
+ * Both simpler answers are wrong in a way you can watch happen. The longest
+ * track overall ignores that three stages queue behind one another, and read
+ * "8 min left" on a paper whose parse had not finished. The sum of all four
+ * double-counts the fork, since Patients and Variants genuinely run at once.
+ *
+ * The stage numbers come from /stats, so this cannot drift from the DAG the
+ * worker actually follows -- see lib/tasks/tracks.py.
+ *
+ * Null if any outstanding track has no honest estimate: one unmeasured or
+ * over-budget track makes the total a guess, and a guess presented to the
+ * minute is worse than no number.
  */
 export function remainingSeconds(tracks: TrackProgress[]): number | null {
-  const known = tracks
-    .filter((t) => !t.complete)
-    .map((t) => t.remainingSeconds)
-    .filter((s): s is number => s !== null)
-  return known.length ? Math.max(...known) : null
+  const outstanding = tracks.filter((t) => !t.complete)
+  if (outstanding.length === 0) return null
+
+  const byStage = new Map<number, (number | null)[]>()
+  for (const track of outstanding) {
+    const stage = byStage.get(track.stage) ?? []
+    stage.push(track.remainingSeconds)
+    byStage.set(track.stage, stage)
+  }
+
+  let total = 0
+  for (const remaining of byStage.values()) {
+    if (remaining.some((s) => s === null)) return null
+    total += Math.max(...(remaining as number[]))
+  }
+  return total
 }
 
 /** "4 min", "2 h 10 min", "<1 min" -- coarse on purpose, because a median over

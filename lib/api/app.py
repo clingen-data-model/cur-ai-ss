@@ -566,13 +566,14 @@ def _track_stats(session: Session) -> list[TrackDurationStat]:
     by_track = collect(from_scratch) if from_scratch else collect(None)
 
     stats = []
-    for track_id, label, task_types in PIPELINE_TRACKS:
-        values = sorted(by_track.get(track_id, []))
+    for track in PIPELINE_TRACKS:
+        values = sorted(by_track.get(track.id, []))
         stats.append(
             TrackDurationStat(
-                id=track_id,
-                label=label,
-                task_types=list(task_types),
+                id=track.id,
+                label=track.label,
+                task_types=list(track.task_types),
+                stage=track.stage,
                 median_seconds=_percentile(values, 0.5) if values else None,
                 p90_seconds=_percentile(values, 0.9) if values else None,
                 # Runs now, not papers: one paper processed three times

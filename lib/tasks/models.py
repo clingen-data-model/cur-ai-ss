@@ -8,6 +8,7 @@ from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from lib.models.base import Base
+from lib.models.datetimes import UtcDatetime
 from lib.models.user import UserSummaryResp
 
 if TYPE_CHECKING:
@@ -281,8 +282,8 @@ class TaskResp(BaseModel):
     phenotype_id: int | None
     patient_variant_occurrence_id: int | None
     run_id: str | None = None
-    started_at: datetime | None = None
-    updated_at: datetime
+    started_at: UtcDatetime | None = None
+    updated_at: UtcDatetime
     updated_by_user_id: int | None = None
     updated_by: UserSummaryResp | None = None
 

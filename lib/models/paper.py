@@ -10,6 +10,8 @@ from pydantic import (
     model_validator,
 )
 
+from lib.models.datetimes import UtcDatetime
+
 if TYPE_CHECKING:
     from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
     from lib.models.family import FamilyDB
@@ -312,7 +314,7 @@ class PaperResp(PaperExtractionOutput):
     disease_inheritance_mode_evidence: HumanEvidenceBlock[Inheritance] | None = None
     mondo: ReasoningBlock[MondoTerm | None]
     mondo_components: list[MondoComponentMapping] = []
-    updated_at: datetime
+    updated_at: UtcDatetime
     updated_by_user_id: int | None = None
     updated_by: UserSummaryResp | None = None
     tasks: list['TaskResp'] = []
@@ -383,7 +385,7 @@ class PaperSummaryResp(BaseModel):
     first_author: str | None = None
     journal_name: str | None = None
     tags: list[PaperTag] = []
-    updated_at: datetime
+    updated_at: UtcDatetime
     status: PaperTaskStatus
     # Everyone who has touched this paper. Measured at most two per paper on
     # dev, so unlike the task list this replaced it does not bloat the response.
