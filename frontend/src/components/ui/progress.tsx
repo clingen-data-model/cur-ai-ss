@@ -4,10 +4,15 @@ import { cn } from "@/lib/utils"
 
 function Progress({
   className,
+  // Added to the vendored component: the Root renders its own Track and
+  // Indicator, so without this there is no way to recolour the fill -- which a
+  // failed track needs, since a stalled bar and a broken one are the same
+  // length.
+  indicatorClassName,
   children,
   value,
   ...props
-}: ProgressPrimitive.Root.Props) {
+}: ProgressPrimitive.Root.Props & { indicatorClassName?: string }) {
   return (
     <ProgressPrimitive.Root
       value={value}
@@ -17,7 +22,7 @@ function Progress({
     >
       {children}
       <ProgressTrack>
-        <ProgressIndicator />
+        <ProgressIndicator className={indicatorClassName} />
       </ProgressTrack>
     </ProgressPrimitive.Root>
   )
@@ -27,6 +32,11 @@ function ProgressTrack({ className, ...props }: ProgressPrimitive.Track.Props) {
   return (
     <ProgressPrimitive.Track
       className={cn(
+        // Base UI marks an indeterminate track with data-indeterminate but
+        // styles nothing, so value={null} rendered identically to 0% -- an
+        // empty bar reading as stalled rather than as "size not yet known".
+        // The sweep is what tells them apart.
+        "data-[indeterminate]:shimmer-track",
         "relative flex h-1 w-full items-center overflow-x-hidden rounded-full bg-muted",
         className
       )}
