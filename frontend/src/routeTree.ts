@@ -16,6 +16,10 @@
  * why the header, footer, auth gate and toaster render on every page.
  */
 import { RootRoute, Route } from '@tanstack/react-router'
+import { PaperTaskStatus } from './api/generated/types.gen'
+import type { PaperTaskStatus as PaperTaskStatusValue } from './api/generated/types.gen'
+
+const PAPER_STATUSES: string[] = Object.values(PaperTaskStatus)
 import { RootLayout } from './routes/__root'
 import { HomePage } from './routes/index'
 import { LoginPage } from './routes/login'
@@ -38,6 +42,8 @@ const rootRoute = new RootRoute({
  */
 export interface IndexSearch {
   worked_by?: 'anyone' | 'me' | number
+  /** A PaperTaskStatus value, or absent for every status. */
+  status?: PaperTaskStatusValue
 }
 
 const indexRoute = new Route({
@@ -45,12 +51,26 @@ const indexRoute = new Route({
   path: '/',
   component: HomePage,
   validateSearch: (search: Record<string, unknown>): IndexSearch => {
-    const raw = search.worked_by
-    if (raw === 'me' || raw === 'anyone') return { worked_by: raw }
-    const id = Number(raw)
-    // A junk value falls through to the default rather than erroring: this is a
-    // filter, and an unreadable one should show everything, not a broken page.
-    return Number.isInteger(id) && id > 0 ? { worked_by: id } : {}
+    const parsed: IndexSearch = {}
+
+    const who = search.worked_by
+    if (who === 'me' || who === 'anyone') {
+      parsed.worked_by = who
+    } else {
+      const id = Number(who)
+      if (Number.isInteger(id) && id > 0) parsed.worked_by = id
+    }
+
+    // Validated against the API's own values rather than a copy of them, so a
+    // status added server-side cannot silently stop being filterable.
+    const status = search.status
+    if (typeof status === 'string' && PAPER_STATUSES.includes(status)) {
+      parsed.status = status as PaperTaskStatusValue
+    }
+
+    // Anything unreadable falls through to showing everything rather than
+    // erroring: these are filters, and a broken one should not be a broken page.
+    return parsed
   },
 })
 

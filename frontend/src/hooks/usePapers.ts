@@ -23,7 +23,10 @@ const STALE_TIME = 5 * 60 * 1000
  * key matches useGeneTable's -- the genes tab and the unfiltered papers tab
  * share one response.
  */
-export function usePapers(workedBy: IndexSearch['worked_by']) {
+export function usePapers(
+  workedBy: IndexSearch['worked_by'],
+  status?: IndexSearch['status'],
+) {
   const { user } = useAuth()
   const queryClient = useQueryClient()
 
@@ -48,10 +51,16 @@ export function usePapers(workedBy: IndexSearch['worked_by']) {
 
   const papers = useMemo(() => {
     const rows = (Array.isArray(query.data) ? query.data : []) as PaperSummaryResp[]
-    return [...rows].sort((a, b) =>
+    // Status is filtered here rather than in the query, unlike touched_by.
+    // It is computed per paper from that paper's tasks, not stored -- so the
+    // server would have to derive every status before it could drop any, which
+    // costs exactly what returning them all costs. touched_by is different: it
+    // narrows the set of papers before their summaries are built.
+    const matching = status ? rows.filter((p) => p.status === status) : rows
+    return [...matching].sort((a, b) =>
       (b.updated_at ?? '').localeCompare(a.updated_at ?? ''),
     )
-  }, [query.data])
+  }, [query.data, status])
 
   // Its own endpoint rather than the collaborators present in the rows: the
   // options must be everyone who could narrow the list, and deriving them from
@@ -73,10 +82,15 @@ export function usePapers(workedBy: IndexSearch['worked_by']) {
   const cachedAll = queryClient.getQueryData<unknown>(['papers'])
   const total = Array.isArray(cachedAll) ? cachedAll.length : undefined
 
+  // What the person filter alone returned, so the count can say "3 of 21" when
+  // a status is also applied rather than jumping straight to the grand total.
+  const beforeStatus = Array.isArray(query.data) ? query.data.length : undefined
+
   return {
     papers,
     people,
     total,
+    beforeStatus,
     // isPending only, not isFetching: with placeholder data this is true just
     // once, on the very first load when there is genuinely nothing to show.
     isLoading: query.isPending,
