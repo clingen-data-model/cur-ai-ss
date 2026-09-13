@@ -182,6 +182,20 @@ class TaskDB(Base):
     )
     conversation_id: Mapped[str | None] = mapped_column(String, nullable=True)
     additional_context: Mapped[str | None] = mapped_column(String, nullable=True)
+    # When the worker last moved this task to RUNNING. NULL until it does, and
+    # re-stamped on a retry, so it always describes the attempt that produced
+    # the current status.
+    #
+    # There is no matching finished_at: for a task in a terminal state,
+    # updated_at already is the finish time, and nothing rewrites such a row
+    # afterwards -- a re-run deletes the old rows rather than resetting them
+    # (see invalidate_descendants). So duration is updated_at - started_at, and
+    # only for COMPLETED or FAILED tasks; for a RUNNING one the pair measures
+    # nothing, since updated_at is the moment it started.
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -228,6 +242,7 @@ class TaskResp(BaseModel):
     variant_id: int | None
     phenotype_id: int | None
     patient_variant_occurrence_id: int | None
+    started_at: datetime | None = None
     updated_at: datetime
     updated_by_user_id: int | None = None
     updated_by: UserSummaryResp | None = None
