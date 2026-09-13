@@ -1,4 +1,4 @@
-import React, { forwardRef, useImperativeHandle, useRef, useState } from 'react'
+import React, { forwardRef, useImperativeHandle, useRef } from 'react'
 import { PdfHighlighter, PdfLoader, Highlight as PdfHighlight } from 'react-pdf-highlighter'
 import 'react-pdf-highlighter/dist/style.css'
 import * as pdfjs from 'pdfjs-dist'

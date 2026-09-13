@@ -2,18 +2,21 @@ import * as React from 'react'
 import { GripVertical } from 'lucide-react'
 import {
   Group,
+  type GroupImperativeHandle,
   Panel,
   Separator,
 } from 'react-resizable-panels'
 
 const ResizablePanelGroup = React.forwardRef<
-  any,
+  GroupImperativeHandle,
   React.ComponentPropsWithoutRef<typeof Group>
 >(({ ...props }, ref) => <Group groupRef={ref} {...props} />)
 ResizablePanelGroup.displayName = 'ResizablePanelGroup'
 
-const ResizablePanel = Panel as any
-ResizablePanel.displayName = 'ResizablePanel'
+// Re-exported as-is. It was `Panel as any` so a displayName could be attached,
+// which cost every caller its prop types to gain a label React DevTools already
+// infers from the function's name.
+const ResizablePanel = Panel
 
 const ResizableHandle = React.forwardRef<
   HTMLDivElement,

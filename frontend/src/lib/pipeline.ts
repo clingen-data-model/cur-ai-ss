@@ -86,7 +86,7 @@ export function trackProgress(
     const startedAt = earliestStart(mine)
     const elapsed = startedAt === null ? null : (now - startedAt) / 1000
 
-    let percent: number | null = null
+    let percent: number | null
     let remainingSeconds: number | null = null
 
     if (complete) {

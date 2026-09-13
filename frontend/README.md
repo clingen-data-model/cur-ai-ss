@@ -249,7 +249,9 @@ declared but not imported anywhere in `src/` yet.
 | `tailwindcss` | Utility-first CSS framework (v4) | The styling system; configured in CSS rather than a JS config file. |
 | `postcss` | CSS transform pipeline | The pipeline Tailwind and autoprefixer plug into. |
 | `autoprefixer` | Adds CSS vendor prefixes | PostCSS plugin for browser compatibility. |
-| `eslint` | Linter | `pnpm lint`. |
+| `eslint` | Linter | `pnpm lint`, configured by `eslint.config.js` (flat config). |
+| `@eslint/js` | ESLint's own recommended rules | The `js.configs.recommended` baseline. |
+| `globals` | Standard global-variable lists | Declares the browser globals, so `window` and friends are not "undefined". |
 | `@typescript-eslint/parser` | Lets ESLint parse TypeScript | Required for any TS linting. |
 | `@typescript-eslint/eslint-plugin` | TypeScript lint rules | The TS-specific rule set. |
 | `eslint-plugin-react-hooks` | Rules of Hooks enforcement | Catches conditional hook calls and missing dependencies. |
