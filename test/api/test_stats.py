@@ -23,16 +23,27 @@ def paper(db_session):
 
 @pytest.fixture
 def add_task(db_session, paper):
-    def _add(seconds, status=TaskStatus.COMPLETED, type=TaskType.PDF_PARSING):
-        started = BASE if seconds is not None else None
+    def _add(
+        seconds,
+        status=TaskStatus.COMPLETED,
+        type=TaskType.PDF_PARSING,
+        run_id='run-1',
+        start_offset=0,
+    ):
+        started = (
+            BASE + datetime.timedelta(seconds=start_offset)
+            if seconds is not None
+            else None
+        )
         db_session.add(
             TaskDB(
                 paper_id=paper.id,
                 type=type,
                 status=status,
                 started_at=started,
+                run_id=run_id,
                 updated_at=(
-                    BASE + datetime.timedelta(seconds=seconds)
+                    BASE + datetime.timedelta(seconds=start_offset + seconds)
                     if seconds is not None
                     else BASE
                 ),
@@ -151,6 +162,7 @@ def test_a_tracks_span_covers_its_whole_membership(client, add_task, paper, db_s
             paper_id=paper.id,
             type=TaskType.PEDIGREE_DESCRIPTION,
             status=TaskStatus.COMPLETED,
+            run_id='run-1',
             started_at=BASE,
             updated_at=BASE + datetime.timedelta(seconds=30),
         )
@@ -160,6 +172,7 @@ def test_a_tracks_span_covers_its_whole_membership(client, add_task, paper, db_s
             paper_id=paper.id,
             type=TaskType.HPO_LINKING,
             status=TaskStatus.COMPLETED,
+            run_id='run-1',
             started_at=BASE + datetime.timedelta(seconds=100),
             updated_at=BASE + datetime.timedelta(seconds=250),
         )
@@ -195,3 +208,50 @@ def test_track_membership_covers_every_pipeline_type_but_chat(client):
 
     assert len(assigned) == len(set(assigned)), 'a type is in two tracks'
     assert set(assigned) == {t.value for t in T} - {T.GENERAL_PAPER_QUESTION.value}
+
+
+def test_tracks_are_measured_per_run_not_per_paper(client, add_task):
+    """A paper accumulates runs weeks apart. Spanning its whole history measured
+    calendar time: on dev that gave Variants a 43-day 'duration'."""
+    # Two from-scratch runs of the same paper, an hour apart.
+    add_task(30, run_id='run-a', start_offset=0)
+    add_task(30, run_id='run-b', start_offset=3600)
+
+    track = _track(client.get('/stats').json(), 'paper')
+
+    # 30s each, not the 3630s from the first start to the last finish.
+    assert track['median_seconds'] == 30
+    assert track['papers'] == 2
+
+
+def test_partial_reruns_do_not_drag_the_budget_down(client, add_task):
+    """A re-run of one agent spans that one agent. Mixed in, every budget would
+    sink toward the shortest thing a track can do, and a bar would read 99%
+    through most of a real run."""
+    # From scratch: the track ran end to end.
+    add_task(30, run_id='full', type=TaskType.PDF_PARSING, start_offset=0)
+    add_task(300, run_id='full', type=TaskType.PAPER_METADATA, start_offset=30)
+    # A later re-run of just one agent, with no PDF parsing.
+    add_task(5, run_id='partial', type=TaskType.PAPER_METADATA, start_offset=9000)
+
+    track = _track(client.get('/stats').json(), 'paper')
+
+    assert track['papers'] == 1, 'the partial run should be excluded'
+    assert track['median_seconds'] == 330
+
+
+def test_falls_back_to_every_run_when_none_started_from_scratch(client, add_task):
+    """Only true of a database that has never processed a paper end to end --
+    reporting nothing there would be worse than reporting something rough."""
+    add_task(45, run_id='partial', type=TaskType.PAPER_METADATA)
+
+    track = _track(client.get('/stats').json(), 'paper')
+
+    assert track['papers'] == 1
+    assert track['median_seconds'] == 45
+
+
+def test_tasks_without_a_run_are_ignored(client, add_task):
+    add_task(30, run_id=None)
+
+    assert _track(client.get('/stats').json(), 'paper')['papers'] == 0
