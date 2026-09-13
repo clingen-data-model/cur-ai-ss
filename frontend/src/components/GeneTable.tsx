@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/button'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import type { GeneRow, PaperSummaryResp } from '@/hooks/useGeneTable'
-import type { PaperTag, TaskStatsResp } from '@/api/generated/types.gen'
+import type { PaperTag } from '@/api/generated/types.gen'
 import { API_BASE_URL } from '@/lib/api'
 
 
@@ -66,7 +66,7 @@ function PaperTaskDAG({ paperId, enabled }: { paperId: number; enabled: boolean 
       </div>
     )
   }
-  return <TaskDAG tasks={data?.data ?? []} />
+  return <TaskDAG tasks={data ?? []} />
 }
 
 /** The badge's click target: four progress bars, with the full DAG one step
@@ -122,8 +122,8 @@ function PaperProgressPopover({
           <p className="text-sm text-destructive">Could not load progress.</p>
         ) : (
           <PipelineProgress
-            tasks={tasksQuery.data?.data ?? []}
-            stats={statsQuery.data as TaskStatsResp | undefined}
+            tasks={tasksQuery.data ?? []}
+            stats={statsQuery.data}
           />
         )}
         <Button

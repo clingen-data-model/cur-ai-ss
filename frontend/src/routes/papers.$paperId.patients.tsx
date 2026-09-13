@@ -75,10 +75,9 @@ export function PatientsPage() {
           color: '#FFE28F',
         },
       })
-      const annotations = (Array.isArray(result.data) ? result.data : result) as any[]
       const newHighlights = await annotationsToHighlights(
         pdfViewerRef.current.pdfDocument!,
-        annotations,
+        result ?? [],
         query,
       )
       setHighlights(newHighlights)

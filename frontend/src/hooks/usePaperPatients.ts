@@ -37,8 +37,8 @@ export function usePaperPatients(paperId: number) {
 
   const familyNodes = useMemo<FamilyNode[]>(() => {
     if (!familiesQuery.data || !patientsQuery.data) return []
-    const families = Array.isArray(familiesQuery.data) ? familiesQuery.data : []
-    const patients = Array.isArray(patientsQuery.data) ? patientsQuery.data : []
+    const families = familiesQuery.data
+    const patients = patientsQuery.data
     return families.map((family) => ({
       family,
       patients: patients.filter((p) => p.family_id === family.id),

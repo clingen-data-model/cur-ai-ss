@@ -116,7 +116,7 @@ export function UploadPaperDialog({ open, setDialogOpen, initialGene }: UploadPa
     queryFn: () => searchGenesGenesSearchGet({ query: { prefix: genePrefix, limit: 1000 } }),
     enabled: !initialGene,
   })
-  const genes = Array.isArray(genesData) ? genesData : []
+  const genes = genesData ?? []
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
