@@ -98,39 +98,33 @@ export function HomePage() {
 function AllPapersTab() {
   const { worked_by: workedBy = 'anyone' } = useSearch({ from: '/' })
   const navigate = useNavigate({ from: '/' })
-  const { papers, people, total, isLoading, isError, error } = usePapers(workedBy)
-
-  if (isLoading) {
-    return (
-      <div className="flex justify-center py-12">
-        <Spinner />
-      </div>
-    )
-  }
-  if (isError) {
-    return (
-      <div className="py-12 text-center text-red-500">
-        Error loading papers: {error?.message || 'Unknown error'}
-      </div>
-    )
-  }
+  const { papers, people, total, isLoading, isRefreshing, isError, error } =
+    usePapers(workedBy)
 
   const filtered = workedBy !== 'anyone'
 
+  // The header renders unconditionally, above every branch below. Returning
+  // early on a loading state used to take the filter down with the table, so
+  // choosing a person made the control that had just been clicked disappear and
+  // come back -- and only the first time each person was picked, since a second
+  // visit was served from cache.
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          {filtered && total !== undefined
-            ? `${papers.length} of ${total} papers`
-            : `${papers.length} papers`}
+          {isLoading
+            ? '\u00a0'
+            : filtered && total !== undefined
+              ? `${papers.length} of ${total} papers`
+              : `${papers.length} papers`}
+          {/* A quiet hint rather than a spinner: the rows on screen are the
+              previous scope's and still readable while the new ones load. */}
+          {isRefreshing && <span className="ml-2 opacity-60">updating…</span>}
         </p>
         <WorkedByFilter
           value={workedBy}
           people={people}
           onChange={(next) =>
-            // Written to the URL, so the current view is a link worth keeping.
-            // 'anyone' clears the param rather than spelling out the default.
             navigate({
               search: next === 'anyone' ? {} : { worked_by: next },
               replace: true,
@@ -139,30 +133,43 @@ function AllPapersTab() {
         />
       </div>
 
-      {papers.length === 0 ? (
-        <Empty>
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <UserRoundSearch />
-            </EmptyMedia>
-            <EmptyTitle>No papers match that filter</EmptyTitle>
-            <EmptyDescription>
-              Papers are listed here once someone uploads one, runs an agent on
-              it, or edits its extracted data.
-            </EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent className="flex-row justify-center">
-            <Button
-              variant="outline"
-              onClick={() => navigate({ search: {}, replace: true })}
-            >
-              Show all papers
-            </Button>
-          </EmptyContent>
-        </Empty>
-      ) : (
-        <PapersTable papers={papers} />
-      )}
+      <div
+        // Only the rows dim while a new scope loads, so the page does not jump.
+        className={isRefreshing ? 'opacity-60 transition-opacity' : undefined}
+      >
+        {isLoading ? (
+          <div className="flex justify-center py-12">
+            <Spinner />
+          </div>
+        ) : isError ? (
+          <div className="py-12 text-center text-red-500">
+            Error loading papers: {error?.message || 'Unknown error'}
+          </div>
+        ) : papers.length === 0 ? (
+          <Empty>
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <UserRoundSearch />
+              </EmptyMedia>
+              <EmptyTitle>No papers match that filter</EmptyTitle>
+              <EmptyDescription>
+                Papers are listed here once someone uploads one, runs an agent on
+                it, or edits its extracted data.
+              </EmptyDescription>
+            </EmptyHeader>
+            <EmptyContent className="flex-row justify-center">
+              <Button
+                variant="outline"
+                onClick={() => navigate({ search: {}, replace: true })}
+              >
+                Show all papers
+              </Button>
+            </EmptyContent>
+          </Empty>
+        ) : (
+          <PapersTable papers={papers} />
+        )}
+      </div>
     </div>
   )
 }

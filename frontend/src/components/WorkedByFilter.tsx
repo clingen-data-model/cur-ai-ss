@@ -11,7 +11,7 @@
  * with nine people scrolling is fine, but typing a name is faster and the
  * control should not need replacing later.
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   Combobox,
@@ -51,6 +51,13 @@ export function WorkedByFilter({
   // blank forever. Controlling the value lets it correct itself when they arrive.
   const [draft, setDraft] = useState<string | null>(null)
 
+  // Once `value` reflects the selection, stop overriding the input: otherwise a
+  // change from elsewhere -- the browser back button, the empty state's "Show
+  // all papers" -- would leave the old label showing.
+  useEffect(() => {
+    setDraft(null)
+  }, [value])
+
   const options = useMemo<Option[]>(
     () => [
       { value: 'anyone', label: 'Anyone' },
@@ -88,13 +95,21 @@ export function WorkedByFilter({
         itemToStringLabel={labelFor}
         inputValue={inputValue}
         onValueChange={(next: string | null) => {
-          setDraft(null) // back to showing the selection rather than the query
+          // Hold the chosen label rather than clearing to null. The selection
+          // travels out through the URL and back in as `value`, so for at least
+          // one render `value` is still the previous choice -- and a null draft
+          // would show that stale label before the new one arrived. The effect
+          // below drops this once the prop catches up.
+          setDraft(labelFor(next ?? 'anyone'))
           if (next === null || next === 'anyone') return onChange('anyone')
           onChange(next === 'me' ? 'me' : Number(next))
         }}
         onInputValueChange={(next: string | null) => setDraft(next ?? '')}
       >
-        <ComboboxInput placeholder="Anyone" className="w-52" showClear />
+        {/* Wide enough for a full name: at w-52 "Pamela Ajuyah Robertson" ran
+            under the clear button, since an input scrolls its text rather than
+            wrapping or truncating. */}
+        <ComboboxInput placeholder="Anyone" className="w-64" showClear />
         <ComboboxContent>
           <ComboboxList>
             {visible.map((option) => (
