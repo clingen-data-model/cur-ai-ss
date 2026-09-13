@@ -12,20 +12,49 @@ import {
   type TrackProgress,
 } from '@/lib/pipeline'
 import { cn } from '@/lib/utils'
+import type { CSSProperties } from 'react'
 import type { TaskResp, TaskStatsResp } from '@/api/generated/types.gen'
 
+/* A colour per track, so four bars stacked together read as four different
+ * things rather than one measurement in four pieces.
+ *
+ * The chart tokens rather than hand-picked hues: they are the theme's
+ * categorical palette, already defined for both light and dark, and they carry
+ * no status meaning that would collide with the one colour here that does --
+ * destructive, for a failed track.
+ *
+ * Keyed by the track ids in lib/tasks/tracks.py. An id with no entry falls back
+ * to the primary accent rather than disappearing.
+ */
+const TRACK_ACCENT: Record<string, string> = {
+  paper: 'var(--color-chart-1)',
+  patients: 'var(--color-chart-2)',
+  variants: 'var(--color-chart-3)',
+  analysis: 'var(--color-chart-4)',
+}
+
 function TrackBar({ track }: { track: TrackProgress }) {
+  // Read by the fill, and by the sweep an indeterminate track draws across
+  // itself -- so a waiting track shimmers in its own colour instead of
+  // borrowing the primary accent from a track it is not.
+  const accent =
+    (track.failed
+      ? 'var(--color-destructive)'
+      : TRACK_ACCENT[track.id]) ?? 'var(--color-primary)'
+
   return (
     <Progress
       value={track.percent}
       aria-label={`${track.label} progress`}
       className="gap-x-2 gap-y-1"
+      style={{ '--track-accent': accent } as CSSProperties}
       // Failed is the one state a bar's length cannot express: a stalled track
-      // and a broken one are the same width. Running gets a sweep for the same
-      // reason -- progress advances only when a whole task finishes, and tasks
-      // take minutes, so a working bar is motionless most of the time.
+      // and a broken one are the same width, so it overrides the track's own
+      // colour above. Running gets a sweep for the same reason -- progress
+      // advances only when a whole task finishes, and tasks take minutes, so a
+      // working bar is motionless most of the time.
       indicatorClassName={cn(
-        track.failed && 'bg-destructive',
+        'bg-[var(--track-accent)]',
         track.running && !track.failed && 'shimmer',
       )}
     >
