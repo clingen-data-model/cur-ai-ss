@@ -1,111 +1,114 @@
-/* Grouping a paper's tasks into the four tracks the progress bars show.
+/* Turning a paper's tasks into the four progress bars.
  *
- * The pipeline is a DAG, not a chain: after Paper Classifier it forks into
- * three branches that run concurrently and rejoin at Patient Variant
- * Occurrences. Four parallel bars represent that honestly; a single segmented
- * bar would imply an order that does not exist.
+ * The bars measure elapsed time against a historical wall-clock budget, not
+ * finished tasks against total tasks. That is what stops them running
+ * backwards: a count-based denominator moves, because downstream rows do not
+ * exist until their predecessor completes -- a re-run deletes the whole
+ * subtree, and patient extraction discovering twelve patients enqueues twelve
+ * phenotype tasks. Both make "done/total" jump back.
  *
- * The cut is by subject rather than by phase because it matches the entities
- * the rest of the UI already talks about, and because two of the tracks fan out
- * per patient and per variant -- a paper has ~17 task types but ~96 tasks, so
- * "Patients 7/12" is information a single aggregate bar would destroy.
+ * Elapsed over expected cannot: the denominator is a constant from history and
+ * the numerator only increases. The task counts are still shown as text, where
+ * they are a factual statement rather than a progress claim.
+ *
+ * The grouping comes from /stats rather than being declared here, so there is
+ * one definition of which task type belongs to which track. See
+ * lib/tasks/tracks.py.
  */
-import type { TaskResp, TaskStatsResp, TaskType } from '@/api/generated/types.gen'
-
-export type TrackId = 'paper' | 'patients' | 'variants' | 'analysis'
-
-export const TRACKS: { id: TrackId; label: string; types: TaskType[] }[] = [
-  {
-    id: 'paper',
-    label: 'Paper',
-    types: ['PDF Parsing', 'Paper Classifier', 'Paper Metadata'],
-  },
-  {
-    id: 'patients',
-    label: 'Patients',
-    types: [
-      'Pedigree Description',
-      'Patient Extraction',
-      'Patient Demographics',
-      'Phenotype Extraction',
-      'HPO Linking',
-    ],
-  },
-  {
-    id: 'variants',
-    label: 'Variants',
-    types: ['Variant Extraction', 'Variant Harmonization', 'Variant Annotation'],
-  },
-  {
-    id: 'analysis',
-    label: 'Analysis',
-    types: [
-      'Patient Variant Occurrences',
-      'Segregation Evidence Extraction',
-      'Segregation Analysis Computed',
-      'Compound Het Evaluation',
-      'MONDO Linking',
-    ],
-  },
-]
-
-// 'General Paper Question' is deliberately in no track: it is ad-hoc chat
-// created by the router, not pipeline work, and counting it would make a paper
-// look unfinished every time someone asked a question about it.
-const TRACK_OF = new Map<TaskType, TrackId>(
-  TRACKS.flatMap((track) => track.types.map((type) => [type, track.id] as const)),
-)
+import type {
+  TaskResp,
+  TaskStatsResp,
+  TrackDurationStat,
+} from '@/api/generated/types.gen'
 
 export interface TrackProgress {
-  id: TrackId
+  id: string
   label: string
   done: number
   total: number
-  /** 0-100, or null when there is nothing to measure yet. */
+  /** 0-100, or null when there is nothing honest to show. */
   percent: number | null
-  /** Expected seconds of work left, or null without duration history. */
+  /** Expected seconds left, or null without a budget to subtract from. */
   remainingSeconds: number | null
   running: boolean
   failed: boolean
+  complete: boolean
 }
 
-const DONE: string[] = ['Completed']
-const ACTIVE: string[] = ['Running', 'Queued']
+const DONE = 'Completed'
+const ACTIVE = ['Running', 'Queued']
 
-/** Seconds a task of this type is expected to take, falling back to the
- *  overall median for a type never yet observed -- treating it as free would
- *  let a bar finish and then stall. */
-function expectedSeconds(type: TaskType, stats: TaskStatsResp | undefined): number | null {
-  if (!stats) return null
-  const match = stats.task_durations.find((d) => d.type === type)
-  return match ? match.median_seconds : (stats.overall_median_seconds ?? null)
+/** Whether the pipeline has nothing outstanding anywhere.
+ *
+ * Judged across the whole paper, never per track. A track whose current tasks
+ * have all landed is not finished -- downstream rows do not exist until their
+ * predecessor completes, so Patients reads "1 of 1 done" the moment Pedigree
+ * lands and then grows to 15. Snapping that to 100% and recomputing when the
+ * next task appeared was exactly the backwards jump this file exists to
+ * prevent.
+ */
+function pipelineComplete(tasks: TaskResp[], terminalTypes: string[]): boolean {
+  if (tasks.length === 0 || terminalTypes.length === 0) return false
+  if (tasks.some((t) => t.status !== DONE)) return false
+  // Every leaf of the DAG has landed. Without this check, a paper one task into
+  // its run also has "every task Completed" and would read as finished.
+  return terminalTypes.every((type) =>
+    tasks.some((t) => t.type === type && t.status === DONE),
+  )
+}
+
+function earliestStart(tasks: TaskResp[]): number | null {
+  const times = tasks
+    .map((t) => t.started_at)
+    .filter((s): s is string => !!s)
+    .map((s) => new Date(s).getTime())
+  return times.length ? Math.min(...times) : null
 }
 
 export function trackProgress(
   tasks: TaskResp[],
-  stats?: TaskStatsResp,
+  stats: TaskStatsResp | undefined,
+  now: number = Date.now(),
 ): TrackProgress[] {
-  return TRACKS.map((track) => {
-    const mine = tasks.filter((t) => TRACK_OF.get(t.type) === track.id)
-    const done = mine.filter((t) => DONE.includes(t.status)).length
+  const tracks: TrackDurationStat[] = stats?.tracks ?? []
+  // One judgement for the whole paper, applied to every track.
+  const finished = pipelineComplete(tasks, stats?.terminal_task_types ?? [])
 
-    // Weighted by expected duration rather than task count. The count is not
-    // stable -- patient extraction discovering twelve patients enqueues twelve
-    // phenotype tasks -- so a count-based fraction jumps backwards as work is
-    // discovered. Weighting by time only extends the estimate.
-    let doneWeight = 0
-    let totalWeight = 0
-    let remaining = 0
-    let weighable = mine.length > 0
-    for (const task of mine) {
-      const seconds = expectedSeconds(task.type, stats)
-      if (seconds === null) {
-        weighable = false
-        continue
-      }
-      totalWeight += seconds
-      if (DONE.includes(task.status)) doneWeight += seconds
-      else remaining += seconds
+  return tracks.map((track) => {
+    const mine = tasks.filter((t) => track.task_types.includes(t.type))
+    const done = mine.filter((t) => t.status === DONE).length
+    const complete = finished && mine.length > 0
+    const budget = track.median_seconds
+
+    const startedAt = earliestStart(mine)
+    const elapsed = startedAt === null ? null : (now - startedAt) / 1000
+
+    let percent: number | null = null
+    let remainingSeconds: number | null = null
+
+    if (complete) {
+      // Snap rather than computing: the work is done whatever the clock says.
+      percent = 100
+      remainingSeconds = 0
+    } else if (startedAt === null) {
+      // Not started. Deliberately null rather than 0 -- the track renders
+      // indeterminate, which reads as "waiting" where an empty bar reads as
+      // stalled. Analysis sits here legitimately until its inputs finish.
+      percent = null
+    } else if (budget && budget > 0 && elapsed !== null) {
+      // Capped below 100 while work remains, so the bar never claims to be
+      // finished before it is. A track over its budget parks just short, which
+      // is the honest reading of "longer than usual".
+      // Capped just short of finished. Past the budget there is no honest
+      // estimate left -- history says it should be done and it is not -- so the
+      // bar parks at 99% and the countdown goes away rather than claiming
+      // "0 min left" forever.
+      percent = Math.min(99, Math.round((elapsed / budget) * 100))
+      remainingSeconds = elapsed < budget ? Math.round(budget - elapsed) : null
+    } else {
+      // Running with no budget -- a track never measured here. Indeterminate
+      // beats inventing a fraction.
+      percent = null
     }
 
     return {
@@ -113,37 +116,30 @@ export function trackProgress(
       label: track.label,
       done,
       total: mine.length,
-      // null, not 0, when there is nothing to measure -- the honest reading of
-      // "this has not started and we do not yet know how big it is", where 0%
-      // reads as stuck. Base UI only marks the track data-indeterminate; the
-      // styling that makes it look different from 0% is ours, in index.css.
-      percent:
-        mine.length === 0
-          ? null
-          : weighable && totalWeight > 0
-            ? Math.round((doneWeight / totalWeight) * 100)
-            : Math.round((done / mine.length) * 100),
-      remainingSeconds: weighable && mine.length > 0 ? Math.round(remaining) : null,
+      percent,
+      remainingSeconds,
       running: mine.some((t) => ACTIVE.includes(t.status)),
       failed: mine.some((t) => t.status === 'Failed'),
+      complete,
     }
   })
 }
 
 /** Expected seconds until the whole pipeline finishes.
  *
- * The tracks run concurrently, so this is the longest remaining track rather
- * than their sum -- adding them would roughly quadruple the estimate.
+ * The longest remaining track, not their sum: they run concurrently, and adding
+ * them would roughly quadruple the estimate.
  */
 export function remainingSeconds(tracks: TrackProgress[]): number | null {
   const known = tracks
+    .filter((t) => !t.complete)
     .map((t) => t.remainingSeconds)
     .filter((s): s is number => s !== null)
   return known.length ? Math.max(...known) : null
 }
 
-/** "4 min", "2 h 10 min", "<1 min" -- deliberately coarse, because the
- *  underlying medians do not justify second-level precision. */
+/** "4 min", "2 h 10 min", "<1 min" -- coarse on purpose, because a median over
+ *  a handful of papers does not justify second-level precision. */
 export function formatDuration(seconds: number): string {
   if (seconds < 60) return '<1 min'
   const minutes = Math.round(seconds / 60)

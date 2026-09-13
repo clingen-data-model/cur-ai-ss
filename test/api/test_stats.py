@@ -123,3 +123,75 @@ def test_empty_database_reports_no_history(client):
     assert body['task_durations'] == []
     assert body['overall_median_seconds'] is None
     assert body['total_samples'] == 0
+
+
+def _track(body, track_id):
+    return next(t for t in body['tracks'] if t['id'] == track_id)
+
+
+def test_tracks_measure_wall_clock_not_the_sum_of_tasks(client, add_task, db_session):
+    """Tasks inside a track overlap, so summing their durations would overstate
+    the track badly. Two 60s tasks starting together span 60s, not 120s."""
+    for _ in range(2):
+        add_task(60, type=TaskType.PDF_PARSING)
+
+    track = _track(client.get('/stats').json(), 'paper')
+
+    assert track['median_seconds'] == 60
+    assert track['papers'] == 1
+
+
+def test_a_tracks_span_covers_its_whole_membership(client, add_task, paper, db_session):
+    """Pedigree and HPO Linking are both Patients, so the track runs from the
+    first start to the last finish across all of them."""
+    import datetime
+
+    db_session.add(
+        TaskDB(
+            paper_id=paper.id,
+            type=TaskType.PEDIGREE_DESCRIPTION,
+            status=TaskStatus.COMPLETED,
+            started_at=BASE,
+            updated_at=BASE + datetime.timedelta(seconds=30),
+        )
+    )
+    db_session.add(
+        TaskDB(
+            paper_id=paper.id,
+            type=TaskType.HPO_LINKING,
+            status=TaskStatus.COMPLETED,
+            started_at=BASE + datetime.timedelta(seconds=100),
+            updated_at=BASE + datetime.timedelta(seconds=250),
+        )
+    )
+    db_session.flush()
+
+    assert _track(client.get('/stats').json(), 'patients')['median_seconds'] == 250
+
+
+def test_every_track_is_reported_even_without_history(client):
+    """The bars read their grouping from here, so a track with no measurements
+    still has to appear -- with null durations rather than being absent."""
+    body = client.get('/stats').json()
+
+    assert [t['id'] for t in body['tracks']] == [
+        'paper',
+        'patients',
+        'variants',
+        'analysis',
+    ]
+    for track in body['tracks']:
+        assert track['median_seconds'] is None
+        assert track['papers'] == 0
+        assert track['task_types']
+
+
+def test_track_membership_covers_every_pipeline_type_but_chat(client):
+    """Guards the grouping the frontend no longer keeps its own copy of."""
+    from lib.tasks.models import TaskType as T
+
+    body = client.get('/stats').json()
+    assigned = [t for track in body['tracks'] for t in track['task_types']]
+
+    assert len(assigned) == len(set(assigned)), 'a type is in two tracks'
+    assert set(assigned) == {t.value for t in T} - {T.GENERAL_PAPER_QUESTION.value}
