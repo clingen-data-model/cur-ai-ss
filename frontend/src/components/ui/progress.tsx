@@ -32,6 +32,11 @@ function ProgressTrack({ className, ...props }: ProgressPrimitive.Track.Props) {
   return (
     <ProgressPrimitive.Track
       className={cn(
+        // Base UI marks an indeterminate track with data-indeterminate but
+        // styles nothing, so value={null} rendered identically to 0% -- an
+        // empty bar reading as stalled rather than as "size not yet known".
+        // The sweep is what tells them apart.
+        "data-[indeterminate]:shimmer-track",
         "relative flex h-1 w-full items-center overflow-x-hidden rounded-full bg-muted",
         className
       )}

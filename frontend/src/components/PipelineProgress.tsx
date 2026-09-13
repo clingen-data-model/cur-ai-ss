@@ -21,8 +21,13 @@ function TrackBar({ track }: { track: TrackProgress }) {
       aria-label={`${track.label} progress`}
       className="gap-x-2 gap-y-1"
       // Failed is the one state a bar's length cannot express: a stalled track
-      // and a broken one are the same width.
-      indicatorClassName={track.failed ? 'bg-destructive' : undefined}
+      // and a broken one are the same width. Running gets a sweep for the same
+      // reason -- progress advances only when a whole task finishes, and tasks
+      // take minutes, so a working bar is motionless most of the time.
+      indicatorClassName={cn(
+        track.failed && 'bg-destructive',
+        track.running && !track.failed && 'shimmer',
+      )}
     >
       <ProgressLabel className="text-xs font-normal">{track.label}</ProgressLabel>
       <ProgressValue

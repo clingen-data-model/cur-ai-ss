@@ -113,9 +113,10 @@ export function trackProgress(
       label: track.label,
       done,
       total: mine.length,
-      // null, not 0, when there is nothing to measure: Base UI renders that as
-      // indeterminate, which is the honest reading of "this has not started and
-      // we do not yet know how big it is". 0% reads as stuck.
+      // null, not 0, when there is nothing to measure -- the honest reading of
+      // "this has not started and we do not yet know how big it is", where 0%
+      // reads as stuck. Base UI only marks the track data-indeterminate; the
+      // styling that makes it look different from 0% is ours, in index.css.
       percent:
         mine.length === 0
           ? null
