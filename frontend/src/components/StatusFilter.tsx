@@ -4,8 +4,11 @@
  * there are six statuses and they never grow with the data, so a search box
  * would be furniture. The person list can reach every account.
  *
- * Labels come from STATUS_BADGE so the menu reads the same words as the column
- * it filters -- "Done", not "completed".
+ * Labels come from STATUS_BADGE so the control reads the same words as the
+ * column it filters -- "Done", not "completed". That applies to the closed
+ * trigger as well as the open menu: Select.Value renders the raw value unless
+ * given a function, so without labelFor below, picking "Done" left the trigger
+ * reading "completed".
  */
 import {
   Select,
@@ -30,6 +33,11 @@ const ORDER: Status[] = [
   PaperTaskStatus.FAILED,
 ]
 
+function labelFor(status: string | null): string {
+  if (status === null || status === ANY) return 'Any status'
+  return STATUS_BADGE[status as Status].label
+}
+
 export function StatusFilter({
   value,
   onChange,
@@ -47,13 +55,13 @@ export function StatusFilter({
         }
       >
         <SelectTrigger className="w-40">
-          <SelectValue />
+          <SelectValue>{(status: string | null) => labelFor(status)}</SelectValue>
         </SelectTrigger>
         <SelectContent>
           <SelectItem value={ANY}>Any status</SelectItem>
           {ORDER.map((status) => (
             <SelectItem key={status} value={status}>
-              {STATUS_BADGE[status].label}
+              {labelFor(status)}
             </SelectItem>
           ))}
         </SelectContent>
