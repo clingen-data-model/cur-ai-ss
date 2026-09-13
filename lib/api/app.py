@@ -578,6 +578,37 @@ def _track_stats(session: Session) -> list[TrackDurationStat]:
     return stats
 
 
+@app.get('/papers/active', response_model=list[PaperSummaryResp], tags=['papers'])
+def list_active_papers(
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """Papers with pipeline work in flight, for the header's activity indicator.
+
+    Separate from GET /papers with a filter because that one computes a status
+    for every paper before anything could be filtered on it -- the same cost as
+    returning all of them. This starts from tasks instead, where RUNNING and
+    QUEUED are indexed, so it reads a handful of rows rather than 94 papers.
+    That matters: this is the one endpoint the UI polls.
+
+    Chat tasks are excluded. A question being answered is not the paper being
+    extracted, and counting it would light up the indicator for something the
+    progress bars do not track.
+    """
+    active_paper_ids = [
+        row[0]
+        for row in session.query(TaskDB.paper_id)
+        .filter(
+            TaskDB.status.in_([TaskStatus.RUNNING, TaskStatus.QUEUED]),
+            TaskDB.type != TaskType.GENERAL_PAPER_QUESTION,
+        )
+        .distinct()
+    ]
+    if not active_paper_ids:
+        return []
+    return _paper_summaries(session, active_paper_ids)
+
+
 @app.get('/stats', response_model=TaskStatsResp, tags=['stats'])
 def get_task_stats(
     session: Session = Depends(get_session),
@@ -907,6 +938,62 @@ def _paper_touchers(session: Session) -> dict[int, list[int]]:
     return touchers
 
 
+def _paper_summaries(
+    session: Session, paper_ids: list[int] | None = None
+) -> list[PaperSummaryResp]:
+    """Build PaperSummaryResp for every paper, or just the ones named.
+
+    Shared by the list endpoint and the activity indicator so the two cannot
+    disagree about what a paper summary contains -- they render the same card.
+    """
+    patient_counts = _count_by_paper(session, PatientDB.paper_id, PatientDB.id)
+    variant_counts = _count_by_paper(session, VariantDB.paper_id, VariantDB.id)
+    occurrence_counts = _count_by_paper(
+        session,
+        PatientVariantOccurrenceDB.paper_id,
+        PatientVariantOccurrenceDB.id,
+    )
+
+    task_statuses: dict[int, list[TaskStatus]] = defaultdict(list)
+    for paper_id, task_status in session.query(TaskDB.paper_id, TaskDB.status):
+        task_statuses[paper_id].append(task_status)
+
+    touchers = _paper_touchers(session)
+    # Resolved in one pass: there are a handful of users and each appears on
+    # many papers, so a lookup beats a per-paper join.
+    users = {
+        user.id: UserSummaryResp.model_validate(user)
+        for user in session.query(UserDB).all()
+    }
+
+    query = session.query(PaperDB).options(selectinload(PaperDB.gene))
+    if paper_ids is not None:
+        if not paper_ids:
+            return []
+        query = query.filter(PaperDB.id.in_(paper_ids))
+
+    return [
+        PaperSummaryResp(
+            id=paper.id,
+            gene_symbol=paper.gene.symbol,
+            collaborators=[
+                users[uid] for uid in touchers.get(paper.id, []) if uid in users
+            ],
+            filename=paper.filename,
+            title=paper.title,
+            first_author=paper.first_author,
+            journal_name=paper.journal_name,
+            tags=[PaperTag(tag) for tag in paper.tags],
+            updated_at=paper.updated_at,
+            status=summarize_paper_task_status(task_statuses.get(paper.id, [])),
+            patient_count=patient_counts.get(paper.id, 0),
+            variant_count=variant_counts.get(paper.id, 0),
+            patient_variant_occurrences_count=occurrence_counts.get(paper.id, 0),
+        )
+        for paper in query.all()
+    ]
+
+
 @app.get('/papers', response_model=list[PaperSummaryResp])
 def list_papers(
     touched_by: int | None = None,
@@ -931,58 +1018,14 @@ def list_papers(
     history gets an empty list -- on dev that is 65 of 95 papers with no human
     toucher at all.
     """
-    patient_counts = _count_by_paper(session, PatientDB.paper_id, PatientDB.id)
-    variant_counts = _count_by_paper(session, VariantDB.paper_id, VariantDB.id)
-    occurrence_counts = _count_by_paper(
-        session,
-        PatientVariantOccurrenceDB.paper_id,
-        PatientVariantOccurrenceDB.id,
-    )
-
-    task_statuses: dict[int, list[TaskStatus]] = defaultdict(list)
-    for paper_id, task_status in session.query(TaskDB.paper_id, TaskDB.status):
-        task_statuses[paper_id].append(task_status)
+    if touched_by is None:
+        return _paper_summaries(session)
 
     touchers = _paper_touchers(session)
-    # Resolved in one pass: there are a handful of users and each appears on
-    # many papers, so a lookup beats a per-paper join.
-    users = {
-        user.id: UserSummaryResp.model_validate(user)
-        for user in session.query(UserDB).all()
-    }
-
-    query = session.query(PaperDB).options(selectinload(PaperDB.gene))
-    if touched_by is not None:
-        matching = [
-            paper_id
-            for paper_id, user_ids in touchers.items()
-            if touched_by in user_ids
-        ]
-        if not matching:
-            return []
-        query = query.filter(PaperDB.id.in_(matching))
-
-    papers = query.all()
-    return [
-        PaperSummaryResp(
-            id=paper.id,
-            gene_symbol=paper.gene.symbol,
-            collaborators=[
-                users[uid] for uid in touchers.get(paper.id, []) if uid in users
-            ],
-            filename=paper.filename,
-            title=paper.title,
-            first_author=paper.first_author,
-            journal_name=paper.journal_name,
-            tags=[PaperTag(tag) for tag in paper.tags],
-            updated_at=paper.updated_at,
-            status=summarize_paper_task_status(task_statuses.get(paper.id, [])),
-            patient_count=patient_counts.get(paper.id, 0),
-            variant_count=variant_counts.get(paper.id, 0),
-            patient_variant_occurrences_count=occurrence_counts.get(paper.id, 0),
-        )
-        for paper in papers
-    ]
+    return _paper_summaries(
+        session,
+        [pid for pid, user_ids in touchers.items() if touched_by in user_ids],
+    )
 
 
 def _mondo_reasoning_block(

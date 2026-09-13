@@ -1771,3 +1771,78 @@ def test_collaborators_are_name_sorted(client, test_pdf, db_session, seeded_gene
     names = [p['name'] for p in client.get('/papers/collaborators').json()]
 
     assert names == sorted(names, key=str.lower)
+
+
+def test_active_papers_lists_only_work_in_flight(
+    client, test_pdf, db_session, seeded_genes
+):
+    idle = client.put(
+        '/papers',
+        files={'uploaded_file': ('idle.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
+    ).json()['id']
+    busy = client.put(
+        '/papers',
+        files={
+            'uploaded_file': (
+                'busy.pdf',
+                io.BytesIO(test_pdf.getvalue().replace(b'9 9', b'10 9')),
+                'application/pdf',
+            )
+        },
+        data={'gene_symbol': 'BRCA2'},
+    ).json()['id']
+    # The idle paper's tasks are finished; the busy one has work running.
+    for task in db_session.query(TaskDB).filter(TaskDB.paper_id == idle):
+        task.status = TaskStatus.COMPLETED
+    for task in db_session.query(TaskDB).filter(TaskDB.paper_id == busy):
+        task.status = TaskStatus.RUNNING
+    db_session.flush()
+
+    active = client.get('/papers/active').json()
+
+    assert [p['id'] for p in active] == [busy]
+
+
+def test_active_papers_counts_queued_as_in_flight(
+    client, test_pdf, db_session, seeded_genes
+):
+    """A queued task is work the user is waiting on, even though nothing is
+    executing it yet -- the indicator should already be lit."""
+    paper_id = client.put(
+        '/papers',
+        files={'uploaded_file': ('p.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
+    ).json()['id']
+    for task in db_session.query(TaskDB).filter(TaskDB.paper_id == paper_id):
+        task.status = TaskStatus.QUEUED
+    db_session.flush()
+
+    assert [p['id'] for p in client.get('/papers/active').json()] == [paper_id]
+
+
+def test_active_papers_ignores_chat_tasks(client, test_pdf, db_session, seeded_genes):
+    """A question being answered is not the paper being extracted, and the
+    progress bars do not track it."""
+    paper_id = client.put(
+        '/papers',
+        files={'uploaded_file': ('p.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
+    ).json()['id']
+    for task in db_session.query(TaskDB).filter(TaskDB.paper_id == paper_id):
+        task.status = TaskStatus.COMPLETED
+    db_session.add(
+        TaskDB(
+            paper_id=paper_id,
+            type=TaskType.GENERAL_PAPER_QUESTION,
+            status=TaskStatus.RUNNING,
+        )
+    )
+    db_session.flush()
+
+    assert client.get('/papers/active').json() == []
+
+
+def test_active_papers_is_empty_when_nothing_runs(client, db_session):
+    """The common case: the indicator renders nothing rather than a zero."""
+    assert client.get('/papers/active').json() == []
