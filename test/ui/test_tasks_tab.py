@@ -4,6 +4,7 @@ from lib.tasks import TaskResp, TaskStatus, TaskType
 from lib.ui.paper.shared import TAB_TASKS
 from lib.ui.paper.tasks import (
     STATUS_ICONS,
+    STATUS_WORDS,
     _scope_label,
     _status_label,
     _task_rows,
@@ -39,12 +40,18 @@ def test_every_status_has_an_icon():
 
 def test_status_label_is_readable():
     assert _status_label(TaskStatus.FAILED) == '❌ Failed'
-    assert _status_label(TaskStatus.QUEUED) == '🟡 Queued'
     # Every status renders as icon + words, never a bare enum.
     for status in TaskStatus:
         label = _status_label(status)
-        assert label.endswith(status.value)
+        assert label.endswith(STATUS_WORDS[status])
         assert label != status.value
+
+
+def test_queued_is_shown_as_pending():
+    """QUEUED is the scheduler's claim on a row, not a state the reader of this
+    table can act on differently from PENDING -- so it is not shown as its own
+    thing."""
+    assert _status_label(TaskStatus.QUEUED) == _status_label(TaskStatus.PENDING)
 
 
 def test_scope_label_names_the_entity():

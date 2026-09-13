@@ -1810,10 +1810,12 @@ def test_active_papers_counts_waiting_work_as_in_flight(
 ):
     """Work the user is waiting on counts even though nothing executes it yet.
 
-    PENDING is the case that actually happens -- the worker polls every 10s, and
-    PDF parsing runs one at a time, so a second paper waits there for the whole
-    of the first one's parse. An earlier version matched only QUEUED, which
-    nothing in the codebase ever assigns, so a paper just queued read as idle.
+    Both occur. PENDING is where a task waits to be claimed -- the scheduler
+    polls every 10s, and PDF parsing runs one at a time, so a second paper waits
+    there for the whole of the first one's parse. QUEUED is the brief window
+    after the scheduler claims it (worker.py:282, which stops it being scheduled
+    twice) and before the handler starts. An earlier version matched only the
+    latter, so a paper just queued read as idle.
     """
     paper_id = client.put(
         '/papers',

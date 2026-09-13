@@ -18,6 +18,7 @@ from lib.tasks import (
     infer_paper_status_detail,
     is_task_completed,
 )
+from lib.tasks.models import ACTIVE_STATUSES
 from lib.ui.api import (
     delete_paper,
     enqueue_paper_task,
@@ -344,10 +345,7 @@ with center:
                 on_change='rerun',
             ):
                 render_queue_tasks_fragment(paper_query_params)
-            tasks_active = any(
-                t.status in (TaskStatus.PENDING, TaskStatus.QUEUED, TaskStatus.RUNNING)
-                for t in paper_resp.tasks
-            )
+            tasks_active = any(t.status in ACTIVE_STATUSES for t in paper_resp.tasks)
             with st.popover(
                 '⏪ Reset',
                 type='tertiary',

@@ -7,16 +7,26 @@ import streamlit as st
 
 from lib.models import PaperResp
 from lib.tasks import TaskResp, TaskStatus, TaskType
-from lib.tasks.models import TASK_SUCCESSORS
+from lib.tasks.models import TASK_SUCCESSORS, WAITING_STATUSES
 
-# Icons follow the paper status badge (see get_status_badge_icon); QUEUED has no
-# badge equivalent, so it borrows the amber dot used elsewhere in the UI.
+# Icons follow the paper status badge (see get_status_badge_icon). The two
+# waiting statuses share one, for the reason given under STATUS_WORDS.
 STATUS_ICONS: dict[TaskStatus, str] = {
     TaskStatus.PENDING: '⏹️',
-    TaskStatus.QUEUED: '🟡',
+    TaskStatus.QUEUED: '⏹️',
     TaskStatus.RUNNING: '⏳',
     TaskStatus.COMPLETED: '✅',
     TaskStatus.FAILED: '❌',
+}
+
+# Every waiting status is written as "Pending", so QUEUED never appears in this
+# column. The scheduler sets it to stop itself claiming the same row twice
+# (lib/bin/worker.py) -- it is a real status, and it is bookkeeping. To someone
+# reading this table the task is waiting either way, and there is nothing to do
+# differently about one than the other.
+STATUS_WORDS: dict[TaskStatus, str] = {
+    **{status: status.value for status in TaskStatus},
+    **{status: TaskStatus.PENDING.value for status in WAITING_STATUSES},
 }
 
 _PIPELINE_TYPES: list[TaskType] = list(TaskType)
@@ -73,7 +83,7 @@ PIPELINE_ORDER: dict[TaskType, tuple[int, int]] = {
 
 def _status_label(status: TaskStatus) -> str:
     """Render a status so it reads at a glance rather than as a bare enum."""
-    return f'{STATUS_ICONS.get(status, "•")} {status.value}'
+    return f'{STATUS_ICONS.get(status, "•")} {STATUS_WORDS.get(status, status.value)}'
 
 
 def _scope_label(task: TaskResp) -> str:

@@ -14,7 +14,7 @@ from lib.models.patient import PatientDB
 from lib.models.phenotype import PhenotypeDB
 from lib.models.variant import VariantDB
 from lib.tasks.misc import enqueue_task
-from lib.tasks.models import TaskDB, TaskStatus, TaskType
+from lib.tasks.models import CLAIMED_STATUSES, TaskDB, TaskStatus, TaskType
 
 
 class ChatRoutingOutput(BaseModel):
@@ -310,13 +310,16 @@ def _make_queue_task_tool(paper_id: int, user_id: int) -> Any:
             )
             # Build the confirmation from the real task while the session is open.
             target = f' for "{entity_label}"' if entity_label else ''
-            if task.status in (TaskStatus.RUNNING, TaskStatus.QUEUED):
+            if task.status in CLAIMED_STATUSES:
                 # Already in flight; enqueue_task left it unchanged, so any new
                 # guidance was not applied — don't claim it was.
+                #
+                # "In progress" rather than the status itself: QUEUED and RUNNING
+                # differ only in whether the handler has started, which is not a
+                # distinction to hand someone asking about their paper.
                 confirmation = (
-                    f'The "{task.type}" task{target} is already '
-                    f'{task.status.value.lower()}. Results will appear on the paper '
-                    f'page when it finishes.'
+                    f'The "{task.type}" task{target} is already in progress. '
+                    f'Results will appear on the paper page when it finishes.'
                 )
             else:
                 guidance = (

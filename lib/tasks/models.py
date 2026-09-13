@@ -70,6 +70,32 @@ class TaskStatus(StrEnum):
     FAILED = 'Failed'
 
 
+# The groupings of TaskStatus that matter, named because they overlap without
+# coinciding and the difference is easy to get backwards.
+#
+# WAITING is what a user sees: the task is not executing. PENDING and QUEUED are
+# both that. Their difference is the scheduler's bookkeeping -- QUEUED means it
+# has claimed the row so it cannot schedule it twice (worker.py) -- and nothing
+# a person is waiting on should be described by which side of that claim it
+# happens to sit on.
+WAITING_STATUSES: frozenset[TaskStatus] = frozenset(
+    {TaskStatus.PENDING, TaskStatus.QUEUED}
+)
+
+# CLAIMED is what the scheduler sees: this row is spoken for, so do not re-queue
+# it and do not delete it out from under a handler. QUEUED belongs with RUNNING
+# here, and with PENDING above -- which is precisely why both names exist.
+CLAIMED_STATUSES: frozenset[TaskStatus] = frozenset(
+    {TaskStatus.QUEUED, TaskStatus.RUNNING}
+)
+
+# ACTIVE is everything short of a terminal status: work the paper is still
+# owed. Display reads it as "something is happening here"; the reset paths read
+# it as "data is still moving, do not overwrite it". Those are the same
+# question, so they share the name rather than each spelling out the trio.
+ACTIVE_STATUSES: frozenset[TaskStatus] = WAITING_STATUSES | {TaskStatus.RUNNING}
+
+
 class InferredPaperStatus(StrEnum):
     """Inferred overall status of a paper based on its task states.
 

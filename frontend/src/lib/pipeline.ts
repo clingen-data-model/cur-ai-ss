@@ -36,7 +36,10 @@ export interface TrackProgress {
 }
 
 const DONE = 'Completed'
-const ACTIVE = ['Running', 'Queued']
+// Running, and not Queued. Queued means the scheduler has claimed the task; no
+// handler is executing it, so it waits alongside Pending. `running` drives the
+// shimmer and the "about N left" estimate, and neither is honest yet.
+const RUNNING = 'Running'
 
 /** Whether the pipeline has nothing outstanding anywhere.
  *
@@ -118,7 +121,7 @@ export function trackProgress(
       total: mine.length,
       percent,
       remainingSeconds,
-      running: mine.some((t) => ACTIVE.includes(t.status)),
+      running: mine.some((t) => t.status === RUNNING),
       failed: mine.some((t) => t.status === 'Failed'),
       complete,
     }
