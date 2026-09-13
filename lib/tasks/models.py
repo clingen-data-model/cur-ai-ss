@@ -182,6 +182,18 @@ class TaskDB(Base):
     )
     conversation_id: Mapped[str | None] = mapped_column(String, nullable=True)
     additional_context: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Which run this task belongs to: one user action and everything
+    # enqueue_successors creates from it. A fresh upload starts one, and so does
+    # every re-run -- so a paper accumulates many over its life.
+    #
+    # Exists because a paper's task list is not a run. Ancestors survive a
+    # re-run (invalidate_descendants only clears downstream), so rows from
+    # weeks apart sit side by side, and "when did this start" read from the
+    # oldest of them is the wrong moment. Inferring runs from idle gaps worked
+    # on today's data but is a guess about scheduling that a slow agent or two
+    # concurrent papers would break.
+    run_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+
     # When the worker last moved this task to RUNNING. NULL until it does, and
     # re-stamped on a retry, so it always describes the attempt that produced
     # the current status.
@@ -242,6 +254,7 @@ class TaskResp(BaseModel):
     variant_id: int | None
     phenotype_id: int | None
     patient_variant_occurrence_id: int | None
+    run_id: str | None = None
     started_at: datetime | None = None
     updated_at: datetime
     updated_by_user_id: int | None = None
