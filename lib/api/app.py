@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import math
 import secrets
 import shutil
 import time
@@ -167,6 +168,7 @@ from lib.models.patient import (
     TwinType,
 )
 from lib.models.segregation_analysis import SegregationAnalysisComputedNestedResp
+from lib.models.stats import TaskDurationStat, TaskStatsResp
 from lib.tasks import (
     TaskCreateRequest,
     TaskResp,
@@ -476,6 +478,69 @@ def put_paper(
             status_code=status.HTTP_409_CONFLICT,
             detail='Paper with this content already exists',
         )
+
+
+def _percentile(sorted_values: list[float], fraction: float) -> float:
+    """Nearest-rank percentile of an already-sorted, non-empty list."""
+    index = min(
+        len(sorted_values) - 1,
+        max(0, math.ceil(fraction * len(sorted_values)) - 1),
+    )
+    return sorted_values[index]
+
+
+@app.get('/stats', response_model=TaskStatsResp, tags=['stats'])
+def get_task_stats(
+    session: Session = Depends(get_session),
+) -> Any:
+    """How long each kind of task has historically taken.
+
+    Backs the progress estimates: a caller knows which of a paper's tasks are
+    outstanding and prices them with these.
+
+    Only terminal tasks with a start time count. A RUNNING task has
+    started_at == updated_at, so it would contribute a zero and drag every
+    median toward nothing; a PENDING one never ran at all. FAILED runs are
+    included -- they consumed real time, and dropping them would bias the
+    numbers toward whatever happened to succeed.
+
+    Median rather than mean, and p90 alongside it: model latency is
+    long-tailed, so a single slow run moves a mean and not a median, and the
+    gap between the two says how much precision a caller should imply.
+    """
+    rows = session.query(TaskDB.type, TaskDB.started_at, TaskDB.updated_at).filter(
+        TaskDB.started_at.is_not(None),
+        TaskDB.status.in_([TaskStatus.COMPLETED, TaskStatus.FAILED]),
+    )
+
+    by_type: dict[TaskType, list[float]] = defaultdict(list)
+    for task_type, started_at, updated_at in rows:
+        seconds = (updated_at - started_at).total_seconds()
+        # Defensive: nothing should record a finish before its start, but a
+        # single negative would silently pull a median below zero and render as
+        # a progress bar running backwards.
+        if seconds > 0:
+            by_type[task_type].append(seconds)
+
+    durations = []
+    for task_type, values in by_type.items():
+        values.sort()
+        durations.append(
+            TaskDurationStat(
+                type=task_type,
+                median_seconds=_percentile(values, 0.5),
+                p90_seconds=_percentile(values, 0.9),
+                samples=len(values),
+            )
+        )
+    durations.sort(key=lambda stat: stat.type.value)
+
+    every = sorted(value for values in by_type.values() for value in values)
+    return TaskStatsResp(
+        task_durations=durations,
+        overall_median_seconds=_percentile(every, 0.5) if every else None,
+        total_samples=len(every),
+    )
 
 
 @app.get('/papers/collaborators', response_model=list[UserSummaryResp])
