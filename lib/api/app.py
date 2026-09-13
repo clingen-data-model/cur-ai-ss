@@ -499,35 +499,48 @@ def _percentile(sorted_values: list[float], fraction: float) -> float:
 
 
 def _track_stats(session: Session) -> list[TrackDurationStat]:
-    """Per-track wall-clock times: last finish minus first start, per paper.
+    """Per-track wall-clock times, measured over runs.
 
     Wall clock rather than the sum of task durations, because tasks inside a
     track run concurrently -- summing would overstate a track badly enough to
     make every estimate useless.
 
-    Measured per paper and then aggregated, so fan-out is already baked in: a
-    paper with twelve patients genuinely spends longer in Patients than one
-    with two, and the median over papers is the typical case rather than a
-    figure that has to be multiplied by a patient count nobody knows yet.
+    Grouped by run, not by paper. A paper accumulates tasks across re-runs
+    weeks apart, so spanning its whole history measured calendar time rather
+    than pipeline time: on dev that gave Variants a 43-day "duration".
 
-    Median, not mean. A paper whose run straddled a worker restart contributes
-    an enormous span, and that gap is idle time rather than work -- a mean would
-    carry it into every estimate.
+    Only runs that started from scratch count, identified by containing a
+    PDF_PARSING task. A re-run of one agent produces a run whose span is that
+    one agent, and mixing those in would pull every budget toward the shortest
+    thing a track can do -- so a bar would read 99% through most of a real run.
+    Papers are usually uploaded and left to run, so the from-scratch case is
+    both the common one and the one worth estimating. Falls back to every run
+    when none qualify, which is only true of a database that has never
+    processed a paper end to end.
+
+    Fan-out stays baked in: a run with twelve patients genuinely takes longer
+    than one with two, and each contributes its own span.
+
+    Median, not mean: one pathological run should not move every estimate.
     """
     rows = session.query(
-        TaskDB.paper_id, TaskDB.type, TaskDB.started_at, TaskDB.updated_at
+        TaskDB.run_id, TaskDB.type, TaskDB.started_at, TaskDB.updated_at
     ).filter(
+        TaskDB.run_id.is_not(None),
         TaskDB.started_at.is_not(None),
         TaskDB.status.in_([TaskStatus.COMPLETED, TaskStatus.FAILED]),
     )
 
-    # {(track, paper): [earliest start, latest finish]}
-    spans: dict[tuple[str, int], list[datetime]] = {}
-    for paper_id, task_type, started_at, updated_at in rows:
+    # {(track, run): [earliest start, latest finish]}
+    spans: dict[tuple[str, str], list[datetime]] = {}
+    from_scratch: set[str] = set()
+    for run_id, task_type, started_at, updated_at in rows:
+        if task_type == TaskType.PDF_PARSING:
+            from_scratch.add(run_id)
         track_id = TRACK_OF_TYPE.get(task_type)
         if track_id is None:
             continue
-        key = (track_id, paper_id)
+        key = (track_id, run_id)
         span = spans.get(key)
         if span is None:
             spans[key] = [started_at, updated_at]
@@ -535,11 +548,17 @@ def _track_stats(session: Session) -> list[TrackDurationStat]:
             span[0] = min(span[0], started_at)
             span[1] = max(span[1], updated_at)
 
-    by_track: dict[str, list[float]] = defaultdict(list)
-    for (track_id, _), (first, last) in spans.items():
-        seconds = (last - first).total_seconds()
-        if seconds > 0:
-            by_track[track_id].append(seconds)
+    def collect(runs: set[str] | None) -> dict[str, list[float]]:
+        found: dict[str, list[float]] = defaultdict(list)
+        for (track_id, run_id), (first, last) in spans.items():
+            if runs is not None and run_id not in runs:
+                continue
+            seconds = (last - first).total_seconds()
+            if seconds > 0:
+                found[track_id].append(seconds)
+        return found
+
+    by_track = collect(from_scratch) if from_scratch else collect(None)
 
     stats = []
     for track_id, label, task_types in PIPELINE_TRACKS:
@@ -551,6 +570,8 @@ def _track_stats(session: Session) -> list[TrackDurationStat]:
                 task_types=list(task_types),
                 median_seconds=_percentile(values, 0.5) if values else None,
                 p90_seconds=_percentile(values, 0.9) if values else None,
+                # Runs now, not papers: one paper processed three times
+                # contributes three measurements.
                 papers=len(values),
             )
         )
