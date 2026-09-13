@@ -168,7 +168,11 @@ from lib.models.patient import (
     TwinType,
 )
 from lib.models.segregation_analysis import SegregationAnalysisComputedNestedResp
-from lib.models.stats import TaskDurationStat, TaskStatsResp
+from lib.models.stats import (
+    TaskDurationStat,
+    TaskStatsResp,
+    TrackDurationStat,
+)
 from lib.tasks import (
     TaskCreateRequest,
     TaskResp,
@@ -178,7 +182,8 @@ from lib.tasks import (
 )
 from lib.tasks.handlers import ensure_conversation_id, format_paper_context
 from lib.tasks.misc import summarize_paper_task_status
-from lib.tasks.models import TaskStatus, TaskType
+from lib.tasks.models import TERMINAL_TASK_TYPES, TaskStatus, TaskType
+from lib.tasks.tracks import PIPELINE_TRACKS, TRACK_OF_TYPE
 
 logger = logging.getLogger(__name__)
 
@@ -489,6 +494,65 @@ def _percentile(sorted_values: list[float], fraction: float) -> float:
     return sorted_values[index]
 
 
+def _track_stats(session: Session) -> list[TrackDurationStat]:
+    """Per-track wall-clock times: last finish minus first start, per paper.
+
+    Wall clock rather than the sum of task durations, because tasks inside a
+    track run concurrently -- summing would overstate a track badly enough to
+    make every estimate useless.
+
+    Measured per paper and then aggregated, so fan-out is already baked in: a
+    paper with twelve patients genuinely spends longer in Patients than one
+    with two, and the median over papers is the typical case rather than a
+    figure that has to be multiplied by a patient count nobody knows yet.
+
+    Median, not mean. A paper whose run straddled a worker restart contributes
+    an enormous span, and that gap is idle time rather than work -- a mean would
+    carry it into every estimate.
+    """
+    rows = session.query(
+        TaskDB.paper_id, TaskDB.type, TaskDB.started_at, TaskDB.updated_at
+    ).filter(
+        TaskDB.started_at.is_not(None),
+        TaskDB.status.in_([TaskStatus.COMPLETED, TaskStatus.FAILED]),
+    )
+
+    # {(track, paper): [earliest start, latest finish]}
+    spans: dict[tuple[str, int], list[datetime]] = {}
+    for paper_id, task_type, started_at, updated_at in rows:
+        track_id = TRACK_OF_TYPE.get(task_type)
+        if track_id is None:
+            continue
+        key = (track_id, paper_id)
+        span = spans.get(key)
+        if span is None:
+            spans[key] = [started_at, updated_at]
+        else:
+            span[0] = min(span[0], started_at)
+            span[1] = max(span[1], updated_at)
+
+    by_track: dict[str, list[float]] = defaultdict(list)
+    for (track_id, _), (first, last) in spans.items():
+        seconds = (last - first).total_seconds()
+        if seconds > 0:
+            by_track[track_id].append(seconds)
+
+    stats = []
+    for track_id, label, task_types in PIPELINE_TRACKS:
+        values = sorted(by_track.get(track_id, []))
+        stats.append(
+            TrackDurationStat(
+                id=track_id,
+                label=label,
+                task_types=list(task_types),
+                median_seconds=_percentile(values, 0.5) if values else None,
+                p90_seconds=_percentile(values, 0.9) if values else None,
+                papers=len(values),
+            )
+        )
+    return stats
+
+
 @app.get('/stats', response_model=TaskStatsResp, tags=['stats'])
 def get_task_stats(
     session: Session = Depends(get_session),
@@ -539,6 +603,8 @@ def get_task_stats(
     every = sorted(value for values in by_type.values() for value in values)
     return TaskStatsResp(
         task_durations=durations,
+        tracks=_track_stats(session),
+        terminal_task_types=sorted(TERMINAL_TASK_TYPES, key=lambda t: t.value),
         overall_median_seconds=_percentile(every, 0.5) if every else None,
         total_samples=len(every),
     )
