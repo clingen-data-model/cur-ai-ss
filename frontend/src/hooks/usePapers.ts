@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   listPaperCollaboratorsPapersCollaboratorsGet,
   listPapersPapersGet,
@@ -38,6 +38,12 @@ export function usePapers(workedBy: IndexSearch['worked_by']) {
         targetId === undefined ? {} : { query: { touched_by: targetId } },
       ),
     staleTime: STALE_TIME,
+    // Changing the filter changes the query key, so without this the new scope
+    // starts out pending and the caller sees a load from scratch -- which blanked
+    // the whole tab, including the control that had just been used. Holding the
+    // previous rows keeps the page mounted while the new ones arrive; isFetching
+    // is what says something is happening.
+    placeholderData: keepPreviousData,
   })
 
   const papers = useMemo(() => {
@@ -71,7 +77,12 @@ export function usePapers(workedBy: IndexSearch['worked_by']) {
     papers,
     people,
     total,
+    // isPending only, not isFetching: with placeholder data this is true just
+    // once, on the very first load when there is genuinely nothing to show.
     isLoading: query.isPending,
+    // A refresh in flight over rows already on screen -- worth a quiet hint,
+    // never a spinner that replaces them.
+    isRefreshing: query.isFetching && !query.isPending,
     isError: query.isError,
     error: query.error,
   }
