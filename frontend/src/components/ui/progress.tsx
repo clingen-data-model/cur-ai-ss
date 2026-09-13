@@ -4,10 +4,15 @@ import { cn } from "@/lib/utils"
 
 function Progress({
   className,
+  // Added to the vendored component: the Root renders its own Track and
+  // Indicator, so without this there is no way to recolour the fill -- which a
+  // failed track needs, since a stalled bar and a broken one are the same
+  // length.
+  indicatorClassName,
   children,
   value,
   ...props
-}: ProgressPrimitive.Root.Props) {
+}: ProgressPrimitive.Root.Props & { indicatorClassName?: string }) {
   return (
     <ProgressPrimitive.Root
       value={value}
@@ -17,7 +22,7 @@ function Progress({
     >
       {children}
       <ProgressTrack>
-        <ProgressIndicator />
+        <ProgressIndicator className={indicatorClassName} />
       </ProgressTrack>
     </ProgressPrimitive.Root>
   )

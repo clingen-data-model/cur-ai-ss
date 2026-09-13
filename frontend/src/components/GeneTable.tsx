@@ -3,7 +3,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { ChevronDown, ChevronRight, FolderPlus } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { listTasksPapersPaperIdTasksGet } from '@/api/generated'
+import { getTaskStatsStatsGet, listTasksPapersPaperIdTasksGet } from '@/api/generated'
 import { DataTable } from '@/components/ui/data-table'
 import { Carousel, CarouselContent, CarouselItem, CarouselPrevious, CarouselNext, CarouselCounter } from '@/components/ui/carousel'
 import { Card, CardContent } from '@/components/ui/card'
@@ -14,11 +14,13 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { UploadPaperDialog } from '@/components/UploadPaperDialog'
 import { TaskDAG } from '@/components/TaskDAG'
 import { STATUS_BADGE } from '@/components/StatusBadge'
+import { PipelineProgress } from '@/components/PipelineProgress'
 import { DeletePaperButton, RerunTaskButton } from '@/components/PaperActions'
+import { Button } from '@/components/ui/button'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import type { GeneRow, PaperSummaryResp } from '@/hooks/useGeneTable'
-import type { PaperTag } from '@/api/generated/types.gen'
+import type { PaperTag, TaskStatsResp } from '@/api/generated/types.gen'
 import { API_BASE_URL } from '@/lib/api'
 
 
@@ -65,6 +67,79 @@ function PaperTaskDAG({ paperId, enabled }: { paperId: number; enabled: boolean 
     )
   }
   return <TaskDAG tasks={data?.data ?? []} />
+}
+
+/** The badge's click target: four progress bars, with the full DAG one step
+ *  further in.
+ *
+ * A popover rather than a hover card because it holds a button, and hover cards
+ * are keyboard- and touch-hostile. Its queries are disabled until it opens, so
+ * a grid of cards does not fetch tasks for every paper on screen.
+ */
+function PaperProgressPopover({
+  paper,
+  onOpenPipeline,
+  children,
+}: {
+  paper: PaperSummaryResp
+  onOpenPipeline: () => void
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = useState(false)
+
+  const tasksQuery = useQuery({
+    queryKey: ['paper-tasks', paper.id],
+    queryFn: () =>
+      listTasksPapersPaperIdTasksGet({
+        path: { paper_id: paper.id },
+        throwOnError: true,
+      }),
+    enabled: open,
+  })
+
+  // Shared across every card: one response backs all of them.
+  const statsQuery = useQuery({
+    queryKey: ['task-stats'],
+    queryFn: () => getTaskStatsStatsGet(),
+    enabled: open,
+    staleTime: 30 * 60 * 1000,
+  })
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger type="button" className="cursor-pointer">
+        {children}
+      </PopoverTrigger>
+      <PopoverContent className="w-80 space-y-3">
+        <p className="text-sm font-medium leading-tight truncate">
+          {paper.title ?? paper.filename}
+        </p>
+        {tasksQuery.isPending ? (
+          <div className="flex justify-center py-6">
+            <Spinner />
+          </div>
+        ) : tasksQuery.isError ? (
+          <p className="text-sm text-destructive">Could not load progress.</p>
+        ) : (
+          <PipelineProgress
+            tasks={tasksQuery.data?.data ?? []}
+            stats={statsQuery.data as TaskStatsResp | undefined}
+          />
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full"
+          onClick={() => {
+            setOpen(false)
+            onOpenPipeline()
+          }}
+        >
+          View pipeline
+        </Button>
+      </PopoverContent>
+    </Popover>
+  )
 }
 
 function PaperCard({ paper }: { paper: PaperSummaryResp }) {
@@ -138,14 +213,11 @@ function PaperCard({ paper }: { paper: PaperSummaryResp }) {
             ['Variants', paper.variant_count ?? '—'],
             ['Occurrences', paper.patient_variant_occurrences_count ?? '—'],
             ['Status', (
-              <Tooltip>
-                <TooltipTrigger type="button" onClick={() => setDagOpen(true)} className="cursor-pointer">
-                  <Badge variant={status.variant} className={`${status.className} hover:opacity-80 transition-opacity`}>
-                    {status.label}
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent>View pipeline</TooltipContent>
-              </Tooltip>
+              <PaperProgressPopover paper={paper} onOpenPipeline={() => setDagOpen(true)}>
+                <Badge variant={status.variant} className={`${status.className} hover:opacity-80 transition-opacity`}>
+                  {status.label}
+                </Badge>
+              </PaperProgressPopover>
             )],
             ['Modified', formatDate(paper.updated_at)],
           ] as [string, React.ReactNode][]).map(([label, value]) => (
