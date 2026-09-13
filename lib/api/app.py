@@ -591,6 +591,17 @@ def list_active_papers(
     QUEUED are indexed, so it reads a handful of rows rather than 94 papers.
     That matters: this is the one endpoint the UI polls.
 
+    PENDING counts, not just RUNNING. It is the state a task sits in between
+    being enqueued and the worker claiming it, which it polls for every 10
+    seconds -- and with PDF parsing limited to one at a time, a second paper can
+    wait there for the length of the first paper's parse. That is work the user
+    is waiting on, so the indicator should already be lit.
+
+    QUEUED is listed for completeness and currently never occurs: nothing in the
+    codebase assigns it, and the dev database has only ever held COMPLETED,
+    PENDING and RUNNING. Matching on it alone -- which this did at first -- meant
+    a paper the user had just queued showed as idle.
+
     Chat tasks are excluded. A question being answered is not the paper being
     extracted, and counting it would light up the indicator for something the
     progress bars do not track.
@@ -599,7 +610,9 @@ def list_active_papers(
         row[0]
         for row in session.query(TaskDB.paper_id)
         .filter(
-            TaskDB.status.in_([TaskStatus.RUNNING, TaskStatus.QUEUED]),
+            TaskDB.status.in_(
+                [TaskStatus.PENDING, TaskStatus.QUEUED, TaskStatus.RUNNING]
+            ),
             TaskDB.type != TaskType.GENERAL_PAPER_QUESTION,
         )
         .distinct()
