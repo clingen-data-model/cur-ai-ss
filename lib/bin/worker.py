@@ -57,8 +57,14 @@ async def execute_task(task_id: int) -> None:
             logger.warning(f'Task {task_id} not found')
             return
 
+        started = datetime.datetime.now(datetime.timezone.utc)
         task.status = TaskStatus.RUNNING
-        task.updated_at = datetime.datetime.now(datetime.timezone.utc)
+        # Both, deliberately: updated_at is overwritten when the task reaches a
+        # terminal status, which is what makes it the finish time. started_at is
+        # the only record of when the attempt began, and a retry re-stamps it so
+        # the pair always describes the same attempt.
+        task.started_at = started
+        task.updated_at = started
         task.tries += 1
         task_type = task.type
 
