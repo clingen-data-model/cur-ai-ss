@@ -677,6 +677,29 @@ def get_status_badge_color(
             return 'gray'
 
 
+# Icons for the summarised status. Deliberately the same glyphs
+# get_status_badge_icon uses for the equivalent task-derived states, so the two
+# badges agree wherever both appear.
+#
+# The six are shown as they come. The React app folds them to four
+# (frontend/src/lib/paperState.ts) because that is a curator-facing
+# simplification; copying the fold here would be a second definition to keep in
+# step, and this table is the operator's view.
+PAPER_STATUS_ICONS: dict[str, str] = {
+    'idle': '⏹️',
+    'pending': '⏹️',
+    'running': '⏳',
+    'partial': '🟡',
+    'completed': '✅',
+    'failed': '❌',
+}
+
+
+def paper_status_badge(status: 'PaperTaskStatus') -> str:
+    """Icon and words for a paper's summarised status, e.g. "⏳ Running"."""
+    return f'{PAPER_STATUS_ICONS.get(status.value, "•")} {status.value.capitalize()}'
+
+
 def get_status_badge_icon(tasks: list[TaskResp]) -> str:
     """Get icon for status badge based on paper status."""
     status = infer_paper_status(tasks)

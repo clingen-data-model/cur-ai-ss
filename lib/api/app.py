@@ -901,15 +901,22 @@ def _touch_paper(session: Session, paper_id: int, editor: UserDB | None) -> None
     paper_db.updated_at = func.now()
 
 
-def _count_by_paper(session: Session, paper_id: Any, row_id: Any) -> dict[int, int]:
+def _count_by_paper(
+    session: Session, paper_id: Any, row_id: Any, where: Any = None
+) -> dict[int, int]:
     """{paper_id: row count} from one grouped COUNT.
 
     Used instead of loading the rows and calling len() on them: the previous
     version selectinload'ed patients, variants and occurrences purely to measure
     their length, and none of those objects were ever serialised -- the response
     carries only the counts.
+
+    `where` narrows what is counted, for a subset like probands among patients.
     """
-    rows = session.query(paper_id, func.count(row_id)).group_by(paper_id).all()
+    query = session.query(paper_id, func.count(row_id))
+    if where is not None:
+        query = query.filter(where)
+    rows = query.group_by(paper_id).all()
     return {pid: n for pid, n in rows}
 
 
@@ -966,6 +973,12 @@ def _paper_summaries(
     disagree about what a paper summary contains -- they render the same card.
     """
     patient_counts = _count_by_paper(session, PatientDB.paper_id, PatientDB.id)
+    proband_counts = _count_by_paper(
+        session,
+        PatientDB.paper_id,
+        PatientDB.id,
+        where=PatientDB.proband_status == ProbandStatus.Proband.value,
+    )
     variant_counts = _count_by_paper(session, VariantDB.paper_id, VariantDB.id)
     occurrence_counts = _count_by_paper(
         session,
@@ -1005,7 +1018,15 @@ def _paper_summaries(
             tags=[PaperTag(tag) for tag in paper.tags],
             updated_at=paper.updated_at,
             status=summarize_paper_task_status(task_statuses.get(paper.id, [])),
+            disease_name=paper.disease_name,
+            pmid=paper.pmid,
+            updated_by=(
+                users.get(paper.updated_by_user_id)
+                if paper.updated_by_user_id is not None
+                else None
+            ),
             patient_count=patient_counts.get(paper.id, 0),
+            proband_count=proband_counts.get(paper.id, 0),
             variant_count=variant_counts.get(paper.id, 0),
             patient_variant_occurrences_count=occurrence_counts.get(paper.id, 0),
         )

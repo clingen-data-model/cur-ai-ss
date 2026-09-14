@@ -9,8 +9,8 @@ from streamlit_searchbox import st_searchbox
 
 from lib.core.environment import env
 from lib.misc.pdf.paths import pdf_thumbnail_path
-from lib.models import PaperResp, PaperUpdateRequest
-from lib.tasks import get_status_badge_icon, infer_paper_status_detail
+from lib.models import PaperSummaryResp, PaperUpdateRequest
+from lib.tasks.misc import paper_status_badge
 from lib.ui.api import (
     delete_paper,
     get_http_error_detail,
@@ -107,9 +107,13 @@ def upload_paper_modal() -> None:
             st.session_state.pop(DIALOG_STATE_KEY)
 
 
-def render_papers_df(papers_resps: list[PaperResp]) -> None:
-    papers_by_id = {p.id: p for p in paper_resps}
-    df = pd.DataFrame([p.model_dump(exclude={'tasks'}) for p in paper_resps])
+def render_papers_df(papers: list[PaperSummaryResp]) -> None:
+    # Reads its argument, which it did not before: the body referred to
+    # `paper_resps`, the caller's module-level name, and the parameter went
+    # unused. It worked only because this module is a script and that name
+    # happened to be global.
+    papers_by_id = {p.id: p for p in papers}
+    df = pd.DataFrame([p.model_dump() for p in papers])
     eastern = pytz.timezone('America/New_York')
     df['updated_at'] = pd.to_datetime(df['updated_at'], utc=True).dt.tz_convert(eastern)
     df['thumbnail_path'] = df['id'].map(
@@ -127,8 +131,11 @@ def render_papers_df(papers_resps: list[PaperResp]) -> None:
         lambda row: f'/paper?paper_id={row["id"]}#{papers_by_id[row["id"]].pmid or QUEUED_EXTRACTION_TEXT}',
         axis=1,
     )
+    # From the summarised status rather than the task list, which the summary
+    # response no longer carries. That costs the "3 agents running" detail --
+    # the full task list is a per-paper fetch now, and this is a 94-row table.
     df['agent_status'] = df['id'].map(
-        lambda paper_id: f'{get_status_badge_icon(papers_by_id[paper_id].tasks)} {infer_paper_status_detail(papers_by_id[paper_id].tasks)}'
+        lambda paper_id: paper_status_badge(papers_by_id[paper_id].status)
     )
     df['tags'] = df['tags'].apply(lambda x: x if isinstance(x, list) else [])
     df['updated_by'] = df['updated_by'].apply(

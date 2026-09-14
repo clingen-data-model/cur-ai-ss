@@ -372,10 +372,13 @@ class PaperSummaryResp(BaseModel):
     replaces all of it; the full task list is fetched per paper from
     GET /papers/{paper_id}/tasks when the DAG dialog opens.
 
-    Fields track what the gene table actually reads. abstract,
-    section_classifications, mondo, the disease_* group, proband_count and
-    updated_by are all in PaperResp and none are read here, so they are omitted
-    rather than serialised and discarded.
+    Fields track what the list views actually read -- plural, which an earlier
+    revision of this docstring got wrong. It said proband_count, updated_by and
+    the disease_* group "are not read here", having checked the gene table and
+    not the Streamlit dashboard, which reads the same endpoint and needs all
+    three. They are back below; what stays omitted is the genuinely heavy part,
+    the task list, plus abstract, section_classifications and the evidence
+    blocks, none of which any list view renders.
     """
 
     id: int
@@ -390,7 +393,14 @@ class PaperSummaryResp(BaseModel):
     # Everyone who has touched this paper. Measured at most two per paper on
     # dev, so unlike the task list this replaced it does not bloat the response.
     collaborators: list['UserSummaryResp'] = []
+    # Columns on the paper row, so free: the query loads the row either way.
+    disease_name: str | None = None
+    pmid: str | None = None
+    # Who last touched the paper itself, as distinct from collaborators, which
+    # is everyone who has touched anything under it.
+    updated_by: 'UserSummaryResp | None' = None
     patient_count: int = 0
+    proband_count: int = 0
     variant_count: int = 0
     patient_variant_occurrences_count: int = 0
 
