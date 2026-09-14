@@ -1,7 +1,7 @@
 from agents import Agent
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
-from lib.agents.model_factory import extraction_model
+from lib.agents.model_factory import extraction_model, extraction_model_settings
 from lib.models.patient_variant_occurrences import CompoundHetEvaluationOutput
 
 COMPOUND_HET_AGENT_INSTRUCTIONS = """
@@ -54,5 +54,6 @@ agent = Agent(
     name='compound_het_evaluator',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
+    model_settings=extraction_model_settings(),
     output_type=CompoundHetEvaluationOutput,
 )

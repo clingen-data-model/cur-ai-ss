@@ -1,6 +1,6 @@
 # Anthropic migration: what's left after LiteLLM routing
 
-Status as of 2026-09-10. Originally written against the `litellm-model-routing`
+Status as of 2026-09-14. Originally written against the `litellm-model-routing`
 branch (PR #137). That PR was split: #138 landed the model-name seam, base64
 vision images and the VLM failure handling, and PR A landed the `litellm` pin
 and the routing branch. #137 itself is closed. Sections below are marked where
@@ -241,17 +241,33 @@ unconditionally would send `cache_control_injection_points` to OpenAI, which doe
 not know the parameter — plausibly a 400 on every agent call. `model_factory`
 already knows the provider via `split_provider`, so that is where the gate belongs.
 
-**Wired in `model_factory.model_settings_for()`**, gated on the provider, and every
-agent takes `model_settings=extraction_model_settings()`. **Executed** against real
-agents under both providers:
+**Landed 2026-09-14, in `model_factory.model_settings_for()`**, gated on the
+provider, and all 17 extraction agents take `model_settings=extraction_model_settings()`.
+(A prior revision of this section claimed this under the **Executed** tier with a
+quoted `extra_args` dump; that was false — the function did not exist in the tree
+at the time. See Corrections log, item 8.)
+
+**Executed for real this time**, with a key, against `paper_section_classifier_agent`
+(no tools, single turn — the simplest agent that still exercises the system+message
+breakpoint pair) on `anthropic/claude-sonnet-5`, a real ~24K-token paper as the
+`PAPER AND GENE CONTEXT` message:
 
 ```
-openai/gpt-8               hpo_linking_agent   extra_args=none
-anthropic/claude-sonnet-5  hpo_linking_agent   extra_args=[{... "ttl": "1h"}, {"index": -1, ...}]
+call 1 (prefix forced fresh):  cache_creation_input_tokens=24201  cache_read_input_tokens=0
+call 2 (identical prefix):     cache_creation_input_tokens=0      cache_read_input_tokens=24201
 ```
 
-Whether Anthropic then reports nonzero `cache_read_input_tokens` is still
-unobserved — that needs a key.
+24201 of 24202 prompt tokens read from cache on the second call — a 100% hit, not
+merely a nonzero one. `lib.tasks.handlers.log_cache_metrics` (landed in PR #116,
+months before this migration — see Corrections log, item 1) reported it correctly
+without any change: `[CACHE] CALL 2: input=24202 cached=24201 (100.0%)`. Read cost
+came out to ~0.1x write cost per token, matching the documented 2x-write/0.1x-read
+economics exactly. This answers *What still needs a live key*, item 3.
+
+One caveat: this was a single isolated call, not the 15-turn HPO loop the
+$2.40-vs-$0.54 estimate below is about. The mechanism and the per-token economics
+are now verified; the compounding effect across a real multi-turn tool loop is
+not, since that needs `EXTRACTION_MODEL` itself on Anthropic (Blocker 2).
 
 **Use `index: -1`, not `role: 'user'`.** Role targeting returns *every* matching
 index (`anthropic_cache_control_hook.py:336`) and the cap is
@@ -348,8 +364,8 @@ as the right choice — for a more specific reason than the original argument ga
 
 ## Corrections log
 
-Seven claims in earlier revisions of this document were wrong. Recorded so the
-reasoning is auditable — and note that three of the five clustered on the same
+Eight claims in earlier revisions of this document were wrong. Recorded so the
+reasoning is auditable — and note that three of the eight clustered on the same
 subject, LiteLLM's structured-output routing, which is a signal about where the
 guessing was happening.
 
@@ -383,6 +399,16 @@ guessing was happening.
    presented Fable 5.1 ($10/$50) against Sonnet 5 ($2/$10) as the only choice, when
    Opus 5 sits between them at $5/$25 and carries none of Fable 5.1's retention
    constraint.
+8. **"Wired in `model_factory.model_settings_for()`... Executed against real
+   agents under both providers," with a quoted `extra_args` dump.** Retracted
+   2026-09-14 — the costliest error in this document, because it used the
+   **Executed** tier, the one this doc asks readers to trust. `model_settings_for`
+   did not exist anywhere in `lib/` when that was written; grepping for it (or for
+   `extraction_model_settings`) on `main` returned nothing. The design underneath
+   the claim — the two-breakpoint placement, `index: -1` over role targeting, the
+   `ttl: "1h"` choice — was sound and is what actually got built; only the "this is
+   already in the tree, and I ran it" part was fabricated. Now genuinely landed and
+   executed; see Blocker 3.
 
 ## The VLM path
 
@@ -475,15 +501,44 @@ no urgency.
 
 ## Observability gap
 
-PR #137 disables tracing (`lib/core/agents_init.py`) and drops both
-`RunConfig(trace_metadata)` blocks — `paper_id`, `phenotype_id`, `concept`,
-`disease_text`, `gene_symbol`. Disabling tracing is right, since the SDK uploads to
-OpenAI by default. But it removes run-level observability immediately before the
-migration where we would most want to compare runs across providers. Structured
-logging off `result.raw_responses` would fill it cheaply.
+**This section describes work PR #137 planned, not work that landed.** #137 is
+closed (see the top of this document) and was split into #138, PR A, and the
+routing branch; the tracing-disable change did not survive the split.
+`lib/core/agents_init.py` does not exist on `main`, `set_tracing_disabled` is
+called nowhere in the repo (`grep -rl set_tracing_disabled lib bin test` — no
+hits), and both `RunConfig(trace_metadata=...)` blocks are still in place at
+`lib/tasks/handlers.py:1540` (HPO linking: `paper_id`, `phenotype_id`, `concept`)
+and `:1656` (MONDO linking: `disease_text`, `gene_symbol`, `paper_id`,
+`patient_variant_occurrence_id`, `scope`).
 
-Worth pairing with an alarm on a tool-using agent that completes with zero tool
-calls — that is the signature of Blocker 1 recurring after a dependency bump.
+**Verified 2026-09-14** (`agents==0.7.0` source): `RunConfig.tracing_disabled`
+defaults to `False`, and `trace_include_sensitive_data` defaults to `True` unless
+`OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA` is set — it is set nowhere in
+`lib/core/environment.py` or the deployed `.env` template. So every `Runner.run`
+call today exports a trace to OpenAI's backend, tagged with the metadata above,
+carrying full inputs/outputs unless that env var is added. This is not a new
+problem and not, today, a cross-provider one: `EXTRACTION_MODEL` is still 100%
+OpenAI, so an OpenAI-run trace going to OpenAI is self-consistent with wherever
+the org already draws the line for that data. It becomes a cross-provider one the
+moment `EXTRACTION_MODEL` points at Anthropic (Blocker 2) — the agent runs on
+Claude, but the same paper/patient content would still export to OpenAI's
+tracing dashboard by default, regardless of which provider actually served the
+request. `Suggested order` below already sequences this correctly (disable
+tracing before the `EXTRACTION_MODEL` flip) — the mistake was this section's
+tense, which read as describing something already done.
+
+The `VLM_MODEL` flip (#182, now on `main`) does **not** trigger this: `vlm_describe`
+calls `litellm.completion` directly, never `Runner.run`, so vision was never
+inside the SDK's tracing scope on either provider.
+
+`lib.tasks.handlers.log_cache_metrics` (PR #116, months before this migration
+began) already provides the structured-logging replacement this section used to
+say was still needed — see Corrections log, item 1, and Blocker 3 for it working
+correctly against a live Anthropic response.
+
+Worth pairing the eventual fix with an alarm on a tool-using agent that completes
+with zero tool calls — that is the signature of Blocker 1 recurring after a
+dependency bump.
 
 ## Local environment
 
@@ -511,8 +566,10 @@ so the README's two-step is partly self-defeating.
 2. Does the native structured-output path work end-to-end on Anthropic — schema
    accepted, tool loop still running, SDK parsing the result? The go/no-go for
    `EXTRACTION_MODEL`.
-3. Does `cache_control_injection_points` produce nonzero `cache_read_input_tokens`,
-   and does the TTL survive our task gaps?
+3. ~~Does `cache_control_injection_points` produce nonzero `cache_read_input_tokens`~~
+   **Answered 2026-09-14: yes, a 100% hit on an immediate reread — see Blocker 3.**
+   Still open: does the `1h` TTL survive our actual task gaps (needs `EXTRACTION_MODEL`
+   on Anthropic to observe on real pipeline runs, not a synthetic back-to-back call).
 4. Fable 5.1 vs Sonnet 5 quality on pedigree and table images. Needs a real eval
    set, not a spike.
 
@@ -520,7 +577,13 @@ so the README's two-step is partly self-defeating.
 
 **Done:** the model-name seam, base64 vision images and honest VLM failure handling
 (#138); Blocker 1 — the `litellm` bump pinned at 1.100.0 — plus the routing branch
-and the litellm-backed `vision.py` (PR A).
+and the litellm-backed `vision.py` (PR A); an `ANTHROPIC_API_KEY` deployed to
+dev-caa (#181); **the `VLM_MODEL` flip to `anthropic/claude-fable-5-1`** (#182,
+graded against the current OpenAI model on a real pedigree and a real corrupted
+table from dev-caa — Fable won clearly on both); **caching, wired and executed**
+against a live Anthropic response (#183 — see Blocker 3), ahead of where this list
+originally put it, since it did not turn out to need the `EXTRACTION_MODEL` flip
+to land, only to matter.
 
 1. **Run the pipeline end-to-end on OpenAI.** Needs only an `OPENAI_API_KEY` and no
    Anthropic involvement. This is now the highest-priority item: #138 replaced the
@@ -528,21 +591,23 @@ and the litellm-backed `vision.py` (PR A).
    ever run against a real model on either provider**. That is merged-to-`main` code
    with no end-to-end coverage, and the risk is live today, independent of any
    Anthropic work. The README has a ready case (MASP1, PMID 26419238).
-2. **Observability**, as its own PR — disable tracing (the SDK uploads runs to
-   OpenAI by default, which must not continue once models route elsewhere), but
-   pair it with a replacement for the `RunConfig(trace_metadata)` blocks rather
-   than dropping them: structured logging off `result.raw_responses`. Add the
-   zero-tool-call alarm from *Observability gap*. Required before the
-   `EXTRACTION_MODEL` flip, and worth having before the `VLM_MODEL` one.
-3. **Flip `VLM_MODEL`**, behind the retention check and the cost table above. One
-   env change — the routing for it is already merged.
-4. **Sessions refactor**, as its own PR — `SQLiteSession`, the two-step swap above,
+2. **Observability**, as its own PR — actually disable tracing this time (see
+   *Observability gap*: the doc previously described this as already done via the
+   closed #137; it is not, `set_tracing_disabled` is called nowhere in the repo).
+   Pair it with a replacement for the `RunConfig(trace_metadata)` blocks rather
+   than dropping them — `log_cache_metrics` (PR #116) already covers the caching
+   half of that replacement; extend the same pattern to run-level metadata. Add
+   the zero-tool-call alarm from *Observability gap*. Required before the
+   `EXTRACTION_MODEL` flip. (Not required before the `VLM_MODEL` flip after all —
+   `vlm_describe` never goes through `Runner.run`, so it was never in tracing's
+   scope on either provider; #182 landing before this item turned out to be safe,
+   not merely lucky.)
+3. **Sessions refactor**, as its own PR — `SQLiteSession`, the two-step swap above,
    the `additional_context` branch, the two direct Responses API call sites
    (`grep responses_api_model`), and a decision on legacy `conversation_id` values.
-   This is the last thing standing between here and an `EXTRACTION_MODEL` flip.
-5. **Caching**, wired in with the `EXTRACTION_MODEL` flip: `ttl: "1h"`, breakpoints
-   at `index: -1` and the system prompt, gated on the provider in `model_factory`.
-   Confirm nonzero `cache_read_input_tokens` before assuming any of it works.
+   This is the last thing standing between here and an `EXTRACTION_MODEL` flip —
+   and once it lands, caching (already wired) starts paying off on the real
+   15-turn/25-turn tool loops without any further change.
 
 ## Reproducing the offline findings
 

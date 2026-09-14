@@ -22,6 +22,7 @@ SDK's default error handler would turn the exception into text for the model
 rather than failing the run.
 """
 
+from agents import ModelSettings
 from agents.extensions.models.litellm_model import LitellmModel
 from agents.models.interface import Model
 
@@ -32,10 +33,54 @@ from lib.core.model_names import (
     split_provider,
 )
 
+# TTL is the ceiling Anthropic offers -- '5m' or '1h', no longer option -- and is
+# measured from the start of the request that writes *or reads* the entry, so a
+# hit refreshes it. '1h' covers the ~40 runs/paper gap that '5m' would mostly
+# miss, at the cost of a 2x (not 1.25x) write; see docs/anthropic-migration.md
+# for the break-even math.
+_CACHE_CONTROL = {'type': 'ephemeral', 'ttl': '1h'}
+
 
 def extraction_model() -> Model | str:
     """The model every text-extraction agent runs on."""
     return resolve_model(env.EXTRACTION_MODEL)
+
+
+def extraction_model_settings() -> ModelSettings:
+    """Model settings every text-extraction agent runs with."""
+    return model_settings_for(env.EXTRACTION_MODEL)
+
+
+def model_settings_for(name: str) -> ModelSettings:
+    """Prompt-cache breakpoints for a configured model, gated on provider.
+
+    Anthropic only: ModelSettings.extra_args is splatted as top-level kwargs
+    into whichever API the model resolves to, including the OpenAI Responses
+    call the agents SDK's default provider makes. Sending
+    cache_control_injection_points there is not a no-op -- OpenAI does not know
+    the parameter, so an openai/ model gets the empty ModelSettings() the type
+    requires (Agent.__post_init__ rejects None) rather than these breakpoints.
+
+    Two breakpoints, not one: 'system' covers the instructions and tool
+    definitions, which are identical on every call an agent makes; index -1
+    covers the paper context in the last user message, which is what makes a
+    tool loop's later turns and a same-session follow-up read instead of
+    resend. Role targeting stamps every message of that role, so 'system' is
+    safe (agents send exactly one), but the paper must be targeted by position
+    -- a thread that has accumulated follow-ups would otherwise stamp the first
+    four user messages and miss the one actually being extended.
+    """
+    provider, _ = split_provider(name)
+    if provider != 'anthropic':
+        return ModelSettings()
+    return ModelSettings(
+        extra_args={
+            'cache_control_injection_points': [
+                {'location': 'message', 'role': 'system', 'control': _CACHE_CONTROL},
+                {'location': 'message', 'index': -1, 'control': _CACHE_CONTROL},
+            ]
+        }
+    )
 
 
 def vlm_model() -> str:

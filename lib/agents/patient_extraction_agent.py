@@ -2,7 +2,7 @@ from agents import Agent
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
-from lib.agents.model_factory import extraction_model
+from lib.agents.model_factory import extraction_model, extraction_model_settings
 from lib.models.patient import PatientExtractionOutput
 
 PATIENT_EXTRACTION_INSTRUCTIONS = f"""
@@ -175,5 +175,6 @@ agent = Agent(
     name='patient_info_extractor',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
+    model_settings=extraction_model_settings(),
     output_type=PatientExtractionOutput,
 )

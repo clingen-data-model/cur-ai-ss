@@ -1,7 +1,7 @@
 from agents import Agent
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
-from lib.agents.model_factory import extraction_model
+from lib.agents.model_factory import extraction_model, extraction_model_settings
 
 GENERAL_PAPER_QA_INSTRUCTIONS = """
     Answer questions precisely, citing specific patients, variants, or phenotypes by name where relevant. If the data is not available in the context, say so clearly.
@@ -14,4 +14,5 @@ agent = Agent(
     name='general_paper_qa',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
+    model_settings=extraction_model_settings(),
 )
