@@ -18,6 +18,7 @@
 # Optional variables:
 #   gcp_project           - CAA project name (default: clingen-caa)
 #   openai_api_key_secret - Secret Manager name for OpenAI key (default: caa-openai-api-key)
+#   anthropic_api_key_secret - Secret Manager name for Anthropic key (default: caa-anthropic-api-key)
 #   ncbi_api_key_secret   - Secret Manager name for NCBI Api Key (default: caa-ncbi-api-key)
 #   ncbi_email_secret     - Secret Manager name for NCBI Email (default: caa-ncbi-email)
 #   auth_secrets_secret   - Secret Manager name for the auth/SMTP JSON secret (default: caa-auth-secrets)
@@ -76,6 +77,9 @@
 #      # OpenAI API key
 #      gcloud secrets create caa-openai-api-key --project=PROJECT
 #      echo -n "sk-..." | gcloud secrets versions add caa-openai-api-key --data-file=- --project=PROJECT
+#      # Anthropic API key (needed whenever EXTRACTION_MODEL or VLM_MODEL names anthropic/)
+#      gcloud secrets create caa-anthropic-api-key --replication-policy=automatic --project=PROJECT
+#      printf %s "sk-ant-..." | gcloud secrets versions add caa-anthropic-api-key --data-file=- --project=PROJECT
 #      # NCBI API key
 #      gcloud secrets create caa-ncbi-api-key --project=PROJECT
 #      echo -n "..." | gcloud secrets versions add caa-ncbi-api-key --data-file=- --project=PROJECT
@@ -98,6 +102,7 @@
     git_version: main
     # Secret Manager secret names (can be overridden via -e)
     openai_api_key_secret: caa-openai-api-key
+    anthropic_api_key_secret: caa-anthropic-api-key
     ncbi_api_key_secret: caa-ncbi-api-key
     ncbi_email_secret: caa-ncbi-email
     # Single JSON secret holding the auth/SMTP credentials:
@@ -253,6 +258,17 @@
         --secret={{ openai_api_key_secret }}
         --project={{ gcp_project }}
       register: openai_api_key_content
+      changed_when: false
+      no_log: true
+
+    - name: Fetch Anthropic API key from Secret Manager
+      delegate_to: localhost
+      become: no
+      command: >
+        gcloud secrets versions access latest
+        --secret={{ anthropic_api_key_secret }}
+        --project={{ gcp_project }}
+      register: anthropic_api_key_content
       changed_when: false
       no_log: true
 
