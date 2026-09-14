@@ -141,7 +141,9 @@ Configuration is in `lib/core/environment.py` using Pydantic BaseSettings:
 
 **Required:**
 - `EXTRACTION_MODEL` - Text-extraction model as `<provider>/<model>` (default: `openai/gpt-5.6-luna`); prefix required
-- `VLM_MODEL` - Vision model, same form (default: `openai/gpt-5.6-sol`)
+- `VLM_MODEL` - Vision model, same form (default: `openai/gpt-5.6-sol`; the
+  dev-caa deployment overrides this to `anthropic/claude-fable-5-1` in
+  `infrastructure/ansible/templates/env.j2`)
 - `OPENAI_API_KEY` - required whenever a configured model names `openai/`
 - `JWT_SECRET_KEY` - Secret used to sign auth access tokens (set a strong value in prod)
 
