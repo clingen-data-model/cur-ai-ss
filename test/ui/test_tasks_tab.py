@@ -127,53 +127,33 @@ def test_rows_carry_failure_detail():
     assert rows[0]['Scope'] == 'Patient 2'
 
 
-def test_tasks_tab_offered_with_and_without_chat():
-    """Tasks is appended last so existing ?tab_id= deep links keep their target."""
-    from types import SimpleNamespace
+def test_tab_order_is_stable_for_deep_links():
+    """?tab_id= is a positional index into this list.
 
+    So the order is the contract: a tab inserted rather than appended silently
+    repoints every existing deep link. Tasks and Chat sit at the end for that
+    reason -- both were added after the first four.
+
+    This replaces a pair of tests for CHAT_FEATURE_GATE_TIME, which hid the chat
+    tab on papers last updated before 2026-05-17. Every completed task bumps
+    papers.updated_at, so the gate cleared itself as papers were re-run, and it
+    had stopped excluding anything long before it was removed.
+    """
     from lib.ui.paper.shared import (
-        CHAT_FEATURE_GATE_TIME,
+        PAPER_TABS,
         TAB_CHAT,
         TAB_METADATA,
         TAB_OCCURRENCES,
         TAB_PATIENTS,
+        TAB_TASKS,
         TAB_VARIANTS,
-        get_available_tabs,
     )
 
-    # Built from the gate rather than from literals, so the two are comparable
-    # by construction -- which is exactly why this test kept passing while the
-    # real page raised TypeError. See test_the_gate_compares_against_a_real_paper.
-    before = SimpleNamespace(updated_at=CHAT_FEATURE_GATE_TIME - timedelta(days=1))
-    after = SimpleNamespace(updated_at=CHAT_FEATURE_GATE_TIME + timedelta(days=1))
-
-    without_chat = get_available_tabs(before)  # type: ignore[arg-type]
-    with_chat = get_available_tabs(after)  # type: ignore[arg-type]
-
-    assert TAB_TASKS in without_chat and TAB_TASKS in with_chat
-    assert TAB_CHAT not in without_chat and TAB_CHAT in with_chat
-    # The four leading positions are unchanged in both cases.
-    expected = [TAB_METADATA, TAB_OCCURRENCES, TAB_PATIENTS, TAB_VARIANTS]
-    assert without_chat[:4] == expected
-    assert with_chat[:4] == expected
-    assert with_chat.index(TAB_CHAT) == 4
-
-
-def test_the_gate_compares_against_a_real_paper_timestamp():
-    """The gate is compared with PaperResp.updated_at, which is timezone-aware.
-
-    The test above derives both operands from CHAT_FEATURE_GATE_TIME, so they
-    agree about awareness whatever it is, and it passed while every paper page
-    raised "can't compare offset-naive and offset-aware datetimes". This uses a
-    timestamp shaped like the one the API actually sends.
-    """
-    import datetime
-    from types import SimpleNamespace
-
-    from lib.ui.paper.shared import CHAT_FEATURE_GATE_TIME, get_available_tabs
-
-    now = datetime.datetime.now(datetime.timezone.utc)
-
-    assert CHAT_FEATURE_GATE_TIME.tzinfo is not None
-    # The comparison itself is the assertion: naive-vs-aware raises TypeError.
-    assert get_available_tabs(SimpleNamespace(updated_at=now))  # type: ignore[arg-type]
+    assert PAPER_TABS == [
+        TAB_METADATA,
+        TAB_OCCURRENCES,
+        TAB_PATIENTS,
+        TAB_VARIANTS,
+        TAB_CHAT,
+        TAB_TASKS,
+    ]
