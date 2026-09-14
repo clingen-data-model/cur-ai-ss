@@ -1,5 +1,5 @@
 import random
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote
 
@@ -34,7 +34,11 @@ HEADER_TABS = [
 ]
 HEADER_TABS_KEY = 'HEADER_TABS_KEY'
 HUMAN_EDIT_NOTE_DEFAULT = 'Reasoning behind the change...'
-CHAT_FEATURE_GATE_TIME = datetime(2026, 5, 17, 12, 0, 0)
+# UTC, explicitly. It is compared against PaperResp.updated_at, which carries a
+# timezone since the API started declaring one (lib/models/datetimes.py) -- and
+# Python refuses to compare an aware datetime with a naive one, so leaving this
+# naive raised TypeError on every paper page.
+CHAT_FEATURE_GATE_TIME = datetime(2026, 5, 17, 12, 0, 0, tzinfo=timezone.utc)
 
 
 def clean_quote(quote: str) -> str:
