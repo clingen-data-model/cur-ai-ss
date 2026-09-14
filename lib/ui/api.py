@@ -15,6 +15,7 @@ from lib.models import (
     GeneResp,
     PaperResetResp,
     PaperResp,
+    PaperSummaryResp,
     PaperUpdateRequest,
     PatientResp,
     PatientUpdateRequest,
@@ -115,10 +116,16 @@ def change_password(current_password: str, new_password: str) -> UserResp:
     return UserResp.model_validate(resp.json())
 
 
-def get_papers() -> list[PaperResp]:
+def get_papers() -> list[PaperSummaryResp]:
+    """GET /papers returns summaries, not whole papers.
+
+    It was narrowed in #142 to drop the embedded task list -- 90.5% of a 4.97 MB
+    response -- and this kept parsing the old shape, so every dashboard load
+    raised 282 validation errors for fields the endpoint had stopped sending.
+    """
     resp = _session.get(f'{env.PROTOCOL}{env.API_ENDPOINT}/papers')
     resp.raise_for_status()
-    return TypeAdapter(list[PaperResp]).validate_python(resp.json())
+    return TypeAdapter(list[PaperSummaryResp]).validate_python(resp.json())
 
 
 def search_genes(prefix: str, limit: int = 10) -> list[GeneResp]:

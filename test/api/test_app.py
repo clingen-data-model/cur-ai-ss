@@ -322,11 +322,37 @@ def test_list_papers_summarizes_tasks_into_a_status(
     # A freshly uploaded paper has one PENDING task (PDF parsing).
     assert all(job['status'] == 'pending' for job in jobs)
     assert all('tasks' not in job for job in jobs)
-    # Dropped alongside tasks: none of these are read by the gene table.
-    for absent in ('abstract', 'section_classifications', 'mondo', 'proband_count'):
+    # Dropped alongside tasks, and genuinely unread by any list view. An earlier
+    # version of this list also held proband_count, which the Streamlit
+    # dashboard does read -- see the test below.
+    for absent in ('abstract', 'section_classifications', 'mondo'):
         assert all(absent not in job for job in jobs)
     for job in jobs:
         _assert_updated_at_recent(job['updated_at'])
+
+
+def test_list_papers_carries_what_the_streamlit_dashboard_renders(
+    client, test_pdf, seeded_genes
+):
+    """GET /papers has two consumers, and #142 only checked one.
+
+    Narrowing the response to PaperSummaryResp was measured against the gene
+    table's needs. The Streamlit dashboard reads the same endpoint and renders
+    disease, PMID, proband count and last-modified-by, none of which survived --
+    so it raised 282 validation errors on every load and nobody noticed, because
+    the columns it lost were not the ones being optimised.
+    """
+    client.put(
+        '/papers',
+        files={'uploaded_file': ('p.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
+    )
+
+    jobs = client.get('/papers').json()
+
+    assert jobs
+    for field in ('disease_name', 'pmid', 'proband_count', 'updated_by'):
+        assert all(field in job for job in jobs), field
 
 
 def test_list_papers_counts_children_without_loading_them(
@@ -343,6 +369,45 @@ def test_list_papers_counts_children_without_loading_them(
     assert job['patient_count'] == 0
     assert job['variant_count'] == 0
     assert job['patient_variant_occurrences_count'] == 0
+
+
+def test_list_papers_counts_only_probands_as_probands(
+    client, test_pdf, db_session, seeded_genes
+):
+    """proband_count is its own grouped COUNT with a filter, not patient_count."""
+    paper_id = client.put(
+        '/papers',
+        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
+    ).json()['id']
+    family = FamilyDB(
+        paper_id=paper_id,
+        identifier='Family 1',
+        identifier_evidence=dict(
+            value='Family 1', reasoning='test family', quote='Family 1'
+        ),
+        consanguinity=False,
+        consanguinity_evidence=dict(value=False, reasoning='test family', quote='test'),
+    )
+    db_session.add(family)
+    db_session.flush()
+    for identifier, proband_status in (('P1', 'Proband'), ('P2', 'Unknown')):
+        fields = _patient_required_fields(identifier)
+        fields['proband_status'] = proband_status
+        db_session.add(
+            PatientDB(
+                paper_id=paper_id,
+                family_id=family.id,
+                identifier=identifier,
+                **fields,
+            )
+        )
+    db_session.commit()
+
+    job = next(j for j in client.get('/papers').json() if j['id'] == paper_id)
+
+    assert job['patient_count'] == 2
+    assert job['proband_count'] == 1
 
 
 def test_delete_paper(client, test_pdf, db_session, seeded_genes):
