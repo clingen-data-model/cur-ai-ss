@@ -18,7 +18,7 @@ import requests
 from agents import Agent, function_tool
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
-from lib.agents.model_factory import extraction_model
+from lib.agents.model_factory import extraction_model, extraction_model_settings
 from lib.agents.variant_annotation_agent import _get_session_with_retries
 from lib.core.environment import env
 from lib.models.evidence_block import ReasoningBlock
@@ -984,6 +984,7 @@ agent = Agent(
     name='variant_harmonizer',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
+    model_settings=extraction_model_settings(),
     output_type=ReasoningBlock[HarmonizedVariant],
     tools=[
         select_canonical_transcript,

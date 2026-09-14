@@ -9,7 +9,7 @@ from lib.agents.hpo_linking_agent import (
     get_hpo_term,
     search_hpo_terms,
 )
-from lib.agents.model_factory import extraction_model
+from lib.agents.model_factory import extraction_model, extraction_model_settings
 from lib.models.evidence_block import ReasoningBlock
 from lib.models.mondo import MondoAgentDecision
 from lib.reference_data import mondo
@@ -229,6 +229,7 @@ agent = Agent(
     name='mondo_linker',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
+    model_settings=extraction_model_settings(),
     output_type=ReasoningBlock[MondoAgentDecision],
     tools=[
         get_mondo_term,

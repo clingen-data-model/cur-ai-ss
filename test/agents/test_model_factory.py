@@ -1,8 +1,11 @@
 import pytest
+from agents import ModelSettings
 from agents.extensions.models.litellm_model import LitellmModel
 
 from lib.agents.model_factory import (
     extraction_model,
+    extraction_model_settings,
+    model_settings_for,
     provider_api_key,
     resolve_model,
     responses_api_model,
@@ -103,6 +106,63 @@ def test_responses_api_model_refuses_a_non_openai_model(monkeypatch):
 
     with pytest.raises(ValueError, match='sessions refactor'):
         responses_api_model()
+
+
+def test_openai_gets_empty_model_settings_not_none():
+    """Agent.__post_init__ rejects model_settings=None outright (TypeError), so
+    the openai/ branch must return an empty ModelSettings(), not None -- the
+    'no cache breakpoints' case still has to satisfy the type Agent requires."""
+    settings = model_settings_for('openai/gpt-5.6-luna')
+
+    assert settings == ModelSettings()
+    assert settings.extra_args is None
+
+
+def test_anthropic_gets_two_breakpoints_at_the_1h_ttl():
+    """system covers instructions+tools (identical every call an agent makes);
+    index -1 covers the paper context, targeted by position rather than role
+    because a thread with follow-ups has more than one user message and only
+    the last is the one being extended. Verified live (2026-09-14, Sonnet 5,
+    paper_section_classifier_agent): a forced-cold call wrote
+    cache_creation_input_tokens=24201/cache_read_input_tokens=0, and the
+    identical prefix resent immediately after read
+    cache_read_input_tokens=24201/cache_creation_input_tokens=0 -- a 100% hit,
+    not just a non-empty one."""
+    settings = model_settings_for('anthropic/claude-sonnet-5')
+
+    points = settings.extra_args['cache_control_injection_points']
+    assert points == [
+        {
+            'location': 'message',
+            'role': 'system',
+            'control': {'type': 'ephemeral', 'ttl': '1h'},
+        },
+        {
+            'location': 'message',
+            'index': -1,
+            'control': {'type': 'ephemeral', 'ttl': '1h'},
+        },
+    ]
+
+
+def test_settings_stay_under_the_four_breakpoint_cap():
+    """MAX_CACHE_CONTROL_BLOCKS = 4 in litellm's
+    anthropic_cache_control_hook.py; injection stops silently past the cap
+    rather than erroring, so a future third breakpoint added here without
+    checking this would degrade instead of failing loudly."""
+    settings = model_settings_for('anthropic/claude-sonnet-5')
+
+    assert len(settings.extra_args['cache_control_injection_points']) <= 4
+
+
+def test_extraction_model_settings_follows_extraction_model(monkeypatch):
+    """Same env-driven pattern as extraction_model() itself -- one setting,
+    read fresh each call, no separate provider to keep in sync."""
+    monkeypatch.setattr(env, 'EXTRACTION_MODEL', 'anthropic/claude-sonnet-5')
+    assert extraction_model_settings().extra_args is not None
+
+    monkeypatch.setattr(env, 'EXTRACTION_MODEL', 'openai/gpt-5.6-luna')
+    assert extraction_model_settings() == ModelSettings()
 
 
 def test_split_provider_returns_both_halves():
