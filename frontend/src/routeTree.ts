@@ -16,10 +16,8 @@
  * why the header, footer, auth gate and toaster render on every page.
  */
 import { RootRoute, Route } from '@tanstack/react-router'
-import { PaperTaskStatus } from './api/generated/types.gen'
-import type { PaperTaskStatus as PaperTaskStatusValue } from './api/generated/types.gen'
+import { isPaperState, type PaperState } from './lib/paperState'
 
-const PAPER_STATUSES: string[] = Object.values(PaperTaskStatus)
 import { RootLayout } from './routes/__root'
 import { HomePage } from './routes/index'
 import { LoginPage } from './routes/login'
@@ -42,8 +40,8 @@ const rootRoute = new RootRoute({
  */
 export interface IndexSearch {
   worked_by?: 'anyone' | 'me' | number
-  /** A PaperTaskStatus value, or absent for every status. */
-  status?: PaperTaskStatusValue
+  /** A PaperState, or absent for every state. */
+  status?: PaperState
 }
 
 const indexRoute = new Route({
@@ -61,12 +59,12 @@ const indexRoute = new Route({
       if (Number.isInteger(id) && id > 0) parsed.worked_by = id
     }
 
-    // Validated against the API's own values rather than a copy of them, so a
-    // status added server-side cannot silently stop being filterable.
+    // The four states the table speaks in, not the six the API reports -- see
+    // lib/paperState. An old link carrying 'pending' or 'partial' simply falls
+    // through to showing everything, which is the same forgiving behaviour as
+    // any other unreadable filter below.
     const status = search.status
-    if (typeof status === 'string' && PAPER_STATUSES.includes(status)) {
-      parsed.status = status as PaperTaskStatusValue
-    }
+    if (isPaperState(status)) parsed.status = status
 
     // Anything unreadable falls through to showing everything rather than
     // erroring: these are filters, and a broken one should not be a broken page.
