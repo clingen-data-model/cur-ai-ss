@@ -141,6 +141,9 @@ def test_tasks_tab_offered_with_and_without_chat():
         get_available_tabs,
     )
 
+    # Built from the gate rather than from literals, so the two are comparable
+    # by construction -- which is exactly why this test kept passing while the
+    # real page raised TypeError. See test_the_gate_compares_against_a_real_paper.
     before = SimpleNamespace(updated_at=CHAT_FEATURE_GATE_TIME - timedelta(days=1))
     after = SimpleNamespace(updated_at=CHAT_FEATURE_GATE_TIME + timedelta(days=1))
 
@@ -154,3 +157,23 @@ def test_tasks_tab_offered_with_and_without_chat():
     assert without_chat[:4] == expected
     assert with_chat[:4] == expected
     assert with_chat.index(TAB_CHAT) == 4
+
+
+def test_the_gate_compares_against_a_real_paper_timestamp():
+    """The gate is compared with PaperResp.updated_at, which is timezone-aware.
+
+    The test above derives both operands from CHAT_FEATURE_GATE_TIME, so they
+    agree about awareness whatever it is, and it passed while every paper page
+    raised "can't compare offset-naive and offset-aware datetimes". This uses a
+    timestamp shaped like the one the API actually sends.
+    """
+    import datetime
+    from types import SimpleNamespace
+
+    from lib.ui.paper.shared import CHAT_FEATURE_GATE_TIME, get_available_tabs
+
+    now = datetime.datetime.now(datetime.timezone.utc)
+
+    assert CHAT_FEATURE_GATE_TIME.tzinfo is not None
+    # The comparison itself is the assertion: naive-vs-aware raises TypeError.
+    assert get_available_tabs(SimpleNamespace(updated_at=now))  # type: ignore[arg-type]
