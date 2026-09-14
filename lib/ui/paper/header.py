@@ -36,13 +36,13 @@ from lib.ui.paper.patients import render_patients_tab
 from lib.ui.paper.shared import (
     CURRENT_ANNOTATIONS_KEY,
     HEADER_TABS_KEY,
+    PAPER_TABS,
     TAB_CHAT,
     TAB_METADATA,
     TAB_OCCURRENCES,
     TAB_PATIENTS,
     TAB_TASKS,
     TAB_VARIANTS,
-    get_available_tabs,
 )
 from lib.ui.paper.tasks import render_tasks_tab
 from lib.ui.paper.variants import render_variants_tab
@@ -284,7 +284,7 @@ with center:
     left, right = st.columns([5, 4])
     with left:
         with st.container(horizontal=True, vertical_alignment='center'):
-            available_tabs = get_available_tabs(paper_resp)
+            available_tabs = PAPER_TABS
             if paper_query_params.tab_id:
                 default_tab = (
                     available_tabs[paper_query_params.tab_id]

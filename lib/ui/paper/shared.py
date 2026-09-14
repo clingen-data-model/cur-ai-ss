@@ -25,20 +25,8 @@ from lib.ui.api import (
 )
 
 CURRENT_ANNOTATIONS_KEY = 'CURRENT_ANNOTATIONS_KEY'
-HEADER_TABS = [
-    '📝 Metadata',
-    '👤 Patients',
-    '🧬 Variants',
-    '🔗 Occurrences',
-    '💬 Chat with Agent',
-]
 HEADER_TABS_KEY = 'HEADER_TABS_KEY'
 HUMAN_EDIT_NOTE_DEFAULT = 'Reasoning behind the change...'
-# UTC, explicitly. It is compared against PaperResp.updated_at, which carries a
-# timezone since the API started declaring one (lib/models/datetimes.py) -- and
-# Python refuses to compare an aware datetime with a naive one, so leaving this
-# naive raised TypeError on every paper page.
-CHAT_FEATURE_GATE_TIME = datetime(2026, 5, 17, 12, 0, 0, tzinfo=timezone.utc)
 
 
 def clean_quote(quote: str) -> str:
@@ -119,22 +107,24 @@ TAB_CHAT = '💬 Chat with Agent'
 TAB_TASKS = '⚙️ Tasks'
 
 
-def get_available_tabs(paper_resp: PaperResp) -> list[str]:
-    """Get available tabs for a paper, conditionally excluding chat based on update time.
-
-    The chat feature is only available for papers updated after CHAT_FEATURE_GATE_TIME.
-    """
-    tabs = [
-        TAB_METADATA,
-        TAB_OCCURRENCES,
-        TAB_PATIENTS,
-        TAB_VARIANTS,
-    ]
-    if paper_resp.updated_at > CHAT_FEATURE_GATE_TIME:
-        tabs.append(TAB_CHAT)
-    # Appended last so existing ?tab_id= deep links keep pointing at the same tab.
-    tabs.append(TAB_TASKS)
-    return tabs
+# The paper page's tabs, in the order ?tab_id= indexes them -- so anything new
+# is appended rather than inserted, or every existing deep link shifts by one.
+#
+# The chat tab used to be conditional: it appeared only on papers updated after
+# CHAT_FEATURE_GATE_TIME, a hardcoded 2026-05-17, because chat needs extraction
+# state the pipeline only produced from that release onward. Every completed
+# task bumps papers.updated_at, so the gate cleared itself as papers were
+# re-run, and on production all 94 are past it -- the oldest by four months.
+# A one-way gate with no expiry becomes dead weight the moment it stops
+# excluding anything.
+PAPER_TABS = [
+    TAB_METADATA,
+    TAB_OCCURRENCES,
+    TAB_PATIENTS,
+    TAB_VARIANTS,
+    TAB_CHAT,
+    TAB_TASKS,
+]
 
 
 COLORS = [
