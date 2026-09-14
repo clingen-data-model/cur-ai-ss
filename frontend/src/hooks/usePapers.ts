@@ -5,6 +5,7 @@ import {
   listPapersPapersGet,
 } from '@/api/generated'
 import type { PaperSummaryResp } from '@/api/generated/types.gen'
+import { STATE_OF } from '@/lib/paperState'
 import { useAuth } from '@/lib/auth'
 import type { IndexSearch } from '@/routeTree'
 
@@ -56,7 +57,9 @@ export function usePapers(
     // server would have to derive every status before it could drop any, which
     // costs exactly what returning them all costs. touched_by is different: it
     // narrows the set of papers before their summaries are built.
-    const matching = status ? rows.filter((p) => p.status === status) : rows
+    const matching = status
+      ? rows.filter((p) => STATE_OF[p.status] === status)
+      : rows
     return [...matching].sort((a, b) =>
       (b.updated_at ?? '').localeCompare(a.updated_at ?? ''),
     )

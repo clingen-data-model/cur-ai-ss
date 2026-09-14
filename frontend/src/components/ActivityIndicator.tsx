@@ -90,7 +90,7 @@ export function ActivityIndicator() {
             table with the running ones somewhere in it. */}
         <Link
           to="/"
-          search={{ status: 'running' }}
+          search={{ status: 'in-progress' }}
           className="block pt-2 text-sm text-muted-foreground hover:text-foreground hover:underline underline-offset-4"
         >
           See all in the papers table

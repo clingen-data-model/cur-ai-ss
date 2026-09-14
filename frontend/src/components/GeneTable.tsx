@@ -13,7 +13,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { UploadPaperDialog } from '@/components/UploadPaperDialog'
 import { TaskDAG } from '@/components/TaskDAG'
-import { STATUS_BADGE } from '@/components/StatusBadge'
+import { badgeFor } from '@/components/StatusBadge'
 import { PipelineProgress } from '@/components/PipelineProgress'
 import { DeletePaperButton, RerunTaskButton } from '@/components/PaperActions'
 import { Button } from '@/components/ui/button'
@@ -143,7 +143,7 @@ function PaperProgressPopover({
 }
 
 function PaperCard({ paper }: { paper: PaperSummaryResp }) {
-  const status = STATUS_BADGE[paper.status]
+  const status = badgeFor(paper.status)
   const thumbnailSrc = `${API_BASE_URL}${paper.thumbnail_url}`
   const [dagOpen, setDagOpen] = useState(false)
 

@@ -1,14 +1,13 @@
-/* Narrows the papers table to one pipeline status.
+/* Narrows the papers table to one paper state.
  *
  * A plain select rather than the searchable combobox the person filter uses:
- * there are six statuses and they never grow with the data, so a search box
+ * there are four states and they never grow with the data, so a search box
  * would be furniture. The person list can reach every account.
  *
- * Labels come from STATUS_BADGE so the control reads the same words as the
- * column it filters -- "Done", not "completed". That applies to the closed
- * trigger as well as the open menu: Select.Value renders the raw value unless
- * given a function, so without labelFor below, picking "Done" left the trigger
- * reading "completed".
+ * Labels come from STATE_LABEL so the control reads the same words as the
+ * column it filters. That applies to the closed trigger as well as the open
+ * menu: Select.Value renders the raw value unless given a function, so without
+ * labelFor below, picking "Done" left the trigger reading "done".
  */
 import {
   Select,
@@ -17,33 +16,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { STATUS_BADGE } from '@/components/StatusBadge'
-import { PaperTaskStatus } from '@/api/generated/types.gen'
-import type { PaperTaskStatus as Status } from '@/api/generated/types.gen'
+import { PAPER_STATES, STATE_LABEL, type PaperState } from '@/lib/paperState'
 
 const ANY = 'any'
 
-// Pipeline order, so the menu reads as a progression rather than alphabetically.
-const ORDER: Status[] = [
-  PaperTaskStatus.IDLE,
-  PaperTaskStatus.PENDING,
-  PaperTaskStatus.RUNNING,
-  PaperTaskStatus.PARTIAL,
-  PaperTaskStatus.COMPLETED,
-  PaperTaskStatus.FAILED,
-]
-
-function labelFor(status: string | null): string {
-  if (status === null || status === ANY) return 'Any status'
-  return STATUS_BADGE[status as Status].label
+function labelFor(state: string | null): string {
+  if (state === null || state === ANY) return 'Any status'
+  return STATE_LABEL[state as PaperState]
 }
 
 export function StatusFilter({
   value,
   onChange,
 }: {
-  value: Status | undefined
-  onChange: (next: Status | undefined) => void
+  value: PaperState | undefined
+  onChange: (next: PaperState | undefined) => void
 }) {
   return (
     <div className="flex items-center gap-2">
@@ -51,17 +38,17 @@ export function StatusFilter({
       <Select
         value={value ?? ANY}
         onValueChange={(next: string | null) =>
-          onChange(next === null || next === ANY ? undefined : (next as Status))
+          onChange(next === null || next === ANY ? undefined : (next as PaperState))
         }
       >
         <SelectTrigger className="w-40">
-          <SelectValue>{(status: string | null) => labelFor(status)}</SelectValue>
+          <SelectValue>{(state: string | null) => labelFor(state)}</SelectValue>
         </SelectTrigger>
         <SelectContent>
           <SelectItem value={ANY}>Any status</SelectItem>
-          {ORDER.map((status) => (
-            <SelectItem key={status} value={status}>
-              {labelFor(status)}
+          {PAPER_STATES.map((state) => (
+            <SelectItem key={state} value={state}>
+              {labelFor(state)}
             </SelectItem>
           ))}
         </SelectContent>
