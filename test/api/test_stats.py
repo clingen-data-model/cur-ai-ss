@@ -199,7 +199,7 @@ def test_every_track_is_reported_even_without_history(client):
         assert track['task_types']
 
 
-def test_track_membership_covers_every_pipeline_type_but_chat(client):
+def test_track_membership_covers_every_pipeline_type(client):
     """Guards the grouping the frontend no longer keeps its own copy of."""
     from lib.tasks.models import TaskType as T
 
@@ -207,7 +207,7 @@ def test_track_membership_covers_every_pipeline_type_but_chat(client):
     assigned = [t for track in body['tracks'] for t in track['task_types']]
 
     assert len(assigned) == len(set(assigned)), 'a type is in two tracks'
-    assert set(assigned) == {t.value for t in T} - {T.GENERAL_PAPER_QUESTION.value}
+    assert set(assigned) == {t.value for t in T}
 
 
 def test_tracks_are_measured_per_run_not_per_paper(client, add_task):

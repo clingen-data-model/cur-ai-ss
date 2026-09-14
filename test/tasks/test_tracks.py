@@ -10,7 +10,7 @@ def test_every_pipeline_task_belongs_to_exactly_one_track():
     """A task in no track is priced at nothing; a task in two is priced twice."""
     covered = [t for track in PIPELINE_TRACKS for t in track.task_types]
     assert len(covered) == len(set(covered))
-    missing = set(TaskType) - set(covered) - {TaskType.GENERAL_PAPER_QUESTION}
+    missing = set(TaskType) - set(covered)
     assert not missing
 
 

@@ -4,8 +4,7 @@ A snapshot is one JSON file under ``<pdf_dir>/snapshots/`` holding a faithful
 column dump of every paper-scoped table, written when the extraction pipeline
 completes. Restoring wipes the paper's domain rows -- tasks included -- and re-inserts
 them with their original primary keys, so every snapshot is a self-consistent
-reality: entities, links, and the task history that produced them. Chat tasks
-and the conversations table are left alone.
+reality: entities, links, and the task history that produced them.
 """
 
 import hashlib
@@ -69,8 +68,7 @@ _INSERT_ORDER: list[tuple[str, type[Base]]] = [
     ('patient_variant_occurrences', PatientVariantOccurrenceDB),
     ('segregation_evidence', SegregationEvidenceDB),
     ('segregation_analysis_computed', SegregationAnalysisComputedDB),
-    # Last: tasks FK every entity table above. Chat tasks are excluded (kept
-    # through resets, like the conversations table).
+    # Last: tasks FK every entity table above.
     ('tasks', TaskDB),
 ]
 
@@ -184,14 +182,7 @@ def dump_paper_state(paper_id: int, paper_db: PaperDB, session: Session) -> dict
         if family_ids
         else []
     )
-    tasks = (
-        session.query(TaskDB)
-        .filter(
-            TaskDB.paper_id == paper_id,
-            TaskDB.type != TaskType.GENERAL_PAPER_QUESTION,
-        )
-        .all()
-    )
+    tasks = session.query(TaskDB).filter(TaskDB.paper_id == paper_id).all()
 
     return {
         'paper': row_to_dict(paper_db),
@@ -305,7 +296,6 @@ def _snapshot_description(
     ordering ascending keeps the label on the root (e.g. Patient Extraction)."""
     query = session.query(TaskDB).filter(
         TaskDB.paper_id == paper_id,
-        TaskDB.type != TaskType.GENERAL_PAPER_QUESTION,
         TaskDB.updated_by_user_id.isnot(None),
     )
     if previous is not None:
@@ -418,7 +408,7 @@ def _coerce_row(table: Table, row: dict) -> dict:
 
 def _delete_paper_domain_rows(session: Session, paper_id: int) -> None:
     """Bulk-delete the paper's domain rows child-first, tasks before the
-    entities their scope FKs point at. Chat tasks are kept."""
+    entities their scope FKs point at."""
     family_ids = [
         i for (i,) in session.query(FamilyDB.id).filter(FamilyDB.paper_id == paper_id)
     ]
@@ -432,10 +422,9 @@ def _delete_paper_domain_rows(session: Session, paper_id: int) -> None:
         i for (i,) in session.query(VariantDB.id).filter(VariantDB.paper_id == paper_id)
     ]
 
-    session.query(TaskDB).filter(
-        TaskDB.paper_id == paper_id,
-        TaskDB.type != TaskType.GENERAL_PAPER_QUESTION,
-    ).delete(synchronize_session=False)
+    session.query(TaskDB).filter(TaskDB.paper_id == paper_id).delete(
+        synchronize_session=False
+    )
     session.query(PatientVariantOccurrenceDB).filter(
         PatientVariantOccurrenceDB.paper_id == paper_id
     ).delete(synchronize_session=False)

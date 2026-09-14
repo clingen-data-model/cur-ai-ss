@@ -58,10 +58,10 @@ def _pipeline_depths() -> dict[TaskType, int]:
 
     # A type absent from the graph has no prerequisites and would tie with PDF
     # Parsing at depth zero, sorting above the task that actually starts the
-    # pipeline. Send those to the end instead. Today the only such member is
-    # General Paper Question, which is a chat routing outcome and never queued
-    # as a task at all; the guard is really for a task type added here before
-    # its successors are wired up.
+    # pipeline. Send those to the end instead -- this guards a task type added
+    # to TaskType before its successors are wired into TASK_SUCCESSORS; every
+    # current type has a place in the graph, so the branch below is inert
+    # today, not dead.
     connected = set(TASK_SUCCESSORS) | {
         successor for successors in TASK_SUCCESSORS.values() for successor in successors
     }

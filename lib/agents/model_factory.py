@@ -111,29 +111,3 @@ def provider_api_key(name: str) -> str | None:
     provider, _ = split_provider(name)
     setting = PROVIDER_KEY_SETTINGS.get(provider)
     return getattr(env, setting) if setting else None
-
-
-def responses_api_model() -> str:
-    """The bare model name for a direct OpenAI Responses API call.
-
-    Two call sites still talk to the Responses API without going through the
-    agents SDK, because they depend on server-side conversation state that only
-    OpenAI has: the chat follow-up turn in lib/api/app.py and
-    ensure_conversation_id in lib/tasks/handlers.py. Both are Blocker 2 -- the
-    sessions refactor removes them, and this function with them.
-
-    Until then this raises rather than resolving, because neither alternative is
-    safe: extraction_model() would hand a LitellmModel object to the OpenAI
-    client, and the bare half of an 'anthropic/...' name is a model OpenAI has
-    never heard of. Both fail confusingly at request time; this fails clearly at
-    the call, naming the reason.
-    """
-    provider, bare = split_provider(env.EXTRACTION_MODEL)
-    if provider != 'openai':
-        raise ValueError(
-            f'EXTRACTION_MODEL={env.EXTRACTION_MODEL!r} routes to {provider!r}, but '
-            f'this path calls the OpenAI Responses API directly for its '
-            f'server-side conversation state. It needs the client-side sessions '
-            f'refactor before a non-OpenAI extraction model can be configured.'
-        )
-    return bare

@@ -18,7 +18,6 @@ from lib.misc.snapshots import (
 from lib.models import (
     AnnotatedVariantDB,
     Base,
-    ConversationDB,
     FamilyDB,
     GeneDB,
     HarmonizedVariantDB,
@@ -42,9 +41,10 @@ def test_snapshot_covers_every_paper_scoped_table():
     snapshot (lib.misc.snapshots._INSERT_ORDER) or to the exclusions below."""
     from lib.misc.snapshots import _INSERT_ORDER
 
-    # Deliberately not snapshotted: conversations are chat history the user
-    # keeps through resets (chat tasks are likewise excluded in the dump).
-    excluded = {'conversations'}
+    # Nothing is deliberately excluded any more -- the one exclusion this
+    # guarded (the conversations table, chat history the user kept through
+    # resets) was dropped along with the chat feature.
+    excluded: set[str] = set()
     snapshotted = {model.__table__.name for _, model in _INSERT_ORDER} | {'papers'}
 
     reachable = {'papers'}
@@ -251,13 +251,6 @@ def snapshot_paper(db_session):
         patient_id=p1.id,
     )
     db_session.add_all([paper_task, scoped_task])
-    db_session.add(
-        ConversationDB(
-            paper_id=paper.id,
-            conversation_id='conv-1',
-            messages=[{'role': 'user', 'content': 'hi'}],
-        )
-    )
     db_session.flush()
     return {
         'paper': paper,
@@ -303,12 +296,7 @@ def test_reset_roundtrip(client, db_session, test_user, snapshot_paper):
         status=TaskStatus.COMPLETED,
         patient_id=new_patient.id,
     )
-    chat_task = TaskDB(
-        paper_id=paper.id,
-        type=TaskType.GENERAL_PAPER_QUESTION,
-        status=TaskStatus.COMPLETED,
-    )
-    db_session.add_all([new_scoped_task, chat_task])
+    db_session.add(new_scoped_task)
     db_session.flush()
 
     response = client.post(f'/papers/{paper.id}/reset', json={'snapshot_name': name})
@@ -343,7 +331,7 @@ def test_reset_roundtrip(client, db_session, test_user, snapshot_paper):
     assert db_session.query(PedigreeDB).count() == 1
 
     # Task history reverts with the snapshot: pre-snapshot tasks are back with
-    # scope intact, the post-snapshot task is gone, chat tasks survive.
+    # scope intact, the post-snapshot task is gone.
     tasks = db_session.query(TaskDB).filter_by(paper_id=paper.id).all()
     types = {t.type for t in tasks}
     assert TaskType.PDF_PARSING in types
@@ -351,10 +339,6 @@ def test_reset_roundtrip(client, db_session, test_user, snapshot_paper):
     assert scoped.patient_id == snapshot_paper['p1'].id
     assert scoped.id == snapshot_paper['scoped_task'].id  # PK preserved
     assert TaskType.PHENOTYPE_EXTRACTION not in types
-    assert TaskType.GENERAL_PAPER_QUESTION in types  # chat task kept
-
-    # Conversation untouched.
-    assert db_session.query(ConversationDB).filter_by(paper_id=paper.id).count() == 1
 
 
 def test_write_snapshot_idempotent(db_session, snapshot_paper):
@@ -550,20 +534,6 @@ def test_worker_hook_skips_incomplete_pipeline(db_session, snapshot_paper):
     db_session.flush()
     _maybe_write_snapshot(db_session, paper.id)
     assert list_snapshots(paper.id) == []
-
-
-def test_worker_hook_ignores_chat_tasks(db_session, snapshot_paper):
-    paper = snapshot_paper['paper']
-    db_session.add(
-        TaskDB(
-            paper_id=paper.id,
-            type=TaskType.GENERAL_PAPER_QUESTION,
-            status=TaskStatus.PENDING,
-        )
-    )
-    db_session.flush()
-    _maybe_write_snapshot(db_session, paper.id)
-    assert len(list_snapshots(paper.id)) == 1
 
 
 def test_snapshots_dir_removed_with_paper(client, db_session, snapshot_paper):

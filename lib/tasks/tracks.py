@@ -27,11 +27,8 @@ class PipelineTrack(NamedTuple):
 # tracks rather than sequential phases. The cut is by subject, matching the
 # entities the UI already names.
 #
-# GENERAL_PAPER_QUESTION is in no track: it is ad-hoc chat created by the
-# router, not pipeline work, and counting it would make a paper look unfinished
-# every time someone asked a question about it.
-# STAGES. The four tracks are not all concurrent, and treating them as though
-# they were is what made "time left" wrong in both directions.
+# The four tracks are not all concurrent, and treating them as though they
+# were is what made "time left" wrong in both directions.
 #
 # Reading TASK_SUCCESSORS: nothing starts until PDF Parsing and Paper Classifier
 # have run, and Patients and Variants both hang off the classifier -- so Paper

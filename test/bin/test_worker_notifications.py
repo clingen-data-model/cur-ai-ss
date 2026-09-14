@@ -95,23 +95,6 @@ def test_silent_when_a_task_failed(db_session, paper_with_owner, sent):
     assert sent == []
 
 
-def test_chat_tasks_do_not_hold_the_pipeline_open(db_session, paper_with_owner, sent):
-    """GENERAL_PAPER_QUESTION is ad hoc chat, not pipeline work -- a pending one
-    must not stop the completion notice, matching _maybe_write_snapshot."""
-    paper, _ = paper_with_owner()
-    _add_tasks(db_session, paper, TaskStatus.COMPLETED)
-    _add_tasks(
-        db_session,
-        paper,
-        TaskStatus.PENDING,
-        task_type=TaskType.GENERAL_PAPER_QUESTION,
-    )
-
-    _maybe_notify_completion(db_session, paper.id)
-
-    assert len(sent) == 1
-
-
 def test_opted_out_user_is_not_emailed_but_is_stamped(
     db_session, paper_with_owner, sent
 ):

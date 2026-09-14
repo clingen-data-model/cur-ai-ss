@@ -120,10 +120,9 @@ def _maybe_write_snapshot(
     session.flush()
     pipeline_statuses = [
         task_status
-        for (task_status, task_type) in session.query(
-            TaskDB.status, TaskDB.type
-        ).filter(TaskDB.paper_id == paper_id)
-        if task_type != TaskType.GENERAL_PAPER_QUESTION
+        for (task_status,) in session.query(TaskDB.status).filter(
+            TaskDB.paper_id == paper_id
+        )
     ]
     if not all(s == TaskStatus.COMPLETED for s in pipeline_statuses):
         return
@@ -161,10 +160,9 @@ def _maybe_notify_completion(session: Session, paper_id: int) -> None:
 
     pipeline_statuses = [
         task_status
-        for (task_status, task_type) in session.query(
-            TaskDB.status, TaskDB.type
-        ).filter(TaskDB.paper_id == paper_id)
-        if task_type != TaskType.GENERAL_PAPER_QUESTION
+        for (task_status,) in session.query(TaskDB.status).filter(
+            TaskDB.paper_id == paper_id
+        )
     ]
     if not pipeline_statuses or not all(
         s == TaskStatus.COMPLETED for s in pipeline_statuses

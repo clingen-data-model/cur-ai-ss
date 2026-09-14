@@ -29,7 +29,6 @@ from lib.ui.api import (
     reset_paper,
 )
 from lib.ui.auth import clear_session_state_keeping_auth
-from lib.ui.paper.chat import render_chat_with_agent_tab
 from lib.ui.paper.metadata import render_metadata_tab
 from lib.ui.paper.occurrences import render_patient_variant_occurrences_tab
 from lib.ui.paper.patients import render_patients_tab
@@ -37,7 +36,6 @@ from lib.ui.paper.shared import (
     CURRENT_ANNOTATIONS_KEY,
     HEADER_TABS_KEY,
     PAPER_TABS,
-    TAB_CHAT,
     TAB_METADATA,
     TAB_OCCURRENCES,
     TAB_PATIENTS,
@@ -171,7 +169,7 @@ def render_reset_fragment(paper_query_params: PaperQueryParams) -> None:
     )
     st.caption(
         '⚠️ Resetting cannot be undone. Task history reverts with the snapshot; '
-        'chat history and PDF highlights are kept.'
+        'PDF highlights are kept.'
     )
 
     def on_confirm() -> None:
@@ -319,8 +317,6 @@ with center:
                     render_patients_tab(paper_query_params.patient_id)
                 elif is_open(TAB_VARIANTS):
                     render_variants_tab(paper_query_params.variant_id)
-                elif is_open(TAB_CHAT):
-                    render_chat_with_agent_tab()
                 elif is_open(TAB_TASKS):
                     render_tasks_tab()
 

@@ -8,7 +8,6 @@ from lib.agents.model_factory import (
     model_settings_for,
     provider_api_key,
     resolve_model,
-    responses_api_model,
     vlm_model,
 )
 from lib.core.environment import env
@@ -90,22 +89,6 @@ def test_provider_api_key_follows_the_provider(monkeypatch):
 
     assert provider_api_key('openai/gpt-5.6-luna') == 'sk-openai'
     assert provider_api_key('anthropic/claude-sonnet-5') == 'sk-ant'
-
-
-def test_responses_api_model_returns_the_bare_openai_name(monkeypatch):
-    monkeypatch.setattr(env, 'EXTRACTION_MODEL', 'openai/gpt-5.6-luna')
-
-    assert responses_api_model() == 'gpt-5.6-luna'
-
-
-def test_responses_api_model_refuses_a_non_openai_model(monkeypatch):
-    """This path needs OpenAI's server-side conversation state. Resolving it
-    anyway would hand a LitellmModel to the OpenAI client, or send a Claude
-    model name to OpenAI -- both fail confusingly at request time instead."""
-    monkeypatch.setattr(env, 'EXTRACTION_MODEL', 'anthropic/claude-sonnet-5')
-
-    with pytest.raises(ValueError, match='sessions refactor'):
-        responses_api_model()
 
 
 def test_openai_gets_empty_model_settings_not_none():

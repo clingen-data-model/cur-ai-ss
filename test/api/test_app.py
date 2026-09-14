@@ -1894,28 +1894,6 @@ def test_active_papers_counts_waiting_work_as_in_flight(
     assert [p['id'] for p in client.get('/papers/active').json()] == [paper_id]
 
 
-def test_active_papers_ignores_chat_tasks(client, test_pdf, db_session, seeded_genes):
-    """A question being answered is not the paper being extracted, and the
-    progress bars do not track it."""
-    paper_id = client.put(
-        '/papers',
-        files={'uploaded_file': ('p.pdf', test_pdf, 'application/pdf')},
-        data={'gene_symbol': 'BRCA1'},
-    ).json()['id']
-    for task in db_session.query(TaskDB).filter(TaskDB.paper_id == paper_id):
-        task.status = TaskStatus.COMPLETED
-    db_session.add(
-        TaskDB(
-            paper_id=paper_id,
-            type=TaskType.GENERAL_PAPER_QUESTION,
-            status=TaskStatus.RUNNING,
-        )
-    )
-    db_session.flush()
-
-    assert client.get('/papers/active').json() == []
-
-
 def test_active_papers_is_empty_when_nothing_runs(client, db_session):
     """The common case: the indicator renders nothing rather than a zero."""
     assert client.get('/papers/active').json() == []
