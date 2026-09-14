@@ -131,17 +131,13 @@ def test_tab_order_is_stable_for_deep_links():
     """?tab_id= is a positional index into this list.
 
     So the order is the contract: a tab inserted rather than appended silently
-    repoints every existing deep link. Tasks and Chat sit at the end for that
-    reason -- both were added after the first four.
-
-    This replaces a pair of tests for CHAT_FEATURE_GATE_TIME, which hid the chat
-    tab on papers last updated before 2026-05-17. Every completed task bumps
-    papers.updated_at, so the gate cleared itself as papers were re-run, and it
-    had stopped excluding anything long before it was removed.
+    repoints every existing deep link. Tasks sits at the end for that reason --
+    it was added after the first four. (The chat tab used to sit between
+    Variants and Tasks; it was deleted along with the rest of the chat
+    feature, which is why Tasks moved from index 5 to 4.)
     """
     from lib.ui.paper.shared import (
         PAPER_TABS,
-        TAB_CHAT,
         TAB_METADATA,
         TAB_OCCURRENCES,
         TAB_PATIENTS,
@@ -154,6 +150,5 @@ def test_tab_order_is_stable_for_deep_links():
         TAB_OCCURRENCES,
         TAB_PATIENTS,
         TAB_VARIANTS,
-        TAB_CHAT,
         TAB_TASKS,
     ]

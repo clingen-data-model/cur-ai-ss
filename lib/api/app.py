@@ -13,7 +13,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncGenerator, Optional
 
-from agents import Runner
 from fastapi import (
     Body,
     Depends,
@@ -30,28 +29,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from openai import AsyncOpenAI
 from sqlalchemy import delete, func, select, union
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, selectinload
-from sqlalchemy.orm.attributes import flag_modified
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
-from lib.agents.chat_routing_agent import (
-    _GLOBAL_AGENTS,
-    CHAT_ROUTING_INSTRUCTIONS,
-    ChatRoutingOutput,
-    ChatRunContext,
-    make_routing_agent,
-)
-from lib.agents.general_paper_qa_agent import (
-    GENERAL_PAPER_QA_INSTRUCTIONS,
-)
-from lib.agents.general_paper_qa_agent import (
-    agent as general_paper_qa_agent,
-)
-from lib.agents.model_factory import responses_api_model
 from lib.api.auth import get_current_user, get_current_user_optional
 from lib.api.db import get_session, session_scope
 from lib.api.middleware import make_log_request_middleware
@@ -90,14 +73,12 @@ from lib.misc.pdf.paths import (
     pdf_supplements_dir,
     pdf_thumbnail_path,
     pdf_words_json_path,
-    relevant_sections_md,
 )
 from lib.misc.snapshots import (
     InvalidSnapshotNameError,
     SnapshotIncompatibleError,
     SnapshotNotFoundError,
     current_state_hash,
-    dump_paper_state,
     list_snapshots,
     restore_snapshot,
 )
@@ -105,10 +86,6 @@ from lib.models import (
     AnnotatedVariantDB,
     AnnotatedVariantResp,
     ChangePasswordRequest,
-    ChatMessageRequest,
-    ChatMessageResp,
-    ChatRoutingResponse,
-    ConversationDB,
     FamilyCreateRequest,
     FamilyDB,
     FamilyResp,
@@ -181,7 +158,6 @@ from lib.tasks import (
     enqueue_task,
     invalidate_descendants,
 )
-from lib.tasks.handlers import ensure_conversation_id, format_paper_context
 from lib.tasks.misc import summarize_paper_task_status
 from lib.tasks.models import (
     ACTIVE_STATUSES,
@@ -611,18 +587,11 @@ def list_active_papers(
     Matching only the last two -- which this did at first -- left a paper the
     user had just queued reading as idle, because PENDING is where it spends the
     wait.
-
-    Chat tasks are excluded. A question being answered is not the paper being
-    extracted, and counting it would light up the indicator for something the
-    progress bars do not track.
     """
     active_paper_ids = [
         row[0]
         for row in session.query(TaskDB.paper_id)
-        .filter(
-            TaskDB.status.in_(ACTIVE_STATUSES),
-            TaskDB.type != TaskType.GENERAL_PAPER_QUESTION,
-        )
+        .filter(TaskDB.status.in_(ACTIVE_STATUSES))
         .distinct()
     ]
     if not active_paper_ids:
@@ -2193,234 +2162,3 @@ def clear_highlights(
         content = f.read()
     with open(highlighted_path, 'wb') as f:
         f.write(content)
-
-
-@app.get('/papers/{paper_id}/chat/messages', response_model=list[dict])
-def get_chat_messages(
-    paper_id: int,
-    session: Session = Depends(get_session),
-    current_user: UserDB = Depends(get_current_user),
-) -> Any:
-    conversation_db = (
-        session.query(ConversationDB)
-        .filter(ConversationDB.paper_id == paper_id)
-        .first()
-    )
-    return conversation_db.messages if conversation_db else []
-
-
-@app.delete('/papers/{paper_id}/chat')
-def clear_chat(
-    paper_id: int,
-    session: Session = Depends(get_session),
-    current_user: UserDB = Depends(get_current_user),
-) -> Any:
-    conversation_db = (
-        session.query(ConversationDB)
-        .filter(ConversationDB.paper_id == paper_id)
-        .first()
-    )
-    if conversation_db:
-        session.delete(conversation_db)
-    return {'status': 'cleared'}
-
-
-@app.post('/papers/{paper_id}/chat/init', response_model=ChatRoutingResponse)
-async def init_chat(
-    paper_id: int,
-    request: ChatMessageRequest,
-    current_user: UserDB = Depends(get_current_user),
-    session: Session = Depends(get_session),
-) -> Any:
-    paper_db = session.get(PaperDB, paper_id)
-    if not paper_db:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
-        )
-
-    conversation_db = (
-        session.query(ConversationDB)
-        .filter(ConversationDB.paper_id == paper_id)
-        .first()
-    )
-
-    if conversation_db is None:
-        # Run the chat agent. An ACTION queues a task (recorded in the run context);
-        # a QUESTION returns a routing decision to answer from.
-        def build_selection_summary(output: ChatRoutingOutput) -> str:
-            parts = [f'Selected the "{output.task_type}" agent']
-            if output.entity_label:
-                parts.append(f'for "{output.entity_label}"')
-            parts.append(f'because it {output.task_type.description.lower()}')
-            return ' '.join(parts)
-
-        chat_ctx = ChatRunContext()
-        routing_input = (
-            f'{CHAT_ROUTING_INSTRUCTIONS}\n\nUser question: {request.message}'
-        )
-        routing_result = await Runner.run(
-            make_routing_agent(paper_id, current_user.id),
-            routing_input,
-            context=chat_ctx,
-        )
-
-        # ACTION: a task was queued — store the confirmation and return.
-        if chat_ctx.confirmation is not None:
-            conversation_db = ConversationDB(
-                paper_id=paper_id,
-                conversation_id=None,
-                messages=[
-                    {'role': 'user', 'content': request.message},
-                    {'role': 'assistant', 'content': chat_ctx.confirmation},
-                ],
-            )
-            session.add(conversation_db)
-            return ChatRoutingResponse(
-                messages=conversation_db.messages, queued_task=True
-            )
-
-        # QUESTION (answer path): route to general QA or an existing task conversation.
-        any_eligible = session.query(TaskDB).filter(TaskDB.paper_id == paper_id).all()
-        if not any(t.conversation_id for t in any_eligible):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail='No completed task conversations available for this paper.',
-            )
-
-        routing_output = routing_result.final_output
-
-        if routing_output.task_type == TaskType.GENERAL_PAPER_QUESTION:
-            conversation_db = ConversationDB(
-                paper_id=paper_id,
-                conversation_id=None,
-                messages=[
-                    {'role': 'user', 'content': request.message},
-                    {
-                        'role': 'assistant',
-                        'content': build_selection_summary(routing_output),
-                    },
-                ],
-            )
-        else:
-            chosen_task = session.get(TaskDB, routing_output.task_id)
-            if chosen_task is None or not chosen_task.conversation_id:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail='No agent conversation is available for the selected task type.',
-                )
-            conversation_db = ConversationDB(
-                paper_id=paper_id,
-                conversation_id=chosen_task.conversation_id,
-                messages=[
-                    {'role': 'user', 'content': request.message},
-                    {
-                        'role': 'assistant',
-                        'content': build_selection_summary(routing_output),
-                    },
-                ],
-            )
-
-        session.add(conversation_db)
-
-    # Answer path (or an already-initialized conversation): a generate call still
-    # owes the actual answer.
-    return ChatRoutingResponse(messages=conversation_db.messages, queued_task=False)
-
-
-def _build_qa_context(
-    paper_id: int, paper_db: PaperDB, session: Session
-) -> tuple[str, str, str]:
-    """Build paper context and database state separately.
-
-    Returns:
-        Tuple of (paper_context, db_state_context, agent_instructions)
-    """
-    db_state = dump_paper_state(paper_id, paper_db, session)
-    db_state.pop('tasks')  # pipeline bookkeeping, not extraction state
-    db_state['hpo_terms'] = db_state.pop('hpos')
-    db_state['segregation_analysis'] = db_state.pop('segregation_analysis_computed')
-
-    paper_md = relevant_sections_md(paper_id, paper_db.supplement_format)
-    paper_context = format_paper_context(paper_md)
-    db_state_context = f'CAA Extracted State:\n{json.dumps(db_state, default=str)}'
-
-    return paper_context, db_state_context, GENERAL_PAPER_QA_INSTRUCTIONS
-
-
-@app.post('/papers/{paper_id}/chat/generate', response_model=list[dict])
-async def generate_chat_response(
-    paper_id: int,
-    request: ChatMessageRequest | None = None,
-    session: Session = Depends(get_session),
-    current_user: UserDB = Depends(get_current_user),
-) -> Any:
-    conversation_db = (
-        session.query(ConversationDB)
-        .filter(ConversationDB.paper_id == paper_id)
-        .first()
-    )
-
-    if conversation_db is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail='No conversation initialized for this paper.',
-        )
-
-    if request and request.message:
-        conversation_db.messages = [
-            *conversation_db.messages,
-            {'role': 'user', 'content': request.message},
-        ]
-        flag_modified(conversation_db, 'messages')
-
-    last_user_message = next(
-        (
-            msg['content']
-            for msg in reversed(conversation_db.messages)
-            if msg['role'] == 'user'
-        ),
-        None,
-    )
-    if last_user_message is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail='No user message in conversation.',
-        )
-
-    paper_db = session.get(PaperDB, paper_id)
-    if not paper_db:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
-        )
-
-    if conversation_db.conversation_id is None:
-        paper_context, db_state_context, agent_instructions = _build_qa_context(
-            paper_id, paper_db, session
-        )
-        qa_input = (
-            f'{paper_context}\n\n'
-            f'{db_state_context}\n\n'
-            f'{agent_instructions}\n\n'
-            f'User question: {last_user_message}'
-        )
-        new_conv_id = await ensure_conversation_id(None)
-        result = await Runner.run(
-            general_paper_qa_agent, qa_input, conversation_id=new_conv_id
-        )
-        response_text = result.final_output
-        conversation_db.conversation_id = new_conv_id
-    else:
-        client = AsyncOpenAI(api_key=env.OPENAI_API_KEY)
-        resp = await client.responses.create(
-            model=responses_api_model(),
-            input=last_user_message,
-            conversation=conversation_db.conversation_id,
-        )
-        response_text = resp.output_text or ''
-
-    conversation_db.messages = [
-        *conversation_db.messages,
-        {'role': 'assistant', 'content': response_text},
-    ]
-    flag_modified(conversation_db, 'messages')
-    return conversation_db.messages

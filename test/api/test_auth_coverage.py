@@ -75,7 +75,8 @@ def test_previously_open_routes_now_reject_anonymous_requests(unauth_client):
     """The guard above proves the dependency is declared. This proves it bites.
 
     A sample across the shapes that were open: a plain read, a destructive
-    delete, and the chat generator, which spends money on a model call.
+    delete, and a task enqueue that costs real API spend once the worker
+    picks it up.
     """
     for method, path in [
         ('get', '/papers'),
@@ -83,7 +84,7 @@ def test_previously_open_routes_now_reject_anonymous_requests(unauth_client):
         ('get', '/papers/collaborators'),
         ('get', '/papers/1/tasks'),
         ('delete', '/papers/1'),
-        ('post', '/papers/1/chat/generate'),
+        ('post', '/papers/1/tasks'),
     ]:
         response = getattr(unauth_client, method)(path)
         assert response.status_code == 401, f'{method.upper()} {path}'

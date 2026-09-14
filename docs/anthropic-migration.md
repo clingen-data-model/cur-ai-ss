@@ -112,16 +112,18 @@ returns structured JSON (`end_turn`), deciding per turn. The current parameter i
 `additional_context`, `Runner.run(..., conversation_id=...)`, persist the id back.
 58 references in that file alone.
 
-**Two call sites also reach the Responses API directly**, outside the agents SDK,
-because they need OpenAI's server-side conversation state: the chat follow-up turn
-in `lib/api/app.py` and `ensure_conversation_id` in `handlers.py`. Both are in
-scope for this refactor. Since PR A they route through
-`model_factory.responses_api_model()`, which **raises** for a non-OpenAI
-`EXTRACTION_MODEL` rather than resolving — neither alternative was safe
-(`extraction_model()` would hand a `LitellmModel` to the OpenAI client; the bare
-half of an `anthropic/...` name is a model OpenAI has never heard of, which is what
-the original #137 did). Grep `responses_api_model` to find them; the refactor
-deletes the function.
+**One of the two Responses-API-direct call sites this section used to list is
+already gone.** The chat feature (`chat_routing_agent`, `general_paper_qa_agent`,
+the paper-level `ConversationDB`, all four `/papers/{id}/chat/*` endpoints, the
+Streamlit tab) was a proof of concept ahead of a real streaming rebuild in the
+React SPA, and was deleted outright on 2026-09-14 rather than carried through this
+refactor -- see its migration, `4993494a8281_drop_the_chat_feature.py`. That
+removed the chat follow-up turn in `lib/api/app.py`, and with it
+`model_factory.responses_api_model()`'s only caller, so the function is deleted
+too rather than waiting for this refactor to do it. `ensure_conversation_id` in
+`handlers.py` remains -- it still serves the unrelated per-task
+`additional_context` follow-up feature ("Rerun Agent" with extra context, in both
+UIs), which this refactor is still about.
 
 Sessions and `conversation_id` are mutually exclusive within a run, so this is a
 swap, not a layering. Two independently verifiable steps:
@@ -209,6 +211,21 @@ So there is a choice, and it is worth making deliberately rather than by default
 **Start with store-everything.** The thin option trades disk for a fragile coupling
 between prompt text and cache correctness, and the failure mode is invisible. Measure
 one paper's session file first — if it is not actually a problem, the question is moot.
+
+### After this lands: `openai/` no longer needs to bypass LiteLLM
+
+`model_factory.resolve_model()`'s module docstring already says this, in one line:
+"Once client-side sessions replace conversation_id, this special case can go." Worth
+spelling out why, since it is easy to read as a throwaway remark. The `openai/`
+branch exists *only* because `LitellmModel` ignores `conversation_id`
+(`litellm_model.py:161`/`:271`), and the pipeline depends on that parameter today.
+Once sessions replace it, nothing left depends on OpenAI's server-side state
+specifically — `resolve_model()` could route `openai/` through `LitellmModel` like
+every other provider, "pseudo-supporting" it the same way `anthropic/` is supported
+now rather than privileging it with direct Responses API access. That collapses
+`resolve_model()`'s two branches into one and removes the last place a provider
+name changes which code path a request takes. Not urgent, and not this refactor's
+job — but it is the refactor's natural following step, not a separate idea.
 
 ## Blocker 3: prompt caching
 
@@ -583,7 +600,11 @@ graded against the current OpenAI model on a real pedigree and a real corrupted
 table from dev-caa — Fable won clearly on both); **caching, wired and executed**
 against a live Anthropic response (#183 — see Blocker 3), ahead of where this list
 originally put it, since it did not turn out to need the `EXTRACTION_MODEL` flip
-to land, only to matter.
+to land, only to matter; **the chat feature deleted outright** rather than carried
+through the sessions refactor (2026-09-14, migration
+`4993494a8281_drop_the_chat_feature.py`), which removed one of Blocker 2's two
+Responses-API-direct call sites and `responses_api_model()` itself ahead of
+schedule — see Blocker 2.
 
 1. **Run the pipeline end-to-end on OpenAI.** Needs only an `OPENAI_API_KEY` and no
    Anthropic involvement. This is now the highest-priority item: #138 replaced the
@@ -603,8 +624,9 @@ to land, only to matter.
    scope on either provider; #182 landing before this item turned out to be safe,
    not merely lucky.)
 3. **Sessions refactor**, as its own PR — `SQLiteSession`, the two-step swap above,
-   the `additional_context` branch, the two direct Responses API call sites
-   (`grep responses_api_model`), and a decision on legacy `conversation_id` values.
+   the `additional_context` branch, `ensure_conversation_id` (the one remaining
+   direct OpenAI-conversation-state dependency, now that chat's Responses-API call
+   site is gone), and a decision on legacy `conversation_id` values.
    This is the last thing standing between here and an `EXTRACTION_MODEL` flip —
    and once it lands, caching (already wired) starts paying off on the real
    15-turn/25-turn tool loops without any further change.

@@ -9,7 +9,6 @@ from pydantic import TypeAdapter
 from lib.core.environment import env
 from lib.misc.pdf.highlight import GrobidAnnotation
 from lib.models import (
-    ChatMessageResp,
     FamilyResp,
     FamilyUpdateRequest,
     GeneResp,
@@ -431,47 +430,3 @@ def get_curation_pptx(paper_id: int) -> bytes:
     )
     resp.raise_for_status()
     return resp.content
-
-
-def get_chat_messages(paper_id: int) -> list[dict[str, str]]:
-    resp = _session.get(
-        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/chat/messages'
-    )
-    resp.raise_for_status()
-    return TypeAdapter(list[dict[str, str]]).validate_python(resp.json())
-
-
-def init_chat_message(paper_id: int, message: str) -> tuple[list[dict[str, str]], bool]:
-    """Initialize a chat turn (fast; returns the routing result).
-
-    Returns ``(messages, queued_task)``. When ``queued_task`` is True the turn is
-    terminal (a task was queued) and the caller must NOT call
-    ``generate_chat_response``; otherwise generation still owes the answer.
-    """
-    resp = _session.post(
-        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/chat/init',
-        json={'message': message},
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    return data['messages'], data['queued_task']
-
-
-def generate_chat_response(
-    paper_id: int, message: str | None = None
-) -> list[dict[str, str]]:
-    """Generate OpenAI response for the initialized conversation."""
-    payload = {'message': message} if message else {}
-    resp = _session.post(
-        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/chat/generate',
-        json=payload,
-    )
-    resp.raise_for_status()
-    return resp.json()
-
-
-def clear_chat(paper_id: int) -> None:
-    resp = _session.delete(
-        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/chat',
-    )
-    resp.raise_for_status()

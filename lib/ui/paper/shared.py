@@ -103,26 +103,19 @@ TAB_METADATA = '📝 Metadata'
 TAB_PATIENTS = '👤 Patients'
 TAB_VARIANTS = '🧬 Variants'
 TAB_OCCURRENCES = '🔗 Occurrences'
-TAB_CHAT = '💬 Chat with Agent'
 TAB_TASKS = '⚙️ Tasks'
 
 
 # The paper page's tabs, in the order ?tab_id= indexes them -- so anything new
 # is appended rather than inserted, or every existing deep link shifts by one.
-#
-# The chat tab used to be conditional: it appeared only on papers updated after
-# CHAT_FEATURE_GATE_TIME, a hardcoded 2026-05-17, because chat needs extraction
-# state the pipeline only produced from that release onward. Every completed
-# task bumps papers.updated_at, so the gate cleared itself as papers were
-# re-run, and on production all 94 are past it -- the oldest by four months.
-# A one-way gate with no expiry becomes dead weight the moment it stops
-# excluding anything.
+# (The chat tab that used to sit before Tasks was deleted outright, which
+# shifts Tasks from index 5 to 4; an old ?tab_id=5 link now falls through to
+# the default tab rather than erroring, since tab_id is bounds-checked.)
 PAPER_TABS = [
     TAB_METADATA,
     TAB_OCCURRENCES,
     TAB_PATIENTS,
     TAB_VARIANTS,
-    TAB_CHAT,
     TAB_TASKS,
 ]
 

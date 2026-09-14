@@ -522,7 +522,6 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
             | TaskType.COMPOUND_HET_EVALUATION
             | TaskType.HPO_LINKING
             | TaskType.MONDO_LINKING
-            | TaskType.GENERAL_PAPER_QUESTION
         ):
             # These tasks have no successors
             pass

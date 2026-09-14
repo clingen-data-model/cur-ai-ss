@@ -21,7 +21,6 @@ class TaskType(StrEnum):
 
     PDF_PARSING = 'PDF Parsing'
     PAPER_CLASSIFIER = 'Paper Classifier'
-    GENERAL_PAPER_QUESTION = 'General Paper Question'
     PAPER_METADATA = 'Paper Metadata'
     VARIANT_EXTRACTION = 'Variant Extraction'
     PEDIGREE_DESCRIPTION = 'Pedigree Description'
@@ -44,7 +43,6 @@ class TaskType(StrEnum):
         descriptions: dict[TaskType, str] = {
             TaskType.PDF_PARSING: 'Parses PDF file and extract text, tables, and images',
             TaskType.PAPER_CLASSIFIER: 'Classifies paper sections by relevance and evaluates if paper contains extractable patient-variant pairs',
-            TaskType.GENERAL_PAPER_QUESTION: 'Answers a general question using the full paper text and all extracted data',
             TaskType.PAPER_METADATA: 'Extracts paper title, authors, publication date, and other metadata; resolve to PubMed article',
             TaskType.VARIANT_EXTRACTION: 'Identifies genetic variants mentioned in the paper',
             TaskType.PEDIGREE_DESCRIPTION: 'Analyzes the images in the paper to determine if there is a describable pedigree',
@@ -143,12 +141,9 @@ TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
     TaskType.MONDO_LINKING: [],
 }
 
-# Pipeline leaves: task types with no successors. GENERAL_PAPER_QUESTION is
-# excluded because chat tasks are not part of the extraction pipeline.
+# Pipeline leaves: task types with no successors.
 TERMINAL_TASK_TYPES: frozenset[TaskType] = frozenset(
-    t
-    for t in TaskType
-    if not TASK_SUCCESSORS.get(t) and t is not TaskType.GENERAL_PAPER_QUESTION
+    t for t in TaskType if not TASK_SUCCESSORS.get(t)
 )
 
 
