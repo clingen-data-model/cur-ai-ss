@@ -202,7 +202,6 @@ class TaskDB(Base):
     skip_successors: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default='0'
     )
-    conversation_id: Mapped[str | None] = mapped_column(String, nullable=True)
     additional_context: Mapped[str | None] = mapped_column(String, nullable=True)
     # Which run this task belongs to: one user action and everything
     # enqueue_successors creates from it. A fresh upload starts one, and so does
@@ -269,7 +268,6 @@ class TaskResp(BaseModel):
     tries: int
     error_message: str | None
     skip_successors: bool
-    conversation_id: str | None
     additional_context: str | None
     family_id: int | None
     patient_id: int | None

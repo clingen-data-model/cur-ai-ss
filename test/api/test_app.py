@@ -1249,22 +1249,20 @@ def test_enqueue_all_instances_for_splatted_task(client, seeded_paper, db_sessio
     assert {t['family_id'] for t in tasks} == {family1.id, family2.id}
 
 
-def test_enqueue_clears_conversation_id_without_context(
+def test_enqueue_clears_additional_context_without_context(
     client, seeded_paper, db_session
 ):
-    """Test that re-enqueueing without additional_context clears conversation_id."""
-    # Create a task with existing conversation_id and additional_context
+    """Re-enqueueing without additional_context clears the old context and
+    resets the task to run fresh."""
     task = TaskDB(
         paper_id=seeded_paper.id,
         type=TaskType.HPO_LINKING,
         status=TaskStatus.COMPLETED,
-        conversation_id='conv-123',
         additional_context='old context',
     )
     db_session.add(task)
     db_session.commit()
 
-    # Re-enqueue without additional_context - should clear conversation_id
     response = client.post(
         f'/papers/{seeded_paper.id}/tasks',
         json=TaskCreateRequest(
@@ -1274,7 +1272,6 @@ def test_enqueue_clears_conversation_id_without_context(
     assert response.status_code == 200
     tasks = response.json()
     assert len(tasks) == 1
-    assert tasks[0]['conversation_id'] is None
     assert tasks[0]['additional_context'] is None
     assert tasks[0]['status'] == 'Pending'
 
@@ -1402,7 +1399,6 @@ def test_enqueue_task_with_patient_variant_occurrence_scope(
 
     task = db_session.get(TaskDB, tasks[0]['id'])
     task.status = TaskStatus.COMPLETED
-    task.conversation_id = 'conv-123'
     db_session.commit()
 
     response = client.post(
@@ -1418,7 +1414,6 @@ def test_enqueue_task_with_patient_variant_occurrence_scope(
     assert tasks[0]['id'] == task.id
     assert tasks[0]['patient_variant_occurrence_id'] == occurrence.id
     assert tasks[0]['status'] == 'Pending'
-    assert tasks[0]['conversation_id'] is None
 
 
 def test_paper_metadata_successor_enqueues_mondo_linking(db_session, seeded_paper):

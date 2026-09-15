@@ -103,7 +103,6 @@ _HASH_EXCLUDED_KEYS = {
     'updated_at',
     'updated_by_user_id',
     'tries',
-    'conversation_id',
     'error_message',
 }
 
