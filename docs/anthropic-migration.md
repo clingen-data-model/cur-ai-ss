@@ -111,8 +111,9 @@ returns structured JSON (`end_turn`), deciding per turn. The current parameter i
 ## Blocker 2: `conversation_id` → sessions
 
 **Landed 2026-09-14** (`lib/tasks/agent_session.py`, migration
-`99bb61eac734_drop_tasks_conversation_id_column.py`). This was the last
-blocker to an `EXTRACTION_MODEL` flip; it no longer is.
+`99bb61eac734_drop_tasks_conversation_id_column.py`). At the time this was
+written it looked like the last blocker to an `EXTRACTION_MODEL` flip — it
+wasn't; see Blocker 4, found the next day by actually trying the flip.
 
 What actually shipped differs from the plan below in two ways, both direct
 decisions rather than discoveries mid-implementation:
@@ -409,10 +410,114 @@ and bills only a cheap read, avoiding the doubled write. Every extraction agent
 uses structured outputs, so that option is unavailable to us and `ttl: "1h"` stands
 as the right choice — for a more specific reason than the original argument gave.
 
+## Blocker 4: Anthropic's union-type schema limit — fixed for the 4 affected agents
+
+**Discovered and fixed 2026-09-15**, running the real pipeline end-to-end on
+`EXTRACTION_MODEL=anthropic/claude-sonnet-5` against a real paper (ITPR3,
+"Dominant mutations in ITPR3 cause Charcot-Marie-Tooth disease", 5 affected
+patients across two families) — the first real trial of the sessions work from
+Blocker 2, and it surfaced a blocker that section didn't anticipate.
+
+**Executed.** `VARIANT_EXTRACTION` and `PATIENT_EXTRACTION` failed on every one
+of 3 automatic retries with a 400 from Anthropic:
+
+```
+Schemas contains too many parameters with union types (61 parameters with type
+arrays or anyOf). This causes exponential compilation cost. Reduce the number
+of nullable or union-typed parameters (limit: 16 parameters with unions).
+```
+
+(61 for `VariantExtractionOutput`; `PatientExtractionOutput` hit the same wall
+at 18.)
+
+**Root cause: EvidenceBlock reuse, dereferenced.** Every extracted field is
+wrapped in `EvidenceBlock[T]` (`lib/models/evidence_block.py`) — `value: T`,
+plus `quote`/`table_id`/`image_id`, all independently nullable. Pydantic emits
+that wrapper once as a shared `$defs` entry no matter how many fields reuse it,
+so the schema *as generated* is compact. Anthropic's schema compiler doesn't
+see it that way: it has to fully dereference every `$ref` to build its decoding
+grammar (external refs aren't supported, and even the client-side inlining
+LiteLLM does for Anthropic — `litellm/llms/anthropic/chat/transformation.py`'s
+`unpack_defs`, **source-read** — wouldn't matter, since Anthropic's own
+compiler has to expand internal refs regardless of what's sent over the wire).
+Sixteen genuinely-optional concepts read as sixteen; the same wrapper reused 15
+times reads as 61.
+
+**Not a stale-model artifact.** A similar-shaped issue reported against an
+unrelated project claimed current-generation Claude models don't hit this limit
+at all — only older ones forced through a legacy tool-schema compiler.
+Checked and ruled out as the explanation here: **source-read**,
+`AnthropicModelInfo._supports_model_capability('anthropic/claude-sonnet-5',
+'supports_native_structured_output', 'anthropic')` returns `True` in the locked
+LiteLLM, confirming our calls already use Anthropic's newer native
+`output_format` path, not the legacy forced-tool-call path — and it fails
+there too. Trust our own live, reproducible result over a secondhand report.
+
+**Census: 4 of 17 agents are over the limit, not 2.** Generating each agent's
+`output_type` schema, dereferencing `$ref`s the same way, and counting
+`anyOf`/nullable nodes (script output matched the two live failures exactly —
+61 and 18 — confirming the methodology):
+
+| Agent | Union count | Anthropic-safe? |
+|---|---|---|
+| `variant_extraction_agent` | 61 | no |
+| `patient_demographics_agent` | 40 | no (never reached in the first live run — patient extraction failed before its successor could queue) |
+| `patient_variant_occurrence_agent` | 20 | no (also never reached) |
+| `patient_extraction_agent` | 18 | no |
+| `mondo_linking_agent` | 11 | yes |
+| `paper_extraction_agent` / `patient_phenotype_linking_agent` / `segregation_evidence_extractor` | 7 | yes |
+| `variant_harmonization_agent` | 6 | yes |
+| `hpo_linking_agent` / `pedigree_describer_agent` | 2 | yes |
+| `table_correction_agent` | 1 | yes |
+| `compound_het_agent` / `paper_section_classifier_agent` / `segregation_analysis_computed_agent` | 0 | yes |
+
+The pattern is structural, not incidental: every agent dense with
+`EvidenceBlock`-wrapped fields is over the limit; every other agent clears it
+comfortably.
+
+**Rejected: branching on provider.** The obvious-looking fix — native
+structured output on `openai/`, something else on `anthropic/` — was rejected
+outright. It's the same class of special-casing this whole migration has been
+undoing (see Blocker 2's "openai/ no longer needs to bypass LiteLLM"): a
+schema too complex for Anthropic's compiler is a fact about the *agent's
+schema*, not about which provider happens to be configured today, and OpenAI
+gains nothing from a code path Anthropic can't also use.
+
+**Fix: `output_type=None` on the 4 over-limit agents, unconditionally.**
+`lib/agents/manual_output.py` — `AgentOutputSchema.is_plain_text()` is a
+first-class SDK mode (**source-read**, `agents/agent_output.py:127-129`): when
+`output_type` is `None`, no schema reaches the provider at all, on any
+backend, and `result.final_output` is the model's raw text. The four agents'
+own `output_type` is now permanently `None`; `run_with_manual_output()` embeds
+the target Pydantic model's JSON schema in the prompt as documentation (never
+sent to the API for enforcement), then validates the response client-side with
+`model_validate_json()`, repairing in the same session — the model sees its
+own invalid output plus what was wrong with it — up to 3 attempts before
+failing the task (which still has the worker's own outer retry as a backstop).
+
+**Reliability — checked against real-world reports before trusting it.**
+Practitioner writeups on Claude structured-output patterns (not this
+project's data) put pure prompt-only JSON at ~85% single-shot reliable and
+explicitly discourage it for production; a stronger "assistant prefill"
+pattern (seed the reply with `{`) reports ~90% but "struggles with deeply
+nested structures" — which describes these schemas exactly. We did not
+implement prefill (the agents SDK's `input` is the next turn, not a partial
+assistant continuation, and wiring it through would mean bypassing the SDK the
+way `vision.py` already bypasses it for VLM calls) because the empirical
+result below didn't show a need to.
+
+**Executed, on the real paper**: all 4 previously-failing calls succeeded on
+the **first attempt** — `VARIANT_EXTRACTION`, `PATIENT_EXTRACTION`, all 6
+per-patient `PATIENT_DEMOGRAPHICS` calls, and `PATIENT_VARIANT_OCCURRENCES` —
+zero repair-loop warnings logged across 8 calls. Final extraction: 6 patients,
+2 probands, 4 variants, 5 patient-variant links. Small sample — 8 calls is not
+a production reliability estimate — so this is worth watching once
+`EXTRACTION_MODEL` actually flips for real traffic, not a closed question.
+
 ## Corrections log
 
-Eight claims in earlier revisions of this document were wrong. Recorded so the
-reasoning is auditable — and note that three of the eight clustered on the same
+Nine claims in earlier revisions of this document were wrong. Recorded so the
+reasoning is auditable — and note that three of the nine clustered on the same
 subject, LiteLLM's structured-output routing, which is a signal about where the
 guessing was happening.
 
@@ -456,6 +561,12 @@ guessing was happening.
    `ttl: "1h"` choice — was sound and is what actually got built; only the "this is
    already in the tree, and I ran it" part was fabricated. Now genuinely landed and
    executed; see Blocker 3.
+9. **"This was the last blocker to an `EXTRACTION_MODEL` flip"** (Blocker 2,
+   2026-09-14). Corrected the next day: actually attempting the flip surfaced
+   Blocker 4, a schema-complexity limit affecting 4 agents that no prior
+   section had checked for. The lesson repeats one already in this log —
+   "no live key" claims and "should work now" claims are different tiers, and
+   this document kept writing the former in the voice of the latter.
 
 ## The VLM path
 
@@ -610,9 +721,14 @@ so the README's two-step is partly self-defeating.
    image change — which currently has no end-to-end coverage for *either* provider.
    The README has a ready case (MASP1, PMID 26419238). Do this before any switch,
    to establish a known-good reference.
-2. Does the native structured-output path work end-to-end on Anthropic — schema
-   accepted, tool loop still running, SDK parsing the result? The go/no-go for
-   `EXTRACTION_MODEL`.
+2. ~~Does the native structured-output path work end-to-end on Anthropic —
+   schema accepted, tool loop still running, SDK parsing the result?~~
+   **Answered 2026-09-15: mostly yes, with one real blocker — see Blocker 4.**
+   13 of 17 agents' schemas are accepted as-is; the 4 that dereference over
+   Anthropic's 16-union-node limit now run through manual JSON output instead
+   and were verified end-to-end against a live paper on `claude-sonnet-5`
+   (8/8 calls succeeded first attempt, zero repairs needed). The go/no-go for
+   `EXTRACTION_MODEL` is otherwise clear.
 3. ~~Does `cache_control_injection_points` produce nonzero `cache_read_input_tokens`~~
    **Answered 2026-09-14: yes, a 100% hit on an immediate reread — see Blocker 3.**
    Still open: does the `1h` TTL survive our actual task gaps (needs `EXTRACTION_MODEL`
@@ -636,8 +752,11 @@ through the sessions refactor (2026-09-14, migration
 Responses-API-direct call sites and `responses_api_model()` itself ahead of
 schedule; **the sessions refactor** (2026-09-14, `lib/tasks/agent_session.py`,
 migration `99bb61eac734_drop_tasks_conversation_id_column.py`) — see Blocker 2 for
-what shipped differently than planned. That was the last blocker to an
-`EXTRACTION_MODEL` flip.
+what shipped differently than planned; **the union-type schema limit found and
+fixed for the 4 affected agents** (2026-09-15, `lib/agents/manual_output.py`) —
+see Blocker 4 — discovered only once a live paper was actually run end-to-end
+against `claude-sonnet-5`, which is why it wasn't on this list until then, and
+verified with a second live run (8/8 calls succeeded on the first attempt).
 
 1. **Run the pipeline end-to-end on OpenAI.** Needs only an `OPENAI_API_KEY` and no
    Anthropic involvement. This is now the highest-priority item: #138 replaced the
@@ -656,8 +775,11 @@ what shipped differently than planned. That was the last blocker to an
    `vlm_describe` never goes through `Runner.run`, so it was never in tracing's
    scope on either provider; #182 landing before this item turned out to be safe,
    not merely lucky.) **This is now the only remaining blocker to the
-   `EXTRACTION_MODEL` flip** — once it lands, caching (already wired) starts
-   paying off on the real 15-turn/25-turn tool loops without any further change.
+   `EXTRACTION_MODEL` flip** — Blocker 4 (the union-type schema limit) looked
+   like a second one when it surfaced mid-live-test, but is already fixed and
+   verified, so it doesn't add a step here. Once observability lands, caching
+   (already wired) starts paying off on the real 15-turn/25-turn tool loops
+   without any further change.
 
 ## Reproducing the offline findings
 
