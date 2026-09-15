@@ -36,11 +36,16 @@ Defaults still name OpenAI models, so behavior is unchanged.
 
 `ROUTABLE_PROVIDERS` is `{'openai', 'anthropic'}` and the settings validator
 requires each configured model's provider key, so **`VLM_MODEL=anthropic/...` works
-today**. `EXTRACTION_MODEL` does not — see Blocker 2.
+today**. `EXTRACTION_MODEL` does not yet — Blocker 2 (the `conversation_id`
+dependency) is resolved, so the only thing left in the way is *Observability gap*
+(tracing is not actually disabled) — see *Suggested order*.
 
-The `openai/` special case exists because `LitellmModel` ignores `conversation_id`
-— **source-read**: literally annotated `conversation_id: str | None = None,  # unused`
-at `litellm_model.py:161` and `:271`, never referenced in either body.
+The `openai/` special case still exists, but no longer because `LitellmModel`
+ignores `conversation_id` — **source-read**: literally annotated
+`conversation_id: str | None = None,  # unused` at `litellm_model.py:161` and
+`:271`, never referenced in either body, and nothing in the pipeline passes that
+parameter anymore. It is kept as a deliberate, undone decision — see Blocker 2,
+"`openai/` no longer needs to bypass LiteLLM — but still does."
 
 ## Blocker 1: structured output — fixed by bumping LiteLLM
 
@@ -105,12 +110,37 @@ returns structured JSON (`end_turn`), deciding per turn. The current parameter i
 
 ## Blocker 2: `conversation_id` → sessions
 
-**The remaining blocker to an `EXTRACTION_MODEL` flip.**
+**Landed 2026-09-14** (`lib/tasks/agent_session.py`, migration
+`99bb61eac734_drop_tasks_conversation_id_column.py`). This was the last
+blocker to an `EXTRACTION_MODEL` flip; it no longer is.
 
-`lib/tasks/handlers.py` repeats the same six-step dance in ~14 handlers: read
-`task.conversation_id`, `ensure_conversation_id()`, branch on
-`additional_context`, `Runner.run(..., conversation_id=...)`, persist the id back.
-58 references in that file alone.
+What actually shipped differs from the plan below in two ways, both direct
+decisions rather than discoveries mid-implementation:
+
+- **Skipped the `OpenAIConversationsSession` intermediate step.** The plan's
+  two-step swap (below) was written to keep the change behavior-preserving on
+  already-persisted ids. We went straight to `SQLiteSession` instead, so
+  every previously-stored `conversation_id` became unreachable in one step —
+  the same "accept the data loss, document it" call already made for the
+  chat feature. `tasks.conversation_id` is dropped outright, not migrated.
+- **No empty-session detection in the `additional_context` branch.** The
+  concern below (a fresh session is empty, so a follow-up sent into one would
+  have no paper attached) turns out to describe a pre-existing gap, not a new
+  one: the *old* code had the identical failure mode any time `additional_context`
+  was set on a task's first-ever run — `ensure_conversation_id(None)` minted a
+  fresh, equally empty OpenAI conversation. `agent_session(task_id)` is
+  deterministic on the task's id rather than round-tripped through a mint
+  call, but a task row created with `additional_context` already set (never
+  run before) still hits an empty session either way. Not fixed here, because
+  it is not a regression — the "Rerun Agent" UI only offers a context field on
+  a task that has already produced output once.
+
+Each of the ~14 handlers in `lib/tasks/handlers.py` used to repeat the same
+six-step dance: read `task.conversation_id`, `ensure_conversation_id()`,
+branch on `additional_context`, `Runner.run(..., conversation_id=...)`,
+persist the id back. 58 references in that file alone, now zero — replaced by
+`agent_sess = agent_session(task_id)` and `Runner.run(..., session=agent_sess)`,
+with `await agent_sess.clear_session()` on the branch that starts fresh.
 
 **One of the two Responses-API-direct call sites this section used to list is
 already gone.** The chat feature (`chat_routing_agent`, `general_paper_qa_agent`,
@@ -121,25 +151,24 @@ refactor -- see its migration, `4993494a8281_drop_the_chat_feature.py`. That
 removed the chat follow-up turn in `lib/api/app.py`, and with it
 `model_factory.responses_api_model()`'s only caller, so the function is deleted
 too rather than waiting for this refactor to do it. `ensure_conversation_id` in
-`handlers.py` remains -- it still serves the unrelated per-task
-`additional_context` follow-up feature ("Rerun Agent" with extra context, in both
-UIs), which this refactor is still about.
+`handlers.py` served the unrelated per-task `additional_context` follow-up
+feature ("Rerun Agent" with extra context, in both UIs) -- which is what this
+refactor was about -- and is now deleted along with it.
 
-Sessions and `conversation_id` are mutually exclusive within a run, so this is a
-swap, not a layering. Two independently verifiable steps:
+Sessions and `conversation_id` are mutually exclusive within a run, so this was a
+swap, not a layering. The plan below called for two independently verifiable
+steps — an intermediate `OpenAIConversationsSession` before the local one — but
+as noted above, we went straight to step 2:
 
-1. Replace `conversation_id=X` with `session=OpenAIConversationsSession(conversation_id=X)`.
-   **Source-read**: the constructor accepts an existing id
-   (`agents/memory/openai_conversations_session.py:23`, created lazily when `None`),
-   so this is behavior-preserving on already-persisted ids and collapses 12 copies
-   into one helper.
-2. Swap the implementation for a local session.
+1. ~~Replace `conversation_id=X` with `session=OpenAIConversationsSession(conversation_id=X)`.~~
+   **Skipped** — see the "Landed" note above.
+2. Swap the implementation for a local session. **Done**, with `SQLiteSession`.
 
 **The `openai-agents` bump does not help here.** **Source-read** at the released
 `v0.22.2` tag: `LitellmModel`'s `conversation_id` is *still* annotated `# unused`
 (`litellm_model.py:219` and `:392`). An earlier revision of this doc guessed it
 might have been implemented across fifteen minor versions. It has not. The sessions
-refactor is genuinely required, and it does not need the bump either.
+refactor was genuinely required, and it did not need the bump either.
 
 ### Use `SQLiteSession`, not `SQLAlchemySession`
 
@@ -158,32 +187,31 @@ portable across platforms. That is the deciding factor.
 requires `engine: AsyncEngine`, so it would force an `aiosqlite` dependency and a
 second async engine alongside the sync one in `lib/api/db.py`.
 
-**Point `db_path` at its own file** — e.g. `{CAA_ROOT}/sqllite/agent_sessions.db`
-— rather than the app database. The SDK creates and owns `agent_sessions` /
-`agent_messages` itself, and tables outside Alembic's model metadata sitting in
-`app.db` invite `alembic revision --autogenerate` proposing to drop them. A
-separate file keeps the SDK's schema and ours from fighting, and sidesteps the
-`ondelete="CASCADE"` hazard in `CLAUDE.md` entirely.
+**Point `db_path` at its own file** — landed at `{CAA_ROOT}/sqllite/agent_sessions.db`
+(`lib/tasks/agent_session.py`) — rather than the app database. The SDK creates and
+owns `agent_sessions` / `agent_messages` itself, and tables outside Alembic's model
+metadata sitting in `app.db` invite `alembic revision --autogenerate` proposing to
+drop them. A separate file keeps the SDK's schema and ours from fighting, and
+sidesteps the `ondelete="CASCADE"` hazard in `CLAUDE.md` entirely.
 
-### The `additional_context` branch has to change too
+### The `additional_context` branch: both concerns resolved, differently than planned
 
-This is not a pure swap, and it is the part most likely to bite. Handlers currently
+This was flagged as not a pure swap, and the part most likely to bite. Handlers
 branch: when `additional_context` is set they send *only* the follow-up prompt and
-rely on OpenAI's server-side history to supply the paper. A freshly created
+relied on OpenAI's server-side history to supply the paper. A freshly created
 client-side session is **empty**, so that branch would send a bare "Please review
 your previous analysis in light of..." with no paper attached.
 
-Two things follow:
+Two things were flagged; see the "Landed" note at the top of this section for why
+neither was implemented as originally planned:
 
-1. The follow-up branch must seed or detect an empty session and send the full
-   initial message when there is no local history. Turn 0 is reconstructible —
-   `format_paper_context(fulltext_md(paper_id, supplement_format), gene_symbol)`
-   plus the agent's instructions — so this is cheap, just not automatic.
-2. **Every `conversation_id` already persisted becomes unreachable.** Those
-   histories live on OpenAI's servers and cannot be imported into a local session.
-   Decide deliberately whether to accept that in-flight reruns lose their prior
-   context, or to keep reading `task.conversation_id` for legacy tasks during a
-   transition. Doing nothing silently degrades reruns on existing papers.
+1. Seeding or detecting an empty session was **not implemented** — turned out to
+   describe a pre-existing gap in the old code too, not something this change
+   introduces.
+2. **Every `conversation_id` already persisted became unreachable** — resolved by
+   deciding, not defaulting: the migration drops the column outright rather than
+   keeping a legacy read path, the same choice already made for the chat feature's
+   conversation history.
 
 ### Storage design worth deciding first
 
@@ -208,24 +236,26 @@ So there is a choice, and it is worth making deliberately rather than by default
   actually saw. It also loses the intermediate tool-call transcript the
   Conversations API replays today.
 
-**Start with store-everything.** The thin option trades disk for a fragile coupling
-between prompt text and cache correctness, and the failure mode is invisible. Measure
-one paper's session file first — if it is not actually a problem, the question is moot.
+**Went with store-everything**, as recommended: `agent_session()` returns a plain
+`SQLiteSession`, no wrapping. The thin option's byte-identical-reconstruction
+requirement was too fragile a coupling between prompt text and cache correctness
+to take on in the same change; measuring whether the session file is actually a
+disk problem in practice is still open, not urgent.
 
-### After this lands: `openai/` no longer needs to bypass LiteLLM
+### `openai/` no longer needs to bypass LiteLLM — but still does
 
-`model_factory.resolve_model()`'s module docstring already says this, in one line:
-"Once client-side sessions replace conversation_id, this special case can go." Worth
-spelling out why, since it is easy to read as a throwaway remark. The `openai/`
-branch exists *only* because `LitellmModel` ignores `conversation_id`
-(`litellm_model.py:161`/`:271`), and the pipeline depends on that parameter today.
-Once sessions replace it, nothing left depends on OpenAI's server-side state
-specifically — `resolve_model()` could route `openai/` through `LitellmModel` like
-every other provider, "pseudo-supporting" it the same way `anthropic/` is supported
-now rather than privileging it with direct Responses API access. That collapses
-`resolve_model()`'s two branches into one and removes the last place a provider
-name changes which code path a request takes. Not urgent, and not this refactor's
-job — but it is the refactor's natural following step, not a separate idea.
+`model_factory.resolve_model()`'s module docstring now documents this directly
+rather than gesturing at a future state: the `openai/` branch existed *only*
+because `LitellmModel` ignores `conversation_id` (`litellm_model.py:161`/`:271`),
+and the pipeline depended on that parameter. Sessions replaced it, so nothing left
+depends on OpenAI's server-side state specifically — `resolve_model()` could route
+`openai/` through `LitellmModel` like every other provider, "pseudo-supporting" it
+the same way `anthropic/` is supported now rather than privileging it with direct
+Responses API access. That would collapse `resolve_model()`'s two branches into
+one and remove the last place a provider name changes which code path a request
+takes. **Still not done** — left as its own decision rather than a side effect of
+this change, since it changes how every OpenAI call is made and deserves its own
+testing.
 
 ## Blocker 3: prompt caching
 
@@ -604,7 +634,10 @@ to land, only to matter; **the chat feature deleted outright** rather than carri
 through the sessions refactor (2026-09-14, migration
 `4993494a8281_drop_the_chat_feature.py`), which removed one of Blocker 2's two
 Responses-API-direct call sites and `responses_api_model()` itself ahead of
-schedule — see Blocker 2.
+schedule; **the sessions refactor** (2026-09-14, `lib/tasks/agent_session.py`,
+migration `99bb61eac734_drop_tasks_conversation_id_column.py`) — see Blocker 2 for
+what shipped differently than planned. That was the last blocker to an
+`EXTRACTION_MODEL` flip.
 
 1. **Run the pipeline end-to-end on OpenAI.** Needs only an `OPENAI_API_KEY` and no
    Anthropic involvement. This is now the highest-priority item: #138 replaced the
@@ -622,14 +655,9 @@ schedule — see Blocker 2.
    `EXTRACTION_MODEL` flip. (Not required before the `VLM_MODEL` flip after all —
    `vlm_describe` never goes through `Runner.run`, so it was never in tracing's
    scope on either provider; #182 landing before this item turned out to be safe,
-   not merely lucky.)
-3. **Sessions refactor**, as its own PR — `SQLiteSession`, the two-step swap above,
-   the `additional_context` branch, `ensure_conversation_id` (the one remaining
-   direct OpenAI-conversation-state dependency, now that chat's Responses-API call
-   site is gone), and a decision on legacy `conversation_id` values.
-   This is the last thing standing between here and an `EXTRACTION_MODEL` flip —
-   and once it lands, caching (already wired) starts paying off on the real
-   15-turn/25-turn tool loops without any further change.
+   not merely lucky.) **This is now the only remaining blocker to the
+   `EXTRACTION_MODEL` flip** — once it lands, caching (already wired) starts
+   paying off on the real 15-turn/25-turn tool loops without any further change.
 
 ## Reproducing the offline findings
 

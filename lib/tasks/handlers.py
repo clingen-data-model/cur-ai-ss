@@ -4,7 +4,6 @@ import logging
 from typing import Any, Awaitable, Callable
 
 from agents import Agent, RunConfig, Runner
-from openai import AsyncOpenAI
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
@@ -151,6 +150,7 @@ from lib.models.phenotype import HPOTerm
 from lib.models.variant import HarmonizedVariant, Variant, is_harmonized
 from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
 from lib.reference_data.mondo import get_mondo_term
+from lib.tasks.agent_session import agent_session
 from lib.tasks.models import TaskType
 
 setup_logging()
@@ -187,16 +187,6 @@ def log_cache_metrics(task_type: str, result: Any) -> None:
             f'input={total_input} cached={total_cache_read} '
             f'({cache_pct:.1f}%)'
         )
-
-
-async def ensure_conversation_id(conversation_id: str | None) -> str:
-    """Create a new conversation if needed, otherwise return the provided ID."""
-    if conversation_id:
-        return conversation_id
-
-    client = AsyncOpenAI(api_key=env.OPENAI_API_KEY)
-    conversation = await client.conversations.create()
-    return conversation.id
 
 
 def build_followup_prompt(additional_context: str) -> str:
@@ -249,7 +239,6 @@ async def handle_paper_section_classifier(task_id: int) -> None:
     """Classify paper sections as relevant or irrelevant for downstream extraction."""
     paper_id: int
     gene_symbol: str
-    stored_conv_id: str | None
     additional_context: str | None
     supplement_format: FileFormat | None
     with session_scope() as session:
@@ -259,11 +248,10 @@ async def handle_paper_section_classifier(task_id: int) -> None:
             return
         paper_id = task.paper_id
         gene_symbol = paper.gene.symbol
-        stored_conv_id = task.conversation_id
         additional_context = task.additional_context
         supplement_format = paper.supplement_format
 
-    stored_conv_id = await ensure_conversation_id(stored_conv_id)
+    agent_sess = agent_session(task_id)
 
     if additional_context is not None:
         # Follow-up: agent has context from conversation
@@ -271,19 +259,19 @@ async def handle_paper_section_classifier(task_id: int) -> None:
         agent = paper_classifier_agent
     else:
         # Initial query: build full message with paper + instructions
+        await agent_sess.clear_session()
         paper_markdown = fulltext_md(paper_id, supplement_format)
         paper_context = format_paper_context(paper_markdown, gene_symbol)
         message = f'{paper_context}\n\n{PAPER_CLASSIFIER_AGENT_INSTRUCTIONS}'
         agent = paper_classifier_agent
 
-    result = await Runner.run(agent, message, conversation_id=stored_conv_id)
+    result = await Runner.run(agent, message, session=agent_sess)
     log_cache_metrics('PAPER_SECTION_CLASSIFIER', result)
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         paper = session.get(PaperDB, paper_id)
         if task:
-            task.conversation_id = stored_conv_id
             # If paper is not relevant, skip enqueuing successors
             if not result.final_output.is_paper_relevant.value:
                 task.skip_successors = True
@@ -301,7 +289,6 @@ async def handle_paper_metadata(task_id: int) -> None:
     """Extract paper metadata (title, authors, abstract, etc)."""
     paper_id: int
     gene_symbol: str
-    stored_conv_id: str | None
     additional_context: str | None
     supplement_format: FileFormat | None
     section_classifications: dict | None
@@ -316,12 +303,11 @@ async def handle_paper_metadata(task_id: int) -> None:
 
         paper_id = task.paper_id
         gene_symbol = paper.gene.symbol
-        stored_conv_id = task.conversation_id
         additional_context = task.additional_context
         supplement_format = paper.supplement_format
         section_classifications = paper.section_classifications
 
-    stored_conv_id = await ensure_conversation_id(stored_conv_id)
+    agent_sess = agent_session(task_id)
 
     if additional_context is not None:
         # Follow-up: agent has context from conversation
@@ -329,6 +315,7 @@ async def handle_paper_metadata(task_id: int) -> None:
         agent = paper_extraction_agent
     else:
         # Initial query: build full message with paper + instructions
+        await agent_sess.clear_session()
         paper_markdown = relevant_sections_md(
             paper_id, supplement_format, section_classifications
         )
@@ -339,14 +326,11 @@ async def handle_paper_metadata(task_id: int) -> None:
     result = await Runner.run(
         agent,
         message,
-        conversation_id=stored_conv_id,
+        session=agent_sess,
     )
     log_cache_metrics('PAPER_METADATA', result)
 
     with session_scope() as session:
-        task = session.get(TaskDB, task_id)
-        if task:
-            task.conversation_id = stored_conv_id
         paper = session.get(PaperDB, paper_id)
         if paper:
             result.final_output.apply_to(paper)
@@ -356,7 +340,6 @@ async def handle_variant_extraction(task_id: int) -> None:
     """Extract genetic variants from paper."""
     paper_id: int
     gene_symbol: str
-    stored_conv_id: str | None
     additional_context: str | None
     supplement_format: FileFormat | None
     section_classifications: dict | None
@@ -371,12 +354,11 @@ async def handle_variant_extraction(task_id: int) -> None:
 
         paper_id = task.paper_id
         gene_symbol = paper.gene.symbol
-        stored_conv_id = task.conversation_id
         additional_context = task.additional_context
         supplement_format = paper.supplement_format
         section_classifications = paper.section_classifications
 
-    stored_conv_id = await ensure_conversation_id(stored_conv_id)
+    agent_sess = agent_session(task_id)
 
     if additional_context is not None:
         # Follow-up: agent has context from conversation
@@ -384,6 +366,7 @@ async def handle_variant_extraction(task_id: int) -> None:
         agent = variant_extraction_agent
     else:
         # Initial query: build full message with paper + instructions
+        await agent_sess.clear_session()
         paper_markdown = relevant_sections_md(
             paper_id, supplement_format, section_classifications
         )
@@ -394,7 +377,7 @@ async def handle_variant_extraction(task_id: int) -> None:
     result = await Runner.run(
         agent,
         message,
-        conversation_id=stored_conv_id,
+        session=agent_sess,
     )
     log_cache_metrics('VARIANT_EXTRACTION', result)
 
@@ -402,7 +385,6 @@ async def handle_variant_extraction(task_id: int) -> None:
         task = session.get(TaskDB, task_id)
         if not task:
             return
-        task.conversation_id = stored_conv_id
 
         # Idempotent: delete-then-insert
         session.query(VariantDB).filter(
@@ -415,14 +397,12 @@ async def handle_variant_extraction(task_id: int) -> None:
 async def handle_pedigree_description(task_id: int) -> None:
     """Describe pedigree images from paper."""
     paper_id: int
-    stored_conv_id: str | None
     additional_context: str | None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
             return
         paper_id = task.paper_id
-        stored_conv_id = task.conversation_id
         additional_context = task.additional_context
 
     combined_text = ''
@@ -449,20 +429,21 @@ async def handle_pedigree_description(task_id: int) -> None:
             combined_text += f'Caption: {caption_text}\n\n'
             image_id += 1
 
-    stored_conv_id = await ensure_conversation_id(stored_conv_id)
+    agent_sess = agent_session(task_id)
 
     if additional_context is not None:
         # Follow-up: agent has context from conversation
         message = build_followup_prompt(additional_context)
     else:
         # Initial query: build full message with pedigree images + instructions
+        await agent_sess.clear_session()
         message = f'{combined_text}\n\n{PEDIGREE_DESCRIBER_AGENT_INSTRUCTIONS}'
 
     agent, capture = pedigree_describer_agent_for_paper(paper_id)
     result = await Runner.run(
         agent,
         message,
-        conversation_id=stored_conv_id,
+        session=agent_sess,
     )
     log_cache_metrics('PEDIGREE_DESCRIPTION', result)
 
@@ -484,9 +465,6 @@ async def handle_pedigree_description(task_id: int) -> None:
         )
 
     with session_scope() as session:
-        task = session.get(TaskDB, task_id)
-        if task:
-            task.conversation_id = stored_conv_id
         # Idempotent: delete-then-insert
         session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).delete()
         if output and output.found:
@@ -497,7 +475,6 @@ async def handle_patient_extraction(task_id: int) -> None:
     """Extract patient information from paper."""
     paper_id: int
     pedigree_descriptions_output: dict | None
-    stored_conv_id: str | None
     additional_context: str | None
     supplement_format: FileFormat | None = None
     section_classifications: dict | None = None
@@ -507,7 +484,6 @@ async def handle_patient_extraction(task_id: int) -> None:
             return
 
         paper_id = task.paper_id
-        stored_conv_id = task.conversation_id
         additional_context = task.additional_context
 
         # Load paper and pedigree from DB
@@ -527,7 +503,7 @@ async def handle_patient_extraction(task_id: int) -> None:
             else None
         )
 
-    stored_conv_id = await ensure_conversation_id(stored_conv_id)
+    agent_sess = agent_session(task_id)
 
     if additional_context is not None:
         # Follow-up: agent has context from conversation, just pass new instructions
@@ -535,6 +511,7 @@ async def handle_patient_extraction(task_id: int) -> None:
         agent = patient_extraction_agent
     else:
         # Initial query: build full message with paper + task input + instructions
+        await agent_sess.clear_session()
         paper_markdown = relevant_sections_md(
             paper_id, supplement_format, section_classifications
         )
@@ -549,7 +526,7 @@ async def handle_patient_extraction(task_id: int) -> None:
     result = await Runner.run(
         agent,
         message,
-        conversation_id=stored_conv_id,
+        session=agent_sess,
     )
     log_cache_metrics('PATIENT_EXTRACTION', result)
 
@@ -557,7 +534,6 @@ async def handle_patient_extraction(task_id: int) -> None:
         task = session.get(TaskDB, task_id)
         if not task:
             return
-        task.conversation_id = stored_conv_id
 
         # Idempotent: delete existing families and patients, then re-insert both
         session.query(FamilyDB).filter(
@@ -594,7 +570,6 @@ async def handle_patient_demographics(task_id: int) -> None:
     paper_id: int
     patient_id: int | None = None
     supplement_format: FileFormat | None = None
-    stored_conv_id: str | None = None
     additional_context: str | None = None
     patient_data: dict | None = None
     proband_identifier: str | None = None
@@ -613,7 +588,6 @@ async def handle_patient_demographics(task_id: int) -> None:
                 f'Task {task_id}: PATIENT_DEMOGRAPHICS requires patient_id'
             )
 
-        stored_conv_id = task.conversation_id
         additional_context = task.additional_context
 
         paper = session.get(PaperDB, paper_id)
@@ -655,7 +629,7 @@ async def handle_patient_demographics(task_id: int) -> None:
             else None
         )
 
-    stored_conv_id = await ensure_conversation_id(stored_conv_id)
+    agent_sess = agent_session(task_id)
 
     if additional_context is not None:
         # Follow-up: agent has context from conversation
@@ -663,6 +637,7 @@ async def handle_patient_demographics(task_id: int) -> None:
         agent = patient_demographics_agent
     else:
         # Initial query: build full message with paper + patient data + instructions
+        await agent_sess.clear_session()
         paper_markdown = relevant_sections_md(
             paper_id, supplement_format, section_classifications
         )
@@ -679,7 +654,7 @@ async def handle_patient_demographics(task_id: int) -> None:
     result = await Runner.run(
         agent,
         message,
-        conversation_id=stored_conv_id,
+        session=agent_sess,
     )
     log_cache_metrics('PATIENT_DEMOGRAPHICS', result)
 
@@ -687,7 +662,6 @@ async def handle_patient_demographics(task_id: int) -> None:
         task = session.get(TaskDB, task_id)
         if not task:
             return
-        task.conversation_id = stored_conv_id
 
         patient_row = session.get(PatientDB, patient_id)
         if not patient_row:
@@ -700,7 +674,6 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
     paper_id: int = 0
     family_id: int | None = None
     supplement_format: FileFormat | None = None
-    stored_conv_id: str | None = None
     additional_context: str | None = None
     family_info: dict | None = None
     section_classifications: dict | None = None
@@ -723,7 +696,6 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
 
         supplement_format = paper.supplement_format
         section_classifications = paper.section_classifications
-        stored_conv_id = task.conversation_id
         additional_context = task.additional_context
 
         family = session.get(FamilyDB, family_id)
@@ -767,7 +739,7 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
             ],
         }
 
-    stored_conv_id = await ensure_conversation_id(stored_conv_id)
+    agent_sess = agent_session(task_id)
 
     if additional_context is not None:
         # Follow-up: agent has context from conversation
@@ -775,6 +747,7 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
         agent = segregation_evidence_extractor
     else:
         # Initial query: build full message with paper + family data + instructions
+        await agent_sess.clear_session()
         paper_markdown = relevant_sections_md(
             paper_id, supplement_format, section_classifications
         )
@@ -789,7 +762,7 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
     result = await Runner.run(
         agent,
         message,
-        conversation_id=stored_conv_id,
+        session=agent_sess,
     )
     log_cache_metrics('SEGREGATION_EVIDENCE_EXTRACTION', result)
 
@@ -798,8 +771,6 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
         task = session.get(TaskDB, task_id)
         if not task:
             return
-
-        task.conversation_id = stored_conv_id
 
         session.query(SegregationEvidenceDB).filter(
             SegregationEvidenceDB.family_id == family_id
@@ -814,7 +785,6 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
 async def handle_segregation_analysis_computed(task_id: int) -> None:
     """Compute segregation analysis metrics for a specific family using ClinGen methodology."""
     family_id: int | None = None
-    stored_conv_id: str | None = None
     additional_context: str | None = None
     family_info: dict | None = None
     paper_id: int | None = None
@@ -839,7 +809,6 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
         paper_id = task.paper_id
         supplement_format = paper.supplement_format
         section_classifications = paper.section_classifications
-        stored_conv_id = task.conversation_id
         additional_context = task.additional_context
 
         family = session.get(FamilyDB, family_id)
@@ -903,13 +872,14 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
             else None,
         }
 
-    stored_conv_id = await ensure_conversation_id(stored_conv_id)
+    agent_sess = agent_session(task_id)
 
     if additional_context is not None:
         # Follow-up: agent has context from conversation
         message = build_followup_prompt(additional_context)
     else:
         # Initial query: build full message with paper + family data + instructions
+        await agent_sess.clear_session()
         paper_markdown = relevant_sections_md(
             paper_id, supplement_format, section_classifications
         )
@@ -923,7 +893,7 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
     result = await Runner.run(
         segregation_analysis_computed_agent,
         message,
-        conversation_id=stored_conv_id,
+        session=agent_sess,
     )
     log_cache_metrics('SEGREGATION_ANALYSIS_COMPUTED', result)
 
@@ -932,8 +902,6 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
         task = session.get(TaskDB, task_id)
         if not task:
             return
-
-        task.conversation_id = stored_conv_id
 
         session.query(SegregationAnalysisComputedDB).filter(
             SegregationAnalysisComputedDB.family_id == family_id
@@ -950,7 +918,6 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
 async def handle_variant_harmonization(task_id: int) -> None:
     """Harmonize a variant to standard genomic coordinates."""
     variant_id: int | None = None
-    stored_conv_id: str | None = None
     additional_context: str | None = None
     variant_input: dict | None = None
 
@@ -965,7 +932,6 @@ async def handle_variant_harmonization(task_id: int) -> None:
                 f'Task {task_id}: VARIANT_HARMONIZATION requires variant_id'
             )
 
-        stored_conv_id = task.conversation_id
         additional_context = task.additional_context
 
         paper = session.get(PaperDB, task.paper_id)
@@ -982,13 +948,14 @@ async def handle_variant_harmonization(task_id: int) -> None:
             **{f: getattr(variant_row, f) for f in Variant.model_fields},
         }
 
-    stored_conv_id = await ensure_conversation_id(stored_conv_id)
+    agent_sess = agent_session(task_id)
 
     if additional_context is not None:
         # Follow-up: agent has context from conversation
         message = build_followup_prompt(additional_context)
     else:
         # Initial query: build full message with variant data + instructions
+        await agent_sess.clear_session()
         message = (
             f'Variant JSON:\n{json.dumps(variant_input, indent=2)}\n\n'
             f'{VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS}'
@@ -998,7 +965,7 @@ async def handle_variant_harmonization(task_id: int) -> None:
         variant_harmonization_agent,
         message,
         max_turns=15,
-        conversation_id=stored_conv_id,
+        session=agent_sess,
     )
     log_cache_metrics('VARIANT_HARMONIZATION', result)
 
@@ -1039,8 +1006,6 @@ async def handle_variant_harmonization(task_id: int) -> None:
         task = session.get(TaskDB, task_id)
         if not task:
             return
-
-        task.conversation_id = stored_conv_id
 
         # Idempotent: delete-then-insert
         session.query(HarmonizedVariantDB).filter(
@@ -1143,7 +1108,6 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
     structured_variants: list
     structured_patients: list
     pedigree_descriptions_output: dict | None
-    stored_conv_id: str | None
     additional_context: str | None
     supplement_format: FileFormat | None = None
     section_classifications: dict | None = None
@@ -1153,7 +1117,6 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
             return
 
         paper_id = task.paper_id
-        stored_conv_id = task.conversation_id
         additional_context = task.additional_context
 
         paper = session.get(PaperDB, paper_id)
@@ -1201,7 +1164,7 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
             else None
         )
 
-    stored_conv_id = await ensure_conversation_id(stored_conv_id)
+    agent_sess = agent_session(task_id)
 
     if additional_context is not None:
         # Follow-up: agent has context from conversation
@@ -1209,6 +1172,7 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
         agent = patient_variant_occurrence_agent
     else:
         # Initial query: build full message with paper + variant/patient data + instructions
+        await agent_sess.clear_session()
         paper_markdown = relevant_sections_md(
             paper_id, supplement_format, section_classifications
         )
@@ -1225,14 +1189,11 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
     result = await Runner.run(
         agent,
         message,
-        conversation_id=stored_conv_id,
+        session=agent_sess,
     )
     log_cache_metrics('PATIENT_VARIANT_OCCURRENCE', result)
 
     with session_scope() as session:
-        task = session.get(TaskDB, task_id)
-        if task:
-            task.conversation_id = stored_conv_id
         # Idempotent: delete-then-insert
         session.query(PatientVariantOccurrenceDB).filter(
             PatientVariantOccurrenceDB.paper_id == paper_id
@@ -1268,7 +1229,6 @@ async def handle_compound_het_evaluation(task_id: int) -> None:
     """Evaluate heterozygous variant pairs for compound heterozygous genotypes."""
     paper_id: int
     patient_id: int | None = None
-    stored_conv_id: str | None = None
     supplement_format: FileFormat | None = None
     section_classifications: dict | None = None
 
@@ -1283,8 +1243,6 @@ async def handle_compound_het_evaluation(task_id: int) -> None:
             raise ValueError(
                 f'Task {task_id}: COMPOUND_HET_EVALUATION requires patient_id'
             )
-
-        stored_conv_id = task.conversation_id
 
         # Load all heterozygous variants for this patient
         het_links = (
@@ -1351,15 +1309,10 @@ async def handle_compound_het_evaluation(task_id: int) -> None:
     result = await Runner.run(
         agent_to_use,
         message,
-        conversation_id=stored_conv_id,
     )
     log_cache_metrics('COMPOUND_HET_EVALUATION', result)
 
     with session_scope() as session:
-        task = session.get(TaskDB, task_id)
-        if task:
-            task.conversation_id = stored_conv_id
-
         # For each pair in the result, set the pairing and reasoning
         for pair in result.final_output.pairs:
             link_a = (
@@ -1403,7 +1356,6 @@ async def handle_phenotype_extraction(task_id: int) -> None:
     paper_id: int
     patient_id: int | None = None
     supplement_format: FileFormat | None = None
-    stored_conv_id: str | None = None
     additional_context: str | None = None
     patient_data: dict | None = None
     section_classifications: dict | None = None
@@ -1420,7 +1372,6 @@ async def handle_phenotype_extraction(task_id: int) -> None:
                 f'Task {task_id}: PHENOTYPE_EXTRACTION requires patient_id'
             )
 
-        stored_conv_id = task.conversation_id
         additional_context = task.additional_context
 
         paper = session.get(PaperDB, paper_id)
@@ -1437,7 +1388,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
             'identifier_quote': patient_row.identifier_evidence['quote'],
         }
 
-    stored_conv_id = await ensure_conversation_id(stored_conv_id)
+    agent_sess = agent_session(task_id)
 
     if additional_context is not None:
         # Follow-up: agent has context from conversation
@@ -1445,6 +1396,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         agent = patient_phenotype_linking_agent
     else:
         # Initial query: build full message with paper + patient data + instructions
+        await agent_sess.clear_session()
         paper_markdown = relevant_sections_md(
             paper_id, supplement_format, section_classifications
         )
@@ -1459,7 +1411,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
     result = await Runner.run(
         agent,
         message,
-        conversation_id=stored_conv_id,
+        session=agent_sess,
     )
     log_cache_metrics('PHENOTYPE_EXTRACTION', result)
 
@@ -1468,8 +1420,6 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         task = session.get(TaskDB, task_id)
         if not task:
             return
-
-        task.conversation_id = stored_conv_id
 
         # Idempotent: delete-then-insert
         # Phenotypes are scoped by patient_id, which is already run-versioned
@@ -1486,7 +1436,6 @@ async def handle_phenotype_extraction(task_id: int) -> None:
 async def handle_hpo_linking(task_id: int) -> None:
     """Link a phenotype to HPO terms."""
     phenotype_id: int | None = None
-    stored_conv_id: str | None = None
     additional_context: str | None = None
     phenotype_data: dict | None = None
 
@@ -1499,7 +1448,6 @@ async def handle_hpo_linking(task_id: int) -> None:
         if phenotype_id is None:
             raise ValueError(f'Task {task_id}: HPO_LINKING requires phenotype_id')
 
-        stored_conv_id = task.conversation_id
         additional_context = task.additional_context
 
         phenotype_row = session.get(PhenotypeDB, phenotype_id)
@@ -1520,13 +1468,14 @@ async def handle_hpo_linking(task_id: int) -> None:
             'candidates': [c.model_dump() for c in candidates],
         }
 
-    stored_conv_id = await ensure_conversation_id(stored_conv_id)
+    agent_sess = agent_session(task_id)
 
     if additional_context is not None:
         # Follow-up: agent has context from conversation
         message = build_followup_prompt(additional_context)
     else:
         # Initial query: build full message with phenotype data + instructions
+        await agent_sess.clear_session()
         message = (
             f'Phenotype JSON:\n{json.dumps(phenotype_data, indent=2)}\n\n'
             f'{HPO_LINKING_AGENT_INSTRUCTIONS}'
@@ -1536,7 +1485,7 @@ async def handle_hpo_linking(task_id: int) -> None:
         hpo_linking_agent,
         message,
         max_turns=15,
-        conversation_id=stored_conv_id,
+        session=agent_sess,
         run_config=RunConfig(
             trace_metadata={
                 'paper_id': str(task_id),
@@ -1552,8 +1501,6 @@ async def handle_hpo_linking(task_id: int) -> None:
         task = session.get(TaskDB, task_id)
         if not task:
             return
-
-        task.conversation_id = stored_conv_id
 
         # Idempotent: delete-then-insert
         session.query(HpoDB).filter(HpoDB.phenotype_id == phenotype_id).delete()
@@ -1616,7 +1563,6 @@ async def handle_mondo_linking(task_id: int) -> None:
             return
         paper = session.get(PaperDB, target.paper_id)
         supplement_format = paper.supplement_format if paper else None
-        stored_conv_id = task.conversation_id
         additional_context = task.additional_context
 
     query = target.disease_text.strip() if target.disease_text else ''
@@ -1625,7 +1571,7 @@ async def handle_mondo_linking(task_id: int) -> None:
     mondo_match_context: dict | None = None
 
     if query:
-        stored_conv_id = await ensure_conversation_id(stored_conv_id)
+        agent_sess = agent_session(task_id)
         if additional_context is not None:
             # Rerun with feedback: continue the existing conversation instead of
             # resending the paper context.
@@ -1634,6 +1580,7 @@ async def handle_mondo_linking(task_id: int) -> None:
             # Lead with the shared paper-context prefix so the API can reuse the
             # cache the other paper agents already warmed, then append the
             # MONDO-specific target and instructions.
+            await agent_sess.clear_session()
             paper_markdown = fulltext_md(target.paper_id, supplement_format)
             paper_context = format_paper_context(paper_markdown, target.gene_symbol)
             target_payload = {
@@ -1652,7 +1599,7 @@ async def handle_mondo_linking(task_id: int) -> None:
             mondo_linking_agent,
             message,
             max_turns=25,
-            conversation_id=stored_conv_id,
+            session=agent_sess,
             run_config=RunConfig(
                 trace_metadata={
                     'scope': target.scope.value,
@@ -1686,9 +1633,6 @@ async def handle_mondo_linking(task_id: int) -> None:
         task = session.get(TaskDB, task_id)
         if not task:
             return
-
-        if query:
-            task.conversation_id = stored_conv_id
 
         if target.scope is MondoDiseaseScope.PAPER:
             paper = session.get(PaperDB, target.paper_id)

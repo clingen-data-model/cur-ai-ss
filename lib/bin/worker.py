@@ -16,6 +16,7 @@ from lib.core.logging import setup_logging
 from lib.misc.snapshots import write_snapshot
 from lib.models import TaskDB
 from lib.models.paper import PaperDB
+from lib.tasks.agent_session import agent_session
 from lib.tasks.handlers import TASK_HANDLERS
 from lib.tasks.misc import enqueue_successors
 from lib.tasks.models import (
@@ -232,7 +233,7 @@ async def poll_and_schedule_tasks(
                     f'Resetting timed-out task {task.id} ({task.type}) (attempt {task.tries + 1}/{MAX_RETRIES + 1})'
                 )
                 task.status = TaskStatus.PENDING
-                task.conversation_id = None
+                await agent_session(task.id).clear_session()
             else:
                 logger.info(
                     f'Abandoning timed-out task {task.id} ({task.type}) (exhausted retries at {task.tries})'
@@ -261,7 +262,7 @@ async def poll_and_schedule_tasks(
             task.status = TaskStatus.PENDING
             task.updated_at = now
             task.error_message = None
-            task.conversation_id = None
+            await agent_session(task.id).clear_session()
 
         session.flush()
 

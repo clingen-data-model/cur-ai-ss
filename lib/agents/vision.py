@@ -5,9 +5,9 @@ constructing a client and reading the response themselves, so the stop-reason
 handling below exists once rather than twice.
 
 Calls go through litellm rather than the OpenAI client so VLM_MODEL is a
-one-line env change: the vision path has no conversation_id, no structured
-output and no tools, so it touches none of what still pins the extraction
-agents to the Responses API.
+one-line env change: the vision path has no structured output and no tools,
+so it touches none of what still pins EXTRACTION_MODEL to 'openai/' -- see
+model_factory.py.
 """
 
 import logging

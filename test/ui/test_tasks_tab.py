@@ -20,7 +20,6 @@ def _task(task_type: TaskType, **overrides) -> TaskResp:
         'tries': 1,
         'error_message': None,
         'skip_successors': False,
-        'conversation_id': None,
         'additional_context': None,
         'family_id': None,
         'patient_id': None,

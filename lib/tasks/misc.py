@@ -82,9 +82,6 @@ def enqueue_task(
         # leaving the previous run's id would date the new run to the old one.
         if run_id is not None:
             existing_task.run_id = run_id
-        # Clear conversation_id if not providing new context (start fresh).
-        if additional_context is None:
-            existing_task.conversation_id = None
         session.flush()
         return existing_task
     else:
@@ -156,9 +153,6 @@ def enqueue_all_instances(
                 # See enqueue_task: the previous attempt's start time is not
                 # this one's.
                 task.started_at = None
-                # Clear conversation_id if not providing new context (start fresh)
-                if additional_context is None:
-                    task.conversation_id = None
                 results.append(task)
         session.flush()
         return results if results else existing_tasks

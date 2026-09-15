@@ -5,13 +5,19 @@ Every configured model name carries a LiteLLM-style provider prefix
 the provider is always explicit in config.
 
 'openai/' resolves to the plain model string, which the agents SDK's default
-provider (the Responses API) takes as-is. That is deliberate rather than
-incidental: the pipeline still relies on the Responses API's server-side
-conversation_id for additional-context reruns, and LitellmModel ignores that
-parameter -- it is annotated `# unused` at litellm_model.py:161 and :271 in the
-locked 0.7.0, so routing OpenAI through LiteLLM would silently drop the
-conversation history rather than fail. Once client-side sessions replace
-conversation_id, this special case can go.
+provider (the Responses API) takes as-is, rather than routing through
+LitellmModel like every other provider.
+
+This used to be load-bearing: the additional-context rerun feature relied on
+the Responses API's server-side conversation_id, which LitellmModel ignores
+entirely (it is annotated `# unused` at litellm_model.py:161 and :271 in the
+locked 0.7.0), so routing OpenAI through LiteLLM would have silently dropped
+the conversation history rather than fail. That dependency is gone --
+lib.tasks.agent_session now gives every task its own local SQLiteSession,
+provider-agnostic -- so nothing here still requires 'openai/' to bypass
+LiteLLM. Left in place because collapsing it changes how every OpenAI call is
+made, which deserves its own change and its own testing, not a side effect of
+this one.
 
 Any other provider routes through LitellmModel. The settings validator rejects
 an unroutable provider at load, so by the time anything here runs the provider
