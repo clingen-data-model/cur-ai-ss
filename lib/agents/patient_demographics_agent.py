@@ -3,7 +3,6 @@ from agents import Agent
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
 from lib.agents.model_factory import extraction_model, extraction_model_settings
-from lib.models.patient import PatientDemographics
 
 PATIENT_DEMOGRAPHICS_INSTRUCTIONS = """
 System: You are an expert clinical data curator.
@@ -105,5 +104,9 @@ agent = Agent(
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
     model_settings=extraction_model_settings(),
-    output_type=PatientDemographics,
+    # PatientDemographics dereferences to 40 union/nullable JSON-schema nodes
+    # -- over Anthropic's hard limit of 16. output_type=None sends no schema
+    # to any provider; lib.agents.manual_output validates the reply ourselves
+    # instead. See that module's docstring.
+    output_type=None,
 )
