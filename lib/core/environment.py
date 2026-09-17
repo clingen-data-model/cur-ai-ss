@@ -34,9 +34,8 @@ class Env(BaseSettings):
     # through LiteLLM -- see lib/agents/model_factory.py.
     EXTRACTION_MODEL: str = 'openai/gpt-5.6-luna'
     VLM_MODEL: str = 'openai/gpt-5.6-sol'
-    # Separate from EXTRACTION_MODEL: Anthropic Fast mode (see
-    # lib/agents/model_factory.py's chat_model_settings) only works on Opus
-    # models, and EXTRACTION_MODEL is not necessarily Opus.
+    # Separate from EXTRACTION_MODEL so chat's model choice (interactive,
+    # latency-sensitive) can move independently of extraction's.
     CHAT_MODEL: str = 'anthropic/claude-opus-5'
     OPENAI_API_KEY: Optional[str] = None
     ANTHROPIC_API_KEY: Optional[str] = None
