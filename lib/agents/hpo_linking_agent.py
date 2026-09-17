@@ -2,7 +2,7 @@ import hpotk
 from agents import Agent, function_tool
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
-from lib.agents.model_factory import extraction_model, extraction_model_settings
+from lib.agents.model_factory import decision_model_settings, extraction_model
 from lib.models.evidence_block import ReasoningBlock
 from lib.models.phenotype import HPOTerm
 from lib.reference_data.hpo import find_matching_hpo_terms, get_ontology
@@ -336,21 +336,14 @@ but actively use tools before giving up.
 
 ---------------------------------------------------------------------
 
-HPO REASONING REQUIREMENTS (STEP-BY-STEP JUSTIFICATION)
+HPO REASONING REQUIREMENTS (BRIEF)
 
-The `hpo.reasoning` field MUST summarize your reasoning process
-for the single phenotype using the HPO TERM SELECTION FRAMEWORK.
-
-The explanation should document the resolution process in a concise
-step-by-step format.
-
-Include:
-
-1. How you interpreted the phenotype
-2. Which candidates you evaluated and why
-3. What you searched for and what you found (e.g., "Searched for 'agenesis of teeth', found HP:0001321 — too broad")
-4. Why you selected (or rejected) specific terms
-5. Final selection or null reasoning
+The `hpo.reasoning` field is a short audit note for a human curator, not a
+transcript -- it is displayed as-is and never parsed. In 1-2 sentences, state
+the final selection (or null) and the one or two facts that justified it (a
+candidate confirmed or rejected, a search that found or failed to find a
+better term). Skip restating the framework steps or narrating tool calls in
+sequence.
 
 Write in plain prose. Do not use function names like get_hpo_term() — describe what you did instead (e.g., "Looked up HP:0001250 — confirmed as seizures").
 
@@ -362,7 +355,7 @@ agent = Agent(
     name='hpo_linker',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
-    model_settings=extraction_model_settings(),
+    model_settings=decision_model_settings(),
     output_type=ReasoningBlock[HPOTerm],
     tools=[search_hpo_terms, get_hpo_term, get_hpo_parents, get_hpo_children],
 )
