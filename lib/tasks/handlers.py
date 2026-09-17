@@ -20,6 +20,7 @@ from lib.agents.hpo_linking_agent import (
 from lib.agents.hpo_linking_agent import (
     agent as hpo_linking_agent,
 )
+from lib.agents.manual_output import run_with_manual_output
 from lib.agents.mondo_linking_agent import (
     MONDO_LINKING_AGENT_INSTRUCTIONS,
 )
@@ -145,9 +146,19 @@ from lib.models.mondo import (
     MondoLinkingTarget,
 )
 from lib.models.paper import FileFormat
-from lib.models.patient import ProbandStatus
+from lib.models.patient import (
+    PatientDemographics,
+    PatientExtractionOutput,
+    ProbandStatus,
+)
+from lib.models.patient_variant_occurrences import PatientVariantOccurrenceOutput
 from lib.models.phenotype import HPOTerm
-from lib.models.variant import HarmonizedVariant, Variant, is_harmonized
+from lib.models.variant import (
+    HarmonizedVariant,
+    Variant,
+    VariantExtractionOutput,
+    is_harmonized,
+)
 from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
 from lib.reference_data.mondo import get_mondo_term
 from lib.tasks.agent_session import agent_session
@@ -374,9 +385,10 @@ async def handle_variant_extraction(task_id: int) -> None:
         message = f'{paper_context}\n\n{VARIANT_EXTRACTION_AGENT_INSTRUCTIONS}'
         agent = variant_extraction_agent
 
-    result = await Runner.run(
+    result, parsed = await run_with_manual_output(
         agent,
         message,
+        VariantExtractionOutput,
         session=agent_sess,
     )
     log_cache_metrics('VARIANT_EXTRACTION', result)
@@ -390,7 +402,7 @@ async def handle_variant_extraction(task_id: int) -> None:
         session.query(VariantDB).filter(
             VariantDB.paper_id == paper_id,
         ).delete()
-        for variant in result.final_output.variants:
+        for variant in parsed.variants:
             session.add(variant_to_db(paper_id, variant))
 
 
@@ -523,9 +535,10 @@ async def handle_patient_extraction(task_id: int) -> None:
         )
         agent = patient_extraction_agent
 
-    result = await Runner.run(
+    result, parsed = await run_with_manual_output(
         agent,
         message,
+        PatientExtractionOutput,
         session=agent_sess,
     )
     log_cache_metrics('PATIENT_EXTRACTION', result)
@@ -546,14 +559,14 @@ async def handle_patient_extraction(task_id: int) -> None:
 
         # Insert families first so we have family IDs for patient assignment
         family_entries_by_id: dict[str, int] = {}
-        for entry in result.final_output.families:
+        for entry in parsed.families:
             db_family = family_to_db(paper_id, entry.family)
             session.add(db_family)
             session.flush()
             family_entries_by_id[entry.family.identifier.value] = db_family.id
 
         # Insert patients (identity only; demographics filled by a later agent)
-        for patient_info in result.final_output.patients:
+        for patient_info in parsed.patients:
             db_patient = patient_identity_to_db(paper_id, patient_info)
             # Use family_identifier from patient to find correct family
             family_id_value = patient_info.family_identifier.value
@@ -651,9 +664,10 @@ async def handle_patient_demographics(task_id: int) -> None:
         )
         agent = patient_demographics_agent
 
-    result = await Runner.run(
+    result, parsed = await run_with_manual_output(
         agent,
         message,
+        PatientDemographics,
         session=agent_sess,
     )
     log_cache_metrics('PATIENT_DEMOGRAPHICS', result)
@@ -666,7 +680,7 @@ async def handle_patient_demographics(task_id: int) -> None:
         patient_row = session.get(PatientDB, patient_id)
         if not patient_row:
             return
-        apply_patient_demographics(patient_row, result.final_output)
+        apply_patient_demographics(patient_row, parsed)
 
 
 async def handle_segregation_evidence_extraction(task_id: int) -> None:
@@ -1186,9 +1200,10 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
         )
         agent = patient_variant_occurrence_agent
 
-    result = await Runner.run(
+    result, parsed = await run_with_manual_output(
         agent,
         message,
+        PatientVariantOccurrenceOutput,
         session=agent_sess,
     )
     log_cache_metrics('PATIENT_VARIANT_OCCURRENCE', result)
@@ -1198,31 +1213,29 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
         session.query(PatientVariantOccurrenceDB).filter(
             PatientVariantOccurrenceDB.paper_id == paper_id
         ).delete()
-        for link in result.final_output.links:
+        for link in parsed.links:
             session.add(patient_variant_occurrence_to_db(paper_id, link))
         session.flush()
 
         # Clear any existing pairing and reasoning (idempotent re-run support)
         # Compound het evaluation will be done by a separate agent
-        links = (
+        db_links = (
             session.query(PatientVariantOccurrenceDB)
             .filter(PatientVariantOccurrenceDB.paper_id == paper_id)
             .all()
         )
-        for link in links:
-            link.paired_variant_link_id = None
-            link.paired_variant_confidence = None
-            link.paired_variant_confidence_reasoning = None
+        for db_link in db_links:
+            db_link.paired_variant_link_id = None
+            db_link.paired_variant_confidence = None
+            db_link.paired_variant_confidence_reasoning = None
         session.flush()
 
         # Update paper-level disease_name if provided by the agent (case-level context)
-        if result.final_output.disease_name is not None:
+        if parsed.disease_name is not None:
             paper = session.get(PaperDB, paper_id)
             if paper:
-                paper.disease_name = result.final_output.disease_name.value
-                paper.disease_name_evidence = (
-                    result.final_output.disease_name.model_dump()
-                )
+                paper.disease_name = parsed.disease_name.value
+                paper.disease_name_evidence = parsed.disease_name.model_dump()
 
 
 async def handle_compound_het_evaluation(task_id: int) -> None:
