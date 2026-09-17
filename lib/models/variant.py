@@ -481,6 +481,7 @@ class AnnotatedVariant(BaseModel):
     submissions: Optional[int] = None
     stars: Optional[int] = None
     exon: Optional[str] = None
+    vep_consequence: Optional[str] = None
     revel: Optional[float] = None
     alphamissense_class: Optional[str] = None
     alphamissense_score: Optional[float] = None
@@ -512,6 +513,7 @@ class AnnotatedVariantResp(BaseModel):
     submissions: Optional[int] = None
     stars: Optional[int] = None
     exon: Optional[str] = None
+    vep_consequence: Optional[str] = None
     revel: Optional[float] = None
     alphamissense_class: Optional[str] = None
     alphamissense_score: Optional[float] = None
@@ -545,6 +547,7 @@ class AnnotatedVariantDB(Base):
 
     # VEP
     exon: Mapped[str | None] = mapped_column(String, nullable=True)
+    vep_consequence: Mapped[str | None] = mapped_column(String, nullable=True)
     revel: Mapped[float | None] = mapped_column(Float, nullable=True)
     alphamissense_class: Mapped[str | None] = mapped_column(String, nullable=True)
     alphamissense_score: Mapped[float | None] = mapped_column(Float, nullable=True)

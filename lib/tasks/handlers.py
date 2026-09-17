@@ -1105,6 +1105,7 @@ async def handle_variant_annotation(task_id: int) -> None:
                     submissions=ev.submissions,
                     stars=ev.stars,
                     exon=ev.exon,
+                    vep_consequence=ev.vep_consequence,
                     revel=ev.revel,
                     alphamissense_class=ev.alphamissense_class,
                     alphamissense_score=ev.alphamissense_score,

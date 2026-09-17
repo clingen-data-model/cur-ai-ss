@@ -1748,6 +1748,7 @@ def _variant_to_resp(row: VariantDB) -> VariantResp:
             submissions=row.annotated_variant.submissions,
             stars=row.annotated_variant.stars,
             exon=row.annotated_variant.exon,
+            vep_consequence=row.annotated_variant.vep_consequence,
             revel=row.annotated_variant.revel,
             alphamissense_class=row.annotated_variant.alphamissense_class,
             alphamissense_score=row.annotated_variant.alphamissense_score,
