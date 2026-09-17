@@ -34,6 +34,10 @@ class Env(BaseSettings):
     # through LiteLLM -- see lib/agents/model_factory.py.
     EXTRACTION_MODEL: str = 'openai/gpt-5.6-luna'
     VLM_MODEL: str = 'openai/gpt-5.6-sol'
+    # Separate from EXTRACTION_MODEL: Anthropic Fast mode (see
+    # lib/agents/model_factory.py's chat_model_settings) only works on Opus
+    # models, and EXTRACTION_MODEL is not necessarily Opus.
+    CHAT_MODEL: str = 'anthropic/claude-opus-5'
     OPENAI_API_KEY: Optional[str] = None
     ANTHROPIC_API_KEY: Optional[str] = None
     LOG_LEVEL: LogLevel = LogLevel.INFO
@@ -89,6 +93,7 @@ class Env(BaseSettings):
         for setting, model in (
             ('EXTRACTION_MODEL', self.EXTRACTION_MODEL),
             ('VLM_MODEL', self.VLM_MODEL),
+            ('CHAT_MODEL', self.CHAT_MODEL),
         ):
             provider, _ = split_provider(model)
             if provider not in ROUTABLE_PROVIDERS:

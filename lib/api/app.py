@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncGenerator, Optional
 
+from agents import RunConfig, Runner
 from fastapi import (
     Body,
     Depends,
@@ -35,6 +36,11 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
+from lib.agents.chat_agent import (
+    ChatRunContext,
+    build_paper_chat_context,
+    make_chat_agent,
+)
 from lib.api.auth import get_current_user, get_current_user_optional
 from lib.api.db import get_session, session_scope
 from lib.api.middleware import make_log_request_middleware
@@ -86,6 +92,10 @@ from lib.models import (
     AnnotatedVariantDB,
     AnnotatedVariantResp,
     ChangePasswordRequest,
+    ChatMessageCreateRequest,
+    ChatMessageDB,
+    ChatMessageResp,
+    ChatRole,
     FamilyCreateRequest,
     FamilyDB,
     FamilyResp,
@@ -158,6 +168,7 @@ from lib.tasks import (
     enqueue_task,
     invalidate_descendants,
 )
+from lib.tasks.agent_session import chat_session
 from lib.tasks.misc import summarize_paper_task_status
 from lib.tasks.models import (
     ACTIVE_STATUSES,
@@ -1212,6 +1223,78 @@ def create_task(
         )
         tasks = [task]
     return tasks
+
+
+@app.get('/papers/{paper_id}/chat/messages', response_model=list[ChatMessageResp])
+def list_chat_messages(
+    paper_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    return (
+        session.query(ChatMessageDB)
+        .options(selectinload(ChatMessageDB.created_by))
+        .filter(ChatMessageDB.paper_id == paper_id)
+        .order_by(ChatMessageDB.id)
+        .all()
+    )
+
+
+@app.post('/papers/{paper_id}/chat/messages', response_model=ChatMessageResp)
+async def send_chat_message(
+    paper_id: int,
+    request: ChatMessageCreateRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """Post a chat message and get the assistant's reply.
+
+    One Runner.run() call per message, on the paper's own SQLiteSession
+    (chat_session) -- the model itself decides whether to answer in prose or
+    call queue_task, exactly as the deleted chat_routing_agent did. A queued
+    task's confirmation is stored verbatim as the assistant's reply rather
+    than whatever the model additionally says, so the visible message always
+    matches what actually happened.
+    """
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+
+    user_message = ChatMessageDB(
+        paper_id=paper_id,
+        role=ChatRole.USER,
+        content=request.message,
+        created_by_user_id=current_user.id,
+    )
+    session.add(user_message)
+    session.flush()
+
+    context = build_paper_chat_context(paper_id)
+    run_context = ChatRunContext()
+    result = await Runner.run(
+        make_chat_agent(paper_id, current_user.id),
+        f'PAPER CONTEXT:\n{context}\n\nUser: {request.message}',
+        session=chat_session(paper_id),
+        context=run_context,
+        run_config=RunConfig(trace_metadata={'paper_id': str(paper_id)}),
+    )
+    reply = run_context.confirmation or str(result.final_output)
+
+    assistant_message = ChatMessageDB(
+        paper_id=paper_id,
+        role=ChatRole.ASSISTANT,
+        content=reply,
+    )
+    session.add(assistant_message)
+    session.flush()
+    return assistant_message
 
 
 def _user_summary(user: UserDB | None) -> UserSummaryResp | None:

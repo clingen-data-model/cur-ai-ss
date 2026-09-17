@@ -1,6 +1,7 @@
 import io
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,6 +13,8 @@ from lib.api.db import get_session, session_scope
 from lib.core.environment import env
 from lib.models import (
     AnnotatedVariantDB,
+    ChatMessageDB,
+    ChatRole,
     FamilyDB,
     GeneDB,
     HarmonizedVariantDB,
@@ -1319,6 +1322,81 @@ def test_create_task_requires_authentication(unauth_client, seeded_paper):
     response = unauth_client.post(
         f'/papers/{seeded_paper.id}/tasks',
         json=TaskCreateRequest(type=TaskType.VARIANT_EXTRACTION).model_dump(),
+    )
+    assert response.status_code == 401
+
+
+def test_send_chat_message_answers_question(client, seeded_paper):
+    """A plain question is answered in prose and both turns are persisted."""
+    mock_result = MagicMock()
+    mock_result.final_output = 'This paper has one family.'
+
+    with patch('agents.Runner.run', return_value=mock_result):
+        response = client.post(
+            f'/papers/{seeded_paper.id}/chat/messages',
+            json={'message': 'How many families are in this paper?'},
+        )
+    assert response.status_code == 200
+    reply = response.json()
+    assert reply['role'] == 'assistant'
+    assert reply['content'] == 'This paper has one family.'
+
+    messages = client.get(f'/papers/{seeded_paper.id}/chat/messages').json()
+    assert [m['role'] for m in messages] == ['user', 'assistant']
+    assert messages[0]['content'] == 'How many families are in this paper?'
+    assert messages[1]['content'] == 'This paper has one family.'
+
+
+def test_send_chat_message_queues_task(client, seeded_paper):
+    """An action request stores the tool's confirmation verbatim, not
+    whatever the model additionally said."""
+    mock_result = MagicMock()
+    mock_result.final_output = 'ignored -- the confirmation wins'
+
+    async def fake_run(agent, message, *, context=None, **kwargs):
+        context.confirmation = 'Queued the "Variant Extraction" task.'
+        return mock_result
+
+    with patch('agents.Runner.run', side_effect=fake_run):
+        response = client.post(
+            f'/papers/{seeded_paper.id}/chat/messages',
+            json={'message': 're-run variant extraction'},
+        )
+    assert response.status_code == 200
+    reply = response.json()
+    assert reply['content'] == 'Queued the "Variant Extraction" task.'
+
+
+def test_list_chat_messages(client, db_session, seeded_paper, test_user):
+    db_session.add_all(
+        [
+            ChatMessageDB(
+                paper_id=seeded_paper.id,
+                role=ChatRole.USER,
+                content='hi',
+                created_by_user_id=test_user.id,
+            ),
+            ChatMessageDB(
+                paper_id=seeded_paper.id,
+                role=ChatRole.ASSISTANT,
+                content='hello',
+            ),
+        ]
+    )
+    db_session.commit()
+
+    response = client.get(f'/papers/{seeded_paper.id}/chat/messages')
+    assert response.status_code == 200
+    messages = response.json()
+    assert [m['content'] for m in messages] == ['hi', 'hello']
+    assert messages[0]['created_by_user_id'] == test_user.id
+    assert messages[1]['created_by_user_id'] is None
+
+
+def test_send_chat_message_requires_authentication(unauth_client, seeded_paper):
+    response = unauth_client.post(
+        f'/papers/{seeded_paper.id}/chat/messages',
+        json={'message': 'hello'},
     )
     assert response.status_code == 401
 

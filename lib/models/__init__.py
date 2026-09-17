@@ -4,6 +4,12 @@ from typing import Literal
 from pydantic import BaseModel
 
 from lib.models.base import Base, PatchModel
+from lib.models.chat_message import (
+    ChatMessageCreateRequest,
+    ChatMessageDB,
+    ChatMessageResp,
+    ChatRole,
+)
 from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock
 from lib.models.family import (
     Family,
