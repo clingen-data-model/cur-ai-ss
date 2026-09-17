@@ -103,7 +103,10 @@ export function DataTable<TData, TValue>({
             {table.getRowModel().rows.length ? (
               table.getRowModel().rows.map((row) => (
                 <React.Fragment key={row.id}>
-                  <TableRow>
+                  <TableRow
+                    onClick={row.getCanExpand() ? () => row.toggleExpanded() : undefined}
+                    className={row.getCanExpand() ? 'cursor-pointer' : undefined}
+                  >
                     {row.getVisibleCells().map((cell) => (
                       <TableCell key={cell.id}>
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
