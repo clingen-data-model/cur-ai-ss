@@ -80,7 +80,7 @@ function FileCard({ file, onRemove }: { file: File; onRemove: () => void }) {
         <FileIcon className="h-4 w-4 text-foreground" />
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-medium text-foreground">{file.name}</p>
+        <p className="text-wrap break-words text-xs font-medium text-foreground">{file.name}</p>
         <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
       </div>
       <Button
