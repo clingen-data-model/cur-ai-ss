@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
+  clearChatMessagesPapersPaperIdChatMessagesDelete,
   listChatMessagesPapersPaperIdChatMessagesGet,
   sendChatMessagePapersPaperIdChatMessagesPost,
 } from '@/api/generated'
@@ -52,10 +53,23 @@ export function usePaperChat(paperId: number) {
     },
   })
 
+  const clearChat = useMutation({
+    mutationFn: () =>
+      clearChatMessagesPapersPaperIdChatMessagesDelete({ path: { paper_id: paperId } }),
+    onSuccess: () => {
+      queryClient.setQueryData<ChatMessageResp[]>(queryKey, [])
+      toast.success('Chat cleared')
+    },
+    onError: (err) => {
+      toast.error(`Failed to clear chat: ${err.message}`)
+    },
+  })
+
   return {
     messages: messagesQuery.data ?? [],
     isLoading: messagesQuery.isPending,
     isError: messagesQuery.isError,
     sendMessage,
+    clearChat,
   }
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { MessageCircleIcon, SendIcon, XIcon } from 'lucide-react'
+import { MessageCircleIcon, SendIcon, Trash2Icon, XIcon } from 'lucide-react'
 import { usePaperChat } from '@/hooks/usePaperChat'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -28,7 +28,7 @@ import {
  * -- today that's just the patients page, but it requires no changes when
  * occurrences/variants get their own React routes later. */
 export function ChatBubble({ paperId }: { paperId: number }) {
-  const { messages, isLoading, sendMessage } = usePaperChat(paperId)
+  const { messages, isLoading, sendMessage, clearChat } = usePaperChat(paperId)
   const [draft, setDraft] = useState('')
   const [open, setOpen] = useState(false)
 
@@ -70,7 +70,16 @@ export function ChatBubble({ paperId }: { paperId: number }) {
         <Card className="h-[32rem] max-h-[70vh] gap-0 py-0 shadow-xl">
           <CardHeader className="border-b py-3">
             <CardTitle>Paper Chat</CardTitle>
-            <CardAction>
+            <CardAction className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => clearChat.mutate()}
+                disabled={messages.length === 0 || clearChat.isPending}
+              >
+                <Trash2Icon />
+                <span className="sr-only">Clear chat</span>
+              </Button>
               <PopoverClose
                 render={<Button variant="ghost" size="icon-sm" />}
               >

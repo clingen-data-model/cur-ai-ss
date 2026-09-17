@@ -1297,6 +1297,30 @@ async def send_chat_message(
     return assistant_message
 
 
+@app.delete('/papers/{paper_id}/chat/messages', status_code=status.HTTP_204_NO_CONTENT)
+async def clear_chat_messages(
+    paper_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> None:
+    """Reset a paper's chat to a blank slate: no stored messages, no residual
+    agent turn history -- the next message starts from just the paper's
+    current DB state, same as the old Streamlit 'Clear Chat' button.
+
+    Two operations because this schema splits what the old ConversationDB row
+    held in one place: the stored transcript (ChatMessageDB rows) and the
+    agent's own turn history (chat_session's SQLiteSession) are cleared
+    separately.
+    """
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        return
+
+    session.query(ChatMessageDB).filter(ChatMessageDB.paper_id == paper_id).delete()
+    session.flush()
+    await chat_session(paper_id).clear_session()
+
+
 def _user_summary(user: UserDB | None) -> UserSummaryResp | None:
     return UserSummaryResp.model_validate(user) if user else None
 
