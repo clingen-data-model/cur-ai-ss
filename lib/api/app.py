@@ -28,7 +28,7 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import delete, func, select, union
 from sqlalchemy.exc import IntegrityError
@@ -53,6 +53,7 @@ from lib.core.security import (
 )
 from lib.misc.avatars import (
     InvalidAvatarError,
+    avatar_path,
     delete_avatar,
     store_avatar,
 )
@@ -114,6 +115,7 @@ from lib.models import (
     PaperResetRequest,
     PaperResetResp,
     PaperResp,
+    PaperReviewUpdateRequest,
     PaperSummaryResp,
     PaperTag,
     PaperUpdateRequest,
@@ -667,6 +669,46 @@ def get_task_stats(
     )
 
 
+@app.get('/users', response_model=list[UserSummaryResp], tags=['users'])
+def list_users(
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """Every active account, for pickers that must offer someone who hasn't
+    touched a paper yet -- unlike GET /papers/collaborators, which is scoped to
+    people who have."""
+    users = session.query(UserDB).filter(UserDB.is_active.is_(True)).all()
+    return sorted(
+        (UserSummaryResp.model_validate(user) for user in users),
+        key=lambda u: u.name.lower(),
+    )
+
+
+@app.get('/users/{user_id}/avatar')
+def get_user_avatar(user_id: int) -> FileResponse:
+    """Serve any user's avatar image, unauthenticated.
+
+    Backs UserSummaryResp.avatar_url, which every avatar rendered for someone
+    other than the signed-in user resolves through (collaborators, the
+    worked-on-by filter, the review-assignee picker) -- unlike UserResp's,
+    which points straight at the static-mounted file since only the caller's
+    own avatar needs no path of its own. An <img src> cannot carry a bearer
+    token, so this has to be reachable without one, same as the static mount.
+
+    Cached for 24 hours like the static mount's files: the URL carries
+    avatar_updated_at as a cache-busting query parameter, so a fresh upload
+    is a new URL rather than stale content served from cache.
+    """
+    path = avatar_path(user_id)
+    if not path.exists():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='No avatar')
+    return FileResponse(
+        path,
+        media_type='image/png',
+        headers={'Cache-Control': 'public, max-age=86400'},
+    )
+
+
 @app.get('/papers/collaborators', response_model=list[UserSummaryResp])
 def list_paper_collaborators(
     session: Session = Depends(get_session),
@@ -865,6 +907,59 @@ def update_paper(
     return _paper_to_resp(paper_db)
 
 
+@app.patch('/papers/{paper_id}/review', response_model=PaperResp)
+def update_paper_review(
+    paper_id: int,
+    request: PaperReviewUpdateRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """Assign, start, complete or unassign a paper's curation review.
+
+    Separate from PATCH /papers/{paper_id}: review status is a workflow the
+    team manages, not paper metadata a curator edits, and it does not touch
+    updated_by_user_id -- assigning a paper to someone else should not read as
+    "last edited by" whoever made the assignment.
+    """
+    paper_db = (
+        session.query(PaperDB)
+        .options(
+            selectinload(PaperDB.gene),
+            selectinload(PaperDB.tasks),
+            selectinload(PaperDB.patients),
+            selectinload(PaperDB.variants),
+            selectinload(PaperDB.patient_variant_occurrences),
+        )
+        .filter(PaperDB.id == paper_id)
+        .one_or_none()
+    )
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    if request.assignee_user_id is not None:
+        assignee = session.get(UserDB, request.assignee_user_id)
+        if assignee is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail='Assignee not found'
+            )
+    paper_db.review_status = request.review_status
+    paper_db.review_assignee_user_id = request.assignee_user_id
+    paper_db.patient_count = len(paper_db.patients)
+    paper_db.proband_count = len(
+        [
+            p
+            for p in paper_db.patients
+            if p.proband_status == ProbandStatus.Proband.value
+        ]
+    )
+    paper_db.variant_count = len(paper_db.variants)
+    paper_db.patient_variant_occurrences_count = len(
+        paper_db.patient_variant_occurrences
+    )
+    return _paper_to_resp(paper_db)
+
+
 def _touch_paper(session: Session, paper_id: int, editor: UserDB | None) -> None:
     """Propagate a child-entity edit up to the parent paper's modification
     attribution. Editing a nested entity (variant, patient, family, ...) does not
@@ -1005,6 +1100,12 @@ def _paper_summaries(
                 if paper.updated_by_user_id is not None
                 else None
             ),
+            review_status=paper.review_status,
+            review_assignee=(
+                users.get(paper.review_assignee_user_id)
+                if paper.review_assignee_user_id is not None
+                else None
+            ),
             patient_count=patient_counts.get(paper.id, 0),
             proband_count=proband_counts.get(paper.id, 0),
             variant_count=variant_counts.get(paper.id, 0),
@@ -1124,6 +1225,8 @@ def _paper_to_resp(row: PaperDB) -> PaperResp:
         updated_at=row.updated_at,
         updated_by_user_id=row.updated_by_user_id,
         updated_by=_user_summary(row.updated_by),
+        review_status=row.review_status,
+        review_assignee=_user_summary(row.review_assignee),
         tasks=[
             TaskResp.model_validate(task, from_attributes=True) for task in row.tasks
         ],

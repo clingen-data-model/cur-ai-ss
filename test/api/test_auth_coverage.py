@@ -11,12 +11,17 @@ from fastapi.routing import APIRoute
 from lib.api.app import app
 
 # Public by necessity, not by oversight:
-#   login / register -- you cannot hold a token before you have an account
-#   status           -- health check, polled by infrastructure with no identity
+#   login / register     -- you cannot hold a token before you have an account
+#   status               -- health check, polled by infrastructure with no identity
+#   users/{id}/avatar     -- rendered by <img src>, which cannot carry a bearer
+#                            token; same reasoning as the CAA_ROOT static mount,
+#                            which serves the signed-in user's own avatar file
+#                            the same way and is unauthenticated for the same reason
 PUBLIC_ROUTES = {
     ('POST', '/auth/login'),
     ('POST', '/auth/register'),
     ('GET', '/status'),
+    ('GET', '/users/{user_id}/avatar'),
 }
 
 

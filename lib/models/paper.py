@@ -123,6 +123,22 @@ class FileFormat(StrEnum):
     XLSX = 'xlsx'
 
 
+class ReviewStatus(StrEnum):
+    """A paper's curation-review workflow state, distinct from its extraction
+    `PaperTaskStatus`. Extraction tracks whether the agent pipeline has run;
+    review tracks whether a human has signed off on the result.
+
+    ASSIGNED, IN_PROGRESS and COMPLETED always carry a `review_assignee`.
+    NOT_ASSIGNED never does -- the two travel together and are validated as a
+    pair in `PaperReviewUpdateRequest`.
+    """
+
+    NOT_ASSIGNED = 'not_assigned'
+    ASSIGNED = 'assigned'
+    IN_PROGRESS = 'in_progress'
+    COMPLETED = 'completed'
+
+
 class PaperDB(Base):
     __tablename__ = 'papers'
 
@@ -167,7 +183,27 @@ class PaperDB(Base):
         nullable=True,
         index=True,
     )
-    updated_by: Mapped['UserDB | None'] = relationship('UserDB')
+    # Explicit foreign_keys on both user relationships below: with two FKs from
+    # papers to users, SQLAlchemy cannot infer which one each relationship means.
+    updated_by: Mapped['UserDB | None'] = relationship(
+        'UserDB', foreign_keys=[updated_by_user_id]
+    )
+
+    review_status: Mapped[ReviewStatus] = mapped_column(
+        SQLEnum(ReviewStatus),
+        nullable=False,
+        default=ReviewStatus.NOT_ASSIGNED,
+        server_default=ReviewStatus.NOT_ASSIGNED.value,
+    )
+    review_assignee_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey('users.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
+    review_assignee: Mapped['UserDB | None'] = relationship(
+        'UserDB', foreign_keys=[review_assignee_user_id]
+    )
 
     # Paper extraction metadata (populated asynchronously by extraction agent)
     title: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -321,6 +357,8 @@ class PaperResp(PaperExtractionOutput):
     updated_at: UtcDatetime
     updated_by_user_id: int | None = None
     updated_by: UserSummaryResp | None = None
+    review_status: ReviewStatus = ReviewStatus.NOT_ASSIGNED
+    review_assignee: UserSummaryResp | None = None
     tasks: list['TaskResp'] = []
     patient_count: int = 0
     proband_count: int = 0
@@ -403,6 +441,8 @@ class PaperSummaryResp(BaseModel):
     # Who last touched the paper itself, as distinct from collaborators, which
     # is everyone who has touched anything under it.
     updated_by: 'UserSummaryResp | None' = None
+    review_status: ReviewStatus = ReviewStatus.NOT_ASSIGNED
+    review_assignee: 'UserSummaryResp | None' = None
     patient_count: int = 0
     proband_count: int = 0
     variant_count: int = 0
@@ -414,6 +454,31 @@ class PaperSummaryResp(BaseModel):
         from lib.misc.pdf.paths import pdf_thumbnail_path
 
         return str(pdf_thumbnail_path(self.id))
+
+
+class PaperReviewUpdateRequest(BaseModel):
+    """Body for PATCH /papers/{paper_id}/review.
+
+    review_status and assignee_user_id always travel together: NOT_ASSIGNED
+    means no one is on the hook for review, so it must not carry an assignee,
+    and every other status is meaningless without one.
+    """
+
+    review_status: ReviewStatus
+    assignee_user_id: int | None = None
+
+    @model_validator(mode='after')
+    def assignee_matches_status(self) -> Self:
+        if self.review_status == ReviewStatus.NOT_ASSIGNED:
+            if self.assignee_user_id is not None:
+                raise ValueError(
+                    'assignee_user_id must be omitted when review_status is not_assigned'
+                )
+        elif self.assignee_user_id is None:
+            raise ValueError(
+                'assignee_user_id is required unless review_status is not_assigned'
+            )
+        return self
 
 
 class PaperUpdateRequest(PatchModel):

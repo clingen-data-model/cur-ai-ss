@@ -10,6 +10,7 @@ import { Link } from '@tanstack/react-router'
 import { DataTable } from '@/components/ui/data-table'
 import { Collaborators } from '@/components/Collaborators'
 import { StatusBadge } from '@/components/StatusBadge'
+import { ReviewStatusCell } from '@/components/ReviewStatusCell'
 import { DeletePaperButton, RerunTaskButton } from '@/components/PaperActions'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { PaperSummaryResp } from '@/api/generated/types.gen'
@@ -62,8 +63,13 @@ export function PapersTable({ papers }: { papers: PaperSummaryResp[] }) {
       },
       {
         accessorKey: 'status',
-        header: 'Status',
+        header: 'Extraction Status',
         cell: ({ row }) => <StatusBadge status={row.original.status} />,
+      },
+      {
+        accessorKey: 'review_status',
+        header: 'Review Status',
+        cell: ({ row }) => <ReviewStatusCell paper={row.original} />,
       },
       { accessorKey: 'patient_count', header: 'Patients' },
       { accessorKey: 'variant_count', header: 'Variants' },
