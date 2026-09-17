@@ -41,10 +41,10 @@ def test_snapshot_covers_every_paper_scoped_table():
     snapshot (lib.misc.snapshots._INSERT_ORDER) or to the exclusions below."""
     from lib.misc.snapshots import _INSERT_ORDER
 
-    # Nothing is deliberately excluded any more -- the one exclusion this
-    # guarded (the conversations table, chat history the user kept through
-    # resets) was dropped along with the chat feature.
-    excluded: set[str] = set()
+    # chat_messages is deliberately excluded, same as the old conversations
+    # table before it: chat history is user-authored conversation, not
+    # extraction output, so a reset should not wipe or restore it.
+    excluded: set[str] = {'chat_messages'}
     snapshotted = {model.__table__.name for _, model in _INSERT_ORDER} | {'papers'}
 
     reachable = {'papers'}

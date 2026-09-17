@@ -19,10 +19,15 @@ def _env(**overrides) -> Env:
 
 
 def test_prefixed_openai_models_validate():
-    env = _env(EXTRACTION_MODEL='openai/gpt-5.6-luna', VLM_MODEL='openai/gpt-5.6-sol')
+    env = _env(
+        EXTRACTION_MODEL='openai/gpt-5.6-luna',
+        VLM_MODEL='openai/gpt-5.6-sol',
+        CHAT_MODEL='openai/gpt-5.6-luna',
+    )
 
     assert env.EXTRACTION_MODEL == 'openai/gpt-5.6-luna'
     assert env.VLM_MODEL == 'openai/gpt-5.6-sol'
+    assert env.CHAT_MODEL == 'openai/gpt-5.6-luna'
 
 
 @pytest.mark.parametrize('name', ['gpt-5.6-luna', 'openai/', '/gpt', ''])

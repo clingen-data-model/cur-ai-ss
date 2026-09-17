@@ -106,6 +106,31 @@ def model_settings_for(name: str, *, effort: str | None = None) -> ModelSettings
     return ModelSettings(extra_args=extra_args)
 
 
+def chat_model() -> Model | str:
+    """The model the chat agent runs on."""
+    return resolve_model(env.CHAT_MODEL)
+
+
+def chat_model_settings() -> ModelSettings:
+    """Chat gets its own model settings rather than model_settings_for(): it
+    still wants the prompt-cache breakpoints, but additionally requests
+    Anthropic Fast mode ('speed': 'fast') for lower-latency interactive
+    replies. Fast mode is Opus-only, so CHAT_MODEL should be pointed at an
+    Opus model to actually get it -- but sending it unconditionally whenever
+    the provider is Anthropic (rather than special-casing "is this
+    specifically Opus") follows the same non-branching pattern as
+    decision_model_settings()'s `effort`: a fixed property of this agent, not
+    a runtime check of today's config.
+    """
+    settings = model_settings_for(env.CHAT_MODEL)
+    provider, _ = split_provider(env.CHAT_MODEL)
+    if provider != 'anthropic':
+        return settings
+    extra_args = dict(settings.extra_args or {})
+    extra_args['speed'] = 'fast'
+    return ModelSettings(extra_args=extra_args)
+
+
 def vlm_model() -> str:
     """The model the vision tools run on, as a LiteLLM-routable name.
 

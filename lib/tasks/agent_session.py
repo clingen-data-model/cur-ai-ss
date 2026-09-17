@@ -32,3 +32,16 @@ def agent_session(task_id: int) -> SQLiteSession:
         session_id=f'task-{task_id}',
         db_path=env.sqlite_dir / AGENT_SESSIONS_DB_NAME,
     )
+
+
+def chat_session(paper_id: int) -> SQLiteSession:
+    """The chat conversation history for one paper.
+
+    Same SQLiteSession mechanism and db file as agent_session, keyed with a
+    distinct prefix ('chat-' vs 'task-') so the two id spaces never collide.
+    """
+    Path(env.sqlite_dir).mkdir(parents=True, exist_ok=True)
+    return SQLiteSession(
+        session_id=f'chat-{paper_id}',
+        db_path=env.sqlite_dir / AGENT_SESSIONS_DB_NAME,
+    )
