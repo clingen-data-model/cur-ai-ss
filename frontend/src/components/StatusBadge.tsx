@@ -39,7 +39,7 @@ export function badgeFor(status: PaperTaskStatus) {
 export function StatusBadge({ status }: { status: PaperTaskStatus }) {
   const { label, variant, className } = badgeFor(status)
   return (
-    <Badge variant={variant} className={className}>
+    <Badge variant={variant} className={`${className ?? ''} hover:opacity-80 transition-opacity`}>
       {label}
     </Badge>
   )

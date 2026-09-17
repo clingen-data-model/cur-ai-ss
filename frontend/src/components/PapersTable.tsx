@@ -10,6 +10,7 @@ import { Link } from '@tanstack/react-router'
 import { DataTable } from '@/components/ui/data-table'
 import { Collaborators } from '@/components/Collaborators'
 import { StatusBadge } from '@/components/StatusBadge'
+import { PaperProgressPopover } from '@/components/PaperProgressPopover'
 import { ReviewStatusCell } from '@/components/ReviewStatusCell'
 import { DeletePaperButton, RerunTaskButton } from '@/components/PaperActions'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -64,7 +65,11 @@ export function PapersTable({ papers }: { papers: PaperSummaryResp[] }) {
       {
         accessorKey: 'status',
         header: 'Extraction Status',
-        cell: ({ row }) => <StatusBadge status={row.original.status} />,
+        cell: ({ row }) => (
+          <PaperProgressPopover paper={row.original}>
+            <StatusBadge status={row.original.status} />
+          </PaperProgressPopover>
+        ),
       },
       {
         accessorKey: 'review_status',
