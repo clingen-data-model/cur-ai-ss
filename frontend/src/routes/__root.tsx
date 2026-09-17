@@ -3,13 +3,23 @@
  */
 import '@/lib/api'
 import React, { useEffect } from 'react'
-import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
+import { Link, Outlet, useNavigate, useParams, useRouterState } from '@tanstack/react-router'
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Spinner } from '@/components/ui/spinner'
 import { ActivityIndicator } from '@/components/ActivityIndicator'
+import { ChatBubble } from '@/components/ChatBubble'
 import { UserMenu } from '@/components/UserMenu'
 import { AuthProvider, useAuth } from '@/lib/auth'
+
+/* Renders the chat bubble on every /papers/$paperId/* page. Reads the param
+ * loosely (strict: false) so it works from any current or future route
+ * nested under a paper, without each of those routes wiring it in itself. */
+function PaperChatBubble() {
+  const { paperId } = useParams({ strict: false })
+  if (!paperId) return null
+  return <ChatBubble paperId={Number(paperId)} />
+}
 
 /* Gate every route behind a token. Reads happen to be open on the API, but the
  * app is only useful signed in and every mutation would 401, so redirect rather
@@ -80,6 +90,7 @@ function Layout() {
         </div>
       </footer>
 
+      <PaperChatBubble />
       <Toaster position="top-right" />
     </div>
   )
