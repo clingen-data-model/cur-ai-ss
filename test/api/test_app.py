@@ -1,3 +1,4 @@
+import asyncio
 import io
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
@@ -28,6 +29,7 @@ from lib.models import (
     VariantDB,
 )
 from lib.tasks import TaskCreateRequest
+from lib.tasks.agent_session import chat_session
 from lib.tasks.models import TaskStatus, TaskType
 
 
@@ -1399,6 +1401,45 @@ def test_send_chat_message_requires_authentication(unauth_client, seeded_paper):
         json={'message': 'hello'},
     )
     assert response.status_code == 401
+
+
+def test_clear_chat_messages(client, db_session, seeded_paper, test_user):
+    """Clearing wipes stored messages and the agent's own turn history, so the
+    next message starts from just the paper's current DB state."""
+    db_session.add_all(
+        [
+            ChatMessageDB(
+                paper_id=seeded_paper.id,
+                role=ChatRole.USER,
+                content='hi',
+                created_by_user_id=test_user.id,
+            ),
+            ChatMessageDB(
+                paper_id=seeded_paper.id, role=ChatRole.ASSISTANT, content='hello'
+            ),
+        ]
+    )
+    db_session.commit()
+
+    asyncio.run(
+        chat_session(seeded_paper.id).add_items([{'role': 'user', 'content': 'hi'}])
+    )
+
+    response = client.delete(f'/papers/{seeded_paper.id}/chat/messages')
+    assert response.status_code == 204
+
+    assert client.get(f'/papers/{seeded_paper.id}/chat/messages').json() == []
+    assert asyncio.run(chat_session(seeded_paper.id).get_items()) == []
+
+
+def test_clear_chat_messages_requires_authentication(unauth_client, seeded_paper):
+    response = unauth_client.delete(f'/papers/{seeded_paper.id}/chat/messages')
+    assert response.status_code == 401
+
+
+def test_clear_chat_messages_missing_paper_is_a_noop(client):
+    response = client.delete('/papers/999999/chat/messages')
+    assert response.status_code == 204
 
 
 def test_update_occurrence(client, db_session, seeded_paper, seeded_variant, test_user):
