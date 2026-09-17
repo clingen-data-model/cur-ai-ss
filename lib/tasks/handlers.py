@@ -4,6 +4,7 @@ import logging
 from typing import Any, Awaitable, Callable
 
 from agents import Agent, RunConfig, Runner
+from agents.exceptions import MaxTurnsExceeded
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
@@ -175,6 +176,7 @@ def log_cache_metrics(task_type: str, result: Any) -> None:
 
     total_input = 0
     total_cache_read = 0
+    total_output = 0
 
     for resp in result.raw_responses:
         if not hasattr(resp, 'usage'):
@@ -187,16 +189,18 @@ def log_cache_metrics(task_type: str, result: Any) -> None:
         input_tokens = getattr(usage, 'input_tokens', None) or 0
         details = getattr(usage, 'input_tokens_details', None)
         cache_read = getattr(details, 'cached_tokens', None) or 0
+        output_tokens = getattr(usage, 'output_tokens', None) or 0
 
         total_input += input_tokens
         total_cache_read += cache_read
+        total_output += output_tokens
 
     if total_input > 0:
         cache_pct = (total_cache_read / total_input * 100) if total_input > 0 else 0
         logger.info(
             f'[CACHE] {task_type}: '
             f'input={total_input} cached={total_cache_read} '
-            f'({cache_pct:.1f}%)'
+            f'({cache_pct:.1f}%) output={total_output}'
         )
 
 
@@ -1494,20 +1498,38 @@ async def handle_hpo_linking(task_id: int) -> None:
             f'{HPO_LINKING_AGENT_INSTRUCTIONS}'
         )
 
-    result = await Runner.run(
-        hpo_linking_agent,
-        message,
-        max_turns=15,
-        session=agent_sess,
-        run_config=RunConfig(
-            trace_metadata={
-                'paper_id': str(task_id),
-                'phenotype_id': str(phenotype_id),
-                'concept': phenotype_data['concept'],
-            },
-        ),
-    )
-    log_cache_metrics('HPO_LINKING', result)
+    try:
+        result = await Runner.run(
+            hpo_linking_agent,
+            message,
+            max_turns=8,
+            session=agent_sess,
+            run_config=RunConfig(
+                trace_metadata={
+                    'paper_id': str(task_id),
+                    'phenotype_id': str(phenotype_id),
+                    'concept': phenotype_data['concept'],
+                },
+            ),
+        )
+        log_cache_metrics('HPO_LINKING', result)
+        hpo_result = result.final_output
+    except MaxTurnsExceeded:
+        # An ambiguous phenotype exploring the ontology graph exhausts the
+        # turn budget rather than erroring cleanly. A retry from scratch
+        # would repeat the same walk at the same cost with no new
+        # information to converge faster, so treat this as "no confident
+        # match" -- a real outcome the agent itself can return -- instead
+        # of a transient failure the worker retries.
+        logger.warning(
+            f'Task {task_id}: HPO_LINKING exceeded max turns for phenotype '
+            f'{phenotype_id}; recording no match instead of retrying'
+        )
+        hpo_result = ReasoningBlock[HPOTerm](
+            value=HPOTerm(id=None, name=None),
+            reasoning='Exceeded the tool-call turn budget while exploring the '
+            'HPO ontology graph; no confident match was reached.',
+        )
 
     # Store results in new session
     with session_scope() as session:
@@ -1517,7 +1539,7 @@ async def handle_hpo_linking(task_id: int) -> None:
 
         # Idempotent: delete-then-insert
         session.query(HpoDB).filter(HpoDB.phenotype_id == phenotype_id).delete()
-        session.add(hpo_to_db(phenotype_id, result.final_output))
+        session.add(hpo_to_db(phenotype_id, hpo_result))
 
 
 def _build_mondo_linking_target(

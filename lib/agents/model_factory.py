@@ -57,7 +57,19 @@ def extraction_model_settings() -> ModelSettings:
     return model_settings_for(env.EXTRACTION_MODEL)
 
 
-def model_settings_for(name: str) -> ModelSettings:
+def decision_model_settings() -> ModelSettings:
+    """Model settings for agents choosing among a small set of options rather
+    than extracting open-ended structured data from a paper -- HPO/MONDO
+    linking, segregation classification. These are closer to classification
+    than reasoning-heavy extraction, so they hold up fine at lower effort, and
+    lower effort also means fewer, more consolidated tool calls -- directly
+    addressing the multi-turn ontology-walk cost these agents are prone to
+    (see docs/anthropic-migration.md's cost-reduction notes).
+    """
+    return model_settings_for(env.EXTRACTION_MODEL, effort='low')
+
+
+def model_settings_for(name: str, *, effort: str | None = None) -> ModelSettings:
     """Prompt-cache breakpoints for a configured model, gated on provider.
 
     Anthropic only: ModelSettings.extra_args is splatted as top-level kwargs
@@ -66,6 +78,10 @@ def model_settings_for(name: str) -> ModelSettings:
     cache_control_injection_points there is not a no-op -- OpenAI does not know
     the parameter, so an openai/ model gets the empty ModelSettings() the type
     requires (Agent.__post_init__ rejects None) rather than these breakpoints.
+    The same is true of `effort`: `output_config.effort` is meaningless outside
+    Anthropic, so it is only ever set here, never as a provider branch inside
+    an agent -- a fixed, per-agent choice about how hard that agent's task
+    warrants thinking, not a workaround for what today's provider can't do.
 
     Two breakpoints, not one: 'system' covers the instructions and tool
     definitions, which are identical on every call an agent makes; index -1
@@ -79,14 +95,15 @@ def model_settings_for(name: str) -> ModelSettings:
     provider, _ = split_provider(name)
     if provider != 'anthropic':
         return ModelSettings()
-    return ModelSettings(
-        extra_args={
-            'cache_control_injection_points': [
-                {'location': 'message', 'role': 'system', 'control': _CACHE_CONTROL},
-                {'location': 'message', 'index': -1, 'control': _CACHE_CONTROL},
-            ]
-        }
-    )
+    extra_args: dict = {
+        'cache_control_injection_points': [
+            {'location': 'message', 'role': 'system', 'control': _CACHE_CONTROL},
+            {'location': 'message', 'index': -1, 'control': _CACHE_CONTROL},
+        ]
+    }
+    if effort is not None:
+        extra_args['output_config'] = {'effort': effort}
+    return ModelSettings(extra_args=extra_args)
 
 
 def vlm_model() -> str:
