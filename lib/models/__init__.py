@@ -38,12 +38,14 @@ from lib.models.paper import (
     PaperDB,
     PaperExtractionOutput,
     PaperResp,
+    PaperReviewUpdateRequest,
     PaperSummaryResp,
     PaperTag,
     PaperType,
     PaperUpdateRequest,
     PedigreeDB,
     PedigreeResp,
+    ReviewStatus,
 )
 from lib.models.patient import (
     PatientDB,
