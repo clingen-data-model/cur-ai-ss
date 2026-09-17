@@ -112,23 +112,19 @@ def chat_model() -> Model | str:
 
 
 def chat_model_settings() -> ModelSettings:
-    """Chat gets its own model settings rather than model_settings_for(): it
-    still wants the prompt-cache breakpoints, but additionally requests
-    Anthropic Fast mode ('speed': 'fast') for lower-latency interactive
-    replies. Fast mode is Opus-only, so CHAT_MODEL should be pointed at an
-    Opus model to actually get it -- but sending it unconditionally whenever
-    the provider is Anthropic (rather than special-casing "is this
-    specifically Opus") follows the same non-branching pattern as
-    decision_model_settings()'s `effort`: a fixed property of this agent, not
-    a runtime check of today's config.
+    """Chat's model settings -- just the prompt-cache breakpoints, same as
+    every other agent.
+
+    This used to also request Anthropic Fast mode ('speed': 'fast'). Verified
+    live against production and reverted: our Anthropic org has a 0
+    fast-mode-input-tokens-per-minute limit, so every Fast mode request 429s
+    outright (litellm.RateLimitError, "This request would exceed your rate
+    limit of 0 fast mode input tokens per minute") regardless of prompt size --
+    not a usage-based limit that headroom or backoff would fix, but Fast mode
+    not being provisioned on this account's plan at all. Revisit only after
+    confirming with Anthropic that the org's plan grants Fast mode capacity.
     """
-    settings = model_settings_for(env.CHAT_MODEL)
-    provider, _ = split_provider(env.CHAT_MODEL)
-    if provider != 'anthropic':
-        return settings
-    extra_args = dict(settings.extra_args or {})
-    extra_args['speed'] = 'fast'
-    return ModelSettings(extra_args=extra_args)
+    return model_settings_for(env.CHAT_MODEL)
 
 
 def vlm_model() -> str:
