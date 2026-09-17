@@ -106,6 +106,27 @@ def model_settings_for(name: str, *, effort: str | None = None) -> ModelSettings
     return ModelSettings(extra_args=extra_args)
 
 
+def chat_model() -> Model | str:
+    """The model the chat agent runs on."""
+    return resolve_model(env.CHAT_MODEL)
+
+
+def chat_model_settings() -> ModelSettings:
+    """Chat's model settings -- just the prompt-cache breakpoints, same as
+    every other agent.
+
+    This used to also request Anthropic Fast mode ('speed': 'fast'). Verified
+    live against production and reverted: our Anthropic org has a 0
+    fast-mode-input-tokens-per-minute limit, so every Fast mode request 429s
+    outright (litellm.RateLimitError, "This request would exceed your rate
+    limit of 0 fast mode input tokens per minute") regardless of prompt size --
+    not a usage-based limit that headroom or backoff would fix, but Fast mode
+    not being provisioned on this account's plan at all. Revisit only after
+    confirming with Anthropic that the org's plan grants Fast mode capacity.
+    """
+    return model_settings_for(env.CHAT_MODEL)
+
+
 def vlm_model() -> str:
     """The model the vision tools run on, as a LiteLLM-routable name.
 

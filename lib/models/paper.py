@@ -13,6 +13,7 @@ from pydantic import (
 from lib.models.datetimes import UtcDatetime
 
 if TYPE_CHECKING:
+    from lib.models.chat_message import ChatMessageDB
     from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
     from lib.models.family import FamilyDB
     from lib.models.patient import PatientDB
@@ -261,6 +262,9 @@ class PaperDB(Base):
     )
     tasks: Mapped[list['TaskDB']] = relationship(
         'TaskDB', back_populates='paper', cascade='all, delete-orphan'
+    )
+    chat_messages: Mapped[list['ChatMessageDB']] = relationship(
+        'ChatMessageDB', back_populates='paper', cascade='all, delete-orphan'
     )
 
 
