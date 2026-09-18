@@ -233,6 +233,8 @@ declared but not imported anywhere in `src/` yet.
 | `react-pdf` | React wrapper around PDF.js | Renders paper pages in `TwoColumnWithBottomRightPdf.tsx`. |
 | `react-pdf-highlighter` | Highlight overlay for PDF.js pages | Draws evidence highlights on the rendered paper. Pinned to the pre-release `8.0.0-rc.0`, and **patched** — see [The react-pdf-highlighter patch](#the-react-pdf-highlighter-patch). |
 | `zustand` | Minimal global state store | `stores/ui.ts`, for UI state that shouldn't live in the URL or the query cache. |
+| `react-markdown` | Renders a markdown string as React elements | `PedigreeTab.tsx`, for the vision model's freeform pedigree description (headings, lists, bold). |
+| `remark-gfm` | GitHub-flavored markdown extensions for `react-markdown` | Tables/strikethrough/task-lists in the same pedigree description, in case the model's output uses them. |
 | `zod` | Runtime schema validation | **Unused** — the generated client provides types, and nothing validates at runtime yet. |
 | `shadcn` | CLI that vendors shadcn/ui components | A tool, not a library: `pnpm dlx shadcn add <component>` copies source into `components/ui/`. Pinned to `latest`, so it can change under you. |
 
