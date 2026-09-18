@@ -8,9 +8,12 @@
 import { useMemo, useState } from 'react'
 import { useParams, Link } from '@tanstack/react-router'
 import type { ColumnDef, ExpandedState } from '@tanstack/react-table'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { ChevronDown, ChevronRight, FileText } from 'lucide-react'
 import { usePaperOccurrences } from '@/hooks/usePaperOccurrences'
 import type { OccurrenceRow } from '@/hooks/usePaperOccurrences'
+import { deleteOccurrencePapersPaperIdOccurrencesOccurrenceIdDelete } from '@/api/generated'
 import { DataTable } from '@/components/ui/data-table'
 import { Spinner } from '@/components/ui/spinner'
 import { Button } from '@/components/ui/button'
@@ -30,6 +33,8 @@ import { VariantHoverCardContent } from '@/components/VariantHoverCard'
 import { UnassociatedPatientsTab } from '@/components/UnassociatedPatientsTab'
 import { UnassociatedVariantsTab } from '@/components/UnassociatedVariantsTab'
 import { PipelineGate } from '@/components/PipelineGate'
+import { DeleteIconButton } from '@/components/DeleteIconButton'
+import { apiErrorMessage } from '@/lib/apiError'
 import { TaskType } from '@/api/generated/types.gen'
 import { PedigreeTab } from '@/components/PedigreeTab'
 import { PaperMetadataTab } from '@/components/PaperMetadataTab'
@@ -65,11 +70,26 @@ function EntityLink({
 }
 
 function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRow[] }) {
+  const queryClient = useQueryClient()
   const [expandedCell, setExpandedCell] = useState<{ rowId: string; view: ExpandedView } | null>(null)
 
   const toggleExpanded = (rowId: string, view: ExpandedView) => {
     setExpandedCell((prev) => (prev?.rowId === rowId && prev.view === view ? null : { rowId, view }))
   }
+
+  const deleteMutation = useMutation({
+    mutationFn: (occurrenceId: number) =>
+      deleteOccurrencePapersPaperIdOccurrencesOccurrenceIdDelete({
+        path: { paper_id: paperId, occurrence_id: occurrenceId },
+        throwOnError: true,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['occurrences', paperId] })
+      queryClient.invalidateQueries({ queryKey: ['papers'] })
+      toast.success('Occurrence deleted')
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, 'Failed to delete occurrence')),
+  })
 
   const expanded: ExpandedState = expandedCell ? { [expandedCell.rowId]: true } : {}
 
@@ -188,8 +208,22 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
       })
     }
 
+    cols.push({
+      id: 'actions',
+      header: '',
+      size: 40,
+      enableSorting: false,
+      cell: ({ row }) => (
+        <DeleteIconButton
+          title="Delete occurrence?"
+          description="This will permanently delete this patient/variant link. This cannot be undone."
+          onDelete={() => deleteMutation.mutate(row.original.occurrence.id)}
+        />
+      ),
+    })
+
     return cols
-  }, [hasPairedVariants, hasDiseaseNames, paperId, expandedCell?.rowId])
+  }, [hasPairedVariants, hasDiseaseNames, paperId, expandedCell?.rowId, deleteMutation])
 
   if (rows.length === 0) {
     return (

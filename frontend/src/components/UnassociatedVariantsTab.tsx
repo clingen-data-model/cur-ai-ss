@@ -4,11 +4,19 @@
  * table here would claim the exact opposite of the truth. */
 import { useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { Dna } from 'lucide-react'
 import { TaskType } from '@/api/generated/types.gen'
 import type { TaskResp, VariantResp } from '@/api/generated/types.gen'
+import { deleteVariantPapersPaperIdVariantsVariantIdDelete } from '@/api/generated'
 import { DataTable } from '@/components/ui/data-table'
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
 import { VariantDetailPanel } from '@/components/VariantDetailPanel'
 import { PipelineGate } from '@/components/PipelineGate'
+import { AddVariantDialog } from '@/components/AddVariantDialog'
+import { DeleteIconButton } from '@/components/DeleteIconButton'
+import { apiErrorMessage } from '@/lib/apiError'
 
 export function UnassociatedVariantsTab({
   paperId,
@@ -19,6 +27,22 @@ export function UnassociatedVariantsTab({
   variants: VariantResp[]
   tasks: TaskResp[]
 }) {
+  const queryClient = useQueryClient()
+
+  const deleteMutation = useMutation({
+    mutationFn: (variantId: number) =>
+      deleteVariantPapersPaperIdVariantsVariantIdDelete({
+        path: { paper_id: paperId, variant_id: variantId },
+        throwOnError: true,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['variants', paperId] })
+      queryClient.invalidateQueries({ queryKey: ['papers'] })
+      toast.success('Variant deleted')
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, 'Failed to delete variant')),
+  })
+
   const columns: ColumnDef<VariantResp>[] = useMemo(
     () => [
       { id: 'variant', header: 'Variant', accessorFn: (row) => row.variant_description },
@@ -28,8 +52,29 @@ export function UnassociatedVariantsTab({
         header: 'Main Focus',
         accessorFn: (row) => (row.main_focus ? 'Yes' : 'No'),
       },
+      {
+        id: 'actions',
+        header: '',
+        size: 40,
+        enableSorting: false,
+        cell: ({ row }) => (
+          <DeleteIconButton
+            title="Delete variant?"
+            description={
+              <>
+                This will permanently delete{' '}
+                <span className="font-medium text-foreground">
+                  {row.original.variant_description}
+                </span>{' '}
+                and all data linked to it. This cannot be undone.
+              </>
+            }
+            onDelete={() => deleteMutation.mutate(row.original.id)}
+          />
+        ),
+      },
     ],
-    [],
+    [deleteMutation],
   )
 
   return (
@@ -39,20 +84,36 @@ export function UnassociatedVariantsTab({
       label="Patient/variant linking"
     >
       {variants.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          Every extracted variant is linked to a patient.
-        </p>
+        <Empty className="border">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <Dna />
+            </EmptyMedia>
+            <EmptyTitle>Every extracted variant is linked to a patient</EmptyTitle>
+            <EmptyDescription>
+              Add a variant manually if extraction missed one.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <AddVariantDialog paperId={paperId} />
+          </EmptyContent>
+        </Empty>
       ) : (
-        <DataTable
-          columns={columns}
-          data={variants}
-          filterPlaceholder="Filter variants..."
-          getRowId={(row) => String(row.id)}
-          getRowCanExpand={() => true}
-          renderSubComponent={({ row }) => (
-            <VariantDetailPanel paperId={paperId} variant={row} />
-          )}
-        />
+        <>
+          <div className="flex justify-end mb-2">
+            <AddVariantDialog paperId={paperId} />
+          </div>
+          <DataTable
+            columns={columns}
+            data={variants}
+            filterPlaceholder="Filter variants..."
+            getRowId={(row) => String(row.id)}
+            getRowCanExpand={() => true}
+            renderSubComponent={({ row }) => (
+              <VariantDetailPanel paperId={paperId} variant={row} />
+            )}
+          />
+        </>
       )}
     </PipelineGate>
   )

@@ -149,6 +149,7 @@ from lib.models import (
     VariantResp,
     VariantUpdateRequest,
 )
+from lib.models.base import manual_evidence_block
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.mondo import MondoComponentMapping, MondoTerm
 from lib.models.patient import (
@@ -1537,6 +1538,38 @@ def get_families(
     )
 
 
+@app.post('/papers/{paper_id}/families', response_model=FamilyResp)
+def create_family(
+    paper_id: int,
+    create_request: FamilyCreateRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """Create a new family (e.g. to attach a manually added, unassociated patient to)."""
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+
+    family_db = FamilyDB(
+        paper_id=paper_id,
+        identifier=create_request.identifier,
+        identifier_evidence=manual_evidence_block(
+            create_request.identifier, current_user
+        ),
+        consanguinity=False,
+        consanguinity_evidence=manual_evidence_block(False, current_user),
+        updated_by_user_id=current_user.id,
+    )
+
+    session.add(family_db)
+    _touch_paper(session, paper_id, current_user)
+    session.commit()
+    session.refresh(family_db)
+    return family_db
+
+
 @app.patch('/papers/{paper_id}/families/{family_id}', response_model=FamilyResp)
 def update_family(
     paper_id: int,
@@ -2123,25 +2156,55 @@ def create_patient(
         paper_id=paper_id,
         family_id=create_request.family_id,
         identifier=create_request.identifier,
+        identifier_evidence=manual_evidence_block(
+            create_request.identifier, current_user
+        ),
         proband_status=create_request.proband_status,
+        proband_status_evidence=manual_evidence_block(
+            create_request.proband_status, current_user
+        ),
         affected_status=create_request.affected_status,
+        affected_status_evidence=manual_evidence_block(
+            create_request.affected_status, current_user
+        ),
         sex=create_request.sex,
+        sex_evidence=manual_evidence_block(create_request.sex, current_user),
         country_of_origin=create_request.country_of_origin,
+        country_of_origin_evidence=manual_evidence_block(
+            create_request.country_of_origin, current_user
+        ),
         race=create_request.race,
+        race_evidence=manual_evidence_block(create_request.race, current_user),
         ethnicity=create_request.ethnicity,
+        ethnicity_evidence=manual_evidence_block(
+            create_request.ethnicity, current_user
+        ),
         age_diagnosis=create_request.age_diagnosis,
+        age_diagnosis_evidence=manual_evidence_block(
+            create_request.age_diagnosis, current_user
+        ),
         age_diagnosis_unit=create_request.age_diagnosis_unit,
         age_report=create_request.age_report,
+        age_report_evidence=manual_evidence_block(
+            create_request.age_report, current_user
+        ),
         age_report_unit=create_request.age_report_unit,
         age_death=create_request.age_death,
+        age_death_evidence=manual_evidence_block(
+            create_request.age_death, current_user
+        ),
         age_death_unit=create_request.age_death_unit,
         is_obligate_carrier=create_request.is_obligate_carrier,
         relationship_to_proband=create_request.relationship_to_proband,
         twin_type=create_request.twin_type,
+        family_assignment_evidence=manual_evidence_block(
+            family_db.identifier, current_user
+        ),
         updated_by_user_id=current_user.id,
     )
 
     session.add(patient_db)
+    _touch_paper(session, paper_id, current_user)
     session.commit()
     session.refresh(patient_db)
     return _patient_to_resp(patient_db)
@@ -2164,6 +2227,7 @@ def delete_patient(
         )
 
     session.delete(patient_db)
+    _touch_paper(session, paper_id, current_user)
     session.commit()
 
 
@@ -2189,25 +2253,62 @@ def create_variant(
     variant_db = VariantDB(
         paper_id=paper_id,
         variant=create_request.variant,
+        variant_evidence=manual_evidence_block(create_request.variant, current_user),
         transcript=create_request.transcript,
+        transcript_evidence=manual_evidence_block(
+            create_request.transcript, current_user
+        ),
         protein_accession=create_request.protein_accession,
+        protein_accession_evidence=manual_evidence_block(
+            create_request.protein_accession, current_user
+        ),
         genomic_accession=create_request.genomic_accession,
+        genomic_accession_evidence=manual_evidence_block(
+            create_request.genomic_accession, current_user
+        ),
         lrg_accession=create_request.lrg_accession,
+        lrg_accession_evidence=manual_evidence_block(
+            create_request.lrg_accession, current_user
+        ),
         gene_accession=create_request.gene_accession,
+        gene_accession_evidence=manual_evidence_block(
+            create_request.gene_accession, current_user
+        ),
         genomic_coordinates=create_request.genomic_coordinates,
+        genomic_coordinates_evidence=manual_evidence_block(
+            create_request.genomic_coordinates, current_user
+        ),
         genome_build=create_request.genome_build,
+        genome_build_evidence=manual_evidence_block(
+            create_request.genome_build, current_user
+        ),
         rsid=create_request.rsid,
+        rsid_evidence=manual_evidence_block(create_request.rsid, current_user),
         caid=create_request.caid,
+        caid_evidence=manual_evidence_block(create_request.caid, current_user),
         hgvs_c=create_request.hgvs_c,
+        hgvs_c_evidence=manual_evidence_block(create_request.hgvs_c, current_user),
         hgvs_p=create_request.hgvs_p,
+        hgvs_p_evidence=manual_evidence_block(create_request.hgvs_p, current_user),
         hgvs_g=create_request.hgvs_g,
+        hgvs_g_evidence=manual_evidence_block(create_request.hgvs_g, current_user),
         variant_type=create_request.variant_type,
+        variant_type_evidence=manual_evidence_block(
+            create_request.variant_type, current_user
+        ),
         functional_evidence=create_request.functional_evidence,
+        functional_evidence_evidence=manual_evidence_block(
+            create_request.functional_evidence, current_user
+        ),
         main_focus=create_request.main_focus,
+        main_focus_evidence=manual_evidence_block(
+            create_request.main_focus, current_user
+        ),
         updated_by_user_id=current_user.id,
     )
 
     session.add(variant_db)
+    _touch_paper(session, paper_id, current_user)
     session.commit()
     session.refresh(variant_db)
     return _variant_to_resp(variant_db)
@@ -2230,6 +2331,7 @@ def delete_variant(
         )
 
     session.delete(variant_db)
+    _touch_paper(session, paper_id, current_user)
     session.commit()
 
 
@@ -2269,14 +2371,23 @@ def create_occurrence(
         patient_id=create_request.patient_id,
         variant_id=create_request.variant_id,
         zygosity=create_request.zygosity,
+        zygosity_evidence=manual_evidence_block(create_request.zygosity, current_user),
         inheritance=create_request.inheritance,
+        inheritance_evidence=manual_evidence_block(
+            create_request.inheritance, current_user
+        ),
         de_novo=create_request.de_novo,
+        de_novo_evidence=manual_evidence_block(create_request.de_novo, current_user),
         testing_methods=create_request.testing_methods,
+        testing_methods_evidence=[
+            manual_evidence_block(method, current_user)
+            for method in create_request.testing_methods
+        ],
         disease_name=create_request.disease_name,
-        updated_by_user_id=current_user.id,
     )
 
     session.add(occurrence_db)
+    _touch_paper(session, paper_id, current_user)
     session.commit()
     session.refresh(occurrence_db)
     return _patient_variant_occurrence_to_resp(
@@ -2302,6 +2413,7 @@ def delete_occurrence(
         )
 
     session.delete(occurrence_db)
+    _touch_paper(session, paper_id, current_user)
     session.commit()
 
 

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
 from sqlalchemy.orm import DeclarativeBase
+
+from lib.models.evidence_block import HumanEvidenceBlock
 
 if TYPE_CHECKING:
     from lib.models.user import UserDB
@@ -22,6 +24,25 @@ def row_to_dict(obj: Base) -> dict:
 def _editor_display_name(editor: UserDB) -> str:
     name = f'{editor.first_name} {editor.last_name}'.strip()
     return name or editor.email
+
+
+def manual_evidence_block(value: Any, editor: UserDB) -> dict:
+    """Evidence block for a field a curator typed directly rather than one the
+    extraction pipeline found -- e.g. a manually created patient/variant/family/
+    occurrence. Every ``*_evidence`` column is non-nullable, and PatchModel's
+    ``*_human_edit_note`` handling requires an existing evidence dict to
+    annotate, so these fields need a real (if reasoning-less) evidence block
+    from the moment the row is created, not just on later extraction."""
+    block = HumanEvidenceBlock[Any](
+        value=value,
+        reasoning='Manually entered by curator.',
+        manually_entered=True,
+        human_edit_note='Manually entered by curator.',
+        edited_by_user_id=editor.id,
+        edited_by_name=_editor_display_name(editor),
+        edited_at=datetime.now(timezone.utc),
+    )
+    return block.model_dump(mode='json')
 
 
 class PatchModel(BaseModel):
