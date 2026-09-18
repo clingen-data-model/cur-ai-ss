@@ -121,7 +121,7 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
         cell: ({ row }) => (
           <EntityLink
             onClick={() => toggleExpanded(String(row.original.occurrence.id), 'patient')}
-            hoverContent={<PatientHoverCardContent patient={row.original.patient} />}
+            hoverContent={<PatientHoverCardContent paperId={paperId} patient={row.original.patient} />}
           >
             {row.original.patient.identifier}
           </EntityLink>
