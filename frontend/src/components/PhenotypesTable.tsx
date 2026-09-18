@@ -5,12 +5,15 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
+import { toast } from 'sonner'
 import { getPhenotypesPapersPaperIdPatientsPatientIdPhenotypesGet } from '@/api/generated'
 import type { PhenotypeResp } from '@/api/generated/types.gen'
 import { DataTable } from '@/components/ui/data-table'
 import { EvidencePopover } from '@/components/EvidencePopover'
 import { CopyButton } from '@/components/CopyButton'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Copy } from 'lucide-react'
 
 const STALE_TIME = 5 * 60 * 1000
 
@@ -34,6 +37,27 @@ export function PhenotypesTable({ paperId, patientId }: { paperId: number; patie
       }),
     staleTime: STALE_TIME,
   })
+
+  const copyAllHpoIds = async () => {
+    if (!phenotypesQuery.data) return
+
+    const ids = phenotypesQuery.data
+      .map((p) => p.hpo.value?.id)
+      .filter(Boolean)
+      .join('\n')
+
+    if (!ids) {
+      toast.info('No HPO IDs to copy')
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(ids)
+      toast.success(`Copied ${ids.split('\n').length} HPO IDs`)
+    } catch {
+      toast.error('Failed to copy')
+    }
+  }
 
   const columns: ColumnDef<PhenotypeResp>[] = useMemo(
     () => [
@@ -117,7 +141,18 @@ export function PhenotypesTable({ paperId, patientId }: { paperId: number; patie
 
   return (
     <div className="space-y-2">
-      <h4 className="text-sm font-semibold">Phenotypes</h4>
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-semibold">Phenotypes</h4>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={copyAllHpoIds}
+          className="gap-2"
+        >
+          <Copy className="h-4 w-4" />
+          Copy All HPO IDs
+        </Button>
+      </div>
       <DataTable
         columns={columns}
         data={phenotypesQuery.data}
