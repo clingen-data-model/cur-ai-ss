@@ -42,7 +42,7 @@ export function PapersTable({ papers }: { papers: PaperSummaryResp[] }) {
               <TooltipTrigger
                 render={
                   <Link
-                    to="/papers/$paperId/patients"
+                    to="/papers/$paperId/occurrences"
                     params={{ paperId: String(row.original.id) }}
                     className="block max-w-[28rem] truncate font-medium hover:underline underline-offset-4"
                   />

@@ -27,6 +27,18 @@ interface DataTableProps<TData, TValue> {
   renderSubComponent?: (props: { row: TData }) => React.ReactNode
   getRowCanExpand?: (row: TData) => boolean
   className?: string
+  /** Stable row identity (e.g. a database id) instead of array index -- needed
+   * when a caller drives `expanded` itself and has to key into it. */
+  getRowId?: (row: TData) => string
+  /** Controlled expansion, for a caller that opens a row from something other
+   * than the row's own click (e.g. a specific cell's button). Uncontrolled
+   * (internal state) when omitted. */
+  expanded?: ExpandedState
+  onExpandedChange?: React.Dispatch<React.SetStateAction<ExpandedState>>
+  /** Clicking anywhere in the row toggles it expanded. Default true; a caller
+   * with its own expand triggers (see `expanded` above) sets this false so a
+   * stray click inside a cell doesn't also toggle the row. */
+  expandOnRowClick?: boolean
 }
 
 export function DataTable<TData, TValue>({
@@ -37,10 +49,16 @@ export function DataTable<TData, TValue>({
   renderSubComponent,
   getRowCanExpand,
   className,
+  getRowId,
+  expanded: expandedProp,
+  onExpandedChange: onExpandedChangeProp,
+  expandOnRowClick = true,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = React.useState('')
-  const [expanded, setExpanded] = React.useState<ExpandedState>({})
+  const [expandedState, setExpandedState] = React.useState<ExpandedState>({})
+  const expanded = expandedProp ?? expandedState
+  const onExpandedChange = onExpandedChangeProp ?? setExpandedState
 
   const table = useReactTable({
     data,
@@ -48,13 +66,14 @@ export function DataTable<TData, TValue>({
     state: { sorting, globalFilter, expanded },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
-    onExpandedChange: setExpanded,
+    onExpandedChange,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     getExpandedRowModel: getExpandedRowModel(),
     getRowCanExpand: getRowCanExpand ? (row) => getRowCanExpand(row.original) : undefined,
+    getRowId: getRowId ? (row) => getRowId(row) : undefined,
     initialState: { pagination: { pageSize } },
   })
 
@@ -104,8 +123,14 @@ export function DataTable<TData, TValue>({
               table.getRowModel().rows.map((row) => (
                 <React.Fragment key={row.id}>
                   <TableRow
-                    onClick={row.getCanExpand() ? () => row.toggleExpanded() : undefined}
-                    className={row.getCanExpand() ? 'cursor-pointer' : undefined}
+                    onClick={
+                      expandOnRowClick && row.getCanExpand()
+                        ? () => row.toggleExpanded()
+                        : undefined
+                    }
+                    className={
+                      expandOnRowClick && row.getCanExpand() ? 'cursor-pointer' : undefined
+                    }
                   >
                     {row.getVisibleCells().map((cell) => (
                       <TableCell key={cell.id}>

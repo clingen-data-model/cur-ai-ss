@@ -207,6 +207,8 @@ uv run pytest test/api/test_app.py::test_function  # Specific test
 - Use FastAPI dependency injection in endpoints: `session: Session = Depends(get_session)`
 - Explicitly handle `IntegrityError` for constraint violations
 
+**SQLAlchemy enum columns round-trip through the member's *name*, not its value** — `SQLEnum(SomeEnum)` with no `values_callable` stores e.g. `'COMPLETED'`, not `'completed'` (see `TaskStatus`). A `server_default` (or any raw-SQL backfill) that writes the lowercase *value* instead of the uppercase *name* leaves rows the ORM cannot map back to an enum member — a `LookupError` on every read, not on write, so it passes the migration and only surfaces the first time something queries the table. This broke `GET /papers` (and the whole dashboard) in production on 2026-09-17: migration `f3a8c2d914b7` added `papers.review_status` with `server_default=ReviewStatus.NOT_ASSIGNED.value`; fixed by `4a424fffb965`, which repairs the already-written data and corrects the default to `.name`. When adding a new enum column, default it to the member's name, and confirm by reading a freshly-migrated row back through the ORM (not just checking the raw SQL value) before merging.
+
 **Database migrations (SQLite safety):**
 
 When using `batch_alter_table()` on any table that has CASCADE foreign keys pointing to it, you **MUST disable foreign key constraints** before the batch operation, then re-enable them. Otherwise, when SQLite drops and recreates the table, CASCADE constraints will delete child rows unexpectedly.
