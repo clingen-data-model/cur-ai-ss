@@ -30,23 +30,22 @@ export function PaperMetadataTab({ paper }: { paper: PaperResp }) {
   const [zoom, setZoom] = useState(100)
 
   const updateMutation = useMutation({
-    mutationFn: ({ field, value, note }: { field: string; value: string | null; note: string }) =>
+    mutationFn: (body: Record<string, unknown>) =>
       updatePaperPapersPaperIdPatch({
         path: { paper_id: paper.id },
-        body: {
-          [field]: value,
-          [`${field}_human_edit_note`]: note,
-        },
+        body,
         throwOnError: true,
       }),
     onSuccess: () => {
-      toast.success('Paper updated')
       queryClient.invalidateQueries({ queryKey: ['papers', paper.id] })
     },
-    onError: () => {
-      toast.error('Failed to update paper')
+    onError: (error: unknown) => {
+      const message = error instanceof Error ? error.message : 'Failed to update paper'
+      toast.error(message)
     },
   })
+
+  const save = (body: Record<string, unknown>) => updateMutation.mutate(body)
 
   const onDocumentLoadSuccess = ({ numPages: num }: { numPages: number }) => {
     setNumPages(num)
@@ -102,38 +101,37 @@ export function PaperMetadataTab({ paper }: { paper: PaperResp }) {
               <EditableTextRow
                 label="Title"
                 value={paper.title || ''}
-                onSave={(value, note) =>
-                  updateMutation.mutateAsync({ field: 'title', value: value || null, note })
-                }
                 isSaving={updateMutation.isPending}
+                onSave={(value, note) =>
+                  save({ title: value || null, title_human_edit_note: note })
+                }
               />
               <EditableTextRow
                 label="First Author"
                 value={paper.first_author || ''}
-                onSave={(value, note) =>
-                  updateMutation.mutateAsync({ field: 'first_author', value: value || null, note })
-                }
                 isSaving={updateMutation.isPending}
+                onSave={(value, note) =>
+                  save({ first_author: value || null, first_author_human_edit_note: note })
+                }
               />
               <EditableTextRow
                 label="Publication Year"
                 value={paper.publication_year ? String(paper.publication_year) : ''}
+                isSaving={updateMutation.isPending}
                 onSave={(value, note) =>
-                  updateMutation.mutateAsync({
-                    field: 'publication_year',
-                    value: value ? String(parseInt(value, 10)) : null,
-                    note,
+                  save({
+                    publication_year: value ? parseInt(value, 10) : null,
+                    publication_year_human_edit_note: note,
                   })
                 }
-                isSaving={updateMutation.isPending}
               />
               <EditableTextRow
                 label="Journal Name"
                 value={paper.journal_name || ''}
-                onSave={(value, note) =>
-                  updateMutation.mutateAsync({ field: 'journal_name', value: value || null, note })
-                }
                 isSaving={updateMutation.isPending}
+                onSave={(value, note) =>
+                  save({ journal_name: value || null, journal_name_human_edit_note: note })
+                }
               />
               {paper.paper_types && paper.paper_types.length > 0 && (
                 <div className="flex items-center justify-between gap-3 py-1.5 border-b">
