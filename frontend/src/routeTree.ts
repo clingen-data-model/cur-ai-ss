@@ -16,12 +16,12 @@
  * why the header, footer, auth gate and toaster render on every page.
  */
 import { RootRoute, Route } from '@tanstack/react-router'
-import { isPaperState, type PaperState } from './lib/paperState'
+import { isPaperState, type PaperState, isReviewState, type ReviewState } from './lib/paperState'
 
 import { RootLayout } from './routes/__root'
 import { HomePage } from './routes/index'
 import { LoginPage } from './routes/login'
-import { PatientsPage } from './routes/papers.$paperId.patients'
+import { OccurrencesPage } from './routes/papers.$paperId.occurrences'
 import { SettingsPage } from './routes/settings'
 
 const rootRoute = new RootRoute({
@@ -42,6 +42,8 @@ export interface IndexSearch {
   worked_by?: 'anyone' | 'me' | number
   /** A PaperState, or absent for every state. */
   status?: PaperState
+  /** A ReviewState, or absent for every review state. */
+  review_status?: ReviewState
 }
 
 const indexRoute = new Route({
@@ -66,6 +68,10 @@ const indexRoute = new Route({
     const status = search.status
     if (isPaperState(status)) parsed.status = status
 
+    // Review states for curation workflow filtering.
+    const reviewStatus = search.review_status
+    if (isReviewState(reviewStatus)) parsed.review_status = reviewStatus
+
     // Anything unreadable falls through to showing everything rather than
     // erroring: these are filters, and a broken one should not be a broken page.
     return parsed
@@ -84,17 +90,17 @@ const settingsRoute = new Route({
   component: SettingsPage,
 })
 
-const papersPatientRoute = new Route({
+const papersOccurrencesRoute = new Route({
   getParentRoute: () => rootRoute,
-  path: '/papers/$paperId/patients',
-  component: PatientsPage,
+  path: '/papers/$paperId/occurrences',
+  component: OccurrencesPage,
 })
 
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
   settingsRoute,
-  papersPatientRoute,
+  papersOccurrencesRoute,
 ])
 
-export { papersPatientRoute }
+export { papersOccurrencesRoute }
