@@ -43,6 +43,15 @@ export function AddPatientDialog({ paperId }: { paperId: number }) {
   const effectiveFamilyChoice =
     familyChoice || (families.length > 0 ? String(families[0].id) : NEW_FAMILY_VALUE)
 
+  // Base UI's SelectValue does not read labels off SelectItem children like
+  // Radix did -- a bare <SelectValue /> just stringifies the raw value, so a
+  // family id/sentinel needs an explicit value -> label mapping.
+  const familyLabelFor = (value: string | null): string => {
+    if (value === NEW_FAMILY_VALUE) return '+ Create new family'
+    const family = families.find((f) => String(f.id) === value)
+    return family?.identifier ?? ''
+  }
+
   const reset = () => {
     setIdentifier('')
     setFamilyChoice('')
@@ -128,7 +137,7 @@ export function AddPatientDialog({ paperId }: { paperId: number }) {
                 onValueChange={(value) => setFamilyChoice(value ?? '')}
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue />
+                  <SelectValue>{(value: string | null) => familyLabelFor(value)}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {families.map((f) => (
