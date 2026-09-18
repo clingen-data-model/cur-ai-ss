@@ -8,12 +8,14 @@
 import { useMemo, useState } from 'react'
 import { useParams, Link } from '@tanstack/react-router'
 import type { ColumnDef, ExpandedState } from '@tanstack/react-table'
-import { ChevronDown, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, FileText } from 'lucide-react'
 import { usePaperOccurrences } from '@/hooks/usePaperOccurrences'
 import type { OccurrenceRow } from '@/hooks/usePaperOccurrences'
 import { DataTable } from '@/components/ui/data-table'
 import { Spinner } from '@/components/ui/spinner'
+import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { API_BASE_URL } from '@/lib/api'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card'
 import {
   EditableDeNovoCell,
@@ -220,6 +222,28 @@ export function ExtractionPage() {
   const paperId = parseInt(params.paperId, 10)
   const { paper, rows, unassociatedPatients, unassociatedVariants, isLoading, isError, error } =
     usePaperOccurrences(paperId)
+  const [isExporting, setIsExporting] = useState(false)
+
+  const handleExportPptx = async () => {
+    setIsExporting(true)
+    try {
+      const response = await fetch(`${API_BASE_URL}/papers/${paperId}/curation-export`)
+      if (!response.ok) throw new Error('Failed to export PPTX')
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `curation_${paperId}.pptx`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Error exporting PPTX:', err)
+    } finally {
+      setIsExporting(false)
+    }
+  }
 
   if (isLoading) {
     return (
@@ -241,11 +265,25 @@ export function ExtractionPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <Link to="/" className="text-sm text-muted-foreground hover:underline">
-          &larr; All Papers
-        </Link>
-        <h1 className="text-xl font-semibold mt-1">{paper?.title ?? paper?.filename}</h1>
+      <div className="flex items-start justify-between">
+        <div>
+          <Link to="/" className="text-sm text-muted-foreground hover:underline">
+            &larr; All Papers
+          </Link>
+          <h1 className="text-xl font-semibold mt-1">{paper?.title ?? paper?.filename}</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportPptx}
+            disabled={!paper || isExporting}
+            title="Export curation summary as PPTX"
+          >
+            <FileText className="h-4 w-4 mr-2" />
+            {isExporting ? 'Exporting...' : 'PPTX'}
+          </Button>
+        </div>
       </div>
 
       <Tabs defaultValue="occurrences">
