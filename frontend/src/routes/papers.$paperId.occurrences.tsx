@@ -9,6 +9,7 @@
 import { useMemo, useState } from 'react'
 import { useParams, Link } from '@tanstack/react-router'
 import type { ColumnDef, ExpandedState } from '@tanstack/react-table'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import { usePaperOccurrences } from '@/hooks/usePaperOccurrences'
 import type { OccurrenceRow } from '@/hooks/usePaperOccurrences'
 import { DataTable } from '@/components/ui/data-table'
@@ -60,6 +61,34 @@ export function OccurrencesPage() {
 
   const columns: ColumnDef<OccurrenceRow>[] = useMemo(() => {
     const cols: ColumnDef<OccurrenceRow>[] = [
+      {
+        id: 'expander',
+        size: 40,
+        enableSorting: false,
+        header: () => null,
+        cell: ({ row }) => (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              const rowId = String(row.original.occurrence.id)
+              const isExpanded = expandedCell?.rowId === rowId
+              if (isExpanded) {
+                setExpandedCell(null)
+              } else {
+                setExpandedCell({ rowId, view: 'patient' })
+              }
+            }}
+            className="cursor-pointer flex items-center"
+          >
+            {expandedCell?.rowId === String(row.original.occurrence.id) ? (
+              <ChevronDown className="size-4" />
+            ) : (
+              <ChevronRight className="size-4" />
+            )}
+          </button>
+        ),
+      },
       {
         id: 'proband',
         header: 'Proband',
@@ -134,7 +163,7 @@ export function OccurrencesPage() {
     }
 
     return cols
-  }, [hasPairedVariants, hasDiseaseNames, paperId])
+  }, [hasPairedVariants, hasDiseaseNames, paperId, expandedCell?.rowId])
 
   if (isLoading) {
     return (
