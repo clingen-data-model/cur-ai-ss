@@ -18,7 +18,7 @@ import { ReadOnlyRow } from '@/components/EditableField'
 import { EvidencePopover } from '@/components/EvidencePopover'
 import { pillColorFor } from '@/lib/pillColors'
 
-pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`
+pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`
 
 export function PaperMetadataTab({ paper }: { paper: PaperResp }) {
   const [numPages, setNumPages] = useState<number | null>(null)
