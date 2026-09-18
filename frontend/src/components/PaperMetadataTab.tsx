@@ -11,9 +11,12 @@ import {
   ResizableHandle,
 } from '@/components/ui/resizable'
 import type { PaperResp } from '@/api/generated/types.gen'
+import { API_BASE_URL } from '@/lib/api'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { ReadOnlyRow } from '@/components/EditableField'
 import { EvidencePopover } from '@/components/EvidencePopover'
+import { pillColorFor } from '@/lib/pillColors'
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`
 
@@ -72,10 +75,16 @@ export function PaperMetadataTab({ paper }: { paper: PaperResp }) {
               />
               <ReadOnlyRow label="Journal Name" value={paper.journal_name || '—'} />
               {paper.paper_types && paper.paper_types.length > 0 && (
-                <ReadOnlyRow
-                  label="Paper Types"
-                  value={paper.paper_types.join(', ')}
-                />
+                <div className="flex items-center justify-between gap-3 py-1.5 border-b">
+                  <span className="text-sm text-muted-foreground w-44">Paper Types</span>
+                  <div className="flex flex-wrap gap-1 flex-1 justify-end">
+                    {paper.paper_types.map((type) => (
+                      <Badge key={type} className={pillColorFor(type)} variant="outline">
+                        {type}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
 
@@ -208,7 +217,7 @@ export function PaperMetadataTab({ paper }: { paper: PaperResp }) {
           {/* PDF Container */}
           <div className="flex-1 overflow-auto bg-muted/50 flex items-start justify-center p-4">
             <Document
-              file={paper.pdf_url}
+              file={`${API_BASE_URL}${paper.pdf_url}`}
               onLoadSuccess={onDocumentLoadSuccess}
               loading={<p className="text-xs text-muted-foreground">Loading PDF...</p>}
               error={<p className="text-xs text-red-500">Failed to load PDF</p>}
