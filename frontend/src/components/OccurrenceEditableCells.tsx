@@ -67,6 +67,8 @@ export function EditableZygosityCell({
         defaultNote={occurrence.zygosity_evidence.human_edit_note}
         isPending={mutation.isPending}
         onConfirm={(note) => pending.confirm(note)}
+        beforeValue={occurrence.zygosity}
+        afterValue={pending.pendingValue ?? occurrence.zygosity}
       />
     </div>
   )
@@ -105,6 +107,8 @@ export function EditableInheritanceCell({
         defaultNote={occurrence.inheritance_evidence.human_edit_note}
         isPending={mutation.isPending}
         onConfirm={(note) => pending.confirm(note)}
+        beforeValue={occurrence.inheritance}
+        afterValue={pending.pendingValue ?? occurrence.inheritance}
       />
     </div>
   )
@@ -132,6 +136,8 @@ export function EditableDeNovoCell({
         defaultNote={occurrence.de_novo_evidence.human_edit_note}
         isPending={mutation.isPending}
         onConfirm={(note) => pending.confirm(note)}
+        beforeValue={occurrence.de_novo ? 'Yes' : 'No'}
+        afterValue={pending.pendingValue ? 'Yes' : 'No'}
       />
     </div>
   )
@@ -212,6 +218,8 @@ export function EditableTestingMethodsCell({
         defaultNote={occurrence.testing_methods_note}
         isPending={mutation.isPending}
         onConfirm={(note) => pending.confirm(note)}
+        beforeValue={occurrence.testing_methods.join(', ') || '—'}
+        afterValue={(pending.pendingValue ?? []).join(', ') || '—'}
       />
     </div>
   )
