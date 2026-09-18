@@ -193,7 +193,14 @@ class PaperDB(Base):
         SQLEnum(ReviewStatus),
         nullable=False,
         default=ReviewStatus.NOT_ASSIGNED,
-        server_default=ReviewStatus.NOT_ASSIGNED.value,
+        # SQLEnum(SomeEnum) round-trips through the member's *name* by default
+        # (no values_callable is set here, matching every other enum column in
+        # this codebase -- see TaskStatus), so the raw SQL DEFAULT clause must
+        # be the name ('NOT_ASSIGNED'), not the value ('not_assigned'). Using
+        # .value here shipped 'not_assigned' into every existing paper's row,
+        # which the ORM then failed to read back (LookupError) on every
+        # GET /papers -- see the data-repair migration this bug produced.
+        server_default=ReviewStatus.NOT_ASSIGNED.name,
     )
     review_assignee_user_id: Mapped[int | None] = mapped_column(
         Integer,
