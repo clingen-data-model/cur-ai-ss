@@ -58,10 +58,12 @@ export function HumanEditNoteDialog({
           </AlertDialogDescription>
         </AlertDialogHeader>
         {beforeValue !== undefined && afterValue !== undefined && (
-          <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm">
-            <span className="text-muted-foreground line-through truncate">{beforeValue || '—'}</span>
-            <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
-            <span className="font-medium truncate">{afterValue || '—'}</span>
+          <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm space-y-1.5">
+            <span className="block text-muted-foreground line-through text-wrap break-words">{beforeValue || '—'}</span>
+            <div className="flex items-center gap-2">
+              <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
+            </div>
+            <span className="block font-medium text-wrap break-words">{afterValue || '—'}</span>
           </div>
         )}
         <Textarea
