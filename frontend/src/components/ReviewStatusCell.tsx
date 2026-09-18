@@ -14,7 +14,6 @@ import { ReviewStatus } from '@/api/generated/types.gen'
 import type { PaperSummaryResp, UserSummaryResp } from '@/api/generated/types.gen'
 import { useUsers } from '@/hooks/useUsers'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Command,
@@ -87,6 +86,7 @@ export function ReviewStatusCell({ paper }: { paper: PaperSummaryResp }) {
   const setStatus = (review_status: ReviewStatus) => {
     if (!assignee) return
     mutation.mutate({ review_status, assignee_user_id: assignee.id })
+    setOpen(false)
   }
 
   return (
@@ -95,10 +95,39 @@ export function ReviewStatusCell({ paper }: { paper: PaperSummaryResp }) {
         <ReviewStatusBadge status={status} assignee={assignee} />
       </PopoverTrigger>
       <PopoverContent align="start" className="w-64 p-0 gap-0">
+        {/* Every item that reacts to typing -- status changes and the
+            assignee list -- must live inside one <Command>: cmdk's
+            sub-components (CommandSeparator included) read from context
+            the root provides, and crash if rendered as its sibling. */}
         <Command>
           <CommandInput placeholder="Assign reviewer..." />
           <CommandList>
             <CommandEmpty>No one by that name.</CommandEmpty>
+            {status !== ReviewStatus.NOT_ASSIGNED && (
+              <>
+                <CommandGroup heading="Status">
+                  {IN_PROGRESS_STATUSES.map((s) => (
+                    <CommandItem
+                      key={s}
+                      value={REVIEW_STATUS_SHORT_LABEL[s]}
+                      onSelect={() => setStatus(s)}
+                    >
+                      {REVIEW_STATUS_SHORT_LABEL[s]}
+                      {status === s && <Check className="ml-auto size-4" />}
+                    </CommandItem>
+                  ))}
+                  <CommandItem
+                    value="Unassign"
+                    onSelect={unassign}
+                    className="text-muted-foreground"
+                  >
+                    <UserX />
+                    Unassign
+                  </CommandItem>
+                </CommandGroup>
+                <CommandSeparator />
+              </>
+            )}
             <CommandGroup heading="Assignee">
               {users.map((user) => (
                 <CommandItem
@@ -114,36 +143,6 @@ export function ReviewStatusCell({ paper }: { paper: PaperSummaryResp }) {
             </CommandGroup>
           </CommandList>
         </Command>
-        {status !== ReviewStatus.NOT_ASSIGNED && (
-          <>
-            <CommandSeparator />
-            <div className="flex items-center gap-1 p-1.5">
-              {IN_PROGRESS_STATUSES.map((s) => (
-                <Button
-                  key={s}
-                  type="button"
-                  variant={status === s ? 'secondary' : 'ghost'}
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => setStatus(s)}
-                >
-                  {REVIEW_STATUS_SHORT_LABEL[s]}
-                </Button>
-              ))}
-            </div>
-            <CommandSeparator />
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="m-1.5 justify-start text-muted-foreground"
-              onClick={unassign}
-            >
-              <UserX />
-              Unassign
-            </Button>
-          </>
-        )}
       </PopoverContent>
     </Popover>
   )
