@@ -28,6 +28,7 @@ import { VariantHoverCardContent } from '@/components/VariantHoverCard'
 import { UnassociatedPatientsTab } from '@/components/UnassociatedPatientsTab'
 import { UnassociatedVariantsTab } from '@/components/UnassociatedVariantsTab'
 import { PedigreeTab } from '@/components/PedigreeTab'
+import { PaperMetadataTab } from '@/components/PaperMetadataTab'
 
 type ExpandedView = 'patient' | 'variant'
 
@@ -263,6 +264,7 @@ export function ExtractionPage() {
             )}
           </TabsTrigger>
           <TabsTrigger value="pedigree">Pedigree Image &amp; Description</TabsTrigger>
+          <TabsTrigger value="paper-metadata">Paper Metadata</TabsTrigger>
         </TabsList>
 
         <TabsContent value="occurrences" className="pt-3">
@@ -276,6 +278,9 @@ export function ExtractionPage() {
         </TabsContent>
         <TabsContent value="pedigree" className="pt-3">
           <PedigreeTab paperId={paperId} />
+        </TabsContent>
+        <TabsContent value="paper-metadata" className="pt-3 h-[70vh]">
+          {paper && <PaperMetadataTab paper={paper} />}
         </TabsContent>
       </Tabs>
     </div>
