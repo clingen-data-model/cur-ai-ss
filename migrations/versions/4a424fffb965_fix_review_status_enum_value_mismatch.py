@@ -15,6 +15,29 @@ broke GET /papers (and therefore the whole dashboard) for every paper.
 This repairs the already-written data and fixes the column's own DEFAULT
 clause to match, so a future ALTER-added row gets the correct value even
 outside the ORM.
+
+INCIDENT (2026-09-17): the first version of this migration used
+`connection.execute(text('PRAGMA foreign_keys = OFF'))`, copied from
+f3a8c2d914b7's own (also-buggy) use of that pattern. PRAGMA foreign_keys is
+a documented no-op while a transaction is open, and alembic's env.py
+(`context.begin_transaction()`) already has one open by the time upgrade()
+runs -- so on both migrations the PRAGMA silently did nothing, and batch
+mode's drop-and-recreate of `papers` (required here because SQLite has no
+ALTER COLUMN for changing a DEFAULT) cascaded, deleting every row in
+patients, families, variants, tasks and chat_messages in production.
+Recovered from a same-day backup; ~9 hours of work between the backup and
+the incident was lost.
+
+The fix, verified against a local reproduction of the exact failure:
+`connection.commit()` (closing whichever transaction is already open)
+*before* the PRAGMA, using `exec_driver_sql` rather than `execute(text(...))`
+for the PRAGMA itself. Every other migration using the old
+execute(text('PRAGMA foreign_keys = OFF')) pattern (grep the repo for it)
+carries the same latent bug -- they happened not to trigger it, either
+because their batch operation didn't require a full table recreation or
+their target table has no CASCADE children. Use this migration's pattern,
+not CLAUDE.md's older documented one, for any future batch_alter_table on a
+table with CASCADE dependents.
 """
 
 from typing import Sequence, Union
@@ -47,7 +70,8 @@ def upgrade() -> None:
             {'name': name, 'value': value},
         )
 
-    connection.execute(sa.text('PRAGMA foreign_keys = OFF'))
+    connection.commit()
+    connection.exec_driver_sql('PRAGMA foreign_keys = OFF')
     try:
         with op.batch_alter_table('papers', schema=None) as batch_op:
             batch_op.alter_column(
@@ -62,12 +86,14 @@ def upgrade() -> None:
                 server_default='NOT_ASSIGNED',
             )
     finally:
-        connection.execute(sa.text('PRAGMA foreign_keys = ON'))
+        connection.exec_driver_sql('PRAGMA foreign_keys = ON')
+        connection.commit()
 
 
 def downgrade() -> None:
     connection = op.get_bind()
-    connection.execute(sa.text('PRAGMA foreign_keys = OFF'))
+    connection.commit()
+    connection.exec_driver_sql('PRAGMA foreign_keys = OFF')
     try:
         with op.batch_alter_table('papers', schema=None) as batch_op:
             batch_op.alter_column(
@@ -82,7 +108,8 @@ def downgrade() -> None:
                 server_default='not_assigned',
             )
     finally:
-        connection.execute(sa.text('PRAGMA foreign_keys = ON'))
+        connection.exec_driver_sql('PRAGMA foreign_keys = ON')
+        connection.commit()
 
     for value, name in _VALUE_TO_NAME.items():
         connection.execute(

@@ -14,6 +14,21 @@ user unassigns their papers rather than deleting them. papers has CASCADE
 dependents (patients, families, variants, tasks, chat_messages all cascade
 from papers.id), so PRAGMA foreign_keys is disabled around the batch alter --
 see CLAUDE.md and a1b2c3d4e5f6.
+
+`server_default='NOT_ASSIGNED'` is the enum member's *name*, not its value
+('not_assigned') -- SQLEnum(ReviewStatus) has no values_callable, so it
+round-trips through the name like every other enum column in this codebase
+(see TaskStatus). The value was used here originally, which the ORM could
+not read back (LookupError on every GET /papers) -- see 4a424fffb965.
+
+PRAGMA foreign_keys is also a no-op while a transaction is open, and
+alembic's env.py already has one open by the time upgrade() runs here --
+connection.execute(text('PRAGMA foreign_keys = OFF')) alone silently does
+nothing, confirmed both by this migration wiping every one of papers'
+CASCADE children in production and by a local reproduction. connection
+.commit() first (closing that transaction) before the PRAGMA is what
+actually makes it take effect -- see 4a424fffb965's docstring for the full
+incident writeup.
 """
 
 from typing import Sequence, Union
@@ -30,7 +45,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     connection = op.get_bind()
-    connection.execute(sa.text('PRAGMA foreign_keys = OFF'))
+    connection.commit()
+    connection.exec_driver_sql('PRAGMA foreign_keys = OFF')
     try:
         with op.batch_alter_table('papers', schema=None) as batch_op:
             batch_op.add_column(
@@ -44,7 +60,7 @@ def upgrade() -> None:
                         name='reviewstatus',
                     ),
                     nullable=False,
-                    server_default='not_assigned',
+                    server_default='NOT_ASSIGNED',
                 )
             )
             batch_op.add_column(
@@ -62,12 +78,14 @@ def upgrade() -> None:
                 ['review_assignee_user_id'],
             )
     finally:
-        connection.execute(sa.text('PRAGMA foreign_keys = ON'))
+        connection.exec_driver_sql('PRAGMA foreign_keys = ON')
+        connection.commit()
 
 
 def downgrade() -> None:
     connection = op.get_bind()
-    connection.execute(sa.text('PRAGMA foreign_keys = OFF'))
+    connection.commit()
+    connection.exec_driver_sql('PRAGMA foreign_keys = OFF')
     try:
         with op.batch_alter_table('papers', schema=None) as batch_op:
             batch_op.drop_index('ix_papers_review_assignee_user_id')
@@ -77,4 +95,5 @@ def downgrade() -> None:
             batch_op.drop_column('review_assignee_user_id')
             batch_op.drop_column('review_status')
     finally:
-        connection.execute(sa.text('PRAGMA foreign_keys = ON'))
+        connection.exec_driver_sql('PRAGMA foreign_keys = ON')
+        connection.commit()
