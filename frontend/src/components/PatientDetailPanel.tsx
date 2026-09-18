@@ -29,7 +29,13 @@ export function PatientDetailPanel({ paperId, patient }: { paperId: number; pati
         body,
         throwOnError: true,
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['patients', paperId] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['patients', paperId] })
+      // Editing a patient sets updated_by_user_id, which backs the papers
+      // table's touched_by filter -- without this, "worked on by" stays
+      // stale until the 5-minute staleTime lapses on its own.
+      queryClient.invalidateQueries({ queryKey: ['papers'] })
+    },
     onError: () => toast.error('Failed to save patient'),
   })
 
