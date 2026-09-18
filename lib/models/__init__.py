@@ -48,6 +48,7 @@ from lib.models.paper import (
     ReviewStatus,
 )
 from lib.models.patient import (
+    PatientCreateRequest,
     PatientDB,
     PatientResp,
     PatientUpdateRequest,
@@ -55,6 +56,7 @@ from lib.models.patient import (
 from lib.models.patient_variant_occurrences import (
     Inheritance,
     PatientVariantOccurrence,
+    PatientVariantOccurrenceCreateRequest,
     PatientVariantOccurrenceDB,
     PatientVariantOccurrenceOutput,
     PatientVariantOccurrenceResp,
@@ -101,6 +103,7 @@ from lib.models.variant import (
     SpliceAI,
     Variant,
     VariantAnnotationOutput,
+    VariantCreateRequest,
     VariantDB,
     VariantResp,
     VariantUpdateRequest,

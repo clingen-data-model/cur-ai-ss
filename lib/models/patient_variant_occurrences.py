@@ -115,6 +115,18 @@ class PatientVariantOccurrenceUpdateRequest(PatchModel):
         return self
 
 
+class PatientVariantOccurrenceCreateRequest(BaseModel):
+    """Request to create a new patient-variant occurrence."""
+
+    patient_id: int
+    variant_id: int
+    zygosity: Zygosity = Zygosity.unknown
+    inheritance: Inheritance = Inheritance.unknown
+    de_novo: bool = False
+    testing_methods: list[TestingMethod] = []
+    disease_name: str | None = None
+
+
 class CompoundHetPair(BaseModel):
     variant_id_a: int
     variant_id_b: int

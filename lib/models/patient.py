@@ -607,6 +607,28 @@ class PatientResp(BaseModel):
     family_assignment_evidence: HumanEvidenceBlock[str]
 
 
+class PatientCreateRequest(BaseModel):
+    """Request to create a new patient. All fields required."""
+
+    family_id: int
+    identifier: str
+    proband_status: str
+    affected_status: str
+    sex: str
+    country_of_origin: str
+    race: str
+    ethnicity: str
+    age_diagnosis: int | None = None
+    age_diagnosis_unit: str | None = None
+    age_report: int | None = None
+    age_report_unit: str | None = None
+    age_death: int | None = None
+    age_death_unit: str | None = None
+    is_obligate_carrier: bool | None = None
+    relationship_to_proband: str | None = None
+    twin_type: str | None = None
+
+
 class PatientUpdateRequest(PatchModel):
     identifier: str | None = None
     proband_status: str | None = None

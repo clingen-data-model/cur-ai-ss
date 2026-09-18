@@ -278,6 +278,27 @@ class HarmonizedVariantUpdate(PatchModel):
         self.stamp_updated_by(obj, editor)
 
 
+class VariantCreateRequest(BaseModel):
+    """Request to create a new raw (unharmonized) variant."""
+
+    variant: str | None = None
+    transcript: str | None = None
+    protein_accession: str | None = None
+    genomic_accession: str | None = None
+    lrg_accession: str | None = None
+    gene_accession: str | None = None
+    genomic_coordinates: str | None = None
+    genome_build: str | None = None
+    rsid: str | None = None
+    caid: str | None = None
+    hgvs_c: str | None = None
+    hgvs_p: str | None = None
+    hgvs_g: str | None = None
+    variant_type: str = 'Unknown'
+    functional_evidence: bool = False
+    main_focus: bool = False
+
+
 class VariantUpdateRequest(PatchModel):
     """Patch model for updating variant fields editable in the UI."""
 
