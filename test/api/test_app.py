@@ -1492,6 +1492,158 @@ def test_update_occurrence(client, db_session, seeded_paper, seeded_variant, tes
     assert resp.status_code == 404
 
 
+def test_create_family(client, seeded_paper):
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/families', json={'identifier': 'Family 2'}
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body['identifier'] == 'Family 2'
+    assert body['consanguinity'] is False
+    assert (
+        body['identifier_evidence']['human_edit_note'] == 'Manually entered by curator.'
+    )
+
+    resp = client.post('/papers/999999/families', json={'identifier': 'Family X'})
+    assert resp.status_code == 404
+
+
+def test_create_family_requires_authentication(unauth_client, seeded_paper):
+    resp = unauth_client.post(
+        f'/papers/{seeded_paper.id}/families', json={'identifier': 'Family 2'}
+    )
+    assert resp.status_code == 401
+
+
+def _patient_create_body(family_id: int, identifier: str = 'New Patient') -> dict:
+    return {
+        'family_id': family_id,
+        'identifier': identifier,
+        'proband_status': 'Unknown',
+        'affected_status': 'Unknown',
+        'sex': 'Unknown',
+        'country_of_origin': 'Unknown',
+        'race': 'Unknown',
+        'ethnicity': 'Unknown',
+    }
+
+
+def test_create_patient(client, db_session, seeded_paper, test_user):
+    family = (
+        db_session.query(FamilyDB).filter(FamilyDB.paper_id == seeded_paper.id).one()
+    )
+
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/patients',
+        json=_patient_create_body(family.id),
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body['identifier'] == 'New Patient'
+    assert (
+        body['identifier_evidence']['human_edit_note'] == 'Manually entered by curator.'
+    )
+    assert body['identifier_evidence']['edited_by_user_id'] == test_user.id
+
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/patients',
+        json=_patient_create_body(999999),
+    )
+    assert resp.status_code == 404
+
+
+def test_create_variant(client, seeded_paper):
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/variants', json={'variant': 'c.100A>G'}
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body['variant_description'] == 'c.100A>G'
+    assert body['variant_type'] == 'Unknown'
+    assert body['functional_evidence'] is False
+    assert body['main_focus'] is False
+
+    resp = client.post('/papers/999999/variants', json={'variant': 'c.1A>G'})
+    assert resp.status_code == 404
+
+
+def test_create_occurrence(client, db_session, seeded_paper, seeded_variant):
+    family = (
+        db_session.query(FamilyDB).filter(FamilyDB.paper_id == seeded_paper.id).one()
+    )
+    patient = PatientDB(
+        paper_id=seeded_paper.id,
+        family_id=family.id,
+        identifier='Occurrence Test Patient',
+        **_patient_required_fields('Occurrence Test Patient'),
+    )
+    db_session.add(patient)
+    db_session.commit()
+
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/occurrences',
+        json={'patient_id': patient.id, 'variant_id': seeded_variant.id},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body['zygosity'] == 'Unknown'
+    assert body['inheritance'] == 'Unknown'
+    assert body['de_novo'] is False
+    assert body['testing_methods'] == []
+
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/occurrences',
+        json={'patient_id': 999999, 'variant_id': seeded_variant.id},
+    )
+    assert resp.status_code == 404
+
+
+def test_delete_patient(client, db_session, seeded_paper):
+    family = (
+        db_session.query(FamilyDB).filter(FamilyDB.paper_id == seeded_paper.id).one()
+    )
+    patient = PatientDB(
+        paper_id=seeded_paper.id,
+        family_id=family.id,
+        identifier='Deletable',
+        **_patient_required_fields('Deletable'),
+    )
+    db_session.add(patient)
+    db_session.commit()
+    patient_id = patient.id
+
+    resp = client.delete(f'/papers/{seeded_paper.id}/patients/{patient_id}')
+    assert resp.status_code == 204
+    assert db_session.get(PatientDB, patient_id) is None
+
+    resp = client.delete(f'/papers/{seeded_paper.id}/patients/999999')
+    assert resp.status_code == 404
+
+
+def test_delete_variant(client, db_session, seeded_paper, seeded_variant):
+    variant_id = seeded_variant.id
+    resp = client.delete(f'/papers/{seeded_paper.id}/variants/{variant_id}')
+    assert resp.status_code == 204
+    assert db_session.get(VariantDB, variant_id) is None
+
+    resp = client.delete(f'/papers/{seeded_paper.id}/variants/999999')
+    assert resp.status_code == 404
+
+
+def test_delete_occurrence(client, db_session, seeded_paper, seeded_variant):
+    occurrence = _create_patient_variant_occurrence(
+        db_session, seeded_paper, seeded_variant
+    )
+    occurrence_id = occurrence.id
+
+    resp = client.delete(f'/papers/{seeded_paper.id}/occurrences/{occurrence_id}')
+    assert resp.status_code == 204
+    assert db_session.get(PatientVariantOccurrenceDB, occurrence_id) is None
+
+    resp = client.delete(f'/papers/{seeded_paper.id}/occurrences/999999')
+    assert resp.status_code == 404
+
+
 def test_enqueue_task_with_patient_variant_occurrence_scope(
     client, seeded_paper, seeded_variant, db_session
 ):

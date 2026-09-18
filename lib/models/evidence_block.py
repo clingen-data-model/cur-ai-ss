@@ -76,6 +76,13 @@ class EvidenceBlock(ReasoningBlock[T]):
     is_supplement: bool = (
         False  # whether evidence came from a supplement (non-renderable in PDF view)
     )
+    # True when a curator typed this value directly (e.g. a manually created
+    # patient/variant) rather than the extraction pipeline reading it out of
+    # the paper -- there's no quote to point at because it was never a claim
+    # about the paper's text. Applies to every evidence block, not just
+    # HumanEvidenceBlock ones, since "raw" extracted-only fields (no
+    # human_edit_note) can also be seeded manually at creation time.
+    manually_entered: bool = False
 
     @field_validator('quote', mode='after')
     @classmethod
@@ -100,6 +107,7 @@ class EvidenceBlock(ReasoningBlock[T]):
         if (
             not is_unknown
             and not is_falsy_bool
+            and not self.manually_entered
             and not self.quote
             and self.table_id is None
             and self.image_id is None
