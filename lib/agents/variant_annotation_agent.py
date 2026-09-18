@@ -226,6 +226,7 @@ def vep_lookup(
 
     # Populate fields
     result_variant.exon = tx.get('exon')
+    result_variant.vep_consequence = ', '.join(tx.get('consequence_terms', [])) or None
     result_variant.revel = tx.get('revel')
     result_variant.alphamissense_class = tx.get('alphamissense', {}).get('am_class')
     result_variant.alphamissense_score = tx.get('alphamissense', {}).get(

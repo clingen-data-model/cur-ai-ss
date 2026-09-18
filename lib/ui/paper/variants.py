@@ -858,6 +858,7 @@ def render_variants_tab(selected_variant_id: int | None) -> None:
                                     else 'N/A',
                                     'SpliceAI': spliceai_display,
                                     'Exon': ev.exon or 'N/A',
+                                    'VEP Consequence': ev.vep_consequence or 'N/A',
                                 }
                             ]
                         )
