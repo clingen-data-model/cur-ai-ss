@@ -21,6 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { VARIANT_TYPE_OPTIONS } from '@/lib/variantType'
 import { gnomadUrl, clinGenUrl } from '@/lib/variantLinks'
 import { formatGnomadPopulation } from '@/lib/gnomadPopulations'
+import { apiErrorMessage } from '@/lib/apiError'
 
 function formatAlleleCounts(ac?: number | null, an?: number | null): string {
   if (ac == null || an == null) return 'N/A'
@@ -46,7 +47,7 @@ export function VariantDetailPanel({ paperId, variant }: { paperId: number; vari
       // stale until the 5-minute staleTime lapses on its own.
       queryClient.invalidateQueries({ queryKey: ['papers'] })
     },
-    onError: () => toast.error('Failed to save variant'),
+    onError: (error) => toast.error(apiErrorMessage(error, 'Failed to save variant')),
   })
 
   const save = (body: VariantUpdateRequest) => mutation.mutate(body)
