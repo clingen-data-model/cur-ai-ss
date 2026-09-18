@@ -37,13 +37,13 @@ export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
       )}
       <PopoverContent className="w-80 text-sm space-y-2">
         {block?.quote && (
-          <p>
+          <p className="break-words">
             <span className="font-medium">Evidence: </span>
             {block.quote}
           </p>
         )}
         {block?.reasoning && (
-          <p>
+          <p className="break-words">
             <span className="font-medium">Reasoning: </span>
             {block.reasoning}
           </p>
@@ -51,7 +51,7 @@ export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
         {block?.human_edit_note && (
           <div className="pt-2 border-t space-y-0.5">
             <p className="font-medium">Curator Note</p>
-            <p className="text-muted-foreground">{block.human_edit_note}</p>
+            <p className="text-muted-foreground break-words">{block.human_edit_note}</p>
             {block.edited_by_name && (
               <p className="text-xs text-muted-foreground">
                 Edited by {block.edited_by_name}
