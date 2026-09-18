@@ -21,11 +21,11 @@ import { PAPER_STATES, STATE_LABEL, type PaperState } from '@/lib/paperState'
 const ANY = 'any'
 
 function labelFor(state: string | null): string {
-  if (state === null || state === ANY) return 'Any status'
+  if (state === null || state === ANY) return 'Any'
   return STATE_LABEL[state as PaperState]
 }
 
-export function StatusFilter({
+export function ExtractionStatusFilter({
   value,
   onChange,
 }: {
@@ -45,7 +45,7 @@ export function StatusFilter({
           <SelectValue>{(state: string | null) => labelFor(state)}</SelectValue>
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={ANY}>Any status</SelectItem>
+          <SelectItem value={ANY}>Any</SelectItem>
           {PAPER_STATES.map((state) => (
             <SelectItem key={state} value={state}>
               {labelFor(state)}
