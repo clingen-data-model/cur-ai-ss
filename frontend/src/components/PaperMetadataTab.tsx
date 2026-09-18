@@ -4,7 +4,7 @@
  */
 import { useState } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
-import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Download } from 'lucide-react'
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -48,6 +48,15 @@ export function PaperMetadataTab({ paper }: { paper: PaperResp }) {
 
   const handleZoomOut = () => {
     setZoom(Math.max(zoom - 10, 50))
+  }
+
+  const handleDownloadPdf = () => {
+    const link = document.createElement('a')
+    link.href = paper.pdf_url
+    link.download = paper.filename || 'paper.pdf'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
 
   if (!paper.title) {
@@ -210,6 +219,14 @@ export function PaperMetadataTab({ paper }: { paper: PaperResp }) {
                 disabled={zoom >= 200}
               >
                 <ZoomIn className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleDownloadPdf}
+                title="Download PDF"
+              >
+                <Download className="h-4 w-4" />
               </Button>
             </div>
           </div>
