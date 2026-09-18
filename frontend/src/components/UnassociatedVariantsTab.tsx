@@ -1,17 +1,23 @@
-/* Variants extracted from the paper that no occurrence links to a patient
- * yet -- either linking hasn't run, or it found nothing to link them to. */
+/* Variants extracted from the paper that no occurrence links to a patient.
+ *
+ * Gated on linking: before it runs nothing is linked, so an unguarded empty
+ * table here would claim the exact opposite of the truth. */
 import { useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
-import type { VariantResp } from '@/api/generated/types.gen'
+import { TaskType } from '@/api/generated/types.gen'
+import type { TaskResp, VariantResp } from '@/api/generated/types.gen'
 import { DataTable } from '@/components/ui/data-table'
 import { VariantDetailPanel } from '@/components/VariantDetailPanel'
+import { PipelineGate } from '@/components/PipelineGate'
 
 export function UnassociatedVariantsTab({
   paperId,
   variants,
+  tasks,
 }: {
   paperId: number
   variants: VariantResp[]
+  tasks: TaskResp[]
 }) {
   const columns: ColumnDef<VariantResp>[] = useMemo(
     () => [
@@ -26,18 +32,28 @@ export function UnassociatedVariantsTab({
     [],
   )
 
-  if (variants.length === 0) {
-    return <p className="text-sm text-muted-foreground">Every extracted variant is linked to a patient.</p>
-  }
-
   return (
-    <DataTable
-      columns={columns}
-      data={variants}
-      filterPlaceholder="Filter variants..."
-      getRowId={(row) => String(row.id)}
-      getRowCanExpand={() => true}
-      renderSubComponent={({ row }) => <VariantDetailPanel paperId={paperId} variant={row} />}
-    />
+    <PipelineGate
+      tasks={tasks}
+      task={TaskType.PATIENT_VARIANT_OCCURRENCES}
+      label="Patient/variant linking"
+    >
+      {variants.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Every extracted variant is linked to a patient.
+        </p>
+      ) : (
+        <DataTable
+          columns={columns}
+          data={variants}
+          filterPlaceholder="Filter variants..."
+          getRowId={(row) => String(row.id)}
+          getRowCanExpand={() => true}
+          renderSubComponent={({ row }) => (
+            <VariantDetailPanel paperId={paperId} variant={row} />
+          )}
+        />
+      )}
+    </PipelineGate>
   )
 }

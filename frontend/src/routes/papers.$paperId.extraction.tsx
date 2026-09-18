@@ -29,6 +29,8 @@ import { PatientHoverCardContent } from '@/components/PatientHoverCard'
 import { VariantHoverCardContent } from '@/components/VariantHoverCard'
 import { UnassociatedPatientsTab } from '@/components/UnassociatedPatientsTab'
 import { UnassociatedVariantsTab } from '@/components/UnassociatedVariantsTab'
+import { PipelineGate } from '@/components/PipelineGate'
+import { TaskType } from '@/api/generated/types.gen'
 import { PedigreeTab } from '@/components/PedigreeTab'
 import { PaperMetadataTab } from '@/components/PaperMetadataTab'
 
@@ -190,7 +192,11 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
   }, [hasPairedVariants, hasDiseaseNames, paperId, expandedCell?.rowId])
 
   if (rows.length === 0) {
-    return <p className="text-sm text-muted-foreground">No Patient/Variant links found.</p>
+    return (
+      <p className="text-sm text-muted-foreground">
+        Linking ran but connected no patient to a variant.
+      </p>
+    )
   }
 
   return (
@@ -222,6 +228,7 @@ export function ExtractionPage() {
   const paperId = parseInt(params.paperId, 10)
   const { paper, rows, unassociatedPatients, unassociatedVariants, isLoading, isError, error } =
     usePaperOccurrences(paperId)
+  const tasks = paper?.tasks ?? []
   const [isExporting, setIsExporting] = useState(false)
 
   const handleExportPptx = async () => {
@@ -314,13 +321,27 @@ export function ExtractionPage() {
         </TabsList>
 
         <TabsContent value="occurrences" className="pt-3">
-          <OccurrencesTab paperId={paperId} rows={rows} />
+          <PipelineGate
+            tasks={tasks}
+            task={TaskType.PATIENT_VARIANT_OCCURRENCES}
+            label="Patient/variant linking"
+          >
+            <OccurrencesTab paperId={paperId} rows={rows} />
+          </PipelineGate>
         </TabsContent>
         <TabsContent value="unassociated-patients" className="pt-3">
-          <UnassociatedPatientsTab paperId={paperId} patients={unassociatedPatients} />
+          <UnassociatedPatientsTab
+            paperId={paperId}
+            patients={unassociatedPatients}
+            tasks={tasks}
+          />
         </TabsContent>
         <TabsContent value="unassociated-variants" className="pt-3">
-          <UnassociatedVariantsTab paperId={paperId} variants={unassociatedVariants} />
+          <UnassociatedVariantsTab
+            paperId={paperId}
+            variants={unassociatedVariants}
+            tasks={tasks}
+          />
         </TabsContent>
         <TabsContent value="pedigree" className="pt-3">
           <PedigreeTab paperId={paperId} />
