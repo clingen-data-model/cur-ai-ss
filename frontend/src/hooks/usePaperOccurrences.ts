@@ -89,9 +89,30 @@ export function usePaperOccurrences(paperId: number) {
     return result
   }, [occurrencesQuery.data, patientsQuery.data, variantsQuery.data])
 
+  // Patients/variants extraction surfaces even when linking hasn't happened
+  // (or failed) for them yet, so "no occurrence references this id" is the
+  // read of "unassociated" -- not a separate extraction step of its own.
+  const unassociatedPatients = useMemo(() => {
+    const patients = patientsQuery.data
+    const occurrences = occurrencesQuery.data
+    if (!patients || !occurrences) return []
+    const linkedPatientIds = new Set(occurrences.map((o) => o.patient_id))
+    return patients.filter((p) => !linkedPatientIds.has(p.id))
+  }, [patientsQuery.data, occurrencesQuery.data])
+
+  const unassociatedVariants = useMemo(() => {
+    const variants = variantsQuery.data
+    const occurrences = occurrencesQuery.data
+    if (!variants || !occurrences) return []
+    const linkedVariantIds = new Set(occurrences.map((o) => o.variant_id))
+    return variants.filter((v) => !linkedVariantIds.has(v.id))
+  }, [variantsQuery.data, occurrencesQuery.data])
+
   return {
     paper: paperQuery.data as PaperResp | undefined,
     rows,
+    unassociatedPatients,
+    unassociatedVariants,
     isLoading:
       paperQuery.isPending ||
       occurrencesQuery.isPending ||

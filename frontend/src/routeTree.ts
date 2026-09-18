@@ -21,7 +21,7 @@ import { isPaperState, type PaperState, isReviewState, type ReviewState } from '
 import { RootLayout } from './routes/__root'
 import { HomePage } from './routes/index'
 import { LoginPage } from './routes/login'
-import { OccurrencesPage } from './routes/papers.$paperId.occurrences'
+import { ExtractionPage } from './routes/papers.$paperId.extraction'
 import { SettingsPage } from './routes/settings'
 
 const rootRoute = new RootRoute({
@@ -90,17 +90,17 @@ const settingsRoute = new Route({
   component: SettingsPage,
 })
 
-const papersOccurrencesRoute = new Route({
+const papersExtractionRoute = new Route({
   getParentRoute: () => rootRoute,
-  path: '/papers/$paperId/occurrences',
-  component: OccurrencesPage,
+  path: '/papers/$paperId/extraction',
+  component: ExtractionPage,
 })
 
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
   settingsRoute,
-  papersOccurrencesRoute,
+  papersExtractionRoute,
 ])
 
-export { papersOccurrencesRoute }
+export { papersExtractionRoute }

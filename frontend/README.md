@@ -66,7 +66,8 @@ src/
     __root.tsx          Shared layout: header, footer, AuthGate, Toaster
     index.tsx           Paper list (dashboard)
     login.tsx           Token login, mirrors the Streamlit auth gate
-    papers.$paperId.occurrences.tsx   Paper detail: patient/variant occurrences table
+    papers.$paperId.extraction.tsx   Paper detail: occurrences, unassociated
+                        patients/variants, pedigree -- tabbed
   components/           Feature components (GeneTable, TaskDAG, ReviewStatusCell, ...)
     ui/                 Vendored shadcn/ui primitives - owned code, edit freely
   api/generated/        Generated API client (gitignored, see below)

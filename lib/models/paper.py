@@ -542,3 +542,4 @@ class PedigreeDB(Base):
 class PedigreeResp(BaseModel):
     image_id: int
     description: str
+    image_url: str

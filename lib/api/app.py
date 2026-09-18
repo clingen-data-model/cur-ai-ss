@@ -76,6 +76,7 @@ from lib.misc.pdf.parse import WordLoc
 from lib.misc.pdf.paths import (
     pdf_dir,
     pdf_highlighted_path,
+    pdf_image_path,
     pdf_raw_path,
     pdf_supplements_dir,
     pdf_thumbnail_path,
@@ -1569,7 +1570,13 @@ def get_pedigree(
     pedigree = (
         session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).one_or_none()
     )
-    return pedigree
+    if not pedigree:
+        return None
+    return PedigreeResp(
+        image_id=pedigree.image_id,
+        description=pedigree.description,
+        image_url=str(pdf_image_path(paper_id, pedigree.image_id)),
+    )
 
 
 def _seg_evidence_block(value: Any, evidence_dict: dict | None) -> HumanEvidenceBlock:

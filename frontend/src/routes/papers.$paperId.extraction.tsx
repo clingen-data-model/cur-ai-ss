@@ -1,10 +1,9 @@
-/* Occurrences page: the SPA analog of the Streamlit "Occurrences" tab
- * (lib/ui/paper/occurrences.py) -- one row per patient/variant link.
- * Zygosity, Inheritance, De Novo and Testing Methods are editable inline;
- * clicking the Patient or Variant identifier expands the row into that
- * entity's full field set (lib/ui/paper/patients.py / variants.py), also
- * editable. Every manual edit is gated behind a forced human-edit-note
- * dialog (see HumanEditNoteDialog).
+/* Extraction page: the SPA's per-paper review surface, tabbed like the
+ * Streamlit paper page (lib/ui/paper/header.py). "Occurrences" is the main
+ * tab -- one row per patient/variant link, editable inline, with click-to-
+ * expand Patient/Variant detail panels. The other three tabs surface what
+ * didn't make it into an occurrence: patients/variants extraction found but
+ * linking never connected, and the pedigree image/description.
  */
 import { useMemo, useState } from 'react'
 import { useParams, Link } from '@tanstack/react-router'
@@ -14,6 +13,7 @@ import { usePaperOccurrences } from '@/hooks/usePaperOccurrences'
 import type { OccurrenceRow } from '@/hooks/usePaperOccurrences'
 import { DataTable } from '@/components/ui/data-table'
 import { Spinner } from '@/components/ui/spinner'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   EditableDeNovoCell,
   EditableInheritanceCell,
@@ -22,6 +22,9 @@ import {
 } from '@/components/OccurrenceEditableCells'
 import { PatientDetailPanel } from '@/components/PatientDetailPanel'
 import { VariantDetailPanel } from '@/components/VariantDetailPanel'
+import { UnassociatedPatientsTab } from '@/components/UnassociatedPatientsTab'
+import { UnassociatedVariantsTab } from '@/components/UnassociatedVariantsTab'
+import { PedigreeTab } from '@/components/PedigreeTab'
 
 type ExpandedView = 'patient' | 'variant'
 
@@ -40,11 +43,7 @@ function EntityLink({ onClick, children }: { onClick: () => void; children: Reac
   )
 }
 
-export function OccurrencesPage() {
-  const params = useParams({ from: '/papers/$paperId/occurrences' })
-  const paperId = parseInt(params.paperId, 10)
-  const { paper, rows, isLoading, isError, error } = usePaperOccurrences(paperId)
-
+function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRow[] }) {
   const [expandedCell, setExpandedCell] = useState<{ rowId: string; view: ExpandedView } | null>(null)
 
   const toggleExpanded = (rowId: string, view: ExpandedView) => {
@@ -165,6 +164,40 @@ export function OccurrencesPage() {
     return cols
   }, [hasPairedVariants, hasDiseaseNames, paperId, expandedCell?.rowId])
 
+  if (rows.length === 0) {
+    return <p className="text-sm text-muted-foreground">No Patient/Variant links found.</p>
+  }
+
+  return (
+    <>
+      <p className="text-sm text-muted-foreground mb-2">{rows.length} total occurrences</p>
+      <DataTable
+        columns={columns}
+        data={rows}
+        filterPlaceholder="Filter occurrences..."
+        getRowId={(row) => String(row.occurrence.id)}
+        getRowCanExpand={() => true}
+        expandOnRowClick={false}
+        expanded={expanded}
+        onExpandedChange={() => {}}
+        renderSubComponent={({ row }) =>
+          expandedCell?.view === 'patient' ? (
+            <PatientDetailPanel paperId={paperId} patient={row.patient} />
+          ) : (
+            <VariantDetailPanel paperId={paperId} variant={row.variant} />
+          )
+        }
+      />
+    </>
+  )
+}
+
+export function ExtractionPage() {
+  const params = useParams({ from: '/papers/$paperId/extraction' })
+  const paperId = parseInt(params.paperId, 10)
+  const { paper, rows, unassociatedPatients, unassociatedVariants, isLoading, isError, error } =
+    usePaperOccurrences(paperId)
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -189,33 +222,40 @@ export function OccurrencesPage() {
         <Link to="/" className="text-sm text-muted-foreground hover:underline">
           &larr; All Papers
         </Link>
-        <h1 className="text-xl font-semibold mt-1">
-          {paper?.title ?? paper?.filename} — Patient/Variant Occurrences
-        </h1>
-        <p className="text-sm text-muted-foreground">{rows.length} total occurrences</p>
+        <h1 className="text-xl font-semibold mt-1">{paper?.title ?? paper?.filename}</h1>
       </div>
 
-      {rows.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No Patient/Variant links found.</p>
-      ) : (
-        <DataTable
-          columns={columns}
-          data={rows}
-          filterPlaceholder="Filter occurrences..."
-          getRowId={(row) => String(row.occurrence.id)}
-          getRowCanExpand={() => true}
-          expandOnRowClick={false}
-          expanded={expanded}
-          onExpandedChange={() => {}}
-          renderSubComponent={({ row }) =>
-            expandedCell?.view === 'patient' ? (
-              <PatientDetailPanel paperId={paperId} patient={row.patient} />
-            ) : (
-              <VariantDetailPanel paperId={paperId} variant={row.variant} />
-            )
-          }
-        />
-      )}
+      <Tabs defaultValue="occurrences">
+        <TabsList>
+          <TabsTrigger value="occurrences">Occurrences</TabsTrigger>
+          <TabsTrigger value="unassociated-patients">
+            Unassociated Patients
+            {unassociatedPatients.length > 0 && (
+              <span className="ml-1 text-xs text-muted-foreground">({unassociatedPatients.length})</span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="unassociated-variants">
+            Unassociated Variants
+            {unassociatedVariants.length > 0 && (
+              <span className="ml-1 text-xs text-muted-foreground">({unassociatedVariants.length})</span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="pedigree">Pedigree Image &amp; Description</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="occurrences" className="pt-3">
+          <OccurrencesTab paperId={paperId} rows={rows} />
+        </TabsContent>
+        <TabsContent value="unassociated-patients" className="pt-3">
+          <UnassociatedPatientsTab paperId={paperId} patients={unassociatedPatients} />
+        </TabsContent>
+        <TabsContent value="unassociated-variants" className="pt-3">
+          <UnassociatedVariantsTab paperId={paperId} variants={unassociatedVariants} />
+        </TabsContent>
+        <TabsContent value="pedigree" className="pt-3">
+          <PedigreeTab paperId={paperId} />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
