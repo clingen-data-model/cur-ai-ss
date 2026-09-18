@@ -3,6 +3,7 @@
  * of the pptx curation export's variant summary (lib/misc/curation/summary.py). */
 import type { VariantResp } from '@/api/generated/types.gen'
 import { gnomadUrl, clinGenUrl } from '@/lib/variantLinks'
+import { formatGnomadPopulation } from '@/lib/gnomadPopulations'
 
 function formatAf(af: number | null | undefined): string | null {
   if (af == null) return null
@@ -62,7 +63,11 @@ export function VariantHoverCardContent({ variant }: { variant: VariantResp }) {
         <dt className="text-muted-foreground">gnomAD</dt>
         <dd className="text-right truncate">
           {popmaxAf
-            ? `${popmaxAf}${annotated?.gnomad_popmax_population ? ` (${annotated.gnomad_popmax_population})` : ''}`
+            ? `${popmaxAf}${
+                annotated?.gnomad_popmax_population
+                  ? ` — ${formatGnomadPopulation(annotated.gnomad_popmax_population)}`
+                  : ''
+              }`
             : (topLevelAf ?? 'Not found')}
         </dd>
 
