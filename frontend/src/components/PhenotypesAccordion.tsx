@@ -1,32 +1,12 @@
-import { useQuery } from '@tanstack/react-query'
-import { getPhenotypesPapersPaperIdPatientsPatientIdPhenotypesGet } from '@/api/generated'
 import type { PhenotypeResp } from '@/api/generated/types.gen'
 import { EvidencePopover, type EvidenceLike } from '@/components/EvidencePopover'
 import { Badge } from '@/components/ui/badge'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
-import { cn } from 'cn'
 
-const STALE_TIME = 5 * 60 * 1000
-
-export function PhenotypesAccordion({ paperId, patientId }: { paperId: number; patientId: number }) {
-  const phenotypesQuery = useQuery({
-    queryKey: ['phenotypes', paperId, patientId],
-    queryFn: () =>
-      getPhenotypesPapersPaperIdPatientsPatientIdPhenotypesGet({
-        path: { paper_id: paperId, patient_id: patientId },
-      }),
-    staleTime: STALE_TIME,
-  })
-
-  if (phenotypesQuery.isPending) {
-    return <p className="text-sm text-muted-foreground">Loading phenotypes…</p>
-  }
-
-  if (!phenotypesQuery.data || phenotypesQuery.data.length === 0) {
+export function PhenotypesAccordion({ phenotypes }: { phenotypes: PhenotypeResp[] }) {
+  if (!phenotypes || phenotypes.length === 0) {
     return <p className="text-sm text-muted-foreground">No phenotypes extracted.</p>
   }
-
-  const phenotypes = phenotypesQuery.data
 
   return (
     <div className="space-y-2">
@@ -57,9 +37,9 @@ export function PhenotypesAccordion({ paperId, patientId }: { paperId: number; p
                 <div className="space-y-1 border-t pt-2">
                   <p className="text-xs font-medium text-muted-foreground">HPO Match</p>
                   {phenotype.hpo.value ? (
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5 min-w-0">
                       <div className="text-sm font-medium">{phenotype.hpo.value.name}</div>
-                      <p className="text-xs text-muted-foreground">{phenotype.hpo.reasoning}</p>
+                      <p className="text-xs text-muted-foreground break-words">{phenotype.hpo.reasoning}</p>
                     </div>
                   ) : (
                     <p className="text-xs text-muted-foreground">No HPO match found</p>

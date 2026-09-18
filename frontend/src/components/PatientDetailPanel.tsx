@@ -2,9 +2,9 @@
  * render_patient(), minus the family/consanguinity/segregation-analysis and
  * phenotypes sections (out of scope for the Occurrences page for now).
  */
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { updatePatientPapersPaperIdPatientsPatientIdPatch } from '@/api/generated'
+import { updatePatientPapersPaperIdPatientsPatientIdPatch, getPhenotypesPapersPaperIdPatientsPatientIdPhenotypesGet } from '@/api/generated'
 import {
   AffectedStatus,
   AgeUnit,
@@ -20,8 +20,19 @@ import type { PatientResp, PatientUpdateRequest } from '@/api/generated/types.ge
 import { EditableAgeRow, EditableSelectRow, EditableSwitchRow, EditableTextRow } from '@/components/EditableField'
 import { PhenotypesAccordion } from '@/components/PhenotypesAccordion'
 
+const STALE_TIME = 5 * 60 * 1000
+
 export function PatientDetailPanel({ paperId, patient }: { paperId: number; patient: PatientResp }) {
   const queryClient = useQueryClient()
+
+  const phenotypesQuery = useQuery({
+    queryKey: ['phenotypes', paperId, patient.id],
+    queryFn: () =>
+      getPhenotypesPapersPaperIdPatientsPatientIdPhenotypesGet({
+        path: { paper_id: paperId, patient_id: patient.id },
+      }),
+    staleTime: STALE_TIME,
+  })
 
   const mutation = useMutation({
     mutationFn: (body: PatientUpdateRequest) =>
@@ -185,7 +196,7 @@ export function PatientDetailPanel({ paperId, patient }: { paperId: number; pati
 
       {/* Phenotypes accordion */}
       <div className="mt-4 border-t pt-4">
-        <PhenotypesAccordion paperId={paperId} patientId={patient.id} />
+        <PhenotypesAccordion phenotypes={phenotypesQuery.data ?? []} />
       </div>
     </div>
   )
