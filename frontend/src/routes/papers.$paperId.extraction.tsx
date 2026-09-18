@@ -15,7 +15,7 @@ import { DataTable } from '@/components/ui/data-table'
 import { Spinner } from '@/components/ui/spinner'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { API_BASE_URL } from '@/lib/api'
+import { API_BASE_URL, getAccessToken } from '@/lib/api'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card'
 import {
   EditableDeNovoCell,
@@ -227,8 +227,16 @@ export function ExtractionPage() {
   const handleExportPptx = async () => {
     setIsExporting(true)
     try {
-      const response = await fetch(`${API_BASE_URL}/papers/${paperId}/curation-export`)
-      if (!response.ok) throw new Error('Failed to export PPTX')
+      const token = getAccessToken()
+      const headers: HeadersInit = {}
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`
+      }
+
+      const response = await fetch(`${API_BASE_URL}/papers/${paperId}/curation-export`, {
+        headers,
+      })
+      if (!response.ok) throw new Error(`Failed to export PPTX: ${response.status}`)
       const blob = await response.blob()
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
