@@ -1,10 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { getPhenotypesPapersPaperIdPatientsPatientIdPhenotypesGet } from '@/api/generated'
-import type { PhenotypeResp } from '@/api/generated/types.gen'
-import { EvidencePopover, type EvidenceLike } from '@/components/EvidencePopover'
+import { EvidencePopover } from '@/components/EvidencePopover'
 import { Badge } from '@/components/ui/badge'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
-import { cn } from 'cn'
 
 const STALE_TIME = 5 * 60 * 1000
 
@@ -55,15 +53,13 @@ export function PhenotypesAccordion({ paperId, patientId }: { paperId: number; p
 
                 {/* HPO match section */}
                 <div className="space-y-1 border-t pt-2">
-                  <p className="text-xs font-medium text-muted-foreground">HPO Match</p>
-                  {phenotype.hpo.value ? (
-                    <div className="space-y-1.5">
-                      <div className="text-sm font-medium">{phenotype.hpo.value.name}</div>
-                      <p className="text-xs text-muted-foreground">{phenotype.hpo.reasoning}</p>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">No HPO match found</p>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-medium text-muted-foreground">HPO Match</p>
+                    <EvidencePopover block={phenotype.hpo} />
+                  </div>
+                  <p className="text-sm font-medium">
+                    {phenotype.hpo.value ? phenotype.hpo.value.name : 'No HPO match found'}
+                  </p>
                 </div>
 
                 {/* Additional metadata */}
