@@ -56,7 +56,7 @@ export function EditableSelectRow({
     <FieldRow label={label} evidence={evidence}>
       <Select value={value ?? NONE_VALUE} onValueChange={(v) => pending.propose(v === NONE_VALUE ? null : v)}>
         <SelectTrigger size="sm" className="h-7 text-xs min-w-60">
-          <SelectValue />
+          {value === null ? '—' : <SelectValue />}
         </SelectTrigger>
         <SelectContent>
           {allowNone && <SelectItem value={NONE_VALUE}>—</SelectItem>}
