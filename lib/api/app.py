@@ -120,9 +120,11 @@ from lib.models import (
     PaperSummaryResp,
     PaperTag,
     PaperUpdateRequest,
+    PatientCreateRequest,
     PatientDB,
     PatientResp,
     PatientUpdateRequest,
+    PatientVariantOccurrenceCreateRequest,
     PatientVariantOccurrenceDB,
     PatientVariantOccurrenceResp,
     PatientVariantOccurrenceUpdateRequest,
@@ -142,6 +144,7 @@ from lib.models import (
     UserResp,
     UserSettingsUpdateRequest,
     UserSummaryResp,
+    VariantCreateRequest,
     VariantDB,
     VariantResp,
     VariantUpdateRequest,
@@ -2089,6 +2092,217 @@ def _patient_variant_occurrence_to_resp(
         else None,
         updated_at=row.updated_at,
     )
+
+
+# ==============================
+# Patient CRUD
+# ==============================
+
+
+@app.post('/papers/{paper_id}/patients', response_model=PatientResp)
+def create_patient(
+    paper_id: int,
+    create_request: PatientCreateRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """Create a new patient."""
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+
+    family_db = session.get(FamilyDB, create_request.family_id)
+    if not family_db or family_db.paper_id != paper_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Family not found'
+        )
+
+    patient_db = PatientDB(
+        paper_id=paper_id,
+        family_id=create_request.family_id,
+        identifier=create_request.identifier,
+        proband_status=create_request.proband_status,
+        affected_status=create_request.affected_status,
+        sex=create_request.sex,
+        country_of_origin=create_request.country_of_origin,
+        race=create_request.race,
+        ethnicity=create_request.ethnicity,
+        age_diagnosis=create_request.age_diagnosis,
+        age_diagnosis_unit=create_request.age_diagnosis_unit,
+        age_report=create_request.age_report,
+        age_report_unit=create_request.age_report_unit,
+        age_death=create_request.age_death,
+        age_death_unit=create_request.age_death_unit,
+        is_obligate_carrier=create_request.is_obligate_carrier,
+        relationship_to_proband=create_request.relationship_to_proband,
+        twin_type=create_request.twin_type,
+        updated_by_user_id=current_user.id,
+    )
+
+    session.add(patient_db)
+    session.commit()
+    session.refresh(patient_db)
+    return _patient_to_resp(patient_db)
+
+
+@app.delete(
+    '/papers/{paper_id}/patients/{patient_id}', status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_patient(
+    paper_id: int,
+    patient_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> None:
+    """Delete a patient (cascades to occurrences)."""
+    patient_db = session.get(PatientDB, patient_id)
+    if not patient_db or patient_db.paper_id != paper_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Patient not found'
+        )
+
+    session.delete(patient_db)
+    session.commit()
+
+
+# ==============================
+# Variant CRUD
+# ==============================
+
+
+@app.post('/papers/{paper_id}/variants', response_model=VariantResp)
+def create_variant(
+    paper_id: int,
+    create_request: VariantCreateRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """Create a new raw (unharmonized) variant."""
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+
+    variant_db = VariantDB(
+        paper_id=paper_id,
+        variant=create_request.variant,
+        transcript=create_request.transcript,
+        protein_accession=create_request.protein_accession,
+        genomic_accession=create_request.genomic_accession,
+        lrg_accession=create_request.lrg_accession,
+        gene_accession=create_request.gene_accession,
+        genomic_coordinates=create_request.genomic_coordinates,
+        genome_build=create_request.genome_build,
+        rsid=create_request.rsid,
+        caid=create_request.caid,
+        hgvs_c=create_request.hgvs_c,
+        hgvs_p=create_request.hgvs_p,
+        hgvs_g=create_request.hgvs_g,
+        variant_type=create_request.variant_type,
+        functional_evidence=create_request.functional_evidence,
+        main_focus=create_request.main_focus,
+        updated_by_user_id=current_user.id,
+    )
+
+    session.add(variant_db)
+    session.commit()
+    session.refresh(variant_db)
+    return _variant_to_resp(variant_db)
+
+
+@app.delete(
+    '/papers/{paper_id}/variants/{variant_id}', status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_variant(
+    paper_id: int,
+    variant_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> None:
+    """Delete a variant (cascades to occurrences)."""
+    variant_db = session.get(VariantDB, variant_id)
+    if not variant_db or variant_db.paper_id != paper_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Variant not found'
+        )
+
+    session.delete(variant_db)
+    session.commit()
+
+
+# ==============================
+# Occurrence CRUD
+# ==============================
+
+
+@app.post('/papers/{paper_id}/occurrences', response_model=PatientVariantOccurrenceResp)
+def create_occurrence(
+    paper_id: int,
+    create_request: PatientVariantOccurrenceCreateRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """Create a new patient-variant occurrence."""
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+
+    patient_db = session.get(PatientDB, create_request.patient_id)
+    if not patient_db or patient_db.paper_id != paper_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Patient not found'
+        )
+
+    variant_db = session.get(VariantDB, create_request.variant_id)
+    if not variant_db or variant_db.paper_id != paper_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Variant not found'
+        )
+
+    occurrence_db = PatientVariantOccurrenceDB(
+        paper_id=paper_id,
+        patient_id=create_request.patient_id,
+        variant_id=create_request.variant_id,
+        zygosity=create_request.zygosity,
+        inheritance=create_request.inheritance,
+        de_novo=create_request.de_novo,
+        testing_methods=create_request.testing_methods,
+        disease_name=create_request.disease_name,
+        updated_by_user_id=current_user.id,
+    )
+
+    session.add(occurrence_db)
+    session.commit()
+    session.refresh(occurrence_db)
+    return _patient_variant_occurrence_to_resp(
+        occurrence_db, patient_identifier=patient_db.identifier
+    )
+
+
+@app.delete(
+    '/papers/{paper_id}/occurrences/{occurrence_id}',
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_occurrence(
+    paper_id: int,
+    occurrence_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> None:
+    """Delete a patient-variant occurrence."""
+    occurrence_db = session.get(PatientVariantOccurrenceDB, occurrence_id)
+    if not occurrence_db or occurrence_db.paper_id != paper_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Occurrence not found'
+        )
+
+    session.delete(occurrence_db)
+    session.commit()
 
 
 @app.get(
