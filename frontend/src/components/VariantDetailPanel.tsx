@@ -20,6 +20,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { VARIANT_TYPE_OPTIONS } from '@/lib/variantType'
 import { gnomadUrl, clinGenUrl } from '@/lib/variantLinks'
+import { formatGnomadPopulation } from '@/lib/gnomadPopulations'
 
 function formatAlleleCounts(ac?: number | null, an?: number | null): string {
   if (ac == null || an == null) return 'N/A'
@@ -203,7 +204,7 @@ export function VariantDetailPanel({ paperId, variant }: { paperId: number; vari
                 value={formatAlleleCounts(annotated.gnomad_ac, annotated.gnomad_an)}
               />
               <ReadOnlyRow label="Popmax AF" value={annotated.gnomad_popmax_af ?? 'N/A'} />
-              <ReadOnlyRow label="Popmax Population" value={annotated.gnomad_popmax_population ?? 'N/A'} />
+              <ReadOnlyRow label="Popmax Population" value={formatGnomadPopulation(annotated.gnomad_popmax_population)} />
               <ReadOnlyRow
                 label="Popmax Alleles (AC / AN)"
                 value={formatAlleleCounts(annotated.gnomad_popmax_ac, annotated.gnomad_popmax_an)}

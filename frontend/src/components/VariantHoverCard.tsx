@@ -3,6 +3,7 @@
  * of the pptx curation export's variant summary (lib/misc/curation/summary.py). */
 import type { VariantResp } from '@/api/generated/types.gen'
 import { gnomadUrl, clinGenUrl } from '@/lib/variantLinks'
+import { formatGnomadPopulation } from '@/lib/gnomadPopulations'
 
 function formatAf(af: number | null | undefined): string | null {
   if (af == null) return null
@@ -22,15 +23,29 @@ export function VariantHoverCardContent({ variant }: { variant: VariantResp }) {
     <div className="space-y-1.5">
       <p className="font-semibold truncate">{variant.variant_description}</p>
 
-      {gnomadCoords && (
-        <a
-          href={gnomadUrl(gnomadCoords)}
-          target="_blank"
-          rel="noreferrer"
-          className="block truncate font-mono text-xs text-primary hover:underline"
-        >
-          {gnomadCoords}
-        </a>
+      {(gnomadCoords || caid) && (
+        <div className="flex items-center justify-between gap-2">
+          {gnomadCoords && (
+            <a
+              href={gnomadUrl(gnomadCoords)}
+              target="_blank"
+              rel="noreferrer"
+              className="truncate font-mono text-xs text-primary hover:underline"
+            >
+              {gnomadCoords}
+            </a>
+          )}
+          {caid && (
+            <a
+              href={clinGenUrl(caid)}
+              target="_blank"
+              rel="noreferrer"
+              className="shrink-0 font-mono text-xs text-primary hover:underline"
+            >
+              {caid}
+            </a>
+          )}
+        </div>
       )}
 
       <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-xs">
@@ -48,7 +63,11 @@ export function VariantHoverCardContent({ variant }: { variant: VariantResp }) {
         <dt className="text-muted-foreground">gnomAD</dt>
         <dd className="text-right truncate">
           {popmaxAf
-            ? `${popmaxAf}${annotated?.gnomad_popmax_population ? ` (${annotated.gnomad_popmax_population})` : ''}`
+            ? `${popmaxAf}${
+                annotated?.gnomad_popmax_population
+                  ? ` — ${formatGnomadPopulation(annotated.gnomad_popmax_population)}`
+                  : ''
+              }`
             : (topLevelAf ?? 'Not found')}
         </dd>
 
@@ -59,17 +78,6 @@ export function VariantHoverCardContent({ variant }: { variant: VariantResp }) {
           </>
         )}
       </dl>
-
-      {caid && (
-        <a
-          href={clinGenUrl(caid)}
-          target="_blank"
-          rel="noreferrer"
-          className="block text-xs text-primary hover:underline"
-        >
-          View in ClinGen
-        </a>
-      )}
     </div>
   )
 }
