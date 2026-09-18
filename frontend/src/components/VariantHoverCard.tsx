@@ -22,15 +22,29 @@ export function VariantHoverCardContent({ variant }: { variant: VariantResp }) {
     <div className="space-y-1.5">
       <p className="font-semibold truncate">{variant.variant_description}</p>
 
-      {gnomadCoords && (
-        <a
-          href={gnomadUrl(gnomadCoords)}
-          target="_blank"
-          rel="noreferrer"
-          className="block truncate font-mono text-xs text-primary hover:underline"
-        >
-          {gnomadCoords}
-        </a>
+      {(gnomadCoords || caid) && (
+        <div className="flex items-center justify-between gap-2">
+          {gnomadCoords && (
+            <a
+              href={gnomadUrl(gnomadCoords)}
+              target="_blank"
+              rel="noreferrer"
+              className="truncate font-mono text-xs text-primary hover:underline"
+            >
+              {gnomadCoords}
+            </a>
+          )}
+          {caid && (
+            <a
+              href={clinGenUrl(caid)}
+              target="_blank"
+              rel="noreferrer"
+              className="shrink-0 font-mono text-xs text-primary hover:underline"
+            >
+              {caid}
+            </a>
+          )}
+        </div>
       )}
 
       <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-xs">
@@ -59,17 +73,6 @@ export function VariantHoverCardContent({ variant }: { variant: VariantResp }) {
           </>
         )}
       </dl>
-
-      {caid && (
-        <a
-          href={clinGenUrl(caid)}
-          target="_blank"
-          rel="noreferrer"
-          className="block text-xs text-primary hover:underline"
-        >
-          View in ClinGen
-        </a>
-      )}
     </div>
   )
 }
