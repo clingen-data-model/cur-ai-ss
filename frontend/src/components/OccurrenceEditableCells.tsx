@@ -29,7 +29,13 @@ function useOccurrenceMutation(paperId: number, occurrenceId: number) {
         body,
         throwOnError: true,
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['occurrences', paperId] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['occurrences', paperId] })
+      // update_occurrence calls _touch_paper server-side, which backs the
+      // papers table's touched_by filter -- without this, "worked on by"
+      // stays stale until the 5-minute staleTime lapses on its own.
+      queryClient.invalidateQueries({ queryKey: ['papers'] })
+    },
     onError: () => toast.error('Failed to save occurrence'),
   })
 }

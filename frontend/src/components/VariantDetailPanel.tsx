@@ -45,7 +45,13 @@ export function VariantDetailPanel({ paperId, variant }: { paperId: number; vari
         body,
         throwOnError: true,
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['variants', paperId] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['variants', paperId] })
+      // Editing a variant sets updated_by_user_id, which backs the papers
+      // table's touched_by filter -- without this, "worked on by" stays
+      // stale until the 5-minute staleTime lapses on its own.
+      queryClient.invalidateQueries({ queryKey: ['papers'] })
+    },
     onError: () => toast.error('Failed to save variant'),
   })
 
