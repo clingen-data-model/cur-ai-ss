@@ -54,3 +54,23 @@ export const STATE_LABEL: Record<PaperState, string> = {
 export function isPaperState(value: unknown): value is PaperState {
   return typeof value === 'string' && (PAPER_STATES as string[]).includes(value)
 }
+
+export type ReviewState = 'not_assigned' | 'assigned' | 'in_progress' | 'completed'
+
+export const REVIEW_STATES: ReviewState[] = [
+  'not_assigned',
+  'assigned',
+  'in_progress',
+  'completed',
+]
+
+export const REVIEW_STATE_LABEL: Record<ReviewState, string> = {
+  'not_assigned': 'Not assigned',
+  'assigned': 'Assigned',
+  'in_progress': 'In progress',
+  'completed': 'Completed',
+}
+
+export function isReviewState(value: unknown): value is ReviewState {
+  return typeof value === 'string' && (REVIEW_STATES as string[]).includes(value)
+}

@@ -34,7 +34,7 @@ export function StatusFilter({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <label className="text-sm text-muted-foreground whitespace-nowrap">Status</label>
+      <label className="text-sm text-muted-foreground whitespace-nowrap">Extraction Status</label>
       <Select
         value={value ?? ANY}
         onValueChange={(next: string | null) =>

@@ -68,7 +68,7 @@ function PaperCard({ paper }: { paper: PaperSummaryResp }) {
           <div className="text-xs truncate">
             {paper.title ? (
               <Link
-                to="/papers/$paperId/patients"
+                to="/papers/$paperId/occurrences"
                 params={{ paperId: String(paper.id) }}
                 className="text-link hover:underline"
               >
@@ -82,7 +82,7 @@ function PaperCard({ paper }: { paper: PaperSummaryResp }) {
           <div className="text-xs truncate">
             {paper.first_author ? (
               <Link
-                to="/papers/$paperId/patients"
+                to="/papers/$paperId/occurrences"
                 params={{ paperId: String(paper.id) }}
                 className="text-link hover:underline"
               >
