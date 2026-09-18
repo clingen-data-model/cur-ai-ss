@@ -43,6 +43,7 @@ from lib.models import (
     VariantDB,
 )
 from lib.models.base import row_to_dict
+from lib.models.edit import EditDB
 from lib.tasks.models import TaskType
 
 logger = logging.getLogger(__name__)
@@ -520,6 +521,15 @@ def restore_snapshot(
             setattr(
                 paper_db, column.name, _coerce_value(column, paper_row[column.name])
             )
+    # Entity-level edit history (patient/variant/family/occurrence/segregation
+    # fields) is cleaned up for free by CASCADE when those rows are deleted
+    # above. Paper-level fields (disease_name, disease_inheritance_mode) live
+    # on a row that's never deleted, just overwritten, so their edit history
+    # would otherwise survive a reset and misattribute the restored,
+    # extraction-original value to whoever last edited it.
+    session.query(EditDB).filter(EditDB.paper_id == paper_id).delete(
+        synchronize_session=False
+    )
     paper_db.updated_by_user_id = editor.id
     paper_db.updated_at = datetime.now(timezone.utc)
     session.flush()

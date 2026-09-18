@@ -28,6 +28,7 @@ from lib.models import (
     UserDB,
     VariantDB,
 )
+from lib.models.edit import EditDB
 from lib.tasks import TaskCreateRequest
 from lib.tasks.agent_session import chat_session
 from lib.tasks.models import TaskStatus, TaskType
@@ -634,6 +635,48 @@ def test_update_patient_with_human_edit_note(
     # ...while untouched fields stay unattributed.
     assert resp_json['sex_evidence']['edited_by_user_id'] is None
     assert resp_json['sex_evidence']['edited_by_name'] is None
+
+
+def test_patient_field_edit_history_is_append_only_and_cascades_on_delete(
+    client, db_session, seeded_paper, test_user
+):
+    """Each *_human_edit_note patch appends a row to the edits table (not an
+    upsert), the response always reflects only the latest one, and deleting
+    the patient cascades its edit history away."""
+    family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
+    patient = PatientDB(
+        paper_id=seeded_paper.id,
+        family_id=family.id,
+        identifier='P1',
+        **_patient_required_fields('P1'),
+    )
+    db_session.add(patient)
+    db_session.flush()
+    patient_id = patient.id
+
+    for note in ('First note', 'Second note'):
+        response = client.patch(
+            f'/papers/{seeded_paper.id}/patients/{patient_id}',
+            json={'identifier_human_edit_note': note},
+        )
+        assert response.status_code == 200
+
+    resp_json = response.json()
+    assert resp_json['identifier_evidence']['human_edit_note'] == 'Second note'
+    assert resp_json['identifier_evidence']['edited_by_user_id'] == test_user.id
+
+    edit_rows = (
+        db_session.query(EditDB)
+        .filter(EditDB.patient_id == patient_id, EditDB.field_name == 'identifier')
+        .order_by(EditDB.edited_at)
+        .all()
+    )
+    assert len(edit_rows) == 2, 'each patch should append, not overwrite, a row'
+
+    response = client.delete(f'/papers/{seeded_paper.id}/patients/{patient_id}')
+    assert response.status_code == 204
+    remaining = db_session.query(EditDB).filter(EditDB.patient_id == patient_id).count()
+    assert remaining == 0, 'deleting the patient should cascade its edit history away'
 
 
 def test_update_patient_rejects_wrong_paper_scope(client, db_session, seeded_paper):

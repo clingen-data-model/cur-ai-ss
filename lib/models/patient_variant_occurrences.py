@@ -20,10 +20,12 @@ from lib.models.base import Base, PatchModel
 from lib.models.datetimes import UtcDatetime
 from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock, ReasoningBlock
 from lib.models.mondo import MondoComponentMapping, MondoTerm
+from lib.models.user import UserSummaryResp
 
 if TYPE_CHECKING:
     from lib.models.paper import PaperDB
     from lib.models.patient import PatientDB
+    from lib.models.user import UserDB
     from lib.models.variant import VariantDB
 
 # ==============================
@@ -193,6 +195,12 @@ class PatientVariantOccurrenceDB(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    updated_by_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey('users.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
 
     paper: Mapped['PaperDB'] = relationship(
         'PaperDB', back_populates='patient_variant_occurrences'
@@ -203,6 +211,7 @@ class PatientVariantOccurrenceDB(Base):
     variant: Mapped['VariantDB'] = relationship(
         'VariantDB', back_populates='patient_variant_occurrences'
     )
+    updated_by: Mapped['UserDB | None'] = relationship('UserDB')
     paired_link: Mapped['PatientVariantOccurrenceDB | None'] = relationship(
         'PatientVariantOccurrenceDB',
         foreign_keys=[paired_variant_link_id],
@@ -256,3 +265,5 @@ class PatientVariantOccurrenceResp(BaseModel):
         ReasoningBlock[CompoundHetConfidence] | None
     ) = None
     updated_at: UtcDatetime
+    updated_by_user_id: int | None = None
+    updated_by: UserSummaryResp | None = None

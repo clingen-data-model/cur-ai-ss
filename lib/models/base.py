@@ -9,6 +9,8 @@ from sqlalchemy.orm import DeclarativeBase
 from lib.models.evidence_block import HumanEvidenceBlock
 
 if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+
     from lib.models.user import UserDB
 
 
@@ -32,7 +34,13 @@ def manual_evidence_block(value: Any, editor: UserDB) -> dict:
     occurrence. Every ``*_evidence`` column is non-nullable, and PatchModel's
     ``*_human_edit_note`` handling requires an existing evidence dict to
     annotate, so these fields need a real (if reasoning-less) evidence block
-    from the moment the row is created, not just on later extraction."""
+    from the moment the row is created, not just on later extraction.
+
+    The edited_by_* stamp here is a one-time snapshot baked directly into the
+    JSON at creation (not the edits table -- there's no row yet to attach a
+    foreign key to). It stays visible until the field is first patched via a
+    *_human_edit_note, at which point record_edit's edits-table row takes over
+    and is overlaid on top of it at response-build time (_attach_edit_history)."""
     block = HumanEvidenceBlock[Any](
         value=value,
         reasoning='Manually entered by curator.',
@@ -46,17 +54,23 @@ def manual_evidence_block(value: Any, editor: UserDB) -> dict:
 
 
 class PatchModel(BaseModel):
-    def apply_to(self, obj: Base, editor: UserDB | None = None) -> None:
+    def apply_to(
+        self, obj: Base, editor: UserDB | None = None, session: Session | None = None
+    ) -> None:
         for field, value in self.model_dump(exclude_unset=True).items():
-            self._apply_field(obj, field, value, editor)
+            self._apply_field(obj, field, value, editor, session)
         self.stamp_updated_by(obj, editor)
 
     @staticmethod
     def _apply_field(
-        obj: Base, field: str, value: object, editor: UserDB | None
+        obj: Base,
+        field: str,
+        value: object,
+        editor: UserDB | None,
+        session: Session | None = None,
     ) -> None:
         """Apply one patched field, mapping ``*_human_edit_note`` to its evidence
-        column and stamping per-field edit attribution onto that evidence block."""
+        column and recording per-field edit history for it."""
         if field.endswith('_human_edit_note'):
             evidence_column = field.replace('_human_edit_note', '_evidence')
             existing = getattr(obj, evidence_column, None)
@@ -67,11 +81,14 @@ class PatchModel(BaseModel):
                 return
             evidence_dict = existing.copy()
             evidence_dict['human_edit_note'] = value
-            if editor is not None:
-                evidence_dict['edited_by_user_id'] = editor.id
-                evidence_dict['edited_by_name'] = _editor_display_name(editor)
-                evidence_dict['edited_at'] = datetime.now(timezone.utc).isoformat()
             setattr(obj, evidence_column, evidence_dict)
+            if editor is not None and session is not None:
+                # Local import: edit.py imports Base from this module, so a
+                # top-level import here would be circular.
+                from lib.models.edit import record_edit
+
+                field_name = field.replace('_human_edit_note', '')
+                record_edit(session, obj, field_name, editor)
         else:
             setattr(obj, field, value)
 
