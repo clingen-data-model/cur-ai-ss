@@ -5,6 +5,8 @@
 import { useState } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Download } from 'lucide-react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import {
   ResizablePanelGroup,
   ResizablePanel,
@@ -14,16 +16,37 @@ import type { PaperResp } from '@/api/generated/types.gen'
 import { API_BASE_URL } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { ReadOnlyRow } from '@/components/EditableField'
+import { EditableTextRow } from '@/components/EditableField'
 import { EvidencePopover } from '@/components/EvidencePopover'
 import { pillColorFor } from '@/lib/pillColors'
+import { updatePaperPapersPaperIdPatch } from '@/api/generated'
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`
 
 export function PaperMetadataTab({ paper }: { paper: PaperResp }) {
+  const queryClient = useQueryClient()
   const [numPages, setNumPages] = useState<number | null>(null)
   const [pageNumber, setPageNumber] = useState(1)
   const [zoom, setZoom] = useState(100)
+
+  const updateMutation = useMutation({
+    mutationFn: ({ field, value, note }: { field: string; value: string | null; note: string }) =>
+      updatePaperPapersPaperIdPatch({
+        path: { paper_id: paper.id },
+        body: {
+          [field]: value,
+          [`${field}_human_edit_note`]: note,
+        },
+        throwOnError: true,
+      }),
+    onSuccess: () => {
+      toast.success('Paper updated')
+      queryClient.invalidateQueries({ queryKey: ['papers', paper.id] })
+    },
+    onError: () => {
+      toast.error('Failed to update paper')
+    },
+  })
 
   const onDocumentLoadSuccess = ({ numPages: num }: { numPages: number }) => {
     setNumPages(num)
@@ -76,13 +99,42 @@ export function PaperMetadataTab({ paper }: { paper: PaperResp }) {
             {/* Basic Metadata */}
             <div className="space-y-3">
               <h3 className="font-semibold text-sm">Publication Details</h3>
-              <ReadOnlyRow label="Title" value={paper.title} />
-              <ReadOnlyRow label="First Author" value={paper.first_author || '—'} />
-              <ReadOnlyRow
-                label="Publication Year"
-                value={paper.publication_year ? String(paper.publication_year) : '—'}
+              <EditableTextRow
+                label="Title"
+                value={paper.title || ''}
+                onSave={(value, note) =>
+                  updateMutation.mutateAsync({ field: 'title', value: value || null, note })
+                }
+                isSaving={updateMutation.isPending}
               />
-              <ReadOnlyRow label="Journal Name" value={paper.journal_name || '—'} />
+              <EditableTextRow
+                label="First Author"
+                value={paper.first_author || ''}
+                onSave={(value, note) =>
+                  updateMutation.mutateAsync({ field: 'first_author', value: value || null, note })
+                }
+                isSaving={updateMutation.isPending}
+              />
+              <EditableTextRow
+                label="Publication Year"
+                value={paper.publication_year ? String(paper.publication_year) : ''}
+                onSave={(value, note) =>
+                  updateMutation.mutateAsync({
+                    field: 'publication_year',
+                    value: value ? String(parseInt(value, 10)) : null,
+                    note,
+                  })
+                }
+                isSaving={updateMutation.isPending}
+              />
+              <EditableTextRow
+                label="Journal Name"
+                value={paper.journal_name || ''}
+                onSave={(value, note) =>
+                  updateMutation.mutateAsync({ field: 'journal_name', value: value || null, note })
+                }
+                isSaving={updateMutation.isPending}
+              />
               {paper.paper_types && paper.paper_types.length > 0 && (
                 <div className="flex items-center justify-between gap-3 py-1.5 border-b">
                   <span className="text-sm text-muted-foreground w-44">Paper Types</span>
