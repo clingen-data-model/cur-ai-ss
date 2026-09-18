@@ -19,6 +19,12 @@ import { Switch } from '@/components/ui/switch'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Command, CommandGroup, CommandItem, CommandList } from '@/components/ui/command'
 import { pillColorFor } from '@/lib/pillColors'
+import { apiErrorMessage } from '@/lib/apiError'
+
+/** PatientVariantOccurrenceUpdateRequest.max_two_methods rejects a third
+ * selection server-side -- enforced here too so a curator sees it at
+ * selection time instead of a generic save failure after the fact. */
+const MAX_TESTING_METHODS = 2
 
 function useOccurrenceMutation(paperId: number, occurrenceId: number) {
   const queryClient = useQueryClient()
@@ -36,7 +42,7 @@ function useOccurrenceMutation(paperId: number, occurrenceId: number) {
       // stays stale until the 5-minute staleTime lapses on its own.
       queryClient.invalidateQueries({ queryKey: ['papers'] })
     },
-    onError: () => toast.error('Failed to save occurrence'),
+    onError: (error) => toast.error(apiErrorMessage(error, 'Failed to save occurrence')),
   })
 }
 
@@ -176,8 +182,14 @@ export function EditableTestingMethodsCell({
   }
 
   const toggle = (method: string) => {
-    setDraft((prev) => (prev.includes(method) ? prev.filter((m) => m !== method) : [...prev, method]))
+    setDraft((prev) => {
+      if (prev.includes(method)) return prev.filter((m) => m !== method)
+      if (prev.length >= MAX_TESTING_METHODS) return prev
+      return [...prev, method]
+    })
   }
+
+  const atLimit = draft.length >= MAX_TESTING_METHODS
 
   return (
     <div className="flex items-center gap-1">
@@ -195,14 +207,25 @@ export function EditableTestingMethodsCell({
         </PopoverTrigger>
         <PopoverContent className="w-72 p-0" align="start">
           <Command>
+            <p className="px-2 pt-2 text-xs text-muted-foreground">
+              {atLimit ? 'Maximum of 2 selected' : 'Select up to 2'}
+            </p>
             <CommandList>
               <CommandGroup>
-                {Object.values(TestingMethod).map((method) => (
-                  <CommandItem key={method} value={method} onSelect={() => toggle(method)}>
-                    {method}
-                    {draft.includes(method) && <Check className="ml-auto size-4" />}
-                  </CommandItem>
-                ))}
+                {Object.values(TestingMethod).map((method) => {
+                  const selected = draft.includes(method)
+                  return (
+                    <CommandItem
+                      key={method}
+                      value={method}
+                      disabled={atLimit && !selected}
+                      onSelect={() => toggle(method)}
+                    >
+                      {method}
+                      {selected && <Check className="ml-auto size-4" />}
+                    </CommandItem>
+                  )
+                })}
               </CommandGroup>
             </CommandList>
           </Command>

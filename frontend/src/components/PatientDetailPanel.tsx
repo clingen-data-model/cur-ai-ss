@@ -19,6 +19,7 @@ import {
 import type { PatientResp, PatientUpdateRequest } from '@/api/generated/types.gen'
 import { EditableAgeRow, EditableSelectRow, EditableSwitchRow, EditableTextRow } from '@/components/EditableField'
 import { PhenotypesAccordion } from '@/components/PhenotypesAccordion'
+import { apiErrorMessage } from '@/lib/apiError'
 
 export function PatientDetailPanel({ paperId, patient }: { paperId: number; patient: PatientResp }) {
   const queryClient = useQueryClient()
@@ -37,7 +38,7 @@ export function PatientDetailPanel({ paperId, patient }: { paperId: number; pati
       // stale until the 5-minute staleTime lapses on its own.
       queryClient.invalidateQueries({ queryKey: ['papers'] })
     },
-    onError: () => toast.error('Failed to save patient'),
+    onError: (error) => toast.error(apiErrorMessage(error, 'Failed to save patient')),
   })
 
   const save = (body: PatientUpdateRequest) => mutation.mutate(body)
