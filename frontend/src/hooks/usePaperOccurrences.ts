@@ -5,17 +5,15 @@ import {
   getOccurrencesPapersPaperIdOccurrencesGet,
   getPatientsPapersPaperIdPatientsGet,
   getVariantsPapersPaperIdVariantsGet,
-  getFamiliesPapersPaperIdFamiliesGet,
 } from '@/api/generated'
 import type {
   PaperResp,
   PatientResp,
   VariantResp,
-  FamilyResp,
   PatientVariantOccurrenceResp,
 } from '@/api/generated/types.gen'
 
-export type { PaperResp, PatientResp, VariantResp, FamilyResp, PatientVariantOccurrenceResp }
+export type { PaperResp, PatientResp, VariantResp, PatientVariantOccurrenceResp }
 
 const STALE_TIME = 5 * 60 * 1000
 
@@ -51,18 +49,6 @@ export function usePaperOccurrences(paperId: number) {
     queryFn: () => getVariantsPapersPaperIdVariantsGet({ path: { paper_id: paperId } }),
     staleTime: STALE_TIME,
   })
-
-  const familiesQuery = useQuery({
-    queryKey: ['families', paperId],
-    queryFn: () => getFamiliesPapersPaperIdFamiliesGet({ path: { paper_id: paperId } }),
-    staleTime: STALE_TIME,
-  })
-
-  const familiesById = useMemo(() => {
-    const map = new Map<number, FamilyResp>()
-    for (const family of familiesQuery.data ?? []) map.set(family.id, family)
-    return map
-  }, [familiesQuery.data])
 
   const rows = useMemo<OccurrenceRow[]>(() => {
     const occurrences = occurrencesQuery.data
@@ -106,24 +92,13 @@ export function usePaperOccurrences(paperId: number) {
   return {
     paper: paperQuery.data as PaperResp | undefined,
     rows,
-    familiesById,
     isLoading:
       paperQuery.isPending ||
       occurrencesQuery.isPending ||
       patientsQuery.isPending ||
-      variantsQuery.isPending ||
-      familiesQuery.isPending,
+      variantsQuery.isPending,
     isError:
-      paperQuery.isError ||
-      occurrencesQuery.isError ||
-      patientsQuery.isError ||
-      variantsQuery.isError ||
-      familiesQuery.isError,
-    error:
-      paperQuery.error ??
-      occurrencesQuery.error ??
-      patientsQuery.error ??
-      variantsQuery.error ??
-      familiesQuery.error,
+      paperQuery.isError || occurrencesQuery.isError || patientsQuery.isError || variantsQuery.isError,
+    error: paperQuery.error ?? occurrencesQuery.error ?? patientsQuery.error ?? variantsQuery.error,
   }
 }
