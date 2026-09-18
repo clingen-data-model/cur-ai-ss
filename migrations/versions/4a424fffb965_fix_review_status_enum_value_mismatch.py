@@ -35,9 +35,34 @@ for the PRAGMA itself. Every other migration using the old
 execute(text('PRAGMA foreign_keys = OFF')) pattern (grep the repo for it)
 carries the same latent bug -- they happened not to trigger it, either
 because their batch operation didn't require a full table recreation or
-their target table has no CASCADE children. Use this migration's pattern,
-not CLAUDE.md's older documented one, for any future batch_alter_table on a
-table with CASCADE dependents.
+their target table has no CASCADE children.
+
+FOLLOW-UP (same day): the `connection.commit()` fix above turned out to
+have its own bug, caught before the next deploy. Calling `.commit()`
+directly on the connection alembic's MigrationContext is managing
+deactivates alembic's own outer Transaction object. The DDL/data changes
+still commit fine, but alembic's post-upgrade() `UPDATE alembic_version`
+then runs in a transaction whose final commit (at the end of
+`context.begin_transaction()`) becomes a silent no-op -- so whichever
+migration runs *last* in a given `alembic upgrade head` invocation leaves
+alembic_version one revision behind the schema it actually produced.
+Harmless-looking (no exception, schema is correct) until the next
+migration is added and alembic tries to re-run this one from a stale
+version, hitting a "duplicate column" or similar error, or -- worse, for a
+migration doing a CASCADE-guarded batch alter -- risking a second wipe.
+
+Confirmed in production after the first fix's deploy (alembic_version
+stuck at f3a8c2d914b7 after this migration ran with no error) and
+reproduced locally. Fixed by running the PRAGMA inside
+`op.get_context().autocommit_block()` -- alembic's own supported mechanism
+for stepping outside its managed transaction and back in -- instead of
+manual connection.commit() calls. Verified: the full chain from
+da29165eddd6 to head with a real CASCADE child row surviving every step,
+`alembic upgrade head` run twice back-to-back is a clean no-op the second
+time (proving alembic_version lands correctly), and downgrade-to-base and
+back up round-trips correctly at every intermediate revision. Use
+autocommit_block(), not connection.commit(), for any future
+batch_alter_table on a table with CASCADE dependents -- see CLAUDE.md.
 """
 
 from typing import Sequence, Union
@@ -70,8 +95,8 @@ def upgrade() -> None:
             {'name': name, 'value': value},
         )
 
-    connection.commit()
-    connection.exec_driver_sql('PRAGMA foreign_keys = OFF')
+    with op.get_context().autocommit_block():
+        connection.exec_driver_sql('PRAGMA foreign_keys = OFF')
     try:
         with op.batch_alter_table('papers', schema=None) as batch_op:
             batch_op.alter_column(
@@ -86,14 +111,14 @@ def upgrade() -> None:
                 server_default='NOT_ASSIGNED',
             )
     finally:
-        connection.exec_driver_sql('PRAGMA foreign_keys = ON')
-        connection.commit()
+        with op.get_context().autocommit_block():
+            connection.exec_driver_sql('PRAGMA foreign_keys = ON')
 
 
 def downgrade() -> None:
     connection = op.get_bind()
-    connection.commit()
-    connection.exec_driver_sql('PRAGMA foreign_keys = OFF')
+    with op.get_context().autocommit_block():
+        connection.exec_driver_sql('PRAGMA foreign_keys = OFF')
     try:
         with op.batch_alter_table('papers', schema=None) as batch_op:
             batch_op.alter_column(
@@ -108,8 +133,8 @@ def downgrade() -> None:
                 server_default='not_assigned',
             )
     finally:
-        connection.exec_driver_sql('PRAGMA foreign_keys = ON')
-        connection.commit()
+        with op.get_context().autocommit_block():
+            connection.exec_driver_sql('PRAGMA foreign_keys = ON')
 
     for value, name in _VALUE_TO_NAME.items():
         connection.execute(

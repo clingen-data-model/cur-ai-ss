@@ -211,7 +211,9 @@ uv run pytest test/api/test_app.py::test_function  # Specific test
 
 When using `batch_alter_table()` on any table that has CASCADE foreign keys pointing to it, you **MUST disable foreign key constraints** before the batch operation, then re-enable them. Otherwise, when SQLite drops and recreates the table, CASCADE constraints will delete child rows unexpectedly.
 
-**`PRAGMA foreign_keys` is a no-op inside an open transaction** (documented SQLite behavior), and alembic's `env.py` (`context.begin_transaction()`) already has one open by the time `upgrade()` runs. `connection.execute(text('PRAGMA foreign_keys = OFF'))` alone therefore silently does nothing — this is exactly what caused both the June 2026 incident below and a September 2026 repeat (migration `f3a8c2d914b7`, wiped every row in patients/families/variants/tasks/chat_messages; recovered from a same-day backup with ~9 hours of data loss). You must `connection.commit()` first to close the already-open transaction before the PRAGMA takes effect.
+**`PRAGMA foreign_keys` is a no-op inside an open transaction** (documented SQLite behavior), and alembic's `env.py` (`context.begin_transaction()`) already has one open by the time `upgrade()` runs. `connection.execute(text('PRAGMA foreign_keys = OFF'))` alone therefore silently does nothing — this is exactly what caused both the June 2026 incident below and a September 2026 repeat (migration `f3a8c2d914b7`, wiped every row in patients/families/variants/tasks/chat_messages; recovered from a same-day backup with ~9 hours of data loss).
+
+**Do not "fix" this with `connection.commit()`.** A same-day follow-up incident: calling `.commit()` directly on the connection deactivates alembic's own managed transaction object. The DDL/data changes still commit, but alembic's post-migration `alembic_version` bookkeeping write then lands in a transaction whose final commit (at the end of `context.begin_transaction()`) silently becomes a no-op — so whichever migration runs *last* in a given `alembic upgrade head` invocation leaves `alembic_version` one revision behind the schema it actually produced. No exception, no warning; it only surfaces when a later migration tries to re-run against a table that already has the change, or (worse) when that stale-versioned re-run hits this exact CASCADE bug a second time. Use `op.get_context().autocommit_block()` — alembic's own supported mechanism for stepping outside its managed transaction — instead.
 
 **Safe pattern for batch alterations:**
 ```python
@@ -219,17 +221,16 @@ from alembic import op
 
 def upgrade() -> None:
     connection = op.get_bind()
-    # Close alembic's already-open transaction, or the PRAGMA below is a no-op
-    connection.commit()
-    connection.exec_driver_sql('PRAGMA foreign_keys = OFF')
+    with op.get_context().autocommit_block():
+        connection.exec_driver_sql('PRAGMA foreign_keys = OFF')
 
     try:
         with op.batch_alter_table('table_name', schema=None) as batch_op:
             batch_op.add_column(...)
             # ... other operations
     finally:
-        connection.exec_driver_sql('PRAGMA foreign_keys = ON')
-        connection.commit()
+        with op.get_context().autocommit_block():
+            connection.exec_driver_sql('PRAGMA foreign_keys = ON')
 ```
 
 **Additional rules:**
@@ -237,7 +238,7 @@ def upgrade() -> None:
 - Always backup before running complex migrations (especially those involving multiple batches or adding CASCADE constraints).
 - After migrations, verify data integrity: check row counts on tables with cascade relationships.
 - This pattern is critical for tables like `families` (has CASCADE dependents like `patients`) — June 2026 migration `3b2d941d02a2` deleted all patients because FK constraints weren't actually disabled (see above: the `execute(text(...))` form never worked in the first place).
-- Before trusting a new batch-alter migration against real data, reproduce the exact scenario locally first: create the parent + a CASCADE child row, run the migration, assert the child row survives. Do not rely on the migration completing without error — this bug is completely silent (no exception, no warning) and only shows up as missing rows later.
+- Before trusting a new batch-alter migration against real data, reproduce the exact scenario locally first: create the parent + a CASCADE child row, run the migration, assert the child row survives, run `alembic upgrade head` a second time and confirm it's a clean no-op (proves `alembic_version` actually landed). Do not rely on the migration completing without error — both failure modes here are completely silent and only show up later, as missing rows or as a stale version re-running destructive DDL.
 
 **Agent implementation:**
 - Agents use `openai_agents` library (structured outputs)
