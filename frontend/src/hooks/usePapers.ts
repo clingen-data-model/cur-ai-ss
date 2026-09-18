@@ -27,6 +27,7 @@ const STALE_TIME = 5 * 60 * 1000
 export function usePapers(
   workedBy: IndexSearch['worked_by'],
   status?: IndexSearch['status'],
+  review_status?: IndexSearch['review_status'],
 ) {
   const { user } = useAuth()
   const queryClient = useQueryClient()
@@ -57,13 +58,13 @@ export function usePapers(
     // server would have to derive every status before it could drop any, which
     // costs exactly what returning them all costs. touched_by is different: it
     // narrows the set of papers before their summaries are built.
-    const matching = status
-      ? rows.filter((p) => STATE_OF[p.status] === status)
-      : rows
+    const matching = rows
+      .filter((p) => (status ? STATE_OF[p.status] === status : true))
+      .filter((p) => (review_status ? p.review_status === review_status : true))
     return [...matching].sort((a, b) =>
       (b.updated_at ?? '').localeCompare(a.updated_at ?? ''),
     )
-  }, [query.data, status])
+  }, [query.data, status, review_status])
 
   // Its own endpoint rather than the collaborators present in the rows: the
   // options must be everyone who could narrow the list, and deriving them from

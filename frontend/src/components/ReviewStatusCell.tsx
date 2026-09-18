@@ -13,6 +13,7 @@ import { updatePaperReviewPapersPaperIdReviewPatch } from '@/api/generated'
 import { ReviewStatus } from '@/api/generated/types.gen'
 import type { PaperSummaryResp, UserSummaryResp } from '@/api/generated/types.gen'
 import { useUsers } from '@/hooks/useUsers'
+import { useAuth } from '@/lib/auth'
 import { Badge } from '@/components/ui/badge'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
@@ -51,6 +52,7 @@ export function ReviewStatusBadge({
 
 export function ReviewStatusCell({ paper }: { paper: PaperSummaryResp }) {
   const { users } = useUsers()
+  const { user } = useAuth()
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   // Both default to their "nothing assigned yet" value: the API always sends
@@ -103,6 +105,20 @@ export function ReviewStatusCell({ paper }: { paper: PaperSummaryResp }) {
           <CommandInput placeholder="Assign reviewer..." />
           <CommandList>
             <CommandEmpty>No one by that name.</CommandEmpty>
+            {user && (
+              <>
+                <CommandGroup>
+                  <CommandItem
+                    value="Assign to me"
+                    onSelect={() => assignTo(user.id)}
+                  >
+                    <Check className={assignee?.id === user.id ? 'ml-auto size-4' : 'opacity-0'} />
+                    Assign to me
+                  </CommandItem>
+                </CommandGroup>
+                <CommandSeparator />
+              </>
+            )}
             {status !== ReviewStatus.NOT_ASSIGNED && (
               <>
                 <CommandGroup heading="Status">
