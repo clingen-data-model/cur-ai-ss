@@ -211,30 +211,33 @@ uv run pytest test/api/test_app.py::test_function  # Specific test
 
 When using `batch_alter_table()` on any table that has CASCADE foreign keys pointing to it, you **MUST disable foreign key constraints** before the batch operation, then re-enable them. Otherwise, when SQLite drops and recreates the table, CASCADE constraints will delete child rows unexpectedly.
 
+**`PRAGMA foreign_keys` is a no-op inside an open transaction** (documented SQLite behavior), and alembic's `env.py` (`context.begin_transaction()`) already has one open by the time `upgrade()` runs. `connection.execute(text('PRAGMA foreign_keys = OFF'))` alone therefore silently does nothing — this is exactly what caused both the June 2026 incident below and a September 2026 repeat (migration `f3a8c2d914b7`, wiped every row in patients/families/variants/tasks/chat_messages; recovered from a same-day backup with ~9 hours of data loss). You must `connection.commit()` first to close the already-open transaction before the PRAGMA takes effect.
+
 **Safe pattern for batch alterations:**
 ```python
-from sqlalchemy import text
 from alembic import op
 
 def upgrade() -> None:
     connection = op.get_bind()
-    # Disable FK constraints before batch alter
-    connection.execute(text('PRAGMA foreign_keys = OFF'))
-    
+    # Close alembic's already-open transaction, or the PRAGMA below is a no-op
+    connection.commit()
+    connection.exec_driver_sql('PRAGMA foreign_keys = OFF')
+
     try:
         with op.batch_alter_table('table_name', schema=None) as batch_op:
             batch_op.add_column(...)
             # ... other operations
     finally:
-        # Always re-enable FK constraints
-        connection.execute(text('PRAGMA foreign_keys = ON'))
+        connection.exec_driver_sql('PRAGMA foreign_keys = ON')
+        connection.commit()
 ```
 
 **Additional rules:**
 - **NEVER use `ondelete='CASCADE'` when adding new foreign keys inside batch_alter_table** — add the column first, then the constraint separately in a non-batch operation.
 - Always backup before running complex migrations (especially those involving multiple batches or adding CASCADE constraints).
 - After migrations, verify data integrity: check row counts on tables with cascade relationships.
-- This pattern is critical for tables like `families` (has CASCADE dependents like `patients`) — June 2026 migration `3b2d941d02a2` deleted all patients because FK constraints weren't disabled.
+- This pattern is critical for tables like `families` (has CASCADE dependents like `patients`) — June 2026 migration `3b2d941d02a2` deleted all patients because FK constraints weren't actually disabled (see above: the `execute(text(...))` form never worked in the first place).
+- Before trusting a new batch-alter migration against real data, reproduce the exact scenario locally first: create the parent + a CASCADE child row, run the migration, assert the child row survives. Do not rely on the migration completing without error — this bug is completely silent (no exception, no warning) and only shows up as missing rows later.
 
 **Agent implementation:**
 - Agents use `openai_agents` library (structured outputs)
