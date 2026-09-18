@@ -14,6 +14,7 @@ import type { OccurrenceRow } from '@/hooks/usePaperOccurrences'
 import { DataTable } from '@/components/ui/data-table'
 import { Spinner } from '@/components/ui/spinner'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card'
 import {
   EditableDeNovoCell,
   EditableInheritanceCell,
@@ -22,24 +23,39 @@ import {
 } from '@/components/OccurrenceEditableCells'
 import { PatientDetailPanel } from '@/components/PatientDetailPanel'
 import { VariantDetailPanel } from '@/components/VariantDetailPanel'
+import { PatientHoverCardContent } from '@/components/PatientHoverCard'
+import { VariantHoverCardContent } from '@/components/VariantHoverCard'
 import { UnassociatedPatientsTab } from '@/components/UnassociatedPatientsTab'
 import { UnassociatedVariantsTab } from '@/components/UnassociatedVariantsTab'
 import { PedigreeTab } from '@/components/PedigreeTab'
 
 type ExpandedView = 'patient' | 'variant'
 
-function EntityLink({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+/** Patient/Variant cell: click expands the row's detail panel, hover previews
+ * a snippet of it (demographics / ClinVar+gnomAD) without expanding. */
+function EntityLink({
+  onClick,
+  hoverContent,
+  children,
+}: {
+  onClick: () => void
+  hoverContent: React.ReactNode
+  children: React.ReactNode
+}) {
   return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation()
-        onClick()
-      }}
-      className="text-left hover:underline underline-offset-2 cursor-pointer"
-    >
-      {children}
-    </button>
+    <HoverCard>
+      <HoverCardTrigger
+        render={<button type="button" />}
+        onClick={(e) => {
+          e.stopPropagation()
+          onClick()
+        }}
+        className="text-left hover:underline underline-offset-2 cursor-pointer"
+      >
+        {children}
+      </HoverCardTrigger>
+      <HoverCardContent className="w-72">{hoverContent}</HoverCardContent>
+    </HoverCard>
   )
 }
 
@@ -103,7 +119,10 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
         header: 'Patient',
         accessorFn: (row) => row.patient.identifier,
         cell: ({ row }) => (
-          <EntityLink onClick={() => toggleExpanded(String(row.original.occurrence.id), 'patient')}>
+          <EntityLink
+            onClick={() => toggleExpanded(String(row.original.occurrence.id), 'patient')}
+            hoverContent={<PatientHoverCardContent paperId={paperId} patient={row.original.patient} />}
+          >
             {row.original.patient.identifier}
           </EntityLink>
         ),
@@ -113,7 +132,10 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
         header: 'Variant',
         accessorFn: (row) => row.variant.variant_description,
         cell: ({ row }) => (
-          <EntityLink onClick={() => toggleExpanded(String(row.original.occurrence.id), 'variant')}>
+          <EntityLink
+            onClick={() => toggleExpanded(String(row.original.occurrence.id), 'variant')}
+            hoverContent={<VariantHoverCardContent variant={row.original.variant} />}
+          >
             {row.original.variant.variant_description}
           </EntityLink>
         ),

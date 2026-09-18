@@ -19,14 +19,7 @@ import {
 } from '@/components/EditableField'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { VARIANT_TYPE_OPTIONS } from '@/lib/variantType'
-
-function gnomadUrl(coordinates: string): string {
-  return `https://gnomad.broadinstitute.org/variant/${coordinates}?dataset=gnomad_r4`
-}
-
-function clinGenUrl(caid: string): string {
-  return `https://reg.clinicalgenome.org/redmine/projects/registry/genboree_registry/by_canonicalid?canonicalid=${caid}`
-}
+import { gnomadUrl, clinGenUrl } from '@/lib/variantLinks'
 
 function formatAlleleCounts(ac?: number | null, an?: number | null): string {
   if (ac == null || an == null) return 'N/A'
