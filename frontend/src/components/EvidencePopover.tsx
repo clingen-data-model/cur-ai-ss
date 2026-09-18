@@ -3,8 +3,9 @@
  * popover (lib/ui/paper/shared.py's render_evidence_controls), minus the
  * color-picker/highlight controls, since PDF highlighting isn't wired up here yet.
  */
-import { MessageSquareQuote } from 'lucide-react'
+import { Info } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 export interface EvidenceLike {
   quote?: string | null
@@ -14,18 +15,26 @@ export interface EvidenceLike {
   edited_at?: string | null
 }
 
+const TRIGGER_CLASSNAME =
+  'inline-flex items-center justify-center size-6 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed transition-colors'
+
 export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
   const hasContent = !!(block?.quote || block?.reasoning || block?.human_edit_note)
 
   return (
     <Popover>
-      <PopoverTrigger
-        disabled={!hasContent}
-        className="inline-flex items-center justify-center size-6 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-        title="Evidence & Reasoning"
-      >
-        <MessageSquareQuote className="size-3.5" />
-      </PopoverTrigger>
+      {hasContent ? (
+        <Tooltip>
+          <TooltipTrigger render={<PopoverTrigger className={TRIGGER_CLASSNAME} />}>
+            <Info className="size-3.5" />
+          </TooltipTrigger>
+          <TooltipContent>Evidence & Reasoning</TooltipContent>
+        </Tooltip>
+      ) : (
+        <PopoverTrigger disabled className={TRIGGER_CLASSNAME}>
+          <Info className="size-3.5" />
+        </PopoverTrigger>
+      )}
       <PopoverContent className="w-80 text-sm space-y-2">
         {block?.quote && (
           <p>
