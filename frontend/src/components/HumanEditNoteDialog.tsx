@@ -4,6 +4,7 @@
  * here the curator must type their own reasoning before the edit saves.
  */
 import { useEffect, useState } from 'react'
+import { ArrowRight } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,6 +24,8 @@ export function HumanEditNoteDialog({
   defaultNote,
   onConfirm,
   isPending,
+  beforeValue,
+  afterValue,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -30,6 +33,11 @@ export function HumanEditNoteDialog({
   defaultNote?: string | null
   onConfirm: (note: string) => void
   isPending?: boolean
+  /** The field's current and proposed values, formatted for display. Shown as
+   * a "before -> after" line when both are given; omitted otherwise so a
+   * caller that hasn't been updated yet still renders correctly. */
+  beforeValue?: string
+  afterValue?: string
 }) {
   const [note, setNote] = useState('')
 
@@ -49,6 +57,13 @@ export function HumanEditNoteDialog({
             being manually overridden. This is required before the change saves.
           </AlertDialogDescription>
         </AlertDialogHeader>
+        {beforeValue !== undefined && afterValue !== undefined && (
+          <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-sm">
+            <span className="text-muted-foreground line-through truncate">{beforeValue || '—'}</span>
+            <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
+            <span className="font-medium truncate">{afterValue || '—'}</span>
+          </div>
+        )}
         <Textarea
           autoFocus
           value={note}

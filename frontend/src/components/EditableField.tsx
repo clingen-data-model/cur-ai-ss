@@ -76,6 +76,8 @@ export function EditableSelectRow({
         defaultNote={evidence?.human_edit_note}
         isPending={isSaving}
         onConfirm={(note) => pending.confirm(note)}
+        beforeValue={value ?? '—'}
+        afterValue={pending.pendingValue ?? '—'}
       />
     </FieldRow>
   )
@@ -107,6 +109,8 @@ export function EditableSwitchRow({
         defaultNote={evidence?.human_edit_note}
         isPending={isSaving}
         onConfirm={(note) => pending.confirm(note)}
+        beforeValue={value ? 'Yes' : 'No'}
+        afterValue={pending.pendingValue ? 'Yes' : 'No'}
       />
     </FieldRow>
   )
@@ -159,6 +163,8 @@ export function EditableTextRow({
         defaultNote={evidence?.human_edit_note}
         isPending={isSaving}
         onConfirm={(note) => pending.confirm(note)}
+        beforeValue={value}
+        afterValue={pending.pendingValue ?? ''}
       />
     </FieldRow>
   )
@@ -238,6 +244,8 @@ export function EditableAgeRow({
         defaultNote={evidence?.human_edit_note}
         isPending={isSaving}
         onConfirm={(note) => pending.confirm(note)}
+        beforeValue={value != null ? String(value) : '—'}
+        afterValue={pending.pendingValue != null ? String(pending.pendingValue) : '—'}
       />
     </FieldRow>
   )
