@@ -60,7 +60,7 @@ export function WorkedByFilter({
 
   const options = useMemo<Option[]>(
     () => [
-      { value: 'anyone', label: 'Anyone' },
+      { value: 'anyone', label: 'Any' },
       { value: 'me', label: 'Me' },
       ...people.map((person) => ({
         value: String(person.id),
@@ -106,10 +106,7 @@ export function WorkedByFilter({
         }}
         onInputValueChange={(next: string | null) => setDraft(next ?? '')}
       >
-        {/* Wide enough for a full name: at w-52 "Pamela Ajuyah Robertson" ran
-            under the clear button, since an input scrolls its text rather than
-            wrapping or truncating. */}
-        <ComboboxInput placeholder="Anyone" className="w-64" showClear />
+        <ComboboxInput placeholder="Any" className="w-40" showClear />
         <ComboboxContent>
           <ComboboxList>
             {visible.map((option) => (
