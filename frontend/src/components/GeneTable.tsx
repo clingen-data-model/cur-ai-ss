@@ -53,14 +53,18 @@ function PaperCard({ paper }: { paper: PaperSummaryResp }) {
         </div>
       </div>
       <div className="flex justify-center px-3">
-        <div className="w-4/5 overflow-hidden rounded-md border border-border shadow-sm">
+        <Link
+          to="/papers/$paperId/occurrences"
+          params={{ paperId: String(paper.id) }}
+          className="w-4/5 overflow-hidden rounded-md border border-border shadow-sm hover:shadow-md transition-shadow"
+        >
           <img
             src={thumbnailSrc}
             alt=""
             className="w-full aspect-[3/4] object-cover object-top bg-slate-100"
             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
           />
-        </div>
+        </Link>
       </div>
       <CardContent className="grid grid-cols-2 gap-x-3 gap-y-2 pt-3">
         <div className="col-span-2 space-y-0.5 min-w-0">
