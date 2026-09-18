@@ -10,7 +10,7 @@ import { REVIEW_STATES, REVIEW_STATE_LABEL, type ReviewState } from '@/lib/paper
 const ANY = 'any'
 
 function labelFor(state: string | null): string {
-  if (state === null || state === ANY) return 'Any review status'
+  if (state === null || state === ANY) return 'Any'
   return REVIEW_STATE_LABEL[state as ReviewState]
 }
 
@@ -34,7 +34,7 @@ export function ReviewStatusFilter({
           <SelectValue>{(state: string | null) => labelFor(state)}</SelectValue>
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={ANY}>Any review status</SelectItem>
+          <SelectItem value={ANY}>Any</SelectItem>
           {REVIEW_STATES.map((state) => (
             <SelectItem key={state} value={state}>
               {labelFor(state)}

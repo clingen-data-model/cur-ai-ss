@@ -4,7 +4,7 @@ import { useGeneTable } from '@/hooks/useGeneTable'
 import { usePapers } from '@/hooks/usePapers'
 import { GeneTable } from '@/components/GeneTable'
 import { PapersTable } from '@/components/PapersTable'
-import { StatusFilter } from '@/components/StatusFilter'
+import { ExtractionStatusFilter } from '@/components/ExtractionStatusFilter'
 import { ReviewStatusFilter } from '@/components/ReviewStatusFilter'
 import { WorkedByFilter } from '@/components/WorkedByFilter'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -132,7 +132,7 @@ function AllPapersTab() {
           {isRefreshing && <span className="ml-2 opacity-60">updating…</span>}
         </p>
         <div className="flex flex-wrap items-center gap-3">
-          <StatusFilter
+          <ExtractionStatusFilter
             value={status}
             onChange={(next) =>
               navigate({ search: withSearch({ status: next }), replace: true })
