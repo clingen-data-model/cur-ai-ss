@@ -221,7 +221,7 @@ export function EditableAgeRow({
       />
       <Select value={unit ?? NONE_VALUE} onValueChange={(v) => onSaveUnit(v === NONE_VALUE ? null : v)}>
         <SelectTrigger size="sm" className="h-7 text-xs w-24">
-          <SelectValue />
+          {unit === null ? '—' : <SelectValue />}
         </SelectTrigger>
         <SelectContent>
           <SelectItem value={NONE_VALUE}>—</SelectItem>
