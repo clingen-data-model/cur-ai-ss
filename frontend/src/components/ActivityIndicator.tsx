@@ -39,7 +39,7 @@ function PaperRow({ paper, stats }: { paper: PaperSummaryResp; stats?: TaskStats
   return (
     <div className="space-y-1.5 py-1.5">
       <Link
-        to="/papers/$paperId/patients"
+        to="/papers/$paperId/occurrences"
         params={{ paperId: String(paper.id) }}
         className="block truncate text-sm font-medium hover:underline underline-offset-4"
       >
