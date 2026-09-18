@@ -13,10 +13,11 @@ import {
   ResizableHandle,
 } from '@/components/ui/resizable'
 import type { PaperResp } from '@/api/generated/types.gen'
+import { Inheritance } from '@/api/generated/types.gen'
 import { API_BASE_URL } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { EditableTextRow } from '@/components/EditableField'
+import { EditableSelectRow, EditableTextRow } from '@/components/EditableField'
 import { EvidencePopover } from '@/components/EvidencePopover'
 import { pillColorFor } from '@/lib/pillColors'
 import { updatePaperPapersPaperIdPatch } from '@/api/generated'
@@ -160,13 +161,15 @@ export function PaperMetadataTab({ paper }: { paper: PaperResp }) {
             {/* Gene-Disease Information */}
             <div className="space-y-3 border-t pt-3">
               <h3 className="font-semibold text-sm">Gene-Disease Information</h3>
-              <div className="flex items-center justify-between gap-3 py-1.5 border-b">
-                <span className="text-sm text-muted-foreground w-44">Disease Name</span>
-                <div className="flex items-center gap-1 flex-1 justify-end">
-                  <span className="text-sm">{paper.disease_name || '—'}</span>
-                  <EvidencePopover block={paper.disease_name_evidence} />
-                </div>
-              </div>
+              <EditableTextRow
+                label="Disease Name"
+                value={paper.disease_name || ''}
+                evidence={paper.disease_name_evidence}
+                isSaving={updateMutation.isPending}
+                onSave={(value, note) =>
+                  save({ disease_name: value || null, disease_name_human_edit_note: note })
+                }
+              />
 
               {/* MONDO Disease */}
               <div className="flex items-center justify-between gap-3 py-1.5 border-b">
@@ -184,17 +187,20 @@ export function PaperMetadataTab({ paper }: { paper: PaperResp }) {
               </div>
 
               {/* Disease Inheritance Mode */}
-              <div className="flex items-center justify-between gap-3 py-1.5 border-b">
-                <span className="text-sm text-muted-foreground w-44">
-                  Inheritance Mode
-                </span>
-                <div className="flex items-center gap-1 flex-1 justify-end">
-                  <span className="text-sm">
-                    {paper.disease_inheritance_mode || '—'}
-                  </span>
-                  <EvidencePopover block={paper.disease_inheritance_mode_evidence} />
-                </div>
-              </div>
+              <EditableSelectRow
+                label="Inheritance Mode"
+                value={paper.disease_inheritance_mode ?? null}
+                options={Object.values(Inheritance)}
+                allowNone
+                evidence={paper.disease_inheritance_mode_evidence}
+                isSaving={updateMutation.isPending}
+                onSave={(value, note) =>
+                  save({
+                    disease_inheritance_mode: value,
+                    disease_inheritance_mode_human_edit_note: note,
+                  })
+                }
+              />
             </div>
 
             {/* Metadata Summary */}
