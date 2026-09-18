@@ -151,7 +151,7 @@ from lib.models import (
     VariantUpdateRequest,
 )
 from lib.models.base import manual_evidence_block
-from lib.models.edit import EditDB, latest_edits_for
+from lib.models.edit import EditDB, latest_edits_for, record_edits
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.mondo import MondoComponentMapping, MondoTerm
 from lib.models.patient import (
@@ -1600,15 +1600,15 @@ def create_family(
     family_db = FamilyDB(
         paper_id=paper_id,
         identifier=create_request.identifier,
-        identifier_evidence=manual_evidence_block(
-            create_request.identifier, current_user
-        ),
+        identifier_evidence=manual_evidence_block(create_request.identifier),
         consanguinity=False,
-        consanguinity_evidence=manual_evidence_block(False, current_user),
+        consanguinity_evidence=manual_evidence_block(False),
         updated_by_user_id=current_user.id,
     )
 
     session.add(family_db)
+    session.flush()
+    record_edits(session, family_db, ['identifier', 'consanguinity'], current_user)
     _touch_paper(session, paper_id, current_user)
     session.commit()
     session.refresh(family_db)
@@ -2219,54 +2219,57 @@ def create_patient(
         paper_id=paper_id,
         family_id=create_request.family_id,
         identifier=create_request.identifier,
-        identifier_evidence=manual_evidence_block(
-            create_request.identifier, current_user
-        ),
+        identifier_evidence=manual_evidence_block(create_request.identifier),
         proband_status=create_request.proband_status,
-        proband_status_evidence=manual_evidence_block(
-            create_request.proband_status, current_user
-        ),
+        proband_status_evidence=manual_evidence_block(create_request.proband_status),
         affected_status=create_request.affected_status,
-        affected_status_evidence=manual_evidence_block(
-            create_request.affected_status, current_user
-        ),
+        affected_status_evidence=manual_evidence_block(create_request.affected_status),
         sex=create_request.sex,
-        sex_evidence=manual_evidence_block(create_request.sex, current_user),
+        sex_evidence=manual_evidence_block(create_request.sex),
         country_of_origin=create_request.country_of_origin,
         country_of_origin_evidence=manual_evidence_block(
-            create_request.country_of_origin, current_user
+            create_request.country_of_origin
         ),
         race=create_request.race,
-        race_evidence=manual_evidence_block(create_request.race, current_user),
+        race_evidence=manual_evidence_block(create_request.race),
         ethnicity=create_request.ethnicity,
-        ethnicity_evidence=manual_evidence_block(
-            create_request.ethnicity, current_user
-        ),
+        ethnicity_evidence=manual_evidence_block(create_request.ethnicity),
         age_diagnosis=create_request.age_diagnosis,
-        age_diagnosis_evidence=manual_evidence_block(
-            create_request.age_diagnosis, current_user
-        ),
+        age_diagnosis_evidence=manual_evidence_block(create_request.age_diagnosis),
         age_diagnosis_unit=create_request.age_diagnosis_unit,
         age_report=create_request.age_report,
-        age_report_evidence=manual_evidence_block(
-            create_request.age_report, current_user
-        ),
+        age_report_evidence=manual_evidence_block(create_request.age_report),
         age_report_unit=create_request.age_report_unit,
         age_death=create_request.age_death,
-        age_death_evidence=manual_evidence_block(
-            create_request.age_death, current_user
-        ),
+        age_death_evidence=manual_evidence_block(create_request.age_death),
         age_death_unit=create_request.age_death_unit,
         is_obligate_carrier=create_request.is_obligate_carrier,
         relationship_to_proband=create_request.relationship_to_proband,
         twin_type=create_request.twin_type,
-        family_assignment_evidence=manual_evidence_block(
-            family_db.identifier, current_user
-        ),
+        family_assignment_evidence=manual_evidence_block(family_db.identifier),
         updated_by_user_id=current_user.id,
     )
 
     session.add(patient_db)
+    session.flush()
+    record_edits(
+        session,
+        patient_db,
+        [
+            'identifier',
+            'proband_status',
+            'affected_status',
+            'sex',
+            'country_of_origin',
+            'race',
+            'ethnicity',
+            'age_diagnosis',
+            'age_report',
+            'age_death',
+            'family_assignment',
+        ],
+        current_user,
+    )
     _touch_paper(session, paper_id, current_user)
     session.commit()
     session.refresh(patient_db)
@@ -2316,61 +2319,59 @@ def create_variant(
     variant_db = VariantDB(
         paper_id=paper_id,
         variant=create_request.variant,
-        variant_evidence=manual_evidence_block(create_request.variant, current_user),
+        variant_evidence=manual_evidence_block(create_request.variant),
         transcript=create_request.transcript,
-        transcript_evidence=manual_evidence_block(
-            create_request.transcript, current_user
-        ),
+        transcript_evidence=manual_evidence_block(create_request.transcript),
         protein_accession=create_request.protein_accession,
         protein_accession_evidence=manual_evidence_block(
-            create_request.protein_accession, current_user
+            create_request.protein_accession
         ),
         genomic_accession=create_request.genomic_accession,
         genomic_accession_evidence=manual_evidence_block(
-            create_request.genomic_accession, current_user
+            create_request.genomic_accession
         ),
         lrg_accession=create_request.lrg_accession,
-        lrg_accession_evidence=manual_evidence_block(
-            create_request.lrg_accession, current_user
-        ),
+        lrg_accession_evidence=manual_evidence_block(create_request.lrg_accession),
         gene_accession=create_request.gene_accession,
-        gene_accession_evidence=manual_evidence_block(
-            create_request.gene_accession, current_user
-        ),
+        gene_accession_evidence=manual_evidence_block(create_request.gene_accession),
         genomic_coordinates=create_request.genomic_coordinates,
         genomic_coordinates_evidence=manual_evidence_block(
-            create_request.genomic_coordinates, current_user
+            create_request.genomic_coordinates
         ),
         genome_build=create_request.genome_build,
-        genome_build_evidence=manual_evidence_block(
-            create_request.genome_build, current_user
-        ),
+        genome_build_evidence=manual_evidence_block(create_request.genome_build),
         rsid=create_request.rsid,
-        rsid_evidence=manual_evidence_block(create_request.rsid, current_user),
+        rsid_evidence=manual_evidence_block(create_request.rsid),
         caid=create_request.caid,
-        caid_evidence=manual_evidence_block(create_request.caid, current_user),
+        caid_evidence=manual_evidence_block(create_request.caid),
         hgvs_c=create_request.hgvs_c,
-        hgvs_c_evidence=manual_evidence_block(create_request.hgvs_c, current_user),
+        hgvs_c_evidence=manual_evidence_block(create_request.hgvs_c),
         hgvs_p=create_request.hgvs_p,
-        hgvs_p_evidence=manual_evidence_block(create_request.hgvs_p, current_user),
+        hgvs_p_evidence=manual_evidence_block(create_request.hgvs_p),
         hgvs_g=create_request.hgvs_g,
-        hgvs_g_evidence=manual_evidence_block(create_request.hgvs_g, current_user),
+        hgvs_g_evidence=manual_evidence_block(create_request.hgvs_g),
         variant_type=create_request.variant_type,
-        variant_type_evidence=manual_evidence_block(
-            create_request.variant_type, current_user
-        ),
+        variant_type_evidence=manual_evidence_block(create_request.variant_type),
         functional_evidence=create_request.functional_evidence,
         functional_evidence_evidence=manual_evidence_block(
-            create_request.functional_evidence, current_user
+            create_request.functional_evidence
         ),
         main_focus=create_request.main_focus,
-        main_focus_evidence=manual_evidence_block(
-            create_request.main_focus, current_user
-        ),
+        main_focus_evidence=manual_evidence_block(create_request.main_focus),
         updated_by_user_id=current_user.id,
     )
 
     session.add(variant_db)
+    session.flush()
+    # Only variant_type/functional_evidence/main_focus are HumanEvidenceBlock
+    # fields (the only ones VariantUpdateRequest can *_human_edit_note patch);
+    # the rest are plain EvidenceBlock with no edit attribution to record.
+    record_edits(
+        session,
+        variant_db,
+        ['variant_type', 'functional_evidence', 'main_focus'],
+        current_user,
+    )
     _touch_paper(session, paper_id, current_user)
     session.commit()
     session.refresh(variant_db)
@@ -2434,23 +2435,27 @@ def create_occurrence(
         patient_id=create_request.patient_id,
         variant_id=create_request.variant_id,
         zygosity=create_request.zygosity,
-        zygosity_evidence=manual_evidence_block(create_request.zygosity, current_user),
+        zygosity_evidence=manual_evidence_block(create_request.zygosity),
         inheritance=create_request.inheritance,
-        inheritance_evidence=manual_evidence_block(
-            create_request.inheritance, current_user
-        ),
+        inheritance_evidence=manual_evidence_block(create_request.inheritance),
         de_novo=create_request.de_novo,
-        de_novo_evidence=manual_evidence_block(create_request.de_novo, current_user),
+        de_novo_evidence=manual_evidence_block(create_request.de_novo),
         testing_methods=create_request.testing_methods,
         testing_methods_evidence=[
-            manual_evidence_block(method, current_user)
-            for method in create_request.testing_methods
+            manual_evidence_block(method) for method in create_request.testing_methods
         ],
         disease_name=create_request.disease_name,
         updated_by_user_id=current_user.id,
     )
 
     session.add(occurrence_db)
+    session.flush()
+    # testing_methods_evidence is a list of plain EvidenceBlock (no per-item
+    # attribution -- see testing_methods_note); only these three are
+    # HumanEvidenceBlock fields.
+    record_edits(
+        session, occurrence_db, ['zygosity', 'inheritance', 'de_novo'], current_user
+    )
     _touch_paper(session, paper_id, current_user)
     session.commit()
     session.refresh(occurrence_db)

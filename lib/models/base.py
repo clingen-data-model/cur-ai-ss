@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
@@ -28,7 +27,7 @@ def _editor_display_name(editor: UserDB) -> str:
     return name or editor.email
 
 
-def manual_evidence_block(value: Any, editor: UserDB) -> dict:
+def manual_evidence_block(value: Any) -> dict:
     """Evidence block for a field a curator typed directly rather than one the
     extraction pipeline found -- e.g. a manually created patient/variant/family/
     occurrence. Every ``*_evidence`` column is non-nullable, and PatchModel's
@@ -36,19 +35,17 @@ def manual_evidence_block(value: Any, editor: UserDB) -> dict:
     annotate, so these fields need a real (if reasoning-less) evidence block
     from the moment the row is created, not just on later extraction.
 
-    The edited_by_* stamp here is a one-time snapshot baked directly into the
-    JSON at creation (not the edits table -- there's no row yet to attach a
-    foreign key to). It stays visible until the field is first patched via a
-    *_human_edit_note, at which point record_edit's edits-table row takes over
-    and is overlaid on top of it at response-build time (_attach_edit_history)."""
+    Carries no attribution itself: the entity doesn't have a primary key yet
+    at the point this is called (it's building the columns passed into the
+    ORM constructor), so there's nothing yet for an edits row's foreign key
+    to point at. The caller records the real edits-table row once the row has
+    been flushed and has an id -- see record_edit() calls in create_patient/
+    create_variant/create_occurrence/create_family."""
     block = HumanEvidenceBlock[Any](
         value=value,
         reasoning='Manually entered by curator.',
         manually_entered=True,
         human_edit_note='Manually entered by curator.',
-        edited_by_user_id=editor.id,
-        edited_by_name=_editor_display_name(editor),
-        edited_at=datetime.now(timezone.utc),
     )
     return block.model_dump(mode='json')
 

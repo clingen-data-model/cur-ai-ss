@@ -1,9 +1,11 @@
+import json
 from pathlib import Path
 
 from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
+from sqlalchemy import text
 
 from lib.api import db
 from lib.models import Base
@@ -31,3 +33,142 @@ def test_alembic_upgrade_head(monkeypatch, tmp_path):
         MigrationContext.configure(engine.connect()), Base.metadata
     )
     assert diffs == []
+
+
+def test_backfill_edits_table_from_evidence_json(monkeypatch, tmp_path):
+    """24aa340de723 should port edited_by_* attribution already sitting in
+    *_evidence JSON into the edits table, strip those keys from the JSON, and
+    tolerate a user_id that no longer resolves to a real users row."""
+
+    monkeypatch.setattr(db.env, 'CAA_ROOT', str(tmp_path))
+    monkeypatch.setattr(db.env, 'SQLLITE_DIR', '')
+    monkeypatch.setattr(db, '_engine', None)
+    monkeypatch.setattr(db, '_session_factory', None)
+
+    repo_root = Path(__file__).resolve().parents[2]
+    cfg = Config(str(repo_root / 'alembic.ini'))
+    command.upgrade(cfg, 'ab0eafbeac4f')  # everything up to, but not, the backfill
+
+    engine = db.get_engine()
+    with engine.begin() as connection:
+        user_id = connection.execute(
+            text(
+                'INSERT INTO users (email, hashed_password, first_name, last_name) '
+                "VALUES ('a@example.com', 'x', 'Ann', 'Author') RETURNING id"
+            )
+        ).scalar_one()
+        gene_id = connection.execute(
+            text("INSERT INTO genes (symbol) VALUES ('TESTGENE') RETURNING id")
+        ).scalar_one()
+        paper_id = connection.execute(
+            text(
+                'INSERT INTO papers (gene_id, content_hash, filename, paper_types, '
+                'disease_name, disease_name_evidence) '
+                "VALUES (:gene_id, 'h', 'f.pdf', '[]', 'Marfan syndrome', :evidence) "
+                'RETURNING id'
+            ),
+            {
+                'gene_id': gene_id,
+                'evidence': json.dumps(
+                    {
+                        'value': 'Marfan syndrome',
+                        'reasoning': 'x',
+                        'human_edit_note': 'fixed spelling',
+                        'edited_by_user_id': user_id,
+                        'edited_by_name': 'Ann Author',
+                        'edited_at': '2026-01-01T00:00:00+00:00',
+                    }
+                ),
+            },
+        ).scalar_one()
+        family_id = connection.execute(
+            text(
+                'INSERT INTO families '
+                '(paper_id, identifier, identifier_evidence, consanguinity, '
+                'consanguinity_evidence) '
+                "VALUES (:paper_id, 'F1', :id_ev, 0, :con_ev) RETURNING id"
+            ),
+            {
+                'paper_id': paper_id,
+                'id_ev': json.dumps({'value': 'F1', 'reasoning': 'x'}),
+                'con_ev': json.dumps({'value': False, 'reasoning': 'x'}),
+            },
+        ).scalar_one()
+        age_evidence = json.dumps({'value': None, 'reasoning': 'x'})
+        unattributed = json.dumps({'value': 'Unknown', 'reasoning': 'x'})
+        patient_id = connection.execute(
+            text(
+                'INSERT INTO patients '
+                '(paper_id, family_id, identifier, identifier_evidence, proband_status, '
+                'proband_status_evidence, sex, sex_evidence, age_diagnosis_evidence, '
+                'age_report_evidence, age_death_evidence, country_of_origin, '
+                'country_of_origin_evidence, race, race_evidence, ethnicity, '
+                'ethnicity_evidence, affected_status, affected_status_evidence, '
+                'family_assignment_evidence) '
+                "VALUES (:paper_id, :family_id, 'P1', :id_ev, 'Proband', "
+                ":proband_ev, 'Male', :unattributed, :age_ev, :age_ev, :age_ev, "
+                "'Unknown', :unattributed, 'Unknown', :unattributed, 'Unknown', "
+                ":unattributed, 'Affected', :unattributed, :unattributed) "
+                'RETURNING id'
+            ),
+            {
+                'paper_id': paper_id,
+                'family_id': family_id,
+                'id_ev': json.dumps(
+                    {
+                        'value': 'P1',
+                        'reasoning': 'x',
+                        'edited_by_user_id': user_id,
+                        'edited_by_name': 'Ann Author',
+                        'edited_at': '2026-01-02T00:00:00+00:00',
+                    }
+                ),
+                # Attribution pointing at a user_id with no matching users row
+                # (e.g. that user was later deleted).
+                'proband_ev': json.dumps(
+                    {
+                        'value': 'Proband',
+                        'reasoning': 'x',
+                        'edited_by_user_id': 99999,
+                        'edited_by_name': 'Ghost User',
+                        'edited_at': '2026-01-03T00:00:00+00:00',
+                    }
+                ),
+                'age_ev': age_evidence,
+                'unattributed': unattributed,
+            },
+        ).scalar_one()
+
+    command.upgrade(cfg, 'head')
+
+    with engine.begin() as connection:
+        edits = connection.execute(
+            text(
+                'SELECT field_name, user_id, editor_name FROM edits ORDER BY field_name'
+            )
+        ).fetchall()
+        assert sorted((f, u, n) for f, u, n in edits) == [
+            ('disease_name', user_id, 'Ann Author'),
+            ('identifier', user_id, 'Ann Author'),
+            ('proband_status', None, 'Ghost User'),
+        ]
+
+        disease_evidence = json.loads(
+            connection.execute(
+                text('SELECT disease_name_evidence FROM papers WHERE id = :id'),
+                {'id': paper_id},
+            ).scalar_one()
+        )
+        assert 'edited_by_user_id' not in disease_evidence
+        assert 'edited_by_name' not in disease_evidence
+        assert 'edited_at' not in disease_evidence
+        assert disease_evidence['human_edit_note'] == 'fixed spelling'
+
+        identifier_evidence = json.loads(
+            connection.execute(
+                text('SELECT identifier_evidence FROM patients WHERE id = :id'),
+                {'id': patient_id},
+            ).scalar_one()
+        )
+        assert 'edited_by_user_id' not in identifier_evidence
+        assert identifier_evidence['value'] == 'P1'

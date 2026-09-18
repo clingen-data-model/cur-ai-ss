@@ -115,16 +115,28 @@ def record_edit(session: Session, obj: Base, field_name: str, editor: 'UserDB') 
     Flushes immediately: the app's sessionmaker runs with autoflush=False, and
     a response built later in the same request (via latest_edits_for) must see
     this row, not just whatever gets flushed on the next unrelated query."""
+    record_edits(session, obj, [field_name], editor)
+
+
+def record_edits(
+    session: Session, obj: Base, field_names: list[str], editor: 'UserDB'
+) -> None:
+    """Append one edit-history row per field in ``field_names`` on ``obj``, in a
+    single flush -- e.g. every manually-entered field at creation time, once
+    the row has been flushed and has a real id for the FK to point at."""
     fk_column, entity_id = _entity_fk(obj)
-    session.add(
-        EditDB(
-            field_name=field_name,
-            user_id=editor.id,
-            editor_name=_editor_display_name(editor),
-            edited_at=datetime.now(timezone.utc),
-            **{fk_column: entity_id},
+    now = datetime.now(timezone.utc)
+    editor_name = _editor_display_name(editor)
+    for field_name in field_names:
+        session.add(
+            EditDB(
+                field_name=field_name,
+                user_id=editor.id,
+                editor_name=editor_name,
+                edited_at=now,
+                **{fk_column: entity_id},
+            )
         )
-    )
     session.flush()
 
 
