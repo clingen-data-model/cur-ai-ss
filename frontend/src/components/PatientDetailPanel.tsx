@@ -18,7 +18,7 @@ import {
 } from '@/api/generated/types.gen'
 import type { PatientResp, PatientUpdateRequest } from '@/api/generated/types.gen'
 import { EditableAgeRow, EditableSelectRow, EditableSwitchRow, EditableTextRow } from '@/components/EditableField'
-import { PhenotypesAccordion } from '@/components/PhenotypesAccordion'
+import { PhenotypesTable } from '@/components/PhenotypesTable'
 import { apiErrorMessage } from '@/lib/apiError'
 
 export function PatientDetailPanel({ paperId, patient }: { paperId: number; patient: PatientResp }) {
@@ -184,9 +184,8 @@ export function PatientDetailPanel({ paperId, patient }: { paperId: number; pati
         />
       </div>
 
-      {/* Phenotypes accordion */}
       <div className="mt-4 border-t pt-4">
-        <PhenotypesAccordion paperId={paperId} patientId={patient.id} />
+        <PhenotypesTable paperId={paperId} patientId={patient.id} />
       </div>
     </div>
   )
