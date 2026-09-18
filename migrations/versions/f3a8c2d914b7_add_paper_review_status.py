@@ -25,10 +25,14 @@ PRAGMA foreign_keys is also a no-op while a transaction is open, and
 alembic's env.py already has one open by the time upgrade() runs here --
 connection.execute(text('PRAGMA foreign_keys = OFF')) alone silently does
 nothing, confirmed both by this migration wiping every one of papers'
-CASCADE children in production and by a local reproduction. connection
-.commit() first (closing that transaction) before the PRAGMA is what
-actually makes it take effect -- see 4a424fffb965's docstring for the full
-incident writeup.
+CASCADE children in production and by a local reproduction. This runs the
+PRAGMA inside op.get_context().autocommit_block() -- alembic's own
+supported mechanism for stepping outside its managed transaction -- rather
+than calling connection.commit() directly, which fixes the PRAGMA but
+silently breaks alembic's own post-migration alembic_version bookkeeping
+for whichever migration runs last in a given upgrade invocation (its
+outer Transaction object ends up deactivated, so its final commit is a
+no-op). See 4a424fffb965's docstring for the full incident writeup.
 """
 
 from typing import Sequence, Union
@@ -45,8 +49,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     connection = op.get_bind()
-    connection.commit()
-    connection.exec_driver_sql('PRAGMA foreign_keys = OFF')
+    with op.get_context().autocommit_block():
+        connection.exec_driver_sql('PRAGMA foreign_keys = OFF')
     try:
         with op.batch_alter_table('papers', schema=None) as batch_op:
             batch_op.add_column(
@@ -78,14 +82,14 @@ def upgrade() -> None:
                 ['review_assignee_user_id'],
             )
     finally:
-        connection.exec_driver_sql('PRAGMA foreign_keys = ON')
-        connection.commit()
+        with op.get_context().autocommit_block():
+            connection.exec_driver_sql('PRAGMA foreign_keys = ON')
 
 
 def downgrade() -> None:
     connection = op.get_bind()
-    connection.commit()
-    connection.exec_driver_sql('PRAGMA foreign_keys = OFF')
+    with op.get_context().autocommit_block():
+        connection.exec_driver_sql('PRAGMA foreign_keys = OFF')
     try:
         with op.batch_alter_table('papers', schema=None) as batch_op:
             batch_op.drop_index('ix_papers_review_assignee_user_id')
@@ -95,5 +99,5 @@ def downgrade() -> None:
             batch_op.drop_column('review_assignee_user_id')
             batch_op.drop_column('review_status')
     finally:
-        connection.exec_driver_sql('PRAGMA foreign_keys = ON')
-        connection.commit()
+        with op.get_context().autocommit_block():
+            connection.exec_driver_sql('PRAGMA foreign_keys = ON')
