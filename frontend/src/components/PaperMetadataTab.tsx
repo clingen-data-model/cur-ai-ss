@@ -52,7 +52,7 @@ export function PaperMetadataTab({ paper }: { paper: PaperResp }) {
 
   const handleDownloadPdf = () => {
     const link = document.createElement('a')
-    link.href = paper.pdf_url
+    link.href = `${API_BASE_URL}${paper.pdf_url}`
     link.download = paper.filename || 'paper.pdf'
     document.body.appendChild(link)
     link.click()
