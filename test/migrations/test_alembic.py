@@ -35,10 +35,13 @@ def test_alembic_upgrade_head(monkeypatch, tmp_path):
     assert diffs == []
 
 
-def test_backfill_edits_table_from_evidence_json(monkeypatch, tmp_path):
+def test_edits_attribution_migration_chain(monkeypatch, tmp_path):
     """24aa340de723 should port edited_by_* attribution already sitting in
     *_evidence JSON into the edits table, strip those keys from the JSON, and
-    tolerate a user_id that no longer resolves to a real users row."""
+    tolerate a user_id that no longer resolves to a real users row.
+    32bc2c2d591b (head) should then drop the now-redundant editor_name
+    snapshot without touching user_id/field_name, and its downgrade should
+    best-effort repopulate it from each row's current user name."""
 
     monkeypatch.setattr(db.env, 'CAA_ROOT', str(tmp_path))
     monkeypatch.setattr(db.env, 'SQLLITE_DIR', '')
@@ -139,7 +142,7 @@ def test_backfill_edits_table_from_evidence_json(monkeypatch, tmp_path):
             },
         ).scalar_one()
 
-    command.upgrade(cfg, 'head')
+    command.upgrade(cfg, '24aa340de723')
 
     with engine.begin() as connection:
         edits = connection.execute(
@@ -172,3 +175,33 @@ def test_backfill_edits_table_from_evidence_json(monkeypatch, tmp_path):
         )
         assert 'edited_by_user_id' not in identifier_evidence
         assert identifier_evidence['value'] == 'P1'
+
+    # 32bc2c2d591b (head): editor_name is dropped, user_id/field_name survive.
+    command.upgrade(cfg, 'head')
+    with engine.begin() as connection:
+        columns = {
+            row[1] for row in connection.execute(text('PRAGMA table_info(edits)'))
+        }
+        assert 'editor_name' not in columns
+
+        edits = connection.execute(
+            text('SELECT field_name, user_id FROM edits ORDER BY field_name')
+        ).fetchall()
+        assert sorted(edits) == [
+            ('disease_name', user_id),
+            ('identifier', user_id),
+            ('proband_status', None),
+        ]
+
+    # Downgrade re-adds the column, best-effort, from each row's *current*
+    # user name (not the name at edit time -- that information is gone).
+    command.downgrade(cfg, '24aa340de723')
+    with engine.begin() as connection:
+        names = dict(
+            connection.execute(
+                text('SELECT field_name, editor_name FROM edits')
+            ).fetchall()
+        )
+        assert names['disease_name'] == 'Ann Author'
+        assert names['identifier'] == 'Ann Author'
+        assert names['proband_status'] == 'Unknown'  # user_id is NULL

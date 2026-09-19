@@ -11,9 +11,9 @@ from sqlalchemy import (
     func,
     select,
 )
-from sqlalchemy.orm import Mapped, Session, mapped_column
+from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 
-from lib.models.base import Base, _editor_display_name
+from lib.models.base import Base
 
 if TYPE_CHECKING:
     from lib.models.user import UserDB
@@ -70,16 +70,19 @@ class EditDB(Base):
 
     field_name: Mapped[str] = mapped_column(String, nullable=False)
 
-    # user_id is a soft link (SET NULL on delete); editor_name is an immutable
-    # snapshot of the curator's display name at edit time, so history stays
-    # readable even after the user is renamed or removed.
+    # user_id is the source of truth for who made the edit, resolved live via
+    # the relationship below rather than a frozen name snapshot -- this app
+    # never hard-deletes a user row (accounts are deactivated via
+    # UserDB.is_active instead), so user_id is expected to always resolve.
+    # ON DELETE SET NULL remains as a defensive fallback for that not holding.
     user_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey('users.id', ondelete='SET NULL'), nullable=True
     )
-    editor_name: Mapped[str] = mapped_column(String, nullable=False)
     edited_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+    user: Mapped['UserDB | None'] = relationship('UserDB')
 
     __table_args__ = (
         CheckConstraint(
@@ -126,13 +129,11 @@ def record_edits(
     the row has been flushed and has a real id for the FK to point at."""
     fk_column, entity_id = _entity_fk(obj)
     now = datetime.now(timezone.utc)
-    editor_name = _editor_display_name(editor)
     for field_name in field_names:
         session.add(
             EditDB(
                 field_name=field_name,
                 user_id=editor.id,
-                editor_name=editor_name,
                 edited_at=now,
                 **{fk_column: entity_id},
             )
