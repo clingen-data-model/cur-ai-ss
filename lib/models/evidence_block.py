@@ -126,9 +126,11 @@ class EvidenceBlock(ReasoningBlock[T]):
 
 class HumanEvidenceBlock(EvidenceBlock[T]):
     human_edit_note: str | None = None  # optional annotation by human curator
-    # Per-field edit attribution. ``edited_by_name`` is an immutable snapshot of
-    # the curator's display name at edit time (deletion/rename-proof); the id is
-    # a soft link only (no FK is possible inside a JSON column).
+    # Per-field edit attribution, resolved live from the edits table's most
+    # recent row for this field (see app.py's _attach_edit_history) -- not
+    # stored on this model at all, so edited_by_name/is_active always reflect
+    # the editor's current name/account state, not a stamp frozen at edit time.
     edited_by_user_id: int | None = None
     edited_by_name: str | None = None
+    edited_by_is_active: bool | None = None
     edited_at: UtcDatetime | None = None

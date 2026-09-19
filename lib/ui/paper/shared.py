@@ -401,7 +401,12 @@ def render_evidence_controls(
                 if edited_by_name:
                     edited_at = getattr(block, 'edited_at', None)
                     when = f' on {edited_at:%Y-%m-%d}' if edited_at else ''
-                    st.caption(f'✏️ Edited by {edited_by_name}{when}')
+                    deactivated = (
+                        ' (deactivated)'
+                        if getattr(block, 'edited_by_is_active', None) is False
+                        else ''
+                    )
+                    st.caption(f'✏️ Edited by {edited_by_name}{deactivated}{when}')
         # Only pass EvidenceBlock to highlight controls (ReasoningBlock has no evidence sources)
         highlight_blocks = [block] if isinstance(block, EvidenceBlock) else []
         if highlight_blocks:
