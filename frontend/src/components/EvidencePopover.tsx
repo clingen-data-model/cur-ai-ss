@@ -12,6 +12,7 @@ export interface EvidenceLike {
   reasoning?: string | null
   human_edit_note?: string | null
   edited_by_name?: string | null
+  edited_by_is_active?: boolean | null
   edited_at?: string | null
 }
 
@@ -55,6 +56,7 @@ export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
             {block.edited_by_name && (
               <p className="text-xs text-muted-foreground">
                 Edited by {block.edited_by_name}
+                {block.edited_by_is_active === false ? ' (deactivated)' : ''}
                 {block.edited_at ? ` on ${new Date(block.edited_at).toLocaleDateString()}` : ''}
               </p>
             )}
