@@ -74,3 +74,26 @@ export const REVIEW_STATE_LABEL: Record<ReviewState, string> = {
 export function isReviewState(value: unknown): value is ReviewState {
   return typeof value === 'string' && (REVIEW_STATES as string[]).includes(value)
 }
+
+const ASSIGNED_TO_PREFIX = 'assigned_to:'
+
+/** What the Review Status filter can hold: one of the four status buckets, or
+ * a specific reviewer via `assigned_to:<user id>` -- a single encoded string
+ * so the filter stays a single URL param and a single <Select> value instead
+ * of a second, parallel filter control. */
+export type ReviewFilterValue = ReviewState | `${typeof ASSIGNED_TO_PREFIX}${number}`
+
+export function isReviewFilterValue(value: unknown): value is ReviewFilterValue {
+  if (typeof value !== 'string') return false
+  return isReviewState(value) || /^assigned_to:\d+$/.test(value)
+}
+
+/** The user id encoded in an `assigned_to:<id>` filter value, or undefined for
+ * a plain `ReviewState` -- lets callers branch on "match this reviewer" vs.
+ * "match this status bucket" without re-parsing the string themselves. */
+export function reviewFilterAssigneeId(
+  value: ReviewFilterValue | undefined,
+): number | undefined {
+  if (typeof value !== 'string' || !value.startsWith(ASSIGNED_TO_PREFIX)) return undefined
+  return Number(value.slice(ASSIGNED_TO_PREFIX.length))
+}
