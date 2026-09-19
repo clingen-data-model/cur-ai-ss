@@ -16,7 +16,12 @@
  * why the header, footer, auth gate and toaster render on every page.
  */
 import { RootRoute, Route } from '@tanstack/react-router'
-import { isPaperState, type PaperState, isReviewState, type ReviewState } from './lib/paperState'
+import {
+  isPaperState,
+  type PaperState,
+  isReviewFilterValue,
+  type ReviewFilterValue,
+} from './lib/paperState'
 
 import { RootLayout } from './routes/__root'
 import { HomePage } from './routes/index'
@@ -42,8 +47,9 @@ export interface IndexSearch {
   worked_by?: 'anyone' | 'me' | number
   /** A PaperState, or absent for every state. */
   status?: PaperState
-  /** A ReviewState, or absent for every review state. */
-  review_status?: ReviewState
+  /** A ReviewState, or `assigned_to:<user id>` for one specific reviewer, or
+   * absent for every review state. */
+  review_status?: ReviewFilterValue
 }
 
 const indexRoute = new Route({
@@ -70,7 +76,7 @@ const indexRoute = new Route({
 
     // Review states for curation workflow filtering.
     const reviewStatus = search.review_status
-    if (isReviewState(reviewStatus)) parsed.review_status = reviewStatus
+    if (isReviewFilterValue(reviewStatus)) parsed.review_status = reviewStatus
 
     // Anything unreadable falls through to showing everything rather than
     // erroring: these are filters, and a broken one should not be a broken page.
