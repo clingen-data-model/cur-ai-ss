@@ -117,20 +117,7 @@ export function PhenotypesTable({ paperId, patientId }: { paperId: number; patie
       },
       {
         id: 'hpo_match',
-        header: () => (
-          <div className="flex items-center gap-1.5">
-            <span>HPO Match</span>
-            <button
-              type="button"
-              onClick={copyAllHpoIds}
-              title="Copy all HPO IDs"
-              className="inline-flex items-center justify-center size-5 shrink-0 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors"
-            >
-              <Copy className="size-3.5" />
-            </button>
-          </div>
-        ),
-        enableSorting: false,
+        header: 'HPO Match',
         accessorFn: (row) => row.hpo.value?.name ?? '',
         cell: ({ row }) => {
           const hpo = row.original.hpo
@@ -146,7 +133,20 @@ export function PhenotypesTable({ paperId, patientId }: { paperId: number; patie
       },
       {
         id: 'hpo_id',
-        header: 'HPO ID',
+        header: () => (
+          <div className="flex items-center gap-1.5">
+            <span>HPO ID</span>
+            <button
+              type="button"
+              onClick={copyAllHpoIds}
+              title="Copy all HPO IDs"
+              className="inline-flex items-center justify-center size-5 shrink-0 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors"
+            >
+              <Copy className="size-3.5" />
+            </button>
+          </div>
+        ),
+        enableSorting: false,
         accessorFn: (row) => row.hpo.value?.id ?? '',
         cell: ({ row }) => {
           const id = row.original.hpo.value?.id
