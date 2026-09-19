@@ -146,15 +146,28 @@ function AllPapersTab() {
           <ReviewStatusFilter
             value={review_status}
             onChange={(next) =>
-              navigate({ search: withSearch({ review_status: next }), replace: true })
+              navigate({
+                // "Not assigned" can never carry an assignee (see
+                // PaperReviewUpdateRequest's validator) -- clear a stale
+                // selection rather than leave a hidden filter silently
+                // forcing zero results.
+                search: withSearch(
+                  next === 'not_assigned'
+                    ? { review_status: next, review_assignee: undefined }
+                    : { review_status: next },
+                ),
+                replace: true,
+              })
             }
           />
-          <ReviewAssigneeFilter
-            value={review_assignee}
-            onChange={(next) =>
-              navigate({ search: withSearch({ review_assignee: next }), replace: true })
-            }
-          />
+          {review_status !== 'not_assigned' && (
+            <ReviewAssigneeFilter
+              value={review_assignee}
+              onChange={(next) =>
+                navigate({ search: withSearch({ review_assignee: next }), replace: true })
+              }
+            />
+          )}
           <WorkedByFilter
             value={workedBy}
             people={people}
