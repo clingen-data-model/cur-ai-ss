@@ -44,7 +44,15 @@ def test_snapshot_covers_every_paper_scoped_table():
     # chat_messages is deliberately excluded, same as the old conversations
     # table before it: chat history is user-authored conversation, not
     # extraction output, so a reset should not wipe or restore it.
-    excluded: set[str] = {'chat_messages'}
+    #
+    # edits (per-field curator edit history) is also deliberately excluded:
+    # it isn't extraction output either, and restoring it from a stale
+    # snapshot would misattribute edits to a state that no longer exists.
+    # Entity-scoped edit rows (patient/variant/family/occurrence/segregation)
+    # are cleaned up for free by CASCADE when those rows are deleted during a
+    # reset; paper-scoped rows are deleted explicitly in restore_snapshot
+    # since the papers row itself is never deleted, just overwritten.
+    excluded: set[str] = {'chat_messages', 'edits'}
     snapshotted = {model.__table__.name for _, model in _INSERT_ORDER} | {'papers'}
 
     reachable = {'papers'}

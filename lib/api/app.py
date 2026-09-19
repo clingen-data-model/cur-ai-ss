@@ -30,6 +30,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 from sqlalchemy import delete, func, select, union
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, selectinload
@@ -150,6 +151,7 @@ from lib.models import (
     VariantUpdateRequest,
 )
 from lib.models.base import manual_evidence_block
+from lib.models.edit import EditDB, latest_edits_for, record_edits
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.mondo import MondoComponentMapping, MondoTerm
 from lib.models.patient import (
@@ -479,7 +481,7 @@ def put_paper(
         paper_db.patient_variant_occurrences_count = len(
             paper_db.patient_variant_occurrences
         )
-        return _paper_to_resp(paper_db)
+        return _paper_to_resp(paper_db, session)
     except IntegrityError:
         session.rollback()
         raise HTTPException(
@@ -779,7 +781,7 @@ def get_paper(
     paper_db.patient_variant_occurrences_count = len(
         paper_db.patient_variant_occurrences
     )
-    return _paper_to_resp(paper_db)
+    return _paper_to_resp(paper_db, session)
 
 
 @app.delete('/papers/{paper_id}', status_code=status.HTTP_204_NO_CONTENT)
@@ -887,7 +889,7 @@ def update_paper(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
     previous_disease_name = paper_db.disease_name
-    patch_request.apply_to(paper_db, current_user)
+    patch_request.apply_to(paper_db, current_user, session)
     # Disease MONDO fields are computed from the free-text disease name. Clear
     # them on manual text edits so clients never see a match for stale text.
     if (
@@ -909,7 +911,7 @@ def update_paper(
     paper_db.patient_variant_occurrences_count = len(
         paper_db.patient_variant_occurrences
     )
-    return _paper_to_resp(paper_db)
+    return _paper_to_resp(paper_db, session)
 
 
 @app.patch('/papers/{paper_id}/review', response_model=PaperResp)
@@ -962,7 +964,7 @@ def update_paper_review(
     paper_db.patient_variant_occurrences_count = len(
         paper_db.patient_variant_occurrences
     )
-    return _paper_to_resp(paper_db)
+    return _paper_to_resp(paper_db, session)
 
 
 def _touch_paper(session: Session, paper_id: int, editor: UserDB | None) -> None:
@@ -1194,12 +1196,12 @@ def _mondo_components(
     ]
 
 
-def _paper_to_resp(row: PaperDB) -> PaperResp:
+def _paper_to_resp(row: PaperDB, session: Session) -> PaperResp:
     """Convert PaperDB to PaperResp, including reconstructed MONDO reasoning."""
     from lib.models.paper import PaperType
     from lib.models.patient_variant_occurrences import Inheritance
 
-    return PaperResp(
+    resp = PaperResp(
         id=row.id,
         content_hash=row.content_hash,
         gene_symbol=row.gene.symbol,
@@ -1249,6 +1251,8 @@ def _paper_to_resp(row: PaperDB) -> PaperResp:
         pmcid=row.pmcid,
         paper_types=[PaperType(paper_type) for paper_type in row.paper_types],
     )
+    _attach_edit_history(resp, latest_edits_for(session, row))
+    return resp
 
 
 @app.get('/papers/{paper_id}/tasks', response_model=list[TaskResp])
@@ -1433,8 +1437,46 @@ def _user_summary(user: UserDB | None) -> UserSummaryResp | None:
     return UserSummaryResp.model_validate(user) if user else None
 
 
-def _patient_to_resp(row: PatientDB) -> PatientResp:
-    return PatientResp(
+def _attach_edit_history(resp: BaseModel, edits: dict[str, EditDB]) -> None:
+    """Overlay per-field edit attribution from the edits table onto every
+    HumanEvidenceBlock field of an already-built response, keyed by the
+    response field name with any ``_evidence`` suffix stripped (e.g.
+    ``identifier_evidence`` -> ``identifier``; segregation's evidence fields
+    carry no such suffix -- e.g. ``extracted_lod_score`` -- and match as-is).
+    Fields never patched via apply_to simply have no entry in ``edits`` and
+    keep whatever attribution (if any) was baked into their evidence JSON at
+    creation (see manual_evidence_block)."""
+    for name, value in resp.__dict__.items():
+        if not isinstance(value, HumanEvidenceBlock):
+            continue
+        field_name = name[: -len('_evidence')] if name.endswith('_evidence') else name
+        edit = edits.get(field_name)
+        if edit is not None:
+            value.edited_by_user_id = edit.user_id
+            value.edited_by_name = edit.editor_name
+            value.edited_at = edit.edited_at
+
+
+def _family_to_resp(row: FamilyDB, session: Session) -> FamilyResp:
+    resp = FamilyResp(
+        id=row.id,
+        paper_id=row.paper_id,
+        identifier=row.identifier,
+        identifier_evidence=HumanEvidenceBlock.model_validate(row.identifier_evidence),
+        consanguinity=row.consanguinity,
+        consanguinity_evidence=HumanEvidenceBlock.model_validate(
+            row.consanguinity_evidence
+        ),
+        updated_at=row.updated_at,
+        updated_by_user_id=row.updated_by_user_id,
+        updated_by=_user_summary(row.updated_by),
+    )
+    _attach_edit_history(resp, latest_edits_for(session, row))
+    return resp
+
+
+def _patient_to_resp(row: PatientDB, session: Session) -> PatientResp:
+    resp = PatientResp(
         id=row.id,
         paper_id=row.paper_id,
         identifier=row.identifier,
@@ -1495,6 +1537,8 @@ def _patient_to_resp(row: PatientDB) -> PatientResp:
             row.family_assignment_evidence
         ),
     )
+    _attach_edit_history(resp, latest_edits_for(session, row))
+    return resp
 
 
 @app.get('/papers/{paper_id}/patients', response_model=list[PatientResp])
@@ -1515,7 +1559,7 @@ def get_patients(
         .order_by(PatientDB.id)
         .all()
     )
-    return [_patient_to_resp(p) for p in patients]
+    return [_patient_to_resp(p, session) for p in patients]
 
 
 @app.get('/papers/{paper_id}/families', response_model=list[FamilyResp])
@@ -1529,13 +1573,14 @@ def get_families(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
-    return (
+    families = (
         session.query(FamilyDB)
         .options(selectinload(FamilyDB.updated_by))
         .filter(FamilyDB.paper_id == paper_id)
         .order_by(FamilyDB.id)
         .all()
     )
+    return [_family_to_resp(f, session) for f in families]
 
 
 @app.post('/papers/{paper_id}/families', response_model=FamilyResp)
@@ -1555,19 +1600,19 @@ def create_family(
     family_db = FamilyDB(
         paper_id=paper_id,
         identifier=create_request.identifier,
-        identifier_evidence=manual_evidence_block(
-            create_request.identifier, current_user
-        ),
+        identifier_evidence=manual_evidence_block(create_request.identifier),
         consanguinity=False,
-        consanguinity_evidence=manual_evidence_block(False, current_user),
+        consanguinity_evidence=manual_evidence_block(False),
         updated_by_user_id=current_user.id,
     )
 
     session.add(family_db)
+    session.flush()
+    record_edits(session, family_db, ['identifier', 'consanguinity'], current_user)
     _touch_paper(session, paper_id, current_user)
     session.commit()
     session.refresh(family_db)
-    return family_db
+    return _family_to_resp(family_db, session)
 
 
 @app.patch('/papers/{paper_id}/families/{family_id}', response_model=FamilyResp)
@@ -1587,9 +1632,9 @@ def update_family(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Family not found'
         )
-    patch_request.apply_to(family_db, current_user)
+    patch_request.apply_to(family_db, current_user, session)
     _touch_paper(session, paper_id, current_user)
-    return family_db
+    return _family_to_resp(family_db, session)
 
 
 @app.get('/papers/{paper_id}/pedigree', response_model=PedigreeResp | None)
@@ -1627,6 +1672,7 @@ def _segregation_analysis_to_resp(
     family: FamilyDB,
     evidence: SegregationEvidenceDB,
     computed: SegregationAnalysisComputedDB | None,
+    session: Session,
 ) -> SegregationAnalysisResp:
     computed_nested = None
     if computed:
@@ -1651,7 +1697,7 @@ def _segregation_analysis_to_resp(
             ),
         )
 
-    return SegregationAnalysisResp(
+    resp = SegregationAnalysisResp(
         id=computed.id if computed else evidence.id,
         family_id=family.id,
         extracted_lod_score=_seg_evidence_block(
@@ -1666,6 +1712,8 @@ def _segregation_analysis_to_resp(
         updated_by_user_id=evidence.updated_by_user_id,
         updated_by=_user_summary(evidence.updated_by),
     )
+    _attach_edit_history(resp, latest_edits_for(session, evidence))
+    return resp
 
 
 @app.get(
@@ -1694,7 +1742,7 @@ def get_segregation_analysis(
         .all()
     )
     result = [
-        _segregation_analysis_to_resp(family, evidence, computed)
+        _segregation_analysis_to_resp(family, evidence, computed, session)
         for family, evidence, computed in rows
     ]
     return result
@@ -1723,14 +1771,14 @@ def update_segregation_evidence(
             detail='Segregation evidence not found',
         )
     family, evidence = row
-    patch_request.apply_to(evidence, current_user)
+    patch_request.apply_to(evidence, current_user, session)
     _touch_paper(session, paper_id, current_user)
     computed = (
         session.query(SegregationAnalysisComputedDB)
         .filter(SegregationAnalysisComputedDB.family_id == family_id)
         .one_or_none()
     )
-    return _segregation_analysis_to_resp(family, evidence, computed)
+    return _segregation_analysis_to_resp(family, evidence, computed, session)
 
 
 @app.get('/papers/{paper_id}/variants', response_model=list[VariantResp])
@@ -1757,10 +1805,10 @@ def get_variants(
         .order_by(VariantDB.id)
         .all()
     )
-    return [_variant_to_resp(v) for v in variants]
+    return [_variant_to_resp(v, session) for v in variants]
 
 
-def _variant_to_resp(row: VariantDB) -> VariantResp:
+def _variant_to_resp(row: VariantDB, session: Session) -> VariantResp:
     """Convert VariantDB to VariantResp, including harmonized and enriched data."""
     hv = row.harmonized_variant
     if hv:
@@ -1807,7 +1855,7 @@ def _variant_to_resp(row: VariantDB) -> VariantResp:
         if row.annotated_variant
         else None
     )
-    return VariantResp(
+    resp = VariantResp(
         id=row.id,
         paper_id=row.paper_id,
         variant=row.variant,
@@ -1860,6 +1908,8 @@ def _variant_to_resp(row: VariantDB) -> VariantResp:
         harmonized_variant=harmonized,
         annotated_variant=enriched,
     )
+    _attach_edit_history(resp, latest_edits_for(session, row))
+    return resp
 
 
 @app.patch('/papers/{paper_id}/variants/{variant_id}', response_model=VariantResp)
@@ -1883,7 +1933,7 @@ def update_variant(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Variant not found'
         )
-    patch_request.apply_to(variant_db, current_user)
+    patch_request.apply_to(variant_db, current_user, session)
     # Editing any harmonized field invalidates the downstream enrichment row,
     # which was computed by key lookup from the pre-edit coordinates. Treat
     # all harmonized siblings uniformly so a future enrichment lookup added
@@ -1907,7 +1957,7 @@ def update_variant(
         variant_db.annotated_variant = None
     _touch_paper(session, paper_id, current_user)
     session.flush()
-    return _variant_to_resp(variant_db)
+    return _variant_to_resp(variant_db, session)
 
 
 def _phenotype_to_resp(row: PhenotypeDB) -> PhenotypeResp:
@@ -1972,7 +2022,9 @@ def get_occurrences(
         .all()
     )
     return [
-        _patient_variant_occurrence_to_resp(link[0], patient_identifier=link[1])
+        _patient_variant_occurrence_to_resp(
+            link[0], patient_identifier=link[1], session=session
+        )
         for link in links
     ]
 
@@ -2006,7 +2058,9 @@ def get_variant_occurrences(
         .all()
     )
     return [
-        _patient_variant_occurrence_to_resp(link[0], patient_identifier=link[1])
+        _patient_variant_occurrence_to_resp(
+            link[0], patient_identifier=link[1], session=session
+        )
         for link in links
     ]
 
@@ -2040,7 +2094,9 @@ def get_patient_occurrences(
         .all()
     )
     return [
-        _patient_variant_occurrence_to_resp(link[0], patient_identifier=link[1])
+        _patient_variant_occurrence_to_resp(
+            link[0], patient_identifier=link[1], session=session
+        )
         for link in links
     ]
 
@@ -2068,24 +2124,27 @@ def update_occurrence(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Occurrence not found'
         )
-    patch_request.apply_to(occurrence_db, current_user)
+    patch_request.apply_to(occurrence_db, current_user, session)
     _touch_paper(session, paper_id, current_user)
     patient = session.get(PatientDB, occurrence_db.patient_id)
     return _patient_variant_occurrence_to_resp(
-        occurrence_db, patient_identifier=patient.identifier if patient else ''
+        occurrence_db,
+        patient_identifier=patient.identifier if patient else '',
+        session=session,
     )
 
 
 def _patient_variant_occurrence_to_resp(
     row: PatientVariantOccurrenceDB,
     patient_identifier: str,
+    session: Session,
 ) -> PatientVariantOccurrenceResp:
     """Convert PatientVariantOccurrenceDB to PatientVariantOccurrenceResp."""
     from lib.models import Inheritance, TestingMethod, Zygosity
     from lib.models.evidence_block import ReasoningBlock
     from lib.models.patient_variant_occurrences import CompoundHetConfidence
 
-    return PatientVariantOccurrenceResp(
+    resp = PatientVariantOccurrenceResp(
         id=row.id,
         paper_id=row.paper_id,
         patient_id=row.patient_id,
@@ -2124,7 +2183,11 @@ def _patient_variant_occurrence_to_resp(
         if row.paired_variant_confidence_reasoning
         else None,
         updated_at=row.updated_at,
+        updated_by_user_id=row.updated_by_user_id,
+        updated_by=_user_summary(row.updated_by),
     )
+    _attach_edit_history(resp, latest_edits_for(session, row))
+    return resp
 
 
 # ==============================
@@ -2156,58 +2219,61 @@ def create_patient(
         paper_id=paper_id,
         family_id=create_request.family_id,
         identifier=create_request.identifier,
-        identifier_evidence=manual_evidence_block(
-            create_request.identifier, current_user
-        ),
+        identifier_evidence=manual_evidence_block(create_request.identifier),
         proband_status=create_request.proband_status,
-        proband_status_evidence=manual_evidence_block(
-            create_request.proband_status, current_user
-        ),
+        proband_status_evidence=manual_evidence_block(create_request.proband_status),
         affected_status=create_request.affected_status,
-        affected_status_evidence=manual_evidence_block(
-            create_request.affected_status, current_user
-        ),
+        affected_status_evidence=manual_evidence_block(create_request.affected_status),
         sex=create_request.sex,
-        sex_evidence=manual_evidence_block(create_request.sex, current_user),
+        sex_evidence=manual_evidence_block(create_request.sex),
         country_of_origin=create_request.country_of_origin,
         country_of_origin_evidence=manual_evidence_block(
-            create_request.country_of_origin, current_user
+            create_request.country_of_origin
         ),
         race=create_request.race,
-        race_evidence=manual_evidence_block(create_request.race, current_user),
+        race_evidence=manual_evidence_block(create_request.race),
         ethnicity=create_request.ethnicity,
-        ethnicity_evidence=manual_evidence_block(
-            create_request.ethnicity, current_user
-        ),
+        ethnicity_evidence=manual_evidence_block(create_request.ethnicity),
         age_diagnosis=create_request.age_diagnosis,
-        age_diagnosis_evidence=manual_evidence_block(
-            create_request.age_diagnosis, current_user
-        ),
+        age_diagnosis_evidence=manual_evidence_block(create_request.age_diagnosis),
         age_diagnosis_unit=create_request.age_diagnosis_unit,
         age_report=create_request.age_report,
-        age_report_evidence=manual_evidence_block(
-            create_request.age_report, current_user
-        ),
+        age_report_evidence=manual_evidence_block(create_request.age_report),
         age_report_unit=create_request.age_report_unit,
         age_death=create_request.age_death,
-        age_death_evidence=manual_evidence_block(
-            create_request.age_death, current_user
-        ),
+        age_death_evidence=manual_evidence_block(create_request.age_death),
         age_death_unit=create_request.age_death_unit,
         is_obligate_carrier=create_request.is_obligate_carrier,
         relationship_to_proband=create_request.relationship_to_proband,
         twin_type=create_request.twin_type,
-        family_assignment_evidence=manual_evidence_block(
-            family_db.identifier, current_user
-        ),
+        family_assignment_evidence=manual_evidence_block(family_db.identifier),
         updated_by_user_id=current_user.id,
     )
 
     session.add(patient_db)
+    session.flush()
+    record_edits(
+        session,
+        patient_db,
+        [
+            'identifier',
+            'proband_status',
+            'affected_status',
+            'sex',
+            'country_of_origin',
+            'race',
+            'ethnicity',
+            'age_diagnosis',
+            'age_report',
+            'age_death',
+            'family_assignment',
+        ],
+        current_user,
+    )
     _touch_paper(session, paper_id, current_user)
     session.commit()
     session.refresh(patient_db)
-    return _patient_to_resp(patient_db)
+    return _patient_to_resp(patient_db, session)
 
 
 @app.delete(
@@ -2253,65 +2319,63 @@ def create_variant(
     variant_db = VariantDB(
         paper_id=paper_id,
         variant=create_request.variant,
-        variant_evidence=manual_evidence_block(create_request.variant, current_user),
+        variant_evidence=manual_evidence_block(create_request.variant),
         transcript=create_request.transcript,
-        transcript_evidence=manual_evidence_block(
-            create_request.transcript, current_user
-        ),
+        transcript_evidence=manual_evidence_block(create_request.transcript),
         protein_accession=create_request.protein_accession,
         protein_accession_evidence=manual_evidence_block(
-            create_request.protein_accession, current_user
+            create_request.protein_accession
         ),
         genomic_accession=create_request.genomic_accession,
         genomic_accession_evidence=manual_evidence_block(
-            create_request.genomic_accession, current_user
+            create_request.genomic_accession
         ),
         lrg_accession=create_request.lrg_accession,
-        lrg_accession_evidence=manual_evidence_block(
-            create_request.lrg_accession, current_user
-        ),
+        lrg_accession_evidence=manual_evidence_block(create_request.lrg_accession),
         gene_accession=create_request.gene_accession,
-        gene_accession_evidence=manual_evidence_block(
-            create_request.gene_accession, current_user
-        ),
+        gene_accession_evidence=manual_evidence_block(create_request.gene_accession),
         genomic_coordinates=create_request.genomic_coordinates,
         genomic_coordinates_evidence=manual_evidence_block(
-            create_request.genomic_coordinates, current_user
+            create_request.genomic_coordinates
         ),
         genome_build=create_request.genome_build,
-        genome_build_evidence=manual_evidence_block(
-            create_request.genome_build, current_user
-        ),
+        genome_build_evidence=manual_evidence_block(create_request.genome_build),
         rsid=create_request.rsid,
-        rsid_evidence=manual_evidence_block(create_request.rsid, current_user),
+        rsid_evidence=manual_evidence_block(create_request.rsid),
         caid=create_request.caid,
-        caid_evidence=manual_evidence_block(create_request.caid, current_user),
+        caid_evidence=manual_evidence_block(create_request.caid),
         hgvs_c=create_request.hgvs_c,
-        hgvs_c_evidence=manual_evidence_block(create_request.hgvs_c, current_user),
+        hgvs_c_evidence=manual_evidence_block(create_request.hgvs_c),
         hgvs_p=create_request.hgvs_p,
-        hgvs_p_evidence=manual_evidence_block(create_request.hgvs_p, current_user),
+        hgvs_p_evidence=manual_evidence_block(create_request.hgvs_p),
         hgvs_g=create_request.hgvs_g,
-        hgvs_g_evidence=manual_evidence_block(create_request.hgvs_g, current_user),
+        hgvs_g_evidence=manual_evidence_block(create_request.hgvs_g),
         variant_type=create_request.variant_type,
-        variant_type_evidence=manual_evidence_block(
-            create_request.variant_type, current_user
-        ),
+        variant_type_evidence=manual_evidence_block(create_request.variant_type),
         functional_evidence=create_request.functional_evidence,
         functional_evidence_evidence=manual_evidence_block(
-            create_request.functional_evidence, current_user
+            create_request.functional_evidence
         ),
         main_focus=create_request.main_focus,
-        main_focus_evidence=manual_evidence_block(
-            create_request.main_focus, current_user
-        ),
+        main_focus_evidence=manual_evidence_block(create_request.main_focus),
         updated_by_user_id=current_user.id,
     )
 
     session.add(variant_db)
+    session.flush()
+    # Only variant_type/functional_evidence/main_focus are HumanEvidenceBlock
+    # fields (the only ones VariantUpdateRequest can *_human_edit_note patch);
+    # the rest are plain EvidenceBlock with no edit attribution to record.
+    record_edits(
+        session,
+        variant_db,
+        ['variant_type', 'functional_evidence', 'main_focus'],
+        current_user,
+    )
     _touch_paper(session, paper_id, current_user)
     session.commit()
     session.refresh(variant_db)
-    return _variant_to_resp(variant_db)
+    return _variant_to_resp(variant_db, session)
 
 
 @app.delete(
@@ -2371,27 +2435,32 @@ def create_occurrence(
         patient_id=create_request.patient_id,
         variant_id=create_request.variant_id,
         zygosity=create_request.zygosity,
-        zygosity_evidence=manual_evidence_block(create_request.zygosity, current_user),
+        zygosity_evidence=manual_evidence_block(create_request.zygosity),
         inheritance=create_request.inheritance,
-        inheritance_evidence=manual_evidence_block(
-            create_request.inheritance, current_user
-        ),
+        inheritance_evidence=manual_evidence_block(create_request.inheritance),
         de_novo=create_request.de_novo,
-        de_novo_evidence=manual_evidence_block(create_request.de_novo, current_user),
+        de_novo_evidence=manual_evidence_block(create_request.de_novo),
         testing_methods=create_request.testing_methods,
         testing_methods_evidence=[
-            manual_evidence_block(method, current_user)
-            for method in create_request.testing_methods
+            manual_evidence_block(method) for method in create_request.testing_methods
         ],
         disease_name=create_request.disease_name,
+        updated_by_user_id=current_user.id,
     )
 
     session.add(occurrence_db)
+    session.flush()
+    # testing_methods_evidence is a list of plain EvidenceBlock (no per-item
+    # attribution -- see testing_methods_note); only these three are
+    # HumanEvidenceBlock fields.
+    record_edits(
+        session, occurrence_db, ['zygosity', 'inheritance', 'de_novo'], current_user
+    )
     _touch_paper(session, paper_id, current_user)
     session.commit()
     session.refresh(occurrence_db)
     return _patient_variant_occurrence_to_resp(
-        occurrence_db, patient_identifier=patient_db.identifier
+        occurrence_db, patient_identifier=patient_db.identifier, session=session
     )
 
 
@@ -2518,9 +2587,9 @@ def update_patient(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Patient not found'
         )
-    patch_request.apply_to(patient_db, current_user)
+    patch_request.apply_to(patient_db, current_user, session)
     _touch_paper(session, paper_id, current_user)
-    return _patient_to_resp(patient_db)
+    return _patient_to_resp(patient_db, session)
 
 
 @app.get('/genes/search', response_model=list[GeneResp])

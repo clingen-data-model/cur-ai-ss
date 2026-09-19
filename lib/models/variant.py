@@ -25,6 +25,8 @@ from lib.models.paper import PaperDB
 from lib.models.user import UserSummaryResp
 
 if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+
     from lib.models.patient_variant_occurrences import PatientVariantOccurrenceDB
     from lib.models.user import UserDB
 
@@ -325,12 +327,15 @@ class VariantUpdateRequest(PatchModel):
         return self
 
     def apply_to(  # type: ignore[override]
-        self, obj: 'VariantDB', editor: 'UserDB | None' = None
+        self,
+        obj: 'VariantDB',
+        editor: 'UserDB | None' = None,
+        session: 'Session | None' = None,
     ) -> None:
         for field, value in self.model_dump(exclude_unset=True).items():
             if field == 'harmonized_variant':
                 continue
-            self._apply_field(obj, field, value, editor)
+            self._apply_field(obj, field, value, editor, session)
         self.stamp_updated_by(obj, editor)
 
 
