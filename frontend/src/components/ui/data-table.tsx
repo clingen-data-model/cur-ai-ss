@@ -140,8 +140,15 @@ export function DataTable<TData, TValue>({
                   </TableRow>
                   {row.getIsExpanded() && renderSubComponent && (
                     <TableRow className="hover:bg-transparent">
-                      <TableCell colSpan={columns.length} className="p-0">
-                        {renderSubComponent({ row: row.original })}
+                      {/* max-w-0 keeps auto table-layout from sizing this
+                       * column off the sub-panel's content (e.g. a nested
+                       * phenotypes table with unwrapped cell text) -- without
+                       * it, wide content here silently widens every row. The
+                       * inner overflow-x-auto lets that content scroll instead. */}
+                      <TableCell colSpan={columns.length} className="p-0 max-w-0">
+                        <div className="overflow-x-auto">
+                          {renderSubComponent({ row: row.original })}
+                        </div>
                       </TableCell>
                     </TableRow>
                   )}
