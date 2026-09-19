@@ -52,11 +52,26 @@ function PaperCard({ paper }: { paper: PaperSummaryResp }) {
           <DeletePaperButton paper={paper} />
         </div>
       </div>
+      <div className="px-3 space-y-0.5 min-w-0">
+        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Title</div>
+        <div className="text-xs truncate">
+          {paper.title ? (
+            <Link
+              to="/papers/$paperId/extraction"
+              params={{ paperId: String(paper.id) }}
+              className="text-link hover:underline"
+            >
+              {paper.title}
+            </Link>
+          ) : '—'}
+        </div>
+      </div>
       <div className="flex justify-center px-3">
         <Link
           to="/papers/$paperId/extraction"
           params={{ paperId: String(paper.id) }}
-          className="w-4/5 overflow-hidden rounded-md border border-border shadow-sm hover:shadow-md transition-shadow"
+          // 56% = the previous 80% (w-4/5) reduced by 30%.
+          className="w-[56%] overflow-hidden rounded-md border border-border shadow-sm hover:shadow-md transition-shadow"
         >
           <img
             src={thumbnailSrc}
@@ -67,20 +82,6 @@ function PaperCard({ paper }: { paper: PaperSummaryResp }) {
         </Link>
       </div>
       <CardContent className="grid grid-cols-2 gap-x-3 gap-y-2 pt-3">
-        <div className="col-span-2 space-y-0.5 min-w-0">
-          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Title</div>
-          <div className="text-xs truncate">
-            {paper.title ? (
-              <Link
-                to="/papers/$paperId/extraction"
-                params={{ paperId: String(paper.id) }}
-                className="text-link hover:underline"
-              >
-                {paper.title}
-              </Link>
-            ) : '—'}
-          </div>
-        </div>
         <div className="col-span-2 space-y-0.5 min-w-0">
           <div className="text-[10px] uppercase tracking-wide text-muted-foreground">First Author</div>
           <div className="text-xs truncate">
