@@ -5,7 +5,7 @@ import {
   listPapersPapersGet,
 } from '@/api/generated'
 import type { PaperSummaryResp } from '@/api/generated/types.gen'
-import { STATE_OF, isReviewState, reviewFilterAssigneeId } from '@/lib/paperState'
+import { STATE_OF } from '@/lib/paperState'
 import { useAuth } from '@/lib/auth'
 import type { IndexSearch } from '@/routeTree'
 
@@ -28,6 +28,7 @@ export function usePapers(
   workedBy: IndexSearch['worked_by'],
   status?: IndexSearch['status'],
   review_status?: IndexSearch['review_status'],
+  review_assignee?: IndexSearch['review_assignee'],
 ) {
   const { user } = useAuth()
   const queryClient = useQueryClient()
@@ -58,20 +59,16 @@ export function usePapers(
     // server would have to derive every status before it could drop any, which
     // costs exactly what returning them all costs. touched_by is different: it
     // narrows the set of papers before their summaries are built.
-    const assignedToId = reviewFilterAssigneeId(review_status)
     const matching = rows
       .filter((p) => (status ? STATE_OF[p.status] === status : true))
-      .filter((p) => {
-        if (assignedToId !== undefined) return p.review_assignee?.id === assignedToId
-        if (review_status && isReviewState(review_status)) {
-          return p.review_status === review_status
-        }
-        return true
-      })
+      .filter((p) => (review_status ? p.review_status === review_status : true))
+      .filter((p) =>
+        review_assignee !== undefined ? p.review_assignee?.id === review_assignee : true,
+      )
     return [...matching].sort((a, b) =>
       (b.updated_at ?? '').localeCompare(a.updated_at ?? ''),
     )
-  }, [query.data, status, review_status])
+  }, [query.data, status, review_status, review_assignee])
 
   // Its own endpoint rather than the collaborators present in the rows: the
   // options must be everyone who could narrow the list, and deriving them from

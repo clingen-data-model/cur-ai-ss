@@ -6,6 +6,7 @@ import { GeneTable } from '@/components/GeneTable'
 import { PapersTable } from '@/components/PapersTable'
 import { ExtractionStatusFilter } from '@/components/ExtractionStatusFilter'
 import { ReviewStatusFilter } from '@/components/ReviewStatusFilter'
+import { ReviewAssigneeFilter } from '@/components/ReviewAssigneeFilter'
 import { WorkedByFilter } from '@/components/WorkedByFilter'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Spinner } from '@/components/ui/spinner'
@@ -99,12 +100,16 @@ export function HomePage() {
  *  every visit to the genes view. */
 function AllPapersTab() {
   const search = useSearch({ from: '/' })
-  const { worked_by: workedBy = 'anyone', status, review_status } = search
+  const { worked_by: workedBy = 'anyone', status, review_status, review_assignee } = search
   const navigate = useNavigate({ from: '/' })
   const { papers, people, total, beforeStatus, isLoading, isRefreshing, isError, error } =
-    usePapers(workedBy, status, review_status)
+    usePapers(workedBy, status, review_status, review_assignee)
 
-  const filtered = workedBy !== 'anyone' || status !== undefined
+  const filtered =
+    workedBy !== 'anyone' ||
+    status !== undefined ||
+    review_status !== undefined ||
+    review_assignee !== undefined
   // Preserve the other filter when changing one -- they compose.
   const withSearch = (next: Partial<typeof search>) => {
     const merged = { ...search, ...next }
@@ -142,6 +147,12 @@ function AllPapersTab() {
             value={review_status}
             onChange={(next) =>
               navigate({ search: withSearch({ review_status: next }), replace: true })
+            }
+          />
+          <ReviewAssigneeFilter
+            value={review_assignee}
+            onChange={(next) =>
+              navigate({ search: withSearch({ review_assignee: next }), replace: true })
             }
           />
           <WorkedByFilter
