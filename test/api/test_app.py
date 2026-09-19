@@ -679,6 +679,40 @@ def test_patient_field_edit_history_is_append_only_and_cascades_on_delete(
     assert remaining == 0, 'deleting the patient should cascade its edit history away'
 
 
+def test_edited_by_reflects_current_deactivation_state(
+    client, db_session, seeded_paper, test_user
+):
+    """Attribution is resolved live from the user row, not frozen at edit
+    time -- deactivating the editor afterward should surface on their past
+    edits without needing to re-edit anything."""
+    family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
+    patient = PatientDB(
+        paper_id=seeded_paper.id,
+        family_id=family.id,
+        identifier='P1',
+        **_patient_required_fields('P1'),
+    )
+    db_session.add(patient)
+    db_session.flush()
+    patient_id = patient.id
+
+    response = client.patch(
+        f'/papers/{seeded_paper.id}/patients/{patient_id}',
+        json={'identifier_human_edit_note': 'A note'},
+    )
+    assert response.status_code == 200
+    assert response.json()['identifier_evidence']['edited_by_is_active'] is True
+
+    test_user.is_active = False
+    db_session.flush()
+
+    response = client.get(f'/papers/{seeded_paper.id}/patients')
+    patient_resp = next(p for p in response.json() if p['id'] == patient_id)
+    evidence = patient_resp['identifier_evidence']
+    assert evidence['edited_by_name'] == 'Test User'
+    assert evidence['edited_by_is_active'] is False
+
+
 def test_update_patient_rejects_wrong_paper_scope(client, db_session, seeded_paper):
     other_paper = PaperDB(
         content_hash='other-paper',

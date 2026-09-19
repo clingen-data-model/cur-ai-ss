@@ -1456,6 +1456,7 @@ def _attach_edit_history(resp: BaseModel, edits: dict[str, EditDB]) -> None:
             value.edited_by_name = (
                 _editor_display_name(edit.user) if edit.user else None
             )
+            value.edited_by_is_active = edit.user.is_active if edit.user else None
             value.edited_at = edit.edited_at
 
 
