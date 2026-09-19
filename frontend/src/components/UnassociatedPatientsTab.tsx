@@ -15,6 +15,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { PatientDetailPanel } from '@/components/PatientDetailPanel'
 import { PipelineGate } from '@/components/PipelineGate'
 import { AddPatientDialog } from '@/components/AddPatientDialog'
+import { LinkVariantDialog } from '@/components/LinkVariantDialog'
 import { DeleteIconButton } from '@/components/DeleteIconButton'
 import { apiErrorMessage } from '@/lib/apiError'
 
@@ -52,24 +53,31 @@ export function UnassociatedPatientsTab({
       {
         id: 'actions',
         header: '',
-        size: 40,
+        size: 76,
         enableSorting: false,
         cell: ({ row }) => (
-          <DeleteIconButton
-            title="Delete patient?"
-            description={
-              <>
-                This will permanently delete{' '}
-                <span className="font-medium text-foreground">{row.original.identifier}</span>{' '}
-                and all data linked to it. This cannot be undone.
-              </>
-            }
-            onDelete={() => deleteMutation.mutate(row.original.id)}
-          />
+          <div className="flex items-center gap-1">
+            <LinkVariantDialog
+              paperId={paperId}
+              patientId={row.original.id}
+              patientIdentifier={row.original.identifier}
+            />
+            <DeleteIconButton
+              title="Delete patient?"
+              description={
+                <>
+                  This will permanently delete{' '}
+                  <span className="font-medium text-foreground">{row.original.identifier}</span>{' '}
+                  and all data linked to it. This cannot be undone.
+                </>
+              }
+              onDelete={() => deleteMutation.mutate(row.original.id)}
+            />
+          </div>
         ),
       },
     ],
-    [deleteMutation],
+    [paperId, deleteMutation],
   )
 
   return (

@@ -15,6 +15,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { VariantDetailPanel } from '@/components/VariantDetailPanel'
 import { PipelineGate } from '@/components/PipelineGate'
 import { AddVariantDialog } from '@/components/AddVariantDialog'
+import { LinkPatientDialog } from '@/components/LinkPatientDialog'
 import { DeleteIconButton } from '@/components/DeleteIconButton'
 import { apiErrorMessage } from '@/lib/apiError'
 
@@ -55,26 +56,33 @@ export function UnassociatedVariantsTab({
       {
         id: 'actions',
         header: '',
-        size: 40,
+        size: 76,
         enableSorting: false,
         cell: ({ row }) => (
-          <DeleteIconButton
-            title="Delete variant?"
-            description={
-              <>
-                This will permanently delete{' '}
-                <span className="font-medium text-foreground">
-                  {row.original.variant_description}
-                </span>{' '}
-                and all data linked to it. This cannot be undone.
-              </>
-            }
-            onDelete={() => deleteMutation.mutate(row.original.id)}
-          />
+          <div className="flex items-center gap-1">
+            <LinkPatientDialog
+              paperId={paperId}
+              variantId={row.original.id}
+              variantDescription={row.original.variant_description}
+            />
+            <DeleteIconButton
+              title="Delete variant?"
+              description={
+                <>
+                  This will permanently delete{' '}
+                  <span className="font-medium text-foreground">
+                    {row.original.variant_description}
+                  </span>{' '}
+                  and all data linked to it. This cannot be undone.
+                </>
+              }
+              onDelete={() => deleteMutation.mutate(row.original.id)}
+            />
+          </div>
         ),
       },
     ],
-    [deleteMutation],
+    [paperId, deleteMutation],
   )
 
   return (
