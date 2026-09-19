@@ -150,7 +150,7 @@ from lib.models import (
     VariantResp,
     VariantUpdateRequest,
 )
-from lib.models.base import manual_evidence_block
+from lib.models.base import _editor_display_name, manual_evidence_block
 from lib.models.edit import EditDB, latest_edits_for, record_edits
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.mondo import MondoComponentMapping, MondoTerm
@@ -1453,7 +1453,9 @@ def _attach_edit_history(resp: BaseModel, edits: dict[str, EditDB]) -> None:
         edit = edits.get(field_name)
         if edit is not None:
             value.edited_by_user_id = edit.user_id
-            value.edited_by_name = edit.editor_name
+            value.edited_by_name = (
+                _editor_display_name(edit.user) if edit.user else None
+            )
             value.edited_at = edit.edited_at
 
 
