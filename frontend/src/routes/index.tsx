@@ -7,6 +7,7 @@ import { PapersTable } from '@/components/PapersTable'
 import { ExtractionStatusFilter } from '@/components/ExtractionStatusFilter'
 import { ReviewStatusFilter } from '@/components/ReviewStatusFilter'
 import { ReviewAssigneeFilter } from '@/components/ReviewAssigneeFilter'
+import { REVIEW_STATUS_VERB } from '@/lib/reviewStatus'
 import { WorkedByFilter } from '@/components/WorkedByFilter'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Spinner } from '@/components/ui/spinner'
@@ -147,12 +148,14 @@ function AllPapersTab() {
             value={review_status}
             onChange={(next) =>
               navigate({
-                // "Not assigned" can never carry an assignee (see
-                // PaperReviewUpdateRequest's validator) -- clear a stale
-                // selection rather than leave a hidden filter silently
-                // forcing zero results.
+                // "Any" and "Not assigned" both hide the Assigned To filter
+                // below -- "Not assigned" because it can never carry an
+                // assignee (see PaperReviewUpdateRequest's validator), "Any"
+                // just to keep the bar from showing a filter with nothing to
+                // scope it. Clear a stale selection in both cases rather than
+                // leave a hidden filter silently narrowing the results.
                 search: withSearch(
-                  next === 'not_assigned'
+                  next === undefined || next === 'not_assigned'
                     ? { review_status: next, review_assignee: undefined }
                     : { review_status: next },
                 ),
@@ -160,9 +163,10 @@ function AllPapersTab() {
               })
             }
           />
-          {review_status !== 'not_assigned' && (
+          {review_status !== undefined && review_status !== 'not_assigned' && (
             <ReviewAssigneeFilter
               value={review_assignee}
+              label={REVIEW_STATUS_VERB[review_status]}
               onChange={(next) =>
                 navigate({ search: withSearch({ review_assignee: next }), replace: true })
               }
