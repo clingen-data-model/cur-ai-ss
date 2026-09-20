@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from lib.core.environment import env
+from lib.models.evidence_block import strip_markup
 
 if TYPE_CHECKING:
     from lib.models.paper import FileFormat
@@ -131,6 +132,16 @@ def apply_table_corrections(
     markdown -- which is byte-identical to the copy docling inlined into
     ``raw.md`` -- so the match is exact by construction. Tables with no vision
     file are left as they are.
+
+    A table rebuilt from its image comes back as rich markdown -- ``<br>`` for
+    an in-cell line break, ``<sup>``/``<sub>`` for exponents and footnote
+    markers -- because plain markdown cannot express either. ``strip_markup``
+    is applied here, once, so every reader of this markdown (extraction
+    agents and quotes pulled from it alike) sees the same plain text, and a
+    quote copied from it is a verbatim substring of what this function
+    returns. ``EvidenceBlock.quote``/``reasoning`` re-apply the same cleanup
+    as a safety net for evidence written before this existed, or for markup
+    that arrives some other way.
     """
     tables_dir = pdf_tables_dir(paper_id, supplement=supplement)
     if not tables_dir.exists():
@@ -143,7 +154,8 @@ def apply_table_corrections(
             continue
         original = original_path.read_text()
         if original and original in markdown:
-            markdown = markdown.replace(original, vision_path.read_text(), 1)
+            corrected = strip_markup(vision_path.read_text())
+            markdown = markdown.replace(original, corrected, 1)
 
     return _flag_unrecovered_tables(paper_id, markdown, supplement=supplement)
 

@@ -181,6 +181,22 @@ def test_apply_table_corrections_noop_without_vision_file():
     assert fulltext_md(paper_id) == f'intro\n\n{garbled}\n\noutro'
 
 
+def test_apply_table_corrections_strips_markup_from_vision_markdown():
+    """A vision-corrected table's <br>/<sup>/<sub> are cleaned on the way in,
+    so a quote pulled from fulltext_md() is already a plain-text substring of
+    it -- matching what EvidenceBlock.quote/reasoning do to evidence text."""
+    paper_id = 987005
+    garbled = '| b | Clin mt1 |\n|---|---|\n| IVI | * |'
+    corrected = '| *FH San<br>Francisco | Fs 3<sup>g</sup> | <2 |'
+
+    _seed_table(paper_id, 0, garbled, f'intro\n\n{garbled}\n\noutro')
+    pdf_table_vision_markdown_path(paper_id, 0).write_text(corrected)
+
+    assert fulltext_md(paper_id) == (
+        'intro\n\n| *FH San Francisco | Fs 3 | <2 |\n\noutro'
+    )
+
+
 def test_apply_table_corrections_is_idempotent():
     """Re-applying against already-corrected markdown changes nothing."""
     paper_id = 987003
