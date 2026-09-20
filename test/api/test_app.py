@@ -270,6 +270,28 @@ def test_update_paper_metadata(client, test_pdf, db_session, seeded_genes, test_
     assert response5.json()['disease_inheritance_mode_evidence'] is None
 
 
+def test_update_paper_rejects_more_than_two_paper_types(client, test_pdf, seeded_genes):
+    response = client.put(
+        '/papers',
+        files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
+        data={'gene_symbol': 'BRCA1'},
+    )
+    paper_id = response.json()['id']
+
+    response2 = client.patch(
+        f'/papers/{paper_id}',
+        json={'paper_types': ['Case Study', 'Case Series']},
+    )
+    assert response2.status_code == 200
+    assert response2.json()['paper_types'] == ['Case Study', 'Case Series']
+
+    response3 = client.patch(
+        f'/papers/{paper_id}',
+        json={'paper_types': ['Case Study', 'Case Series', 'Cohort Analysis']},
+    )
+    assert response3.status_code == 422
+
+
 def test_list_paper(client, test_pdf, seeded_genes):
     response = client.put(
         '/papers',

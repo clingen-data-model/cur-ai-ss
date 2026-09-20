@@ -504,6 +504,12 @@ class PaperUpdateRequest(PatchModel):
     disease_name_human_edit_note: str | None = None
     disease_inheritance_mode_human_edit_note: str | None = None
 
+    @model_validator(mode='after')
+    def max_two_paper_types(self) -> Self:
+        if self.paper_types is not None and len(self.paper_types) > 2:
+            raise ValueError('paper_types must contain at most two items')
+        return self
+
 
 class HighlightRequest(BaseModel):
     queries: list[str]

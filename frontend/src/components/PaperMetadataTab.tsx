@@ -13,16 +13,32 @@ import {
   ResizableHandle,
 } from '@/components/ui/resizable'
 import type { PaperResp } from '@/api/generated/types.gen'
-import { Inheritance } from '@/api/generated/types.gen'
+import { Inheritance, PaperType } from '@/api/generated/types.gen'
 import { API_BASE_URL } from '@/lib/api'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { EditableSelectRow, EditableTextRow } from '@/components/EditableField'
+import { Textarea } from '@/components/ui/textarea'
+import { EditableSelectRow, EditableTextRow, SimpleMultiSelectRow } from '@/components/EditableField'
 import { EvidencePopover } from '@/components/EvidencePopover'
-import { pillColorFor } from '@/lib/pillColors'
 import { updatePaperPapersPaperIdPatch } from '@/api/generated'
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`
+
+/** Saves on blur with no note dialog -- abstract has no evidence column or
+ * `abstract_human_edit_note` field, matching Streamlit's plain `st.text_area`. */
+function AbstractField({ value, onSave }: { value: string; onSave: (value: string) => void }) {
+  const [draft, setDraft] = useState(value)
+  return (
+    <Textarea
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        if (draft !== value) onSave(draft)
+      }}
+      rows={8}
+      className="text-xs"
+    />
+  )
+}
 
 export function PaperMetadataTab({ paper }: { paper: PaperResp }) {
   const queryClient = useQueryClient()
@@ -134,29 +150,20 @@ export function PaperMetadataTab({ paper }: { paper: PaperResp }) {
                   save({ journal_name: value || null, journal_name_human_edit_note: note })
                 }
               />
-              {paper.paper_types && paper.paper_types.length > 0 && (
-                <div className="flex items-center justify-between gap-3 py-1.5 border-b">
-                  <span className="text-sm text-muted-foreground w-44">Paper Types</span>
-                  <div className="flex flex-wrap gap-1 flex-1 justify-end">
-                    {paper.paper_types.map((type) => (
-                      <Badge key={type} className={pillColorFor(type)} variant="outline">
-                        {type}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <SimpleMultiSelectRow
+                label="Paper Types"
+                value={paper.paper_types ?? []}
+                options={Object.values(PaperType)}
+                max={2}
+                onSave={(value) => save({ paper_types: value })}
+              />
             </div>
 
             {/* Abstract */}
-            {paper.abstract && (
-              <div className="space-y-2">
-                <h3 className="font-semibold text-sm">Abstract</h3>
-                <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                  {paper.abstract}
-                </p>
-              </div>
-            )}
+            <div className="space-y-2">
+              <h3 className="font-semibold text-sm">Abstract</h3>
+              <AbstractField value={paper.abstract ?? ''} onSave={(value) => save({ abstract: value || null })} />
+            </div>
 
             {/* Gene-Disease Information */}
             <div className="space-y-3 border-t pt-3">
