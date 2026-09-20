@@ -9,6 +9,7 @@
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { TriangleAlert } from 'lucide-react'
 import { updateVariantPapersPaperIdVariantsVariantIdPatch } from '@/api/generated'
 import type { HarmonizedVariantUpdate, VariantResp, VariantUpdateRequest } from '@/api/generated/types.gen'
 import {
@@ -17,10 +18,12 @@ import {
   ReadOnlyRow,
   SimpleTextRow,
 } from '@/components/EditableField'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { VARIANT_TYPE_OPTIONS } from '@/lib/variantType'
 import { gnomadUrl, clinGenUrl } from '@/lib/variantLinks'
 import { formatGnomadPopulation } from '@/lib/gnomadPopulations'
+import { harmonizationWarning } from '@/lib/harmonization'
 import { apiErrorMessage } from '@/lib/apiError'
 
 function formatAlleleCounts(ac?: number | null, an?: number | null): string {
@@ -32,6 +35,7 @@ export function VariantDetailPanel({ paperId, variant }: { paperId: number; vari
   const queryClient = useQueryClient()
   const harmonized = variant.harmonized_variant.value
   const annotated = variant.annotated_variant
+  const warning = harmonizationWarning(harmonized)
 
   const mutation = useMutation({
     mutationFn: (body: VariantUpdateRequest) =>
@@ -56,6 +60,12 @@ export function VariantDetailPanel({ paperId, variant }: { paperId: number; vari
   return (
     <div className="p-4 bg-muted/30">
       <h4 className="text-sm font-semibold mb-2">Variant</h4>
+      {warning && (
+        <Alert variant="destructive" className="mb-3 max-w-2xl">
+          <TriangleAlert />
+          <AlertDescription>{warning}</AlertDescription>
+        </Alert>
+      )}
       <Tabs defaultValue="raw" className="max-w-2xl">
         <TabsList>
           <TabsTrigger value="raw">Raw</TabsTrigger>
