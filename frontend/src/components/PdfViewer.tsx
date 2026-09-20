@@ -1,13 +1,13 @@
-import React, { forwardRef, useImperativeHandle, useRef } from 'react'
+/* Renders a PDF with highlight overlays -- used by the evidence "View in PDF"
+ * sheet. Coordinates come from the /grobid-annotation endpoint, which is
+ * side-effect-free (unlike /highlight, which mutates a shared highlighted.pdf
+ * on disk), so this is safe for multiple curators to use concurrently.
+ */
+import { forwardRef, useImperativeHandle, useRef } from 'react'
 import { PdfHighlighter, PdfLoader, Highlight as PdfHighlight } from 'react-pdf-highlighter'
 import 'react-pdf-highlighter/dist/style.css'
 import * as pdfjs from 'pdfjs-dist'
 import { Spinner } from '@/components/ui/spinner'
-import {
-  ResizablePanelGroup,
-  ResizablePanel,
-  ResizableHandle,
-} from '@/components/ui/resizable'
 import type { GrobidAnnotation } from '@/api/generated/types.gen'
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`
@@ -115,7 +115,7 @@ interface PdfViewerProps {
 // forwardRef: the `ref` arg only arrives via the literal `ref={}` attribute at the
 // call site (e.g. <PdfViewer ref={pdfViewerRef} />). `ref` is a reserved prop name —
 // passing it under any other name (pdfViewRef={...}) would land in props, not here.
-const PdfViewer = forwardRef<PdfViewerRef, PdfViewerProps>(
+export const PdfViewer = forwardRef<PdfViewerRef, PdfViewerProps>(
   ({ url, highlights }, ref) => {
     // Both values are produced inside PdfLoader/PdfHighlighter render-prop callbacks,
     // where setState isn't allowed — so refs are the right fit, not state.
@@ -136,110 +136,43 @@ const PdfViewer = forwardRef<PdfViewerRef, PdfViewerProps>(
       },
     }))
 
-
     return (
       // Single position:relative container with a real height — the library's PDF
       // container is position:absolute/height:100% and resolves against this. An extra
       // wrapper here can starve it of height at mount, so pagesinit never fires.
       <div style={{ position: 'relative', height: '100%', width: '100%' }}>
         <PdfLoader url={url} beforeLoad={<Spinner />}>
-            {(loadedDocument) => {
-              // Store the loaded doc so the imperative handle can expose it
-              pdfDocRef.current = loadedDocument
-              return (
-                <PdfHighlighter
-                  pdfDocument={loadedDocument}
-                  scrollRef={(scrollTo) => {
-                    scrollToRef.current = scrollTo
-                  }}
-                  // Disable area highlighting (Alt+drag rectangle selection)
-                  enableAreaSelection={() => false}
-                  onScrollChange={() => {}}
-                  highlights={highlights}
-                  // Disable commenting (no popup when text is selected)
-                  onSelectionFinished={() => null}
-                  // Render each highlight: called once per highlight in the highlights array
-                  highlightTransform={(highlight, index) => (
-                    <PdfHighlight
-                      key={highlight.id ?? index}
-                      isScrolledTo={false}
-                      position={highlight.position}
-                      comment={highlight.comment}
-                    />
-                  )}
-                />
-              )
-            }}
-          </PdfLoader>
+          {(loadedDocument) => {
+            // Store the loaded doc so the imperative handle can expose it
+            pdfDocRef.current = loadedDocument
+            return (
+              <PdfHighlighter
+                pdfDocument={loadedDocument}
+                scrollRef={(scrollTo) => {
+                  scrollToRef.current = scrollTo
+                }}
+                // Disable area highlighting (Alt+drag rectangle selection)
+                enableAreaSelection={() => false}
+                onScrollChange={() => {}}
+                highlights={highlights}
+                // Disable commenting (no popup when text is selected)
+                onSelectionFinished={() => null}
+                // Render each highlight: called once per highlight in the highlights array
+                highlightTransform={(highlight, index) => (
+                  <PdfHighlight
+                    key={highlight.id ?? index}
+                    isScrolledTo={false}
+                    position={highlight.position}
+                    comment={highlight.comment}
+                  />
+                )}
+              />
+            )
+          }}
+        </PdfLoader>
       </div>
     )
   },
 )
 
 PdfViewer.displayName = 'PdfViewer'
-
-interface TwoColumnWithBottomRightPdfProps {
-  left: React.ReactNode
-  leftDefaultSize?: number
-  leftMinSize?: number
-  topRight: React.ReactNode
-  topRightDefaultSize?: number
-  topRightMinSize?: number
-  pdfUrl: string
-  pdfHighlights: Highlight[]
-  pdfViewerRef?: React.Ref<PdfViewerRef>
-  bottomRightDefaultSize?: number
-  bottomRightMinSize?: number
-}
-
-export function TwoColumnWithBottomRightPdf({
-  left,
-  leftDefaultSize = 33,
-  leftMinSize = 20,
-  topRight,
-  topRightDefaultSize = 50,
-  topRightMinSize = 50,
-  pdfUrl,
-  pdfHighlights,
-  pdfViewerRef,
-  bottomRightDefaultSize = 50,
-  bottomRightMinSize = 50,
-}: TwoColumnWithBottomRightPdfProps) {
-  return (
-    <div className="h-[calc(100vh-8rem)] p-4">
-      <ResizablePanelGroup orientation="horizontal" className="h-full rounded-lg border">
-        {/* Left sidebar */}
-        <ResizablePanel defaultSize={leftDefaultSize} minSize={leftMinSize}>
-          <div className="h-full overflow-y-auto p-2">
-            {left}
-          </div>
-        </ResizablePanel>
-
-        <ResizableHandle withHandle />
-
-        {/* Right panel - Vertical split */}
-        <ResizablePanel defaultSize={100 - leftDefaultSize} minSize={100 - leftMinSize}>
-          <ResizablePanelGroup orientation="vertical" className="h-full">
-            {/* Upper right */}
-            <ResizablePanel defaultSize={topRightDefaultSize} minSize={topRightMinSize}>
-              <div className="h-full overflow-y-auto p-4 bg-muted/30">
-                {topRight}
-              </div>
-            </ResizablePanel>
-
-            <ResizableHandle withHandle className="!h-1 !w-full" />
-
-            {/* Lower right - PDF */}
-            <ResizablePanel defaultSize={bottomRightDefaultSize} minSize={bottomRightMinSize}>
-              <PdfViewer
-                ref={pdfViewerRef}
-                url={pdfUrl}
-                highlights={pdfHighlights}
-              />
-            </ResizablePanel>
-          </ResizablePanelGroup>
-        </ResizablePanel>
-      </ResizablePanelGroup>
-    </div>
-  )
-}

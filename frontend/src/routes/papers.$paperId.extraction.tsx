@@ -38,6 +38,7 @@ import { apiErrorMessage } from '@/lib/apiError'
 import { TaskType } from '@/api/generated/types.gen'
 import { PedigreeTab } from '@/components/PedigreeTab'
 import { PaperMetadataTab } from '@/components/PaperMetadataTab'
+import { PdfHighlightProvider } from '@/components/PdfHighlightProvider'
 
 type ExpandedView = 'patient' | 'variant'
 
@@ -313,77 +314,79 @@ export function ExtractionPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-start justify-between">
-        <div>
-          <Link to="/" className="text-sm text-muted-foreground hover:underline">
-            &larr; All Papers
-          </Link>
-          <h1 className="text-xl font-semibold mt-1">{paper?.title ?? paper?.filename}</h1>
+    <PdfHighlightProvider paperId={paperId} pdfUrl={paper?.pdf_url}>
+      <div className="space-y-4">
+        <div className="flex items-start justify-between">
+          <div>
+            <Link to="/" className="text-sm text-muted-foreground hover:underline">
+              &larr; All Papers
+            </Link>
+            <h1 className="text-xl font-semibold mt-1">{paper?.title ?? paper?.filename}</h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportPptx}
+              disabled={!paper || isExporting}
+              title="Export curation summary as PPTX"
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              {isExporting ? 'Exporting...' : 'PPTX'}
+            </Button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleExportPptx}
-            disabled={!paper || isExporting}
-            title="Export curation summary as PPTX"
-          >
-            <FileText className="h-4 w-4 mr-2" />
-            {isExporting ? 'Exporting...' : 'PPTX'}
-          </Button>
-        </div>
+
+        <Tabs defaultValue="occurrences">
+          <TabsList>
+            <TabsTrigger value="occurrences">Occurrences</TabsTrigger>
+            <TabsTrigger value="unassociated-patients">
+              Unassociated Patients
+              {unassociatedPatients.length > 0 && (
+                <span className="ml-1 text-xs text-muted-foreground">({unassociatedPatients.length})</span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="unassociated-variants">
+              Unassociated Variants
+              {unassociatedVariants.length > 0 && (
+                <span className="ml-1 text-xs text-muted-foreground">({unassociatedVariants.length})</span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="pedigree">Pedigree Image &amp; Description</TabsTrigger>
+            <TabsTrigger value="paper-metadata">Paper Metadata</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="occurrences" className="pt-3">
+            <PipelineGate
+              tasks={tasks}
+              task={TaskType.PATIENT_VARIANT_OCCURRENCES}
+              label="Patient/variant linking"
+            >
+              <OccurrencesTab paperId={paperId} rows={rows} />
+            </PipelineGate>
+          </TabsContent>
+          <TabsContent value="unassociated-patients" className="pt-3">
+            <UnassociatedPatientsTab
+              paperId={paperId}
+              patients={unassociatedPatients}
+              tasks={tasks}
+            />
+          </TabsContent>
+          <TabsContent value="unassociated-variants" className="pt-3">
+            <UnassociatedVariantsTab
+              paperId={paperId}
+              variants={unassociatedVariants}
+              tasks={tasks}
+            />
+          </TabsContent>
+          <TabsContent value="pedigree" className="pt-3">
+            <PedigreeTab paperId={paperId} />
+          </TabsContent>
+          <TabsContent value="paper-metadata" className="pt-3 h-[70vh]">
+            {paper && <PaperMetadataTab paper={paper} />}
+          </TabsContent>
+        </Tabs>
       </div>
-
-      <Tabs defaultValue="occurrences">
-        <TabsList>
-          <TabsTrigger value="occurrences">Occurrences</TabsTrigger>
-          <TabsTrigger value="unassociated-patients">
-            Unassociated Patients
-            {unassociatedPatients.length > 0 && (
-              <span className="ml-1 text-xs text-muted-foreground">({unassociatedPatients.length})</span>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="unassociated-variants">
-            Unassociated Variants
-            {unassociatedVariants.length > 0 && (
-              <span className="ml-1 text-xs text-muted-foreground">({unassociatedVariants.length})</span>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="pedigree">Pedigree Image &amp; Description</TabsTrigger>
-          <TabsTrigger value="paper-metadata">Paper Metadata</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="occurrences" className="pt-3">
-          <PipelineGate
-            tasks={tasks}
-            task={TaskType.PATIENT_VARIANT_OCCURRENCES}
-            label="Patient/variant linking"
-          >
-            <OccurrencesTab paperId={paperId} rows={rows} />
-          </PipelineGate>
-        </TabsContent>
-        <TabsContent value="unassociated-patients" className="pt-3">
-          <UnassociatedPatientsTab
-            paperId={paperId}
-            patients={unassociatedPatients}
-            tasks={tasks}
-          />
-        </TabsContent>
-        <TabsContent value="unassociated-variants" className="pt-3">
-          <UnassociatedVariantsTab
-            paperId={paperId}
-            variants={unassociatedVariants}
-            tasks={tasks}
-          />
-        </TabsContent>
-        <TabsContent value="pedigree" className="pt-3">
-          <PedigreeTab paperId={paperId} />
-        </TabsContent>
-        <TabsContent value="paper-metadata" className="pt-3 h-[70vh]">
-          {paper && <PaperMetadataTab paper={paper} />}
-        </TabsContent>
-      </Tabs>
-    </div>
+    </PdfHighlightProvider>
   )
 }
