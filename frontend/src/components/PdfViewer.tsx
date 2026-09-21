@@ -6,11 +6,10 @@
 import { forwardRef, useImperativeHandle, useRef } from 'react'
 import { PdfHighlighter, PdfLoader, Highlight as PdfHighlight } from 'react-pdf-highlighter'
 import 'react-pdf-highlighter/dist/style.css'
-import * as pdfjs from 'pdfjs-dist'
+import type * as pdfjs from 'pdfjs-dist'
 import { Spinner } from '@/components/ui/spinner'
 import type { GrobidAnnotation } from '@/api/generated/types.gen'
-
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`
+import { PDF_WORKER_SRC } from '@/lib/pdfWorker'
 
 export interface Highlight {
   id: string
@@ -141,7 +140,7 @@ export const PdfViewer = forwardRef<PdfViewerRef, PdfViewerProps>(
       // container is position:absolute/height:100% and resolves against this. An extra
       // wrapper here can starve it of height at mount, so pagesinit never fires.
       <div style={{ position: 'relative', height: '100%', width: '100%' }}>
-        <PdfLoader url={url} beforeLoad={<Spinner />}>
+        <PdfLoader url={url} workerSrc={PDF_WORKER_SRC} beforeLoad={<Spinner />}>
           {(loadedDocument) => {
             // Store the loaded doc so the imperative handle can expose it
             pdfDocRef.current = loadedDocument
