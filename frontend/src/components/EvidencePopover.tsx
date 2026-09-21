@@ -5,7 +5,7 @@
  * PdfHighlightProvider); there is no color picker or persistent highlighting
  * here, unlike Streamlit's version.
  */
-import { FileSearch, Info } from 'lucide-react'
+import { FileSearch, Info, TriangleAlert } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
@@ -34,67 +34,86 @@ export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
   const canViewInPdf =
     !block?.is_supplement &&
     (!!block?.quote || block?.table_id != null || block?.image_id != null)
+  // edited_at is only ever set from a real edits-table row (see
+  // _attach_edit_history in app.py), never at initial extraction, so it's a
+  // reliable "a human changed this" signal independent of whether a note was
+  // left -- though HumanEditNoteDialog forces one for every edit made here.
+  const isHumanEdited = !!block?.edited_at
 
   return (
-    <Popover>
-      {hasContent ? (
+    <span className="inline-flex items-center gap-0.5">
+      {isHumanEdited && (
         <Tooltip>
-          <TooltipTrigger render={<PopoverTrigger className={TRIGGER_CLASSNAME} />}>
-            <Info className="size-3.5" />
+          <TooltipTrigger className="inline-flex items-center justify-center size-6 rounded text-orange-500 cursor-default">
+            <TriangleAlert className="size-3.5" />
           </TooltipTrigger>
-          <TooltipContent>Evidence & Reasoning</TooltipContent>
+          <TooltipContent>
+            Edited by {block?.edited_by_name ?? 'a curator'}
+            {block?.edited_by_is_active === false ? ' (deactivated)' : ''}
+            {block?.edited_at ? ` on ${new Date(block.edited_at).toLocaleDateString()}` : ''}
+          </TooltipContent>
         </Tooltip>
-      ) : (
-        <PopoverTrigger disabled className={TRIGGER_CLASSNAME}>
-          <Info className="size-3.5" />
-        </PopoverTrigger>
       )}
-      <PopoverContent className="w-80 text-sm space-y-2">
-        {block?.quote && (
-          <p className="break-words">
-            <span className="font-medium">Evidence: </span>
-            {block.quote}
-          </p>
+      <Popover>
+        {hasContent ? (
+          <Tooltip>
+            <TooltipTrigger render={<PopoverTrigger className={TRIGGER_CLASSNAME} />}>
+              <Info className="size-3.5" />
+            </TooltipTrigger>
+            <TooltipContent>Evidence & Reasoning</TooltipContent>
+          </Tooltip>
+        ) : (
+          <PopoverTrigger disabled className={TRIGGER_CLASSNAME}>
+            <Info className="size-3.5" />
+          </PopoverTrigger>
         )}
-        {block?.reasoning && (
-          <p className="break-words">
-            <span className="font-medium">Reasoning: </span>
-            {block.reasoning}
-          </p>
-        )}
-        {block?.human_edit_note && (
-          <div className="pt-2 border-t space-y-0.5">
-            <p className="font-medium">Curator Note</p>
-            <p className="text-muted-foreground break-words">{block.human_edit_note}</p>
-            {block.edited_by_name && (
-              <p className="text-xs text-muted-foreground">
-                Edited by {block.edited_by_name}
-                {block.edited_by_is_active === false ? ' (deactivated)' : ''}
-                {block.edited_at ? ` on ${new Date(block.edited_at).toLocaleDateString()}` : ''}
-              </p>
-            )}
-          </div>
-        )}
-        {canViewInPdf && (
-          <div className="pt-2 border-t">
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
-              onClick={() =>
-                openHighlight({
-                  quote: block?.quote,
-                  table_id: block?.table_id,
-                  image_id: block?.image_id,
-                })
-              }
-            >
-              <FileSearch className="size-3.5 mr-1.5" />
-              View in PDF
-            </Button>
-          </div>
-        )}
-      </PopoverContent>
-    </Popover>
+        <PopoverContent className="w-80 text-sm space-y-2">
+          {block?.quote && (
+            <p className="break-words">
+              <span className="font-medium">Evidence: </span>
+              {block.quote}
+            </p>
+          )}
+          {block?.reasoning && (
+            <p className="break-words">
+              <span className="font-medium">Reasoning: </span>
+              {block.reasoning}
+            </p>
+          )}
+          {block?.human_edit_note && (
+            <div className="pt-2 border-t space-y-0.5">
+              <p className="font-medium">Curator Note</p>
+              <p className="text-muted-foreground break-words">{block.human_edit_note}</p>
+              {block.edited_by_name && (
+                <p className="text-xs text-muted-foreground">
+                  Edited by {block.edited_by_name}
+                  {block.edited_by_is_active === false ? ' (deactivated)' : ''}
+                  {block.edited_at ? ` on ${new Date(block.edited_at).toLocaleDateString()}` : ''}
+                </p>
+              )}
+            </div>
+          )}
+          {canViewInPdf && (
+            <div className="pt-2 border-t">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() =>
+                  openHighlight({
+                    quote: block?.quote,
+                    table_id: block?.table_id,
+                    image_id: block?.image_id,
+                  })
+                }
+              >
+                <FileSearch className="size-3.5 mr-1.5" />
+                View in PDF
+              </Button>
+            </div>
+          )}
+        </PopoverContent>
+      </Popover>
+    </span>
   )
 }
