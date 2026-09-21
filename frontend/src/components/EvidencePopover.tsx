@@ -41,79 +41,69 @@ export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
   const isHumanEdited = !!block?.edited_at
 
   return (
-    <>
-      {isHumanEdited && (
+    <Popover>
+      {hasContent ? (
         <Tooltip>
-          <TooltipTrigger className="inline-flex items-center justify-center size-6 rounded text-orange-500 cursor-default">
-            <TriangleAlert className="size-3.5" />
-          </TooltipTrigger>
-          <TooltipContent>
-            Edited by {block?.edited_by_name ?? 'a curator'}
-            {block?.edited_by_is_active === false ? ' (deactivated)' : ''}
-            {block?.edited_at ? ` on ${new Date(block.edited_at).toLocaleDateString()}` : ''}
-          </TooltipContent>
-        </Tooltip>
-      )}
-      <Popover>
-        {hasContent ? (
-          <Tooltip>
-            <TooltipTrigger render={<PopoverTrigger className={TRIGGER_CLASSNAME} />}>
+          <TooltipTrigger render={<PopoverTrigger className={TRIGGER_CLASSNAME} />}>
+            {isHumanEdited ? (
+              <TriangleAlert className="size-3.5 text-orange-500" />
+            ) : (
               <Info className="size-3.5" />
-            </TooltipTrigger>
-            <TooltipContent>Evidence & Reasoning</TooltipContent>
-          </Tooltip>
-        ) : (
-          <PopoverTrigger disabled className={TRIGGER_CLASSNAME}>
-            <Info className="size-3.5" />
-          </PopoverTrigger>
+            )}
+          </TooltipTrigger>
+          <TooltipContent>Evidence & Reasoning</TooltipContent>
+        </Tooltip>
+      ) : (
+        <PopoverTrigger disabled className={TRIGGER_CLASSNAME}>
+          <Info className="size-3.5" />
+        </PopoverTrigger>
+      )}
+      <PopoverContent className="w-80 text-sm space-y-2">
+        {block?.quote && (
+          <p className="break-words">
+            <span className="font-medium">Evidence: </span>
+            {block.quote}
+          </p>
         )}
-        <PopoverContent className="w-80 text-sm space-y-2">
-          {block?.quote && (
-            <p className="break-words">
-              <span className="font-medium">Evidence: </span>
-              {block.quote}
-            </p>
-          )}
-          {block?.reasoning && (
-            <p className="break-words">
-              <span className="font-medium">Reasoning: </span>
-              {block.reasoning}
-            </p>
-          )}
-          {block?.human_edit_note && (
-            <div className="pt-2 border-t space-y-0.5">
-              <p className="font-medium">Curator Note</p>
-              <p className="text-muted-foreground break-words">{block.human_edit_note}</p>
-              {block.edited_by_name && (
-                <p className="text-xs text-muted-foreground">
-                  Edited by {block.edited_by_name}
-                  {block.edited_by_is_active === false ? ' (deactivated)' : ''}
-                  {block.edited_at ? ` on ${new Date(block.edited_at).toLocaleDateString()}` : ''}
-                </p>
-              )}
-            </div>
-          )}
-          {canViewInPdf && (
-            <div className="pt-2 border-t">
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full"
-                onClick={() =>
-                  openHighlight({
-                    quote: block?.quote,
-                    table_id: block?.table_id,
-                    image_id: block?.image_id,
-                  })
-                }
-              >
-                <FileSearch className="size-3.5 mr-1.5" />
-                View in PDF
-              </Button>
-            </div>
-          )}
-        </PopoverContent>
-      </Popover>
-    </>
+        {block?.reasoning && (
+          <p className="break-words">
+            <span className="font-medium">Reasoning: </span>
+            {block.reasoning}
+          </p>
+        )}
+        {block?.human_edit_note && (
+          <div className="pt-2 border-t space-y-0.5">
+            <p className="font-medium">Curator Note</p>
+            <p className="text-muted-foreground break-words">{block.human_edit_note}</p>
+            {block.edited_by_name && (
+              <p className="text-xs text-muted-foreground">
+                Edited by {block.edited_by_name}
+                {block.edited_by_is_active === false ? ' (deactivated)' : ''}
+                {block.edited_at ? ` on ${new Date(block.edited_at).toLocaleDateString()}` : ''}
+              </p>
+            )}
+          </div>
+        )}
+        {canViewInPdf && (
+          <div className="pt-2 border-t">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full"
+              onClick={() =>
+                openHighlight({
+                  quote: block?.quote,
+                  table_id: block?.table_id,
+                  image_id: block?.image_id,
+                })
+              }
+            >
+              <FileSearch className="size-3.5 mr-1.5" />
+              View in PDF
+            </Button>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
   )
 }
