@@ -120,83 +120,33 @@ prefix and lands on the Streamlit app:
 
 ### Known deployment caveats
 
-- **The pdf.js worker is loaded from a CDN.** `TwoColumnWithBottomRightPdf.tsx` sets
-  `pdfjs.GlobalWorkerOptions.workerSrc` to `//unpkg.com/pdfjs-dist@<version>/...`, so PDF
-  rendering depends on unpkg being reachable from the browser. Serving the worker from
-  our own bundle would remove that third-party runtime dependency.
-- **The main chunk is ~1.4 MB** (~440 kB gzipped) and Vite warns about it. No code
+- **The pdf.js worker is loaded from a CDN.** `PaperMetadataTab.tsx` sets
+  `pdfjs.GlobalWorkerOptions.workerSrc` to `//cdnjs.cloudflare.com/ajax/libs/pdf.js/<version>/...`,
+  so PDF rendering depends on cdnjs being reachable from the browser. Serving the worker
+  from our own bundle would remove that third-party runtime dependency.
+- **There must be exactly one `pdfjs-dist` in the tree.** Every major of pdf.js
+  unconditionally assigns `globalThis.pdfjsLib` when its core module evaluates, and its
+  viewer builds read the core API back off that same global and assert the two versions
+  match. A second copy — a direct `pdfjs-dist` dependency, or another wrapper library that
+  pins its own — makes whichever module evaluated last win the global, and the loser throws
+  `The API version "x" does not match the Viewer version "y"` at runtime, not at build time.
+  Let `react-pdf` own pdf.js; import `pdfjs` from `react-pdf`, never from `pdfjs-dist`.
+- **The main chunk is ~1.8 MB** (~565 kB gzipped) and Vite warns about it. No code
   splitting is configured yet.
-
-## The react-pdf-highlighter patch
-
-`patches/react-pdf-highlighter@8.0.0-rc.0.patch` is a one-line fix applied by pnpm at
-install time. It is recorded in `pnpm-lock.yaml` under `patchedDependencies` with a
-content hash, and pnpm 12 discovers the `patches/` directory on its own — there is no
-`pnpm.patchedDependencies` block in `package.json`, and none is needed.
-
-**Editing the patch changes that hash**, so a patch edit must be followed by a
-`pnpm install` that rewrites the lockfile, or the next `pnpm install --frozen-lockfile`
-(which is what the deploy runs) will fail.
-
-### What breaks without it
-
-Scroll-to-highlight silently stops working, and the PDF stops scaling to fit its
-container. No error is raised and nothing appears in the console — clicking a piece of
-evidence just does not move the PDF.
-
-### Why
-
-In `PdfHighlighter.init()` the library creates a **fresh** `EventBus` on every call, but
-creates the `PDFViewer` only once:
-
-```js
-const eventBus = new pdfjs.EventBus();              // new bus on every init()
-this.viewer = this.viewer || new pdfjs.PDFViewer({  // viewer built once, keeps bus #1
-  eventBus, ...
-});
-this.viewer.setDocument(pdfDocument);               // emits `pagesinit` on the viewer's bus
-this.attachRef(eventBus);                           // subscribes the listener to the NEW bus
-```
-
-`componentWillUnmount` only calls `unsubscribe()`; it never clears `this.viewer`. So on any
-**second** `init()` on the same component instance, the viewer still holds bus #1 while the
-`pagesinit` listener sits on bus #2. The event fires where nobody is listening.
-
-That matters because `onDocumentReady` — the `pagesinit` handler — is what calls
-`handleScaleValue()` and, crucially, `scrollRef(this.scrollTo)`. If it never runs, the
-parent is never handed its scroll function. In `TwoColumnWithBottomRightPdf.tsx` that
-leaves `scrollToRef.current` at `null`, so `PdfViewer.scrollTo()` is a silent no-op.
-
-### When a second `init()` happens
-
-Two ways, and **only the first is development-only**:
-
-1. **`React.StrictMode`** (`src/main.tsx`) deliberately mounts, unmounts and remounts in
-   development, so `componentDidMount` runs twice on the same instance.
-2. **`componentDidUpdate` re-runs `init()` whenever the `pdfDocument` prop changes.** This
-   happens in production — the same `PdfHighlighter` instance being handed a different
-   document takes exactly the same broken path.
-
-The patch's own inline comment cites StrictMode, which is how it was found; the second
-case is the one that matters in a deployed build.
-
-### The fix, and what else was possible
-
-```js
-this.viewer.eventBus = eventBus;  // re-point the reused viewer at the current bus
-```
-
-Two alternatives, both larger and neither attempted:
-
-- **Stop reusing the viewer** (drop the `this.viewer ||` guard). Correct, but throws away
-  already-rendered pages on every document change.
-- **Stop recreating the bus** — hoist the `EventBus` onto the instance so viewer and
-  listener always share one. Probably the right upstream fix, but it changes the
-  subscribe/unsubscribe lifecycle rather than one assignment.
-
-Not reported upstream. `8.0.0-rc.0` is a pre-release, so the first thing to check on any
-version bump is whether this is still needed — re-test by switching between two papers
-in one session and confirming that clicking evidence still scrolls the PDF.
+- **Find-in-PDF isn't implemented.** The evidence "View in PDF" sheet (`PdfViewer.tsx`)
+  shows the page GROBID pointed at, with the quote highlighted, but there's no in-document
+  search and the browser's own Cmd+F can't help — only one page is ever in the DOM at a
+  time. A pdf.js-native attempt (`PDFFindController` + its own viewer stack, bypassing
+  react-pdf) was tried and reverted: it required a second, directly-imported `pdfjs-dist`
+  alongside react-pdf's own copy, and under React StrictMode the two viewer instances
+  from a double-mount fought over the same container (the constructor's `ResizeObserver`/
+  scroll listener aren't torn down without an undocumented `abortSignal` option), which
+  broke page navigation and made the evidence highlight itself unreliable. If this gets
+  picked up again, start from that failure mode rather than the CSS Custom Highlight API
+  or hand-built `Range`-based approaches, which were also tried and abandoned earlier for
+  unrelated reasons (Lightning CSS strips `::highlight()` rules from the production build,
+  and react-pdf's `TextLayer` tears itself down on every render unless its callbacks are
+  memoized).
 
 ## JavaScript dependencies
 
@@ -229,9 +179,7 @@ declared but not imported anywhere in `src/` yet.
 | `react-resizable-panels` | Draggable split panes | Backs `ui/resizable.tsx`, used for the paper detail split view. |
 | `@xyflow/react` | Interactive node/edge canvas (React Flow) | Renders the extraction task DAG in `TaskDAG.tsx`. |
 | `@dagrejs/dagre` | Directed-graph layout algorithm | Computes node positions for that DAG before React Flow draws it — React Flow does not do layout itself. |
-| `pdfjs-dist` | Mozilla PDF.js engine | Pinned to exactly `4.4.168` because `react-pdf` and `react-pdf-highlighter` are compiled against that API. Also used directly for Grobid coordinate work. |
-| `react-pdf` | React wrapper around PDF.js | Renders paper pages in `TwoColumnWithBottomRightPdf.tsx`. |
-| `react-pdf-highlighter` | Highlight overlay for PDF.js pages | Draws evidence highlights on the rendered paper. Pinned to the pre-release `8.0.0-rc.0`, and **patched** — see [The react-pdf-highlighter patch](#the-react-pdf-highlighter-patch). |
+| `react-pdf` | React wrapper around PDF.js | The only PDF renderer: `PaperMetadataTab.tsx` and `PdfViewer.tsx` (the evidence "View in PDF" sheet). It brings its own `pdfjs-dist`; nothing else may depend on that package — see the caveat below. |
 | `zustand` | Minimal global state store | `stores/ui.ts`, for UI state that shouldn't live in the URL or the query cache. |
 | `react-markdown` | Renders a markdown string as React elements | `PedigreeTab.tsx`, for the vision model's freeform pedigree description (headings, lists, bold). |
 | `remark-gfm` | GitHub-flavored markdown extensions for `react-markdown` | Tables/strikethrough/task-lists in the same pedigree description, in case the model's output uses them. |

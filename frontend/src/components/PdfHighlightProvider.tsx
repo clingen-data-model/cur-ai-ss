@@ -8,16 +8,15 @@
  * highlighted.pdf on disk, so this is safe for multiple curators to use at
  * the same time.
  */
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
-import * as pdfjs from 'pdfjs-dist'
+import { createContext, useContext, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AlertCircle } from 'lucide-react'
 import { grobidAnnotationPapersPaperIdGrobidAnnotationPost } from '@/api/generated'
 import { API_BASE_URL } from '@/lib/api'
 import { apiErrorMessage } from '@/lib/apiError'
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { Spinner } from '@/components/ui/spinner'
-import { PdfViewer, annotationsToHighlights, type Highlight, type PdfViewerRef } from '@/components/PdfViewer'
+import { PdfViewer } from '@/components/PdfViewer'
 
 // Matches Streamlit's default palette (lib/ui/paper/shared.py's COLORS[0]) --
 // this viewer is read-only, so there's no picker, just one fixed color.
@@ -43,25 +42,18 @@ export function usePdfHighlight(): PdfHighlightContextValue {
   return ctx
 }
 
-function targetLabel(target: HighlightTarget): string {
-  if (target.quote) return target.quote
-  if (target.table_id != null) return `Table ${target.table_id}`
-  if (target.image_id != null) return `Figure ${target.image_id}`
-  return ''
-}
-
 export function PdfHighlightProvider({
   paperId,
   pdfUrl,
+  filename,
   children,
 }: {
   paperId: number
   pdfUrl: string | undefined
+  filename?: string | null
   children: React.ReactNode
 }) {
   const [target, setTarget] = useState<HighlightTarget | null>(null)
-  const [highlights, setHighlights] = useState<Highlight[]>([])
-  const pdfViewerRef = useRef<PdfViewerRef>(null)
   const fullPdfUrl = pdfUrl ? `${API_BASE_URL}${pdfUrl}` : ''
 
   const annotationsQuery = useQuery({
@@ -80,50 +72,27 @@ export function PdfHighlightProvider({
     enabled: target !== null && fullPdfUrl !== '',
   })
 
-  // annotationsToHighlights needs a loaded pdfjs document to look up each
-  // page's viewport size -- loaded independently of PdfViewer's own PdfLoader
-  // rather than threading a "document ready" callback through its ref, since
-  // the browser serves the second fetch from cache.
-  useEffect(() => {
-    if (!annotationsQuery.data || annotationsQuery.data.length === 0 || !fullPdfUrl) {
-      setHighlights([])
-      return
-    }
-    let cancelled = false
-    void (async () => {
-      const doc = await pdfjs.getDocument(fullPdfUrl).promise
-      const hs = await annotationsToHighlights(
-        doc,
-        annotationsQuery.data,
-        targetLabel(target ?? {}),
-      )
-      if (cancelled) return
-      setHighlights(hs)
-      if (hs[0]) pdfViewerRef.current?.scrollTo(hs[0])
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [annotationsQuery.data, fullPdfUrl, target])
-
   const openHighlight = (next: HighlightTarget) => {
-    setHighlights([])
     setTarget(next)
   }
 
   const close = () => {
     setTarget(null)
-    setHighlights([])
   }
 
   return (
     <PdfHighlightContext.Provider value={{ openHighlight }}>
       {children}
       <Sheet open={target !== null} onOpenChange={(open) => !open && close()}>
-        <SheetContent side="right" className="data-[side=right]:sm:max-w-3xl">
-          <SheetHeader className="border-b">
-            <SheetTitle>View in PDF</SheetTitle>
-          </SheetHeader>
+        <SheetContent
+          side="right"
+          showCloseButton={false}
+          className="gap-0 data-[side=right]:sm:max-w-3xl"
+        >
+          {/* The viewer's own toolbar carries the close button, so the sheet
+            * needs only one row -- but the dialog still needs an accessible
+            * name. */}
+          <SheetTitle className="sr-only">View in PDF</SheetTitle>
           <div className="flex-1 min-h-0">
             {annotationsQuery.isPending ? (
               <div className="flex h-full items-center justify-center">
@@ -135,7 +104,12 @@ export function PdfHighlightProvider({
                 {apiErrorMessage(annotationsQuery.error, "Couldn't locate this in the PDF.")}
               </div>
             ) : fullPdfUrl ? (
-              <PdfViewer ref={pdfViewerRef} url={fullPdfUrl} highlights={highlights} />
+              <PdfViewer
+                url={fullPdfUrl}
+                filename={filename}
+                annotations={annotationsQuery.data ?? []}
+                onClose={close}
+              />
             ) : null}
           </div>
         </SheetContent>

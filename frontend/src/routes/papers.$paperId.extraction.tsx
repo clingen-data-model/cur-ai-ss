@@ -314,7 +314,11 @@ export function ExtractionPage() {
   }
 
   return (
-    <PdfHighlightProvider paperId={paperId} pdfUrl={paper?.pdf_url}>
+    <PdfHighlightProvider
+      paperId={paperId}
+      pdfUrl={paper?.pdf_url}
+      filename={paper?.filename}
+    >
       <div className="space-y-4">
         <div className="flex items-start justify-between">
           <div>
