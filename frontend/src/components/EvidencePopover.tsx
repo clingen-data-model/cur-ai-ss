@@ -41,7 +41,7 @@ export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
   const isHumanEdited = !!block?.edited_at
 
   return (
-    <span className="inline-flex items-center gap-0.5">
+    <>
       {isHumanEdited && (
         <Tooltip>
           <TooltipTrigger className="inline-flex items-center justify-center size-6 rounded text-orange-500 cursor-default">
@@ -114,6 +114,6 @@ export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
           )}
         </PopoverContent>
       </Popover>
-    </span>
+    </>
   )
 }
