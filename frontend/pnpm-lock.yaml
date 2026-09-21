@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  react-pdf-highlighter@8.0.0-rc.0: f3bb695fef5c507d2d8559c4d8fce2c8554921475c2d335d4907195c6bcce9bf
+  react-pdf-highlighter@8.0.0-rc.0: 498908cc3d797b8b59f745501f85c97b0fecdb7343c6682a6edc0938746aec27
 
 importers:
 
@@ -79,7 +79,7 @@ importers:
         version: 10.5.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react-pdf-highlighter:
         specifier: 8.0.0-rc.0
-        version: 8.0.0-rc.0(patch_hash=f3bb695fef5c507d2d8559c4d8fce2c8554921475c2d335d4907195c6bcce9bf)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        version: 8.0.0-rc.0(patch_hash=498908cc3d797b8b59f745501f85c97b0fecdb7343c6682a6edc0938746aec27)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react-resizable-panels:
         specifier: ^4.11.2
         version: 4.12.4(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -6699,7 +6699,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  react-pdf-highlighter@8.0.0-rc.0(patch_hash=f3bb695fef5c507d2d8559c4d8fce2c8554921475c2d335d4907195c6bcce9bf)(react-dom@19.2.8(react@19.2.8))(react@19.2.8):
+  react-pdf-highlighter@8.0.0-rc.0(patch_hash=498908cc3d797b8b59f745501f85c97b0fecdb7343c6682a6edc0938746aec27)(react-dom@19.2.8(react@19.2.8))(react@19.2.8):
     dependencies:
       pdfjs-dist: 4.4.168
       react: 19.2.8

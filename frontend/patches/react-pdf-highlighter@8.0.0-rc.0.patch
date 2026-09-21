@@ -1,5 +1,5 @@
 diff --git a/dist/src/components/PdfHighlighter.js b/dist/src/components/PdfHighlighter.js
-index d64a8a411b7ddd917be221cff240cca982dac4e7..0c395ecd74a510f95be9740a7e3867c803e2b3c6 100644
+index d64a8a411b7ddd917be221cff240cca982dac4e7..af547ffde3d66fb256df785b675fa7cbe1750418 100644
 --- a/dist/src/components/PdfHighlighter.js
 +++ b/dist/src/components/PdfHighlighter.js
 @@ -271,6 +271,9 @@ class PdfHighlighter extends PureComponent {
@@ -12,3 +12,20 @@ index d64a8a411b7ddd917be221cff240cca982dac4e7..0c395ecd74a510f95be9740a7e3867c8
      linkService.setDocument(pdfDocument);
      linkService.setViewer(this.viewer);
      this.viewer.setDocument(pdfDocument);
+@@ -452,6 +455,16 @@ class PdfHighlighter extends PureComponent {
+     ) });
+   }
+   renderHighlightLayers() {
++    // PATCH: componentDidUpdate calls this whenever the `highlights` prop
++    // changes, but `this.viewer` is only assigned once init()'s dynamic
++    // import + PDFViewer construction resolves. Highlights can arrive from
++    // an independent async chain (see PdfHighlightProvider) before that
++    // finishes, which previously threw here and crashed the whole tree with
++    // no error boundary. onTextLayerRendered already re-invokes this once
++    // the viewer is actually ready, so skipping here just defers the paint.
++    if (!this.viewer) {
++      return;
++    }
+     const { pdfDocument } = this.props;
+     for (let pageNumber = 1; pageNumber <= pdfDocument.numPages; pageNumber++) {
+       const highlightRoot = this.highlightRoots[pageNumber];
