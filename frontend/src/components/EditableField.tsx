@@ -60,7 +60,11 @@ export function EditableSelectRow({
   return (
     <FieldRow label={label} evidence={evidence}>
       <Select value={value ?? NONE_VALUE} onValueChange={(v) => pending.propose(v === NONE_VALUE ? null : v)}>
-        <SelectTrigger size="sm" className="h-7 text-xs min-w-60">
+        {/* Fixed width -- w-fit (the SelectTrigger default) sizes to
+         * whichever option is currently selected, so every row in this panel
+         * would resize independently as values change. A shared fixed width
+         * keeps the whole column visually aligned instead. */}
+        <SelectTrigger size="sm" className="h-7 text-xs w-60">
           {value === null ? '—' : <SelectValue />}
         </SelectTrigger>
         <SelectContent>

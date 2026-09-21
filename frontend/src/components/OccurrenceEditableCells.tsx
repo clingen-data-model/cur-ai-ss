@@ -60,7 +60,11 @@ export function EditableZygosityCell({
   return (
     <div className="flex items-center gap-1">
       <Select value={occurrence.zygosity} onValueChange={(v) => v && pending.propose(v)}>
-        <SelectTrigger size="sm" className="h-7 text-xs">
+        {/* Fixed width -- w-fit (the SelectTrigger default) sizes to the
+         * currently selected value, so the trigger visibly resizes as a
+         * curator changes it. w-32 comfortably fits the longest option
+         * ("Heterozygous") at text-xs. */}
+        <SelectTrigger size="sm" className="h-7 w-32 text-xs">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -100,7 +104,9 @@ export function EditableInheritanceCell({
   return (
     <div className="flex items-center gap-1">
       <Select value={occurrence.inheritance} onValueChange={(v) => v && pending.propose(v)}>
-        <SelectTrigger size="sm" className="h-7 text-xs">
+        {/* Fixed width, matching EditableZygosityCell -- w-44 fits the
+         * longest option ("Somatic Mosaicism") at text-xs. */}
+        <SelectTrigger size="sm" className="h-7 w-44 text-xs">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
