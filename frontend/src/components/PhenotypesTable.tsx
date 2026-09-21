@@ -149,11 +149,19 @@ export function PhenotypesTable({ paperId, patientId }: { paperId: number; patie
         enableSorting: false,
         accessorFn: (row) => row.hpo.value?.id ?? '',
         cell: ({ row }) => {
-          const id = row.original.hpo.value?.id
+          const hpo = row.original.hpo.value
+          const id = hpo?.id
           if (!id) return <span className="text-muted-foreground">—</span>
           return (
             <div className="flex items-center gap-1">
-              <code className="text-xs">{id}</code>
+              <a
+                href={`https://hpo.jax.org/app/browse/term/${id}${hpo.name ? `#${hpo.name}` : ''}`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-link hover:underline"
+              >
+                <code className="text-xs">{id}</code>
+              </a>
               <CopyButton value={id} />
             </div>
           )
