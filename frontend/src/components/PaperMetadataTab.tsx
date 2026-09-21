@@ -3,7 +3,7 @@
  * disease-related fields. Right side shows a PDF viewer with zoom/navigation.
  */
 import { useState } from 'react'
-import { Document, Page } from 'react-pdf'
+import { Document, Page, pdfjs } from 'react-pdf'
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Download } from 'lucide-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -20,6 +20,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { EditableSelectRow, EditableTextRow, SimpleMultiSelectRow } from '@/components/EditableField'
 import { EvidencePopover } from '@/components/EvidencePopover'
 import { updatePaperPapersPaperIdPatch } from '@/api/generated'
+
+pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`
 
 /** Saves on blur with no note dialog -- abstract has no evidence column or
  * `abstract_human_edit_note` field, matching Streamlit's plain `st.text_area`. */
