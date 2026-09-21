@@ -28,6 +28,7 @@ from lib.models import (
     UserDB,
     VariantDB,
 )
+from lib.models.deletion_log import DeletionLogDB
 from lib.models.edit import EditDB
 from lib.tasks import TaskCreateRequest
 from lib.tasks.agent_session import chat_session
@@ -438,23 +439,43 @@ def test_list_papers_counts_only_probands_as_probands(
     assert job['proband_count'] == 1
 
 
-def test_delete_paper(client, test_pdf, db_session, seeded_genes):
+def test_delete_paper(client, test_pdf, db_session, seeded_genes, test_user):
     response = client.delete(
         f'/papers/999',
     )
     assert response.status_code == 204
+    assert (
+        db_session.query(DeletionLogDB).filter(DeletionLogDB.entity_id == 999).count()
+        == 0
+    )
 
     response2 = client.put(
         '/papers',
         files={'uploaded_file': ('job-1.pdf', test_pdf, 'application/pdf')},
         data={'gene_symbol': 'BRCA1'},
     )
+    paper_id = response2.json()['id']
     response3 = client.delete(
-        f'/papers/{response2.json()["id"]}',
+        f'/papers/{paper_id}',
     )
     assert response3.status_code == 204
     result = db_session.execute(select(func.count(PaperDB.id)))
     assert result.scalar_one() == 0
+
+    log_entry = (
+        db_session.query(DeletionLogDB)
+        .filter(
+            DeletionLogDB.entity_type == 'paper', DeletionLogDB.entity_id == paper_id
+        )
+        .one()
+    )
+    assert log_entry.paper_id == paper_id
+    assert log_entry.deleted_by_user_id == test_user.id
+
+    # The paper no longer exists, but its own deletion entry must stay visible.
+    log_response = client.get(f'/papers/{paper_id}/deletion-log')
+    assert log_response.status_code == 200
+    assert [row['entity_type'] for row in log_response.json()] == ['paper']
 
 
 def test_search_genes_by_prefix(client, seeded_genes):
@@ -1719,7 +1740,7 @@ def test_create_occurrence(client, db_session, seeded_paper, seeded_variant):
     assert resp.status_code == 404
 
 
-def test_delete_patient(client, db_session, seeded_paper):
+def test_delete_patient(client, db_session, seeded_paper, test_user):
     family = (
         db_session.query(FamilyDB).filter(FamilyDB.paper_id == seeded_paper.id).one()
     )
@@ -1737,21 +1758,44 @@ def test_delete_patient(client, db_session, seeded_paper):
     assert resp.status_code == 204
     assert db_session.get(PatientDB, patient_id) is None
 
+    log_entry = (
+        db_session.query(DeletionLogDB)
+        .filter(
+            DeletionLogDB.entity_type == 'patient',
+            DeletionLogDB.entity_id == patient_id,
+        )
+        .one()
+    )
+    assert log_entry.paper_id == seeded_paper.id
+    assert log_entry.identifier_snapshot == 'Deletable'
+    assert log_entry.deleted_by_user_id == test_user.id
+
     resp = client.delete(f'/papers/{seeded_paper.id}/patients/999999')
     assert resp.status_code == 404
 
 
-def test_delete_variant(client, db_session, seeded_paper, seeded_variant):
+def test_delete_variant(client, db_session, seeded_paper, seeded_variant, test_user):
     variant_id = seeded_variant.id
     resp = client.delete(f'/papers/{seeded_paper.id}/variants/{variant_id}')
     assert resp.status_code == 204
     assert db_session.get(VariantDB, variant_id) is None
 
+    log_entry = (
+        db_session.query(DeletionLogDB)
+        .filter(
+            DeletionLogDB.entity_type == 'variant',
+            DeletionLogDB.entity_id == variant_id,
+        )
+        .one()
+    )
+    assert log_entry.paper_id == seeded_paper.id
+    assert log_entry.deleted_by_user_id == test_user.id
+
     resp = client.delete(f'/papers/{seeded_paper.id}/variants/999999')
     assert resp.status_code == 404
 
 
-def test_delete_occurrence(client, db_session, seeded_paper, seeded_variant):
+def test_delete_occurrence(client, db_session, seeded_paper, seeded_variant, test_user):
     occurrence = _create_patient_variant_occurrence(
         db_session, seeded_paper, seeded_variant
     )
@@ -1761,8 +1805,35 @@ def test_delete_occurrence(client, db_session, seeded_paper, seeded_variant):
     assert resp.status_code == 204
     assert db_session.get(PatientVariantOccurrenceDB, occurrence_id) is None
 
+    log_entry = (
+        db_session.query(DeletionLogDB)
+        .filter(
+            DeletionLogDB.entity_type == 'occurrence',
+            DeletionLogDB.entity_id == occurrence_id,
+        )
+        .one()
+    )
+    assert log_entry.paper_id == seeded_paper.id
+    assert log_entry.deleted_by_user_id == test_user.id
+
     resp = client.delete(f'/papers/{seeded_paper.id}/occurrences/999999')
     assert resp.status_code == 404
+
+
+def test_list_deletion_log(client, db_session, seeded_paper, seeded_variant, test_user):
+    occurrence = _create_patient_variant_occurrence(
+        db_session, seeded_paper, seeded_variant
+    )
+    resp = client.delete(f'/papers/{seeded_paper.id}/occurrences/{occurrence.id}')
+    assert resp.status_code == 204
+    resp = client.delete(f'/papers/{seeded_paper.id}/variants/{seeded_variant.id}')
+    assert resp.status_code == 204
+
+    resp = client.get(f'/papers/{seeded_paper.id}/deletion-log')
+    assert resp.status_code == 200
+    rows = resp.json()
+    assert [row['entity_type'] for row in rows] == ['occurrence', 'variant']
+    assert all(row['deleted_by']['id'] == test_user.id for row in rows)
 
 
 def test_enqueue_task_with_patient_variant_occurrence_scope(

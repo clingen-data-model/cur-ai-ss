@@ -151,6 +151,7 @@ from lib.models import (
     VariantUpdateRequest,
 )
 from lib.models.base import Base, _editor_display_name, manual_evidence_block
+from lib.models.deletion_log import DeletionLogDB, DeletionLogResp, record_deletion
 from lib.models.edit import EditDB, latest_edits_for, record_edits
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.mondo import MondoComponentMapping, MondoTerm
@@ -799,6 +800,14 @@ def delete_paper(
     if pdf_directory.exists():
         shutil.rmtree(pdf_directory)
 
+    record_deletion(
+        session,
+        paper_id=paper_db.id,
+        entity_type='paper',
+        entity_id=paper_db.id,
+        identifier_snapshot=paper_db.title or paper_db.doi or f'paper {paper_db.id}',
+        editor=current_user,
+    )
     session.delete(paper_db)
     session.flush()
 
@@ -2331,6 +2340,14 @@ def delete_patient(
             status_code=status.HTTP_404_NOT_FOUND, detail='Patient not found'
         )
 
+    record_deletion(
+        session,
+        paper_id=patient_db.paper_id,
+        entity_type='patient',
+        entity_id=patient_db.id,
+        identifier_snapshot=patient_db.identifier,
+        editor=current_user,
+    )
     session.delete(patient_db)
     _touch_paper(session, paper_id, current_user)
     session.commit()
@@ -2433,6 +2450,14 @@ def delete_variant(
             status_code=status.HTTP_404_NOT_FOUND, detail='Variant not found'
         )
 
+    record_deletion(
+        session,
+        paper_id=variant_db.paper_id,
+        entity_type='variant',
+        entity_id=variant_db.id,
+        identifier_snapshot=variant_db.variant or variant_db.hgvs_c,
+        editor=current_user,
+    )
     session.delete(variant_db)
     _touch_paper(session, paper_id, current_user)
     session.commit()
@@ -2520,9 +2545,40 @@ def delete_occurrence(
             status_code=status.HTTP_404_NOT_FOUND, detail='Occurrence not found'
         )
 
+    record_deletion(
+        session,
+        paper_id=occurrence_db.paper_id,
+        entity_type='occurrence',
+        entity_id=occurrence_db.id,
+        identifier_snapshot=(
+            f'patient {occurrence_db.patient_id}, variant {occurrence_db.variant_id} '
+            f'({occurrence_db.zygosity})'
+        ),
+        editor=current_user,
+    )
     session.delete(occurrence_db)
     _touch_paper(session, paper_id, current_user)
     session.commit()
+
+
+@app.get('/papers/{paper_id}/deletion-log', response_model=list[DeletionLogResp])
+def list_deletion_log(
+    paper_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """Every patient/variant/occurrence/paper deletion recorded for this paper.
+
+    Deliberately does not 404 when the paper itself no longer exists -- a
+    paper's own deletion entry (entity_type='paper') must stay visible after
+    the paper is gone, since paper_id here is a snapshot, not a live FK."""
+    return (
+        session.query(DeletionLogDB)
+        .options(selectinload(DeletionLogDB.deleted_by))
+        .filter(DeletionLogDB.paper_id == paper_id)
+        .order_by(DeletionLogDB.id)
+        .all()
+    )
 
 
 @app.get(
