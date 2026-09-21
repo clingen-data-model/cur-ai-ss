@@ -14,12 +14,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import './index.css'
 import { routeTree } from './routeTree'
 import '@/lib/api'
-// Must come after `routeTree`: that import eagerly pulls in every route,
-// including react-pdf and react-pdf-highlighter, both of which set their own
-// (wrong, for this app) default pdfjs worker src as a side effect of their
-// own module evaluation. Importing this first would just have theirs run
-// afterward and win. See lib/pdfWorker.ts for the full story.
-import '@/lib/pdfWorker'
 
 // Server state management (caching, synchronization, background fetching)
 const queryClient = new QueryClient()
