@@ -5,7 +5,7 @@
  * PdfHighlightProvider); there is no color picker or persistent highlighting
  * here, unlike Streamlit's version.
  */
-import { FileSearch, Info, TriangleAlert } from 'lucide-react'
+import { FileSearch, Info, UserRoundPen } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
@@ -60,12 +60,15 @@ export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
         <Tooltip>
           <TooltipTrigger render={<PopoverTrigger className={TRIGGER_CLASSNAME} />}>
             {isHumanEdited ? (
-              <TriangleAlert className="size-3.5 text-orange-500" />
+              <UserRoundPen className="size-3.5 text-orange-500" />
             ) : (
               <Info className="size-3.5" />
             )}
           </TooltipTrigger>
-          <TooltipContent>
+          <TooltipContent
+            className={isHumanEdited ? 'bg-orange-500 text-white' : undefined}
+            arrowClassName={isHumanEdited ? 'bg-orange-500 fill-orange-500' : undefined}
+          >
             {isHumanEdited ? `Edited by ${block?.edited_by_name ?? 'unknown'}` : 'Evidence & Reasoning'}
           </TooltipContent>
         </Tooltip>
