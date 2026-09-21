@@ -1437,6 +1437,26 @@ def _user_summary(user: UserDB | None) -> UserSummaryResp | None:
     return UserSummaryResp.model_validate(user) if user else None
 
 
+def _decode_edit_value(raw: str | None, current_value: Any) -> Any:
+    """Decode a JSON-encoded old_value/new_value from the edits table, coerced
+    to match ``current_value``'s type (e.g. str -> Zygosity) rather than left
+    as the plain str/int/bool/list json.loads produces -- HumanEvidenceBlock's
+    ``value``/``previous_value`` are typed as the field's real type (often a
+    str Enum), and a serializer given a raw str where it expects an enum
+    member emits a PydanticSerializationUnexpectedValue warning. Falls back to
+    the undecorated json.loads result for a type json.loads already produces
+    correctly (plain str/int/bool) or that isn't worth coercing (a list)."""
+    if raw is None:
+        return None
+    decoded = json.loads(raw)
+    if decoded is not None and current_value is not None:
+        try:
+            return type(current_value)(decoded)
+        except (TypeError, ValueError):
+            pass
+    return decoded
+
+
 def _attach_edit_history(resp: BaseModel, edits: dict[str, EditDB]) -> None:
     """Overlay per-field edit attribution from the edits table onto every
     HumanEvidenceBlock field of an already-built response, keyed by the
@@ -1445,7 +1465,15 @@ def _attach_edit_history(resp: BaseModel, edits: dict[str, EditDB]) -> None:
     carry no such suffix -- e.g. ``extracted_lod_score`` -- and match as-is).
     Fields never patched via apply_to simply have no entry in ``edits`` and
     keep whatever attribution (if any) was baked into their evidence JSON at
-    creation (see manual_evidence_block)."""
+    creation (see manual_evidence_block).
+
+    Also corrects ``value`` itself for an edited field: the evidence JSON's
+    embedded value is a snapshot from extraction/creation time that
+    apply_to's raw-field branch (``setattr(obj, field, value)``) never
+    touches, so without this it would keep showing the pre-edit value forever
+    -- a latent inconsistency that previous_value's "changed from X to Y"
+    display makes newly visible (Y would silently be stale, not just X
+    missing)."""
     for name, value in resp.__dict__.items():
         if not isinstance(value, HumanEvidenceBlock):
             continue
@@ -1458,6 +1486,12 @@ def _attach_edit_history(resp: BaseModel, edits: dict[str, EditDB]) -> None:
             )
             value.edited_by_is_active = edit.user.is_active if edit.user else None
             value.edited_at = edit.edited_at
+            value.previous_value = _decode_edit_value(edit.old_value, value.value)
+            # A pre-existing edit row from before old_value/new_value existed
+            # has new_value=None too -- leave the (stale) snapshot value alone
+            # rather than blank it out.
+            if edit.new_value is not None:
+                value.value = _decode_edit_value(edit.new_value, value.value)
 
 
 def _family_to_resp(row: FamilyDB, session: Session) -> FamilyResp:

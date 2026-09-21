@@ -23,10 +23,24 @@ export interface EvidenceLike {
   // Supplement PDFs have no words.json of their own, so there's nothing for
   // /grobid-annotation to search -- "View in PDF" is not offered for these.
   is_supplement?: boolean
+  // The current value (`value`) and, when the latest edit's old_value was
+  // captured, what it changed from (`previous_value`) -- typed loosely since
+  // this interface is shared across every HumanEvidenceBlock<T> variant
+  // (str/int/bool/enum/list). Absent (undefined) on non-HumanEvidenceBlock
+  // callers (e.g. plain EvidenceBlock), which don't have edit history at all.
+  value?: unknown
+  previous_value?: unknown
 }
 
 const TRIGGER_CLASSNAME =
   'inline-flex items-center justify-center size-6 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed transition-colors'
+
+function formatEvidenceValue(value: unknown): string {
+  if (value == null || value === '') return '—'
+  if (Array.isArray(value)) return value.length ? value.join(', ') : '—'
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+  return String(value)
+}
 
 export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
   const { openHighlight } = usePdfHighlight()
@@ -51,7 +65,9 @@ export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
               <Info className="size-3.5" />
             )}
           </TooltipTrigger>
-          <TooltipContent>Evidence & Reasoning</TooltipContent>
+          <TooltipContent>
+            {isHumanEdited ? `Edited by ${block?.edited_by_name ?? 'unknown'}` : 'Evidence & Reasoning'}
+          </TooltipContent>
         </Tooltip>
       ) : (
         <PopoverTrigger disabled className={TRIGGER_CLASSNAME}>
@@ -75,6 +91,12 @@ export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
           <div className="pt-2 border-t space-y-0.5">
             <p className="font-medium">Curator Note</p>
             <p className="text-muted-foreground break-words">{block.human_edit_note}</p>
+            {block.previous_value != null && (
+              <p className="text-xs text-muted-foreground break-words">
+                Changed from <span className="font-medium">{formatEvidenceValue(block.previous_value)}</span> to{' '}
+                <span className="font-medium">{formatEvidenceValue(block.value)}</span>
+              </p>
+            )}
             {block.edited_by_name && (
               <p className="text-xs text-muted-foreground">
                 Edited by {block.edited_by_name}
