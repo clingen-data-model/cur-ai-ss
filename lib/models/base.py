@@ -54,8 +54,25 @@ class PatchModel(BaseModel):
     def apply_to(
         self, obj: Base, editor: UserDB | None = None, session: Session | None = None
     ) -> None:
-        for field, value in self.model_dump(exclude_unset=True).items():
-            self._apply_field(obj, field, value, editor, session)
+        updates = self.model_dump(exclude_unset=True)
+        # Snapshot each value field's pre-patch value before *any* field is
+        # applied, then apply value fields before note fields -- a
+        # `<field>_human_edit_note` always arrives alongside its `<field>` in
+        # the same request (see HumanEditNoteDialog call sites), and recording
+        # edit history for it needs both the value from before this patch and
+        # the value from after it, not whatever order model_dump() happens to
+        # iterate the two in.
+        old_values = {
+            field: getattr(obj, field, None)
+            for field in updates
+            if not field.endswith('_human_edit_note')
+        }
+        note_fields = [f for f in updates if f.endswith('_human_edit_note')]
+        for field in updates:
+            if field not in note_fields:
+                self._apply_field(obj, field, updates[field], editor, session)
+        for field in note_fields:
+            self._apply_field(obj, field, updates[field], editor, session, old_values)
         self.stamp_updated_by(obj, editor)
 
     @staticmethod
@@ -65,6 +82,7 @@ class PatchModel(BaseModel):
         value: object,
         editor: UserDB | None,
         session: Session | None = None,
+        old_values: dict[str, Any] | None = None,
     ) -> None:
         """Apply one patched field, mapping ``*_human_edit_note`` to its evidence
         column and recording per-field edit history for it."""
@@ -85,7 +103,14 @@ class PatchModel(BaseModel):
                 from lib.models.edit import record_edit
 
                 field_name = field.replace('_human_edit_note', '')
-                record_edit(session, obj, field_name, editor)
+                record_edit(
+                    session,
+                    obj,
+                    field_name,
+                    editor,
+                    old_value=(old_values or {}).get(field_name),
+                    new_value=getattr(obj, field_name, None),
+                )
         else:
             setattr(obj, field, value)
 

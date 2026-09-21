@@ -1569,6 +1569,24 @@ def test_update_occurrence(client, db_session, seeded_paper, seeded_variant, tes
     assert zygosity_evidence['human_edit_note'] == 'Corrected from Table 2'
     assert zygosity_evidence['edited_by_user_id'] == test_user.id
     assert zygosity_evidence['edited_by_name'] == 'Test User'
+    # Occurrence was seeded with zygosity='Heterozygous' -- the edit history
+    # should capture that as previous_value alongside the new value.
+    assert zygosity_evidence['previous_value'] == 'Heterozygous'
+    assert zygosity_evidence['value'] == 'Homozygous'
+
+    # A second edit's previous_value reflects the value right before *that*
+    # edit (what the first edit changed it to), not the original seeded value
+    # -- edits.old_value is captured per-edit, but only the latest edit per
+    # field is ever surfaced (see latest_edits_for), so only one hop back is
+    # visible at a time.
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/occurrences/{occurrence.id}',
+        json={'zygosity': 'Hemizygous', 'zygosity_human_edit_note': 'Re-corrected'},
+    )
+    assert resp.status_code == 200
+    zygosity_evidence = resp.json()['zygosity_evidence']
+    assert zygosity_evidence['previous_value'] == 'Homozygous'
+    assert zygosity_evidence['value'] == 'Hemizygous'
 
     # More than two testing methods is rejected.
     resp = client.patch(
@@ -1602,6 +1620,10 @@ def test_create_family(client, seeded_paper):
     assert (
         body['identifier_evidence']['human_edit_note'] == 'Manually entered by curator.'
     )
+    # Creation-time edit history has no old_value -- the entity didn't exist
+    # before this row, so there's nothing for previous_value to hold.
+    assert body['identifier_evidence']['previous_value'] is None
+    assert body['identifier_evidence']['value'] == 'Family 2'
 
     resp = client.post('/papers/999999/families', json={'identifier': 'Family X'})
     assert resp.status_code == 404

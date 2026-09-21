@@ -1,5 +1,6 @@
+import json
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     CheckConstraint,
@@ -8,6 +9,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Text,
     func,
     select,
 )
@@ -70,6 +72,13 @@ class EditDB(Base):
 
     field_name: Mapped[str] = mapped_column(String, nullable=False)
 
+    # JSON-encoded, since a field's Python type varies by field_name --
+    # str/int/bool/a str Enum member/a list of any of those. NULL means "no
+    # value" (either the field was empty, or -- for old_value on a
+    # creation-time row -- the field didn't exist before this row).
+    old_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+    new_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     # user_id is the source of truth for who made the edit, resolved live via
     # the relationship below rather than a frozen name snapshot -- this app
     # never hard-deletes a user row (accounts are deactivated via
@@ -112,13 +121,41 @@ def _entity_fk(obj: Base) -> tuple[str, int]:
     return _ENTITY_FK_COLUMNS[table_name], entity_id
 
 
-def record_edit(session: Session, obj: Base, field_name: str, editor: 'UserDB') -> None:
-    """Append one edit-history row for a single field on ``obj``.
+def _serialize_edit_value(value: Any) -> str | None:
+    """JSON-encode a field value for storage in old_value/new_value. Every
+    patchable field is str/int/float/bool/None, a str Enum member (e.g.
+    Zygosity), or a list of those -- json.dumps handles all of them natively,
+    since a str Enum member *is* a str instance as far as the encoder cares."""
+    return None if value is None else json.dumps(value)
+
+
+def record_edit(
+    session: Session,
+    obj: Base,
+    field_name: str,
+    editor: 'UserDB',
+    *,
+    old_value: Any = None,
+    new_value: Any = None,
+) -> None:
+    """Append one edit-history row for a single field on ``obj``, recording the
+    value it changed from and to.
 
     Flushes immediately: the app's sessionmaker runs with autoflush=False, and
     a response built later in the same request (via latest_edits_for) must see
     this row, not just whatever gets flushed on the next unrelated query."""
-    record_edits(session, obj, [field_name], editor)
+    fk_column, entity_id = _entity_fk(obj)
+    session.add(
+        EditDB(
+            field_name=field_name,
+            user_id=editor.id,
+            edited_at=datetime.now(timezone.utc),
+            old_value=_serialize_edit_value(old_value),
+            new_value=_serialize_edit_value(new_value),
+            **{fk_column: entity_id},
+        )
+    )
+    session.flush()
 
 
 def record_edits(
@@ -126,7 +163,9 @@ def record_edits(
 ) -> None:
     """Append one edit-history row per field in ``field_names`` on ``obj``, in a
     single flush -- e.g. every manually-entered field at creation time, once
-    the row has been flushed and has a real id for the FK to point at."""
+    the row has been flushed and has a real id for the FK to point at. Each
+    field's current value on ``obj`` is recorded as new_value; there is no
+    old_value, since the entity (and so the field) didn't exist before."""
     fk_column, entity_id = _entity_fk(obj)
     now = datetime.now(timezone.utc)
     for field_name in field_names:
@@ -135,6 +174,7 @@ def record_edits(
                 field_name=field_name,
                 user_id=editor.id,
                 edited_at=now,
+                new_value=_serialize_edit_value(getattr(obj, field_name, None)),
                 **{fk_column: entity_id},
             )
         )

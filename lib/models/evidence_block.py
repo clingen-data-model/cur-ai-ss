@@ -134,3 +134,7 @@ class HumanEvidenceBlock(EvidenceBlock[T]):
     edited_by_name: str | None = None
     edited_by_is_active: bool | None = None
     edited_at: UtcDatetime | None = None
+    # The value this field held immediately before the edit above, resolved
+    # the same way (live, from the edits table) -- None both when there is no
+    # edit and when the edit's old_value genuinely was empty/never set.
+    previous_value: T | None = None
