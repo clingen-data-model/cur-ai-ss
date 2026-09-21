@@ -150,7 +150,7 @@ from lib.models import (
     VariantResp,
     VariantUpdateRequest,
 )
-from lib.models.base import _editor_display_name, manual_evidence_block
+from lib.models.base import Base, _editor_display_name, manual_evidence_block
 from lib.models.edit import EditDB, latest_edits_for, record_edits
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.mondo import MondoComponentMapping, MondoTerm
@@ -1251,7 +1251,7 @@ def _paper_to_resp(row: PaperDB, session: Session) -> PaperResp:
         pmcid=row.pmcid,
         paper_types=[PaperType(paper_type) for paper_type in row.paper_types],
     )
-    _attach_edit_history(resp, latest_edits_for(session, row))
+    _attach_edit_history(resp, latest_edits_for(session, row), row)
     return resp
 
 
@@ -1438,13 +1438,13 @@ def _user_summary(user: UserDB | None) -> UserSummaryResp | None:
 
 
 def _decode_edit_value(raw: str | None, current_value: Any) -> Any:
-    """Decode a JSON-encoded old_value/new_value from the edits table, coerced
-    to match ``current_value``'s type (e.g. str -> Zygosity) rather than left
-    as the plain str/int/bool/list json.loads produces -- HumanEvidenceBlock's
-    ``value``/``previous_value`` are typed as the field's real type (often a
-    str Enum), and a serializer given a raw str where it expects an enum
-    member emits a PydanticSerializationUnexpectedValue warning. Falls back to
-    the undecorated json.loads result for a type json.loads already produces
+    """Decode a JSON-encoded old_value from the edits table, coerced to match
+    ``current_value``'s type (e.g. str -> Zygosity) rather than left as the
+    plain str/int/bool/list json.loads produces -- HumanEvidenceBlock's
+    ``previous_value`` is typed as the field's real type (often a str Enum),
+    and a serializer given a raw str where it expects an enum member emits a
+    PydanticSerializationUnexpectedValue warning. Falls back to the
+    undecorated json.loads result for a type json.loads already produces
     correctly (plain str/int/bool) or that isn't worth coercing (a list)."""
     if raw is None:
         return None
@@ -1457,7 +1457,7 @@ def _decode_edit_value(raw: str | None, current_value: Any) -> Any:
     return decoded
 
 
-def _attach_edit_history(resp: BaseModel, edits: dict[str, EditDB]) -> None:
+def _attach_edit_history(resp: BaseModel, edits: dict[str, EditDB], row: Base) -> None:
     """Overlay per-field edit attribution from the edits table onto every
     HumanEvidenceBlock field of an already-built response, keyed by the
     response field name with any ``_evidence`` suffix stripped (e.g.
@@ -1473,7 +1473,13 @@ def _attach_edit_history(resp: BaseModel, edits: dict[str, EditDB]) -> None:
     touches, so without this it would keep showing the pre-edit value forever
     -- a latent inconsistency that previous_value's "changed from X to Y"
     display makes newly visible (Y would silently be stale, not just X
-    missing)."""
+    missing). The corrected value is read straight off ``row`` -- the ORM
+    object, which always carries the real, current column (e.g.
+    ``row.zygosity`` alongside ``row.zygosity_evidence``) -- rather than
+    ``resp``, since for segregation analysis the response's field *is* the
+    HumanEvidenceBlock itself with no separate sibling scalar. Reading off the
+    live column this way also means there's no need to store or decode a
+    "new_value" from the edits table at all."""
     for name, value in resp.__dict__.items():
         if not isinstance(value, HumanEvidenceBlock):
             continue
@@ -1487,11 +1493,7 @@ def _attach_edit_history(resp: BaseModel, edits: dict[str, EditDB]) -> None:
             value.edited_by_is_active = edit.user.is_active if edit.user else None
             value.edited_at = edit.edited_at
             value.previous_value = _decode_edit_value(edit.old_value, value.value)
-            # A pre-existing edit row from before old_value/new_value existed
-            # has new_value=None too -- leave the (stale) snapshot value alone
-            # rather than blank it out.
-            if edit.new_value is not None:
-                value.value = _decode_edit_value(edit.new_value, value.value)
+            value.value = getattr(row, field_name, value.value)
 
 
 def _family_to_resp(row: FamilyDB, session: Session) -> FamilyResp:
@@ -1508,7 +1510,7 @@ def _family_to_resp(row: FamilyDB, session: Session) -> FamilyResp:
         updated_by_user_id=row.updated_by_user_id,
         updated_by=_user_summary(row.updated_by),
     )
-    _attach_edit_history(resp, latest_edits_for(session, row))
+    _attach_edit_history(resp, latest_edits_for(session, row), row)
     return resp
 
 
@@ -1574,7 +1576,7 @@ def _patient_to_resp(row: PatientDB, session: Session) -> PatientResp:
             row.family_assignment_evidence
         ),
     )
-    _attach_edit_history(resp, latest_edits_for(session, row))
+    _attach_edit_history(resp, latest_edits_for(session, row), row)
     return resp
 
 
@@ -1749,7 +1751,7 @@ def _segregation_analysis_to_resp(
         updated_by_user_id=evidence.updated_by_user_id,
         updated_by=_user_summary(evidence.updated_by),
     )
-    _attach_edit_history(resp, latest_edits_for(session, evidence))
+    _attach_edit_history(resp, latest_edits_for(session, evidence), evidence)
     return resp
 
 
@@ -1945,7 +1947,7 @@ def _variant_to_resp(row: VariantDB, session: Session) -> VariantResp:
         harmonized_variant=harmonized,
         annotated_variant=enriched,
     )
-    _attach_edit_history(resp, latest_edits_for(session, row))
+    _attach_edit_history(resp, latest_edits_for(session, row), row)
     return resp
 
 
@@ -2223,7 +2225,7 @@ def _patient_variant_occurrence_to_resp(
         updated_by_user_id=row.updated_by_user_id,
         updated_by=_user_summary(row.updated_by),
     )
-    _attach_edit_history(resp, latest_edits_for(session, row))
+    _attach_edit_history(resp, latest_edits_for(session, row), row)
     return resp
 
 

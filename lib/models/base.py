@@ -109,7 +109,6 @@ class PatchModel(BaseModel):
                     field_name,
                     editor,
                     old_value=(old_values or {}).get(field_name),
-                    new_value=getattr(obj, field_name, None),
                 )
         else:
             setattr(obj, field, value)
