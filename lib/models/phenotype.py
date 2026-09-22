@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, List
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import (
+    Boolean,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
@@ -116,6 +117,11 @@ class HpoDB(Base):
     hpo_id: Mapped[str | None] = mapped_column(String, nullable=True)
     hpo_name: Mapped[str | None] = mapped_column(String, nullable=True)
     reasoning: Mapped[str] = mapped_column(String, nullable=False)
+    # True when a curator set this link via create_phenotype/relink_phenotype_hpo
+    # rather than the extraction pipeline having matched it -- see HpoLinkBlock.
+    manually_linked: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -154,7 +160,7 @@ class PhenotypeResp(BaseModel):
     updated_by_user_id: int | None = None
     # Evidence block (from DB JSON column)
     concept_evidence: EvidenceBlock[str]
-    # HPO link (always present with ReasoningBlock, value may be None if not yet linked or excluded)
+    # HPO link (always present, value may be None if not yet linked or excluded)
     hpo: ReasoningBlock[HPOTerm | None]
 
 

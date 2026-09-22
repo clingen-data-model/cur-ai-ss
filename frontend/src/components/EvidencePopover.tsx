@@ -30,6 +30,11 @@ export interface EvidenceLike {
   // callers (e.g. plain EvidenceBlock), which don't have edit history at all.
   value?: unknown
   previous_value?: unknown
+  // True when a curator set this value directly rather than extraction having
+  // found it (EvidenceBlock.manually_entered / HpoLinkBlock.manually_entered)
+  // -- present with no edited_at/edited_by_name at all when there's no
+  // per-field edit-history row for this entity (e.g. phenotypes).
+  manually_entered?: boolean
 }
 
 const TRIGGER_CLASSNAME =
@@ -52,7 +57,10 @@ export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
   // _attach_edit_history in app.py), never at initial extraction, so it's a
   // reliable "a human changed this" signal independent of whether a note was
   // left -- though HumanEditNoteDialog forces one for every edit made here.
-  const isHumanEdited = !!block?.edited_at
+  // manually_entered covers entities with no per-field edit-history row at
+  // all (e.g. phenotypes/HPO links) but whose value a curator typed/picked
+  // directly rather than extraction having found it.
+  const isHumanEdited = !!block?.edited_at || !!block?.manually_entered
 
   return (
     <Popover>
@@ -69,7 +77,11 @@ export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
             className={isHumanEdited ? 'bg-orange-500 text-white' : undefined}
             arrowClassName={isHumanEdited ? 'bg-orange-500 fill-orange-500' : undefined}
           >
-            {isHumanEdited ? `Edited by ${block?.edited_by_name ?? 'unknown'}` : 'Evidence & Reasoning'}
+            {isHumanEdited
+              ? block?.edited_by_name
+                ? `Edited by ${block.edited_by_name}`
+                : 'Manually entered by curator'
+              : 'Evidence & Reasoning'}
           </TooltipContent>
         </Tooltip>
       ) : (
