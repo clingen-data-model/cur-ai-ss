@@ -109,7 +109,9 @@ from lib.models import (
     HarmonizedVariantDB,
     HarmonizedVariantResp,
     HighlightRequest,
+    HpoCandidate,
     HpoDB,
+    HpoRelinkRequest,
     HPOTerm,
     HumanEvidenceBlock,
     LoginRequest,
@@ -131,6 +133,7 @@ from lib.models import (
     PatientVariantOccurrenceUpdateRequest,
     PedigreeDB,
     PedigreeResp,
+    PhenotypeCreateRequest,
     PhenotypeDB,
     PhenotypeResp,
     SegregationAnalysisComputedDB,
@@ -171,6 +174,7 @@ from lib.models.stats import (
     TaskStatsResp,
     TrackDurationStat,
 )
+from lib.reference_data.hpo import find_matching_hpo_terms, get_ontology
 from lib.tasks import (
     TaskCreateRequest,
     TaskResp,
@@ -2662,6 +2666,136 @@ def get_phenotypes(
         .all()
     )
     return [_phenotype_to_resp(p) for p in phenotypes]
+
+
+@app.post(
+    '/papers/{paper_id}/patients/{patient_id}/phenotypes',
+    response_model=PhenotypeResp,
+)
+def create_phenotype(
+    paper_id: int,
+    patient_id: int,
+    create_request: PhenotypeCreateRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """Manually add a phenotype row. HPO id is optional; when given, it must
+    resolve to a real term in the ontology."""
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    patient_db = (
+        session.query(PatientDB)
+        .filter(PatientDB.id == patient_id, PatientDB.paper_id == paper_id)
+        .one_or_none()
+    )
+    if not patient_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Patient not found'
+        )
+
+    hpo_name: str | None = None
+    if create_request.hpo_id is not None:
+        hpo_name = get_ontology().get_term_name(create_request.hpo_id)
+        if hpo_name is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f'Unknown HPO id: {create_request.hpo_id}',
+            )
+
+    phenotype_db = PhenotypeDB(
+        paper_id=paper_id,
+        patient_id=patient_id,
+        concept=create_request.concept,
+        concept_evidence=manual_evidence_block(create_request.concept),
+        updated_by_user_id=current_user.id,
+    )
+    session.add(phenotype_db)
+    session.flush()
+
+    if create_request.hpo_id is not None:
+        phenotype_db.hpo = HpoDB(
+            hpo_id=create_request.hpo_id,
+            hpo_name=hpo_name,
+            reasoning='Manually linked by curator',
+        )
+
+    _touch_paper(session, paper_id, current_user)
+    session.commit()
+    session.refresh(phenotype_db)
+    return _phenotype_to_resp(phenotype_db)
+
+
+@app.patch(
+    '/papers/{paper_id}/phenotypes/{phenotype_id}/hpo',
+    response_model=PhenotypeResp,
+)
+def relink_phenotype_hpo(
+    paper_id: int,
+    phenotype_id: int,
+    relink_request: HpoRelinkRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """Change (or, with hpo_id=None, clear) which HPO term a phenotype is
+    linked to."""
+    phenotype_db = (
+        session.query(PhenotypeDB)
+        .options(joinedload(PhenotypeDB.hpo))
+        .filter(PhenotypeDB.id == phenotype_id, PhenotypeDB.paper_id == paper_id)
+        .one_or_none()
+    )
+    if not phenotype_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Phenotype not found'
+        )
+
+    if relink_request.hpo_id is None:
+        hpo_name = None
+        reasoning = 'Unlinked by curator'
+    else:
+        hpo_name = get_ontology().get_term_name(relink_request.hpo_id)
+        if hpo_name is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f'Unknown HPO id: {relink_request.hpo_id}',
+            )
+        reasoning = 'Manually linked by curator'
+
+    if phenotype_db.hpo:
+        phenotype_db.hpo.hpo_id = relink_request.hpo_id
+        phenotype_db.hpo.hpo_name = hpo_name
+        phenotype_db.hpo.reasoning = reasoning
+    else:
+        phenotype_db.hpo = HpoDB(
+            hpo_id=relink_request.hpo_id,
+            hpo_name=hpo_name,
+            reasoning=reasoning,
+        )
+    phenotype_db.updated_by_user_id = current_user.id
+    phenotype_db.updated_at = func.now()
+
+    _touch_paper(session, paper_id, current_user)
+    session.commit()
+    session.refresh(phenotype_db)
+    return _phenotype_to_resp(phenotype_db)
+
+
+@app.get('/hpo/search', response_model=list[HpoCandidate])
+def search_hpo_terms(
+    text: str = Query(..., min_length=2),
+    limit: int = Query(10, le=25),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """Fuzzy-match free text against HPO term names/synonyms, for a curator
+    picking a term to (re-)link -- the same matching function the extraction
+    pipeline uses to propose candidates. Note: when nothing clears the
+    similarity cutoff, this falls back to the ontology root term rather than
+    an empty list (see find_matching_hpo_terms), so a very short or unrelated
+    query can still show one low-relevance result."""
+    return find_matching_hpo_terms(text, limit=limit)
 
 
 @app.patch('/papers/{paper_id}/patients/{patient_id}', response_model=PatientResp)
