@@ -242,7 +242,7 @@ export function PhenotypesTable({ paperId, patientId }: { paperId: number; patie
               taskType="Phenotype Extraction"
               scope={{ patient_id: patientId }}
               label="Re-extract Phenotypes"
-              description="Re-runs phenotype extraction (and downstream HPO linking) for this patient. Existing phenotypes are not removed first."
+              description="Re-runs phenotype extraction for this patient. When it completes, every existing phenotype for this patient -- including any added or edited manually -- is replaced with the new results, and HPO linking is re-triggered for each."
             />
             <AddPhenotypeDialog paperId={paperId} patientId={patientId} />
           </div>
@@ -262,7 +262,7 @@ export function PhenotypesTable({ paperId, patientId }: { paperId: number; patie
             taskType="Phenotype Extraction"
             scope={{ patient_id: patientId }}
             label="Re-extract Phenotypes"
-            description="Re-runs phenotype extraction (and downstream HPO linking) for this patient. Existing phenotypes are not removed first."
+            description="Re-runs phenotype extraction for this patient. When it completes, every existing phenotype for this patient -- including any added or edited manually -- is replaced with the new results, and HPO linking is re-triggered for each."
           />
           <AddPhenotypeDialog paperId={paperId} patientId={patientId} />
           <Button variant="outline" size="sm" onClick={exportCsv} className="gap-2">

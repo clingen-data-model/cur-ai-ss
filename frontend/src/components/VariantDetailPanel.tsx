@@ -92,7 +92,7 @@ export function VariantDetailPanel({ paperId, variant }: { paperId: number; vari
         </TabsContent>
 
         <TabsContent value="harmonized" className="pt-3">
-          <div className="mb-3">
+          <div className="mb-3 flex justify-end">
             <ScopedRerunButton
               paperId={paperId}
               taskType="Variant Harmonization"
@@ -199,7 +199,7 @@ export function VariantDetailPanel({ paperId, variant }: { paperId: number; vari
         </TabsContent>
 
         <TabsContent value="annotations" className="pt-3">
-          <div className="mb-3">
+          <div className="mb-3 flex justify-end">
             <ScopedRerunButton
               paperId={paperId}
               taskType="Variant Annotation"
