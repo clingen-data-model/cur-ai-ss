@@ -2510,6 +2510,45 @@ def test_extracted_hpo_link_is_not_manually_entered(client, db_session, seeded_p
     assert body['hpo']['manually_entered'] is False
 
 
+def test_delete_phenotype(client, db_session, seeded_paper, test_user):
+    patient = _seed_patient(db_session, seeded_paper, 'Delete Phenotype Patient')
+    phenotype = PhenotypeDB(
+        paper_id=seeded_paper.id,
+        patient_id=patient.id,
+        concept='Seizures',
+        concept_evidence=dict(value='Seizures', reasoning='test', quote='test'),
+        hpo=HpoDB(hpo_id='HP:0001250', hpo_name='Seizure', reasoning='Fuzzy match'),
+    )
+    db_session.add(phenotype)
+    db_session.commit()
+    phenotype_id = phenotype.id
+    hpo_id = phenotype.hpo.id
+
+    resp = client.delete(f'/papers/999999/phenotypes/{phenotype_id}')
+    assert resp.status_code == 404
+
+    resp = client.delete(f'/papers/{seeded_paper.id}/phenotypes/{phenotype_id}')
+    assert resp.status_code == 204
+    assert db_session.get(PhenotypeDB, phenotype_id) is None
+    # Cascade: the linked hpos row goes with it.
+    assert db_session.get(HpoDB, hpo_id) is None
+
+    log_entry = (
+        db_session.query(DeletionLogDB)
+        .filter(
+            DeletionLogDB.entity_type == 'phenotype',
+            DeletionLogDB.entity_id == phenotype_id,
+        )
+        .one()
+    )
+    assert log_entry.paper_id == seeded_paper.id
+    assert log_entry.identifier_snapshot == 'Seizures'
+    assert log_entry.deleted_by_user_id == test_user.id
+
+    resp = client.delete(f'/papers/{seeded_paper.id}/phenotypes/{phenotype_id}')
+    assert resp.status_code == 404
+
+
 def test_search_hpo_terms(client):
     fake_candidates = [
         HpoCandidate(id='HP:0001250', name='Seizure', similarity_score=95.0),

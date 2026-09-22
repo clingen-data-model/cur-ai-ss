@@ -3,19 +3,24 @@
  * match's id are all visible/scannable at once instead of one at a time
  * behind a click, and the id can be copied straight out of the row. */
 import { useCallback, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import { toast } from 'sonner'
-import { getPhenotypesPapersPaperIdPatientsPatientIdPhenotypesGet } from '@/api/generated'
+import {
+  deletePhenotypePapersPaperIdPhenotypesPhenotypeIdDelete,
+  getPhenotypesPapersPaperIdPatientsPatientIdPhenotypesGet,
+} from '@/api/generated'
 import type { PhenotypeResp } from '@/api/generated/types.gen'
 import { DataTable } from '@/components/ui/data-table'
 import { EvidencePopover } from '@/components/EvidencePopover'
 import { CopyButton } from '@/components/CopyButton'
 import { AddPhenotypeDialog } from '@/components/AddPhenotypeDialog'
 import { RelinkHpoDialog } from '@/components/RelinkHpoDialog'
+import { DeleteIconButton } from '@/components/DeleteIconButton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Copy, Download } from 'lucide-react'
+import { apiErrorMessage } from '@/lib/apiError'
 
 const STALE_TIME = 5 * 60 * 1000
 
@@ -35,6 +40,7 @@ function additionalInfo(phenotype: PhenotypeResp): string {
 }
 
 export function PhenotypesTable({ paperId, patientId }: { paperId: number; patientId: number }) {
+  const queryClient = useQueryClient()
   const phenotypesQuery = useQuery({
     queryKey: ['phenotypes', paperId, patientId],
     queryFn: () =>
@@ -42,6 +48,19 @@ export function PhenotypesTable({ paperId, patientId }: { paperId: number; patie
         path: { paper_id: paperId, patient_id: patientId },
       }),
     staleTime: STALE_TIME,
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (phenotypeId: number) =>
+      deletePhenotypePapersPaperIdPhenotypesPhenotypeIdDelete({
+        path: { paper_id: paperId, phenotype_id: phenotypeId },
+        throwOnError: true,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['phenotypes', paperId, patientId] })
+      toast.success('Phenotype deleted')
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, 'Failed to delete phenotype')),
   })
 
   const copyAllHpoIds = useCallback(async () => {
@@ -188,8 +207,27 @@ export function PhenotypesTable({ paperId, patientId }: { paperId: number; patie
         enableSorting: false,
         cell: ({ row }) => <span className="text-xs text-muted-foreground">{additionalInfo(row.original) || '—'}</span>,
       },
+      {
+        id: 'actions',
+        header: '',
+        size: 40,
+        enableSorting: false,
+        cell: ({ row }) => (
+          <DeleteIconButton
+            title="Delete phenotype?"
+            description={
+              <>
+                This will permanently delete{' '}
+                <span className="font-medium text-foreground">{row.original.concept}</span>.
+                This cannot be undone.
+              </>
+            }
+            onDelete={() => deleteMutation.mutate(row.original.id)}
+          />
+        ),
+      },
     ],
-    [paperId, copyAllHpoIds],
+    [paperId, copyAllHpoIds, deleteMutation],
   )
 
   if (phenotypesQuery.isPending) {

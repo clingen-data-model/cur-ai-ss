@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 class DeletionLogDB(Base):
     """Append-only record of a curator deleting a patient/variant/occurrence/
-    paper -- the delete itself is otherwise silent and unrecoverable.
+    phenotype/paper -- the delete itself is otherwise silent and unrecoverable.
 
     Deliberately carries no foreign key back into the entity it records (not
     even ``paper_id``, which is a plain snapshot int rather than a real FK):
