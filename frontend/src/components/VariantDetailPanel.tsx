@@ -7,6 +7,7 @@
  * - Properties: editable, each with its own evidence + human-edit-note
  * - Annotations: read-only ClinVar/gnomAD/in-silico display
  */
+import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { TriangleAlert } from 'lucide-react'
@@ -34,6 +35,7 @@ function formatAlleleCounts(ac?: number | null, an?: number | null): string {
 
 export function VariantDetailPanel({ paperId, variant }: { paperId: number; variant: VariantResp }) {
   const queryClient = useQueryClient()
+  const [activeTab, setActiveTab] = useState('raw')
   const harmonized = variant.harmonized_variant.value
   const annotated = variant.annotated_variant
   const warning = harmonizationWarning(harmonized)
@@ -67,13 +69,37 @@ export function VariantDetailPanel({ paperId, variant }: { paperId: number; vari
           <AlertDescription>{warning}</AlertDescription>
         </Alert>
       )}
-      <Tabs defaultValue="raw" className="max-w-2xl">
-        <TabsList>
-          <TabsTrigger value="raw">Raw</TabsTrigger>
-          <TabsTrigger value="harmonized">Harmonized</TabsTrigger>
-          <TabsTrigger value="properties">Properties</TabsTrigger>
-          <TabsTrigger value="annotations">Annotations</TabsTrigger>
-        </TabsList>
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as string)}
+        className="max-w-2xl"
+      >
+        <div className="flex items-center justify-between">
+          <TabsList>
+            <TabsTrigger value="raw">Raw</TabsTrigger>
+            <TabsTrigger value="harmonized">Harmonized</TabsTrigger>
+            <TabsTrigger value="properties">Properties</TabsTrigger>
+            <TabsTrigger value="annotations">Annotations</TabsTrigger>
+          </TabsList>
+          {activeTab === 'harmonized' && (
+            <ScopedRerunButton
+              paperId={paperId}
+              taskType="Variant Harmonization"
+              scope={{ variant_id: variant.id }}
+              label="Re-harmonize"
+              description="Re-runs variant harmonization for this variant, overwriting the fields below."
+            />
+          )}
+          {activeTab === 'annotations' && (
+            <ScopedRerunButton
+              paperId={paperId}
+              taskType="Variant Annotation"
+              scope={{ variant_id: variant.id }}
+              label="Re-annotate"
+              description="Re-runs variant annotation for this variant, overwriting the fields below."
+            />
+          )}
+        </div>
 
         <TabsContent value="raw" className="pt-3">
           <ReadOnlyRow label="Variant Description" value={variant.variant_evidence.value ?? 'N/A'} evidence={variant.variant_evidence} />
@@ -92,15 +118,6 @@ export function VariantDetailPanel({ paperId, variant }: { paperId: number; vari
         </TabsContent>
 
         <TabsContent value="harmonized" className="pt-3">
-          <div className="mb-3 flex justify-end">
-            <ScopedRerunButton
-              paperId={paperId}
-              taskType="Variant Harmonization"
-              scope={{ variant_id: variant.id }}
-              label="Re-harmonize"
-              description="Re-runs variant harmonization for this variant, overwriting the fields below."
-            />
-          </div>
           {harmonized ? (
             <>
               <SimpleTextRow
@@ -199,15 +216,6 @@ export function VariantDetailPanel({ paperId, variant }: { paperId: number; vari
         </TabsContent>
 
         <TabsContent value="annotations" className="pt-3">
-          <div className="mb-3 flex justify-end">
-            <ScopedRerunButton
-              paperId={paperId}
-              taskType="Variant Annotation"
-              scope={{ variant_id: variant.id }}
-              label="Re-annotate"
-              description="Re-runs variant annotation for this variant, overwriting the fields below."
-            />
-          </div>
           {!annotated ? (
             <p className="text-sm text-muted-foreground">Enrichment not yet completed for this variant.</p>
           ) : (
