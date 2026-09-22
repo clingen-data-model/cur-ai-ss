@@ -16,6 +16,7 @@ import { EvidencePopover } from '@/components/EvidencePopover'
 import { AddPhenotypeDialog } from '@/components/AddPhenotypeDialog'
 import { RelinkHpoDialog } from '@/components/RelinkHpoDialog'
 import { DeleteIconButton } from '@/components/DeleteIconButton'
+import { ScopedRerunButton } from '@/components/ScopedRerunButton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Copy, Download } from 'lucide-react'
@@ -235,7 +236,16 @@ export function PhenotypesTable({ paperId, patientId }: { paperId: number; patie
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <h4 className="text-sm font-semibold">Phenotypes</h4>
-          <AddPhenotypeDialog paperId={paperId} patientId={patientId} />
+          <div className="flex items-center gap-2">
+            <ScopedRerunButton
+              paperId={paperId}
+              taskType="Phenotype Extraction"
+              scope={{ patient_id: patientId }}
+              label="Re-extract Phenotypes"
+              description="Re-runs phenotype extraction (and downstream HPO linking) for this patient. Existing phenotypes are not removed first."
+            />
+            <AddPhenotypeDialog paperId={paperId} patientId={patientId} />
+          </div>
         </div>
         <p className="text-sm text-muted-foreground">No phenotypes extracted.</p>
       </div>
@@ -247,6 +257,13 @@ export function PhenotypesTable({ paperId, patientId }: { paperId: number; patie
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-semibold">Phenotypes</h4>
         <div className="flex items-center gap-2">
+          <ScopedRerunButton
+            paperId={paperId}
+            taskType="Phenotype Extraction"
+            scope={{ patient_id: patientId }}
+            label="Re-extract Phenotypes"
+            description="Re-runs phenotype extraction (and downstream HPO linking) for this patient. Existing phenotypes are not removed first."
+          />
           <AddPhenotypeDialog paperId={paperId} patientId={patientId} />
           <Button variant="outline" size="sm" onClick={exportCsv} className="gap-2">
             <Download className="h-4 w-4" />

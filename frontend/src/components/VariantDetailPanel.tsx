@@ -20,6 +20,7 @@ import {
 } from '@/components/EditableField'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ScopedRerunButton } from '@/components/ScopedRerunButton'
 import { VARIANT_TYPE_OPTIONS } from '@/lib/variantType'
 import { gnomadUrl, clinGenUrl } from '@/lib/variantLinks'
 import { formatGnomadPopulation } from '@/lib/gnomadPopulations'
@@ -91,6 +92,15 @@ export function VariantDetailPanel({ paperId, variant }: { paperId: number; vari
         </TabsContent>
 
         <TabsContent value="harmonized" className="pt-3">
+          <div className="mb-3">
+            <ScopedRerunButton
+              paperId={paperId}
+              taskType="Variant Harmonization"
+              scope={{ variant_id: variant.id }}
+              label="Re-harmonize"
+              description="Re-runs variant harmonization for this variant, overwriting the fields below."
+            />
+          </div>
           {harmonized ? (
             <>
               <SimpleTextRow
@@ -189,6 +199,15 @@ export function VariantDetailPanel({ paperId, variant }: { paperId: number; vari
         </TabsContent>
 
         <TabsContent value="annotations" className="pt-3">
+          <div className="mb-3">
+            <ScopedRerunButton
+              paperId={paperId}
+              taskType="Variant Annotation"
+              scope={{ variant_id: variant.id }}
+              label="Re-annotate"
+              description="Re-runs variant annotation for this variant, overwriting the fields below."
+            />
+          </div>
           {!annotated ? (
             <p className="text-sm text-muted-foreground">Enrichment not yet completed for this variant.</p>
           ) : (

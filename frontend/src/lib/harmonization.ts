@@ -58,14 +58,15 @@ export function malformedIdentifiers(harmonized: HarmonizedLike): Record<string,
 
 /** The warning message for a variant's harmonized identifiers, or null when
  * there's nothing to flag. Mirrors lib/ui/paper/variants.py's two warning
- * strings exactly, but points at the paper-level Rerun Agent dialog instead
- * of a per-variant "Re-harmonize" button, which the SPA doesn't have yet. */
+ * strings, but points at the per-variant "Re-harmonize" button on the
+ * Harmonized tab (see VariantDetailPanel) instead of the paper-level Rerun
+ * Agent dialog. */
 export function harmonizationWarning(harmonized: HarmonizedLike): string | null {
   if (!isHarmonized(harmonized)) {
     return (
       'Harmonization produced no gnomAD coordinates, rsID, CAID or HGVS g./c. ' +
-      'for this variant, so it could not be annotated. Rerun Variant ' +
-      'Harmonization for this paper to try again.'
+      'for this variant, so it could not be annotated. Use the Re-harmonize ' +
+      'button on the Harmonized tab to try again.'
     )
   }
 
@@ -77,7 +78,7 @@ export function harmonizationWarning(harmonized: HarmonizedLike): string | null 
   return (
     `Harmonized notation looks malformed (${fieldList}). It was most likely ` +
     'copied from the paper rather than normalized, so any annotation for ' +
-    'this variant may be wrong. Rerun Variant Harmonization for this paper ' +
-    'to try again.'
+    'this variant may be wrong. Use the Re-harmonize button on the ' +
+    'Harmonized tab to try again.'
   )
 }
