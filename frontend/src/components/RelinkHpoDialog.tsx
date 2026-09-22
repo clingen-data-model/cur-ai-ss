@@ -36,6 +36,7 @@ export function RelinkHpoDialog({
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const [hpoId, setHpoId] = useState<string | null>(currentHpoId)
+  const hasExistingLink = currentHpoId != null
 
   const mutation = useMutation({
     mutationFn: (nextHpoId: string | null) =>
@@ -56,7 +57,7 @@ export function RelinkHpoDialog({
     <>
       <button
         type="button"
-        title="Re-link HPO term"
+        title={hasExistingLink ? 'Re-link HPO term' : 'Link HPO term'}
         onClick={(e) => {
           e.stopPropagation()
           setHpoId(currentHpoId)
@@ -69,10 +70,20 @@ export function RelinkHpoDialog({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent onClick={(e) => e.stopPropagation()}>
           <DialogHeader>
-            <DialogTitle>Re-link HPO Term</DialogTitle>
+            <DialogTitle>{hasExistingLink ? 'Re-link HPO Term' : 'Link HPO Term'}</DialogTitle>
             <DialogDescription>
-              Change which HPO term <span className="font-medium text-foreground">{concept}</span>{' '}
-              is linked to, or clear the link entirely.
+              {hasExistingLink ? (
+                <>
+                  Change which HPO term{' '}
+                  <span className="font-medium text-foreground">{concept}</span> is linked to, or
+                  clear the link entirely.
+                </>
+              ) : (
+                <>
+                  Link <span className="font-medium text-foreground">{concept}</span> to an HPO
+                  term.
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5">
@@ -92,7 +103,7 @@ export function RelinkHpoDialog({
               onClick={() => mutation.mutate(hpoId)}
               disabled={mutation.isPending || hpoId === currentHpoId}
             >
-              {mutation.isPending ? 'Saving...' : 'Save'}
+              {mutation.isPending ? 'Saving...' : hasExistingLink ? 'Save' : 'Link'}
             </Button>
           </DialogFooter>
         </DialogContent>
