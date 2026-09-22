@@ -1,11 +1,15 @@
 /* Per-row action to change (or clear) which HPO term a phenotype is linked
  * to -- for correcting a wrong auto-match or linking one manually where
  * extraction found none. Mirrors LinkVariantDialog's icon-button-trigger
- * shape but edits an existing row instead of creating a new link. */
+ * shape but edits an existing row instead of creating a new link. The
+ * trigger icon signals which of those two this is: a pencil for picking a
+ * term for the first time ("manual edit"), a recycle icon for replacing an
+ * existing one ("re-link") -- both open the same search-as-you-type
+ * combobox and only ever accept a real ontology term either way. */
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Pencil } from 'lucide-react'
+import { Pencil, Recycle } from 'lucide-react'
 import { relinkPhenotypeHpoPapersPaperIdPhenotypesPhenotypeIdHpoPatch } from '@/api/generated'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -65,7 +69,7 @@ export function RelinkHpoDialog({
         }}
         className="inline-flex items-center justify-center size-7 shrink-0 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors"
       >
-        <Pencil className="size-3.5" />
+        {hasExistingLink ? <Recycle className="size-3.5" /> : <Pencil className="size-3.5" />}
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent onClick={(e) => e.stopPropagation()}>

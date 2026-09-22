@@ -2572,7 +2572,8 @@ def list_deletion_log(
     session: Session = Depends(get_session),
     current_user: UserDB = Depends(get_current_user),
 ) -> Any:
-    """Every patient/variant/occurrence/paper deletion recorded for this paper.
+    """Every patient/variant/occurrence/phenotype/paper deletion recorded for
+    this paper.
 
     Deliberately does not 404 when the paper itself no longer exists -- a
     paper's own deletion entry (entity_type='paper') must stay visible after
@@ -2728,6 +2729,36 @@ def create_phenotype(
     session.commit()
     session.refresh(phenotype_db)
     return _phenotype_to_resp(phenotype_db)
+
+
+@app.delete(
+    '/papers/{paper_id}/phenotypes/{phenotype_id}',
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_phenotype(
+    paper_id: int,
+    phenotype_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> None:
+    """Delete a phenotype (cascades to its HPO link, if any)."""
+    phenotype_db = session.get(PhenotypeDB, phenotype_id)
+    if not phenotype_db or phenotype_db.paper_id != paper_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Phenotype not found'
+        )
+
+    record_deletion(
+        session,
+        paper_id=phenotype_db.paper_id,
+        entity_type='phenotype',
+        entity_id=phenotype_db.id,
+        identifier_snapshot=phenotype_db.concept,
+        editor=current_user,
+    )
+    session.delete(phenotype_db)
+    _touch_paper(session, paper_id, current_user)
+    session.commit()
 
 
 @app.patch(
