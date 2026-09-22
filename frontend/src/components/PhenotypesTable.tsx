@@ -1,7 +1,7 @@
 /* All phenotypes for a patient, one row per phenotype -- a table rather than
  * the accordion this replaced, so every concept, its HPO match, and the
  * match's id are all visible/scannable at once instead of one at a time
- * behind a click, and the id can be copied straight out of the row. */
+ * behind a click. */
 import { useCallback, useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -13,7 +13,6 @@ import {
 import type { PhenotypeResp } from '@/api/generated/types.gen'
 import { DataTable } from '@/components/ui/data-table'
 import { EvidencePopover } from '@/components/EvidencePopover'
-import { CopyButton } from '@/components/CopyButton'
 import { AddPhenotypeDialog } from '@/components/AddPhenotypeDialog'
 import { RelinkHpoDialog } from '@/components/RelinkHpoDialog'
 import { DeleteIconButton } from '@/components/DeleteIconButton'
@@ -176,17 +175,14 @@ export function PhenotypesTable({ paperId, patientId }: { paperId: number; patie
           return (
             <div className="flex items-center gap-1">
               {id ? (
-                <>
-                  <a
-                    href={`https://hpo.jax.org/app/browse/term/${id}${hpo.name ? `#${hpo.name}` : ''}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-link hover:underline"
-                  >
-                    <code className="text-xs">{id}</code>
-                  </a>
-                  <CopyButton value={id} />
-                </>
+                <a
+                  href={`https://hpo.jax.org/app/browse/term/${id}${hpo.name ? `#${hpo.name}` : ''}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-link hover:underline"
+                >
+                  <code className="text-xs">{id}</code>
+                </a>
               ) : (
                 <span className="text-muted-foreground">—</span>
               )}
