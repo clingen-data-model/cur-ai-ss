@@ -11,6 +11,8 @@ import type { PhenotypeResp } from '@/api/generated/types.gen'
 import { DataTable } from '@/components/ui/data-table'
 import { EvidencePopover } from '@/components/EvidencePopover'
 import { CopyButton } from '@/components/CopyButton'
+import { AddPhenotypeDialog } from '@/components/AddPhenotypeDialog'
+import { RelinkHpoDialog } from '@/components/RelinkHpoDialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Copy, Download } from 'lucide-react'
@@ -149,20 +151,33 @@ export function PhenotypesTable({ paperId, patientId }: { paperId: number; patie
         enableSorting: false,
         accessorFn: (row) => row.hpo.value?.id ?? '',
         cell: ({ row }) => {
-          const hpo = row.original.hpo.value
+          const phenotype = row.original
+          const hpo = phenotype.hpo.value
           const id = hpo?.id
-          if (!id) return <span className="text-muted-foreground">—</span>
           return (
             <div className="flex items-center gap-1">
-              <a
-                href={`https://hpo.jax.org/app/browse/term/${id}${hpo.name ? `#${hpo.name}` : ''}`}
-                target="_blank"
-                rel="noreferrer"
-                className="text-link hover:underline"
-              >
-                <code className="text-xs">{id}</code>
-              </a>
-              <CopyButton value={id} />
+              {id ? (
+                <>
+                  <a
+                    href={`https://hpo.jax.org/app/browse/term/${id}${hpo.name ? `#${hpo.name}` : ''}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-link hover:underline"
+                  >
+                    <code className="text-xs">{id}</code>
+                  </a>
+                  <CopyButton value={id} />
+                </>
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              )}
+              <RelinkHpoDialog
+                paperId={paperId}
+                phenotypeId={phenotype.id}
+                concept={phenotype.concept}
+                currentHpoId={hpo?.id ?? null}
+                currentHpoName={hpo?.name ?? null}
+              />
             </div>
           )
         },
@@ -174,7 +189,7 @@ export function PhenotypesTable({ paperId, patientId }: { paperId: number; patie
         cell: ({ row }) => <span className="text-xs text-muted-foreground">{additionalInfo(row.original) || '—'}</span>,
       },
     ],
-    [copyAllHpoIds],
+    [paperId, copyAllHpoIds],
   )
 
   if (phenotypesQuery.isPending) {
@@ -182,17 +197,28 @@ export function PhenotypesTable({ paperId, patientId }: { paperId: number; patie
   }
 
   if (!phenotypesQuery.data || phenotypesQuery.data.length === 0) {
-    return <p className="text-sm text-muted-foreground">No phenotypes extracted.</p>
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-semibold">Phenotypes</h4>
+          <AddPhenotypeDialog paperId={paperId} patientId={patientId} />
+        </div>
+        <p className="text-sm text-muted-foreground">No phenotypes extracted.</p>
+      </div>
+    )
   }
 
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-semibold">Phenotypes</h4>
-        <Button variant="outline" size="sm" onClick={exportCsv} className="gap-2">
-          <Download className="h-4 w-4" />
-          Export CSV
-        </Button>
+        <div className="flex items-center gap-2">
+          <AddPhenotypeDialog paperId={paperId} patientId={patientId} />
+          <Button variant="outline" size="sm" onClick={exportCsv} className="gap-2">
+            <Download className="h-4 w-4" />
+            Export CSV
+          </Button>
+        </div>
       </div>
       <DataTable
         columns={columns}

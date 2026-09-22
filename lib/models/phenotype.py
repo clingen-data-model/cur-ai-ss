@@ -156,3 +156,19 @@ class PhenotypeResp(BaseModel):
     concept_evidence: EvidenceBlock[str]
     # HPO link (always present with ReasoningBlock, value may be None if not yet linked or excluded)
     hpo: ReasoningBlock[HPOTerm | None]
+
+
+class PhenotypeCreateRequest(BaseModel):
+    """Request to manually add a phenotype row for a patient. HPO id is
+    optional; when given, the endpoint validates it against the ontology and
+    looks up its canonical name."""
+
+    concept: str
+    hpo_id: str | None = None
+
+
+class HpoRelinkRequest(BaseModel):
+    """Request to change which HPO term a phenotype is linked to, or clear
+    the link entirely with hpo_id=None."""
+
+    hpo_id: str | None

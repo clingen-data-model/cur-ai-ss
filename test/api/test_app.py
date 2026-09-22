@@ -19,6 +19,8 @@ from lib.models import (
     FamilyDB,
     GeneDB,
     HarmonizedVariantDB,
+    HpoCandidate,
+    HpoDB,
     PaperDB,
     PatientDB,
     PatientVariantOccurrenceDB,
@@ -2355,3 +2357,138 @@ def test_active_papers_counts_waiting_work_as_in_flight(
 def test_active_papers_is_empty_when_nothing_runs(client, db_session):
     """The common case: the indicator renders nothing rather than a zero."""
     assert client.get('/papers/active').json() == []
+
+
+def _seed_patient(db_session, seeded_paper, identifier='Phenotype Test Patient'):
+    family = (
+        db_session.query(FamilyDB).filter(FamilyDB.paper_id == seeded_paper.id).one()
+    )
+    patient = PatientDB(
+        paper_id=seeded_paper.id,
+        family_id=family.id,
+        identifier=identifier,
+        **_patient_required_fields(identifier),
+    )
+    db_session.add(patient)
+    db_session.commit()
+    return patient
+
+
+def _fake_ontology(names: dict[str, str]) -> MagicMock:
+    ontology = MagicMock()
+    ontology.get_term_name.side_effect = lambda term_id: names.get(term_id)
+    return ontology
+
+
+def test_create_phenotype(client, db_session, seeded_paper):
+    patient = _seed_patient(db_session, seeded_paper)
+
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/patients/{patient.id}/phenotypes',
+        json={'concept': 'Seizures'},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body['concept'] == 'Seizures'
+    assert body['concept_evidence']['manually_entered'] is True
+    # No hpos row is created when hpo_id is omitted -- the response falls
+    # back to the same "not yet linked" reasoning a pipeline-extracted but
+    # unlinked phenotype would show.
+    assert body['hpo'] == {'value': None, 'reasoning': 'HPO linking not yet performed'}
+
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/patients/999999/phenotypes',
+        json={'concept': 'Seizures'},
+    )
+    assert resp.status_code == 404
+
+    resp = client.post(
+        '/papers/999999/patients/1/phenotypes',
+        json={'concept': 'Seizures'},
+    )
+    assert resp.status_code == 404
+
+
+def test_create_phenotype_with_hpo_id(client, db_session, seeded_paper):
+    patient = _seed_patient(db_session, seeded_paper, 'Phenotype HPO Patient')
+    ontology = _fake_ontology({'HP:0001250': 'Seizure'})
+
+    with patch('lib.api.app.get_ontology', return_value=ontology):
+        resp = client.post(
+            f'/papers/{seeded_paper.id}/patients/{patient.id}/phenotypes',
+            json={'concept': 'Seizures', 'hpo_id': 'HP:0001250'},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body['hpo']['value'] == {'id': 'HP:0001250', 'name': 'Seizure'}
+        assert body['hpo']['reasoning'] == 'Manually linked by curator'
+
+        resp = client.post(
+            f'/papers/{seeded_paper.id}/patients/{patient.id}/phenotypes',
+            json={'concept': 'Seizures', 'hpo_id': 'HP:9999999'},
+        )
+        assert resp.status_code == 400
+
+
+def test_relink_phenotype_hpo(client, db_session, seeded_paper):
+    patient = _seed_patient(db_session, seeded_paper, 'Relink Patient')
+    phenotype = PhenotypeDB(
+        paper_id=seeded_paper.id,
+        patient_id=patient.id,
+        concept='Seizures',
+        concept_evidence=dict(value='Seizures', reasoning='test', quote='test'),
+    )
+    db_session.add(phenotype)
+    db_session.commit()
+    ontology = _fake_ontology({'HP:0001250': 'Seizure'})
+
+    with patch('lib.api.app.get_ontology', return_value=ontology):
+        resp = client.patch(
+            f'/papers/{seeded_paper.id}/phenotypes/{phenotype.id}/hpo',
+            json={'hpo_id': 'HP:0001250'},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body['hpo']['value'] == {'id': 'HP:0001250', 'name': 'Seizure'}
+        assert body['hpo']['reasoning'] == 'Manually linked by curator'
+
+        resp = client.patch(
+            f'/papers/{seeded_paper.id}/phenotypes/{phenotype.id}/hpo',
+            json={'hpo_id': None},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body['hpo'] == {'value': None, 'reasoning': 'Unlinked by curator'}
+        # Re-linking updates the existing hpos row rather than creating a
+        # second one -- phenotype_id is unique on that table.
+        assert (
+            db_session.query(HpoDB).filter(HpoDB.phenotype_id == phenotype.id).count()
+            == 1
+        )
+
+        resp = client.patch(
+            f'/papers/{seeded_paper.id}/phenotypes/{phenotype.id}/hpo',
+            json={'hpo_id': 'HP:9999999'},
+        )
+        assert resp.status_code == 400
+
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/phenotypes/999999/hpo',
+        json={'hpo_id': None},
+    )
+    assert resp.status_code == 404
+
+
+def test_search_hpo_terms(client):
+    fake_candidates = [
+        HpoCandidate(id='HP:0001250', name='Seizure', similarity_score=95.0),
+    ]
+    with patch('lib.api.app.find_matching_hpo_terms', return_value=fake_candidates):
+        resp = client.get('/hpo/search', params={'text': 'seizure'})
+        assert resp.status_code == 200
+        assert resp.json() == [
+            {'id': 'HP:0001250', 'name': 'Seizure', 'similarity_score': 95.0}
+        ]
+
+    resp = client.get('/hpo/search', params={'text': 'a'})
+    assert resp.status_code == 422
