@@ -111,7 +111,6 @@ from lib.models import (
     HighlightRequest,
     HpoCandidate,
     HpoDB,
-    HpoLinkBlock,
     HpoRelinkRequest,
     HPOTerm,
     HumanEvidenceBlock,
@@ -2020,13 +2019,13 @@ def _phenotype_to_resp(row: PhenotypeDB) -> PhenotypeResp:
             if row.hpo.hpo_id and row.hpo.hpo_name
             else None
         )
-        hpo = HpoLinkBlock(
+        hpo = ReasoningBlock[HPOTerm | None](
             value=hpo_value,
             reasoning=row.hpo.reasoning,
             manually_entered=row.hpo.manually_linked,
         )
     else:
-        hpo = HpoLinkBlock(
+        hpo = ReasoningBlock[HPOTerm | None](
             value=None,
             reasoning='HPO linking not yet performed',
         )

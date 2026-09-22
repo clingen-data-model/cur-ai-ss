@@ -53,16 +53,6 @@ class HPOTerm(BaseModel):
     name: str | None
 
 
-class HpoLinkBlock(ReasoningBlock[HPOTerm | None]):
-    """A phenotype's linked HPO term, plus whether a curator set that link
-    (create/relink) rather than the extraction pipeline -- mirrors
-    EvidenceBlock.manually_entered, just sourced from HpoDB.manually_linked
-    instead of an evidence JSON blob, since the HPO link is a whole replaced
-    row rather than a single patched field."""
-
-    manually_entered: bool = False
-
-
 class PhenotypeDB(Base):
     __tablename__ = 'phenotypes'
 
@@ -171,7 +161,7 @@ class PhenotypeResp(BaseModel):
     # Evidence block (from DB JSON column)
     concept_evidence: EvidenceBlock[str]
     # HPO link (always present, value may be None if not yet linked or excluded)
-    hpo: HpoLinkBlock
+    hpo: ReasoningBlock[HPOTerm | None]
 
 
 class PhenotypeCreateRequest(BaseModel):

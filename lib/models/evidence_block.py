@@ -62,6 +62,12 @@ def strip_markup(text: str) -> str:
 class ReasoningBlock(BaseModel, Generic[T]):
     value: T
     reasoning: str  # human-readable summary (always required)
+    # True when a curator set this value directly (e.g. a manually created
+    # patient/variant, or a manually (re-)linked HPO term) rather than the
+    # extraction pipeline having produced it. Lives here rather than only on
+    # EvidenceBlock so a plain ReasoningBlock -- which has no quote/table_id/
+    # image_id to point at anyway -- can carry the same signal.
+    manually_entered: bool = False
 
     @field_validator('reasoning', mode='after')
     @classmethod
@@ -76,13 +82,6 @@ class EvidenceBlock(ReasoningBlock[T]):
     is_supplement: bool = (
         False  # whether evidence came from a supplement (non-renderable in PDF view)
     )
-    # True when a curator typed this value directly (e.g. a manually created
-    # patient/variant) rather than the extraction pipeline reading it out of
-    # the paper -- there's no quote to point at because it was never a claim
-    # about the paper's text. Applies to every evidence block, not just
-    # HumanEvidenceBlock ones, since "raw" extracted-only fields (no
-    # human_edit_note) can also be seeded manually at creation time.
-    manually_entered: bool = False
 
     @field_validator('quote', mode='after')
     @classmethod
