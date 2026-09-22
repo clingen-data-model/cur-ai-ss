@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, List
 
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import (
+    Boolean,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
@@ -50,6 +51,16 @@ class HPOTerm(BaseModel):
 
     id: str | None
     name: str | None
+
+
+class HpoLinkBlock(ReasoningBlock[HPOTerm | None]):
+    """A phenotype's linked HPO term, plus whether a curator set that link
+    (create/relink) rather than the extraction pipeline -- mirrors
+    EvidenceBlock.manually_entered, just sourced from HpoDB.manually_linked
+    instead of an evidence JSON blob, since the HPO link is a whole replaced
+    row rather than a single patched field."""
+
+    manually_entered: bool = False
 
 
 class PhenotypeDB(Base):
@@ -116,6 +127,11 @@ class HpoDB(Base):
     hpo_id: Mapped[str | None] = mapped_column(String, nullable=True)
     hpo_name: Mapped[str | None] = mapped_column(String, nullable=True)
     reasoning: Mapped[str] = mapped_column(String, nullable=False)
+    # True when a curator set this link via create_phenotype/relink_phenotype_hpo
+    # rather than the extraction pipeline having matched it -- see HpoLinkBlock.
+    manually_linked: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -154,8 +170,8 @@ class PhenotypeResp(BaseModel):
     updated_by_user_id: int | None = None
     # Evidence block (from DB JSON column)
     concept_evidence: EvidenceBlock[str]
-    # HPO link (always present with ReasoningBlock, value may be None if not yet linked or excluded)
-    hpo: ReasoningBlock[HPOTerm | None]
+    # HPO link (always present, value may be None if not yet linked or excluded)
+    hpo: HpoLinkBlock
 
 
 class PhenotypeCreateRequest(BaseModel):

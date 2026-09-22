@@ -111,6 +111,7 @@ from lib.models import (
     HighlightRequest,
     HpoCandidate,
     HpoDB,
+    HpoLinkBlock,
     HpoRelinkRequest,
     HPOTerm,
     HumanEvidenceBlock,
@@ -2019,12 +2020,13 @@ def _phenotype_to_resp(row: PhenotypeDB) -> PhenotypeResp:
             if row.hpo.hpo_id and row.hpo.hpo_name
             else None
         )
-        hpo = ReasoningBlock[HPOTerm | None](
+        hpo = HpoLinkBlock(
             value=hpo_value,
             reasoning=row.hpo.reasoning,
+            manually_entered=row.hpo.manually_linked,
         )
     else:
-        hpo = ReasoningBlock[HPOTerm | None](
+        hpo = HpoLinkBlock(
             value=None,
             reasoning='HPO linking not yet performed',
         )
@@ -2720,6 +2722,7 @@ def create_phenotype(
             hpo_id=create_request.hpo_id,
             hpo_name=hpo_name,
             reasoning='Manually linked by curator',
+            manually_linked=True,
         )
 
     _touch_paper(session, paper_id, current_user)
@@ -2768,11 +2771,13 @@ def relink_phenotype_hpo(
         phenotype_db.hpo.hpo_id = relink_request.hpo_id
         phenotype_db.hpo.hpo_name = hpo_name
         phenotype_db.hpo.reasoning = reasoning
+        phenotype_db.hpo.manually_linked = True
     else:
         phenotype_db.hpo = HpoDB(
             hpo_id=relink_request.hpo_id,
             hpo_name=hpo_name,
             reasoning=reasoning,
+            manually_linked=True,
         )
     phenotype_db.updated_by_user_id = current_user.id
     phenotype_db.updated_at = func.now()

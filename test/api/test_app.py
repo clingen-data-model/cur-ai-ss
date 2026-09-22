@@ -2394,7 +2394,11 @@ def test_create_phenotype(client, db_session, seeded_paper):
     # No hpos row is created when hpo_id is omitted -- the response falls
     # back to the same "not yet linked" reasoning a pipeline-extracted but
     # unlinked phenotype would show.
-    assert body['hpo'] == {'value': None, 'reasoning': 'HPO linking not yet performed'}
+    assert body['hpo'] == {
+        'value': None,
+        'reasoning': 'HPO linking not yet performed',
+        'manually_entered': False,
+    }
 
     resp = client.post(
         f'/papers/{seeded_paper.id}/patients/999999/phenotypes',
@@ -2422,6 +2426,7 @@ def test_create_phenotype_with_hpo_id(client, db_session, seeded_paper):
         body = resp.json()
         assert body['hpo']['value'] == {'id': 'HP:0001250', 'name': 'Seizure'}
         assert body['hpo']['reasoning'] == 'Manually linked by curator'
+        assert body['hpo']['manually_entered'] is True
 
         resp = client.post(
             f'/papers/{seeded_paper.id}/patients/{patient.id}/phenotypes',
@@ -2451,6 +2456,7 @@ def test_relink_phenotype_hpo(client, db_session, seeded_paper):
         body = resp.json()
         assert body['hpo']['value'] == {'id': 'HP:0001250', 'name': 'Seizure'}
         assert body['hpo']['reasoning'] == 'Manually linked by curator'
+        assert body['hpo']['manually_entered'] is True
 
         resp = client.patch(
             f'/papers/{seeded_paper.id}/phenotypes/{phenotype.id}/hpo',
@@ -2458,7 +2464,11 @@ def test_relink_phenotype_hpo(client, db_session, seeded_paper):
         )
         assert resp.status_code == 200
         body = resp.json()
-        assert body['hpo'] == {'value': None, 'reasoning': 'Unlinked by curator'}
+        assert body['hpo'] == {
+            'value': None,
+            'reasoning': 'Unlinked by curator',
+            'manually_entered': True,
+        }
         # Re-linking updates the existing hpos row rather than creating a
         # second one -- phenotype_id is unique on that table.
         assert (
@@ -2477,6 +2487,27 @@ def test_relink_phenotype_hpo(client, db_session, seeded_paper):
         json={'hpo_id': None},
     )
     assert resp.status_code == 404
+
+
+def test_extracted_hpo_link_is_not_manually_entered(client, db_session, seeded_paper):
+    # An HpoDB row built the way the extraction pipeline builds one (see
+    # lib/models/converters.py's hpo_to_db) never sets manually_linked, so it
+    # must default to False rather than reporting a curator edit.
+    patient = _seed_patient(db_session, seeded_paper, 'Extraction Patient')
+    phenotype = PhenotypeDB(
+        paper_id=seeded_paper.id,
+        patient_id=patient.id,
+        concept='Seizures',
+        concept_evidence=dict(value='Seizures', reasoning='test', quote='test'),
+        hpo=HpoDB(hpo_id='HP:0001250', hpo_name='Seizure', reasoning='Fuzzy match'),
+    )
+    db_session.add(phenotype)
+    db_session.commit()
+
+    resp = client.get(f'/papers/{seeded_paper.id}/patients/{patient.id}/phenotypes')
+    assert resp.status_code == 200
+    [body] = resp.json()
+    assert body['hpo']['manually_entered'] is False
 
 
 def test_search_hpo_terms(client):

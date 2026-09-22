@@ -70,6 +70,7 @@ from lib.models.phenotype import (
     ExtractedPhenotype,
     HpoCandidate,
     HpoDB,
+    HpoLinkBlock,
     HpoRelinkRequest,
     HPOTerm,
     PhenotypeCreateRequest,
