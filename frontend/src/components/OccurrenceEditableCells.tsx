@@ -311,3 +311,20 @@ export function EditableDiseaseNameCell({
     </div>
   )
 }
+
+/** Read-only: MONDO linking runs as its own agent step (OCCURRENCE_MONDO_LINKING),
+ * not a human-editable field, so this only ever displays what that step found. */
+export function MondoDiseaseCell({ occurrence }: { occurrence: PatientVariantOccurrenceResp }) {
+  return (
+    <div className="flex items-center gap-1">
+      {occurrence.mondo.value ? (
+        <span className="text-xs">
+          {occurrence.mondo.value.mondo_id} — {occurrence.mondo.value.label}
+        </span>
+      ) : (
+        <span className="text-xs text-muted-foreground">Not linked</span>
+      )}
+      <EvidencePopover block={occurrence.mondo} />
+    </div>
+  )
+}
