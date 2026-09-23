@@ -2,9 +2,13 @@
 
 A snapshot is one JSON file under ``<pdf_dir>/snapshots/`` holding a faithful
 column dump of every paper-scoped table, written when the extraction pipeline
-completes. Restoring wipes the paper's domain rows -- tasks included -- and re-inserts
-them with their original primary keys, so every snapshot is a self-consistent
-reality: entities, links, and the task history that produced them.
+completes and right before a rerun is queued (so an edit or deletion made
+between the two is never silently lost to the rerun's delete-and-recreate).
+Restoring wipes the paper's domain rows -- tasks, edit history, and the
+deletion log included -- and re-inserts them with their original primary
+keys, so every snapshot is a self-consistent reality: entities, links, edit
+history, deletions, and the task history that produced them, all as of
+exactly that moment.
 """
 
 import hashlib
@@ -15,8 +19,9 @@ import re
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
+from typing import Any
 
-from sqlalchemy import Column, DateTime, Table, insert, text, update
+from sqlalchemy import Column, DateTime, Table, insert, or_, text, update
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.orm import Session
@@ -43,6 +48,7 @@ from lib.models import (
     VariantDB,
 )
 from lib.models.base import row_to_dict
+from lib.models.deletion_log import DeletionLogDB
 from lib.models.edit import EditDB
 from lib.tasks.models import TaskType
 
@@ -69,6 +75,12 @@ _INSERT_ORDER: list[tuple[str, type[Base]]] = [
     ('patient_variant_occurrences', PatientVariantOccurrenceDB),
     ('segregation_evidence', SegregationEvidenceDB),
     ('segregation_analysis_computed', SegregationAnalysisComputedDB),
+    # Edit history and the deletion log version alongside the data they
+    # describe -- every FK target above is already inserted by this point.
+    # deletion_log has no FK of its own (see its docstring), so its position
+    # here only matters relative to 'tasks'.
+    ('edits', EditDB),
+    ('deletion_log', DeletionLogDB),
     # Last: tasks FK every entity table above.
     ('tasks', TaskDB),
 ]
@@ -105,7 +117,34 @@ _HASH_EXCLUDED_KEYS = {
     'updated_by_user_id',
     'tries',
     'error_message',
+    'edited_at',
+    'deleted_at',
 }
+
+
+def _paper_edit_filter(
+    paper_id: int,
+    *,
+    family_ids: list[int],
+    patient_ids: list[int],
+    variant_ids: list[int],
+    occurrence_ids: list[int],
+    segregation_evidence_ids: list[int],
+) -> Any:
+    """Every EditDB row reachable from this paper, across its six mutually
+    exclusive entity-FK columns (see EditDB's _ENTITY_FK_COLUMNS)."""
+    clauses = [EditDB.paper_id == paper_id]
+    if family_ids:
+        clauses.append(EditDB.family_id.in_(family_ids))
+    if patient_ids:
+        clauses.append(EditDB.patient_id.in_(patient_ids))
+    if variant_ids:
+        clauses.append(EditDB.variant_id.in_(variant_ids))
+    if occurrence_ids:
+        clauses.append(EditDB.occurrence_id.in_(occurrence_ids))
+    if segregation_evidence_ids:
+        clauses.append(EditDB.segregation_evidence_id.in_(segregation_evidence_ids))
+    return or_(*clauses)
 
 
 def _model_table(model: type[Base]) -> Table:
@@ -184,6 +223,27 @@ def dump_paper_state(paper_id: int, paper_db: PaperDB, session: Session) -> dict
     )
     tasks = session.query(TaskDB).filter(TaskDB.paper_id == paper_id).all()
 
+    patient_ids = [p.id for p in patients]
+    occurrence_ids = [o.id for o in pvlinks]
+    segregation_evidence_ids = [s.id for s in seg_evidence]
+    edits = (
+        session.query(EditDB)
+        .filter(
+            _paper_edit_filter(
+                paper_id,
+                family_ids=family_ids,
+                patient_ids=patient_ids,
+                variant_ids=variant_ids,
+                occurrence_ids=occurrence_ids,
+                segregation_evidence_ids=segregation_evidence_ids,
+            )
+        )
+        .all()
+    )
+    deletions = (
+        session.query(DeletionLogDB).filter(DeletionLogDB.paper_id == paper_id).all()
+    )
+
     return {
         'paper': row_to_dict(paper_db),
         'families': [row_to_dict(r) for r in families],
@@ -197,6 +257,8 @@ def dump_paper_state(paper_id: int, paper_db: PaperDB, session: Session) -> dict
         'patient_variant_occurrences': [row_to_dict(r) for r in pvlinks],
         'segregation_evidence': [row_to_dict(r) for r in seg_evidence],
         'segregation_analysis_computed': [row_to_dict(r) for r in seg_computed],
+        'edits': [row_to_dict(r) for r in edits],
+        'deletion_log': [row_to_dict(r) for r in deletions],
         'tasks': [row_to_dict(r) for r in tasks],
     }
 
@@ -361,6 +423,21 @@ def write_snapshot(
     return path
 
 
+def write_snapshot_safe(
+    session: Session, paper_id: int, description: str | None = None
+) -> Path | None:
+    """write_snapshot, but a failure logs and returns None instead of raising.
+
+    For call sites where a snapshot is a safety net around some other action
+    (a rerun, a pipeline cycle finishing) rather than the point of the call --
+    a snapshot failure must never fail the thing it's attached to."""
+    try:
+        return write_snapshot(paper_id, session, description=description)
+    except Exception:
+        logger.exception('Failed to write extraction snapshot for paper %s', paper_id)
+        return None
+
+
 def _coerce_value(column: Column, value: object) -> object:
     if value is None:
         return None
@@ -404,6 +481,9 @@ def _delete_paper_domain_rows(session: Session, paper_id: int) -> None:
     family_ids = [
         i for (i,) in session.query(FamilyDB.id).filter(FamilyDB.paper_id == paper_id)
     ]
+    patient_ids = [
+        i for (i,) in session.query(PatientDB.id).filter(PatientDB.paper_id == paper_id)
+    ]
     phenotype_ids = [
         i
         for (i,) in session.query(PhenotypeDB.id).filter(
@@ -413,6 +493,40 @@ def _delete_paper_domain_rows(session: Session, paper_id: int) -> None:
     variant_ids = [
         i for (i,) in session.query(VariantDB.id).filter(VariantDB.paper_id == paper_id)
     ]
+    occurrence_ids = [
+        i
+        for (i,) in session.query(PatientVariantOccurrenceDB.id).filter(
+            PatientVariantOccurrenceDB.paper_id == paper_id
+        )
+    ]
+    segregation_evidence_ids = (
+        [
+            i
+            for (i,) in session.query(SegregationEvidenceDB.id).filter(
+                SegregationEvidenceDB.family_id.in_(family_ids)
+            )
+        ]
+        if family_ids
+        else []
+    )
+
+    # Edit history and the deletion log have no row of their own to cascade
+    # from for paper-level entries (the papers row is never deleted, just
+    # overwritten below), so both are deleted explicitly rather than relied
+    # on to disappear for free.
+    session.query(EditDB).filter(
+        _paper_edit_filter(
+            paper_id,
+            family_ids=family_ids,
+            patient_ids=patient_ids,
+            variant_ids=variant_ids,
+            occurrence_ids=occurrence_ids,
+            segregation_evidence_ids=segregation_evidence_ids,
+        )
+    ).delete(synchronize_session=False)
+    session.query(DeletionLogDB).filter(DeletionLogDB.paper_id == paper_id).delete(
+        synchronize_session=False
+    )
 
     session.query(TaskDB).filter(TaskDB.paper_id == paper_id).delete(
         synchronize_session=False
@@ -513,15 +627,12 @@ def restore_snapshot(
             setattr(
                 paper_db, column.name, _coerce_value(column, paper_row[column.name])
             )
-    # Entity-level edit history (patient/variant/family/occurrence/segregation
-    # fields) is cleaned up for free by CASCADE when those rows are deleted
-    # above. Paper-level fields (disease_name, disease_inheritance_mode) live
-    # on a row that's never deleted, just overwritten, so their edit history
-    # would otherwise survive a reset and misattribute the restored,
-    # extraction-original value to whoever last edited it.
-    session.query(EditDB).filter(EditDB.paper_id == paper_id).delete(
-        synchronize_session=False
-    )
+    # Edit history and the deletion log for every entity above (including
+    # paper-level edits) were deleted in _delete_paper_domain_rows and just
+    # came back in with the rest of _INSERT_ORDER, so both now match this
+    # snapshot's point in time exactly, same as every other table here --
+    # nothing left to do.
+
     paper_db.updated_by_user_id = editor.id
     paper_db.updated_at = datetime.now(timezone.utc)
     session.flush()

@@ -14,7 +14,7 @@ from lib.core.agents_init import init_agents_sdk
 from lib.core.email import send_email
 from lib.core.environment import env
 from lib.core.logging import setup_logging
-from lib.misc.snapshots import write_snapshot
+from lib.misc.snapshots import write_snapshot_safe
 from lib.models import TaskDB
 from lib.models.paper import PaperDB
 from lib.reference_data.hpo import warm_term_lookup_if_cached
@@ -133,10 +133,7 @@ def _maybe_write_snapshot(session: Session, paper_id: int) -> None:
     ]
     if not all(s == TaskStatus.COMPLETED for s in pipeline_statuses):
         return
-    try:
-        write_snapshot(paper_id, session)
-    except Exception:
-        logger.exception(f'Failed to write extraction snapshot for paper {paper_id}')
+    write_snapshot_safe(session, paper_id)
 
 
 def _maybe_notify_completion(session: Session, paper_id: int) -> None:

@@ -18,6 +18,8 @@ from lib.misc.snapshots import (
 from lib.models import (
     AnnotatedVariantDB,
     Base,
+    DeletionLogDB,
+    EditDB,
     FamilyDB,
     GeneDB,
     HarmonizedVariantDB,
@@ -31,9 +33,11 @@ from lib.models import (
     SegregationEvidenceDB,
     TaskDB,
     VariantDB,
+    record_deletion,
 )
+from lib.models.edit import record_edit
 from lib.models.patient import AgeUnit
-from lib.tasks.models import TaskStatus, TaskType
+from lib.tasks.models import TaskCreateRequest, TaskStatus, TaskType
 
 
 def test_snapshot_covers_every_paper_scoped_table():
@@ -41,18 +45,17 @@ def test_snapshot_covers_every_paper_scoped_table():
     snapshot (lib.misc.snapshots._INSERT_ORDER) or to the exclusions below."""
     from lib.misc.snapshots import _INSERT_ORDER
 
-    # chat_messages is deliberately excluded, same as the old conversations
-    # table before it: chat history is user-authored conversation, not
-    # extraction output, so a reset should not wipe or restore it.
+    # chat_messages is deliberately excluded: chat history is user-authored
+    # conversation, not extraction output, so a reset should not wipe or
+    # restore it.
     #
-    # edits (per-field curator edit history) is also deliberately excluded:
-    # it isn't extraction output either, and restoring it from a stale
-    # snapshot would misattribute edits to a state that no longer exists.
-    # Entity-scoped edit rows (patient/variant/family/occurrence/segregation)
-    # are cleaned up for free by CASCADE when those rows are deleted during a
-    # reset; paper-scoped rows are deleted explicitly in restore_snapshot
-    # since the papers row itself is never deleted, just overwritten.
-    excluded: set[str] = {'chat_messages', 'edits'}
+    # edits and deletion_log ARE snapshotted, deliberately: each is a record
+    # of something that happened to a row, and the row itself reverts with
+    # the snapshot, so the record of what happened to it should revert right
+    # along with it -- see _INSERT_ORDER. (deletion_log has no FK of its own,
+    # see its docstring, so it was never "reachable" by the walk below in the
+    # first place; it's listed here only for symmetry with edits.)
+    excluded: set[str] = {'chat_messages'}
     snapshotted = {model.__table__.name for _, model in _INSERT_ORDER} | {'papers'}
 
     reachable = {'papers'}
@@ -513,6 +516,96 @@ def test_v1_snapshot_rejected(db_session, test_user, snapshot_paper):
     path.write_text(json.dumps(data))
     with pytest.raises(SnapshotIncompatibleError):
         restore_snapshot(paper.id, path.name, db_session, test_user)
+
+
+def test_edit_history_reverts_with_snapshot(db_session, test_user, snapshot_paper):
+    """An edit is a record of a value that changed, and the value itself
+    reverts with its row -- so its history should match whichever snapshot's
+    point in time was chosen, not be unconditionally wiped every time."""
+    paper = snapshot_paper['paper']
+    p1 = snapshot_paper['p1']
+
+    path_a = write_snapshot(paper.id, db_session)
+    assert path_a is not None
+
+    record_edit(db_session, p1, 'identifier', test_user, old_value='P1')
+    p1.identifier = 'EDITED-ONCE'
+    db_session.flush()
+    path_b = write_snapshot(paper.id, db_session)
+    assert path_b is not None
+
+    record_edit(db_session, p1, 'identifier', test_user, old_value='EDITED-ONCE')
+    p1.identifier = 'EDITED-TWICE'
+    db_session.flush()
+
+    # Bulk insert/delete bypasses the ORM identity map (see reset_paper's own
+    # expire_all() in lib/api/app.py), so already-loaded objects need an
+    # explicit expire before a re-query reflects what was just restored.
+    assert restore_snapshot(paper.id, path_a.name, db_session, test_user) is True
+    db_session.expire_all()
+    restored = db_session.get(PatientDB, p1.id)
+    assert restored.identifier == 'P1'
+    assert db_session.query(EditDB).filter_by(patient_id=p1.id).count() == 0
+
+    assert restore_snapshot(paper.id, path_b.name, db_session, test_user) is True
+    db_session.expire_all()
+    restored = db_session.get(PatientDB, p1.id)
+    assert restored.identifier == 'EDITED-ONCE'
+    edits = db_session.query(EditDB).filter_by(patient_id=p1.id).all()
+    assert len(edits) == 1
+    assert edits[0].old_value == '"P1"'
+
+
+def test_deletion_log_reverts_with_snapshot(db_session, test_user, snapshot_paper):
+    """A deletion is a record of something that happened to a row, and the row
+    itself reverts with the snapshot -- so the record should match whichever
+    snapshot's point in time was chosen, same as edit history."""
+    paper = snapshot_paper['paper']
+    p2 = snapshot_paper['p2']
+
+    path_a = write_snapshot(paper.id, db_session)
+    assert path_a is not None
+
+    record_deletion(
+        db_session,
+        paper_id=paper.id,
+        entity_type='patient',
+        entity_id=p2.id,
+        identifier_snapshot=p2.identifier,
+        editor=test_user,
+    )
+    db_session.delete(p2)
+    db_session.flush()
+    path_b = write_snapshot(paper.id, db_session)
+    assert path_b is not None
+
+    assert restore_snapshot(paper.id, path_a.name, db_session, test_user) is True
+    patients = db_session.query(PatientDB).filter_by(paper_id=paper.id).all()
+    assert sorted(p.identifier for p in patients) == ['P1', 'P2']
+    assert db_session.query(DeletionLogDB).filter_by(paper_id=paper.id).count() == 0
+
+    assert restore_snapshot(paper.id, path_b.name, db_session, test_user) is True
+    patients = db_session.query(PatientDB).filter_by(paper_id=paper.id).all()
+    assert sorted(p.identifier for p in patients) == ['P1']
+    assert db_session.query(DeletionLogDB).filter_by(paper_id=paper.id).count() == 1
+
+
+def test_create_task_writes_pre_rerun_snapshot(client, db_session, snapshot_paper):
+    """A rerun's handlers delete-and-recreate rows from scratch; without a
+    snapshot taken right before it starts, any edit made since the last
+    pipeline-completion snapshot would be silently lost."""
+    paper = snapshot_paper['paper']
+    assert list_snapshots(paper.id) == []
+
+    response = client.post(
+        f'/papers/{paper.id}/tasks',
+        json=TaskCreateRequest(type=TaskType.PATIENT_DEMOGRAPHICS).model_dump(),
+    )
+    assert response.status_code == 200, response.text
+
+    snapshots = list_snapshots(paper.id)
+    assert len(snapshots) == 1
+    assert snapshots[0].description == 'Before re-running Patient Demographics'
 
 
 def test_worker_hook_writes_snapshot_when_pipeline_done(db_session, snapshot_paper):
