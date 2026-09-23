@@ -27,13 +27,25 @@ const RERUNNABLE_TASK_TYPES: TaskType[] = [
   'Phenotype Extraction', 'HPO Linking', 'Paper MONDO Linking', 'Occurrence MONDO Linking',
 ]
 
-function RerunTaskButton({ paper }: { paper: PaperSummaryResp }) {
+/* Shared by RerunTaskButton's own trigger (papers table / gene cards) and
+ * TaskTimeline's per-row rerun icon -- same dialog either way, just opened
+ * with a different task type pre-selected. Kept as one definition so the two
+ * triggers can't drift into asking for different fields. */
+function RerunTaskDialog({
+  paper,
+  open,
+  onOpenChange,
+  initialTaskType = 'PDF Parsing',
+}: {
+  paper: PaperSummaryResp
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  initialTaskType?: TaskType
+}) {
   const queryClient = useQueryClient()
-  const [open, setOpen] = useState(false)
-  const [taskType, setTaskType] = useState<TaskType>('PDF Parsing')
+  const [taskType, setTaskType] = useState<TaskType>(initialTaskType)
   const [skipSuccessors, setSkipSuccessors] = useState(false)
   const [context, setContext] = useState('')
-  const isRunning = paper.status === 'running'
 
   const mutation = useMutation({
     mutationFn: () => createTaskPapersPaperIdTasksPost({
@@ -46,13 +58,80 @@ function RerunTaskButton({ paper }: { paper: PaperSummaryResp }) {
       // papers table render. Without this the badge keeps reading Done until
       // something else happens to refetch.
       queryClient.invalidateQueries({ queryKey: ['papers'] })
+      queryClient.invalidateQueries({ queryKey: ['paper-tasks', paper.id] })
       toast.success('Task queued')
-      setOpen(false)
+      onOpenChange(false)
       setContext('')
       setSkipSuccessors(false)
     },
     onError: () => toast.error('Failed to queue task'),
   })
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        // Re-opening (e.g. a different row's icon) should show that row's type,
+        // not whatever was last picked from the dropdown.
+        if (next) setTaskType(initialTaskType)
+        onOpenChange(next)
+      }}
+    >
+      <DialogContent onClick={(e) => e.stopPropagation()}>
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-base font-semibold">Rerun Agent</h2>
+            <p className="text-sm text-muted-foreground mt-0.5">{paper.title ?? paper.filename}</p>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Task</label>
+            <Select value={taskType} onValueChange={(v) => setTaskType(v as TaskType)}>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="max-h-40">
+                {RERUNNABLE_TASK_TYPES.map(t => (
+                  <SelectItem key={t} value={t}>{t}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">
+              Additional context <span className="text-muted-foreground font-normal">(optional)</span>
+            </label>
+            <textarea
+              value={context}
+              onChange={(e) => setContext(e.target.value)}
+              placeholder="Any specific instructions for this task run..."
+              rows={3}
+              className="w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none resize-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            />
+          </div>
+          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={skipSuccessors}
+              onChange={(e) => setSkipSuccessors(e.target.checked)}
+              className="cursor-pointer"
+            />
+            Skip successor tasks
+          </label>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>
+              {mutation.isPending ? 'Queuing...' : 'Confirm Rerun'}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function RerunTaskButton({ paper }: { paper: PaperSummaryResp }) {
+  const [open, setOpen] = useState(false)
+  const isRunning = paper.status === 'running'
 
   return (
     <>
@@ -64,56 +143,7 @@ function RerunTaskButton({ paper }: { paper: PaperSummaryResp }) {
       >
         <RefreshCw className="size-4" />
       </button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <div className="space-y-4">
-            <div>
-              <h2 className="text-base font-semibold">Rerun Agent</h2>
-              <p className="text-sm text-muted-foreground mt-0.5">{paper.title ?? paper.filename}</p>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Task</label>
-              <Select value={taskType} onValueChange={(v) => setTaskType(v as TaskType)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="max-h-40">
-                  {RERUNNABLE_TASK_TYPES.map(t => (
-                    <SelectItem key={t} value={t}>{t}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">
-                Additional context <span className="text-muted-foreground font-normal">(optional)</span>
-              </label>
-              <textarea
-                value={context}
-                onChange={(e) => setContext(e.target.value)}
-                placeholder="Any specific instructions for this task run..."
-                rows={3}
-                className="w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none resize-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-              />
-            </div>
-            <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={skipSuccessors}
-                onChange={(e) => setSkipSuccessors(e.target.checked)}
-                className="cursor-pointer"
-              />
-              Skip successor tasks
-            </label>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>
-                {mutation.isPending ? 'Queuing...' : 'Confirm Rerun'}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <RerunTaskDialog paper={paper} open={open} onOpenChange={setOpen} />
     </>
   )
 }
@@ -156,4 +186,4 @@ function DeletePaperButton({ paper }: { paper: PaperSummaryResp }) {
   )
 }
 
-export { RerunTaskButton, DeletePaperButton, RERUNNABLE_TASK_TYPES }
+export { RerunTaskButton, RerunTaskDialog, DeletePaperButton, RERUNNABLE_TASK_TYPES }

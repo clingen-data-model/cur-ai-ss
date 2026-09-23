@@ -3,7 +3,7 @@
  * found none. Mirrors LinkVariantDialog's icon-button-trigger shape but
  * edits an existing row instead of creating a new link. The trigger icon
  * signals which of the two flows below this opens on: a pencil for picking a
- * term for the first time ("manual edit"), a recycle icon for replacing an
+ * term for the first time ("manual edit"), a refresh icon for replacing an
  * existing one ("re-link").
  *
  * Two ways to change the link, as separate tabs rather than one combined
@@ -17,11 +17,16 @@
  * for when the curator wants the agent to reconsider with a hint rather than
  * overriding it by hand. That queues async work on the worker, so there is
  * no immediate result here beyond a confirmation toast; the row picks up the
- * new match whenever the phenotypes list is next refetched. */
+ * new match whenever the phenotypes list is next refetched.
+ *
+ * The trigger icon for an existing link is the same RefreshCw PaperActions.tsx
+ * and TaskTimeline.tsx use for "re-run this agent" -- both open onto a re-run
+ * flow (this one via a tab, since a manual pick is also on offer), so the icon
+ * means the same thing everywhere it appears. */
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Pencil, Recycle } from 'lucide-react'
+import { Pencil, RefreshCw } from 'lucide-react'
 import {
   createTaskPapersPaperIdTasksPost,
   relinkPhenotypeHpoPapersPaperIdPhenotypesPhenotypeIdHpoPatch,
@@ -112,7 +117,7 @@ export function RelinkHpoDialog({
         }}
         className="inline-flex items-center justify-center size-7 shrink-0 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors"
       >
-        {hasExistingLink ? <Recycle className="size-3.5" /> : <Pencil className="size-3.5" />}
+        {hasExistingLink ? <RefreshCw className="size-3.5" /> : <Pencil className="size-3.5" />}
       </button>
       <Dialog
         open={open}

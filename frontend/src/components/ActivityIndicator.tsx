@@ -45,7 +45,7 @@ function PaperRow({ paper, stats }: { paper: PaperSummaryResp; stats?: TaskStats
       >
         {paper.title ?? paper.filename}
       </Link>
-      <TaskTimeline tasks={data ?? []} stats={stats} />
+      <TaskTimeline tasks={data ?? []} stats={stats} paper={paper} />
     </div>
   )
 }

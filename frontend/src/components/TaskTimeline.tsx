@@ -7,13 +7,14 @@
  * waiting on the whole pipeline. The grouping and completion rule live in
  * lib/taskTimeline; this file only renders them.
  */
-import type { CSSProperties } from 'react'
-import { Check, X } from 'lucide-react'
+import { useState, type CSSProperties } from 'react'
+import { Check, RefreshCw, X } from 'lucide-react'
 import { useNow } from '@/hooks/useNow'
 import { formatElapsedLive, taskTypeProgress } from '@/lib/taskTimeline'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { RerunTaskDialog } from '@/components/PaperActions'
 import { cn } from '@/lib/utils'
-import type { TaskResp, TaskStatsResp } from '@/api/generated/types.gen'
+import type { PaperSummaryResp, TaskResp, TaskStatsResp } from '@/api/generated/types.gen'
 import type { TaskRowProgress } from '@/lib/taskTimeline'
 
 // Same palette PipelineProgress used, keyed by the track ids in
@@ -51,7 +52,13 @@ function StatusMarker({ row, accent }: { row: TaskRowProgress; accent: string })
   return <span className="size-1.5 rounded-full bg-muted-foreground/30" />
 }
 
-function TaskRow({ row }: { row: TaskRowProgress }) {
+function TaskRow({
+  row,
+  onRerun,
+}: {
+  row: TaskRowProgress
+  onRerun: () => void
+}) {
   const accent = TRACK_ACCENT[row.trackId] ?? 'var(--color-primary)'
 
   return (
@@ -77,11 +84,25 @@ function TaskRow({ row }: { row: TaskRowProgress }) {
         )}
       </span>
 
-      {row.elapsedSeconds !== null && (
-        <span className="ml-auto shrink-0 text-xs tabular-nums text-muted-foreground">
-          {formatElapsedLive(row.elapsedSeconds)}
-        </span>
-      )}
+      <span className="ml-auto flex shrink-0 items-center gap-1.5">
+        {row.elapsedSeconds !== null && (
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {formatElapsedLive(row.elapsedSeconds)}
+          </span>
+        )}
+        <button
+          type="button"
+          disabled={row.status === 'running'}
+          title={`Re-run ${row.type}`}
+          onClick={(e) => {
+            e.stopPropagation()
+            onRerun()
+          }}
+          className="flex items-center justify-center size-5 shrink-0 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          <RefreshCw className="size-3" />
+        </button>
+      </span>
     </div>
   )
 }
@@ -89,21 +110,32 @@ function TaskRow({ row }: { row: TaskRowProgress }) {
 export function TaskTimeline({
   tasks,
   stats,
+  paper,
   className,
 }: {
   tasks: TaskResp[]
   stats?: TaskStatsResp
+  paper: PaperSummaryResp
   className?: string
 }) {
   const anyRunning = tasks.some((t) => t.status === 'Running')
   const now = useNow(anyRunning)
   const rows = taskTypeProgress(tasks, stats, now)
+  const [rerunType, setRerunType] = useState<TaskRowProgress['type'] | null>(null)
 
   return (
     <div className={cn('max-h-80 space-y-0.5 overflow-y-auto', className)}>
       {rows.map((row) => (
-        <TaskRow key={row.type} row={row} />
+        <TaskRow key={row.type} row={row} onRerun={() => setRerunType(row.type)} />
       ))}
+      <RerunTaskDialog
+        paper={paper}
+        initialTaskType={rerunType ?? undefined}
+        open={rerunType !== null}
+        onOpenChange={(open) => {
+          if (!open) setRerunType(null)
+        }}
+      />
     </div>
   )
 }
