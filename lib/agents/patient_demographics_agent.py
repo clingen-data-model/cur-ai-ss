@@ -79,6 +79,12 @@ Each field (except the *_unit fields) is an EvidenceBlock containing:
   - Unknown: relationship not specified
   - Determine relative to the provided Proband Identifier, using text descriptions and pedigree structure.
   - HARD RULE: if this patient's identifier equals the provided Proband Identifier, relationship_to_proband MUST be Proband (this keeps it consistent with the patient's proband status determined upstream).
+  - Evidence for the Proband case: this value follows from the HARD RULE above,
+    not from new text, so there is no fresh quote to give. Cite whatever
+    quote/table_id/image_id identifies this patient as the proband/index case
+    elsewhere in the paper instead of leaving quote, table_id, and image_id
+    all empty -- an evidence block with a concrete value and no source is
+    invalid regardless of why the value was determined.
 
 - twin_type (EvidenceBlock[enum: Monozygotic, Dizygotic, Unknown] or null):
   - Monozygotic: identical twins (count as 1 segregation)
