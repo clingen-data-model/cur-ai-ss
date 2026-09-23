@@ -39,6 +39,7 @@ import { UnassociatedVariantsTab } from '@/components/UnassociatedVariantsTab'
 import { PipelineGate } from '@/components/PipelineGate'
 import { DeleteIconButton } from '@/components/DeleteIconButton'
 import { RestoreSnapshotButton } from '@/components/RestoreSnapshotButton'
+import { RerunAgentsButton } from '@/components/PaperActions'
 import { apiErrorMessage } from '@/lib/apiError'
 import { TaskType } from '@/api/generated/types.gen'
 import { PedigreeTab } from '@/components/PedigreeTab'
@@ -356,6 +357,7 @@ export function ExtractionPage() {
             <h1 className="text-xl font-semibold mt-1">{paper?.title ?? paper?.filename}</h1>
           </div>
           <div className="flex items-center gap-2">
+            {paper && <RerunAgentsButton paper={paper} />}
             {paper && <RestoreSnapshotButton paper={paper} />}
             <Button
               variant="outline"

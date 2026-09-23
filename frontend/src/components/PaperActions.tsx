@@ -15,6 +15,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogMedia, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import type { PaperSummaryResp, TaskType } from '@/api/generated/types.gen'
 
+/* The fields RerunTaskDialog actually needs -- narrower than PaperSummaryResp
+ * so it can also take a PaperResp (the paper-detail page's shape, which has
+ * no gene_symbol/status/thumbnail_url) without a fake/partial object. */
+type RerunnablePaper = Pick<PaperSummaryResp, 'id' | 'title' | 'filename'>
+
 // Every task type is rerunnable except 'General Paper Question', which is only
 // ever created ad hoc by the chat router. Mirrors lib/ui/paper/header.py.
 const RERUNNABLE_TASK_TYPES: TaskType[] = [
@@ -37,7 +42,7 @@ function RerunTaskDialog({
   onOpenChange,
   initialTaskType = 'PDF Parsing',
 }: {
-  paper: PaperSummaryResp
+  paper: RerunnablePaper
   open: boolean
   onOpenChange: (open: boolean) => void
   initialTaskType?: TaskType
@@ -148,6 +153,23 @@ function RerunTaskButton({ paper }: { paper: PaperSummaryResp }) {
   )
 }
 
+/* Labeled variant of RerunTaskButton -- same RefreshCw icon and dialog, but
+ * with a text label, for the top of the paper-detail page rather than a
+ * compact icon slot in a table row or popover. */
+function RerunAgentsButton({ paper }: { paper: RerunnablePaper }) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <>
+      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+        <RefreshCw className="h-4 w-4 mr-2" />
+        Re-run Agents
+      </Button>
+      <RerunTaskDialog paper={paper} open={open} onOpenChange={setOpen} />
+    </>
+  )
+}
+
 function DeletePaperButton({ paper }: { paper: PaperSummaryResp }) {
   const queryClient = useQueryClient()
   const mutation = useMutation({
@@ -186,4 +208,4 @@ function DeletePaperButton({ paper }: { paper: PaperSummaryResp }) {
   )
 }
 
-export { RerunTaskButton, RerunTaskDialog, DeletePaperButton, RERUNNABLE_TASK_TYPES }
+export { RerunTaskButton, RerunAgentsButton, RerunTaskDialog, DeletePaperButton, RERUNNABLE_TASK_TYPES }
