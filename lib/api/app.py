@@ -32,6 +32,7 @@ from pydantic import BaseModel
 from sqlalchemy import delete, func, select, union
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm.attributes import flag_modified
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
@@ -114,6 +115,7 @@ from lib.models import (
     HPOTerm,
     HumanEvidenceBlock,
     LoginRequest,
+    OccurrencePairRequest,
     PaperDB,
     PaperResetRequest,
     PaperResetResp,
@@ -152,7 +154,12 @@ from lib.models import (
     VariantResp,
     VariantUpdateRequest,
 )
-from lib.models.base import Base, _editor_display_name, manual_evidence_block
+from lib.models.base import (
+    Base,
+    PatchModel,
+    _editor_display_name,
+    manual_evidence_block,
+)
 from lib.models.deletion_log import DeletionLogDB, DeletionLogResp, record_deletion
 from lib.models.edit import EditDB, latest_edits_for, record_edits
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
@@ -2067,6 +2074,141 @@ def update_occurrence(
     )
 
 
+def _clear_pairing(row: PatientVariantOccurrenceDB) -> None:
+    row.paired_variant_link_id = None
+    row.paired_variant_confidence = None
+    row.paired_variant_confidence_reasoning = None
+    flag_modified(row, 'paired_variant_confidence_reasoning')
+
+
+@app.patch(
+    '/papers/{paper_id}/occurrences/{occurrence_id}/pair',
+    response_model=list[PatientVariantOccurrenceResp],
+)
+def pair_occurrence(
+    paper_id: int,
+    occurrence_id: int,
+    pair_request: OccurrencePairRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """Manually pair (or, with paired_occurrence_id=None, unpair) this
+    occurrence with another occurrence of the same patient, as a
+    curator-confirmed compound-het pair. Unlike update_occurrence, this
+    mutates up to two rows symmetrically (the pairing FK points both ways),
+    plus a stale partner on either side when re-pairing, so it can't go
+    through PatchModel.apply_to's single-row mechanism -- mirrors
+    relink_phenotype_hpo in shape (a dedicated PATCH for a relationship the
+    generic patch endpoint can't express) but returns every row it touched
+    rather than just the primary one, since the client needs to see a former
+    partner come back unpaired too."""
+    from lib.models.patient_variant_occurrences import CompoundHetConfidence
+
+    occurrence_a = (
+        session.query(PatientVariantOccurrenceDB)
+        .filter(
+            PatientVariantOccurrenceDB.id == occurrence_id,
+            PatientVariantOccurrenceDB.paper_id == paper_id,
+        )
+        .one_or_none()
+    )
+    if not occurrence_a:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Occurrence not found'
+        )
+
+    affected: list[PatientVariantOccurrenceDB] = [occurrence_a]
+
+    if pair_request.paired_occurrence_id is None:
+        if occurrence_a.paired_variant_link_id is not None:
+            old_partner = session.get(
+                PatientVariantOccurrenceDB, occurrence_a.paired_variant_link_id
+            )
+            _clear_pairing(occurrence_a)
+            if old_partner:
+                _clear_pairing(old_partner)
+                affected.append(old_partner)
+    else:
+        if pair_request.paired_occurrence_id == occurrence_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail='Cannot pair an occurrence with itself',
+            )
+        occurrence_b = (
+            session.query(PatientVariantOccurrenceDB)
+            .filter(
+                PatientVariantOccurrenceDB.id == pair_request.paired_occurrence_id,
+                PatientVariantOccurrenceDB.paper_id == paper_id,
+            )
+            .one_or_none()
+        )
+        if not occurrence_b:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail='Partner occurrence not found',
+            )
+        if occurrence_b.patient_id != occurrence_a.patient_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail='Paired occurrences must belong to the same patient',
+            )
+
+        if occurrence_a.paired_variant_link_id not in (None, occurrence_b.id):
+            old_a_partner = session.get(
+                PatientVariantOccurrenceDB, occurrence_a.paired_variant_link_id
+            )
+            if old_a_partner:
+                _clear_pairing(old_a_partner)
+                affected.append(old_a_partner)
+        if occurrence_b.paired_variant_link_id not in (None, occurrence_a.id):
+            old_b_partner = session.get(
+                PatientVariantOccurrenceDB, occurrence_b.paired_variant_link_id
+            )
+            if old_b_partner:
+                _clear_pairing(old_b_partner)
+                affected.append(old_b_partner)
+
+        reasoning_block = ReasoningBlock[CompoundHetConfidence](
+            value=CompoundHetConfidence.confirmed,
+            reasoning='Manually paired by curator.',
+            manually_entered=True,
+        ).model_dump(mode='json')
+
+        occurrence_a.paired_variant_link_id = occurrence_b.id
+        occurrence_b.paired_variant_link_id = occurrence_a.id
+        occurrence_a.paired_variant_confidence = CompoundHetConfidence.confirmed.value
+        occurrence_b.paired_variant_confidence = CompoundHetConfidence.confirmed.value
+        occurrence_a.paired_variant_confidence_reasoning = reasoning_block
+        occurrence_b.paired_variant_confidence_reasoning = reasoning_block
+        flag_modified(occurrence_a, 'paired_variant_confidence_reasoning')
+        flag_modified(occurrence_b, 'paired_variant_confidence_reasoning')
+        affected.append(occurrence_b)
+
+    for row in affected:
+        PatchModel.stamp_updated_by(row, current_user)
+        row.updated_at = func.now()
+
+    _touch_paper(session, paper_id, current_user)
+    session.commit()
+    for row in affected:
+        session.refresh(row)
+
+    patients_by_id = {
+        row.patient_id: session.get(PatientDB, row.patient_id) for row in affected
+    }
+    resps = []
+    for row in affected:
+        patient = patients_by_id[row.patient_id]
+        resps.append(
+            _patient_variant_occurrence_to_resp(
+                row,
+                patient_identifier=patient.identifier if patient else '',
+                session=session,
+            )
+        )
+    return resps
+
+
 def _patient_variant_occurrence_to_resp(
     row: PatientVariantOccurrenceDB,
     patient_identifier: str,
@@ -2097,7 +2239,9 @@ def _patient_variant_occurrence_to_resp(
         ],
         testing_methods_note=row.testing_methods_note,
         disease_name=row.disease_name,
-        disease_name_evidence=EvidenceBlock.model_validate(row.disease_name_evidence)
+        disease_name_evidence=HumanEvidenceBlock.model_validate(
+            row.disease_name_evidence
+        )
         if row.disease_name_evidence
         else None,
         mondo=_mondo_reasoning_block(
