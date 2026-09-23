@@ -104,19 +104,20 @@ export function PaperProgressPopover({
           {children}
         </PopoverTrigger>
         <PopoverContent className="w-80 space-y-3">
-          <p className="text-sm font-medium leading-tight truncate">
-            {paper.title ?? paper.filename}
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
-            disabled={isRunning}
-            onClick={() => setRerunOpen(true)}
-          >
-            <RefreshCw className="size-3.5" />
-            Re-run agents
-          </Button>
+          <div className="flex items-center gap-1.5">
+            <p className="flex-1 truncate text-sm font-medium leading-tight">
+              {paper.title ?? paper.filename}
+            </p>
+            <button
+              type="button"
+              disabled={isRunning}
+              title="Re-run agents"
+              onClick={() => setRerunOpen(true)}
+              className="flex items-center justify-center size-6 shrink-0 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <RefreshCw className="size-3.5" />
+            </button>
+          </div>
           {tasksQuery.isPending ? (
             <div className="flex justify-center py-6">
               <Spinner />
