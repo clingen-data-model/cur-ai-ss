@@ -110,7 +110,9 @@ def model_settings_for(name: str, *, effort: str | None = None) -> ModelSettings
             {'location': 'message', 'index': -1, 'control': _CACHE_CONTROL},
         ]
     }
-    if effort is not None and AnthropicConfig._model_supports_effort_param(bare, provider):
+    if effort is not None and AnthropicConfig._model_supports_effort_param(
+        bare, provider
+    ):
         extra_args['output_config'] = {'effort': effort}
     return ModelSettings(extra_args=extra_args)
 
