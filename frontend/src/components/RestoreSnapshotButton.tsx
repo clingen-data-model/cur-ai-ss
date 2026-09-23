@@ -140,7 +140,7 @@ function RestoreSnapshotDialog({
                       <SelectItem
                         key={s.name}
                         value={s.name}
-                        className="items-start py-1.5 text-xs [&_span]:whitespace-normal [&_span]:break-words"
+                        className="items-start py-1.5 text-xs [&_span]:min-w-0 [&_span]:shrink [&_span]:whitespace-normal [&_span]:break-words"
                       >
                         {formatSnapshotLabel(s)}
                       </SelectItem>
@@ -150,7 +150,7 @@ function RestoreSnapshotDialog({
               </div>
               <p className="text-sm text-muted-foreground">
                 ⚠️ Resetting cannot be undone. Task history reverts with the
-                snapshot; PDF highlights are kept.
+                snapshot.
               </p>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => onOpenChange(false)}>
