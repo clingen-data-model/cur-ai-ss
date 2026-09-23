@@ -1526,6 +1526,36 @@ def test_send_chat_message_queues_task(client, seeded_paper):
     assert reply['content'] == 'Queued the "Variant Extraction" task.'
 
 
+def test_send_chat_message_uses_full_chat_instructions_and_all_tools(
+    client, seeded_paper
+):
+    """Regression: make_chat_agent once passed BASE_SYSTEM_INSTRUCTIONS (the
+    generic structured-extraction prompt) instead of CHAT_AGENT_INSTRUCTIONS,
+    so the ACTIONS/QUESTIONS routing logic silently never reached the model."""
+    from lib.agents.chat_agent import CHAT_AGENT_INSTRUCTIONS
+
+    mock_result = MagicMock()
+    mock_result.final_output = 'irrelevant'
+    captured = {}
+
+    async def fake_run(agent, message, *, context=None, **kwargs):
+        captured['agent'] = agent
+        return mock_result
+
+    with patch('agents.Runner.run', side_effect=fake_run):
+        response = client.post(
+            f'/papers/{seeded_paper.id}/chat/messages',
+            json={'message': 'anything'},
+        )
+    assert response.status_code == 200
+    assert captured['agent'].instructions == CHAT_AGENT_INSTRUCTIONS
+    assert {t.name for t in captured['agent'].tools} == {
+        'list_paper_entities',
+        'ask_extraction_agent',
+        'queue_task',
+    }
+
+
 def test_list_chat_messages(client, db_session, seeded_paper, test_user):
     db_session.add_all(
         [
