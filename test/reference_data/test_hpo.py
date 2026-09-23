@@ -163,6 +163,47 @@ def test_find_matching_hpo_terms_uses_the_cached_lookup_by_default(monkeypatch) 
     assert len(build_calls) == 1
 
 
+def test_warm_term_lookup_if_cached_skips_when_ontology_file_is_absent(
+    monkeypatch, tmp_path
+) -> None:
+    """A cold CAA_ROOT (every test run, a brand-new deployment) must never
+    trigger a network download at startup -- warming should no-op and leave
+    the lazy build-on-first-use path for get_term_lookup() to handle."""
+    monkeypatch.setattr(hpo_module, '_term_lookup', None)
+    monkeypatch.setattr(hpo_module, 'ontology_path', lambda: tmp_path / 'missing.json')
+
+    def fail_if_called() -> defaultdict[str, list[hpotk.model._term_id.DefaultTermId]]:
+        raise AssertionError(
+            'build_term_lookup should not run when the ontology is not cached'
+        )
+
+    monkeypatch.setattr(hpo_module, 'build_term_lookup', fail_if_called)
+
+    hpo_module.warm_term_lookup_if_cached()
+
+    assert hpo_module._term_lookup is None
+
+
+def test_warm_term_lookup_if_cached_builds_when_ontology_file_is_present(
+    monkeypatch, tmp_path
+) -> None:
+    """Once the ontology is already on disk, warming should build the lookup
+    eagerly so the first real search request doesn't pay for it."""
+    monkeypatch.setattr(hpo_module, '_term_lookup', None)
+    cached_path = tmp_path / 'hp.json'
+    cached_path.write_text('{}')
+    monkeypatch.setattr(hpo_module, 'ontology_path', lambda: cached_path)
+
+    fake_lookup: defaultdict[str, list[hpotk.model._term_id.DefaultTermId]] = (
+        defaultdict(list, {'seizures': [hpotk.TermId.from_curie('HP:0000005')]})
+    )
+    monkeypatch.setattr(hpo_module, 'build_term_lookup', lambda: fake_lookup)
+
+    hpo_module.warm_term_lookup_if_cached()
+
+    assert hpo_module._term_lookup is fake_lookup
+
+
 def test_find_matching_hpo_terms_synonym_match(
     mock_term_lookup: defaultdict[str, list[hpotk.model._term_id.DefaultTermId]],
 ) -> None:

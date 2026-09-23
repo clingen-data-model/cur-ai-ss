@@ -17,6 +17,7 @@ from lib.core.logging import setup_logging
 from lib.misc.snapshots import write_snapshot
 from lib.models import TaskDB
 from lib.models.paper import PaperDB
+from lib.reference_data.hpo import warm_term_lookup_if_cached
 from lib.tasks.agent_session import agent_session
 from lib.tasks.handlers import TASK_HANDLERS
 from lib.tasks.misc import enqueue_successors
@@ -43,6 +44,11 @@ DEFAULT_CONCURRENCY = 20
 setup_logging()
 init_agents_sdk()
 logger = logging.getLogger(__name__)
+
+try:
+    warm_term_lookup_if_cached()
+except Exception:
+    logger.warning('Failed to warm the HPO term lookup cache at startup', exc_info=True)
 
 
 def _signal_handler(sig: int, frame: FrameType | None) -> None:

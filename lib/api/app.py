@@ -172,7 +172,11 @@ from lib.models.stats import (
     TaskStatsResp,
     TrackDurationStat,
 )
-from lib.reference_data.hpo import find_matching_hpo_terms, get_ontology
+from lib.reference_data.hpo import (
+    find_matching_hpo_terms,
+    get_ontology,
+    warm_term_lookup_if_cached,
+)
 from lib.tasks import (
     TaskCreateRequest,
     TaskResp,
@@ -199,6 +203,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     setup_logging()  # NB: run setup logging after the alembic setup to prevent it from overriding.
     init_agents_sdk()
+    try:
+        await asyncio.to_thread(warm_term_lookup_if_cached)
+    except Exception:
+        logger.warning(
+            'Failed to warm the HPO term lookup cache at startup', exc_info=True
+        )
     yield
 
 

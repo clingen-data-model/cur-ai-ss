@@ -94,6 +94,24 @@ def get_term_lookup() -> defaultdict[str, list[hpotk.model._term_id.DefaultTermI
     return _term_lookup
 
 
+def warm_term_lookup_if_cached() -> None:
+    """Eagerly build the term lookup at process startup, but only when the
+    ontology is already cached on disk.
+
+    Called from both the API's lifespan() and the worker's module-level
+    startup, so the first real /hpo/search request or search_hpo_terms tool
+    call doesn't pay for building the ~19k-term lookup. Skipped when the
+    ontology file isn't on disk yet (a cold CAA_ROOT -- every test run
+    against .env.test, or a brand-new deployment) so that warming never turns
+    into an eager network download at startup; get_term_lookup() already
+    falls back to building lazily on first use in that case, same as before
+    this existed.
+    """
+    if not ontology_path().exists():
+        return
+    get_term_lookup()
+
+
 def find_matching_hpo_terms(
     phenotype_text: str,
     limit: int = 10,
