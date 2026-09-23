@@ -140,7 +140,7 @@ function RestoreSnapshotDialog({
                       <SelectItem
                         key={s.name}
                         value={s.name}
-                        className="items-start py-1.5 text-xs [&_span]:whitespace-normal [&_span]:break-words"
+                        className="items-start py-1.5 text-xs [&_span]:min-w-0 [&_span]:shrink [&_span]:whitespace-normal [&_span]:break-words"
                       >
                         {formatSnapshotLabel(s)}
                       </SelectItem>
