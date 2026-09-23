@@ -27,10 +27,10 @@ const RERUNNABLE_TASK_TYPES: TaskType[] = [
   'Phenotype Extraction', 'HPO Linking', 'Paper MONDO Linking', 'Occurrence MONDO Linking',
 ]
 
-/* Shared by RerunTaskButton's own trigger (papers table / gene cards) and
- * TaskTimeline's per-row rerun icon -- same dialog either way, just opened
- * with a different task type pre-selected. Kept as one definition so the two
- * triggers can't drift into asking for different fields. */
+/* Shared by RerunTaskButton's own trigger (papers table / gene cards) and the
+ * "Re-run agents" button atop the task-timeline popovers -- same dialog
+ * either way. Kept as one definition so the two triggers can't drift into
+ * asking for different fields. */
 function RerunTaskDialog({
   paper,
   open,

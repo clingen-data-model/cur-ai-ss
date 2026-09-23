@@ -7,9 +7,10 @@
  * "0 extracting" would be noise occupying the header for the state it spends
  * almost all its time in.
  */
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
-import { Loader2 } from 'lucide-react'
+import { Loader2, RefreshCw } from 'lucide-react'
 import {
   getTaskStatsStatsGet,
   listActivePapersPapersActiveGet,
@@ -17,6 +18,7 @@ import {
 } from '@/api/generated'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { TaskTimeline } from '@/components/TaskTimeline'
+import { RerunTaskDialog } from '@/components/PaperActions'
 import type { PaperSummaryResp, TaskStatsResp } from '@/api/generated/types.gen'
 
 // Polled, so the cadence is a real cost decision. The worker claims work every
@@ -26,6 +28,7 @@ const POLL_WHILE_ACTIVE_MS = 10_000
 const POLL_WHILE_IDLE_MS = 60_000
 
 function PaperRow({ paper, stats }: { paper: PaperSummaryResp; stats?: TaskStatsResp }) {
+  const [rerunOpen, setRerunOpen] = useState(false)
   const { data } = useQuery({
     queryKey: ['paper-tasks', paper.id],
     queryFn: () =>
@@ -38,14 +41,25 @@ function PaperRow({ paper, stats }: { paper: PaperSummaryResp; stats?: TaskStats
 
   return (
     <div className="space-y-1.5 py-1.5">
-      <Link
-        to="/papers/$paperId/extraction"
-        params={{ paperId: String(paper.id) }}
-        className="block truncate text-sm font-medium hover:underline underline-offset-4"
-      >
-        {paper.title ?? paper.filename}
-      </Link>
-      <TaskTimeline tasks={data ?? []} stats={stats} paper={paper} />
+      <div className="flex items-center gap-1.5">
+        <Link
+          to="/papers/$paperId/extraction"
+          params={{ paperId: String(paper.id) }}
+          className="block flex-1 truncate text-sm font-medium hover:underline underline-offset-4"
+        >
+          {paper.title ?? paper.filename}
+        </Link>
+        <button
+          type="button"
+          title="Re-run agents"
+          onClick={() => setRerunOpen(true)}
+          className="flex items-center justify-center size-6 shrink-0 rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors"
+        >
+          <RefreshCw className="size-3.5" />
+        </button>
+      </div>
+      <TaskTimeline tasks={data ?? []} stats={stats} />
+      <RerunTaskDialog paper={paper} open={rerunOpen} onOpenChange={setRerunOpen} />
     </div>
   )
 }

@@ -9,6 +9,7 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { RefreshCw } from 'lucide-react'
 import { getTaskStatsStatsGet, listTasksPapersPaperIdTasksGet } from '@/api/generated'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
@@ -16,6 +17,7 @@ import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { TaskTimeline } from '@/components/TaskTimeline'
 import { TaskDAG } from '@/components/TaskDAG'
+import { RerunTaskDialog } from '@/components/PaperActions'
 import type { PaperSummaryResp } from '@/api/generated/types.gen'
 
 /** Fetches a paper's tasks on demand, so the list response need not carry them.
@@ -66,6 +68,8 @@ export function PaperProgressPopover({
 }) {
   const [open, setOpen] = useState(false)
   const [dagOpen, setDagOpen] = useState(false)
+  const [rerunOpen, setRerunOpen] = useState(false)
+  const isRunning = paper.status === 'running'
 
   const tasksQuery = useQuery({
     queryKey: ['paper-tasks', paper.id],
@@ -103,6 +107,16 @@ export function PaperProgressPopover({
           <p className="text-sm font-medium leading-tight truncate">
             {paper.title ?? paper.filename}
           </p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            disabled={isRunning}
+            onClick={() => setRerunOpen(true)}
+          >
+            <RefreshCw className="size-3.5" />
+            Re-run agents
+          </Button>
           {tasksQuery.isPending ? (
             <div className="flex justify-center py-6">
               <Spinner />
@@ -110,7 +124,7 @@ export function PaperProgressPopover({
           ) : tasksQuery.isError ? (
             <p className="text-sm text-destructive">Could not load progress.</p>
           ) : (
-            <TaskTimeline tasks={tasksQuery.data ?? []} stats={statsQuery.data} paper={paper} />
+            <TaskTimeline tasks={tasksQuery.data ?? []} stats={statsQuery.data} />
           )}
           <Button
             variant="outline"
@@ -125,6 +139,8 @@ export function PaperProgressPopover({
           </Button>
         </PopoverContent>
       </Popover>
+
+      <RerunTaskDialog paper={paper} open={rerunOpen} onOpenChange={setRerunOpen} />
 
       <Dialog open={dagOpen} onOpenChange={setDagOpen}>
         <DialogContent className="!w-[32vw] !max-w-none h-[90vh]">
