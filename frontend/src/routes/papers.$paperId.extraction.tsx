@@ -26,6 +26,7 @@ import {
   EditableInheritanceCell,
   EditableTestingMethodsCell,
   EditableZygosityCell,
+  MondoDiseaseCell,
 } from '@/components/OccurrenceEditableCells'
 import { ConfidenceBadge } from '@/components/ConfidenceBadge'
 import { EvidencePopover } from '@/components/EvidencePopover'
@@ -221,6 +222,12 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
       cell: ({ row }) => (
         <EditableDiseaseNameCell paperId={paperId} occurrence={row.original.occurrence} />
       ),
+    })
+
+    cols.push({
+      id: 'mondo',
+      header: 'MONDO Disease',
+      cell: ({ row }) => <MondoDiseaseCell occurrence={row.original.occurrence} />,
     })
 
     cols.push({
