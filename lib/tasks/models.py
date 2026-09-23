@@ -1,3 +1,4 @@
+from collections import defaultdict
 from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
@@ -146,6 +147,14 @@ TERMINAL_TASK_TYPES: frozenset[TaskType] = frozenset(
     t for t in TaskType if not TASK_SUCCESSORS.get(t)
 )
 
+# Reverse of TASK_SUCCESSORS: a type's direct predecessor(s). Lets a caller ask
+# "has everything that could ever create more of these landed yet" without
+# walking the whole DAG itself.
+PREDECESSOR_TASK_TYPES: dict[TaskType, list[TaskType]] = defaultdict(list)
+for _predecessor, _successors in TASK_SUCCESSORS.items():
+    for _successor in _successors:
+        PREDECESSOR_TASK_TYPES[_successor].append(_predecessor)
+
 
 class TaskDB(Base):
     __tablename__ = 'tasks'
@@ -203,17 +212,6 @@ class TaskDB(Base):
         Boolean, nullable=False, default=False, server_default='0'
     )
     additional_context: Mapped[str | None] = mapped_column(String, nullable=True)
-    # Which run this task belongs to: one user action and everything
-    # enqueue_successors creates from it. A fresh upload starts one, and so does
-    # every re-run -- so a paper accumulates many over its life.
-    #
-    # Exists because a paper's task list is not a run. Ancestors survive a
-    # re-run (invalidate_descendants only clears downstream), so rows from
-    # weeks apart sit side by side, and "when did this start" read from the
-    # oldest of them is the wrong moment. Inferring runs from idle gaps worked
-    # on today's data but is a guess about scheduling that a slow agent or two
-    # concurrent papers would break.
-    run_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
 
     # When the worker last moved this task to RUNNING. NULL until it does, and
     # re-stamped on a retry, so it always describes the attempt that produced
@@ -274,7 +272,6 @@ class TaskResp(BaseModel):
     variant_id: int | None
     phenotype_id: int | None
     patient_variant_occurrence_id: int | None
-    run_id: str | None = None
     started_at: UtcDatetime | None = None
     updated_at: UtcDatetime
     updated_by_user_id: int | None = None
