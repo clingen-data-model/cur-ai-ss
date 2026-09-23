@@ -11,6 +11,8 @@ from lib.models import HpoCandidate
 
 # Lazy-loaded ontology
 _ontology: hpotk.MinimalOntology | None = None
+# Lazy-loaded name/synonym -> HPO id lookup, built from the ontology above
+_term_lookup: defaultdict[str, list[hpotk.model._term_id.DefaultTermId]] | None = None
 
 MAX_AGE_S = 7 * 24 * 60 * 60  # 7 days
 
@@ -57,6 +59,14 @@ def get_ontology() -> hpotk.MinimalOntology:
 
 
 def build_term_lookup() -> defaultdict[str, list[hpotk.model._term_id.DefaultTermId]]:
+    """Build the name/synonym -> HPO id lookup fresh from the ontology.
+
+    Iterates every one of the ~19,000 HPO terms plus their synonyms, so this
+    is the expensive step -- callers wanting the normal cached behavior
+    should use get_term_lookup() instead. Kept as its own function for
+    callers that genuinely want a fresh build (there are none in this repo
+    today; it exists mainly so get_term_lookup() has something to wrap and
+    tests can exercise the two steps separately)."""
     hpo = get_ontology()
     term_lookup = defaultdict(list)
     for term in hpo.terms:
@@ -66,6 +76,22 @@ def build_term_lookup() -> defaultdict[str, list[hpotk.model._term_id.DefaultTer
         for syn in term.synonyms:
             term_lookup[syn.name.lower()].append(term.identifier)
     return term_lookup
+
+
+def get_term_lookup() -> defaultdict[str, list[hpotk.model._term_id.DefaultTermId]]:
+    """Build and cache the term lookup, same lifetime as get_ontology()'s cache.
+
+    Before this existed, every call to find_matching_hpo_terms() with no
+    term_lookup passed in -- every /hpo/search request from the UI combobox,
+    and every search_hpo_terms tool call the HPO linking agent's tool loop
+    makes -- rebuilt this from scratch: a full pass over every HPO term and
+    synonym. That is the dominant cost in a search request (the ontology
+    object itself was already cached), and it ran on every keystroke-driven
+    search, not just the first one per process."""
+    global _term_lookup
+    if _term_lookup is None:
+        _term_lookup = build_term_lookup()
+    return _term_lookup
 
 
 def find_matching_hpo_terms(
@@ -97,7 +123,7 @@ def find_matching_hpo_terms(
     matching too many queries.
     """
     if not term_lookup:
-        term_lookup = build_term_lookup()
+        term_lookup = get_term_lookup()
 
     query = phenotype_text.lower()
     all_terms = list(term_lookup.keys())

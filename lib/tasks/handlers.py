@@ -160,7 +160,7 @@ from lib.models.variant import (
     VariantExtractionOutput,
     is_harmonized,
 )
-from lib.reference_data.hpo import build_term_lookup, find_matching_hpo_terms
+from lib.reference_data.hpo import find_matching_hpo_terms
 from lib.reference_data.mondo import get_mondo_term
 from lib.tasks.agent_session import agent_session
 from lib.tasks.models import TaskType
@@ -1494,10 +1494,7 @@ async def handle_hpo_linking(task_id: int) -> None:
         if not phenotype_row:
             return
 
-        term_lookup = build_term_lookup()
-        candidates = find_matching_hpo_terms(
-            str(phenotype_row.concept), term_lookup=term_lookup
-        )
+        candidates = find_matching_hpo_terms(str(phenotype_row.concept))
 
         phenotype_data = {
             'phenotype_id': phenotype_row.id,

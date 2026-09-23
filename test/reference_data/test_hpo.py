@@ -3,6 +3,7 @@ from collections import defaultdict
 import hpotk
 import pytest
 
+import lib.reference_data.hpo as hpo_module
 from lib.reference_data.hpo import find_matching_hpo_terms
 
 
@@ -116,6 +117,50 @@ def test_find_matching_hpo_terms_result_structure(
         assert isinstance(item.name, str)
         assert isinstance(item.similarity_score, float)
         assert 0 <= item.similarity_score <= 100
+
+
+def test_get_term_lookup_builds_once_and_caches(monkeypatch) -> None:
+    """The whole point of the cache: /hpo/search shouldn't rebuild the
+    ~19k-term lookup on every keystroke, and the HPO linking agent's tool
+    loop shouldn't rebuild it on every search_hpo_terms call either."""
+    monkeypatch.setattr(hpo_module, '_term_lookup', None)
+    build_calls = []
+    fake_lookup: defaultdict[str, list[hpotk.model._term_id.DefaultTermId]] = (
+        defaultdict(list, {'seizures': [hpotk.TermId.from_curie('HP:0000005')]})
+    )
+
+    def fake_build() -> defaultdict[str, list[hpotk.model._term_id.DefaultTermId]]:
+        build_calls.append(1)
+        return fake_lookup
+
+    monkeypatch.setattr(hpo_module, 'build_term_lookup', fake_build)
+
+    first = hpo_module.get_term_lookup()
+    second = hpo_module.get_term_lookup()
+
+    assert first is second is fake_lookup
+    assert len(build_calls) == 1
+
+
+def test_find_matching_hpo_terms_uses_the_cached_lookup_by_default(monkeypatch) -> None:
+    """Calling without a term_lookup (as every real caller does) should go
+    through the cache rather than building fresh each time."""
+    monkeypatch.setattr(hpo_module, '_term_lookup', None)
+    build_calls = []
+    fake_lookup: defaultdict[str, list[hpotk.model._term_id.DefaultTermId]] = (
+        defaultdict(list, {'seizures': [hpotk.TermId.from_curie('HP:0000005')]})
+    )
+
+    def fake_build() -> defaultdict[str, list[hpotk.model._term_id.DefaultTermId]]:
+        build_calls.append(1)
+        return fake_lookup
+
+    monkeypatch.setattr(hpo_module, 'build_term_lookup', fake_build)
+
+    hpo_module.find_matching_hpo_terms('seizures')
+    hpo_module.find_matching_hpo_terms('seizures')
+
+    assert len(build_calls) == 1
 
 
 def test_find_matching_hpo_terms_synonym_match(
