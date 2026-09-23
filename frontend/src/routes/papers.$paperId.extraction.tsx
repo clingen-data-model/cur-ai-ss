@@ -98,6 +98,8 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
 
   const expanded: ExpandedState = expandedCell ? { [expandedCell.rowId]: true } : {}
 
+  const hasPairedVariants = useMemo(() => rows.some((r) => r.pairedVariant), [rows])
+
   const columns: ColumnDef<OccurrenceRow>[] = useMemo(() => {
     const cols: ColumnDef<OccurrenceRow>[] = [
       {
@@ -166,33 +168,25 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
       },
     ]
 
-    cols.push({
-      id: 'paired_variant',
-      header: 'Paired Variant',
-      accessorFn: (row) => row.pairedVariant?.variant_description ?? '',
-      cell: ({ row }) => {
-        const occurrence = row.original.occurrence
-        const siblingOccurrences = rows.filter(
-          (r) =>
-            r.occurrence.patient_id === occurrence.patient_id &&
-            r.occurrence.id !== occurrence.id,
-        )
-        return (
-          <div className="flex items-center gap-1">
-            <span>{row.original.pairedVariant?.variant_description ?? '—'}</span>
-            {occurrence.paired_variant_confidence && (
-              <ConfidenceBadge confidence={occurrence.paired_variant_confidence} />
-            )}
-            <EvidencePopover block={occurrence.paired_variant_confidence_reasoning} />
-            <PairOccurrenceDialog
-              paperId={paperId}
-              occurrence={occurrence}
-              siblingOccurrences={siblingOccurrences}
-            />
-          </div>
-        )
-      },
-    })
+    if (hasPairedVariants) {
+      cols.push({
+        id: 'paired_variant',
+        header: 'Paired Variant',
+        accessorFn: (row) => row.pairedVariant?.variant_description ?? '',
+        cell: ({ row }) => {
+          const occurrence = row.original.occurrence
+          return (
+            <div className="flex items-center gap-1">
+              <span>{row.original.pairedVariant?.variant_description ?? '—'}</span>
+              {occurrence.paired_variant_confidence && (
+                <ConfidenceBadge confidence={occurrence.paired_variant_confidence} />
+              )}
+              <EvidencePopover block={occurrence.paired_variant_confidence_reasoning} />
+            </div>
+          )
+        },
+      })
+    }
 
     cols.push(
       {
@@ -230,19 +224,34 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
     cols.push({
       id: 'actions',
       header: '',
-      size: 40,
+      size: 64,
       enableSorting: false,
-      cell: ({ row }) => (
-        <DeleteIconButton
-          title="Delete occurrence?"
-          description="This will permanently delete this patient/variant link. This cannot be undone."
-          onDelete={() => deleteMutation.mutate(row.original.occurrence.id)}
-        />
-      ),
+      cell: ({ row }) => {
+        const occurrence = row.original.occurrence
+        const siblingOccurrences = rows.filter(
+          (r) =>
+            r.occurrence.patient_id === occurrence.patient_id &&
+            r.occurrence.id !== occurrence.id,
+        )
+        return (
+          <div className="flex items-center gap-0.5">
+            <PairOccurrenceDialog
+              paperId={paperId}
+              occurrence={occurrence}
+              siblingOccurrences={siblingOccurrences}
+            />
+            <DeleteIconButton
+              title="Delete occurrence?"
+              description="This will permanently delete this patient/variant link. This cannot be undone."
+              onDelete={() => deleteMutation.mutate(occurrence.id)}
+            />
+          </div>
+        )
+      },
     })
 
     return cols
-  }, [rows, paperId, expandedCell?.rowId, deleteMutation])
+  }, [rows, hasPairedVariants, paperId, expandedCell?.rowId, deleteMutation])
 
   if (rows.length === 0) {
     return (
