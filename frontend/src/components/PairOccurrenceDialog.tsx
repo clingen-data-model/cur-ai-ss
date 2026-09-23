@@ -141,7 +141,18 @@ export function PairOccurrenceDialog({
                     onValueChange={(v) => setPartnerId(v === NONE_VALUE ? null : Number(v))}
                   >
                     <SelectTrigger className="w-full">
-                      <SelectValue />
+                      {/* base-ui's Select.Value renders the raw value string unless
+                          given a render-prop -- it doesn't look up a SelectItem's
+                          children to derive a label. */}
+                      <SelectValue>
+                        {(value: string) =>
+                          value === NONE_VALUE
+                            ? '— No pairing —'
+                            : (siblingOccurrences.find(
+                                (sibling) => String(sibling.occurrence.id) === value,
+                              )?.variant.variant_description ?? value)
+                        }
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value={NONE_VALUE}>— No pairing —</SelectItem>
