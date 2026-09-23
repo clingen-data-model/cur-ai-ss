@@ -103,9 +103,12 @@ export function EditableInheritanceCell({
   return (
     <div className="flex items-center gap-1">
       <Select value={occurrence.inheritance} onValueChange={(v) => v && pending.propose(v)}>
-        {/* Fixed width, matching EditableZygosityCell -- w-44 fits the
-         * longest option ("Somatic Mosaicism") at text-xs. */}
-        <SelectTrigger size="sm" className="h-7 w-44 text-xs">
+        {/* Narrower than it takes to fit the longest option ("Somatic
+         * Mosaicism") -- the closed trigger clips that one rather than
+         * pushing the rest of the Occurrences table (Testing Methods,
+         * Disease Name, actions) off the right edge of the viewport. The
+         * full label is always visible in the open dropdown. */}
+        <SelectTrigger size="sm" className="h-7 w-36 text-xs">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
