@@ -42,6 +42,7 @@ from lib.models import (
     PhenotypeDB,
     SegregationAnalysisComputedDB,
     SegregationEvidenceDB,
+    SnapshotDB,
     SnapshotMeta,
     TaskDB,
     UserDB,
@@ -169,6 +170,21 @@ def snapshot_path(paper_id: int, name: str) -> Path:
     if not _SNAPSHOT_NAME_RE.match(name):
         raise InvalidSnapshotNameError(f'Invalid snapshot name: {name!r}')
     return snapshots_dir(paper_id) / name
+
+
+def snapshot_file_paths(paper_id: int) -> list[Path]:
+    """Every on-disk snapshot file for a paper, unsorted.
+
+    For indexing/backfill use only -- list_snapshots() is the fast, DB-backed
+    path normal reads should use."""
+    directory = snapshots_dir(paper_id)
+    if not directory.exists():
+        return []
+    return [
+        path
+        for path in directory.glob('extraction_*.json')
+        if _SNAPSHOT_NAME_RE.match(path.name)
+    ]
 
 
 def dump_paper_state(paper_id: int, paper_db: PaperDB, session: Session) -> dict:
@@ -317,21 +333,38 @@ def _current_alembic_revision(session: Session) -> str | None:
     return session.execute(text('SELECT version_num FROM alembic_version')).scalar()
 
 
-def list_snapshots(paper_id: int) -> list[SnapshotMeta]:
-    """Read the meta block of every snapshot for a paper, newest first."""
-    directory = snapshots_dir(paper_id)
-    if not directory.exists():
-        return []
+def list_snapshots(paper_id: int, session: Session) -> list[SnapshotMeta]:
+    """List every snapshot for a paper, newest first, from the snapshots index
+    table -- an indexed query instead of json.loads()-ing every on-disk
+    snapshot file (including its large `tables` blob) just for the `meta`
+    block. The file remains the source of truth for restoring; a row whose
+    file is missing (e.g. hand-deleted outside the app) is skipped rather
+    than surfaced, since restoring to it would fail anyway. Only the file's
+    existence is checked here (a cheap stat), never its contents."""
+    rows = (
+        session.query(SnapshotDB)
+        .filter(SnapshotDB.paper_id == paper_id)
+        .order_by(SnapshotDB.created_at.desc())
+        .all()
+    )
     metas: list[SnapshotMeta] = []
-    for path in directory.glob('extraction_*.json'):
-        if not _SNAPSHOT_NAME_RE.match(path.name):
+    for row in rows:
+        if not snapshot_path(paper_id, row.name).exists():
+            logger.warning('Skipping snapshot %s: file missing on disk', row.name)
             continue
-        try:
-            meta = json.loads(path.read_text())['meta']
-            metas.append(SnapshotMeta(name=path.name, **meta))
-        except (OSError, ValueError, KeyError):
-            logger.warning('Skipping unreadable snapshot %s', path)
-    metas.sort(key=lambda m: m.created_at, reverse=True)
+        metas.append(
+            SnapshotMeta(
+                name=row.name,
+                version=row.version,
+                created_at=row.created_at,
+                paper_id=row.paper_id,
+                alembic_revision=row.alembic_revision,
+                model=row.model,
+                description=row.description,
+                git_hash=row.git_hash,
+                state_hash=row.state_hash,
+            )
+        )
     return metas
 
 
@@ -390,7 +423,7 @@ def write_snapshot(
 
     encoded = _encode_tables(dump_paper_state(paper_id, paper_db, session))
     state_hash = _state_hash(encoded)
-    existing = list_snapshots(paper_id)
+    existing = list_snapshots(paper_id, session)
     if existing and existing[0].state_hash == state_hash:
         return None
 
@@ -419,6 +452,29 @@ def write_snapshot(
     tmp_path = path.with_suffix('.tmp')
     tmp_path.write_text(json.dumps({'meta': meta, 'tables': encoded}))
     os.replace(tmp_path, path)
+
+    # The file write above is already atomic (temp file + rename) and is
+    # complete by the time this index row is added, so the only possible
+    # drift from a crash before the caller's transaction commits is an
+    # orphan file with no row -- never a row pointing at a missing file.
+    session.add(
+        SnapshotDB(
+            paper_id=paper_id,
+            name=name,
+            version=meta['version'],
+            created_at=now,
+            alembic_revision=meta['alembic_revision'],
+            model=meta['model'],
+            description=meta['description'],
+            git_hash=meta['git_hash'],
+            state_hash=state_hash,
+        )
+    )
+    # Sessions here run with autoflush=False (worker.py, this module's own
+    # callers), so without this, a second write_snapshot in the same session
+    # -- or any other same-session read via list_snapshots -- would not see
+    # this row and would treat the paper as having no snapshots yet.
+    session.flush()
     logger.info('Wrote extraction snapshot %s for paper %s', name, paper_id)
     return path
 

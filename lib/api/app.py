@@ -722,7 +722,7 @@ def get_paper_snapshots(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
-    snapshots = list_snapshots(paper_id)
+    snapshots = list_snapshots(paper_id, session)
     if snapshots:
         state_hash = current_state_hash(paper_id, paper_db, session)
         for snapshot in snapshots:

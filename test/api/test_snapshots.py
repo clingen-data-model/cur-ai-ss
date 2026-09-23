@@ -31,6 +31,7 @@ from lib.models import (
     PhenotypeDB,
     SegregationAnalysisComputedDB,
     SegregationEvidenceDB,
+    SnapshotDB,
     TaskDB,
     VariantDB,
     record_deletion,
@@ -49,13 +50,21 @@ def test_snapshot_covers_every_paper_scoped_table():
     # conversation, not extraction output, so a reset should not wipe or
     # restore it.
     #
+    # snapshots is deliberately excluded too, for a sharper reason: it's the
+    # index of restore points itself (see lib/models/snapshot.py), not
+    # extraction output. Including it in _INSERT_ORDER would mean restoring a
+    # paper to an old snapshot deletes every *other* snapshot's index row
+    # along the way (_delete_paper_domain_rows wipes every snapshotted table
+    # for the paper first) -- restoring would destroy the very restore points
+    # it's supposed to leave intact.
+    #
     # edits and deletion_log ARE snapshotted, deliberately: each is a record
     # of something that happened to a row, and the row itself reverts with
     # the snapshot, so the record of what happened to it should revert right
     # along with it -- see _INSERT_ORDER. (deletion_log has no FK of its own,
     # see its docstring, so it was never "reachable" by the walk below in the
     # first place; it's listed here only for symmetry with edits.)
-    excluded: set[str] = {'chat_messages'}
+    excluded: set[str] = {'chat_messages', 'snapshots'}
     snapshotted = {model.__table__.name for _, model in _INSERT_ORDER} | {'papers'}
 
     reachable = {'papers'}
@@ -356,12 +365,12 @@ def test_write_snapshot_idempotent(db_session, snapshot_paper):
     paper = snapshot_paper['paper']
     assert write_snapshot(paper.id, db_session) is not None
     assert write_snapshot(paper.id, db_session) is None
-    assert len(list_snapshots(paper.id)) == 1
+    assert len(list_snapshots(paper.id, db_session)) == 1
 
     snapshot_paper['p1'].identifier = 'CHANGED'
     db_session.flush()
     assert write_snapshot(paper.id, db_session) is not None
-    snapshots = list_snapshots(paper.id)
+    snapshots = list_snapshots(paper.id, db_session)
     assert len(snapshots) == 2
     # Newest first, and the label comes from the writer's environment (the
     # agent_runs table is stale by construction and must not be consulted).
@@ -412,7 +421,7 @@ def test_reset_guards(client, db_session, snapshot_paper):
     assert response.status_code == 404
     # Active task blocks reset.
     write_snapshot(paper.id, db_session)
-    name = list_snapshots(paper.id)[0].name
+    name = list_snapshots(paper.id, db_session)[0].name
     snapshot_paper['paper_task'].status = TaskStatus.RUNNING
     db_session.flush()
     response = client.post(f'/papers/{paper.id}/reset', json={'snapshot_name': name})
@@ -469,7 +478,7 @@ def test_snapshot_descriptions(db_session, test_user, snapshot_paper):
     snapshot_paper['paper_task'].updated_by_user_id = test_user.id
     db_session.flush()
     write_snapshot(paper.id, db_session)
-    assert list_snapshots(paper.id)[0].description == 'Initial extraction'
+    assert list_snapshots(paper.id, db_session)[0].description == 'Initial extraction'
 
     # A user rerun labels the next snapshot with the cascade ROOT's type and
     # scope. enqueue_successors propagates the user stamp down the cascade, so
@@ -494,7 +503,7 @@ def test_snapshot_descriptions(db_session, test_user, snapshot_paper):
     db_session.flush()
     write_snapshot(paper.id, db_session)
     assert (
-        list_snapshots(paper.id)[0].description
+        list_snapshots(paper.id, db_session)[0].description
         == f'Patient Demographics re-run (patient {scoped.patient_id})'
     )
 
@@ -502,7 +511,10 @@ def test_snapshot_descriptions(db_session, test_user, snapshot_paper):
     snapshot_paper['p1'].identifier = 'CHANGED AGAIN'
     db_session.flush()
     write_snapshot(paper.id, db_session, description='Manual snapshot backfill')
-    assert list_snapshots(paper.id)[0].description == 'Manual snapshot backfill'
+    assert (
+        list_snapshots(paper.id, db_session)[0].description
+        == 'Manual snapshot backfill'
+    )
 
 
 def test_v1_snapshot_rejected(db_session, test_user, snapshot_paper):
@@ -595,7 +607,7 @@ def test_create_task_writes_pre_rerun_snapshot(client, db_session, snapshot_pape
     snapshot taken right before it starts, any edit made since the last
     pipeline-completion snapshot would be silently lost."""
     paper = snapshot_paper['paper']
-    assert list_snapshots(paper.id) == []
+    assert list_snapshots(paper.id, db_session) == []
 
     response = client.post(
         f'/papers/{paper.id}/tasks',
@@ -603,7 +615,7 @@ def test_create_task_writes_pre_rerun_snapshot(client, db_session, snapshot_pape
     )
     assert response.status_code == 200, response.text
 
-    snapshots = list_snapshots(paper.id)
+    snapshots = list_snapshots(paper.id, db_session)
     assert len(snapshots) == 1
     assert snapshots[0].description == 'Before re-running Patient Demographics'
 
@@ -611,7 +623,7 @@ def test_create_task_writes_pre_rerun_snapshot(client, db_session, snapshot_pape
 def test_worker_hook_writes_snapshot_when_pipeline_done(db_session, snapshot_paper):
     paper = snapshot_paper['paper']
     _maybe_write_snapshot(db_session, paper.id)
-    assert len(list_snapshots(paper.id)) == 1
+    assert len(list_snapshots(paper.id, db_session)) == 1
 
 
 def test_worker_hook_sees_unflushed_completion(db_session, snapshot_paper):
@@ -626,7 +638,7 @@ def test_worker_hook_sees_unflushed_completion(db_session, snapshot_paper):
     # Mimic execute_task's completion bookkeeping: in-memory only, no flush.
     task.status = TaskStatus.COMPLETED
     _maybe_write_snapshot(db_session, paper.id)
-    assert len(list_snapshots(paper.id)) == 1
+    assert len(list_snapshots(paper.id, db_session)) == 1
 
 
 def test_worker_hook_skips_incomplete_pipeline(db_session, snapshot_paper):
@@ -634,7 +646,7 @@ def test_worker_hook_skips_incomplete_pipeline(db_session, snapshot_paper):
     snapshot_paper['scoped_task'].status = TaskStatus.PENDING
     db_session.flush()
     _maybe_write_snapshot(db_session, paper.id)
-    assert list_snapshots(paper.id) == []
+    assert list_snapshots(paper.id, db_session) == []
 
 
 def test_snapshots_dir_removed_with_paper(client, db_session, snapshot_paper):
@@ -661,6 +673,33 @@ def test_snapshots_written_before_run_ids_still_read(db_session, snapshot_paper)
     payload['meta']['run_id'] = 'run-abc'
     path.write_text(json.dumps(payload))
 
-    snapshots = list_snapshots(snapshot_paper['paper'].id)
+    snapshots = list_snapshots(snapshot_paper['paper'].id, db_session)
 
     assert len(snapshots) == 1
+
+
+def test_snapshot_index_rows_dropped_with_paper(client, db_session, snapshot_paper):
+    """The snapshots table FKs to papers with ondelete='CASCADE' -- deleting a
+    paper must not leave orphaned index rows behind for a since-reused id."""
+    paper = snapshot_paper['paper']
+    write_snapshot(paper.id, db_session)
+    assert db_session.query(SnapshotDB).filter_by(paper_id=paper.id).count() == 1
+    snapshot_paper['pvo2'].paired_variant_link_id = None
+    db_session.flush()
+
+    assert client.delete(f'/papers/{paper.id}').status_code == 204
+
+    assert db_session.query(SnapshotDB).filter_by(paper_id=paper.id).count() == 0
+
+
+def test_list_snapshots_skips_row_with_missing_file(db_session, snapshot_paper):
+    """A snapshots row surviving its file (e.g. hand-deleted outside the app)
+    must not be offered as a restore point -- restoring to it would 404."""
+    paper = snapshot_paper['paper']
+    path = write_snapshot(paper.id, db_session)
+    assert path is not None
+    assert len(list_snapshots(paper.id, db_session)) == 1
+
+    path.unlink()
+
+    assert list_snapshots(paper.id, db_session) == []
