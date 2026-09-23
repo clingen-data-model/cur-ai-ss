@@ -18,6 +18,7 @@ from agents import Agent, RunContextWrapper, function_tool
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.model_factory import chat_model, chat_model_settings
 from lib.api.db import session_scope
+from lib.misc.snapshots import write_snapshot_safe
 from lib.models.base import row_to_dict
 from lib.models.family import FamilyDB
 from lib.models.paper import PaperDB
@@ -197,6 +198,13 @@ def _make_queue_task_tool(paper_id: int, user_id: int) -> Any:
             paper = session.get(PaperDB, paper_id)
             if paper is None:
                 return 'This paper no longer exists.'
+
+            # See create_task's identical call in lib/api/app.py: a rerun's
+            # handlers delete-and-recreate rows, which would otherwise
+            # silently discard any manual edit made since the last snapshot.
+            write_snapshot_safe(
+                session, paper_id, description=f'Before re-running {task_type.value}'
+            )
 
             if not skip_successors:
                 invalidate_descendants(session, paper_id, task_type)

@@ -90,6 +90,7 @@ from lib.misc.snapshots import (
     current_state_hash,
     list_snapshots,
     restore_snapshot,
+    write_snapshot_safe,
 )
 from lib.models import (
     AnnotatedVariantDB,
@@ -1195,6 +1196,15 @@ def create_task(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
+
+    # A rerun's handlers delete-and-recreate rows from scratch, which would
+    # otherwise silently discard any manual edit made since the last snapshot
+    # (pipeline-completion snapshots don't capture edits made afterward).
+    # Fires regardless of skip_successors -- even a single scoped rerun
+    # deletes and recreates rows for that scope.
+    write_snapshot_safe(
+        session, paper_id, description=f'Before re-running {request.type.value}'
+    )
 
     # Clear the previous run's downstream rows first. Their COMPLETED status is
     # what the fan-in readiness gates read, and left in place it lets a successor
