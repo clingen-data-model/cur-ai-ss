@@ -36,9 +36,12 @@ Defaults still name OpenAI models, so behavior is unchanged.
 
 `ROUTABLE_PROVIDERS` is `{'openai', 'anthropic'}` and the settings validator
 requires each configured model's provider key, so **`VLM_MODEL=anthropic/...` works
-today**. `EXTRACTION_MODEL` does not yet — Blocker 2 (the `conversation_id`
-dependency) is resolved, so the only thing left in the way is *Observability gap*
-(tracing is not actually disabled) — see *Suggested order*.
+today**. **2026-09-22: the observability gap is now closed** — `set_tracing_disabled(True)`
+runs at both process entrypoints (`lib/core/agents_init.py`) and the three
+`RunConfig(trace_metadata=...)` blocks were replaced by `log_run_metrics` calls — see
+*Observability gap* and *Suggested order* below. `EXTRACTION_MODEL` flipping to
+Anthropic is therefore unblocked from this side; the flip itself is a separate,
+not-yet-made decision.
 
 The `openai/` special case still exists, but no longer because `LitellmModel`
 ignores `conversation_id` — **source-read**: literally annotated
@@ -659,44 +662,48 @@ no urgency.
 
 ## Observability gap
 
-**This section describes work PR #137 planned, not work that landed.** #137 is
-closed (see the top of this document) and was split into #138, PR A, and the
-routing branch; the tracing-disable change did not survive the split.
-`lib/core/agents_init.py` does not exist on `main`, `set_tracing_disabled` is
-called nowhere in the repo (`grep -rl set_tracing_disabled lib bin test` — no
-hits), and both `RunConfig(trace_metadata=...)` blocks are still in place at
-`lib/tasks/handlers.py:1540` (HPO linking: `paper_id`, `phenotype_id`, `concept`)
-and `:1656` (MONDO linking: `disease_text`, `gene_symbol`, `paper_id`,
-`patient_variant_occurrence_id`, `scope`).
+**Landed 2026-09-22.** `lib/core/agents_init.py` (recreated — this is the piece of
+#137 that didn't survive the split into #138/PR A/the routing branch) exposes
+`init_agents_sdk()`, which calls `set_tracing_disabled(True)`. It runs once at each
+process entrypoint that can call `Runner.run` — `lib/api/app.py`'s `lifespan()` and
+`lib/bin/worker.py` at module level — right alongside the existing `setup_logging()`
+call at each. This is unconditional (no env-var gate): there's no legitimate case for
+re-enabling OpenAI-hosted tracing of paper/patient content.
 
-**Verified 2026-09-14** (`agents==0.7.0` source): `RunConfig.tracing_disabled`
-defaults to `False`, and `trace_include_sensitive_data` defaults to `True` unless
-`OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA` is set — it is set nowhere in
-`lib/core/environment.py` or the deployed `.env` template. So every `Runner.run`
-call today exports a trace to OpenAI's backend, tagged with the metadata above,
-carrying full inputs/outputs unless that env var is added. This is not a new
-problem and not, today, a cross-provider one: `EXTRACTION_MODEL` is still 100%
-OpenAI, so an OpenAI-run trace going to OpenAI is self-consistent with wherever
-the org already draws the line for that data. It becomes a cross-provider one the
-moment `EXTRACTION_MODEL` points at Anthropic (Blocker 2) — the agent runs on
-Claude, but the same paper/patient content would still export to OpenAI's
-tracing dashboard by default, regardless of which provider actually served the
-request. `Suggested order` below already sequences this correctly (disable
-tracing before the `EXTRACTION_MODEL` flip) — the mistake was this section's
-tense, which read as describing something already done.
+All three `RunConfig(trace_metadata=...)` blocks (HPO linking and MONDO linking in
+`lib/tasks/handlers.py`, plus the chat handler in `lib/api/app.py` — this third site
+was not in this section's original inventory, since the chat feature was rebuilt in
+the React SPA after this doc's "deleted outright" note below) were removed and their
+metadata folded into `log_run_metrics` (renamed from `log_cache_metrics`) instead of
+just dropped, per this section's original suggestion.
 
-The `VLM_MODEL` flip (#182, now on `main`) does **not** trigger this: `vlm_describe`
+**Verified 2026-09-14** (`agents==0.7.0` source), and the reason this needed fixing:
+`RunConfig.tracing_disabled` defaults to `False`, and `trace_include_sensitive_data`
+defaults to `True` unless `OPENAI_AGENTS_TRACE_INCLUDE_SENSITIVE_DATA` is set — it
+was set nowhere in `lib/core/environment.py` or the deployed `.env` template. So
+before the 2026-09-22 fix above, every `Runner.run` call exported a trace to
+OpenAI's backend, tagged with the metadata above, carrying full inputs/outputs.
+That was not a new problem and not, at the time, a cross-provider one:
+`EXTRACTION_MODEL` was still 100% OpenAI, so an OpenAI-run trace going to OpenAI
+was self-consistent with wherever the org already drew the line for that data. It
+would have become a cross-provider one the moment `EXTRACTION_MODEL` pointed at
+Anthropic (Blocker 2) — the agent runs on Claude, but the same paper/patient
+content would still export to OpenAI's tracing dashboard by default, regardless of
+which provider actually served the request. That is exactly the risk the
+2026-09-22 fix closes.
+
+The `VLM_MODEL` flip (#182, now on `main`) never triggered this: `vlm_describe`
 calls `litellm.completion` directly, never `Runner.run`, so vision was never
 inside the SDK's tracing scope on either provider.
 
-`lib.tasks.handlers.log_cache_metrics` (PR #116, months before this migration
-began) already provides the structured-logging replacement this section used to
-say was still needed — see Corrections log, item 1, and Blocker 3 for it working
-correctly against a live Anthropic response.
+`lib.tasks.handlers.log_run_metrics` (renamed 2026-09-22 from `log_cache_metrics`,
+PR #116, months before this migration began) is the structured-logging replacement
+this section used to say was still needed — see Corrections log, item 1, and
+Blocker 3 for it working correctly against a live Anthropic response.
 
-Worth pairing the eventual fix with an alarm on a tool-using agent that completes
-with zero tool calls — that is the signature of Blocker 1 recurring after a
-dependency bump.
+**Landed 2026-09-22 alongside the fix above:** `log_run_metrics` now also warns
+(`[ZERO_TOOL_CALLS]`) when a tool-using agent completes without calling any tool —
+the signature of Blocker 1 recurring after a dependency bump.
 
 ## Local environment
 
@@ -756,7 +763,11 @@ what shipped differently than planned; **the union-type schema limit found and
 fixed for the 4 affected agents** (2026-09-15, `lib/agents/manual_output.py`) —
 see Blocker 4 — discovered only once a live paper was actually run end-to-end
 against `claude-sonnet-5`, which is why it wasn't on this list until then, and
-verified with a second live run (8/8 calls succeeded on the first attempt).
+verified with a second live run (8/8 calls succeeded on the first attempt);
+**observability — tracing disabled and the `RunConfig(trace_metadata)` blocks
+replaced** (2026-09-22, `lib/core/agents_init.py`, `log_run_metrics`) — see
+*Observability gap* — closing what had been the only remaining blocker to the
+`EXTRACTION_MODEL` flip.
 
 1. **Run the pipeline end-to-end on OpenAI.** Needs only an `OPENAI_API_KEY` and no
    Anthropic involvement. This is now the highest-priority item: #138 replaced the
@@ -764,21 +775,17 @@ verified with a second live run (8/8 calls succeeded on the first attempt).
    ever run against a real model on either provider**. That is merged-to-`main` code
    with no end-to-end coverage, and the risk is live today, independent of any
    Anthropic work. The README has a ready case (MASP1, PMID 26419238).
-2. **Observability**, as its own PR — actually disable tracing this time (see
-   *Observability gap*: the doc previously described this as already done via the
-   closed #137; it is not, `set_tracing_disabled` is called nowhere in the repo).
-   Pair it with a replacement for the `RunConfig(trace_metadata)` blocks rather
-   than dropping them — `log_cache_metrics` (PR #116) already covers the caching
-   half of that replacement; extend the same pattern to run-level metadata. Add
-   the zero-tool-call alarm from *Observability gap*. Required before the
-   `EXTRACTION_MODEL` flip. (Not required before the `VLM_MODEL` flip after all —
-   `vlm_describe` never goes through `Runner.run`, so it was never in tracing's
-   scope on either provider; #182 landing before this item turned out to be safe,
-   not merely lucky.) **This is now the only remaining blocker to the
-   `EXTRACTION_MODEL` flip** — Blocker 4 (the union-type schema limit) looked
-   like a second one when it surfaced mid-live-test, but is already fixed and
-   verified, so it doesn't add a step here. Once observability lands, caching
-   (already wired) starts paying off on the real 15-turn/25-turn tool loops
+2. ~~**Observability**, as its own PR — actually disable tracing this time~~
+   **Landed 2026-09-22** — see *Observability gap*. `set_tracing_disabled(True)`
+   runs process-wide via `lib/core/agents_init.py`; the three
+   `RunConfig(trace_metadata=...)` blocks were replaced by `log_run_metrics` calls
+   carrying the same run-level metadata, plus the zero-tool-call alarm. **This was
+   the only remaining blocker to the `EXTRACTION_MODEL` flip** — Blocker 4 (the
+   union-type schema limit) looked like a second one when it surfaced mid-live-test,
+   but was already fixed and verified, so it didn't add a step here. The flip
+   itself is now unblocked from this side but has not been made — that's a
+   separate decision. Caching (already wired) starts paying off on the real
+   15-turn/25-turn tool loops
    without any further change.
 
 ## Reproducing the offline findings

@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncGenerator, Optional
 
-from agents import RunConfig, Runner
+from agents import Runner
 from fastapi import (
     Body,
     Depends,
@@ -45,6 +45,7 @@ from lib.agents.chat_agent import (
 from lib.api.auth import get_current_user, get_current_user_optional
 from lib.api.db import get_session, session_scope
 from lib.api.middleware import make_log_request_middleware
+from lib.core.agents_init import init_agents_sdk
 from lib.core.environment import env
 from lib.core.logging import setup_logging
 from lib.core.security import (
@@ -183,6 +184,7 @@ from lib.tasks import (
     invalidate_descendants,
 )
 from lib.tasks.agent_session import chat_session
+from lib.tasks.handlers import log_run_metrics
 from lib.tasks.misc import summarize_paper_task_status
 from lib.tasks.models import (
     ACTIVE_STATUSES,
@@ -204,6 +206,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await asyncio.to_thread(command.upgrade, alembic_cfg, 'head')
 
     setup_logging()  # NB: run setup logging after the alembic setup to prevent it from overriding.
+    init_agents_sdk()
     yield
 
 
@@ -1408,8 +1411,8 @@ async def send_chat_message(
         f'PAPER CONTEXT:\n{context}\n\nUser: {request.message}',
         session=chat_session(paper_id),
         context=run_context,
-        run_config=RunConfig(trace_metadata={'paper_id': str(paper_id)}),
     )
+    log_run_metrics('CHAT', result, paper_id=paper_id)
     reply = run_context.confirmation or str(result.final_output)
 
     assistant_message = ChatMessageDB(

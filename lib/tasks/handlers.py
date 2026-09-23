@@ -3,7 +3,7 @@ import json
 import logging
 from typing import Any, Awaitable, Callable
 
-from agents import Agent, RunConfig, Runner
+from agents import Agent, Runner, ToolCallItem
 from agents.exceptions import MaxTurnsExceeded
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -169,16 +169,17 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 
-def log_cache_metrics(task_type: str, result: Any) -> None:
-    """Log prompt cache metrics from agent response."""
-    if not hasattr(result, 'raw_responses') or not result.raw_responses:
-        return
-
+def log_run_metrics(task_type: str, result: Any, **metadata: Any) -> None:
+    """Log cache/usage metrics, run-level metadata, and a zero-tool-call
+    warning for one agent run. Tracing (and the OpenAI-hosted trace export it
+    used to carry ``RunConfig(trace_metadata=...)`` to) is disabled
+    process-wide (see lib/core/agents_init.py), so this local, structured log
+    line is the only place that context is recorded now."""
     total_input = 0
     total_cache_read = 0
     total_output = 0
 
-    for resp in result.raw_responses:
+    for resp in getattr(result, 'raw_responses', None) or []:
         if not hasattr(resp, 'usage'):
             continue
 
@@ -195,13 +196,34 @@ def log_cache_metrics(task_type: str, result: Any) -> None:
         total_cache_read += cache_read
         total_output += output_tokens
 
-    if total_input > 0:
-        cache_pct = (total_cache_read / total_input * 100) if total_input > 0 else 0
-        logger.info(
-            f'[CACHE] {task_type}: '
-            f'input={total_input} cached={total_cache_read} '
-            f'({cache_pct:.1f}%) output={total_output}'
+    cache_pct = (total_cache_read / total_input * 100) if total_input > 0 else 0
+    meta_str = ''.join(f' {k}={v}' for k, v in metadata.items())
+    logger.info(
+        f'[RUN] {task_type}: '
+        f'input={total_input} cached={total_cache_read} '
+        f'({cache_pct:.1f}%) output={total_output}{meta_str}'
+    )
+
+    # A tool-using agent that completes without calling any tool is the
+    # signature of the forced-tool-choice/structured-output bug recurring
+    # after a dependency bump (see docs/anthropic-migration.md, Blocker 1) --
+    # surfaced here rather than only discovered by a curator noticing empty
+    # results downstream.
+    try:
+        last_agent = result.last_agent
+    except Exception:
+        last_agent = None
+    if last_agent is not None and getattr(last_agent, 'tools', None):
+        made_tool_call = any(
+            isinstance(item, ToolCallItem)
+            for item in getattr(result, 'new_items', None) or []
         )
+        if not made_tool_call:
+            logger.warning(
+                f'[ZERO_TOOL_CALLS] {task_type}: agent has '
+                f'{len(last_agent.tools)} tool(s) available but made none '
+                f'this run{meta_str}'
+            )
 
 
 def build_followup_prompt(additional_context: str) -> str:
@@ -281,7 +303,7 @@ async def handle_paper_section_classifier(task_id: int) -> None:
         agent = paper_classifier_agent
 
     result = await Runner.run(agent, message, session=agent_sess)
-    log_cache_metrics('PAPER_SECTION_CLASSIFIER', result)
+    log_run_metrics('PAPER_SECTION_CLASSIFIER', result)
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -343,7 +365,7 @@ async def handle_paper_metadata(task_id: int) -> None:
         message,
         session=agent_sess,
     )
-    log_cache_metrics('PAPER_METADATA', result)
+    log_run_metrics('PAPER_METADATA', result)
 
     with session_scope() as session:
         paper = session.get(PaperDB, paper_id)
@@ -395,7 +417,7 @@ async def handle_variant_extraction(task_id: int) -> None:
         VariantExtractionOutput,
         session=agent_sess,
     )
-    log_cache_metrics('VARIANT_EXTRACTION', result)
+    log_run_metrics('VARIANT_EXTRACTION', result)
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -461,7 +483,7 @@ async def handle_pedigree_description(task_id: int) -> None:
         message,
         session=agent_sess,
     )
-    log_cache_metrics('PEDIGREE_DESCRIPTION', result)
+    log_run_metrics('PEDIGREE_DESCRIPTION', result)
 
     output = result.final_output
     # The analysis is the vision model's; the agent only routes figures to it and
@@ -545,7 +567,7 @@ async def handle_patient_extraction(task_id: int) -> None:
         PatientExtractionOutput,
         session=agent_sess,
     )
-    log_cache_metrics('PATIENT_EXTRACTION', result)
+    log_run_metrics('PATIENT_EXTRACTION', result)
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -674,7 +696,7 @@ async def handle_patient_demographics(task_id: int) -> None:
         PatientDemographics,
         session=agent_sess,
     )
-    log_cache_metrics('PATIENT_DEMOGRAPHICS', result)
+    log_run_metrics('PATIENT_DEMOGRAPHICS', result)
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -782,7 +804,7 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
         message,
         session=agent_sess,
     )
-    log_cache_metrics('SEGREGATION_EVIDENCE_EXTRACTION', result)
+    log_run_metrics('SEGREGATION_EVIDENCE_EXTRACTION', result)
 
     # Store results in new session
     with session_scope() as session:
@@ -913,7 +935,7 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
         message,
         session=agent_sess,
     )
-    log_cache_metrics('SEGREGATION_ANALYSIS_COMPUTED', result)
+    log_run_metrics('SEGREGATION_ANALYSIS_COMPUTED', result)
 
     # Store results in new session
     with session_scope() as session:
@@ -985,7 +1007,7 @@ async def handle_variant_harmonization(task_id: int) -> None:
         max_turns=15,
         session=agent_sess,
     )
-    log_cache_metrics('VARIANT_HARMONIZATION', result)
+    log_run_metrics('VARIANT_HARMONIZATION', result)
 
     # Check if rate limited (only if harmonization actually failed)
     if result.final_output and result.final_output.value:
@@ -1211,7 +1233,7 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
         PatientVariantOccurrenceOutput,
         session=agent_sess,
     )
-    log_cache_metrics('PATIENT_VARIANT_OCCURRENCE', result)
+    log_run_metrics('PATIENT_VARIANT_OCCURRENCE', result)
 
     with session_scope() as session:
         # Idempotent: delete-then-insert
@@ -1328,7 +1350,7 @@ async def handle_compound_het_evaluation(task_id: int) -> None:
         agent_to_use,
         message,
     )
-    log_cache_metrics('COMPOUND_HET_EVALUATION', result)
+    log_run_metrics('COMPOUND_HET_EVALUATION', result)
 
     with session_scope() as session:
         # For each pair in the result, set the pairing and reasoning
@@ -1431,7 +1453,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         message,
         session=agent_sess,
     )
-    log_cache_metrics('PHENOTYPE_EXTRACTION', result)
+    log_run_metrics('PHENOTYPE_EXTRACTION', result)
 
     # Update DB with results
     with session_scope() as session:
@@ -1505,15 +1527,14 @@ async def handle_hpo_linking(task_id: int) -> None:
             message,
             max_turns=8,
             session=agent_sess,
-            run_config=RunConfig(
-                trace_metadata={
-                    'paper_id': str(task_id),
-                    'phenotype_id': str(phenotype_id),
-                    'concept': phenotype_data['concept'],
-                },
-            ),
         )
-        log_cache_metrics('HPO_LINKING', result)
+        log_run_metrics(
+            'HPO_LINKING',
+            result,
+            paper_id=task_id,
+            phenotype_id=phenotype_id,
+            concept=phenotype_data['concept'],
+        )
         hpo_result = result.final_output
     except MaxTurnsExceeded:
         # An ambiguous phenotype exploring the ontology graph exhausts the
@@ -1636,19 +1657,16 @@ async def handle_mondo_linking(task_id: int) -> None:
             message,
             max_turns=25,
             session=agent_sess,
-            run_config=RunConfig(
-                trace_metadata={
-                    'scope': target.scope.value,
-                    'paper_id': str(target.paper_id),
-                    'patient_variant_occurrence_id': str(
-                        target.patient_variant_occurrence_id or ''
-                    ),
-                    'disease_text': query,
-                    'gene_symbol': target.gene_symbol or '',
-                },
-            ),
         )
-        log_cache_metrics('MONDO_LINKING', result)
+        log_run_metrics(
+            'MONDO_LINKING',
+            result,
+            scope=target.scope.value,
+            paper_id=target.paper_id,
+            patient_variant_occurrence_id=target.patient_variant_occurrence_id,
+            disease_text=query,
+            gene_symbol=target.gene_symbol,
+        )
 
         decision = result.final_output.value
         if decision.mondo_id:
