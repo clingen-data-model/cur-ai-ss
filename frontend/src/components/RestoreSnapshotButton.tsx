@@ -154,7 +154,8 @@ function RestoreSnapshotDialog({
               </div>
               <p className="text-sm text-muted-foreground">
                 ⚠️ Resetting cannot be undone. Task history reverts with the
-                snapshot.
+                snapshot. Note that you cannot restore to a snapshot that
+                matches the existing curation.
               </p>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => onOpenChange(false)}>
