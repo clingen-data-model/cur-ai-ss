@@ -110,7 +110,7 @@ export function PaperProgressPopover({
           ) : tasksQuery.isError ? (
             <p className="text-sm text-destructive">Could not load progress.</p>
           ) : (
-            <TaskTimeline tasks={tasksQuery.data ?? []} stats={statsQuery.data} />
+            <TaskTimeline tasks={tasksQuery.data ?? []} stats={statsQuery.data} paper={paper} />
           )}
           <Button
             variant="outline"
