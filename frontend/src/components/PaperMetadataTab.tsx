@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { EditableSelectRow, EditableTextRow, SimpleMultiSelectRow } from '@/components/EditableField'
 import { EvidencePopover } from '@/components/EvidencePopover'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { updatePaperPapersPaperIdPatch } from '@/api/generated'
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`
@@ -183,9 +184,12 @@ export function PaperMetadataTab({ paper }: { paper: PaperResp }) {
                 <span className="text-sm text-muted-foreground w-44">MONDO Disease</span>
                 <div className="flex items-center gap-1 flex-1 justify-end">
                   {paper.mondo.value ? (
-                    <span className="text-sm">
-                      {paper.mondo.value.mondo_id} — {paper.mondo.value.label}
-                    </span>
+                    <Tooltip>
+                      <TooltipTrigger render={<span className="text-sm cursor-help" />}>
+                        {paper.mondo.value.mondo_id}
+                      </TooltipTrigger>
+                      <TooltipContent>{paper.mondo.value.label}</TooltipContent>
+                    </Tooltip>
                   ) : (
                     <span className="text-sm text-muted-foreground">Not linked</span>
                   )}

@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Command, CommandGroup, CommandItem, CommandList } from '@/components/ui/command'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { pillColorFor } from '@/lib/pillColors'
 import { apiErrorMessage } from '@/lib/apiError'
 
@@ -318,9 +319,12 @@ export function MondoDiseaseCell({ occurrence }: { occurrence: PatientVariantOcc
   return (
     <div className="flex items-center gap-1">
       {occurrence.mondo.value ? (
-        <span className="text-xs">
-          {occurrence.mondo.value.mondo_id} — {occurrence.mondo.value.label}
-        </span>
+        <Tooltip>
+          <TooltipTrigger render={<span className="text-xs cursor-help" />}>
+            {occurrence.mondo.value.mondo_id}
+          </TooltipTrigger>
+          <TooltipContent>{occurrence.mondo.value.label}</TooltipContent>
+        </Tooltip>
       ) : (
         <span className="text-xs text-muted-foreground">Not linked</span>
       )}
