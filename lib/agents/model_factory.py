@@ -31,6 +31,7 @@ rather than failing the run.
 from agents import ModelSettings
 from agents.extensions.models.litellm_model import LitellmModel
 from agents.models.interface import Model
+from litellm.llms.anthropic.chat.transformation import AnthropicConfig
 
 from lib.core.environment import env
 from lib.core.model_names import (
@@ -82,6 +83,14 @@ def model_settings_for(name: str, *, effort: str | None = None) -> ModelSettings
     Anthropic, so it is only ever set here, never as a provider branch inside
     an agent -- a fixed, per-agent choice about how hard that agent's task
     warrants thinking, not a workaround for what today's provider can't do.
+    Not every Anthropic model accepts it, though -- confirmed live,
+    'anthropic/claude-haiku-4-5-20251001' 400s on any `output_config` at all
+    ("This model does not support the effort parameter"), while Sonnet 5,
+    Opus 5 and Fable 5.1 all accept it. litellm already carries this as a
+    capability flag per model (`AnthropicConfig._model_supports_effort_param`,
+    checked the same way its `supports_native_structured_output` flag settled
+    Blocker 1 in docs/anthropic-migration.md), so effort is gated on that
+    rather than a hardcoded model-name list here.
 
     Two breakpoints, not one: 'system' covers the instructions and tool
     definitions, which are identical on every call an agent makes; index -1
@@ -92,7 +101,7 @@ def model_settings_for(name: str, *, effort: str | None = None) -> ModelSettings
     -- a thread that has accumulated follow-ups would otherwise stamp the first
     four user messages and miss the one actually being extended.
     """
-    provider, _ = split_provider(name)
+    provider, bare = split_provider(name)
     if provider != 'anthropic':
         return ModelSettings()
     extra_args: dict = {
@@ -101,7 +110,7 @@ def model_settings_for(name: str, *, effort: str | None = None) -> ModelSettings
             {'location': 'message', 'index': -1, 'control': _CACHE_CONTROL},
         ]
     }
-    if effort is not None:
+    if effort is not None and AnthropicConfig._model_supports_effort_param(bare, provider):
         extra_args['output_config'] = {'effort': effort}
     return ModelSettings(extra_args=extra_args)
 

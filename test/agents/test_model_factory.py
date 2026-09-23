@@ -138,6 +138,26 @@ def test_settings_stay_under_the_four_breakpoint_cap():
     assert len(settings.extra_args['cache_control_injection_points']) <= 4
 
 
+def test_effort_is_sent_for_a_model_that_supports_it():
+    """Sonnet 5 accepts output_config.effort -- verified live against
+    docs/anthropic-migration.md's Blocker 1 trial."""
+    settings = model_settings_for('anthropic/claude-sonnet-5', effort='low')
+
+    assert settings.extra_args['output_config'] == {'effort': 'low'}
+
+
+def test_effort_is_dropped_for_a_model_that_rejects_it():
+    """Claude Haiku 4.5 400s on any output_config at all ("This model does not
+    support the effort parameter") -- confirmed live on dev-caa running the
+    MASP1 (PMID 26419238) extraction. Gated on litellm's own capability flag
+    (AnthropicConfig._model_supports_effort_param) rather than a hardcoded
+    model-name list, the same way Blocker 1's native-structured-output check
+    works."""
+    settings = model_settings_for('anthropic/claude-haiku-4-5-20251001', effort='low')
+
+    assert 'output_config' not in settings.extra_args
+
+
 def test_extraction_model_settings_follows_extraction_model(monkeypatch):
     """Same env-driven pattern as extraction_model() itself -- one setting,
     read fresh each call, no separate provider to keep in sync."""
