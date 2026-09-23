@@ -167,10 +167,7 @@ def render_reset_fragment(paper_query_params: PaperQueryParams) -> None:
         + (f' — {s.model}' if s.model else '')
         + (' — current state' if s.matches_current else ''),
     )
-    st.caption(
-        '⚠️ Resetting cannot be undone. Task history reverts with the snapshot; '
-        'PDF highlights are kept.'
-    )
+    st.caption('⚠️ Resetting cannot be undone. Task history reverts with the snapshot.')
 
     def on_confirm() -> None:
         try:
