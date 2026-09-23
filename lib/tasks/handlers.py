@@ -1522,7 +1522,7 @@ async def handle_hpo_linking(task_id: int) -> None:
         result = await Runner.run(
             hpo_linking_agent,
             message,
-            max_turns=8,
+            max_turns=20,
             session=agent_sess,
         )
         log_run_metrics(
