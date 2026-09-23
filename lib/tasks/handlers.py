@@ -238,6 +238,93 @@ def build_followup_prompt(additional_context: str) -> str:
     return f'Please review your previous analysis in light of the following additional context:\n\n{additional_context}'
 
 
+# Tasks with no agent conversation to consult: PDF_PARSING and VARIANT_ANNOTATION
+# are mechanical (no LLM call at all), and COMPOUND_HET_EVALUATION runs without a
+# session (see handle_compound_het_evaluation) so it has no persisted history.
+QA_UNSUPPORTED_TASK_TYPES = {
+    TaskType.PDF_PARSING,
+    TaskType.VARIANT_ANNOTATION,
+    TaskType.COMPOUND_HET_EVALUATION,
+}
+
+QA_FOLLOWUP_MAX_TURNS = 8
+
+
+def _agent_for_task_type(task_type: TaskType, paper_id: int) -> Agent | None:
+    """The same Agent instance (tools, model, instructions) each handler runs
+    for this task type -- None if it has no conversation to ask (see
+    QA_UNSUPPORTED_TASK_TYPES)."""
+    if task_type in QA_UNSUPPORTED_TASK_TYPES:
+        return None
+    if task_type == TaskType.PEDIGREE_DESCRIPTION:
+        agent, _capture = pedigree_describer_agent_for_paper(paper_id)
+        return agent
+    return {
+        TaskType.PAPER_CLASSIFIER: paper_classifier_agent,
+        TaskType.PAPER_METADATA: paper_extraction_agent,
+        TaskType.VARIANT_EXTRACTION: variant_extraction_agent,
+        TaskType.PATIENT_EXTRACTION: patient_extraction_agent,
+        TaskType.PATIENT_DEMOGRAPHICS: patient_demographics_agent,
+        TaskType.SEGREGATION_EVIDENCE_EXTRACTION: segregation_evidence_extractor,
+        TaskType.SEGREGATION_ANALYSIS_COMPUTED: segregation_analysis_computed_agent,
+        TaskType.VARIANT_HARMONIZATION: variant_harmonization_agent,
+        TaskType.PATIENT_VARIANT_OCCURRENCES: patient_variant_occurrence_agent,
+        TaskType.PHENOTYPE_EXTRACTION: patient_phenotype_linking_agent,
+        TaskType.HPO_LINKING: hpo_linking_agent,
+        TaskType.PAPER_MONDO_LINKING: mondo_linking_agent,
+        TaskType.OCCURRENCE_MONDO_LINKING: mondo_linking_agent,
+    }.get(task_type)
+
+
+async def ask_task_agent(
+    task_id: int, task_type: TaskType, paper_id: int, question: str
+) -> str:
+    """Consult the exact agent that ran a given task, in its own session, for
+    a read-only follow-up question -- the same model, tools, and memory of
+    what it actually considered that produced the stored result, rather than
+    a different agent guessing from the current database state or a raw
+    transcript. Used by the chat agent's ask_extraction_agent tool.
+
+    Cloning with output_type=str is what makes this read-only: the agent's
+    real output_type (e.g. ReasoningBlock[HPOTerm]) would otherwise force
+    even a follow-up turn back into that structured shape. The clone shares
+    the original's tools and instructions, so it can still look things up
+    again if answering the question calls for it. The exchange is appended to
+    the same session file as every other turn (store-everything, per
+    lib/tasks/agent_session.py), so a later real rerun with additional_context
+    will see this Q&A in its history too -- harmless, since nothing here is
+    persisted to the paper's extracted data.
+    """
+    base_agent = _agent_for_task_type(task_type, paper_id)
+    if base_agent is None:
+        return f'No agent conversation is available for "{task_type.value}".'
+
+    agent_sess = agent_session(task_id)
+    if not await agent_sess.get_items(limit=1):
+        return (
+            f'"{task_type.value}" has not been run yet for this paper/entity, '
+            f'so there is nothing to ask about.'
+        )
+
+    qa_agent = base_agent.clone(
+        output_type=str,
+        instructions=(
+            f'{base_agent.instructions}\n\n'
+            'A curator is now asking a follow-up question about the analysis '
+            'you already produced above in this same conversation. Answer '
+            'using your memory of what you considered (including any tool '
+            'calls you made) -- call a tool again only if double-checking '
+            'something is necessary to answer the question. Reply in plain, '
+            'conversational text; do not attempt to produce a new structured '
+            'extraction result.'
+        ),
+    )
+    result = await Runner.run(
+        qa_agent, question, session=agent_sess, max_turns=QA_FOLLOWUP_MAX_TURNS
+    )
+    return str(result.final_output)
+
+
 def format_paper_context(paper_markdown: str, gene_symbol: str | None = None) -> str:
     """Format paper and gene context for inclusion in message input.
 

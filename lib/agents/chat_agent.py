@@ -15,7 +15,6 @@ from typing import Any
 
 from agents import Agent, RunContextWrapper, function_tool
 
-from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.model_factory import chat_model, chat_model_settings
 from lib.api.db import session_scope
 from lib.misc.snapshots import write_snapshot_safe
@@ -25,6 +24,7 @@ from lib.models.paper import PaperDB
 from lib.models.patient import PatientDB
 from lib.models.phenotype import PhenotypeDB
 from lib.models.variant import VariantDB
+from lib.tasks.handlers import QA_UNSUPPORTED_TASK_TYPES, ask_task_agent
 from lib.tasks.misc import (
     enqueue_all_instances,
     enqueue_task,
@@ -45,6 +45,12 @@ _NOT_CHAT_RUNNABLE = {
 _RUNNABLE_TASK_TYPES = [t for t in TaskType if t not in _NOT_CHAT_RUNNABLE]
 _RUNNABLE_TASK_TYPE_LIST = '\n'.join(
     f'- "{t.value}": {t.description}' for t in _RUNNABLE_TASK_TYPES
+)
+
+# Task types ask_task_agent can actually consult -- see QA_UNSUPPORTED_TASK_TYPES.
+_ASKABLE_TASK_TYPES = [t for t in TaskType if t not in QA_UNSUPPORTED_TASK_TYPES]
+_ASKABLE_TASK_TYPE_LIST = '\n'.join(
+    f'- "{t.value}": {t.description}' for t in _ASKABLE_TASK_TYPES
 )
 
 
@@ -160,6 +166,59 @@ def _make_list_entities_tool(paper_id: int) -> Any:
             )
 
     return list_paper_entities
+
+
+def _make_ask_extraction_agent_tool(paper_id: int) -> Any:
+    @function_tool
+    async def ask_extraction_agent(
+        task_type: TaskType,
+        question: str,
+        family_id: int | None = None,
+        patient_id: int | None = None,
+        variant_id: int | None = None,
+        phenotype_id: int | None = None,
+        patient_variant_occurrence_id: int | None = None,
+    ) -> str:
+        """Ask the SAME agent that actually ran a given extraction step your
+        question, in its own conversation -- grounded in exactly what it
+        considered (including its own tool calls), not a guess from the
+        current database state. Use this for any "why"/"how" question about a
+        specific step's reasoning (e.g. "why did variant extraction call this
+        a frameshift?", "why didn't HPO linking match this phenotype?").
+
+        task_type MUST be one of the askable types listed in your instructions.
+
+        For an entity-scoped step, first call list_paper_entities and pass the
+        matched entity's top-level id in the right field (family_id/patient_id/
+        variant_id/phenotype_id/patient_variant_occurrence_id) -- the same
+        scope enqueue_task uses. Leave every id null for a paper-wide step.
+        Returns the agent's answer, or a message explaining why none is
+        available (step hasn't run yet, or has no conversation to consult)."""
+        if task_type in QA_UNSUPPORTED_TASK_TYPES:
+            return f'"{task_type.value}" has no agent conversation to consult.'
+
+        with session_scope() as session:
+            task = (
+                session.query(TaskDB)
+                .filter(
+                    TaskDB.type == task_type,
+                    TaskDB.paper_id == paper_id,
+                    TaskDB.family_id == family_id,
+                    TaskDB.patient_id == patient_id,
+                    TaskDB.variant_id == variant_id,
+                    TaskDB.phenotype_id == phenotype_id,
+                    TaskDB.patient_variant_occurrence_id
+                    == patient_variant_occurrence_id,
+                )
+                .first()
+            )
+            if task is None:
+                return f'No "{task_type.value}" task found for that scope.'
+            task_id = task.id
+
+        return await ask_task_agent(task_id, task_type, paper_id, question)
+
+    return ask_extraction_agent
 
 
 def _make_queue_task_tool(paper_id: int, user_id: int) -> Any:
@@ -294,6 +353,18 @@ when you need fuller detail than the summary gives (e.g. harmonized/annotated
 variant records). If the context doesn't contain the answer, say so rather
 than guessing.
 
+For a "why"/"how" question about a specific extraction step's reasoning (e.g.
+"why did variant extraction call this a frameshift?", "why didn't HPO linking
+match this phenotype?"), don't guess from the PAPER CONTEXT block or the
+current data alone -- call ask_extraction_agent so the actual agent that did
+that work answers from its own memory of what it considered. task_type MUST
+be one of these askable types:
+{_ASKABLE_TASK_TYPE_LIST}
+Resolve an entity-scoped question's target the same way as an ACTION (call
+list_paper_entities, match by any field, pass the matched id). If it returns
+that no task/conversation is available, say so rather than falling back to a
+guess.
+
 Keep replies short and conversational -- this is a chat panel, not a report.
 """
 
@@ -307,11 +378,12 @@ def make_chat_agent(paper_id: int, user_id: int) -> Agent:
     """
     return Agent(
         name='chat_agent',
-        instructions=BASE_SYSTEM_INSTRUCTIONS,
+        instructions=CHAT_AGENT_INSTRUCTIONS,
         model=chat_model(),
         model_settings=chat_model_settings(),
         tools=[  # type: ignore[list-item]
             _make_list_entities_tool(paper_id),
+            _make_ask_extraction_agent_tool(paper_id),
             _make_queue_task_tool(paper_id, user_id),
         ],
     )
