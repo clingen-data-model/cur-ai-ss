@@ -183,13 +183,7 @@ from lib.tasks import (
 from lib.tasks.agent_session import chat_session
 from lib.tasks.handlers import log_run_metrics
 from lib.tasks.misc import summarize_paper_task_status
-from lib.tasks.models import (
-    ACTIVE_STATUSES,
-    PREDECESSOR_TASK_TYPES,
-    TERMINAL_TASK_TYPES,
-    TaskStatus,
-    TaskType,
-)
+from lib.tasks.models import ACTIVE_STATUSES, TaskStatus, TaskType
 from lib.tasks.tracks import PIPELINE_TRACKS
 
 logger = logging.getLogger(__name__)
@@ -554,22 +548,14 @@ def list_active_papers(
 def get_task_stats(
     current_user: UserDB = Depends(get_current_user),
 ) -> Any:
-    """The pipeline's structure: which task types group into which track, the
-    pipeline's terminal (leaf) task types, and each type's direct predecessor(s).
+    """The pipeline's structure: which task types group into which track.
 
     A caller uses this alongside a paper's own task list to work out progress
     live from real task status -- not from a historical time estimate, which
     can't be measured reliably once a single task can be re-run on its own
     without disturbing the rest of the pipeline.
     """
-    return TaskStatsResp(
-        tracks=_track_stats(),
-        terminal_task_types=sorted(TERMINAL_TASK_TYPES, key=lambda t: t.value),
-        predecessor_task_types={
-            task_type: sorted(predecessors, key=lambda t: t.value)
-            for task_type, predecessors in PREDECESSOR_TASK_TYPES.items()
-        },
-    )
+    return TaskStatsResp(tracks=_track_stats())
 
 
 @app.get('/users', response_model=list[UserSummaryResp], tags=['users'])

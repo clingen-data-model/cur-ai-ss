@@ -1852,7 +1852,7 @@ def test_enqueue_task_with_patient_variant_occurrence_scope(
     response = client.post(
         f'/papers/{seeded_paper.id}/tasks',
         json=TaskCreateRequest(
-            type=TaskType.MONDO_LINKING,
+            type=TaskType.OCCURRENCE_MONDO_LINKING,
             patient_variant_occurrence_id=occurrence.id,
         ).model_dump(),
     )
@@ -1869,7 +1869,7 @@ def test_enqueue_task_with_patient_variant_occurrence_scope(
     response = client.post(
         f'/papers/{seeded_paper.id}/tasks',
         json=TaskCreateRequest(
-            type=TaskType.MONDO_LINKING,
+            type=TaskType.OCCURRENCE_MONDO_LINKING,
             patient_variant_occurrence_id=occurrence.id,
         ).model_dump(),
     )
@@ -1881,7 +1881,9 @@ def test_enqueue_task_with_patient_variant_occurrence_scope(
     assert tasks[0]['status'] == 'Pending'
 
 
-def test_paper_metadata_successor_enqueues_mondo_linking(db_session, seeded_paper):
+def test_paper_metadata_successor_enqueues_paper_mondo_linking(
+    db_session, seeded_paper
+):
     from lib.tasks.misc import enqueue_successors
 
     task = TaskDB(
@@ -1898,17 +1900,21 @@ def test_paper_metadata_successor_enqueues_mondo_linking(db_session, seeded_pape
         db_session.query(TaskDB)
         .filter(
             TaskDB.paper_id == seeded_paper.id,
-            TaskDB.type == TaskType.MONDO_LINKING,
+            TaskDB.type == TaskType.PAPER_MONDO_LINKING,
         )
         .one()
     )
     assert mondo_task.status == TaskStatus.PENDING
+    assert mondo_task.patient_variant_occurrence_id is None
 
 
 def test_patient_variant_occurrence_successor_enqueues_paper_and_occurrence_mondo(
     db_session, seeded_paper, seeded_variant
 ):
-    """Enqueue MONDO-linking for paper and patient variant occurrences with nonblank disease names."""
+    """Re-links paper-level MONDO linking, and fans out occurrence-level MONDO
+    linking for patient variant occurrences with nonblank disease names --
+    two distinct task types, since the paper-level task is a single row
+    re-triggered in place, never a fan-out."""
     from lib.tasks.misc import enqueue_successors
 
     occurrence_one = _create_patient_variant_occurrence(
@@ -1941,21 +1947,31 @@ def test_patient_variant_occurrence_successor_enqueues_paper_and_occurrence_mond
 
     enqueue_successors(db_session, task)
 
-    mondo_tasks = (
+    paper_mondo_task = (
         db_session.query(TaskDB)
         .filter(
             TaskDB.paper_id == seeded_paper.id,
-            TaskDB.type == TaskType.MONDO_LINKING,
+            TaskDB.type == TaskType.PAPER_MONDO_LINKING,
+        )
+        .one()
+    )
+    assert paper_mondo_task.status == TaskStatus.PENDING
+    assert paper_mondo_task.patient_variant_occurrence_id is None
+
+    occurrence_mondo_tasks = (
+        db_session.query(TaskDB)
+        .filter(
+            TaskDB.paper_id == seeded_paper.id,
+            TaskDB.type == TaskType.OCCURRENCE_MONDO_LINKING,
         )
         .all()
     )
-    assert len(mondo_tasks) == 3
-    assert {task.patient_variant_occurrence_id for task in mondo_tasks} == {
-        None,
+    assert len(occurrence_mondo_tasks) == 2
+    assert {task.patient_variant_occurrence_id for task in occurrence_mondo_tasks} == {
         occurrence_one.id,
         occurrence_two.id,
     }
-    assert all(task.status == TaskStatus.PENDING for task in mondo_tasks)
+    assert all(task.status == TaskStatus.PENDING for task in occurrence_mondo_tasks)
 
     segregation_task = (
         db_session.query(TaskDB)

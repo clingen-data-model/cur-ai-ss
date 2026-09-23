@@ -91,9 +91,9 @@ def test_segregation_sorts_after_occurrences():
 
 
 def test_rows_sorted_by_pipeline_order_not_alphabetically():
-    """MONDO Linking runs last but sorts first alphabetically."""
+    """Occurrence MONDO Linking runs last but sorts first alphabetically."""
     tasks = [
-        _task(TaskType.MONDO_LINKING),
+        _task(TaskType.OCCURRENCE_MONDO_LINKING, patient_variant_occurrence_id=1),
         _task(TaskType.PDF_PARSING),
         _task(TaskType.PATIENT_EXTRACTION),
     ]
@@ -103,7 +103,7 @@ def test_rows_sorted_by_pipeline_order_not_alphabetically():
     assert types == [
         TaskType.PDF_PARSING.value,
         TaskType.PATIENT_EXTRACTION.value,
-        TaskType.MONDO_LINKING.value,
+        TaskType.OCCURRENCE_MONDO_LINKING.value,
     ]
 
 

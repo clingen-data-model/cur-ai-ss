@@ -1,13 +1,19 @@
 /* Turning a paper's tasks into a live, per-task-type status list.
  *
- * One row per pipeline task type, in execution order, each independently
- * pending / running / complete / failed -- unlike the four aggregate bars this
- * replaces, a row's completeness is read straight off its own instances'
- * status plus its direct predecessor's, never off run-scoping or a
- * whole-paper judgement. See PREDECESSOR_TASK_TYPES (lib/tasks/models.py) for
- * why that is enough: a fan-out type's rows are always fully created by the
- * time its direct predecessor type is itself fully Completed, so nothing can
- * trickle in later once a row is marked complete.
+ * One row per pipeline task type, in execution order, each judged only by its
+ * own instances -- never by a predecessor type's status. An earlier version
+ * gated a row's completeness on its direct predecessor also being complete
+ * (to stop a fan-out row reading "1 of 1 done" the moment its first row
+ * landed, before the rest existed). That gate broke on real data two
+ * different ways: computed in the rerun dropdown's flat display order rather
+ * than true DAG order, so a predecessor later in that list read as
+ * permanently unfinished; and a paper old enough to predate some task types
+ * entirely (zero rows, ever, for an early type) could never satisfy it,
+ * permanently blanking out everything downstream. Judging each row by its own
+ * instances alone sidesteps both. The one type created in more than one batch
+ * from independent predecessors (MONDO_LINKING, from both Paper Metadata and
+ * Patient Variant Occurrences finishing) can in principle un-check briefly
+ * between batches -- accepted as a minor, rare cosmetic cost.
  */
 import { RERUNNABLE_TASK_TYPES } from '@/components/PaperActions'
 import type {
@@ -22,7 +28,9 @@ export interface TaskRowProgress {
   type: TaskType
   trackId: string
   status: TaskRowStatus
-  /** Seconds elapsed (running, live) or taken (complete, frozen). Null otherwise. */
+  /** Seconds: live elapsed since the earliest running instance started, or the
+   *  average per-instance duration once every instance is Completed. Null
+   *  otherwise. */
   elapsedSeconds: number | null
   errorMessage: string | null
   /** How many rows of this type exist -- >1 for a fan-out type (per-patient, etc). */
@@ -37,9 +45,17 @@ function earliestStart(tasks: TaskResp[]): number | null {
   return times.length ? Math.min(...times) : null
 }
 
-function latestUpdate(tasks: TaskResp[]): number | null {
-  const times = tasks.map((t) => new Date(t.updated_at).getTime())
-  return times.length ? Math.max(...times) : null
+/** Mean of each completed task's own (updated_at - started_at), not a wall-clock
+ *  span across all of them -- a fan-out type's N instances run with staggered
+ *  starts, so first-to-last would measure scheduling overlap rather than how
+ *  long the work itself typically takes. */
+function averageDuration(tasks: TaskResp[]): number | null {
+  const durations = tasks
+    .filter((t): t is TaskResp & { started_at: string } => !!t.started_at)
+    .map((t) => (new Date(t.updated_at).getTime() - new Date(t.started_at).getTime()) / 1000)
+    .filter((s) => s >= 0)
+  if (!durations.length) return null
+  return durations.reduce((sum, s) => sum + s, 0) / durations.length
 }
 
 export function taskTypeProgress(
@@ -47,27 +63,17 @@ export function taskTypeProgress(
   stats: TaskStatsResp | undefined,
   now: number = Date.now(),
 ): TaskRowProgress[] {
-  const predecessorsOf = stats?.predecessor_task_types ?? {}
   const trackOfType: Record<string, string> = {}
   for (const track of stats?.tracks ?? []) {
     for (const type of track.task_types) trackOfType[type] = track.id
   }
 
-  const completeByType: Partial<Record<TaskType, boolean>> = {}
   return RERUNNABLE_TASK_TYPES.map((type) => {
     const mine = tasks.filter((t) => t.type === type)
     const running = mine.filter((t) => t.status === 'Running')
     const failed = mine.filter((t) => t.status === 'Failed')
-
-    const predecessorsDone = (predecessorsOf[type] ?? []).every(
-      (p) => completeByType[p],
-    )
-    const complete =
-      running.length === 0 &&
-      predecessorsDone &&
-      mine.length > 0 &&
-      mine.every((t) => t.status === 'Completed')
-    completeByType[type] = complete
+    const completed = mine.filter((t) => t.status === 'Completed')
+    const complete = mine.length > 0 && completed.length === mine.length
 
     const status: TaskRowStatus =
       running.length > 0
@@ -78,17 +84,12 @@ export function taskTypeProgress(
             ? 'failed'
             : 'pending'
 
-    const completed = mine.filter((t) => t.status === 'Completed')
-    const startedAt = earliestStart(status === 'running' ? running : completed)
     let elapsedSeconds: number | null = null
-    if (status === 'running' && startedAt !== null) {
-      elapsedSeconds = Math.max(0, (now - startedAt) / 1000)
+    if (status === 'running') {
+      const startedAt = earliestStart(running)
+      elapsedSeconds = startedAt === null ? null : Math.max(0, (now - startedAt) / 1000)
     } else if (status === 'complete') {
-      const endedAt = latestUpdate(completed)
-      elapsedSeconds =
-        startedAt !== null && endedAt !== null
-          ? Math.max(0, (endedAt - startedAt) / 1000)
-          : null
+      elapsedSeconds = averageDuration(completed)
     }
 
     return {
