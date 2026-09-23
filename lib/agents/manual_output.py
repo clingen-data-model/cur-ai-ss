@@ -36,7 +36,18 @@ T = TypeVar('T', bound=BaseModel)
 _JSON_OUTPUT_DIRECTIVE = (
     'Respond with a single JSON object and nothing else -- no markdown code '
     'fences, no commentary before or after. It must validate against this '
-    'JSON Schema exactly:\n\n{schema}'
+    'JSON Schema exactly:\n\n{schema}\n\n'
+    'The schema above cannot express one of its own rules, because it is a '
+    'cross-field check: any object shaped like {{"value", "reasoning", '
+    '"quote", "table_id", "image_id", ...}} is an evidence block, and at '
+    'least one of quote, table_id, or image_id MUST be set unless value is '
+    'null, "Unknown", or false. A block whose value is a concrete answer but '
+    'whose quote/table_id/image_id are all empty is invalid and will be '
+    'rejected. If the value itself was constructed rather than copied '
+    'verbatim (an invented label, an identifier assigned by you, a '
+    'conclusion that follows from a rule rather than from new text), cite '
+    'whatever quote, table, or image supports the underlying fact instead '
+    'of leaving all three empty.'
 )
 
 _REPAIR_PROMPT = (
