@@ -22,10 +22,14 @@ import { API_BASE_URL, getAccessToken } from '@/lib/api'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card'
 import {
   EditableDeNovoCell,
+  EditableDiseaseNameCell,
   EditableInheritanceCell,
   EditableTestingMethodsCell,
   EditableZygosityCell,
 } from '@/components/OccurrenceEditableCells'
+import { ConfidenceBadge } from '@/components/ConfidenceBadge'
+import { EvidencePopover } from '@/components/EvidencePopover'
+import { PairOccurrenceDialog } from '@/components/PairOccurrenceDialog'
 import { PatientDetailPanel } from '@/components/PatientDetailPanel'
 import { VariantDetailPanel } from '@/components/VariantDetailPanel'
 import { PatientHoverCardContent } from '@/components/PatientHoverCard'
@@ -93,12 +97,6 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
   })
 
   const expanded: ExpandedState = expandedCell ? { [expandedCell.rowId]: true } : {}
-
-  const hasPairedVariants = useMemo(() => rows.some((r) => r.pairedVariant), [rows])
-  const hasDiseaseNames = useMemo(
-    () => rows.some((r) => r.occurrence.disease_name),
-    [rows],
-  )
 
   const columns: ColumnDef<OccurrenceRow>[] = useMemo(() => {
     const cols: ColumnDef<OccurrenceRow>[] = [
@@ -168,13 +166,33 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
       },
     ]
 
-    if (hasPairedVariants) {
-      cols.push({
-        id: 'paired_variant',
-        header: 'Paired Variant',
-        accessorFn: (row) => row.pairedVariant?.variant_description ?? '',
-      })
-    }
+    cols.push({
+      id: 'paired_variant',
+      header: 'Paired Variant',
+      accessorFn: (row) => row.pairedVariant?.variant_description ?? '',
+      cell: ({ row }) => {
+        const occurrence = row.original.occurrence
+        const siblingOccurrences = rows.filter(
+          (r) =>
+            r.occurrence.patient_id === occurrence.patient_id &&
+            r.occurrence.id !== occurrence.id,
+        )
+        return (
+          <div className="flex items-center gap-1">
+            <span>{row.original.pairedVariant?.variant_description ?? '—'}</span>
+            {occurrence.paired_variant_confidence && (
+              <ConfidenceBadge confidence={occurrence.paired_variant_confidence} />
+            )}
+            <EvidencePopover block={occurrence.paired_variant_confidence_reasoning} />
+            <PairOccurrenceDialog
+              paperId={paperId}
+              occurrence={occurrence}
+              siblingOccurrences={siblingOccurrences}
+            />
+          </div>
+        )
+      },
+    })
 
     cols.push(
       {
@@ -201,13 +219,13 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
       },
     )
 
-    if (hasDiseaseNames) {
-      cols.push({
-        id: 'disease_name',
-        header: 'Disease Name',
-        accessorFn: (row) => row.occurrence.disease_name ?? '',
-      })
-    }
+    cols.push({
+      id: 'disease_name',
+      header: 'Disease Name',
+      cell: ({ row }) => (
+        <EditableDiseaseNameCell paperId={paperId} occurrence={row.original.occurrence} />
+      ),
+    })
 
     cols.push({
       id: 'actions',
@@ -224,7 +242,7 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
     })
 
     return cols
-  }, [hasPairedVariants, hasDiseaseNames, paperId, expandedCell?.rowId, deleteMutation])
+  }, [rows, paperId, expandedCell?.rowId, deleteMutation])
 
   if (rows.length === 0) {
     return (

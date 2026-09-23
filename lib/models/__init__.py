@@ -57,6 +57,7 @@ from lib.models.patient import (
 )
 from lib.models.patient_variant_occurrences import (
     Inheritance,
+    OccurrencePairRequest,
     PatientVariantOccurrence,
     PatientVariantOccurrenceCreateRequest,
     PatientVariantOccurrenceDB,

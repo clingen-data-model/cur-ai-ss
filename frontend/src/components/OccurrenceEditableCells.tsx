@@ -1,7 +1,5 @@
 /* The occurrence-level fields editable directly from the Occurrences table:
- * Zygosity, Inheritance, De Novo and Testing Methods. Disease Name stays
- * read-only -- PatientVariantOccurrenceUpdateRequest has no field for it,
- * matching the Streamlit grid (which never makes it editable either).
+ * Zygosity, Inheritance, De Novo, Testing Methods and Disease Name.
  */
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -14,6 +12,7 @@ import { EvidencePopover } from '@/components/EvidencePopover'
 import { HumanEditNoteDialog } from '@/components/HumanEditNoteDialog'
 import { usePendingEdit } from '@/hooks/usePendingEdit'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -255,6 +254,56 @@ export function EditableTestingMethodsCell({
         onConfirm={(note) => pending.confirm(note)}
         beforeValue={occurrence.testing_methods.join(', ') || '—'}
         afterValue={(pending.pendingValue ?? []).join(', ') || '—'}
+      />
+    </div>
+  )
+}
+
+export function EditableDiseaseNameCell({
+  paperId,
+  occurrence,
+}: {
+  paperId: number
+  occurrence: PatientVariantOccurrenceResp
+}) {
+  const mutation = useOccurrenceMutation(paperId, occurrence.id)
+  const pending = usePendingEdit<string>((value, note) =>
+    mutation.mutate({ disease_name: value || null, disease_name_human_edit_note: note }),
+  )
+  const [draft, setDraft] = useState(occurrence.disease_name ?? '')
+
+  const commit = () => {
+    if (draft !== (occurrence.disease_name ?? '')) pending.propose(draft)
+    else setDraft(occurrence.disease_name ?? '')
+  }
+
+  return (
+    <div className="flex items-center gap-1">
+      <Input
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur()
+        }}
+        placeholder="—"
+        className="h-7 w-40 text-xs"
+      />
+      <EvidencePopover block={occurrence.disease_name_evidence} />
+      <HumanEditNoteDialog
+        open={pending.isOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            pending.cancel()
+            setDraft(occurrence.disease_name ?? '')
+          }
+        }}
+        fieldLabel="Disease Name"
+        defaultNote={occurrence.disease_name_evidence?.human_edit_note}
+        isPending={mutation.isPending}
+        onConfirm={(note) => pending.confirm(note)}
+        beforeValue={occurrence.disease_name ?? '—'}
+        afterValue={pending.pendingValue || '—'}
       />
     </div>
   )

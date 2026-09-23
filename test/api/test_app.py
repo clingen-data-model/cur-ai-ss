@@ -986,17 +986,19 @@ def _create_patient_variant_occurrence(
     paper: PaperDB,
     variant: VariantDB,
     disease_name: str | None = 'test disease',
+    patient: PatientDB | None = None,
 ) -> PatientVariantOccurrenceDB:
-    patient_number = db_session.scalar(select(func.count(PatientDB.id))) + 1
-    patient_identifier = f'PVO Test Patient {patient_number}'
-    patient = PatientDB(
-        paper_id=paper.id,
-        family_id=paper.default_family_id,
-        identifier=patient_identifier,
-        **_patient_required_fields(patient_identifier),
-    )
-    db_session.add(patient)
-    db_session.flush()
+    if patient is None:
+        patient_number = db_session.scalar(select(func.count(PatientDB.id))) + 1
+        patient_identifier = f'PVO Test Patient {patient_number}'
+        patient = PatientDB(
+            paper_id=paper.id,
+            family_id=paper.default_family_id,
+            identifier=patient_identifier,
+            **_patient_required_fields(patient_identifier),
+        )
+        db_session.add(patient)
+        db_session.flush()
 
     occurrence = PatientVariantOccurrenceDB(
         paper_id=paper.id,
@@ -1016,6 +1018,39 @@ def _create_patient_variant_occurrence(
     db_session.add(occurrence)
     db_session.flush()
     return occurrence
+
+
+def _create_variant(db_session, paper: PaperDB, variant_str: str) -> VariantDB:
+    """A bare VariantDB for tests that just need a distinct variant_id to
+    link occurrences to (e.g. compound-het pairing), without the
+    harmonized/annotated rows seeded_variant/seeded_unharmonized_variant
+    also set up."""
+    variant = VariantDB(
+        paper_id=paper.id,
+        variant=variant_str,
+        variant_type='Missense',
+        functional_evidence=False,
+        main_focus=False,
+        transcript_evidence=_ev(),
+        protein_accession_evidence=_ev(),
+        genomic_accession_evidence=_ev(),
+        lrg_accession_evidence=_ev(),
+        gene_accession_evidence=_ev(),
+        genomic_coordinates_evidence=_ev(),
+        genome_build_evidence=_ev(),
+        rsid_evidence=_ev(),
+        caid_evidence=_ev(),
+        variant_evidence=_ev(variant_str),
+        hgvs_c_evidence=_ev(),
+        hgvs_p_evidence=_ev(),
+        hgvs_g_evidence=_ev(),
+        variant_type_evidence=_ev('Missense'),
+        functional_evidence_evidence=_ev(False),
+        main_focus_evidence=_ev(False),
+    )
+    db_session.add(variant)
+    db_session.flush()
+    return variant
 
 
 @pytest.fixture
@@ -1630,6 +1665,244 @@ def test_update_occurrence(client, db_session, seeded_paper, seeded_variant, tes
         json={'zygosity': 'Hemizygous'},
     )
     assert resp.status_code == 404
+
+
+def test_update_occurrence_disease_name(
+    client, db_session, seeded_paper, seeded_variant, test_user
+):
+    occurrence = _create_patient_variant_occurrence(
+        db_session, seeded_paper, seeded_variant, disease_name='Original Disease'
+    )
+
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/occurrences/{occurrence.id}',
+        json={
+            'disease_name': 'Corrected Disease',
+            'disease_name_human_edit_note': 'Corrected per clinician note',
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body['disease_name'] == 'Corrected Disease'
+    disease_name_evidence = body['disease_name_evidence']
+    assert disease_name_evidence['human_edit_note'] == 'Corrected per clinician note'
+    assert disease_name_evidence['edited_by_user_id'] == test_user.id
+    assert disease_name_evidence['edited_by_name'] == 'Test User'
+    assert disease_name_evidence['previous_value'] == 'Original Disease'
+    assert disease_name_evidence['value'] == 'Corrected Disease'
+
+    # Clearing the disease name is a valid patch too.
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/occurrences/{occurrence.id}',
+        json={'disease_name': None},
+    )
+    assert resp.status_code == 200
+    assert resp.json()['disease_name'] is None
+
+
+def test_update_occurrence_disease_name_with_no_prior_evidence(
+    client, db_session, seeded_paper, seeded_variant
+):
+    """An occurrence whose disease_name was never extracted has no evidence
+    block to annotate -- PatchModel._apply_field skips the note rather than
+    fabricating one, but the raw value still saves (matches the existing
+    documented behavior for every other optional evidence field)."""
+    occurrence = _create_patient_variant_occurrence(
+        db_session, seeded_paper, seeded_variant, disease_name=None
+    )
+
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/occurrences/{occurrence.id}',
+        json={
+            'disease_name': 'Newly Added Disease',
+            'disease_name_human_edit_note': 'Added by curator',
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body['disease_name'] == 'Newly Added Disease'
+    assert body['disease_name_evidence'] is None
+
+
+def test_pair_occurrence(
+    client, db_session, seeded_paper, seeded_variant, seeded_unharmonized_variant
+):
+    occurrence_a = _create_patient_variant_occurrence(
+        db_session, seeded_paper, seeded_variant
+    )
+    occurrence_b = _create_patient_variant_occurrence(
+        db_session,
+        seeded_paper,
+        seeded_unharmonized_variant,
+        patient=db_session.get(PatientDB, occurrence_a.patient_id),
+    )
+
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/occurrences/{occurrence_a.id}/pair',
+        json={'paired_occurrence_id': occurrence_b.id},
+    )
+    assert resp.status_code == 200
+    body = {row['id']: row for row in resp.json()}
+    assert set(body.keys()) == {occurrence_a.id, occurrence_b.id}
+    assert body[occurrence_a.id]['paired_variant_link_id'] == occurrence_b.id
+    assert body[occurrence_b.id]['paired_variant_link_id'] == occurrence_a.id
+    for row in body.values():
+        assert row['paired_variant_confidence'] == 'confirmed'
+        assert row['paired_variant_confidence_reasoning']['manually_entered'] is True
+
+
+def test_pair_occurrence_rejects_self_pair(
+    client, db_session, seeded_paper, seeded_variant
+):
+    occurrence = _create_patient_variant_occurrence(
+        db_session, seeded_paper, seeded_variant
+    )
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/occurrences/{occurrence.id}/pair',
+        json={'paired_occurrence_id': occurrence.id},
+    )
+    assert resp.status_code == 400
+
+
+def test_pair_occurrence_rejects_different_patient(
+    client, db_session, seeded_paper, seeded_variant, seeded_unharmonized_variant
+):
+    occurrence_a = _create_patient_variant_occurrence(
+        db_session, seeded_paper, seeded_variant
+    )
+    occurrence_b = _create_patient_variant_occurrence(
+        db_session, seeded_paper, seeded_unharmonized_variant
+    )
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/occurrences/{occurrence_a.id}/pair',
+        json={'paired_occurrence_id': occurrence_b.id},
+    )
+    assert resp.status_code == 400
+
+
+def test_pair_occurrence_missing_partner(
+    client, db_session, seeded_paper, seeded_variant
+):
+    occurrence = _create_patient_variant_occurrence(
+        db_session, seeded_paper, seeded_variant
+    )
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/occurrences/{occurrence.id}/pair',
+        json={'paired_occurrence_id': 999999},
+    )
+    assert resp.status_code == 404
+
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/occurrences/999999/pair',
+        json={'paired_occurrence_id': occurrence.id},
+    )
+    assert resp.status_code == 404
+
+
+def test_pair_occurrence_clears_stale_partner_symmetrically(
+    client, db_session, seeded_paper, seeded_variant, seeded_unharmonized_variant
+):
+    variant_c = _create_variant(db_session, seeded_paper, 'c.300A>G')
+    variant_d = _create_variant(db_session, seeded_paper, 'c.400A>G')
+
+    occurrence_a = _create_patient_variant_occurrence(
+        db_session, seeded_paper, seeded_variant
+    )
+    patient = db_session.get(PatientDB, occurrence_a.patient_id)
+    occurrence_b = _create_patient_variant_occurrence(
+        db_session, seeded_paper, seeded_unharmonized_variant, patient=patient
+    )
+    occurrence_c = _create_patient_variant_occurrence(
+        db_session, seeded_paper, variant_c, patient=patient
+    )
+    # D is paired with B before the test's own pairing calls, to exercise
+    # clearing a stale partner that came from a prior (agent or manual) run.
+    occurrence_d = _create_patient_variant_occurrence(
+        db_session, seeded_paper, variant_d, patient=patient
+    )
+
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/occurrences/{occurrence_b.id}/pair',
+        json={'paired_occurrence_id': occurrence_d.id},
+    )
+    assert resp.status_code == 200
+
+    # Re-pairing B to A must clear D (B's stale old partner) reciprocally,
+    # at this step -- not left dangling for a later call to discover.
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/occurrences/{occurrence_a.id}/pair',
+        json={'paired_occurrence_id': occurrence_b.id},
+    )
+    assert resp.status_code == 200
+    body = {row['id']: row for row in resp.json()}
+    assert body[occurrence_d.id]['paired_variant_link_id'] is None
+    assert body[occurrence_d.id]['paired_variant_confidence'] is None
+
+    # Re-pair A with C -- B (A's old partner) should come back unpaired.
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/occurrences/{occurrence_a.id}/pair',
+        json={'paired_occurrence_id': occurrence_c.id},
+    )
+    assert resp.status_code == 200
+    body = {row['id']: row for row in resp.json()}
+    assert body[occurrence_a.id]['paired_variant_link_id'] == occurrence_c.id
+    assert body[occurrence_c.id]['paired_variant_link_id'] == occurrence_a.id
+    assert body[occurrence_b.id]['paired_variant_link_id'] is None
+    assert body[occurrence_b.id]['paired_variant_confidence'] is None
+
+    # D was never touched by this last call -- confirm it's still unpaired
+    # in the DB, not just absent from this response.
+    db_session.refresh(occurrence_d)
+    assert occurrence_d.paired_variant_link_id is None
+
+
+def test_pair_occurrence_unpair(
+    client, db_session, seeded_paper, seeded_variant, seeded_unharmonized_variant
+):
+    occurrence_a = _create_patient_variant_occurrence(
+        db_session, seeded_paper, seeded_variant
+    )
+    occurrence_b = _create_patient_variant_occurrence(
+        db_session,
+        seeded_paper,
+        seeded_unharmonized_variant,
+        patient=db_session.get(PatientDB, occurrence_a.patient_id),
+    )
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/occurrences/{occurrence_a.id}/pair',
+        json={'paired_occurrence_id': occurrence_b.id},
+    )
+    assert resp.status_code == 200
+
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/occurrences/{occurrence_a.id}/pair',
+        json={'paired_occurrence_id': None},
+    )
+    assert resp.status_code == 200
+    body = {row['id']: row for row in resp.json()}
+    assert body[occurrence_a.id]['paired_variant_link_id'] is None
+    assert body[occurrence_b.id]['paired_variant_link_id'] is None
+
+    # Unpairing an already-unpaired occurrence is a no-op, not an error.
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/occurrences/{occurrence_a.id}/pair',
+        json={'paired_occurrence_id': None},
+    )
+    assert resp.status_code == 200
+    assert resp.json()[0]['paired_variant_link_id'] is None
+
+
+def test_pair_occurrence_requires_authentication(
+    unauth_client, db_session, seeded_paper, seeded_variant
+):
+    occurrence = _create_patient_variant_occurrence(
+        db_session, seeded_paper, seeded_variant
+    )
+    resp = unauth_client.patch(
+        f'/papers/{seeded_paper.id}/occurrences/{occurrence.id}/pair',
+        json={'paired_occurrence_id': None},
+    )
+    assert resp.status_code == 401
 
 
 def test_create_family(client, seeded_paper):

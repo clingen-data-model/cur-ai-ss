@@ -109,6 +109,8 @@ class PatientVariantOccurrenceUpdateRequest(PatchModel):
     de_novo_human_edit_note: str | None = None
     testing_methods: list[TestingMethod] | None = None
     testing_methods_note: str | None = None
+    disease_name: str | None = None
+    disease_name_human_edit_note: str | None = None
 
     @model_validator(mode='after')
     def max_two_methods(self) -> Self:
@@ -137,6 +139,13 @@ class CompoundHetPair(BaseModel):
 
 class CompoundHetEvaluationOutput(BaseModel):
     pairs: List[CompoundHetPair]
+
+
+class OccurrencePairRequest(BaseModel):
+    """Manually pair (or, with paired_occurrence_id=None, unpair) an
+    occurrence with another occurrence of the same patient."""
+
+    paired_occurrence_id: int | None
 
 
 # ==============================
@@ -256,7 +265,7 @@ class PatientVariantOccurrenceResp(BaseModel):
     testing_methods_evidence: List[EvidenceBlock[TestingMethod]]
     testing_methods_note: str | None = None
     disease_name: str | None = None
-    disease_name_evidence: EvidenceBlock[str] | None = None
+    disease_name_evidence: HumanEvidenceBlock[str] | None = None
     mondo: ReasoningBlock[MondoTerm | None]
     mondo_components: list[MondoComponentMapping] = []
     paired_variant_link_id: int | None = None
