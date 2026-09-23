@@ -137,7 +137,11 @@ function RestoreSnapshotDialog({
                   </SelectTrigger>
                   <SelectContent className="max-h-60">
                     {snapshots.map((s) => (
-                      <SelectItem key={s.name} value={s.name}>
+                      <SelectItem
+                        key={s.name}
+                        value={s.name}
+                        className="items-start py-1.5 text-xs [&_span]:whitespace-normal [&_span]:break-words"
+                      >
                         {formatSnapshotLabel(s)}
                       </SelectItem>
                     ))}
