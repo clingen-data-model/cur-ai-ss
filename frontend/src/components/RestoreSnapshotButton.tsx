@@ -60,7 +60,11 @@ function RestoreSnapshotDialog({
         path: { paper_id: paper.id },
         throwOnError: true,
       }),
-    enabled: open,
+    // Fetches as soon as this (always-mounted) dialog wrapper mounts, not
+    // gated on `open`: this is now a cheap indexed query (see
+    // lib/misc/snapshots.py's list_snapshots), so by the time a curator
+    // actually opens the dialog the list is already cached and there's no
+    // "Loading snapshots..." flash resizing the dialog on first open.
   })
 
   const snapshots = snapshotsQuery.data ?? []
