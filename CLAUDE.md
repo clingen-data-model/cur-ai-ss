@@ -140,7 +140,9 @@ Key tables:
 Configuration is in `lib/core/environment.py` using Pydantic BaseSettings:
 
 **Required:**
-- `EXTRACTION_MODEL` - Text-extraction model as `<provider>/<model>` (default: `openai/gpt-5.6-luna`); prefix required
+- `EXTRACTION_MODEL` - Text-extraction model as `<provider>/<model>` (default: `openai/gpt-5.6-luna`); prefix required; the
+  dev-caa deployment overrides this to `anthropic/claude-haiku-4-5-20251001` in
+  `infrastructure/ansible/templates/env.j2`
 - `VLM_MODEL` - Vision model, same form (default: `openai/gpt-5.6-sol`; the
   dev-caa deployment overrides this to `anthropic/claude-fable-5-1` in
   `infrastructure/ansible/templates/env.j2`)
@@ -148,7 +150,7 @@ Configuration is in `lib/core/environment.py` using Pydantic BaseSettings:
 - `JWT_SECRET_KEY` - Secret used to sign auth access tokens (set a strong value in prod)
 
 **Optional:**
-- `ANTHROPIC_API_KEY` - required whenever a configured model names `anthropic/`. `anthropic/` routes through LiteLLM; `openai/` goes to the agents SDK's default provider. The two settings may name different providers, so vision can run on Claude while extraction stays on OpenAI. Extraction itself cannot move to `anthropic/` yet — it still depends on OpenAI's server-side `conversation_id` (see `docs/anthropic-migration.md`)
+- `ANTHROPIC_API_KEY` - required whenever a configured model names `anthropic/`. `anthropic/` routes through LiteLLM; `openai/` goes to the agents SDK's default provider. The two settings may name different providers, so vision and extraction can be pointed at different providers independently. Extraction used to be pinned to OpenAI because `responses_api_model()`'s server-side `conversation_id` had no Anthropic equivalent; that dependency is gone now that `lib.tasks.agent_session` gives every task its own provider-agnostic `SQLiteSession` (see `docs/anthropic-migration.md`), so extraction can run on Claude too -- verified live against the MASP1 test paper (PMID 26419238) before flipping dev-caa to it
 - `NCBI_API_KEY` / `NCBI_EMAIL` - For variant enrichment
 - `API_ENDPOINT` - Where UI reaches API (default: `localhost:8000`)
 - `CORS_ALLOWED_ORIGINS` - CORS origins (default: `http://localhost:8501`)
