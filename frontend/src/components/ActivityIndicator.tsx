@@ -16,7 +16,7 @@ import {
   listTasksPapersPaperIdTasksGet,
 } from '@/api/generated'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { PipelineProgress } from '@/components/PipelineProgress'
+import { TaskTimeline } from '@/components/TaskTimeline'
 import type { PaperSummaryResp, TaskStatsResp } from '@/api/generated/types.gen'
 
 // Polled, so the cadence is a real cost decision. The worker claims work every
@@ -45,7 +45,7 @@ function PaperRow({ paper, stats }: { paper: PaperSummaryResp; stats?: TaskStats
       >
         {paper.title ?? paper.filename}
       </Link>
-      <PipelineProgress tasks={data ?? []} stats={stats} />
+      <TaskTimeline tasks={data ?? []} stats={stats} />
     </div>
   )
 }

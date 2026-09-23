@@ -186,9 +186,9 @@
   /* An indeterminate track has no fill to shimmer, so the sweep runs across the
      whole track instead -- the visual difference from a 0% bar. */
   .shimmer-track {
-    /* Follows the bar's own colour when one is set -- see PipelineProgress --
-       so a waiting track sweeps in its track's hue rather than the primary
-       accent belonging to a track it is not. */
+    /* Follows the bar's own colour when one is set via --track-accent, so a
+       waiting track sweeps in its own hue rather than the primary accent
+       belonging to a track it is not. */
     --shimmer-track-tint: color-mix(
       in oklab,
       var(--track-accent, var(--color-primary)) 22%,
@@ -205,6 +205,24 @@
     animation: caa-shimmer 2.4s linear infinite;
   }
 
+  /* A running row in TaskTimeline: sweeps the gradient across the label text
+     itself rather than a fill, since a text row has no bar to shimmer.
+     Tinted per row via --shimmer-text-tint (the row's track accent), same
+     mechanism as --track-accent above. */
+  .shimmer-text {
+    background-image: linear-gradient(
+      90deg,
+      var(--shimmer-text-tint, var(--color-foreground)) 0%,
+      color-mix(in oklab, var(--shimmer-text-tint, var(--color-foreground)) 35%, transparent) 50%,
+      var(--shimmer-text-tint, var(--color-foreground)) 100%
+    );
+    background-size: 200% 100%;
+    background-repeat: no-repeat;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: caa-shimmer 1.8s linear infinite;
+  }
+
   /* Honour the OS setting -- but this animation carries information, so the
      band is parked mid-sweep rather than left wherever it happened to stop.
      Without the explicit position an indeterminate track would fall back to
@@ -212,7 +230,8 @@
      from. */
   @media (prefers-reduced-motion: reduce) {
     .shimmer,
-    .shimmer-track {
+    .shimmer-track,
+    .shimmer-text {
       animation: none;
       background-position: 50% 0;
     }

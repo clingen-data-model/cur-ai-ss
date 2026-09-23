@@ -1,12 +1,10 @@
 import asyncio
 import json
 import logging
-import math
 import secrets
 import shutil
 import time
 import traceback
-import uuid
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -171,7 +169,6 @@ from lib.models.patient import (
 )
 from lib.models.segregation_analysis import SegregationAnalysisComputedNestedResp
 from lib.models.stats import (
-    TaskDurationStat,
     TaskStatsResp,
     TrackDurationStat,
 )
@@ -188,11 +185,12 @@ from lib.tasks.handlers import log_run_metrics
 from lib.tasks.misc import summarize_paper_task_status
 from lib.tasks.models import (
     ACTIVE_STATUSES,
+    PREDECESSOR_TASK_TYPES,
     TERMINAL_TASK_TYPES,
     TaskStatus,
     TaskType,
 )
-from lib.tasks.tracks import PIPELINE_TRACKS, TRACK_OF_TYPE
+from lib.tasks.tracks import PIPELINE_TRACKS
 
 logger = logging.getLogger(__name__)
 
@@ -437,9 +435,6 @@ def put_paper(
             type=TaskType.PDF_PARSING,
             status=TaskStatus.PENDING,
             updated_by_user_id=current_user.id,
-            # The paper's first run. Everything enqueue_successors cascades
-            # from here inherits it, so this id spans the whole extraction.
-            run_id=str(uuid.uuid4()),
         )
         paper_db.tasks.append(task)
         session.flush()
@@ -498,94 +493,22 @@ def put_paper(
         )
 
 
-def _percentile(sorted_values: list[float], fraction: float) -> float:
-    """Nearest-rank percentile of an already-sorted, non-empty list."""
-    index = min(
-        len(sorted_values) - 1,
-        max(0, math.ceil(fraction * len(sorted_values)) - 1),
-    )
-    return sorted_values[index]
-
-
-def _track_stats(session: Session) -> list[TrackDurationStat]:
-    """Per-track wall-clock times, measured over runs.
-
-    Wall clock rather than the sum of task durations, because tasks inside a
-    track run concurrently -- summing would overstate a track badly enough to
-    make every estimate useless.
-
-    Grouped by run, not by paper. A paper accumulates tasks across re-runs
-    weeks apart, so spanning its whole history measured calendar time rather
-    than pipeline time: on dev that gave Variants a 43-day "duration".
-
-    Only runs that started from scratch count, identified by containing a
-    PDF_PARSING task. A re-run of one agent produces a run whose span is that
-    one agent, and mixing those in would pull every budget toward the shortest
-    thing a track can do -- so a bar would read 99% through most of a real run.
-    Papers are usually uploaded and left to run, so the from-scratch case is
-    both the common one and the one worth estimating. Falls back to every run
-    when none qualify, which is only true of a database that has never
-    processed a paper end to end.
-
-    Fan-out stays baked in: a run with twelve patients genuinely takes longer
-    than one with two, and each contributes its own span.
-
-    Median, not mean: one pathological run should not move every estimate.
+def _track_stats() -> list[TrackDurationStat]:
+    """The pipeline's tracks, structurally -- which task types belong to which,
+    and where each sits in the pipeline's ordering. No historical timing data:
+    a track's typical wall-clock duration can't be measured reliably once a
+    single task within it can be re-run on its own (see the "Where we are"
+    note on this), so nothing here tries to estimate one anymore.
     """
-    rows = session.query(
-        TaskDB.run_id, TaskDB.type, TaskDB.started_at, TaskDB.updated_at
-    ).filter(
-        TaskDB.run_id.is_not(None),
-        TaskDB.started_at.is_not(None),
-        TaskDB.status.in_([TaskStatus.COMPLETED, TaskStatus.FAILED]),
-    )
-
-    # {(track, run): [earliest start, latest finish]}
-    spans: dict[tuple[str, str], list[datetime]] = {}
-    from_scratch: set[str] = set()
-    for run_id, task_type, started_at, updated_at in rows:
-        if task_type == TaskType.PDF_PARSING:
-            from_scratch.add(run_id)
-        track_id = TRACK_OF_TYPE.get(task_type)
-        if track_id is None:
-            continue
-        key = (track_id, run_id)
-        span = spans.get(key)
-        if span is None:
-            spans[key] = [started_at, updated_at]
-        else:
-            span[0] = min(span[0], started_at)
-            span[1] = max(span[1], updated_at)
-
-    def collect(runs: set[str] | None) -> dict[str, list[float]]:
-        found: dict[str, list[float]] = defaultdict(list)
-        for (track_id, run_id), (first, last) in spans.items():
-            if runs is not None and run_id not in runs:
-                continue
-            seconds = (last - first).total_seconds()
-            if seconds > 0:
-                found[track_id].append(seconds)
-        return found
-
-    by_track = collect(from_scratch) if from_scratch else collect(None)
-
-    stats = []
-    for track in PIPELINE_TRACKS:
-        values = sorted(by_track.get(track.id, []))
-        stats.append(
-            TrackDurationStat(
-                id=track.id,
-                label=track.label,
-                task_types=list(track.task_types),
-                stage=track.stage,
-                median_seconds=_percentile(values, 0.5) if values else None,
-                p90_seconds=_percentile(values, 0.9) if values else None,
-                # Runs now, not papers: one paper processed three times
-                # contributes three measurements.
-                papers=len(values),
-            )
+    return [
+        TrackDurationStat(
+            id=track.id,
+            label=track.label,
+            task_types=list(track.task_types),
+            stage=track.stage,
         )
-    return stats
+        for track in PIPELINE_TRACKS
+    ]
 
 
 @app.get('/papers/active', response_model=list[PaperSummaryResp], tags=['papers'])
@@ -629,58 +552,23 @@ def list_active_papers(
 
 @app.get('/stats', response_model=TaskStatsResp, tags=['stats'])
 def get_task_stats(
-    session: Session = Depends(get_session),
     current_user: UserDB = Depends(get_current_user),
 ) -> Any:
-    """How long each kind of task has historically taken.
+    """The pipeline's structure: which task types group into which track, the
+    pipeline's terminal (leaf) task types, and each type's direct predecessor(s).
 
-    Backs the progress estimates: a caller knows which of a paper's tasks are
-    outstanding and prices them with these.
-
-    Only terminal tasks with a start time count. A RUNNING task has
-    started_at == updated_at, so it would contribute a zero and drag every
-    median toward nothing; a PENDING one never ran at all. FAILED runs are
-    included -- they consumed real time, and dropping them would bias the
-    numbers toward whatever happened to succeed.
-
-    Median rather than mean, and p90 alongside it: model latency is
-    long-tailed, so a single slow run moves a mean and not a median, and the
-    gap between the two says how much precision a caller should imply.
+    A caller uses this alongside a paper's own task list to work out progress
+    live from real task status -- not from a historical time estimate, which
+    can't be measured reliably once a single task can be re-run on its own
+    without disturbing the rest of the pipeline.
     """
-    rows = session.query(TaskDB.type, TaskDB.started_at, TaskDB.updated_at).filter(
-        TaskDB.started_at.is_not(None),
-        TaskDB.status.in_([TaskStatus.COMPLETED, TaskStatus.FAILED]),
-    )
-
-    by_type: dict[TaskType, list[float]] = defaultdict(list)
-    for task_type, started_at, updated_at in rows:
-        seconds = (updated_at - started_at).total_seconds()
-        # Defensive: nothing should record a finish before its start, but a
-        # single negative would silently pull a median below zero and render as
-        # a progress bar running backwards.
-        if seconds > 0:
-            by_type[task_type].append(seconds)
-
-    durations = []
-    for task_type, values in by_type.items():
-        values.sort()
-        durations.append(
-            TaskDurationStat(
-                type=task_type,
-                median_seconds=_percentile(values, 0.5),
-                p90_seconds=_percentile(values, 0.9),
-                samples=len(values),
-            )
-        )
-    durations.sort(key=lambda stat: stat.type.value)
-
-    every = sorted(value for values in by_type.values() for value in values)
     return TaskStatsResp(
-        task_durations=durations,
-        tracks=_track_stats(session),
+        tracks=_track_stats(),
         terminal_task_types=sorted(TERMINAL_TASK_TYPES, key=lambda t: t.value),
-        overall_median_seconds=_percentile(every, 0.5) if every else None,
-        total_samples=len(every),
+        predecessor_task_types={
+            task_type: sorted(predecessors, key=lambda t: t.value)
+            for task_type, predecessors in PREDECESSOR_TASK_TYPES.items()
+        },
     )
 
 
@@ -1313,11 +1201,6 @@ def create_task(
     if not request.skip_successors:
         invalidate_descendants(session, paper_id, request.type)
 
-    # A re-run is its own run, even though the paper's earlier tasks remain:
-    # ancestors survive invalidate_descendants, so without a new id this run's
-    # elapsed time would be measured from whenever the paper was first uploaded.
-    run_id = str(uuid.uuid4())
-
     if (
         request.family_id is None
         and request.patient_id is None
@@ -1332,7 +1215,6 @@ def create_task(
             skip_successors=request.skip_successors,
             additional_context=request.additional_context,
             updated_by_user_id=current_user.id,
-            run_id=run_id,
         )
     else:
         task = enqueue_task(
@@ -1347,7 +1229,6 @@ def create_task(
             skip_successors=request.skip_successors,
             additional_context=request.additional_context,
             updated_by_user_id=current_user.id,
-            run_id=run_id,
         )
         tasks = [task]
     return tasks

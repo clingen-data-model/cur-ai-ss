@@ -17,14 +17,6 @@ class SnapshotMeta(BaseModel):
     model: str | None = None
     description: str | None = None
     git_hash: str | None = None
-    # The pipeline run whose completion produced this snapshot. None on
-    # snapshots written before runs were recorded, and on any written outside a
-    # run -- a manual backfill, say.
-    #
-    # Ordering alone cannot answer "revert to before that re-run": a paper's
-    # snapshots are a flat list, and which of them predates a given run is only
-    # inferable from timestamps. This makes it exact.
-    run_id: str | None = None
     state_hash: str
     # Set by the API when listing: whether the paper's current state already
     # matches this snapshot (resetting to it would be a no-op).

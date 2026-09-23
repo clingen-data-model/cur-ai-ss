@@ -10,7 +10,6 @@ as it did in the deleted lib/agents/chat_routing_agent.py.
 """
 
 import json
-import uuid
 from dataclasses import dataclass
 from typing import Any
 
@@ -201,7 +200,6 @@ def _make_queue_task_tool(paper_id: int, user_id: int) -> Any:
 
             if not skip_successors:
                 invalidate_descendants(session, paper_id, task_type)
-            run_id = str(uuid.uuid4())
 
             if no_scope:
                 tasks = enqueue_all_instances(
@@ -211,7 +209,6 @@ def _make_queue_task_tool(paper_id: int, user_id: int) -> Any:
                     skip_successors=skip_successors,
                     additional_context=additional_context,
                     updated_by_user_id=user_id,
-                    run_id=run_id,
                 )
             else:
                 tasks = [
@@ -227,7 +224,6 @@ def _make_queue_task_tool(paper_id: int, user_id: int) -> Any:
                         additional_context=additional_context,
                         skip_successors=skip_successors,
                         updated_by_user_id=user_id,
-                        run_id=run_id,
                     )
                 ]
 

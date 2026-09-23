@@ -14,7 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
-import { PipelineProgress } from '@/components/PipelineProgress'
+import { TaskTimeline } from '@/components/TaskTimeline'
 import { TaskDAG } from '@/components/TaskDAG'
 import type { PaperSummaryResp } from '@/api/generated/types.gen'
 
@@ -75,6 +75,14 @@ export function PaperProgressPopover({
         throwOnError: true,
       }),
     enabled: open,
+    // Matches ActivityIndicator's polling: the worker only claims new work
+    // every 10s, so anything faster shows the same rows twice. Off entirely
+    // once nothing is in flight -- a finished paper's popover has nothing left
+    // to learn by polling.
+    refetchInterval: (query) =>
+      query.state.data?.some((t) => t.status === 'Running' || t.status === 'Queued')
+        ? 5_000
+        : false,
   })
 
   // Shared across every badge on screen: one response backs all of them.
@@ -102,7 +110,7 @@ export function PaperProgressPopover({
           ) : tasksQuery.isError ? (
             <p className="text-sm text-destructive">Could not load progress.</p>
           ) : (
-            <PipelineProgress tasks={tasksQuery.data ?? []} stats={statsQuery.data} />
+            <TaskTimeline tasks={tasksQuery.data ?? []} stats={statsQuery.data} />
           )}
           <Button
             variant="outline"
