@@ -24,7 +24,7 @@ const RERUNNABLE_TASK_TYPES: TaskType[] = [
   'Segregation Evidence Extraction', 'Segregation Analysis Computed',
   'Variant Harmonization', 'Variant Annotation', 'Patient Variant Occurrences',
   'Compound Het Evaluation',
-  'Phenotype Extraction', 'HPO Linking', 'MONDO Linking',
+  'Phenotype Extraction', 'HPO Linking', 'Paper MONDO Linking', 'Occurrence MONDO Linking',
 ]
 
 function RerunTaskButton({ paper }: { paper: PaperSummaryResp }) {

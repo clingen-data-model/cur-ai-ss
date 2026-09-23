@@ -1721,5 +1721,10 @@ TASK_HANDLERS: dict[TaskType, Callable[[int], Awaitable[None]]] = {
     TaskType.COMPOUND_HET_EVALUATION: handle_compound_het_evaluation,
     TaskType.PHENOTYPE_EXTRACTION: handle_phenotype_extraction,
     TaskType.HPO_LINKING: handle_hpo_linking,
-    TaskType.MONDO_LINKING: handle_mondo_linking,
+    # Same handler, still dispatching internally on scope (see
+    # _build_mondo_linking_target) -- the two TaskTypes disambiguate the
+    # pipeline's DAG (predecessors, fan-out) and the frontend's row grouping,
+    # not the linking logic itself, which is identical either way.
+    TaskType.PAPER_MONDO_LINKING: handle_mondo_linking,
+    TaskType.OCCURRENCE_MONDO_LINKING: handle_mondo_linking,
 }

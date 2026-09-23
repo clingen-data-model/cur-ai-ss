@@ -1,4 +1,3 @@
-from collections import defaultdict
 from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
@@ -36,7 +35,14 @@ class TaskType(StrEnum):
     COMPOUND_HET_EVALUATION = 'Compound Het Evaluation'  # per-patient
     PHENOTYPE_EXTRACTION = 'Phenotype Extraction'  # per-patient
     HPO_LINKING = 'HPO Linking'  # per-patient
-    MONDO_LINKING = 'MONDO Linking'
+    # Two distinct types rather than one shared by both scopes: the paper-level
+    # task is a single row, re-triggered (reset in place, not duplicated) by
+    # either predecessor; the occurrence-level task fans out per occurrence,
+    # atomically, from Patient Variant Occurrences alone. Kept separate so a
+    # paper-level re-run can never look like the fan-out type's row count
+    # jumping back up after it already read complete.
+    PAPER_MONDO_LINKING = 'Paper MONDO Linking'
+    OCCURRENCE_MONDO_LINKING = 'Occurrence MONDO Linking'  # per-occurrence
 
     @property
     def description(self) -> str:
@@ -57,7 +63,8 @@ class TaskType(StrEnum):
             TaskType.COMPOUND_HET_EVALUATION: 'Evaluates pairs of heterozygous variants to identify compound heterozygous genotypes',
             TaskType.PHENOTYPE_EXTRACTION: 'Extracts phenotype text spans per patient',
             TaskType.HPO_LINKING: 'Maps phenotypes to HPO ontology terms for standardization',
-            TaskType.MONDO_LINKING: 'Maps disease names to MONDO ontology terms for standardization',
+            TaskType.PAPER_MONDO_LINKING: "Maps the paper's disease name to a MONDO ontology term for standardization",
+            TaskType.OCCURRENCE_MONDO_LINKING: "Maps a patient-variant occurrence's disease name to a MONDO ontology term for standardization",
         }
         return descriptions[self]
 
@@ -123,7 +130,7 @@ TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
         TaskType.PHENOTYPE_EXTRACTION,
         TaskType.PATIENT_VARIANT_OCCURRENCES,
     ],
-    TaskType.PAPER_METADATA: [TaskType.MONDO_LINKING],
+    TaskType.PAPER_METADATA: [TaskType.PAPER_MONDO_LINKING],
     TaskType.VARIANT_EXTRACTION: [
         TaskType.VARIANT_HARMONIZATION,
         TaskType.PATIENT_VARIANT_OCCURRENCES,
@@ -133,27 +140,23 @@ TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
     TaskType.PATIENT_VARIANT_OCCURRENCES: [
         TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
         TaskType.COMPOUND_HET_EVALUATION,
-        TaskType.MONDO_LINKING,
+        # Re-links the paper-level task (case-level occurrence extraction may
+        # have updated paper.disease_name), and fans out the per-occurrence one.
+        TaskType.PAPER_MONDO_LINKING,
+        TaskType.OCCURRENCE_MONDO_LINKING,
     ],
     TaskType.SEGREGATION_EVIDENCE_EXTRACTION: [TaskType.SEGREGATION_ANALYSIS_COMPUTED],
     TaskType.SEGREGATION_ANALYSIS_COMPUTED: [],
     TaskType.PHENOTYPE_EXTRACTION: [TaskType.HPO_LINKING],
     TaskType.HPO_LINKING: [],
-    TaskType.MONDO_LINKING: [],
+    TaskType.PAPER_MONDO_LINKING: [],
+    TaskType.OCCURRENCE_MONDO_LINKING: [],
 }
 
 # Pipeline leaves: task types with no successors.
 TERMINAL_TASK_TYPES: frozenset[TaskType] = frozenset(
     t for t in TaskType if not TASK_SUCCESSORS.get(t)
 )
-
-# Reverse of TASK_SUCCESSORS: a type's direct predecessor(s). Lets a caller ask
-# "has everything that could ever create more of these landed yet" without
-# walking the whole DAG itself.
-PREDECESSOR_TASK_TYPES: dict[TaskType, list[TaskType]] = defaultdict(list)
-for _predecessor, _successors in TASK_SUCCESSORS.items():
-    for _successor in _successors:
-        PREDECESSOR_TASK_TYPES[_successor].append(_predecessor)
 
 
 class TaskDB(Base):

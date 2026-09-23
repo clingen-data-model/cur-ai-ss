@@ -21,7 +21,7 @@ const DAG_EDGES: [TaskType, TaskType][] = [
   ['Paper Classifier', 'Paper Metadata'],
   ['Paper Classifier', 'Variant Extraction'],
   ['Paper Classifier', 'Pedigree Description'],
-  ['Paper Metadata', 'MONDO Linking'],
+  ['Paper Metadata', 'Paper MONDO Linking'],
   ['Pedigree Description', 'Patient Extraction'],
   ['Patient Extraction', 'Patient Demographics'],
   ['Patient Demographics', 'Phenotype Extraction'],
@@ -31,7 +31,8 @@ const DAG_EDGES: [TaskType, TaskType][] = [
   ['Variant Harmonization', 'Variant Annotation'],
   ['Patient Variant Occurrences', 'Segregation Evidence Extraction'],
   ['Patient Variant Occurrences', 'Compound Het Evaluation'],
-  ['Patient Variant Occurrences', 'MONDO Linking'],
+  ['Patient Variant Occurrences', 'Paper MONDO Linking'],
+  ['Patient Variant Occurrences', 'Occurrence MONDO Linking'],
   ['Segregation Evidence Extraction', 'Segregation Analysis Computed'],
   ['Phenotype Extraction', 'HPO Linking'],
 ]
@@ -44,7 +45,8 @@ const ALL_TASK_TYPES: TaskType[] = [
   'Pedigree Description',
   'Patient Extraction',
   'Patient Demographics',
-  'MONDO Linking',
+  'Paper MONDO Linking',
+  'Occurrence MONDO Linking',
   'Variant Harmonization',
   'Variant Annotation',
   'Patient Variant Occurrences',
@@ -71,7 +73,8 @@ const TASK_DESCRIPTIONS: Record<TaskType, string> = {
   'Compound Het Evaluation': 'Evaluates pairs of heterozygous variants to identify compound heterozygous genotypes',
   'Phenotype Extraction': 'Extracts phenotype text spans per patient',
   'HPO Linking': 'Maps phenotypes to HPO ontology terms for standardization',
-  'MONDO Linking': 'Maps disease names to MONDO ontology terms for standardization',
+  'Paper MONDO Linking': "Maps the paper's disease name to a MONDO ontology term for standardization",
+  'Occurrence MONDO Linking': "Maps a patient-variant occurrence's disease name to a MONDO ontology term for standardization",
 }
 
 export type NodeStatus = 'idle' | 'pending' | 'running' | 'partial' | 'completed' | 'failed'

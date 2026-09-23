@@ -14,32 +14,19 @@ from lib.tasks.models import TaskType
 
 
 class TaskStatsResp(BaseModel):
-    """The pipeline's shape: which task types group into which track, its
-    terminal (leaf) task types, and each type's direct predecessor(s).
+    """The pipeline's shape: which task types group into which track.
 
     Deliberately not a per-paper estimate: what a given paper still owes
     depends on which of its tasks are outstanding and their live status, which
-    the caller already knows from its task list. This supplies the pipeline
-    structure to interpret that with.
+    the caller already knows from its task list -- a row's own status and
+    instances are enough to judge it, without needing to know its place in the
+    wider DAG. This supplies the track grouping the progress list colours by.
     """
 
     # The grouping the progress list draws, and its color-coding. Served
     # together so the frontend does not keep its own copy of which task type
     # belongs to which track -- two copies would drift.
     tracks: list['TrackDurationStat'] = []
-
-    # The pipeline's leaves. A caller cannot tell "this level finished" from
-    # "the whole run finished" by looking at a task list: right after Pedigree
-    # Description lands, every task the paper has is Completed, and the rest do
-    # not exist yet. A run is done when each of these has completed.
-    terminal_task_types: list[TaskType] = []
-
-    # A type's direct predecessor(s) in the pipeline DAG (PREDECESSOR_TASK_TYPES,
-    # the reverse of TASK_SUCCESSORS). Lets a caller tell whether a fan-out
-    # type's current rows are the complete set or might still grow: once every
-    # predecessor instance is Completed, nothing more of this type can be
-    # created, so its own rows are safe to treat as final.
-    predecessor_task_types: dict[TaskType, list[TaskType]] = {}
 
 
 class TrackDurationStat(BaseModel):

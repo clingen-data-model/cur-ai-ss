@@ -414,10 +414,11 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
             enqueue_task(
                 session,
                 paper_id=task.paper_id,
-                task_type=TaskType.MONDO_LINKING,
+                task_type=TaskType.PAPER_MONDO_LINKING,
             )
 
-            # Expand to per-occurrence MONDO_LINKING tasks for extracted disease names.
+            # Expand to per-occurrence OCCURRENCE_MONDO_LINKING tasks for
+            # extracted disease names.
             occurrences = (
                 session.query(PatientVariantOccurrenceDB)
                 .filter(PatientVariantOccurrenceDB.paper_id == task.paper_id)
@@ -429,7 +430,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 enqueue_task(
                     session,
                     paper_id=task.paper_id,
-                    task_type=TaskType.MONDO_LINKING,
+                    task_type=TaskType.OCCURRENCE_MONDO_LINKING,
                     patient_variant_occurrence_id=occurrence.id,
                 )
 
@@ -465,7 +466,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
             enqueue_task(
                 session,
                 paper_id=task.paper_id,
-                task_type=TaskType.MONDO_LINKING,
+                task_type=TaskType.PAPER_MONDO_LINKING,
             )
 
         case (
@@ -473,7 +474,8 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
             | TaskType.SEGREGATION_ANALYSIS_COMPUTED
             | TaskType.COMPOUND_HET_EVALUATION
             | TaskType.HPO_LINKING
-            | TaskType.MONDO_LINKING
+            | TaskType.PAPER_MONDO_LINKING
+            | TaskType.OCCURRENCE_MONDO_LINKING
         ):
             # These tasks have no successors
             pass
