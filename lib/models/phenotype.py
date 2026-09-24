@@ -17,7 +17,11 @@ from sqlalchemy.types import JSON
 
 from lib.models.base import Base
 from lib.models.datetimes import UtcDatetime
-from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
+from lib.models.evidence_block import (
+    AttributedEvidenceBlock,
+    AttributedReasoningBlock,
+    EvidenceBlock,
+)
 
 if TYPE_CHECKING:
     from lib.models.paper import PaperDB
@@ -153,9 +157,9 @@ class PhenotypeResp(BaseModel):
     updated_at: UtcDatetime
     updated_by_user_id: int | None = None
     # Evidence block (from DB JSON column)
-    concept_evidence: EvidenceBlock[str]
+    concept_evidence: AttributedEvidenceBlock[str]
     # HPO link (always present, value may be None if not yet linked or excluded)
-    hpo: ReasoningBlock[HPOTerm | None]
+    hpo: AttributedReasoningBlock[HPOTerm | None]
 
 
 class PhenotypeCreateRequest(BaseModel):

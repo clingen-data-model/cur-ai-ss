@@ -6,7 +6,9 @@ markers as <sup>, in-cell line breaks as <br> -- and Streamlit escapes tags, so
 a curator reads them literally. These are real quotes from paper 96.
 """
 
-from lib.models.evidence_block import EvidenceBlock
+import pytest
+
+from lib.models.evidence_block import AttributedEvidenceBlock, EvidenceBlock
 from lib.models.evidence_block import strip_markup as clean_quote
 
 
@@ -180,3 +182,18 @@ def test_clinical_less_than_phrasing_survives():
         'below <lower limit of normal',
     ):
         assert clean_quote(text) == text
+
+
+def test_agent_evidence_block_requires_a_source() -> None:
+    # Agent output must cite a quote/table/image for a non-empty value, and a
+    # stray manually_entered key (no longer a field) is not an escape hatch.
+    with pytest.raises(ValueError, match='evidence source'):
+        EvidenceBlock[str].model_validate(
+            {'value': 'x', 'reasoning': 'r', 'manually_entered': True}
+        )
+
+
+def test_attributed_evidence_block_allows_curator_value_without_source() -> None:
+    block = AttributedEvidenceBlock[str](value='x', reasoning='r')
+    assert block.quote is None
+    assert 'edited_at' not in EvidenceBlock[str].model_json_schema()['properties']

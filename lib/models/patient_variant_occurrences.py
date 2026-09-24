@@ -18,7 +18,13 @@ from typing_extensions import Self
 
 from lib.models.base import Base, PatchModel
 from lib.models.datetimes import UtcDatetime
-from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock, ReasoningBlock
+from lib.models.evidence_block import (
+    AttributedEvidenceBlock,
+    AttributedReasoningBlock,
+    EvidenceBlock,
+    HumanEvidenceBlock,
+    ReasoningBlock,
+)
 from lib.models.mondo import MondoComponentMapping, MondoTerm
 from lib.models.user import UserSummaryResp
 
@@ -262,7 +268,7 @@ class PatientVariantOccurrenceResp(BaseModel):
     de_novo: bool
     de_novo_evidence: HumanEvidenceBlock[bool]
     testing_methods: list[TestingMethod]
-    testing_methods_evidence: List[EvidenceBlock[TestingMethod]]
+    testing_methods_evidence: List[AttributedEvidenceBlock[TestingMethod]]
     testing_methods_note: str | None = None
     disease_name: str | None = None
     disease_name_evidence: HumanEvidenceBlock[str] | None = None
@@ -271,7 +277,7 @@ class PatientVariantOccurrenceResp(BaseModel):
     paired_variant_link_id: int | None = None
     paired_variant_confidence: CompoundHetConfidence | None = None
     paired_variant_confidence_reasoning: (
-        ReasoningBlock[CompoundHetConfidence] | None
+        AttributedReasoningBlock[CompoundHetConfidence] | None
     ) = None
     updated_at: UtcDatetime
     updated_by_user_id: int | None = None

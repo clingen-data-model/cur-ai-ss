@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel
 from sqlalchemy.orm import DeclarativeBase
 
-from lib.models.evidence_block import HumanEvidenceBlock
+from lib.models.evidence_block import ATTRIBUTION_FIELDS, HumanEvidenceBlock
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -38,16 +38,19 @@ def manual_evidence_block(value: Any) -> dict:
     Carries no attribution itself: the entity doesn't have a primary key yet
     at the point this is called (it's building the columns passed into the
     ORM constructor), so there's nothing yet for an edits row's foreign key
-    to point at. The caller records the real edits-table row once the row has
-    been flushed and has an id -- see record_edit() calls in create_patient/
-    create_variant/create_occurrence/create_family."""
+    to point at. The caller must record an edits-table row for every field
+    built with this once the row has been flushed and has an id -- that row
+    is the only thing marking the field as curator-entered (see record_edits
+    calls in create_patient/create_variant/create_occurrence/create_family/
+    create_phenotype)."""
     block = HumanEvidenceBlock[Any](
         value=value,
         reasoning='Manually entered by curator.',
-        manually_entered=True,
         human_edit_note='Manually entered by curator.',
     )
-    return block.model_dump(mode='json')
+    return block.model_dump(
+        mode='json', exclude=set(ATTRIBUTION_FIELDS) | {'previous_value'}
+    )
 
 
 class PatchModel(BaseModel):

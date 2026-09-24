@@ -20,7 +20,13 @@ from sqlalchemy.types import JSON
 
 from lib.models.base import Base, PatchModel
 from lib.models.datetimes import UtcDatetime
-from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock, ReasoningBlock
+from lib.models.evidence_block import (
+    AttributedEvidenceBlock,
+    AttributedReasoningBlock,
+    EvidenceBlock,
+    HumanEvidenceBlock,
+    ReasoningBlock,
+)
 from lib.models.paper import PaperDB
 from lib.models.user import UserSummaryResp
 
@@ -225,24 +231,24 @@ class VariantResp(BaseModel):
     updated_by_user_id: int | None = None
     updated_by: UserSummaryResp | None = None
     # Evidence blocks (from DB JSON columns)
-    transcript_evidence: EvidenceBlock[Optional[str]]
-    protein_accession_evidence: EvidenceBlock[Optional[str]]
-    genomic_accession_evidence: EvidenceBlock[Optional[str]]
-    lrg_accession_evidence: EvidenceBlock[Optional[str]]
-    gene_accession_evidence: EvidenceBlock[Optional[str]]
-    genomic_coordinates_evidence: EvidenceBlock[Optional[str]]
-    genome_build_evidence: EvidenceBlock[Optional[str]]
-    rsid_evidence: EvidenceBlock[Optional[str]]
-    caid_evidence: EvidenceBlock[Optional[str]]
-    variant_evidence: EvidenceBlock[Optional[str]]
-    hgvs_c_evidence: EvidenceBlock[Optional[str]]
-    hgvs_p_evidence: EvidenceBlock[Optional[str]]
-    hgvs_g_evidence: EvidenceBlock[Optional[str]]
+    transcript_evidence: AttributedEvidenceBlock[Optional[str]]
+    protein_accession_evidence: AttributedEvidenceBlock[Optional[str]]
+    genomic_accession_evidence: AttributedEvidenceBlock[Optional[str]]
+    lrg_accession_evidence: AttributedEvidenceBlock[Optional[str]]
+    gene_accession_evidence: AttributedEvidenceBlock[Optional[str]]
+    genomic_coordinates_evidence: AttributedEvidenceBlock[Optional[str]]
+    genome_build_evidence: AttributedEvidenceBlock[Optional[str]]
+    rsid_evidence: AttributedEvidenceBlock[Optional[str]]
+    caid_evidence: AttributedEvidenceBlock[Optional[str]]
+    variant_evidence: AttributedEvidenceBlock[Optional[str]]
+    hgvs_c_evidence: AttributedEvidenceBlock[Optional[str]]
+    hgvs_p_evidence: AttributedEvidenceBlock[Optional[str]]
+    hgvs_g_evidence: AttributedEvidenceBlock[Optional[str]]
     variant_type_evidence: HumanEvidenceBlock[str]
     functional_evidence_evidence: HumanEvidenceBlock[bool]
     main_focus_evidence: HumanEvidenceBlock[bool]
     # Harmonized variant (always present with ReasoningBlock, but value may be None if not yet harmonized)
-    harmonized_variant: ReasoningBlock[HarmonizedVariantResp | None]
+    harmonized_variant: AttributedReasoningBlock[HarmonizedVariantResp | None]
     # Annotated variant (optional, may not yet be annotated)
     annotated_variant: Optional['AnnotatedVariantResp'] = None
 

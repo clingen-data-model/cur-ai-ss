@@ -9,7 +9,7 @@ from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, AsyncGenerator, Optional
+from typing import Any, AsyncGenerator, Optional, TypeVar
 
 from agents import Runner
 from fastapi import (
@@ -163,7 +163,13 @@ from lib.models.base import (
 )
 from lib.models.deletion_log import DeletionLogDB, DeletionLogResp, record_deletion
 from lib.models.edit import EditDB, latest_edits_for, record_edit, record_edits
-from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
+from lib.models.evidence_block import (
+    ATTRIBUTION_FIELDS,
+    AttributedEvidenceBlock,
+    AttributedReasoningBlock,
+    EvidenceBlock,
+    ReasoningBlock,
+)
 from lib.models.mondo import MondoComponentMapping, MondoTerm
 from lib.models.patient import (
     AffectedStatus,
@@ -1118,16 +1124,16 @@ def _paper_to_resp(row: PaperDB, session: Session) -> PaperResp:
         is_paper_relevant=row.is_paper_relevant,
         section_classifications=row.section_classifications,
         disease_name=row.disease_name,
-        disease_name_evidence=HumanEvidenceBlock.model_validate(
-            row.disease_name_evidence
+        disease_name_evidence=_from_storage(
+            HumanEvidenceBlock, row.disease_name_evidence
         )
         if row.disease_name_evidence
         else None,
         disease_inheritance_mode=Inheritance(row.disease_inheritance_mode)
         if row.disease_inheritance_mode
         else None,
-        disease_inheritance_mode_evidence=HumanEvidenceBlock.model_validate(
-            row.disease_inheritance_mode_evidence
+        disease_inheritance_mode_evidence=_from_storage(
+            HumanEvidenceBlock, row.disease_inheritance_mode_evidence
         )
         if row.disease_inheritance_mode_evidence
         else None,
@@ -1367,43 +1373,68 @@ def _decode_edit_value(raw: str | None, current_value: Any) -> Any:
     return decoded
 
 
-def _attach_edit_history(resp: BaseModel, edits: dict[str, EditDB], row: Base) -> None:
-    """Overlay per-field edit attribution from the edits table onto every
-    HumanEvidenceBlock field of an already-built response, keyed by the
-    response field name with any ``_evidence`` suffix stripped (e.g.
-    ``identifier_evidence`` -> ``identifier``; segregation's evidence fields
-    carry no such suffix -- e.g. ``extracted_lod_score`` -- and match as-is).
-    Fields never patched via apply_to simply have no entry in ``edits`` and
-    keep whatever attribution (if any) was baked into their evidence JSON at
-    creation (see manual_evidence_block).
+_Block = TypeVar('_Block', bound=BaseModel)
 
-    Also corrects ``value`` itself for an edited field: the evidence JSON's
-    embedded value is a snapshot from extraction/creation time that
-    apply_to's raw-field branch (``setattr(obj, field, value)``) never
-    touches, so without this it would keep showing the pre-edit value forever
-    -- a latent inconsistency that previous_value's "changed from X to Y"
-    display makes newly visible (Y would silently be stale, not just X
-    missing). The corrected value is read straight off ``row`` -- the ORM
-    object, which always carries the real, current column (e.g.
-    ``row.zygosity`` alongside ``row.zygosity_evidence``) -- rather than
-    ``resp``, since for segregation analysis the response's field *is* the
-    HumanEvidenceBlock itself with no separate sibling scalar. Reading off the
-    live column this way also means there's no need to store or decode a
-    "new_value" from the edits table at all."""
+# Keys a stored evidence/reasoning blob may still carry from before the edits
+# table existed (attribution used to be embedded in the JSON). Attribution is
+# derived from the edits table at response time only, so these are dropped
+# on read rather than trusted.
+_DERIVED_BLOCK_KEYS = ATTRIBUTION_FIELDS | {'previous_value', 'manually_entered'}
+
+
+def _from_storage(block_type: type[_Block], data: dict) -> _Block:
+    """Parse a stored evidence/reasoning blob into its response block type."""
+    return block_type.model_validate(
+        {k: v for k, v in data.items() if k not in _DERIVED_BLOCK_KEYS}
+    )
+
+
+def _set_attribution(
+    block: AttributedReasoningBlock[Any] | AttributedEvidenceBlock[Any], edit: EditDB
+) -> None:
+    block.edited_by_user_id = edit.user_id
+    block.edited_by_name = _editor_display_name(edit.user) if edit.user else None
+    block.edited_by_is_active = edit.user.is_active if edit.user else None
+    block.edited_at = edit.edited_at
+
+
+def _attach_edit_history(resp: BaseModel, edits: dict[str, EditDB], row: Base) -> None:
+    """Fill in edit attribution from the edits table on every attributed block
+    of an already-built response. A block is matched to its field's history by
+    the response field name with any ``_evidence``/``_reasoning`` suffix
+    stripped (e.g. ``identifier_evidence`` -> ``identifier``,
+    ``paired_variant_confidence_reasoning`` -> ``paired_variant_confidence``;
+    segregation's fields carry no suffix and match as-is). A list of blocks
+    (``testing_methods_evidence``) shares its one field's history. A field
+    with no edits row keeps no attribution -- nothing stored is trusted for it.
+
+    For a HumanEvidenceBlock this also fills ``previous_value`` and corrects
+    ``value`` itself: the evidence JSON's embedded value is a snapshot from
+    extraction/creation time that apply_to's raw-field branch
+    (``setattr(obj, field, value)``) never touches, so without this it would
+    keep showing the pre-edit value forever. The corrected value is read
+    straight off ``row`` -- the ORM object, which always carries the real,
+    current column (e.g. ``row.zygosity`` alongside ``row.zygosity_evidence``)
+    -- rather than ``resp``, since for segregation analysis the response's
+    field *is* the HumanEvidenceBlock itself with no separate sibling scalar."""
     for name, value in resp.__dict__.items():
-        if not isinstance(value, HumanEvidenceBlock):
+        candidates = value if isinstance(value, list) else [value]
+        blocks = [
+            b
+            for b in candidates
+            if isinstance(b, (AttributedReasoningBlock, AttributedEvidenceBlock))
+        ]
+        if not blocks:
             continue
-        field_name = name[: -len('_evidence')] if name.endswith('_evidence') else name
+        field_name = name.removesuffix('_evidence').removesuffix('_reasoning')
         edit = edits.get(field_name)
-        if edit is not None:
-            value.edited_by_user_id = edit.user_id
-            value.edited_by_name = (
-                _editor_display_name(edit.user) if edit.user else None
-            )
-            value.edited_by_is_active = edit.user.is_active if edit.user else None
-            value.edited_at = edit.edited_at
-            value.previous_value = _decode_edit_value(edit.old_value, value.value)
-            value.value = getattr(row, field_name, value.value)
+        if edit is None:
+            continue
+        for block in blocks:
+            _set_attribution(block, edit)
+            if isinstance(block, HumanEvidenceBlock):
+                block.previous_value = _decode_edit_value(edit.old_value, block.value)
+                block.value = getattr(row, field_name, block.value)
 
 
 def _family_to_resp(row: FamilyDB, session: Session) -> FamilyResp:
@@ -1411,10 +1442,10 @@ def _family_to_resp(row: FamilyDB, session: Session) -> FamilyResp:
         id=row.id,
         paper_id=row.paper_id,
         identifier=row.identifier,
-        identifier_evidence=HumanEvidenceBlock.model_validate(row.identifier_evidence),
+        identifier_evidence=_from_storage(HumanEvidenceBlock, row.identifier_evidence),
         consanguinity=row.consanguinity,
-        consanguinity_evidence=HumanEvidenceBlock.model_validate(
-            row.consanguinity_evidence
+        consanguinity_evidence=_from_storage(
+            HumanEvidenceBlock, row.consanguinity_evidence
         ),
         updated_at=row.updated_at,
         updated_by_user_id=row.updated_by_user_id,
@@ -1429,52 +1460,52 @@ def _patient_to_resp(row: PatientDB, session: Session) -> PatientResp:
         id=row.id,
         paper_id=row.paper_id,
         identifier=row.identifier,
-        identifier_evidence=HumanEvidenceBlock.model_validate(row.identifier_evidence),
+        identifier_evidence=_from_storage(HumanEvidenceBlock, row.identifier_evidence),
         proband_status=ProbandStatus(row.proband_status),
-        proband_status_evidence=HumanEvidenceBlock.model_validate(
-            row.proband_status_evidence
+        proband_status_evidence=_from_storage(
+            HumanEvidenceBlock, row.proband_status_evidence
         ),
         sex=SexAtBirth(row.sex),
-        sex_evidence=HumanEvidenceBlock.model_validate(row.sex_evidence),
+        sex_evidence=_from_storage(HumanEvidenceBlock, row.sex_evidence),
         age_diagnosis=row.age_diagnosis,
         age_diagnosis_unit=row.age_diagnosis_unit,
-        age_diagnosis_evidence=HumanEvidenceBlock.model_validate(
-            row.age_diagnosis_evidence
+        age_diagnosis_evidence=_from_storage(
+            HumanEvidenceBlock, row.age_diagnosis_evidence
         ),
         age_report=row.age_report,
         age_report_unit=row.age_report_unit,
-        age_report_evidence=HumanEvidenceBlock.model_validate(row.age_report_evidence),
+        age_report_evidence=_from_storage(HumanEvidenceBlock, row.age_report_evidence),
         age_death=row.age_death,
         age_death_unit=row.age_death_unit,
-        age_death_evidence=HumanEvidenceBlock.model_validate(row.age_death_evidence),
+        age_death_evidence=_from_storage(HumanEvidenceBlock, row.age_death_evidence),
         country_of_origin=CountryCode(row.country_of_origin),
-        country_of_origin_evidence=HumanEvidenceBlock.model_validate(
-            row.country_of_origin_evidence
+        country_of_origin_evidence=_from_storage(
+            HumanEvidenceBlock, row.country_of_origin_evidence
         ),
         race=Race(row.race),
-        race_evidence=HumanEvidenceBlock.model_validate(row.race_evidence),
+        race_evidence=_from_storage(HumanEvidenceBlock, row.race_evidence),
         ethnicity=Ethnicity(row.ethnicity),
-        ethnicity_evidence=HumanEvidenceBlock.model_validate(row.ethnicity_evidence),
+        ethnicity_evidence=_from_storage(HumanEvidenceBlock, row.ethnicity_evidence),
         affected_status=AffectedStatus(row.affected_status),
-        affected_status_evidence=HumanEvidenceBlock.model_validate(
-            row.affected_status_evidence
+        affected_status_evidence=_from_storage(
+            HumanEvidenceBlock, row.affected_status_evidence
         ),
         is_obligate_carrier=row.is_obligate_carrier,
         relationship_to_proband=RelationshipToProband(row.relationship_to_proband)
         if row.relationship_to_proband
         else None,
         twin_type=TwinType(row.twin_type) if row.twin_type else None,
-        is_obligate_carrier_evidence=HumanEvidenceBlock.model_validate(
-            row.is_obligate_carrier_evidence
+        is_obligate_carrier_evidence=_from_storage(
+            HumanEvidenceBlock, row.is_obligate_carrier_evidence
         )
         if row.is_obligate_carrier_evidence
         else None,
-        relationship_to_proband_evidence=HumanEvidenceBlock.model_validate(
-            row.relationship_to_proband_evidence
+        relationship_to_proband_evidence=_from_storage(
+            HumanEvidenceBlock, row.relationship_to_proband_evidence
         )
         if row.relationship_to_proband_evidence
         else None,
-        twin_type_evidence=HumanEvidenceBlock.model_validate(row.twin_type_evidence)
+        twin_type_evidence=_from_storage(HumanEvidenceBlock, row.twin_type_evidence)
         if row.twin_type_evidence
         else None,
         updated_at=row.updated_at,
@@ -1482,8 +1513,8 @@ def _patient_to_resp(row: PatientDB, session: Session) -> PatientResp:
         updated_by=_user_summary(row.updated_by),
         family_id=row.family.id,
         family_identifier=row.family.identifier,
-        family_assignment_evidence=HumanEvidenceBlock.model_validate(
-            row.family_assignment_evidence
+        family_assignment_evidence=_from_storage(
+            HumanEvidenceBlock, row.family_assignment_evidence
         ),
     )
     _attach_edit_history(resp, latest_edits_for(session, row), row)
@@ -1614,7 +1645,7 @@ def _seg_evidence_block(value: Any, evidence_dict: dict | None) -> HumanEvidence
     (the source of truth for edits) and reasoning/quote/note from the JSON block."""
     data = dict(evidence_dict or {})
     data['value'] = value
-    return HumanEvidenceBlock.model_validate(data)
+    return _from_storage(HumanEvidenceBlock, data)
 
 
 def _segregation_analysis_to_resp(
@@ -1761,7 +1792,7 @@ def _variant_to_resp(row: VariantDB, session: Session) -> VariantResp:
     """Convert VariantDB to VariantResp, including harmonized and enriched data."""
     hv = row.harmonized_variant
     if hv:
-        harmonized = ReasoningBlock[HarmonizedVariantResp | None](
+        harmonized = AttributedReasoningBlock[HarmonizedVariantResp | None](
             value=HarmonizedVariantResp(
                 gnomad_style_coordinates=hv.gnomad_style_coordinates,
                 rsid=hv.rsid,
@@ -1780,18 +1811,11 @@ def _variant_to_resp(row: VariantDB, session: Session) -> VariantResp:
         # attribution shown is whichever of those rows is most recent.
         harmonized_edits = latest_edits_for(session, hv)
         if harmonized_edits:
-            latest_edit = max(harmonized_edits.values(), key=lambda e: e.edited_at)
-            harmonized.manually_entered = True
-            harmonized.edited_by_user_id = latest_edit.user_id
-            harmonized.edited_by_name = (
-                _editor_display_name(latest_edit.user) if latest_edit.user else None
+            _set_attribution(
+                harmonized, max(harmonized_edits.values(), key=lambda e: e.edited_at)
             )
-            harmonized.edited_by_is_active = (
-                latest_edit.user.is_active if latest_edit.user else None
-            )
-            harmonized.edited_at = latest_edit.edited_at
     else:
-        harmonized = ReasoningBlock[HarmonizedVariantResp | None](
+        harmonized = AttributedReasoningBlock[HarmonizedVariantResp | None](
             value=None,
             reasoning='Harmonization not yet performed',
         )
@@ -1841,35 +1865,41 @@ def _variant_to_resp(row: VariantDB, session: Session) -> VariantResp:
         updated_at=row.updated_at,
         updated_by_user_id=row.updated_by_user_id,
         updated_by=_user_summary(row.updated_by),
-        transcript_evidence=EvidenceBlock.model_validate(row.transcript_evidence),
-        protein_accession_evidence=EvidenceBlock.model_validate(
-            row.protein_accession_evidence
+        transcript_evidence=_from_storage(
+            AttributedEvidenceBlock, row.transcript_evidence
         ),
-        genomic_accession_evidence=EvidenceBlock.model_validate(
-            row.genomic_accession_evidence
+        protein_accession_evidence=_from_storage(
+            AttributedEvidenceBlock, row.protein_accession_evidence
         ),
-        lrg_accession_evidence=EvidenceBlock.model_validate(row.lrg_accession_evidence),
-        gene_accession_evidence=EvidenceBlock.model_validate(
-            row.gene_accession_evidence
+        genomic_accession_evidence=_from_storage(
+            AttributedEvidenceBlock, row.genomic_accession_evidence
         ),
-        genomic_coordinates_evidence=EvidenceBlock.model_validate(
-            row.genomic_coordinates_evidence
+        lrg_accession_evidence=_from_storage(
+            AttributedEvidenceBlock, row.lrg_accession_evidence
         ),
-        genome_build_evidence=EvidenceBlock.model_validate(row.genome_build_evidence),
-        rsid_evidence=EvidenceBlock.model_validate(row.rsid_evidence),
-        caid_evidence=EvidenceBlock.model_validate(row.caid_evidence),
-        variant_evidence=EvidenceBlock.model_validate(row.variant_evidence),
-        hgvs_c_evidence=EvidenceBlock.model_validate(row.hgvs_c_evidence),
-        hgvs_p_evidence=EvidenceBlock.model_validate(row.hgvs_p_evidence),
-        hgvs_g_evidence=EvidenceBlock.model_validate(row.hgvs_g_evidence),
-        variant_type_evidence=HumanEvidenceBlock.model_validate(
-            row.variant_type_evidence
+        gene_accession_evidence=_from_storage(
+            AttributedEvidenceBlock, row.gene_accession_evidence
         ),
-        functional_evidence_evidence=HumanEvidenceBlock.model_validate(
-            row.functional_evidence_evidence
+        genomic_coordinates_evidence=_from_storage(
+            AttributedEvidenceBlock, row.genomic_coordinates_evidence
+        ),
+        genome_build_evidence=_from_storage(
+            AttributedEvidenceBlock, row.genome_build_evidence
+        ),
+        rsid_evidence=_from_storage(AttributedEvidenceBlock, row.rsid_evidence),
+        caid_evidence=_from_storage(AttributedEvidenceBlock, row.caid_evidence),
+        variant_evidence=_from_storage(AttributedEvidenceBlock, row.variant_evidence),
+        hgvs_c_evidence=_from_storage(AttributedEvidenceBlock, row.hgvs_c_evidence),
+        hgvs_p_evidence=_from_storage(AttributedEvidenceBlock, row.hgvs_p_evidence),
+        hgvs_g_evidence=_from_storage(AttributedEvidenceBlock, row.hgvs_g_evidence),
+        variant_type_evidence=_from_storage(
+            HumanEvidenceBlock, row.variant_type_evidence
+        ),
+        functional_evidence_evidence=_from_storage(
+            HumanEvidenceBlock, row.functional_evidence_evidence
         ),
         main_focus=row.main_focus,
-        main_focus_evidence=HumanEvidenceBlock.model_validate(row.main_focus_evidence),
+        main_focus_evidence=_from_storage(HumanEvidenceBlock, row.main_focus_evidence),
         harmonized_variant=harmonized,
         annotated_variant=enriched,
     )
@@ -1933,23 +1963,24 @@ def _phenotype_to_resp(session: Session, row: PhenotypeDB) -> PhenotypeResp:
             if row.hpo.hpo_id and row.hpo.hpo_name
             else None
         )
-        hpo_edits = latest_edits_for(session, row.hpo)
-        hpo = ReasoningBlock[HPOTerm | None](
+        hpo = AttributedReasoningBlock[HPOTerm | None](
             value=hpo_value,
             reasoning=row.hpo.reasoning,
-            manually_entered='hpo' in hpo_edits,
         )
+        hpo_edit = latest_edits_for(session, row.hpo).get('hpo')
+        if hpo_edit is not None:
+            _set_attribution(hpo, hpo_edit)
     else:
-        hpo = ReasoningBlock[HPOTerm | None](
+        hpo = AttributedReasoningBlock[HPOTerm | None](
             value=None,
             reasoning='HPO linking not yet performed',
         )
-    return PhenotypeResp(
+    resp = PhenotypeResp(
         id=row.id,
         paper_id=row.paper_id,
         patient_id=row.patient_id,
         concept=row.concept,
-        concept_evidence=EvidenceBlock.model_validate(row.concept_evidence),
+        concept_evidence=_from_storage(AttributedEvidenceBlock, row.concept_evidence),
         negated=row.negated,
         uncertain=row.uncertain,
         family_history=row.family_history,
@@ -1961,6 +1992,8 @@ def _phenotype_to_resp(session: Session, row: PhenotypeDB) -> PhenotypeResp:
         updated_by_user_id=row.updated_by_user_id,
         hpo=hpo,
     )
+    _attach_edit_history(resp, edits, row)
+    return resp
 
 
 @app.get(
@@ -2199,9 +2232,16 @@ def pair_occurrence(
         reasoning_block = ReasoningBlock[CompoundHetConfidence](
             value=CompoundHetConfidence.confirmed,
             reasoning='Manually paired by curator.',
-            manually_entered=True,
         ).model_dump(mode='json')
 
+        for occurrence in (occurrence_a, occurrence_b):
+            record_edit(
+                session,
+                occurrence,
+                'paired_variant_confidence',
+                current_user,
+                old_value=occurrence.paired_variant_confidence,
+            )
         occurrence_a.paired_variant_link_id = occurrence_b.id
         occurrence_b.paired_variant_link_id = occurrence_a.id
         occurrence_a.paired_variant_confidence = CompoundHetConfidence.confirmed.value
@@ -2254,21 +2294,22 @@ def _patient_variant_occurrence_to_resp(
         patient_identifier=patient_identifier,
         variant_id=row.variant_id,
         zygosity=Zygosity(row.zygosity),
-        zygosity_evidence=HumanEvidenceBlock.model_validate(row.zygosity_evidence),
+        zygosity_evidence=_from_storage(HumanEvidenceBlock, row.zygosity_evidence),
         inheritance=Inheritance(row.inheritance),
-        inheritance_evidence=HumanEvidenceBlock.model_validate(
-            row.inheritance_evidence
+        inheritance_evidence=_from_storage(
+            HumanEvidenceBlock, row.inheritance_evidence
         ),
         de_novo=row.de_novo,
-        de_novo_evidence=HumanEvidenceBlock.model_validate(row.de_novo_evidence),
+        de_novo_evidence=_from_storage(HumanEvidenceBlock, row.de_novo_evidence),
         testing_methods=[TestingMethod(m) for m in row.testing_methods],
         testing_methods_evidence=[
-            EvidenceBlock.model_validate(m) for m in row.testing_methods_evidence
+            _from_storage(AttributedEvidenceBlock, m)
+            for m in row.testing_methods_evidence
         ],
         testing_methods_note=row.testing_methods_note,
         disease_name=row.disease_name,
-        disease_name_evidence=HumanEvidenceBlock.model_validate(
-            row.disease_name_evidence
+        disease_name_evidence=_from_storage(
+            HumanEvidenceBlock, row.disease_name_evidence
         )
         if row.disease_name_evidence
         else None,
@@ -2282,9 +2323,10 @@ def _patient_variant_occurrence_to_resp(
         paired_variant_confidence=CompoundHetConfidence(row.paired_variant_confidence)
         if row.paired_variant_confidence
         else None,
-        paired_variant_confidence_reasoning=ReasoningBlock[
-            CompoundHetConfidence
-        ].model_validate(row.paired_variant_confidence_reasoning)
+        paired_variant_confidence_reasoning=_from_storage(
+            AttributedReasoningBlock[CompoundHetConfidence],
+            row.paired_variant_confidence_reasoning,
+        )
         if row.paired_variant_confidence_reasoning
         else None,
         updated_at=row.updated_at,
@@ -2476,13 +2518,27 @@ def create_variant(
 
     session.add(variant_db)
     session.flush()
-    # Only variant_type/functional_evidence/main_focus are HumanEvidenceBlock
-    # fields (the only ones VariantUpdateRequest can *_human_edit_note patch);
-    # the rest are plain EvidenceBlock with no edit attribution to record.
     record_edits(
         session,
         variant_db,
-        ['variant_type', 'functional_evidence', 'main_focus'],
+        [
+            'variant',
+            'transcript',
+            'protein_accession',
+            'genomic_accession',
+            'lrg_accession',
+            'gene_accession',
+            'genomic_coordinates',
+            'genome_build',
+            'rsid',
+            'caid',
+            'hgvs_c',
+            'hgvs_p',
+            'hgvs_g',
+            'variant_type',
+            'functional_evidence',
+            'main_focus',
+        ],
         current_user,
     )
     _touch_paper(session, paper_id, current_user)
@@ -2571,11 +2627,12 @@ def create_occurrence(
 
     session.add(occurrence_db)
     session.flush()
-    # testing_methods_evidence is a list of plain EvidenceBlock (no per-item
-    # attribution -- see testing_methods_note); only these three are
-    # HumanEvidenceBlock fields.
     record_edits(
-        session, occurrence_db, ['zygosity', 'inheritance', 'de_novo'], current_user
+        session,
+        occurrence_db,
+        ['zygosity', 'inheritance', 'de_novo']
+        + (['testing_methods'] if create_request.testing_methods else []),
+        current_user,
     )
     _touch_paper(session, paper_id, current_user)
     session.commit()

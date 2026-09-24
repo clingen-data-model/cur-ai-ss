@@ -1194,8 +1194,8 @@ def test_update_variant_harmonized_field_records_edit_history(
 ):
     """Editing a harmonized field records an edits-table row keyed by
     harmonized_variant_id, and surfaces as the shared block's
-    manually_entered/edited_by attribution -- what EvidencePopover's "edited
-    by curator" warning keys off of."""
+    edited_by attribution -- what EvidencePopover's "edited by curator"
+    warning keys off of."""
     hv_id = seeded_variant.harmonized_variant.id
     response = client.patch(
         f'/papers/{seeded_paper.id}/variants/{seeded_variant.id}',
@@ -1203,7 +1203,7 @@ def test_update_variant_harmonized_field_records_edit_history(
     )
     assert response.status_code == 200
     block = response.json()['harmonized_variant']
-    assert block['manually_entered'] is True
+    assert 'manually_entered' not in block
     assert block['edited_by_name'] == 'Test User'
     assert block['edited_at'] is not None
 
@@ -1227,7 +1227,7 @@ def test_update_variant_harmonized_unchanged_value_records_no_edit(
         json={'harmonized_variant': {'rsid': 'rs80357906'}},  # already this value
     )
     assert response.status_code == 200
-    assert response.json()['harmonized_variant']['manually_entered'] is False
+    assert response.json()['harmonized_variant']['edited_at'] is None
     assert (
         db_session.query(EditDB).filter(EditDB.harmonized_variant_id == hv_id).count()
         == 0
@@ -1847,7 +1847,19 @@ def test_pair_occurrence(
     assert body[occurrence_b.id]['paired_variant_link_id'] == occurrence_a.id
     for row in body.values():
         assert row['paired_variant_confidence'] == 'confirmed'
-        assert row['paired_variant_confidence_reasoning']['manually_entered'] is True
+        block = row['paired_variant_confidence_reasoning']
+        assert block['edited_by_name'] == 'Test User'
+        assert block['edited_at'] is not None
+    for occurrence in (occurrence_a, occurrence_b):
+        assert (
+            db_session.query(EditDB)
+            .filter(
+                EditDB.occurrence_id == occurrence.id,
+                EditDB.field_name == 'paired_variant_confidence',
+            )
+            .count()
+            == 1
+        )
 
 
 def test_pair_occurrence_rejects_self_pair(
@@ -2078,6 +2090,13 @@ def test_create_variant(client, seeded_paper):
     assert body['variant_type'] == 'Unknown'
     assert body['functional_evidence'] is False
     assert body['main_focus'] is False
+    # Every curator-entered field is attributed from its creation-time edits
+    # row -- including the raw accession/HGVS fields, which are plain
+    # (note-less) evidence blocks.
+    for field in ('variant_evidence', 'caid_evidence', 'hgvs_c_evidence'):
+        assert body[field]['edited_by_name'] == 'Test User'
+        assert body[field]['edited_at'] is not None
+        assert 'manually_entered' not in body[field]
 
     resp = client.post('/papers/999999/variants', json={'variant': 'c.1A>G'})
     assert resp.status_code == 404
@@ -2112,6 +2131,37 @@ def test_create_occurrence(client, db_session, seeded_paper, seeded_variant):
         json={'patient_id': 999999, 'variant_id': seeded_variant.id},
     )
     assert resp.status_code == 404
+
+
+def test_create_occurrence_attributes_testing_methods(
+    client, db_session, seeded_paper, seeded_variant
+):
+    family = (
+        db_session.query(FamilyDB).filter(FamilyDB.paper_id == seeded_paper.id).one()
+    )
+    patient = PatientDB(
+        paper_id=seeded_paper.id,
+        family_id=family.id,
+        identifier='Testing Methods Patient',
+        **_patient_required_fields('Testing Methods Patient'),
+    )
+    db_session.add(patient)
+    db_session.commit()
+
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/occurrences',
+        json={
+            'patient_id': patient.id,
+            'variant_id': seeded_variant.id,
+            'testing_methods': ['Chromosomal Microarray'],
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    [block] = body['testing_methods_evidence']
+    assert block['edited_by_name'] == 'Test User'
+    assert block['edited_at'] is not None
+    assert body['zygosity_evidence']['edited_at'] is not None
 
 
 def test_delete_patient(client, db_session, seeded_paper, test_user):
@@ -2778,14 +2828,14 @@ def test_create_phenotype(client, db_session, seeded_paper):
     assert resp.status_code == 200
     body = resp.json()
     assert body['concept'] == 'Seizures'
-    assert body['concept_evidence']['manually_entered'] is True
+    assert body['concept_evidence']['edited_by_name'] == 'Test User'
+    assert body['concept_evidence']['edited_at'] is not None
     # No hpos row is created when hpo_id is omitted -- the response falls
     # back to the same "not yet linked" reasoning a pipeline-extracted but
     # unlinked phenotype would show.
     assert body['hpo'] == {
         'value': None,
         'reasoning': 'HPO linking not yet performed',
-        'manually_entered': False,
         'edited_by_user_id': None,
         'edited_by_name': None,
         'edited_by_is_active': None,
@@ -2818,7 +2868,7 @@ def test_create_phenotype_with_hpo_id(client, db_session, seeded_paper):
         body = resp.json()
         assert body['hpo']['value'] == {'id': 'HP:0001250', 'name': 'Seizure'}
         assert body['hpo']['reasoning'] == 'Manually linked by curator'
-        assert body['hpo']['manually_entered'] is True
+        assert body['hpo']['edited_by_name'] == 'Test User'
 
         resp = client.post(
             f'/papers/{seeded_paper.id}/patients/{patient.id}/phenotypes',
@@ -2848,7 +2898,7 @@ def test_relink_phenotype_hpo(client, db_session, seeded_paper):
         body = resp.json()
         assert body['hpo']['value'] == {'id': 'HP:0001250', 'name': 'Seizure'}
         assert body['hpo']['reasoning'] == 'Manually linked by curator'
-        assert body['hpo']['manually_entered'] is True
+        assert body['hpo']['edited_by_name'] == 'Test User'
 
         resp = client.patch(
             f'/papers/{seeded_paper.id}/phenotypes/{phenotype.id}/hpo',
@@ -2856,15 +2906,10 @@ def test_relink_phenotype_hpo(client, db_session, seeded_paper):
         )
         assert resp.status_code == 200
         body = resp.json()
-        assert body['hpo'] == {
-            'value': None,
-            'reasoning': 'Unlinked by curator',
-            'manually_entered': True,
-            'edited_by_user_id': None,
-            'edited_by_name': None,
-            'edited_by_is_active': None,
-            'edited_at': None,
-        }
+        assert body['hpo']['value'] is None
+        assert body['hpo']['reasoning'] == 'Unlinked by curator'
+        assert body['hpo']['edited_by_name'] == 'Test User'
+        assert body['hpo']['edited_at'] is not None
         # Re-linking updates the existing hpos row rather than creating a
         # second one -- phenotype_id is unique on that table.
         assert (
@@ -2933,7 +2978,7 @@ def test_relink_phenotype_hpo_records_edit_history(client, db_session, seeded_pa
             json={'hpo_id': 'HP:0002066'},
         )
     assert resp.status_code == 200
-    assert resp.json()['hpo']['manually_entered'] is True
+    assert resp.json()['hpo']['edited_at'] is not None
 
     db_session.refresh(phenotype)
     edit = (
@@ -2986,14 +3031,16 @@ def test_deleting_hpo_link_cascades_its_edit_history(client, db_session, seeded_
     assert db_session.query(EditDB).filter(EditDB.hpo_link_id == hpo_id).count() == 0
     resp = client.get(f'/papers/{seeded_paper.id}/patients/{patient.id}/phenotypes')
     [body] = resp.json()
-    assert body['hpo']['manually_entered'] is False
+    assert body['hpo']['edited_at'] is None
 
 
-def test_extracted_hpo_link_is_not_manually_entered(client, db_session, seeded_paper):
+def test_extracted_hpo_link_has_no_curator_attribution(
+    client, db_session, seeded_paper
+):
     # An HpoDB row built the way the extraction pipeline builds one (see
     # lib/models/converters.py's hpo_to_db) never goes through a curator
-    # endpoint, so it has no 'hpo' edits row -- manually_entered must derive
-    # to False rather than reporting a curator edit.
+    # endpoint, so it has no 'hpo' edits row -- it must carry no edited_*
+    # attribution rather than reporting a curator edit.
     patient = _seed_patient(db_session, seeded_paper, 'Extraction Patient')
     phenotype = PhenotypeDB(
         paper_id=seeded_paper.id,
@@ -3008,7 +3055,7 @@ def test_extracted_hpo_link_is_not_manually_entered(client, db_session, seeded_p
     resp = client.get(f'/papers/{seeded_paper.id}/patients/{patient.id}/phenotypes')
     assert resp.status_code == 200
     [body] = resp.json()
-    assert body['hpo']['manually_entered'] is False
+    assert body['hpo']['edited_at'] is None
 
 
 def test_delete_phenotype(client, db_session, seeded_paper, test_user):
