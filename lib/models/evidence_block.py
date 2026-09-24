@@ -68,6 +68,17 @@ class ReasoningBlock(BaseModel, Generic[T]):
     # EvidenceBlock so a plain ReasoningBlock -- which has no quote/table_id/
     # image_id to point at anyway -- can carry the same signal.
     manually_entered: bool = False
+    # Per-field edit attribution, resolved live from the edits table (see
+    # app.py's _attach_edit_history / _variant_to_resp) -- not stored on this
+    # model at all, so edited_by_name/is_active always reflect the editor's
+    # current name/account state, not a stamp frozen at edit time. Lives here
+    # rather than only on HumanEvidenceBlock so a block with no single quote/
+    # table/image to point at (e.g. harmonized_variant, which covers several
+    # underlying fields at once) can still carry "a curator edited this".
+    edited_by_user_id: int | None = None
+    edited_by_name: str | None = None
+    edited_by_is_active: bool | None = None
+    edited_at: UtcDatetime | None = None
 
     @field_validator('reasoning', mode='after')
     @classmethod
@@ -125,15 +136,8 @@ class EvidenceBlock(ReasoningBlock[T]):
 
 class HumanEvidenceBlock(EvidenceBlock[T]):
     human_edit_note: str | None = None  # optional annotation by human curator
-    # Per-field edit attribution, resolved live from the edits table's most
-    # recent row for this field (see app.py's _attach_edit_history) -- not
-    # stored on this model at all, so edited_by_name/is_active always reflect
-    # the editor's current name/account state, not a stamp frozen at edit time.
-    edited_by_user_id: int | None = None
-    edited_by_name: str | None = None
-    edited_by_is_active: bool | None = None
-    edited_at: UtcDatetime | None = None
-    # The value this field held immediately before the edit above, resolved
-    # the same way (live, from the edits table) -- None both when there is no
-    # edit and when the edit's old_value genuinely was empty/never set.
+    # The value this field held immediately before the edit recorded via
+    # ReasoningBlock's edited_by_*/edited_at above, resolved live from the
+    # edits table -- None both when there is no edit and when the edit's
+    # old_value genuinely was empty/never set.
     previous_value: T | None = None

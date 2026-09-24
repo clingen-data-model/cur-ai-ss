@@ -36,6 +36,7 @@ _ENTITY_FK_COLUMNS: dict[str, str] = {
     'segregation_evidence': 'segregation_evidence_id',
     'phenotypes': 'phenotype_id',
     'hpos': 'hpo_link_id',
+    'harmonized_variants': 'harmonized_variant_id',
 }
 
 
@@ -84,6 +85,16 @@ class EditDB(Base):
     hpo_link_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey('hpos.id', ondelete='CASCADE'), nullable=True
     )
+    # One column per harmonized field (gnomad_style_coordinates, rsid, caid,
+    # hgvs_c/p/g) rather than sharing variant_id: harmonization can run again
+    # and overwrite these fields wholesale, and pointing at harmonized_variants.id
+    # (not variants.id) means that overwrite's own row lifecycle -- it's
+    # replaced in place, not deleted/recreated, so history simply keeps
+    # accumulating against the same id -- matches how the other FK columns
+    # here track the entity whose fields are actually being edited.
+    harmonized_variant_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey('harmonized_variants.id', ondelete='CASCADE'), nullable=True
+    )
 
     field_name: Mapped[str] = mapped_column(String, nullable=False)
 
@@ -119,7 +130,8 @@ class EditDB(Base):
             '(patient_id IS NOT NULL) + (variant_id IS NOT NULL) + '
             '(occurrence_id IS NOT NULL) + (family_id IS NOT NULL) + '
             '(paper_id IS NOT NULL) + (segregation_evidence_id IS NOT NULL) + '
-            '(phenotype_id IS NOT NULL) + (hpo_link_id IS NOT NULL) = 1',
+            '(phenotype_id IS NOT NULL) + (hpo_link_id IS NOT NULL) + '
+            '(harmonized_variant_id IS NOT NULL) = 1',
             name='ck_edits_exactly_one_entity',
         ),
         Index('ix_edits_patient_id_field_name', 'patient_id', 'field_name'),
@@ -134,6 +146,11 @@ class EditDB(Base):
         ),
         Index('ix_edits_phenotype_id_field_name', 'phenotype_id', 'field_name'),
         Index('ix_edits_hpo_link_id_field_name', 'hpo_link_id', 'field_name'),
+        Index(
+            'ix_edits_harmonized_variant_id_field_name',
+            'harmonized_variant_id',
+            'field_name',
+        ),
     )
 
 

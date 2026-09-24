@@ -273,10 +273,22 @@ class HarmonizedVariantUpdate(PatchModel):
     hgvs_g: str | None = None
 
     def apply_to(  # type: ignore[override]
-        self, obj: 'HarmonizedVariantDB', editor: 'UserDB | None' = None
+        self,
+        obj: 'HarmonizedVariantDB',
+        editor: 'UserDB | None' = None,
+        session: 'Session | None' = None,
     ) -> None:
         for field, value in self.model_dump(exclude_unset=True).items():
+            old_value = getattr(obj, field, None)
             setattr(obj, field, value)
+            if editor is not None and session is not None and old_value != value:
+                # Local import: edit.py imports Base from lib.models.base, and
+                # this module sits below base.py in the same import chain --
+                # matches the local-import pattern base.py itself uses for the
+                # same reason (see PatchModel._apply_field).
+                from lib.models.edit import record_edit
+
+                record_edit(session, obj, field, editor, old_value=old_value)
         self.stamp_updated_by(obj, editor)
 
 
