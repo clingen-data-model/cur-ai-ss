@@ -77,7 +77,10 @@ function Layout() {
       </header>
 
       {/* Main content */}
-      <main className="flex-1 container mx-auto px-4 py-8">
+      {/* No `container` here (unlike header/footer) -- its per-breakpoint
+          max-width left a growing empty margin on wide screens where content
+          like the extraction page's tables most wants the space. */}
+      <main className="flex-1 w-full px-6 py-8">
         <AuthGate>
           <Outlet />
         </AuthGate>
