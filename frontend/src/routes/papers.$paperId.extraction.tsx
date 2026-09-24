@@ -40,7 +40,6 @@ import { UnassociatedVariantsTab } from '@/components/UnassociatedVariantsTab'
 import { PipelineGate } from '@/components/PipelineGate'
 import { DeleteIconButton } from '@/components/DeleteIconButton'
 import { RestoreSnapshotButton } from '@/components/RestoreSnapshotButton'
-import { RerunAgentsButton } from '@/components/PaperActions'
 import { PaperProgressPopover } from '@/components/PaperProgressPopover'
 import { ReviewStatusCell } from '@/components/ReviewStatusCell'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -366,22 +365,22 @@ export function ExtractionPage() {
             <Link to="/" className="text-sm text-muted-foreground hover:underline">
               &larr; All Papers
             </Link>
-            <div className="flex items-center gap-2 mt-1">
-              <h1 className="text-xl font-semibold">{paper?.title ?? paper?.filename}</h1>
-              {paper && (
-                <>
-                  <PaperProgressPopover
-                    paper={{ id: paper.id, title: paper.title, filename: paper.filename, status: paperStatus }}
-                  >
-                    <StatusBadge status={paperStatus} />
-                  </PaperProgressPopover>
-                  <ReviewStatusCell paper={paper} />
-                </>
-              )}
-            </div>
+            <h1 className="text-xl font-semibold mt-1">{paper?.title ?? paper?.filename}</h1>
           </div>
           <div className="flex items-center gap-2">
-            {paper && <RerunAgentsButton paper={paper} />}
+            {/* Stacked in place of a standalone Re-run Agents button --
+                PaperProgressPopover's own refresh icon already opens the
+                same RerunTaskDialog, so a second control here was redundant. */}
+            {paper && (
+              <div className="flex flex-col items-start gap-1">
+                <PaperProgressPopover
+                  paper={{ id: paper.id, title: paper.title, filename: paper.filename, status: paperStatus }}
+                >
+                  <StatusBadge status={paperStatus} />
+                </PaperProgressPopover>
+                <ReviewStatusCell paper={paper} />
+              </div>
+            )}
             {paper && <RestoreSnapshotButton paper={paper} />}
             <Button
               variant="outline"
