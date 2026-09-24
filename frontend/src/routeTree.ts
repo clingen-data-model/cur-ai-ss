@@ -47,6 +47,10 @@ export interface IndexSearch {
   /** A specific reviewer's user id, independent of review_status -- the two
    * compose (e.g. "In progress" + this) rather than one replacing the other. */
   review_assignee?: number
+  /** Which of the two Curations-home tabs was last open. Absent means
+   * 'genes' -- the default is left out of the URL rather than written
+   * explicitly, same as 'anyone' for worked_by below. */
+  tab?: 'genes' | 'papers'
 }
 
 const indexRoute = new Route({
@@ -84,6 +88,10 @@ const indexRoute = new Route({
 
     // Anything unreadable falls through to showing everything rather than
     // erroring: these are filters, and a broken one should not be a broken page.
+
+    const tab = search.tab
+    if (tab === 'genes' || tab === 'papers') parsed.tab = tab
+
     return parsed
   },
 })
