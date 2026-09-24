@@ -41,6 +41,7 @@ export function VariantDetailPanel({ paperId, variant }: { paperId: number; vari
   const warning = harmonizationWarning(harmonized)
 
   const mutation = useMutation({
+    mutationKey: ['paper-edit', paperId],
     mutationFn: (body: VariantUpdateRequest) =>
       updateVariantPapersPaperIdVariantsVariantIdPatch({
         path: { paper_id: paperId, variant_id: variant.id },

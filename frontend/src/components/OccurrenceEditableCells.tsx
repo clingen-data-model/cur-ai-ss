@@ -29,6 +29,7 @@ const MAX_TESTING_METHODS = 2
 function useOccurrenceMutation(paperId: number, occurrenceId: number) {
   const queryClient = useQueryClient()
   return useMutation({
+    mutationKey: ['paper-edit', paperId],
     mutationFn: (body: PatientVariantOccurrenceUpdateRequest) =>
       updateOccurrencePapersPaperIdOccurrencesOccurrenceIdPatch({
         path: { paper_id: paperId, occurrence_id: occurrenceId },

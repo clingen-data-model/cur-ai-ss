@@ -25,6 +25,7 @@ export function PatientDetailPanel({ paperId, patient }: { paperId: number; pati
   const queryClient = useQueryClient()
 
   const mutation = useMutation({
+    mutationKey: ['paper-edit', paperId],
     mutationFn: (body: PatientUpdateRequest) =>
       updatePatientPapersPaperIdPatientsPatientIdPatch({
         path: { paper_id: paperId, patient_id: patient.id },

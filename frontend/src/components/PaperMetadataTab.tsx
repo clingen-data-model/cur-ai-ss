@@ -48,6 +48,7 @@ export function PaperMetadataTab({ paper }: { paper: PaperResp }) {
   const [zoom, setZoom] = useState(100)
 
   const updateMutation = useMutation({
+    mutationKey: ['paper-edit', paper.id],
     mutationFn: (body: Record<string, unknown>) =>
       updatePaperPapersPaperIdPatch({
         path: { paper_id: paper.id },
