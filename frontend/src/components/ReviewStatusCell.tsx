@@ -50,7 +50,13 @@ export function ReviewStatusBadge({
   )
 }
 
-export function ReviewStatusCell({ paper }: { paper: PaperSummaryResp }) {
+/** Narrower than PaperSummaryResp so a PaperResp (the paper-detail page's
+ * shape) satisfies it directly too -- both models carry these same three
+ * fields with the same (optional) types. Mirrors PaperProgressPopover's
+ * ProgressPaper. */
+type ReviewablePaper = Pick<PaperSummaryResp, 'id' | 'review_status' | 'review_assignee'>
+
+export function ReviewStatusCell({ paper }: { paper: ReviewablePaper }) {
   const { users } = useUsers()
   const { user } = useAuth()
   const queryClient = useQueryClient()
@@ -67,9 +73,12 @@ export function ReviewStatusCell({ paper }: { paper: PaperSummaryResp }) {
         body,
         throwOnError: true,
       }),
-    // The review column is only ever read from the papers list, so refetching
-    // it is enough -- no other view embeds review_status/review_assignee.
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['papers'] }),
+    // The papers list and the paper-detail page (['paper', id]) both embed
+    // review_status/review_assignee now, so both need invalidating.
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['papers'] })
+      queryClient.invalidateQueries({ queryKey: ['paper', paper.id] })
+    },
     onError: () => toast.error('Failed to update review status'),
   })
 

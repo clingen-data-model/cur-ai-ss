@@ -59,11 +59,18 @@ function PaperTaskDAG({ paperId, enabled }: { paperId: number; enabled: boolean 
  * are keyboard- and touch-hostile. Its queries are disabled until it opens, so
  * a table or grid of papers does not fetch tasks for every row on screen.
  */
+/** Narrower than PaperSummaryResp so a PaperResp (the paper-detail page's
+ * shape, which has no precomputed `status` -- see PaperTaskStatus's
+ * docstring) can supply this one field itself, computed from its own
+ * `tasks`, without a fake/partial PaperSummaryResp. Mirrors PaperActions.tsx's
+ * RerunnablePaper. */
+type ProgressPaper = Pick<PaperSummaryResp, 'id' | 'title' | 'filename' | 'status'>
+
 export function PaperProgressPopover({
   paper,
   children,
 }: {
-  paper: PaperSummaryResp
+  paper: ProgressPaper
   children: ReactNode
 }) {
   const [open, setOpen] = useState(false)
