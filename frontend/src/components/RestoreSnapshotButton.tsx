@@ -144,7 +144,11 @@ function RestoreSnapshotDialog({
                       <SelectItem
                         key={s.name}
                         value={s.name}
-                        className="items-start py-1.5 text-xs [&_span]:min-w-0 [&_span]:shrink [&_span]:whitespace-normal [&_span]:break-words"
+                        // Overrides ItemText -- Base UI's SelectItemText renders a
+                        // <div>, not a <span>, so a `[&_span]` selector here never
+                        // matches it and its own hardcoded `whitespace-nowrap
+                        // shrink-0` clipped the label instead of wrapping it.
+                        className="items-start py-1.5 text-xs [&>div]:min-w-0 [&>div]:shrink [&>div]:whitespace-normal [&>div]:break-words"
                       >
                         {formatSnapshotLabel(s)}
                       </SelectItem>
