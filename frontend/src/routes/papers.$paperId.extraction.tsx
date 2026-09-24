@@ -372,7 +372,7 @@ export function ExtractionPage() {
                 PaperProgressPopover's own refresh icon already opens the
                 same RerunTaskDialog, so a second control here was redundant. */}
             {paper && (
-              <div className="flex flex-col items-start gap-1">
+              <div className="flex items-center gap-2">
                 <PaperProgressPopover
                   paper={{ id: paper.id, title: paper.title, filename: paper.filename, status: paperStatus }}
                 >
