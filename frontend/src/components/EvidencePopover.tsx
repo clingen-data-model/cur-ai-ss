@@ -26,15 +26,10 @@ export interface EvidenceLike {
   // The current value (`value`) and, when the latest edit's old_value was
   // captured, what it changed from (`previous_value`) -- typed loosely since
   // this interface is shared across every HumanEvidenceBlock<T> variant
-  // (str/int/bool/enum/list). Absent (undefined) on non-HumanEvidenceBlock
-  // callers (e.g. plain EvidenceBlock), which don't have edit history at all.
+  // (str/int/bool/enum/list). previous_value is only present on
+  // HumanEvidenceBlock; the other Attributed* blocks carry edited_* alone.
   value?: unknown
   previous_value?: unknown
-  // True when a curator set this value directly rather than extraction having
-  // found it (EvidenceBlock.manually_entered / HpoLinkBlock.manually_entered)
-  // -- present with no edited_at/edited_by_name at all when there's no
-  // per-field edit-history row for this entity (e.g. phenotypes).
-  manually_entered?: boolean
 }
 
 const TRIGGER_CLASSNAME =
@@ -57,10 +52,9 @@ export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
   // _attach_edit_history in app.py), never at initial extraction, so it's a
   // reliable "a human changed this" signal independent of whether a note was
   // left -- though HumanEditNoteDialog forces one for every edit made here.
-  // manually_entered covers entities with no per-field edit-history row at
-  // all (e.g. phenotypes/HPO links) but whose value a curator typed/picked
-  // directly rather than extraction having found it.
-  const isHumanEdited = !!block?.edited_at || !!block?.manually_entered
+  // That includes values a curator entered at creation: those get an edits
+  // row too. Backfilled rows have no user, hence the fallback tooltip text.
+  const isHumanEdited = !!block?.edited_at
 
   return (
     <Popover>

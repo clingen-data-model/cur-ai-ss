@@ -1,6 +1,6 @@
 import re
 from datetime import datetime
-from typing import Generic, Self, TypeVar
+from typing import ClassVar, Generic, Self, TypeVar
 
 from pydantic import BaseModel, field_validator, model_validator
 
@@ -62,23 +62,6 @@ def strip_markup(text: str) -> str:
 class ReasoningBlock(BaseModel, Generic[T]):
     value: T
     reasoning: str  # human-readable summary (always required)
-    # True when a curator set this value directly (e.g. a manually created
-    # patient/variant, or a manually (re-)linked HPO term) rather than the
-    # extraction pipeline having produced it. Lives here rather than only on
-    # EvidenceBlock so a plain ReasoningBlock -- which has no quote/table_id/
-    # image_id to point at anyway -- can carry the same signal.
-    manually_entered: bool = False
-    # Per-field edit attribution, resolved live from the edits table (see
-    # app.py's _attach_edit_history / _variant_to_resp) -- not stored on this
-    # model at all, so edited_by_name/is_active always reflect the editor's
-    # current name/account state, not a stamp frozen at edit time. Lives here
-    # rather than only on HumanEvidenceBlock so a block with no single quote/
-    # table/image to point at (e.g. harmonized_variant, which covers several
-    # underlying fields at once) can still carry "a curator edited this".
-    edited_by_user_id: int | None = None
-    edited_by_name: str | None = None
-    edited_by_is_active: bool | None = None
-    edited_at: UtcDatetime | None = None
 
     @field_validator('reasoning', mode='after')
     @classmethod
@@ -93,6 +76,11 @@ class EvidenceBlock(ReasoningBlock[T]):
     is_supplement: bool = (
         False  # whether evidence came from a supplement (non-renderable in PDF view)
     )
+
+    # Whether a non-empty value must cite a quote/table/image. True for what an
+    # agent produces; the response-side subclasses below turn it off, since a
+    # curator-typed value legitimately has no source to cite.
+    require_source: ClassVar[bool] = True
 
     @field_validator('quote', mode='after')
     @classmethod
@@ -115,9 +103,9 @@ class EvidenceBlock(ReasoningBlock[T]):
         is_falsy_bool = isinstance(self.value, bool) and not self.value
 
         if (
-            not is_unknown
+            self.require_source
+            and not is_unknown
             and not is_falsy_bool
-            and not self.manually_entered
             and not self.quote
             and self.table_id is None
             and self.image_id is None
@@ -134,10 +122,40 @@ class EvidenceBlock(ReasoningBlock[T]):
         return self
 
 
-class HumanEvidenceBlock(EvidenceBlock[T]):
+# ReasoningBlock/EvidenceBlock above are agent output schemas and the shape
+# stored in the DB's evidence JSON, so they carry no "who edited this" fields:
+# anything on them is sent to the model to fill in (and counts toward
+# Anthropic's 16 union/nullable-node schema limit), and anything stored would
+# be a frozen copy of what the edits table already records. The Attributed*
+# classes below are the API-response shapes; their edited_* fields are filled
+# in from the edits table while the response is built (see app.py's
+# _attach_edit_history), never read from storage.
+
+
+class AttributedReasoningBlock(ReasoningBlock[T]):
+    edited_by_user_id: int | None = None
+    edited_by_name: str | None = None
+    edited_by_is_active: bool | None = None
+    edited_at: UtcDatetime | None = None
+
+
+class AttributedEvidenceBlock(EvidenceBlock[T]):
+    require_source: ClassVar[bool] = False
+
+    edited_by_user_id: int | None = None
+    edited_by_name: str | None = None
+    edited_by_is_active: bool | None = None
+    edited_at: UtcDatetime | None = None
+
+
+class HumanEvidenceBlock(AttributedEvidenceBlock[T]):
     human_edit_note: str | None = None  # optional annotation by human curator
-    # The value this field held immediately before the edit recorded via
-    # ReasoningBlock's edited_by_*/edited_at above, resolved live from the
-    # edits table -- None both when there is no edit and when the edit's
-    # old_value genuinely was empty/never set.
+    # The value this field held immediately before the edit in edited_*, resolved
+    # the same way (live, from the edits table) -- None both when there is no
+    # edit and when the edit's old_value genuinely was empty/never set.
     previous_value: T | None = None
+
+
+ATTRIBUTION_FIELDS = frozenset(
+    {'edited_by_user_id', 'edited_by_name', 'edited_by_is_active', 'edited_at'}
+)
