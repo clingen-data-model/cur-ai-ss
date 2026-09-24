@@ -41,6 +41,10 @@ import { PipelineGate } from '@/components/PipelineGate'
 import { DeleteIconButton } from '@/components/DeleteIconButton'
 import { RestoreSnapshotButton } from '@/components/RestoreSnapshotButton'
 import { RerunAgentsButton } from '@/components/PaperActions'
+import { PaperProgressPopover } from '@/components/PaperProgressPopover'
+import { ReviewStatusCell } from '@/components/ReviewStatusCell'
+import { StatusBadge } from '@/components/StatusBadge'
+import { computeStatus } from '@/components/TaskDAG'
 import { apiErrorMessage } from '@/lib/apiError'
 import { TaskType } from '@/api/generated/types.gen'
 import { PedigreeTab } from '@/components/PedigreeTab'
@@ -300,6 +304,7 @@ export function ExtractionPage() {
   const { paper, rows, unassociatedPatients, unassociatedVariants, isLoading, isError, error } =
     usePaperOccurrences(paperId)
   const tasks = paper?.tasks ?? []
+  const paperStatus = computeStatus(tasks)
   const [isExporting, setIsExporting] = useState(false)
 
   const handleExportPptx = async () => {
@@ -361,7 +366,19 @@ export function ExtractionPage() {
             <Link to="/" className="text-sm text-muted-foreground hover:underline">
               &larr; All Papers
             </Link>
-            <h1 className="text-xl font-semibold mt-1">{paper?.title ?? paper?.filename}</h1>
+            <div className="flex items-center gap-2 mt-1">
+              <h1 className="text-xl font-semibold">{paper?.title ?? paper?.filename}</h1>
+              {paper && (
+                <>
+                  <PaperProgressPopover
+                    paper={{ id: paper.id, title: paper.title, filename: paper.filename, status: paperStatus }}
+                  >
+                    <StatusBadge status={paperStatus} />
+                  </PaperProgressPopover>
+                  <ReviewStatusCell paper={paper} />
+                </>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             {paper && <RerunAgentsButton paper={paper} />}
