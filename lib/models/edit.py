@@ -34,6 +34,7 @@ _ENTITY_FK_COLUMNS: dict[str, str] = {
     'families': 'family_id',
     'papers': 'paper_id',
     'segregation_evidence': 'segregation_evidence_id',
+    'phenotypes': 'phenotype_id',
 }
 
 
@@ -69,6 +70,15 @@ class EditDB(Base):
         ForeignKey('segregation_evidence.id', ondelete='CASCADE'),
         nullable=True,
     )
+    # Covers both the phenotype's own concept field and its HPO link (see
+    # HpoDB) -- a phenotype has at most one HPO link, so field_name
+    # disambiguates ('concept' vs. 'hpo') the same way family_id already
+    # disambiguates 'identifier' vs. 'consanguinity'. No separate FK onto
+    # hpos: it would be the 7th/8th column doing the same disambiguation
+    # field_name already does for free.
+    phenotype_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey('phenotypes.id', ondelete='CASCADE'), nullable=True
+    )
 
     field_name: Mapped[str] = mapped_column(String, nullable=False)
 
@@ -103,7 +113,8 @@ class EditDB(Base):
         CheckConstraint(
             '(patient_id IS NOT NULL) + (variant_id IS NOT NULL) + '
             '(occurrence_id IS NOT NULL) + (family_id IS NOT NULL) + '
-            '(paper_id IS NOT NULL) + (segregation_evidence_id IS NOT NULL) = 1',
+            '(paper_id IS NOT NULL) + (segregation_evidence_id IS NOT NULL) + '
+            '(phenotype_id IS NOT NULL) = 1',
             name='ck_edits_exactly_one_entity',
         ),
         Index('ix_edits_patient_id_field_name', 'patient_id', 'field_name'),
@@ -116,6 +127,7 @@ class EditDB(Base):
             'segregation_evidence_id',
             'field_name',
         ),
+        Index('ix_edits_phenotype_id_field_name', 'phenotype_id', 'field_name'),
     )
 
 

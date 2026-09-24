@@ -162,7 +162,7 @@ from lib.models.base import (
     manual_evidence_block,
 )
 from lib.models.deletion_log import DeletionLogDB, DeletionLogResp, record_deletion
-from lib.models.edit import EditDB, latest_edits_for, record_edits
+from lib.models.edit import EditDB, latest_edits_for, record_edit, record_edits
 from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.mondo import MondoComponentMapping, MondoTerm
 from lib.models.patient import (
@@ -1909,7 +1909,8 @@ def update_variant(
     return _variant_to_resp(variant_db, session)
 
 
-def _phenotype_to_resp(row: PhenotypeDB) -> PhenotypeResp:
+def _phenotype_to_resp(session: Session, row: PhenotypeDB) -> PhenotypeResp:
+    edits = latest_edits_for(session, row)
     if row.hpo:
         hpo_value = (
             HPOTerm(id=row.hpo.hpo_id, name=row.hpo.hpo_name)
@@ -1919,7 +1920,7 @@ def _phenotype_to_resp(row: PhenotypeDB) -> PhenotypeResp:
         hpo = ReasoningBlock[HPOTerm | None](
             value=hpo_value,
             reasoning=row.hpo.reasoning,
-            manually_entered=row.hpo.manually_linked,
+            manually_entered='hpo' in edits,
         )
     else:
         hpo = ReasoningBlock[HPOTerm | None](
@@ -2701,7 +2702,7 @@ def get_phenotypes(
         .order_by(PhenotypeDB.id)
         .all()
     )
-    return [_phenotype_to_resp(p) for p in phenotypes]
+    return [_phenotype_to_resp(session, p) for p in phenotypes]
 
 
 @app.post(
@@ -2750,19 +2751,20 @@ def create_phenotype(
     )
     session.add(phenotype_db)
     session.flush()
+    record_edits(session, phenotype_db, ['concept'], current_user)
 
     if create_request.hpo_id is not None:
         phenotype_db.hpo = HpoDB(
             hpo_id=create_request.hpo_id,
             hpo_name=hpo_name,
             reasoning='Manually linked by curator',
-            manually_linked=True,
         )
+        record_edits(session, phenotype_db, ['hpo'], current_user)
 
     _touch_paper(session, paper_id, current_user)
     session.commit()
     session.refresh(phenotype_db)
-    return _phenotype_to_resp(phenotype_db)
+    return _phenotype_to_resp(session, phenotype_db)
 
 
 @app.delete(
@@ -2831,25 +2833,25 @@ def relink_phenotype_hpo(
             )
         reasoning = 'Manually linked by curator'
 
+    old_hpo_id = phenotype_db.hpo.hpo_id if phenotype_db.hpo else None
     if phenotype_db.hpo:
         phenotype_db.hpo.hpo_id = relink_request.hpo_id
         phenotype_db.hpo.hpo_name = hpo_name
         phenotype_db.hpo.reasoning = reasoning
-        phenotype_db.hpo.manually_linked = True
     else:
         phenotype_db.hpo = HpoDB(
             hpo_id=relink_request.hpo_id,
             hpo_name=hpo_name,
             reasoning=reasoning,
-            manually_linked=True,
         )
+    record_edit(session, phenotype_db, 'hpo', current_user, old_value=old_hpo_id)
     phenotype_db.updated_by_user_id = current_user.id
     phenotype_db.updated_at = func.now()
 
     _touch_paper(session, paper_id, current_user)
     session.commit()
     session.refresh(phenotype_db)
-    return _phenotype_to_resp(phenotype_db)
+    return _phenotype_to_resp(session, phenotype_db)
 
 
 @app.get('/hpo/search', response_model=list[HpoCandidate])
