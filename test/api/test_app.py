@@ -1189,6 +1189,75 @@ def test_update_variant_harmonized_fields(
     assert hv['updated_by']['name'] == 'Test User'
 
 
+def test_update_variant_harmonized_field_records_edit_history(
+    client, db_session, seeded_paper, seeded_variant, test_user
+):
+    """Editing a harmonized field records an edits-table row keyed by
+    harmonized_variant_id, and surfaces as the shared block's
+    manually_entered/edited_by attribution -- what EvidencePopover's "edited
+    by curator" warning keys off of."""
+    hv_id = seeded_variant.harmonized_variant.id
+    response = client.patch(
+        f'/papers/{seeded_paper.id}/variants/{seeded_variant.id}',
+        json={'harmonized_variant': {'caid': 'CA999999'}},
+    )
+    assert response.status_code == 200
+    block = response.json()['harmonized_variant']
+    assert block['manually_entered'] is True
+    assert block['edited_by_name'] == 'Test User'
+    assert block['edited_at'] is not None
+
+    edit_rows = (
+        db_session.query(EditDB)
+        .filter(EditDB.harmonized_variant_id == hv_id, EditDB.field_name == 'caid')
+        .all()
+    )
+    assert len(edit_rows) == 1
+    assert edit_rows[0].old_value is None  # seeded_variant's harmonized caid was unset
+
+
+def test_update_variant_harmonized_unchanged_value_records_no_edit(
+    client, db_session, seeded_paper, seeded_variant
+):
+    """Re-saving a field's existing value is not an edit -- no history row,
+    no warning."""
+    hv_id = seeded_variant.harmonized_variant.id
+    response = client.patch(
+        f'/papers/{seeded_paper.id}/variants/{seeded_variant.id}',
+        json={'harmonized_variant': {'rsid': 'rs80357906'}},  # already this value
+    )
+    assert response.status_code == 200
+    assert response.json()['harmonized_variant']['manually_entered'] is False
+    assert (
+        db_session.query(EditDB).filter(EditDB.harmonized_variant_id == hv_id).count()
+        == 0
+    )
+
+
+def test_update_variant_harmonized_edit_history_cascades_with_variant(
+    client, db_session, seeded_paper, seeded_variant
+):
+    """Deleting the variant (and its harmonized row) cascades its edit
+    history away, same guarantee as every other entity's edits rows."""
+    hv_id = seeded_variant.harmonized_variant.id
+    response = client.patch(
+        f'/papers/{seeded_paper.id}/variants/{seeded_variant.id}',
+        json={'harmonized_variant': {'caid': 'CA999999'}},
+    )
+    assert response.status_code == 200
+    assert (
+        db_session.query(EditDB).filter(EditDB.harmonized_variant_id == hv_id).count()
+        == 1
+    )
+
+    response = client.delete(f'/papers/{seeded_paper.id}/variants/{seeded_variant.id}')
+    assert response.status_code == 204
+    assert (
+        db_session.query(EditDB).filter(EditDB.harmonized_variant_id == hv_id).count()
+        == 0
+    )
+
+
 def test_update_variant_human_edit_note(client, seeded_paper, seeded_variant):
     """PATCH with a human edit note on an evidence block."""
     response = client.patch(
@@ -2717,6 +2786,10 @@ def test_create_phenotype(client, db_session, seeded_paper):
         'value': None,
         'reasoning': 'HPO linking not yet performed',
         'manually_entered': False,
+        'edited_by_user_id': None,
+        'edited_by_name': None,
+        'edited_by_is_active': None,
+        'edited_at': None,
     }
 
     resp = client.post(
@@ -2787,6 +2860,10 @@ def test_relink_phenotype_hpo(client, db_session, seeded_paper):
             'value': None,
             'reasoning': 'Unlinked by curator',
             'manually_entered': True,
+            'edited_by_user_id': None,
+            'edited_by_name': None,
+            'edited_by_is_active': None,
+            'edited_at': None,
         }
         # Re-linking updates the existing hpos row rather than creating a
         # second one -- phenotype_id is unique on that table.

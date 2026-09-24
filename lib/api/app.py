@@ -1774,6 +1774,22 @@ def _variant_to_resp(row: VariantDB, session: Session) -> VariantResp:
             ),
             reasoning=hv.reasoning,
         )
+        # All six harmonized fields share this one block (see
+        # VariantDetailPanel.tsx's comment on why -- no per-field evidence),
+        # so "edited" here means any of them has an edits-table row, and the
+        # attribution shown is whichever of those rows is most recent.
+        harmonized_edits = latest_edits_for(session, hv)
+        if harmonized_edits:
+            latest_edit = max(harmonized_edits.values(), key=lambda e: e.edited_at)
+            harmonized.manually_entered = True
+            harmonized.edited_by_user_id = latest_edit.user_id
+            harmonized.edited_by_name = (
+                _editor_display_name(latest_edit.user) if latest_edit.user else None
+            )
+            harmonized.edited_by_is_active = (
+                latest_edit.user.is_active if latest_edit.user else None
+            )
+            harmonized.edited_at = latest_edit.edited_at
     else:
         harmonized = ReasoningBlock[HarmonizedVariantResp | None](
             value=None,
@@ -1901,7 +1917,7 @@ def update_variant(
                 status_code=status.HTTP_409_CONFLICT,
                 detail='Variant has not been harmonized by the server yet',
             )
-        harmonized_update.apply_to(variant_db.harmonized_variant, current_user)
+        harmonized_update.apply_to(variant_db.harmonized_variant, current_user, session)
         # delete-orphan cascade removes the row
         variant_db.annotated_variant = None
     _touch_paper(session, paper_id, current_user)
