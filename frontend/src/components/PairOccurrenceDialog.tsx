@@ -59,6 +59,7 @@ export function PairOccurrenceDialog({
   }
 
   const pairMutation = useMutation({
+    mutationKey: ['paper-edit', paperId],
     mutationFn: (nextPartnerId: number | null) =>
       pairOccurrencePapersPaperIdOccurrencesOccurrenceIdPairPatch({
         path: { paper_id: paperId, occurrence_id: occurrence.id },

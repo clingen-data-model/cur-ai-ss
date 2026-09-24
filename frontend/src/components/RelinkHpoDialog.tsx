@@ -71,6 +71,7 @@ export function RelinkHpoDialog({
   }
 
   const relinkMutation = useMutation({
+    mutationKey: ['paper-edit', paperId],
     mutationFn: (nextHpoId: string | null) =>
       relinkPhenotypeHpoPapersPaperIdPhenotypesPhenotypeIdHpoPatch({
         path: { paper_id: paperId, phenotype_id: phenotypeId },

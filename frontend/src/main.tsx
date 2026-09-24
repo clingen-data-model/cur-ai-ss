@@ -10,13 +10,27 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { RouterProvider, createRouter } from '@tanstack/react-router'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, MutationCache } from '@tanstack/react-query'
 import './index.css'
 import { routeTree } from './routeTree'
 import '@/lib/api'
 
 // Server state management (caching, synchronization, background fetching)
-const queryClient = new QueryClient()
+const queryClient = new QueryClient({
+  mutationCache: new MutationCache({
+    onSuccess: (_data, _variables, _context, mutation) => {
+      // Any edit to a paper's extracted data can change whether it still
+      // matches a saved snapshot -- tag an edit mutation with
+      // mutationKey: ['paper-edit', paperId] (see e.g. OccurrenceEditableCells.tsx)
+      // to have it refresh RestoreSnapshotButton's list here, in one place,
+      // rather than repeating this invalidation at every edit call site.
+      const key = mutation.options.mutationKey
+      if (Array.isArray(key) && key[0] === 'paper-edit' && typeof key[1] === 'number') {
+        queryClient.invalidateQueries({ queryKey: ['paper-snapshots', key[1]] })
+      }
+    },
+  }),
+})
 
 // File-based routing with type-safe params.
 //
