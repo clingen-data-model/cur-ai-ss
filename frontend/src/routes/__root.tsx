@@ -56,8 +56,11 @@ function Layout() {
   return (
     <div className="min-h-screen flex flex-col">
       {/* Header */}
+      {/* w-full px-6, matching <main> below -- not `container`, or its
+          per-breakpoint max-width centers the logo/nav in a narrower box
+          than the now-full-width content, misaligning both edges. */}
       <header className="gradient-header border-b border-slate-200">
-        <div className="container mx-auto px-4 py-2 flex items-center justify-between">
+        <div className="w-full px-6 py-2 flex items-center justify-between">
           {/* Link (not <a href="/">) so the router prepends the basepath — a raw '/'
               would leave the SPA for the Streamlit UI when served under '/v2'. Likewise
               the logo resolves against BASE_URL, since public/ assets are emitted under
