@@ -1917,10 +1917,11 @@ def _phenotype_to_resp(session: Session, row: PhenotypeDB) -> PhenotypeResp:
             if row.hpo.hpo_id and row.hpo.hpo_name
             else None
         )
+        hpo_edits = latest_edits_for(session, row.hpo)
         hpo = ReasoningBlock[HPOTerm | None](
             value=hpo_value,
             reasoning=row.hpo.reasoning,
-            manually_entered='hpo' in edits,
+            manually_entered='hpo' in hpo_edits,
         )
     else:
         hpo = ReasoningBlock[HPOTerm | None](
@@ -2759,7 +2760,8 @@ def create_phenotype(
             hpo_name=hpo_name,
             reasoning='Manually linked by curator',
         )
-        record_edits(session, phenotype_db, ['hpo'], current_user)
+        session.flush()  # hpo needs a real id before edits can reference it
+        record_edits(session, phenotype_db.hpo, ['hpo'], current_user)
 
     _touch_paper(session, paper_id, current_user)
     session.commit()
@@ -2844,7 +2846,8 @@ def relink_phenotype_hpo(
             hpo_name=hpo_name,
             reasoning=reasoning,
         )
-    record_edit(session, phenotype_db, 'hpo', current_user, old_value=old_hpo_id)
+        session.flush()  # hpo needs a real id before edits can reference it
+    record_edit(session, phenotype_db.hpo, 'hpo', current_user, old_value=old_hpo_id)
     phenotype_db.updated_by_user_id = current_user.id
     phenotype_db.updated_at = func.now()
 

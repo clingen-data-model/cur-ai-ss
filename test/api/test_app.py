@@ -2828,8 +2828,13 @@ def test_create_phenotype_records_edit_history(client, db_session, seeded_paper)
         )
     assert resp.status_code == 200
     phenotype_id = resp.json()['id']
-    edits = db_session.query(EditDB).filter(EditDB.phenotype_id == phenotype_id).all()
-    assert {e.field_name for e in edits} == {'concept', 'hpo'}
+    concept_edits = (
+        db_session.query(EditDB).filter(EditDB.phenotype_id == phenotype_id).all()
+    )
+    assert {e.field_name for e in concept_edits} == {'concept'}
+    hpo_row = db_session.query(HpoDB).filter(HpoDB.phenotype_id == phenotype_id).one()
+    hpo_edits = db_session.query(EditDB).filter(EditDB.hpo_link_id == hpo_row.id).all()
+    assert {e.field_name for e in hpo_edits} == {'hpo'}
 
 
 def test_relink_phenotype_hpo_records_edit_history(client, db_session, seeded_paper):
@@ -2853,12 +2858,58 @@ def test_relink_phenotype_hpo_records_edit_history(client, db_session, seeded_pa
     assert resp.status_code == 200
     assert resp.json()['hpo']['manually_entered'] is True
 
+    db_session.refresh(phenotype)
     edit = (
         db_session.query(EditDB)
-        .filter(EditDB.phenotype_id == phenotype.id, EditDB.field_name == 'hpo')
+        .filter(EditDB.hpo_link_id == phenotype.hpo.id, EditDB.field_name == 'hpo')
         .one()
     )
     assert edit.old_value == '"HP:0001250"'
+
+
+def test_deleting_hpo_link_cascades_its_edit_history(client, db_session, seeded_paper):
+    # handle_hpo_linking's delete-then-insert (an agent re-run) deletes just
+    # the HpoDB row, not the parent phenotype -- edits.hpo_link_id must
+    # CASCADE so a prior curator relink's history doesn't survive as a stale,
+    # now-incorrect "manually entered" signal for the link the agent just
+    # replaced.
+    patient = _seed_patient(db_session, seeded_paper, 'Cascade Patient')
+    phenotype = PhenotypeDB(
+        paper_id=seeded_paper.id,
+        patient_id=patient.id,
+        concept='Seizures',
+        concept_evidence=dict(value='Seizures', reasoning='test', quote='test'),
+    )
+    db_session.add(phenotype)
+    db_session.commit()
+
+    ontology = _fake_ontology({'HP:0001250': 'Seizure'})
+    with patch('lib.api.app.get_ontology', return_value=ontology):
+        client.patch(
+            f'/papers/{seeded_paper.id}/phenotypes/{phenotype.id}/hpo',
+            json={'hpo_id': 'HP:0001250'},
+        )
+    db_session.refresh(phenotype)
+    hpo_id = phenotype.hpo.id
+    assert db_session.query(EditDB).filter(EditDB.hpo_link_id == hpo_id).count() == 1
+
+    # Simulate handle_hpo_linking's delete-then-insert of a fresh, agent-only
+    # link for the same phenotype.
+    db_session.query(HpoDB).filter(HpoDB.id == hpo_id).delete()
+    db_session.add(
+        HpoDB(
+            phenotype_id=phenotype.id,
+            hpo_id='HP:0002066',
+            hpo_name='Gait ataxia',
+            reasoning='Fuzzy match',
+        )
+    )
+    db_session.commit()
+
+    assert db_session.query(EditDB).filter(EditDB.hpo_link_id == hpo_id).count() == 0
+    resp = client.get(f'/papers/{seeded_paper.id}/patients/{patient.id}/phenotypes')
+    [body] = resp.json()
+    assert body['hpo']['manually_entered'] is False
 
 
 def test_extracted_hpo_link_is_not_manually_entered(client, db_session, seeded_paper):

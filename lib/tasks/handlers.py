@@ -1643,7 +1643,11 @@ async def handle_hpo_linking(task_id: int) -> None:
         if not task:
             return
 
-        # Idempotent: delete-then-insert
+        # Idempotent: delete-then-insert. Any edit history for the old link
+        # (edits.hpo_link_id -> hpos.id, ON DELETE CASCADE) is retired by the
+        # database the moment this delete fires, along with the row it
+        # describes -- the fresh row this agent result produces starts with
+        # no edit history of its own, correctly reporting as agent-derived.
         session.query(HpoDB).filter(HpoDB.phenotype_id == phenotype_id).delete()
         session.add(hpo_to_db(phenotype_id, hpo_result))
 

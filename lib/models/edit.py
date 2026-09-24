@@ -35,6 +35,7 @@ _ENTITY_FK_COLUMNS: dict[str, str] = {
     'papers': 'paper_id',
     'segregation_evidence': 'segregation_evidence_id',
     'phenotypes': 'phenotype_id',
+    'hpos': 'hpo_link_id',
 }
 
 
@@ -70,14 +71,18 @@ class EditDB(Base):
         ForeignKey('segregation_evidence.id', ondelete='CASCADE'),
         nullable=True,
     )
-    # Covers both the phenotype's own concept field and its HPO link (see
-    # HpoDB) -- a phenotype has at most one HPO link, so field_name
-    # disambiguates ('concept' vs. 'hpo') the same way family_id already
-    # disambiguates 'identifier' vs. 'consanguinity'. No separate FK onto
-    # hpos: it would be the 7th/8th column doing the same disambiguation
-    # field_name already does for free.
+    # Covers the phenotype's own concept field ('concept'). The HPO link gets
+    # its own FK column below rather than sharing this one: HpoDB rows are
+    # deleted-and-recreated whenever HPO linking (re-)runs (see
+    # handle_hpo_linking), so pointing hpo edit rows at hpos.id lets ON DELETE
+    # CASCADE retire stale "manually linked" history for free the same moment
+    # the link it describes stops existing -- sharing phenotype_id would have
+    # left that history dangling, since the phenotype itself isn't deleted.
     phenotype_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey('phenotypes.id', ondelete='CASCADE'), nullable=True
+    )
+    hpo_link_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey('hpos.id', ondelete='CASCADE'), nullable=True
     )
 
     field_name: Mapped[str] = mapped_column(String, nullable=False)
@@ -114,7 +119,7 @@ class EditDB(Base):
             '(patient_id IS NOT NULL) + (variant_id IS NOT NULL) + '
             '(occurrence_id IS NOT NULL) + (family_id IS NOT NULL) + '
             '(paper_id IS NOT NULL) + (segregation_evidence_id IS NOT NULL) + '
-            '(phenotype_id IS NOT NULL) = 1',
+            '(phenotype_id IS NOT NULL) + (hpo_link_id IS NOT NULL) = 1',
             name='ck_edits_exactly_one_entity',
         ),
         Index('ix_edits_patient_id_field_name', 'patient_id', 'field_name'),
@@ -128,6 +133,7 @@ class EditDB(Base):
             'field_name',
         ),
         Index('ix_edits_phenotype_id_field_name', 'phenotype_id', 'field_name'),
+        Index('ix_edits_hpo_link_id_field_name', 'hpo_link_id', 'field_name'),
     )
 
 
