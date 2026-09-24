@@ -21,6 +21,9 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 export function HomePage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const { rows, papersByGene, isLoading, isError, error } = useGeneTable()
+  const search = useSearch({ from: '/' })
+  const navigate = useNavigate({ from: '/' })
+  const activeTab = search.tab ?? 'genes'
 
   if (isLoading) {
     return (
@@ -78,8 +81,18 @@ export function HomePage() {
       </div>
 
       {/* Tabs rather than routes: two views of the same collection, and the
-          switch should not cost a navigation or lose the table's filter. */}
-      <Tabs defaultValue="genes">
+          switch should not cost a navigation or lose the table's filter.
+          Controlled by the `tab` search param (rather than component state)
+          so a reload reopens the same tab, same as the filters below. */}
+      <Tabs
+        value={activeTab}
+        onValueChange={(next) => {
+          const merged = { ...search }
+          if (next === 'papers') merged.tab = 'papers'
+          else delete merged.tab
+          navigate({ search: merged, replace: true })
+        }}
+      >
         <TabsList>
           <TabsTrigger value="genes">Genes</TabsTrigger>
           <TabsTrigger value="papers">All Papers</TabsTrigger>
@@ -209,7 +222,7 @@ function AllPapersTab() {
             <EmptyContent className="flex-row justify-center">
               <Button
                 variant="outline"
-                onClick={() => navigate({ search: {}, replace: true })}
+                onClick={() => navigate({ search: { tab: 'papers' }, replace: true })}
               >
                 Show all papers
               </Button>
