@@ -30,6 +30,9 @@ import {
 } from '@/components/OccurrenceEditableCells'
 import { ConfidenceBadge } from '@/components/ConfidenceBadge'
 import { EvidencePopover } from '@/components/EvidencePopover'
+import { Badge } from '@/components/ui/badge'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { pillColorFor } from '@/lib/pillColors'
 import { PairOccurrenceDialog } from '@/components/PairOccurrenceDialog'
 import { PatientDetailPanel } from '@/components/PatientDetailPanel'
 import { VariantDetailPanel } from '@/components/VariantDetailPanel'
@@ -45,12 +48,21 @@ import { ReviewStatusCell } from '@/components/ReviewStatusCell'
 import { StatusBadge } from '@/components/StatusBadge'
 import { computeStatus } from '@/components/TaskDAG'
 import { apiErrorMessage } from '@/lib/apiError'
-import { TaskType } from '@/api/generated/types.gen'
+import { AffectedStatus, ProbandStatus, TaskType } from '@/api/generated/types.gen'
 import { PedigreeTab } from '@/components/PedigreeTab'
 import { PaperMetadataTab } from '@/components/PaperMetadataTab'
 import { PdfHighlightProvider } from '@/components/PdfHighlightProvider'
 
 type ExpandedView = 'patient' | 'variant'
+
+/** Affected status as a dot next to the patient name, rather than its own
+ * column -- three states (Affected/Unaffected/Unknown) read fine as a color
+ * with a tooltip, and freeing the column keeps the table narrower. */
+const AFFECTED_DOT: Record<AffectedStatus, string> = {
+  [AffectedStatus.AFFECTED]: 'bg-rose-500',
+  [AffectedStatus.UNAFFECTED]: 'bg-muted-foreground/25',
+  [AffectedStatus.UNKNOWN]: 'border border-muted-foreground/40',
+}
 
 /** Patient/Variant cell: click expands the row's detail panel, hover previews
  * a snippet of it (demographics / ClinVar+gnomAD) without expanding. */
@@ -137,27 +149,36 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
         ),
       },
       {
-        id: 'proband',
-        header: 'Proband',
-        accessorFn: (row) => row.patient.proband_status,
-      },
-      {
-        id: 'affected',
-        header: 'Affected',
-        accessorFn: (row) => row.patient.affected_status,
-      },
-      {
         id: 'patient',
         header: 'Patient',
         accessorFn: (row) => row.patient.identifier,
-        cell: ({ row }) => (
-          <EntityLink
-            onClick={() => toggleExpanded(String(row.original.occurrence.id), 'patient')}
-            hoverContent={<PatientHoverCardContent paperId={paperId} patient={row.original.patient} />}
-          >
-            {row.original.patient.identifier}
-          </EntityLink>
-        ),
+        cell: ({ row }) => {
+          const { patient } = row.original
+          return (
+            <div className="flex items-center gap-1.5">
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <span className={`size-2.5 rounded-full shrink-0 ${AFFECTED_DOT[patient.affected_status]}`} />
+                  }
+                />
+                <TooltipContent>{patient.affected_status}</TooltipContent>
+              </Tooltip>
+              <EntityLink
+                onClick={() => toggleExpanded(String(row.original.occurrence.id), 'patient')}
+                hoverContent={<PatientHoverCardContent paperId={paperId} patient={patient} />}
+              >
+                {patient.identifier}
+              </EntityLink>
+              {patient.proband_status === ProbandStatus.PROBAND && (
+                <Tooltip>
+                  <TooltipTrigger render={<span className="text-muted-foreground cursor-help" />}>*</TooltipTrigger>
+                  <TooltipContent>Proband</TooltipContent>
+                </Tooltip>
+              )}
+            </div>
+          )
+        },
       },
       {
         id: 'variant',
@@ -170,6 +191,16 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
           >
             {row.original.variant.variant_description}
           </EntityLink>
+        ),
+      },
+      {
+        id: 'variant_type',
+        header: 'Variant Type',
+        accessorFn: (row) => row.variant.variant_type,
+        cell: ({ row }) => (
+          <Badge className={pillColorFor(row.original.variant.variant_type)} variant="outline">
+            {row.original.variant.variant_type}
+          </Badge>
         ),
       },
     ]
