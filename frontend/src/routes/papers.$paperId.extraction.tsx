@@ -65,6 +65,20 @@ const AFFECTED_DOT: Record<AffectedStatus, string> = {
   [AffectedStatus.UNKNOWN]: 'border border-muted-foreground/40',
 }
 
+/** "c.123A>G (p.Arg41Gly)" -- the protein change alongside the genomic/cDNA
+ * description, when known. Omitted when they're the same string:
+ * variant_description falls back to hgvs_p itself when no genomic/cDNA
+ * notation exists (see get_variant_description in lib/models/variant.py),
+ * which would otherwise show "p.Arg41Gly (p.Arg41Gly)". */
+function VariantLabel({ description, hgvsP }: { description: string; hgvsP: string | null }) {
+  return (
+    <>
+      {description}
+      {hgvsP && hgvsP !== description && <span className="text-muted-foreground"> ({hgvsP})</span>}
+    </>
+  )
+}
+
 /** Patient/Variant cell: click expands the row's detail panel, hover previews
  * a snippet of it (demographics / ClinVar+gnomAD) without expanding. */
 function EntityLink({
@@ -217,7 +231,10 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
             onClick={() => toggleExpanded(String(row.original.occurrence.id), 'variant')}
             hoverContent={<VariantHoverCardContent variant={row.original.variant} />}
           >
-            {row.original.variant.variant_description}
+            <VariantLabel
+              description={row.original.variant.variant_description}
+              hgvsP={row.original.variant.hgvs_p}
+            />
           </EntityLink>
         ),
       },
@@ -242,7 +259,16 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
           const occurrence = row.original.occurrence
           return (
             <div className="flex items-center gap-1">
-              <span>{row.original.pairedVariant?.variant_description ?? '—'}</span>
+              <span>
+                {row.original.pairedVariant ? (
+                  <VariantLabel
+                    description={row.original.pairedVariant.variant_description}
+                    hgvsP={row.original.pairedVariant.hgvs_p}
+                  />
+                ) : (
+                  '—'
+                )}
+              </span>
               {occurrence.paired_variant_confidence && (
                 <ConfidenceBadge confidence={occurrence.paired_variant_confidence} />
               )}
