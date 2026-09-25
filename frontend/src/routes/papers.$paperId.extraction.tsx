@@ -30,6 +30,7 @@ import {
 } from '@/components/OccurrenceEditableCells'
 import { ConfidenceBadge } from '@/components/ConfidenceBadge'
 import { EvidencePopover } from '@/components/EvidencePopover'
+import { ManuallyCreatedIndicator } from '@/components/ManuallyCreatedIndicator'
 import { PairOccurrenceDialog } from '@/components/PairOccurrenceDialog'
 import { PatientDetailPanel } from '@/components/PatientDetailPanel'
 import { VariantDetailPanel } from '@/components/VariantDetailPanel'
@@ -108,6 +109,33 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
 
   const columns: ColumnDef<OccurrenceRow>[] = useMemo(() => {
     const cols: ColumnDef<OccurrenceRow>[] = [
+      {
+        id: 'created',
+        header: '',
+        size: 28,
+        enableSorting: false,
+        cell: ({ row }) => (
+          <ManuallyCreatedIndicator
+            sources={[
+              {
+                label: 'Patient',
+                createdByUserId: row.original.patient.created_by_user_id,
+                createdBy: row.original.patient.created_by,
+              },
+              {
+                label: 'Variant',
+                createdByUserId: row.original.variant.created_by_user_id,
+                createdBy: row.original.variant.created_by,
+              },
+              {
+                label: 'Occurrence',
+                createdByUserId: row.original.occurrence.created_by_user_id,
+                createdBy: row.original.occurrence.created_by,
+              },
+            ]}
+          />
+        ),
+      },
       {
         id: 'expander',
         size: 40,

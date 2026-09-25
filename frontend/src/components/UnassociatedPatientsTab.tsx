@@ -12,6 +12,7 @@ import type { PatientResp, TaskResp } from '@/api/generated/types.gen'
 import { deletePatientPapersPaperIdPatientsPatientIdDelete } from '@/api/generated'
 import { DataTable } from '@/components/ui/data-table'
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
+import { ManuallyCreatedIndicator } from '@/components/ManuallyCreatedIndicator'
 import { PatientDetailPanel } from '@/components/PatientDetailPanel'
 import { PipelineGate } from '@/components/PipelineGate'
 import { AddPatientDialog } from '@/components/AddPatientDialog'
@@ -46,6 +47,23 @@ export function UnassociatedPatientsTab({
 
   const columns: ColumnDef<PatientResp>[] = useMemo(
     () => [
+      {
+        id: 'created',
+        header: '',
+        size: 32,
+        enableSorting: false,
+        cell: ({ row }) => (
+          <ManuallyCreatedIndicator
+            sources={[
+              {
+                label: 'Patient',
+                createdByUserId: row.original.created_by_user_id,
+                createdBy: row.original.created_by,
+              },
+            ]}
+          />
+        ),
+      },
       { id: 'identifier', header: 'Identifier', accessorFn: (row) => row.identifier },
       { id: 'proband', header: 'Proband', accessorFn: (row) => row.proband_status },
       { id: 'affected', header: 'Affected', accessorFn: (row) => row.affected_status },

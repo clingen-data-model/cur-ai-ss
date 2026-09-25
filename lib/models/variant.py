@@ -230,6 +230,9 @@ class VariantResp(BaseModel):
     updated_at: UtcDatetime
     updated_by_user_id: int | None = None
     updated_by: UserSummaryResp | None = None
+    created_at: UtcDatetime
+    created_by_user_id: int | None = None
+    created_by: UserSummaryResp | None = None
     # Evidence blocks (from DB JSON columns)
     transcript_evidence: AttributedEvidenceBlock[Optional[str]]
     protein_accession_evidence: AttributedEvidenceBlock[Optional[str]]
@@ -421,9 +424,28 @@ class VariantDB(Base):
         nullable=True,
         index=True,
     )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    # NULL means the extraction pipeline created this row -- see
+    # PatientDB.created_by_user_id's comment for why this is a separate
+    # column from updated_by_user_id.
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey('users.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
 
     paper: Mapped[PaperDB] = relationship('PaperDB', back_populates='variants')
-    updated_by: Mapped['UserDB | None'] = relationship('UserDB')
+    updated_by: Mapped['UserDB | None'] = relationship(
+        'UserDB', foreign_keys=[updated_by_user_id]
+    )
+    created_by: Mapped['UserDB | None'] = relationship(
+        'UserDB', foreign_keys=[created_by_user_id]
+    )
     harmonized_variant: Mapped['HarmonizedVariantDB | None'] = relationship(
         'HarmonizedVariantDB',
         back_populates='variant',
