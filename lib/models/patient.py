@@ -494,6 +494,16 @@ class PatientDB(Base):
         nullable=True,
         index=True,
     )
+    # NULL means the extraction pipeline created this row -- pipeline code
+    # never sets it, matching how updated_by_user_id already works. Distinct
+    # from updated_by_user_id, which gets set on manual creation too but is
+    # overwritten by any later edit, losing the "created from scratch" signal.
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey('users.id', ondelete='SET NULL'),
+        nullable=True,
+        index=True,
+    )
 
     # Extracted values (updateable, strongly typed)
     identifier: Mapped[str] = mapped_column(String, nullable=False)
@@ -545,10 +555,20 @@ class PatientDB(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
 
     paper: Mapped[PaperDB] = relationship('PaperDB', back_populates='patients')
     family: Mapped['FamilyDB'] = relationship('FamilyDB', back_populates='patients')
-    updated_by: Mapped['UserDB | None'] = relationship('UserDB')
+    updated_by: Mapped['UserDB | None'] = relationship(
+        'UserDB', foreign_keys=[updated_by_user_id]
+    )
+    created_by: Mapped['UserDB | None'] = relationship(
+        'UserDB', foreign_keys=[created_by_user_id]
+    )
     phenotypes: Mapped[list['PhenotypeDB']] = relationship(
         'PhenotypeDB', back_populates='patient', cascade='all, delete-orphan'
     )
@@ -588,6 +608,9 @@ class PatientResp(BaseModel):
     updated_at: UtcDatetime
     updated_by_user_id: int | None = None
     updated_by: UserSummaryResp | None = None
+    created_at: UtcDatetime
+    created_by_user_id: int | None = None
+    created_by: UserSummaryResp | None = None
     # Evidence blocks (from DB JSON columns)
     identifier_evidence: HumanEvidenceBlock[str]
     proband_status_evidence: HumanEvidenceBlock[ProbandStatus]

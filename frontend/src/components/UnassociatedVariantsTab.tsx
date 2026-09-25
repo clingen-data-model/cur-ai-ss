@@ -12,6 +12,7 @@ import type { TaskResp, VariantResp } from '@/api/generated/types.gen'
 import { deleteVariantPapersPaperIdVariantsVariantIdDelete } from '@/api/generated'
 import { DataTable } from '@/components/ui/data-table'
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
+import { ManuallyCreatedIndicator } from '@/components/ManuallyCreatedIndicator'
 import { VariantDetailPanel } from '@/components/VariantDetailPanel'
 import { PipelineGate } from '@/components/PipelineGate'
 import { AddVariantDialog } from '@/components/AddVariantDialog'
@@ -46,6 +47,23 @@ export function UnassociatedVariantsTab({
 
   const columns: ColumnDef<VariantResp>[] = useMemo(
     () => [
+      {
+        id: 'created',
+        header: '',
+        size: 32,
+        enableSorting: false,
+        cell: ({ row }) => (
+          <ManuallyCreatedIndicator
+            sources={[
+              {
+                label: 'Variant',
+                createdByUserId: row.original.created_by_user_id,
+                createdBy: row.original.created_by,
+              },
+            ]}
+          />
+        ),
+      },
       { id: 'variant', header: 'Variant', accessorFn: (row) => row.variant_description },
       { id: 'type', header: 'Type', accessorFn: (row) => row.variant_type },
       {

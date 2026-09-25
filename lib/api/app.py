@@ -1511,6 +1511,9 @@ def _patient_to_resp(row: PatientDB, session: Session) -> PatientResp:
         updated_at=row.updated_at,
         updated_by_user_id=row.updated_by_user_id,
         updated_by=_user_summary(row.updated_by),
+        created_at=row.created_at,
+        created_by_user_id=row.created_by_user_id,
+        created_by=_user_summary(row.created_by),
         family_id=row.family.id,
         family_identifier=row.family.identifier,
         family_assignment_evidence=_from_storage(
@@ -1534,7 +1537,11 @@ def get_patients(
         )
     patients = (
         session.query(PatientDB)
-        .options(selectinload(PatientDB.family), selectinload(PatientDB.updated_by))
+        .options(
+            selectinload(PatientDB.family),
+            selectinload(PatientDB.updated_by),
+            selectinload(PatientDB.created_by),
+        )
         .filter(PatientDB.paper_id == paper_id)
         .order_by(PatientDB.id)
         .all()
@@ -1780,6 +1787,7 @@ def get_variants(
             ),
             joinedload(VariantDB.annotated_variant),
             selectinload(VariantDB.updated_by),
+            selectinload(VariantDB.created_by),
         )
         .filter(VariantDB.paper_id == paper_id)
         .order_by(VariantDB.id)
@@ -1865,6 +1873,9 @@ def _variant_to_resp(row: VariantDB, session: Session) -> VariantResp:
         updated_at=row.updated_at,
         updated_by_user_id=row.updated_by_user_id,
         updated_by=_user_summary(row.updated_by),
+        created_at=row.created_at,
+        created_by_user_id=row.created_by_user_id,
+        created_by=_user_summary(row.created_by),
         transcript_evidence=_from_storage(
             AttributedEvidenceBlock, row.transcript_evidence
         ),
@@ -2332,6 +2343,9 @@ def _patient_variant_occurrence_to_resp(
         updated_at=row.updated_at,
         updated_by_user_id=row.updated_by_user_id,
         updated_by=_user_summary(row.updated_by),
+        created_at=row.created_at,
+        created_by_user_id=row.created_by_user_id,
+        created_by=_user_summary(row.created_by),
     )
     _attach_edit_history(resp, latest_edits_for(session, row), row)
     return resp
@@ -2395,6 +2409,7 @@ def create_patient(
         twin_type=create_request.twin_type,
         family_assignment_evidence=manual_evidence_block(family_db.identifier),
         updated_by_user_id=current_user.id,
+        created_by_user_id=current_user.id,
     )
 
     session.add(patient_db)
@@ -2514,6 +2529,7 @@ def create_variant(
         main_focus=create_request.main_focus,
         main_focus_evidence=manual_evidence_block(create_request.main_focus),
         updated_by_user_id=current_user.id,
+        created_by_user_id=current_user.id,
     )
 
     session.add(variant_db)
@@ -2623,6 +2639,7 @@ def create_occurrence(
         ],
         disease_name=create_request.disease_name,
         updated_by_user_id=current_user.id,
+        created_by_user_id=current_user.id,
     )
 
     session.add(occurrence_db)
