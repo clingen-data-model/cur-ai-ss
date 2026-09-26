@@ -16,7 +16,11 @@ import { API_BASE_URL } from '@/lib/api'
 import { apiErrorMessage } from '@/lib/apiError'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { Spinner } from '@/components/ui/spinner'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PdfViewer } from '@/components/PdfViewer'
+import { MarkdownEvidenceViewer } from '@/components/MarkdownEvidenceViewer'
+
+type ViewerTab = 'pdf' | 'markdown'
 
 // Matches Streamlit's default palette (lib/ui/paper/shared.py's COLORS[0]) --
 // this viewer is read-only, so there's no picker, just one fixed color.
@@ -54,6 +58,7 @@ export function PdfHighlightProvider({
   children: React.ReactNode
 }) {
   const [target, setTarget] = useState<HighlightTarget | null>(null)
+  const [activeTab, setActiveTab] = useState<ViewerTab>('pdf')
   const fullPdfUrl = pdfUrl ? `${API_BASE_URL}${pdfUrl}` : ''
 
   const annotationsQuery = useQuery({
@@ -69,11 +74,12 @@ export function PdfHighlightProvider({
         },
         throwOnError: true,
       }),
-    enabled: target !== null && fullPdfUrl !== '',
+    enabled: target !== null && fullPdfUrl !== '' && activeTab === 'pdf',
   })
 
   const openHighlight = (next: HighlightTarget) => {
     setTarget(next)
+    setActiveTab('pdf')
   }
 
   const close = () => {
@@ -93,25 +99,42 @@ export function PdfHighlightProvider({
             * needs only one row -- but the dialog still needs an accessible
             * name. */}
           <SheetTitle className="sr-only">View in PDF</SheetTitle>
-          <div className="flex-1 min-h-0">
-            {annotationsQuery.isPending ? (
-              <div className="flex h-full items-center justify-center">
-                <Spinner />
-              </div>
-            ) : annotationsQuery.isError ? (
-              <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
-                <AlertCircle className="size-5" />
-                {apiErrorMessage(annotationsQuery.error, "Couldn't locate this in the PDF.")}
-              </div>
-            ) : fullPdfUrl ? (
-              <PdfViewer
-                url={fullPdfUrl}
-                filename={filename}
-                annotations={annotationsQuery.data ?? []}
-                onClose={close}
+          <Tabs
+            value={activeTab}
+            onValueChange={(value) => setActiveTab(value as ViewerTab)}
+            className="flex-1 min-h-0 flex flex-col gap-0"
+          >
+            <TabsList className="mx-4 mt-3 w-fit">
+              <TabsTrigger value="pdf">PDF</TabsTrigger>
+              <TabsTrigger value="markdown">Markdown</TabsTrigger>
+            </TabsList>
+            <TabsContent value="pdf" className="flex-1 min-h-0">
+              {annotationsQuery.isPending ? (
+                <div className="flex h-full items-center justify-center">
+                  <Spinner />
+                </div>
+              ) : annotationsQuery.isError ? (
+                <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
+                  <AlertCircle className="size-5" />
+                  {apiErrorMessage(annotationsQuery.error, "Couldn't locate this in the PDF.")}
+                </div>
+              ) : fullPdfUrl ? (
+                <PdfViewer
+                  url={fullPdfUrl}
+                  filename={filename}
+                  annotations={annotationsQuery.data ?? []}
+                  onClose={close}
+                />
+              ) : null}
+            </TabsContent>
+            <TabsContent value="markdown" className="flex-1 min-h-0">
+              <MarkdownEvidenceViewer
+                paperId={paperId}
+                quote={target?.quote}
+                enabled={target !== null && activeTab === 'markdown'}
               />
-            ) : null}
-          </div>
+            </TabsContent>
+          </Tabs>
         </SheetContent>
       </Sheet>
     </PdfHighlightContext.Provider>

@@ -63,8 +63,10 @@ from lib.misc.curation.pptx import build_curation_pptx
 from lib.misc.curation.summary import build_curation_row
 from lib.misc.pdf.highlight import (
     GrobidAnnotation,
+    MarkdownAnnotationResp,
     figures_to_grobid_annotations,
     find_best_match,
+    find_best_match_in_text,
     highlight_figures_in_pdf,
     highlight_words_in_pdf,
     parse_hex_color,
@@ -82,6 +84,7 @@ from lib.misc.pdf.paths import (
     pdf_supplements_dir,
     pdf_thumbnail_path,
     pdf_words_json_path,
+    raw_md,
 )
 from lib.misc.snapshots import (
     InvalidSnapshotNameError,
@@ -116,6 +119,7 @@ from lib.models import (
     HPOTerm,
     HumanEvidenceBlock,
     LoginRequest,
+    MarkdownAnnotationRequest,
     OccurrencePairRequest,
     PaperDB,
     PaperResetRequest,
@@ -3140,6 +3144,42 @@ def grobid_annotation(
     )
 
     return all_annotations
+
+
+@app.post(
+    '/papers/{paper_id}/markdown-annotation', response_model=MarkdownAnnotationResp
+)
+def markdown_annotation(
+    paper_id: int,
+    request: MarkdownAnnotationRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> MarkdownAnnotationResp:
+    """
+    Return a paper's extracted markdown, plus the best-effort character
+    offsets of a quote's match within it.
+
+    The SPA's evidence sheet uses this for its "Markdown" tab, alongside the
+    coordinate-based /grobid-annotation used for the PDF tab -- unlike that
+    endpoint, a missed match here is not an error: the tab still renders the
+    markdown, just without a highlight.
+    """
+    paper_db = session.get(PaperDB, paper_id)
+    if not paper_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+
+    try:
+        content = raw_md(paper_id)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Markdown not yet available for this paper',
+        )
+
+    match = find_best_match_in_text(request.quote, content) if request.quote else None
+    return MarkdownAnnotationResp(content=content, match=match)
 
 
 @app.post('/papers/{paper_id}/clear-highlights', status_code=status.HTTP_204_NO_CONTENT)
