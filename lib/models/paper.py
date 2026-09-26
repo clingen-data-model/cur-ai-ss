@@ -518,6 +518,10 @@ class HighlightRequest(BaseModel):
     color: str
 
 
+class MarkdownAnnotationRequest(BaseModel):
+    quote: str | None = None
+
+
 class PedigreeDB(Base):
     __tablename__ = 'pedigrees'
 

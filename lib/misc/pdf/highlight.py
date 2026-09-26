@@ -9,6 +9,7 @@ import fitz
 from Bio.Align import PairwiseAligner
 from pydantic import BaseModel
 from rapidfuzz import fuzz
+from rapidfuzz.utils import default_process
 
 from lib.misc.pdf.parse import Polygon, WordLoc
 from lib.misc.pdf.paths import pdf_highlighted_path, pdf_json_path, pdf_raw_path
@@ -24,6 +25,44 @@ class GrobidAnnotation(BaseModel):
     height: float
     color: str
     border: str = 'solid'
+
+
+class MarkdownAnnotation(BaseModel):
+    """Character offsets of a quote's best match within a markdown string."""
+
+    start: int
+    end: int
+
+
+class MarkdownAnnotationResp(BaseModel):
+    content: str
+    match: MarkdownAnnotation | None = None
+
+
+# Below this score (0-100), treat a fuzzy match as noise rather than a real
+# hit. Unlike /grobid-annotation, which 404s the whole request on a miss,
+# markdown highlighting is best-effort: the tab is still useful unhighlighted,
+# so a weak match should render the plain markdown rather than mark the wrong
+# passage.
+MARKDOWN_MATCH_THRESHOLD = 60.0
+
+
+def find_best_match_in_text(query: str, text: str) -> MarkdownAnnotation | None:
+    """Fuzzy-match a quote against plain text, returning its char offsets.
+
+    The PDF/GROBID matcher above (find_best_match) aligns against a word-
+    position list and returns matched words for coordinate lookup; this
+    instead aligns against a single string and returns character offsets,
+    for highlighting a span in rendered markdown. `processor=default_process`
+    case-folds and normalizes whitespace for scoring only -- the returned
+    offsets still index into the original, unprocessed `text`.
+    """
+    if not query.strip() or not text:
+        return None
+    result = fuzz.partial_ratio_alignment(query, text, processor=default_process)
+    if result is None or result.score < MARKDOWN_MATCH_THRESHOLD:
+        return None
+    return MarkdownAnnotation(start=result.dest_start, end=result.dest_end)
 
 
 def parse_hex_color(color_str: str) -> tuple[float, float, float]:

@@ -37,6 +37,7 @@ from lib.models.paper import (
     GeneDB,
     GeneResp,
     HighlightRequest,
+    MarkdownAnnotationRequest,
     PaperDB,
     PaperExtractionOutput,
     PaperResp,

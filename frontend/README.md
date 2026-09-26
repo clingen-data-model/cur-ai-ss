@@ -181,8 +181,10 @@ declared but not imported anywhere in `src/` yet.
 | `@dagrejs/dagre` | Directed-graph layout algorithm | Computes node positions for that DAG before React Flow draws it — React Flow does not do layout itself. |
 | `react-pdf` | React wrapper around PDF.js | The only PDF renderer: `PaperMetadataTab.tsx` and `PdfViewer.tsx` (the evidence "View in PDF" sheet). It brings its own `pdfjs-dist`; nothing else may depend on that package — see the caveat below. |
 | `zustand` | Minimal global state store | `stores/ui.ts`, for UI state that shouldn't live in the URL or the query cache. |
-| `react-markdown` | Renders a markdown string as React elements | `PedigreeTab.tsx`, for the vision model's freeform pedigree description (headings, lists, bold). |
-| `remark-gfm` | GitHub-flavored markdown extensions for `react-markdown` | Tables/strikethrough/task-lists in the same pedigree description, in case the model's output uses them. |
+| `react-markdown` | Renders a markdown string as React elements | `PedigreeTab.tsx`, for the vision model's freeform pedigree description (headings, lists, bold); also `MarkdownEvidenceViewer.tsx`, the evidence sheet's "Markdown" tab. |
+| `remark-gfm` | GitHub-flavored markdown extensions for `react-markdown` | Tables/strikethrough/task-lists in the same pedigree description and markdown evidence tab, in case the source uses them. |
+| `rehype-raw` | Lets `react-markdown` render raw HTML tags found in the markdown source as elements | `MarkdownEvidenceViewer.tsx`, so a literal `<mark>` spliced around a matched evidence quote renders as a highlight instead of literal text. |
+| `rehype-sanitize` | Strips unsafe/unexpected raw HTML before it reaches the DOM | Paired with `rehype-raw` in the same viewer — GitHub's default schema plus `mark`, since raw-HTML passthrough would otherwise also render stray HTML artifacts Docling sometimes leaves in a paper's markdown. |
 | `zod` | Runtime schema validation | **Unused** — the generated client provides types, and nothing validates at runtime yet. |
 | `shadcn` | CLI that vendors shadcn/ui components | A tool, not a library: `pnpm dlx shadcn add <component>` copies source into `components/ui/`. Pinned to `latest`, so it can change under you. |
 
