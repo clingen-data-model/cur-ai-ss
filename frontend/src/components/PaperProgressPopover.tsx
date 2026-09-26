@@ -86,10 +86,11 @@ export function PaperProgressPopover({
         throwOnError: true,
       }),
     enabled: open,
-    // Matches ActivityIndicator's polling: the worker only claims new work
-    // every 10s, so anything faster shows the same rows twice. Off entirely
-    // once nothing is in flight -- a finished paper's popover has nothing left
-    // to learn by polling. "In flight" must include Pending, not just
+    // Faster than the worker's own 10s claim cadence -- a popover someone is
+    // actively watching is worth the occasional repeated-rows fetch for the
+    // snappier feel. Off entirely once nothing is in flight -- a finished
+    // paper's popover has nothing left to learn by polling. "In flight" must
+    // include Pending, not just
     // Queued/Running: a successor task is created Pending the instant its
     // predecessor completes, and only flips to Queued once the worker's next
     // poll claims it (up to 10s later). Checking Running/Queued alone meant
@@ -99,7 +100,7 @@ export function PaperProgressPopover({
     // the popover was closed and reopened.
     refetchInterval: (query) =>
       query.state.data?.some((t) => t.status !== 'Completed' && t.status !== 'Failed')
-        ? 5_000
+        ? 3_000
         : false,
   })
 
