@@ -37,20 +37,22 @@ function withHighlight(content: string, match: { start: number; end: number } | 
 export function MarkdownEvidenceViewer({
   paperId,
   quote,
+  isSupplement,
   enabled,
 }: {
   paperId: number
   quote: string | null | undefined
+  isSupplement: boolean
   enabled: boolean
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
 
   const query = useQuery({
-    queryKey: ['markdown-annotation', paperId, quote],
+    queryKey: ['markdown-annotation', paperId, quote, isSupplement],
     queryFn: () =>
       markdownAnnotationPapersPaperIdMarkdownAnnotationPost({
         path: { paper_id: paperId },
-        body: { quote: quote ?? null },
+        body: { quote: quote ?? null, is_supplement: isSupplement },
         throwOnError: true,
       }),
     enabled,

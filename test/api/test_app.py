@@ -12,6 +12,7 @@ from lib.api.app import app
 from lib.api.auth import get_current_user
 from lib.api.db import get_session, session_scope
 from lib.core.environment import env
+from lib.misc.pdf.paths import pdf_dir, pdf_supplements_dir
 from lib.models import (
     AnnotatedVariantDB,
     ChatMessageDB,
@@ -540,6 +541,59 @@ def test_get_patients_empty(client, seeded_paper):
     response = client.get(f'/papers/{seeded_paper.id}/patients')
     assert response.status_code == 200
     assert response.json() == []
+
+
+def test_markdown_annotation_matches_main_paper_text(client, seeded_paper):
+    pdf_dir(seeded_paper.id).mkdir(parents=True, exist_ok=True)
+    (pdf_dir(seeded_paper.id) / 'raw.md').write_text(
+        'This paper describes a MASP1 variant in two affected patients.'
+    )
+
+    response = client.post(
+        f'/papers/{seeded_paper.id}/markdown-annotation',
+        json={'quote': 'MASP1 variant'},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert 'MASP1' in body['content']
+    assert body['match'] is not None
+    start, end = body['match']['start'], body['match']['end']
+    assert 'MASP1' in body['content'][start:end]
+
+
+def test_markdown_annotation_supplement_reads_supplement_file(client, seeded_paper):
+    pdf_dir(seeded_paper.id).mkdir(parents=True, exist_ok=True)
+    (pdf_dir(seeded_paper.id) / 'raw.md').write_text(
+        'Main paper text, no mention of Table S1.'
+    )
+    pdf_supplements_dir(seeded_paper.id).mkdir(parents=True, exist_ok=True)
+    (pdf_supplements_dir(seeded_paper.id) / 'raw.md').write_text(
+        'Table S1 lists every variant found in the affected cohort.'
+    )
+
+    response = client.post(
+        f'/papers/{seeded_paper.id}/markdown-annotation',
+        json={'quote': 'variant found in the affected cohort', 'is_supplement': True},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert 'Table S1' in body['content']
+    assert 'Main paper text' not in body['content']
+    assert body['match'] is not None
+
+
+def test_markdown_annotation_supplement_missing_is_404(client, seeded_paper):
+    pdf_dir(seeded_paper.id).mkdir(parents=True, exist_ok=True)
+    (pdf_dir(seeded_paper.id) / 'raw.md').write_text(
+        'Main paper text only, no supplement extracted.'
+    )
+
+    response = client.post(
+        f'/papers/{seeded_paper.id}/markdown-annotation',
+        json={'quote': 'anything', 'is_supplement': True},
+    )
+    assert response.status_code == 404
+    assert 'Supplement' in response.json()['detail']
 
 
 def _patient_required_fields(identifier: str = 'P1') -> dict:

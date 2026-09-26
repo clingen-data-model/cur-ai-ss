@@ -3171,12 +3171,14 @@ def markdown_annotation(
         )
 
     try:
-        content = raw_md(paper_id)
+        content = raw_md(paper_id, supplement=request.is_supplement)
     except FileNotFoundError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail='Markdown not yet available for this paper',
+        detail = (
+            'Supplement markdown not yet available for this paper'
+            if request.is_supplement
+            else 'Markdown not yet available for this paper'
         )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
 
     match = find_best_match_in_text(request.quote, content) if request.quote else None
     return MarkdownAnnotationResp(content=content, match=match)

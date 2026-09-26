@@ -520,6 +520,7 @@ class HighlightRequest(BaseModel):
 
 class MarkdownAnnotationRequest(BaseModel):
     quote: str | None = None
+    is_supplement: bool = False
 
 
 class PedigreeDB(Base):

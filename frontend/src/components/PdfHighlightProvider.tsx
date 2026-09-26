@@ -30,6 +30,10 @@ export interface HighlightTarget {
   quote?: string | null
   table_id?: number | null
   image_id?: number | null
+  // Supplement PDFs have no words.json, so the PDF tab has nothing to search
+  // -- only the Markdown tab (which reads the supplement's own raw.md) works
+  // for these.
+  is_supplement?: boolean
 }
 
 interface PdfHighlightContextValue {
@@ -74,12 +78,12 @@ export function PdfHighlightProvider({
         },
         throwOnError: true,
       }),
-    enabled: target !== null && fullPdfUrl !== '' && activeTab === 'pdf',
+    enabled: target !== null && !target.is_supplement && fullPdfUrl !== '' && activeTab === 'pdf',
   })
 
   const openHighlight = (next: HighlightTarget) => {
     setTarget(next)
-    setActiveTab('pdf')
+    setActiveTab(next.is_supplement ? 'markdown' : 'pdf')
   }
 
   const close = () => {
@@ -105,11 +109,18 @@ export function PdfHighlightProvider({
             className="flex-1 min-h-0 flex flex-col gap-0"
           >
             <TabsList className="mx-4 mt-3 w-fit">
-              <TabsTrigger value="pdf">PDF</TabsTrigger>
+              <TabsTrigger value="pdf" disabled={target?.is_supplement}>
+                PDF
+              </TabsTrigger>
               <TabsTrigger value="markdown">Markdown</TabsTrigger>
             </TabsList>
             <TabsContent value="pdf" className="flex-1 min-h-0">
-              {annotationsQuery.isPending ? (
+              {target?.is_supplement ? (
+                <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
+                  <AlertCircle className="size-5" />
+                  Supplement evidence has no page coordinates to show here -- see the Markdown tab.
+                </div>
+              ) : annotationsQuery.isPending ? (
                 <div className="flex h-full items-center justify-center">
                   <Spinner />
                 </div>
@@ -131,6 +142,7 @@ export function PdfHighlightProvider({
               <MarkdownEvidenceViewer
                 paperId={paperId}
                 quote={target?.quote}
+                isSupplement={!!target?.is_supplement}
                 enabled={target !== null && activeTab === 'markdown'}
               />
             </TabsContent>

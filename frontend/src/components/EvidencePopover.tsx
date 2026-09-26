@@ -21,7 +21,8 @@ export interface EvidenceLike {
   table_id?: number | null
   image_id?: number | null
   // Supplement PDFs have no words.json of their own, so there's nothing for
-  // /grobid-annotation to search -- "View in PDF" is not offered for these.
+  // /grobid-annotation to search -- the PDF tab is not offered for these, but
+  // the Markdown tab (reading the supplement's own raw.md) still is.
   is_supplement?: boolean
   // The current value (`value`) and, when the latest edit's old_value was
   // captured, what it changed from (`previous_value`) -- typed loosely since
@@ -48,6 +49,11 @@ export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
   const canViewInPdf =
     !block?.is_supplement &&
     (!!block?.quote || block?.table_id != null || block?.image_id != null)
+  // Supplement PDFs have no words.json, so the PDF tab can't locate anything
+  // -- but the Markdown tab reads the supplement's own raw.md directly, so a
+  // supplement quote can still be shown there.
+  const canViewMarkdownOnly = !!block?.is_supplement && !!block?.quote
+  const canViewEvidence = canViewInPdf || canViewMarkdownOnly
   // edited_at is only ever set from a real edits-table row (see
   // _attach_edit_history in app.py), never at initial extraction, so it's a
   // reliable "a human changed this" signal independent of whether a note was
@@ -115,7 +121,7 @@ export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
             )}
           </div>
         )}
-        {canViewInPdf && (
+        {canViewEvidence && (
           <div className="pt-2 border-t">
             <Button
               variant="outline"
@@ -126,11 +132,12 @@ export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
                   quote: block?.quote,
                   table_id: block?.table_id,
                   image_id: block?.image_id,
+                  is_supplement: block?.is_supplement,
                 })
               }
             >
               <FileSearch className="size-3.5 mr-1.5" />
-              View in PDF
+              {canViewInPdf ? 'View in PDF' : 'View in Markdown'}
             </Button>
           </div>
         )}
