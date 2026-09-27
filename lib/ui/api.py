@@ -205,27 +205,6 @@ def reset_paper(paper_id: int, snapshot_name: str) -> PaperResetResp:
     return PaperResetResp.model_validate(resp.json())
 
 
-def highlight_pdf(
-    paper_id: int,
-    queries: list[str],
-    image_ids: list[int],
-    table_ids: list[int],
-    color: str,
-) -> None:
-    if isinstance(queries, str):
-        queries = [queries]
-    resp = _session.post(
-        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/highlight',
-        json={
-            'queries': queries,
-            'image_ids': image_ids,
-            'table_ids': table_ids,
-            'color': color,
-        },
-    )
-    resp.raise_for_status()
-
-
 def grobid_annotations(
     paper_id: int,
     queries: list[str],
@@ -302,13 +281,6 @@ def update_variant(
     )
     resp.raise_for_status()
     return VariantResp.model_validate(resp.json())
-
-
-def clear_highlights(paper_id: int) -> None:
-    resp = _session.post(
-        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/clear-highlights',
-    )
-    resp.raise_for_status()
 
 
 def get_occurrences(

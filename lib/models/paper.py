@@ -51,7 +51,6 @@ from typing_extensions import Self
 
 from lib.core.environment import env
 from lib.misc.pdf.paths import (
-    pdf_highlighted_path,
     pdf_image_path,
     pdf_raw_path,
     pdf_sections_dir,

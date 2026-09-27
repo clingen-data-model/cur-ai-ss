@@ -67,8 +67,6 @@ from lib.misc.pdf.highlight import (
     figures_to_grobid_annotations,
     find_best_match,
     find_best_match_in_text,
-    highlight_figures_in_pdf,
-    highlight_words_in_pdf,
     parse_hex_color,
     words_to_grobid_annotations,
 )
@@ -78,7 +76,6 @@ from lib.misc.pdf.misc import (
 from lib.misc.pdf.parse import WordLoc
 from lib.misc.pdf.paths import (
     pdf_dir,
-    pdf_highlighted_path,
     pdf_image_path,
     pdf_raw_path,
     pdf_supplements_dir,
@@ -463,8 +460,6 @@ def put_paper(
 
         pdf_raw_path(paper_db.id).parent.mkdir(parents=True, exist_ok=True)
         with open(pdf_raw_path(paper_db.id), 'wb') as f:
-            f.write(main_content)
-        with open(pdf_highlighted_path(paper_db.id), 'wb') as f:
             f.write(main_content)
         with open(pdf_thumbnail_path(paper_db.id), 'wb') as fp:
             fp.write(pdf_first_page_to_thumbnail_pymupdf_bytes(main_content))
@@ -3017,65 +3012,6 @@ def list_genes(
     return query.all()
 
 
-@app.post('/papers/{paper_id}/highlight', status_code=status.HTTP_204_NO_CONTENT)
-def highlight_pdf(
-    paper_id: int,
-    request: HighlightRequest,
-    session: Session = Depends(get_session),
-    current_user: UserDB = Depends(get_current_user),
-) -> None:
-    """
-    Highlight text in a PDF and save the highlighted version.
-
-    Args:
-        paper_id: The ID of the paper
-        request: JSON body with queries (list) and color fields
-    """
-    # Verify paper exists
-    paper_db = session.get(PaperDB, paper_id)
-    if not paper_db:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
-        )
-
-    # Parse and validate color
-    try:
-        rgb_color = parse_hex_color(request.color)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-
-    # Return early if no highlightable evidence (e.g., all from supplements)
-    if not request.queries and not request.image_ids and not request.table_ids:
-        return
-
-    # Load words from JSON file
-    words_file = pdf_words_json_path(paper_id)
-    with open(words_file, 'r') as f:
-        words = json.load(f)
-        words = [WordLoc(**word) for word in words]
-
-    # Process each query
-    for query in request.queries:
-        # Find best match for the query in the PDF
-        matched_words = find_best_match(query, words)
-        if not matched_words:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f'Could not find text matching query: "{query}"',
-            )
-
-        # Highlight the matched words in the PDF
-        highlight_words_in_pdf(paper_id, matched_words, rgb_color)
-
-    # Also highlight requested figures
-    highlight_figures_in_pdf(
-        paper_id,
-        request.image_ids,
-        request.table_ids,
-        rgb_color,
-    )
-
-
 @app.post('/papers/{paper_id}/grobid-annotation', response_model=list[GrobidAnnotation])
 def grobid_annotation(
     paper_id: int,
@@ -3180,31 +3116,3 @@ def markdown_annotation(
 
     match = find_best_match_in_text(request.quote, content) if request.quote else None
     return MarkdownAnnotationResp(content=content, match=match)
-
-
-@app.post('/papers/{paper_id}/clear-highlights', status_code=status.HTTP_204_NO_CONTENT)
-def clear_highlights(
-    paper_id: int,
-    session: Session = Depends(get_session),
-    current_user: UserDB = Depends(get_current_user),
-) -> None:
-    """
-    Clear all highlights from a paper by replacing the highlighted PDF with the raw PDF.
-
-    Args:
-        paper_id: The ID of the paper
-    """
-    # Verify paper exists
-    paper_db = session.get(PaperDB, paper_id)
-    if not paper_db:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
-        )
-
-    raw_path = pdf_raw_path(paper_id)
-    highlighted_path = pdf_highlighted_path(paper_id)
-
-    with open(raw_path, 'rb') as f:
-        content = f.read()
-    with open(highlighted_path, 'wb') as f:
-        f.write(content)

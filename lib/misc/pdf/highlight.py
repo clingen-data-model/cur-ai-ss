@@ -12,7 +12,7 @@ from rapidfuzz import fuzz
 from rapidfuzz.utils import default_process
 
 from lib.misc.pdf.parse import Polygon, WordLoc
-from lib.misc.pdf.paths import pdf_highlighted_path, pdf_json_path, pdf_raw_path
+from lib.misc.pdf.paths import pdf_json_path, pdf_raw_path
 
 
 class GrobidAnnotation(BaseModel):
@@ -188,7 +188,7 @@ def figures_to_grobid_annotations(
     table_ids: list[int],
     color: tuple[float, float, float],
 ) -> list[GrobidAnnotation]:
-    pdf_path = pdf_highlighted_path(paper_id)
+    pdf_path = pdf_raw_path(paper_id)
     pdf_doc = fitz.open(pdf_path)
 
     docling_json_file = pdf_json_path(paper_id)
@@ -236,7 +236,7 @@ def words_to_grobid_annotations(
     words: list[WordLoc],
     color: tuple[float, float, float],
 ) -> list[GrobidAnnotation]:
-    pdf_path = pdf_highlighted_path(paper_id)
+    pdf_path = pdf_raw_path(paper_id)
     pdf_doc = fitz.open(pdf_path)
 
     words_by_page: dict[int, list[WordLoc]] = defaultdict(list)
@@ -273,94 +273,3 @@ def words_to_grobid_annotations(
     pdf_doc.close()
 
     return annotations
-
-
-def highlight_figures_in_pdf(
-    paper_id: int,
-    image_ids: list[int],
-    table_ids: list[int],
-    rgb_color: tuple[float, float, float],
-) -> None:
-    if not image_ids:
-        return
-
-    # Load PDF
-    pdf_path = pdf_highlighted_path(paper_id)
-    pdf_doc = fitz.open(pdf_path)
-
-    docling_json_file = pdf_json_path(paper_id)
-    with open(docling_json_file, 'r') as f:
-        docling_json = json.load(f)
-
-    for key, ids in (('pictures', image_ids), ('tables', table_ids)):
-        for item_id in ids:
-            for prov in docling_json[key][item_id]['prov']:
-                page = pdf_doc[prov['page_no'] - 1]
-                h = page.rect.height
-                l, t, r, b = (
-                    prov['bbox']['l'],
-                    prov['bbox']['t'],
-                    prov['bbox']['r'],
-                    prov['bbox']['b'],
-                )
-                poly = [
-                    (l, h - t),
-                    (r, h - t),
-                    (r, h - b),
-                    (l, h - b),
-                ]
-                page.draw_polyline(
-                    poly,
-                    color=rgb_color,
-                    fill=rgb_color,
-                    fill_opacity=0.3,
-                )
-
-    # Save highlighted PDF
-    output_path = pdf_highlighted_path(paper_id)
-    pdf_doc.save(output_path, incremental=True, encryption=fitz.PDF_ENCRYPT_KEEP)
-    pdf_doc.close()
-
-    return None
-
-
-def highlight_words_in_pdf(
-    paper_id: int,
-    words: list[WordLoc],
-    rgb_color: tuple[float, float, float],
-) -> None:
-    # Load PDF
-    pdf_path = pdf_highlighted_path(paper_id)
-    pdf_doc = fitz.open(pdf_path)
-
-    # Group words by page
-    words_by_page: dict[int, list[WordLoc]] = defaultdict(list)
-    for word in words:
-        words_by_page[int(word.page_idx)].append(word)
-
-    # Highlight words on each page
-    for page_idx, page_words in words_by_page.items():
-        page = pdf_doc[page_idx - 1]  # convert 1-based → 0-based
-        page_height = page.rect.height
-
-        # Merge adjacent polygons
-        merged_polygons = merge_adjacent_polygons(page_words)
-
-        # Draw all merged polygons
-        for polygon in merged_polygons:
-            points = [
-                (polygon.x0, page_height - polygon.y0),
-                (polygon.x1, page_height - polygon.y1),
-                (polygon.x2, page_height - polygon.y2),
-                (polygon.x3, page_height - polygon.y3),
-            ]
-            page.draw_polyline(
-                points, color=rgb_color, fill=rgb_color, fill_opacity=0.3
-            )
-
-    # Save highlighted PDF
-    output_path = pdf_highlighted_path(paper_id)
-    pdf_doc.save(output_path, incremental=True, encryption=fitz.PDF_ENCRYPT_KEEP)
-    pdf_doc.close()
-
-    return None

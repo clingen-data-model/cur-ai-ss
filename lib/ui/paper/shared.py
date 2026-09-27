@@ -7,7 +7,7 @@ import requests
 import streamlit as st
 from streamlit_pdf_viewer import pdf_viewer
 
-from lib.misc.pdf.paths import pdf_highlighted_path
+from lib.misc.pdf.paths import pdf_raw_path
 from lib.models.evidence_block import (
     EvidenceBlock,
     HumanEvidenceBlock,
@@ -17,11 +17,9 @@ from lib.models.evidence_block import (
 from lib.models.paper import PaperResp
 from lib.tasks import TaskType
 from lib.ui.api import (
-    clear_highlights,
     enqueue_paper_task,
     get_http_error_detail,
     grobid_annotations,
-    highlight_pdf,
 )
 
 CURRENT_ANNOTATIONS_KEY = 'CURRENT_ANNOTATIONS_KEY'
@@ -209,7 +207,7 @@ def pdf_focus_modal() -> None:
     paper_resp = st.session_state['paper_resp']
     annotations = st.session_state.get(CURRENT_ANNOTATIONS_KEY, [])
     pdf_viewer(
-        pdf_highlighted_path(paper_resp.id),
+        pdf_raw_path(paper_resp.id),
         width=1000,
         height=800,
         zoom_level=1.5,
@@ -222,21 +220,13 @@ def pdf_focus_modal() -> None:
         scroll_to_page=annotations[0].page if len(annotations) == 1 else None,
         render_text=True,
     )
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button(
-            'Clear Highlights', width='stretch', icon=':material/highlight_off:'
-        ):
-            clear_highlights(paper_resp.id)
-            st.rerun()
-    with col2:
-        st.download_button(
-            label='Download PDF',
-            data=open(pdf_highlighted_path(paper_resp.id), 'rb').read(),
-            icon=':material/download:',
-            mime='application/pdf',
-            width='stretch',
-        )
+    st.download_button(
+        label='Download PDF',
+        data=open(pdf_raw_path(paper_resp.id), 'rb').read(),
+        icon=':material/download:',
+        mime='application/pdf',
+        width='stretch',
+    )
 
 
 def focus_and_show_dialog(
@@ -260,40 +250,20 @@ def focus_and_show_dialog(
         st.error(f'Failed to find Focus : {get_http_error_detail(e)}')
 
 
-def highlight_evidence(
-    paper_id: int,
-    queries: list[str],
-    image_ids: list[int],
-    table_ids: list[int],
-    color: str,
-) -> None:
-    try:
-        highlight_pdf(
-            paper_id,
-            queries,
-            image_ids,
-            table_ids,
-            color,
-        )
-        st.toast('PDF Highlighted!')
-    except requests.HTTPError as e:
-        st.error(f'Failed to highlight: {get_http_error_detail(e)}')
-
-
-def render_highlight_controls(
+def render_focus_controls(
     paper_id: int,
     blocks: list[EvidenceBlock[Any]],
     color_key: str,
     button_key_prefix: str,
     disabled: bool = False,
 ) -> None:
-    """Render color picker + Highlight + Focus & Switch Tab buttons.
+    """Render color picker + Focus button.
 
     Args:
-        paper_id: Paper ID for highlighting/focusing.
+        paper_id: Paper ID for focusing.
         blocks: List of EvidenceBlocks containing quotes and evidence sources.
         color_key: Session state key for color picker.
-        button_key_prefix: Prefix for highlight/focus button keys.
+        button_key_prefix: Prefix for the focus button's key.
         disabled: Whether to disable the controls.
     """
 
@@ -310,22 +280,14 @@ def render_highlight_controls(
     color = st.color_picker(
         'Choose Color', label_visibility='collapsed', key=color_key, disabled=disabled
     )
-    has_highlightable_evidence = bool(queries or image_ids or table_ids)
-    st.button(
-        'Highlight',
-        key=f'{button_key_prefix}-highlight',
-        type='secondary',
-        on_click=highlight_evidence,
-        args=(paper_id, queries, image_ids, table_ids, color),
-        disabled=disabled or not has_highlightable_evidence,
-    )
+    has_focusable_evidence = bool(queries or image_ids or table_ids)
     st.button(
         'Focus',
         key=f'{button_key_prefix}-focus',
         type='secondary',
         on_click=focus_and_show_dialog,
         args=(paper_id, queries, image_ids, table_ids, color),
-        disabled=disabled or not has_highlightable_evidence,
+        disabled=disabled or not has_focusable_evidence,
     )
 
 
@@ -338,14 +300,14 @@ def render_evidence_controls(
     human_edit_note_key: str | None = None,
     human_edit_note_value: str | None = None,
 ) -> str | None:
-    """Render popover + color picker + Highlight + Focus & Switch Tab buttons.
+    """Render popover + color picker + Focus button.
 
     Args:
-        paper_id: Paper ID for highlighting/focusing.
+        paper_id: Paper ID for focusing.
         block: EvidenceBlock or ReasoningBlock containing quote, reasoning, and evidence sources.
         label: Label for the popover button.
         color_key: Session state key for color picker.
-        button_key_prefix: Prefix for highlight/focus button keys.
+        button_key_prefix: Prefix for the focus button's key.
         human_edit_note_key: Session state key for human edit note text area.
         human_edit_note_value: Explicit curator note value to show, overriding
             ``block.human_edit_note``. Use when the note lives on a different
@@ -383,7 +345,7 @@ def render_evidence_controls(
             # Show info message if evidence is from supplement
             if isinstance(block, EvidenceBlock) and block.is_supplement:
                 st.info(
-                    '📎 This evidence comes from a supplement. PDF highlighting is only available for main document evidence.'
+                    '📎 This evidence comes from a supplement. Focus is only available for main document evidence.'
                 )
             if human_edit_note and human_edit_note_key:
                 st.markdown('---')
@@ -407,16 +369,16 @@ def render_evidence_controls(
                         else ''
                     )
                     st.caption(f'✏️ Edited by {edited_by_name}{deactivated}{when}')
-        # Only pass EvidenceBlock to highlight controls (ReasoningBlock has no evidence sources)
-        highlight_blocks = [block] if isinstance(block, EvidenceBlock) else []
-        if highlight_blocks:
+        # Only pass EvidenceBlock to focus controls (ReasoningBlock has no evidence sources)
+        focus_blocks = [block] if isinstance(block, EvidenceBlock) else []
+        if focus_blocks:
             # Whether there is anything to show is decided in there, across every
             # source a block may carry. Gating on the quote here disabled Focus
-            # for evidence cited by table_id or image_id, which highlights just
+            # for evidence cited by table_id or image_id, which focuses just
             # as well -- a figure or a table row is locatable on the page.
-            render_highlight_controls(
+            render_focus_controls(
                 paper_id,
-                blocks=highlight_blocks,
+                blocks=focus_blocks,
                 color_key=color_key,
                 button_key_prefix=button_key_prefix,
             )

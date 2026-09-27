@@ -31,7 +31,7 @@ from lib.ui.paper.shared import (
     clean_quote,
     get_gnomad_url,
     render_evidence_controls,
-    render_highlight_controls,
+    render_focus_controls,
 )
 
 OCCURRENCES_EDITOR_KEY = 'occurrences-editor'
@@ -86,7 +86,7 @@ def _render_evidence_block(
                 vertical_alignment='center',
                 horizontal_alignment='right',
             ):
-                render_highlight_controls(
+                render_focus_controls(
                     paper_id,
                     blocks=[evidence_block],
                     color_key=f'{paper_id}-{block_id}-{source_type}-color-evidence',
