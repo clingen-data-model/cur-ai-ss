@@ -46,7 +46,7 @@ from lib.ui.paper.shared import (
     HUMAN_EDIT_NOTE_DEFAULT,
     clean_quote,
     render_evidence_controls,
-    render_highlight_controls,
+    render_focus_controls,
     render_rerun_popover,
 )
 
@@ -246,7 +246,7 @@ def _render_phenotypes_table(
                     vertical_alignment='center',
                     horizontal_alignment='right',
                 ):
-                    render_highlight_controls(
+                    render_focus_controls(
                         paper_resp.id,
                         blocks=evidence_blocks,
                         color_key=f'{key_prefix}-highlight-color-{first_phenotype.id}',

@@ -66,10 +66,6 @@ def pdf_words_json_path(paper_id: int, supplement: bool = False) -> Path:
     return base / 'words.json'
 
 
-def pdf_highlighted_path(paper_id: int) -> Path:
-    return pdf_dir(paper_id) / 'highlighted.pdf'
-
-
 def pdf_extraction_success_path(paper_id: int, supplement: bool = False) -> Path:
     base = pdf_supplements_dir(paper_id) if supplement else pdf_dir(paper_id)
     return base / '_SUCCESS'
