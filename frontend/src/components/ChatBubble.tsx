@@ -54,11 +54,11 @@ export function ChatBubble({ paperId }: { paperId: number }) {
         render={
           <Button
             size="icon"
-            className="fixed bottom-6 right-6 z-40 h-12 w-12 rounded-full shadow-lg"
+            className="fixed bottom-6 right-6 z-40 size-18 rounded-full shadow-lg"
           />
         }
       >
-        <MessageCircleIcon />
+        <MessageCircleIcon className="size-6" />
         <span className="sr-only">Open chat</span>
       </PopoverTrigger>
       <PopoverContent
