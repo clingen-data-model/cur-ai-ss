@@ -15,7 +15,7 @@ type BadgeVariant = VariantProps<typeof badgeVariants>['variant']
 export const REVIEW_STATUS_VERB: Record<ReviewStatus, string> = {
   [ReviewStatus.NOT_ASSIGNED]: 'Not assigned',
   [ReviewStatus.ASSIGNED]: 'Assigned to',
-  [ReviewStatus.IN_PROGRESS]: 'In review by',
+  [ReviewStatus.IN_PROGRESS]: 'In progress by',
   [ReviewStatus.COMPLETED]: 'Completed by',
 }
 
@@ -23,11 +23,11 @@ export const REVIEW_STATUS_VERB: Record<ReviewStatus, string> = {
 export const REVIEW_STATUS_SHORT_LABEL: Record<ReviewStatus, string> = {
   [ReviewStatus.NOT_ASSIGNED]: 'Not assigned',
   [ReviewStatus.ASSIGNED]: 'Assigned',
-  [ReviewStatus.IN_PROGRESS]: 'In review',
+  [ReviewStatus.IN_PROGRESS]: 'In progress',
   [ReviewStatus.COMPLETED]: 'Completed',
 }
 
-/** "Not assigned" / "Assigned to Pat" / "In review by Pat" / "Completed by Pat". */
+/** "Not assigned" / "Assigned to Pat" / "In progress by Pat" / "Completed by Pat". */
 export function reviewStatusLabel(
   status: ReviewStatus,
   assignee?: UserSummaryResp | null,

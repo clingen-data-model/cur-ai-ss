@@ -44,7 +44,7 @@ export function ReviewAssigneeFilter({
   value: number | undefined
   onChange: (next: number | undefined) => void
   /** Matches the verb the badge/popover already use for the selected status
-   * ("Assigned to" / "In review by" / "Completed by") -- see reviewStatus.ts. */
+   * ("Assigned to" / "In progress by" / "Completed by") -- see reviewStatus.ts. */
   label?: string
 }) {
   const { users } = useUsers()
