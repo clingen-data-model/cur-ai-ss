@@ -2646,8 +2646,7 @@ def create_occurrence(
     record_edits(
         session,
         occurrence_db,
-        ['zygosity', 'inheritance', 'de_novo']
-        + (['testing_methods'] if create_request.testing_methods else []),
+        ['zygosity', 'inheritance', 'de_novo', 'testing_methods'],
         current_user,
     )
     _touch_paper(session, paper_id, current_user)

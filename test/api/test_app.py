@@ -2125,6 +2125,20 @@ def test_create_occurrence(client, db_session, seeded_paper, seeded_variant):
     assert body['inheritance'] == 'Unknown'
     assert body['de_novo'] is False
     assert body['testing_methods'] == []
+    # Regression: testing_methods used to only get an edits-table row (and so
+    # the same "manually entered" treatment as zygosity/inheritance/de_novo)
+    # when the create request's list was non-empty -- leaving a curator-added
+    # occurrence's default empty Testing Methods indistinguishable from a
+    # genuinely-extracted-and-empty one. It's defaulted at creation exactly
+    # like the other three, so it should be recorded exactly like them too.
+    assert (
+        db_session.query(EditDB)
+        .filter(
+            EditDB.occurrence_id == body['id'], EditDB.field_name == 'testing_methods'
+        )
+        .count()
+        == 1
+    )
 
     resp = client.post(
         f'/papers/{seeded_paper.id}/occurrences',
