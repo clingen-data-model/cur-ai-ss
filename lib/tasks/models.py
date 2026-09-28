@@ -147,6 +147,9 @@ TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
     ],
     TaskType.SEGREGATION_EVIDENCE_EXTRACTION: [TaskType.SEGREGATION_ANALYSIS_COMPUTED],
     TaskType.SEGREGATION_ANALYSIS_COMPUTED: [],
+    # Also gated on the patient having a variant occurrence, which
+    # PATIENT_VARIANT_OCCURRENCES releases without being an edge here -- see
+    # enqueue_deferred_hpo_linking.
     TaskType.PHENOTYPE_EXTRACTION: [TaskType.HPO_LINKING],
     TaskType.HPO_LINKING: [],
     TaskType.PAPER_MONDO_LINKING: [],

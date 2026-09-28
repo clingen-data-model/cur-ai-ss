@@ -163,6 +163,11 @@ from lib.models.variant import (
 from lib.reference_data.hpo import find_matching_hpo_terms
 from lib.reference_data.mondo import get_mondo_term
 from lib.tasks.agent_session import agent_session
+from lib.tasks.hpo_link_cache import (
+    is_cacheable,
+    lookup_hpo_link,
+    remember_hpo_link,
+)
 from lib.tasks.models import TaskType
 
 setup_logging()
@@ -1557,7 +1562,25 @@ async def handle_phenotype_extraction(task_id: int) -> None:
             # Ensure patient_id is set on the phenotype
             if phenotype.patient_id is None or phenotype.patient_id != patient_id:
                 phenotype.patient_id = patient_id
-            session.add(phenotype_to_db(paper_id, phenotype))
+            phenotype_db = phenotype_to_db(paper_id, phenotype)
+            # A concept linked before gets that link now, so it never needs an
+            # HPO_LINKING task (enqueue_deferred_hpo_linking skips phenotypes
+            # that already have one).
+            cached = (
+                lookup_hpo_link(phenotype_db.concept)
+                if is_cacheable(phenotype_db)
+                else None
+            )
+            if cached is not None:
+                phenotype_db.hpo = HpoDB(
+                    hpo_id=cached.hpo_id,
+                    hpo_name=cached.hpo_name,
+                    reasoning=f'Reused the link {cached.hpo_id} ({cached.hpo_name}) '
+                    f'already made for the identical concept on phenotype '
+                    f'{cached.source_phenotype_id}'
+                    f'{", which a curator set" if cached.curated else ""}.',
+                )
+            session.add(phenotype_db)
 
 
 async def handle_hpo_linking(task_id: int) -> None:
@@ -1594,16 +1617,20 @@ async def handle_hpo_linking(task_id: int) -> None:
 
     agent_sess = agent_session(task_id)
 
-    if additional_context is not None:
+    if additional_context is not None and await agent_sess.get_items(limit=1):
         # Follow-up: agent has context from conversation
         message = build_followup_prompt(additional_context)
     else:
-        # Initial query: build full message with phenotype data + instructions
+        # Initial query: build full message with phenotype data + instructions.
+        # A follow-up lands here too when there is no conversation to follow
+        # up on -- a link reused from the HPO link cache never ran the agent.
         await agent_sess.clear_session()
         message = (
             f'Phenotype JSON:\n{json.dumps(phenotype_data, indent=2)}\n\n'
             f'{HPO_LINKING_AGENT_INSTRUCTIONS}'
         )
+        if additional_context is not None:
+            message += f'\n\nAdditional context:\n\n{additional_context}'
 
     try:
         result = await Runner.run(
@@ -1650,6 +1677,21 @@ async def handle_hpo_linking(task_id: int) -> None:
         # no edit history of its own, correctly reporting as agent-derived.
         session.query(HpoDB).filter(HpoDB.phenotype_id == phenotype_id).delete()
         session.add(hpo_to_db(phenotype_id, hpo_result))
+
+    # A no-match is left out so one failed walk is not replayed onto every
+    # later phenotype sharing the concept.
+    if (
+        not phenotype_data['negated']
+        and not phenotype_data['family_history']
+        and hpo_result.value.id is not None
+        and hpo_result.value.name is not None
+    ):
+        remember_hpo_link(
+            phenotype_data['concept'],
+            hpo_result.value.id,
+            hpo_result.value.name,
+            phenotype_id,
+        )
 
 
 def _build_mondo_linking_target(

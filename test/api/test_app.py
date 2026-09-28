@@ -1,5 +1,6 @@
 import asyncio
 import io
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
@@ -3110,3 +3111,217 @@ def test_search_hpo_terms(client):
 
     resp = client.get('/hpo/search', params={'text': 'a'})
     assert resp.status_code == 422
+
+
+def _seed_phenotype(db_session, patient, concept='Seizures', **kw) -> PhenotypeDB:
+    phenotype = PhenotypeDB(
+        paper_id=patient.paper_id,
+        patient_id=patient.id,
+        concept=concept,
+        concept_evidence=dict(value=concept, reasoning='test', quote='test'),
+        **kw,
+    )
+    db_session.add(phenotype)
+    db_session.flush()
+    return phenotype
+
+
+def _hpo_linking_phenotype_ids(db_session, paper_id) -> set[int]:
+    return {
+        t.phenotype_id
+        for t in db_session.query(TaskDB).filter(
+            TaskDB.paper_id == paper_id, TaskDB.type == TaskType.HPO_LINKING
+        )
+    }
+
+
+def test_phenotype_extraction_links_hpo_only_for_variant_linked_patients(
+    db_session, seeded_paper, seeded_variant
+):
+    from lib.tasks.misc import enqueue_successors
+
+    linked = _create_patient_variant_occurrence(
+        db_session, seeded_paper, seeded_variant
+    ).patient
+    unlinked = _seed_patient(db_session, seeded_paper, 'No Variant Patient')
+    linked_phenotype = _seed_phenotype(db_session, linked)
+    already_linked = _seed_phenotype(db_session, linked, 'Ataxia')
+    already_linked.hpo = HpoDB(hpo_id='HP:0001251', hpo_name='Ataxia', reasoning='x')
+    _seed_phenotype(db_session, unlinked)
+
+    for patient in (linked, unlinked):
+        task = TaskDB(
+            paper_id=seeded_paper.id,
+            type=TaskType.PHENOTYPE_EXTRACTION,
+            patient_id=patient.id,
+            status=TaskStatus.COMPLETED,
+        )
+        db_session.add(task)
+        db_session.flush()
+        enqueue_successors(db_session, task)
+
+    assert _hpo_linking_phenotype_ids(db_session, seeded_paper.id) == {
+        linked_phenotype.id
+    }
+
+
+def test_patient_variant_occurrences_releases_hpo_linking(
+    db_session, seeded_paper, seeded_variant
+):
+    """Phenotype extraction usually finishes before occurrences exist, so the
+    occurrences task is the one that finds the patient linked."""
+    from lib.tasks.misc import enqueue_successors
+
+    unlinked = _seed_patient(db_session, seeded_paper, 'No Variant Patient')
+    _seed_phenotype(db_session, unlinked)
+    occurrence = _create_patient_variant_occurrence(
+        db_session, seeded_paper, seeded_variant
+    )
+    phenotype = _seed_phenotype(db_session, occurrence.patient)
+    task = TaskDB(
+        paper_id=seeded_paper.id,
+        type=TaskType.PATIENT_VARIANT_OCCURRENCES,
+        status=TaskStatus.COMPLETED,
+    )
+    db_session.add(task)
+    db_session.flush()
+
+    enqueue_successors(db_session, task)
+
+    assert _hpo_linking_phenotype_ids(db_session, seeded_paper.id) == {phenotype.id}
+
+
+def test_create_occurrence_does_not_queue_hpo_linking(
+    client, db_session, seeded_paper, seeded_variant
+):
+    patient = _seed_patient(db_session, seeded_paper, 'Hand Linked Patient')
+    _seed_phenotype(db_session, patient)
+    db_session.commit()
+
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/occurrences',
+        json={
+            'patient_id': patient.id,
+            'variant_id': seeded_variant.id,
+            'zygosity': 'Heterozygous',
+            'inheritance': 'Unknown',
+            'de_novo': False,
+            'testing_methods': [],
+        },
+    )
+    assert resp.status_code == 200
+    assert _hpo_linking_phenotype_ids(db_session, seeded_paper.id) == set()
+
+
+def test_load_hpo_link_cache(db_session, seeded_paper):
+    from lib.tasks.hpo_link_cache import load_hpo_link_cache
+
+    patient = _seed_patient(db_session, seeded_paper, 'Cache Patient')
+
+    def link(concept, hpo_id, **kw):
+        phenotype = _seed_phenotype(db_session, patient, concept, **kw)
+        phenotype.hpo = HpoDB(hpo_id=hpo_id, hpo_name=hpo_id, reasoning='x')
+        db_session.flush()
+        return phenotype
+
+    curated = link('Seizures', 'HP:CURATED')
+    db_session.add(EditDB(hpo_link_id=curated.hpo.id, field_name='hpo'))
+    link('  seizures ', 'HP:LATER_AGENT')
+    link('Short stature', 'HP:FIRST')
+    link('short  STATURE', 'HP:SECOND')
+    link('No seizures', 'HP:NEGATED', negated=True)
+    link('Maternal ataxia', 'HP:FAMILY', family_history=True)
+    link('Unmatched', None)
+    db_session.flush()
+
+    cache = load_hpo_link_cache(db_session)
+
+    assert {key: entry.hpo_id for key, entry in cache.items()} == {
+        'seizures': 'HP:CURATED',
+        'short stature': 'HP:SECOND',
+    }
+    assert cache['seizures'].curated
+    assert cache['seizures'].source_phenotype_id == curated.id
+
+
+def test_phenotype_extraction_takes_cached_hpo_links(
+    db_session, seeded_paper, monkeypatch
+):
+    from lib.models import ExtractedPhenotype
+    from lib.tasks import hpo_link_cache
+    from lib.tasks.handlers import handle_phenotype_extraction
+
+    patient = _seed_patient(db_session, seeded_paper, 'Cache Hit Patient')
+    task = TaskDB(
+        paper_id=seeded_paper.id,
+        type=TaskType.PHENOTYPE_EXTRACTION,
+        patient_id=patient.id,
+        status=TaskStatus.RUNNING,
+        # Takes the follow-up branch, which needs no paper markdown on disk.
+        additional_context='again',
+    )
+    db_session.add(task)
+    db_session.commit()
+    monkeypatch.setattr(
+        hpo_link_cache,
+        '_cache',
+        {'seizures': hpo_link_cache.CachedHpoLink('HP:0001250', 'Seizure', 7, False)},
+    )
+    monkeypatch.setattr(hpo_link_cache, '_loaded_at', time.monotonic())
+
+    def extracted(concept, **kw):
+        return ExtractedPhenotype(
+            patient_id=patient.id,
+            concept=dict(value=concept, reasoning='r', quote='q'),
+            onset=None,
+            location=None,
+            severity=None,
+            modifier=None,
+            **kw,
+        )
+
+    result = MagicMock()
+    result.final_output = [
+        extracted('SEIZURES'),
+        extracted('Seizures', negated=True),
+        extracted('Ataxia'),
+    ]
+    with patch('lib.tasks.handlers.Runner.run', return_value=result):
+        asyncio.run(handle_phenotype_extraction(task.id))
+
+    db_session.expire_all()
+    rows = {
+        (p.concept, p.negated): p
+        for p in db_session.query(PhenotypeDB).filter(
+            PhenotypeDB.patient_id == patient.id
+        )
+    }
+    hit = rows[('SEIZURES', False)].hpo
+    assert (hit.hpo_id, hit.hpo_name) == ('HP:0001250', 'Seizure')
+    assert 'phenotype 7' in hit.reasoning
+    assert rows[('Seizures', True)].hpo is None
+    assert rows[('Ataxia', False)].hpo is None
+
+
+def test_hpo_link_cache_reloads_after_interval(db_session, seeded_paper, monkeypatch):
+    """A curator's relink lands in the API process; the worker's cache only
+    sees it by reloading from the database."""
+    from lib.tasks import hpo_link_cache
+
+    patient = _seed_patient(db_session, seeded_paper, 'Reload Patient')
+    phenotype = _seed_phenotype(db_session, patient)
+    phenotype.hpo = HpoDB(hpo_id='HP:OLD', hpo_name='Old', reasoning='x')
+    db_session.commit()
+    now = [1000.0]
+    monkeypatch.setattr(hpo_link_cache.time, 'monotonic', lambda: now[0])
+    monkeypatch.setattr(hpo_link_cache, '_cache', None)
+
+    assert hpo_link_cache.lookup_hpo_link('Seizures').hpo_id == 'HP:OLD'
+
+    phenotype.hpo.hpo_id = 'HP:NEW'
+    db_session.commit()
+    now[0] += hpo_link_cache.RELOAD_INTERVAL_S
+    assert hpo_link_cache.lookup_hpo_link('Seizures').hpo_id == 'HP:OLD'
+
+    now[0] += 1
+    assert hpo_link_cache.lookup_hpo_link('Seizures').hpo_id == 'HP:NEW'
