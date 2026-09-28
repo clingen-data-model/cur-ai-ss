@@ -39,6 +39,9 @@ interface DataTableProps<TData, TValue> {
    * with its own expand triggers (see `expanded` above) sets this false so a
    * stray click inside a cell doesn't also toggle the row. */
   expandOnRowClick?: boolean
+  /** Extra class(es) for a specific row's <TableRow> -- e.g. tinting a
+   * curator-created row -- merged with the expand-cursor class above. */
+  getRowClassName?: (row: TData) => string | undefined
 }
 
 export function DataTable<TData, TValue>({
@@ -53,6 +56,7 @@ export function DataTable<TData, TValue>({
   expanded: expandedProp,
   onExpandedChange: onExpandedChangeProp,
   expandOnRowClick = true,
+  getRowClassName,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = React.useState('')
@@ -128,9 +132,10 @@ export function DataTable<TData, TValue>({
                         ? () => row.toggleExpanded()
                         : undefined
                     }
-                    className={
-                      expandOnRowClick && row.getCanExpand() ? 'cursor-pointer' : undefined
-                    }
+                    className={cn(
+                      expandOnRowClick && row.getCanExpand() ? 'cursor-pointer' : undefined,
+                      getRowClassName?.(row.original),
+                    )}
                   >
                     {row.getVisibleCells().map((cell) => (
                       <TableCell key={cell.id}>

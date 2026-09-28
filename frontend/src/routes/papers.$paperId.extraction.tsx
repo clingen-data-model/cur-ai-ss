@@ -65,6 +65,17 @@ const AFFECTED_DOT: Record<AffectedStatus, string> = {
   [AffectedStatus.UNKNOWN]: 'border border-muted-foreground/40',
 }
 
+/** Same "any of patient/variant/occurrence was curator-created" check as
+ * ManuallyCreatedIndicator, reused to tint the whole row -- the icon alone
+ * sits in a narrow, unlabeled column that's easy to miss. */
+function isManuallyCreatedRow(row: OccurrenceRow): boolean {
+  return (
+    row.patient.created_by_user_id != null ||
+    row.variant.created_by_user_id != null ||
+    row.occurrence.created_by_user_id != null
+  )
+}
+
 /** "c.123A>G (p.Arg41Gly)" -- the protein change alongside the genomic/cDNA
  * description, when known. Omitted when they're the same string:
  * variant_description falls back to hgvs_p itself when no genomic/cDNA
@@ -368,6 +379,9 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
         getRowId={(row) => String(row.occurrence.id)}
         getRowCanExpand={() => true}
         expandOnRowClick={false}
+        getRowClassName={(row) =>
+          isManuallyCreatedRow(row) ? 'bg-orange-50/60 dark:bg-orange-950/20' : undefined
+        }
         expanded={expanded}
         onExpandedChange={() => {}}
         renderSubComponent={({ row }) =>
