@@ -20,6 +20,7 @@ from lib.models.paper import PaperDB
 from lib.reference_data.hpo import warm_term_lookup_if_cached
 from lib.tasks.agent_session import agent_session
 from lib.tasks.handlers import TASK_HANDLERS
+from lib.tasks.hpo_link_cache import get_hpo_link_cache
 from lib.tasks.misc import enqueue_successors
 from lib.tasks.models import (
     CLAIMED_STATUSES,
@@ -49,6 +50,12 @@ try:
     warm_term_lookup_if_cached()
 except Exception:
     logger.warning('Failed to warm the HPO term lookup cache at startup', exc_info=True)
+
+try:
+    get_hpo_link_cache()
+except Exception:
+    # Loads lazily on first use instead.
+    logger.warning('Failed to load the HPO link cache at startup', exc_info=True)
 
 
 def _signal_handler(sig: int, frame: FrameType | None) -> None:

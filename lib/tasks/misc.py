@@ -186,6 +186,51 @@ def _patient_demographics_ready(session: Session, paper_id: int) -> bool:
     return all(t.status == TaskStatus.COMPLETED for t in demographics_tasks)
 
 
+def enqueue_deferred_hpo_linking(
+    session: Session,
+    paper_id: int,
+    patient_id: int | None = None,
+    updated_by_user_id: int | None = None,
+) -> list[TaskDB]:
+    """Queue HPO_LINKING for phenotypes of patients linked to a variant.
+
+    HPO linking is the most numerous agent task a paper has -- one per
+    phenotype -- and a patient with no variant contributes nothing a curation
+    needs, so its phenotypes are left unlinked. PHENOTYPE_EXTRACTION and
+    PATIENT_VARIANT_OCCURRENCES run concurrently, so this is called from both
+    and whichever finishes second finds the phenotypes and the occurrences in
+    place. Nothing outside the pipeline calls it: a patient linked to a variant
+    by hand afterwards gets HPO links only from an explicit HPO_LINKING re-run.
+
+    Phenotypes that already have an HPO link -- including one
+    handle_phenotype_extraction took from the HPO link cache -- are skipped, so
+    an occurrences re-run never overwrites a curator's link with a fresh agent
+    one.
+    """
+    from lib.models import HpoDB, PhenotypeDB
+
+    linked_patient_ids = session.query(PatientVariantOccurrenceDB.patient_id).filter(
+        PatientVariantOccurrenceDB.paper_id == paper_id
+    )
+    query = session.query(PhenotypeDB).filter(
+        PhenotypeDB.paper_id == paper_id,
+        PhenotypeDB.patient_id.in_(linked_patient_ids),
+        ~session.query(HpoDB).filter(HpoDB.phenotype_id == PhenotypeDB.id).exists(),
+    )
+    if patient_id is not None:
+        query = query.filter(PhenotypeDB.patient_id == patient_id)
+    return [
+        enqueue_task(
+            session,
+            paper_id=paper_id,
+            task_type=TaskType.HPO_LINKING,
+            phenotype_id=phenotype.id,
+            updated_by_user_id=updated_by_user_id,
+        )
+        for phenotype in query.all()
+    ]
+
+
 def invalidate_descendants(session: Session, paper_id: int, task_type: TaskType) -> int:
     """Delete every downstream task row for a paper before a user-triggered re-run.
 
@@ -239,14 +284,15 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
     """Create successor tasks when a task completes.
 
     Each case is explicit about what successors to create and any entity ID
-    filtering/expansion needed. PATIENT_VARIANT_OCCURRENCES is the only task that
-    requires checking multiple independent predecessors.
+    filtering/expansion needed. PATIENT_VARIANT_OCCURRENCES and HPO_LINKING (see
+    enqueue_deferred_hpo_linking) are the tasks that wait on multiple
+    independent predecessors.
 
     The triggering user (``task.updated_by_user_id``) is propagated to successor
     tasks so the attribution chain is preserved end-to-end. Tasks triggered by the
     worker itself (initial pipeline runs) have no user and stay unattributed.
     """
-    from lib.models import FamilyDB, PatientDB, PhenotypeDB, VariantDB
+    from lib.models import FamilyDB, PatientDB, VariantDB
 
     user_id = task.updated_by_user_id
 
@@ -434,6 +480,15 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     patient_variant_occurrence_id=occurrence.id,
                 )
 
+            # HPO_LINKING for patients this run linked to a variant, whose
+            # phenotypes were extracted first. Deliberately not a
+            # TASK_SUCCESSORS edge: re-running occurrences would then have
+            # invalidate_descendants delete the paper's completed HPO_LINKING
+            # rows, and this never re-creates them for phenotypes already linked.
+            enqueue_deferred_hpo_linking(
+                session, task.paper_id, updated_by_user_id=user_id
+            )
+
         case TaskType.SEGREGATION_EVIDENCE_EXTRACTION:
             enqueue_task(
                 session,
@@ -444,23 +499,14 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
             )
 
         case TaskType.PHENOTYPE_EXTRACTION:
-            # Expand to per-phenotype HPO_LINKING tasks (filtered by this patient's phenotypes)
-            phenotypes = (
-                session.query(PhenotypeDB)
-                .filter(
-                    PhenotypeDB.paper_id == task.paper_id,
-                    PhenotypeDB.patient_id == task.patient_id,
-                )
-                .all()
+            # Per-phenotype HPO_LINKING for this patient -- but only once the
+            # patient is linked to a variant; see enqueue_deferred_hpo_linking.
+            enqueue_deferred_hpo_linking(
+                session,
+                task.paper_id,
+                patient_id=task.patient_id,
+                updated_by_user_id=user_id,
             )
-            for phenotype in phenotypes:
-                enqueue_task(
-                    session,
-                    paper_id=task.paper_id,
-                    task_type=TaskType.HPO_LINKING,
-                    phenotype_id=phenotype.id,
-                    updated_by_user_id=user_id,
-                )
 
         case TaskType.PAPER_METADATA:
             enqueue_task(
