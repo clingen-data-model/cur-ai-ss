@@ -4,7 +4,6 @@ import datetime
 import logging
 import os
 import signal
-from types import FrameType
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -58,14 +57,51 @@ except Exception:
     logger.warning('Failed to load the HPO link cache at startup', exc_info=True)
 
 
-def _signal_handler(sig: int, frame: FrameType | None) -> None:
-    """Handle SIGINT and SIGTERM by exiting immediately."""
-    logger.info(f'Received signal {sig}, shutting down')
-    os._exit(0)
+# Task ids this process currently holds RUNNING -- populated/cleared by
+# execute_task, read by _release_in_flight_tasks on a graceful shutdown so a
+# deploy's service restart doesn't leave them orphaned until LEASE_TIMEOUT_S.
+_in_flight_tasks: set[int] = set()
 
 
-signal.signal(signal.SIGINT, _signal_handler)
-signal.signal(signal.SIGTERM, _signal_handler)
+async def _release_in_flight_tasks() -> None:
+    """Release this process's leases immediately on shutdown, same reset (and
+    same PENDING-vs-abandon retry-limit check) poll_and_schedule_tasks already
+    applies to a task that timed out -- PENDING plus a cleared session, so the
+    retry starts from a clean slate rather than piling a fresh prompt onto an
+    interrupted one. Without this, these tasks just sit RUNNING, invisible to
+    the poller, until the lease timeout notices them on its own."""
+    if not _in_flight_tasks:
+        return
+    task_ids = list(_in_flight_tasks)
+    logger.info(f'Releasing {len(task_ids)} in-flight task(s) before shutdown')
+    now = datetime.datetime.now(datetime.timezone.utc)
+    to_clear: list[int] = []
+    with session_scope() as session:
+        for task_id in task_ids:
+            task = session.get(TaskDB, task_id)
+            if task is None:
+                continue
+            if task.tries < MAX_RETRIES:
+                task.status = TaskStatus.PENDING
+                to_clear.append(task_id)
+            else:
+                task.status = TaskStatus.FAILED
+                task.error_message = 'Worker shut down mid-task and exhausted retries'
+            task.updated_at = now
+    for task_id in to_clear:
+        await agent_session(task_id).clear_session()
+
+
+async def _shutdown() -> None:
+    try:
+        await _release_in_flight_tasks()
+    finally:
+        os._exit(0)
+
+
+def _handle_shutdown_signal(sig: int) -> None:
+    logger.info(f'Received signal {sig}, releasing in-flight tasks before shutdown')
+    asyncio.create_task(_shutdown())
 
 
 async def execute_task(task_id: int) -> None:
@@ -90,6 +126,7 @@ async def execute_task(task_id: int) -> None:
         task_type = task.type
 
     # Handler manages its own session - no session held across async boundaries
+    _in_flight_tasks.add(task_id)
     handler = TASK_HANDLERS[task_type]
     error_msg = None
     try:
@@ -97,6 +134,8 @@ async def execute_task(task_id: int) -> None:
     except Exception as e:
         logger.exception(f'Task {task_id} ({task_type}) failed')
         error_msg = str(e)
+    finally:
+        _in_flight_tasks.discard(task_id)
 
     # Update final status in a new session
     with session_scope() as session:
@@ -315,6 +354,13 @@ async def poll_and_schedule_tasks(
 
 async def main_async() -> None:
     """Main async loop: continuously poll for tasks and schedule them."""
+    # add_signal_handler (not signal.signal) so the handler can schedule the
+    # async release above on this same loop rather than running as a plain
+    # synchronous interrupt.
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, _handle_shutdown_signal, sig)
+
     # Create global and type-specific semaphores
     global_semaphore = asyncio.Semaphore(GLOBAL_CONCURRENCY)
     semaphores: dict[TaskType, asyncio.Semaphore] = {}
