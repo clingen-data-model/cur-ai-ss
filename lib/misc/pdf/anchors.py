@@ -39,7 +39,7 @@ from docling_core.types.doc import (
     TextItem,
     TitleItem,
 )
-from docling_core.types.doc.base import BoundingBox, CoordOrigin
+from docling_core.types.doc.base import CoordOrigin
 from pydantic import BaseModel
 
 from lib.misc.pdf.paths import (
@@ -170,18 +170,6 @@ def _anchor_id(kind: AnchorKind, index: int, supplement: bool) -> str:
     return f'{prefix}{kind}-{index}'
 
 
-def _page_box(page_no: int, bbox: BoundingBox, page_height: float) -> PageBox:
-    """Convert a Docling bbox (either origin) to the viewer's top-left x/y/w/h."""
-    top_left = bbox.to_top_left_origin(page_height)
-    return PageBox(
-        page_no=page_no,
-        x=top_left.l,
-        y=top_left.t,
-        width=top_left.r - top_left.l,
-        height=top_left.b - top_left.t,
-    )
-
-
 def _prov_boxes(item: DocItem, doc: DoclingDocument) -> list[PageBox]:
     """An item's page boxes, one per prov entry.
 
@@ -209,7 +197,16 @@ def _prov_boxes(item: DocItem, doc: DoclingDocument) -> list[PageBox]:
         page = doc.pages.get(prov.page_no)
         if page is None or page.size is None:  # DOCX and friends: no layout
             continue
-        boxes.append(_page_box(prov.page_no, prov.bbox, page.size.height))
+        tl = prov.bbox.to_top_left_origin(page.size.height)
+        boxes.append(
+            PageBox(
+                page_no=prov.page_no,
+                x=tl.l,
+                y=tl.t,
+                width=tl.r - tl.l,
+                height=tl.b - tl.t,
+            )
+        )
     return boxes
 
 
@@ -249,17 +246,14 @@ def _row_boxes(
     return rows
 
 
-def _pipe_lines(markdown: str) -> list[str]:
-    """Just the '|' rows of a markdown table, dropping caption/notes around it."""
-    return [line for line in markdown.splitlines() if _PIPE_LINE.match(line)]
-
-
-def _with_anchor_column(pipe_lines: list[str], table_id: str) -> tuple[list[str], int]:
+def _with_anchor_column(markdown: str, table_id: str) -> tuple[list[str], int]:
     """Prepend an ``anchor`` column: header, separator, then table-N-row-R ids.
 
+    Takes the '|' rows of the markdown (caption/notes around them are dropped).
     A line-level transform, so it works on Docling and vision tables alike.
     Returns the new lines and the number of data rows.
     """
+    pipe_lines = [line for line in markdown.splitlines() if _PIPE_LINE.match(line)]
     if not pipe_lines:
         return [], 0
     out = [f'| anchor {pipe_lines[0].lstrip()}']
@@ -274,11 +268,6 @@ def _with_anchor_column(pipe_lines: list[str], table_id: str) -> tuple[list[str]
     for row_index, line in enumerate(rest):
         out.append(f'| {table_id}-row-{row_index} {line.lstrip()}')
     return out, len(rest)
-
-
-def _table_is_unrecovered(paper_id: int, index: int, supplement: bool) -> bool:
-    """The correction agent judged the table corrupt and could not rebuild it."""
-    return document_table_unrecovered_path(paper_id, index, supplement).exists()
 
 
 def _table_text(
@@ -298,11 +287,12 @@ def _table_text(
     source_md = (
         vision_path.read_text() if vision_corrected else table.export_to_markdown(doc)
     )
-    pipe_lines, rendered_rows = _with_anchor_column(_pipe_lines(source_md), anchor_id)
+    pipe_lines, rendered_rows = _with_anchor_column(source_md, anchor_id)
 
     caption = serializer.serialize_captions(item=table).text.strip()
     lines = [f'[{anchor_id}] {caption}'.rstrip()]
-    if _table_is_unrecovered(paper_id, index, supplement):
+    # The correction agent judged it corrupt and could not rebuild it: warn readers.
+    if document_table_unrecovered_path(paper_id, index, supplement).exists():
         lines += ['', UNRECOVERED_TABLE_MARKER.format(table_id=index)]
     lines += ['', *pipe_lines]
 
@@ -499,7 +489,7 @@ def anchored_from_markdown(
         lines = block.splitlines()
         if all(_PIPE_LINE.match(line) for line in lines):
             anchor_id = next_id(AnchorKind.TABLE)
-            pipe_lines, rows = _with_anchor_column(lines, anchor_id)
+            pipe_lines, rows = _with_anchor_column(block, anchor_id)
             chunks.append('\n'.join([f'[{anchor_id}]', '', *pipe_lines]))
             anchors.append(Anchor(id=anchor_id, row_boxes=[[] for _ in range(rows)]))
         elif len(lines) == 1 and _IMAGE_LINE.match(block):
