@@ -3325,3 +3325,83 @@ def test_hpo_link_cache_reloads_after_interval(db_session, seeded_paper, monkeyp
 
     now[0] += 1
     assert hpo_link_cache.lookup_hpo_link('Seizures').hpo_id == 'HP:NEW'
+
+
+def test_create_task_refused_while_paper_has_tasks_in_flight(
+    client, db_session, seeded_paper
+):
+    running = TaskDB(
+        paper_id=seeded_paper.id, type=TaskType.HPO_LINKING, status=TaskStatus.RUNNING
+    )
+    db_session.add(running)
+    db_session.commit()
+
+    with patch('lib.api.app.write_snapshot_safe') as snapshot:
+        resp = client.post(
+            f'/papers/{seeded_paper.id}/tasks',
+            json={'type': 'Paper MONDO Linking', 'skip_successors': False},
+        )
+
+    assert resp.status_code == 409
+    assert resp.json()['detail'] == (
+        '1 task still pending or running (HPO Linking). '
+        'Wait for it to finish before re-running.'
+    )
+    # Refused before the pre-rerun snapshot: a mid-run snapshot is the thing
+    # this guard exists to prevent.
+    snapshot.assert_not_called()
+    assert (
+        db_session.query(TaskDB)
+        .filter(TaskDB.type == TaskType.PAPER_MONDO_LINKING)
+        .count()
+        == 0
+    )
+
+    running.status = TaskStatus.COMPLETED
+    db_session.commit()
+    with patch('lib.api.app.write_snapshot_safe'):
+        resp = client.post(
+            f'/papers/{seeded_paper.id}/tasks',
+            json={'type': 'Paper MONDO Linking', 'skip_successors': False},
+        )
+    assert resp.status_code == 200
+
+
+def test_chat_queue_task_refused_while_paper_has_tasks_in_flight(
+    db_session, seeded_paper, test_user
+):
+    from agents.tool_context import ToolContext
+
+    from lib.agents.chat_agent import ChatRunContext, _make_queue_task_tool
+
+    db_session.add(
+        TaskDB(
+            paper_id=seeded_paper.id,
+            type=TaskType.HPO_LINKING,
+            status=TaskStatus.PENDING,
+        )
+    )
+    db_session.commit()
+    run_context = ChatRunContext()
+    tool = _make_queue_task_tool(seeded_paper.id, test_user.id)
+
+    with patch('lib.agents.chat_agent.write_snapshot_safe') as snapshot:
+        args = '{"task_type": "Paper MONDO Linking"}'
+        reply = asyncio.run(
+            tool.on_invoke_tool(
+                ToolContext(
+                    context=run_context,
+                    tool_name='queue_task',
+                    tool_call_id='call-1',
+                    tool_arguments=args,
+                ),
+                args,
+            )
+        )
+
+    assert reply == (
+        '1 task still pending or running (HPO Linking). '
+        'Wait for it to finish before re-running.'
+    )
+    assert run_context.confirmation is None
+    snapshot.assert_not_called()

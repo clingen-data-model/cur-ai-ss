@@ -109,3 +109,30 @@ export function taskStateMessage(
       return { title: '', description: '' }
   }
 }
+
+/** Mirrors lib/tasks/models.py's ACTIVE_STATUSES: a task the paper is still
+ * owed. Re-running and restoring are both refused (409) while any exist. */
+export const ACTIVE_TASK_STATUSES: ReadonlySet<TaskStatus> = new Set([
+  TaskStatus.PENDING,
+  TaskStatus.QUEUED,
+  TaskStatus.RUNNING,
+])
+
+/** Why a paper can't be re-run or restored yet, or null if it can -- the same
+ * sentence paper_busy_message (lib/tasks/misc.py) puts in the 409. */
+export function paperBusyMessage(tasks: TaskResp[], action: string): string | null {
+  const counts = new Map<TaskType, number>()
+  for (const t of tasks) {
+    if (ACTIVE_TASK_STATUSES.has(t.status)) counts.set(t.type, (counts.get(t.type) ?? 0) + 1)
+  }
+  if (counts.size === 0) return null
+  const total = [...counts.values()].reduce((a, b) => a + b, 0)
+  const inFlight = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([type, n]) => (n > 1 ? `${type} ×${n}` : type))
+    .join(', ')
+  return (
+    `${total} task${total !== 1 ? 's' : ''} still pending or running (${inFlight}). ` +
+    `Wait for ${total !== 1 ? 'them' : 'it'} to finish before ${action}.`
+  )
+}

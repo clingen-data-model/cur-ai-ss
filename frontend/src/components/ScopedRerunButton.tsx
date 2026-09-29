@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { apiErrorMessage } from '@/lib/apiError'
+import { usePaperBusy } from '@/hooks/usePaperBusy'
 
 interface TaskScope {
   family_id?: number
@@ -49,6 +50,7 @@ export function ScopedRerunButton({
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const [context, setContext] = useState('')
+  const busy = usePaperBusy(paperId, open)
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -67,6 +69,7 @@ export function ScopedRerunButton({
       // renders -- without this it keeps reading Done until something else
       // happens to refetch it.
       queryClient.invalidateQueries({ queryKey: ['papers'] })
+      queryClient.invalidateQueries({ queryKey: ['paper-tasks', paperId] })
       toast.success(`${taskType} queued`)
       setOpen(false)
       setContext('')
@@ -103,11 +106,12 @@ export function ScopedRerunButton({
               rows={3}
             />
           </div>
+          {busy && <p className="text-sm text-amber-700 dark:text-amber-400">{busy}</p>}
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>
+            <Button onClick={() => mutation.mutate()} disabled={mutation.isPending || !!busy}>
               {mutation.isPending ? 'Queuing...' : 'Confirm'}
             </Button>
           </DialogFooter>
