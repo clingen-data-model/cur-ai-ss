@@ -17,10 +17,24 @@ CORE EXTRACTION RULES:
     - A field is considered table-derived if the information is explicitly presented in a structured table (rows and columns) in the source.
     - If a verbatim quote cannot be extracted (i.e., the exact table row or cell text is not available as a substring of the input text), then table_id alone is sufficient.
   - image_id: required for figure-derived evidence
-  - is_supplement: boolean flag indicating whether evidence came from a supplement
-    - Set to true when evidence is extracted from supplementary material that may not be renderable in the PDF view
-    - Set to false (or omit) when evidence is from the main paper
-    - When true, coordinates may not be available for highlighting/linking in the UI
+  - is_supplement: boolean flag indicating whether evidence came from the paper's
+    separately uploaded supplement file (a distinct Word or Excel document), NOT from
+    the main PDF
+    - If the input contains a heading starting "# Supplementary Material" (e.g.
+      "# Supplementary Material (XLSX)"), that marks exactly where the separate
+      file's content begins. Everything before it, including everything in the main
+      PDF's own pages, is the main paper; everything at or after it is the supplement.
+    - Set to true ONLY for evidence quoted/tabled/figured from content at or after
+      that heading.
+    - Set to false (or omit) for everything before it -- this includes any section,
+      table, or figure the main paper itself labels "Supplementary" (e.g.
+      "Supplementary Table S2"), if it appears in the main PDF's own pages before the
+      heading. That is still part of the main document and fully highlightable there;
+      only the separately uploaded file cannot be.
+    - If the input has no such heading, the paper has no supplement yet -- this
+      should always be false.
+    - When true, coordinates may not be available for highlighting/linking in the UI,
+      since the supplement has no PDF of its own.
   - reasoning: required explanation
 
 - At least one of:

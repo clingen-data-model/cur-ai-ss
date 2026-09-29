@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 from typing import Literal, TypeAlias
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     ForeignKey,
     Index,
@@ -536,6 +537,11 @@ class PedigreeDB(Base):
         unique=True,
     )
     image_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    # image_id is namespaced separately per supplement/main (see pdf_image_path),
+    # so this is required to know which file image_id actually names.
+    is_supplement: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default='0'
+    )
     description: Mapped[str] = mapped_column(Text, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -554,5 +560,6 @@ class PedigreeDB(Base):
 
 class PedigreeResp(BaseModel):
     image_id: int
+    is_supplement: bool
     description: str
     image_url: str

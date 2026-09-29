@@ -29,7 +29,7 @@ def test_a_declined_figure_is_never_captured(monkeypatch):
 
     description = pedigree._analyze_image_url('data:image/png;base64,AAA')
     if description.strip() != NOT_A_PEDIGREE:
-        capture.record(1, description)
+        capture.record(1, False, description)
 
     assert capture.image_id is None
     assert capture.description is None
@@ -83,3 +83,23 @@ async def test_a_decline_still_answers_not_a_pedigree(monkeypatch):
 
     assert result == NOT_A_PEDIGREE
     assert capture.image_id is None
+
+
+async def test_capture_records_which_namespace_a_found_pedigree_came_from(monkeypatch):
+    """image_id is namespaced separately per supplement/main (pdf_image_path),
+    so a real find must also record is_supplement -- otherwise the caller
+    can't know which file image_id actually names."""
+    monkeypatch.setattr(pedigree, 'vlm_describe', lambda *_: 'III-2 affected male')
+    monkeypatch.setattr(
+        pedigree, 'image_to_data_url', lambda *_: 'data:image/png;base64,AAA'
+    )
+    agent, capture = pedigree.pedigree_describer_agent_for_paper(paper_id=1)
+    (tool,) = agent.tools
+
+    result = await tool.on_invoke_tool(
+        _tool_context(tool.name), '{"image_id": 2, "is_supplement": true}'
+    )
+
+    assert result == 'III-2 affected male'
+    assert capture.image_id == 2
+    assert capture.is_supplement is True

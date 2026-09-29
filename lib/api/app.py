@@ -1637,8 +1637,13 @@ def get_pedigree(
         return None
     return PedigreeResp(
         image_id=pedigree.image_id,
+        is_supplement=pedigree.is_supplement,
         description=pedigree.description,
-        image_url=str(pdf_image_path(paper_id, pedigree.image_id)),
+        image_url=str(
+            pdf_image_path(
+                paper_id, pedigree.image_id, supplement=pedigree.is_supplement
+            )
+        ),
     )
 
 

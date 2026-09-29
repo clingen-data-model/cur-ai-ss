@@ -590,6 +590,7 @@ async def handle_pedigree_description(task_id: int) -> None:
         output = output.model_copy(
             update={
                 'image_id': capture.image_id,
+                'is_supplement': capture.is_supplement,
                 'description': capture.description,
             }
         )
