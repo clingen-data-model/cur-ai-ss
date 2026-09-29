@@ -1,11 +1,19 @@
 import json
+import shutil
 from unittest.mock import MagicMock, patch
 
 from lib.agents.table_correction_agent import TableCorrectionResult, correct_tables
+from lib.bin.backfill_documents import backfill_paper
+from lib.misc.pdf.anchors import load_anchors
 from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import (
     UNRECOVERED_TABLE_MARKER,
     apply_table_corrections,
+    document_anchored_md_path,
+    document_dir,
+    document_images_dir,
+    document_success_path,
+    document_tables_dir,
     fulltext_md,
     pdf_extraction_success_path,
     pdf_image_path,
@@ -113,6 +121,39 @@ async def test_convert_and_extract_creates_outputs(test_file_contents):
 
         with open(pdf_section_markdown_path(paper_id, section_id - 1), 'r') as f:
             assert '## Supporting Information' in f.read()
+
+        # ---- anchor-indexed document, written side by side ----
+        assert document_success_path(paper_id).exists()
+        anchored = document_anchored_md_path(paper_id).read_text()
+        anchors = load_anchors(paper_id)
+        assert anchored.count('[paragraph-') >= 100
+        assert '## Supporting Information' in anchored  # headers untagged
+        table_ids = sorted(a.id for a in anchors if a.id.startswith('table-'))
+        figure_ids = sorted(a.id for a in anchors if a.id.startswith('figure-'))
+        assert table_ids and figure_ids
+        # Files are keyed by the same Docling index as the anchor ids.
+        assert (
+            sorted(
+                f'table-{p.stem}'
+                for p in document_tables_dir(paper_id).glob('*.md')
+                if '.' not in p.stem
+            )
+            == table_ids
+        )
+        assert (
+            sorted(
+                f'figure-{p.stem}' for p in document_images_dir(paper_id).glob('*.png')
+            )
+            == figure_ids
+        )
+        assert all(a.boxes for a in anchors), 'every PDF anchor has a box'
+
+        # The backfill (from raw.json) must produce exactly what the live parse did.
+        live_md, live_anchors = anchored, anchors
+        shutil.rmtree(document_dir(paper_id))
+        backfill_paper(paper_id)
+        assert document_anchored_md_path(paper_id).read_text() == live_md
+        assert load_anchors(paper_id) == live_anchors
 
 
 async def test_correct_tables_leaves_unrecoverable_tables_in_place():

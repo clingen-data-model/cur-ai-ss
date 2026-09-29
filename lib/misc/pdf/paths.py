@@ -116,6 +116,78 @@ def paper_section_classification_path(paper_id: int) -> Path:
     return pdf_dir(paper_id) / 'paper_section_classification.json'
 
 
+# --- Anchor-indexed document layout: {CAA_ROOT}/documents/{paper_id}/{main|supplement}
+#
+# Written side by side with the extracted_pdfs/ layout above while both exist.
+# Tables and images here are keyed by their Docling index (#/tables/N,
+# #/pictures/N), which is also the number in the anchor ids (table-N, figure-N)
+# printed into anchored.md -- one numbering everywhere, assigned by Docling.
+
+
+def document_dir(paper_id: int, supplement: bool = False) -> Path:
+    return env.documents_dir / str(paper_id) / ('supplement' if supplement else 'main')
+
+
+def document_raw_path(
+    paper_id: int, supplement: bool = False, file_format: str | None = None
+) -> Path:
+    return document_dir(paper_id, supplement) / f'raw.{file_format or "pdf"}'
+
+
+def document_words_json_path(paper_id: int, supplement: bool = False) -> Path:
+    return document_dir(paper_id, supplement) / 'words.json'
+
+
+def document_anchored_md_path(paper_id: int, supplement: bool = False) -> Path:
+    return document_dir(paper_id, supplement) / 'anchored.md'
+
+
+def document_anchors_path(paper_id: int, supplement: bool = False) -> Path:
+    return document_dir(paper_id, supplement) / 'anchors.json'
+
+
+def document_success_path(paper_id: int, supplement: bool = False) -> Path:
+    return document_dir(paper_id, supplement) / '_SUCCESS'
+
+
+def document_tables_dir(paper_id: int, supplement: bool = False) -> Path:
+    return document_dir(paper_id, supplement) / 'tables'
+
+
+def document_images_dir(paper_id: int, supplement: bool = False) -> Path:
+    return document_dir(paper_id, supplement) / 'images'
+
+
+def document_table_markdown_path(
+    paper_id: int, table_index: int, supplement: bool = False
+) -> Path:
+    return document_tables_dir(paper_id, supplement) / f'{table_index}.md'
+
+
+def document_table_image_path(
+    paper_id: int, table_index: int, supplement: bool = False
+) -> Path:
+    return document_tables_dir(paper_id, supplement) / f'{table_index}.png'
+
+
+def document_table_vision_markdown_path(
+    paper_id: int, table_index: int, supplement: bool = False
+) -> Path:
+    return document_tables_dir(paper_id, supplement) / f'{table_index}.vision.md'
+
+
+def document_table_correction_path(
+    paper_id: int, table_index: int, supplement: bool = False
+) -> Path:
+    return document_tables_dir(paper_id, supplement) / f'{table_index}.correction.json'
+
+
+def document_image_path(
+    paper_id: int, picture_index: int, supplement: bool = False
+) -> Path:
+    return document_images_dir(paper_id, supplement) / f'{picture_index}.png'
+
+
 def apply_table_corrections(
     paper_id: int, markdown: str, supplement: bool = False
 ) -> str:

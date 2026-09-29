@@ -57,6 +57,9 @@ class Env(BaseSettings):
     CAA_ROOT: str = '/var/caa'
     SQLLITE_DIR: str = 'sqllite'
     EXTRACTED_PDF_DIR: str = 'extracted_pdfs'
+    # Anchor-indexed documents (anchored.md + anchors.json per paper), written
+    # side by side with EXTRACTED_PDF_DIR while the two layouts coexist.
+    DOCUMENTS_DIR: str = 'documents'
     REFERENCE_DATA_DIR: str = 'reference_data'
 
     # Reference data
@@ -118,6 +121,10 @@ class Env(BaseSettings):
     @property
     def extracted_pdf_dir(self) -> Path:
         return Path(self.CAA_ROOT) / self.EXTRACTED_PDF_DIR
+
+    @property
+    def documents_dir(self) -> Path:
+        return Path(self.CAA_ROOT) / self.DOCUMENTS_DIR
 
     @property
     def reference_data_dir(self) -> Path:
