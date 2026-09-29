@@ -430,7 +430,7 @@ def build_anchored(
         elif items and isinstance(items[0], (SectionHeaderItem, TitleItem)):
             # Headings: printed as '## ...' with no id -- never evidence.
             chunks.append(part.text.strip())
-        elif items and isinstance(items[0], TextItem):
+        elif items and isinstance(items[0], TextItem) and part.text.strip():
             # Ordinary paragraph (also an orphan caption whose table/figure was
             # dropped). An inline group merges several TextItems into one part:
             # the id is the first item's, the boxes are all of theirs.

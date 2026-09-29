@@ -307,3 +307,16 @@ def test_other_text_kinds_become_paragraphs_and_furniture_is_dropped(paper_id):
     )
     assert 'running head' not in md
     assert [a.id for a in anchors] == ['paragraph-2', 'paragraph-3', 'paragraph-4']
+
+
+def test_blank_items_produce_neither_text_nor_anchor(paper_id):
+    doc = DoclingDocument(name='blank')
+    doc.add_page(page_no=1, size=Size(width=600, height=PAGE_HEIGHT))
+    doc.add_formula(text='')  # Docling emits these for unrecognised equation regions
+    doc.add_text(label=DocItemLabel.TEXT, text='   ')
+    doc.add_text(label=DocItemLabel.TEXT, text='real')
+
+    md, anchors = build_anchored(doc, paper_id=paper_id)
+
+    assert md == '[paragraph-2] real\n'
+    assert [a.id for a in anchors] == ['paragraph-2']
