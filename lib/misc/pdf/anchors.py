@@ -388,6 +388,22 @@ def build_anchored(
     ``tables/N.vision.md``, ``N.unrecovered`` and ``images/N.png`` must already
     be in place under the document dir, since the text refers to them; that is
     why ``write_anchored_document`` calls this last.
+
+    Coverage, from a census of every Docling item in the 94 dev-caa papers
+    (+4 supplements) on 2026-09-29 -- what exists and where it goes:
+
+        text 27135, caption 515, footnote 353, checkbox 23   -> [paragraph-N]
+        list_item 4003 (in 283 list groups)                  -> [paragraph-N] each
+        section_header 1967, title                           -> '## ...', untagged
+        page_header 2044, page_footer 1429 (furniture layer) -> dropped by serializer
+        table 214                                            -> [table-N] + rows
+        picture 863                                          -> [figure-N]
+        code 2 (both Wiley author lines misread as code)     -> [paragraph-N], fenced
+        formula 5 (all empty text)                           -> never emitted
+        inline groups 30 (several TextItems in one part)     -> one paragraph, all boxes
+        key_value_area 164 / unspecified 252 / form_area 5   -> plain text children, tagged
+        key_value_items 0, form_items 0                      -> would print untagged
+        text inside pictures (263 in one paper)              -> excluded, cite figure-N
     """
     serializer = MarkdownDocSerializer(
         doc=doc, params=MarkdownParams(escape_html=False, escape_underscores=False)
