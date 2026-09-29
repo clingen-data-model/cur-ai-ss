@@ -1,9 +1,10 @@
 /* The evidence sheet's "Markdown" tab: the paper's extracted markdown
  * (Docling's raw.md), with the evidence quote highlighted and scrolled into
  * view when a fuzzy match is found -- the text-based analog of the PDF
- * tab's coordinate-based highlight box. table_id/image_id evidence (no quote,
- * or a quote that didn't match) falls back to highlighting the Nth table/
- * image element instead -- see the comment further down.
+ * tab's coordinate-based highlight box. table_id evidence always highlights
+ * the Nth table element instead (never the quote splice, even when the
+ * quote matches); image_id evidence does the same, but only when there's no
+ * quote match -- see the comment further down for why.
  *
  * The match's character offsets come back from the backend already indexed
  * into this exact `content` string (see find_best_match_in_text), so a
@@ -88,13 +89,22 @@ export function MarkdownEvidenceViewer({
    * figures_to_grobid_annotations indexes docling's own JSON dump the same
    * way) -- so here that same ordinal is used to find the Nth <table>/<img>
    * as react-markdown renders them, and that whole element is wrapped in a
-   * real <mark> node instead. Only used as a fallback when there's no quote
-   * match, since a quote pinpoints an exact row/cell rather than a whole
-   * table or image.
+   * real <mark> node instead.
+   *
+   * table_id evidence NEVER uses the quote-splice highlight, even when the
+   * quote matches: agents are told to copy the table row verbatim into
+   * quote, so a match commonly spans several `|`-delimited cells, and each
+   * cell's inline content is parsed independently -- a <mark> opened in one
+   * cell has no matching close until deep in a later cell, so it silently
+   * closes at the first cell boundary instead, leaving only a sliver of the
+   * first cell highlighted rather than the row (confirmed live against
+   * paper 83's patient 993). image_id keeps the quote match as a fallback
+   * since a figure-adjacent quote is plain prose with no such cell
+   * boundaries to break across.
    */
-  const hasQuoteMatch = !!data?.match
-  const highlightTableId = hasQuoteMatch ? null : (tableId ?? null)
-  const highlightImageId = hasQuoteMatch ? null : (imageId ?? null)
+  const highlightTableId = tableId ?? null
+  const spliceMatch = tableId == null ? data?.match : null
+  const highlightImageId = tableId == null && !spliceMatch ? (imageId ?? null) : null
 
   let tableIndex = 0
   let imageIndex = 0
@@ -152,7 +162,7 @@ export function MarkdownEvidenceViewer({
           rehypePlugins={[rehypeRaw, [rehypeSanitize, SANITIZE_SCHEMA]]}
           components={components}
         >
-          {withHighlight(data?.content ?? '', data?.match)}
+          {withHighlight(data?.content ?? '', spliceMatch)}
         </ReactMarkdown>
       </div>
     </div>
