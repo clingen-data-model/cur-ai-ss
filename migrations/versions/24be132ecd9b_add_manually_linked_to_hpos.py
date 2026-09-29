@@ -12,6 +12,7 @@ existing rows -- see the migration-safety section of CLAUDE.md and
 cab7e60ebd9f for the same pattern.
 
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa

@@ -15,11 +15,11 @@ the same image_id -- the API always resolved the image as if it were from the
 main pipeline. Every existing pedigrees row predates supplement support for
 this field entirely, so backfilling false is correct for all of them.
 """
+
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = 'b7a96f15119d'
