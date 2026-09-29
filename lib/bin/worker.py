@@ -7,6 +7,7 @@ import signal
 from types import FrameType
 from typing import Any
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from lib.api.db import session_scope
@@ -23,6 +24,7 @@ from lib.tasks.handlers import TASK_HANDLERS
 from lib.tasks.hpo_link_cache import get_hpo_link_cache
 from lib.tasks.misc import enqueue_successors
 from lib.tasks.models import (
+    ACTIVE_STATUSES,
     CLAIMED_STATUSES,
     TERMINAL_TASK_TYPES,
     TaskStatus,
@@ -119,10 +121,17 @@ async def execute_task(task_id: int) -> None:
             if error_msg is None and task.type in TERMINAL_TASK_TYPES:
                 _maybe_write_snapshot(session, task.paper_id)
                 _maybe_notify_completion(session, task.paper_id)
+            elif error_msg is not None and task.tries > MAX_RETRIES:
+                # A final failure can be the last thing a pipeline does.
+                _maybe_write_snapshot(session, task.paper_id)
 
 
 def _maybe_write_snapshot(session: Session, paper_id: int) -> None:
-    """Snapshot the paper's extracted state once every pipeline task is done.
+    """Snapshot the paper's extracted state once no pipeline task is in flight.
+
+    Idle, not all-COMPLETED: a paper whose pipeline ended with a failed task is
+    just as settled, and requiring success meant such a paper never got a
+    completion snapshot at all.
 
     Several terminal tasks can finish in quick succession; write_snapshot
     dedupes on a state hash, so repeat calls for an unchanged paper are no-ops.
@@ -132,13 +141,19 @@ def _maybe_write_snapshot(session: Session, paper_id: int) -> None:
     # the query below reads the stale RUNNING row and the check can never pass
     # for the final task of a pipeline -- the exact task meant to trigger it.
     session.flush()
-    pipeline_statuses = [
-        task_status
-        for (task_status,) in session.query(TaskDB.status).filter(
-            TaskDB.paper_id == paper_id
+    in_flight = (
+        session.query(TaskDB.id)
+        .filter(
+            TaskDB.paper_id == paper_id,
+            or_(
+                TaskDB.status.in_(ACTIVE_STATUSES),
+                # Still owed a retry by poll_and_schedule_tasks.
+                (TaskDB.status == TaskStatus.FAILED) & (TaskDB.tries <= MAX_RETRIES),
+            ),
         )
-    ]
-    if not all(s == TaskStatus.COMPLETED for s in pipeline_statuses):
+        .first()
+    )
+    if in_flight is not None:
         return
     write_snapshot_safe(session, paper_id)
 
@@ -146,8 +161,8 @@ def _maybe_write_snapshot(session: Session, paper_id: int) -> None:
 def _maybe_notify_completion(session: Session, paper_id: int) -> None:
     """Email the paper's owner the first time its pipeline finishes.
 
-    Shares the "every pipeline task is COMPLETED" condition with
-    _maybe_write_snapshot, but not its tolerance for repeat calls: that dedupes
+    Unlike _maybe_write_snapshot, fires only once every pipeline task is
+    COMPLETED, and does not share its tolerance for repeat calls: that dedupes
     on a state hash, whereas a second email is simply a second email. The
     condition stays true once it passes and is re-checked on every terminal
     task, so papers.completion_notified_at is what makes this fire exactly once.
