@@ -3103,7 +3103,7 @@ def markdown_annotation(
         )
 
     try:
-        content = raw_md(paper_id)
+        content = raw_md(paper_id, supplement=request.is_supplement)
     except FileNotFoundError:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

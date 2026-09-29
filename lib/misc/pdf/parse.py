@@ -169,9 +169,11 @@ def _parse_xlsx_content(paper_id: int, content: bytes) -> None:
                     if src_img.suffix.lower() == '.png':
                         dest = pdf_image_path(paper_id, image_id, supplement=True)
                         shutil.copy2(src_img, dest)
-                        ref_map[f'{src_subdir}/{src_img.name}'] = (
-                            f'images/{image_id}.png'
-                        )
+                        # Absolute, matching the path docling itself writes
+                        # for the main paper's images (see parse_content) --
+                        # the frontend rewrites any image src rooted at
+                        # CAA_ROOT to a URL, and only recognizes that form.
+                        ref_map[f'{src_subdir}/{src_img.name}'] = str(dest)
                         image_id += 1
 
         for old_ref, new_ref in ref_map.items():
