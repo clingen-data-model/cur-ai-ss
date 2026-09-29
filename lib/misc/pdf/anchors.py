@@ -74,8 +74,10 @@ class PageBox(BaseModel):
 
 
 class Anchor(BaseModel):
+    """One entry of anchors.json: an id and where it is on the PDF pages."""
+
     id: str
-    boxes: list[PageBox] = []
+    boxes: list[PageBox] = []  # empty for DOCX/XLSX documents, which have no pages
     # Tables only: one entry per rendered data row, so the row ids are known
     # from this file alone. A row's list is empty when its rectangle cannot be
     # trusted (vision-corrected table, or the Docling grid does not line up
@@ -84,6 +86,8 @@ class Anchor(BaseModel):
 
 
 class ParsedAnchor(BaseModel):
+    """The pieces of an id: 'supp-table-1-row-7' -> (True, 'table', 1, 7)."""
+
     supplement: bool
     kind: str  # 'paragraph' | 'table' | 'figure'
     index: int
@@ -91,6 +95,7 @@ class ParsedAnchor(BaseModel):
 
 
 def parse_anchor(anchor_id: str) -> ParsedAnchor | None:
+    """Validate an id against the grammar and split it; None if malformed."""
     match = ANCHOR_RE.match(anchor_id)
     if not match:
         return None
@@ -124,6 +129,7 @@ def boxes_for_anchor(anchor_id: str, anchors: list[Anchor]) -> list[PageBox]:
 def write_anchored(
     paper_id: int, md: str, anchors: list[Anchor], supplement: bool = False
 ) -> None:
+    """Write anchored.md and anchors.json into the paper's document dir."""
     md_path = document_anchored_md_path(paper_id, supplement)
     md_path.parent.mkdir(parents=True, exist_ok=True)
     md_path.write_text(md)
@@ -133,6 +139,7 @@ def write_anchored(
 
 
 def load_anchors(paper_id: int, supplement: bool = False) -> list[Anchor]:
+    """Read anchors.json back (the highlight endpoint's lookup table)."""
     path = document_anchors_path(paper_id, supplement)
     return [Anchor.model_validate(a) for a in json.loads(path.read_text())]
 
@@ -141,15 +148,18 @@ def load_anchors(paper_id: int, supplement: bool = False) -> list[Anchor]:
 
 
 def _docling_index(item: DocItem) -> int:
+    """The N in the item's self_ref ('#/tables/3' -> 3): the number every id and file uses."""
     return int(item.self_ref.rsplit('/', 1)[1])
 
 
 def _anchor_id(kind: str, index: int, supplement: bool) -> str:
+    """Format an id: ('table', 3, True) -> 'supp-table-3'."""
     prefix = SUPPLEMENT_PREFIX if supplement else ''
     return f'{prefix}{kind}-{index}'
 
 
 def _page_box(page_no: int, bbox: BoundingBox, page_height: float) -> PageBox:
+    """Convert a Docling bbox (either origin) to the viewer's top-left x/y/w/h."""
     top_left = bbox.to_top_left_origin(page_height)
     return PageBox(
         page_no=page_no,
@@ -161,6 +171,7 @@ def _page_box(page_no: int, bbox: BoundingBox, page_height: float) -> PageBox:
 
 
 def _prov_boxes(item: DocItem, doc: DoclingDocument) -> list[PageBox]:
+    """An item's page boxes, one per prov entry (a paragraph split across columns has two)."""
     boxes = []
     for prov in item.prov:
         page = doc.pages.get(prov.page_no)
@@ -207,6 +218,7 @@ def _row_boxes(
 
 
 def _pipe_lines(markdown: str) -> list[str]:
+    """Just the '|' rows of a markdown table, dropping caption/notes around it."""
     return [line for line in markdown.splitlines() if _PIPE_LINE.match(line)]
 
 
@@ -233,6 +245,7 @@ def _with_anchor_column(pipe_lines: list[str], table_id: str) -> tuple[list[str]
 
 
 def _table_is_unrecovered(paper_id: int, index: int, supplement: bool) -> bool:
+    """The correction agent judged the table corrupt and could not rebuild it."""
     return document_table_unrecovered_path(paper_id, index, supplement).exists()
 
 
@@ -244,8 +257,10 @@ def _table_text(
     paper_id: int,
     supplement: bool,
 ) -> tuple[str, Anchor]:
+    """One table -> its anchored text ('[table-N] caption' + tagged rows) and Anchor."""
     index = _docling_index(table)
     anchor_id = _anchor_id('table', index, supplement)
+    # Text: the vision rebuild if there is one, else Docling's own pipe table.
     vision_path = document_table_vision_markdown_path(paper_id, index, supplement)
     vision_corrected = vision_path.exists()
     source_md = (
@@ -259,6 +274,7 @@ def _table_text(
         lines += ['', UNRECOVERED_TABLE_MARKER.format(table_id=index)]
     lines += ['', *pipe_lines]
 
+    # Geometry: row rectangles only when the rows shown are Docling's own rows.
     row_boxes = (
         [[] for _ in range(rendered_rows)]
         if vision_corrected
@@ -276,6 +292,7 @@ def _figure_text(
     paper_id: int,
     supplement: bool,
 ) -> tuple[str, Anchor]:
+    """One picture -> '[figure-N] ![caption](images/N.png)' and its Anchor."""
     index = _docling_index(picture)
     anchor_id = _anchor_id('figure', index, supplement)
     caption = serializer.serialize_captions(item=picture).text.strip()
@@ -310,23 +327,27 @@ def build_anchored(
     anchors: list[Anchor] = []
 
     for part in serializer.get_parts():
+        # A part is one block of output; its spans are the items it was made from.
         items = [span.item for span in part.spans]
         table = next((i for i in items if isinstance(i, TableItem)), None)
         picture = next((i for i in items if isinstance(i, PictureItem)), None)
 
         if table is not None:
+            # Captioned table: spans = [caption text, table]; one table anchor.
             text, anchor = _table_text(
                 table, doc, serializer, paper_id=paper_id, supplement=supplement
             )
             chunks.append(text)
             anchors.append(anchor)
         elif picture is not None:
+            # Captioned picture: spans = [caption text, picture]; one figure anchor.
             text, anchor = _figure_text(
                 picture, doc, serializer, paper_id=paper_id, supplement=supplement
             )
             chunks.append(text)
             anchors.append(anchor)
         elif items and all(isinstance(i, ListItem) for i in items):
+            # A whole list is one part; tag each item as its own paragraph.
             lines = []
             for item in items:
                 anchor_id = _anchor_id('paragraph', _docling_index(item), supplement)
@@ -336,14 +357,16 @@ def build_anchored(
                 anchors.append(Anchor(id=anchor_id, boxes=_prov_boxes(item, doc)))
             chunks.append('\n'.join(lines))
         elif items and isinstance(items[0], (SectionHeaderItem, TitleItem)):
+            # Headings: printed as '## ...' with no id -- never evidence.
             chunks.append(part.text.strip())
         elif items and isinstance(items[0], TextItem):
-            # Includes an orphan caption whose table/figure was not emitted.
+            # Ordinary paragraph (also an orphan caption whose table/figure was dropped).
             first = items[0]
             anchor_id = _anchor_id('paragraph', _docling_index(first), supplement)
             chunks.append(f'[{anchor_id}] {part.text.strip()}')
             anchors.append(Anchor(id=anchor_id, boxes=_prov_boxes(first, doc)))
         elif part.text.strip():
+            # Anything else Docling can emit (forms, key-value areas): text, no id.
             chunks.append(part.text.strip())
 
     return '\n\n'.join(chunks) + '\n', anchors
@@ -361,10 +384,12 @@ def anchored_from_markdown(
     counters = {'paragraph': 0, 'table': 0, 'figure': 0}
 
     def next_id(kind: str) -> str:
+        """Sequential ids per kind -- there is no Docling index to borrow here."""
         anchor_id = _anchor_id(kind, counters[kind], supplement)
         counters[kind] += 1
         return anchor_id
 
+    # Blank-line-separated blocks, classified by shape: table, image, heading, else text.
     for block in re.split(r'\n\s*\n', markdown.strip()):
         block = block.strip()
         if not block:
