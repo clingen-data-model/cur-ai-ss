@@ -1,5 +1,3 @@
-import pytest
-
 from lib.misc.pdf.highlight import find_best_match
 from lib.misc.pdf.parse import WordLoc
 

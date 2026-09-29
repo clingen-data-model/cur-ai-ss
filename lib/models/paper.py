@@ -519,7 +519,6 @@ class HighlightRequest(BaseModel):
 
 
 class MarkdownAnnotationRequest(BaseModel):
-    quote: str | None = None
     # EvidenceBlock.is_supplement tells the caller which raw.md to read --
     # a paper's own vs. its uploaded supplement's -- since they're two
     # separate files (see pdf_markdown_path(supplement=...)).

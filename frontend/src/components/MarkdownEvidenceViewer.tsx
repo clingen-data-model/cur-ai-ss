@@ -1,22 +1,32 @@
 /* The evidence sheet's "Markdown" tab: the paper's extracted markdown
  * (Docling's raw.md), with the evidence quote highlighted and scrolled into
- * view when a fuzzy match is found -- the text-based analog of the PDF
- * tab's coordinate-based highlight box. table_id evidence always highlights
- * the Nth table element instead (never the quote splice, even when the
- * quote matches); image_id evidence does the same, but only when there's no
- * quote match -- see the comment further down for why.
+ * view when a match is found -- the text-based analog of the PDF tab's
+ * coordinate-based highlight box. table_id evidence always highlights the
+ * Nth table element instead (never the quote splice, even when the quote
+ * matches); image_id evidence does the same, but only when there's no quote
+ * match -- see the comment further down for why.
  *
- * The match's character offsets come back from the backend already indexed
- * into this exact `content` string (see find_best_match_in_text), so a
- * literal `<mark>` is spliced into the markdown source before rendering.
- * rehype-raw is what lets ReactMarkdown treat that as an element rather than
- * literal text; rehype-sanitize (GitHub's default schema, plus `mark`) keeps
- * that raw-HTML door from also admitting anything unexpected already sitting
- * in a paper's markdown (Docling table conversion can leave stray literal
- * HTML in raw.md, the same reason lib/models/evidence_block.py strips markup
- * from quotes shown elsewhere in the UI).
+ * Matching happens entirely client-side, against the plain `content` the
+ * backend returns: a whitespace-tolerant exact match only, no fuzzy fallback
+ * (see findWhitespaceTolerantMatch) -- an agent's quote is copied verbatim
+ * from the paper, but Docling's markdown export can reproduce a justified
+ * PDF's text layer with runs of 2+ raw spaces between words that a verbatim
+ * quote collapses to one (confirmed on paper 27, PMID 8675681: "extended
+ * kindred" in raw.md vs. "extended kindred" in the quote) -- so the quote's
+ * own whitespace runs are matched loosely while everything else must line up
+ * exactly. A miss just renders the plain markdown unhighlighted, same as
+ * today -- this tab has always been best-effort.
+ *
+ * A literal `<mark>` is spliced into the markdown source at the match's
+ * offsets before rendering. rehype-raw is what lets ReactMarkdown treat that
+ * as an element rather than literal text; rehype-sanitize (GitHub's default
+ * schema, plus `mark`) keeps that raw-HTML door from also admitting anything
+ * unexpected already sitting in a paper's markdown (Docling table conversion
+ * can leave stray literal HTML in raw.md, the same reason
+ * lib/models/evidence_block.py strips markup from quotes shown elsewhere in
+ * the UI).
  */
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
@@ -34,7 +44,24 @@ const SANITIZE_SCHEMA = {
   tagNames: [...(defaultSchema.tagNames ?? []), 'mark'],
 }
 
-function withHighlight(content: string, match: { start: number; end: number } | null | undefined): string {
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+interface TextMatch {
+  start: number
+  end: number
+}
+
+function findWhitespaceTolerantMatch(quote: string | null | undefined, text: string): TextMatch | null {
+  const trimmed = quote?.trim()
+  if (!trimmed || !text) return null
+  const pattern = trimmed.split(/\s+/).map(escapeRegExp).join('\\s+')
+  const match = new RegExp(pattern, 'i').exec(text)
+  return match ? { start: match.index, end: match.index + match[0].length } : null
+}
+
+function withHighlight(content: string, match: TextMatch | null): string {
   if (!match) return content
   return content.slice(0, match.start) + '<mark>' + content.slice(match.start, match.end) + '</mark>' + content.slice(match.end)
 }
@@ -148,11 +175,11 @@ export function MarkdownEvidenceViewer({
   const containerRef = useRef<HTMLDivElement>(null)
 
   const query = useQuery({
-    queryKey: ['markdown-annotation', paperId, quote, isSupplement],
+    queryKey: ['markdown-annotation', paperId, isSupplement],
     queryFn: () =>
       markdownAnnotationPapersPaperIdMarkdownAnnotationPost({
         path: { paper_id: paperId },
-        body: { quote: quote ?? null, is_supplement: isSupplement },
+        body: { is_supplement: isSupplement },
         throwOnError: true,
       }),
     enabled,
@@ -183,7 +210,10 @@ export function MarkdownEvidenceViewer({
    * boundaries to break across.
    */
   const highlightTableId = tableId ?? null
-  const spliceMatch = tableId == null ? data?.match : null
+  const spliceMatch = useMemo(
+    () => (tableId == null ? findWhitespaceTolerantMatch(quote, data?.content ?? '') : null),
+    [tableId, quote, data?.content]
+  )
   const highlightImageId = tableId == null && !spliceMatch ? (imageId ?? null) : null
 
   /* When there's a quote to go with table_id, try to pin down which row of

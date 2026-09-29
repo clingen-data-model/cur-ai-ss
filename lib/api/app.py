@@ -66,7 +66,6 @@ from lib.misc.pdf.highlight import (
     MarkdownAnnotationResp,
     figures_to_grobid_annotations,
     find_best_match,
-    find_best_match_in_text,
     parse_hex_color,
     words_to_grobid_annotations,
 )
@@ -3093,13 +3092,13 @@ def markdown_annotation(
     current_user: UserDB = Depends(get_current_user),
 ) -> MarkdownAnnotationResp:
     """
-    Return a paper's extracted markdown, plus the best-effort character
-    offsets of a quote's match within it.
+    Return a paper's extracted markdown.
 
     The SPA's evidence sheet uses this for its "Markdown" tab, alongside the
-    coordinate-based /grobid-annotation used for the PDF tab -- unlike that
-    endpoint, a missed match here is not an error: the tab still renders the
-    markdown, just without a highlight.
+    coordinate-based /grobid-annotation used for the PDF tab. Quote matching
+    happens client-side (see MarkdownEvidenceViewer.tsx), since it's just a
+    whitespace-tolerant regex against this same content -- no need to round-
+    trip the quote through the backend.
     """
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
@@ -3115,5 +3114,4 @@ def markdown_annotation(
             detail='Markdown not yet available for this paper',
         )
 
-    match = find_best_match_in_text(request.quote, content) if request.quote else None
-    return MarkdownAnnotationResp(content=content, match=match)
+    return MarkdownAnnotationResp(content=content)
