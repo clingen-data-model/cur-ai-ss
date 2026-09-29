@@ -39,6 +39,86 @@ function withHighlight(content: string, match: { start: number; end: number } | 
   return content.slice(0, match.start) + '<mark>' + content.slice(match.start, match.end) + '</mark>' + content.slice(match.end)
 }
 
+interface GfmTable {
+  rows: string[] // data row lines, in source order; header/separator excluded
+}
+
+const SEPARATOR_ROW = /^\s*\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?\s*$/
+
+function isTableRowLine(line: string | undefined): line is string {
+  return !!line && line.includes('|') && line.trim().length > 0
+}
+
+/* A lightweight, string-level re-scan of the same GFM pipe tables
+ * remark-gfm will parse -- just enough to isolate table_id's own data rows
+ * (skipping its header/separator) so a row within it can be matched against
+ * `quote`, without needing a round trip to re-derive this server-side. Table
+ * order here only needs to agree with the order react-markdown renders
+ * <table> elements in (trivially true -- both read top-to-bottom through the
+ * same content), not with remark-gfm's parser internals.
+ */
+function extractGfmTables(content: string): GfmTable[] {
+  const lines = content.split('\n')
+  const tables: GfmTable[] = []
+  let i = 0
+  while (i < lines.length) {
+    if (isTableRowLine(lines[i]) && SEPARATOR_ROW.test(lines[i + 1] ?? '')) {
+      const rows: string[] = []
+      let j = i + 2
+      while (isTableRowLine(lines[j])) {
+        rows.push(lines[j])
+        j += 1
+      }
+      tables.push({ rows })
+      i = j
+    } else {
+      i += 1
+    }
+  }
+  return tables
+}
+
+function normalizeForMatch(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[|_*`]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+const MIN_ROW_MATCH_SCORE = 0.5
+
+/* Word-overlap, not an edit-distance ratio like the backend's fuzzy quote
+ * match -- there's no need to reproduce rapidfuzz here, just enough
+ * confidence to prefer one row over its neighbors. quote is the row copied
+ * verbatim (see core_extraction_rules.py's TABLE EVIDENCE RULES), so a
+ * genuine match shares most of its distinctive (3+ letter) words with
+ * exactly one row and few with the rest.
+ */
+function bestRowIndex(rows: string[], quote: string): number | null {
+  const quoteWords = normalizeForMatch(quote)
+    .split(' ')
+    .filter((word) => word.length > 2)
+  if (quoteWords.length === 0) return null
+
+  let bestIndex: number | null = null
+  let bestScore = 0
+  rows.forEach((row, index) => {
+    const rowWords = new Set(
+      normalizeForMatch(row)
+        .split(' ')
+        .filter((word) => word.length > 2)
+    )
+    if (rowWords.size === 0) return
+    const score = quoteWords.filter((word) => rowWords.has(word)).length / quoteWords.length
+    if (score > bestScore) {
+      bestScore = score
+      bestIndex = index
+    }
+  })
+  return bestScore >= MIN_ROW_MATCH_SCORE ? bestIndex : null
+}
+
 /* Docling writes each figure's `src` as the absolute filesystem path it saved
  * the image to on the API host (e.g. `/var/caa/extracted_pdfs/20/raw_artifacts/
  * image_000002_<hash>.png`) -- the same kind of server-relative path the API
@@ -106,14 +186,41 @@ export function MarkdownEvidenceViewer({
   const spliceMatch = tableId == null ? data?.match : null
   const highlightImageId = tableId == null && !spliceMatch ? (imageId ?? null) : null
 
+  /* When there's a quote to go with table_id, try to pin down which row of
+   * that specific table it came from -- a much more useful highlight than
+   * the whole table, and (unlike the quote-splice this replaces) safe
+   * because it's applied to a whole rendered <tr>, never split mid-cell.
+   * Falls back to null (whole-table highlight) whenever there's no quote or
+   * no row scores confidently enough.
+   */
+  const targetTableRows =
+    highlightTableId != null ? (extractGfmTables(data?.content ?? '')[highlightTableId]?.rows ?? null) : null
+  const targetRowIndex =
+    targetTableRows && quote ? bestRowIndex(targetTableRows, quote) : null
+
   let tableIndex = 0
   let imageIndex = 0
+  let currentTableIsTarget = false
+  let rowsSeenInCurrentTable = 0
   const components: Components = {
     table: ({ children, ...props }) => {
-      const isTarget = tableIndex === highlightTableId
+      currentTableIsTarget = tableIndex === highlightTableId
+      rowsSeenInCurrentTable = 0
       tableIndex += 1
       const element = <table {...props}>{children}</table>
-      return isTarget ? <mark>{element}</mark> : element
+      return currentTableIsTarget && targetRowIndex == null ? <mark>{element}</mark> : element
+    },
+    // GFM tables have exactly one header row, always first -- everything
+    // after it is a data row, so "seen index 0" needs no thead/tbody check.
+    tr: ({ children, ...props }) => {
+      const seenIndex = rowsSeenInCurrentTable
+      rowsSeenInCurrentTable += 1
+      const isTargetRow = currentTableIsTarget && seenIndex - 1 === targetRowIndex
+      return (
+        <tr {...props} data-evidence-highlight={isTargetRow ? '' : undefined}>
+          {children}
+        </tr>
+      )
     },
     img: ({ src, ...props }) => {
       const isTarget = imageIndex === highlightImageId
@@ -124,8 +231,10 @@ export function MarkdownEvidenceViewer({
   }
 
   useEffect(() => {
-    containerRef.current?.querySelector('mark')?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  }, [data, tableId, imageId])
+    containerRef.current
+      ?.querySelector('mark, [data-evidence-highlight]')
+      ?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [data, tableId, imageId, quote])
 
   if (query.isPending) {
     return (
@@ -155,7 +264,8 @@ export function MarkdownEvidenceViewer({
           [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-2
           [&_li]:my-0.5 [&_table]:border-collapse [&_table]:my-2
           [&_th]:border [&_th]:px-2 [&_th]:py-1 [&_td]:border [&_td]:px-2 [&_td]:py-1
-          [&_mark]:rounded [&_mark]:px-0.5"
+          [&_mark]:rounded [&_mark]:px-0.5
+          [&_tr[data-evidence-highlight]>td]:bg-yellow-200"
       >
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
