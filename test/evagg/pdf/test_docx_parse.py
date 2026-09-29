@@ -1,5 +1,7 @@
+from lib.misc.pdf.anchors import load_anchors
 from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import (
+    document_anchored_md_path,
     pdf_extraction_success_path,
     pdf_images_dir,
     pdf_markdown_path,
@@ -39,6 +41,14 @@ async def test_docx_with_image_extracts_markdown_and_images(
     success_path = pdf_extraction_success_path(paper_id, supplement=True)
     assert success_path.exists(), 'Success marker was not created'
 
+    # The anchor-indexed copy: supplement ids, no page layout so no boxes.
+    anchored = document_anchored_md_path(paper_id, supplement=True).read_text()
+    assert 'Test Document with Image' in anchored
+    assert '[supp-paragraph-' in anchored
+    anchors = load_anchors(paper_id, supplement=True)
+    assert anchors and all(a.id.startswith('supp-') for a in anchors)
+    assert all(not a.boxes for a in anchors)
+
     # Verify images were extracted
     images_dir = pdf_images_dir(paper_id, supplement=True)
     assert images_dir.exists(), 'Images directory was not created'
@@ -61,3 +71,9 @@ async def test_xlsx_extracts_markdown(mocked_root_dir, xlsx_with_data):
     assert pdf_extraction_success_path(paper_id, supplement=True).exists()
     md = md_path.read_text()
     assert 'Sheet1' in md
+
+    # The anchor-indexed copy is tagged straight from the markdown.
+    anchored = document_anchored_md_path(paper_id, supplement=True).read_text()
+    assert 'Sheet1' in anchored
+    anchors = load_anchors(paper_id, supplement=True)
+    assert any(a.id.startswith('supp-table-') and a.row_boxes for a in anchors)

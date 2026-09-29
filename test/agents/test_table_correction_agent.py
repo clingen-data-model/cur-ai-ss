@@ -38,9 +38,9 @@ async def test_provider_failure_fails_the_task_instead_of_answering(monkeypatch)
     about the table.
 
     Under the SDK's default handler this became tool output, the agent set
-    conversion_successful=False, and the correction record claimed the table
-    could not be recovered -- indistinguishable from a genuine dense-symbol
-    matrix, and the task still completed.
+    conversion_successful=False, and the table was marked unrecovered --
+    indistinguishable from a genuine dense-symbol matrix, and the task still
+    completed.
     """
 
     def _raise(*_):

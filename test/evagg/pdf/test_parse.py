@@ -1,11 +1,19 @@
 import json
+import shutil
 from unittest.mock import MagicMock, patch
 
 from lib.agents.table_correction_agent import TableCorrectionResult, correct_tables
+from lib.bin.backfill_documents import backfill_paper
+from lib.misc.pdf.anchors import load_anchors
 from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import (
     UNRECOVERED_TABLE_MARKER,
     apply_table_corrections,
+    document_anchored_md_path,
+    document_dir,
+    document_images_dir,
+    document_success_path,
+    document_tables_dir,
     fulltext_md,
     pdf_extraction_success_path,
     pdf_image_path,
@@ -13,9 +21,9 @@ from lib.misc.pdf.paths import (
     pdf_markdown_path,
     pdf_raw_path,
     pdf_section_markdown_path,
-    pdf_table_correction_path,
     pdf_table_image_path,
     pdf_table_markdown_path,
+    pdf_table_unrecovered_path,
     pdf_table_vision_markdown_path,
     pdf_tables_dir,
 )
@@ -113,6 +121,39 @@ async def test_convert_and_extract_creates_outputs(test_file_contents):
 
         with open(pdf_section_markdown_path(paper_id, section_id - 1), 'r') as f:
             assert '## Supporting Information' in f.read()
+
+        # ---- anchor-indexed document, written side by side ----
+        assert document_success_path(paper_id).exists()
+        anchored = document_anchored_md_path(paper_id).read_text()
+        anchors = load_anchors(paper_id)
+        assert anchored.count('[paragraph-') >= 100
+        assert '## Supporting Information' in anchored  # headers untagged
+        table_ids = sorted(a.id for a in anchors if a.id.startswith('table-'))
+        figure_ids = sorted(a.id for a in anchors if a.id.startswith('figure-'))
+        assert table_ids and figure_ids
+        # Files are keyed by the same Docling index as the anchor ids.
+        assert (
+            sorted(
+                f'table-{p.stem}'
+                for p in document_tables_dir(paper_id).glob('*.md')
+                if '.' not in p.stem
+            )
+            == table_ids
+        )
+        assert (
+            sorted(
+                f'figure-{p.stem}' for p in document_images_dir(paper_id).glob('*.png')
+            )
+            == figure_ids
+        )
+        assert all(a.boxes for a in anchors), 'every PDF anchor has a box'
+
+        # The backfill (from raw.json) must produce exactly what the live parse did.
+        live_md, live_anchors = anchored, anchors
+        shutil.rmtree(document_dir(paper_id))
+        backfill_paper(paper_id)
+        assert document_anchored_md_path(paper_id).read_text() == live_md
+        assert load_anchors(paper_id) == live_anchors
 
 
 async def test_correct_tables_leaves_unrecoverable_tables_in_place():
@@ -226,25 +267,13 @@ async def test_correct_tables_writes_vision_file_without_touching_raw_md():
     assert fulltext_md(paper_id) == f'intro\n\n{corrected}\n\noutro'
 
 
-def _seed_record(paper_id: int, table_id: int, **fields) -> None:
-    record = {
-        'table_id': table_id,
-        'is_corrupted': True,
-        'conversion_successful': False,
-        'is_recoverable': False,
-        'corrected': False,
-    }
-    record.update(fields)
-    pdf_table_correction_path(paper_id, table_id).write_text(json.dumps(record))
-
-
 def test_unrecovered_table_is_flagged_for_downstream_agents():
     """A table that failed correction is announced, not passed off as clean."""
     paper_id = 987010
     garbled = '| b | Clin mt1 |\n|---|---|\n| IVI | * |'
 
     _seed_table(paper_id, 0, garbled, f'intro\n\n{garbled}\n\noutro')
-    _seed_record(paper_id, 0)
+    pdf_table_unrecovered_path(paper_id, 0).touch()
 
     result = fulltext_md(paper_id)
 
@@ -263,7 +292,6 @@ def test_recovered_table_is_not_flagged():
 
     _seed_table(paper_id, 0, garbled, f'intro\n\n{garbled}\n\noutro')
     pdf_table_vision_markdown_path(paper_id, 0).write_text(corrected)
-    _seed_record(paper_id, 0, conversion_successful=True, corrected=True)
 
     result = fulltext_md(paper_id)
 
@@ -276,20 +304,8 @@ def test_clean_table_is_not_flagged():
     table = '| Individual | Age |\n|---|---|\n| HN-F25 | 8 (11) |'
 
     _seed_table(paper_id, 0, table, f'intro\n\n{table}\n\noutro')
-    _seed_record(paper_id, 0, is_corrupted=False, is_recoverable=True)
 
     assert 'EXTRACTION WARNING' not in fulltext_md(paper_id)
-
-
-def test_unreadable_correction_record_is_ignored():
-    """A truncated record must not break reading the paper."""
-    paper_id = 987013
-    garbled = '| b | Clin mt1 |\n|---|---|\n| IVI | * |'
-
-    _seed_table(paper_id, 0, garbled, f'intro\n\n{garbled}\n\noutro')
-    pdf_table_correction_path(paper_id, 0).write_text('{not json')
-
-    assert fulltext_md(paper_id) == f'intro\n\n{garbled}\n\noutro'
 
 
 async def _run_correct_tables(paper_id: int, result: TableCorrectionResult) -> None:
@@ -305,8 +321,8 @@ async def _run_correct_tables(paper_id: int, result: TableCorrectionResult) -> N
         await correct_tables(paper_id)
 
 
-async def test_correction_record_written_when_unrecoverable():
-    """The give-up path leaves a record, not just a log line."""
+async def test_unrecovered_marker_written_when_unrecoverable():
+    """The give-up path leaves a marker file, not just a log line."""
     paper_id = 987020
     garbled = '| b | Clin mt1 |\n|---|---|\n| IVI | * |'
     _seed_table(paper_id, 0, garbled, f'intro\n\n{garbled}\n\noutro')
@@ -321,19 +337,18 @@ async def test_correction_record_written_when_unrecoverable():
         ),
     )
 
-    record = json.loads(pdf_table_correction_path(paper_id, 0).read_text())
-    assert record['is_corrupted'] is True
-    assert record['is_recoverable'] is False
-    assert record['corrected'] is False
+    assert pdf_table_unrecovered_path(paper_id, 0).exists()
+    assert not pdf_table_vision_markdown_path(paper_id, 0).exists()
     # ...and the paper now warns readers about it.
     assert 'EXTRACTION WARNING' in fulltext_md(paper_id)
 
 
-async def test_correction_record_written_when_recovered():
+async def test_recovered_table_clears_a_stale_unrecovered_marker():
     paper_id = 987021
     garbled = '| b | Clin mt1 |\n|---|---|\n| IVI | * |'
     corrected = '| Individual | Age |\n|---|---|\n| HN-F25 | 8 (11) |'
     _seed_table(paper_id, 0, garbled, f'intro\n\n{garbled}\n\noutro')
+    pdf_table_unrecovered_path(paper_id, 0).touch()  # from an earlier run
 
     await _run_correct_tables(
         paper_id,
@@ -345,18 +360,17 @@ async def test_correction_record_written_when_recovered():
         ),
     )
 
-    record = json.loads(pdf_table_correction_path(paper_id, 0).read_text())
-    assert record['corrected'] is True
+    assert not pdf_table_unrecovered_path(paper_id, 0).exists()
     assert 'EXTRACTION WARNING' not in fulltext_md(paper_id)
 
 
-async def test_correction_record_written_when_table_is_clean():
+async def test_clean_table_leaves_no_marker():
     paper_id = 987022
     table = '| Individual | Age |\n|---|---|\n| HN-F25 | 8 (11) |'
     _seed_table(paper_id, 0, table, f'intro\n\n{table}\n\noutro')
+    pdf_table_unrecovered_path(paper_id, 0).touch()  # from an earlier run
 
     await _run_correct_tables(paper_id, TableCorrectionResult(is_corrupted=False))
 
-    record = json.loads(pdf_table_correction_path(paper_id, 0).read_text())
-    assert record['is_corrupted'] is False
-    assert record['corrected'] is False
+    assert not pdf_table_unrecovered_path(paper_id, 0).exists()
+    assert not pdf_table_vision_markdown_path(paper_id, 0).exists()
