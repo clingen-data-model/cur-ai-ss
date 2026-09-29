@@ -1,10 +1,12 @@
 /* The evidence sheet's "Markdown" tab: the paper's extracted markdown
  * (Docling's raw.md), with the evidence quote highlighted and scrolled into
  * view when a match is found -- the text-based analog of the PDF tab's
- * coordinate-based highlight box. table_id evidence always highlights the
- * Nth table element instead (never the quote splice, even when the quote
- * matches); image_id evidence does the same, but only when there's no quote
- * match -- see the comment further down for why.
+ * coordinate-based highlight box. table_id evidence also highlights the Nth
+ * table element (or, when the quote scores well against one of its rows, just
+ * that row) -- alongside the quote splice, not instead of it, unless the
+ * quote's match itself falls inside that table's raw text; image_id
+ * evidence highlights the Nth image, but only when there's no quote match --
+ * see the comment further down for why.
  *
  * Matching happens entirely client-side, against the plain `content` the
  * backend returns: a whitespace-tolerant exact match only, no fuzzy fallback
@@ -68,6 +70,8 @@ function withHighlight(content: string, match: TextMatch | null): string {
 
 interface GfmTable {
   rows: string[] // data row lines, in source order; header/separator excluded
+  start: number // char offset of the table block's first line (its header row)
+  end: number // char offset just past the table block's last line
 }
 
 const SEPARATOR_ROW = /^\s*\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?\s*$/
@@ -83,9 +87,20 @@ function isTableRowLine(line: string | undefined): line is string {
  * order here only needs to agree with the order react-markdown renders
  * <table> elements in (trivially true -- both read top-to-bottom through the
  * same content), not with remark-gfm's parser internals.
+ *
+ * Also returns each table's raw character range, so a quote match that lands
+ * inside one (as opposed to in the surrounding prose) can be detected and
+ * kept out of the quote-splice highlight -- see overlapsAnyTable.
  */
 function extractGfmTables(content: string): GfmTable[] {
   const lines = content.split('\n')
+  const lineStarts: number[] = []
+  let offset = 0
+  for (const line of lines) {
+    lineStarts.push(offset)
+    offset += line.length + 1 // +1 for the '\n' this split consumed
+  }
+
   const tables: GfmTable[] = []
   let i = 0
   while (i < lines.length) {
@@ -96,13 +111,18 @@ function extractGfmTables(content: string): GfmTable[] {
         rows.push(lines[j])
         j += 1
       }
-      tables.push({ rows })
+      const lastLine = j - 1
+      tables.push({ rows, start: lineStarts[i], end: lineStarts[lastLine] + lines[lastLine].length })
       i = j
     } else {
       i += 1
     }
   }
   return tables
+}
+
+function overlapsAnyTable(match: TextMatch, tables: GfmTable[]): boolean {
+  return tables.some((table) => match.start < table.end && match.end > table.start)
 }
 
 function normalizeForMatch(text: string): string {
@@ -202,33 +222,39 @@ export function MarkdownEvidenceViewer({
    * splits into two empty boxes rather than covering it; around an opaque
    * <img> its background just sits behind the image, invisible).
    *
-   * table_id evidence NEVER uses the quote-splice highlight, even when the
-   * quote matches: agents are told to copy the table row verbatim into
-   * quote, so a match commonly spans several `|`-delimited cells, and each
-   * cell's inline content is parsed independently -- a <mark> opened in one
-   * cell has no matching close until deep in a later cell, so it silently
-   * closes at the first cell boundary instead, leaving only a sliver of the
-   * first cell highlighted rather than the row (confirmed live against
-   * paper 83's patient 993). image_id keeps the quote match as a fallback
-   * since a figure-adjacent quote is plain prose with no such cell
-   * boundaries to break across.
+   * table_id evidence never uses the quote-splice highlight for a match that
+   * falls *inside* a table's own raw text, even though agents are often told
+   * to copy the table row verbatim into quote: such a match commonly spans
+   * several `|`-delimited cells, and each cell's inline content is parsed
+   * independently -- a <mark> opened in one cell has no matching close until
+   * deep in a later cell, so it silently closes at the first cell boundary
+   * instead, leaving only a sliver of the first cell highlighted rather than
+   * the row (confirmed live against paper 83's patient 993). A quote can
+   * still be prose that merely *references* a table (e.g. "...were
+   * identified in patient B430 and B546 (Table 2)" -- paper 13's patient
+   * B546), which lives outside any table's raw text and splices in exactly
+   * like any other quote -- overlapsAnyTable is what tells these two cases
+   * apart, so both the prose mention and the table/row can be highlighted
+   * together. image_id keeps the quote match as a fallback since a
+   * figure-adjacent quote is plain prose with no such cell boundaries to
+   * break across.
    */
   const highlightTableId = tableId ?? null
-  const spliceMatch = useMemo(
-    () => (tableId == null ? findWhitespaceTolerantMatch(quote, data?.content ?? '') : null),
-    [tableId, quote, data?.content]
-  )
+  const tables = useMemo(() => extractGfmTables(data?.content ?? ''), [data?.content])
+  const spliceMatch = useMemo(() => {
+    const match = findWhitespaceTolerantMatch(quote, data?.content ?? '')
+    return match && !overlapsAnyTable(match, tables) ? match : null
+  }, [quote, data?.content, tables])
   const highlightImageId = tableId == null && !spliceMatch ? (imageId ?? null) : null
 
   /* When there's a quote to go with table_id, try to pin down which row of
    * that specific table it came from -- a much more useful highlight than
-   * the whole table, and (unlike the quote-splice this replaces) safe
-   * because it's applied to a whole rendered <tr>, never split mid-cell.
-   * Falls back to null (whole-table highlight) whenever there's no quote or
-   * no row scores confidently enough.
+   * the whole table, and (unlike the in-table quote-splice this replaces)
+   * safe because it's applied to a whole rendered <tr>, never split
+   * mid-cell. Falls back to null (whole-table highlight) whenever there's no
+   * quote or no row scores confidently enough.
    */
-  const targetTableRows =
-    highlightTableId != null ? (extractGfmTables(data?.content ?? '')[highlightTableId]?.rows ?? null) : null
+  const targetTableRows = highlightTableId != null ? (tables[highlightTableId]?.rows ?? null) : null
   const targetRowIndex =
     targetTableRows && quote ? bestRowIndex(targetTableRows, quote) : null
 
