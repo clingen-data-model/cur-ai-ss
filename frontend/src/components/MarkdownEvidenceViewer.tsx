@@ -16,12 +16,14 @@
 import { useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
+import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize'
 import { AlertCircle } from 'lucide-react'
 import { markdownAnnotationPapersPaperIdMarkdownAnnotationPost } from '@/api/generated'
 import { apiErrorMessage } from '@/lib/apiError'
+import { API_BASE_URL } from '@/lib/api'
 import { Spinner } from '@/components/ui/spinner'
 
 const SANITIZE_SCHEMA = {
@@ -32,6 +34,22 @@ const SANITIZE_SCHEMA = {
 function withHighlight(content: string, match: { start: number; end: number } | null | undefined): string {
   if (!match) return content
   return content.slice(0, match.start) + '<mark>' + content.slice(match.start, match.end) + '</mark>' + content.slice(match.end)
+}
+
+/* Docling writes each figure's `src` as the absolute filesystem path it saved
+ * the image to on the API host (e.g. `/var/caa/extracted_pdfs/20/raw_artifacts/
+ * image_000002_<hash>.png`) -- the same kind of server-relative path the API
+ * returns for thumbnail_url/pdf_url/avatar_url, which every other caller in
+ * this app resolves by prefixing API_BASE_URL (see PedigreeTab.tsx). Left
+ * alone, the browser instead resolves it against the SPA's own origin.
+ */
+const MARKDOWN_COMPONENTS: Components = {
+  img: ({ src, ...props }) => (
+    <img
+      src={typeof src === 'string' && src.startsWith('/') ? `${API_BASE_URL}${src}` : src}
+      {...props}
+    />
+  ),
 }
 
 export function MarkdownEvidenceViewer({
@@ -96,6 +114,7 @@ export function MarkdownEvidenceViewer({
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           rehypePlugins={[rehypeRaw, [rehypeSanitize, SANITIZE_SCHEMA]]}
+          components={MARKDOWN_COMPONENTS}
         >
           {withHighlight(data?.content ?? '', data?.match)}
         </ReactMarkdown>
