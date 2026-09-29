@@ -233,12 +233,22 @@ export function MarkdownEvidenceViewer({
   let currentTableIsTarget = false
   let rowsSeenInCurrentTable = 0
   const components: Components = {
+    // Whole-table fallback uses the same data-attribute technique as the
+    // <tr> case below rather than <mark> -- <mark> is inline content and
+    // <table> is block-level, so the browser splits the inline box around
+    // it into two empty (background-only) boxes rather than covering the
+    // table, leaving a stray colored sliver just above and below it instead
+    // of highlighting anything (confirmed live on paper 13's Table 2).
     table: ({ children, ...props }) => {
       currentTableIsTarget = tableIndex === highlightTableId
       rowsSeenInCurrentTable = 0
       tableIndex += 1
-      const element = <table {...props}>{children}</table>
-      return currentTableIsTarget && targetRowIndex == null ? <mark>{element}</mark> : element
+      const isWholeTableTarget = currentTableIsTarget && targetRowIndex == null
+      return (
+        <table {...props} data-evidence-highlight={isWholeTableTarget ? '' : undefined}>
+          {children}
+        </table>
+      )
     },
     // GFM tables have exactly one header row, always first -- everything
     // after it is a data row, so "seen index 0" needs no thead/tbody check.
@@ -295,7 +305,8 @@ export function MarkdownEvidenceViewer({
           [&_li]:my-0.5 [&_table]:border-collapse [&_table]:my-2
           [&_th]:border [&_th]:px-2 [&_th]:py-1 [&_td]:border [&_td]:px-2 [&_td]:py-1
           [&_mark]:rounded [&_mark]:px-0.5
-          [&_tr[data-evidence-highlight]>td]:bg-yellow-200"
+          [&_tr[data-evidence-highlight]>td]:bg-yellow-200
+          [&_table[data-evidence-highlight]_td]:bg-yellow-200 [&_table[data-evidence-highlight]_th]:bg-yellow-200"
       >
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
