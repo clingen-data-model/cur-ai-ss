@@ -26,11 +26,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { apiErrorMessage } from '@/lib/apiError'
+import { paperBusyMessage } from '@/lib/taskState'
 import type { PaperResp, SnapshotMeta } from '@/api/generated/types.gen'
 
-// Mirrors lib/tasks/models.py's ACTIVE_STATUSES -- the same statuses the
-// reset endpoint's own 409 guard checks server-side.
-const ACTIVE_TASK_STATUSES = new Set(['Pending', 'Queued', 'Running'])
 
 function formatSnapshotLabel(snapshot: SnapshotMeta): string {
   const created = new Date(snapshot.created_at)
@@ -187,7 +185,7 @@ function RestoreSnapshotDialog({
 
 export function RestoreSnapshotButton({ paper }: { paper: PaperResp }) {
   const [open, setOpen] = useState(false)
-  const isActive = paper.tasks?.some((t) => ACTIVE_TASK_STATUSES.has(t.status)) ?? false
+  const busy = paperBusyMessage(paper.tasks ?? [], 'restoring a snapshot')
 
   return (
     <>
@@ -195,12 +193,8 @@ export function RestoreSnapshotButton({ paper }: { paper: PaperResp }) {
         variant="outline"
         size="sm"
         onClick={() => setOpen(true)}
-        disabled={isActive}
-        title={
-          isActive
-            ? 'Cannot restore while extraction tasks are pending or running'
-            : 'Restore a saved extraction snapshot'
-        }
+        disabled={!!busy}
+        title={busy ?? 'Restore a saved extraction snapshot'}
       >
         <History className="h-4 w-4 mr-2" />
         Restore Snapshot

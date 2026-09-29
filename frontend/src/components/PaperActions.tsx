@@ -14,6 +14,8 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogMedia, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import type { PaperSummaryResp, TaskType } from '@/api/generated/types.gen'
+import { usePaperBusy } from '@/hooks/usePaperBusy'
+import { apiErrorMessage } from '@/lib/apiError'
 
 /* The fields RerunTaskDialog actually needs -- narrower than PaperSummaryResp
  * so it can also take a PaperResp (the paper-detail page's shape, which has
@@ -51,6 +53,7 @@ function RerunTaskDialog({
   const [taskType, setTaskType] = useState<TaskType>(initialTaskType)
   const [skipSuccessors, setSkipSuccessors] = useState(false)
   const [context, setContext] = useState('')
+  const busy = usePaperBusy(paper.id, open)
 
   const mutation = useMutation({
     mutationFn: () => createTaskPapersPaperIdTasksPost({
@@ -69,7 +72,7 @@ function RerunTaskDialog({
       setContext('')
       setSkipSuccessors(false)
     },
-    onError: () => toast.error('Failed to queue task'),
+    onError: (error) => toast.error(apiErrorMessage(error, 'Failed to queue task')),
   })
 
   return (
@@ -122,9 +125,10 @@ function RerunTaskDialog({
             />
             Skip successor tasks
           </label>
+          {busy && <p className="text-sm text-amber-700 dark:text-amber-400">{busy}</p>}
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>
+            <Button onClick={() => mutation.mutate()} disabled={mutation.isPending || !!busy}>
               {mutation.isPending ? 'Queuing...' : 'Confirm Rerun'}
             </Button>
           </div>

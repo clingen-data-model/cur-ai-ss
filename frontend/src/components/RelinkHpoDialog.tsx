@@ -45,6 +45,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { HpoCombobox } from '@/components/HpoCombobox'
 import { apiErrorMessage } from '@/lib/apiError'
+import { usePaperBusy } from '@/hooks/usePaperBusy'
 
 export function RelinkHpoDialog({
   paperId,
@@ -86,6 +87,10 @@ export function RelinkHpoDialog({
     onError: (error) => toast.error(apiErrorMessage(error, 'Failed to update HPO link')),
   })
 
+  // The manual tab writes directly and stays usable; only the agent tab
+  // queues a task, which the API refuses while the paper is busy.
+  const busy = usePaperBusy(paperId, open)
+
   const rerunMutation = useMutation({
     mutationFn: () =>
       createTaskPapersPaperIdTasksPost({
@@ -99,6 +104,7 @@ export function RelinkHpoDialog({
         throwOnError: true,
       }),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['paper-tasks', paperId] })
       toast.success('HPO linking agent queued')
       setOpen(false)
       setContext('')
@@ -188,11 +194,15 @@ export function RelinkHpoDialog({
                 Re-runs the HPO linking agent for this phenotype in the background. The result
                 will show up here once it's done.
               </p>
+              {busy && <p className="text-sm text-amber-700 dark:text-amber-400">{busy}</p>}
               <DialogFooter>
                 <Button variant="outline" onClick={() => setOpen(false)}>
                   Cancel
                 </Button>
-                <Button onClick={() => rerunMutation.mutate()} disabled={rerunMutation.isPending}>
+                <Button
+                  onClick={() => rerunMutation.mutate()}
+                  disabled={rerunMutation.isPending || !!busy}
+                >
                   {rerunMutation.isPending ? 'Queuing...' : 'Re-run agent'}
                 </Button>
               </DialogFooter>
