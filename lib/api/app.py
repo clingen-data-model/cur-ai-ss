@@ -201,7 +201,7 @@ from lib.tasks import (
 )
 from lib.tasks.agent_session import chat_session
 from lib.tasks.handlers import log_run_metrics
-from lib.tasks.misc import summarize_paper_task_status
+from lib.tasks.misc import paper_busy_message, summarize_paper_task_status
 from lib.tasks.models import ACTIVE_STATUSES, TaskStatus, TaskType
 from lib.tasks.tracks import PIPELINE_TRACKS
 
@@ -747,19 +747,9 @@ def reset_paper(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
-    active_tasks = (
-        session.query(TaskDB)
-        .filter(
-            TaskDB.paper_id == paper_id,
-            TaskDB.status.in_(ACTIVE_STATUSES),
-        )
-        .count()
-    )
-    if active_tasks:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail='Cannot reset while extraction tasks are pending or running',
-        )
+    busy = paper_busy_message(session, paper_id, 'restoring a snapshot')
+    if busy:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=busy)
     try:
         applied = restore_snapshot(
             paper_id, request.snapshot_name, session, current_user
@@ -1201,6 +1191,12 @@ def create_task(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
+
+    # See paper_busy_message: re-running mid-pipeline snapshots a state that
+    # can't be cleanly restored and races the run still in flight.
+    busy = paper_busy_message(session, paper_id, 're-running')
+    if busy:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=busy)
 
     # A rerun's handlers delete-and-recreate rows from scratch, which would
     # otherwise silently discard any manual edit made since the last snapshot

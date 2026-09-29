@@ -30,6 +30,7 @@ from lib.tasks.misc import (
     enqueue_task,
     infer_paper_status_detail,
     invalidate_descendants,
+    paper_busy_message,
 )
 from lib.tasks.models import CLAIMED_STATUSES, TaskDB, TaskResp, TaskType
 
@@ -257,6 +258,10 @@ def _make_queue_task_tool(paper_id: int, user_id: int) -> Any:
             paper = session.get(PaperDB, paper_id)
             if paper is None:
                 return 'This paper no longer exists.'
+
+            busy = paper_busy_message(session, paper_id, 're-running')
+            if busy:
+                return busy
 
             # See create_task's identical call in lib/api/app.py: a rerun's
             # handlers delete-and-recreate rows, which would otherwise

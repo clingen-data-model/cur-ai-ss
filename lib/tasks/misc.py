@@ -1,3 +1,4 @@
+from collections import Counter
 from typing import TYPE_CHECKING, Iterable, Literal
 
 from sqlalchemy.orm import Session
@@ -11,6 +12,7 @@ if TYPE_CHECKING:
     from lib.models.paper import PaperTaskStatus
 
 from lib.tasks.models import (
+    ACTIVE_STATUSES,
     CLAIMED_STATUSES,
     TASK_SUCCESSORS,
     InferredPaperStatus,
@@ -229,6 +231,35 @@ def enqueue_deferred_hpo_linking(
         )
         for phenotype in query.all()
     ]
+
+
+def paper_busy_message(session: Session, paper_id: int, action: str) -> str | None:
+    """Why ``action`` can't happen to this paper yet, or None if it can.
+
+    Re-running and restoring both need a paper with no task in flight. A rerun
+    snapshots the paper first, and a snapshot taken mid-run restores tasks as
+    RUNNING -- which the worker then reads as timed out and re-runs, all at
+    once. A rerun also invalidates downstream task rows that the in-flight run
+    may still be producing. So both are refused until the paper is idle.
+    """
+    counts = Counter(
+        task_type
+        for (task_type,) in session.query(TaskDB.type).filter(
+            TaskDB.paper_id == paper_id, TaskDB.status.in_(ACTIVE_STATUSES)
+        )
+    )
+    if not counts:
+        return None
+    total = sum(counts.values())
+    in_flight = ', '.join(
+        f'{task_type.value} ×{n}' if n > 1 else task_type.value
+        for task_type, n in counts.most_common()
+    )
+    return (
+        f'{total} task{"s" if total != 1 else ""} still pending or running '
+        f'({in_flight}). Wait for {"them" if total != 1 else "it"} to finish '
+        f'before {action}.'
+    )
 
 
 def invalidate_descendants(session: Session, paper_id: int, task_type: TaskType) -> int:
