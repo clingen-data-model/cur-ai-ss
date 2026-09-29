@@ -183,7 +183,27 @@ def _page_box(page_no: int, bbox: BoundingBox, page_height: float) -> PageBox:
 
 
 def _prov_boxes(item: DocItem, doc: DoclingDocument) -> list[PageBox]:
-    """An item's page boxes, one per prov entry (a paragraph split across columns has two)."""
+    """An item's page boxes, one per prov entry.
+
+    Docling gives one ``prov`` per visual fragment of an item, each with its
+    own page, bbox and ``charspan`` into the item's text, so a paragraph that
+    wraps across a column or page break has several. Worked example from the
+    ACN3-7-1962 test paper, ``#/texts/54`` (919 chars, page 3, height 782.36):
+
+        prov 1  charspan (0, 97)    bbox l=66  t=102 r=294 b=81   BOTTOMLEFT
+                "The results were analyzed using MatLab ... Regions of"
+        prov 2  charspan (98, 919)  bbox l=311 t=711 r=539 b=535  BOTTOMLEFT
+                "interests (cells) were masked ... Ca2-analysis)."
+
+    becomes
+
+        PageBox(page 3, x=66,  y=680.6, w=228, h=21)   two-line tail, left column
+        PageBox(page 3, x=311, y=70.9,  w=228, h=176)  continuation, right column
+
+    (``y = 782.36 - t``; ``h = t - b``). Drawn on the page, both sit exactly on
+    the text and the sentence runs from one into the other. Items from DOCX/
+    XLSX have no pages, so they get no boxes at all.
+    """
     boxes = []
     for prov in item.prov:
         page = doc.pages.get(prov.page_no)
