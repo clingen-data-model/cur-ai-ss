@@ -30,6 +30,10 @@ export interface HighlightTarget {
   quote?: string | null
   table_id?: number | null
   image_id?: number | null
+  // Supplement evidence has no PDF/words.json of its own (see EvidencePopover) --
+  // there's a separate raw.md for it, so this opens straight to the Markdown tab
+  // with the PDF tab disabled, rather than the coordinate-based PDF tab.
+  is_supplement?: boolean
 }
 
 interface PdfHighlightContextValue {
@@ -74,12 +78,13 @@ export function PdfHighlightProvider({
         },
         throwOnError: true,
       }),
-    enabled: target !== null && fullPdfUrl !== '' && activeTab === 'pdf',
+    enabled:
+      target !== null && !target.is_supplement && fullPdfUrl !== '' && activeTab === 'pdf',
   })
 
   const openHighlight = (next: HighlightTarget) => {
     setTarget(next)
-    setActiveTab('pdf')
+    setActiveTab(next.is_supplement ? 'markdown' : 'pdf')
   }
 
   const close = () => {
@@ -98,18 +103,24 @@ export function PdfHighlightProvider({
           {/* The viewer's own toolbar carries the close button, so the sheet
             * needs only one row -- but the dialog still needs an accessible
             * name. */}
-          <SheetTitle className="sr-only">View in PDF</SheetTitle>
+          <SheetTitle className="sr-only">View evidence</SheetTitle>
           <Tabs
             value={activeTab}
             onValueChange={(value) => setActiveTab(value as ViewerTab)}
             className="flex-1 min-h-0 flex flex-col gap-0"
           >
             <TabsList className="mx-4 mt-3 w-fit">
-              <TabsTrigger value="pdf">PDF</TabsTrigger>
+              <TabsTrigger value="pdf" disabled={target?.is_supplement}>
+                PDF
+              </TabsTrigger>
               <TabsTrigger value="markdown">Markdown</TabsTrigger>
             </TabsList>
             <TabsContent value="pdf" className="flex-1 min-h-0">
-              {annotationsQuery.isPending ? (
+              {target?.is_supplement ? (
+                <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted-foreground">
+                  This evidence came from the paper's supplement, which has no PDF view.
+                </div>
+              ) : annotationsQuery.isPending ? (
                 <div className="flex h-full items-center justify-center">
                   <Spinner />
                 </div>
@@ -131,6 +142,7 @@ export function PdfHighlightProvider({
               <MarkdownEvidenceViewer
                 paperId={paperId}
                 quote={target?.quote}
+                isSupplement={target?.is_supplement}
                 enabled={target !== null && activeTab === 'markdown'}
               />
             </TabsContent>

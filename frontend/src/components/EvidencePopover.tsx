@@ -21,7 +21,8 @@ export interface EvidenceLike {
   table_id?: number | null
   image_id?: number | null
   // Supplement PDFs have no words.json of their own, so there's nothing for
-  // /grobid-annotation to search -- "View in PDF" is not offered for these.
+  // /grobid-annotation to search -- this evidence gets a "View in Markdown"
+  // button (reading the supplement's own raw.md) instead of "View in PDF".
   is_supplement?: boolean
   // The current value (`value`) and, when the latest edit's old_value was
   // captured, what it changed from (`previous_value`) -- typed loosely since
@@ -45,9 +46,8 @@ function formatEvidenceValue(value: unknown): string {
 export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
   const { openHighlight } = usePdfHighlight()
   const hasContent = !!(block?.quote || block?.reasoning || block?.human_edit_note)
-  const canViewInPdf =
-    !block?.is_supplement &&
-    (!!block?.quote || block?.table_id != null || block?.image_id != null)
+  const canViewEvidence =
+    !!block?.quote || block?.table_id != null || block?.image_id != null
   // edited_at is only ever set from a real edits-table row (see
   // _attach_edit_history in app.py), never at initial extraction, so it's a
   // reliable "a human changed this" signal independent of whether a note was
@@ -115,7 +115,7 @@ export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
             )}
           </div>
         )}
-        {canViewInPdf && (
+        {canViewEvidence && (
           <div className="pt-2 border-t">
             <Button
               variant="outline"
@@ -126,11 +126,12 @@ export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
                   quote: block?.quote,
                   table_id: block?.table_id,
                   image_id: block?.image_id,
+                  is_supplement: block?.is_supplement,
                 })
               }
             >
               <FileSearch className="size-3.5 mr-1.5" />
-              View in PDF
+              {block?.is_supplement ? 'View in Markdown' : 'View in PDF'}
             </Button>
           </div>
         )}
