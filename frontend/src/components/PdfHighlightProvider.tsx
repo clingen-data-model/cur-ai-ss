@@ -142,6 +142,8 @@ export function PdfHighlightProvider({
               <MarkdownEvidenceViewer
                 paperId={paperId}
                 quote={target?.quote}
+                tableId={target?.table_id}
+                imageId={target?.image_id}
                 isSupplement={target?.is_supplement}
                 enabled={target !== null && activeTab === 'markdown'}
               />

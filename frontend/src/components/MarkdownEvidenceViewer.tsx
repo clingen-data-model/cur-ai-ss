@@ -1,7 +1,9 @@
 /* The evidence sheet's "Markdown" tab: the paper's extracted markdown
  * (Docling's raw.md), with the evidence quote highlighted and scrolled into
  * view when a fuzzy match is found -- the text-based analog of the PDF
- * tab's coordinate-based highlight box.
+ * tab's coordinate-based highlight box. table_id/image_id evidence (no quote,
+ * or a quote that didn't match) falls back to highlighting the Nth table/
+ * image element instead -- see the comment further down.
  *
  * The match's character offsets come back from the backend already indexed
  * into this exact `content` string (see find_best_match_in_text), so a
@@ -43,23 +45,22 @@ function withHighlight(content: string, match: { start: number; end: number } | 
  * this app resolves by prefixing API_BASE_URL (see PedigreeTab.tsx). Left
  * alone, the browser instead resolves it against the SPA's own origin.
  */
-const MARKDOWN_COMPONENTS: Components = {
-  img: ({ src, ...props }) => (
-    <img
-      src={typeof src === 'string' && src.startsWith('/') ? `${API_BASE_URL}${src}` : src}
-      {...props}
-    />
-  ),
+function resolveImageSrc(src: string | undefined): string | undefined {
+  return src?.startsWith('/') ? `${API_BASE_URL}${src}` : src
 }
 
 export function MarkdownEvidenceViewer({
   paperId,
   quote,
+  tableId,
+  imageId,
   isSupplement = false,
   enabled,
 }: {
   paperId: number
   quote: string | null | undefined
+  tableId?: number | null
+  imageId?: number | null
   isSupplement?: boolean
   enabled: boolean
 }) {
@@ -78,10 +79,43 @@ export function MarkdownEvidenceViewer({
 
   const data = query.data
 
+  /* table_id/image_id have no offsets of their own -- unlike a quote, there's
+   * nothing to splice a literal <mark> around without risking a GFM table
+   * (a raw HTML tag straddling a pipe-table's lines can make remark stop
+   * parsing it as a table at all). Docling's PDF-side highlighting already
+   * trusts table_id/image_id as a plain 0-based position among the
+   * document's tables/pictures in order (lib/misc/pdf/highlight.py's
+   * figures_to_grobid_annotations indexes docling's own JSON dump the same
+   * way) -- so here that same ordinal is used to find the Nth <table>/<img>
+   * as react-markdown renders them, and that whole element is wrapped in a
+   * real <mark> node instead. Only used as a fallback when there's no quote
+   * match, since a quote pinpoints an exact row/cell rather than a whole
+   * table or image.
+   */
+  const hasQuoteMatch = !!data?.match
+  const highlightTableId = hasQuoteMatch ? null : (tableId ?? null)
+  const highlightImageId = hasQuoteMatch ? null : (imageId ?? null)
+
+  let tableIndex = 0
+  let imageIndex = 0
+  const components: Components = {
+    table: ({ children, ...props }) => {
+      const isTarget = tableIndex === highlightTableId
+      tableIndex += 1
+      const element = <table {...props}>{children}</table>
+      return isTarget ? <mark>{element}</mark> : element
+    },
+    img: ({ src, ...props }) => {
+      const isTarget = imageIndex === highlightImageId
+      imageIndex += 1
+      const element = <img src={resolveImageSrc(src)} {...props} />
+      return isTarget ? <mark>{element}</mark> : element
+    },
+  }
+
   useEffect(() => {
-    if (!data?.match) return
     containerRef.current?.querySelector('mark')?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  }, [data])
+  }, [data, tableId, imageId])
 
   if (query.isPending) {
     return (
@@ -116,7 +150,7 @@ export function MarkdownEvidenceViewer({
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           rehypePlugins={[rehypeRaw, [rehypeSanitize, SANITIZE_SCHEMA]]}
-          components={MARKDOWN_COMPONENTS}
+          components={components}
         >
           {withHighlight(data?.content ?? '', data?.match)}
         </ReactMarkdown>
