@@ -344,13 +344,50 @@ def build_anchored(
 ) -> tuple[str, list[Anchor]]:
     """Render ``anchored.md`` and its ``anchors.json`` entries from a Docling document.
 
-    Walks the markdown serializer's parts (one per body item, in reading order;
-    a captioned table/figure part spans its caption too, a list part spans its
-    items) so the text is exactly what Docling would print, plus the ids.
-    Headers are printed untagged: they are never evidence, and the section
-    classifier matches them literally. Table files (``tables/N.vision.md``,
-    ``N.unrecovered``) and ``images/N.png`` must already be in place under
-    the document dir, since the text refers to them.
+    Step by step:
+
+    1. Build Docling's own markdown serializer, configured as ``raw.md`` is
+       written today (no ``\\_`` escaping, raw HTML such as ``<sup>`` kept).
+       We never ask it for the whole document, only for its *parts*.
+
+    2. Walk ``serializer.get_parts()``: one block of output per body item, in
+       reading order, each carrying ``spans`` -- the Docling items it was built
+       from. Some items merge into one part, so a 159-item body gives ~117
+       parts. The shapes seen, with real examples from the test paper:
+
+           [SectionHeaderItem #/texts/1]                     '## Dominant mutations in ITPR3 ...'
+           [TextItem #/texts/54]                             'Two missense variants ...'
+           [TextItem #/texts/96 (caption), TableItem #/tables/0]     caption + pipe table
+           [TextItem #/texts/70 (caption), PictureItem #/pictures/2] caption + '<!-- image -->'
+           [PictureItem #/pictures/0]                        '<!-- image -->'  (uncaptioned logo)
+           [ListItem #/texts/403, ListItem #/texts/404, ...] '1. Laura M...\\n2. Szigeti K...'
+
+    3. Dispatch on the shape, first match wins:
+         - has a TableItem     -> _table_text: '[table-N] caption', warning line
+                                  if unrecovered, then the pipe table (vision
+                                  rebuild if present) with the anchor column;
+                                  one Anchor with table + row boxes
+         - has a PictureItem   -> _figure_text: '[figure-N] ![caption](png)';
+                                  one Anchor
+         - all ListItems       -> one '[paragraph-N] 1. ...' line per item, each
+                                  its own Anchor
+         - heading/title       -> printed as '## ...', no id, no Anchor
+         - any other TextItem  -> '[paragraph-N] text', one Anchor (two boxes
+                                  if it wraps a column, see _prov_boxes)
+         - anything else       -> its text, untagged (forms, key-value areas)
+       A caption inside a table/figure part is consumed by that branch and
+       gets no id of its own, which is why paragraph numbers have gaps:
+       ``#/texts/96`` exists in Docling but is the caption of ``table-0``.
+
+    4. Join the chunks with blank lines (one markdown block each) and return
+       the anchors in the order their ids appear in the text.
+
+    Deliberately not done here: headers get no id (never evidence, and the
+    section classifier matches their text literally); nothing is searched for
+    -- every id comes from ``self_ref``, so text and index cannot disagree.
+    ``tables/N.vision.md``, ``N.unrecovered`` and ``images/N.png`` must already
+    be in place under the document dir, since the text refers to them; that is
+    why ``write_anchored_document`` calls this last.
     """
     serializer = MarkdownDocSerializer(
         doc=doc, params=MarkdownParams(escape_html=False, escape_underscores=False)
