@@ -77,8 +77,8 @@ class Anchor(BaseModel):
 
 Everything else is derivable and therefore not stored: the kind is the id prefix; a
 figure's PNG is `document_image_path(paper_id, N, supplement)`; "vision-corrected" is
-the existence of `tables/N.vision.md`; the unrecovered-table verdict is read from
-`tables/N.correction.json` once, at build time, and printed as the
+the existence of `tables/N.vision.md`; the unrecovered-table verdict is the existence of
+`tables/N.unrecovered`, read once, at build time, and printed as the
 `UNRECOVERED_TABLE_MARKER` line above the table. Headers are printed untagged and have
 no anchor entry. Table text = `serialize_captions(item)` + `tables/N.vision.md` when
 present, else Docling's own pipe table. XLSX supplements (no Docling doc) go through

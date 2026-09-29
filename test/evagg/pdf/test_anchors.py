@@ -25,7 +25,7 @@ from lib.misc.pdf.anchors import (
 from lib.misc.pdf.paths import (
     UNRECOVERED_TABLE_MARKER,
     document_image_path,
-    document_table_correction_path,
+    document_table_unrecovered_path,
     document_table_vision_markdown_path,
 )
 
@@ -150,9 +150,9 @@ def test_vision_corrected_table_uses_vision_text_and_no_row_boxes(paper_id):
 
 
 def test_unrecovered_table_gets_warning_marker(paper_id):
-    record = document_table_correction_path(paper_id, 0)
-    record.parent.mkdir(parents=True)
-    record.write_text(json.dumps({'is_corrupted': True, 'corrected': False}))
+    marker = document_table_unrecovered_path(paper_id, 0)
+    marker.parent.mkdir(parents=True)
+    marker.touch()
 
     md, _ = build_anchored(_document(), paper_id=paper_id)
 

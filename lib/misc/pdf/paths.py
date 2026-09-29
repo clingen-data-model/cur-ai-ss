@@ -99,11 +99,14 @@ def pdf_table_vision_markdown_path(
     return pdf_tables_dir(paper_id, supplement) / f'{table_id}.vision.md'
 
 
-def pdf_table_correction_path(
+def pdf_table_unrecovered_path(
     paper_id: int, table_id: int, supplement: bool = False
 ) -> Path:
-    """Record of what the correction agent decided about one table."""
-    return pdf_tables_dir(paper_id, supplement) / f'{table_id}.correction.json'
+    """Present iff the correction agent judged the table corrupt and could not
+    rebuild it from the image. Symmetric with ``.vision.md``: that file present
+    means corrected, this one present means unrecovered, neither means clean.
+    """
+    return pdf_tables_dir(paper_id, supplement) / f'{table_id}.unrecovered'
 
 
 def pdf_section_markdown_path(
@@ -176,10 +179,10 @@ def document_table_vision_markdown_path(
     return document_tables_dir(paper_id, supplement) / f'{table_index}.vision.md'
 
 
-def document_table_correction_path(
+def document_table_unrecovered_path(
     paper_id: int, table_index: int, supplement: bool = False
 ) -> Path:
-    return document_tables_dir(paper_id, supplement) / f'{table_index}.correction.json'
+    return document_tables_dir(paper_id, supplement) / f'{table_index}.unrecovered'
 
 
 def document_image_path(
@@ -240,16 +243,8 @@ def _flag_unrecovered_tables(
     """
     tables_dir = pdf_tables_dir(paper_id, supplement=supplement)
 
-    for record_path in sorted(tables_dir.glob('*.correction.json')):
-        table_id = record_path.name.removesuffix('.correction.json')
-        try:
-            record = json.loads(record_path.read_text())
-        except (OSError, json.JSONDecodeError):
-            continue
-
-        if not record.get('is_corrupted') or record.get('corrected'):
-            continue
-
+    for marker_path in sorted(tables_dir.glob('*.unrecovered')):
+        table_id = marker_path.name.removesuffix('.unrecovered')
         original_path = tables_dir / f'{table_id}.md'
         if not original_path.exists():
             continue

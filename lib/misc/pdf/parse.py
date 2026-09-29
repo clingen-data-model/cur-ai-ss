@@ -37,9 +37,9 @@ from lib.misc.pdf.paths import (
     document_images_dir,
     document_raw_path,
     document_success_path,
-    document_table_correction_path,
     document_table_image_path,
     document_table_markdown_path,
+    document_table_unrecovered_path,
     document_table_vision_markdown_path,
     document_tables_dir,
     document_words_json_path,
@@ -52,9 +52,9 @@ from lib.misc.pdf.paths import (
     pdf_raw_path,
     pdf_section_markdown_path,
     pdf_sections_dir,
-    pdf_table_correction_path,
     pdf_table_image_path,
     pdf_table_markdown_path,
+    pdf_table_unrecovered_path,
     pdf_table_vision_markdown_path,
     pdf_tables_dir,
     pdf_words_json_path,
@@ -221,7 +221,7 @@ def write_anchored_document(
 
     Tables and images are keyed by Docling index. The extracted_pdfs/ layout
     numbers them by a counter that only advances for items Docling could crop,
-    so the correction agent's ``N.vision.md``/``N.correction.json`` are
+    so the correction agent's ``N.vision.md``/``N.unrecovered`` are
     re-keyed here by replaying that counter over the same items.
     """
     document_tables_dir(paper_id, supplement).mkdir(parents=True, exist_ok=True)
@@ -253,8 +253,8 @@ def write_anchored_document(
                     document_table_vision_markdown_path(paper_id, index, supplement),
                 )
                 _copy_if_exists(
-                    pdf_table_correction_path(paper_id, old_table_id, supplement),
-                    document_table_correction_path(paper_id, index, supplement),
+                    pdf_table_unrecovered_path(paper_id, old_table_id, supplement),
+                    document_table_unrecovered_path(paper_id, index, supplement),
                 )
                 old_table_id += 1
 

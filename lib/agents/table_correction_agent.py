@@ -12,8 +12,8 @@ from lib.agents.vision import vlm_describe
 from lib.core.logging import setup_logging
 from lib.misc.images import image_to_data_url
 from lib.misc.pdf.paths import (
-    pdf_table_correction_path,
     pdf_table_image_path,
+    pdf_table_unrecovered_path,
     pdf_table_vision_markdown_path,
     pdf_tables_dir,
 )
@@ -98,31 +98,15 @@ is_recoverable to false and conversion_successful to false. This is an acceptabl
 not a failure -- the original markdown will simply be left in place."""
 
 
-def _write_correction_record(
-    paper_id: int,
-    table_id: int,
-    result: TableCorrectionResult,
-    corrected: bool,
-    supplement: bool = False,
-) -> None:
-    """Persist what was decided about one table, so it is not only a log line."""
-    record = {
-        'table_id': table_id,
-        'is_corrupted': result.is_corrupted,
-        'conversion_successful': result.conversion_successful,
-        'is_recoverable': result.is_recoverable,
-        'corrected': corrected,
-    }
-    path = pdf_table_correction_path(paper_id, table_id, supplement=supplement)
-    path.write_text(json.dumps(record, indent=2))
-
-
 async def correct_tables(paper_id: int, supplement: bool = False) -> None:
     """Correct corrupted table markdown in paper using agent.
 
-    Scans all tables, checks each with the agent, and writes a .vision.md
-    beside every table it recovers. ``raw.md`` is deliberately left untouched:
-    corrections are applied at read time by
+    Scans all tables and checks each with the agent. The verdict is recorded
+    as one of two presence files beside the table: ``N.vision.md`` (corrupt
+    and rebuilt from the image -- the rebuilt markdown) or ``N.unrecovered``
+    (corrupt and the image did not yield a faithful table); neither means the
+    table was clean. ``raw.md`` is deliberately left untouched: corrections
+    and the unrecovered warning are applied at read time by
     ``lib.misc.pdf.paths.apply_table_corrections``.
     """
     tables_dir = pdf_tables_dir(paper_id, supplement=supplement)
@@ -156,15 +140,13 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
         # Run agent
         result = await Runner.run(agent, message)
 
+        unrecovered_path = pdf_table_unrecovered_path(
+            paper_id, table_id, supplement=supplement
+        )
+
         if not result.final_output.is_corrupted:
             logger.info(f'Table {table_id} looks OK')
-            _write_correction_record(
-                paper_id,
-                table_id,
-                result.final_output,
-                corrected=False,
-                supplement=supplement,
-            )
+            unrecovered_path.unlink(missing_ok=True)
             continue
 
         if (
@@ -179,13 +161,7 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
                 f'leaving original markdown in place (recoverable='
                 f'{result.final_output.is_recoverable})'
             )
-            _write_correction_record(
-                paper_id,
-                table_id,
-                result.final_output,
-                corrected=False,
-                supplement=supplement,
-            )
+            unrecovered_path.touch()
             continue
 
         logger.info(f'Table {table_id} was corrupted, corrected version ready')
@@ -196,10 +172,4 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
         )
         vision_path.write_text(result.final_output.corrected_markdown)
         logger.info(f'Wrote {vision_path}')
-        _write_correction_record(
-            paper_id,
-            table_id,
-            result.final_output,
-            corrected=True,
-            supplement=supplement,
-        )
+        unrecovered_path.unlink(missing_ok=True)

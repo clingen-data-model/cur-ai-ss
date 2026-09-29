@@ -46,7 +46,7 @@ from lib.misc.pdf.paths import (
     document_anchored_md_path,
     document_anchors_path,
     document_image_path,
-    document_table_correction_path,
+    document_table_unrecovered_path,
     document_table_vision_markdown_path,
 )
 
@@ -233,13 +233,7 @@ def _with_anchor_column(pipe_lines: list[str], table_id: str) -> tuple[list[str]
 
 
 def _table_is_unrecovered(paper_id: int, index: int, supplement: bool) -> bool:
-    """Same rule as ``paths._flag_unrecovered_tables``: corrupted and not corrected."""
-    path = document_table_correction_path(paper_id, index, supplement)
-    try:
-        record = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError):
-        return False
-    return bool(record.get('is_corrupted')) and not record.get('corrected')
+    return document_table_unrecovered_path(paper_id, index, supplement).exists()
 
 
 def _table_text(
@@ -306,7 +300,7 @@ def build_anchored(
     items) so the text is exactly what Docling would print, plus the ids.
     Headers are printed untagged: they are never evidence, and the section
     classifier matches them literally. Table files (``tables/N.vision.md``,
-    ``N.correction.json``) and ``images/N.png`` must already be in place under
+    ``N.unrecovered``) and ``images/N.png`` must already be in place under
     the document dir, since the text refers to them.
     """
     serializer = MarkdownDocSerializer(
