@@ -195,8 +195,12 @@ export function MarkdownEvidenceViewer({
    * document's tables/pictures in order (lib/misc/pdf/highlight.py's
    * figures_to_grobid_annotations indexes docling's own JSON dump the same
    * way) -- so here that same ordinal is used to find the Nth <table>/<img>
-   * as react-markdown renders them, and that whole element is wrapped in a
-   * real <mark> node instead.
+   * as react-markdown renders them, and that whole element gets a
+   * data-evidence-highlight attribute (styled below) instead of a <mark>
+   * wrapper -- both are block/replaced content that a real <mark> node
+   * doesn't reliably highlight (an inline <mark> around a block <table>
+   * splits into two empty boxes rather than covering it; around an opaque
+   * <img> its background just sits behind the image, invisible).
    *
    * table_id evidence NEVER uses the quote-splice highlight, even when the
    * quote matches: agents are told to copy the table row verbatim into
@@ -262,11 +266,16 @@ export function MarkdownEvidenceViewer({
         </tr>
       )
     },
+    // Same data-attribute technique as tr/table above, not <mark>: an <img>
+    // is inline-replaced content, so wrapping it in <mark> mostly just tints
+    // the mark's own px-0.5 padding either side of the image -- the image
+    // itself covers the rest of the box, hiding a background-color highlight
+    // behind it. A border/box-shadow (styled below) stays visible over an
+    // opaque image where a background wouldn't.
     img: ({ src, ...props }) => {
       const isTarget = imageIndex === highlightImageId
       imageIndex += 1
-      const element = <img src={resolveImageSrc(src)} {...props} />
-      return isTarget ? <mark>{element}</mark> : element
+      return <img src={resolveImageSrc(src)} {...props} data-evidence-highlight={isTarget ? '' : undefined} />
     },
   }
 
@@ -306,7 +315,8 @@ export function MarkdownEvidenceViewer({
           [&_th]:border [&_th]:px-2 [&_th]:py-1 [&_td]:border [&_td]:px-2 [&_td]:py-1
           [&_mark]:rounded [&_mark]:px-0.5
           [&_tr[data-evidence-highlight]>td]:bg-yellow-200
-          [&_table[data-evidence-highlight]_td]:bg-yellow-200 [&_table[data-evidence-highlight]_th]:bg-yellow-200"
+          [&_table[data-evidence-highlight]_td]:bg-yellow-200 [&_table[data-evidence-highlight]_th]:bg-yellow-200
+          [&_img[data-evidence-highlight]]:rounded [&_img[data-evidence-highlight]]:ring-4 [&_img[data-evidence-highlight]]:ring-yellow-300"
       >
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
