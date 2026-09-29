@@ -1,12 +1,14 @@
 /* The evidence sheet's "Markdown" tab: the paper's extracted markdown
  * (Docling's raw.md), with the evidence quote highlighted and scrolled into
  * view when a match is found -- the text-based analog of the PDF tab's
- * coordinate-based highlight box. table_id evidence also highlights the Nth
- * table element (or, when the quote scores well against one of its rows, just
- * that row) -- alongside the quote splice, not instead of it, unless the
- * quote's match itself falls inside that table's raw text; image_id
- * evidence highlights the Nth image, but only when there's no quote match --
- * see the comment further down for why.
+ * coordinate-based highlight box. Like the PDF tab (which sends quote/
+ * table_id/image_id to /grobid-annotation together and highlights whichever
+ * are present, with no priority between them), table_id/image_id evidence
+ * highlights the Nth table/image *alongside* the quote splice rather than
+ * instead of it -- table_id also narrows to just the matching row when the
+ * quote scores well against one, and the one exception is a quote whose
+ * match itself falls inside that table's own raw text (see the comment
+ * further down for why that one case still can't use the splice).
  *
  * Matching happens entirely client-side, against the plain `content` the
  * backend returns: a whitespace-tolerant exact match only, no fuzzy fallback
@@ -235,9 +237,9 @@ export function MarkdownEvidenceViewer({
    * B546), which lives outside any table's raw text and splices in exactly
    * like any other quote -- overlapsAnyTable is what tells these two cases
    * apart, so both the prose mention and the table/row can be highlighted
-   * together. image_id keeps the quote match as a fallback since a
-   * figure-adjacent quote is plain prose with no such cell boundaries to
-   * break across.
+   * together. image_id evidence has no such risk (a quote next to a figure
+   * is plain prose, with no cell boundaries to straddle), so it always
+   * highlights alongside the quote splice.
    */
   const highlightTableId = tableId ?? null
   const tables = useMemo(() => extractGfmTables(data?.content ?? ''), [data?.content])
@@ -245,7 +247,7 @@ export function MarkdownEvidenceViewer({
     const match = findWhitespaceTolerantMatch(quote, data?.content ?? '')
     return match && !overlapsAnyTable(match, tables) ? match : null
   }, [quote, data?.content, tables])
-  const highlightImageId = tableId == null && !spliceMatch ? (imageId ?? null) : null
+  const highlightImageId = imageId ?? null
 
   /* When there's a quote to go with table_id, try to pin down which row of
    * that specific table it came from -- a much more useful highlight than
