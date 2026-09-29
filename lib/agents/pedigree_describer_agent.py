@@ -15,6 +15,9 @@ class PedigreeExtractionOutput(BaseModel):
     found: bool
     image_id: Optional[int] = None
     description: Optional[str] = None
+    # image_id is namespaced separately per supplement/main (see pdf_image_path),
+    # so this is required to resolve which file image_id actually names.
+    is_supplement: bool = False
 
 
 # The vision model answers with exactly this when a figure is not a pedigree.
@@ -33,12 +36,14 @@ class PedigreeCapture:
     def __init__(self) -> None:
         self.image_id: int | None = None
         self.description: str | None = None
+        self.is_supplement: bool = False
 
-    def record(self, image_id: int, description: str) -> None:
+    def record(self, image_id: int, is_supplement: bool, description: str) -> None:
         # The agent is told to stop at the first pedigree, so the first
         # confirmed figure is the one it reports.
         if self.image_id is None:
             self.image_id = image_id
+            self.is_supplement = is_supplement
             self.description = description
 
 
@@ -94,10 +99,10 @@ Stop as soon as the tool confirms a pedigree, or once every figure has been eval
 none are pedigrees.
 
 DECISION:
-- If the tool returned pedigree details for a figure: set found=True, and populate image_id
-  and description from that tool output.
+- If the tool returned pedigree details for a figure: set found=True, and populate image_id,
+  is_supplement, and description to match the call that returned those details.
 - If the tool returned NOT_A_PEDIGREE for every figure: set found=False, image_id=None,
-  description=None.
+  is_supplement=False, description=None.
 
 IMPORTANT GUARDRAILS:
 - The tool's visual verdict is authoritative — do not report found=True without a tool
@@ -138,7 +143,7 @@ def pedigree_describer_agent_for_paper(
         image_path = pdf_image_path(paper_id, image_id, supplement=is_supplement)
         description = _analyze_image_url(image_to_data_url(image_path))
         if description.strip() != NOT_A_PEDIGREE:
-            capture.record(image_id, description)
+            capture.record(image_id, is_supplement, description)
         return description
 
     agent = Agent(

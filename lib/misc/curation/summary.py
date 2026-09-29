@@ -158,7 +158,9 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
     pedigree = session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).first()
     pedigree_image_path_str = None
     if pedigree:
-        path = pdf_image_path(paper_id, pedigree.image_id)
+        path = pdf_image_path(
+            paper_id, pedigree.image_id, supplement=pedigree.is_supplement
+        )
         if path.exists():
             pedigree_image_path_str = str(path)
 
