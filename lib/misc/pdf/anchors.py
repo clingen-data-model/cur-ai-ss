@@ -22,6 +22,7 @@ is the existence of ``tables/N.vision.md``, and its one geometric consequence
 
 import json
 import re
+from enum import StrEnum
 from pathlib import Path
 
 from docling_core.transforms.serializer.markdown import (
@@ -50,12 +51,23 @@ from lib.misc.pdf.paths import (
     document_table_vision_markdown_path,
 )
 
+
+class AnchorKind(StrEnum):
+    """What an id points at; also the word the id starts with."""
+
+    PARAGRAPH = 'paragraph'  # #/texts/N: paragraph, list item, caption
+    TABLE = 'table'  # #/tables/N; may carry a -row-R suffix
+    FIGURE = 'figure'  # #/pictures/N
+
+
+SUPPLEMENT_PREFIX = 'supp-'
+
 # Self-describing, hyphen-only ids: paragraph-54, table-1, table-1-row-7,
 # figure-2, supp-table-1-row-7. A couple of tokens more per block than
 # p54/t1.r7, and far harder for an agent to mangle or a human to misread.
-ANCHOR_RE = re.compile(r'^(supp-)?(paragraph|table|figure)-(\d+)(?:-row-(\d+))?$')
-
-SUPPLEMENT_PREFIX = 'supp-'
+ANCHOR_RE = re.compile(
+    rf'^({SUPPLEMENT_PREFIX})?({"|".join(AnchorKind)})-(\d+)(?:-row-(\d+))?$'
+)
 
 _PIPE_LINE = re.compile(r'^\s*\|')
 _SEPARATOR_LINE = re.compile(r'^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$')
@@ -89,7 +101,7 @@ class ParsedAnchor(BaseModel):
     """The pieces of an id: 'supp-table-1-row-7' -> (True, 'table', 1, 7)."""
 
     supplement: bool
-    kind: str  # 'paragraph' | 'table' | 'figure'
+    kind: AnchorKind
     index: int
     row: int | None = None
 
@@ -100,11 +112,11 @@ def parse_anchor(anchor_id: str) -> ParsedAnchor | None:
     if not match:
         return None
     prefix, kind, index, row = match.groups()
-    if row is not None and kind != 'table':
+    if row is not None and kind != AnchorKind.TABLE:
         return None
     return ParsedAnchor(
         supplement=prefix is not None,
-        kind=kind,
+        kind=AnchorKind(kind),
         index=int(index),
         row=int(row) if row is not None else None,
     )
@@ -152,8 +164,8 @@ def _docling_index(item: DocItem) -> int:
     return int(item.self_ref.rsplit('/', 1)[1])
 
 
-def _anchor_id(kind: str, index: int, supplement: bool) -> str:
-    """Format an id: ('table', 3, True) -> 'supp-table-3'."""
+def _anchor_id(kind: AnchorKind, index: int, supplement: bool) -> str:
+    """Format an id: (TABLE, 3, True) -> 'supp-table-3'."""
     prefix = SUPPLEMENT_PREFIX if supplement else ''
     return f'{prefix}{kind}-{index}'
 
@@ -259,7 +271,7 @@ def _table_text(
 ) -> tuple[str, Anchor]:
     """One table -> its anchored text ('[table-N] caption' + tagged rows) and Anchor."""
     index = _docling_index(table)
-    anchor_id = _anchor_id('table', index, supplement)
+    anchor_id = _anchor_id(AnchorKind.TABLE, index, supplement)
     # Text: the vision rebuild if there is one, else Docling's own pipe table.
     vision_path = document_table_vision_markdown_path(paper_id, index, supplement)
     vision_corrected = vision_path.exists()
@@ -294,7 +306,7 @@ def _figure_text(
 ) -> tuple[str, Anchor]:
     """One picture -> '[figure-N] ![caption](images/N.png)' and its Anchor."""
     index = _docling_index(picture)
-    anchor_id = _anchor_id('figure', index, supplement)
+    anchor_id = _anchor_id(AnchorKind.FIGURE, index, supplement)
     caption = serializer.serialize_captions(item=picture).text.strip()
     image_path = document_image_path(paper_id, index, supplement)
     if image_path.exists():
@@ -350,7 +362,9 @@ def build_anchored(
             # A whole list is one part; tag each item as its own paragraph.
             lines = []
             for item in items:
-                anchor_id = _anchor_id('paragraph', _docling_index(item), supplement)
+                anchor_id = _anchor_id(
+                    AnchorKind.PARAGRAPH, _docling_index(item), supplement
+                )
                 lines.append(
                     f'[{anchor_id}] {serializer.serialize(item=item).text.strip()}'
                 )
@@ -362,7 +376,9 @@ def build_anchored(
         elif items and isinstance(items[0], TextItem):
             # Ordinary paragraph (also an orphan caption whose table/figure was dropped).
             first = items[0]
-            anchor_id = _anchor_id('paragraph', _docling_index(first), supplement)
+            anchor_id = _anchor_id(
+                AnchorKind.PARAGRAPH, _docling_index(first), supplement
+            )
             chunks.append(f'[{anchor_id}] {part.text.strip()}')
             anchors.append(Anchor(id=anchor_id, boxes=_prov_boxes(first, doc)))
         elif part.text.strip():
@@ -381,9 +397,9 @@ def anchored_from_markdown(
     """Tag a plain markdown document: paragraphs, pipe tables, images. No boxes."""
     chunks: list[str] = []
     anchors: list[Anchor] = []
-    counters = {'paragraph': 0, 'table': 0, 'figure': 0}
+    counters = dict.fromkeys(AnchorKind, 0)
 
-    def next_id(kind: str) -> str:
+    def next_id(kind: AnchorKind) -> str:
         """Sequential ids per kind -- there is no Docling index to borrow here."""
         anchor_id = _anchor_id(kind, counters[kind], supplement)
         counters[kind] += 1
@@ -396,18 +412,18 @@ def anchored_from_markdown(
             continue
         lines = block.splitlines()
         if all(_PIPE_LINE.match(line) for line in lines):
-            anchor_id = next_id('table')
+            anchor_id = next_id(AnchorKind.TABLE)
             pipe_lines, rows = _with_anchor_column(lines, anchor_id)
             chunks.append('\n'.join([f'[{anchor_id}]', '', *pipe_lines]))
             anchors.append(Anchor(id=anchor_id, row_boxes=[[] for _ in range(rows)]))
         elif len(lines) == 1 and _IMAGE_LINE.match(block):
-            anchor_id = next_id('figure')
+            anchor_id = next_id(AnchorKind.FIGURE)
             chunks.append(f'[{anchor_id}] {block}')
             anchors.append(Anchor(id=anchor_id))
         elif _HEADING_LINE.match(block):
             chunks.append(block)
         else:
-            anchor_id = next_id('paragraph')
+            anchor_id = next_id(AnchorKind.PARAGRAPH)
             chunks.append(f'[{anchor_id}] {block}')
             anchors.append(Anchor(id=anchor_id))
 
