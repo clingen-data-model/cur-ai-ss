@@ -3,6 +3,7 @@ import json
 import pytest
 from docling_core.types.doc import (
     BoundingBox,
+    ContentLayer,
     CoordOrigin,
     DocItemLabel,
     DoclingDocument,
@@ -254,3 +255,55 @@ def test_boxes_for_anchor():
     assert boxes_for_anchor('table-1-row-2', anchors) == []  # no such row
     assert boxes_for_anchor('figure-9', anchors) == []
     assert boxes_for_anchor('nonsense', anchors) == []
+
+
+def test_inline_group_is_one_paragraph_with_every_items_boxes(paper_id):
+    doc = DoclingDocument(name='inline')
+    doc.add_page(page_no=1, size=Size(width=600, height=PAGE_HEIGHT))
+    group = doc.add_inline_group()
+    doc.add_text(
+        label=DocItemLabel.TEXT,
+        text='inline a',
+        parent=group,
+        prov=_bottom_left(10, 700, 100, 680),
+    )
+    doc.add_text(
+        label=DocItemLabel.TEXT,
+        text='inline b',
+        parent=group,
+        prov=_bottom_left(100, 700, 200, 680),
+    )
+
+    md, anchors = build_anchored(doc, paper_id=paper_id)
+
+    assert md == '[paragraph-0] inline a inline b\n'
+    assert [a.id for a in anchors] == ['paragraph-0']
+    assert [b.x for b in anchors[0].boxes] == [10, 100]
+
+
+def test_other_text_kinds_become_paragraphs_and_furniture_is_dropped(paper_id):
+    doc = DoclingDocument(name='misc')
+    doc.add_page(page_no=1, size=Size(width=600, height=PAGE_HEIGHT))
+    doc.add_title('A title')
+    doc.add_text(
+        label=DocItemLabel.PAGE_HEADER,
+        text='running head',
+        content_layer=ContentLayer.FURNITURE,
+    )
+    doc.add_text(label=DocItemLabel.FOOTNOTE, text='a footnote')
+    doc.add_code(text='x = 1')
+    doc.add_formula(text='E=mc^2')
+
+    md, anchors = build_anchored(doc, paper_id=paper_id)
+
+    assert (
+        md
+        == (
+            '# A title\n\n'
+            '[paragraph-2] a footnote\n\n'
+            '[paragraph-3]\n```\nx = 1\n```\n\n'  # tag on its own line keeps the fence valid
+            '[paragraph-4] $$E=mc^2$$\n'
+        )
+    )
+    assert 'running head' not in md
+    assert [a.id for a in anchors] == ['paragraph-2', 'paragraph-3', 'paragraph-4']

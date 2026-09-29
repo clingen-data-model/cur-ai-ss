@@ -431,13 +431,26 @@ def build_anchored(
             # Headings: printed as '## ...' with no id -- never evidence.
             chunks.append(part.text.strip())
         elif items and isinstance(items[0], TextItem):
-            # Ordinary paragraph (also an orphan caption whose table/figure was dropped).
-            first = items[0]
+            # Ordinary paragraph (also an orphan caption whose table/figure was
+            # dropped). An inline group merges several TextItems into one part:
+            # the id is the first item's, the boxes are all of theirs.
             anchor_id = _anchor_id(
-                AnchorKind.PARAGRAPH, _docling_index(first), supplement
+                AnchorKind.PARAGRAPH, _docling_index(items[0]), supplement
             )
-            chunks.append(f'[{anchor_id}] {part.text.strip()}')
-            anchors.append(Anchor(id=anchor_id, boxes=_prov_boxes(first, doc)))
+            text = part.text.strip()
+            # Multi-line text (a fenced code block) needs the tag on its own line.
+            chunks.append(f'[{anchor_id}]{chr(10) if chr(10) in text else " "}{text}')
+            anchors.append(
+                Anchor(
+                    id=anchor_id,
+                    boxes=[
+                        box
+                        for item in items
+                        if isinstance(item, TextItem)
+                        for box in _prov_boxes(item, doc)
+                    ],
+                )
+            )
         elif part.text.strip():
             # Anything else Docling can emit (forms, key-value areas): text, no id.
             chunks.append(part.text.strip())
