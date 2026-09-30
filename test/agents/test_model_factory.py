@@ -101,16 +101,16 @@ def test_openai_gets_empty_model_settings_not_none():
     assert settings.extra_args is None
 
 
-def test_anthropic_gets_the_paper_and_last_message_breakpoints_at_the_1h_ttl():
-    """Index 1 is the paper message every paper-bearing handler sends right
-    after the SDK's system message (lib.tasks.handlers.paper_input): the same
-    bytes for every agent on a paper, so one write serves the whole pipeline.
-    Index -1 is the message being extended: tool loops, repairs, follow-ups.
-    No 'system' point: every agent's instructions are the ~120-char base
-    prompt, far below Anthropic's minimum cacheable block, so it never wrote
-    anything. Before 2026-09-30 the paper was inlined into one message per
-    call and every run wrote a unique entry at the 1h write price that nothing
-    read (worker log: 59/59 demographics runs cached=0)."""
+def test_anthropic_gets_paper_instructions_and_last_message_breakpoints():
+    """One per shared block of lib.tasks.handlers.paper_input's input, after
+    the SDK's system message at 0: index 1 the paper (same bytes for every
+    agent on a paper), index 2 the agent's instructions plus manual-output
+    directive (same bytes for every run of that agent on the paper), index -1
+    the message being extended (this run's data, then tool results, repairs,
+    follow-ups). No 'system' point: the ~120-char base prompt is below the
+    minimum cacheable block. Paper 80 after #334 (paper only): demographics
+    read 44% of a call, phenotypes 62%; the rest was the constant text placed
+    after the data, which index 2 now covers."""
     settings = model_settings_for('anthropic/claude-sonnet-5')
 
     points = settings.extra_args['cache_control_injection_points']
@@ -118,6 +118,11 @@ def test_anthropic_gets_the_paper_and_last_message_breakpoints_at_the_1h_ttl():
         {
             'location': 'message',
             'index': 1,
+            'control': {'type': 'ephemeral', 'ttl': '1h'},
+        },
+        {
+            'location': 'message',
+            'index': 2,
             'control': {'type': 'ephemeral', 'ttl': '1h'},
         },
         {

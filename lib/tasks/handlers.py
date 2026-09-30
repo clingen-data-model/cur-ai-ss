@@ -362,25 +362,34 @@ def format_paper_context(paper_markdown: str, gene_symbol: str | None = None) ->
     return '\n\n'.join(sections)
 
 
-def paper_input(paper_context: str, task_text: str) -> list[TResponseInputItem]:
-    """The two-item input every paper-bearing agent gets: the paper block on
-    its own, then the task's data and instructions.
+def paper_input(
+    paper_context: str, instructions: str, task_data: str | None = None
+) -> list[TResponseInputItem]:
+    """The input every paper-bearing agent gets, in three user items: the paper
+    block, the agent's instructions, then this run's data (if any).
 
     Anthropic caches the prompt prefix up to a cache_control breakpoint, and
-    litellm can only place a breakpoint at the end of an input message, so the
-    paper has to end one for the breakpoint to land right after it. On the
-    wire litellm folds the two consecutive user items into one Anthropic user
-    turn with two text blocks, each with its breakpoint (verified offline,
-    2026-09-30), so the model sees the same bytes in the same order as the
-    single string this replaces. Every agent sends the same paper block
-    (``format_paper_context`` with the paper's gene, which is static, so pass
-    it everywhere) and reads it from the entry the first one wrote; only the
-    second block differs per task. Breakpoints: ``lib/agents/model_factory.py``.
+    litellm can only place a breakpoint at the end of an input item, so each
+    part that is shared has to end an item of its own. On the wire litellm
+    folds consecutive user items into one Anthropic user turn with one text
+    block each, each block with its breakpoint (verified offline, 2026-09-30),
+    so the model reads paper, instructions, data in that order. The prefix
+    hierarchy that gives: ``system + paper`` is the same bytes for every agent
+    on a paper (``format_paper_context`` with the paper's gene, which is
+    static, so pass it everywhere); ``+ instructions`` is the same for every
+    run of one agent on that paper (``run_with_manual_output`` appends its
+    schema directive here, never to the data); ``+ data`` is what one run
+    adds. Data last is also what the instruction constants say ("provided
+    below") and Anthropic's long-context guidance (document first, query
+    last). Breakpoints: ``lib/agents/model_factory.py``.
     """
-    return [
+    items: list[TResponseInputItem] = [
         {'role': 'user', 'content': paper_context},
-        {'role': 'user', 'content': task_text},
+        {'role': 'user', 'content': instructions},
     ]
+    if task_data is not None:
+        items.append({'role': 'user', 'content': task_data})
+    return items
 
 
 async def handle_pdf_parsing(task_id: int) -> None:
@@ -704,8 +713,8 @@ def patient_extraction_message(
     )
     return paper_input(
         format_paper_context(paper_markdown, gene_symbol),
-        f'Pedigree Description:\n{pedigree_descriptions_output}\n\n'
-        f'{PATIENT_EXTRACTION_AGENT_INSTRUCTIONS}',
+        PATIENT_EXTRACTION_AGENT_INSTRUCTIONS,
+        f'Pedigree Description:\n{pedigree_descriptions_output}',
     )
 
 
@@ -853,10 +862,10 @@ async def handle_patient_demographics(task_id: int) -> None:
         )
         message = paper_input(
             format_paper_context(paper_markdown, gene_symbol),
+            PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS,
             f'Patient JSON:\n{patient_data}\n\n'
             f'Proband Identifier:\n{proband_identifier}\n\n'
-            f'Pedigree Description:\n{pedigree_descriptions_output}\n\n'
-            f'{PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS}',
+            f'Pedigree Description:\n{pedigree_descriptions_output}',
         )
         agent = patient_demographics_agent
 
@@ -965,8 +974,8 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
         )
         message = paper_input(
             format_paper_context(paper_markdown, gene_symbol),
-            f'Family Structure: {json.dumps(family_info, indent=2, default=str)}\n\n'
-            f'{SEGREGATION_EVIDENCE_AGENT_INSTRUCTIONS}',
+            SEGREGATION_EVIDENCE_AGENT_INSTRUCTIONS,
+            f'Family Structure: {json.dumps(family_info, indent=2, default=str)}',
         )
         agent = segregation_evidence_extractor
 
@@ -1098,8 +1107,8 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
         )
         message = paper_input(
             format_paper_context(paper_markdown, gene_symbol),
-            f'Family Structure and Data: {json.dumps(family_info, indent=2, default=str)}\n\n'
-            f'{SEGREGATION_ANALYSIS_COMPUTED_AGENT_INSTRUCTIONS}',
+            SEGREGATION_ANALYSIS_COMPUTED_AGENT_INSTRUCTIONS,
+            f'Family Structure and Data: {json.dumps(family_info, indent=2, default=str)}',
         )
 
     result = await Runner.run(
@@ -1392,10 +1401,10 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
         )
         message = paper_input(
             format_paper_context(paper_markdown, gene_symbol),
+            PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS,
             f'Variants JSON:\n{structured_variants}\n\n'
             f'Patients JSON:\n{structured_patients}\n\n'
-            f'Pedigree Description:\n{pedigree_descriptions_output}\n\n'
-            f'{PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS}',
+            f'Pedigree Description:\n{pedigree_descriptions_output}',
         )
         agent = patient_variant_occurrence_agent
 
@@ -1509,11 +1518,11 @@ async def handle_compound_het_evaluation(task_id: int) -> None:
         )
         message = paper_input(
             format_paper_context(paper_markdown, gene_symbol),
+            COMPOUND_HET_AGENT_INSTRUCTIONS,
             f'Patient: {patient.identifier}\n\n'
             f'Pedigree Description:\n{pedigree_description}\n\n'
             f'Heterozygous Variants for This Patient:\n'
-            f'{json.dumps(variants_json, indent=2)}\n\n'
-            f'{COMPOUND_HET_AGENT_INSTRUCTIONS}',
+            f'{json.dumps(variants_json, indent=2)}',
         )
 
         agent_to_use = compound_het_agent
@@ -1615,8 +1624,8 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         )
         message = paper_input(
             format_paper_context(paper_markdown, gene_symbol),
-            f'Structured Patient JSON:\n{[patient_data]}\n\n'
-            f'{PATIENT_PHENOTYPE_LINKING_AGENT_INSTRUCTIONS}',
+            PATIENT_PHENOTYPE_LINKING_AGENT_INSTRUCTIONS,
+            f'Structured Patient JSON:\n{[patient_data]}',
         )
         agent = patient_phenotype_linking_agent
 
@@ -1858,9 +1867,8 @@ async def handle_mondo_linking(task_id: int) -> None:
             }
             message = paper_input(
                 format_paper_context(paper_markdown, target.gene_symbol),
-                f'MONDO linking target JSON:\n'
-                f'{json.dumps(target_payload, indent=2)}\n\n'
-                f'{MONDO_LINKING_AGENT_INSTRUCTIONS}',
+                MONDO_LINKING_AGENT_INSTRUCTIONS,
+                f'MONDO linking target JSON:\n{json.dumps(target_payload, indent=2)}',
             )
         result = await Runner.run(
             mondo_linking_agent,

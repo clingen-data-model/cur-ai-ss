@@ -92,24 +92,31 @@ def model_settings_for(name: str, *, effort: str | None = None) -> ModelSettings
     Blocker 1 in docs/anthropic-migration.md), so effort is gated on that
     rather than a hardcoded model-name list here.
 
-    Two breakpoints. Index 1 is the paper: every paper-bearing handler sends
-    the paper block as its own user message right after the system message the
-    SDK inserts at index 0 (``lib.tasks.handlers.paper_input``), so the entry
-    written there is the same bytes for every agent on that paper and every
-    later run reads it. Absolute position, not role: a thread that has
-    accumulated follow-ups has several user messages, and role targeting would
-    stamp them all. Index -1 is the last message, which is what makes a tool
-    loop's later turns, a repair turn and a same-session follow-up read the
-    thread so far instead of resending it. An agent with no paper has its one
-    message at both positions; litellm skips a message that already carries
-    cache_control, so that collapses to one breakpoint. No 'system' point:
-    every agent's instructions are the same ~120-char base prompt, far below
-    the minimum cacheable block, so it could never write anything.
+    Three breakpoints, one per shared block of the input that
+    ``lib.tasks.handlers.paper_input`` builds. Index 1 is the paper block,
+    right after the system message the SDK inserts at index 0: the same bytes
+    for every agent on that paper, so one write serves the whole pipeline.
+    Index 2 is the agent's instructions (plus the manual-output schema
+    directive): the same for every run of one agent on that paper, written
+    once by the first run (which the worker's fan-out gate makes happen
+    alone) and read by the rest. Index -1 is the message being extended: the
+    run's data on the first turn, then tool results, repair turns and
+    follow-ups. Absolute positions, not roles: a thread that has accumulated
+    follow-ups has several user messages, and role targeting would stamp
+    them all. An input with no data item has its instructions at both 2 and
+    -1 and an agent with no paper has one message at 1 and -1; litellm skips
+    a message already carrying cache_control, and logs and skips an index
+    past the end, so those collapse. No 'system' point: every agent's
+    instructions constant is the ~120-char base prompt, far below the
+    minimum cacheable block, so it could never write anything.
 
-    Before 2026-09-30 the points were 'system' and -1 with the paper inlined
+    History (docs/anthropic-migration.md, "Prompt caching, second pass"):
+    before 2026-09-30 the points were 'system' and -1 with the paper inlined
     into one message per call, so every run wrote a unique-prefix entry at
-    the 1h write price and nothing ever read one (see
-    docs/anthropic-migration.md, "Prompt caching, second pass").
+    the 1h write price and nothing ever read one. PR #334 split the paper
+    out (index 1); paper 80 then read 44% of a demographics call and 62% of
+    a phenotype call, the rest being the agent's constant text placed after
+    the run's data. This split moves that text before the data (index 2).
     """
     provider, bare = split_provider(name)
     if provider != 'anthropic':
@@ -117,6 +124,7 @@ def model_settings_for(name: str, *, effort: str | None = None) -> ModelSettings
     extra_args: dict = {
         'cache_control_injection_points': [
             {'location': 'message', 'index': 1, 'control': _CACHE_CONTROL},
+            {'location': 'message', 'index': 2, 'control': _CACHE_CONTROL},
             {'location': 'message', 'index': -1, 'control': _CACHE_CONTROL},
         ]
     }

@@ -80,19 +80,23 @@ def _strip_code_fence(text: str) -> str:
     return match.group(1).strip() if match else text
 
 
-def _append_to_last(message: AgentInput, text: str) -> AgentInput:
-    """Add `text` to the end of the task text: the string itself, or the last
-    item of a list input, leaving the paper message in front of it untouched
-    (it must stay byte-identical across agents to be a cache hit)."""
+def _append_to_instructions(message: AgentInput, text: str) -> AgentInput:
+    """Add `text` to the agent's instructions: the string itself, or the
+    instructions item of a list input built by `lib.tasks.handlers.paper_input`
+    (item 1; the data item after it, if any, is left alone, as is the paper
+    item before it). Both shared items must stay byte-identical across runs
+    to be prompt-cache hits, and the directive is the same for every run of
+    an agent, so it belongs with the instructions, not with the run's data."""
     if isinstance(message, str):
         return f'{message}\n\n{text}'
-    if not message:
-        raise ValueError('agent input must not be empty')
-    *head, last = message
-    content = last.get('content')  # type: ignore[union-attr]  # the input-item union
+    if len(message) < 2:
+        raise ValueError('a list input needs a paper item and an instructions item')
+    paper, instructions, *data = message
+    content = instructions.get('content')  # type: ignore[union-attr]  # the input-item union
     if not isinstance(content, str):
-        raise TypeError('the last input item must carry string content')
-    return [*head, {**last, 'content': f'{content}\n\n{text}'}]  # type: ignore[list-item]
+        raise TypeError('the instructions item must carry string content')
+    extended = {**instructions, 'content': f'{content}\n\n{text}'}
+    return [paper, extended, *data]  # type: ignore[list-item]
 
 
 async def run_with_manual_output(
@@ -115,7 +119,7 @@ async def run_with_manual_output(
     directive = _JSON_OUTPUT_DIRECTIVE.format(
         schema=json.dumps(output_type.model_json_schema(), indent=2)
     )
-    prompt = _append_to_last(message, directive)
+    prompt = _append_to_instructions(message, directive)
 
     result = await Runner.run(agent, prompt, **runner_kwargs)
     for attempt in range(1, max_attempts + 1):
