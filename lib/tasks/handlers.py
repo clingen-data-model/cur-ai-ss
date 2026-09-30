@@ -21,7 +21,11 @@ from lib.agents.hpo_linking_agent import (
 from lib.agents.hpo_linking_agent import (
     agent as hpo_linking_agent,
 )
-from lib.agents.manual_output import run_with_manual_output
+from lib.agents.manual_output import (
+    Check,
+    run_with_checked_output,
+    run_with_manual_output,
+)
 from lib.agents.mondo_linking_agent import (
     MONDO_LINKING_AGENT_INSTRUCTIONS,
 )
@@ -104,11 +108,19 @@ class RateLimitError(Exception):
 from lib.api.db import session_scope
 from lib.core.environment import env
 from lib.core.logging import setup_logging
+from lib.misc.pdf.anchors import (
+    AnchorKind,
+    block_texts,
+    load_anchors,
+    make_anchor_id,
+    paper_block_texts,
+    parse_anchor,
+)
 from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import (
+    document_anchored_md_path,
+    document_image_path,
     fulltext_md,
-    pdf_image_caption_path,
-    pdf_image_path,
     relevant_sections_md,
 )
 from lib.models import (
@@ -141,7 +153,7 @@ from lib.models.converters import (
     segregation_evidence_to_db,
     variant_to_db,
 )
-from lib.models.evidence_block import ReasoningBlock
+from lib.models.evidence_block import ReasoningBlock, verify_citations
 from lib.models.mondo import (
     MondoDiseaseScope,
     MondoLinkingTarget,
@@ -452,9 +464,10 @@ async def handle_paper_metadata(task_id: int) -> None:
         message = f'{paper_context}\n\n{PAPER_EXTRACTION_AGENT_INSTRUCTIONS}'
         agent = paper_extraction_agent
 
-    result = await Runner.run(
+    result = await run_with_checked_output(
         agent,
         message,
+        citation_check(paper_id),
         session=agent_sess,
     )
     log_run_metrics('PAPER_METADATA', result)
@@ -507,6 +520,7 @@ async def handle_variant_extraction(task_id: int) -> None:
         agent,
         message,
         VariantExtractionOutput,
+        check=citation_check(paper_id),
         session=agent_sess,
     )
     log_run_metrics('VARIANT_EXTRACTION', result)
@@ -540,24 +554,30 @@ async def handle_pedigree_description(task_id: int) -> None:
     # List figures by id + caption. The agent picks a pedigree from the captions,
     # then the analyze_pedigree_image tool loads the image bytes on demand — so we
     # never put image URLs (or data URLs) into the prompt text.
+    #
+    # Figures come from the anchored document, so image_id is the Docling
+    # picture index: the N of the figure-N id the other agents cite, and the N
+    # of documents/{id}/{main,supplement}/images/N.png the tool loads.
     for is_supplement, label in ((False, 'Pipeline'), (True, 'Supplement')):
-        image_id = 0
-        while True:
-            pdf_image = pdf_image_path(paper_id, image_id, supplement=is_supplement)
-            if not pdf_image.exists():
-                break
-            caption_path = pdf_image_caption_path(
-                paper_id, image_id, supplement=is_supplement
+        anchored = document_anchored_md_path(paper_id, supplement=is_supplement)
+        if not anchored.exists():
+            continue
+        captions = block_texts(anchored.read_text())
+        for anchor in load_anchors(paper_id, supplement=is_supplement):
+            parsed_id = parse_anchor(anchor.id)
+            if parsed_id is None or parsed_id.kind != AnchorKind.FIGURE:
+                continue
+            image = document_image_path(
+                paper_id, parsed_id.index, supplement=is_supplement
             )
-            caption_text = (
-                caption_path.read_text() if caption_path.exists() else 'No caption'
-            )
-            logger.info(f'Listing {label.lower()} figure {image_id} from {pdf_image}')
-            combined_text += f'[{label} Figure {image_id}]\n'
-            combined_text += f'image_id: {image_id}\n'
+            if not image.exists():
+                continue
+            caption_text = captions.get(anchor.id) or 'No caption'
+            logger.info(f'Listing {label.lower()} figure {anchor.id} from {image}')
+            combined_text += f'[{label} Figure {anchor.id}]\n'
+            combined_text += f'image_id: {parsed_id.index}\n'
             combined_text += f'is_supplement: {is_supplement}\n'
             combined_text += f'Caption: {caption_text}\n\n'
-            image_id += 1
 
     agent_sess = agent_session(task_id)
 
@@ -602,6 +622,35 @@ async def handle_pedigree_description(task_id: int) -> None:
             session.add(pedigree_to_db(paper_id, output))
 
 
+def pedigree_input(pedigree_row: PedigreeDB | None) -> dict | None:
+    """The pedigree as the agents see it: the figure anchor to cite, and the text.
+
+    ``PedigreeDB.image_id`` is the Docling picture index, the same N as the
+    ``figure-N`` id printed in the anchored text, so the anchor is exact.
+    """
+    if pedigree_row is None:
+        return None
+    return {
+        'anchor': make_anchor_id(
+            AnchorKind.FIGURE, pedigree_row.image_id, pedigree_row.is_supplement
+        ),
+        'description': pedigree_row.description,
+    }
+
+
+def citation_check(paper_id: int) -> Check:
+    """The rule the output schema cannot express: every citation names a block
+    the paper has and every quote is found in it.
+
+    Handed to the repair loop (``run_with_manual_output`` / ``run_with_checked_output``)
+    so a bad citation is sent back to the model with the field, the anchor and
+    what was wrong, instead of being stored. The block texts are read once per
+    run, not per attempt.
+    """
+    texts = paper_block_texts(paper_id)
+    return lambda output: verify_citations(output, texts)
+
+
 def patient_extraction_message(session: Session, paper_id: int) -> str:
     """The initial message the patient extraction agent gets for a paper.
 
@@ -617,14 +666,7 @@ def patient_extraction_message(session: Session, paper_id: int) -> str:
     pedigree_row = (
         session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).first()
     )
-    pedigree_descriptions_output = (
-        {
-            'image_id': pedigree_row.image_id,
-            'description': pedigree_row.description,
-        }
-        if pedigree_row
-        else None
-    )
+    pedigree_descriptions_output = pedigree_input(pedigree_row)
 
     paper_markdown = relevant_sections_md(
         paper_id, supplement_format, section_classifications
@@ -669,6 +711,7 @@ async def handle_patient_extraction(task_id: int) -> None:
         agent,
         message,
         PatientExtractionOutput,
+        check=citation_check(paper_id),
         session=agent_sess,
     )
     log_run_metrics('PATIENT_EXTRACTION', result)
@@ -763,14 +806,7 @@ async def handle_patient_demographics(task_id: int) -> None:
         pedigree_row = (
             session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).first()
         )
-        pedigree_descriptions_output = (
-            {
-                'image_id': pedigree_row.image_id,
-                'description': pedigree_row.description,
-            }
-            if pedigree_row
-            else None
-        )
+        pedigree_descriptions_output = pedigree_input(pedigree_row)
 
     agent_sess = agent_session(task_id)
 
@@ -798,6 +834,7 @@ async def handle_patient_demographics(task_id: int) -> None:
         agent,
         message,
         PatientDemographics,
+        check=citation_check(paper_id),
         session=agent_sess,
     )
     log_run_metrics('PATIENT_DEMOGRAPHICS', result)
@@ -903,9 +940,10 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
         )
         agent = segregation_evidence_extractor
 
-    result = await Runner.run(
+    result = await run_with_checked_output(
         agent,
         message,
+        citation_check(paper_id),
         session=agent_sess,
     )
     log_run_metrics('SEGREGATION_EVIDENCE_EXTRACTION', result)
@@ -1335,6 +1373,7 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
         agent,
         message,
         PatientVariantOccurrenceOutput,
+        check=citation_check(paper_id),
         session=agent_sess,
     )
     log_run_metrics('PATIENT_VARIANT_OCCURRENCE', result)
@@ -1552,9 +1591,10 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         )
         agent = patient_phenotype_linking_agent
 
-    result = await Runner.run(
+    result = await run_with_checked_output(
         agent,
         message,
+        citation_check(paper_id),
         session=agent_sess,
     )
     log_run_metrics('PHENOTYPE_EXTRACTION', result)

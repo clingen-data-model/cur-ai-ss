@@ -3,6 +3,7 @@ from agents.tool_context import ToolContext
 
 from lib.agents import pedigree_describer_agent as pedigree
 from lib.agents.pedigree_describer_agent import NOT_A_PEDIGREE
+from lib.misc.pdf.paths import document_image_path
 
 
 def test_usable_description_is_returned(monkeypatch):
@@ -86,12 +87,15 @@ async def test_a_decline_still_answers_not_a_pedigree(monkeypatch):
 
 
 async def test_capture_records_which_namespace_a_found_pedigree_came_from(monkeypatch):
-    """image_id is namespaced separately per supplement/main (pdf_image_path),
-    so a real find must also record is_supplement -- otherwise the caller
-    can't know which file image_id actually names."""
+    """image_id is the Docling picture index, namespaced separately per
+    supplement/main (document_image_path), so a real find must also record
+    is_supplement -- otherwise the caller can't know which file image_id names."""
     monkeypatch.setattr(pedigree, 'vlm_describe', lambda *_: 'III-2 affected male')
+    loaded: list = []
     monkeypatch.setattr(
-        pedigree, 'image_to_data_url', lambda *_: 'data:image/png;base64,AAA'
+        pedigree,
+        'image_to_data_url',
+        lambda path: loaded.append(path) or 'data:image/png;base64,AAA',
     )
     agent, capture = pedigree.pedigree_describer_agent_for_paper(paper_id=1)
     (tool,) = agent.tools
@@ -103,3 +107,5 @@ async def test_capture_records_which_namespace_a_found_pedigree_came_from(monkey
     assert result == 'III-2 affected male'
     assert capture.image_id == 2
     assert capture.is_supplement is True
+    # The file is the anchored document's images/N.png, the same N as figure-N.
+    assert loaded == [document_image_path(1, 2, supplement=True)]

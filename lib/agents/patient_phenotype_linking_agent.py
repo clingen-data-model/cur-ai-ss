@@ -36,9 +36,10 @@ For every valid phenotype extraction, return:
 - concept (EvidenceBlock[str]):
   - value: the phenotype text
   - reasoning: explanation of why this is a phenotype and how it links to the patient
-  - quote: verbatim quote from the paper (required unless value is null)
-  - table_id: if evidence comes from a table (optional)
-  At least one of quote or table_id must be provided.
+  - citations: the block(s) mentioning the phenotype for this patient, each as
+    {"anchor", "quote"}: the paragraph with the sentence as the quote, or the table
+    row with the cell as the quote (see CORE EXTRACTION RULES). At least one is
+    required unless value is null.
 - negated
 - uncertain
 - family_history
@@ -122,7 +123,7 @@ PHENOTYPE FIELD DEFINITIONS
 1. **concept** (EvidenceBlock[str]):
    - **value**: The exact phenotype text (observable trait, sign, or symptom).
    - **reasoning**: Explain WHY this is a phenotype and HOW you determined which patient it belongs to.
-   - **quote**, **table_id**, **image_id**: Evidence sources (see CORE EXTRACTION RULES below).
+   - **citations**: Evidence sources, anchor + quote (see CORE EXTRACTION RULES below).
 
 2. **negated**: true if the text explicitly states the patient does NOT have the phenotype
    - Example: "no tremor was observed"
@@ -267,39 +268,39 @@ Avoid returning redundant phenotypes for the same patient.
 SPLITTING MULTIPLE PHENOTYPES FROM A SINGLE QUOTE
 ---------------------------------------------------
 
-When a single quote contains multiple distinct phenotypes,
+When a single sentence contains multiple distinct phenotypes,
 you MUST split them into individual extraction entries.
 
 DO NOT combine multiple phenotypes into a single list.
 
 Example:
 
-Quote: "The patient presented with tremor, seizures, and developmental delay."
+[paragraph-31] "The patient presented with tremor, seizures, and developmental delay."
 
 DO NOT return:
 {
   "value": ["tremor", "seizures", "developmental delay"],  ❌ WRONG
-  "quote": "The patient presented with tremor, seizures, and developmental delay."
+  "citations": [{"anchor": "paragraph-31", "quote": "tremor, seizures, and developmental delay"}]
 }
 
 DO return THREE separate entries:
 [
   {
     "value": "tremor",
-    "quote": "The patient presented with tremor, seizures, and developmental delay."
+    "citations": [{"anchor": "paragraph-31", "quote": "presented with tremor"}]
   },
   {
     "value": "seizures",
-    "quote": "The patient presented with tremor, seizures, and developmental delay."
+    "citations": [{"anchor": "paragraph-31", "quote": "seizures"}]
   },
   {
     "value": "developmental delay",
-    "quote": "The patient presented with tremor, seizures, and developmental delay."
+    "citations": [{"anchor": "paragraph-31", "quote": "developmental delay"}]
   }
 ]
 
-Each phenotype gets its own entry with the SAME quote as the source,
-but individual value and reasoning fields.
+Each phenotype gets its own entry citing the same block, with the span that
+names that phenotype as its quote, and individual value and reasoning fields.
 
 ---------------------------------------------------
 GENETIC DISEASE RELEVANCE FILTER
@@ -326,8 +327,8 @@ For each extracted phenotype:
 - Confirm all boolean fields are true/false (not "yes"/"no" or strings)
 - Confirm concept.value is a SINGLE phenotype string (not a list)
 - Confirm concept.reasoning explains the phenotype and patient linkage
-- Follow CORE EXTRACTION RULES for evidence validation (quote verbatim, table_id for tables, etc.)
-- If multiple phenotypes are mentioned in a quote, split them into separate entries
+- Follow CORE EXTRACTION RULES for evidence validation (anchor copied as printed, quote verbatim from that block)
+- If multiple phenotypes are mentioned in one sentence, split them into separate entries
 - If any check fails, adjust or skip the extraction
 
 ---------------------------------------------------
@@ -343,8 +344,7 @@ Example structure:
     "concept": {
       "value": "developmental delay",
       "reasoning": "The patient is described as having delayed milestones in the clinical summary.",
-      "quote": "The patient showed global developmental delay",
-      "table_id": null
+      "citations": [{"anchor": "paragraph-27", "quote": "global developmental delay"}]
     },
     "negated": false,
     "uncertain": false,
@@ -359,8 +359,7 @@ Example structure:
     "concept": {
       "value": "seizures",
       "reasoning": "Seizures are explicitly mentioned as a key clinical feature of this patient.",
-      "quote": "The patient experienced recurrent seizures starting in early childhood",
-      "table_id": null
+      "citations": [{"anchor": "table-2-row-4", "quote": "recurrent seizures"}]
     },
     "negated": false,
     "uncertain": false,
@@ -373,14 +372,14 @@ Example structure:
 ]
 
 Ensure:
-- All required fields are present (patient_id, concept with value/reasoning and quote or table_id)
+- All required fields are present (patient_id, concept with value/reasoning and at least one citation)
 - All optional fields are either provided if mentioned in text, or null/omitted
 - Each phenotype has the patient_id of the provided patient
 - concept.value is a SINGLE phenotype string (never a list)
-- concept.quote contains actual text from the paper (not paraphrased)
+- Every citation quote is actual text from the cited block (not paraphrased)
 - concept.reasoning explains the extraction and why it applies to this patient
 - Each distinct phenotype is extracted as a separate entry (no lists in concept.value)
-- image_id provides pedigree descriptions only and should not be used here
+- The pedigree figure is not a source of phenotypes; do not cite it here
 """
 
 PATIENT_PHENOTYPE_LINKING_AGENT_INSTRUCTIONS = (

@@ -16,7 +16,7 @@ Task: Identify every individual the paper identifies one by one -- in its text, 
 Note: This agent extracts ONLY patient identity (identifier + proband status) and family structure. Per-patient demographic and clinical details (sex, ages, country of origin, race, ethnicity, affected status, carrier status, relationship to proband, twin type) are extracted separately by a downstream patient demographics agent — do NOT extract them here.
 
 Pedigree Input (if present):
-- image_id: integer index of the pedigree image
+- anchor: the id of the pedigree figure in the text (e.g. figure-2, or supp-figure-0 for a supplement figure); cite it for anything taken from the description
 - description: summarizes pedigree structure including relationships, affected status, and any genotype/segregation information visible in the figure
 - If null, there was no pedigree image included in the paper
 
@@ -43,10 +43,8 @@ Fields to extract (for each patient):
 Each field is an EvidenceBlock containing:
   - value: the extracted data
   - reasoning: explanation of how the value was determined
-  - quote: verbatim quote from text (when available)
-  - table_id: if derived from a table
-  - image_id: if derived from a figure/pedigree
-  At least one of quote, table_id, or image_id is required.
+  - citations: the blocks of the text the value rests on, each as {{"anchor", "quote"}}
+    (see CORE EXTRACTION RULES); at least one is required for a real value.
 
 - identifier (EvidenceBlock[string]):
   - A clear textual identifier (e.g., Patient 1, II-2, proband, index case, sibling, mother).
@@ -114,9 +112,9 @@ not extractable, so the count is not a number to reach and falling short of it
 is not an error. Extract the individuals the paper identifies, however many that
 turns out to be.
 
-A patient listed only in a table is still a patient. Its row or column is the
-evidence, cited with table_id, and having no narrative paragraph is not a reason
-to skip it. One patient may occupy several rows, one per variant reported for
+A patient listed only in a table is still a patient. Its row is the evidence
+(cite the row's id from the anchor column, with the identifier cell as the
+quote), and having no narrative paragraph is not a reason to skip it. One patient may occupy several rows, one per variant reported for
 them; that is one patient, not several.
 
 PEDIGREES:
@@ -125,7 +123,7 @@ A family paper holds its full series in the pedigree, while the narrative and
 tables describe only some members in detail. The pedigree description below
 lists every individual the figure shows. Extract every labeled individual in it,
 affected or not: the symbol's affected status is a fact about that person, and
-image_id is the evidence. Skip individuals the description could only place by
+the pedigree's figure anchor (cited with an empty quote) is the evidence. Skip individuals the description could only place by
 position ("unlabeled spouse of II-1"). The narrative's count of affected members
 is a hint, not a target, exactly as for tables.
 
@@ -181,9 +179,9 @@ Output format:
   - patient_identifiers: list of EvidenceBlocks[str] where:
     - value: the patient identifier (matching the patient identifier values extracted above)
     - reasoning: explanation of how the patient was linked to this family (e.g., "explicitly listed in Figure 2 pedigree", "described as proband's sibling in text", "appears in Family 1 label")
-    - quote: verbatim quote if available
-    - image_id: if derived from a pedigree figure
-    - table_id: if derived from a table
+    - citations: the block(s) that place the patient in the family -- the pedigree
+      figure anchor (no quote), a paragraph with the relational phrase as the quote,
+      or a table row with the family cell as the quote
 - The families list must contain at least one family.
 - The union of all patient identifier values across all families must equal the complete set
   of patient identifiers extracted above.

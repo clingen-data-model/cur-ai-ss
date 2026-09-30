@@ -24,11 +24,10 @@ Fields to extract:
 Each field (except the *_unit fields) is an EvidenceBlock containing:
   - value: the extracted data
   - reasoning: explanation of how the value was determined
-  - quote: verbatim quote from text (when available)
-  - table_id: if derived from a table
-  - image_id: if derived from a figure/pedigree
-  At least one of quote, table_id, or image_id is required (unless the value is
-  Unknown/None).
+  - citations: the blocks of the text the value rests on, each as {"anchor", "quote"}
+    (see CORE EXTRACTION RULES); at least one is required unless the value is
+    Unknown/None. A value read from the pedigree description cites the pedigree's
+    figure anchor with an empty quote.
 
 - sex (EvidenceBlock[enum: Male, Female, Intersex, MTF/Transwoman/Transgender Female, FTM/Transman/Transgender Male, Ambiguous/Unable to Determine, Other, Unknown]):
   - Extract sex/gender as explicitly stated in text or pedigree
@@ -67,7 +66,8 @@ Each field (except the *_unit fields) is an EvidenceBlock containing:
     (e.g., parent of affected child, sibling of affected individual with affected parent).
     Do NOT mark as True if genotyping confirms the variant; only for pedigree-inferred carriers.
   - False: not an obligate carrier (either directly genotyped, affected, or not in obligate position).
-  - Use pedigree description and explicit carrier statements in text as evidence.
+  - Use the pedigree description (cite its figure anchor) and explicit carrier
+    statements in text as evidence.
 
 - relationship_to_proband (EvidenceBlock[enum: Proband, Parent, Sibling, Half-Sibling, Child, Other, Unknown]):
   - Proband: this patient IS the proband (i.e., this patient's identifier equals the provided Proband Identifier)
@@ -80,11 +80,10 @@ Each field (except the *_unit fields) is an EvidenceBlock containing:
   - Determine relative to the provided Proband Identifier, using text descriptions and pedigree structure.
   - HARD RULE: if this patient's identifier equals the provided Proband Identifier, relationship_to_proband MUST be Proband (this keeps it consistent with the patient's proband status determined upstream).
   - Evidence for the Proband case: this value follows from the HARD RULE above,
-    not from new text, so there is no fresh quote to give. Cite whatever
-    quote/table_id/image_id identifies this patient as the proband/index case
-    elsewhere in the paper instead of leaving quote, table_id, and image_id
-    all empty -- an evidence block with a concrete value and no source is
-    invalid regardless of why the value was determined.
+    not from new text, so there is no fresh quote to give. Cite whatever block
+    identifies this patient as the proband/index case elsewhere in the paper
+    instead of leaving citations empty -- an evidence block with a concrete
+    value and no citation is invalid regardless of why the value was determined.
 
 - twin_type (EvidenceBlock[enum: Monozygotic, Dizygotic, Unknown] or null):
   - Monozygotic: identical twins (count as 1 segregation)

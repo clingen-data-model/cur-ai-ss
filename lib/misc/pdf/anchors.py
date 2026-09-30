@@ -75,6 +75,8 @@ __all__ = [  # the id grammar lives in anchor_ids.py; re-exported here unchanged
     'boxes_for_anchor',
     'build_anchored',
     'load_anchors',
+    'make_anchor_id',
+    'paper_block_texts',
     'parse_anchor',
     'write_anchored',
 ]
@@ -158,7 +160,7 @@ def _docling_index(item: DocItem) -> int:
     return int(item.self_ref.rsplit('/', 1)[1])
 
 
-def _anchor_id(kind: AnchorKind, index: int, supplement: bool) -> str:
+def make_anchor_id(kind: AnchorKind, index: int, supplement: bool) -> str:
     """Format an id: (TABLE, 3, True) -> 'supp-table-3'."""
     prefix = SUPPLEMENT_PREFIX if supplement else ''
     return f'{prefix}{kind}-{index}'
@@ -447,7 +449,7 @@ def _table_text(
 ) -> tuple[str, Anchor]:
     """One table -> its anchored text ('[table-N] caption' + tagged rows) and Anchor."""
     index = _docling_index(table)
-    anchor_id = _anchor_id(AnchorKind.TABLE, index, supplement)
+    anchor_id = make_anchor_id(AnchorKind.TABLE, index, supplement)
     # Text: the vision rebuild if there is one, else Docling's own pipe table.
     vision_path = document_table_vision_markdown_path(paper_id, index, supplement)
     vision_corrected = vision_path.exists()
@@ -486,7 +488,7 @@ def _figure_text(
 ) -> tuple[str, Anchor]:
     """One picture -> '[figure-N] ![caption](images/N.png)' and its Anchor."""
     index = _docling_index(picture)
-    anchor_id = _anchor_id(AnchorKind.FIGURE, index, supplement)
+    anchor_id = make_anchor_id(AnchorKind.FIGURE, index, supplement)
     caption = serializer.serialize_captions(item=picture).text.strip()
     image_path = document_image_path(paper_id, index, supplement)
     if image_path.exists():
@@ -611,7 +613,7 @@ def build_anchored(
             # A whole list is one part; tag each item as its own paragraph.
             lines = []
             for item in items:
-                anchor_id = _anchor_id(
+                anchor_id = make_anchor_id(
                     AnchorKind.PARAGRAPH, _docling_index(item), supplement
                 )
                 lines.append(
@@ -635,7 +637,7 @@ def build_anchored(
                     text = serializer.serialize(item=item).text.strip()
                     if not text:
                         continue
-                    anchor_id = _anchor_id(
+                    anchor_id = make_anchor_id(
                         AnchorKind.PARAGRAPH, _docling_index(item), supplement
                     )
                     chunks.append(_tagged(anchor_id, text))
@@ -646,7 +648,7 @@ def build_anchored(
             # Ordinary paragraph (also an orphan caption whose table/figure was
             # dropped). An inline group merges several TextItems into one part:
             # the id is the first item's, the boxes are all of theirs.
-            anchor_id = _anchor_id(
+            anchor_id = make_anchor_id(
                 AnchorKind.PARAGRAPH, _docling_index(items[0]), supplement
             )
             chunks.append(_tagged(anchor_id, part.text.strip()))
@@ -677,7 +679,7 @@ _UNRECOVERED_PREFIX = '**[EXTRACTION WARNING'
 def block_texts(markdown: str) -> dict[str, str]:
     """Map every id in an ``anchored.md`` to the text it tags.
 
-    The reverse of ``build_anchored``: this is what ``prune_citations`` checks an
+    The reverse of ``build_anchored``: this is what ``verify_citations`` checks an
     agent's quotes against, and its keys are the set of ids that exist. A line
     state machine over the layout the builders produce (split on ``'\\n'`` only,
     as ``_with_anchor_column`` does, so a ``\\r`` inside a cell stays in the row):
@@ -751,6 +753,19 @@ def block_texts(markdown: str) -> dict[str, str]:
     return texts
 
 
+def paper_block_texts(paper_id: int) -> dict[str, str]:
+    """Every id in a paper's anchored documents -> its text, main and supplement merged.
+
+    The keys are exactly the ids that exist for the paper (``supp-`` ones
+    included), which is what ``verify_citations`` checks an agent's output against.
+    """
+    texts = block_texts(document_anchored_md_path(paper_id).read_text())
+    supplement = document_anchored_md_path(paper_id, supplement=True)
+    if supplement.exists():
+        texts.update(block_texts(supplement.read_text()))
+    return texts
+
+
 # --- building from plain markdown (XLSX supplements have no Docling document) --
 
 
@@ -764,7 +779,7 @@ def anchored_from_markdown(
 
     def next_id(kind: AnchorKind) -> str:
         """Sequential ids per kind -- there is no Docling index to borrow here."""
-        anchor_id = _anchor_id(kind, counters[kind], supplement)
+        anchor_id = make_anchor_id(kind, counters[kind], supplement)
         counters[kind] += 1
         return anchor_id
 

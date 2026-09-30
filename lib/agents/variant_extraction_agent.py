@@ -14,7 +14,7 @@ CONTEXT:
 
 Task:
 Extract all explicitly mentioned genetic variants associated with the target gene from the text.
-Each extracted value MUST be wrapped in an EvidenceBlock (value, quote, table_id, image_id, reasoning).
+Each extracted value MUST be wrapped in an EvidenceBlock (value, reasoning, citations -- see CORE EXTRACTION RULES).
 
 Key Variant Extraction Principles:
 - Extract ONLY variants explicitly stated in the provided text.
@@ -150,8 +150,8 @@ For the "variant" field (overall variant identification):
 - value → the variant as described in the paper (e.g., "c.1799T>A", "p.Val600Glu", "rs80357906")
   - Use the most concise, canonical form mentioned in the paper
   - null only if no clear variant identifier is present
-- quote → verbatim text from the paper that identifies this variant (required if value is non-null)
-- table_id/image_id → optional table or figure number if the variant is presented in a table or pedigree
+- citations → the block(s) that identify this variant (required if value is non-null): the
+  paragraph with the naming phrase as the quote, or the table row with the variant cell as the quote
 - reasoning → explanation of how this variant was identified (which section, context, data type, etc.)
 
 ------------------------------
@@ -164,8 +164,8 @@ FALSE criteria: Variant mentioned without functional studies; purely computation
 
 For the "functional_evidence" field:
 - value → boolean indicating whether functional validation is present (true/false)
-- quote → verbatim text describing the functional evidence (required if value is true)
-- table_id/image_id → optional table or figure number if functional data is presented in a table or figure
+- citations → the block(s) describing the functional evidence (required if value is true): a
+  paragraph with the describing sentence as the quote, a table row, or a figure (no quote)
 - reasoning → explanation of how functional evidence was determined
 
 ------------------------------
@@ -192,8 +192,8 @@ Rules:
 - Determine focus strictly from how the paper treats the variant.
 
 Evidence:
-- quote → text or table cell demonstrating how the paper treats the variant
-- table_id/image_id → if evidence comes from table/figure
+- citations → the block(s) demonstrating how the paper treats the variant, with the
+  phrase or table cell as the quote
 - reasoning → explain why the variant is considered primary or secondary
 
 ------------------------------
@@ -204,8 +204,8 @@ Return JSON array of variants:
   "variants": [
     {
       "gene": "BRAF",
-      "transcript": { "value": "NM_004333.5", "quote": "...", "reasoning": "..." },
-      "hgvs_c": { "value": "c.1799T>A", "quote": "...", "reasoning": "..." },
+      "transcript": { "value": "NM_004333.5", "reasoning": "...", "citations": [{ "anchor": "paragraph-12", "quote": "NM_004333.5" }] },
+      "hgvs_c": { "value": "c.1799T>A", "reasoning": "...", "citations": [{ "anchor": "table-1-row-3", "quote": "c.1799T>A" }] },
       ...
     }
   ]
@@ -213,8 +213,8 @@ Return JSON array of variants:
 
 Output rules:
 - Return array of variants (empty array [] if none found)
-- All fields use EvidenceBlock format: {"value": <value or null>, "quote": "...", "reasoning": "..."}
-- Alternative to "quote": use "table_id" or "image_id" if evidence comes from table/image
+- All fields use EvidenceBlock format: {"value": <value or null>, "reasoning": "...", "citations": [{"anchor": "...", "quote": "..."}]}
+- A figure is cited by its figure-N anchor with an empty quote
 - Null values are acceptable for any value field
 - Include all 15 fields: gene, transcript, protein_accession, genomic_accession, lrg_accession, gene_accession, genomic_coordinates, genome_build, rsid, caid, variant, hgvs_c, hgvs_p, hgvs_g, variant_type, functional_evidence
 - Each field independently justified by its own evidence

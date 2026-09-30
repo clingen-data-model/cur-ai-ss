@@ -84,6 +84,31 @@ class MyOutput(BaseModel):
     nested: NestedModel = Field(description="Complex field")
 ```
 
+### Evidence and citations
+
+Any extracted value a curator will check goes in an `EvidenceBlock` (`lib/models/evidence_block.py`):
+`value`, `reasoning`, and `citations`, a list of `{anchor, quote}`. The text agents read is
+the anchored document (`lib/misc/pdf/anchors.py`): every paragraph is prefixed
+`[paragraph-N]`, every table `[table-N]` with an `anchor` column of `table-N-row-R` ids, every
+figure `[figure-N]`; supplement ids start with `supp-`. An agent cites by copying an id as
+printed and giving the shortest verbatim span of that block that supports the value (a
+table cell's text for a row citation, nothing for a figure). The block-level `quote`,
+`table_id`, `image_id` and `is_supplement` fields are legacy and stay empty on new evidence.
+
+Append `CORE_EXTRACTION_SPEC` (`lib/agents/core_extraction_rules.py`) to any prompt that
+produces evidence blocks; it states the contract once. The schema cannot check that a
+cited id exists or that a quote is really in its block, so the handler passes
+`citation_check(paper_id)` (`lib/tasks/handlers.py`) to the runner: `verify_citations`
+(`lib/models/evidence_block.py`) raises with one line per bad citation, and the runner
+sends that message back to the model as a repair turn in the same session, up to three
+attempts, before the task fails. Nothing with unverified evidence is stored.
+
+An output model that embeds many evidence blocks can exceed Anthropic's limit on
+union/nullable schema nodes; such agents run through `run_with_manual_output`
+(`lib/agents/manual_output.py`), which embeds the schema in the prompt and validates the
+reply client-side, instead of passing `output_type` to the runner. Native-schema agents
+get the same repair loop from `run_with_checked_output` in the same module.
+
 ## Calling an Agent
 
 ```python

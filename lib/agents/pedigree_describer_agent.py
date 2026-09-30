@@ -7,16 +7,18 @@ from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.model_factory import extraction_model, extraction_model_settings
 from lib.agents.vision import vlm_describe
 from lib.misc.images import image_to_data_url
-from lib.misc.pdf.paths import pdf_image_path
+from lib.misc.pdf.paths import document_image_path
 
 
 # --- Output schema ---
 class PedigreeExtractionOutput(BaseModel):
     found: bool
+    # The Docling picture index: the N of the figure-N anchor the other agents
+    # cite and of documents/{id}/{main,supplement}/images/N.png.
     image_id: Optional[int] = None
     description: Optional[str] = None
-    # image_id is namespaced separately per supplement/main (see pdf_image_path),
-    # so this is required to resolve which file image_id actually names.
+    # image_id is namespaced separately per supplement/main (see
+    # document_image_path), so this is required to resolve which file it names.
     is_supplement: bool = False
 
 
@@ -82,7 +84,9 @@ def _analyze_image_url(image_url: str) -> str:
 
 # --- Agent instructions ---
 PEDIGREE_EXTRACTION_INSTRUCTIONS = """
-INPUT: A list of figures, each with an image_id, whether it is a supplement figure, and a caption.
+INPUT: A list of figures, each with its figure id as printed in the paper text
+(figure-N or supp-figure-N), the image_id N to pass to the tool, whether it is a
+supplement figure, and a caption.
 
 Task Overview
 -------------
@@ -140,7 +144,7 @@ def pedigree_describer_agent_for_paper(
         inheritance patterns if the image is a pedigree, or the literal string
         NOT_A_PEDIGREE if it is not.
         """
-        image_path = pdf_image_path(paper_id, image_id, supplement=is_supplement)
+        image_path = document_image_path(paper_id, image_id, supplement=is_supplement)
         description = _analyze_image_url(image_to_data_url(image_path))
         if description.strip() != NOT_A_PEDIGREE:
             capture.record(image_id, is_supplement, description)

@@ -262,59 +262,54 @@ def raw_md(paper_id: int, supplement: bool = False) -> str:
     return apply_table_corrections(paper_id, path.read_text(), supplement=supplement)
 
 
+def _supplement_block(paper_id: int, supplement_format: 'FileFormat | None') -> str:
+    """The supplement's anchored text under the heading agents are told marks it.
+
+    ``core_extraction_rules.py`` names this heading, so it must be emitted exactly.
+    Empty string when the paper has no supplement.
+    """
+    path = document_anchored_md_path(paper_id, supplement=True)
+    if not path.exists():
+        return ''
+    header = SUPPLEMENTARY_MATERIAL_HEADER
+    if supplement_format:
+        header += f' ({supplement_format.value.upper()})'
+    return '\n\n---\n\n' + header + '\n\n' + path.read_text()
+
+
 def fulltext_md(paper_id: int, supplement_format: 'FileFormat | None' = None) -> str:
-    main_md = raw_md(paper_id)
-    supplement_md = pdf_markdown_path(paper_id, supplement=True)
-    if supplement_md.exists():
-        supplement_header = SUPPLEMENTARY_MATERIAL_HEADER
-        if supplement_format:
-            supplement_header += f' ({supplement_format.value.upper()})'
-        return (
-            main_md
-            + '\n\n---\n\n'
-            + supplement_header
-            + '\n\n'
-            + raw_md(paper_id, supplement=True)
-        )
-    return main_md
+    """The text agents read: the anchored main paper, then the supplement if any.
+
+    ``anchored.md`` (see ``lib.misc.pdf.anchors``) is written after table
+    correction, so it already carries the vision-rebuilt tables and the
+    unrecovered-table marker; nothing is applied at read time. ``raw.md`` is a
+    debugging artifact now and the agents never see it.
+    """
+    main = document_anchored_md_path(paper_id).read_text()
+    return main + _supplement_block(paper_id, supplement_format)
 
 
-def relevant_sections_md(
-    paper_id: int,
-    supplement_format: 'FileFormat | None' = None,
-    section_classifications: dict | None = None,
-) -> str:
-    """Return paper markdown with irrelevant sections removed.
+def skip_irrelevant_sections(markdown: str, section_classifications: dict) -> str:
+    """Drop the sections the classifier judged irrelevant.
 
-    Falls back to fulltext_md if section classification has not been run yet.
-    Splices directly from raw.md: when a classified irrelevant section header is
-    encountered, lines are skipped until the next heading that is not.
+    When a heading the classifier marked irrelevant is encountered, lines are
+    skipped until the next heading. Only ``#``-lines are headings; the
+    ``[paragraph-N]`` / ``[table-N]`` tags of an anchored document are ordinary
+    lines and travel with their section.
 
     A heading the classifier never named ends the skip rather than continuing it.
     The classifier's job is to name the sections worth dropping, so a heading it
     did not name is not one it judged irrelevant, and inheriting the previous
     verdict would be this function deciding that on its behalf.
-
-    Args:
-        paper_id: ID of the paper
-        supplement_format: Format of supplement if present
-        section_classifications: Classification data (from paper.section_classifications).
-                                If not provided, returns fulltext.
     """
-    # If no classifications provided, return fulltext
-    if section_classifications is None:
-        return fulltext_md(paper_id, supplement_format)
-
     classified: dict[str, bool] = {
         s['header'].lower(): s.get('relevant', True)
         for s in section_classifications.get('sections', [])
     }
 
-    main_md = raw_md(paper_id)
-    lines = main_md.splitlines(keepends=True)
     result_lines: list[str] = []
     skip = False
-    for line in lines:
+    for line in markdown.splitlines(keepends=True):
         heading_match = re.match(r'^#{1,3} (.+)', line.rstrip())
         if heading_match:
             header_text = heading_match.group(1).strip().lower()
@@ -332,23 +327,25 @@ def relevant_sections_md(
                 skip = False
         if not skip:
             result_lines.append(line)
+    return ''.join(result_lines)
 
-    filtered_md = ''.join(result_lines)
 
-    supplement_md = pdf_markdown_path(paper_id, supplement=True)
-    if supplement_md.exists():
-        supplement_header = SUPPLEMENTARY_MATERIAL_HEADER
-        if supplement_format:
-            supplement_header += f' ({supplement_format.value.upper()})'
-        return (
-            filtered_md
-            + '\n\n---\n\n'
-            + supplement_header
-            + '\n\n'
-            + raw_md(paper_id, supplement=True)
-        )
+def relevant_sections_md(
+    paper_id: int,
+    supplement_format: 'FileFormat | None' = None,
+    section_classifications: dict | None = None,
+) -> str:
+    """``fulltext_md`` with the classifier's irrelevant sections removed.
 
-    return filtered_md
+    Falls back to the full text if section classification has not run yet. Only
+    the main paper is filtered; the supplement is appended whole, as always.
+    """
+    if section_classifications is None:
+        return fulltext_md(paper_id, supplement_format)
+    main = skip_irrelevant_sections(
+        document_anchored_md_path(paper_id).read_text(), section_classifications
+    )
+    return main + _supplement_block(paper_id, supplement_format)
 
 
 def sections_md(paper_id: int) -> list[str]:

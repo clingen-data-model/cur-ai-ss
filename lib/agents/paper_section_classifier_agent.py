@@ -45,9 +45,8 @@ the text of a heading line with its leading # marks removed, and it is compared
 literally against those lines afterwards, so any embellishment stops it from
 being recognised: describing what a section contains, appending its caption or a
 note like "(table)", or dropping a trailing period all turn a heading the
-document has into one it does not. An unrecognised header takes the relevance of
-whichever section preceded it, so a rewritten header near an irrelevant one can
-silently remove a section you meant to keep.
+document has into one it does not. An unrecognised header is treated as relevant,
+so a rewritten header on a section you meant to drop silently keeps that section.
 
 Part 2: Assess Paper Relevance
 

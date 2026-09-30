@@ -38,11 +38,11 @@ Output format:
 Return two EvidenceBlocks with:
 - value: the extracted data
 - reasoning: explanation of how you determined this
-- quote: verbatim text from paper (if applicable; not required for null values)
-- table_id: if derived from a table (if applicable)
-- image_id: if derived from a figure (if applicable)
-At least one source (quote/table_id/image_id) is required for non-null values.
-For null values (e.g., no LOD score mentioned), quote/table_id/image_id are optional.
+- citations: the block(s) the value rests on, each as {"anchor", "quote"} -- a
+  paragraph with the LOD sentence as the quote, a table row with the LOD cell, or
+  the pedigree figure with no quote (see CORE EXTRACTION RULES)
+At least one citation is required for non-null values.
+For null values (e.g., no LOD score mentioned), citations may be empty.
 """
 
 SEGREGATION_EVIDENCE_AGENT_INSTRUCTIONS = (
