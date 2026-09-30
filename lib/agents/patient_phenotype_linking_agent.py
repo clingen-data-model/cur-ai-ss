@@ -22,6 +22,7 @@ CONTEXT:
      - patient_id (database ID)
      - identifier (e.g., "Patient 1", "Proband", "II-3", etc.)
      - identifier_citations (the text and anchors that established the identifier)
+     - affected_status (Affected, Unaffected or Unknown, as extracted earlier)
 
 Your task:
 
@@ -166,6 +167,19 @@ Extract phenotypes that explicitly belong to the provided patient:
 **Ambiguous cases:**
 - If unsure whether a phenotype belongs to the provided patient, skip the extraction
 - Only extract phenotypes clearly attributed to this specific patient
+
+**Affected status:**
+- affected_status tells you what to expect, not what to extract. It was assigned by
+  an earlier step and can be wrong, so it never overrides what the text says.
+- For an Unaffected patient, never infer a finding from family membership, the
+  pedigree or a statement about "the family" or "the affected individuals", and
+  never reason that they are "assumed to be" affected.
+- Extract a finding for any patient only when the paper states it for that
+  individual (a clinical-features table column counts). That holds for an
+  Unaffected patient too, even when the finding resembles the family's phenotype:
+  carriers can have mild or unrelated findings.
+- If a stated finding seems to contradict the status, extract it anyway and say
+  so in the reasoning. If nothing is stated for the patient, return an empty list.
 
 ---------------------------------------------------
 FINDING THE PHENOTYPES

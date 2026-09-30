@@ -69,3 +69,15 @@ def test_every_evidence_producing_prompt_asks_for_citations(instructions):
         'table_id',
     ):
         assert legacy not in instructions
+
+
+def test_phenotype_prompt_tells_the_agent_what_to_do_for_an_unaffected_patient():
+    """Paper 45: eight unaffected relatives were given the family's hearing loss
+    ("assumed to be an affected member") because the agent never saw their status."""
+    prompt = PATIENT_PHENOTYPE_LINKING_AGENT_INSTRUCTIONS
+    assert 'affected_status' in prompt
+    assert 'Unaffected' in prompt
+    assert 'assumed to be' in prompt  # named as the forbidden reasoning
+    # Attribution decides, not status: a stated finding is extracted regardless.
+    assert 'never overrides what the text says' in prompt
+    assert 'extract it anyway' in prompt
