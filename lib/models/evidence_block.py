@@ -74,21 +74,25 @@ class ReasoningBlock(BaseModel, Generic[T]):
         return strip_markup(value)
 
 
+# One structural reference into an anchored document (``anchored.md``).
+#
+# The anchor names a block the agent was shown as a ``[paragraph-54]`` /
+# ``[table-1]`` / ``[figure-2]`` tag, or a table row copied from the ``anchor``
+# column (``table-1-row-7``). The quote narrows the highlight inside that
+# block; it is never the whole block, because the anchor already names it. A
+# table cell is cited as its row plus the cell's text as the quote (no column
+# grammar: the agent copies, it never counts columns).
+#
+# Every field is a plain ``str`` on purpose: Anthropic counts nullable and
+# union nodes in the output schema against a hard limit, per use of the block
+# that embeds this, so a ``str | None`` here would be paid for hundreds of
+# times over (see the schema-limit note below ``EvidenceBlock``).
+#
+# A comment rather than a docstring: Pydantic copies a class docstring into
+# the JSON schema as its description, and the manual-output agents embed that
+# schema in their prompt, so a docstring here is text the model reads.
 class Citation(BaseModel):
-    """One structural reference into an anchored document (``anchored.md``).
-
-    The anchor names a block the agent was shown as a ``[paragraph-54]`` /
-    ``[table-1]`` / ``[figure-2]`` tag, or a table row copied from the
-    ``anchor`` column (``table-1-row-7``). The quote narrows the highlight
-    inside that block; it is never the whole block, because the anchor already
-    names it. A table cell is cited as its row plus the cell's text as the quote
-    (no column grammar: the agent copies, it never counts columns).
-
-    Every field is a plain ``str`` on purpose: Anthropic counts nullable and
-    union nodes in the output schema against a hard limit, per use of the block
-    that embeds this, so a ``str | None`` here would be paid for hundreds of
-    times over (see the schema-limit note below ``EvidenceBlock``).
-    """
+    """One place in the paper that supports a value: a block id and a span of it."""
 
     anchor: str = Field(
         description=(
