@@ -22,7 +22,6 @@ is the existence of ``tables/N.vision.md``, and its one geometric consequence
 
 import json
 import re
-from enum import StrEnum
 from pathlib import Path
 from typing import NamedTuple
 
@@ -47,6 +46,13 @@ from docling_core.types.doc import (
 from docling_core.types.doc.base import CoordOrigin
 from pydantic import BaseModel
 
+from lib.misc.pdf.anchor_ids import (
+    ANCHOR_RE,
+    SUPPLEMENT_PREFIX,
+    AnchorKind,
+    ParsedAnchor,
+    parse_anchor,
+)
 from lib.misc.pdf.paths import (
     UNRECOVERED_TABLE_MARKER,
     document_anchored_md_path,
@@ -57,23 +63,21 @@ from lib.misc.pdf.paths import (
     document_table_vision_markdown_path,
 )
 
-
-class AnchorKind(StrEnum):
-    """What an id points at; also the word the id starts with."""
-
-    PARAGRAPH = 'paragraph'  # #/texts/N: paragraph, list item, caption
-    TABLE = 'table'  # #/tables/N; may carry a -row-R suffix
-    FIGURE = 'figure'  # #/pictures/N
-
-
-SUPPLEMENT_PREFIX = 'supp-'
-
-# Self-describing, hyphen-only ids: paragraph-54, table-1, table-1-row-7,
-# figure-2, supp-table-1-row-7. A couple of tokens more per block than
-# p54/t1.r7, and far harder for an agent to mangle or a human to misread.
-ANCHOR_RE = re.compile(
-    rf'^({SUPPLEMENT_PREFIX})?({"|".join(AnchorKind)})-(\d+)(?:-row-(\d+))?$'
-)
+__all__ = [  # the id grammar lives in anchor_ids.py; re-exported here unchanged
+    'ANCHOR_RE',
+    'SUPPLEMENT_PREFIX',
+    'Anchor',
+    'AnchorKind',
+    'PageBox',
+    'ParsedAnchor',
+    'anchored_from_markdown',
+    'block_texts',
+    'boxes_for_anchor',
+    'build_anchored',
+    'load_anchors',
+    'parse_anchor',
+    'write_anchored',
+]
 
 _PIPE_LINE = re.compile(r'^\s*\|')
 _SEPARATOR_LINE = re.compile(r'^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$')
@@ -110,31 +114,6 @@ class Anchor(BaseModel):
     # trusted (vision-corrected table, or the Docling grid does not line up
     # with the rendered rows); resolve it to the table's own boxes instead.
     row_boxes: list[list[PageBox]] = []
-
-
-class ParsedAnchor(BaseModel):
-    """The pieces of an id: 'supp-table-1-row-7' -> (True, 'table', 1, 7)."""
-
-    supplement: bool
-    kind: AnchorKind
-    index: int
-    row: int | None = None
-
-
-def parse_anchor(anchor_id: str) -> ParsedAnchor | None:
-    """Validate an id against the grammar and split it; None if malformed."""
-    match = ANCHOR_RE.match(anchor_id)
-    if not match:
-        return None
-    prefix, kind, index, row = match.groups()
-    if row is not None and kind != AnchorKind.TABLE:
-        return None
-    return ParsedAnchor(
-        supplement=prefix is not None,
-        kind=AnchorKind(kind),
-        index=int(index),
-        row=int(row) if row is not None else None,
-    )
 
 
 def boxes_for_anchor(anchor_id: str, anchors: list[Anchor]) -> list[PageBox]:
@@ -686,6 +665,90 @@ def build_anchored(
             chunks.append(part.text.strip())
 
     return '\n\n'.join(chunks) + '\n', anchors
+
+
+# --- reading an anchored document back --------------------------------------
+
+_TAG_LINE = re.compile(r'^\[([^\[\]\s]+)\](?:\s(.*))?$')
+_ROW_LINE = re.compile(r'^\|\s*(\S+-row-\d+)\s*\|(.*)$')
+_UNRECOVERED_PREFIX = '**[EXTRACTION WARNING'
+
+
+def block_texts(markdown: str) -> dict[str, str]:
+    """Map every id in an ``anchored.md`` to the text it tags.
+
+    The reverse of ``build_anchored``: this is what ``prune_citations`` checks an
+    agent's quotes against, and its keys are the set of ids that exist. A line
+    state machine over the layout the builders produce (split on ``'\\n'`` only,
+    as ``_with_anchor_column`` does, so a ``\\r`` inside a cell stays in the row):
+
+    - ``[id] rest`` opens a block and closes the previous one (list items are
+      consecutive tag lines with no blank between). A paragraph's text runs to
+      the next blank line, continuing through an open ``\\`\\`\\``` fence; a
+      figure's text is the alt text of ``![alt](path)``, or the bare caption.
+    - Inside a table: the ``| anchor | ...`` header and each
+      ``| table-N-row-R | c1 | c2 |`` row contribute ``| c1 | c2 |`` (anchor
+      column removed, pipes kept, so a copied cell and a copied row both
+      match); each row id also gets its own entry. The separator, blank lines
+      and the unrecovered-table marker are skipped; any other line ends the
+      table. The table's text is caption + header + rows joined by ``'\\n'``.
+    - Headings, untagged text and fence markers belong to no id.
+    """
+    texts: dict[str, str] = {}
+    current: str | None = None
+    kind: AnchorKind | None = None
+    lines: list[str] = []
+    in_fence = False
+
+    def close() -> None:
+        if current is not None and current not in texts:
+            texts[current] = '\n'.join(lines).strip()
+
+    for line in markdown.split('\n'):
+        tag = None if in_fence else _TAG_LINE.match(line)
+        parsed = parse_anchor(tag.group(1)) if tag else None
+        if tag and parsed is not None:
+            close()
+            current, kind, lines = tag.group(1), parsed.kind, []
+            rest = (tag.group(2) or '').strip()
+            if kind == AnchorKind.FIGURE:
+                image = re.fullmatch(r'!\[(.*)\]\(.*\)', rest)
+                rest = image.group(1) if image else rest
+            if rest:
+                lines.append(rest)
+            continue
+        if current is None:
+            continue
+        if kind == AnchorKind.TABLE:
+            if not line.strip() or line.startswith(_UNRECOVERED_PREFIX):
+                continue
+            if _SEPARATOR_LINE.match(line):
+                continue
+            row = _ROW_LINE.match(line)
+            if row:
+                row_id, cells = row.group(1), '|' + row.group(2)
+                lines.append(cells)
+                texts.setdefault(row_id, cells.strip())
+                continue
+            if _PIPE_LINE.match(line):
+                # The header: '| anchor | c1 | c2 |' -> '| c1 | c2 |'.
+                lines.append('|' + line.split('|', 2)[2])
+                continue
+            close()
+            current, kind, lines = None, None, []
+            continue
+        # Paragraph or figure caption: text to the next blank line, fences included.
+        if line.strip().startswith('```'):
+            in_fence = not in_fence
+            lines.append(line)
+            continue
+        if not line.strip() and not in_fence:
+            close()
+            current, kind, lines = None, None, []
+            continue
+        lines.append(line)
+    close()
+    return texts
 
 
 # --- building from plain markdown (XLSX supplements have no Docling document) --

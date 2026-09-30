@@ -21,6 +21,7 @@ from lib.misc.pdf.anchors import (
     _display_to_user,
     _PageFrame,
     anchored_from_markdown,
+    block_texts,
     boxes_for_anchor,
     build_anchored,
     load_anchors,
@@ -501,3 +502,90 @@ def test_blank_items_produce_neither_text_nor_anchor(paper_id):
 
     assert md == '[paragraph-2] real\n'
     assert [a.id for a in anchors] == ['paragraph-2']
+
+
+# --- block_texts: reading an anchored document back ---------------------------
+
+
+def test_block_texts_over_a_built_document(paper_id):
+    md, anchors = build_anchored(_document(), paper_id=paper_id)
+
+    texts = block_texts(md)
+
+    assert texts['paragraph-1'] == 'Hello world'
+    assert texts['table-0'] == (
+        'Table 1. Stuff\n| r0c0   | r0c1   |\n| r1c0   | r1c1   |\n| r2c0   | r2c1   |'
+    )
+    assert texts['table-0-row-0'] == '| r1c0   | r1c1   |'
+    assert texts['table-0-row-1'] == '| r2c0   | r2c1   |'
+    assert texts['figure-0'] == 'Figure 1. Pedigree'
+    assert texts['paragraph-4'] == '- first'
+    assert texts['paragraph-5'] == '- second'
+    # Every anchor has a text, every row id too, and headings have none.
+    assert set(texts) == {a.id for a in anchors} | {'table-0-row-0', 'table-0-row-1'}
+    assert not any('Results' in text for text in texts.values())
+
+
+def test_block_texts_skips_the_unrecovered_marker(paper_id):
+    marker = document_table_unrecovered_path(paper_id, 0)
+    marker.parent.mkdir(parents=True)
+    marker.touch()
+    md, _ = build_anchored(_document(), paper_id=paper_id)
+
+    texts = block_texts(md)
+
+    assert 'EXTRACTION WARNING' not in texts['table-0']
+    assert texts['table-0'].startswith('Table 1. Stuff\n| r0c0')
+
+
+def test_block_texts_uses_image_alt_text(paper_id):
+    image = document_image_path(paper_id, 0)
+    image.parent.mkdir(parents=True)
+    image.write_bytes(b'png')
+    md, _ = build_anchored(_document(), paper_id=paper_id)
+
+    assert block_texts(md)['figure-0'] == 'Figure 1. Pedigree'
+
+
+def test_block_texts_over_plain_markdown_output():
+    md, _ = anchored_from_markdown(
+        '# Sheet 1\n\nSome intro text.\n\n| A | B |\n|---|---|\n| 1 | 2 |\n\n'
+        '![chart](/x/images/0.png)\n'
+    )
+
+    assert block_texts(md) == {
+        'supp-paragraph-0': 'Some intro text.',
+        'supp-table-0': '| A | B |\n| 1 | 2 |',  # no caption
+        'supp-table-0-row-0': '| 1 | 2 |',
+        'supp-figure-0': 'chart',
+    }
+
+
+def test_block_texts_hand_written_layouts():
+    md = (
+        '## Heading\n\n'
+        '[paragraph-3]\n```\nline one\n\nline three\n```\n\n'
+        '[paragraph-4] First line\nsecond line\n\n'
+        '[figure-1] ![Fig. 1 | legend](/x/images/1.png)\n\n'
+        '[table-2] Caption\n\n'
+        '| anchor | A | B |\n|---|---|---|\n'
+        '| table-2-row-0 | a<br>b | c \r d |\n'
+        'Trailing note, not a row\n\n'
+        '[1] a bracketed reference, not a tag\n'
+    )
+
+    texts = block_texts(md)
+
+    assert texts['paragraph-3'] == '```\nline one\n\nline three\n```'
+    assert texts['paragraph-4'] == 'First line\nsecond line'
+    assert texts['figure-1'] == 'Fig. 1 | legend'
+    assert texts['table-2'] == 'Caption\n| A | B |\n| a<br>b | c \r d |'
+    assert texts['table-2-row-0'] == '| a<br>b | c \r d |'
+    assert '[1]' not in ''.join(texts)
+    assert set(texts) == {
+        'paragraph-3',
+        'paragraph-4',
+        'figure-1',
+        'table-2',
+        'table-2-row-0',
+    }

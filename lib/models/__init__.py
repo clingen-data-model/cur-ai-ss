@@ -12,7 +12,7 @@ from lib.models.chat_message import (
 )
 from lib.models.deletion_log import DeletionLogDB, DeletionLogResp, record_deletion
 from lib.models.edit import EditDB
-from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock
+from lib.models.evidence_block import Citation, EvidenceBlock, HumanEvidenceBlock
 from lib.models.family import (
     Family,
     FamilyCreateRequest,
