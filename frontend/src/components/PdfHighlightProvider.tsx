@@ -13,11 +13,14 @@
 import { createContext, useContext, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AlertCircle } from 'lucide-react'
-import { highlightCitationsPapersPaperIdHighlightPost } from '@/api/generated'
+import {
+  highlightCitationsPapersPaperIdHighlightPost,
+  paperAnchorPagesPapersPaperIdAnchorPagesGet,
+} from '@/api/generated'
 import type { Citation, GrobidAnnotation } from '@/api/generated'
 import { API_BASE_URL } from '@/lib/api'
 import { apiErrorMessage } from '@/lib/apiError'
-import { isSupplementAnchor } from '@/lib/anchors'
+import { isSupplementAnchor, tableOfRow } from '@/lib/anchors'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { Spinner } from '@/components/ui/spinner'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -45,6 +48,9 @@ export function isSupplementOnly(target: HighlightTarget): boolean {
 
 interface PdfHighlightContextValue {
   openHighlight: (target: HighlightTarget) => void
+  /** The PDF page an anchor is on, for the evidence chips (undefined for a
+   * supplement anchor, an unparsed paper, or while the map is loading). */
+  anchorPage: (anchor: string) => number | undefined
 }
 
 const PdfHighlightContext = createContext<PdfHighlightContextValue | null>(null)
@@ -87,6 +93,18 @@ export function PdfHighlightProvider({
     enabled: target !== null && !supplementOnly && fullPdfUrl !== '' && activeTab === 'pdf',
   })
 
+  // One small map per paper (anchor id -> page), fetched once so every
+  // popover on the page can label its chips without a request of its own.
+  // It only changes when PDF parsing re-runs, hence the long staleTime.
+  const pagesQuery = useQuery({
+    queryKey: ['anchor-pages', paperId],
+    queryFn: () =>
+      paperAnchorPagesPapersPaperIdAnchorPagesGet({ path: { paper_id: paperId }, throwOnError: true }),
+    staleTime: 5 * 60 * 1000,
+  })
+  // A row is on its table's page (the map lists items, not rows).
+  const anchorPage = (anchor: string) => pagesQuery.data?.[tableOfRow(anchor)]
+
   const openHighlight = (next: HighlightTarget) => {
     setTarget(next)
     setActiveTab(isSupplementOnly(next) ? 'markdown' : 'pdf')
@@ -97,7 +115,7 @@ export function PdfHighlightProvider({
   }
 
   return (
-    <PdfHighlightContext.Provider value={{ openHighlight }}>
+    <PdfHighlightContext.Provider value={{ openHighlight, anchorPage }}>
       {children}
       <Sheet open={target !== null} onOpenChange={(open) => !open && close()}>
         <SheetContent

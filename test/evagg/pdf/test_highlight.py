@@ -405,6 +405,8 @@ WORDS = [
     _word('world', 50, 682, 80, 698),
     _word('Elsewhere', 10, 100, 60, 116),  # same page, outside the paragraph
     _word('world', 50, 682, 80, 698, page=2),  # right place, wrong page
+    _word('Gene', 10, 462, 40, 478),  # inside table-1's first row (paper_documents)
+    _word('cell', 50, 462, 80, 478),
 ]
 
 
@@ -487,11 +489,11 @@ def test_rows_tables_and_figures_are_their_stored_boxes(paper_documents):
     out = citations_to_grobid_annotations(
         paper_documents,
         [
-            Citation(anchor='table-1-row-0', quote='cell'),  # trusted row: its own box
+            Citation(anchor='table-1-row-0'),  # trusted row: its own box
+            Citation(anchor='table-1-row-1'),  # untrusted row: the table's
             Citation(
-                anchor='table-1-row-1', quote='cell'
-            ),  # untrusted row: the table's
-            Citation(anchor='table-1'),
+                anchor='table-1', quote='cell'
+            ),  # a table cited whole never narrows
             Citation(anchor='figure-0'),
         ],
         RED,
@@ -503,6 +505,22 @@ def test_rows_tables_and_figures_are_their_stored_boxes(paper_documents):
         (1, 10.0, 300.0, 290.0, 60.0),
         (1, 10.0, 400.0, 290.0, 60.0),
     ]
+
+
+def test_table_row_with_a_quote_narrows_to_the_quoted_words(paper_documents):
+    """A Docling row can be most of a page (a transposed table read as a few tall
+    grid rows), so a row citation narrows like a paragraph: to the quote's words
+    inside the row's box, or inside the table's when the row's is not trusted."""
+    out = citations_to_grobid_annotations(
+        paper_documents,
+        [
+            Citation(anchor='table-1-row-0', quote='cell'),
+            Citation(anchor='table-1-row-1', quote='cell'),
+        ],
+        RED,
+    )
+
+    assert _placed(out) == [(1, 50.0, 322.0, 30.0, 16.0)] * 2
 
 
 def test_unresolvable_citations_contribute_nothing(paper_documents):

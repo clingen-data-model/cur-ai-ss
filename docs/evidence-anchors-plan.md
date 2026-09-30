@@ -197,8 +197,12 @@ earlier drop-and-blank pruner).
   `words_to_grobid_annotations` as today; else the block's boxes. Markdown: whitespace-
   tolerant exact match inside `block.markdown`, splice a `<span data-evidence-highlight>`
   (rehype-raw + rehype-sanitize allowing `dataEvidenceHighlight` on `span`, the default
-  schema's `span` tag is already allowed); else the whole block. Table rows and figures
-  never narrow. Main paper only on the PDF side (supplements have no PDF tab).
+  schema's `span` tag is already allowed); else the whole block. Tables cited whole and
+  figures never narrow. Table rows narrow on the PDF side too (added 2026-09-30: a
+  transposed table Docling reads as a few tall grid rows made `table-N-row-R` cover most
+  of a page 13 in paper 65, when the quote named one cell); the search runs inside the
+  row's box, or the table's when the row's is not trusted, with the same fallback. Main
+  paper only on the PDF side (supplements have no PDF tab).
 
 ## Backend changes
 
