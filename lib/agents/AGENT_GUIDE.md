@@ -130,12 +130,18 @@ output_path.write_text(result.model_dump_json(indent=2))
 Agents are invoked from `lib/bin/worker.py` as part of the extraction pipeline.
 
 **Send the paper through `paper_input`** (`lib/tasks/handlers.py`), never inlined into
-the task text: `paper_input(format_paper_context(markdown, gene_symbol), task_text)`
-gives the runner the paper block (paper plus gene, byte-identical across agents) as
-its own input item followed by the task text. The prompt-cache breakpoints in
-`lib/agents/model_factory.py` target that first item by position, so every agent on a
-paper reads the block the first one wrote instead of re-sending ~25k tokens. Both
-`run_with_manual_output` and `run_with_checked_output` accept the list.
+the task text: `paper_input(format_paper_context(markdown, gene_symbol), INSTRUCTIONS,
+task_data)` gives the runner three input items in this order: the paper block (paper
+plus gene, byte-identical across agents), the agent's instruction constant
+(byte-identical across runs of that agent; `run_with_manual_output` appends its schema
+directive here), and last the data for this run (patient JSON, pedigree description,
+...). Omit `task_data` for an agent that reads the paper alone. The prompt-cache
+breakpoints in `lib/agents/model_factory.py` target those items by position, so every
+agent on a paper reads the paper block the first one wrote, and every run of one agent
+reads its instructions after the first, instead of re-sending ~25k tokens of paper and
+~10k of instructions each call. Write instructions to match the order: the paper is
+"above", the run's data "below". Both `run_with_manual_output` and
+`run_with_checked_output` accept the list.
 
 ## Tips
 

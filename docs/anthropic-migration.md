@@ -463,6 +463,31 @@ What changed:
   outputs (above), so there is no explicit warm call; the pipeline order is the
   warm.
 
+Paper 80 (MSX1, 25 patients) re-run on dev-caa after that change: every fan-out task
+read the paper entry (25/25 demographics, 25/25 phenotypes), but the read was 44% of
+a demographics call and 62% of a phenotype call. The rest was the agent's own
+*constant* text, sent after the per-task data where nothing can be cached: 10k chars
+of demographics instructions plus the 25k-char schema `run_with_manual_output`
+embeds, 19k chars of phenotype instructions. And the `-1` breakpoint was still
+writing a unique 1h entry for that whole block on every call.
+
+### Prompt caching, third block (2026-09-30): the agent's constant text
+
+`paper_input(paper_context, instructions, task_data)` now sends three user items,
+in this order: the paper block, the agent's instruction constant, the run's data.
+`run_with_manual_output` appends its schema directive to the instructions item, not
+the data item, so item 2 is byte-identical for every run of one agent on a paper.
+`model_settings_for` stamps `index: 1` (paper, shared by every agent on the paper),
+`index: 2` (instructions, shared by every run of that agent) and `index: -1` (the
+run's data, then tool results, repairs and follow-ups): three of the four allowed.
+The per-call write is now the small data block. The first run of an agent on a paper
+still writes the instructions entry (the fan-out gate makes that run happen alone);
+every later run reads paper + instructions.
+
+The prompts already said this order. Every agent's instructions describe the paper
+as "provided above" and the patient JSON as "provided below"; before this change the
+data actually came *above* the instructions.
+
 ## Blocker 4: Anthropic's union-type schema limit — fixed for the 4 affected agents
 
 **Discovered and fixed 2026-09-15**, running the real pipeline end-to-end on

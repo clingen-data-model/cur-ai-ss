@@ -225,10 +225,11 @@ async def test_checked_output_exhausting_attempts_raises(monkeypatch):
 # --- two-message input (paper block, then task) --------------------------------
 
 
-async def test_list_input_gets_the_directive_on_the_last_item_only(monkeypatch):
-    """The paper item must reach the provider byte-identical (it is the
-    prompt-cache prefix every agent shares); the directive and schema belong
-    with the task text."""
+async def test_list_input_gets_the_directive_on_the_instructions_item(monkeypatch):
+    """The paper item and the data item must reach the provider byte-identical
+    (the paper is the prefix every agent shares, the data is what this run
+    adds); the directive and schema are constant per agent, so they extend the
+    instructions item, which every run of the agent then reads from cache."""
     captured = {}
 
     async def fake_run(agent, prompt, **kwargs):
@@ -237,18 +238,42 @@ async def test_list_input_gets_the_directive_on_the_last_item_only(monkeypatch):
 
     monkeypatch.setattr(manual_output.Runner, 'run', fake_run)
     paper = {'role': 'user', 'content': 'PAPER AND GENE CONTEXT\n\nthe paper'}
+    data = {'role': 'user', 'content': 'Patient JSON:\n{"id": 7}'}
 
     await manual_output.run_with_manual_output(
-        _fake_agent(), [paper, {'role': 'user', 'content': 'extract'}], _Widget
+        _fake_agent(), [paper, {'role': 'user', 'content': 'rules'}, data], _Widget
     )
 
     sent = captured['prompt']
     assert sent[0] == paper
-    assert sent[0] is not paper or sent[0] == paper  # unchanged either way
+    assert sent[2] == data
     assert sent[1]['role'] == 'user'
-    assert sent[1]['content'].startswith('extract\n\n')
+    assert sent[1]['content'].startswith('rules\n\n')
     assert '"count"' in sent[1]['content']
-    assert '"count"' not in sent[0]['content']
+    assert '"count"' not in sent[0]['content'] + sent[2]['content']
+
+
+async def test_two_item_input_extends_its_last_item(monkeypatch):
+    captured = {}
+
+    async def fake_run(agent, prompt, **kwargs):
+        captured['prompt'] = prompt
+        return _fake_result('{"name": "gizmo", "count": 3}')
+
+    monkeypatch.setattr(manual_output.Runner, 'run', fake_run)
+
+    await manual_output.run_with_manual_output(
+        _fake_agent(),
+        [{'role': 'user', 'content': 'paper'}, {'role': 'user', 'content': 'rules'}],
+        _Widget,
+    )
+
+    sent = captured['prompt']
+    assert len(sent) == 2
+    assert sent[0]['content'] == 'paper'
+    assert (
+        sent[1]['content'].startswith('rules\n\n') and '"count"' in sent[1]['content']
+    )
 
 
 async def test_list_input_repair_turn_is_a_plain_string(monkeypatch):
@@ -262,7 +287,9 @@ async def test_list_input_repair_turn_is_a_plain_string(monkeypatch):
     monkeypatch.setattr(manual_output.Runner, 'run', fake_run)
 
     _, parsed = await manual_output.run_with_manual_output(
-        _fake_agent(), [{'role': 'user', 'content': 'extract'}], _Widget
+        _fake_agent(),
+        [{'role': 'user', 'content': 'paper'}, {'role': 'user', 'content': 'rules'}],
+        _Widget,
     )
 
     assert parsed == _Widget(name='gizmo', count=3)
@@ -270,10 +297,16 @@ async def test_list_input_repair_turn_is_a_plain_string(monkeypatch):
     assert isinstance(prompts[1], str) and 'not valid JSON' in prompts[1]
 
 
-def test_append_to_last_rejects_empty_and_non_text_items():
+def test_append_to_instructions_rejects_short_lists_and_non_text_items():
     with pytest.raises(ValueError):
-        manual_output._append_to_last([], 'x')
+        manual_output._append_to_instructions([], 'x')
+    with pytest.raises(ValueError):
+        manual_output._append_to_instructions([{'role': 'user', 'content': 'p'}], 'x')
     with pytest.raises(TypeError):
-        manual_output._append_to_last(
-            [{'role': 'user', 'content': [{'type': 'input_text', 'text': 'a'}]}], 'x'
+        manual_output._append_to_instructions(
+            [
+                {'role': 'user', 'content': 'paper'},
+                {'role': 'user', 'content': [{'type': 'input_text', 'text': 'a'}]},
+            ],
+            'x',
         )

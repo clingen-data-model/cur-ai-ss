@@ -30,46 +30,50 @@ def paper(db_session):
     return paper
 
 
-def test_message_is_the_paper_block_then_pedigree_and_instructions(db_session, paper):
-    """Two user items: the paper (with its gene) alone, so it can end at a
-    prompt-cache breakpoint and be the same bytes every agent sends, then the
-    task text in its usual order."""
+def test_message_is_paper_then_instructions_then_pedigree(db_session, paper):
+    """Three user items, each ending at a prompt-cache breakpoint: the paper
+    (with its gene) is the same bytes every agent sends; the instructions are
+    the same bytes every run of this agent sends; the pedigree is this run's
+    data and comes last, which is also where the instructions say it is
+    ("provided below")."""
     db_session.add(
         PedigreeDB(paper_id=paper.id, image_id=3, description='II-1 affected female')
     )
     db_session.flush()
 
-    paper_item, task_item = patient_extraction_message(db_session, paper.id)
+    paper_item, instructions_item, data_item = patient_extraction_message(
+        db_session, paper.id
+    )
 
-    assert paper_item['role'] == task_item['role'] == 'user'
+    assert {i['role'] for i in (paper_item, instructions_item, data_item)} == {'user'}
     assert paper_item['content'] == format_paper_context(
         '## Results\n\n[paragraph-13] Eleven additional family members were affected.\n',
         'MSX1',
     )
     assert paper_item['content'].endswith('Gene: MSX1')
-    assert task_item['content'] == (
-        "Pedigree Description:\n{'anchor': 'figure-3', 'description': 'II-1 affected female'}\n\n"
-        + PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
+    assert instructions_item['content'] == PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
+    assert data_item['content'] == (
+        "Pedigree Description:\n{'anchor': 'figure-3', 'description': 'II-1 affected female'}"
     )
 
 
 def test_message_without_a_pedigree_says_none(db_session, paper):
-    _, task_item = patient_extraction_message(db_session, paper.id)
+    *_, data_item = patient_extraction_message(db_session, paper.id)
 
-    assert task_item['content'].startswith('Pedigree Description:\nNone\n\n')
+    assert data_item['content'] == 'Pedigree Description:\nNone'
 
 
-def test_paper_input_keeps_the_paper_block_untouched():
-    items = paper_input(
-        'PAPER AND GENE CONTEXT\n\nPaper (fulltext md):\nx\n\nGene: G', 'do it'
-    )
+def test_paper_input_with_and_without_data():
+    paper = 'PAPER AND GENE CONTEXT\n\nPaper (fulltext md):\nx\n\nGene: G'
 
-    assert items == [
-        {
-            'role': 'user',
-            'content': 'PAPER AND GENE CONTEXT\n\nPaper (fulltext md):\nx\n\nGene: G',
-        },
-        {'role': 'user', 'content': 'do it'},
+    assert paper_input(paper, 'rules', 'Patient JSON:\n{}') == [
+        {'role': 'user', 'content': paper},
+        {'role': 'user', 'content': 'rules'},
+        {'role': 'user', 'content': 'Patient JSON:\n{}'},
+    ]
+    assert paper_input(paper, 'rules') == [
+        {'role': 'user', 'content': paper},
+        {'role': 'user', 'content': 'rules'},
     ]
 
 
