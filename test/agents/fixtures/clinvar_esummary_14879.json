@@ -1,0 +1,54 @@
+{
+  "header": {
+    "type": "esummary",
+    "version": "0.3"
+  },
+  "result": {
+    "uids": [
+      "14879"
+    ],
+    "14879": {
+      "uid": "14879",
+      "title": "NM_002448.3(MSX1):c.605G>C (p.Arg202Pro)",
+      "protein_change": "R202P",
+      "germline_classification": {
+        "description": "Pathogenic",
+        "last_evaluated": "1998/10/01 00:00",
+        "review_status": "no assertion criteria provided",
+        "trait_set": [
+          {
+            "trait_name": "Tooth agenesis, selective, 1"
+          }
+        ]
+      },
+      "variation_set": [
+        {
+          "variation_name": "NM_002448.3(MSX1):c.605G>C (p.Arg202Pro)",
+          "aliases": [
+            "R31P"
+          ],
+          "cdna_change": "c.605G>C",
+          "canonical_spdi": "NC_000004.12:4862835:G:C",
+          "variation_xrefs": [
+            {
+              "db_source": "ClinGen",
+              "db_id": "CA124423"
+            },
+            {
+              "db_source": "UniProtKB",
+              "db_id": "P28360#VAR_003754"
+            },
+            {
+              "db_source": "OMIM",
+              "db_id": "142983.0001"
+            },
+            {
+              "db_source": "dbSNP",
+              "db_id": "121913129"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

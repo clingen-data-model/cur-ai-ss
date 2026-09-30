@@ -49,9 +49,14 @@ VV_VARIANT_VALIDATOR_ENSEMBL_ENDPOINT = (
 def clinvar_lookup(query: str) -> List[Dict[str, Any]]:
     """
     Search ClinVar and return structured info for each matching record:
-        - hgvs
+        - hgvs (ClinVar's title, e.g. "NM_002448.3(MSX1):c.605G>C (p.Arg202Pro)")
         - caid (ClinGen Allele ID)
         - rsid (dbSNP rsID)
+        - protein_change (ClinVar's own one-letter form, e.g. "R202P")
+        - aliases (other names the record is known by, e.g. legacy or
+          domain-relative numbering such as "R31P")
+        - condition (trait names from the germline classification)
+        - classification (e.g. "Pathogenic")
 
     Example query:
         "BRCA1 AND (Arg157Ser OR p.Arg157Ser OR R157S)"
@@ -102,8 +107,19 @@ def clinvar_lookup(query: str) -> List[Dict[str, Any]]:
 
     r = session.get(esummary_url, params=esummary_params, headers=headers, timeout=10)
     r.raise_for_status()
-    summary_data = r.json()
+    return _clinvar_records(r.json())
 
+
+def _clinvar_records(summary_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Flatten an esummary reply into one record per variation.
+
+    Beyond the identifiers, this keeps the names ClinVar knows the variation
+    by. A paper's protein change often uses numbering that differs from the
+    RefSeq isoform ClinVar names (a residue counted within a domain, an older
+    isoform), and ClinVar records that history in ``aliases`` and
+    ``protein_change``; without them the agent sees only a codon that does
+    not match and wrongly rejects a record its own query found.
+    """
     result = summary_data.get('result', {})
     uids = result.get('uids', [])
 
@@ -111,11 +127,13 @@ def clinvar_lookup(query: str) -> List[Dict[str, Any]]:
 
     for uid in uids:
         record = result.get(uid, {})
-        variation_set = record.get('variation_set', [])
-
-        for v in variation_set:
-            variation_name = v.get('variation_name')
-
+        classification = record.get('germline_classification') or {}
+        condition = [
+            t.get('trait_name')
+            for t in classification.get('trait_set', []) or []
+            if t.get('trait_name')
+        ]
+        for v in record.get('variation_set', []):
             caid = None
             rsid = None
 
@@ -129,9 +147,13 @@ def clinvar_lookup(query: str) -> List[Dict[str, Any]]:
 
             records.append(
                 {
-                    'hgvs': variation_name,
+                    'hgvs': v.get('variation_name'),
                     'caid': caid,
                     'rsid': rsid,
+                    'protein_change': record.get('protein_change') or None,
+                    'aliases': list(v.get('aliases') or []),
+                    'condition': condition,
+                    'classification': classification.get('description') or None,
                 }
             )
     return records
@@ -888,6 +910,25 @@ Examples:
 Step 5B — Call clinvar_lookup(query)
 
 Step 5C — Interpret Results
+
+A record ClinVar returned for your query is a candidate for the SAME variant
+even when its title numbers the residue differently. Papers often count
+residues within a domain (the MSX1 homeodomain's Arg31 is Arg202 of the
+RefSeq protein) or against an older isoform, and ClinVar keeps those names in
+the record's aliases and protein_change. Before rejecting a record because
+the codon does not match:
+    - If the queried change (any of its forms: Arg31Pro, R31P, p.R31P) appears
+      in the record's aliases or protein_change, it IS the variant. Accept it,
+      proceed with Case A or B, and state the numbering mapping in reasoning
+      ("paper's Arg31Pro is homeodomain-relative; ClinVar names the same
+      change p.Arg202Pro, alias R31P").
+    - If the record's condition matches the paper's disease and the gene and
+      amino acids agree (same reference and substituted residue, different
+      position), treat it as the same variant with the caveat stated and
+      confidence low, rather than returning nothing.
+    - Reject only when neither the aliases nor the amino acids support the
+      match. A mismatched codon alone is not grounds for rejection when the
+      record was found by the change you searched for.
 
 Case A — rsid OR caid returned:
     Call allele_registry_resolver with rsid/caid, any available HGVS from ClinVar results, and genome_build.
