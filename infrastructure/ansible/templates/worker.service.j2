@@ -13,6 +13,11 @@ Environment=API_ENDPOINT="{{ domain }}/api"
 
 ExecStart=/opt/{{ caa_user }}/bin/worker
 
+# Headroom for the per-task SQLiteSession connections (lib/tasks/agent_session.py):
+# the default 1024 ran out after ~500 task runs on 2026-09-30, before the
+# worker closed sessions, and every later SQLite open in the process failed.
+LimitNOFILE=2048
+
 Restart=on-failure
 RestartSec=5
 

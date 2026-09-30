@@ -194,7 +194,7 @@ from lib.tasks import (
     enqueue_task,
     invalidate_descendants,
 )
-from lib.tasks.agent_session import chat_session
+from lib.tasks.agent_session import chat_session, closing_sessions
 from lib.tasks.handlers import log_run_metrics
 from lib.tasks.misc import paper_busy_message, summarize_paper_task_status
 from lib.tasks.models import ACTIVE_STATUSES, TaskStatus, TaskType
@@ -1296,12 +1296,13 @@ async def send_chat_message(
 
     context = build_paper_chat_context(paper_id)
     run_context = ChatRunContext()
-    result = await Runner.run(
-        make_chat_agent(paper_id, current_user.id),
-        f'PAPER CONTEXT:\n{context}\n\nUser: {request.message}',
-        session=chat_session(paper_id),
-        context=run_context,
-    )
+    with closing_sessions():
+        result = await Runner.run(
+            make_chat_agent(paper_id, current_user.id),
+            f'PAPER CONTEXT:\n{context}\n\nUser: {request.message}',
+            session=chat_session(paper_id),
+            context=run_context,
+        )
     log_run_metrics('CHAT', result, paper_id=paper_id)
     reply = run_context.confirmation or str(result.final_output)
 
@@ -1336,7 +1337,8 @@ async def clear_chat_messages(
 
     session.query(ChatMessageDB).filter(ChatMessageDB.paper_id == paper_id).delete()
     session.flush()
-    await chat_session(paper_id).clear_session()
+    with closing_sessions():
+        await chat_session(paper_id).clear_session()
 
 
 def _user_summary(user: UserDB | None) -> UserSummaryResp | None:
