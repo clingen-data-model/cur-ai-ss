@@ -93,12 +93,16 @@ export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
             <p className="font-medium">Evidence</p>
             <ul className="space-y-1">
               {citations.map((citation, index) => (
-                <li key={`${citation.anchor}-${index}`} className="flex items-start gap-1.5 break-words">
+                <li key={`${citation.anchor}-${index}`} className="flex items-start gap-1.5">
                   <Badge variant="outline" className="shrink-0 font-normal" title={citation.anchor}>
                     {describeAnchor(citation.anchor)}
                   </Badge>
+                  {/* min-w-0 lets the flex item shrink below its content width and
+                      overflow-wrap:anywhere breaks a quote with no spaces (an HGVS
+                      string, an accession), which break-words alone leaves overflowing
+                      the card. */}
                   {citation.quote ? (
-                    <span>“{citation.quote}”</span>
+                    <span className="min-w-0 [overflow-wrap:anywhere]">“{citation.quote}”</span>
                   ) : (
                     <span className="text-muted-foreground">whole block</span>
                   )}
