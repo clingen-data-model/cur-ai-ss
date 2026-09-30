@@ -1616,6 +1616,9 @@ async def handle_phenotype_extraction(task_id: int) -> None:
             'patient_id': patient_row.id,
             'identifier': patient_row.identifier,
             'identifier_citations': cited_text(patient_row.identifier_evidence),
+            # Without it the agent cannot tell a carrier from an affected
+            # relative and gives both the family's disease (paper 45, 2026-09-30).
+            'affected_status': patient_row.affected_status,
         }
 
     agent_sess = agent_session(task_id)
