@@ -1,4 +1,4 @@
-> **Status: chunk 1 (anchored documents on disk, side by side) landed and deployed (PRs #326-#328, 2026-09-30). Chunk 2 is being done as four additive slices: (1) the `citations` schema (PR #329); (2) agents cite anchors -- branch `evidence-citations-2`, this update: agents read `anchored.md`, the prompts ask for citations only (no legacy fields on new evidence, nothing derives them), every citation is verified against the paper before storage (a bad anchor or quote is sent back to the model as a repair turn), and the pedigree moves to the Docling picture index; (3) highlight endpoint + `/document` + SPA viewer; (4) cutover and cleanup. Slices 3-4 are not implemented; until slice 3, newly extracted evidence has no highlight in the SPA.** (written 2026-09-29, ids renamed to the self-describing grammar the same day). Design for replacing quote re-finding with structural evidence anchors. Line numbers refer to the tree at commit `226d109d` and will drift.
+> **Status: chunk 1 (anchored documents on disk, side by side) landed and deployed (PRs #326-#328, 2026-09-30). Chunk 2 is being done as four additive slices: (1) the `citations` schema (PR #329); (2) agents cite anchors -- branch `evidence-citations-2`, this update: agents read `anchored.md`, the prompts ask for citations only (no legacy fields on new evidence, nothing derives them), every citation is verified against the paper before storage (a bad anchor or quote is sent back to the model as a repair turn), and the pedigree moves to the Docling picture index; (3) highlight endpoint + `/document` + SPA viewer -- landed: `POST /papers/{id}/highlight` resolves a block's citations to the boxes in `anchors.json` (a paragraph quote narrows to its words inside the paragraph), `GET /papers/{id}/document` serves `anchored.md`, and `DocumentEvidenceViewer.tsx` highlights cited blocks by id; the legacy endpoints and viewer stay for evidence that predates citations; (4) cutover and cleanup. Slice 4 is not implemented.** (written 2026-09-29, ids renamed to the self-describing grammar the same day). Design for replacing quote re-finding with structural evidence anchors. Line numbers refer to the tree at commit `226d109d` and will drift.
 
 # Evidence anchors: cite document structure instead of re-finding quotes
 
@@ -74,9 +74,10 @@ class Anchor(BaseModel):
                                           # [] for DOCX/XLSX
     row_boxes: list[list[PageBox]] = []   # tables: one entry per rendered data row (so the row ids are known from
                                           # this file alone); row r <-> grid row r+1, from grid cell bboxes (TOPLEFT,
-                                          # displayed frame, mapped like the table box); [] for a row when
-                                          # vision-corrected or the grid doesn't line up with the rendered rows
-                                          # => resolve to the table box
+                                          # displayed frame, mapped like the table box); [] for every row when the
+                                          # grid doesn't have one row per rendered row (common for vision-corrected
+                                          # tables; since 2026-09-30 a vision table with the grid's row count keeps
+                                          # them) => resolve to the table box
 ```
 
 Everything else is derivable and therefore not stored: the kind is the id prefix; a

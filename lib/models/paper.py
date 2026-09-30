@@ -59,6 +59,7 @@ from lib.misc.pdf.paths import (
 )
 from lib.models.base import Base, PatchModel
 from lib.models.evidence_block import (
+    Citation,
     EvidenceBlock,
     HumanEvidenceBlock,
     ReasoningBlock,
@@ -523,6 +524,25 @@ class MarkdownAnnotationRequest(BaseModel):
     # a paper's own vs. its uploaded supplement's -- since they're two
     # separate files (see pdf_markdown_path(supplement=...)).
     is_supplement: bool = False
+
+
+class CitationHighlightRequest(BaseModel):
+    """POST /papers/{id}/highlight: an evidence block's citations, as stored."""
+
+    citations: list[Citation]
+    color: str = '#FFF59D'
+
+
+class DocumentResp(BaseModel):
+    """GET /papers/{id}/document: the anchored markdown the agents read and cite.
+
+    Every block carries its id ('[paragraph-54] ...', an 'anchor' column on
+    tables); the supplement's ids are 'supp-' prefixed. None when the paper
+    has no supplement.
+    """
+
+    main: str
+    supplement: str | None = None
 
 
 class PedigreeDB(Base):

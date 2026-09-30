@@ -1,7 +1,11 @@
-/* The evidence sheet's "Markdown" tab: the paper's extracted markdown
- * (Docling's raw.md), with the evidence quote highlighted and scrolled into
- * view when a match is found -- the text-based analog of the PDF tab's
- * coordinate-based highlight box. Like the PDF tab (which sends quote/
+/* The evidence sheet's "Markdown" tab for LEGACY evidence (quote/table_id/
+ * image_id, extracted before evidence cited anchors): the paper's extracted
+ * markdown (Docling's raw.md), with the evidence quote highlighted and
+ * scrolled into view when a match is found -- the text-based analog of the
+ * PDF tab's coordinate-based highlight box. Evidence with `citations` goes
+ * through DocumentEvidenceViewer instead; this file goes away once every
+ * paper has been re-extracted (slice 4 of docs/evidence-anchors-plan.md),
+ * and the helpers it exports move there. Like the PDF tab (which sends quote/
  * table_id/image_id to /grobid-annotation together and highlights whichever
  * are present, with no priority between them), table_id/image_id evidence
  * highlights the Nth table/image *alongside* the quote splice rather than
@@ -43,7 +47,7 @@ import { apiErrorMessage } from '@/lib/apiError'
 import { API_BASE_URL } from '@/lib/api'
 import { Spinner } from '@/components/ui/spinner'
 
-const SANITIZE_SCHEMA = {
+export const SANITIZE_SCHEMA = {
   ...defaultSchema,
   tagNames: [...(defaultSchema.tagNames ?? []), 'mark'],
 }
@@ -52,12 +56,12 @@ function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-interface TextMatch {
+export interface TextMatch {
   start: number
   end: number
 }
 
-function findWhitespaceTolerantMatch(quote: string | null | undefined, text: string): TextMatch | null {
+export function findWhitespaceTolerantMatch(quote: string | null | undefined, text: string): TextMatch | null {
   const trimmed = quote?.trim()
   if (!trimmed || !text) return null
   const pattern = trimmed.split(/\s+/).map(escapeRegExp).join('\\s+')
@@ -65,7 +69,7 @@ function findWhitespaceTolerantMatch(quote: string | null | undefined, text: str
   return match ? { start: match.index, end: match.index + match[0].length } : null
 }
 
-function withHighlight(content: string, match: TextMatch | null): string {
+export function withHighlight(content: string, match: TextMatch | null): string {
   if (!match) return content
   return content.slice(0, match.start) + '<mark>' + content.slice(match.start, match.end) + '</mark>' + content.slice(match.end)
 }
@@ -175,7 +179,7 @@ function bestRowIndex(rows: string[], quote: string): number | null {
  * this app resolves by prefixing API_BASE_URL (see PedigreeTab.tsx). Left
  * alone, the browser instead resolves it against the SPA's own origin.
  */
-function resolveImageSrc(src: string | undefined): string | undefined {
+export function resolveImageSrc(src: string | undefined): string | undefined {
   return src?.startsWith('/') ? `${API_BASE_URL}${src}` : src
 }
 

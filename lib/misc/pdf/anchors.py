@@ -16,8 +16,8 @@ Supplement ids carry a ``supp-`` prefix.
 Two artifacts, nothing stored twice: ``anchored.md`` is the only text (what
 agents read and what curators will see), ``anchors.json`` is a pure id ->
 geometry index. Whether a table was vision-corrected is not recorded here: it
-is the existence of ``tables/N.vision.md``, and its one geometric consequence
-(no trustworthy row rectangles) shows up as empty ``row_boxes`` entries.
+is the existence of ``tables/N.vision.md``; its row rectangles are kept only
+when the rebuilt table has the grid's row count, else they are empty.
 """
 
 import json
@@ -76,8 +76,10 @@ __all__ = [  # the id grammar lives in anchor_ids.py; re-exported here unchanged
     'build_anchored',
     'load_anchors',
     'make_anchor_id',
+    'page_frames',
     'paper_block_texts',
     'parse_anchor',
+    'user_to_display',
     'write_anchored',
 ]
 
@@ -113,8 +115,9 @@ class Anchor(BaseModel):
     boxes: list[PageBox] = []  # empty for DOCX/XLSX documents, which have no pages
     # Tables only: one entry per rendered data row, so the row ids are known
     # from this file alone. A row's list is empty when its rectangle cannot be
-    # trusted (vision-corrected table, or the Docling grid does not line up
-    # with the rendered rows); resolve it to the table's own boxes instead.
+    # trusted (the Docling grid does not have one row per rendered row, which
+    # is common for vision-corrected tables); resolve it to the table's own
+    # boxes instead.
     row_boxes: list[list[PageBox]] = []
 
 
@@ -264,11 +267,43 @@ def _page_frames(pdf_path: Path) -> dict[int, _PageFrame]:
     return frames
 
 
+def page_frames(pdf_path: Path) -> dict[int, _PageFrame]:
+    """The per-page frames of a PDF, keyed by 1-based page number (see above)."""
+    return _page_frames(pdf_path)
+
+
 def _frame_for(
     frames: dict[int, _PageFrame], page_no: int, width: float, height: float
 ) -> _PageFrame:
     """The page's frame, or -- with no PDF to read -- an unrotated page at the origin."""
     return frames.get(page_no, _PageFrame(0, 0.0, 0.0, width, height))
+
+
+def user_to_display(
+    box: PageBox, frames: dict[int, _PageFrame]
+) -> tuple[float, float, float, float] | None:
+    """A ``PageBox`` -> ``(x, y, width, height)`` on the displayed page, or None.
+
+    The forward mapping of the section comment above (what pdf.js draws in:
+    top-left origin, y down, rotation and visible box applied), for the
+    highlight endpoint, whose viewer positions boxes on the displayed page.
+    Both corners are mapped and re-sorted, as ``_display_to_user`` does. None
+    when the PDF has no such page, which only happens for a stale anchors.json.
+    """
+    frame = frames.get(box.page_no)
+    if frame is None:
+        return None
+    corners = [(box.x, box.y), (box.x + box.width, box.y + box.height)]
+    if frame.rotation == 90:
+        points = [(y - frame.y0, x - frame.x0) for x, y in corners]
+    elif frame.rotation == 180:
+        points = [(frame.x1 - x, y - frame.y0) for x, y in corners]
+    elif frame.rotation == 270:
+        points = [(frame.y1 - y, frame.x1 - x) for x, y in corners]
+    else:
+        points = [(x - frame.x0, frame.y1 - y) for x, y in corners]
+    xs, ys = zip(*points, strict=True)
+    return min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)
 
 
 def _display_to_user(
@@ -370,8 +405,12 @@ def _row_boxes(
 
     Rendered data row r is grid row r+1 (grid row 0 is the header). Only trusted
     when the counts agree; otherwise every row is empty and resolves to the
-    table box. Cells are TOPLEFT boxes in the displayed frame, like the table's
-    own prov, so each row's union goes through ``_display_to_user``.
+    table box. That is also the rule for a vision-rebuilt table: its rows come
+    from the image, not the grid, but when it has exactly the grid's row count
+    they are the same rows read top to bottom (decision 2026-09-30; before it
+    every vision-corrected row was untrusted). Cells are TOPLEFT boxes in the
+    displayed frame, like the table's own prov, so each row's union goes
+    through ``_display_to_user``.
     """
     grid = table.data.grid
     if not table.prov or len(grid) != rendered_rows + 1:
@@ -465,14 +504,12 @@ def _table_text(
         lines += ['', UNRECOVERED_TABLE_MARKER.format(table_id=index)]
     lines += ['', *pipe_lines]
 
-    # Geometry: row rectangles only when the rows shown are Docling's own rows.
-    row_boxes = (
-        [[] for _ in range(rendered_rows)]
-        if vision_corrected
-        else _row_boxes(table, doc, rendered_rows, frames)
-    )
+    # Geometry: row rectangles when the rows shown line up with Docling's grid,
+    # vision-rebuilt or not (_row_boxes checks the counts).
     anchor = Anchor(
-        id=anchor_id, boxes=_prov_boxes(table, doc, frames), row_boxes=row_boxes
+        id=anchor_id,
+        boxes=_prov_boxes(table, doc, frames),
+        row_boxes=_row_boxes(table, doc, rendered_rows, frames),
     )
     return '\n'.join(lines), anchor
 

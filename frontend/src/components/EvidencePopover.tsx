@@ -6,12 +6,21 @@
  * here, unlike Streamlit's version.
  */
 import { FileSearch, Info, UserRoundPen } from 'lucide-react'
+import type { Citation } from '@/api/generated'
+import { describeAnchor, isSupplementAnchor } from '@/lib/anchors'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { usePdfHighlight } from '@/components/PdfHighlightProvider'
 
 export interface EvidenceLike {
+  // Where the value comes from: one {anchor, quote} per block of the paper it
+  // rests on (docs/evidence-anchors-plan.md). Every block extracted since
+  // slice 2 has these and none of the legacy quote/table_id/image_id below;
+  // optional because a few callers synthesize note-only or reasoning-only
+  // blocks that carry neither.
+  citations?: Citation[] | null
   quote?: string | null
   reasoning?: string | null
   human_edit_note?: string | null
@@ -45,9 +54,18 @@ function formatEvidenceValue(value: unknown): string {
 
 export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
   const { openHighlight } = usePdfHighlight()
-  const hasContent = !!(block?.quote || block?.reasoning || block?.human_edit_note)
+  const citations = block?.citations ?? []
+  const hasContent = !!(
+    citations.length ||
+    block?.quote ||
+    block?.reasoning ||
+    block?.human_edit_note
+  )
   const canViewEvidence =
-    !!block?.quote || block?.table_id != null || block?.image_id != null
+    citations.length > 0 || !!block?.quote || block?.table_id != null || block?.image_id != null
+  const viewInPdf = citations.length
+    ? citations.some((citation) => !isSupplementAnchor(citation.anchor))
+    : !block?.is_supplement
   // edited_at is only ever set from a real edits-table row (see
   // _attach_edit_history in app.py), never at initial extraction, so it's a
   // reliable "a human changed this" signal independent of whether a note was
@@ -84,6 +102,25 @@ export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
         </PopoverTrigger>
       )}
       <PopoverContent className="w-80 text-sm space-y-2">
+        {citations.length > 0 && (
+          <div className="space-y-1">
+            <p className="font-medium">Evidence</p>
+            <ul className="space-y-1">
+              {citations.map((citation, index) => (
+                <li key={`${citation.anchor}-${index}`} className="flex items-start gap-1.5 break-words">
+                  <Badge variant="outline" className="shrink-0 font-normal" title={citation.anchor}>
+                    {describeAnchor(citation.anchor)}
+                  </Badge>
+                  {citation.quote ? (
+                    <span>“{citation.quote}”</span>
+                  ) : (
+                    <span className="text-muted-foreground">whole block</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {block?.quote && (
           <p className="break-words">
             <span className="font-medium">Evidence: </span>
@@ -122,16 +159,20 @@ export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
               size="sm"
               className="w-full"
               onClick={() =>
-                openHighlight({
-                  quote: block?.quote,
-                  table_id: block?.table_id,
-                  image_id: block?.image_id,
-                  is_supplement: block?.is_supplement,
-                })
+                openHighlight(
+                  citations.length
+                    ? { citations }
+                    : {
+                        quote: block?.quote,
+                        table_id: block?.table_id,
+                        image_id: block?.image_id,
+                        is_supplement: block?.is_supplement,
+                      }
+                )
               }
             >
               <FileSearch className="size-3.5 mr-1.5" />
-              {block?.is_supplement ? 'View in Markdown' : 'View in PDF'}
+              {viewInPdf ? 'View in PDF' : 'View in Markdown'}
             </Button>
           </div>
         )}

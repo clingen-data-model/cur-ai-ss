@@ -33,6 +33,8 @@ from lib.models.mondo import (
     MondoTermDetail,
 )
 from lib.models.paper import (
+    CitationHighlightRequest,
+    DocumentResp,
     FileFormat,
     GeneDB,
     GeneResp,

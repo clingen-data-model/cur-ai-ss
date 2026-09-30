@@ -9,8 +9,23 @@ import fitz
 from Bio.Align import PairwiseAligner
 from pydantic import BaseModel
 
+from lib.misc.pdf.anchor_ids import AnchorKind, parse_anchor
+from lib.misc.pdf.anchors import (
+    PageBox,
+    _PageFrame,
+    boxes_for_anchor,
+    load_anchors,
+    page_frames,
+    user_to_display,
+)
 from lib.misc.pdf.parse import Polygon, WordLoc
-from lib.misc.pdf.paths import pdf_json_path, pdf_raw_path
+from lib.misc.pdf.paths import (
+    document_raw_path,
+    document_words_json_path,
+    pdf_json_path,
+    pdf_raw_path,
+)
+from lib.models.evidence_block import Citation
 
 
 class GrobidAnnotation(BaseModel):
@@ -229,7 +244,7 @@ def words_to_grobid_annotations(
                     y=y,
                     width=width,
                     height=height,
-                    color=f'rgb({color[0] * 255.0},{color[1] * 255.0},{color[2] * 255.0})',
+                    color=_css_rgb(color),
                     border='solid',
                 )
             )
@@ -237,3 +252,133 @@ def words_to_grobid_annotations(
     pdf_doc.close()
 
     return annotations
+
+
+def _css_rgb(color: tuple[float, float, float]) -> str:
+    return f'rgb({color[0] * 255.0},{color[1] * 255.0},{color[2] * 255.0})'
+
+
+# --- highlighting by citation ---------------------------------------------------
+#
+# Evidence cites anchors (lib/misc/pdf/anchors.py); a highlight is the anchor's
+# precomputed boxes, never a re-found quote. The only matching left is *narrowing*:
+# a paragraph citation with a quote highlights the quote's words instead of the
+# whole paragraph, and the search is confined to the words inside that
+# paragraph's own boxes, so a miss can widen a highlight but never misplace it.
+
+
+def words_within(
+    boxes: list[PageBox], words: list[WordLoc], tol: float = 2.0
+) -> list[WordLoc]:
+    """The words whose centre lies inside any of the boxes, in their input order.
+
+    Both are in PDF user space with 1-based page numbers (``words.json`` and
+    ``anchors.json`` are built from the same PDF). ``tol`` grows each box by a
+    couple of points so a word sitting exactly on a box edge still counts.
+    """
+    by_page: defaultdict[int, list[PageBox]] = defaultdict(list)
+    for box in boxes:
+        by_page[box.page_no].append(box)
+    inside = []
+    for word in words:
+        cx = (word.x0 + word.x1 + word.x2 + word.x3) / 4
+        cy = (word.y0 + word.y1 + word.y2 + word.y3) / 4
+        for box in by_page.get(int(word.page_idx), ()):
+            if (
+                box.x - tol <= cx <= box.x + box.width + tol
+                and box.y - tol <= cy <= box.y + box.height + tol
+            ):
+                inside.append(word)
+                break
+    return inside
+
+
+def _polygon_boxes(page_no: int, polygons: list[Polygon]) -> list[PageBox]:
+    """Merged word polygons -> user-space boxes (corner order does not matter)."""
+    boxes = []
+    for p in polygons:
+        xs = (p.x0, p.x1, p.x2, p.x3)
+        ys = (p.y0, p.y1, p.y2, p.y3)
+        boxes.append(
+            PageBox(
+                page_no=page_no,
+                x=min(xs),
+                y=min(ys),
+                width=max(xs) - min(xs),
+                height=max(ys) - min(ys),
+            )
+        )
+    return boxes
+
+
+def boxes_to_grobid_annotations(
+    boxes: list[PageBox],
+    frames: dict[int, _PageFrame],
+    color: tuple[float, float, float],
+) -> list[GrobidAnnotation]:
+    """User-space boxes -> annotations on the displayed page (``user_to_display``)."""
+    css = _css_rgb(color)
+    annotations = []
+    for box in boxes:
+        placed = user_to_display(box, frames)
+        if placed is None:
+            continue
+        x, y, width, height = placed
+        annotations.append(
+            GrobidAnnotation(
+                page=box.page_no, x=x, y=y, width=width, height=height, color=css
+            )
+        )
+    return annotations
+
+
+def citations_to_grobid_annotations(
+    paper_id: int,
+    citations: list[Citation],
+    color: tuple[float, float, float],
+) -> list[GrobidAnnotation]:
+    """Every citation's boxes on the main PDF, in citation order.
+
+    Per citation: a supplement, unknown or malformed anchor contributes nothing
+    (the supplement has no PDF view; nothing here raises). A paragraph with a
+    quote is narrowed to the quote's words when they align inside the
+    paragraph's boxes, else it is the whole paragraph. A table, a row (its own
+    rectangle, or the table's when the row's is not trusted) and a figure are
+    their boxes as stored.
+    """
+    anchors = load_anchors(paper_id)
+    frames = page_frames(document_raw_path(paper_id))
+    words: list[WordLoc] | None = None  # read once, only if a quote needs it
+
+    annotations: list[GrobidAnnotation] = []
+    for citation in citations:
+        parsed = parse_anchor(citation.anchor)
+        if parsed is None or parsed.supplement:
+            continue
+        boxes = boxes_for_anchor(citation.anchor, anchors)
+        if not boxes:
+            continue
+        if parsed.kind == AnchorKind.PARAGRAPH and citation.quote.strip():
+            if words is None:
+                words = _load_words(paper_id)
+            matched = find_best_match(citation.quote, words_within(boxes, words))
+            if matched:
+                by_page: defaultdict[int, list[WordLoc]] = defaultdict(list)
+                for word in matched:
+                    by_page[int(word.page_idx)].append(word)
+                boxes = [
+                    box
+                    for page_no, page_words in by_page.items()
+                    for box in _polygon_boxes(
+                        page_no, merge_adjacent_polygons(page_words)
+                    )
+                ]
+        annotations.extend(boxes_to_grobid_annotations(boxes, frames, color))
+    return annotations
+
+
+def _load_words(paper_id: int) -> list[WordLoc]:
+    path = document_words_json_path(paper_id)
+    if not path.exists():
+        return []
+    return [WordLoc.model_validate(w) for w in json.loads(path.read_text())]
