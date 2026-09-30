@@ -24,14 +24,19 @@ import json
 import re
 from enum import StrEnum
 from pathlib import Path
+from typing import NamedTuple
 
+import fitz
 from docling_core.transforms.serializer.markdown import (
     MarkdownDocSerializer,
     MarkdownParams,
 )
 from docling_core.types.doc import (
+    BoundingBox,
     DocItem,
     DoclingDocument,
+    GroupItem,
+    GroupLabel,
     ListItem,
     PictureItem,
     SectionHeaderItem,
@@ -47,6 +52,7 @@ from lib.misc.pdf.paths import (
     document_anchored_md_path,
     document_anchors_path,
     document_image_path,
+    document_raw_path,
     document_table_unrecovered_path,
     document_table_vision_markdown_path,
 )
@@ -76,7 +82,16 @@ _HEADING_LINE = re.compile(r'^#{1,6}\s')
 
 
 class PageBox(BaseModel):
-    """A rectangle on a PDF page, in points, TOP-LEFT origin (what the viewer draws)."""
+    """A rectangle on a PDF page, in *PDF user space*: points, origin bottom-left, y up.
+
+    User space is the PDF's own coordinate system -- the numbers in the page's
+    content stream, the frame ``words.json`` is in, and the input pdf.js's
+    ``viewport.convertToViewportPoint`` expects. Page rotation and cropping are
+    deliberately NOT applied here: the viewer applies them when it draws, the
+    same way it already places its own text items (see ``PdfViewer.tsx``).
+    ``(x, y)`` is the bottom-left corner. See "Page geometry" below for how
+    Docling's mixed frames are brought into this one.
+    """
 
     page_no: int
     x: float
@@ -170,13 +185,156 @@ def _anchor_id(kind: AnchorKind, index: int, supplement: bool) -> str:
     return f'{prefix}{kind}-{index}'
 
 
-def _prov_boxes(item: DocItem, doc: DoclingDocument) -> list[PageBox]:
-    """An item's page boxes, one per prov entry.
+# --- page geometry ---------------------------------------------------------------
+#
+# Three coordinate frames meet here, and the whole job of this section is to get
+# everything into the first one.
+#
+# 1. PDF user space. The PDF's own coordinates: points, origin at the bottom-left,
+#    y up. Every drawing operator in the page's content stream uses it. So does
+#    ``words.json`` (docling-parse reads the content stream), and so does pdf.js:
+#    ``viewport.convertToViewportPoint(x, y)`` takes user-space input. This is
+#    the frame ``PageBox`` is in. Nothing about rotation or cropping lives here.
+#
+# 2. The displayed page. A page can carry ``/Rotate 90`` ("turn me before you show
+#    me") and a cropbox ("only this part of user space is the page"). A viewer
+#    applies both and shows an upright page whose top-left corner is (0, 0) and
+#    whose y runs down. pdf.js calls this the viewport (at scale 1), and its
+#    forward mapping from user space, with ``(x0, y0, x1, y1)`` the visible box
+#    (cropbox clipped to the mediabox -- pdf.js's ``viewBox``), is
+#
+#        rotation   0:  X = x - x0     Y = y1 - y
+#        rotation  90:  X = y - y0     Y = x - x0
+#        rotation 180:  X = x1 - x     Y = y - y0
+#        rotation 270:  X = y1 - y     Y = x1 - x
+#
+#    On an ordinary page (rotation 0, box at the origin) this is just the y flip,
+#    which is why the difference never showed up until the rotated papers did.
+#
+# 3. What Docling reports. Docling is not in one frame:
+#      - TEXT items come from the PDF's text layer, so their ``prov`` boxes are in
+#        user space (1), as BOTTOMLEFT boxes.
+#      - TABLE and PICTURE items come from a layout model run on the *rendered*
+#        page image, so their ``prov`` boxes and a table's grid cells are in the
+#        displayed frame (2): cells as TOPLEFT boxes, prov as BOTTOMLEFT boxes
+#        measured over the displayed page height, and ``doc.pages[n].size`` is
+#        the displayed (rotated) size.
+#    Measured, not assumed: a census of the 9 prod papers with rotated pages
+#    (2026-09-30) found 880 text boxes that fit only the user-space frame and
+#    all 20 table + 2 picture boxes fitting only the displayed frame.
+#
+# So: text boxes pass through untouched; table, picture and cell boxes go through
+# ``_display_to_user``, the inverse of the mapping above, which needs each page's
+# rotation and visible box. Those are read from ``raw.pdf`` by ``_page_frames``.
+#
+# Worked example, paper 74 page 7 (mediabox 595 x 794, /Rotate 90, so displayed
+# 794 wide x 595 tall and Docling says size=794x595):
+#
+#     text  #/texts/369 "Any ICD (ICD + CRT-D) 30.1% ..."   a table row
+#           prov BOTTOMLEFT l=333 b=64 r=364 t=693         user space already:
+#           -> PageBox(x=333, y=64, w=31, h=629)            a tall thin strip, because
+#                                                           the row runs *up* the
+#                                                           unrotated page
+#     table #/tables/1
+#           prov BOTTOMLEFT l=59 b=188 r=730 t=418          displayed frame, height 595
+#           -> TOPLEFT      L=59 T=177 R=730 B=407          (T = 595 - 418, B = 595 - 188)
+#           -> rotation 90 inverse: x = Y + x0, y = X + y0
+#              corners (59, 177) -> (177, 59) and (730, 407) -> (407, 730)
+#           -> PageBox(x=177, y=59, w=230, h=671)
+#
+# and the text strip (x 333..364, y 64..693) now lies inside the table box
+# (x 177..407, y 59..730), as it must. Before this conversion the two disagreed
+# by hundreds of points, and the table box fell off the page.
+
+
+class _PageFrame(NamedTuple):
+    """One page's ``/Rotate`` and visible box, in user space: what the viewer uses."""
+
+    rotation: int  # 0, 90, 180 or 270, clockwise
+    x0: float  # visible box = cropbox clipped to mediabox, raw PDF coordinates
+    y0: float
+    x1: float
+    y1: float
+
+
+def _page_frames(pdf_path: Path) -> dict[int, _PageFrame]:
+    """Read every page's rotation and visible box from the PDF; {} without a PDF.
+
+    fitz reports ``page.mediabox`` in raw PDF coordinates but ``page.cropbox``
+    with y measured *down from the mediabox top*, so the cropbox is converted
+    back to raw coordinates here (checked: raw /CropBox [150 300 900 800] under
+    /MediaBox [100 252 928 828] comes out of fitz as (150, 28, 900, 528)).
+    """
+    if pdf_path.suffix.lower() != '.pdf' or not pdf_path.exists():
+        return {}  # DOCX/XLSX documents have no pages, and no boxes either
+    frames = {}
+    with fitz.open(pdf_path) as pdf:
+        for page in pdf:
+            media, crop = page.mediabox, page.cropbox
+            raw_crop = fitz.Rect(
+                crop.x0, media.y1 - crop.y1, crop.x1, media.y1 - crop.y0
+            )
+            visible = raw_crop & media  # pdf.js: cropbox intersected with mediabox
+            if visible.is_empty:
+                visible = media
+            frames[page.number + 1] = _PageFrame(
+                page.rotation, visible.x0, visible.y0, visible.x1, visible.y1
+            )
+    return frames
+
+
+def _frame_for(
+    frames: dict[int, _PageFrame], page_no: int, width: float, height: float
+) -> _PageFrame:
+    """The page's frame, or -- with no PDF to read -- an unrotated page at the origin."""
+    return frames.get(page_no, _PageFrame(0, 0.0, 0.0, width, height))
+
+
+def _display_to_user(
+    box: BoundingBox, frame: _PageFrame, page_height: float
+) -> tuple[float, float, float, float]:
+    """A Docling box in the displayed frame -> user space ``(l, b, r, t)``.
+
+    ``box`` may be TOPLEFT (grid cells) or BOTTOMLEFT over the displayed page
+    height (table/picture prov); either way it is first made TOPLEFT, i.e. the
+    ``(X, Y)`` of the forward mapping in the section comment above, and then
+    that mapping is inverted:
+
+        rotation   0:  x = X + x0    y = y1 - Y
+        rotation  90:  x = Y + x0    y = X + y0
+        rotation 180:  x = x1 - X    y = Y + y0
+        rotation 270:  x = x1 - Y    y = y1 - X
+
+    Both corners are mapped and re-sorted, since a rotation swaps which corner
+    is which.
+    """
+    tl = (
+        box
+        if box.coord_origin == CoordOrigin.TOPLEFT
+        else box.to_top_left_origin(page_height)
+    )
+    corners = [(tl.l, tl.t), (tl.r, tl.b)]
+    if frame.rotation == 90:
+        points = [(Y + frame.x0, X + frame.y0) for X, Y in corners]
+    elif frame.rotation == 180:
+        points = [(frame.x1 - X, Y + frame.y0) for X, Y in corners]
+    elif frame.rotation == 270:
+        points = [(frame.x1 - Y, frame.y1 - X) for X, Y in corners]
+    else:
+        points = [(X + frame.x0, frame.y1 - Y) for X, Y in corners]
+    xs, ys = zip(*points, strict=True)
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def _prov_boxes(
+    item: DocItem, doc: DoclingDocument, frames: dict[int, _PageFrame]
+) -> list[PageBox]:
+    """An item's boxes in user space, one per prov entry.
 
     Docling gives one ``prov`` per visual fragment of an item, each with its
     own page, bbox and ``charspan`` into the item's text, so a paragraph that
     wraps across a column or page break has several. Worked example from the
-    ACN3-7-1962 test paper, ``#/texts/54`` (919 chars, page 3, height 782.36):
+    ACN3-7-1962 test paper, ``#/texts/54`` (919 chars, page 3):
 
         prov 1  charspan (0, 97)    bbox l=66  t=102 r=294 b=81   BOTTOMLEFT
                 "The results were analyzed using MatLab ... Regions of"
@@ -185,43 +343,54 @@ def _prov_boxes(item: DocItem, doc: DoclingDocument) -> list[PageBox]:
 
     becomes
 
-        PageBox(page 3, x=66,  y=680.6, w=228, h=21)   two-line tail, left column
-        PageBox(page 3, x=311, y=70.9,  w=228, h=176)  continuation, right column
+        PageBox(page 3, x=66,  y=81,  w=228, h=21)   two-line tail, left column
+        PageBox(page 3, x=311, y=535, w=228, h=176)  continuation, right column
 
-    (``y = 782.36 - t``; ``h = t - b``). Drawn on the page, both sit exactly on
-    the text and the sentence runs from one into the other. Items from DOCX/
-    XLSX have no pages, so they get no boxes at all. Docling occasionally emits
-    a zero-width or zero-height prov (seen once in 14,640 anchors across the
-    94 prod papers); those cover nothing and are dropped.
+    -- for text, Docling's own numbers (``x = l``, ``y = b``, ``h = t - b``),
+    because text prov is already in user space. Drawn on the page, both sit
+    exactly on the text and the sentence runs from one into the other. Table
+    and picture prov is in the displayed frame instead and goes through
+    ``_display_to_user`` (see the section comment). Items from DOCX/XLSX have no
+    pages, so they get no boxes at all. Docling occasionally emits a zero-width
+    or zero-height prov (7 of 14,640 anchors across the 94 prod papers); those
+    cover nothing and are dropped.
     """
     boxes = []
     for prov in item.prov:
         page = doc.pages.get(prov.page_no)
         if page is None or page.size is None:  # DOCX and friends: no layout
             continue
-        tl = prov.bbox.to_top_left_origin(page.size.height)
-        if tl.r <= tl.l or tl.b <= tl.t:  # degenerate box: nothing to highlight
-            continue
-        boxes.append(
-            PageBox(
-                page_no=prov.page_no,
-                x=tl.l,
-                y=tl.t,
-                width=tl.r - tl.l,
-                height=tl.b - tl.t,
+        if isinstance(item, (TableItem, PictureItem)):
+            # Layout-model output: displayed frame, needs the page's rotation.
+            frame = _frame_for(frames, prov.page_no, page.size.width, page.size.height)
+            l, b, r, t = _display_to_user(prov.bbox, frame, page.size.height)
+        else:
+            # Text-layer output: user space already. (TOPLEFT never occurs for
+            # PDF text prov; the conversion is only there so the branch is total.)
+            bl = (
+                prov.bbox
+                if prov.bbox.coord_origin == CoordOrigin.BOTTOMLEFT
+                else prov.bbox.to_bottom_left_origin(page.size.height)
             )
-        )
+            l, b, r, t = bl.l, bl.b, bl.r, bl.t
+        if r <= l or t <= b:  # degenerate box: nothing to highlight
+            continue
+        boxes.append(PageBox(page_no=prov.page_no, x=l, y=b, width=r - l, height=t - b))
     return boxes
 
 
 def _row_boxes(
-    table: TableItem, doc: DoclingDocument, rendered_rows: int
+    table: TableItem,
+    doc: DoclingDocument,
+    rendered_rows: int,
+    frames: dict[int, _PageFrame],
 ) -> list[list[PageBox]]:
-    """One box list per rendered data row, from the Docling cell grid.
+    """One box list per rendered data row, from the Docling cell grid, in user space.
 
     Rendered data row r is grid row r+1 (grid row 0 is the header). Only trusted
     when the counts agree; otherwise every row is empty and resolves to the
-    table box. Cell boxes are already TOP-LEFT, unlike ``prov``.
+    table box. Cells are TOPLEFT boxes in the displayed frame, like the table's
+    own prov, so each row's union goes through ``_display_to_user``.
     """
     grid = table.data.grid
     if not table.prov or len(grid) != rendered_rows + 1:
@@ -230,6 +399,7 @@ def _row_boxes(
     page = doc.pages.get(page_no)
     if page is None or page.size is None:
         return [[] for _ in range(rendered_rows)]
+    frame = _frame_for(frames, page_no, page.size.width, page.size.height)
 
     rows: list[list[PageBox]] = []
     for grid_row in grid[1:]:
@@ -244,9 +414,17 @@ def _row_boxes(
             else b.to_top_left_origin(page.size.height)
             for b in cells
         ]
-        l, t = min(b.l for b in tl), min(b.t for b in tl)
-        r, b_ = max(b.r for b in tl), max(b.b for b in tl)
-        rows.append([PageBox(page_no=page_no, x=l, y=t, width=r - l, height=b_ - t)])
+        # The row's rectangle is the union of its cells, still in the displayed
+        # frame; converting the union is the same as converting each cell.
+        union = BoundingBox(
+            l=min(b.l for b in tl),
+            t=min(b.t for b in tl),
+            r=max(b.r for b in tl),
+            b=max(b.b for b in tl),
+            coord_origin=CoordOrigin.TOPLEFT,
+        )
+        l, b_, r, t = _display_to_user(union, frame, page.size.height)
+        rows.append([PageBox(page_no=page_no, x=l, y=b_, width=r - l, height=t - b_)])
     return rows
 
 
@@ -256,8 +434,13 @@ def _with_anchor_column(markdown: str, table_id: str) -> tuple[list[str], int]:
     Takes the '|' rows of the markdown (caption/notes around them are dropped).
     A line-level transform, so it works on Docling and vision tables alike.
     Returns the new lines and the number of data rows.
+
+    Split on newlines only: Docling's export turns a cell's ``\\n`` into a
+    space but leaves a bare ``\\r`` (16 prod tables have ``\\r\\n`` cells), and
+    ``str.splitlines`` would cut the row there and lose the rest of it.
     """
-    pipe_lines = [line for line in markdown.splitlines() if _PIPE_LINE.match(line)]
+    lines = [line.replace('\r', ' ').rstrip() for line in markdown.split('\n')]
+    pipe_lines = [line for line in lines if _PIPE_LINE.match(line)]
     if not pipe_lines:
         return [], 0
     out = [f'| anchor {pipe_lines[0].lstrip()}']
@@ -278,6 +461,7 @@ def _table_text(
     table: TableItem,
     doc: DoclingDocument,
     serializer: MarkdownDocSerializer,
+    frames: dict[int, _PageFrame],
     *,
     paper_id: int,
     supplement: bool,
@@ -304,9 +488,11 @@ def _table_text(
     row_boxes = (
         [[] for _ in range(rendered_rows)]
         if vision_corrected
-        else _row_boxes(table, doc, rendered_rows)
+        else _row_boxes(table, doc, rendered_rows, frames)
     )
-    anchor = Anchor(id=anchor_id, boxes=_prov_boxes(table, doc), row_boxes=row_boxes)
+    anchor = Anchor(
+        id=anchor_id, boxes=_prov_boxes(table, doc, frames), row_boxes=row_boxes
+    )
     return '\n'.join(lines), anchor
 
 
@@ -314,6 +500,7 @@ def _figure_text(
     picture: PictureItem,
     doc: DoclingDocument,
     serializer: MarkdownDocSerializer,
+    frames: dict[int, _PageFrame],
     *,
     paper_id: int,
     supplement: bool,
@@ -329,8 +516,13 @@ def _figure_text(
     else:
         body = caption or '<!-- image -->'
     return f'[{anchor_id}] {body}', Anchor(
-        id=anchor_id, boxes=_prov_boxes(picture, doc)
+        id=anchor_id, boxes=_prov_boxes(picture, doc, frames)
     )
+
+
+def _tagged(anchor_id: str, text: str) -> str:
+    """'[id] text'; multi-line text (a fenced code block) gets the tag on its own line."""
+    return f'[{anchor_id}]{chr(10) if chr(10) in text else " "}{text}'
 
 
 def build_anchored(
@@ -395,13 +587,19 @@ def build_anchored(
         code 2 (both Wiley author lines misread as code)     -> [paragraph-N], fenced
         formula 5 (all empty text)                           -> never emitted
         inline groups 30 (several TextItems in one part)     -> one paragraph, all boxes
-        key_value_area 164 / unspecified 252 / form_area 5   -> plain text children, tagged
+        key_value_area 164 / form_area 5 (58 multi-item parts, 397 items:
+          'Received: ...' / 'Accepted: ...' blocks)          -> [paragraph-N] per child
+        unspecified 252                                      -> children are parts of their own
         key_value_items 0, form_items 0                      -> would print untagged
         text inside pictures (263 in one paper)              -> excluded, cite figure-N
     """
     serializer = MarkdownDocSerializer(
         doc=doc, params=MarkdownParams(escape_html=False, escape_underscores=False)
     )
+    # Each page's rotation and visible box, needed to bring table and picture
+    # boxes into user space (see "Page geometry"). write_anchored_document copies
+    # raw.pdf into the document dir before calling this, so it is there to read.
+    frames = _page_frames(document_raw_path(paper_id, supplement))
     chunks: list[str] = []
     anchors: list[Anchor] = []
 
@@ -414,14 +612,19 @@ def build_anchored(
         if table is not None:
             # Captioned table: spans = [caption text, table]; one table anchor.
             text, anchor = _table_text(
-                table, doc, serializer, paper_id=paper_id, supplement=supplement
+                table, doc, serializer, frames, paper_id=paper_id, supplement=supplement
             )
             chunks.append(text)
             anchors.append(anchor)
         elif picture is not None:
             # Captioned picture: spans = [caption text, picture]; one figure anchor.
             text, anchor = _figure_text(
-                picture, doc, serializer, paper_id=paper_id, supplement=supplement
+                picture,
+                doc,
+                serializer,
+                frames,
+                paper_id=paper_id,
+                supplement=supplement,
             )
             chunks.append(text)
             anchors.append(anchor)
@@ -435,29 +638,46 @@ def build_anchored(
                 lines.append(
                     f'[{anchor_id}] {serializer.serialize(item=item).text.strip()}'
                 )
-                anchors.append(Anchor(id=anchor_id, boxes=_prov_boxes(item, doc)))
+                anchors.append(
+                    Anchor(id=anchor_id, boxes=_prov_boxes(item, doc, frames))
+                )
             chunks.append('\n'.join(lines))
         elif items and isinstance(items[0], (SectionHeaderItem, TitleItem)):
             # Headings: printed as '## ...' with no id -- never evidence.
             chunks.append(part.text.strip())
         elif items and isinstance(items[0], TextItem) and part.text.strip():
+            text_items = [i for i in items if isinstance(i, TextItem)]
+            parent = items[0].parent.resolve(doc) if items[0].parent else None
+            inline = isinstance(parent, GroupItem) and parent.label == GroupLabel.INLINE
+            if len(text_items) > 1 and not inline:
+                # A key-value or form area: the serializer folds its children into
+                # one blank-line-separated part. Each child is its own paragraph.
+                for item in text_items:
+                    text = serializer.serialize(item=item).text.strip()
+                    if not text:
+                        continue
+                    anchor_id = _anchor_id(
+                        AnchorKind.PARAGRAPH, _docling_index(item), supplement
+                    )
+                    chunks.append(_tagged(anchor_id, text))
+                    anchors.append(
+                        Anchor(id=anchor_id, boxes=_prov_boxes(item, doc, frames))
+                    )
+                continue
             # Ordinary paragraph (also an orphan caption whose table/figure was
             # dropped). An inline group merges several TextItems into one part:
             # the id is the first item's, the boxes are all of theirs.
             anchor_id = _anchor_id(
                 AnchorKind.PARAGRAPH, _docling_index(items[0]), supplement
             )
-            text = part.text.strip()
-            # Multi-line text (a fenced code block) needs the tag on its own line.
-            chunks.append(f'[{anchor_id}]{chr(10) if chr(10) in text else " "}{text}')
+            chunks.append(_tagged(anchor_id, part.text.strip()))
             anchors.append(
                 Anchor(
                     id=anchor_id,
                     boxes=[
                         box
-                        for item in items
-                        if isinstance(item, TextItem)
-                        for box in _prov_boxes(item, doc)
+                        for item in text_items
+                        for box in _prov_boxes(item, doc, frames)
                     ],
                 )
             )
