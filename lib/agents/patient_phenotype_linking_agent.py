@@ -168,15 +168,18 @@ Extract phenotypes that explicitly belong to the provided patient:
 - If unsure whether a phenotype belongs to the provided patient, skip the extraction
 - Only extract phenotypes clearly attributed to this specific patient
 
-**Unaffected patients:**
-- When affected_status is Unaffected, the patient does not have the family's
-  disease. Do NOT give them its features because they belong to the family, the
-  pedigree or the cohort, and never reason that they are "assumed to be" affected.
-- A statement about "the family" or "the affected individuals" is not about them.
-- Extract only a finding the paper states for this individual by identifier
-  (a clinical-features table column counts), and return an empty list if there is none.
-- When affected_status is Unknown, apply the normal rules: extract only what is
-  explicitly attributed to this patient.
+**Affected status:**
+- affected_status tells you what to expect, not what to extract. It was assigned by
+  an earlier step and can be wrong, so it never overrides what the text says.
+- For an Unaffected patient, never infer a finding from family membership, the
+  pedigree or a statement about "the family" or "the affected individuals", and
+  never reason that they are "assumed to be" affected.
+- Extract a finding for any patient only when the paper states it for that
+  individual (a clinical-features table column counts). That holds for an
+  Unaffected patient too, even when the finding resembles the family's phenotype:
+  carriers can have mild or unrelated findings.
+- If a stated finding seems to contradict the status, extract it anyway and say
+  so in the reasoning. If nothing is stated for the patient, return an empty list.
 
 ---------------------------------------------------
 FINDING THE PHENOTYPES
