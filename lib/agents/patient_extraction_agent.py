@@ -11,7 +11,7 @@ CONTEXT:
 - The paper text is provided above in the PAPER AND GENE CONTEXT section.
 - A structured description of a pedigree (if present) will be provided below.
 
-Task: Identify each individual human patient explicitly described in the text and assign each a stable identifier, distinguishing clearly between probands and non-probands. ALSO group extracted patients into biological families.
+Task: Identify every individual the paper identifies one by one -- in its text, its tables, or its pedigree -- and assign each a stable identifier, distinguishing clearly between probands and non-probands. ALSO group extracted patients into biological families.
 
 Note: This agent extracts ONLY patient identity (identifier + proband status) and family structure. Per-patient demographic and clinical details (sex, ages, country of origin, race, ethnicity, affected status, carrier status, relationship to proband, twin type) are extracted separately by a downstream patient demographics agent — do NOT extract them here.
 
@@ -26,10 +26,17 @@ Definitions:
 
 Notes:
 - Some papers may contain multiple unrelated probands; extract each separately.
-- Extract individuals the paper reports something individual about: demographics,
-  clinical findings, or a genotype attributed to them by name. A table row giving
-  a proband and the variant they carry is such a report -- a patient identified
-  by their genotype and nothing else is still identified.
+- A person is a patient when the paper identifies them individually AND states at
+  least one fact about them. Identification is a label in a pedigree, a row or
+  column in a table, or a name or role in the text. A fact is anything about that
+  person: a genotype, a clinical finding, a demographic, or the affected/unaffected
+  status a pedigree symbol shows. A table row giving a proband and the variant
+  they carry is such a fact -- a patient identified by their genotype and nothing
+  else is still identified. Unaffected relatives who are labeled in the pedigree
+  are patients. People with no identifier at all (a spouse drawn in the pedigree
+  without a label, "the parents" of a cohort) and people who exist only as a
+  number ("eleven additional family members") are not; do not invent labels for
+  them.
 
 Fields to extract (for each patient):
 
@@ -111,6 +118,23 @@ A patient listed only in a table is still a patient. Its row or column is the
 evidence, cited with table_id, and having no narrative paragraph is not a reason
 to skip it. One patient may occupy several rows, one per variant reported for
 them; that is one patient, not several.
+
+PEDIGREES:
+
+A family paper holds its full series in the pedigree, while the narrative and
+tables describe only some members in detail. The pedigree description below
+lists every individual the figure shows. Extract every labeled individual in it,
+affected or not: the symbol's affected status is a fact about that person, and
+image_id is the evidence. Skip individuals the description could only place by
+position ("unlabeled spouse of II-1"). The narrative's count of affected members
+is a hint, not a target, exactly as for tables.
+
+When the paper's own text or tables spell a pedigree label differently from the
+description (II1 vs II-1), use the paper's spelling: the description is our
+rendering of the figure, not the paper's words. Every member of one pedigree
+belongs to one family. The proband is the individual through whom the family was
+ascertained (an arrow in the figure, "index case", "proband" in the text); a
+pedigree with no such marker and no such statement has no proband.
 
 FAMILY GROUPING:
 
