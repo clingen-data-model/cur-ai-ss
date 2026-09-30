@@ -4,6 +4,7 @@ import datetime
 import logging
 import os
 import signal
+import time
 from typing import Any
 
 from sqlalchemy import or_
@@ -42,6 +43,11 @@ TASK_CONCURRENCY: dict[TaskType, int] = {
     TaskType.VARIANT_ANNOTATION: 10,
 }
 DEFAULT_CONCURRENCY = 20
+
+# Prompt-cache warm-up window for the fan-out gate below: a little under the
+# 1h TTL the breakpoints use (lib/agents/model_factory.py), so a batch that
+# starts inside the window can trust the entry is still there.
+CACHE_WARM_S = 50 * 60
 
 setup_logging()
 init_agents_sdk()
@@ -261,13 +267,46 @@ def _maybe_notify_completion(session: Session, paper_id: int) -> None:
     paper.completion_notified_at = datetime.datetime.now(datetime.timezone.utc)
 
 
+# Fan-out gate, keyed by (paper, task type). Anthropic makes a prompt-cache
+# entry available only once the first response that wrote it has begun, so if
+# the 25 demographics tasks of a paper all start at once every one of them
+# writes the paper prefix and none reads it. The first task of a paper+type
+# runs alone; the rest wait on its lock, find the gate warm, and run together
+# under the ordinary semaphores. Costs one task's latency per paper+type per
+# warm window, for every provider (no branch to keep in step with the model
+# config; OpenAI's automatic caching likes a warmed prefix just as much).
+_fanout_gates: dict[tuple[int, TaskType], asyncio.Lock] = {}
+_warm_until: dict[tuple[int, TaskType], float] = {}
+
+
+def _gate_is_warm(key: tuple[int, TaskType]) -> bool:
+    return _warm_until.get(key, 0.0) > time.monotonic()
+
+
 async def execute_task_with_semaphore(
     task_id: int,
     global_semaphore: asyncio.Semaphore,
     type_semaphore: asyncio.Semaphore,
+    paper_id: int | None = None,
+    task_type: TaskType | None = None,
 ) -> None:
-    """Execute task, respecting global and type-specific concurrency limits."""
+    """Execute task, respecting global and type-specific concurrency limits
+    and the per-paper fan-out gate (when the caller says which paper+type)."""
     async with global_semaphore, type_semaphore:
+        if paper_id is None or task_type is None:
+            await execute_task(task_id)
+            return
+        key = (paper_id, task_type)
+        lock = _fanout_gates.setdefault(key, asyncio.Lock())
+        async with lock:
+            if not _gate_is_warm(key):
+                try:
+                    await execute_task(task_id)
+                finally:
+                    # Success or failure, the request went out and wrote the
+                    # prefix; a retry must not serialise the others again.
+                    _warm_until[key] = time.monotonic() + CACHE_WARM_S
+                return
         await execute_task(task_id)
 
 
@@ -329,7 +368,7 @@ async def poll_and_schedule_tasks(
         session.flush()
 
         # Fetch pending tasks grouped by type
-        pending_tasks: dict[TaskType, list[int]] = {}
+        pending_tasks: dict[TaskType, list[tuple[int, int]]] = {}
         for task_type in TaskType:
             limit = TASK_CONCURRENCY.get(task_type, DEFAULT_CONCURRENCY)
             tier_tasks = (
@@ -342,7 +381,7 @@ async def poll_and_schedule_tasks(
                 .all()
             )
             if tier_tasks:
-                pending_tasks[task_type] = [t.id for t in tier_tasks]
+                pending_tasks[task_type] = [(t.id, t.paper_id) for t in tier_tasks]
                 # Mark as QUEUED to prevent re-scheduling before execution
                 for task in tier_tasks:
                     task.status = TaskStatus.QUEUED
@@ -356,11 +395,15 @@ async def poll_and_schedule_tasks(
 
     # Schedule tasks with global and type-specific semaphores (non-blocking)
     total_scheduled = 0
-    for task_type, task_ids in pending_tasks.items():
-        for task_id in task_ids:
+    for task_type, tasks in pending_tasks.items():
+        for task_id, paper_id in tasks:
             asyncio.create_task(
                 execute_task_with_semaphore(
-                    task_id, global_semaphore, semaphores[task_type]
+                    task_id,
+                    global_semaphore,
+                    semaphores[task_type],
+                    paper_id=paper_id,
+                    task_type=task_type,
                 )
             )
             total_scheduled += 1

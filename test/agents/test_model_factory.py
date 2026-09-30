@@ -101,23 +101,23 @@ def test_openai_gets_empty_model_settings_not_none():
     assert settings.extra_args is None
 
 
-def test_anthropic_gets_two_breakpoints_at_the_1h_ttl():
-    """system covers instructions+tools (identical every call an agent makes);
-    index -1 covers the paper context, targeted by position rather than role
-    because a thread with follow-ups has more than one user message and only
-    the last is the one being extended. Verified live (2026-09-14, Sonnet 5,
-    paper_section_classifier_agent): a forced-cold call wrote
-    cache_creation_input_tokens=24201/cache_read_input_tokens=0, and the
-    identical prefix resent immediately after read
-    cache_read_input_tokens=24201/cache_creation_input_tokens=0 -- a 100% hit,
-    not just a non-empty one."""
+def test_anthropic_gets_the_paper_and_last_message_breakpoints_at_the_1h_ttl():
+    """Index 1 is the paper message every paper-bearing handler sends right
+    after the SDK's system message (lib.tasks.handlers.paper_input): the same
+    bytes for every agent on a paper, so one write serves the whole pipeline.
+    Index -1 is the message being extended: tool loops, repairs, follow-ups.
+    No 'system' point: every agent's instructions are the ~120-char base
+    prompt, far below Anthropic's minimum cacheable block, so it never wrote
+    anything. Before 2026-09-30 the paper was inlined into one message per
+    call and every run wrote a unique entry at the 1h write price that nothing
+    read (worker log: 59/59 demographics runs cached=0)."""
     settings = model_settings_for('anthropic/claude-sonnet-5')
 
     points = settings.extra_args['cache_control_injection_points']
     assert points == [
         {
             'location': 'message',
-            'role': 'system',
+            'index': 1,
             'control': {'type': 'ephemeral', 'ttl': '1h'},
         },
         {

@@ -129,6 +129,14 @@ output_path.write_text(result.model_dump_json(indent=2))
 
 Agents are invoked from `lib/bin/worker.py` as part of the extraction pipeline.
 
+**Send the paper through `paper_input`** (`lib/tasks/handlers.py`), never inlined into
+the task text: `paper_input(format_paper_context(markdown, gene_symbol), task_text)`
+gives the runner the paper block (paper plus gene, byte-identical across agents) as
+its own input item followed by the task text. The prompt-cache breakpoints in
+`lib/agents/model_factory.py` target that first item by position, so every agent on a
+paper reads the block the first one wrote instead of re-sending ~25k tokens. Both
+`run_with_manual_output` and `run_with_checked_output` accept the list.
+
 ## Tips
 
 - **Field descriptions matter** — the LLM uses them to understand the schema
