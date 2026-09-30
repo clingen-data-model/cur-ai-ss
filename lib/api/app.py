@@ -64,6 +64,7 @@ from lib.misc.curation.summary import build_curation_row
 from lib.misc.pdf.highlight import (
     GrobidAnnotation,
     MarkdownAnnotationResp,
+    citations_to_grobid_annotations,
     figures_to_grobid_annotations,
     find_best_match,
     parse_hex_color,
@@ -74,6 +75,8 @@ from lib.misc.pdf.misc import (
 )
 from lib.misc.pdf.parse import WordLoc
 from lib.misc.pdf.paths import (
+    document_anchored_md_path,
+    document_anchors_path,
     document_image_path,
     pdf_dir,
     pdf_raw_path,
@@ -99,6 +102,8 @@ from lib.models import (
     ChatMessageDB,
     ChatMessageResp,
     ChatRole,
+    CitationHighlightRequest,
+    DocumentResp,
     FamilyCreateRequest,
     FamilyDB,
     FamilyResp,
@@ -3117,3 +3122,67 @@ def markdown_annotation(
         )
 
     return MarkdownAnnotationResp(content=content)
+
+
+@app.post('/papers/{paper_id}/highlight', response_model=list[GrobidAnnotation])
+def highlight_citations(
+    paper_id: int,
+    request: CitationHighlightRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> list[GrobidAnnotation]:
+    """Boxes on the paper's PDF for an evidence block's citations.
+
+    The SPA's evidence sheet posts a block's ``citations`` as stored and draws
+    the result on its PDF tab. Each anchor resolves to the boxes precomputed in
+    anchors.json (``lib/misc/pdf/anchors.py``); a paragraph citation with a
+    quote is narrowed to the quote's words inside that paragraph. Supplement
+    anchors (``supp-``) have no PDF and contribute nothing, as does an anchor
+    the document does not have, so an empty list is a valid answer, not a 404.
+    """
+    if not session.get(PaperDB, paper_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    try:
+        rgb_color = parse_hex_color(request.color)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    if not request.citations:
+        return []
+    if not document_anchors_path(paper_id).exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Document not yet available for this paper',
+        )
+    return citations_to_grobid_annotations(paper_id, request.citations, rgb_color)
+
+
+@app.get('/papers/{paper_id}/document', response_model=DocumentResp)
+def paper_document(
+    paper_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> DocumentResp:
+    """The anchored markdown of the paper and, if it has one, its supplement.
+
+    This is the text the agents read and cite (``fulltext_md`` is built from
+    it), with every block's id printed in, so the SPA's Markdown tab can find a
+    cited block by id instead of re-matching a quote. It changes only when PDF
+    parsing re-runs.
+    """
+    if not session.get(PaperDB, paper_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    main = document_anchored_md_path(paper_id)
+    if not main.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail='Document not yet available for this paper',
+        )
+    supplement = document_anchored_md_path(paper_id, supplement=True)
+    return DocumentResp(
+        main=main.read_text(),
+        supplement=supplement.read_text() if supplement.exists() else None,
+    )

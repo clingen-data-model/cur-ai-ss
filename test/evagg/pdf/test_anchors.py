@@ -25,7 +25,9 @@ from lib.misc.pdf.anchors import (
     boxes_for_anchor,
     build_anchored,
     load_anchors,
+    page_frames,
     parse_anchor,
+    user_to_display,
     write_anchored,
 )
 from lib.misc.pdf.paths import (
@@ -243,7 +245,54 @@ def test_display_to_user_inverts_the_viewport_mapping(rotation):
     assert _display_to_user(displayed, frame, page_height=0) == (l, b, r, t)
 
 
-def test_vision_corrected_table_uses_vision_text_and_no_row_boxes(paper_id):
+@pytest.mark.parametrize('rotation', [0, 90, 180, 270])
+def test_user_to_display_is_the_viewport_mapping(rotation):
+    # The highlight endpoint's direction: a user-space box lands where pdf.js
+    # would draw its corners, as a top-left-origin (x, y, width, height).
+    frame = _PageFrame(rotation, 34.0, 44.0, 621.0, 826.0)
+    box = PageBox(page_no=1, x=100.0, y=300.0, width=150.0, height=80.0)
+    (x_a, y_a), (x_b, y_b) = (
+        _viewport_forward(100.0, 300.0, frame),
+        _viewport_forward(250.0, 380.0, frame),
+    )
+
+    assert user_to_display(box, {1: frame}) == (
+        min(x_a, x_b),
+        min(y_a, y_b),
+        abs(x_a - x_b),
+        abs(y_a - y_b),
+    )
+    assert user_to_display(box, {}) is None  # no such page: nothing to draw
+
+
+def test_page_frames_reads_rotation_and_visible_box(paper_id):
+    _write_pdf(paper_id, width=595, height=794, rotation=90)
+
+    assert page_frames(document_raw_path(paper_id)) == {
+        1: _PageFrame(90, 0.0, 0.0, 595.0, 794.0)
+    }
+    assert page_frames(document_raw_path(paper_id, supplement=True)) == {}
+
+
+def test_vision_corrected_table_keeps_row_boxes_when_the_counts_agree(paper_id):
+    # The rebuilt table has the grid's two data rows: they are the same rows
+    # read top to bottom, so Docling's row rectangles still apply.
+    vision = document_table_vision_markdown_path(paper_id, 0)
+    vision.parent.mkdir(parents=True)
+    vision.write_text('| A | B |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |\n')
+
+    md, anchors = build_anchored(_document(), paper_id=paper_id)
+
+    assert '| table-0-row-1 | 3 | 4 |' in md
+    assert 'r1c0' not in md
+    table = next(a for a in anchors if a.id == 'table-0')
+    assert table.row_boxes == [
+        [PageBox(page_no=1, x=10, y=460, width=190, height=20)],
+        [PageBox(page_no=1, x=10, y=440, width=190, height=20)],
+    ]
+
+
+def test_vision_corrected_table_with_other_row_count_has_no_row_boxes(paper_id):
     vision = document_table_vision_markdown_path(paper_id, 0)
     vision.parent.mkdir(parents=True)
     vision.write_text('| A | B |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |\n| 5 | 6 |\n')
@@ -251,7 +300,6 @@ def test_vision_corrected_table_uses_vision_text_and_no_row_boxes(paper_id):
     md, anchors = build_anchored(_document(), paper_id=paper_id)
 
     assert '| table-0-row-2 | 5 | 6 |' in md
-    assert 'r1c0' not in md
     table = next(a for a in anchors if a.id == 'table-0')
     assert table.row_boxes == [[], [], []]  # rows known, rectangles not trusted
     assert table.boxes  # the table box itself is still there
