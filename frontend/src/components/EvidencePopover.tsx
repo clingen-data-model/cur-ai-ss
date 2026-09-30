@@ -101,10 +101,10 @@ export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
                       overflow-wrap:anywhere breaks a quote with no spaces (an HGVS
                       string, an accession), which break-words alone leaves overflowing
                       the card. */}
-                  {citation.quote ? (
+                  {/* No quote means the whole block (a figure never has one): the
+                      badge already says which, so nothing else is shown. */}
+                  {citation.quote && (
                     <span className="min-w-0 [overflow-wrap:anywhere]">“{citation.quote}”</span>
-                  ) : (
-                    <span className="text-muted-foreground">whole block</span>
                   )}
                 </li>
               ))}
