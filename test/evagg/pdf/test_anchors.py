@@ -1,5 +1,6 @@
 import json
 
+import fitz
 import pytest
 from docling_core.types.doc import (
     BoundingBox,
@@ -17,6 +18,8 @@ from docling_core.types.doc import (
 from lib.misc.pdf.anchors import (
     Anchor,
     PageBox,
+    _display_to_user,
+    _PageFrame,
     anchored_from_markdown,
     boxes_for_anchor,
     build_anchored,
@@ -27,6 +30,7 @@ from lib.misc.pdf.anchors import (
 from lib.misc.pdf.paths import (
     UNRECOVERED_TABLE_MARKER,
     document_image_path,
+    document_raw_path,
     document_table_unrecovered_path,
     document_table_vision_markdown_path,
 )
@@ -121,20 +125,121 @@ def test_build_anchored_boxes(paper_id):
     _, anchors = build_anchored(_document(), paper_id=paper_id)
     by_id = {a.id: a for a in anchors}
 
-    # prov is BOTTOMLEFT: y flips through the page height, height = t - b.
+    # Boxes are in PDF user space (bottom-left origin, y up). Text prov is
+    # already there: x = l, y = b, height = t - b.
     assert by_id['paragraph-1'].boxes == [
-        PageBox(page_no=1, x=10, y=PAGE_HEIGHT - 700, width=190, height=20)
+        PageBox(page_no=1, x=10, y=680, width=190, height=20)
     ]
+    # Table/picture prov is in the displayed frame; with no raw.pdf on disk the
+    # page counts as unrotated at the origin, so that is just the y flip too.
     assert by_id['figure-0'].boxes == [
-        PageBox(page_no=1, x=10, y=PAGE_HEIGHT - 400, width=290, height=60)
+        PageBox(page_no=1, x=10, y=340, width=290, height=60)
     ]
-    # Grid cells are already TOPLEFT; rendered row r is grid row r+1.
     table = by_id['table-0']
-    assert table.boxes == [PageBox(page_no=1, x=10, y=300, width=290, height=60)]
+    assert table.boxes == [PageBox(page_no=1, x=10, y=440, width=290, height=60)]
+    # Grid cells are TOPLEFT in the displayed frame; rendered row r is grid row
+    # r+1, so row 0 is the cells at t=320..340 -> y = 800 - 340 = 460.
     assert table.row_boxes == [
-        [PageBox(page_no=1, x=10, y=320, width=190, height=20)],
-        [PageBox(page_no=1, x=10, y=340, width=190, height=20)],
+        [PageBox(page_no=1, x=10, y=460, width=190, height=20)],
+        [PageBox(page_no=1, x=10, y=440, width=190, height=20)],
     ]
+
+
+def _write_pdf(paper_id: int, *, width: float, height: float, rotation: int) -> None:
+    """A one-page raw.pdf in the paper's document dir, as write_anchored_document leaves it."""
+    path = document_raw_path(paper_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    pdf = fitz.open()
+    pdf.new_page(width=width, height=height).set_rotation(rotation)
+    pdf.save(path)
+
+
+def test_rotated_page_boxes_are_in_user_space(paper_id):
+    # Paper 74 page 7 in miniature: a 595x794 page with /Rotate 90, so it is
+    # displayed 794 wide and 595 tall and Docling reports size=794x595.
+    _write_pdf(paper_id, width=595, height=794, rotation=90)
+    doc = DoclingDocument(name='rotated')
+    doc.add_page(page_no=1, size=Size(width=794, height=595))
+    # Text prov: user space, a tall strip (the row runs up the unrotated page).
+    doc.add_text(
+        label=DocItemLabel.TEXT,
+        text='Any ICD (ICD + CRT-D) 30.1%',
+        prov=_bottom_left(333, 693, 364, 64),
+    )
+    # Table prov: displayed frame, BOTTOMLEFT over the displayed height 595.
+    cells = [
+        TableCell(
+            text=f'r{row}c{col}',
+            start_row_offset_idx=row,
+            end_row_offset_idx=row + 1,
+            start_col_offset_idx=col,
+            end_col_offset_idx=col + 1,
+            bbox=_top_left_cell(
+                60 + col * 300, 180 + row * 20, 360 + col * 300, 200 + row * 20
+            ),
+            column_header=row == 0,
+        )
+        for row in range(2)
+        for col in range(2)
+    ]
+    doc.add_table(
+        data=TableData(num_rows=2, num_cols=2, table_cells=cells),
+        prov=_bottom_left(59, 418, 730, 188),
+    )
+
+    _, anchors = build_anchored(doc, paper_id=paper_id)
+    by_id = {a.id: a for a in anchors}
+
+    assert by_id['paragraph-0'].boxes == [
+        PageBox(page_no=1, x=333, y=64, width=31, height=629)
+    ]
+    # Displayed TOPLEFT (59, 177, 730, 407); rotation-90 inverse x = Y, y = X.
+    table = by_id['table-0']
+    assert table.boxes == [PageBox(page_no=1, x=177, y=59, width=230, height=671)]
+    # Data row cells: displayed TOPLEFT (60, 200, 660, 220) -> x 200..220, y 60..660.
+    assert table.row_boxes == [[PageBox(page_no=1, x=200, y=60, width=20, height=600)]]
+    # The text strip lies inside the table box, as it does on the real page.
+    text_box, table_box = by_id['paragraph-0'].boxes[0], table.boxes[0]
+    assert (
+        table_box.x <= text_box.x
+        and text_box.x + text_box.width <= table_box.x + table_box.width
+    )
+    assert (
+        table_box.y <= text_box.y
+        and text_box.y + text_box.height <= table_box.y + table_box.height
+    )
+
+
+def _viewport_forward(x: float, y: float, frame: _PageFrame) -> tuple[float, float]:
+    """pdf.js's user-space -> displayed mapping, as written in the section comment."""
+    if frame.rotation == 90:
+        return y - frame.y0, x - frame.x0
+    if frame.rotation == 180:
+        return frame.x1 - x, y - frame.y0
+    if frame.rotation == 270:
+        return frame.y1 - y, frame.x1 - x
+    return x - frame.x0, frame.y1 - y
+
+
+@pytest.mark.parametrize('rotation', [0, 90, 180, 270])
+def test_display_to_user_inverts_the_viewport_mapping(rotation):
+    # An offset visible box (paper 96 style) on every rotation: a user-space
+    # rectangle mapped forward to the display and back must come out unchanged.
+    frame = _PageFrame(rotation, 34.0, 44.0, 621.0, 826.0)
+    l, b, r, t = 100.0, 300.0, 250.0, 380.0
+    (x_a, y_a), (x_b, y_b) = (
+        _viewport_forward(l, b, frame),
+        _viewport_forward(r, t, frame),
+    )
+    displayed = BoundingBox(
+        l=min(x_a, x_b),
+        t=min(y_a, y_b),
+        r=max(x_a, x_b),
+        b=max(y_a, y_b),
+        coord_origin=CoordOrigin.TOPLEFT,
+    )
+
+    assert _display_to_user(displayed, frame, page_height=0) == (l, b, r, t)
 
 
 def test_vision_corrected_table_uses_vision_text_and_no_row_boxes(paper_id):
@@ -308,8 +413,8 @@ def test_key_value_group_tags_each_child(paper_id):
         == '[paragraph-0] Received: 6 May 2021\n\n[paragraph-1] Accepted: 7 June 2021\n'
     )
     assert [(a.id, a.boxes[0].y) for a in anchors] == [
-        ('paragraph-0', PAGE_HEIGHT - 700),
-        ('paragraph-1', PAGE_HEIGHT - 680),
+        ('paragraph-0', 680),
+        ('paragraph-1', 660),
     ]
 
 
@@ -382,9 +487,7 @@ def test_zero_area_prov_boxes_are_dropped(paper_id):
 
     _, anchors = build_anchored(doc, paper_id=paper_id)
 
-    assert anchors[0].boxes == [
-        PageBox(page_no=1, x=10, y=PAGE_HEIGHT - 700, width=190, height=20)
-    ]
+    assert anchors[0].boxes == [PageBox(page_no=1, x=10, y=680, width=190, height=20)]
 
 
 def test_blank_items_produce_neither_text_nor_anchor(paper_id):

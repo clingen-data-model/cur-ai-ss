@@ -63,16 +63,20 @@ the ids printed in (see "What agents read" below). `anchors.json` is a pure id -
 geometry index, nothing stored twice:
 
 ```python
-class PageBox(BaseModel):      # PDF points, TOP-LEFT origin -- what PdfViewer draws
-    page_no: int; x: float; y: float; width: float; height: float
+class PageBox(BaseModel):      # PDF user space: points, bottom-left origin, y up -- what pdf.js's
+    page_no: int; x: float; y: float; width: float; height: float   # convertToViewportPoint takes
 
 class Anchor(BaseModel):
     id: str                               # paragraph-12 | table-1 | figure-0, 'supp-' prefixed in a supplement
-    boxes: list[PageBox] = []             # from prov (BOTTOMLEFT -> top-left via doc.pages[n].size.height); [] for DOCX/XLSX
+    boxes: list[PageBox] = []             # text prov as-is (already user space); table/picture prov is in the
+                                          # displayed frame and is mapped back through the page's /Rotate and
+                                          # visible box read from raw.pdf (see "Page geometry" in anchors.py);
+                                          # [] for DOCX/XLSX
     row_boxes: list[list[PageBox]] = []   # tables: one entry per rendered data row (so the row ids are known from
-                                          # this file alone); row r <-> grid row r+1, from grid cell bboxes (TOPLEFT);
-                                          # [] for a row when vision-corrected or the grid doesn't line up with the
-                                          # rendered rows => resolve to the table box
+                                          # this file alone); row r <-> grid row r+1, from grid cell bboxes (TOPLEFT,
+                                          # displayed frame, mapped like the table box); [] for a row when
+                                          # vision-corrected or the grid doesn't line up with the rendered rows
+                                          # => resolve to the table box
 ```
 
 Everything else is derivable and therefore not stored: the kind is the id prefix; a
