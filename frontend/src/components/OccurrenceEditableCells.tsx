@@ -1,13 +1,23 @@
-/* The occurrence-level fields editable directly from the Occurrences table:
- * Zygosity, Inheritance, De Novo, Testing Methods and Disease Name.
+/* The fields editable directly from the Occurrences table: Variant Type (a
+ * field of the variant, saved through the variant endpoint), then the
+ * occurrence-level Zygosity, Inheritance, De Novo, Testing Methods and
+ * Disease Name.
  */
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Check } from 'lucide-react'
-import { updateOccurrencePapersPaperIdOccurrencesOccurrenceIdPatch } from '@/api/generated'
+import {
+  updateOccurrencePapersPaperIdOccurrencesOccurrenceIdPatch,
+  updateVariantPapersPaperIdVariantsVariantIdPatch,
+} from '@/api/generated'
 import { Inheritance, TestingMethod, Zygosity } from '@/api/generated/types.gen'
-import type { PatientVariantOccurrenceResp, PatientVariantOccurrenceUpdateRequest } from '@/api/generated/types.gen'
+import type {
+  PatientVariantOccurrenceResp,
+  PatientVariantOccurrenceUpdateRequest,
+  VariantResp,
+  VariantUpdateRequest,
+} from '@/api/generated/types.gen'
 import { EvidencePopover } from '@/components/EvidencePopover'
 import { HumanEditNoteDialog } from '@/components/HumanEditNoteDialog'
 import { usePendingEdit } from '@/hooks/usePendingEdit'
@@ -20,6 +30,7 @@ import { Command, CommandGroup, CommandItem, CommandList } from '@/components/ui
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { pillColorFor } from '@/lib/pillColors'
 import { apiErrorMessage } from '@/lib/apiError'
+import { VARIANT_TYPE_OPTIONS } from '@/lib/variantType'
 
 /** PatientVariantOccurrenceUpdateRequest.max_two_methods rejects a third
  * selection server-side -- enforced here too so a curator sees it at
@@ -45,6 +56,59 @@ function useOccurrenceMutation(paperId: number, occurrenceId: number) {
     },
     onError: (error) => toast.error(apiErrorMessage(error, 'Failed to save occurrence')),
   })
+}
+
+export function EditableVariantTypeCell({ paperId, variant }: { paperId: number; variant: VariantResp }) {
+  const queryClient = useQueryClient()
+  const mutation = useMutation({
+    mutationKey: ['paper-edit', paperId],
+    mutationFn: (body: VariantUpdateRequest) =>
+      updateVariantPapersPaperIdVariantsVariantIdPatch({
+        path: { paper_id: paperId, variant_id: variant.id },
+        body,
+        throwOnError: true,
+      }),
+    onSuccess: () => {
+      // The row's variant comes from the variants query; the occurrences
+      // query is refreshed too in case the response embeds it.
+      queryClient.invalidateQueries({ queryKey: ['variants', paperId] })
+      queryClient.invalidateQueries({ queryKey: ['occurrences', paperId] })
+      queryClient.invalidateQueries({ queryKey: ['papers'] })
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, 'Failed to save variant')),
+  })
+  const pending = usePendingEdit<string>((value, note) =>
+    mutation.mutate({ variant_type: value, variant_type_human_edit_note: note }),
+  )
+  return (
+    <div className="flex items-center gap-1">
+      <Select value={variant.variant_type} onValueChange={(v) => v && pending.propose(v)}>
+        {/* Fixed width so the trigger does not resize with the value; w-40
+         * fits the longest option ("Frameshift Insertion") at text-xs. */}
+        <SelectTrigger size="sm" className="h-7 w-40 text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {VARIANT_TYPE_OPTIONS.map((type) => (
+            <SelectItem key={type} value={type}>
+              {type}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <EvidencePopover block={variant.variant_type_evidence} />
+      <HumanEditNoteDialog
+        open={pending.isOpen}
+        onOpenChange={(open) => !open && pending.cancel()}
+        fieldLabel="Variant Type"
+        defaultNote={variant.variant_type_evidence.human_edit_note}
+        isPending={mutation.isPending}
+        onConfirm={(note) => pending.confirm(note)}
+        beforeValue={variant.variant_type}
+        afterValue={pending.pendingValue ?? variant.variant_type}
+      />
+    </div>
+  )
 }
 
 export function EditableZygosityCell({

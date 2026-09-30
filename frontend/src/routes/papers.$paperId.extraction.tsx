@@ -25,15 +25,14 @@ import {
   EditableDiseaseNameCell,
   EditableInheritanceCell,
   EditableTestingMethodsCell,
+  EditableVariantTypeCell,
   EditableZygosityCell,
   MondoDiseaseCell,
 } from '@/components/OccurrenceEditableCells'
 import { ConfidenceBadge } from '@/components/ConfidenceBadge'
 import { EvidencePopover } from '@/components/EvidencePopover'
 import { ManuallyCreatedIndicator } from '@/components/ManuallyCreatedIndicator'
-import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { pillColorFor } from '@/lib/pillColors'
 import { PairOccurrenceDialog } from '@/components/PairOccurrenceDialog'
 import { PatientDetailPanel } from '@/components/PatientDetailPanel'
 import { VariantDetailPanel } from '@/components/VariantDetailPanel'
@@ -253,11 +252,7 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
         id: 'variant_type',
         header: 'Variant Type',
         accessorFn: (row) => row.variant.variant_type,
-        cell: ({ row }) => (
-          <Badge className={pillColorFor(row.original.variant.variant_type)} variant="outline">
-            {row.original.variant.variant_type}
-          </Badge>
-        ),
+        cell: ({ row }) => <EditableVariantTypeCell paperId={paperId} variant={row.original.variant} />,
       },
     ]
 
