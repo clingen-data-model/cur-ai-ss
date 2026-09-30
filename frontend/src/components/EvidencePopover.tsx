@@ -44,7 +44,7 @@ function formatEvidenceValue(value: unknown): string {
 }
 
 export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
-  const { openHighlight } = usePdfHighlight()
+  const { openHighlight, anchorPage } = usePdfHighlight()
   const citations = block?.citations ?? []
   const hasContent = !!(citations.length || block?.reasoning || block?.human_edit_note)
   const canViewEvidence = citations.length > 0
@@ -95,7 +95,7 @@ export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
               {citations.map((citation, index) => (
                 <li key={`${citation.anchor}-${index}`} className="flex items-start gap-1.5 break-words">
                   <Badge variant="outline" className="shrink-0 font-normal" title={citation.anchor}>
-                    {describeAnchor(citation.anchor)}
+                    {describeAnchor(citation.anchor, anchorPage(citation.anchor))}
                   </Badge>
                   {citation.quote ? (
                     <span>“{citation.quote}”</span>

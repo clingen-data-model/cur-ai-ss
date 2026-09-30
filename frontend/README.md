@@ -149,7 +149,10 @@ prefix and lands on the Streamlit app:
   `POST /papers/{id}/highlight`, which returns the cited blocks' precomputed boxes for the
   PDF tab; the Markdown tab renders the anchored document from `GET /papers/{id}/document`
   in `DocumentEvidenceViewer.tsx`, highlighting blocks by id (`lib/anchors.ts` parses and
-  labels the ids; `lib/markdown.ts` holds the quote-splice and sanitize helpers).
+  labels the ids; `lib/markdown.ts` holds the quote-splice and sanitize helpers). The
+  provider also fetches `GET /papers/{id}/anchor-pages` once per paper so the popover's
+  chips can say which PDF page a citation is on: anchor numbers are Docling indices, not
+  the paper's own table and figure numbering, so the page is what makes a chip findable.
 
 ## JavaScript dependencies
 

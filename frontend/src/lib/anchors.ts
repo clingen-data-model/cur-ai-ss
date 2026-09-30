@@ -10,7 +10,9 @@
  * The numbers are Docling item indices -- the same ones that key the
  * tables/N.* and images/N.png files -- not the paper's own "Table 2"
  * numbering, so a chip built from describeAnchor() says "Table 1 · row 7"
- * where the paper's caption may say "Table 2".
+ * where the paper's caption may say "Table 2". That is why the chip also
+ * carries the PDF page (GET /papers/{id}/anchor-pages): "Table 7 · row 3 ·
+ * p. 13" is findable, "Table 7" alone is not.
  */
 export type AnchorKind = 'paragraph' | 'table' | 'figure'
 
@@ -48,12 +50,15 @@ const KIND_LABEL: Record<AnchorKind, string> = {
   figure: 'Figure',
 }
 
-/** A short human label: "Paragraph 54", "Table 1 · row 7", "Supplement · Figure 0". */
-export function describeAnchor(id: string): string {
+/** A short human label: "Paragraph 54", "Table 1 · row 7 · p. 13",
+ * "Supplement · Figure 0". The page is appended when known (the supplement
+ * has none, nor does a paper that is not parsed yet). */
+export function describeAnchor(id: string, page?: number): string {
   const parsed = parseAnchor(id)
   if (!parsed) return id
   const parts = [`${KIND_LABEL[parsed.kind]} ${parsed.index}`]
   if (parsed.supplement) parts.unshift('Supplement')
   if (parsed.row !== null) parts.push(`row ${parsed.row}`)
+  if (page !== undefined) parts.push(`p. ${page}`)
   return parts.join(' · ')
 }

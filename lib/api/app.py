@@ -61,6 +61,7 @@ from lib.misc.avatars import (
 from lib.misc.curation.models import CurationSummaryRow
 from lib.misc.curation.pptx import build_curation_pptx
 from lib.misc.curation.summary import build_curation_row
+from lib.misc.pdf.anchors import anchor_pages, load_anchors
 from lib.misc.pdf.highlight import (
     GrobidAnnotation,
     citations_to_grobid_annotations,
@@ -3046,6 +3047,29 @@ def highlight_citations(
             detail='Document not yet available for this paper',
         )
     return citations_to_grobid_annotations(paper_id, request.citations, rgb_color)
+
+
+@app.get('/papers/{paper_id}/anchor-pages', response_model=dict[str, int])
+def paper_anchor_pages(
+    paper_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> dict[str, int]:
+    """Main-document anchor id -> the first PDF page it is on (1-based).
+
+    The SPA's evidence chips label a citation by its anchor, whose number is a
+    Docling index rather than the paper's own ("Table 7" for the paper's
+    Table 2, continued), so the chip adds the page. Rows share their table's
+    entry; supplement anchors have no PDF and are not listed. Empty, not a
+    404, before the paper has been parsed.
+    """
+    if not session.get(PaperDB, paper_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    if not document_anchors_path(paper_id).exists():
+        return {}
+    return anchor_pages(load_anchors(paper_id))
 
 
 @app.get('/papers/{paper_id}/document', response_model=DocumentResp)

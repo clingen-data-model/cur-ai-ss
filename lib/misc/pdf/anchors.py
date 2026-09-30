@@ -137,6 +137,17 @@ def boxes_for_anchor(anchor_id: str, anchors: list[Anchor]) -> list[PageBox]:
     return anchor.row_boxes[parsed.row] or anchor.boxes
 
 
+def anchor_pages(anchors: list[Anchor]) -> dict[str, int]:
+    """Each item id -> the first PDF page it is on (1-based).
+
+    For the SPA's evidence chips: the ids are Docling indices, not the paper's
+    own "Table 2" numbering, and the page is what lets a curator find the
+    block anyway. Rows are not listed; they are on their table's page. Items
+    without boxes (a document with no pages) are left out.
+    """
+    return {a.id: min(b.page_no for b in a.boxes) for a in anchors if a.boxes}
+
+
 def write_anchored(
     paper_id: int, md: str, anchors: list[Anchor], supplement: bool = False
 ) -> None:

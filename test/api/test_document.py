@@ -78,6 +78,20 @@ def test_document_404s_without_a_paper_or_a_document(client, paper):
     assert response.json()['detail'] == 'Document not yet available for this paper'
 
 
+def test_anchor_pages_maps_each_anchor_to_its_page(client, paper, document):
+    response = client.get(f'/papers/{document.id}/anchor-pages')
+
+    assert response.status_code == 200
+    assert response.json() == {'paragraph-1': 1}
+
+
+def test_anchor_pages_is_empty_before_parsing_and_404s_without_a_paper(client, paper):
+    assert client.get('/papers/999/anchor-pages').status_code == 404
+    response = client.get(f'/papers/{paper.id}/anchor-pages')
+    assert response.status_code == 200
+    assert response.json() == {}
+
+
 def test_highlight_resolves_a_paragraph_to_its_box(client, document):
     response = client.post(
         f'/papers/{document.id}/highlight',

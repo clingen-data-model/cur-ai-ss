@@ -20,6 +20,7 @@ from lib.misc.pdf.anchors import (
     PageBox,
     _display_to_user,
     _PageFrame,
+    anchor_pages,
     anchored_from_markdown,
     block_texts,
     boxes_for_anchor,
@@ -412,6 +413,19 @@ def test_boxes_for_anchor():
     assert boxes_for_anchor('table-1-row-2', anchors) == []  # no such row
     assert boxes_for_anchor('figure-9', anchors) == []
     assert boxes_for_anchor('nonsense', anchors) == []
+
+
+def test_anchor_pages_is_the_first_page_of_each_item():
+    def box(page_no):
+        return PageBox(page_no=page_no, x=0, y=0, width=10, height=10)
+
+    anchors = [
+        Anchor(id='paragraph-3', boxes=[box(2), box(3)]),  # runs onto page 3
+        Anchor(id='table-1', boxes=[box(5)], row_boxes=[[box(5)]]),
+        Anchor(id='figure-0', boxes=[]),  # a document without pages
+    ]
+
+    assert anchor_pages(anchors) == {'paragraph-3': 2, 'table-1': 5}
 
 
 def test_inline_group_is_one_paragraph_with_every_items_boxes(paper_id):
