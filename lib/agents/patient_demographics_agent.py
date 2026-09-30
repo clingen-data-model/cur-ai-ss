@@ -3,7 +3,6 @@ from agents import Agent
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
 from lib.agents.model_factory import extraction_model, extraction_model_settings
-from lib.models.patient import PatientDemographics
 
 PATIENT_DEMOGRAPHICS_INSTRUCTIONS = """
 System: You are an expert clinical data curator.
@@ -110,7 +109,9 @@ agent = Agent(
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
     model_settings=extraction_model_settings(),
-    # 7 union/nullable schema nodes since slice 4 of the evidence-anchors work,
-    # under Anthropic's limit of 16; test_output_schema_census guards it.
-    output_type=PatientDemographics,
+    # 7 union nodes, under Anthropic's documented limit of 16, but 23 objects
+    # / 69 properties once dereferenced, which its grammar compiler refuses
+    # ("The compiled grammar is too large", live 2026-09-30). output_type=None
+    # sends no schema; lib.agents.manual_output validates the reply instead.
+    output_type=None,
 )

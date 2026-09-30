@@ -102,12 +102,16 @@ cited id exists or that a quote is really in its block, so the handler passes
 sends that message back to the model as a repair turn in the same session, up to three
 attempts, before the task fails. Nothing with unverified evidence is stored.
 
-Every agent passes its `output_type` to the runner. Anthropic caps a dereferenced output
-schema at 16 union/nullable nodes, and `test/agents/test_output_schema_census.py` fails if
-any agent's schema crosses it (a `Citation` is all-`str`, so evidence blocks add only their
-value's nullability); keep new optional fields on an output model in mind. The four agents
-whose handler passes `citation_check` get the repair loop from `run_with_checked_output`
-(`lib/agents/manual_output.py`).
+Anthropic caps a dereferenced output schema at 16 union/nullable nodes and, above that,
+refuses one whose compiled grammar is too large (undocumented; roughly 20 objects, and every
+`EvidenceBlock` is two objects once `Citation` is inlined). `test/agents/test_output_schema_census.py`
+fails if any agent's schema crosses the union limit and pins which agents run without a
+native schema: variant extraction and demographics, whose schemas the grammar compiler
+refuses, use `output_type=None` and `run_with_manual_output` (`lib/agents/manual_output.py`),
+which puts the schema in the prompt and validates the reply client-side. Every other agent
+passes its `output_type` to the runner; the ones whose handler passes `citation_check` get
+the same repair loop from `run_with_checked_output`. Keep both limits in mind when adding
+fields to an output model.
 
 ## Calling an Agent
 

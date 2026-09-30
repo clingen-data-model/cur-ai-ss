@@ -15,6 +15,13 @@ brought the four over-limit agents (variant extraction 61, patient extraction
 18, demographics 40, occurrences 20) under it. The exact counts are pinned so a
 model change that moves them is a conscious edit here, not a 400 from the
 provider on the next live run.
+
+The union count is necessary, not sufficient: variant extraction (13) and
+demographics (7) still fail with "The compiled grammar is too large", an
+undocumented limit on the dereferenced schema's overall size (live on
+2026-09-30; a Variant with 8 evidence fields compiles, 12 does not). Those two
+run with ``output_type=None`` through ``run_with_manual_output``; the set is
+pinned here so switching one back is a conscious edit too.
 """
 
 import copy
@@ -46,6 +53,8 @@ from lib.agents.segregation_evidence_extractor import (
 from lib.agents.table_correction_agent import TableCorrectionResult
 from lib.agents.variant_extraction_agent import agent as variant_extraction_agent
 from lib.agents.variant_harmonization_agent import agent as variant_harmonization_agent
+from lib.models.patient import PatientDemographics
+from lib.models.variant import VariantExtractionOutput
 
 ANTHROPIC_UNION_NODE_LIMIT = 16
 
@@ -74,12 +83,21 @@ OUTPUT_TYPES: dict[str, Any] = {
     'table_corrector': TableCorrectionResult,
 }
 
-# The four agents slice 4 moved from client-side validation to native output.
-SWITCHED_IN_SLICE_4 = {
+# The four agents slice 4 took under the union limit, with their counts.
+UNDER_THE_UNION_LIMIT_SINCE_SLICE_4 = {
     'variant_extractor': 13,
     'patient_info_extractor': 0,
     'patient_demographics_extractor': 7,
     'patient_variant_occurrence': 2,
+}
+
+# The two whose dereferenced schema is still too large for the grammar
+# compiler; their output_type is None and the schema travels in the prompt.
+MANUAL_OUTPUT = {'variant_extractor', 'patient_demographics_extractor'}
+
+MODELS_BEHIND_MANUAL_OUTPUT: dict[str, Any] = {
+    'variant_extractor': VariantExtractionOutput,
+    'patient_demographics_extractor': PatientDemographics,
 }
 
 
@@ -110,15 +128,22 @@ def union_node_count(output_type: Any) -> int:
     return _count_union_nodes(_dereference(schema, defs))
 
 
-def test_every_agent_has_a_native_output_type():
-    assert all(output_type is not None for output_type in OUTPUT_TYPES.values())
+def _schema_for(name: str) -> Any:
+    return MODELS_BEHIND_MANUAL_OUTPUT.get(name) or OUTPUT_TYPES[name]
+
+
+def test_exactly_the_grammar_limited_agents_run_without_a_native_schema():
+    manual = {name for name, output_type in OUTPUT_TYPES.items() if output_type is None}
+    assert manual == MANUAL_OUTPUT
 
 
 @pytest.mark.parametrize('name', sorted(OUTPUT_TYPES))
-def test_output_schema_fits_the_anthropic_limit(name):
-    assert union_node_count(OUTPUT_TYPES[name]) <= ANTHROPIC_UNION_NODE_LIMIT
+def test_output_schema_fits_the_anthropic_union_limit(name):
+    assert union_node_count(_schema_for(name)) <= ANTHROPIC_UNION_NODE_LIMIT
 
 
-@pytest.mark.parametrize('name, expected', sorted(SWITCHED_IN_SLICE_4.items()))
-def test_switched_agents_keep_their_counts(name, expected):
-    assert union_node_count(OUTPUT_TYPES[name]) == expected
+@pytest.mark.parametrize(
+    'name, expected', sorted(UNDER_THE_UNION_LIMIT_SINCE_SLICE_4.items())
+)
+def test_slice_4_agents_keep_their_union_counts(name, expected):
+    assert union_node_count(_schema_for(name)) == expected

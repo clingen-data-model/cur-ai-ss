@@ -593,21 +593,38 @@ zero repair-loop warnings logged across 8 calls. Final extraction: 6 patients,
 a production reliability estimate — so this is worth watching once
 `EXTRACTION_MODEL` actually flips for real traffic, not a closed question.
 
-**Closed 2026-09-30 (slice 4 of `docs/evidence-anchors-plan.md`): every agent is
-native again.** The legacy `quote`/`table_id`/`image_id`/`is_supplement` fields
+**2026-09-30 (slice 4 of `docs/evidence-anchors-plan.md`): the union limit is
+cleared.** The legacy `quote`/`table_id`/`image_id`/`is_supplement` fields
 were removed from `EvidenceBlock`; evidence is a list of `{anchor, quote}`
 citations, all-`str` inside a plain list, so a block now contributes only its
 value's own nullability. Re-running the census above with the same script
 (`test/agents/test_output_schema_census.py`, which now pins it in CI): variant
 extraction 61 -> **13**, patient extraction 18 -> **0**, demographics 40 -> **7**,
 occurrences 20 -> **2**; `PaperExtractionOutput` is 7 (the table above listed it
-before the pedigree/gene-disease blocks were reshaped). All four agents pass
-`output_type=<Model>` to the SDK, `run_with_manual_output` and its schema
-directive are deleted (`lib/agents/manual_output.py` keeps only
-`run_with_checked_output`, the citation repair loop), and the instructions block
-no longer carries a 25k-char embedded schema, so those calls are ~7k tokens
-smaller and the cache-key group in *Prompt caching* above is now every agent
-with its own `output_format`, as the native ones always were.
+before the pedigree/gene-disease blocks were reshaped). PR #337 switched all
+four to `output_type=<Model>` and deleted `run_with_manual_output`.
+
+**Reopened the same evening: the union count is necessary, not sufficient.**
+Deployed and re-run on paper 80, variant extraction and every demographics call
+came back 400 with a *different* message, `The compiled grammar is too large,
+which would cause performance issues`. That is the undocumented "internal limit
+on compiled grammar size" the structured-outputs doc mentions after its explicit
+table; both schemas clear every explicit limit (13 and 7 union nodes, no
+optional parameters in the SDK's strict rendering). Probed with the strict
+schema and `max_tokens: 1` (a refused schema is a 400 before generation, an
+accepted one costs a few tokens): `VariantExtractionOutput` (34 objects / 97
+properties dereferenced) refused, `PatientDemographics` (23 / 69) refused,
+`PatientExtractionOutput` (16 / 39) accepted, a `Variant` cut to its first 8
+evidence fields (17 / 49) accepted, cut to 12 (25 / 69) refused. So the ceiling
+sits somewhere around 20 objects / 50-70 properties, and every `EvidenceBlock`
+costs two objects and five properties once `Citation` is inlined. Patient
+extraction and occurrences (14 / 39) run natively and did on the live paper;
+variant extraction and demographics are back on `output_type=None` +
+`run_with_manual_output`, restored in the follow-up PR, and
+`test_output_schema_census.py` pins that set. Getting those two native means
+fewer evidence-wrapped fields per output (roughly half of `Variant`'s sixteen),
+a product decision, not a hotfix. (Secondhand reports put the ceiling at "42
+properties in total"; not what this API returned, since 49 passed.)
 
 ## Corrections log
 

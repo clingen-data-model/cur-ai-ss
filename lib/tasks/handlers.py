@@ -25,6 +25,7 @@ from lib.agents.manual_output import (
     AgentInput,
     Check,
     run_with_checked_output,
+    run_with_manual_output,
 )
 from lib.agents.mondo_linking_agent import (
     MONDO_LINKING_AGENT_INSTRUCTIONS,
@@ -376,7 +377,9 @@ def paper_input(
     hierarchy that gives: ``system + paper`` is the same bytes for every agent
     on a paper (``format_paper_context`` with the paper's gene, which is
     static, so pass it everywhere); ``+ instructions`` is the same for every
-    run of one agent on that paper; ``+ data`` is what one run adds. Data last is also what the instruction constants say ("provided
+    run of one agent on that paper (``run_with_manual_output`` appends its
+    schema directive here, never to the data); ``+ data`` is what one run
+    adds. Data last is also what the instruction constants say ("provided
     below") and Anthropic's long-context guidance (document first, query
     last). Breakpoints: ``lib/agents/model_factory.py``.
     """
@@ -550,10 +553,13 @@ async def handle_variant_extraction(task_id: int) -> None:
         )
         agent = variant_extraction_agent
 
-    result = await run_with_checked_output(
-        agent, message, citation_check(paper_id), session=agent_sess
+    result, parsed = await run_with_manual_output(
+        agent,
+        message,
+        VariantExtractionOutput,
+        check=citation_check(paper_id),
+        session=agent_sess,
     )
-    parsed = cast(VariantExtractionOutput, result.final_output)
     log_run_metrics('VARIANT_EXTRACTION', result)
 
     with session_scope() as session:
@@ -874,10 +880,13 @@ async def handle_patient_demographics(task_id: int) -> None:
         )
         agent = patient_demographics_agent
 
-    result = await run_with_checked_output(
-        agent, message, citation_check(paper_id), session=agent_sess
+    result, parsed = await run_with_manual_output(
+        agent,
+        message,
+        PatientDemographics,
+        check=citation_check(paper_id),
+        session=agent_sess,
     )
-    parsed = cast(PatientDemographics, result.final_output)
     log_run_metrics('PATIENT_DEMOGRAPHICS', result)
 
     with session_scope() as session:
