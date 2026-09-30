@@ -32,6 +32,8 @@ from docling_core.transforms.serializer.markdown import (
 from docling_core.types.doc import (
     DocItem,
     DoclingDocument,
+    GroupItem,
+    GroupLabel,
     ListItem,
     PictureItem,
     SectionHeaderItem,
@@ -256,8 +258,13 @@ def _with_anchor_column(markdown: str, table_id: str) -> tuple[list[str], int]:
     Takes the '|' rows of the markdown (caption/notes around them are dropped).
     A line-level transform, so it works on Docling and vision tables alike.
     Returns the new lines and the number of data rows.
+
+    Split on newlines only: Docling's export turns a cell's ``\\n`` into a
+    space but leaves a bare ``\\r`` (16 prod tables have ``\\r\\n`` cells), and
+    ``str.splitlines`` would cut the row there and lose the rest of it.
     """
-    pipe_lines = [line for line in markdown.splitlines() if _PIPE_LINE.match(line)]
+    lines = [line.replace('\r', ' ').rstrip() for line in markdown.split('\n')]
+    pipe_lines = [line for line in lines if _PIPE_LINE.match(line)]
     if not pipe_lines:
         return [], 0
     out = [f'| anchor {pipe_lines[0].lstrip()}']
@@ -333,6 +340,11 @@ def _figure_text(
     )
 
 
+def _tagged(anchor_id: str, text: str) -> str:
+    """'[id] text'; multi-line text (a fenced code block) gets the tag on its own line."""
+    return f'[{anchor_id}]{chr(10) if chr(10) in text else " "}{text}'
+
+
 def build_anchored(
     doc: DoclingDocument, *, paper_id: int, supplement: bool = False
 ) -> tuple[str, list[Anchor]]:
@@ -395,7 +407,9 @@ def build_anchored(
         code 2 (both Wiley author lines misread as code)     -> [paragraph-N], fenced
         formula 5 (all empty text)                           -> never emitted
         inline groups 30 (several TextItems in one part)     -> one paragraph, all boxes
-        key_value_area 164 / unspecified 252 / form_area 5   -> plain text children, tagged
+        key_value_area 164 / form_area 5 (58 multi-item parts, 397 items:
+          'Received: ...' / 'Accepted: ...' blocks)          -> [paragraph-N] per child
+        unspecified 252                                      -> children are parts of their own
         key_value_items 0, form_items 0                      -> would print untagged
         text inside pictures (263 in one paper)              -> excluded, cite figure-N
     """
@@ -441,23 +455,34 @@ def build_anchored(
             # Headings: printed as '## ...' with no id -- never evidence.
             chunks.append(part.text.strip())
         elif items and isinstance(items[0], TextItem) and part.text.strip():
+            text_items = [i for i in items if isinstance(i, TextItem)]
+            parent = items[0].parent.resolve(doc) if items[0].parent else None
+            inline = isinstance(parent, GroupItem) and parent.label == GroupLabel.INLINE
+            if len(text_items) > 1 and not inline:
+                # A key-value or form area: the serializer folds its children into
+                # one blank-line-separated part. Each child is its own paragraph.
+                for item in text_items:
+                    text = serializer.serialize(item=item).text.strip()
+                    if not text:
+                        continue
+                    anchor_id = _anchor_id(
+                        AnchorKind.PARAGRAPH, _docling_index(item), supplement
+                    )
+                    chunks.append(_tagged(anchor_id, text))
+                    anchors.append(Anchor(id=anchor_id, boxes=_prov_boxes(item, doc)))
+                continue
             # Ordinary paragraph (also an orphan caption whose table/figure was
             # dropped). An inline group merges several TextItems into one part:
             # the id is the first item's, the boxes are all of theirs.
             anchor_id = _anchor_id(
                 AnchorKind.PARAGRAPH, _docling_index(items[0]), supplement
             )
-            text = part.text.strip()
-            # Multi-line text (a fenced code block) needs the tag on its own line.
-            chunks.append(f'[{anchor_id}]{chr(10) if chr(10) in text else " "}{text}')
+            chunks.append(_tagged(anchor_id, part.text.strip()))
             anchors.append(
                 Anchor(
                     id=anchor_id,
                     boxes=[
-                        box
-                        for item in items
-                        if isinstance(item, TextItem)
-                        for box in _prov_boxes(item, doc)
+                        box for item in text_items for box in _prov_boxes(item, doc)
                     ],
                 )
             )

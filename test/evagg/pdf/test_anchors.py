@@ -7,6 +7,7 @@ from docling_core.types.doc import (
     CoordOrigin,
     DocItemLabel,
     DoclingDocument,
+    GroupLabel,
     ProvenanceItem,
     Size,
     TableCell,
@@ -279,6 +280,66 @@ def test_inline_group_is_one_paragraph_with_every_items_boxes(paper_id):
     assert md == '[paragraph-0] inline a inline b\n'
     assert [a.id for a in anchors] == ['paragraph-0']
     assert [b.x for b in anchors[0].boxes] == [10, 100]
+
+
+def test_key_value_group_tags_each_child(paper_id):
+    # The serializer folds a key-value area into one blank-line-separated part;
+    # 58 such parts in prod ('Received: ...' / 'Accepted: ...' blocks).
+    doc = DoclingDocument(name='kv')
+    doc.add_page(page_no=1, size=Size(width=600, height=PAGE_HEIGHT))
+    group = doc.add_group(label=GroupLabel.KEY_VALUE_AREA, name='group')
+    doc.add_text(
+        label=DocItemLabel.TEXT,
+        text='Received: 6 May 2021',
+        parent=group,
+        prov=_bottom_left(10, 700, 100, 680),
+    )
+    doc.add_text(
+        label=DocItemLabel.TEXT,
+        text='Accepted: 7 June 2021',
+        parent=group,
+        prov=_bottom_left(10, 680, 100, 660),
+    )
+
+    md, anchors = build_anchored(doc, paper_id=paper_id)
+
+    assert (
+        md
+        == '[paragraph-0] Received: 6 May 2021\n\n[paragraph-1] Accepted: 7 June 2021\n'
+    )
+    assert [(a.id, a.boxes[0].y) for a in anchors] == [
+        ('paragraph-0', PAGE_HEIGHT - 700),
+        ('paragraph-1', PAGE_HEIGHT - 680),
+    ]
+
+
+def test_carriage_return_in_cell_does_not_cut_the_row(paper_id):
+    # Docling's markdown export maps '\n' in a cell to a space but leaves '\r'.
+    doc = DoclingDocument(name='cr')
+    doc.add_page(page_no=1, size=Size(width=600, height=PAGE_HEIGHT))
+    rows = [['Measure', 'Value'], ['Age (years)\r\n55.6 ± 1.9', '55.6'], ['Sex', 'F']]
+    cells = [
+        TableCell(
+            text=text,
+            start_row_offset_idx=r,
+            end_row_offset_idx=r + 1,
+            start_col_offset_idx=c,
+            end_col_offset_idx=c + 1,
+            column_header=r == 0,
+        )
+        for r, row in enumerate(rows)
+        for c, text in enumerate(row)
+    ]
+    doc.add_table(data=TableData(num_rows=3, num_cols=2, table_cells=cells))
+
+    md, anchors = build_anchored(doc, paper_id=paper_id)
+
+    row_lines = [line for line in md.splitlines() if line.startswith('| table-0-row-')]
+    assert len(row_lines) == 2
+    assert row_lines[0].startswith('| table-0-row-0 | Age (years)')
+    assert '55.6 ± 1.9' in row_lines[0]
+    assert row_lines[0].count('|') == 4
+    assert len(anchors[0].row_boxes) == 2
 
 
 def test_other_text_kinds_become_paragraphs_and_furniture_is_dropped(paper_id):
