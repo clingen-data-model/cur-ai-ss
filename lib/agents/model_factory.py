@@ -96,8 +96,8 @@ def model_settings_for(name: str, *, effort: str | None = None) -> ModelSettings
     ``lib.tasks.handlers.paper_input`` builds. Index 1 is the paper block,
     right after the system message the SDK inserts at index 0: the same bytes
     for every agent on that paper, so one write serves the whole pipeline.
-    Index 2 is the agent's instructions (plus the manual-output schema
-    directive): the same for every run of one agent on that paper, written
+    Index 2 is the agent's instructions: the same for every run of one
+    agent on that paper, written
     once by the first run (which the worker's fan-out gate makes happen
     alone) and read by the rest. Index -1 is the message being extended: the
     run's data on the first turn, then tool results, repair turns and

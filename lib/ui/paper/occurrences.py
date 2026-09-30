@@ -28,10 +28,8 @@ from lib.ui.api import (
 )
 from lib.ui.paper.shared import (
     HUMAN_EDIT_NOTE_DEFAULT,
-    clean_quote,
     get_gnomad_url,
     render_evidence_controls,
-    render_focus_controls,
 )
 
 OCCURRENCES_EDITOR_KEY = 'occurrences-editor'
@@ -56,45 +54,8 @@ def _format_variant_with_protein(
     return desc
 
 
-def _render_evidence_block(
-    evidence_block: EvidenceBlock, paper_id: int, block_id: str
-) -> None:
-    """Render an EvidenceBlock with reasoning and evidence sources."""
-
-    # Display evidence sources
-    evidence_sources = []
-    if evidence_block.quote:
-        evidence_sources.append(('Text Evidence', clean_quote(evidence_block.quote)))
-    if evidence_block.table_id is not None:
-        evidence_sources.append(
-            ('Table', f'Table #{evidence_block.table_id + 1}')
-        )  # note table indexes are extracted as zero-indexed, but displayed to user here.
-    if evidence_block.image_id is not None:
-        evidence_sources.append(('Pedigree', f'Image #{evidence_block.image_id}'))
-
-    if evidence_sources:
-        st.markdown('**Evidence Sources:**')
-        for source_type, source_value in evidence_sources:
-            col1, col2 = st.columns([2, 8])
-            with col1:
-                st.markdown(f'*{source_type}*')
-            with col2:
-                st.text(source_value)
-
-            with st.container(
-                horizontal=True,
-                vertical_alignment='center',
-                horizontal_alignment='right',
-            ):
-                render_focus_controls(
-                    paper_id,
-                    blocks=[evidence_block],
-                    color_key=f'{paper_id}-{block_id}-{source_type}-color-evidence',
-                    button_key_prefix=f'{paper_id}-{block_id}-{source_type}-evidence',
-                )
-    else:
-        st.text('No evidence provided')
-
+def _render_evidence_block(evidence_block: EvidenceBlock) -> None:
+    """Render an EvidenceBlock's reasoning."""
     st.text_area('Reasoning', evidence_block.reasoning, height=20, disabled=True)
 
 
@@ -622,9 +583,7 @@ def render_patient_variant_occurrences_tab() -> None:
 
             with col2:
                 st.markdown('#### Disease Name Evidence')
-                _render_evidence_block(
-                    link.disease_name_evidence, paper_resp.id, 'disease_name'
-                )
+                _render_evidence_block(link.disease_name_evidence)
 
         # Display paired variant confidence if present (compound heterozygous pairing)
         if link.paired_variant_link_id and link.paired_variant_confidence:

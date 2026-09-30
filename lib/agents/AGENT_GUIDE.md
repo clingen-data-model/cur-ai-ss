@@ -92,8 +92,7 @@ the anchored document (`lib/misc/pdf/anchors.py`): every paragraph is prefixed
 `[paragraph-N]`, every table `[table-N]` with an `anchor` column of `table-N-row-R` ids, every
 figure `[figure-N]`; supplement ids start with `supp-`. An agent cites by copying an id as
 printed and giving the shortest verbatim span of that block that supports the value (a
-table cell's text for a row citation, nothing for a figure). The block-level `quote`,
-`table_id`, `image_id` and `is_supplement` fields are legacy and stay empty on new evidence.
+table cell's text for a row citation, nothing for a figure).
 
 Append `CORE_EXTRACTION_SPEC` (`lib/agents/core_extraction_rules.py`) to any prompt that
 produces evidence blocks; it states the contract once. The schema cannot check that a
@@ -103,11 +102,12 @@ cited id exists or that a quote is really in its block, so the handler passes
 sends that message back to the model as a repair turn in the same session, up to three
 attempts, before the task fails. Nothing with unverified evidence is stored.
 
-An output model that embeds many evidence blocks can exceed Anthropic's limit on
-union/nullable schema nodes; such agents run through `run_with_manual_output`
-(`lib/agents/manual_output.py`), which embeds the schema in the prompt and validates the
-reply client-side, instead of passing `output_type` to the runner. Native-schema agents
-get the same repair loop from `run_with_checked_output` in the same module.
+Every agent passes its `output_type` to the runner. Anthropic caps a dereferenced output
+schema at 16 union/nullable nodes, and `test/agents/test_output_schema_census.py` fails if
+any agent's schema crosses it (a `Citation` is all-`str`, so evidence blocks add only their
+value's nullability); keep new optional fields on an output model in mind. The four agents
+whose handler passes `citation_check` get the repair loop from `run_with_checked_output`
+(`lib/agents/manual_output.py`).
 
 ## Calling an Agent
 
@@ -133,15 +133,15 @@ Agents are invoked from `lib/bin/worker.py` as part of the extraction pipeline.
 the task text: `paper_input(format_paper_context(markdown, gene_symbol), INSTRUCTIONS,
 task_data)` gives the runner three input items in this order: the paper block (paper
 plus gene, byte-identical across agents), the agent's instruction constant
-(byte-identical across runs of that agent; `run_with_manual_output` appends its schema
-directive here), and last the data for this run (patient JSON, pedigree description,
+(byte-identical across runs of that agent), and last the data for this run (patient JSON,
+pedigree description,
 ...). Omit `task_data` for an agent that reads the paper alone. The prompt-cache
 breakpoints in `lib/agents/model_factory.py` target those items by position, so every
 agent on a paper reads the paper block the first one wrote, and every run of one agent
 reads its instructions after the first, instead of re-sending ~25k tokens of paper and
 ~10k of instructions each call. Write instructions to match the order: the paper is
-"above", the run's data "below". Both `run_with_manual_output` and
-`run_with_checked_output` accept the list.
+"above", the run's data "below". `Runner.run` and `run_with_checked_output` both accept
+the list.
 
 ## Tips
 

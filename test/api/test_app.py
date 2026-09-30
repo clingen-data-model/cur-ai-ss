@@ -866,10 +866,12 @@ def test_get_variants_harmonized_and_enriched(client, db_session, seeded_paper):
         variant_type='Frameshift Deletion',
         functional_evidence=True,
         main_focus=True,
+        # Stored JSON: transcript carries the new citations key; the rest are
+        # legacy rows still holding the retired quote key, which must load.
         transcript_evidence={
             'value': 'NM_007294.3',
             'reasoning': 'test',
-            'quote': 'test',
+            'citations': [{'anchor': 'paragraph-1', 'quote': 'test'}],
         },
         protein_accession_evidence={
             'value': 'NP_009225.1',
@@ -925,6 +927,7 @@ def test_get_variants_harmonized_and_enriched(client, db_session, seeded_paper):
             'value': True,
             'reasoning': 'test',
             'quote': 'test',
+            'citations': [{'anchor': 'table-1-row-2', 'quote': 'test'}],
         },
     )
     db_session.add(variant)
@@ -980,12 +983,21 @@ def test_get_variants_harmonized_and_enriched(client, db_session, seeded_paper):
     # Check evidence block structure
     assert v['transcript_evidence']['value'] == 'NM_007294.3'
     assert v['transcript_evidence']['reasoning'] == 'test'
-    assert v['transcript_evidence']['quote'] == 'test'
+    assert v['transcript_evidence']['citations'] == [
+        {'anchor': 'paragraph-1', 'quote': 'test'}
+    ]
 
-    # Check main_focus evidence
+    # Check main_focus evidence: the retired quote key is not served, the
+    # citations are
     assert v['main_focus_evidence']['value'] is True
     assert v['main_focus_evidence']['reasoning'] == 'test'
-    assert v['main_focus_evidence']['quote'] == 'test'
+    assert v['main_focus_evidence']['citations'] == [
+        {'anchor': 'table-1-row-2', 'quote': 'test'}
+    ]
+    assert 'quote' not in v['main_focus_evidence']
+    # A legacy row with only the quote key still loads, with no citations
+    assert v['protein_accession_evidence']['citations'] == []
+    assert 'quote' not in v['protein_accession_evidence']
 
     # Check harmonized data (wrapped in ReasoningBlock)
     assert v['harmonized_variant'] is not None
@@ -1025,7 +1037,7 @@ def _ev(value: object = None, quote: str | None = 'test') -> dict:
     """Minimal evidence_block JSON stub for the variant fixture."""
     d: dict = {'value': value, 'reasoning': 'test'}
     if quote is not None and value is not None:
-        d['quote'] = quote
+        d['citations'] = [{'anchor': 'paragraph-1', 'quote': quote}]
     return d
 
 
@@ -3305,12 +3317,13 @@ def test_phenotype_extraction_takes_cached_hpo_links(
         patient_id=patient.id,
         status=TaskStatus.RUNNING,
         # Takes the follow-up branch, which never reads the paper text itself;
-        # citation pruning still does, so an (empty) anchored document must exist.
+        # the citation check still does, so the anchored document must hold the
+        # block the concepts cite.
         additional_context='again',
     )
     anchored = document_anchored_md_path(seeded_paper.id)
     anchored.parent.mkdir(parents=True, exist_ok=True)
-    anchored.write_text('')
+    anchored.write_text('[paragraph-1] The proband had q.\n')
     db_session.add(task)
     db_session.commit()
     monkeypatch.setattr(
@@ -3323,7 +3336,11 @@ def test_phenotype_extraction_takes_cached_hpo_links(
     def extracted(concept, **kw):
         return ExtractedPhenotype(
             patient_id=patient.id,
-            concept=dict(value=concept, reasoning='r', quote='q'),
+            concept=dict(
+                value=concept,
+                reasoning='r',
+                citations=[dict(anchor='paragraph-1', quote='q')],
+            ),
             onset=None,
             location=None,
             severity=None,

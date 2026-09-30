@@ -1,4 +1,3 @@
-import json
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -46,11 +45,6 @@ def pdf_images_dir(paper_id: int, supplement: bool = False) -> Path:
     return base / 'images'
 
 
-def pdf_sections_dir(paper_id: int, supplement: bool = False) -> Path:
-    base = pdf_supplements_dir(paper_id) if supplement else pdf_dir(paper_id)
-    return base / 'sections'
-
-
 def pdf_markdown_path(paper_id: int, supplement: bool = False) -> Path:
     base = pdf_supplements_dir(paper_id) if supplement else pdf_dir(paper_id)
     return base / 'raw.md'
@@ -73,12 +67,6 @@ def pdf_extraction_success_path(paper_id: int, supplement: bool = False) -> Path
 
 def pdf_image_path(paper_id: int, image_id: int, supplement: bool = False) -> Path:
     return pdf_images_dir(paper_id, supplement) / f'{image_id}.png'
-
-
-def pdf_image_caption_path(
-    paper_id: int, image_id: int, supplement: bool = False
-) -> Path:
-    return pdf_images_dir(paper_id, supplement) / f'{image_id}.md'
 
 
 def pdf_table_image_path(
@@ -107,12 +95,6 @@ def pdf_table_unrecovered_path(
     means corrected, this one present means unrecovered, neither means clean.
     """
     return pdf_tables_dir(paper_id, supplement) / f'{table_id}.unrecovered'
-
-
-def pdf_section_markdown_path(
-    paper_id: int, section_id: int, supplement: bool = False
-) -> Path:
-    return pdf_sections_dir(paper_id, supplement) / f'{section_id}.md'
 
 
 def paper_section_classification_path(paper_id: int) -> Path:
@@ -191,34 +173,6 @@ def document_image_path(
     return document_images_dir(paper_id, supplement) / f'{picture_index}.png'
 
 
-def apply_table_corrections(
-    paper_id: int, markdown: str, supplement: bool = False
-) -> str:
-    """Replace corrupted table markdown with its vision-corrected version.
-
-    ``correct_tables`` writes a ``<table_id>.vision.md`` beside every table it
-    re-extracted from the table image, and leaves ``raw.md`` untouched. The
-    substitution happens here, at read time, keyed on the on-disk table
-    markdown -- which is byte-identical to the copy docling inlined into
-    ``raw.md`` -- so the match is exact by construction. Tables with no vision
-    file are left as they are.
-    """
-    tables_dir = pdf_tables_dir(paper_id, supplement=supplement)
-    if not tables_dir.exists():
-        return markdown
-
-    for vision_path in sorted(tables_dir.glob('*.vision.md')):
-        table_id = vision_path.name.removesuffix('.vision.md')
-        original_path = tables_dir / f'{table_id}.md'
-        if not original_path.exists():
-            continue
-        original = original_path.read_text()
-        if original and original in markdown:
-            markdown = markdown.replace(original, vision_path.read_text(), 1)
-
-    return _flag_unrecovered_tables(paper_id, markdown, supplement=supplement)
-
-
 # Deliberately asks for nothing the reader cannot do: the extraction agents have
 # no tools, so telling them to check the table image would invite claiming an
 # image they never saw -- the same confabulation this marker exists to prevent.
@@ -230,36 +184,6 @@ UNRECOVERED_TABLE_MARKER = (
     'paper because it is absent from this table -- report it as unreadable '
     'instead.]**'
 )
-
-
-def _flag_unrecovered_tables(
-    paper_id: int, markdown: str, supplement: bool = False
-) -> str:
-    """Mark tables the correction agent judged corrupted but could not recover.
-
-    Without this the scrambled table is indistinguishable from a table that
-    genuinely lacks the value, and extraction agents report a confident
-    "not stated in the paper" for data that is present but unreadable.
-    """
-    tables_dir = pdf_tables_dir(paper_id, supplement=supplement)
-
-    for marker_path in sorted(tables_dir.glob('*.unrecovered')):
-        table_id = marker_path.name.removesuffix('.unrecovered')
-        original_path = tables_dir / f'{table_id}.md'
-        if not original_path.exists():
-            continue
-        original = original_path.read_text()
-        if original and original in markdown:
-            marker = UNRECOVERED_TABLE_MARKER.format(table_id=table_id)
-            markdown = markdown.replace(original, f'{marker}\n\n{original}', 1)
-
-    return markdown
-
-
-def raw_md(paper_id: int, supplement: bool = False) -> str:
-    """Read a paper's extracted markdown with table corrections applied."""
-    path = pdf_markdown_path(paper_id, supplement=supplement)
-    return apply_table_corrections(paper_id, path.read_text(), supplement=supplement)
 
 
 def _supplement_block(paper_id: int, supplement_format: 'FileFormat | None') -> str:
@@ -346,21 +270,3 @@ def relevant_sections_md(
         document_anchored_md_path(paper_id).read_text(), section_classifications
     )
     return main + _supplement_block(paper_id, supplement_format)
-
-
-def sections_md(paper_id: int) -> list[str]:
-    sections = []
-    for section_path in pdf_sections_dir(paper_id).iterdir():
-        if section_path.suffix == '.md':
-            with section_path.open('r') as f:
-                sections.append(f.read())
-    return sections
-
-
-def tables_md(paper_id: int) -> list[str]:
-    tables = []
-    for table_path in pdf_tables_dir(paper_id).iterdir():
-        if table_path.suffix == '.md':
-            with table_path.open('r') as f:
-                tables.append(f.read())
-    return tables

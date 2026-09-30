@@ -1,9 +1,5 @@
 """GET /papers/{id}/document and POST /papers/{id}/highlight: the SPA's evidence
-sheet for evidence that cites anchors (slice 3 of docs/evidence-anchors-plan.md).
-
-The legacy pair (/markdown-annotation, /grobid-annotation) stays for evidence
-that predates citations; see test_markdown_annotation.py.
-"""
+sheet (slices 3 and 4 of docs/evidence-anchors-plan.md)."""
 
 import json
 

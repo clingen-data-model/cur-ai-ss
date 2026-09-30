@@ -105,9 +105,10 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
     as one of two presence files beside the table: ``N.vision.md`` (corrupt
     and rebuilt from the image -- the rebuilt markdown) or ``N.unrecovered``
     (corrupt and the image did not yield a faithful table); neither means the
-    table was clean. ``raw.md`` is deliberately left untouched: corrections
-    and the unrecovered warning are applied at read time by
-    ``lib.misc.pdf.paths.apply_table_corrections``.
+    table was clean. ``raw.md`` is left untouched: ``build_anchored``
+    (``lib.misc.pdf.anchors``) reads the vision file and the unrecovered
+    marker when it writes ``anchored.md``, so corrections and the warning are
+    applied at build time.
     """
     tables_dir = pdf_tables_dir(paper_id, supplement=supplement)
     if not tables_dir.exists():

@@ -33,7 +33,6 @@ from lib.ui.paper.metadata import render_metadata_tab
 from lib.ui.paper.occurrences import render_patient_variant_occurrences_tab
 from lib.ui.paper.patients import render_patients_tab
 from lib.ui.paper.shared import (
-    CURRENT_ANNOTATIONS_KEY,
     HEADER_TABS_KEY,
     PAPER_TABS,
     TAB_METADATA,

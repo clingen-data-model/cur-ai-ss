@@ -59,9 +59,11 @@ def test_well_formed_anchor_survives(anchor):
 @pytest.mark.parametrize('anchor', ['paragraph-3-row-1', 'Table 1', 'p54', ''])
 def test_malformed_anchor_is_dropped_with_a_warning(anchor, caplog):
     with caplog.at_level(logging.WARNING, logger='lib.models.evidence_block'):
-        block = _block(quote='x', citations=[Citation(anchor=anchor)])
+        block = _block(
+            citations=[Citation(anchor=anchor), Citation(anchor='paragraph-1')]
+        )
 
-    assert block.citations == []
+    assert [c.anchor for c in block.citations] == ['paragraph-1']
     warnings = [r for r in caplog.records if 'malformed anchor' in r.getMessage()]
     assert len(warnings) == 1
     assert repr(anchor) in warnings[0].getMessage()
@@ -70,12 +72,16 @@ def test_malformed_anchor_is_dropped_with_a_warning(anchor, caplog):
 def test_citation_alone_satisfies_the_source_rule():
     block = _block(citations=[Citation(anchor='paragraph-1')])
 
-    assert block.quote is None
-    assert block.table_id is None
+    assert [c.anchor for c in block.citations] == ['paragraph-1']
+
+
+def test_a_block_with_no_citations_is_no_source():
+    with pytest.raises(ValueError, match='At least one citation is required'):
+        _block()
 
 
 def test_only_a_malformed_citation_is_no_source():
-    with pytest.raises(ValueError, match='evidence source'):
+    with pytest.raises(ValueError, match='At least one citation is required'):
         _block(citations=[Citation(anchor='p1')])
 
 
@@ -93,11 +99,20 @@ def test_response_blocks_need_no_source_and_do_not_share_the_default():
 
 
 def test_legacy_stored_block_loads_with_no_citations():
-    stored = {'value': 'x', 'reasoning': 'r', 'quote': 'q', 'is_supplement': False}
+    stored = {
+        'value': 'x',
+        'reasoning': 'r',
+        'quote': 'q',
+        'table_id': None,
+        'image_id': None,
+        'is_supplement': False,
+    }
 
     block = HumanEvidenceBlock[str].model_validate(stored)
 
     assert block.citations == []
+    assert not hasattr(block, 'quote')
+    assert 'quote' not in block.model_dump()
 
 
 def test_dumps_carry_citations():
@@ -236,16 +251,6 @@ def test_case_is_not_folded():
 
     with pytest.raises(CitationError):
         verify_citations(block, TEXTS)
-
-
-def test_legacy_fields_are_not_checked():
-    block = _block(
-        quote='not in any block',
-        table_id=3,
-        citations=[Citation(anchor='figure-2')],
-    )
-
-    verify_citations(block, TEXTS)
 
 
 def test_nested_output_is_walked_and_every_problem_has_a_path():

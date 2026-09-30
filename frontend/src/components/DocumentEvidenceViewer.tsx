@@ -12,8 +12,8 @@
  * are handed (react-markdown 10 passes `node` after every rehype plugin has
  * run), strip it from what they render, and set `data-anchor` /
  * `data-evidence-highlight` as React props -- which rehype-sanitize never
- * sees, so the GitHub default schema (plus `mark`, for the quote splice)
- * stays exactly as strict as the legacy viewer's. Tables carry their row ids
+ * sees, so the GitHub default schema (plus `mark`, for the quote splice; see
+ * lib/markdown.ts) stays exactly as strict. Tables carry their row ids
  * in a leading `anchor` column; the `tr` component drops that cell so it is
  * never shown.
  *
@@ -40,13 +40,8 @@ import type { Citation } from '@/api/generated'
 import { apiErrorMessage } from '@/lib/apiError'
 import { describeAnchor, parseAnchor, tableOfRow } from '@/lib/anchors'
 import { Spinner } from '@/components/ui/spinner'
-import {
-  SANITIZE_SCHEMA,
-  findWhitespaceTolerantMatch,
-  resolveImageSrc,
-  withHighlight,
-} from '@/components/MarkdownEvidenceViewer'
-import type { TextMatch } from '@/components/MarkdownEvidenceViewer'
+import { SANITIZE_SCHEMA, findWhitespaceTolerantMatch, resolveImageSrc, withHighlight } from '@/lib/markdown'
+import type { TextMatch } from '@/lib/markdown'
 
 type HastElement = NonNullable<ExtraProps['node']>
 type HastNode = HastElement['children'][number]
@@ -76,8 +71,8 @@ function anchorCell(tr: HastElement | undefined): string | null {
 }
 
 /* A <table> renders before any of its rows, so its id cannot come from
- * render-order state (the legacy viewer's technique); the hast subtree is
- * there up front, and the first row id names the table. */
+ * render-order state; the hast subtree is there up front, and the first row
+ * id names the table. */
 function tableAnchor(node: HastElement | undefined): string | null {
   if (!node) return null
   for (const child of node.children) {

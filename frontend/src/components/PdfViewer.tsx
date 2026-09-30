@@ -1,7 +1,7 @@
 /* Renders a PDF with highlight overlays -- used by the evidence "View in PDF"
- * sheet. Coordinates come from the /grobid-annotation endpoint, which is
- * side-effect-free (unlike /highlight, which mutates a shared highlighted.pdf
- * on disk), so this is safe for multiple curators to use concurrently.
+ * sheet. Coordinates come from `POST /papers/{id}/highlight`, which is
+ * read-only (it resolves a block's citations to precomputed boxes and writes
+ * nothing on disk), so this is safe for multiple curators to use concurrently.
  *
  * Same react-pdf setup as PaperMetadataTab.tsx -- see frontend/README.md for
  * why only react-pdf may import pdfjs-dist.

@@ -17,13 +17,10 @@ from docling.document_converter import (
     WordFormatOption,
 )
 from docling_core.types.doc import (
-    DocItemLabel,
     DoclingDocument,
     ImageRefMode,
     PictureItem,
-    SectionHeaderItem,
     TableItem,
-    TextItem,
 )
 from docling_core.types.doc.page import TextCellUnit
 from docling_parse.pdf_parser import DoclingPdfParser, PdfDocument
@@ -44,14 +41,11 @@ from lib.misc.pdf.paths import (
     document_tables_dir,
     document_words_json_path,
     pdf_extraction_success_path,
-    pdf_image_caption_path,
     pdf_image_path,
     pdf_images_dir,
     pdf_json_path,
     pdf_markdown_path,
     pdf_raw_path,
-    pdf_section_markdown_path,
-    pdf_sections_dir,
     pdf_table_image_path,
     pdf_table_markdown_path,
     pdf_table_unrecovered_path,
@@ -117,46 +111,6 @@ def parse_words_json(stream: BytesIO) -> list[WordLoc]:
                 )
             )
     return words_json
-
-
-def split_by_sections(
-    document: DoclingDocument,
-) -> tuple[list[tuple[str, str]], dict[int, str]]:
-    sections: list[tuple[str, str]] = []
-    image_captions: dict[int, str] = {}
-    current_header = None
-    current_text: list[str] = []
-
-    for item, _ in document.iterate_items():
-        if isinstance(item, SectionHeaderItem):
-            # flush previous section
-            if current_header is not None:
-                sections.append((current_header.text, '\n\n'.join(current_text)))
-
-            current_header = item
-            current_text = []
-
-        elif isinstance(item, TextItem):
-            if item.label == DocItemLabel.CAPTION:
-                if not item.parent:
-                    continue
-                if item.parent.cref.startswith('#/pictures/'):
-                    image_captions[int(item.parent.cref.split('/')[-1])] = item.text
-                elif item.parent.cref.startswith('#/tables/'):
-                    # Skip table headers as they are included in table markdown.
-                    continue
-                else:
-                    print(
-                        f'Caption for non-image or non-table found {item.parent.cref}, violating assumption.'
-                    )
-            else:
-                current_text.append(item.text)
-
-    # flush final section
-    if current_header is not None:
-        sections.append((current_header.text, '\n\n'.join(current_text)))
-
-    return sections, image_captions
 
 
 def _parse_xlsx_content(paper_id: int, content: bytes) -> None:
@@ -318,7 +272,6 @@ async def parse_content(
 
     pdf_images_dir(paper_id, supplement=supplement).mkdir(parents=True, exist_ok=True)
     pdf_tables_dir(paper_id, supplement=supplement).mkdir(parents=True, exist_ok=True)
-    pdf_sections_dir(paper_id, supplement=supplement).mkdir(parents=True, exist_ok=True)
 
     format_options: dict[InputFormat, FormatOption]
     if supplement_format == FileFormat.DOCX:
@@ -387,22 +340,6 @@ async def parse_content(
 
     with open(pdf_words_json_path(paper_id, supplement=supplement), 'w') as fp:
         json.dump([w.model_dump() for w in words_json], fp, indent=2)
-
-    section_mds, image_captions = split_by_sections(document)
-
-    for i, section_md in enumerate(section_mds):
-        with open(
-            pdf_section_markdown_path(paper_id, i, supplement=supplement), 'w'
-        ) as fp:
-            fp.write('## ' + section_md[0])
-            fp.write('\n\n')
-            fp.write(section_md[1])
-
-    for i, caption in image_captions.items():
-        with open(
-            pdf_image_caption_path(paper_id, i, supplement=supplement), 'w'
-        ) as fp:
-            fp.write(caption)
 
     await correct_tables(paper_id, supplement=supplement)
 

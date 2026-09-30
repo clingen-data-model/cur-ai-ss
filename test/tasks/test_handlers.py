@@ -7,6 +7,7 @@ from lib.misc.pdf.paths import document_anchored_md_path
 from lib.models import GeneDB, PaperDB
 from lib.models.paper import PedigreeDB
 from lib.tasks.handlers import (
+    cited_text,
     format_paper_context,
     paper_input,
     patient_extraction_message,
@@ -84,6 +85,31 @@ def test_pedigree_input_names_the_figure_anchor():
     assert pedigree_input(main) == {'anchor': 'figure-2', 'description': 'd'}
     assert pedigree_input(supplement) == {'anchor': 'supp-figure-0', 'description': 'd'}
     assert pedigree_input(None) is None
+
+
+def test_cited_text_renders_each_citation_as_quote_then_anchor():
+    """A stored block's citations, as the later agents are shown them: the
+    quote with its anchor in parentheses, or the bare anchor when there is no
+    quote (a figure), joined with '; '."""
+    block = {
+        'value': 'P1',
+        'reasoning': 'r',
+        'citations': [
+            {'anchor': 'paragraph-13', 'quote': 'Eleven additional'},
+            {'anchor': 'figure-2', 'quote': ''},
+            {'anchor': 'table-1-row-2'},
+        ],
+    }
+
+    assert (
+        cited_text(block) == 'Eleven additional (paragraph-13); figure-2; table-1-row-2'
+    )
+
+
+def test_cited_text_is_empty_without_citations():
+    assert cited_text({'value': 'P1', 'reasoning': 'r', 'citations': []}) == ''
+    # A row written before citations existed carries only the retired keys.
+    assert cited_text({'value': 'P1', 'reasoning': 'r', 'quote': 'old'}) == ''
 
 
 def test_citation_check_reads_the_paper_once_and_rejects_bad_citations(paper):

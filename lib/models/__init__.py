@@ -38,8 +38,6 @@ from lib.models.paper import (
     FileFormat,
     GeneDB,
     GeneResp,
-    HighlightRequest,
-    MarkdownAnnotationRequest,
     PaperDB,
     PaperExtractionOutput,
     PaperResp,
