@@ -28,7 +28,7 @@ import re
 from collections.abc import Callable
 from typing import Any, TypeVar
 
-from agents import Agent, Runner, RunResult
+from agents import Agent, Runner, RunResult, TResponseInputItem
 from pydantic import BaseModel, ValidationError
 
 logger = logging.getLogger(__name__)
@@ -66,6 +66,11 @@ _CHECK_REPAIR_PROMPT = (
 
 Check = Callable[[Any], None]
 
+# What a handler sends: one string, or the list `lib.tasks.handlers.paper_input`
+# builds (the paper block as its own message, then the task text) so the paper
+# can end at a prompt-cache breakpoint.
+AgentInput = str | list[TResponseInputItem]
+
 _FENCE_RE = re.compile(r'^```(?:json)?\s*\n?(.*?)\n?```$', re.DOTALL)
 
 
@@ -75,9 +80,24 @@ def _strip_code_fence(text: str) -> str:
     return match.group(1).strip() if match else text
 
 
+def _append_to_last(message: AgentInput, text: str) -> AgentInput:
+    """Add `text` to the end of the task text: the string itself, or the last
+    item of a list input, leaving the paper message in front of it untouched
+    (it must stay byte-identical across agents to be a cache hit)."""
+    if isinstance(message, str):
+        return f'{message}\n\n{text}'
+    if not message:
+        raise ValueError('agent input must not be empty')
+    *head, last = message
+    content = last.get('content')  # type: ignore[union-attr]  # the input-item union
+    if not isinstance(content, str):
+        raise TypeError('the last input item must carry string content')
+    return [*head, {**last, 'content': f'{content}\n\n{text}'}]  # type: ignore[list-item]
+
+
 async def run_with_manual_output(
     agent: Agent[Any],
-    message: str,
+    message: AgentInput,
     output_type: type[T],
     *,
     check: Check | None = None,
@@ -92,9 +112,10 @@ async def run_with_manual_output(
     model; a `ValueError` it raises is repaired the same way, with its message
     as the feedback (see `verify_citations` in lib.models.evidence_block).
     """
-    prompt = f'{message}\n\n' + _JSON_OUTPUT_DIRECTIVE.format(
+    directive = _JSON_OUTPUT_DIRECTIVE.format(
         schema=json.dumps(output_type.model_json_schema(), indent=2)
     )
+    prompt = _append_to_last(message, directive)
 
     result = await Runner.run(agent, prompt, **runner_kwargs)
     for attempt in range(1, max_attempts + 1):
@@ -124,7 +145,7 @@ async def run_with_manual_output(
 
 async def run_with_checked_output(
     agent: Agent[Any],
-    message: str,
+    message: AgentInput,
     check: Check,
     *,
     max_attempts: int = 3,

@@ -92,21 +92,31 @@ def model_settings_for(name: str, *, effort: str | None = None) -> ModelSettings
     Blocker 1 in docs/anthropic-migration.md), so effort is gated on that
     rather than a hardcoded model-name list here.
 
-    Two breakpoints, not one: 'system' covers the instructions and tool
-    definitions, which are identical on every call an agent makes; index -1
-    covers the paper context in the last user message, which is what makes a
-    tool loop's later turns and a same-session follow-up read instead of
-    resend. Role targeting stamps every message of that role, so 'system' is
-    safe (agents send exactly one), but the paper must be targeted by position
-    -- a thread that has accumulated follow-ups would otherwise stamp the first
-    four user messages and miss the one actually being extended.
+    Two breakpoints. Index 1 is the paper: every paper-bearing handler sends
+    the paper block as its own user message right after the system message the
+    SDK inserts at index 0 (``lib.tasks.handlers.paper_input``), so the entry
+    written there is the same bytes for every agent on that paper and every
+    later run reads it. Absolute position, not role: a thread that has
+    accumulated follow-ups has several user messages, and role targeting would
+    stamp them all. Index -1 is the last message, which is what makes a tool
+    loop's later turns, a repair turn and a same-session follow-up read the
+    thread so far instead of resending it. An agent with no paper has its one
+    message at both positions; litellm skips a message that already carries
+    cache_control, so that collapses to one breakpoint. No 'system' point:
+    every agent's instructions are the same ~120-char base prompt, far below
+    the minimum cacheable block, so it could never write anything.
+
+    Before 2026-09-30 the points were 'system' and -1 with the paper inlined
+    into one message per call, so every run wrote a unique-prefix entry at
+    the 1h write price and nothing ever read one (see
+    docs/anthropic-migration.md, "Prompt caching, second pass").
     """
     provider, bare = split_provider(name)
     if provider != 'anthropic':
         return ModelSettings()
     extra_args: dict = {
         'cache_control_injection_points': [
-            {'location': 'message', 'role': 'system', 'control': _CACHE_CONTROL},
+            {'location': 'message', 'index': 1, 'control': _CACHE_CONTROL},
             {'location': 'message', 'index': -1, 'control': _CACHE_CONTROL},
         ]
     }

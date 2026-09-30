@@ -413,6 +413,56 @@ and bills only a cheap read, avoiding the doubled write. Every extraction agent
 uses structured outputs, so that option is unavailable to us and `ttl: "1h"` stands
 as the right choice — for a more specific reason than the original argument gave.
 
+### Prompt caching, second pass (2026-09-30): the paper as a shared prefix
+
+The one-line mechanism above was on, and every run still reported `cached=0` unless
+it was an exact repeat (worker log 2026-09-29/30: 59/59 PATIENT_DEMOGRAPHICS misses,
+every PATIENT_VARIANT_OCCURRENCE and SEGREGATION run a miss, PHENOTYPE_EXTRACTION 49
+misses vs 10 hits that were identical re-runs within the hour). Two reasons:
+
+- **The breakpoints were on the wrong blocks.** Anthropic writes a cache entry only
+  at a breakpoint, for the whole prefix `tools + system + messages` up to that block.
+  The `system` point covered every agent's identical ~120-char base prompt, far
+  below the 512-token minimum on Claude 5 models, so it wrote nothing. The `-1`
+  point covered the one user message each handler sent: paper + per-task data +
+  instructions in a single string, so the entry's prefix was unique per call.
+  Nothing could read it, and every call paid the 1h **write** price (2x) on the
+  whole ~26k prompt. The pipeline was paying double, not merely missing a discount.
+- **The fan-out defeats a correct breakpoint anyway.** An entry becomes available
+  only after the first response that wrote it begins; the worker started 20
+  per-patient tasks at once.
+
+What changed:
+
+- `lib.tasks.handlers.paper_input` sends the paper block (`format_paper_context`,
+  gene included, so every handler now passes the gene) as its own user item, then
+  the task text as a second item; prompt order is unchanged. litellm folds the two
+  consecutive user items into one Anthropic user turn with two text blocks, each
+  carrying its breakpoint (verified offline by capturing the request body), so the
+  model sees the same bytes as before and the prefix `system + paper block` is
+  byte-identical across agents. A single message with two content parts would
+  *not* have worked: litellm stamps only the last part of a multi-part message,
+  and the agents SDK drops any `cache_control` set on an input part.
+- `model_settings_for` targets `index: 1` (the paper, right after the SDK's
+  system message; absolute so follow-ups cannot move it) and `index: -1` (tool
+  loops, repair turns, follow-ups). The `system` point is gone.
+- `output_config.format` is part of the cache key (structured-outputs doc:
+  changing it invalidates the cache) and so is the tool list, so the sharable group
+  is the agents with no tools and no native schema: variant extraction, patient
+  extraction, demographics, occurrences (all `run_with_manual_output`). Variant
+  extraction runs first and writes the entry; the others read it. Each
+  native-schema agent (classifier, metadata, phenotypes, segregation evidence,
+  compound het) has its own entry, written by its first run on the paper.
+- `lib/bin/worker.py` gates the fan-out per `(paper, task type)`: the first task
+  runs alone, the rest wait on its lock and then run together under the normal
+  semaphores, for a 50-minute window. One task's latency per paper+type; no
+  provider branch.
+- The Paper Classifier cannot be the warm: it reads `fulltext_md` while every
+  later agent reads the `relevant_sections_md` its own output defines, and it has
+  its own `output_format`. `max_tokens: 0` pre-warming is rejected with structured
+  outputs (above), so there is no explicit warm call; the pipeline order is the
+  warm.
+
 ## Blocker 4: Anthropic's union-type schema limit — fixed for the 4 affected agents
 
 **Discovered and fixed 2026-09-15**, running the real pipeline end-to-end on

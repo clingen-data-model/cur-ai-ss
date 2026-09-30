@@ -6,7 +6,12 @@ from lib.agents.patient_extraction_agent import PATIENT_EXTRACTION_AGENT_INSTRUC
 from lib.misc.pdf.paths import document_anchored_md_path
 from lib.models import GeneDB, PaperDB
 from lib.models.paper import PedigreeDB
-from lib.tasks.handlers import patient_extraction_message, pedigree_input
+from lib.tasks.handlers import (
+    format_paper_context,
+    paper_input,
+    patient_extraction_message,
+    pedigree_input,
+)
 
 
 @pytest.fixture
@@ -25,27 +30,47 @@ def paper(db_session):
     return paper
 
 
-def test_message_carries_anchored_paper_pedigree_and_instructions(db_session, paper):
+def test_message_is_the_paper_block_then_pedigree_and_instructions(db_session, paper):
+    """Two user items: the paper (with its gene) alone, so it can end at a
+    prompt-cache breakpoint and be the same bytes every agent sends, then the
+    task text in its usual order."""
     db_session.add(
         PedigreeDB(paper_id=paper.id, image_id=3, description='II-1 affected female')
     )
     db_session.flush()
 
-    message = patient_extraction_message(db_session, paper.id)
+    paper_item, task_item = patient_extraction_message(db_session, paper.id)
 
-    assert '[paragraph-13] Eleven additional family members were affected.' in message
-    assert (
-        "Pedigree Description:\n{'anchor': 'figure-3', 'description': 'II-1 affected female'}"
-        in message
+    assert paper_item['role'] == task_item['role'] == 'user'
+    assert paper_item['content'] == format_paper_context(
+        '## Results\n\n[paragraph-13] Eleven additional family members were affected.\n',
+        'MSX1',
     )
-    assert message.endswith(PATIENT_EXTRACTION_AGENT_INSTRUCTIONS)
-    assert message.index('Eleven') < message.index('Pedigree Description')
+    assert paper_item['content'].endswith('Gene: MSX1')
+    assert task_item['content'] == (
+        "Pedigree Description:\n{'anchor': 'figure-3', 'description': 'II-1 affected female'}\n\n"
+        + PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
+    )
 
 
 def test_message_without_a_pedigree_says_none(db_session, paper):
-    message = patient_extraction_message(db_session, paper.id)
+    _, task_item = patient_extraction_message(db_session, paper.id)
 
-    assert 'Pedigree Description:\nNone\n\n' in message
+    assert task_item['content'].startswith('Pedigree Description:\nNone\n\n')
+
+
+def test_paper_input_keeps_the_paper_block_untouched():
+    items = paper_input(
+        'PAPER AND GENE CONTEXT\n\nPaper (fulltext md):\nx\n\nGene: G', 'do it'
+    )
+
+    assert items == [
+        {
+            'role': 'user',
+            'content': 'PAPER AND GENE CONTEXT\n\nPaper (fulltext md):\nx\n\nGene: G',
+        },
+        {'role': 'user', 'content': 'do it'},
+    ]
 
 
 def test_pedigree_input_names_the_figure_anchor():
