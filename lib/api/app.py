@@ -3023,8 +3023,10 @@ def highlight_citations(
 
     The SPA's evidence sheet posts a block's ``citations`` as stored and draws
     the result on its PDF tab. Each anchor resolves to the boxes precomputed in
-    anchors.json (``lib/misc/pdf/anchors.py``); a paragraph citation with a
-    quote is narrowed to the quote's words inside that paragraph. Supplement
+    anchors.json (``lib/misc/pdf/anchors.py``); a paragraph or table-row
+    citation with a quote is narrowed to the quote's words inside that block
+    (a Docling grid row can be most of a page, so the row alone is too much
+    when the quote names one cell). Supplement
     anchors (``supp-``) have no PDF and contribute nothing, as does an anchor
     the document does not have, so an empty list is a valid answer, not a 404.
     """

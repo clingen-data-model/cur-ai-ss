@@ -156,9 +156,9 @@ def find_best_match(query: str, words: list[WordLoc]) -> list[WordLoc] | None:
 #
 # Evidence cites anchors (lib/misc/pdf/anchors.py); a highlight is the anchor's
 # precomputed boxes, never a re-found quote. The only matching left is *narrowing*:
-# a paragraph citation with a quote highlights the quote's words instead of the
-# whole paragraph, and the search is confined to the words inside that
-# paragraph's own boxes, so a miss can widen a highlight but never misplace it.
+# a paragraph or table-row citation with a quote highlights the quote's words
+# instead of the whole block, and the search is confined to the words inside
+# that block's own boxes, so a miss can widen a highlight but never misplace it.
 
 
 def words_within(
@@ -234,11 +234,13 @@ def citations_to_grobid_annotations(
     """Every citation's boxes on the main PDF, in citation order.
 
     Per citation: a supplement, unknown or malformed anchor contributes nothing
-    (the supplement has no PDF view; nothing here raises). A paragraph with a
-    quote is narrowed to the quote's words when they align inside the
-    paragraph's boxes, else it is the whole paragraph. A table, a row (its own
-    rectangle, or the table's when the row's is not trusted) and a figure are
-    their boxes as stored.
+    (the supplement has no PDF view; nothing here raises). A paragraph or a
+    table row with a quote is narrowed to the quote's words when they align
+    inside the block's boxes, else it is the whole block: for a row that is
+    its own rectangle, or the table's when the row's is not trusted, and a
+    Docling grid row can span most of a page (a transposed table read as a
+    few tall rows), so the cell is what the quote points at. A table cited
+    whole and a figure are their boxes as stored.
     """
     anchors = load_anchors(paper_id)
     frames = page_frames(document_raw_path(paper_id))
@@ -252,7 +254,8 @@ def citations_to_grobid_annotations(
         boxes = boxes_for_anchor(citation.anchor, anchors)
         if not boxes:
             continue
-        if parsed.kind == AnchorKind.PARAGRAPH and citation.quote.strip():
+        narrowable = parsed.kind == AnchorKind.PARAGRAPH or parsed.row is not None
+        if narrowable and citation.quote.strip():
             if words is None:
                 words = _load_words(paper_id)
             matched = find_best_match(citation.quote, words_within(boxes, words))
