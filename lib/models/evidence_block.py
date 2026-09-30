@@ -1,10 +1,15 @@
+import logging
 import re
+from collections.abc import Mapping
 from datetime import datetime
-from typing import ClassVar, Generic, Self, TypeVar
+from typing import Any, ClassVar, Generic, Self, TypeVar
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
+from lib.misc.pdf.anchor_ids import parse_anchor
 from lib.models.datetimes import UtcDatetime
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar('T')
 
@@ -69,7 +74,63 @@ class ReasoningBlock(BaseModel, Generic[T]):
         return strip_markup(value)
 
 
+class Citation(BaseModel):
+    """One structural reference into an anchored document (``anchored.md``).
+
+    The anchor names a block the agent was shown as a ``[paragraph-54]`` /
+    ``[table-1]`` / ``[figure-2]`` tag, or a table row copied from the
+    ``anchor`` column (``table-1-row-7``). The quote narrows the highlight
+    inside that block; it is never the whole block, because the anchor already
+    names it. A table cell is cited as its row plus the cell's text as the quote
+    (no column grammar: the agent copies, it never counts columns).
+
+    Every field is a plain ``str`` on purpose: Anthropic counts nullable and
+    union nodes in the output schema against a hard limit, per use of the block
+    that embeds this, so a ``str | None`` here would be paid for hundreds of
+    times over (see the schema-limit note below ``EvidenceBlock``).
+    """
+
+    anchor: str = Field(
+        description=(
+            'A block id exactly as printed in the text, e.g. paragraph-54, '
+            'table-1, table-1-row-7, figure-2, or supp-table-1-row-7 for the '
+            'supplement.'
+        )
+    )
+    quote: str = Field(
+        default='',
+        description=(
+            'The shortest verbatim span of that block that supports the value: '
+            'a phrase or sentence of a paragraph, or the text of one table cell. '
+            'Empty when the whole block is the evidence (always empty for a '
+            'figure).'
+        ),
+    )
+
+    @field_validator('anchor', mode='after')
+    @classmethod
+    def _strip_anchor(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator('quote', mode='after')
+    @classmethod
+    def _strip_quote_markup(cls, value: str) -> str:
+        return strip_markup(value) if value else value
+
+
 class EvidenceBlock(ReasoningBlock[T]):
+    # Structural evidence: ids of blocks in the anchored document. Slice 1 of
+    # the evidence-anchors work (docs/evidence-anchors-plan.md) adds the field;
+    # the agents start filling it in slice 2 and the four legacy fields below go
+    # away in slice 4. Until then both kinds coexist on a block.
+    citations: list[Citation] = Field(
+        default=[],
+        description=(
+            'Structural anchors for this evidence. Only cite ids that appear as '
+            '[anchor-id] tags in the text you were given; if the text carries no '
+            'such tags, leave this empty.'
+        ),
+    )
     quote: str | None = None  # verbatim quote from text
     table_id: int | None = None  # table-based evidence
     image_id: int | None = None  # figure/pedigree evidence
@@ -77,15 +138,37 @@ class EvidenceBlock(ReasoningBlock[T]):
         False  # whether evidence came from a supplement (non-renderable in PDF view)
     )
 
-    # Whether a non-empty value must cite a quote/table/image. True for what an
-    # agent produces; the response-side subclasses below turn it off, since a
-    # curator-typed value legitimately has no source to cite.
+    # Whether a non-empty value must cite a citation/quote/table/image. True for
+    # what an agent produces; the response-side subclasses below turn it off,
+    # since a curator-typed value legitimately has no source to cite.
     require_source: ClassVar[bool] = True
 
     @field_validator('quote', mode='after')
     @classmethod
     def _strip_quote_markup(cls, value: str | None) -> str | None:
         return strip_markup(value) if value else value
+
+    @field_validator('citations', mode='after')
+    @classmethod
+    def _drop_malformed_citations(cls, citations: list[Citation]) -> list[Citation]:
+        """Keep only citations whose anchor is a well-formed id.
+
+        Lenient about form, strict about presence: a mangled id is dropped with
+        a warning rather than failing the whole agent output, and if it was the
+        block's only source ``validate_sources`` (which runs after the field
+        validators) raises exactly as it would for a block with no source.
+        Cannot live on ``Citation``: a validator cannot remove its own item.
+        Whether the id actually exists in the paper is ``prune_citations``' job.
+        """
+        kept = []
+        for citation in citations:
+            if parse_anchor(citation.anchor) is None:
+                logger.warning(
+                    'Dropping citation with malformed anchor %r', citation.anchor
+                )
+                continue
+            kept.append(citation)
+        return kept
 
     @model_validator(mode='after')
     def validate_sources(self) -> Self:
@@ -106,13 +189,14 @@ class EvidenceBlock(ReasoningBlock[T]):
             self.require_source
             and not is_unknown
             and not is_falsy_bool
+            and not self.citations
             and not self.quote
             and self.table_id is None
             and self.image_id is None
         ):
             raise ValueError(
                 'At least one evidence source must be provided: '
-                'quote, table_id, or image_id'
+                'citations, quote, table_id, or image_id'
             )
 
         # Prioritize table_id if both are provided
@@ -120,6 +204,60 @@ class EvidenceBlock(ReasoningBlock[T]):
             self.image_id = None
 
         return self
+
+
+def _norm(text: str) -> str:
+    """Markup- and whitespace-tolerant form for comparing a quote to its block."""
+    return ' '.join(strip_markup(text).split())
+
+
+def prune_citations(model: Any, texts: Mapping[str, str]) -> int:
+    """Drop citations to ids the paper does not have; blank quotes the block lacks.
+
+    The safety net behind the grammar check above: an agent can produce a
+    well-formed id that names nothing (``paragraph-999``) or a quote it did not
+    actually copy. ``texts`` is id -> block text, as ``block_texts`` builds it
+    from ``anchored.md`` (main and supplement merged); by construction its keys
+    are exactly the ids that exist. Walks any Pydantic model, list or dict *in
+    place*, so a handler can call it on an agent's ``final_output`` before the
+    converters see it. Returns the number of citations dropped or blanked.
+
+    A quote that is not found is blanked rather than dropped: the citation still
+    names a real block, and a block highlight is the safe fallback. Matching is
+    verbatim after stripping markup and collapsing whitespace, no case folding.
+    """
+    changed = 0
+    if isinstance(model, EvidenceBlock):
+        kept = []
+        for citation in model.citations:
+            block = texts.get(citation.anchor)
+            if block is None:
+                logger.warning(
+                    'Dropping citation to unknown anchor %r', citation.anchor
+                )
+                changed += 1
+                continue
+            if citation.quote and _norm(citation.quote) not in _norm(block):
+                logger.warning(
+                    'Blanking quote not found in %s: %r',
+                    citation.anchor,
+                    citation.quote,
+                )
+                citation.quote = ''
+                changed += 1
+            kept.append(citation)
+        model.citations = kept
+        return changed
+    if isinstance(model, BaseModel):
+        for name in type(model).model_fields:
+            changed += prune_citations(getattr(model, name), texts)
+    elif isinstance(model, list):
+        for item in model:
+            changed += prune_citations(item, texts)
+    elif isinstance(model, dict):
+        for item in model.values():
+            changed += prune_citations(item, texts)
+    return changed
 
 
 # ReasoningBlock/EvidenceBlock above are agent output schemas and the shape
@@ -130,6 +268,11 @@ class EvidenceBlock(ReasoningBlock[T]):
 # classes below are the API-response shapes; their edited_* fields are filled
 # in from the edits table while the response is built (see app.py's
 # _attach_edit_history), never read from storage.
+#
+# The same limit is why Citation is all-str and citations is a plain list: a
+# list is not a union node and neither is a required str, so the field adds
+# nothing to the count however many times a block is embedded. The legacy
+# quote/table_id/image_id nullables still count until slice 4 removes them.
 
 
 class AttributedReasoningBlock(ReasoningBlock[T]):

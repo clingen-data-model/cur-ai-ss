@@ -633,6 +633,31 @@ def test_get_patients_paper_not_found(client):
     assert response.json()['detail'] == 'Paper not found'
 
 
+def test_get_patients_returns_stored_citations(client, db_session, seeded_paper):
+    """A stored evidence dict carrying citations comes back through the response
+    model unchanged; blocks stored before the field existed come back with []."""
+    family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
+    fields = _patient_required_fields('P1')
+    fields['sex_evidence'] = dict(
+        value='Unknown',
+        reasoning='test evidence',
+        citations=[dict(anchor='table-1-row-2', quote='F')],
+    )
+    db_session.add(
+        PatientDB(
+            paper_id=seeded_paper.id, family_id=family.id, identifier='P1', **fields
+        )
+    )
+    db_session.flush()
+
+    patient = client.get(f'/papers/{seeded_paper.id}/patients').json()[0]
+
+    assert patient['sex_evidence']['citations'] == [
+        {'anchor': 'table-1-row-2', 'quote': 'F'}
+    ]
+    assert patient['identifier_evidence']['citations'] == []
+
+
 def test_update_patient_with_human_edit_note(
     client, db_session, seeded_paper, test_user
 ):

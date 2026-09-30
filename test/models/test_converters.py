@@ -4,7 +4,7 @@ from lib.models.converters import (
     harmonized_variant_to_db,
     patient_identity_to_db,
 )
-from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
+from lib.models.evidence_block import Citation, EvidenceBlock, ReasoningBlock
 from lib.models.patient import (
     AffectedStatus,
     AgeUnit,
@@ -289,3 +289,32 @@ def test_harmonized_variant_to_db_with_partial_fields():
     assert result.hgvs_p is None
     assert result.hgvs_g is None
     assert result.reasoning == 'Normalized via transcript-based projection.'
+
+
+def test_apply_patient_demographics_stores_citations():
+    """The stored evidence dict carries the citations the agent produced."""
+    row = patient_identity_to_db('paper_cite', _identity())
+    demographics = PatientDemographics(
+        sex=EvidenceBlock(
+            value=SexAtBirth.Female,
+            reasoning='stated',
+            citations=[Citation(anchor='table-1-row-2', quote='F')],
+        ),
+        age_diagnosis=EvidenceBlock(value=None, reasoning='no age'),
+        age_report=EvidenceBlock(value=None, reasoning='no age'),
+        age_death=EvidenceBlock(value=None, reasoning='no death info'),
+        country_of_origin=EvidenceBlock(
+            value=CountryCode.Unknown, reasoning='not stated'
+        ),
+        race=EvidenceBlock(value=Race.Unknown, reasoning='not stated'),
+        ethnicity=EvidenceBlock(value=Ethnicity.Unknown, reasoning='not stated'),
+        affected_status=EvidenceBlock(
+            value=AffectedStatus.Unknown, reasoning='not stated'
+        ),
+    )
+
+    apply_patient_demographics(row, demographics)
+
+    assert row.sex_evidence['citations'] == [{'anchor': 'table-1-row-2', 'quote': 'F'}]
+    assert row.sex_evidence['quote'] is None
+    assert row.race_evidence['citations'] == []

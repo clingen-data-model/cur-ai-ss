@@ -1,4 +1,4 @@
-> **Status: chunk 1 (anchored documents on disk, side by side) in progress on branch `evidence-anchors`; the rest is not implemented** (written 2026-09-29, ids renamed to the self-describing grammar the same day). Design for replacing quote re-finding with structural evidence anchors. Line numbers refer to the tree at commit `226d109d` and will drift.
+> **Status: chunk 1 (anchored documents on disk, side by side) landed and deployed (PRs #326-#328, 2026-09-30). Chunk 2 is being done as four additive slices: (1) the `citations` schema -- on branch `evidence-citations`, this update; (2) agents cite anchors; (3) highlight endpoint + `/document` + SPA viewer; (4) cutover and cleanup. Slices 2-4 are not implemented.** (written 2026-09-29, ids renamed to the self-describing grammar the same day). Design for replacing quote re-finding with structural evidence anchors. Line numbers refer to the tree at commit `226d109d` and will drift.
 
 # Evidence anchors: cite document structure instead of re-finding quotes
 
@@ -125,25 +125,47 @@ are untagged, so the classifier's header extraction (`handlers.py:367-415`, whic
 ### Schema
 
 ```python
+class Citation(BaseModel):
+    anchor: str      # paragraph-54 | table-1 | table-1-row-7 | figure-2 | supp-...
+    quote: str = ''  # shortest verbatim span of that block; '' = the whole block
+
 class EvidenceBlock(ReasoningBlock[T]):
-    anchors: list[str] = []      # every location the value rests on
-    quote: str | None = None     # optional verbatim excerpt of a cited paragraph/row, for curators
+    citations: list[Citation] = []   # every location the value rests on
+    quote / table_id / image_id / is_supplement   # legacy, removed in slice 4
 ```
 
-`table_id`, `image_id`, `is_supplement` are removed (the `supp-` prefix carries supplement-
-ness). Validation is deliberately lenient about *form* and strict about *presence*,
-matching today's contract: a `field_validator` drops anchors that don't match the
-grammar (logged), and `validate_sources` raises when `require_source`, the value is real,
-and no anchor survives -- exactly when today's "at least one of quote/table_id/image_id"
-raises. Manual-output agents (`run_with_manual_output`) get a repair retry from that;
-native-schema agents (`Runner.run(output_type=...)`: segregation, pedigree, phenotype
-linking, paper metadata) fail the task, as they do today. Union-node cost drops from 3
-nullable fields to 1 (`docs/anthropic-migration.md` census: the native-schema agents at 7
-nodes get cheaper, not costlier).
+Decisions (2026-09-30, slice 1, `lib/models/evidence_block.py`):
 
-After each producing agent runs, `prune_unknown_anchors(output, known_ids)` drops any
-anchor that isn't a block id in that paper's `anchors.json` (+ `anchored.md`) (with a warning) -- a mis-
-copied id degrades to "no highlight", never a wrong box.
+- **A quote per anchor**, not one loose quote beside a list of ids. The quote is the
+  *shortest verbatim span inside the cited block* that supports the value -- a phrase or
+  sentence of a paragraph, never the whole paragraph (the anchor already names it). It
+  exists only to narrow the highlight.
+- **Table cells are cited as row + quote**: `anchor='table-1-row-7', quote='c.1220C>A'`,
+  the cell text verbatim. No `-col-N` grammar; the agent copies, it never counts columns.
+  An ambiguous cell (`+`) falls back to the row highlight.
+- **Figures carry no quote**; a paragraph whose whole text is the evidence carries none.
+- **The legacy fields stay until slice 4** (the `supp-` prefix will carry supplement-ness
+  then), so existing evidence keeps rendering and old highlighting keeps working
+  meanwhile. `Citation` is all-`str` and a list is not a union, so the field adds **zero**
+  nodes to Anthropic's per-use union count; the three legacy nullables still cost what
+  they cost today until slice 4 removes them (`docs/anthropic-migration.md` census).
+
+Validation is deliberately lenient about *form* and strict about *presence*,
+matching today's contract: a `field_validator` on `citations` drops entries whose anchor
+fails `parse_anchor` (logged), and `validate_sources` raises when `require_source`, the
+value is real, and no citation or legacy source survives -- exactly when today's "at
+least one of quote/table_id/image_id" raises. Manual-output agents
+(`run_with_manual_output`) get a repair retry from that; native-schema agents
+(`Runner.run(output_type=...)`: segregation, pedigree, phenotype linking, paper
+metadata) fail the task, as they do today. The grammar lives in the dependency-free
+`lib/misc/pdf/anchor_ids.py` so the models can import it without `fitz`/`docling`.
+
+After each producing agent runs (slice 2), `prune_citations(output, texts)` -- `texts` =
+`block_texts(anchored.md)` for main + supplement, whose keys are by construction the ids
+that exist -- drops any citation to an unknown id and blanks any quote that is not a
+markup- and whitespace-tolerant substring of its block (both with a warning). A
+mis-copied id degrades to "no highlight", a mis-copied quote to the block highlight,
+never a wrong box.
 
 ### Highlighting
 
@@ -211,7 +233,7 @@ keep `parse_words_json`/`words.json`, `merge_adjacent_polygons`, `PairwiseAligne
 **`lib/api/app.py`** -- `grobid_annotation` rewritten on anchors; `/markdown-annotation`
 → `GET /document`; `_from_storage` unchanged (extra keys in old JSON are ignored).
 
-**`lib/tasks/handlers.py`** -- call `prune_unknown_anchors` after each of the 7
+**`lib/tasks/handlers.py`** -- call `prune_citations(output, texts)` after each of the 7
 producing agents (variants L468, pedigree L527, patients L605, demographics L700,
 segregation L805, occurrences L1239, phenotypes L1487, paper metadata L417). The
 pedigree figure listing (L543-560) currently probes `images/0.png, 1.png, ...` and stops
@@ -276,7 +298,7 @@ in a snapshot per paper.
   absent or doesn't align → block boxes).
 - `test/api/test_markdown_annotation.py` → `test_document.py` (main, supplement, 404).
 - `test/models/test_evidence_markup.py` + new cases: anchor grammar accepted/rejected,
-  `require_source` needs an anchor, `prune_unknown_anchors`.
+  `require_source` needs an anchor, `prune_citations`.
 - Update fixtures that build blocks with `table_id=`/`image_id=`: `test/models/
   test_converters.py:77-183` (incl. L134, L180-182), `test/models/test_evidence_markup.py:
   91-101`, `test/api/test_app.py` (inline evidence dicts ~L249-865),
@@ -292,8 +314,8 @@ in a snapshot per paper.
 3. Locally, run `PDF_PARSING` on the MASP1 test paper (PMID 26419238, the paper used to
    validate the Claude switch) and inspect `anchors.json` (+ `anchored.md`) and `fulltext_md` output by eye:
    ids on every paragraph, id column on every table, warning marker on a corrupted table.
-4. Run the full pipeline on it and check the evidence JSON: `anchors` populated, no
-   `table_id`/`image_id`, `prune_unknown_anchors` warnings (if any) in the worker log.
+4. Run the full pipeline on it and check the evidence JSON: `citations` populated, no
+   `table_id`/`image_id`, `prune_citations` warnings (if any) in the worker log.
 5. In the SPA: paper 13 / patient B546 identifier evidence → PDF tab boxes the quoted
    sentence (not the whole paragraph) on page 5 plus Table 2; markdown tab highlights the
    sentence inside `p54` and the table, both at once; paper 27's justified-text quote →
