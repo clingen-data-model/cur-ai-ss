@@ -19,7 +19,7 @@ from lib.misc.snapshots import write_snapshot_safe
 from lib.models import TaskDB
 from lib.models.paper import PaperDB
 from lib.reference_data.hpo import warm_term_lookup_if_cached
-from lib.tasks.agent_session import agent_session
+from lib.tasks.agent_session import clear_task_session, closing_sessions
 from lib.tasks.handlers import TASK_HANDLERS
 from lib.tasks.hpo_link_cache import get_hpo_link_cache
 from lib.tasks.misc import enqueue_successors
@@ -97,7 +97,7 @@ async def _release_in_flight_tasks() -> None:
                 task.error_message = 'Worker shut down mid-task and exhausted retries'
             task.updated_at = now
     for task_id in to_clear:
-        await agent_session(task_id).clear_session()
+        await clear_task_session(task_id)
 
 
 async def _shutdown() -> None:
@@ -138,7 +138,10 @@ async def execute_task(task_id: int) -> None:
     handler = TASK_HANDLERS[task_type]
     error_msg = None
     try:
-        await handler(task_id)
+        # Whatever agent sessions the handler opens are closed when it returns
+        # (their connections live on executor threads; see agent_session.py).
+        with closing_sessions():
+            await handler(task_id)
     except Exception as e:
         logger.exception(f'Task {task_id} ({task_type}) failed')
         error_msg = str(e)
@@ -334,7 +337,7 @@ async def poll_and_schedule_tasks(
                     f'Resetting timed-out task {task.id} ({task.type}) (attempt {task.tries + 1}/{MAX_RETRIES + 1})'
                 )
                 task.status = TaskStatus.PENDING
-                await agent_session(task.id).clear_session()
+                await clear_task_session(task.id)
             else:
                 logger.info(
                     f'Abandoning timed-out task {task.id} ({task.type}) (exhausted retries at {task.tries})'
@@ -363,7 +366,7 @@ async def poll_and_schedule_tasks(
             task.status = TaskStatus.PENDING
             task.updated_at = now
             task.error_message = None
-            await agent_session(task.id).clear_session()
+            await clear_task_session(task.id)
 
         session.flush()
 
