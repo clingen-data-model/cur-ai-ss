@@ -190,7 +190,9 @@ def _prov_boxes(item: DocItem, doc: DoclingDocument) -> list[PageBox]:
 
     (``y = 782.36 - t``; ``h = t - b``). Drawn on the page, both sit exactly on
     the text and the sentence runs from one into the other. Items from DOCX/
-    XLSX have no pages, so they get no boxes at all.
+    XLSX have no pages, so they get no boxes at all. Docling occasionally emits
+    a zero-width or zero-height prov (seen once in 14,640 anchors across the
+    94 prod papers); those cover nothing and are dropped.
     """
     boxes = []
     for prov in item.prov:
@@ -198,6 +200,8 @@ def _prov_boxes(item: DocItem, doc: DoclingDocument) -> list[PageBox]:
         if page is None or page.size is None:  # DOCX and friends: no layout
             continue
         tl = prov.bbox.to_top_left_origin(page.size.height)
+        if tl.r <= tl.l or tl.b <= tl.t:  # degenerate box: nothing to highlight
+            continue
         boxes.append(
             PageBox(
                 page_no=prov.page_no,

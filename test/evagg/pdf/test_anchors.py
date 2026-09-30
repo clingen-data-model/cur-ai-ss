@@ -309,6 +309,23 @@ def test_other_text_kinds_become_paragraphs_and_furniture_is_dropped(paper_id):
     assert [a.id for a in anchors] == ['paragraph-2', 'paragraph-3', 'paragraph-4']
 
 
+def test_zero_area_prov_boxes_are_dropped(paper_id):
+    doc = DoclingDocument(name='degenerate')
+    doc.add_page(page_no=1, size=Size(width=600, height=PAGE_HEIGHT))
+    item = doc.add_text(
+        label=DocItemLabel.TEXT, text='wrapped', prov=_bottom_left(10, 700, 200, 680)
+    )
+    # Docling artefacts seen in prod: a zero-width and a zero-height fragment.
+    item.prov.append(_bottom_left(292, 357, 292, 350))
+    item.prov.append(_bottom_left(292, 357, 400, 357))
+
+    _, anchors = build_anchored(doc, paper_id=paper_id)
+
+    assert anchors[0].boxes == [
+        PageBox(page_no=1, x=10, y=PAGE_HEIGHT - 700, width=190, height=20)
+    ]
+
+
 def test_blank_items_produce_neither_text_nor_anchor(paper_id):
     doc = DoclingDocument(name='blank')
     doc.add_page(page_no=1, size=Size(width=600, height=PAGE_HEIGHT))
