@@ -679,7 +679,7 @@ _UNRECOVERED_PREFIX = '**[EXTRACTION WARNING'
 def block_texts(markdown: str) -> dict[str, str]:
     """Map every id in an ``anchored.md`` to the text it tags.
 
-    The reverse of ``build_anchored``: this is what ``prune_citations`` checks an
+    The reverse of ``build_anchored``: this is what ``verify_citations`` checks an
     agent's quotes against, and its keys are the set of ids that exist. A line
     state machine over the layout the builders produce (split on ``'\\n'`` only,
     as ``_with_anchor_column`` does, so a ``\\r`` inside a cell stays in the row):
@@ -757,7 +757,7 @@ def paper_block_texts(paper_id: int) -> dict[str, str]:
     """Every id in a paper's anchored documents -> its text, main and supplement merged.
 
     The keys are exactly the ids that exist for the paper (``supp-`` ones
-    included), which is what ``prune_citations`` checks an agent's output against.
+    included), which is what ``verify_citations`` checks an agent's output against.
     """
     texts = block_texts(document_anchored_md_path(paper_id).read_text())
     supplement = document_anchored_md_path(paper_id, supplement=True)

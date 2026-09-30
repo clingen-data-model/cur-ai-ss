@@ -1,4 +1,4 @@
-> **Status: chunk 1 (anchored documents on disk, side by side) landed and deployed (PRs #326-#328, 2026-09-30). Chunk 2 is being done as four additive slices: (1) the `citations` schema (PR #329); (2) agents cite anchors -- branch `evidence-citations-2`, this update: agents read `anchored.md`, the prompts ask for citations only (no legacy fields on new evidence, nothing derives them), every producing handler prunes, and the pedigree moves to the Docling picture index; (3) highlight endpoint + `/document` + SPA viewer; (4) cutover and cleanup. Slices 3-4 are not implemented; until slice 3, newly extracted evidence has no highlight in the SPA.** (written 2026-09-29, ids renamed to the self-describing grammar the same day). Design for replacing quote re-finding with structural evidence anchors. Line numbers refer to the tree at commit `226d109d` and will drift.
+> **Status: chunk 1 (anchored documents on disk, side by side) landed and deployed (PRs #326-#328, 2026-09-30). Chunk 2 is being done as four additive slices: (1) the `citations` schema (PR #329); (2) agents cite anchors -- branch `evidence-citations-2`, this update: agents read `anchored.md`, the prompts ask for citations only (no legacy fields on new evidence, nothing derives them), every citation is verified against the paper before storage (a bad anchor or quote is sent back to the model as a repair turn), and the pedigree moves to the Docling picture index; (3) highlight endpoint + `/document` + SPA viewer; (4) cutover and cleanup. Slices 3-4 are not implemented; until slice 3, newly extracted evidence has no highlight in the SPA.** (written 2026-09-29, ids renamed to the self-describing grammar the same day). Design for replacing quote re-finding with structural evidence anchors. Line numbers refer to the tree at commit `226d109d` and will drift.
 
 # Evidence anchors: cite document structure instead of re-finding quotes
 
@@ -160,12 +160,16 @@ least one of quote/table_id/image_id" raises. Manual-output agents
 metadata) fail the task, as they do today. The grammar lives in the dependency-free
 `lib/misc/pdf/anchor_ids.py` so the models can import it without `fitz`/`docling`.
 
-After each producing agent runs (slice 2), `prune_citations(output, texts)` -- `texts` =
+After each producing agent runs (slice 2), `verify_citations(output, texts)` -- `texts` =
 `block_texts(anchored.md)` for main + supplement, whose keys are by construction the ids
-that exist -- drops any citation to an unknown id and blanks any quote that is not a
-markup- and whitespace-tolerant substring of its block (both with a warning). A
-mis-copied id degrades to "no highlight", a mis-copied quote to the block highlight,
-never a wrong box.
+that exist -- raises `CitationError` naming every citation to an unknown id and every
+quote that is not a markup- and whitespace-tolerant substring of its block, with the
+path to the field. The handlers pass it into the runner's repair loop
+(`run_with_manual_output(check=...)` / `run_with_checked_output`), so the message goes
+back to the model in the same session, up to three attempts, and the task fails if it
+never checks out. Nothing with unverified evidence is stored: a mis-copied id or quote
+is corrected by the model, never silently degraded (decision 2026-09-30, replacing the
+earlier drop-and-blank pruner).
 
 ### Highlighting
 
@@ -233,7 +237,7 @@ keep `parse_words_json`/`words.json`, `merge_adjacent_polygons`, `PairwiseAligne
 **`lib/api/app.py`** -- `grobid_annotation` rewritten on anchors; `/markdown-annotation`
 → `GET /document`; `_from_storage` unchanged (extra keys in old JSON are ignored).
 
-**`lib/tasks/handlers.py`** -- call `prune_citations(output, texts)` after each of the 7
+**`lib/tasks/handlers.py`** -- pass `citation_check(paper_id)` (→ `verify_citations`) into the runner for each of the 7
 producing agents (variants L468, pedigree L527, patients L605, demographics L700,
 segregation L805, occurrences L1239, phenotypes L1487, paper metadata L417). The
 pedigree figure listing (L543-560) currently probes `images/0.png, 1.png, ...` and stops
@@ -298,7 +302,7 @@ in a snapshot per paper.
   absent or doesn't align → block boxes).
 - `test/api/test_markdown_annotation.py` → `test_document.py` (main, supplement, 404).
 - `test/models/test_evidence_markup.py` + new cases: anchor grammar accepted/rejected,
-  `require_source` needs an anchor, `prune_citations`.
+  `require_source` needs an anchor, `verify_citations`.
 - Update fixtures that build blocks with `table_id=`/`image_id=`: `test/models/
   test_converters.py:77-183` (incl. L134, L180-182), `test/models/test_evidence_markup.py:
   91-101`, `test/api/test_app.py` (inline evidence dicts ~L249-865),
@@ -315,7 +319,7 @@ in a snapshot per paper.
    validate the Claude switch) and inspect `anchors.json` (+ `anchored.md`) and `fulltext_md` output by eye:
    ids on every paragraph, id column on every table, warning marker on a corrupted table.
 4. Run the full pipeline on it and check the evidence JSON: `citations` populated, no
-   `table_id`/`image_id`, `prune_citations` warnings (if any) in the worker log.
+   `table_id`/`image_id`, repair-turn warnings from `manual_output` (if any) in the worker log.
 5. In the SPA: paper 13 / patient B546 identifier evidence → PDF tab boxes the quoted
    sentence (not the whole paragraph) on page 5 plus Table 2; markdown tab highlights the
    sentence inside `p54` and the table, both at once; paper 27's justified-text quote →

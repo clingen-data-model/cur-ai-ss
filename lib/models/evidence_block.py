@@ -162,7 +162,7 @@ class EvidenceBlock(ReasoningBlock[T]):
         block's only source ``validate_sources`` (which runs after the field
         validators) raises exactly as it would for a block with no source.
         Cannot live on ``Citation``: a validator cannot remove its own item.
-        Whether the id actually exists in the paper is ``prune_citations``' job.
+        Whether the id actually exists in the paper is ``verify_citations``' job.
         """
         kept = []
         for citation in citations:
@@ -215,53 +215,79 @@ def _norm(text: str) -> str:
     return ' '.join(strip_markup(text).split())
 
 
-def prune_citations(model: Any, texts: Mapping[str, str]) -> int:
-    """Drop citations to ids the paper does not have; blank quotes the block lacks.
+class CitationError(ValueError):
+    """An agent cited something the paper does not contain.
 
-    The safety net behind the grammar check above: an agent can produce a
-    well-formed id that names nothing (``paragraph-999``) or a quote it did not
-    actually copy. ``texts`` is id -> block text, as ``block_texts`` builds it
-    from ``anchored.md`` (main and supplement merged); by construction its keys
-    are exactly the ids that exist. Walks any Pydantic model, list or dict *in
-    place*, so a handler can call it on an agent's ``final_output`` before the
-    converters see it. Returns the number of citations dropped or blanked.
-
-    A quote that is not found is blanked rather than dropped: the citation still
-    names a real block, and a block highlight is the safe fallback. Matching is
-    verbatim after stripping markup and collapsing whitespace, no case folding.
+    Raised by ``verify_citations`` with one line per bad citation, worded for
+    the model: the repair loop sends the message straight back, so it names
+    the field, the anchor and what was wrong.
     """
-    changed = 0
+
+
+def _citation_problems(model: Any, texts: Mapping[str, str], path: str) -> list[str]:
     if isinstance(model, EvidenceBlock):
-        kept = []
-        for citation in model.citations:
+        problems = []
+        for i, citation in enumerate(model.citations):
+            where = f'{path}.citations[{i}]' if path else f'citations[{i}]'
             block = texts.get(citation.anchor)
             if block is None:
-                logger.warning(
-                    'Dropping citation to unknown anchor %r', citation.anchor
+                problems.append(
+                    f'{where}: anchor {citation.anchor!r} does not exist in the '
+                    'paper; copy an id exactly as printed in the text'
                 )
-                changed += 1
-                continue
-            if citation.quote and _norm(citation.quote) not in _norm(block):
-                logger.warning(
-                    'Blanking quote not found in %s: %r',
-                    citation.anchor,
-                    citation.quote,
+            elif citation.quote and _norm(citation.quote) not in _norm(block):
+                problems.append(
+                    f'{where}: quote {citation.quote!r} is not found verbatim in '
+                    f'{citation.anchor}; copy a span of that block or leave the '
+                    'quote empty'
                 )
-                citation.quote = ''
-                changed += 1
-            kept.append(citation)
-        model.citations = kept
-        return changed
+        return problems
     if isinstance(model, BaseModel):
-        for name in type(model).model_fields:
-            changed += prune_citations(getattr(model, name), texts)
-    elif isinstance(model, list):
-        for item in model:
-            changed += prune_citations(item, texts)
-    elif isinstance(model, dict):
-        for item in model.values():
-            changed += prune_citations(item, texts)
-    return changed
+        return [
+            problem
+            for name in type(model).model_fields
+            for problem in _citation_problems(
+                getattr(model, name), texts, f'{path}.{name}' if path else name
+            )
+        ]
+    if isinstance(model, list):
+        return [
+            problem
+            for i, item in enumerate(model)
+            for problem in _citation_problems(item, texts, f'{path}[{i}]')
+        ]
+    if isinstance(model, dict):
+        return [
+            problem
+            for key, item in model.items()
+            for problem in _citation_problems(item, texts, f'{path}[{key!r}]')
+        ]
+    return []
+
+
+def verify_citations(model: Any, texts: Mapping[str, str]) -> None:
+    """Raise ``CitationError`` unless every citation names a real block and
+    every quote is found inside its block.
+
+    The check behind the grammar validator above: an agent can produce a
+    well-formed id that names nothing (``paragraph-999``) or a quote it did not
+    actually copy. ``texts`` is id -> block text, as ``paper_block_texts``
+    builds it from ``anchored.md`` (main and supplement merged); by
+    construction its keys are exactly the ids that exist. Walks any Pydantic
+    model, list or dict and reports every problem at once, with the path to
+    the field, so a handler can hand the message to the model as a repair
+    prompt (``lib.agents.manual_output``). Nothing is dropped or blanked: a
+    value whose evidence does not check out is not stored.
+
+    Quote matching is verbatim after stripping markup and collapsing
+    whitespace, no case folding.
+    """
+    problems = _citation_problems(model, texts, '')
+    if problems:
+        raise CitationError(
+            f'{len(problems)} citation(s) do not check out against the paper:\n'
+            + '\n'.join(f'- {problem}' for problem in problems)
+        )
 
 
 # ReasoningBlock/EvidenceBlock above are agent output schemas and the shape

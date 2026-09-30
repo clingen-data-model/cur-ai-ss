@@ -21,7 +21,11 @@ from lib.agents.hpo_linking_agent import (
 from lib.agents.hpo_linking_agent import (
     agent as hpo_linking_agent,
 )
-from lib.agents.manual_output import run_with_manual_output
+from lib.agents.manual_output import (
+    Check,
+    run_with_checked_output,
+    run_with_manual_output,
+)
 from lib.agents.mondo_linking_agent import (
     MONDO_LINKING_AGENT_INSTRUCTIONS,
 )
@@ -149,7 +153,7 @@ from lib.models.converters import (
     segregation_evidence_to_db,
     variant_to_db,
 )
-from lib.models.evidence_block import ReasoningBlock, prune_citations
+from lib.models.evidence_block import ReasoningBlock, verify_citations
 from lib.models.mondo import (
     MondoDiseaseScope,
     MondoLinkingTarget,
@@ -460,13 +464,13 @@ async def handle_paper_metadata(task_id: int) -> None:
         message = f'{paper_context}\n\n{PAPER_EXTRACTION_AGENT_INSTRUCTIONS}'
         agent = paper_extraction_agent
 
-    result = await Runner.run(
+    result = await run_with_checked_output(
         agent,
         message,
+        citation_check(paper_id),
         session=agent_sess,
     )
     log_run_metrics('PAPER_METADATA', result)
-    prune_output_citations('PAPER_METADATA', paper_id, result.final_output)
 
     with session_scope() as session:
         paper = session.get(PaperDB, paper_id)
@@ -516,10 +520,10 @@ async def handle_variant_extraction(task_id: int) -> None:
         agent,
         message,
         VariantExtractionOutput,
+        check=citation_check(paper_id),
         session=agent_sess,
     )
     log_run_metrics('VARIANT_EXTRACTION', result)
-    prune_output_citations('VARIANT_EXTRACTION', paper_id, parsed)
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -634,17 +638,17 @@ def pedigree_input(pedigree_row: PedigreeDB | None) -> dict | None:
     }
 
 
-def prune_output_citations(task: str, paper_id: int, output: Any) -> None:
-    """Drop citations to ids the paper lacks and blank quotes the block lacks.
+def citation_check(paper_id: int) -> Check:
+    """The rule the output schema cannot express: every citation names a block
+    the paper has and every quote is found in it.
 
-    Runs on every producing agent's output before it reaches the converters, so
-    a mis-copied id degrades to no highlight rather than a wrong one. The count
-    goes to the log: a large number on one paper means the prompt or the text
-    the agent saw needs a look.
+    Handed to the repair loop (``run_with_manual_output`` / ``run_with_checked_output``)
+    so a bad citation is sent back to the model with the field, the anchor and
+    what was wrong, instead of being stored. The block texts are read once per
+    run, not per attempt.
     """
-    pruned = prune_citations(output, paper_block_texts(paper_id))
-    if pruned:
-        logger.warning(f'{task}: pruned {pruned} citation(s) for paper {paper_id}')
+    texts = paper_block_texts(paper_id)
+    return lambda output: verify_citations(output, texts)
 
 
 def patient_extraction_message(session: Session, paper_id: int) -> str:
@@ -707,10 +711,10 @@ async def handle_patient_extraction(task_id: int) -> None:
         agent,
         message,
         PatientExtractionOutput,
+        check=citation_check(paper_id),
         session=agent_sess,
     )
     log_run_metrics('PATIENT_EXTRACTION', result)
-    prune_output_citations('PATIENT_EXTRACTION', paper_id, parsed)
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -830,10 +834,10 @@ async def handle_patient_demographics(task_id: int) -> None:
         agent,
         message,
         PatientDemographics,
+        check=citation_check(paper_id),
         session=agent_sess,
     )
     log_run_metrics('PATIENT_DEMOGRAPHICS', result)
-    prune_output_citations('PATIENT_DEMOGRAPHICS', paper_id, parsed)
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -936,15 +940,13 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
         )
         agent = segregation_evidence_extractor
 
-    result = await Runner.run(
+    result = await run_with_checked_output(
         agent,
         message,
+        citation_check(paper_id),
         session=agent_sess,
     )
     log_run_metrics('SEGREGATION_EVIDENCE_EXTRACTION', result)
-    prune_output_citations(
-        'SEGREGATION_EVIDENCE_EXTRACTION', paper_id, result.final_output
-    )
 
     # Store results in new session
     with session_scope() as session:
@@ -1371,10 +1373,10 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
         agent,
         message,
         PatientVariantOccurrenceOutput,
+        check=citation_check(paper_id),
         session=agent_sess,
     )
     log_run_metrics('PATIENT_VARIANT_OCCURRENCE', result)
-    prune_output_citations('PATIENT_VARIANT_OCCURRENCE', paper_id, parsed)
 
     with session_scope() as session:
         # Idempotent: delete-then-insert
@@ -1589,13 +1591,13 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         )
         agent = patient_phenotype_linking_agent
 
-    result = await Runner.run(
+    result = await run_with_checked_output(
         agent,
         message,
+        citation_check(paper_id),
         session=agent_sess,
     )
     log_run_metrics('PHENOTYPE_EXTRACTION', result)
-    prune_output_citations('PHENOTYPE_EXTRACTION', paper_id, result.final_output)
 
     # Update DB with results
     with session_scope() as session:

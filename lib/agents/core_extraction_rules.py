@@ -43,9 +43,10 @@ CITATIONS:
     that carries the value in quote; cite the table id (table-N) only for a fact
     about the table as a whole;
   - empty when the whole block is the evidence, and always empty for a figure.
-- quote MUST be copied verbatim from inside the cited block. It is checked against
-  that block and blanked if it is not found there, so paraphrasing, summarising or
-  adding words loses the highlight. Do NOT place interpretive commentary in quote.
+- quote MUST be copied verbatim from inside the cited block. Every citation is
+  checked against the paper: an anchor that does not exist, or a quote that is not
+  found inside its block, is rejected and you will be asked to correct it. Do NOT
+  paraphrase, summarise, add words or place interpretive commentary in quote.
 - If the value itself was constructed rather than copied (an identifier you
   assigned, a conclusion that follows from a rule), cite the block that supports
   the underlying fact rather than leaving citations empty.

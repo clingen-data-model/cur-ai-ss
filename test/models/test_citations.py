@@ -1,5 +1,5 @@
 """The ``citations`` field on EvidenceBlock: grammar check, source rule, schema
-budget, storage compatibility and the ``prune_citations`` safety net.
+budget, storage compatibility and the ``verify_citations`` check.
 ``test_evidence_markup.py`` stays about markup stripping."""
 
 import logging
@@ -14,9 +14,10 @@ from lib.models.base import manual_evidence_block
 from lib.models.evidence_block import (
     AttributedEvidenceBlock,
     Citation,
+    CitationError,
     EvidenceBlock,
     HumanEvidenceBlock,
-    prune_citations,
+    verify_citations,
 )
 from lib.models.patient_variant_occurrences import (
     Inheritance,
@@ -162,7 +163,7 @@ def test_strip_script_cleans_citation_quotes():
     assert stored['citations'][0]['quote'] == 'Fs 3'
 
 
-# --- prune_citations ---------------------------------------------------------
+# --- verify_citations --------------------------------------------------------
 
 TEXTS = {
     'paragraph-1': 'The proband carried c.1220C>A and was  diagnosed at 5.',
@@ -172,7 +173,7 @@ TEXTS = {
 }
 
 
-def test_prune_drops_unknown_anchors(caplog):
+def test_unknown_anchors_are_an_error_naming_each_one():
     block = _block(
         citations=[
             Citation(anchor='paragraph-1'),
@@ -181,23 +182,37 @@ def test_prune_drops_unknown_anchors(caplog):
         ]
     )
 
-    with caplog.at_level(logging.WARNING, logger='lib.models.evidence_block'):
-        changed = prune_citations(block, TEXTS)
+    with pytest.raises(CitationError) as exc:
+        verify_citations(block, TEXTS)
 
-    assert changed == 2
-    assert [c.anchor for c in block.citations] == ['paragraph-1']
-    assert sum('unknown anchor' in r.getMessage() for r in caplog.records) == 2
+    message = str(exc.value)
+    assert message.startswith('2 citation(s) do not check out')
+    assert "citations[1]: anchor 'paragraph-999' does not exist" in message
+    assert "citations[2]: anchor 'table-1-row-9' does not exist" in message
+    assert 'paragraph-1' not in message.split('\n', 1)[1]  # the good one is not listed
 
 
-def test_prune_blanks_quotes_the_block_does_not_contain(caplog):
+def test_a_quote_the_block_does_not_contain_is_an_error():
     block = _block(citations=[Citation(anchor='paragraph-1', quote='c.1220C>T')])
 
-    with caplog.at_level(logging.WARNING, logger='lib.models.evidence_block'):
-        changed = prune_citations(block, TEXTS)
+    with pytest.raises(
+        CitationError, match="quote 'c.1220C>T' is not found verbatim in paragraph-1"
+    ):
+        verify_citations(block, TEXTS)
 
-    assert changed == 1
-    assert block.citations == [Citation(anchor='paragraph-1', quote='')]
-    assert any('Blanking quote' in r.getMessage() for r in caplog.records)
+
+def test_nothing_is_mutated_on_failure():
+    """The model, not the code, corrects a bad citation: the block is untouched."""
+    citations = [
+        Citation(anchor='paragraph-1', quote='nope'),
+        Citation(anchor='table-7'),
+    ]
+    block = _block(citations=list(citations))
+
+    with pytest.raises(CitationError):
+        verify_citations(block, TEXTS)
+
+    assert block.citations == citations
 
 
 @pytest.mark.parametrize(
@@ -209,36 +224,31 @@ def test_prune_blanks_quotes_the_block_does_not_contain(caplog):
         ('table-1-row-0', '| P1 | c.1220C>A |'),  # a copied row
         ('table-1', 'Table 1. Variants'),  # the caption, at table level
         ('table-1', 'P1 | c.1220C>A'),  # a row, at table level
+        ('figure-2', ''),  # a figure is cited without a quote
     ],
 )
-def test_prune_keeps_tolerant_matches(anchor, quote):
-    block = _block(citations=[Citation(anchor=anchor, quote=quote)])
-
-    assert prune_citations(block, TEXTS) == 0
-    assert block.citations[0].quote == quote
+def test_tolerant_matches_pass(anchor, quote):
+    verify_citations(_block(citations=[Citation(anchor=anchor, quote=quote)]), TEXTS)
 
 
-def test_prune_does_not_fold_case():
+def test_case_is_not_folded():
     block = _block(citations=[Citation(anchor='paragraph-1', quote='THE PROBAND')])
 
-    assert prune_citations(block, TEXTS) == 1
-    assert block.citations[0].quote == ''
+    with pytest.raises(CitationError):
+        verify_citations(block, TEXTS)
 
 
-def test_prune_leaves_legacy_fields_and_empty_quotes_alone():
+def test_legacy_fields_are_not_checked():
     block = _block(
         quote='not in any block',
         table_id=3,
         citations=[Citation(anchor='figure-2')],
     )
 
-    assert prune_citations(block, TEXTS) == 0
-    assert block.quote == 'not in any block'
-    assert block.table_id == 3
-    assert block.citations == [Citation(anchor='figure-2', quote='')]
+    verify_citations(block, TEXTS)
 
 
-def test_prune_walks_nested_output_in_place():
+def test_nested_output_is_walked_and_every_problem_has_a_path():
     def occurrence() -> PatientVariantOccurrence:
         return PatientVariantOccurrence(
             patient_id=1,
@@ -269,21 +279,20 @@ def test_prune_walks_nested_output_in_place():
             value='X', reasoning='r', citations=[Citation(anchor='figure-9')]
         ),
     )
-    links = output.links
 
-    assert prune_citations(output, TEXTS) == 5
-    assert output.links is links  # pruned in place, nothing rebuilt
-    for link in output.links:
-        assert link.zygosity.citations[0].quote == 'c.1220C>A'
-        assert link.inheritance.citations == []
-        assert link.testing_methods[0].citations[0].quote == ''
-    assert output.disease_name is not None
-    assert output.disease_name.citations == []
+    with pytest.raises(CitationError) as exc:
+        verify_citations(output, TEXTS)
+
+    lines = str(exc.value).splitlines()
+    assert lines[0].startswith('5 citation(s)')
+    assert "- links[0].inheritance.citations[0]: anchor 'paragraph-77'" in lines[1]
+    assert "- links[0].testing_methods[0].citations[0]: quote 'nope'" in lines[2]
+    assert lines[3].startswith('- links[1].inheritance')
+    assert lines[5].startswith("- disease_name.citations[0]: anchor 'figure-9'")
 
 
-def test_prune_accepts_bare_lists_and_dicts():
-    blocks = [_block(citations=[Citation(anchor='paragraph-1')]) for _ in range(2)]
-
-    assert prune_citations(blocks, TEXTS) == 0
-    assert prune_citations({'a': _block(citations=[Citation(anchor='table-7')])}, TEXTS)
-    assert prune_citations('not a model', TEXTS) == 0
+def test_bare_lists_and_dicts_and_non_models():
+    verify_citations([_block(citations=[Citation(anchor='paragraph-1')])] * 2, TEXTS)
+    verify_citations('not a model', TEXTS)
+    with pytest.raises(CitationError, match=r"\['a'\]\.citations\[0\]"):
+        verify_citations({'a': _block(citations=[Citation(anchor='table-7')])}, TEXTS)

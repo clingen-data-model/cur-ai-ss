@@ -55,3 +55,22 @@ def test_pedigree_input_names_the_figure_anchor():
     assert pedigree_input(main) == {'anchor': 'figure-2', 'description': 'd'}
     assert pedigree_input(supplement) == {'anchor': 'supp-figure-0', 'description': 'd'}
     assert pedigree_input(None) is None
+
+
+def test_citation_check_reads_the_paper_once_and_rejects_bad_citations(paper):
+    from lib.models.evidence_block import Citation, CitationError, EvidenceBlock
+    from lib.tasks.handlers import citation_check
+
+    check = citation_check(paper.id)
+    good = EvidenceBlock[str](
+        value='x',
+        reasoning='r',
+        citations=[Citation(anchor='paragraph-13', quote='Eleven additional')],
+    )
+    bad = EvidenceBlock[str](
+        value='x', reasoning='r', citations=[Citation(anchor='paragraph-14')]
+    )
+
+    check(good)
+    with pytest.raises(CitationError, match="anchor 'paragraph-14' does not exist"):
+        check([good, bad])
