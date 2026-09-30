@@ -14,7 +14,6 @@ from lib.misc.pdf.paths import (
     document_images_dir,
     document_success_path,
     document_tables_dir,
-    fulltext_md,
     pdf_extraction_success_path,
     pdf_image_path,
     pdf_json_path,
@@ -26,6 +25,7 @@ from lib.misc.pdf.paths import (
     pdf_table_unrecovered_path,
     pdf_table_vision_markdown_path,
     pdf_tables_dir,
+    raw_md,
 )
 from lib.models import PaperDB
 
@@ -209,7 +209,7 @@ def test_apply_table_corrections_prefers_vision_markdown():
     _seed_table(paper_id, 0, garbled, f'intro\n\n{garbled}\n\noutro')
     pdf_table_vision_markdown_path(paper_id, 0).write_text(corrected)
 
-    assert fulltext_md(paper_id) == f'intro\n\n{corrected}\n\noutro'
+    assert raw_md(paper_id) == f'intro\n\n{corrected}\n\noutro'
 
 
 def test_apply_table_corrections_noop_without_vision_file():
@@ -219,7 +219,7 @@ def test_apply_table_corrections_noop_without_vision_file():
 
     _seed_table(paper_id, 0, garbled, f'intro\n\n{garbled}\n\noutro')
 
-    assert fulltext_md(paper_id) == f'intro\n\n{garbled}\n\noutro'
+    assert raw_md(paper_id) == f'intro\n\n{garbled}\n\noutro'
 
 
 def test_apply_table_corrections_is_idempotent():
@@ -231,7 +231,7 @@ def test_apply_table_corrections_is_idempotent():
     _seed_table(paper_id, 0, garbled, f'intro\n\n{garbled}\n\noutro')
     pdf_table_vision_markdown_path(paper_id, 0).write_text(corrected)
 
-    once = fulltext_md(paper_id)
+    once = raw_md(paper_id)
     assert apply_table_corrections(paper_id, once) == once
 
 
@@ -264,7 +264,7 @@ async def test_correct_tables_writes_vision_file_without_touching_raw_md():
     assert pdf_table_vision_markdown_path(paper_id, 0).read_text() == corrected
     assert pdf_markdown_path(paper_id).read_text() == raw_body
     # ...but readers see the correction.
-    assert fulltext_md(paper_id) == f'intro\n\n{corrected}\n\noutro'
+    assert raw_md(paper_id) == f'intro\n\n{corrected}\n\noutro'
 
 
 def test_unrecovered_table_is_flagged_for_downstream_agents():
@@ -275,7 +275,7 @@ def test_unrecovered_table_is_flagged_for_downstream_agents():
     _seed_table(paper_id, 0, garbled, f'intro\n\n{garbled}\n\noutro')
     pdf_table_unrecovered_path(paper_id, 0).touch()
 
-    result = fulltext_md(paper_id)
+    result = raw_md(paper_id)
 
     assert UNRECOVERED_TABLE_MARKER.format(table_id=0) in result
     # The garbled rows are kept -- some content is still real.
@@ -293,7 +293,7 @@ def test_recovered_table_is_not_flagged():
     _seed_table(paper_id, 0, garbled, f'intro\n\n{garbled}\n\noutro')
     pdf_table_vision_markdown_path(paper_id, 0).write_text(corrected)
 
-    result = fulltext_md(paper_id)
+    result = raw_md(paper_id)
 
     assert 'EXTRACTION WARNING' not in result
     assert corrected in result
@@ -305,7 +305,7 @@ def test_clean_table_is_not_flagged():
 
     _seed_table(paper_id, 0, table, f'intro\n\n{table}\n\noutro')
 
-    assert 'EXTRACTION WARNING' not in fulltext_md(paper_id)
+    assert 'EXTRACTION WARNING' not in raw_md(paper_id)
 
 
 async def _run_correct_tables(paper_id: int, result: TableCorrectionResult) -> None:
@@ -340,7 +340,7 @@ async def test_unrecovered_marker_written_when_unrecoverable():
     assert pdf_table_unrecovered_path(paper_id, 0).exists()
     assert not pdf_table_vision_markdown_path(paper_id, 0).exists()
     # ...and the paper now warns readers about it.
-    assert 'EXTRACTION WARNING' in fulltext_md(paper_id)
+    assert 'EXTRACTION WARNING' in raw_md(paper_id)
 
 
 async def test_recovered_table_clears_a_stale_unrecovered_marker():
@@ -361,7 +361,7 @@ async def test_recovered_table_clears_a_stale_unrecovered_marker():
     )
 
     assert not pdf_table_unrecovered_path(paper_id, 0).exists()
-    assert 'EXTRACTION WARNING' not in fulltext_md(paper_id)
+    assert 'EXTRACTION WARNING' not in raw_md(paper_id)
 
 
 async def test_clean_table_leaves_no_marker():

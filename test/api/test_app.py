@@ -13,6 +13,7 @@ from lib.api.app import app
 from lib.api.auth import get_current_user
 from lib.api.db import get_session, session_scope
 from lib.core.environment import env
+from lib.misc.pdf.paths import document_anchored_md_path, document_image_path
 from lib.models import (
     AnnotatedVariantDB,
     ChatMessageDB,
@@ -33,6 +34,7 @@ from lib.models import (
 )
 from lib.models.deletion_log import DeletionLogDB
 from lib.models.edit import EditDB
+from lib.models.paper import PedigreeDB
 from lib.tasks import TaskCreateRequest
 from lib.tasks.agent_session import chat_session
 from lib.tasks.models import TaskStatus, TaskType
@@ -631,6 +633,26 @@ def test_get_patients_paper_not_found(client):
     response = client.get('/papers/999/patients')
     assert response.status_code == 404
     assert response.json()['detail'] == 'Paper not found'
+
+
+def test_get_pedigree_image_url_is_the_anchored_documents_image(
+    client, db_session, seeded_paper
+):
+    """PedigreeDB.image_id is the Docling picture index (the N of figure-N), so
+    the image is documents/{id}/{main,supplement}/images/N.png."""
+    db_session.add(
+        PedigreeDB(
+            paper_id=seeded_paper.id, image_id=4, description='ped', is_supplement=True
+        )
+    )
+    db_session.flush()
+
+    resp = client.get(f'/papers/{seeded_paper.id}/pedigree').json()
+
+    assert resp['image_id'] == 4
+    assert resp['image_url'] == str(
+        document_image_path(seeded_paper.id, 4, supplement=True)
+    )
 
 
 def test_get_patients_returns_stored_citations(client, db_session, seeded_paper):
@@ -3282,9 +3304,13 @@ def test_phenotype_extraction_takes_cached_hpo_links(
         type=TaskType.PHENOTYPE_EXTRACTION,
         patient_id=patient.id,
         status=TaskStatus.RUNNING,
-        # Takes the follow-up branch, which needs no paper markdown on disk.
+        # Takes the follow-up branch, which never reads the paper text itself;
+        # citation pruning still does, so an (empty) anchored document must exist.
         additional_context='again',
     )
+    anchored = document_anchored_md_path(seeded_paper.id)
+    anchored.parent.mkdir(parents=True, exist_ok=True)
+    anchored.write_text('')
     db_session.add(task)
     db_session.commit()
     monkeypatch.setattr(

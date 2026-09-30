@@ -104,11 +104,19 @@ class RateLimitError(Exception):
 from lib.api.db import session_scope
 from lib.core.environment import env
 from lib.core.logging import setup_logging
+from lib.misc.pdf.anchors import (
+    AnchorKind,
+    block_texts,
+    load_anchors,
+    make_anchor_id,
+    paper_block_texts,
+    parse_anchor,
+)
 from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import (
+    document_anchored_md_path,
+    document_image_path,
     fulltext_md,
-    pdf_image_caption_path,
-    pdf_image_path,
     relevant_sections_md,
 )
 from lib.models import (
@@ -141,7 +149,7 @@ from lib.models.converters import (
     segregation_evidence_to_db,
     variant_to_db,
 )
-from lib.models.evidence_block import ReasoningBlock
+from lib.models.evidence_block import ReasoningBlock, prune_citations
 from lib.models.mondo import (
     MondoDiseaseScope,
     MondoLinkingTarget,
@@ -458,6 +466,7 @@ async def handle_paper_metadata(task_id: int) -> None:
         session=agent_sess,
     )
     log_run_metrics('PAPER_METADATA', result)
+    prune_output_citations('PAPER_METADATA', paper_id, result.final_output)
 
     with session_scope() as session:
         paper = session.get(PaperDB, paper_id)
@@ -510,6 +519,7 @@ async def handle_variant_extraction(task_id: int) -> None:
         session=agent_sess,
     )
     log_run_metrics('VARIANT_EXTRACTION', result)
+    prune_output_citations('VARIANT_EXTRACTION', paper_id, parsed)
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -540,24 +550,30 @@ async def handle_pedigree_description(task_id: int) -> None:
     # List figures by id + caption. The agent picks a pedigree from the captions,
     # then the analyze_pedigree_image tool loads the image bytes on demand — so we
     # never put image URLs (or data URLs) into the prompt text.
+    #
+    # Figures come from the anchored document, so image_id is the Docling
+    # picture index: the N of the figure-N id the other agents cite, and the N
+    # of documents/{id}/{main,supplement}/images/N.png the tool loads.
     for is_supplement, label in ((False, 'Pipeline'), (True, 'Supplement')):
-        image_id = 0
-        while True:
-            pdf_image = pdf_image_path(paper_id, image_id, supplement=is_supplement)
-            if not pdf_image.exists():
-                break
-            caption_path = pdf_image_caption_path(
-                paper_id, image_id, supplement=is_supplement
+        anchored = document_anchored_md_path(paper_id, supplement=is_supplement)
+        if not anchored.exists():
+            continue
+        captions = block_texts(anchored.read_text())
+        for anchor in load_anchors(paper_id, supplement=is_supplement):
+            parsed_id = parse_anchor(anchor.id)
+            if parsed_id is None or parsed_id.kind != AnchorKind.FIGURE:
+                continue
+            image = document_image_path(
+                paper_id, parsed_id.index, supplement=is_supplement
             )
-            caption_text = (
-                caption_path.read_text() if caption_path.exists() else 'No caption'
-            )
-            logger.info(f'Listing {label.lower()} figure {image_id} from {pdf_image}')
-            combined_text += f'[{label} Figure {image_id}]\n'
-            combined_text += f'image_id: {image_id}\n'
+            if not image.exists():
+                continue
+            caption_text = captions.get(anchor.id) or 'No caption'
+            logger.info(f'Listing {label.lower()} figure {anchor.id} from {image}')
+            combined_text += f'[{label} Figure {anchor.id}]\n'
+            combined_text += f'image_id: {parsed_id.index}\n'
             combined_text += f'is_supplement: {is_supplement}\n'
             combined_text += f'Caption: {caption_text}\n\n'
-            image_id += 1
 
     agent_sess = agent_session(task_id)
 
@@ -602,6 +618,35 @@ async def handle_pedigree_description(task_id: int) -> None:
             session.add(pedigree_to_db(paper_id, output))
 
 
+def pedigree_input(pedigree_row: PedigreeDB | None) -> dict | None:
+    """The pedigree as the agents see it: the figure anchor to cite, and the text.
+
+    ``PedigreeDB.image_id`` is the Docling picture index, the same N as the
+    ``figure-N`` id printed in the anchored text, so the anchor is exact.
+    """
+    if pedigree_row is None:
+        return None
+    return {
+        'anchor': make_anchor_id(
+            AnchorKind.FIGURE, pedigree_row.image_id, pedigree_row.is_supplement
+        ),
+        'description': pedigree_row.description,
+    }
+
+
+def prune_output_citations(task: str, paper_id: int, output: Any) -> None:
+    """Drop citations to ids the paper lacks and blank quotes the block lacks.
+
+    Runs on every producing agent's output before it reaches the converters, so
+    a mis-copied id degrades to no highlight rather than a wrong one. The count
+    goes to the log: a large number on one paper means the prompt or the text
+    the agent saw needs a look.
+    """
+    pruned = prune_citations(output, paper_block_texts(paper_id))
+    if pruned:
+        logger.warning(f'{task}: pruned {pruned} citation(s) for paper {paper_id}')
+
+
 def patient_extraction_message(session: Session, paper_id: int) -> str:
     """The initial message the patient extraction agent gets for a paper.
 
@@ -617,14 +662,7 @@ def patient_extraction_message(session: Session, paper_id: int) -> str:
     pedigree_row = (
         session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).first()
     )
-    pedigree_descriptions_output = (
-        {
-            'image_id': pedigree_row.image_id,
-            'description': pedigree_row.description,
-        }
-        if pedigree_row
-        else None
-    )
+    pedigree_descriptions_output = pedigree_input(pedigree_row)
 
     paper_markdown = relevant_sections_md(
         paper_id, supplement_format, section_classifications
@@ -672,6 +710,7 @@ async def handle_patient_extraction(task_id: int) -> None:
         session=agent_sess,
     )
     log_run_metrics('PATIENT_EXTRACTION', result)
+    prune_output_citations('PATIENT_EXTRACTION', paper_id, parsed)
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -763,14 +802,7 @@ async def handle_patient_demographics(task_id: int) -> None:
         pedigree_row = (
             session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).first()
         )
-        pedigree_descriptions_output = (
-            {
-                'image_id': pedigree_row.image_id,
-                'description': pedigree_row.description,
-            }
-            if pedigree_row
-            else None
-        )
+        pedigree_descriptions_output = pedigree_input(pedigree_row)
 
     agent_sess = agent_session(task_id)
 
@@ -801,6 +833,7 @@ async def handle_patient_demographics(task_id: int) -> None:
         session=agent_sess,
     )
     log_run_metrics('PATIENT_DEMOGRAPHICS', result)
+    prune_output_citations('PATIENT_DEMOGRAPHICS', paper_id, parsed)
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -909,6 +942,9 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
         session=agent_sess,
     )
     log_run_metrics('SEGREGATION_EVIDENCE_EXTRACTION', result)
+    prune_output_citations(
+        'SEGREGATION_EVIDENCE_EXTRACTION', paper_id, result.final_output
+    )
 
     # Store results in new session
     with session_scope() as session:
@@ -1338,6 +1374,7 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
         session=agent_sess,
     )
     log_run_metrics('PATIENT_VARIANT_OCCURRENCE', result)
+    prune_output_citations('PATIENT_VARIANT_OCCURRENCE', paper_id, parsed)
 
     with session_scope() as session:
         # Idempotent: delete-then-insert
@@ -1558,6 +1595,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         session=agent_sess,
     )
     log_run_metrics('PHENOTYPE_EXTRACTION', result)
+    prune_output_citations('PHENOTYPE_EXTRACTION', paper_id, result.final_output)
 
     # Update DB with results
     with session_scope() as session:

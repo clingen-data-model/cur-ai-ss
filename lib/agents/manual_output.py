@@ -1,7 +1,8 @@
 """Manual JSON output for schemas too complex for provider-side enforcement.
 
-Patient and variant extraction wrap most fields in EvidenceBlock (value, quote,
-table_id, image_id -- see lib/models/evidence_block.py), and Pydantic shares
+Patient and variant extraction wrap most fields in EvidenceBlock (value,
+reasoning, citations plus the legacy quote/table_id/image_id -- see
+lib/models/evidence_block.py), and Pydantic shares
 that definition once regardless of how many fields reuse it. Anthropic's tool
 schema compiler doesn't: it has to fully dereference every $ref to build its
 decoding grammar, and caps the result at 16 union/nullable nodes. Variant's
@@ -39,15 +40,16 @@ _JSON_OUTPUT_DIRECTIVE = (
     'JSON Schema exactly:\n\n{schema}\n\n'
     'The schema above cannot express one of its own rules, because it is a '
     'cross-field check: any object shaped like {{"value", "reasoning", '
-    '"quote", "table_id", "image_id", ...}} is an evidence block, and at '
-    'least one of quote, table_id, or image_id MUST be set unless value is '
-    'null, "Unknown", or false. A block whose value is a concrete answer but '
-    'whose quote/table_id/image_id are all empty is invalid and will be '
-    'rejected. If the value itself was constructed rather than copied '
+    '"citations", ...}} is an evidence block, and citations MUST hold at '
+    'least one {{"anchor", "quote"}} entry unless value is null, "Unknown", '
+    'or false. A block whose value is a concrete answer but whose citations '
+    'list is empty is invalid and will be rejected. The block-level quote, '
+    'table_id, image_id and is_supplement fields are legacy: leave them '
+    'null / false. If the value itself was constructed rather than copied '
     'verbatim (an invented label, an identifier assigned by you, a '
     'conclusion that follows from a rule rather than from new text), cite '
-    'whatever quote, table, or image supports the underlying fact instead '
-    'of leaving all three empty.'
+    'the block that supports the underlying fact instead of leaving '
+    'citations empty.'
 )
 
 _REPAIR_PROMPT = (

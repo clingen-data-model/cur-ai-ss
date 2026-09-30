@@ -74,8 +74,8 @@ from lib.misc.pdf.misc import (
 )
 from lib.misc.pdf.parse import WordLoc
 from lib.misc.pdf.paths import (
+    document_image_path,
     pdf_dir,
-    pdf_image_path,
     pdf_raw_path,
     pdf_supplements_dir,
     pdf_thumbnail_path,
@@ -1638,8 +1638,10 @@ def get_pedigree(
         image_id=pedigree.image_id,
         is_supplement=pedigree.is_supplement,
         description=pedigree.description,
+        # image_id is the Docling picture index (the N of figure-N), so the file
+        # lives in the anchored document folder, not the legacy extracted_pdfs one.
         image_url=str(
-            pdf_image_path(
+            document_image_path(
                 paper_id, pedigree.image_id, supplement=pedigree.is_supplement
             )
         ),

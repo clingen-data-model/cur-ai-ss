@@ -23,7 +23,7 @@ You will also receive:
    - identifier (e.g., "Patient 1", "Proband", "II-3")
    - identifier_quote (text snippet or "Pedigree Image")
 3. Any pedigree description. Includes:
-   - image_id (integer)
+   - anchor (the pedigree figure's id in the text, e.g. figure-2; cite it for anything taken from the description)
    - description (summary of family structure, affected status, genotype/segregation)
 
 Your task:
@@ -68,10 +68,10 @@ Note: Compound heterozygous genotype evaluation (determining if two heterozygous
 **Linking rules:**
 
 - Only link if the patient is unambiguously reported to carry the variant.
-- Evidence may come from:
-  - Text sentences or consecutive sentences
-  - Tables or structured lists
-  - Pedigree images (image_id used)
+- Evidence may come from (each cited by its anchor, see CORE EXTRACTION RULES):
+  - Text sentences or consecutive sentences (paragraph anchor, sentence as quote)
+  - Tables or structured lists (row anchor, cell as quote)
+  - Pedigree images (figure anchor, no quote)
 - Do not infer links from generic references or biological plausibility.
 - Negative genotypes (wild-type, homozygous reference, non-carrier) should not be linked.
 

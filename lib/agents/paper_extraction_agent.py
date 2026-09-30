@@ -190,6 +190,10 @@ Extract the disease name and mode of inheritance associated with this gene in th
 - **disease_name**: The name or description of the disease/phenotype caused by variants in this gene (e.g., "Stargardt disease", "retinitis pigmentosa", "dilated cardiomyopathy"). Extract from the abstract, introduction, or case descriptions.
 - **disease_inheritance_mode**: The primary mode of inheritance for this gene-disease relationship as stated or implied in the paper (e.g., "Autosomal Recessive", "Autosomal Dominant", "X-linked Recessive"). Extract from the abstract or clinical findings.
 - Include reasoning that identifies where in the paper this information was found.
+- Both fields are EvidenceBlocks: give citations into the paper text, each an
+  {"anchor", "quote"} pair where anchor is a block id copied exactly as printed in
+  the text (e.g. paragraph-12) and quote is the shortest verbatim span of that block
+  that states the fact. Leave the legacy quote/table_id/image_id fields null.
 - If the disease name or inheritance mode cannot be confidently identified, omit the gene_disease_relation field entirely.
 
 Important Guidelines:

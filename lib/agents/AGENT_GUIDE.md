@@ -84,6 +84,28 @@ class MyOutput(BaseModel):
     nested: NestedModel = Field(description="Complex field")
 ```
 
+### Evidence and citations
+
+Any extracted value a curator will check goes in an `EvidenceBlock` (`lib/models/evidence_block.py`):
+`value`, `reasoning`, and `citations`, a list of `{anchor, quote}`. The text agents read is
+the anchored document (`lib/misc/pdf/anchors.py`): every paragraph is prefixed
+`[paragraph-N]`, every table `[table-N]` with an `anchor` column of `table-N-row-R` ids, every
+figure `[figure-N]`; supplement ids start with `supp-`. An agent cites by copying an id as
+printed and giving the shortest verbatim span of that block that supports the value (a
+table cell's text for a row citation, nothing for a figure). The block-level `quote`,
+`table_id`, `image_id` and `is_supplement` fields are legacy and stay empty on new evidence.
+
+Append `CORE_EXTRACTION_SPEC` (`lib/agents/core_extraction_rules.py`) to any prompt that
+produces evidence blocks; it states the contract once. After the agent runs, the handler
+calls `prune_output_citations` (`lib/tasks/handlers.py`), which drops citations to ids the
+paper does not have and blanks quotes not found inside their block, so a mis-copied id
+degrades to no highlight rather than a wrong one.
+
+An output model that embeds many evidence blocks can exceed Anthropic's limit on
+union/nullable schema nodes; such agents run through `run_with_manual_output`
+(`lib/agents/manual_output.py`), which embeds the schema in the prompt and validates the
+reply client-side, instead of passing `output_type` to the runner.
+
 ## Calling an Agent
 
 ```python
