@@ -602,13 +602,46 @@ async def handle_pedigree_description(task_id: int) -> None:
             session.add(pedigree_to_db(paper_id, output))
 
 
+def patient_extraction_message(session: Session, paper_id: int) -> str:
+    """The initial message the patient extraction agent gets for a paper.
+
+    Paper context (relevant sections), the pedigree description if one was
+    extracted, and the instructions. One function so anything that wants to run
+    the agent outside the worker (lib/bin/patient_extraction_stability.py) sends
+    exactly what production sends.
+    """
+    paper = session.get(PaperDB, paper_id)
+    supplement_format = paper.supplement_format if paper else None
+    section_classifications = paper.section_classifications if paper else None
+
+    pedigree_row = (
+        session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).first()
+    )
+    pedigree_descriptions_output = (
+        {
+            'image_id': pedigree_row.image_id,
+            'description': pedigree_row.description,
+        }
+        if pedigree_row
+        else None
+    )
+
+    paper_markdown = relevant_sections_md(
+        paper_id, supplement_format, section_classifications
+    )
+    paper_context = format_paper_context(paper_markdown)
+    return (
+        f'{paper_context}\n\n'
+        f'Pedigree Description:\n{pedigree_descriptions_output}\n\n'
+        f'{PATIENT_EXTRACTION_AGENT_INSTRUCTIONS}'
+    )
+
+
 async def handle_patient_extraction(task_id: int) -> None:
     """Extract patient information from paper."""
     paper_id: int
-    pedigree_descriptions_output: dict | None
     additional_context: str | None
-    supplement_format: FileFormat | None = None
-    section_classifications: dict | None = None
+    initial_message: str | None = None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
@@ -616,23 +649,8 @@ async def handle_patient_extraction(task_id: int) -> None:
 
         paper_id = task.paper_id
         additional_context = task.additional_context
-
-        # Load paper and pedigree from DB
-        paper = session.get(PaperDB, paper_id)
-        supplement_format = paper.supplement_format if paper else None
-        section_classifications = paper.section_classifications if paper else None
-
-        pedigree_row = (
-            session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).first()
-        )
-        pedigree_descriptions_output = (
-            {
-                'image_id': pedigree_row.image_id,
-                'description': pedigree_row.description,
-            }
-            if pedigree_row
-            else None
-        )
+        if additional_context is None:
+            initial_message = patient_extraction_message(session, paper_id)
 
     agent_sess = agent_session(task_id)
 
@@ -641,17 +659,10 @@ async def handle_patient_extraction(task_id: int) -> None:
         message = build_followup_prompt(additional_context)
         agent = patient_extraction_agent
     else:
-        # Initial query: build full message with paper + task input + instructions
+        # Initial query: full message with paper + pedigree + instructions
         await agent_sess.clear_session()
-        paper_markdown = relevant_sections_md(
-            paper_id, supplement_format, section_classifications
-        )
-        paper_context = format_paper_context(paper_markdown)
-        message = (
-            f'{paper_context}\n\n'
-            f'Pedigree Description:\n{pedigree_descriptions_output}\n\n'
-            f'{PATIENT_EXTRACTION_AGENT_INSTRUCTIONS}'
-        )
+        assert initial_message is not None
+        message = initial_message
         agent = patient_extraction_agent
 
     result, parsed = await run_with_manual_output(
