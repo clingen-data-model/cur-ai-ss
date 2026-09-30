@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, cast
 
 from agents import Agent, Runner, ToolCallItem, TResponseInputItem
 from agents.exceptions import MaxTurnsExceeded
@@ -25,7 +25,6 @@ from lib.agents.manual_output import (
     AgentInput,
     Check,
     run_with_checked_output,
-    run_with_manual_output,
 )
 from lib.agents.mondo_linking_agent import (
     MONDO_LINKING_AGENT_INSTRUCTIONS,
@@ -377,9 +376,7 @@ def paper_input(
     hierarchy that gives: ``system + paper`` is the same bytes for every agent
     on a paper (``format_paper_context`` with the paper's gene, which is
     static, so pass it everywhere); ``+ instructions`` is the same for every
-    run of one agent on that paper (``run_with_manual_output`` appends its
-    schema directive here, never to the data); ``+ data`` is what one run
-    adds. Data last is also what the instruction constants say ("provided
+    run of one agent on that paper; ``+ data`` is what one run adds. Data last is also what the instruction constants say ("provided
     below") and Anthropic's long-context guidance (document first, query
     last). Breakpoints: ``lib/agents/model_factory.py``.
     """
@@ -553,13 +550,10 @@ async def handle_variant_extraction(task_id: int) -> None:
         )
         agent = variant_extraction_agent
 
-    result, parsed = await run_with_manual_output(
-        agent,
-        message,
-        VariantExtractionOutput,
-        check=citation_check(paper_id),
-        session=agent_sess,
+    result = await run_with_checked_output(
+        agent, message, citation_check(paper_id), session=agent_sess
     )
+    parsed = cast(VariantExtractionOutput, result.final_output)
     log_run_metrics('VARIANT_EXTRACTION', result)
 
     with session_scope() as session:
@@ -679,13 +673,27 @@ def citation_check(paper_id: int) -> Check:
     """The rule the output schema cannot express: every citation names a block
     the paper has and every quote is found in it.
 
-    Handed to the repair loop (``run_with_manual_output`` / ``run_with_checked_output``)
-    so a bad citation is sent back to the model with the field, the anchor and
-    what was wrong, instead of being stored. The block texts are read once per
+    Handed to the repair loop (``run_with_checked_output``) is sent back to the model with the field, the anchor and what was wrong,
+    instead of being stored. The block texts are read once per
     run, not per attempt.
     """
     texts = paper_block_texts(paper_id)
     return lambda output: verify_citations(output, texts)
+
+
+def cited_text(block: dict[str, Any]) -> str:
+    """What a stored evidence block cites, as ``quote (anchor)`` per citation
+    (just the anchor when the citation has no quote), joined with ``; ``.
+
+    For prompts that name a patient by the text that established it, so a
+    later agent can tell "Patient 1" of one paragraph from the "Patient 1"
+    of another. Empty for a block with no citations (a curator-typed value,
+    or a row from before slice 4 of docs/evidence-anchors-plan.md).
+    """
+    return '; '.join(
+        f'{c["quote"]} ({c["anchor"]})' if c.get('quote') else c['anchor']
+        for c in block.get('citations', [])
+    )
 
 
 def patient_extraction_message(
@@ -746,13 +754,10 @@ async def handle_patient_extraction(task_id: int) -> None:
         message = initial_message
         agent = patient_extraction_agent
 
-    result, parsed = await run_with_manual_output(
-        agent,
-        message,
-        PatientExtractionOutput,
-        check=citation_check(paper_id),
-        session=agent_sess,
+    result = await run_with_checked_output(
+        agent, message, citation_check(paper_id), session=agent_sess
     )
+    parsed = cast(PatientExtractionOutput, result.final_output)
     log_run_metrics('PATIENT_EXTRACTION', result)
 
     with session_scope() as session:
@@ -827,7 +832,7 @@ async def handle_patient_demographics(task_id: int) -> None:
         patient_data = {
             'patient_id': patient_row.id,
             'identifier': patient_row.identifier,
-            'identifier_quote': patient_row.identifier_evidence['quote'],
+            'identifier_citations': cited_text(patient_row.identifier_evidence),
             'proband_status': patient_row.proband_status,
         }
 
@@ -869,13 +874,10 @@ async def handle_patient_demographics(task_id: int) -> None:
         )
         agent = patient_demographics_agent
 
-    result, parsed = await run_with_manual_output(
-        agent,
-        message,
-        PatientDemographics,
-        check=citation_check(paper_id),
-        session=agent_sess,
+    result = await run_with_checked_output(
+        agent, message, citation_check(paper_id), session=agent_sess
     )
+    parsed = cast(PatientDemographics, result.final_output)
     log_run_metrics('PATIENT_DEMOGRAPHICS', result)
 
     with session_scope() as session:
@@ -1370,7 +1372,7 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
             {
                 'patient_id': p.id,
                 'identifier': p.identifier,
-                'identifier_quote': p.identifier_evidence['quote'],
+                'identifier_citations': cited_text(p.identifier_evidence),
             }
             for p in patient_rows
         ]
@@ -1408,13 +1410,10 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
         )
         agent = patient_variant_occurrence_agent
 
-    result, parsed = await run_with_manual_output(
-        agent,
-        message,
-        PatientVariantOccurrenceOutput,
-        check=citation_check(paper_id),
-        session=agent_sess,
+    result = await run_with_checked_output(
+        agent, message, citation_check(paper_id), session=agent_sess
     )
+    parsed = cast(PatientVariantOccurrenceOutput, result.final_output)
     log_run_metrics('PATIENT_VARIANT_OCCURRENCE', result)
 
     with session_scope() as session:
@@ -1607,7 +1606,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         patient_data = {
             'patient_id': patient_row.id,
             'identifier': patient_row.identifier,
-            'identifier_quote': patient_row.identifier_evidence['quote'],
+            'identifier_citations': cited_text(patient_row.identifier_evidence),
         }
 
     agent_sess = agent_session(task_id)

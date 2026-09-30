@@ -1,4 +1,4 @@
-> **Status: chunk 1 (anchored documents on disk, side by side) landed and deployed (PRs #326-#328, 2026-09-30). Chunk 2 is being done as four additive slices: (1) the `citations` schema (PR #329); (2) agents cite anchors -- branch `evidence-citations-2`, this update: agents read `anchored.md`, the prompts ask for citations only (no legacy fields on new evidence, nothing derives them), every citation is verified against the paper before storage (a bad anchor or quote is sent back to the model as a repair turn), and the pedigree moves to the Docling picture index; (3) highlight endpoint + `/document` + SPA viewer -- landed: `POST /papers/{id}/highlight` resolves a block's citations to the boxes in `anchors.json` (a paragraph quote narrows to its words inside the paragraph), `GET /papers/{id}/document` serves `anchored.md`, and `DocumentEvidenceViewer.tsx` highlights cited blocks by id; the legacy endpoints and viewer stay for evidence that predates citations; (4) cutover and cleanup. Slice 4 is not implemented.** (written 2026-09-29, ids renamed to the self-describing grammar the same day). Design for replacing quote re-finding with structural evidence anchors. Line numbers refer to the tree at commit `226d109d` and will drift.
+> **Status: chunk 1 (anchored documents on disk, side by side) landed and deployed (PRs #326-#328, 2026-09-30). Chunk 2 is being done as four additive slices: (1) the `citations` schema (PR #329); (2) agents cite anchors -- branch `evidence-citations-2`, this update: agents read `anchored.md`, the prompts ask for citations only (no legacy fields on new evidence, nothing derives them), every citation is verified against the paper before storage (a bad anchor or quote is sent back to the model as a repair turn), and the pedigree moves to the Docling picture index; (3) highlight endpoint + `/document` + SPA viewer -- landed: `POST /papers/{id}/highlight` resolves a block's citations to the boxes in `anchors.json` (a paragraph quote narrows to its words inside the paragraph), `GET /papers/{id}/document` serves `anchored.md`, and `DocumentEvidenceViewer.tsx` highlights cited blocks by id; the legacy endpoints and viewer stay for evidence that predates citations; (4) cutover and cleanup -- landed: the legacy `quote`/`table_id`/`image_id`/`is_supplement` fields are gone from `EvidenceBlock`, the four manual-output agents run with native `output_type` (`test/agents/test_output_schema_census.py` pins the union counts at 13/0/7/2), `run_with_manual_output` and the legacy `/grobid-annotation`, `/markdown-annotation` endpoints, `MarkdownEvidenceViewer.tsx`, the dead parsing helpers and Streamlit's Focus button are deleted. Rows written before slice 4 keep their legacy keys in stored JSON (ignored on load) and show reasoning only until the paper is re-run.** (written 2026-09-29, ids renamed to the self-describing grammar the same day). Design for replacing quote re-finding with structural evidence anchors. Line numbers refer to the tree at commit `226d109d` and will drift.
 
 # Evidence anchors: cite document structure instead of re-finding quotes
 
@@ -132,7 +132,7 @@ class Citation(BaseModel):
 
 class EvidenceBlock(ReasoningBlock[T]):
     citations: list[Citation] = []   # every location the value rests on
-    quote / table_id / image_id / is_supplement   # legacy, removed in slice 4
+    # quote / table_id / image_id / is_supplement were removed in slice 4
 ```
 
 Decisions (2026-09-30, slice 1, `lib/models/evidence_block.py`):
@@ -145,20 +145,22 @@ Decisions (2026-09-30, slice 1, `lib/models/evidence_block.py`):
   the cell text verbatim. No `-col-N` grammar; the agent copies, it never counts columns.
   An ambiguous cell (`+`) falls back to the row highlight.
 - **Figures carry no quote**; a paragraph whose whole text is the evidence carries none.
-- **The legacy fields stay until slice 4** (the `supp-` prefix will carry supplement-ness
-  then), so existing evidence keeps rendering and old highlighting keeps working
+- **The legacy fields stayed until slice 4** (the `supp-` prefix carries supplement-ness
+  now), so existing evidence kept rendering and old highlighting kept working
   meanwhile. `Citation` is all-`str` and a list is not a union, so the field adds **zero**
-  nodes to Anthropic's per-use union count; the three legacy nullables still cost what
-  they cost today until slice 4 removes them (`docs/anthropic-migration.md` census).
+  nodes to Anthropic's per-use union count; removing the three legacy nullables in slice 4
+  is what brought the four over-limit agents under it (`docs/anthropic-migration.md`,
+  Blocker 4).
 
 Validation is deliberately lenient about *form* and strict about *presence*,
 matching today's contract: a `field_validator` on `citations` drops entries whose anchor
 fails `parse_anchor` (logged), and `validate_sources` raises when `require_source`, the
-value is real, and no citation or legacy source survives -- exactly when today's "at
-least one of quote/table_id/image_id" raises. Manual-output agents
-(`run_with_manual_output`) get a repair retry from that; native-schema agents
-(`Runner.run(output_type=...)`: segregation, pedigree, phenotype linking, paper
-metadata) fail the task, as they do today. The grammar lives in the dependency-free
+value is real, and no citation survives (since slice 4; before it a legacy source also
+counted). The provider-enforced schema makes an empty list a shape the model can still
+produce, so the check is client-side and, for the four agents that go through
+`run_with_checked_output`, a validation error there is a repair turn; the other
+native-schema agents (segregation, pedigree, phenotype linking, paper metadata) fail the
+task, as they did before. The grammar lives in the dependency-free
 `lib/misc/pdf/anchor_ids.py` so the models can import it without `fitz`/`docling`.
 
 After each producing agent runs (slice 2), `verify_citations(output, texts)` -- `texts` =
@@ -166,7 +168,7 @@ After each producing agent runs (slice 2), `verify_citations(output, texts)` -- 
 that exist -- raises `CitationError` naming every citation to an unknown id and every
 quote that is not a markup- and whitespace-tolerant substring of its block, with the
 path to the field. The handlers pass it into the runner's repair loop
-(`run_with_manual_output(check=...)` / `run_with_checked_output`), so the message goes
+(`run_with_checked_output`; `run_with_manual_output` until slice 4), so the message goes
 back to the model in the same session, up to three attempts, and the task fails if it
 never checks out. Nothing with unverified evidence is stored: a mis-copied id or quote
 is corrected by the model, never silently degraded (decision 2026-09-30, replacing the

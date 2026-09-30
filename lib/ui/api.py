@@ -7,7 +7,6 @@ import streamlit.runtime.uploaded_file_manager
 from pydantic import TypeAdapter
 
 from lib.core.environment import env
-from lib.misc.pdf.highlight import GrobidAnnotation
 from lib.models import (
     FamilyResp,
     FamilyUpdateRequest,
@@ -203,26 +202,6 @@ def reset_paper(paper_id: int, snapshot_name: str) -> PaperResetResp:
     )
     resp.raise_for_status()
     return PaperResetResp.model_validate(resp.json())
-
-
-def grobid_annotations(
-    paper_id: int,
-    queries: list[str],
-    image_ids: list[int],
-    table_ids: list[int],
-    color: str,
-) -> list[GrobidAnnotation]:
-    resp = _session.post(
-        f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/grobid-annotation',
-        json={
-            'queries': queries,
-            'image_ids': image_ids,
-            'table_ids': table_ids,
-            'color': color,
-        },
-    )
-    resp.raise_for_status()
-    return TypeAdapter(list[GrobidAnnotation]).validate_python(resp.json())
 
 
 def get_patients(paper_id: int) -> list[PatientResp]:

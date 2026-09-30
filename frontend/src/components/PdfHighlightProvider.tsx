@@ -3,26 +3,17 @@
  * the root of the extraction page -- not one per popover, since opening it is
  * cheap but instantiating pdfjs per row would not be.
  *
- * Two kinds of evidence, two backends, one sheet:
- *
- * - Evidence that cites anchors (`citations`, everything extracted since
- *   slice 2 of docs/evidence-anchors-plan.md) posts them to /highlight, which
- *   returns the cited blocks' precomputed boxes, and renders the anchored
- *   document (DocumentEvidenceViewer) on the Markdown tab.
- * - Legacy evidence (quote/table_id/image_id, papers not re-extracted yet)
- *   goes through /grobid-annotation and MarkdownEvidenceViewer unchanged;
- *   that path goes away in slice 4.
- *
- * Neither writes anything on disk, so this is safe for several curators at
- * once.
+ * Evidence is a list of citations ({anchor, quote}, see
+ * docs/evidence-anchors-plan.md). The PDF tab posts them to /highlight, which
+ * returns the cited blocks' precomputed boxes; the Markdown tab renders the
+ * anchored document (DocumentEvidenceViewer) with the cited blocks
+ * highlighted by id. Neither writes anything on disk, so this is safe for
+ * several curators at once.
  */
 import { createContext, useContext, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AlertCircle } from 'lucide-react'
-import {
-  grobidAnnotationPapersPaperIdGrobidAnnotationPost,
-  highlightCitationsPapersPaperIdHighlightPost,
-} from '@/api/generated'
+import { highlightCitationsPapersPaperIdHighlightPost } from '@/api/generated'
 import type { Citation, GrobidAnnotation } from '@/api/generated'
 import { API_BASE_URL } from '@/lib/api'
 import { apiErrorMessage } from '@/lib/apiError'
@@ -31,7 +22,6 @@ import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { Spinner } from '@/components/ui/spinner'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PdfViewer } from '@/components/PdfViewer'
-import { MarkdownEvidenceViewer } from '@/components/MarkdownEvidenceViewer'
 import { DocumentEvidenceViewer } from '@/components/DocumentEvidenceViewer'
 
 type ViewerTab = 'pdf' | 'markdown'
@@ -40,31 +30,17 @@ type ViewerTab = 'pdf' | 'markdown'
 // this viewer is read-only, so there's no picker, just one fixed color.
 const HIGHLIGHT_COLOR = '#FFF59D'
 
-export interface LegacyHighlightTarget {
-  quote?: string | null
-  table_id?: number | null
-  image_id?: number | null
-  // Supplement evidence has no PDF/words.json of its own (see EvidencePopover) --
-  // there's a separate raw.md for it, so this opens straight to the Markdown tab
-  // with the PDF tab disabled, rather than the coordinate-based PDF tab.
-  is_supplement?: boolean
-}
-
-export interface CitationHighlightTarget {
+export interface HighlightTarget {
   citations: Citation[]
 }
 
-export type HighlightTarget = LegacyHighlightTarget | CitationHighlightTarget
-
-function isCitationTarget(target: HighlightTarget): target is CitationHighlightTarget {
-  return 'citations' in target
-}
-
-/** True when nothing about this evidence can be shown on the PDF (supplement only). */
+/** True when nothing about this evidence can be shown on the PDF: every
+ * citation points into the supplement, which has no PDF view of its own, so
+ * the sheet opens straight to the Markdown tab with the PDF tab disabled. */
 export function isSupplementOnly(target: HighlightTarget): boolean {
-  return isCitationTarget(target)
-    ? target.citations.every((citation) => isSupplementAnchor(citation.anchor))
-    : !!target.is_supplement
+  return (
+    target.citations.length > 0 && target.citations.every((citation) => isSupplementAnchor(citation.anchor))
+  )
 }
 
 interface PdfHighlightContextValue {
@@ -82,21 +58,9 @@ export function usePdfHighlight(): PdfHighlightContextValue {
 }
 
 function fetchAnnotations(paperId: number, target: HighlightTarget): Promise<GrobidAnnotation[]> {
-  if (isCitationTarget(target)) {
-    return highlightCitationsPapersPaperIdHighlightPost({
-      path: { paper_id: paperId },
-      body: { citations: target.citations, color: HIGHLIGHT_COLOR },
-      throwOnError: true,
-    })
-  }
-  return grobidAnnotationPapersPaperIdGrobidAnnotationPost({
+  return highlightCitationsPapersPaperIdHighlightPost({
     path: { paper_id: paperId },
-    body: {
-      queries: target.quote ? [target.quote] : [],
-      image_ids: target.image_id != null ? [target.image_id] : [],
-      table_ids: target.table_id != null ? [target.table_id] : [],
-      color: HIGHLIGHT_COLOR,
-    },
+    body: { citations: target.citations, color: HIGHLIGHT_COLOR },
     throwOnError: true,
   })
 }
@@ -118,7 +82,7 @@ export function PdfHighlightProvider({
   const supplementOnly = target !== null && isSupplementOnly(target)
 
   const annotationsQuery = useQuery({
-    queryKey: ['grobid-annotation', paperId, target],
+    queryKey: ['highlight', paperId, target],
     queryFn: () => fetchAnnotations(paperId, target as HighlightTarget),
     enabled: target !== null && !supplementOnly && fullPdfUrl !== '' && activeTab === 'pdf',
   })
@@ -180,20 +144,11 @@ export function PdfHighlightProvider({
               ) : null}
             </TabsContent>
             <TabsContent value="markdown" className="flex-1 min-h-0">
-              {target && isCitationTarget(target) ? (
+              {target && (
                 <DocumentEvidenceViewer
                   paperId={paperId}
                   citations={target.citations}
                   enabled={activeTab === 'markdown'}
-                />
-              ) : (
-                <MarkdownEvidenceViewer
-                  paperId={paperId}
-                  quote={target?.quote}
-                  tableId={target?.table_id}
-                  imageId={target?.image_id}
-                  isSupplement={target?.is_supplement}
-                  enabled={target !== null && activeTab === 'markdown'}
                 />
               )}
             </TabsContent>

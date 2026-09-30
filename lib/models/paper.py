@@ -52,9 +52,7 @@ from typing_extensions import Self
 
 from lib.core.environment import env
 from lib.misc.pdf.paths import (
-    pdf_image_path,
     pdf_raw_path,
-    pdf_sections_dir,
     pdf_thumbnail_path,
 )
 from lib.models.base import Base, PatchModel
@@ -512,20 +510,6 @@ class PaperUpdateRequest(PatchModel):
         return self
 
 
-class HighlightRequest(BaseModel):
-    queries: list[str]
-    image_ids: list[int]
-    table_ids: list[int]
-    color: str
-
-
-class MarkdownAnnotationRequest(BaseModel):
-    # EvidenceBlock.is_supplement tells the caller which raw.md to read --
-    # a paper's own vs. its uploaded supplement's -- since they're two
-    # separate files (see pdf_markdown_path(supplement=...)).
-    is_supplement: bool = False
-
-
 class CitationHighlightRequest(BaseModel):
     """POST /papers/{id}/highlight: an evidence block's citations, as stored."""
 
@@ -556,7 +540,7 @@ class PedigreeDB(Base):
         unique=True,
     )
     image_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    # image_id is namespaced separately per supplement/main (see pdf_image_path),
+    # image_id is namespaced separately per supplement/main (see document_image_path),
     # so this is required to know which file image_id actually names.
     is_supplement: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default='0'

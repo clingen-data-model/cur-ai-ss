@@ -3,6 +3,7 @@ from agents import Agent
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
 from lib.agents.model_factory import extraction_model, extraction_model_settings
+from lib.models.patient_variant_occurrences import PatientVariantOccurrenceOutput
 
 INSTRUCTIONS = """
 You are an expert clinical genetic data curator performing structured evidence extraction
@@ -21,7 +22,7 @@ You will also receive:
 2. A structured list of extracted patients. Each patient includes:
    - patient_id (database ID)
    - identifier (e.g., "Patient 1", "Proband", "II-3")
-   - identifier_quote (text snippet or "Pedigree Image")
+   - identifier_citations (the text and anchors that established the identifier)
 3. Any pedigree description. Includes:
    - anchor (the pedigree figure's id in the text, e.g. figure-2; cite it for anything taken from the description)
    - description (summary of family structure, affected status, genotype/segregation)
@@ -91,9 +92,7 @@ agent = Agent(
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
     model_settings=extraction_model_settings(),
-    # PatientVariantOccurrenceOutput dereferences to 20 union/nullable
-    # JSON-schema nodes -- over Anthropic's hard limit of 16. output_type=None
-    # sends no schema to any provider; lib.agents.manual_output validates the
-    # reply ourselves instead. See that module's docstring.
-    output_type=None,
+    # 2 union/nullable schema nodes since slice 4 of the evidence-anchors work,
+    # under Anthropic's limit of 16; test_output_schema_census guards it.
+    output_type=PatientVariantOccurrenceOutput,
 )

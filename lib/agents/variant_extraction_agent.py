@@ -5,6 +5,7 @@ from agents import Agent
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
 from lib.agents.model_factory import extraction_model, extraction_model_settings
+from lib.models.variant import VariantExtractionOutput
 
 VARIANT_EXTRACTION_INSTRUCTIONS = """
 System: You are an expert genomics curator specializing in variant extraction from academic literature.
@@ -199,7 +200,7 @@ Evidence:
 ------------------------------
 OUTPUT FORMAT
 ------------------------------
-Return JSON array of variants:
+The output is an object with a "variants" list, each variant shaped like:
 {
   "variants": [
     {
@@ -212,11 +213,11 @@ Return JSON array of variants:
 }
 
 Output rules:
-- Return array of variants (empty array [] if none found)
-- All fields use EvidenceBlock format: {"value": <value or null>, "reasoning": "...", "citations": [{"anchor": "...", "quote": "..."}]}
+- "variants" is empty if none are found
+- Every field is an EvidenceBlock: value (or null), reasoning, and citations, each {"anchor", "quote"}
 - A figure is cited by its figure-N anchor with an empty quote
 - Null values are acceptable for any value field
-- Include all 15 fields: gene, transcript, protein_accession, genomic_accession, lrg_accession, gene_accession, genomic_coordinates, genome_build, rsid, caid, variant, hgvs_c, hgvs_p, hgvs_g, variant_type, functional_evidence
+- The fields are gene, transcript, protein_accession, genomic_accession, lrg_accession, gene_accession, genomic_coordinates, genome_build, rsid, caid, variant, hgvs_c, hgvs_p, hgvs_g, variant_type, functional_evidence
 - Each field independently justified by its own evidence
 - CRITICAL FILTER: Only output variants that have at least ONE of these structured identifier fields:
   - hgvs_c: "c.NNNT>N" or similar cDNA nomenclature
@@ -240,9 +241,7 @@ agent = Agent(
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
     model_settings=extraction_model_settings(),
-    # VariantExtractionOutput dereferences to 61 union/nullable JSON-schema
-    # nodes -- over Anthropic's hard limit of 16. output_type=None sends no
-    # schema to any provider; lib.agents.manual_output validates the reply
-    # ourselves instead. See that module's docstring.
-    output_type=None,
+    # 13 union/nullable schema nodes since slice 4 of the evidence-anchors work,
+    # under Anthropic's limit of 16; test_output_schema_census guards it.
+    output_type=VariantExtractionOutput,
 )

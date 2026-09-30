@@ -449,7 +449,8 @@ What changed:
 - `output_config.format` is part of the cache key (structured-outputs doc:
   changing it invalidates the cache) and so is the tool list, so the sharable group
   is the agents with no tools and no native schema: variant extraction, patient
-  extraction, demographics, occurrences (all `run_with_manual_output`). Variant
+  extraction, demographics, occurrences (all `run_with_manual_output` at the
+  time; native since slice 4 of the evidence-anchors work, see Blocker 4). Variant
   extraction runs first and writes the entry; the others read it. Each
   native-schema agent (classifier, metadata, phenotypes, segregation evidence,
   compound het) has its own entry, written by its first run on the paper.
@@ -591,6 +592,22 @@ zero repair-loop warnings logged across 8 calls. Final extraction: 6 patients,
 2 probands, 4 variants, 5 patient-variant links. Small sample — 8 calls is not
 a production reliability estimate — so this is worth watching once
 `EXTRACTION_MODEL` actually flips for real traffic, not a closed question.
+
+**Closed 2026-09-30 (slice 4 of `docs/evidence-anchors-plan.md`): every agent is
+native again.** The legacy `quote`/`table_id`/`image_id`/`is_supplement` fields
+were removed from `EvidenceBlock`; evidence is a list of `{anchor, quote}`
+citations, all-`str` inside a plain list, so a block now contributes only its
+value's own nullability. Re-running the census above with the same script
+(`test/agents/test_output_schema_census.py`, which now pins it in CI): variant
+extraction 61 -> **13**, patient extraction 18 -> **0**, demographics 40 -> **7**,
+occurrences 20 -> **2**; `PaperExtractionOutput` is 7 (the table above listed it
+before the pedigree/gene-disease blocks were reshaped). All four agents pass
+`output_type=<Model>` to the SDK, `run_with_manual_output` and its schema
+directive are deleted (`lib/agents/manual_output.py` keeps only
+`run_with_checked_output`, the citation repair loop), and the instructions block
+no longer carries a 25k-char embedded schema, so those calls are ~7k tokens
+smaller and the cache-key group in *Prompt caching* above is now every agent
+with its own `output_format`, as the native ones always were.
 
 ## Corrections log
 

@@ -1,36 +1,16 @@
-import random
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote
 
-import requests
 import streamlit as st
-from streamlit_pdf_viewer import pdf_viewer
 
-from lib.misc.pdf.paths import pdf_raw_path
-from lib.models.evidence_block import (
-    EvidenceBlock,
-    HumanEvidenceBlock,
-    ReasoningBlock,
-    strip_markup,
-)
+from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
 from lib.models.paper import PaperResp
 from lib.tasks import TaskType
-from lib.ui.api import (
-    enqueue_paper_task,
-    get_http_error_detail,
-    grobid_annotations,
-)
+from lib.ui.api import enqueue_paper_task
 
-CURRENT_ANNOTATIONS_KEY = 'CURRENT_ANNOTATIONS_KEY'
 HEADER_TABS_KEY = 'HEADER_TABS_KEY'
 HUMAN_EDIT_NOTE_DEFAULT = 'Reasoning behind the change...'
-
-
-def clean_quote(quote: str) -> str:
-    """Kept as a display-time safety net for rows written before the model
-    layer started stripping markup on the way in."""
-    return strip_markup(quote)
 
 
 def render_rerun_popover(
@@ -118,36 +98,6 @@ PAPER_TABS = [
 ]
 
 
-COLORS = [
-    '#FFF59D',  # soft yellow
-    '#FFE082',  # warm amber
-    '#FFCC80',  # light orange
-    '#FFAB91',  # soft coral
-    '#F48FB1',  # light pink
-    '#CE93D8',  # soft purple
-    '#B39DDB',  # lavender
-    '#9FA8DA',  # muted indigo
-    '#90CAF9',  # light blue
-    '#81D4FA',  # sky blue
-    '#80DEEA',  # cyan
-    '#A5D6A7',  # light green
-    '#C5E1A5',  # lime green
-    '#E6EE9C',  # pale lime
-    '#D7CCC8',  # soft beige/gray
-    # Neon-ish / bright additions
-    '#FF3D00',  # neon red
-    '#FF6D00',  # bright orange
-    '#FFEA00',  # neon yellow
-    '#00E676',  # bright green
-    '#00B0FF',  # neon blue
-    '#D500F9',  # neon magenta
-    '#FF4081',  # bright pink
-    '#18FFFF',  # cyan neon
-    '#64DD17',  # lime neon
-    '#FF9100',  # vivid orange
-]
-
-
 def get_clinvar_url(
     hgvs_g: str | None = None,
     hgvs_c: str | None = None,
@@ -198,99 +148,7 @@ def get_clingen_url(caid: str) -> str:
     return f'https://reg.clinicalgenome.org/redmine/projects/registry/genboree_registry/by_canonicalid?canonicalid={caid}'
 
 
-@st.dialog(
-    'Pdf Focus Modal',
-    width='large',
-    on_dismiss=lambda: st.session_state.pop(CURRENT_ANNOTATIONS_KEY),
-)
-def pdf_focus_modal() -> None:
-    paper_resp = st.session_state['paper_resp']
-    annotations = st.session_state.get(CURRENT_ANNOTATIONS_KEY, [])
-    pdf_viewer(
-        pdf_raw_path(paper_resp.id),
-        width=1000,
-        height=800,
-        zoom_level=1.5,
-        viewer_align='center',  # Center alignment
-        show_page_separator=True,  # Show separators between pages
-        annotations=[a.dict() for a in annotations],
-        # NB: scroll_to_annotation does not support 0... which is the index if there
-        # is only a single annotation.
-        scroll_to_annotation=1 if len(annotations) > 1 else None,
-        scroll_to_page=annotations[0].page if len(annotations) == 1 else None,
-        render_text=True,
-    )
-    st.download_button(
-        label='Download PDF',
-        data=open(pdf_raw_path(paper_resp.id), 'rb').read(),
-        icon=':material/download:',
-        mime='application/pdf',
-        width='stretch',
-    )
-
-
-def focus_and_show_dialog(
-    paper_id: int,
-    queries: list[str],
-    image_ids: list[int],
-    table_ids: list[int],
-    color: str,
-) -> None:
-    try:
-        current_annotations = grobid_annotations(
-            paper_id,
-            queries,
-            image_ids,
-            table_ids,
-            color,
-        )
-        st.session_state[CURRENT_ANNOTATIONS_KEY] = current_annotations
-        pdf_focus_modal()
-    except requests.HTTPError as e:
-        st.error(f'Failed to find Focus : {get_http_error_detail(e)}')
-
-
-def render_focus_controls(
-    paper_id: int,
-    blocks: list[EvidenceBlock[Any]],
-    color_key: str,
-    button_key_prefix: str,
-    disabled: bool = False,
-) -> None:
-    """Render color picker + Focus button.
-
-    Args:
-        paper_id: Paper ID for focusing.
-        blocks: List of EvidenceBlocks containing quotes and evidence sources.
-        color_key: Session state key for color picker.
-        button_key_prefix: Prefix for the focus button's key.
-        disabled: Whether to disable the controls.
-    """
-
-    # Extract fields from all blocks, filtering out supplement evidence
-    queries = [b.quote for b in blocks if b.quote and not b.is_supplement]
-    image_ids = [
-        b.image_id for b in blocks if b.image_id is not None and not b.is_supplement
-    ]
-    table_ids = [
-        b.table_id for b in blocks if b.table_id is not None and not b.is_supplement
-    ]
-    if color_key not in st.session_state:
-        st.session_state[color_key] = random.choice(COLORS)
-    color = st.color_picker(
-        'Choose Color', label_visibility='collapsed', key=color_key, disabled=disabled
-    )
-    has_focusable_evidence = bool(queries or image_ids or table_ids)
-    st.button(
-        'Focus',
-        key=f'{button_key_prefix}-focus',
-        type='secondary',
-        on_click=focus_and_show_dialog,
-        args=(paper_id, queries, image_ids, table_ids, color),
-        disabled=disabled or not has_focusable_evidence,
-    )
-
-
+# color_key / button_key_prefix: kept so call sites need no change; nothing reads them since slice 4 removed the Focus button.
 def render_evidence_controls(
     paper_id: int,
     label: str,
@@ -300,14 +158,14 @@ def render_evidence_controls(
     human_edit_note_key: str | None = None,
     human_edit_note_value: str | None = None,
 ) -> str | None:
-    """Render popover + color picker + Focus button.
+    """Render the reasoning popover, with the curator note when present.
 
     Args:
-        paper_id: Paper ID for focusing.
-        block: EvidenceBlock or ReasoningBlock containing quote, reasoning, and evidence sources.
+        paper_id: Paper ID (unused; kept for call-site compatibility).
+        block: EvidenceBlock or ReasoningBlock containing the reasoning.
         label: Label for the popover button.
-        color_key: Session state key for color picker.
-        button_key_prefix: Prefix for the focus button's key.
+        color_key: Unused; see the comment above the signature.
+        button_key_prefix: Unused; see the comment above the signature.
         human_edit_note_key: Session state key for human edit note text area.
         human_edit_note_value: Explicit curator note value to show, overriding
             ``block.human_edit_note``. Use when the note lives on a different
@@ -318,13 +176,10 @@ def render_evidence_controls(
         The edited human edit note value if present, otherwise None.
     """
     # Extract fields from block if provided
-    quote: str | None = None
     reasoning: str | None = None
     human_edit_note: str | None = None
     if block is not None:
         reasoning = block.reasoning
-        if hasattr(block, 'quote'):
-            quote = block.quote
         if hasattr(block, 'human_edit_note'):
             human_edit_note = block.human_edit_note
     if human_edit_note_value is not None:
@@ -337,16 +192,9 @@ def render_evidence_controls(
         with st.popover(
             label,
             type='tertiary',
-            disabled=not quote and not reasoning and not human_edit_note,
+            disabled=not reasoning and not human_edit_note,
         ):
-            if quote:
-                st.markdown('**Evidence**: ' + clean_quote(quote))
             st.markdown('**Reasoning**: ' + (reasoning or ''))
-            # Show info message if evidence is from supplement
-            if isinstance(block, EvidenceBlock) and block.is_supplement:
-                st.info(
-                    '📎 This evidence comes from a supplement. Focus is only available for main document evidence.'
-                )
             if human_edit_note and human_edit_note_key:
                 st.markdown('---')
                 st.markdown('**✏️ Curator Note**')
@@ -369,18 +217,5 @@ def render_evidence_controls(
                         else ''
                     )
                     st.caption(f'✏️ Edited by {edited_by_name}{deactivated}{when}')
-        # Only pass EvidenceBlock to focus controls (ReasoningBlock has no evidence sources)
-        focus_blocks = [block] if isinstance(block, EvidenceBlock) else []
-        if focus_blocks:
-            # Whether there is anything to show is decided in there, across every
-            # source a block may carry. Gating on the quote here disabled Focus
-            # for evidence cited by table_id or image_id, which focuses just
-            # as well -- a figure or a table row is locatable on the page.
-            render_focus_controls(
-                paper_id,
-                blocks=focus_blocks,
-                color_key=color_key,
-                button_key_prefix=button_key_prefix,
-            )
 
     return edited_note

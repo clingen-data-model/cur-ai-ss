@@ -2,7 +2,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.orm import Session, joinedload
 
 from lib.misc.curation.models import CurationSummaryRow, SectionContent
-from lib.misc.pdf.paths import pdf_image_path
+from lib.misc.pdf.paths import document_image_path
 from lib.models.family import FamilyDB
 from lib.models.paper import PaperDB, PedigreeDB
 from lib.models.patient import AffectedStatus, PatientDB, ProbandStatus
@@ -158,7 +158,7 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
     pedigree = session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).first()
     pedigree_image_path_str = None
     if pedigree:
-        path = pdf_image_path(
+        path = document_image_path(
             paper_id, pedigree.image_id, supplement=pedigree.is_supplement
         )
         if path.exists():

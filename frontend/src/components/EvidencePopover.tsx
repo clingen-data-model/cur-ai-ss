@@ -1,4 +1,4 @@
-/* Read-only quote/reasoning/curator-note viewer, next to an editable or
+/* Read-only citations/reasoning/curator-note viewer, next to an editable or
  * extracted field -- the SPA analog of the Streamlit "Evidence & Reasoning"
  * popover (lib/ui/paper/shared.py's render_evidence_controls). "View in PDF"
  * opens a read-only sheet scrolled to this evidence (see
@@ -16,23 +16,14 @@ import { usePdfHighlight } from '@/components/PdfHighlightProvider'
 
 export interface EvidenceLike {
   // Where the value comes from: one {anchor, quote} per block of the paper it
-  // rests on (docs/evidence-anchors-plan.md). Every block extracted since
-  // slice 2 has these and none of the legacy quote/table_id/image_id below;
-  // optional because a few callers synthesize note-only or reasoning-only
-  // blocks that carry neither.
+  // rests on (docs/evidence-anchors-plan.md). Optional because a few callers
+  // synthesize note-only or reasoning-only blocks that carry none.
   citations?: Citation[] | null
-  quote?: string | null
   reasoning?: string | null
   human_edit_note?: string | null
   edited_by_name?: string | null
   edited_by_is_active?: boolean | null
   edited_at?: string | null
-  table_id?: number | null
-  image_id?: number | null
-  // Supplement PDFs have no words.json of their own, so there's nothing for
-  // /grobid-annotation to search -- this evidence gets a "View in Markdown"
-  // button (reading the supplement's own raw.md) instead of "View in PDF".
-  is_supplement?: boolean
   // The current value (`value`) and, when the latest edit's old_value was
   // captured, what it changed from (`previous_value`) -- typed loosely since
   // this interface is shared across every HumanEvidenceBlock<T> variant
@@ -55,17 +46,12 @@ function formatEvidenceValue(value: unknown): string {
 export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
   const { openHighlight } = usePdfHighlight()
   const citations = block?.citations ?? []
-  const hasContent = !!(
-    citations.length ||
-    block?.quote ||
-    block?.reasoning ||
-    block?.human_edit_note
-  )
-  const canViewEvidence =
-    citations.length > 0 || !!block?.quote || block?.table_id != null || block?.image_id != null
-  const viewInPdf = citations.length
-    ? citations.some((citation) => !isSupplementAnchor(citation.anchor))
-    : !block?.is_supplement
+  const hasContent = !!(citations.length || block?.reasoning || block?.human_edit_note)
+  const canViewEvidence = citations.length > 0
+  // Supplement citations have no PDF view of their own (see
+  // PdfHighlightProvider's isSupplementOnly), so evidence resting entirely on
+  // the supplement gets a "View in Markdown" button instead of "View in PDF".
+  const viewInPdf = citations.some((citation) => !isSupplementAnchor(citation.anchor))
   // edited_at is only ever set from a real edits-table row (see
   // _attach_edit_history in app.py), never at initial extraction, so it's a
   // reliable "a human changed this" signal independent of whether a note was
@@ -121,12 +107,6 @@ export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
             </ul>
           </div>
         )}
-        {block?.quote && (
-          <p className="break-words">
-            <span className="font-medium">Evidence: </span>
-            {block.quote}
-          </p>
-        )}
         {block?.reasoning && (
           <p className="break-words">
             <span className="font-medium">Reasoning: </span>
@@ -158,18 +138,7 @@ export function EvidencePopover({ block }: { block?: EvidenceLike | null }) {
               variant="outline"
               size="sm"
               className="w-full"
-              onClick={() =>
-                openHighlight(
-                  citations.length
-                    ? { citations }
-                    : {
-                        quote: block?.quote,
-                        table_id: block?.table_id,
-                        image_id: block?.image_id,
-                        is_supplement: block?.is_supplement,
-                      }
-                )
-              }
+              onClick={() => openHighlight({ citations })}
             >
               <FileSearch className="size-3.5 mr-1.5" />
               {viewInPdf ? 'View in PDF' : 'View in Markdown'}

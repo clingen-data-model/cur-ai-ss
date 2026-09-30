@@ -21,11 +21,11 @@ import logging
 import sys
 from collections import Counter
 from dataclasses import dataclass
+from typing import cast
 from uuid import uuid4
 
-from agents import SQLiteSession
+from agents import Runner, SQLiteSession
 
-from lib.agents.manual_output import run_with_manual_output
 from lib.agents.patient_extraction_agent import agent as patient_extraction_agent
 from lib.api.db import session_scope
 from lib.core.logging import setup_logging
@@ -78,12 +78,10 @@ async def run_paper(paper_id: int, runs: int) -> Report:
         conversation = SQLiteSession(
             session_id=f'stability-{paper_id}-{uuid4()}', db_path=':memory:'
         )
-        _, parsed = await run_with_manual_output(
-            patient_extraction_agent,
-            message,
-            PatientExtractionOutput,
-            session=conversation,
+        result = await Runner.run(
+            patient_extraction_agent, message, session=conversation
         )
+        parsed = cast(PatientExtractionOutput, result.final_output)
         identifiers = {p.identifier.value for p in parsed.patients}
         probands = sorted(
             p.identifier.value

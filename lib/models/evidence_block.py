@@ -123,10 +123,10 @@ class Citation(BaseModel):
 
 
 class EvidenceBlock(ReasoningBlock[T]):
-    # Structural evidence: ids of blocks in the anchored document. Slice 1 of
-    # the evidence-anchors work (docs/evidence-anchors-plan.md) adds the field;
-    # the agents start filling it in slice 2 and the four legacy fields below go
-    # away in slice 4. Until then both kinds coexist on a block.
+    # Structural evidence: ids of blocks in the anchored document
+    # (docs/evidence-anchors-plan.md). Rows written before slice 4 may still
+    # carry the retired quote/table_id/image_id/is_supplement keys in their
+    # stored JSON; Pydantic ignores them on load, and they are not served.
     citations: list[Citation] = Field(
         default=[],
         description=(
@@ -135,22 +135,11 @@ class EvidenceBlock(ReasoningBlock[T]):
             'such tags, leave this empty.'
         ),
     )
-    quote: str | None = None  # verbatim quote from text
-    table_id: int | None = None  # table-based evidence
-    image_id: int | None = None  # figure/pedigree evidence
-    is_supplement: bool = (
-        False  # whether evidence came from a supplement (non-renderable in PDF view)
-    )
 
-    # Whether a non-empty value must cite a citation/quote/table/image. True for
-    # what an agent produces; the response-side subclasses below turn it off,
-    # since a curator-typed value legitimately has no source to cite.
+    # Whether a non-empty value must cite at least one anchor. True for what an
+    # agent produces; the response-side subclasses below turn it off, since a
+    # curator-typed value legitimately has no source to cite.
     require_source: ClassVar[bool] = True
-
-    @field_validator('quote', mode='after')
-    @classmethod
-    def _strip_quote_markup(cls, value: str | None) -> str | None:
-        return strip_markup(value) if value else value
 
     @field_validator('citations', mode='after')
     @classmethod
@@ -194,18 +183,8 @@ class EvidenceBlock(ReasoningBlock[T]):
             and not is_unknown
             and not is_falsy_bool
             and not self.citations
-            and not self.quote
-            and self.table_id is None
-            and self.image_id is None
         ):
-            raise ValueError(
-                'At least one evidence source must be provided: '
-                'citations, quote, table_id, or image_id'
-            )
-
-        # Prioritize table_id if both are provided
-        if self.table_id is not None and self.image_id is not None:
-            self.image_id = None
+            raise ValueError('At least one citation is required')
 
         return self
 
@@ -276,7 +255,7 @@ def verify_citations(model: Any, texts: Mapping[str, str]) -> None:
     construction its keys are exactly the ids that exist. Walks any Pydantic
     model, list or dict and reports every problem at once, with the path to
     the field, so a handler can hand the message to the model as a repair
-    prompt (``lib.agents.manual_output``). Nothing is dropped or blanked: a
+    prompt (``run_with_checked_output``). Nothing is dropped or blanked: a
     value whose evidence does not check out is not stored.
 
     Quote matching is verbatim after stripping markup and collapsing
@@ -301,8 +280,9 @@ def verify_citations(model: Any, texts: Mapping[str, str]) -> None:
 #
 # The same limit is why Citation is all-str and citations is a plain list: a
 # list is not a union node and neither is a required str, so the field adds
-# nothing to the count however many times a block is embedded. The legacy
-# quote/table_id/image_id nullables still count until slice 4 removes them.
+# nothing to the count however many times a block is embedded. A block
+# contributes only its value's own nullability (test_output_schema_census
+# pins the per-agent totals).
 
 
 class AttributedReasoningBlock(ReasoningBlock[T]):

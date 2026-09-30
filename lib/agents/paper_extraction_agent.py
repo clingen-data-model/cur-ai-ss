@@ -193,7 +193,7 @@ Extract the disease name and mode of inheritance associated with this gene in th
 - Both fields are EvidenceBlocks: give citations into the paper text, each an
   {"anchor", "quote"} pair where anchor is a block id copied exactly as printed in
   the text (e.g. paragraph-12) and quote is the shortest verbatim span of that block
-  that states the fact. Leave the legacy quote/table_id/image_id fields null.
+  that states the fact.
 - If the disease name or inheritance mode cannot be confidently identified, omit the gene_disease_relation field entirely.
 
 Important Guidelines:

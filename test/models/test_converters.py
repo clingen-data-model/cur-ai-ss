@@ -68,6 +68,10 @@ def test_apply_to_handles_none_fields():
     assert paper_db.paper_types == ['Unknown']
 
 
+def _cite(quote: str) -> Citation:
+    return Citation(anchor='paragraph-1', quote=quote)
+
+
 def _identity(
     identifier: str = 'P1',
     family: str = 'Family1',
@@ -75,13 +79,15 @@ def _identity(
 ) -> PatientIdentity:
     return PatientIdentity(
         identifier=EvidenceBlock(
-            value=identifier, quote=f'referred to as {identifier}', reasoning='labeled'
+            value=identifier,
+            reasoning='labeled',
+            citations=[_cite(f'referred to as {identifier}')],
         ),
         family_identifier=EvidenceBlock(
-            value=family, quote=family, reasoning=f'belongs to {family}'
+            value=family, reasoning=f'belongs to {family}', citations=[_cite(family)]
         ),
         proband_status=EvidenceBlock(
-            value=proband, quote='index case', reasoning='stated'
+            value=proband, reasoning='stated', citations=[_cite('index case')]
         ),
     )
 
@@ -94,7 +100,9 @@ def test_patient_identity_to_db_sets_identity_and_placeholder_demographics():
     assert row.identifier == 'P1'
     assert row.proband_status == 'Proband'
     assert row.identifier_evidence['value'] == 'P1'
-    assert row.identifier_evidence['quote'] == 'referred to as P1'
+    assert row.identifier_evidence['citations'] == [
+        {'anchor': 'paragraph-1', 'quote': 'referred to as P1'}
+    ]
     assert row.proband_status_evidence['value'] == 'Proband'
 
     # Demographics are placeholders until the demographics agent runs
@@ -120,34 +128,46 @@ def test_apply_patient_demographics_overwrites_placeholders():
 
     demographics = PatientDemographics(
         sex=EvidenceBlock(
-            value=SexAtBirth.Female, quote='female patient', reasoning='stated female'
+            value=SexAtBirth.Female,
+            reasoning='stated female',
+            citations=[_cite('female patient')],
         ),
         age_diagnosis=EvidenceBlock(
-            value=5, quote='diagnosed at 5', reasoning='age at diagnosis noted'
+            value=5,
+            reasoning='age at diagnosis noted',
+            citations=[_cite('diagnosed at 5')],
         ),
         age_diagnosis_unit=AgeUnit.Years,
         age_report=EvidenceBlock(
-            value=10, quote='reported at 10', reasoning='age at report noted'
+            value=10,
+            reasoning='age at report noted',
+            citations=[_cite('reported at 10')],
         ),
         age_report_unit=AgeUnit.Years,
         age_death=EvidenceBlock(
-            value=None, image_id=1, reasoning='no death information available'
+            value=None,
+            reasoning='no death information available',
+            citations=[Citation(anchor='figure-1')],
         ),
         country_of_origin=EvidenceBlock(
-            value=CountryCode.Japan, quote='from Japan', reasoning='origin stated'
+            value=CountryCode.Japan,
+            reasoning='origin stated',
+            citations=[_cite('from Japan')],
         ),
         race=EvidenceBlock(
-            value=Race.Asian, quote='East Asian descent', reasoning='race stated'
+            value=Race.Asian,
+            reasoning='race stated',
+            citations=[_cite('East Asian descent')],
         ),
         ethnicity=EvidenceBlock(
             value=Ethnicity.Not_Hispanic_or_Latino,
-            quote='East Asian descent',
             reasoning='ethnicity stated',
+            citations=[_cite('East Asian descent')],
         ),
         affected_status=EvidenceBlock(
             value=AffectedStatus.Affected,
-            quote='affected individual',
             reasoning='clearly affected',
+            citations=[_cite('affected individual')],
         ),
     )
     apply_patient_demographics(row, demographics)
@@ -168,7 +188,9 @@ def test_apply_patient_demographics_overwrites_placeholders():
     assert row.ethnicity == 'Not Hispanic or Latino'
     assert row.affected_status == 'Affected'
     assert row.sex_evidence['value'] == 'Female'
-    assert row.race_evidence['quote'] == 'East Asian descent'
+    assert row.race_evidence['citations'] == [
+        {'anchor': 'paragraph-1', 'quote': 'East Asian descent'}
+    ]
 
 
 def test_apply_patient_demographics_maps_segregation_analysis_fields():
@@ -176,32 +198,44 @@ def test_apply_patient_demographics_maps_segregation_analysis_fields():
     row = patient_identity_to_db('paper_seg', _identity())
 
     demographics = PatientDemographics(
-        sex=EvidenceBlock(value=SexAtBirth.Male, quote='male', reasoning='stated'),
-        age_diagnosis=EvidenceBlock(value=None, table_id=1, reasoning='no age'),
-        age_report=EvidenceBlock(value=None, table_id=1, reasoning='no age'),
-        age_death=EvidenceBlock(value=None, table_id=1, reasoning='no death info'),
+        sex=EvidenceBlock(
+            value=SexAtBirth.Male, reasoning='stated', citations=[_cite('male')]
+        ),
+        age_diagnosis=EvidenceBlock(
+            value=None, reasoning='no age', citations=[Citation(anchor='table-1')]
+        ),
+        age_report=EvidenceBlock(
+            value=None, reasoning='no age', citations=[Citation(anchor='table-1')]
+        ),
+        age_death=EvidenceBlock(
+            value=None,
+            reasoning='no death info',
+            citations=[Citation(anchor='table-1')],
+        ),
         country_of_origin=EvidenceBlock(
             value=CountryCode.Unknown, reasoning='not stated'
         ),
         race=EvidenceBlock(value=Race.Unknown, reasoning='not stated'),
         ethnicity=EvidenceBlock(value=Ethnicity.Unknown, reasoning='not stated'),
         affected_status=EvidenceBlock(
-            value=AffectedStatus.Affected, quote='affected', reasoning='disease'
+            value=AffectedStatus.Affected,
+            reasoning='disease',
+            citations=[_cite('affected')],
         ),
         is_obligate_carrier=EvidenceBlock(
             value=True,
-            quote='mother of affected child',
             reasoning='pedigree position indicates carrier',
+            citations=[_cite('mother of affected child')],
         ),
         relationship_to_proband=EvidenceBlock(
             value=RelationshipToProband.Parent,
-            quote='father',
             reasoning='stated as parent',
+            citations=[_cite('father')],
         ),
         twin_type=EvidenceBlock(
             value=TwinType.Monozygotic,
-            quote='identical twins',
             reasoning='explicitly stated',
+            citations=[_cite('identical twins')],
         ),
     )
     apply_patient_demographics(row, demographics)
@@ -210,7 +244,9 @@ def test_apply_patient_demographics_maps_segregation_analysis_fields():
     assert row.relationship_to_proband == 'Parent'
     assert row.twin_type == 'Monozygotic'
     assert row.is_obligate_carrier_evidence['value'] is True
-    assert row.is_obligate_carrier_evidence['quote'] == 'mother of affected child'
+    assert row.is_obligate_carrier_evidence['citations'] == [
+        {'anchor': 'paragraph-1', 'quote': 'mother of affected child'}
+    ]
     assert row.relationship_to_proband_evidence['value'] == 'Parent'
     assert row.twin_type_evidence['value'] == 'Monozygotic'
 
@@ -316,5 +352,5 @@ def test_apply_patient_demographics_stores_citations():
     apply_patient_demographics(row, demographics)
 
     assert row.sex_evidence['citations'] == [{'anchor': 'table-1-row-2', 'quote': 'F'}]
-    assert row.sex_evidence['quote'] is None
+    assert 'quote' not in row.sex_evidence
     assert row.race_evidence['citations'] == []

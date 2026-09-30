@@ -3,6 +3,7 @@ from agents import Agent
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
 from lib.agents.model_factory import extraction_model, extraction_model_settings
+from lib.models.patient import PatientExtractionOutput
 
 PATIENT_EXTRACTION_INSTRUCTIONS = f"""
 System: You are an expert clinical data curator.
@@ -197,9 +198,7 @@ agent = Agent(
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
     model_settings=extraction_model_settings(),
-    # PatientExtractionOutput dereferences to 18 union/nullable JSON-schema
-    # nodes -- over Anthropic's hard limit of 16. output_type=None sends no
-    # schema to any provider; lib.agents.manual_output validates the reply
-    # ourselves instead. See that module's docstring.
-    output_type=None,
+    # 0 union/nullable schema nodes since slice 4 of the evidence-anchors work,
+    # under Anthropic's limit of 16; test_output_schema_census guards it.
+    output_type=PatientExtractionOutput,
 )

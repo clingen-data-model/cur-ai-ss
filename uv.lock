@@ -296,7 +296,6 @@ dependencies = [
     { name = "requests" },
     { name = "sqlalchemy" },
     { name = "streamlit-authenticator" },
-    { name = "streamlit-pdf-viewer" },
     { name = "streamlit-searchbox" },
     { name = "uvicorn" },
     { name = "xldown" },
@@ -336,7 +335,6 @@ requires-dist = [
     { name = "requests", specifier = ">=2.32.5" },
     { name = "sqlalchemy", specifier = ">=2.0.45" },
     { name = "streamlit-authenticator", specifier = ">=0.4.2" },
-    { name = "streamlit-pdf-viewer", specifier = ">=0.0.27" },
     { name = "streamlit-searchbox", specifier = ">=0.1.24" },
     { name = "uvicorn", specifier = ">=0.38.0" },
     { name = "xldown", specifier = ">=0.1.1" },
@@ -2722,18 +2720,6 @@ dependencies = [
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/83/47/837b158e1a5b0d187d20c6be22c46d84d12a8d3e8d7113b67ebb33e221c9/streamlit_authenticator-0.4.2-py3-none-any.whl", hash = "sha256:442acccef6af65e2b0feb15d5e9f68707f204c1d31c60673690d87179c7ca5b2", size = 43197, upload-time = "2025-03-01T20:36:07.566Z" },
-]
-
-[[package]]
-name = "streamlit-pdf-viewer"
-version = "0.0.27"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "streamlit" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/e5/22/59f714ab28357ce29eac8f61295d36f334e49849bd42db3c6faa55073087/streamlit_pdf_viewer-0.0.27.tar.gz", hash = "sha256:72985d30cac26650e126f31270ed3e8aa7ee87f277464271e0c323208c856a37", size = 2276543, upload-time = "2026-01-09T17:35:29.333Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/3e/d7/e89f9b86d1da41b9151d8b58761ef8c73994225fe091aa64b65056167d98/streamlit_pdf_viewer-0.0.27-py3-none-any.whl", hash = "sha256:e10bb1cfe8e7e7fd6dd0b095e0422555d82537b7abe0cbcddf29533f3382933f", size = 2316344, upload-time = "2026-01-09T17:35:27.773Z" },
 ]
 
 [[package]]

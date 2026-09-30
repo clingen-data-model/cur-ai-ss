@@ -122,6 +122,7 @@ def test_build_anchored_text_and_ids(paper_id):
     assert '[figure-0] Figure 1. Pedigree' in lines  # no images/0.png on disk
     assert '[paragraph-4] - first' in lines
     assert '[paragraph-5] - second' in lines
+    assert 'EXTRACTION WARNING' not in md
 
 
 def test_build_anchored_boxes(paper_id):
@@ -285,6 +286,7 @@ def test_vision_corrected_table_keeps_row_boxes_when_the_counts_agree(paper_id):
 
     assert '| table-0-row-1 | 3 | 4 |' in md
     assert 'r1c0' not in md
+    assert 'EXTRACTION WARNING' not in md
     table = next(a for a in anchors if a.id == 'table-0')
     assert table.row_boxes == [
         [PageBox(page_no=1, x=10, y=460, width=190, height=20)],

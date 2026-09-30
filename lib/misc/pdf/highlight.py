@@ -19,12 +19,7 @@ from lib.misc.pdf.anchors import (
     user_to_display,
 )
 from lib.misc.pdf.parse import Polygon, WordLoc
-from lib.misc.pdf.paths import (
-    document_raw_path,
-    document_words_json_path,
-    pdf_json_path,
-    pdf_raw_path,
-)
+from lib.misc.pdf.paths import document_raw_path, document_words_json_path
 from lib.models.evidence_block import Citation
 
 
@@ -38,10 +33,6 @@ class GrobidAnnotation(BaseModel):
     height: float
     color: str
     border: str = 'solid'
-
-
-class MarkdownAnnotationResp(BaseModel):
-    content: str
 
 
 def parse_hex_color(color_str: str) -> tuple[float, float, float]:
@@ -161,103 +152,6 @@ def find_best_match(query: str, words: list[WordLoc]) -> list[WordLoc] | None:
     return get_words_from_alignment(alignments[0].aligned[1], word_to_offset, words)
 
 
-def figures_to_grobid_annotations(
-    paper_id: int,
-    image_ids: list[int],
-    table_ids: list[int],
-    color: tuple[float, float, float],
-) -> list[GrobidAnnotation]:
-    pdf_path = pdf_raw_path(paper_id)
-    pdf_doc = fitz.open(pdf_path)
-
-    docling_json_file = pdf_json_path(paper_id)
-    with open(docling_json_file, 'r') as f:
-        docling_json = json.load(f)
-
-    annotations = []
-    for key, ids in (('pictures', image_ids), ('tables', table_ids)):
-        for item_id in ids:
-            for prov in docling_json[key][item_id]['prov']:
-                page = pdf_doc[prov['page_no'] - 1]
-                h = page.rect.height
-
-                l, t, r, b = (
-                    prov['bbox']['l'],
-                    prov['bbox']['t'],
-                    prov['bbox']['r'],
-                    prov['bbox']['b'],
-                )
-
-                x = l
-                y = h - t
-                width = r - l
-                height = t - b  # docling's inverted Y axis
-
-                annotations.append(
-                    GrobidAnnotation(
-                        page=prov['page_no'],
-                        x=x,
-                        y=y,
-                        width=width,
-                        height=height,
-                        color=f'rgb({color[0] * 255.0},{color[1] * 255.0},{color[2] * 255.0})',
-                        border='solid',
-                    )
-                )
-
-    pdf_doc.close()
-
-    return annotations
-
-
-def words_to_grobid_annotations(
-    paper_id: int,
-    words: list[WordLoc],
-    color: tuple[float, float, float],
-) -> list[GrobidAnnotation]:
-    pdf_path = pdf_raw_path(paper_id)
-    pdf_doc = fitz.open(pdf_path)
-
-    words_by_page: dict[int, list[WordLoc]] = defaultdict(list)
-    for word in words:
-        words_by_page[int(word.page_idx)].append(word)
-
-    annotations = []
-    for page_idx, page_words in words_by_page.items():
-        page = pdf_doc[page_idx - 1]  # convert 1-based → 0-based
-        page_height = page.rect.height
-
-        # Merge adjacent words on this page into polygons
-        merged_polygons = merge_adjacent_polygons(page_words)
-
-        for polygon in merged_polygons:
-            # Convert to screen coordinates (bottom-left origin, using bottom-left point)
-            x = polygon.x3
-            y = page_height - polygon.y3
-            width = polygon.x1 - polygon.x0
-            height = polygon.y2 - polygon.y1
-
-            annotations.append(
-                GrobidAnnotation(
-                    page=page_idx,
-                    x=x,
-                    y=y,
-                    width=width,
-                    height=height,
-                    color=_css_rgb(color),
-                    border='solid',
-                )
-            )
-
-    pdf_doc.close()
-
-    return annotations
-
-
-def _css_rgb(color: tuple[float, float, float]) -> str:
-    return f'rgb({color[0] * 255.0},{color[1] * 255.0},{color[2] * 255.0})'
-
-
 # --- highlighting by citation ---------------------------------------------------
 #
 # Evidence cites anchors (lib/misc/pdf/anchors.py); a highlight is the anchor's
@@ -317,7 +211,7 @@ def boxes_to_grobid_annotations(
     color: tuple[float, float, float],
 ) -> list[GrobidAnnotation]:
     """User-space boxes -> annotations on the displayed page (``user_to_display``)."""
-    css = _css_rgb(color)
+    css = f'rgb({color[0] * 255.0},{color[1] * 255.0},{color[2] * 255.0})'
     annotations = []
     for box in boxes:
         placed = user_to_display(box, frames)

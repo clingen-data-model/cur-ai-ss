@@ -7,8 +7,6 @@ from lib.bin.backfill_documents import backfill_paper
 from lib.misc.pdf.anchors import load_anchors
 from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import (
-    UNRECOVERED_TABLE_MARKER,
-    apply_table_corrections,
     document_anchored_md_path,
     document_dir,
     document_images_dir,
@@ -19,13 +17,11 @@ from lib.misc.pdf.paths import (
     pdf_json_path,
     pdf_markdown_path,
     pdf_raw_path,
-    pdf_section_markdown_path,
     pdf_table_image_path,
     pdf_table_markdown_path,
     pdf_table_unrecovered_path,
     pdf_table_vision_markdown_path,
     pdf_tables_dir,
-    raw_md,
 )
 from lib.models import PaperDB
 
@@ -103,24 +99,6 @@ async def test_convert_and_extract_creates_outputs(test_file_contents):
             image_id += 1
 
         assert len(images) >= 1, 'No pictures were extracted'
-
-        # ---- section markdowns ----
-        sections = []
-        section_id = 0
-
-        while True:
-            section_md = pdf_section_markdown_path(paper_id, section_id)
-
-            if not section_md.exists():
-                break
-
-            sections.append(section_md)
-            section_id += 1
-
-        assert len(sections) >= 20, 'Not enough sections were extracted'
-
-        with open(pdf_section_markdown_path(paper_id, section_id - 1), 'r') as f:
-            assert '## Supporting Information' in f.read()
 
         # ---- anchor-indexed document, written side by side ----
         assert document_success_path(paper_id).exists()
@@ -200,41 +178,6 @@ def _seed_table(paper_id: int, table_id: int, original: str, raw_body: str) -> N
     raw_md_path.write_text(raw_body)
 
 
-def test_apply_table_corrections_prefers_vision_markdown():
-    """A .vision.md replaces the corrupted table wherever it appears."""
-    paper_id = 987001
-    garbled = '| b | Clin mt1 11l(esladons |\n|---|---|\n| IVI | * ! . - |'
-    corrected = '| Individual | Age |\n|---|---|\n| HN-F25 | 8 (11) |'
-
-    _seed_table(paper_id, 0, garbled, f'intro\n\n{garbled}\n\noutro')
-    pdf_table_vision_markdown_path(paper_id, 0).write_text(corrected)
-
-    assert raw_md(paper_id) == f'intro\n\n{corrected}\n\noutro'
-
-
-def test_apply_table_corrections_noop_without_vision_file():
-    """Tables with no vision file are passed through untouched."""
-    paper_id = 987002
-    garbled = '| b | Clin mt1 |\n|---|---|\n| IVI | * |'
-
-    _seed_table(paper_id, 0, garbled, f'intro\n\n{garbled}\n\noutro')
-
-    assert raw_md(paper_id) == f'intro\n\n{garbled}\n\noutro'
-
-
-def test_apply_table_corrections_is_idempotent():
-    """Re-applying against already-corrected markdown changes nothing."""
-    paper_id = 987003
-    garbled = '| b | Clin mt1 |\n|---|---|\n| IVI | * |'
-    corrected = '| Individual | Age |\n|---|---|\n| HN-F25 | 8 (11) |'
-
-    _seed_table(paper_id, 0, garbled, f'intro\n\n{garbled}\n\noutro')
-    pdf_table_vision_markdown_path(paper_id, 0).write_text(corrected)
-
-    once = raw_md(paper_id)
-    assert apply_table_corrections(paper_id, once) == once
-
-
 async def test_correct_tables_writes_vision_file_without_touching_raw_md():
     """Recovered tables land in .vision.md; raw.md stays raw."""
     paper_id = 987004
@@ -263,49 +206,6 @@ async def test_correct_tables_writes_vision_file_without_touching_raw_md():
 
     assert pdf_table_vision_markdown_path(paper_id, 0).read_text() == corrected
     assert pdf_markdown_path(paper_id).read_text() == raw_body
-    # ...but readers see the correction.
-    assert raw_md(paper_id) == f'intro\n\n{corrected}\n\noutro'
-
-
-def test_unrecovered_table_is_flagged_for_downstream_agents():
-    """A table that failed correction is announced, not passed off as clean."""
-    paper_id = 987010
-    garbled = '| b | Clin mt1 |\n|---|---|\n| IVI | * |'
-
-    _seed_table(paper_id, 0, garbled, f'intro\n\n{garbled}\n\noutro')
-    pdf_table_unrecovered_path(paper_id, 0).touch()
-
-    result = raw_md(paper_id)
-
-    assert UNRECOVERED_TABLE_MARKER.format(table_id=0) in result
-    # The garbled rows are kept -- some content is still real.
-    assert garbled in result
-    # And the warning precedes them.
-    assert result.index('EXTRACTION WARNING') < result.index(garbled)
-
-
-def test_recovered_table_is_not_flagged():
-    """A table that was corrected needs no warning."""
-    paper_id = 987011
-    garbled = '| b | Clin mt1 |\n|---|---|\n| IVI | * |'
-    corrected = '| Individual | Age |\n|---|---|\n| HN-F25 | 8 (11) |'
-
-    _seed_table(paper_id, 0, garbled, f'intro\n\n{garbled}\n\noutro')
-    pdf_table_vision_markdown_path(paper_id, 0).write_text(corrected)
-
-    result = raw_md(paper_id)
-
-    assert 'EXTRACTION WARNING' not in result
-    assert corrected in result
-
-
-def test_clean_table_is_not_flagged():
-    paper_id = 987012
-    table = '| Individual | Age |\n|---|---|\n| HN-F25 | 8 (11) |'
-
-    _seed_table(paper_id, 0, table, f'intro\n\n{table}\n\noutro')
-
-    assert 'EXTRACTION WARNING' not in raw_md(paper_id)
 
 
 async def _run_correct_tables(paper_id: int, result: TableCorrectionResult) -> None:
@@ -339,8 +239,6 @@ async def test_unrecovered_marker_written_when_unrecoverable():
 
     assert pdf_table_unrecovered_path(paper_id, 0).exists()
     assert not pdf_table_vision_markdown_path(paper_id, 0).exists()
-    # ...and the paper now warns readers about it.
-    assert 'EXTRACTION WARNING' in raw_md(paper_id)
 
 
 async def test_recovered_table_clears_a_stale_unrecovered_marker():
@@ -361,7 +259,6 @@ async def test_recovered_table_clears_a_stale_unrecovered_marker():
     )
 
     assert not pdf_table_unrecovered_path(paper_id, 0).exists()
-    assert 'EXTRACTION WARNING' not in raw_md(paper_id)
 
 
 async def test_clean_table_leaves_no_marker():

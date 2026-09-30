@@ -8,7 +8,7 @@ a curator reads them literally. These are real quotes from paper 96.
 
 import pytest
 
-from lib.models.evidence_block import AttributedEvidenceBlock, EvidenceBlock
+from lib.models.evidence_block import AttributedEvidenceBlock, Citation, EvidenceBlock
 from lib.models.evidence_block import strip_markup as clean_quote
 
 
@@ -59,24 +59,35 @@ def test_a_block_is_cleaned_as_it_is_built():
     block = EvidenceBlock[str](
         value='Fs 3',
         reasoning='Taken from <b>Table 2</b>',
-        quote='| *FH San<br>Francisco | Fs 3<sup>g</sup> | <2 |',
+        citations=[
+            Citation(
+                anchor='table-1-row-2',
+                quote='| *FH San<br>Francisco | Fs 3<sup>g</sup> | <2 |',
+            )
+        ],
     )
-    assert block.quote == '| *FH San Francisco | Fs 3 | <2 |'
+    assert block.citations[0].quote == '| *FH San Francisco | Fs 3 | <2 |'
     assert block.reasoning == 'Taken from Table 2'
 
 
 def test_cleaning_a_block_twice_changes_nothing():
     """The backfill and the validator both run over stored rows."""
-    once = EvidenceBlock[str](value='Fs 3', reasoning='r', quote='Fs 3<sup>g</sup>')
-    twice = EvidenceBlock[str](
-        value=once.value, reasoning=once.reasoning, quote=once.quote
+    once = EvidenceBlock[str](
+        value='Fs 3',
+        reasoning='r',
+        citations=[Citation(anchor='table-1-row-2', quote='Fs 3<sup>g</sup>')],
     )
-    assert twice.quote == once.quote == 'Fs 3'
+    twice = EvidenceBlock[str](
+        value=once.value, reasoning=once.reasoning, citations=list(once.citations)
+    )
+    assert twice.citations[0].quote == once.citations[0].quote == 'Fs 3'
 
 
-def test_a_block_with_no_quote_is_left_alone():
-    block = EvidenceBlock[None](value=None, reasoning='Not reported in the paper.')
-    assert block.quote is None
+def test_a_citation_with_no_quote_is_left_alone():
+    block = EvidenceBlock[str](
+        value='x', reasoning='r', citations=[Citation(anchor='figure-2')]
+    )
+    assert block.citations[0].quote == ''
 
 
 def test_the_cleanup_script_only_touches_text_a_curator_reads():
@@ -185,9 +196,9 @@ def test_clinical_less_than_phrasing_survives():
 
 
 def test_agent_evidence_block_requires_a_source() -> None:
-    # Agent output must cite a quote/table/image for a non-empty value, and a
+    # Agent output must cite at least one anchor for a non-empty value, and a
     # stray manually_entered key (no longer a field) is not an escape hatch.
-    with pytest.raises(ValueError, match='evidence source'):
+    with pytest.raises(ValueError, match='At least one citation is required'):
         EvidenceBlock[str].model_validate(
             {'value': 'x', 'reasoning': 'r', 'manually_entered': True}
         )
@@ -195,5 +206,5 @@ def test_agent_evidence_block_requires_a_source() -> None:
 
 def test_attributed_evidence_block_allows_curator_value_without_source() -> None:
     block = AttributedEvidenceBlock[str](value='x', reasoning='r')
-    assert block.quote is None
+    assert block.citations == []
     assert 'edited_at' not in EvidenceBlock[str].model_json_schema()['properties']

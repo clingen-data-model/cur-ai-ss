@@ -4,11 +4,9 @@ from collections import defaultdict
 from typing import Any
 
 import pandas as pd
-import requests
 import streamlit as st
 
 from lib.core.environment import env
-from lib.misc.pdf.paths import pdf_image_path
 from lib.models import (
     FamilyResp,
     FamilyUpdateRequest,
@@ -37,16 +35,13 @@ from lib.ui.api import (
     get_pedigree,
     get_phenotypes,
     get_segregation_analysis,
-    grobid_annotations,
     update_family,
     update_patient,
     update_segregation_evidence,
 )
 from lib.ui.paper.shared import (
     HUMAN_EDIT_NOTE_DEFAULT,
-    clean_quote,
     render_evidence_controls,
-    render_focus_controls,
     render_rerun_popover,
 )
 
@@ -225,34 +220,7 @@ def _render_phenotypes_table(
         }
         st.table(pd.DataFrame(details_data))
 
-        # Show all evidence blocks for grouped phenotypes
-        (
-            col1,
-            col2,
-            col3,
-        ) = st.columns(3)
-
-        with col1:
-            # Collect all evidence blocks from grouped phenotypes
-            evidence_blocks = [p.concept_evidence for p in grouped_phenotypes]
-
-            if evidence_blocks:
-                with st.expander('Extracted Phenotype Evidence', expanded=False):
-                    for block in evidence_blocks:
-                        if block.quote:
-                            st.text(clean_quote(block.quote))
-                with st.container(
-                    horizontal=True,
-                    vertical_alignment='center',
-                    horizontal_alignment='right',
-                ):
-                    render_focus_controls(
-                        paper_resp.id,
-                        blocks=evidence_blocks,
-                        color_key=f'{key_prefix}-highlight-color-{first_phenotype.id}',
-                        button_key_prefix=f'{key_prefix}-highlight-confirm-{first_phenotype.id}',
-                        disabled=False,
-                    )
+        col2, col3 = st.columns(2)
 
         # Concept evidence reasoning
         with col2:
@@ -1469,7 +1437,7 @@ def render_patients_tab(selected_patient_id: int | None) -> None:
             col1, col2, col3 = st.columns([1, 3, 1])
             with col2:
                 st.image(
-                    f'{env.PROTOCOL}{env.API_ENDPOINT}{pdf_image_path(paper_resp.id, pedigree_description.image_id)}',
+                    f'{env.PROTOCOL}{env.API_ENDPOINT}{pedigree_description.image_url}',
                     width='content',
                 )
                 st.write(pedigree_description.description)

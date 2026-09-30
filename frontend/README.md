@@ -144,15 +144,12 @@ prefix and lands on the Streamlit app:
   API and hand-built `Range`-based approaches were also abandoned (Lightning CSS strips
   `::highlight()` rules from the production build, and react-pdf's `TextLayer` tears
   itself down on every render unless its callbacks are memoized).
-- **Evidence highlighting has two paths until every paper is re-extracted.** Evidence
-  that cites anchors (`citations: [{anchor, quote}]`, everything extracted since
-  slice 2 of `docs/evidence-anchors-plan.md`) posts them to `POST /papers/{id}/highlight`,
-  which returns the cited blocks' precomputed boxes, and renders the anchored document
-  from `GET /papers/{id}/document` in `DocumentEvidenceViewer.tsx`, highlighting blocks by
-  id (`lib/anchors.ts` parses and labels the ids). Legacy evidence (`quote`/`table_id`/
-  `image_id`) still goes through `/grobid-annotation` and `/markdown-annotation` with
-  `MarkdownEvidenceViewer.tsx`, which re-finds the quote; `PdfHighlightProvider.tsx` picks
-  the path from the target it is given. The legacy path is slice-4 cleanup.
+- **Evidence highlights are resolved from a block's citations.** `PdfHighlightProvider.tsx`
+  posts a block's `citations: [{anchor, quote}]` (see `docs/evidence-anchors-plan.md`) to
+  `POST /papers/{id}/highlight`, which returns the cited blocks' precomputed boxes for the
+  PDF tab; the Markdown tab renders the anchored document from `GET /papers/{id}/document`
+  in `DocumentEvidenceViewer.tsx`, highlighting blocks by id (`lib/anchors.ts` parses and
+  labels the ids; `lib/markdown.ts` holds the quote-splice and sanitize helpers).
 
 ## JavaScript dependencies
 
@@ -187,10 +184,10 @@ declared but not imported anywhere in `src/` yet.
 | `@dagrejs/dagre` | Directed-graph layout algorithm | Computes node positions for that DAG before React Flow draws it — React Flow does not do layout itself. |
 | `react-pdf` | React wrapper around PDF.js | The only PDF renderer: `PaperMetadataTab.tsx` and `PdfViewer.tsx` (the evidence "View in PDF" sheet). It brings its own `pdfjs-dist`; nothing else may depend on that package — see the caveat below. |
 | `zustand` | Minimal global state store | `stores/ui.ts`, for UI state that shouldn't live in the URL or the query cache. |
-| `react-markdown` | Renders a markdown string as React elements | `PedigreeTab.tsx`, for the vision model's freeform pedigree description (headings, lists, bold); `DocumentEvidenceViewer.tsx` and the legacy `MarkdownEvidenceViewer.tsx`, the evidence sheet's "Markdown" tab. The document viewer's custom `p`/`tr`/`table` components read each block's `[anchor-id]` tag off the hast `node` react-markdown hands them, so no remark/rehype plugin (and no `unist-util-visit` dependency) is needed. |
+| `react-markdown` | Renders a markdown string as React elements | `PedigreeTab.tsx`, for the vision model's freeform pedigree description (headings, lists, bold); `DocumentEvidenceViewer.tsx`, the evidence sheet's "Markdown" tab. The document viewer's custom `p`/`tr`/`table` components read each block's `[anchor-id]` tag off the hast `node` react-markdown hands them, so no remark/rehype plugin (and no `unist-util-visit` dependency) is needed. |
 | `remark-gfm` | GitHub-flavored markdown extensions for `react-markdown` | Tables/strikethrough/task-lists in the same pedigree description and markdown evidence tabs (the anchored document's tables are GFM pipe tables). |
-| `rehype-raw` | Lets `react-markdown` render raw HTML tags found in the markdown source as elements | Both evidence viewers, so a literal `<mark>` spliced around a matched evidence quote renders as a highlight instead of literal text, and the `<br>`/`<sup>` markup in vision-rebuilt table cells renders. |
-| `rehype-sanitize` | Strips unsafe/unexpected raw HTML before it reaches the DOM | Paired with `rehype-raw` in the same viewers — GitHub's default schema plus `mark`, since raw-HTML passthrough would otherwise also render stray HTML artifacts Docling sometimes leaves in a paper's markdown. The `data-*` attributes the document viewer sets are React props applied after sanitize, never raw HTML. |
+| `rehype-raw` | Lets `react-markdown` render raw HTML tags found in the markdown source as elements | `DocumentEvidenceViewer.tsx`, so a literal `<mark>` spliced around a matched evidence quote renders as a highlight instead of literal text, and the `<br>`/`<sup>` markup in vision-rebuilt table cells renders. |
+| `rehype-sanitize` | Strips unsafe/unexpected raw HTML before it reaches the DOM | Paired with `rehype-raw` in the same viewer — GitHub's default schema plus `mark` (`lib/markdown.ts`'s `SANITIZE_SCHEMA`), since raw-HTML passthrough would otherwise also render stray HTML artifacts Docling sometimes leaves in a paper's markdown. The `data-*` attributes the document viewer sets are React props applied after sanitize, never raw HTML. |
 | `zod` | Runtime schema validation | **Unused** — the generated client provides types, and nothing validates at runtime yet. |
 | `shadcn` | CLI that vendors shadcn/ui components | A tool, not a library: `pnpm dlx shadcn add <component>` copies source into `components/ui/`. Pinned to `latest`, so it can change under you. |
 

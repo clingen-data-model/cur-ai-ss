@@ -23,8 +23,6 @@ EvidenceBlock requirements:
   - value: the extracted value
   - reasoning: required explanation (see REASONING below)
   - citations: a list of {"anchor", "quote"} objects, one per block the value rests on
-  - quote, table_id, image_id, is_supplement at the block level are legacy fields
-    kept for older data: leave quote/table_id/image_id null and is_supplement false.
 
 CITATIONS:
 

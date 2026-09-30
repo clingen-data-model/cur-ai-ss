@@ -21,7 +21,7 @@ CONTEXT:
   The patient includes:
      - patient_id (database ID)
      - identifier (e.g., "Patient 1", "Proband", "II-3", etc.)
-     - identifier_quote (text snippet where patient is described)
+     - identifier_citations (the text and anchors that established the identifier)
 
 Your task:
 

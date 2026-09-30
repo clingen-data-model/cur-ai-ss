@@ -63,17 +63,12 @@ from lib.misc.curation.pptx import build_curation_pptx
 from lib.misc.curation.summary import build_curation_row
 from lib.misc.pdf.highlight import (
     GrobidAnnotation,
-    MarkdownAnnotationResp,
     citations_to_grobid_annotations,
-    figures_to_grobid_annotations,
-    find_best_match,
     parse_hex_color,
-    words_to_grobid_annotations,
 )
 from lib.misc.pdf.misc import (
     pdf_first_page_to_thumbnail_pymupdf_bytes,
 )
-from lib.misc.pdf.parse import WordLoc
 from lib.misc.pdf.paths import (
     document_anchored_md_path,
     document_anchors_path,
@@ -82,8 +77,6 @@ from lib.misc.pdf.paths import (
     pdf_raw_path,
     pdf_supplements_dir,
     pdf_thumbnail_path,
-    pdf_words_json_path,
-    raw_md,
 )
 from lib.misc.snapshots import (
     InvalidSnapshotNameError,
@@ -113,14 +106,12 @@ from lib.models import (
     GeneResp,
     HarmonizedVariantDB,
     HarmonizedVariantResp,
-    HighlightRequest,
     HpoCandidate,
     HpoDB,
     HpoRelinkRequest,
     HPOTerm,
     HumanEvidenceBlock,
     LoginRequest,
-    MarkdownAnnotationRequest,
     OccurrencePairRequest,
     PaperDB,
     PaperResetRequest,
@@ -1655,7 +1646,7 @@ def get_pedigree(
 
 def _seg_evidence_block(value: Any, evidence_dict: dict | None) -> HumanEvidenceBlock:
     """Build a segregation evidence block, taking ``value`` from the scalar column
-    (the source of truth for edits) and reasoning/quote/note from the JSON block."""
+    (the source of truth for edits) and reasoning/citations/note from the JSON block."""
     data = dict(evidence_dict or {})
     data['value'] = value
     return _from_storage(HumanEvidenceBlock, data)
@@ -3017,111 +3008,6 @@ def list_genes(
     if limit is not None:
         query = query.limit(limit)
     return query.all()
-
-
-@app.post('/papers/{paper_id}/grobid-annotation', response_model=list[GrobidAnnotation])
-def grobid_annotation(
-    paper_id: int,
-    request: HighlightRequest,
-    session: Session = Depends(get_session),
-    current_user: UserDB = Depends(get_current_user),
-) -> list[GrobidAnnotation]:
-    """
-    Find best text matches and return their coordinates in GROBID format.
-
-    Args:
-        paper_id: The ID of the paper
-        request: JSON body with queries (list) and color fields
-
-    Returns:
-        List of GROBID-style coordinates for all matched text
-    """
-    # Verify paper exists
-    paper_db = session.get(PaperDB, paper_id)
-    if not paper_db:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
-        )
-
-    # Parse and validate color
-    try:
-        rgb_color = parse_hex_color(request.color)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-
-    # Return early if no highlightable evidence (e.g., all from supplements)
-    if not request.queries and not request.image_ids and not request.table_ids:
-        return []
-
-    # Load words from JSON file
-    words_file = pdf_words_json_path(paper_id)
-    with open(words_file, 'r') as f:
-        words = json.load(f)
-        words = [WordLoc(**word) for word in words]
-
-    # Find matches for all queries and collect annotations
-    all_annotations: list[GrobidAnnotation] = []
-    for query in request.queries:
-        matched_words = find_best_match(query, words)
-        if not matched_words:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f'Could not find text matching query: "{query}"',
-            )
-
-        # Convert to GROBID annotations
-        annotations = words_to_grobid_annotations(
-            paper_id,
-            matched_words,
-            rgb_color,
-        )
-        all_annotations.extend(annotations)
-
-    all_annotations.extend(
-        figures_to_grobid_annotations(
-            paper_id,
-            request.image_ids,
-            request.table_ids,
-            rgb_color,
-        )
-    )
-
-    return all_annotations
-
-
-@app.post(
-    '/papers/{paper_id}/markdown-annotation', response_model=MarkdownAnnotationResp
-)
-def markdown_annotation(
-    paper_id: int,
-    request: MarkdownAnnotationRequest,
-    session: Session = Depends(get_session),
-    current_user: UserDB = Depends(get_current_user),
-) -> MarkdownAnnotationResp:
-    """
-    Return a paper's extracted markdown.
-
-    The SPA's evidence sheet uses this for its "Markdown" tab, alongside the
-    coordinate-based /grobid-annotation used for the PDF tab. Quote matching
-    happens client-side (see MarkdownEvidenceViewer.tsx), since it's just a
-    whitespace-tolerant regex against this same content -- no need to round-
-    trip the quote through the backend.
-    """
-    paper_db = session.get(PaperDB, paper_id)
-    if not paper_db:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
-        )
-
-    try:
-        content = raw_md(paper_id, supplement=request.is_supplement)
-    except FileNotFoundError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail='Markdown not yet available for this paper',
-        )
-
-    return MarkdownAnnotationResp(content=content)
 
 
 @app.post('/papers/{paper_id}/highlight', response_model=list[GrobidAnnotation])
