@@ -53,8 +53,8 @@ server {
 
     # React SPA (v2) - static build output from `pnpm build`, served directly by nginx.
     #
-    # Mounted under a prefix so the Streamlit UI below keeps owning '/' while the new
-    # frontend is shaken out. The build is done at deploy time with VITE_BASE_PATH=/v2/,
+    # Mounted under a prefix (it replaced the Streamlit UI, which used to own '/').
+    # The build is done at deploy time with VITE_BASE_PATH=/v2/,
     # so every emitted asset URL already carries the prefix, and VITE_API_URL=/api, so
     # the SPA talks to the API block above same-origin (no CORS, no second hostname).
     location /v2/ {
@@ -86,33 +86,11 @@ server {
         expires -1;
     }
 
-    # UI service (Streamlit - needs WebSocket support)
+    # Streamlit is retired: the SPA is the only UI, still mounted at /v2/ above. A
+    # temporary (302) redirect, not 301, so browsers do not cache it for the day the
+    # SPA moves to '/'. Anything not matched above (the old Streamlit paths, bare '/')
+    # lands on the SPA.
     location / {
-        proxy_pass http://127.0.0.1:8001/;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # WebSocket support (required for Streamlit)
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-
-        # Longer timeouts for Streamlit
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 300s;
-        proxy_read_timeout 300s;
-    }
-
-    # Streamlit specific paths (longer read timeout for the websocket)
-    location /_stcore/stream {
-        proxy_pass http://127.0.0.1:8001/_stcore/stream;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_read_timeout 86400;
+        return 302 /v2/;
     }
 }

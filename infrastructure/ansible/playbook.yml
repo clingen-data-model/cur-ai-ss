@@ -39,7 +39,7 @@
 #   ansible-playbook -i <ssh-host>, infrastructure/ansible/playbook.yml --check
 #
 #   # Cert-only run (issue/renew TLS + repoint nginx WITHOUT updating app code or
-#   # restarting api/ui/worker). Skips the git pull, uv sync, env, and systemd tasks.
+#   # restarting api/worker). Skips the git pull, uv sync, env, and systemd tasks.
 #   ansible-playbook -i <ssh-host>, infrastructure/ansible/playbook.yml --tags certbot
 #
 #   # Override a deployment-target default (e.g. staging domain)
@@ -389,15 +389,6 @@
         mode: "0644"
       notify: Restart services
 
-    - name: Deploy ui systemd service
-      template:
-        src: templates/ui.service.j2
-        dest: /home/{{ caa_user }}/.config/systemd/user/ui.service
-        owner: "{{ caa_user }}"
-        group: "{{ caa_user }}"
-        mode: "0644"
-      notify: Restart services
-
     - name: Deploy worker systemd service
       template:
         src: templates/worker.service.j2
@@ -406,6 +397,23 @@
         group: "{{ caa_user }}"
         mode: "0644"
       notify: Restart services
+
+    # Streamlit is retired. A host deployed before that still has the unit, enabled and
+    # running; stop and disable it, then delete the file. Safe on a host that never had
+    # it (the command fails and the file is already absent), and a no-op on later runs.
+    - name: Stop and disable the retired Streamlit ui service
+      become_user: "{{ caa_user }}"
+      environment:
+        XDG_RUNTIME_DIR: /run/user/{{ caa_user_result.uid }}
+      command: systemctl --user disable --now ui.service
+      register: retire_ui
+      failed_when: false
+      changed_when: retire_ui.rc == 0
+
+    - name: Remove the retired ui systemd unit
+      file:
+        path: /home/{{ caa_user }}/.config/systemd/user/ui.service
+        state: absent
 
     - name: Reload systemd user daemon
       become_user: "{{ caa_user }}"
@@ -426,7 +434,6 @@
         scope: user
       loop:
         - api
-        - ui
         - worker
 
     # --- TLS Certificate (certbot + DNS-01 via Porkbun) ---
@@ -781,7 +788,6 @@
         scope: user
       loop:
         - api
-        - ui
         - worker
 
     - name: Reload nginx

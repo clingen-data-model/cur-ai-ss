@@ -35,7 +35,7 @@ const queryClient = new QueryClient({
 // File-based routing with type-safe params.
 //
 // basepath comes from Vite's `base` (VITE_BASE_PATH), so the same bundle works at '/'
-// locally and under '/v2/' on the VM, where the Streamlit UI still owns '/'. Without it
+// locally and under '/v2/' on the VM (nginx redirects '/' there). Without it
 // the router would match against the full pathname and treat '/v2/papers/1' as unknown.
 // The trailing slash Vite always includes is stripped: the router expects '/v2', not '/v2/'.
 const basepath = import.meta.env.BASE_URL.replace(/\/$/, '') || '/'
