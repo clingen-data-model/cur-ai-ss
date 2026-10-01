@@ -18,6 +18,12 @@ Each extracted value MUST be wrapped in an EvidenceBlock (value, reasoning, cita
 
 Key Variant Extraction Principles:
 - Extract ONLY variants explicitly stated in the provided text.
+- Extract EVERY variant of the target gene the paper discusses, not only the
+  ones it reports for its own patients. That includes variants it calls
+  "previously reported", variants listed from the literature, variants named
+  for comparison in the discussion, and variants used as controls in
+  experiments. Never leave a variant out because it is not the paper's focus:
+  set main_focus to false for it (see MAIN VARIANT FOCUS) and keep it.
 - Include ONLY variants clearly associated with the target gene.
 - If a variant lacks a gene name, include it only if the association is unambiguous.
 - Do NOT infer or normalize gene–variant associations.

@@ -81,3 +81,21 @@ def test_phenotype_prompt_tells_the_agent_what_to_do_for_an_unaffected_patient()
     # Attribution decides, not status: a stated finding is extracted regardless.
     assert 'never overrides what the text says' in prompt
     assert 'extract it anyway' in prompt
+
+
+def test_variant_prompt_keeps_literature_variants_and_labels_them_not_main_focus():
+    """Papers 45, 56, 68 and 70 lost their previously reported variants: the paper's
+    own are main focus, the others are kept with main_focus false."""
+    prompt = VARIANT_EXTRACTION_AGENT_INSTRUCTIONS
+    assert 'Extract EVERY variant of the target gene' in prompt
+    assert 'Never leave a variant out' in prompt
+    assert 'set main_focus to false' in prompt
+
+
+def test_patient_prompt_uses_pedigree_labels_even_for_a_single_case_report():
+    """Papers 53 and 68 named the patient "patient" and dropped the labeled
+    relatives although the pedigree labels them (II-2, II-1)."""
+    prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
+    assert 'use the pedigree label' in prompt
+    assert 'this rule does not\n   apply' in prompt
+    assert 'including a single case report' in prompt
