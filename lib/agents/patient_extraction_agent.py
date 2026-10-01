@@ -61,8 +61,11 @@ Each field is an EvidenceBlock containing:
        (a "Proband No." column holding 3 gives "Proband 3"). Both halves are
        already written down, which makes this reading rather than inventing:
        the result is a textual identifier, not a numeric-only one.
-    3. If none exists, use descriptive labels (e.g., "proband", "sister") as written.
-    4. Preserve exact wording when multiple probands or cases are distinguished.
+    3. When the text and tables give a person no label but the pedigree figure
+       labels them, use the pedigree label (e.g., "II-2"). The figure is a
+       source of identifiers exactly as the text is.
+    4. If none exists, use descriptive labels (e.g., "proband", "sister") as written.
+    5. Preserve exact wording when multiple probands or cases are distinguished.
 
 - proband_status (EvidenceBlock[enum: Proband, Non-Proband, Unknown]):
   - Proband: explicitly described as proband/index case, OR the individual discussed in most detail in the paper when no explicit proband is identified (explain the rationale in the reasoning block)
@@ -91,9 +94,13 @@ Guidelines:
 5. Each patient must have an identifier; otherwise skip.
 6. If no identifiable human patients are present, return "unknown".
 7. For relational descriptions (e.g., "proband's sister"), simplify identifier to the role (e.g., "sister").
-8. For single case reports:
+8. For single case reports with no label for the individual in the text, a table or a pedigree:
    - Use identifier: "patient"
    - Set proband_status to "Proband"
+   If the paper has a pedigree that labels the individual, this rule does not
+   apply: use the pedigree label, and extract the pedigree's other labeled
+   members as in PEDIGREES below. The same pedigree gets the same treatment
+   whether the paper reports one family or several.
 9. Do not extract authors, non-clinical mentions, or animal models.
 10. Use enum values when possible; otherwise use "Other" or "Unknown".
 11. Missing fields should be returned as null (not omitted from the structured output).
@@ -127,6 +134,11 @@ affected or not: the symbol's affected status is a fact about that person, and
 the pedigree's figure anchor (cited with an empty quote) is the evidence. Skip individuals the description could only place by
 position ("unlabeled spouse of II-1"). The narrative's count of affected members
 is a hint, not a target, exactly as for tables.
+
+This holds for every paper with a pedigree, including a single case report: the
+patient takes the figure's label (II-2, not "patient"), and the labeled relatives
+are patients too. A relative the text names only by role ("her mother") and
+states a fact about, such as a genotype, is a patient as well.
 
 When the paper's own text or tables spell a pedigree label differently from the
 description (II1 vs II-1), use the paper's spelling: the description is our
