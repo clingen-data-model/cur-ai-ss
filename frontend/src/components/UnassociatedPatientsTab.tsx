@@ -81,8 +81,6 @@ export function UnassociatedPatientsTab({
           <PatientIdCell paperId={paperId} patient={row.original} onClick={() => row.toggleExpanded()} />
         ),
       },
-      { id: 'affected', header: 'Affected', accessorFn: (row) => row.affected_status },
-      { id: 'sex', header: 'Sex at Birth', accessorFn: (row) => row.sex },
       {
         id: 'actions',
         header: '',

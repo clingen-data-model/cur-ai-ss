@@ -73,8 +73,6 @@ function FamilyMembers({ paperId, members }: { paperId: number; members: Patient
           <TableHead className="w-8" />
           <TableHead>Patient</TableHead>
           <TableHead>Relationship</TableHead>
-          <TableHead>Sex</TableHead>
-          <TableHead>Affected</TableHead>
           <TableHead>Carrier</TableHead>
           <TableHead>Twin</TableHead>
         </TableRow>
@@ -99,8 +97,6 @@ function FamilyMembers({ paperId, members }: { paperId: number; members: Patient
                   />
                 </TableCell>
                 <TableCell>{patient.relationship_to_proband ?? '—'}</TableCell>
-                <TableCell>{patient.sex}</TableCell>
-                <TableCell>{patient.affected_status}</TableCell>
                 <TableCell>
                   {patient.is_obligate_carrier == null ? '—' : patient.is_obligate_carrier ? 'Obligate' : 'No'}
                 </TableCell>
@@ -108,7 +104,7 @@ function FamilyMembers({ paperId, members }: { paperId: number; members: Patient
               </TableRow>
               {expanded && (
                 <TableRow>
-                  <TableCell colSpan={7} className="p-0">
+                  <TableCell colSpan={5} className="p-0">
                     <PatientDetailPanel paperId={paperId} patient={patient} />
                   </TableCell>
                 </TableRow>
