@@ -74,6 +74,16 @@ TABLE EVIDENCE RULES:
 - A field is table-derived when the information is presented in a structured
   table (rows and columns) in the source. Cite the row: the id in that row's
   "anchor" column, with the cell text as the quote.
+- When the cell's text appears more than once in the row, a quote of the cell alone
+  does not say which one you mean. This is common when each column is a patient
+  and a row is a feature or a finding: "+", "Yes", "de novo", "Severe", "Heterozygous"
+  repeat across the row. Then quote from the row's first cell (its label) through
+  the cell that carries the value, copied exactly as printed with the "|" separators
+  between cells, and stop at that cell: for the second patient's "+" in the row
+  "Hypotonia | + | +", quote "Hypotonia | + | +"; for the first patient's, quote
+  "Hypotonia | +". Do not include the leading row id. The column picks the patient,
+  so count to the patient's own column and no further; never quote a repeated cell
+  bare.
 - A vision-rebuilt table may carry <br> or <sup> markup inside cells; copy the
   cell as printed, the check tolerates markup and spacing differences.
 - A table may be preceded by an "EXTRACTION WARNING" marker, meaning the automated
