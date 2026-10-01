@@ -10,7 +10,7 @@ import { useParams, Link } from '@tanstack/react-router'
 import type { ColumnDef, ExpandedState } from '@tanstack/react-table'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { ChevronDown, ChevronRight, FileText } from 'lucide-react'
+import { FileText } from 'lucide-react'
 import { usePaperOccurrences } from '@/hooks/usePaperOccurrences'
 import type { OccurrenceRow } from '@/hooks/usePaperOccurrences'
 import { deleteOccurrencePapersPaperIdOccurrencesOccurrenceIdDelete } from '@/api/generated'
@@ -19,7 +19,6 @@ import { Spinner } from '@/components/ui/spinner'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { API_BASE_URL, getAccessToken } from '@/lib/api'
-import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card'
 import {
   EditableDeNovoCell,
   EditableDiseaseNameCell,
@@ -36,8 +35,9 @@ import { PairOccurrenceDialog } from '@/components/PairOccurrenceDialog'
 import { PatientDetailPanel } from '@/components/PatientDetailPanel'
 import { VariantDetailPanel } from '@/components/VariantDetailPanel'
 import { displayProteinChange } from '@/lib/hgvs'
-import { PedigreeSymbol } from '@/components/PedigreeSymbol'
-import { PatientHoverCardContent } from '@/components/PatientHoverCard'
+import { EntityLink } from '@/components/EntityLink'
+import { PatientIdCell } from '@/components/PatientIdCell'
+import { RowExpander } from '@/components/RowExpander'
 import { VariantHoverCardContent } from '@/components/VariantHoverCard'
 import { UnassociatedPatientsTab } from '@/components/UnassociatedPatientsTab'
 import { UnassociatedVariantsTab } from '@/components/UnassociatedVariantsTab'
@@ -83,34 +83,6 @@ function VariantLabel({ description, hgvsP }: { description: string; hgvsP: stri
         <span className="text-muted-foreground"> ({displayProteinChange(hgvsP)})</span>
       )}
     </>
-  )
-}
-
-/** Patient/Variant cell: click expands the row's detail panel, hover previews
- * a snippet of it (demographics / ClinVar+gnomAD) without expanding. */
-function EntityLink({
-  onClick,
-  hoverContent,
-  children,
-}: {
-  onClick: () => void
-  hoverContent: React.ReactNode
-  children: React.ReactNode
-}) {
-  return (
-    <HoverCard>
-      <HoverCardTrigger
-        render={<button type="button" />}
-        onClick={(e) => {
-          e.stopPropagation()
-          onClick()
-        }}
-        className="text-left hover:underline underline-offset-2 cursor-pointer"
-      >
-        {children}
-      </HoverCardTrigger>
-      <HoverCardContent className="w-72">{hoverContent}</HoverCardContent>
-    </HoverCard>
   )
 }
 
@@ -175,26 +147,13 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
         enableSorting: false,
         header: () => null,
         cell: ({ row }) => (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
+          <RowExpander
+            expanded={expandedCell?.rowId === String(row.original.occurrence.id)}
+            onToggle={() => {
               const rowId = String(row.original.occurrence.id)
-              const isExpanded = expandedCell?.rowId === rowId
-              if (isExpanded) {
-                setExpandedCell(null)
-              } else {
-                setExpandedCell({ rowId, view: 'patient' })
-              }
+              setExpandedCell(expandedCell?.rowId === rowId ? null : { rowId, view: 'patient' })
             }}
-            className="cursor-pointer flex items-center"
-          >
-            {expandedCell?.rowId === String(row.original.occurrence.id) ? (
-              <ChevronDown className="size-4" />
-            ) : (
-              <ChevronRight className="size-4" />
-            )}
-          </button>
+          />
         ),
       },
       {
@@ -204,15 +163,11 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
         cell: ({ row }) => {
           const { patient } = row.original
           return (
-            <div className="flex items-center gap-1.5">
-              <PedigreeSymbol patient={patient} />
-              <EntityLink
-                onClick={() => toggleExpanded(String(row.original.occurrence.id), 'patient')}
-                hoverContent={<PatientHoverCardContent paperId={paperId} patient={patient} />}
-              >
-                {patient.identifier}
-              </EntityLink>
-            </div>
+            <PatientIdCell
+              paperId={paperId}
+              patient={patient}
+              onClick={() => toggleExpanded(String(row.original.occurrence.id), 'patient')}
+            />
           )
         },
       },

@@ -13,6 +13,8 @@ import { deletePatientPapersPaperIdPatientsPatientIdDelete } from '@/api/generat
 import { DataTable } from '@/components/ui/data-table'
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
 import { ManuallyCreatedIndicator } from '@/components/ManuallyCreatedIndicator'
+import { PatientIdCell } from '@/components/PatientIdCell'
+import { RowExpander } from '@/components/RowExpander'
 import { PatientDetailPanel } from '@/components/PatientDetailPanel'
 import { PipelineGate } from '@/components/PipelineGate'
 import { AddPatientDialog } from '@/components/AddPatientDialog'
@@ -64,10 +66,21 @@ export function UnassociatedPatientsTab({
           />
         ),
       },
-      { id: 'identifier', header: 'Identifier', accessorFn: (row) => row.identifier },
-      { id: 'proband', header: 'Proband', accessorFn: (row) => row.proband_status },
-      { id: 'affected', header: 'Affected', accessorFn: (row) => row.affected_status },
-      { id: 'sex', header: 'Sex at Birth', accessorFn: (row) => row.sex },
+      {
+        id: 'expander',
+        size: 40,
+        enableSorting: false,
+        header: () => null,
+        cell: ({ row }) => <RowExpander expanded={row.getIsExpanded()} onToggle={() => row.toggleExpanded()} />,
+      },
+      {
+        id: 'identifier',
+        header: 'Patient',
+        accessorFn: (row) => row.identifier,
+        cell: ({ row }) => (
+          <PatientIdCell paperId={paperId} patient={row.original} onClick={() => row.toggleExpanded()} />
+        ),
+      },
       {
         id: 'actions',
         header: '',

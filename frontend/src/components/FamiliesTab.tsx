@@ -18,7 +18,6 @@
 import { Fragment, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { ChevronDown, ChevronRight } from 'lucide-react'
 import {
   getFamiliesPapersPaperIdFamiliesGet,
   getPatientsPapersPaperIdPatientsGet,
@@ -36,7 +35,8 @@ import type {
 } from '@/api/generated/types.gen'
 import { EditableNumberRow, EditableSwitchRow, EditableTextRow, ReadOnlyRow } from '@/components/EditableField'
 import { EvidencePopover } from '@/components/EvidencePopover'
-import { PedigreeSymbol } from '@/components/PedigreeSymbol'
+import { PatientIdCell } from '@/components/PatientIdCell'
+import { RowExpander } from '@/components/RowExpander'
 import { PatientDetailPanel } from '@/components/PatientDetailPanel'
 import { ScopedRerunButton } from '@/components/ScopedRerunButton'
 import { Badge } from '@/components/ui/badge'
@@ -71,11 +71,8 @@ function FamilyMembers({ paperId, members }: { paperId: number; members: Patient
       <TableHeader>
         <TableRow>
           <TableHead className="w-8" />
-          <TableHead className="w-12">Symbol</TableHead>
           <TableHead>Patient</TableHead>
           <TableHead>Relationship</TableHead>
-          <TableHead>Sex</TableHead>
-          <TableHead>Affected</TableHead>
           <TableHead>Carrier</TableHead>
           <TableHead>Twin</TableHead>
         </TableRow>
@@ -90,22 +87,16 @@ function FamilyMembers({ paperId, members }: { paperId: number; members: Patient
                 onClick={() => setExpandedId(expanded ? null : patient.id)}
               >
                 <TableCell>
-                  {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
-                </TableCell>
-                <TableCell>
-                  <PedigreeSymbol patient={patient} />
+                  <RowExpander expanded={expanded} onToggle={() => setExpandedId(expanded ? null : patient.id)} />
                 </TableCell>
                 <TableCell className="font-medium">
-                  {patient.identifier}
-                  {patient.proband_status === 'Proband' && (
-                    <Badge variant="outline" className="ml-2 text-[10px]">
-                      Proband
-                    </Badge>
-                  )}
+                  <PatientIdCell
+                    paperId={paperId}
+                    patient={patient}
+                    onClick={() => setExpandedId(expanded ? null : patient.id)}
+                  />
                 </TableCell>
                 <TableCell>{patient.relationship_to_proband ?? '—'}</TableCell>
-                <TableCell>{patient.sex}</TableCell>
-                <TableCell>{patient.affected_status}</TableCell>
                 <TableCell>
                   {patient.is_obligate_carrier == null ? '—' : patient.is_obligate_carrier ? 'Obligate' : 'No'}
                 </TableCell>
@@ -113,7 +104,7 @@ function FamilyMembers({ paperId, members }: { paperId: number; members: Patient
               </TableRow>
               {expanded && (
                 <TableRow>
-                  <TableCell colSpan={8} className="p-0">
+                  <TableCell colSpan={5} className="p-0">
                     <PatientDetailPanel paperId={paperId} patient={patient} />
                   </TableCell>
                 </TableRow>
