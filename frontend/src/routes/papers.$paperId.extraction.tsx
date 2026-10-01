@@ -32,10 +32,10 @@ import {
 import { ConfidenceBadge } from '@/components/ConfidenceBadge'
 import { EvidencePopover } from '@/components/EvidencePopover'
 import { ManuallyCreatedIndicator } from '@/components/ManuallyCreatedIndicator'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { PairOccurrenceDialog } from '@/components/PairOccurrenceDialog'
 import { PatientDetailPanel } from '@/components/PatientDetailPanel'
 import { VariantDetailPanel } from '@/components/VariantDetailPanel'
+import { PedigreeSymbol } from '@/components/PedigreeSymbol'
 import { PatientHoverCardContent } from '@/components/PatientHoverCard'
 import { VariantHoverCardContent } from '@/components/VariantHoverCard'
 import { UnassociatedPatientsTab } from '@/components/UnassociatedPatientsTab'
@@ -48,22 +48,13 @@ import { ReviewStatusCell } from '@/components/ReviewStatusCell'
 import { StatusBadge } from '@/components/StatusBadge'
 import { computeStatus } from '@/components/TaskDAG'
 import { apiErrorMessage } from '@/lib/apiError'
-import { AffectedStatus, ProbandStatus, TaskType } from '@/api/generated/types.gen'
+import { TaskType } from '@/api/generated/types.gen'
 import { PedigreeTab } from '@/components/PedigreeTab'
 import { FamiliesTab } from '@/components/FamiliesTab'
 import { PaperMetadataTab } from '@/components/PaperMetadataTab'
 import { PdfHighlightProvider } from '@/components/PdfHighlightProvider'
 
 type ExpandedView = 'patient' | 'variant'
-
-/** Affected status as a dot next to the patient name, rather than its own
- * column -- three states (Affected/Unaffected/Unknown) read fine as a color
- * with a tooltip, and freeing the column keeps the table narrower. */
-const AFFECTED_DOT: Record<AffectedStatus, string> = {
-  [AffectedStatus.AFFECTED]: 'bg-rose-500',
-  [AffectedStatus.UNAFFECTED]: 'bg-muted-foreground/25',
-  [AffectedStatus.UNKNOWN]: 'border border-muted-foreground/40',
-}
 
 /** Same "any of patient/variant/occurrence was curator-created" check as
  * ManuallyCreatedIndicator, reused to tint the whole row -- the icon alone
@@ -209,26 +200,13 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
           const { patient } = row.original
           return (
             <div className="flex items-center gap-1.5">
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <span className={`size-2.5 rounded-full shrink-0 ${AFFECTED_DOT[patient.affected_status]}`} />
-                  }
-                />
-                <TooltipContent>{patient.affected_status}</TooltipContent>
-              </Tooltip>
+              <PedigreeSymbol patient={patient} />
               <EntityLink
                 onClick={() => toggleExpanded(String(row.original.occurrence.id), 'patient')}
                 hoverContent={<PatientHoverCardContent paperId={paperId} patient={patient} />}
               >
                 {patient.identifier}
               </EntityLink>
-              {patient.proband_status === ProbandStatus.PROBAND && (
-                <Tooltip>
-                  <TooltipTrigger render={<span className="text-muted-foreground cursor-help" />}>*</TooltipTrigger>
-                  <TooltipContent>Proband</TooltipContent>
-                </Tooltip>
-              )}
             </div>
           )
         },
