@@ -50,6 +50,7 @@ import { computeStatus } from '@/components/TaskDAG'
 import { apiErrorMessage } from '@/lib/apiError'
 import { AffectedStatus, ProbandStatus, TaskType } from '@/api/generated/types.gen'
 import { PedigreeTab } from '@/components/PedigreeTab'
+import { FamiliesTab } from '@/components/FamiliesTab'
 import { PaperMetadataTab } from '@/components/PaperMetadataTab'
 import { PdfHighlightProvider } from '@/components/PdfHighlightProvider'
 
@@ -492,6 +493,7 @@ export function ExtractionPage() {
         <Tabs defaultValue="occurrences">
           <TabsList>
             <TabsTrigger value="occurrences">Occurrences</TabsTrigger>
+            <TabsTrigger value="families">Families</TabsTrigger>
             <TabsTrigger value="unassociated-patients">
               Unassociated Patients
               {unassociatedPatients.length > 0 && (
@@ -515,6 +517,11 @@ export function ExtractionPage() {
               label="Patient/variant linking"
             >
               <OccurrencesTab paperId={paperId} rows={rows} />
+            </PipelineGate>
+          </TabsContent>
+          <TabsContent value="families" className="pt-3">
+            <PipelineGate tasks={tasks} task={TaskType.PATIENT_EXTRACTION} label="Patient extraction">
+              <FamiliesTab paperId={paperId} />
             </PipelineGate>
           </TabsContent>
           <TabsContent value="unassociated-patients" className="pt-3">
