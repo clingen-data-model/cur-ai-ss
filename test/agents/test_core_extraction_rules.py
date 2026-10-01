@@ -104,6 +104,10 @@ def test_patient_prompt_uses_pedigree_labels_even_for_a_single_case_report():
 def test_spec_disambiguates_a_cell_that_repeats_across_a_table_row():
     """A matrix table (one column per patient) repeats "+" or "Severe" across a row;
     a bare quote of that cell cannot say whose it is."""
-    assert 'appears more than once in the row' in CORE_EXTRACTION_SPEC
+    assert 'carries only a flag' in CORE_EXTRACTION_SPEC
+    assert 'each row is a patient' in CORE_EXTRACTION_SPEC
+    assert (
+        'never quote only the row' in CORE_EXTRACTION_SPEC.replace('\n  ', ' ').lower()
+    )
     assert '"Hypotonia | + | +"' in CORE_EXTRACTION_SPEC
-    assert 'never quote a repeated cell\n  bare' in CORE_EXTRACTION_SPEC
+    assert 'Never quote a flag or repeated cell bare' in CORE_EXTRACTION_SPEC

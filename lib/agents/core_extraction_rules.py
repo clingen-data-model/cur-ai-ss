@@ -74,16 +74,23 @@ TABLE EVIDENCE RULES:
 - A field is table-derived when the information is presented in a structured
   table (rows and columns) in the source. Cite the row: the id in that row's
   "anchor" column, with the cell text as the quote.
-- When the cell's text appears more than once in the row, a quote of the cell alone
-  does not say which one you mean. This is common when each column is a patient
-  and a row is a feature or a finding: "+", "Yes", "de novo", "Severe", "Heterozygous"
-  repeat across the row. Then quote from the row's first cell (its label) through
-  the cell that carries the value, copied exactly as printed with the "|" separators
-  between cells, and stop at that cell: for the second patient's "+" in the row
-  "Hypotonia | + | +", quote "Hypotonia | + | +"; for the first patient's, quote
-  "Hypotonia | +". Do not include the leading row id. The column picks the patient,
-  so count to the patient's own column and no further; never quote a repeated cell
-  bare.
+- A cell that carries only a flag ("+", "-", "Yes", "No", "Y", "N") or a value that
+  repeats across the row ("de novo", "Severe", "Heterozygous") means nothing on its
+  own: the same text sits under other columns, and the column header says which
+  finding it answers. This is common when each column is a patient and a row is a
+  feature, and equally when each row is a patient and each column is a feature
+  (ventricular dilation, seizures, hearing: Yes, Yes, No ...). Then quote from the
+  row's first cell (its label or id) through the cell that carries the value,
+  copied exactly as printed with the "|" separators between cells, and stop at that
+  cell: for the second patient's "+" in the row "Hypotonia | + | +", quote
+  "Hypotonia | + | +"; for the first patient's, quote "Hypotonia | +"; for the
+  seizures flag of "KCHYD154-1 | c.1823G>A | p.(Arg608His) | Yes | Shunt | Yes | Yes",
+  quote through the cell in the seizures column. Do not include the leading row id
+  column. Find the column by counting cells against the table's header row, and
+  count to the right column and no further.
+- Never quote a flag or repeated cell bare, and never quote only the row's label or
+  id cell for a value that lives in another column: the label says whose row it is,
+  not what the row says. The quote must end on the cell that carries the value.
 - A vision-rebuilt table may carry <br> or <sup> markup inside cells; copy the
   cell as printed, the check tolerates markup and spacing differences.
 - A table may be preceded by an "EXTRACTION WARNING" marker, meaning the automated
