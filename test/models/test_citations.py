@@ -301,3 +301,27 @@ def test_bare_lists_and_dicts_and_non_models():
     verify_citations('not a model', TEXTS)
     with pytest.raises(CitationError, match=r"\['a'\]\.citations\[0\]"):
         verify_citations({'a': _block(citations=[Citation(anchor='table-7')])}, TEXTS)
+
+
+def test_a_row_quote_with_its_label_and_pipes_checks_out_for_a_repeated_cell():
+    """The quote the prompt asks for when a cell repeats across a row (matrix
+    tables, one column per patient) is the row label through the target cell,
+    pipes kept. It must pass the check as printed, padding and all."""
+    from lib.misc.pdf.anchors import block_texts
+
+    texts = block_texts(
+        '[table-0] Table 1.\n'
+        '| anchor | Individuals | This study | Lam et al. |\n'
+        '|---|---|---|---|\n'
+        '| table-0-row-4 | Hypotonia                      | +      | +     |\n'
+    )
+
+    for quote in ('Hypotonia | +', 'Hypotonia | + | +'):
+        verify_citations(
+            _block(citations=[Citation(anchor='table-0-row-4', quote=quote)]), texts
+        )
+    with pytest.raises(CitationError):  # spaces instead of the printed pipes
+        verify_citations(
+            _block(citations=[Citation(anchor='table-0-row-4', quote='Hypotonia + +')]),
+            texts,
+        )

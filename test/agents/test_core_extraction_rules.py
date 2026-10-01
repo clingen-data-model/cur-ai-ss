@@ -99,3 +99,11 @@ def test_patient_prompt_uses_pedigree_labels_even_for_a_single_case_report():
     assert 'use the pedigree label' in prompt
     assert 'this rule does not\n   apply' in prompt
     assert 'including a single case report' in prompt
+
+
+def test_spec_disambiguates_a_cell_that_repeats_across_a_table_row():
+    """A matrix table (one column per patient) repeats "+" or "Severe" across a row;
+    a bare quote of that cell cannot say whose it is."""
+    assert 'appears more than once in the row' in CORE_EXTRACTION_SPEC
+    assert '"Hypotonia | + | +"' in CORE_EXTRACTION_SPEC
+    assert 'never quote a repeated cell\n  bare' in CORE_EXTRACTION_SPEC
