@@ -179,6 +179,69 @@ export function EditableTextRow({
   )
 }
 
+/** A decimal value (a LOD score) with a forced human-edit note, and null
+ * allowed: clearing the box saves "no value". */
+export function EditableNumberRow({
+  label,
+  value,
+  evidence,
+  onSave,
+  isSaving,
+}: {
+  label: string
+  value: number | null
+  evidence?: EvidenceLike | null
+  onSave: (value: number | null, note: string) => void
+  isSaving?: boolean
+}) {
+  const show = (v: number | null) => (v == null ? '' : String(v))
+  const [draft, setDraft] = useState(show(value))
+  const pending = usePendingEdit<number | null>(onSave)
+
+  const commit = () => {
+    const trimmed = draft.trim()
+    const parsed = trimmed === '' ? null : Number(trimmed)
+    if (parsed !== null && Number.isNaN(parsed)) {
+      setDraft(show(value))
+      return
+    }
+    if (parsed !== value) pending.propose(parsed)
+    else setDraft(show(value))
+  }
+
+  return (
+    <FieldRow label={label} evidence={evidence}>
+      <Input
+        type="number"
+        step="any"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur()
+        }}
+        placeholder="—"
+        className="h-7 text-xs w-28"
+      />
+      <HumanEditNoteDialog
+        open={pending.isOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            pending.cancel()
+            setDraft(show(value))
+          }
+        }}
+        fieldLabel={label}
+        defaultNote={evidence?.human_edit_note}
+        isPending={isSaving}
+        onConfirm={(note) => pending.confirm(note)}
+        beforeValue={value == null ? '—' : String(value)}
+        afterValue={pending.pendingValue == null ? '—' : String(pending.pendingValue)}
+      />
+    </FieldRow>
+  )
+}
+
 /** A numeric value with a separate unit selector. Only the value requires a
  * curator note (matches lib/ui/paper/patients.py: changing the unit alone
  * saves immediately, since there's no `<field>_unit_human_edit_note`). */
