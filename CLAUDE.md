@@ -19,10 +19,9 @@ uv run pytest test --cov=lib --cov-report=term-missing  # Run all tests with cov
 uv run pytest test/path/to/test_file.py  # Run a specific test
 ```
 
-**Run the application (three separate terminals):**
+**Run the application (two terminals, plus the frontend dev server below):**
 ```bash
 ./bin/api       # FastAPI backend (port 8000)
-./bin/ui        # Streamlit frontend (port 8501)
 ./bin/worker    # Background job processor
 ```
 
@@ -35,7 +34,7 @@ pnpm dlx skills add shadcn/ui   # Install shadcn/ui AI skill (gitignored, run on
 
 **Frontend commands** (from `frontend/`; not covered by CI, so run them before deploying):
 ```bash
-pnpm dev          # Vite dev server on port 8501 (conflicts with ./bin/ui)
+pnpm dev          # Vite dev server on port 8501
 pnpm type-check   # tsc --noEmit
 pnpm lint         # eslint
 pnpm build        # regenerates the API client, then tsc -b && vite build
@@ -54,21 +53,15 @@ This is a research paper analysis system that extracts genetic information (pati
 
 ### Core Components
 
-**Four components:**
+**Three components:**
 
 1. **Backend API** (`lib/api/app.py`)
    - FastAPI server handling PDF uploads, data storage, and retrieval
    - SQLite database (configured via `lib/api/db.py`)
-   - CORS middleware configured for Streamlit UI access
+   - CORS middleware configured for the SPA's dev server
    - Serves both API endpoints and static assets
 
-2. **Frontend UI** (`lib/ui/streamlit_app.py`)
-   - Multi-page Streamlit app (dashboard, paper views)
-   - Dashboard lists papers and their extraction status
-   - Paper pages show extracted patients, variants, phenotypes with editing capabilities
-   - Renders PDF highlighting and thumbnails via API
-
-3. **React SPA** (`frontend/`)
+2. **React SPA** (`frontend/`)
    - React 19 + TypeScript + Vite, Tailwind v4, shadcn/ui primitives vendored into `src/components/ui/`
    - TanStack Router and TanStack Query. Route components live in
      `src/routes/`, but the route table `src/routeTree.ts` is **hand-written** —
@@ -76,11 +69,12 @@ This is a research paper analysis system that extracts genetic information (pati
      does nothing until it is imported, declared and listed in `addChildren`
    - The API client in `src/api/generated/` is generated from the FastAPI OpenAPI schema
      by `pnpm build` — never edit it by hand, and regenerate after changing API models
-   - In-progress replacement for the Streamlit UI, deployed in parallel under `/v2`
+   - The only UI (Streamlit has been retired): dashboard, paper pages, PDF evidence
+     viewer. Served under `/v2`; nginx redirects `/` there
    - **See `frontend/README.md`** for architecture, the base-path rules, and a
      description of every JavaScript dependency
 
-4. **Background Worker** (`lib/bin/worker.py`)
+3. **Background Worker** (`lib/bin/worker.py`)
    - Polls database for papers with extraction tasks
    - Runs extraction agents sequentially in a pipeline
    - Updates paper `pipeline_status` as tasks progress
@@ -152,7 +146,7 @@ Configuration is in `lib/core/environment.py` using Pydantic BaseSettings:
 **Optional:**
 - `ANTHROPIC_API_KEY` - required whenever a configured model names `anthropic/`. `anthropic/` routes through LiteLLM; `openai/` goes to the agents SDK's default provider. The two settings may name different providers, so vision and extraction can be pointed at different providers independently. Extraction used to be pinned to OpenAI because `responses_api_model()`'s server-side `conversation_id` had no Anthropic equivalent; that dependency is gone now that `lib.tasks.agent_session` gives every task its own provider-agnostic `SQLiteSession` (see `docs/anthropic-migration.md`), so extraction can run on Claude too -- verified live against the MASP1 test paper (PMID 26419238) before flipping dev-caa to it
 - `NCBI_API_KEY` / `NCBI_EMAIL` - For variant enrichment
-- `API_ENDPOINT` - Where UI reaches API (default: `localhost:8000`)
+- `API_ENDPOINT` / `PROTOCOL` - Address the worker puts in the paper-completion email (default: `http://localhost:8000`)
 - `CORS_ALLOWED_ORIGINS` - CORS origins (default: `http://localhost:8501`)
 - `LOG_LEVEL` - Logging level (default: `INFO`)
 - `JWT_ALGORITHM` - JWT signing algorithm (default: `HS256`)
@@ -261,7 +255,7 @@ def upgrade() -> None:
 5. Add database model in `lib/models/` if needed
 6. Create migration: `alembic revision --autogenerate -m "add_new_agent_tables"`
 7. Add API endpoints in `lib/api/app.py` for retrieving data
-8. Add UI components in `lib/ui/paper/` for display/editing
+8. Add UI components in `frontend/src/` for display/editing
 
 **Adding a new API endpoint:**
 1. Import or create Pydantic models in `lib/models/`
@@ -271,10 +265,10 @@ def upgrade() -> None:
 5. Document response model
 
 **Modifying UI:**
-1. Edit relevant file in `lib/ui/paper/` (each entity type has its own file)
-2. Use Streamlit data editors for user input
-3. Call API endpoints to save changes
-4. Use PDF highlighting via `lib/misc/pdf/highlight.py` utilities
+1. Edit the relevant component in `frontend/src/components/` or the route in `frontend/src/routes/`
+2. Reuse the editable rows in `EditableField.tsx` for user input (they force a human-edit note)
+3. Call the generated API client; regenerate it after changing API models
+4. PDF highlighting comes from the `/highlight` endpoint (`lib/misc/pdf/highlight.py`)
 
 **Generating API specification:**
 ```bash
@@ -305,13 +299,13 @@ Extracts OpenAPI schema from FastAPI app and generates `frontend/api-spec.json`.
 **OpenAI agents:** Uses `openai_agents.Runner` for structured outputs. Models must have Pydantic schema for OpenAI to use as response schema.
 
 **Deployment:** One GCP VM (`dev-caa`, domain `gene-curation-ai.app`) behind nginx:
-Streamlit at `/`, FastAPI at `/api/` (prefix stripped), the React SPA's static build at
-`/v2/`. Deploy with `ansible-playbook -i dev-caa.us-east4-a.clingen-caa, infrastructure/ansible/playbook.yml`,
+FastAPI at `/api/` (prefix stripped), the React SPA's static build at `/v2/`, and a
+temporary redirect from `/` to `/v2/`. Deploy with `ansible-playbook -i dev-caa.us-east4-a.clingen-caa, infrastructure/ansible/playbook.yml`,
 which pulls `main` from GitHub — so changes must be merged and pushed before deploying.
 See the Deployment section of `README.md`.
 
 **The SPA is served under a path prefix**, so anything root-relative in `frontend/` must
-be built from `import.meta.env.BASE_URL` or it escapes `/v2` and hits the Streamlit app:
+be built from `import.meta.env.BASE_URL` or it escapes `/v2` and lands on the root redirect:
 
 - Navigate with `<Link>` from TanStack Router, never `<a href="/...">`
 - Reference `public/` assets as `` `${import.meta.env.BASE_URL}<file>` `` in TSX, or

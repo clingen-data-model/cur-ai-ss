@@ -1,10 +1,10 @@
 # Frontend
 
-React + TypeScript single-page app that is replacing the Streamlit UI. It talks to the
-FastAPI backend through a fully generated, typed client.
+React + TypeScript single-page app, the application's only UI (it replaced Streamlit). It
+talks to the FastAPI backend through a fully generated, typed client.
 
-In production it is served as **static files by nginx under the `/v2/` prefix**, beside
-the Streamlit UI which still owns `/`. See [Deployment](#deployment) below.
+In production it is served as **static files by nginx under the `/v2/` prefix**; nginx
+redirects `/` to it (a 302, so the SPA can move to `/` later). See [Deployment](#deployment) below.
 
 ## Setup
 
@@ -65,7 +65,7 @@ src/
   routes/               File-based routes
     __root.tsx          Shared layout: header, footer, AuthGate, Toaster
     index.tsx           Paper list (dashboard)
-    login.tsx           Token login, mirrors the Streamlit auth gate
+    login.tsx           Token login
     papers.$paperId.extraction.tsx   Paper detail: occurrences, families (structure and
                         segregation analysis), unassociated patients/variants,
                         pedigree -- tabbed
@@ -109,7 +109,7 @@ Two environment variables shape the build, both set by the playbook:
 | `VITE_API_URL` | unset → `http://localhost:8000` | `/api` | Base URL for API calls and API-served assets. Same-origin on the VM, so nginx proxies it and CORS never applies. |
 
 Anything root-relative has to be built from `import.meta.env.BASE_URL`, or it escapes the
-prefix and lands on the Streamlit app:
+prefix and lands on the root redirect:
 
 - Navigation uses `<Link>` from TanStack Router, never `<a href="/...">`. The router is
   given `basepath` from `BASE_URL`, so it prefixes links and strips the prefix when

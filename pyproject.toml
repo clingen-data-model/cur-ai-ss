@@ -34,9 +34,6 @@ dependencies = [
     "biopython>=1.86",
     "pymupdf>=1.26.7",
     "hpo-toolkit>=0.7.0",
-    # Streamlit components
-    "streamlit-searchbox>=0.1.24",
-    "streamlit-authenticator>=0.4.2",
     # Office document generation
     "python-pptx>=0.6.23",
 ]

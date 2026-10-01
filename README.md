@@ -18,8 +18,7 @@ A web-based tool for extracting and curating genetic evidence from scientific pa
 
 **Pipeline Architecture**
 - **Backend API**: FastAPI server managing data storage and retrieval
-- **Streamlit UI**: The current dashboard for browsing papers and curating data
-- **React SPA**: Its replacement, in progress — served alongside it under `/v2`
+- **React SPA**: The UI for browsing papers and curating data, served under `/v2`
 - **Background Worker**: Runs extraction agents in sequence, updating progress in real-time
 - **SQLite Database**: Stores papers, patients, variants, phenotypes, and all extracted data
 
@@ -72,33 +71,26 @@ uv run pytest test/models/test_converters.py  # Run a specific test file
 
 ### Running the Full Application
 
-Start the backend, UI, and worker in separate terminals:
+Start the backend, worker and frontend in separate terminals:
 
 **Terminal 1 — Backend API** (runs on `http://localhost:8000`)
 ```bash
 ./bin/api
 ```
 
-**Terminal 2 — Frontend UI** (runs on `http://localhost:8501`)
-```bash
-./bin/ui
-```
-
-**Terminal 3 — Background Worker** (processes extraction jobs)
+**Terminal 2 — Background Worker** (processes extraction jobs)
 ```bash
 ./bin/worker
 ```
 
-**Terminal 4 — React frontend** (optional, runs on `http://localhost:8501`)
+**Terminal 3 — React frontend** (runs on `http://localhost:8501`)
 ```bash
 cd frontend
 pnpm install
 pnpm dev
 ```
 
-Note that `./bin/ui` (Streamlit) and `pnpm dev` (Vite) both bind port 8501, so run one or
-the other locally. See `frontend/README.md` for the frontend toolchain and its
-dependencies.
+See `frontend/README.md` for the frontend toolchain and its dependencies.
 
 ### Example: Extract Evidence from a Paper with MASP1 Gene
 
@@ -111,10 +103,9 @@ curl -L -o masp1_paper.pdf “https://pmc.ncbi.nlm.nih.gov/articles/PMC4657649/p
 ```
 
 **Step 2: Upload via the UI**
-1. Open the Streamlit dashboard: `http://localhost:8501`
-2. Go to the **Dashboard** page
-3. Click “Upload Paper” and select `masp1_paper.pdf`
-4. Enter a name (e.g., “MASP1 Variants - Kidney Disease”)
+1. Open the dashboard: `http://localhost:8501`
+2. Click “Upload Paper” and select `masp1_paper.pdf`
+3. Enter a name (e.g., “MASP1 Variants - Kidney Disease”)
 
 **Step 3: Watch extraction progress**
 - The background worker automatically starts processing the paper
@@ -135,20 +126,16 @@ curl -L -o masp1_paper.pdf “https://pmc.ncbi.nlm.nih.gov/articles/PMC4657649/p
 **Backend API** (`lib/api/app.py`)
 - FastAPI server with PDF upload, data storage, and retrieval endpoints
 - Serves the frontend and manages database access
-- CORS configured for Streamlit UI
-
-**Streamlit UI** (`lib/ui/streamlit_app.py`)
-- Dashboard: Browse papers and view extraction status
-- Paper pages: Edit patients, variants, phenotypes, and HPO assignments
-- PDF viewer: Highlight and view supporting evidence
-- Still the primary UI, served at `/`
+- CORS configured for the SPA's dev server
 
 **React SPA** (`frontend/`)
 - React 19 + TypeScript, built with Vite, styled with Tailwind v4 and shadcn/ui
 - TanStack Router for type-safe file-based routing, TanStack Query for server state
 - Calls the API through a client generated from the FastAPI OpenAPI schema, so a backend
   schema change becomes a frontend type error rather than a runtime 404
-- In-progress replacement for the Streamlit UI; deployed in parallel under `/v2`
+- The only UI (it replaced Streamlit): dashboard, paper pages for editing patients,
+  families and segregation, variants and phenotypes, and the PDF evidence viewer; served
+  under `/v2`
 - Architecture and a description of every JavaScript dependency: `frontend/README.md`
 
 **Background Worker** (`lib/bin/worker.py`)
@@ -195,12 +182,13 @@ Everything runs on a single GCP VM (`dev-caa`, defined in
 
 | Path | Served by | Notes |
 | --- | --- | --- |
-| `/` | Streamlit UI on `127.0.0.1:8001` | Proxied, with WebSocket upgrade for `/_stcore/stream` |
+| `/` | nginx | Temporary (302) redirect to `/v2/`; also catches the old Streamlit paths |
 | `/api/` | FastAPI on `127.0.0.1:8000` | Proxied; the `/api` prefix is stripped before it reaches FastAPI |
 | `/v2/` | `frontend/dist/` on disk | Static files. Unknown paths fall back to `/v2/index.html` so the SPA router can resolve deep links |
 
-The API, Streamlit UI, and worker run as systemd **user** services (`api`, `ui`,
-`worker`) under the `caa` user. TLS is a Let's Encrypt wildcard managed by certbot on the
+The API and worker run as systemd **user** services (`api`, `worker`) under the `caa`
+user. (A host deployed before Streamlit was retired also had a `ui` service; the playbook
+stops, disables and removes it.) TLS is a Let's Encrypt wildcard managed by certbot on the
 VM, renewed twice-daily by cron via a Porkbun DNS-01 challenge.
 
 Deploying pulls `main` from GitHub onto the VM, syncs Python dependencies, writes `.env`
