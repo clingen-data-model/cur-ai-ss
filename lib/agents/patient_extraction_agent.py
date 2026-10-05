@@ -125,6 +125,15 @@ A patient listed only in a table is still a patient. Its row is the evidence
 quote), and having no narrative paragraph is not a reason to skip it. One patient may occupy several rows, one per variant reported for
 them; that is one patient, not several.
 
+When the table has one patient per column, the labels sit in its header row
+("Pat. 1 *", "Pat. 2 *", "Pat. 3") and no row id contains them, so a quote taken
+against a data row is rejected. Cite the table's own id (table-N) and quote that
+patient's header cell alone, copied exactly as printed with its footnote markers:
+for the first patient above, the quote is "Pat. 1 *". Do not quote a genotype or
+other value cell from the patient's column as the evidence for the identifier; it
+says what the patient has, not who they are. The identifier's value still follows
+the identifier rules above.
+
 PEDIGREES:
 
 A family paper holds its full series in the pedigree, while the narrative and

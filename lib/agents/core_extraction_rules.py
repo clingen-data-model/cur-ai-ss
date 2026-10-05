@@ -39,7 +39,7 @@ CITATIONS:
     already names it;
   - for a table, cite the row id (table-N-row-R) and put the text of the one cell
     that carries the value in quote; cite the table id (table-N) only for a fact
-    about the table as a whole;
+    about the table as a whole or for a header cell (see TABLE EVIDENCE RULES);
   - empty when the whole block is the evidence;
   - for a figure, empty when the image itself is the evidence (a pedigree); when a
     value comes from the figure's legend (the text after the id: "Fig. 3. ... (c)
@@ -94,6 +94,14 @@ TABLE EVIDENCE RULES:
 - Never quote a flag or repeated cell bare, and never quote only the row's label or
   id cell for a value that lives in another column: the label says whose row it is,
   not what the row says. The quote must end on the cell that carries the value.
+- The header row has no id of its own, and no data row contains its text. When the
+  value is a header cell -- above all a patient's label in a table with one patient
+  per column ("Pat. 1 *", "Pat. 2 *") -- cite the table id (table-N) and quote that
+  one header cell alone, copied exactly as printed, footnote markers such as * or
+  a dagger included. Never cite a data row for text that appears only in the
+  header: the row does not contain it and the citation is rejected. Never quote a
+  cell from that patient's column in the label's place: a genotype or feature cell
+  says what the patient has, not who the patient is.
 - A vision-rebuilt table may carry <br> or <sup> markup inside cells; copy the
   cell as printed, the check tolerates markup and spacing differences.
 - A table may be preceded by an "EXTRACTION WARNING" marker, meaning the automated

@@ -9,6 +9,7 @@ from agents.strict_schema import ensure_strict_json_schema
 from litellm.llms.anthropic.chat.transformation import AnthropicConfig
 
 from lib.bin.strip_evidence_markup import _clean
+from lib.misc.pdf.anchors import block_texts
 from lib.models import PaperExtractionOutput
 from lib.models.base import manual_evidence_block
 from lib.models.evidence_block import (
@@ -33,6 +34,28 @@ def _block(**kwargs) -> EvidenceBlock[str]:
 
 
 # --- Citation ---------------------------------------------------------------
+
+
+def test_a_header_cell_is_quotable_through_the_table_id_but_not_a_data_row():
+    """What the table rules tell the agent: the header has no row id, but the
+    table block carries it, so a patient label there is cited as table-N."""
+    texts = block_texts(
+        '[table-0] Table 1. Features\n\n'
+        '| anchor | Feature | Pat. 1 * | Pat. 2 * |\n'
+        '|---|---|---|---|\n'
+        '| table-0-row-0 | Hypotonia | + | - |\n'
+    )
+
+    def cited(anchor: str) -> EvidenceBlock[str]:
+        return EvidenceBlock[str](
+            value='Pat. 1',
+            reasoning='the column label',
+            citations=[Citation(anchor=anchor, quote='Pat. 1 *')],
+        )
+
+    verify_citations(cited('table-0'), texts)
+    with pytest.raises(CitationError):
+        verify_citations(cited('table-0-row-0'), texts)
 
 
 def test_citation_defaults_and_stripping():
