@@ -1,4 +1,3 @@
-import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -210,63 +209,4 @@ def fulltext_md(paper_id: int, supplement_format: 'FileFormat | None' = None) ->
     debugging artifact now and the agents never see it.
     """
     main = document_anchored_md_path(paper_id).read_text()
-    return main + _supplement_block(paper_id, supplement_format)
-
-
-def skip_irrelevant_sections(markdown: str, section_classifications: dict) -> str:
-    """Drop the sections the classifier judged irrelevant.
-
-    When a heading the classifier marked irrelevant is encountered, lines are
-    skipped until the next heading. Only ``#``-lines are headings; the
-    ``[paragraph-N]`` / ``[table-N]`` tags of an anchored document are ordinary
-    lines and travel with their section.
-
-    A heading the classifier never named ends the skip rather than continuing it.
-    The classifier's job is to name the sections worth dropping, so a heading it
-    did not name is not one it judged irrelevant, and inheriting the previous
-    verdict would be this function deciding that on its behalf.
-    """
-    classified: dict[str, bool] = {
-        s['header'].lower(): s.get('relevant', True)
-        for s in section_classifications.get('sections', [])
-    }
-
-    result_lines: list[str] = []
-    skip = False
-    for line in markdown.splitlines(keepends=True):
-        heading_match = re.match(r'^#{1,3} (.+)', line.rstrip())
-        if heading_match:
-            header_text = heading_match.group(1).strip().lower()
-            if header_text in classified:
-                skip = not classified[header_text]
-            else:
-                # Headings go unmatched routinely: the classifier is asked for
-                # the headers it finds and writes them back in its own words,
-                # expanding "Table 1" to the caption underneath it or adding a
-                # note like "(table)", so the string no longer matches the line
-                # it came from. Carrying the previous verdict through those made
-                # one irrelevant section swallow the rest of the file -- papers
-                # that print their tables after the references lost every one of
-                # them, with nothing to show it had happened.
-                skip = False
-        if not skip:
-            result_lines.append(line)
-    return ''.join(result_lines)
-
-
-def relevant_sections_md(
-    paper_id: int,
-    supplement_format: 'FileFormat | None' = None,
-    section_classifications: dict | None = None,
-) -> str:
-    """``fulltext_md`` with the classifier's irrelevant sections removed.
-
-    Falls back to the full text if section classification has not run yet. Only
-    the main paper is filtered; the supplement is appended whole, as always.
-    """
-    if section_classifications is None:
-        return fulltext_md(paper_id, supplement_format)
-    main = skip_irrelevant_sections(
-        document_anchored_md_path(paper_id).read_text(), section_classifications
-    )
     return main + _supplement_block(paper_id, supplement_format)

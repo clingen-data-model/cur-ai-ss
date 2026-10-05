@@ -122,7 +122,6 @@ from lib.misc.pdf.paths import (
     document_anchored_md_path,
     document_image_path,
     fulltext_md,
-    relevant_sections_md,
 )
 from lib.models import (
     AnnotatedVariantDB,
@@ -465,7 +464,6 @@ async def handle_paper_metadata(task_id: int) -> None:
     gene_symbol: str
     additional_context: str | None
     supplement_format: FileFormat | None
-    section_classifications: dict | None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
@@ -479,7 +477,6 @@ async def handle_paper_metadata(task_id: int) -> None:
         gene_symbol = paper.gene.symbol
         additional_context = task.additional_context
         supplement_format = paper.supplement_format
-        section_classifications = paper.section_classifications
 
     agent_sess = agent_session(task_id)
 
@@ -490,9 +487,7 @@ async def handle_paper_metadata(task_id: int) -> None:
     else:
         # Initial query: build full message with paper + instructions
         await agent_sess.clear_session()
-        paper_markdown = relevant_sections_md(
-            paper_id, supplement_format, section_classifications
-        )
+        paper_markdown = fulltext_md(paper_id, supplement_format)
         message = paper_input(
             format_paper_context(paper_markdown, gene_symbol),
             PAPER_EXTRACTION_AGENT_INSTRUCTIONS,
@@ -519,7 +514,6 @@ async def handle_variant_extraction(task_id: int) -> None:
     gene_symbol: str
     additional_context: str | None
     supplement_format: FileFormat | None
-    section_classifications: dict | None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
@@ -533,7 +527,6 @@ async def handle_variant_extraction(task_id: int) -> None:
         gene_symbol = paper.gene.symbol
         additional_context = task.additional_context
         supplement_format = paper.supplement_format
-        section_classifications = paper.section_classifications
 
     agent_sess = agent_session(task_id)
 
@@ -544,9 +537,7 @@ async def handle_variant_extraction(task_id: int) -> None:
     else:
         # Initial query: build full message with paper + instructions
         await agent_sess.clear_session()
-        paper_markdown = relevant_sections_md(
-            paper_id, supplement_format, section_classifications
-        )
+        paper_markdown = fulltext_md(paper_id, supplement_format)
         message = paper_input(
             format_paper_context(paper_markdown, gene_symbol),
             VARIANT_EXTRACTION_AGENT_INSTRUCTIONS,
@@ -714,7 +705,6 @@ def patient_extraction_message(
     """
     paper = session.get(PaperDB, paper_id)
     supplement_format = paper.supplement_format if paper else None
-    section_classifications = paper.section_classifications if paper else None
     gene_symbol = paper.gene.symbol if paper else None
 
     pedigree_row = (
@@ -722,9 +712,7 @@ def patient_extraction_message(
     )
     pedigree_descriptions_output = pedigree_input(pedigree_row)
 
-    paper_markdown = relevant_sections_md(
-        paper_id, supplement_format, section_classifications
-    )
+    paper_markdown = fulltext_md(paper_id, supplement_format)
     return paper_input(
         format_paper_context(paper_markdown, gene_symbol),
         PATIENT_EXTRACTION_AGENT_INSTRUCTIONS,
@@ -810,7 +798,6 @@ async def handle_patient_demographics(task_id: int) -> None:
     patient_data: dict | None = None
     proband_identifier: str | None = None
     pedigree_descriptions_output: dict | None = None
-    section_classifications: dict | None = None
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -828,7 +815,6 @@ async def handle_patient_demographics(task_id: int) -> None:
 
         paper = session.get(PaperDB, paper_id)
         supplement_format = paper.supplement_format if paper else None
-        section_classifications = paper.section_classifications if paper else None
         gene_symbol = paper.gene.symbol if paper else None
 
         patient_row = session.get(PatientDB, patient_id)
@@ -868,9 +854,7 @@ async def handle_patient_demographics(task_id: int) -> None:
     else:
         # Initial query: build full message with paper + patient data + instructions
         await agent_sess.clear_session()
-        paper_markdown = relevant_sections_md(
-            paper_id, supplement_format, section_classifications
-        )
+        paper_markdown = fulltext_md(paper_id, supplement_format)
         message = paper_input(
             format_paper_context(paper_markdown, gene_symbol),
             PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS,
@@ -907,7 +891,6 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
     supplement_format: FileFormat | None = None
     additional_context: str | None = None
     family_info: dict | None = None
-    section_classifications: dict | None = None
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -927,7 +910,6 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
 
         gene_symbol = paper.gene.symbol
         supplement_format = paper.supplement_format
-        section_classifications = paper.section_classifications
         additional_context = task.additional_context
 
         family = session.get(FamilyDB, family_id)
@@ -980,9 +962,7 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
     else:
         # Initial query: build full message with paper + family data + instructions
         await agent_sess.clear_session()
-        paper_markdown = relevant_sections_md(
-            paper_id, supplement_format, section_classifications
-        )
+        paper_markdown = fulltext_md(paper_id, supplement_format)
         message = paper_input(
             format_paper_context(paper_markdown, gene_symbol),
             SEGREGATION_EVIDENCE_AGENT_INSTRUCTIONS,
@@ -1021,7 +1001,6 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
     family_info: dict | None = None
     paper_id: int | None = None
     supplement_format: FileFormat | None = None
-    section_classifications: dict | None = None
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -1041,7 +1020,6 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
         paper_id = task.paper_id
         gene_symbol = paper.gene.symbol
         supplement_format = paper.supplement_format
-        section_classifications = paper.section_classifications
         additional_context = task.additional_context
 
         family = session.get(FamilyDB, family_id)
@@ -1113,9 +1091,7 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
     else:
         # Initial query: build full message with paper + family data + instructions
         await agent_sess.clear_session()
-        paper_markdown = relevant_sections_md(
-            paper_id, supplement_format, section_classifications
-        )
+        paper_markdown = fulltext_md(paper_id, supplement_format)
         message = paper_input(
             format_paper_context(paper_markdown, gene_symbol),
             SEGREGATION_ANALYSIS_COMPUTED_AGENT_INSTRUCTIONS,
@@ -1343,7 +1319,6 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
     pedigree_descriptions_output: dict | None
     additional_context: str | None
     supplement_format: FileFormat | None = None
-    section_classifications: dict | None = None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
@@ -1354,7 +1329,6 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
 
         paper = session.get(PaperDB, paper_id)
         supplement_format = paper.supplement_format if paper else None
-        section_classifications = paper.section_classifications if paper else None
         gene_symbol = paper.gene.symbol if paper else None
 
         variant_rows = (
@@ -1407,9 +1381,7 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
     else:
         # Initial query: build full message with paper + variant/patient data + instructions
         await agent_sess.clear_session()
-        paper_markdown = relevant_sections_md(
-            paper_id, supplement_format, section_classifications
-        )
+        paper_markdown = fulltext_md(paper_id, supplement_format)
         message = paper_input(
             format_paper_context(paper_markdown, gene_symbol),
             PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS,
@@ -1460,7 +1432,6 @@ async def handle_compound_het_evaluation(task_id: int) -> None:
     paper_id: int
     patient_id: int | None = None
     supplement_format: FileFormat | None = None
-    section_classifications: dict | None = None
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -1497,7 +1468,6 @@ async def handle_compound_het_evaluation(task_id: int) -> None:
         gene_symbol = paper.gene.symbol
 
         supplement_format = paper.supplement_format
-        section_classifications = paper.section_classifications
 
         # Get pedigree description
         pedigree_row = (
@@ -1521,9 +1491,7 @@ async def handle_compound_het_evaluation(task_id: int) -> None:
         ]
 
         # Get paper markdown
-        paper_markdown = relevant_sections_md(
-            paper_id, supplement_format, section_classifications
-        )
+        paper_markdown = fulltext_md(paper_id, supplement_format)
         message = paper_input(
             format_paper_context(paper_markdown, gene_symbol),
             COMPOUND_HET_AGENT_INSTRUCTIONS,
@@ -1587,7 +1555,6 @@ async def handle_phenotype_extraction(task_id: int) -> None:
     supplement_format: FileFormat | None = None
     additional_context: str | None = None
     patient_data: dict | None = None
-    section_classifications: dict | None = None
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -1605,7 +1572,6 @@ async def handle_phenotype_extraction(task_id: int) -> None:
 
         paper = session.get(PaperDB, paper_id)
         supplement_format = paper.supplement_format if paper else None
-        section_classifications = paper.section_classifications if paper else None
         gene_symbol = paper.gene.symbol if paper else None
 
         patient_row = session.get(PatientDB, patient_id)
@@ -1630,9 +1596,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
     else:
         # Initial query: build full message with paper + patient data + instructions
         await agent_sess.clear_session()
-        paper_markdown = relevant_sections_md(
-            paper_id, supplement_format, section_classifications
-        )
+        paper_markdown = fulltext_md(paper_id, supplement_format)
         message = paper_input(
             format_paper_context(paper_markdown, gene_symbol),
             PATIENT_PHENOTYPE_LINKING_AGENT_INSTRUCTIONS,
