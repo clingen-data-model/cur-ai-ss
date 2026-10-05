@@ -56,6 +56,25 @@ export function PapersTable({ papers }: { papers: PaperSummaryResp[] }) {
         },
       },
       {
+        // A string accessor, so the table's filter box matches it like the title.
+        accessorKey: 'pmid',
+        header: 'PMID',
+        cell: ({ getValue }) => {
+          const pmid = getValue() as string | null | undefined
+          if (!pmid) return <span className="text-muted-foreground">—</span>
+          return (
+            <a
+              href={`https://pubmed.ncbi.nlm.nih.gov/${encodeURIComponent(pmid)}/`}
+              target="_blank"
+              rel="noreferrer"
+              className="whitespace-nowrap hover:underline underline-offset-4"
+            >
+              {pmid}
+            </a>
+          )
+        },
+      },
+      {
         accessorKey: 'gene_symbol',
         header: 'Gene',
         cell: ({ getValue }) => (
