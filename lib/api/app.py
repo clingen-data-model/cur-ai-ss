@@ -1107,7 +1107,6 @@ def _paper_to_resp(row: PaperDB, session: Session) -> PaperResp:
         filename=row.filename,
         tags=[PaperTag(tag) for tag in row.tags],
         is_paper_relevant=row.is_paper_relevant,
-        section_classifications=row.section_classifications,
         disease_name=row.disease_name,
         disease_name_evidence=_from_storage(
             HumanEvidenceBlock, row.disease_name_evidence

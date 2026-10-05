@@ -353,7 +353,6 @@ class PaperResp(PaperExtractionOutput):
     filename: str
     tags: list[PaperTag] = []
     is_paper_relevant: bool | None = None
-    section_classifications: dict | None = None
     disease_name: str | None = None
     disease_name_evidence: HumanEvidenceBlock[str] | None = None
     disease_inheritance_mode: Inheritance | None = None
@@ -425,7 +424,7 @@ class PaperSummaryResp(BaseModel):
     the disease_* group "are not read here", having checked the gene table and
     not the Streamlit dashboard, which reads the same endpoint and needs all
     three. They are back below; what stays omitted is the genuinely heavy part,
-    the task list, plus abstract, section_classifications and the evidence
+    the task list, plus abstract and the evidence
     blocks, none of which any list view renders.
     """
 

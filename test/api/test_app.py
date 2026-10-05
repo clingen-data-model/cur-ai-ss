@@ -359,7 +359,7 @@ def test_list_papers_summarizes_tasks_into_a_status(
     # Dropped alongside tasks, and genuinely unread by any list view. An earlier
     # version of this list also held proband_count, which the Streamlit
     # dashboard does read -- see the test below.
-    for absent in ('abstract', 'section_classifications', 'mondo'):
+    for absent in ('abstract', 'mondo'):
         assert all(absent not in job for job in jobs)
     for job in jobs:
         _assert_updated_at_recent(job['updated_at'])

@@ -59,7 +59,7 @@ const ALL_TASK_TYPES: TaskType[] = [
 
 const TASK_DESCRIPTIONS: Record<TaskType, string> = {
   'PDF Parsing': 'Parses PDF file and extract text, tables, and images',
-  'Paper Classifier': 'Classifies paper sections by relevance and evaluates if paper contains extractable patient-variant pairs',
+  'Paper Classifier': 'Evaluates if the paper contains extractable patient-variant pairs',
   'Paper Metadata': 'Extracts paper title, authors, publication date, and other metadata; resolve to PubMed article',
   'Variant Extraction': 'Identifies genetic variants mentioned in the paper',
   'Pedigree Description': 'Analyzes the images in the paper to determine if there is a describable pedigree',

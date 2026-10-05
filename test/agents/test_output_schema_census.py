@@ -33,8 +33,8 @@ from agents import AgentOutputSchema
 from lib.agents.compound_het_agent import agent as compound_het_agent
 from lib.agents.hpo_linking_agent import agent as hpo_linking_agent
 from lib.agents.mondo_linking_agent import agent as mondo_linking_agent
+from lib.agents.paper_classifier_agent import agent as paper_classifier_agent
 from lib.agents.paper_extraction_agent import agent as paper_extraction_agent
-from lib.agents.paper_section_classifier_agent import agent as paper_classifier_agent
 from lib.agents.patient_demographics_agent import agent as patient_demographics_agent
 from lib.agents.patient_extraction_agent import agent as patient_extraction_agent
 from lib.agents.patient_phenotype_linking_agent import (
