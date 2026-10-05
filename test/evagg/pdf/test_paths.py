@@ -1,4 +1,4 @@
-"""What the agents are handed to read: the anchored documents, filtered and headed."""
+"""What the agents are handed to read: the anchored documents, headed."""
 
 import pytest
 
@@ -7,8 +7,6 @@ from lib.misc.pdf.paths import (
     SUPPLEMENTARY_MATERIAL_HEADER,
     document_anchored_md_path,
     fulltext_md,
-    relevant_sections_md,
-    skip_irrelevant_sections,
 )
 from lib.models.paper import FileFormat
 
@@ -33,46 +31,6 @@ MAIN = (
 )
 
 SUPPLEMENT = '[supp-paragraph-0] Supplementary text.\n'
-
-
-def _classified(**relevance: bool) -> dict:
-    return {
-        'sections': [
-            {'header': header, 'relevant': relevant}
-            for header, relevant in relevance.items()
-        ]
-    }
-
-
-def test_irrelevant_section_is_dropped_up_to_the_next_heading():
-    out = skip_irrelevant_sections(MAIN, _classified(Methods=False))
-
-    assert 'Sanger sequencing' not in out
-    assert '## Methods' not in out
-    assert '[paragraph-1] We report a family.' in out
-    assert '[paragraph-3] The proband carried c.1A>G.' in out
-
-
-def test_unmatched_heading_ends_the_skip():
-    """The paper-97 case: the classifier names References but writes the table
-    heading in its own words, so the table after References must survive."""
-    out = skip_irrelevant_sections(MAIN, _classified(References=False))
-
-    assert 'Someone et al.' not in out
-    assert '[table-1] Table 2. Phenotypes' in out
-    assert '| table-1-row-0 | P1 | tooth agenesis |' in out
-
-
-def test_kept_sections_survive_byte_for_byte():
-    out = skip_irrelevant_sections(MAIN, _classified(Abstract=True, Results=True))
-
-    assert out == MAIN
-
-
-def test_header_matching_ignores_case():
-    out = skip_irrelevant_sections(MAIN, _classified(methods=False))
-
-    assert 'Sanger sequencing' not in out
 
 
 @pytest.fixture
@@ -106,17 +64,21 @@ def test_fulltext_appends_the_supplement_under_the_heading_agents_are_told_about
     )
 
 
-def test_relevant_sections_filters_main_only_and_keeps_the_supplement(paper_id):
-    _write_supplement(paper_id)
+def test_fulltext_keeps_the_figures_and_legends_printed_after_the_references(
+    mocked_root_dir,
+):
+    """The paper-85 case: an author manuscript prints its figures after
+    ## REFERENCES, and the legend names patients that appear nowhere else."""
+    main = (
+        '## REFERENCES\n\n'
+        '[paragraph-4] 1. Someone et al.\n\n'
+        '[figure-3] ![Fig. 3. MRI of case 17DG0679 (STIL).](images/3.png)\n'
+    )
+    path = document_anchored_md_path(9)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(main)
 
-    text = relevant_sections_md(paper_id, FileFormat.XLSX, _classified(Methods=False))
-
-    assert 'Sanger sequencing' not in text
-    assert text.endswith('# Supplementary Material (XLSX)\n\n' + SUPPLEMENT)
-
-
-def test_relevant_sections_without_classifications_is_the_full_text(paper_id):
-    assert relevant_sections_md(paper_id) == fulltext_md(paper_id)
+    assert '17DG0679' in fulltext_md(9)
 
 
 def test_paper_block_texts_merges_main_and_supplement(paper_id):
