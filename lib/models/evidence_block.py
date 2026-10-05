@@ -105,9 +105,9 @@ class Citation(BaseModel):
         default='',
         description=(
             'The shortest verbatim span of that block that supports the value: '
-            'a phrase or sentence of a paragraph, or the text of one table cell. '
-            'Empty when the whole block is the evidence (always empty for a '
-            'figure).'
+            'a phrase or sentence of a paragraph, the text of one table cell, or '
+            "a span of a figure's legend. Empty when the whole block is the "
+            'evidence, including a figure whose image is the evidence.'
         ),
     )
 

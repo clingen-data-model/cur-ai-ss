@@ -119,6 +119,10 @@ class Anchor(BaseModel):
     # is common for vision-corrected tables); resolve it to the table's own
     # boxes instead.
     row_boxes: list[list[PageBox]] = []
+    # Figures only: where the legend text sits, apart from the picture in
+    # ``boxes``. A citation of the figure with no quote is the picture; one with
+    # a quote from the legend narrows to those words inside these boxes.
+    caption_boxes: list[PageBox] = []
 
 
 def boxes_for_anchor(anchor_id: str, anchors: list[Anchor]) -> list[PageBox]:
@@ -135,6 +139,15 @@ def boxes_for_anchor(anchor_id: str, anchors: list[Anchor]) -> list[PageBox]:
     if parsed.row >= len(anchor.row_boxes):
         return []
     return anchor.row_boxes[parsed.row] or anchor.boxes
+
+
+def caption_boxes_for_anchor(anchor_id: str, anchors: list[Anchor]) -> list[PageBox]:
+    """A figure's legend boxes; empty for anything else or an id not in the list."""
+    parsed = parse_anchor(anchor_id)
+    if parsed is None or parsed.kind != AnchorKind.FIGURE:
+        return []
+    anchor = next((a for a in anchors if a.id == anchor_id), None)
+    return anchor.caption_boxes if anchor else []
 
 
 def anchor_pages(anchors: list[Anchor]) -> dict[str, int]:
@@ -544,8 +557,17 @@ def _figure_text(
         body = f'![{caption}]({image_path})'
     else:
         body = caption or '<!-- image -->'
+    # The legend is a text item of its own, with text-layer prov (user space).
+    caption_boxes = [
+        box
+        for ref in picture.captions
+        if isinstance(caption_item := ref.resolve(doc), DocItem)
+        for box in _prov_boxes(caption_item, doc, frames)
+    ]
     return f'[{anchor_id}] {body}', Anchor(
-        id=anchor_id, boxes=_prov_boxes(picture, doc, frames)
+        id=anchor_id,
+        boxes=_prov_boxes(picture, doc, frames),
+        caption_boxes=caption_boxes,
     )
 
 
