@@ -8,6 +8,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { toast } from 'sonner'
 import {
   deletePhenotypePapersPaperIdPhenotypesPhenotypeIdDelete,
+  getOccurrencesPapersPaperIdOccurrencesGet,
   getPhenotypesPapersPaperIdPatientsPatientIdPhenotypesGet,
 } from '@/api/generated'
 import type { PhenotypeResp } from '@/api/generated/types.gen'
@@ -26,6 +27,23 @@ const STALE_TIME = 5 * 60 * 1000
 
 function toCsvField(value: string): string {
   return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value
+}
+
+/* HPO linking is queued only for patients linked to a variant (the pipeline
+ * skips the rest without a task, an error or any other trace), so a phenotype
+ * with no HPO term can mean "never attempted" as well as "no match". */
+const NO_VARIANT_NOTE =
+  'HPO linking was skipped for this patient. It only runs for patients linked to a variant, and this patient has none. Link a variant to this patient, or run HPO Linking from Rerun Agents.'
+
+function rerunDescription(hasLinkedVariant: boolean | undefined): string {
+  const base =
+    'Re-runs phenotype extraction for this patient. When it completes, every existing phenotype for this patient -- including any added or edited manually -- is replaced with the new results.'
+  if (hasLinkedVariant === undefined) {
+    return `${base} HPO linking is then re-triggered for each phenotype, but only if this patient is linked to a variant.`
+  }
+  return hasLinkedVariant
+    ? `${base} HPO linking is then re-triggered for each phenotype.`
+    : `${base} This patient is not linked to a variant, so HPO linking will NOT run afterwards: the new phenotypes stay unlinked, with no error shown. Link a variant, or run HPO Linking yourself.`
 }
 
 function additionalInfo(phenotype: PhenotypeResp): string {
@@ -49,6 +67,20 @@ export function PhenotypesTable({ paperId, patientId }: { paperId: number; patie
       }),
     staleTime: STALE_TIME,
   })
+
+  // The same paper-wide query the extraction page already holds, so this adds
+  // no request, and linking a variant elsewhere refreshes the notes below.
+  const occurrencesQuery = useQuery({
+    queryKey: ['occurrences', paperId],
+    queryFn: () => getOccurrencesPapersPaperIdOccurrencesGet({ path: { paper_id: paperId } }),
+    staleTime: STALE_TIME,
+  })
+  // undefined while loading, so nothing is claimed until the answer is known.
+  const hasLinkedVariant = occurrencesQuery.data
+    ? occurrencesQuery.data.some((o) => o.patient_id === patientId)
+    : undefined
+  const hpoSkipped = hasLinkedVariant === false
+  const rerunText = rerunDescription(hasLinkedVariant)
 
   const deleteMutation = useMutation({
     mutationFn: (phenotypeId: number) =>
@@ -144,8 +176,15 @@ export function PhenotypesTable({ paperId, patientId }: { paperId: number; patie
           const hpo = row.original.hpo
           return (
             <div className="flex items-center gap-1.5">
-              <span className={hpo.value ? undefined : 'text-muted-foreground'}>
-                {hpo.value ? hpo.value.name : 'No match found'}
+              <span
+                className={hpo.value ? undefined : 'text-muted-foreground'}
+                title={!hpo.value && hpoSkipped ? NO_VARIANT_NOTE : undefined}
+              >
+                {hpo.value
+                  ? hpo.value.name
+                  : hpoSkipped
+                    ? 'Not linked (no variant for this patient)'
+                    : 'No match found'}
               </span>
               <EvidencePopover block={hpo} />
             </div>
@@ -224,7 +263,7 @@ export function PhenotypesTable({ paperId, patientId }: { paperId: number; patie
         ),
       },
     ],
-    [paperId, copyAllHpoIds, deleteMutation],
+    [paperId, copyAllHpoIds, deleteMutation, hpoSkipped],
   )
 
   if (phenotypesQuery.isPending) {
@@ -242,7 +281,7 @@ export function PhenotypesTable({ paperId, patientId }: { paperId: number; patie
               taskType="Phenotype Extraction"
               scope={{ patient_id: patientId }}
               label="Re-extract Phenotypes"
-              description="Re-runs phenotype extraction for this patient. When it completes, every existing phenotype for this patient -- including any added or edited manually -- is replaced with the new results, and HPO linking is re-triggered for each."
+              description={rerunText}
             />
             <AddPhenotypeDialog paperId={paperId} patientId={patientId} />
           </div>
@@ -262,7 +301,7 @@ export function PhenotypesTable({ paperId, patientId }: { paperId: number; patie
             taskType="Phenotype Extraction"
             scope={{ patient_id: patientId }}
             label="Re-extract Phenotypes"
-            description="Re-runs phenotype extraction for this patient. When it completes, every existing phenotype for this patient -- including any added or edited manually -- is replaced with the new results, and HPO linking is re-triggered for each."
+            description={rerunText}
           />
           <AddPhenotypeDialog paperId={paperId} patientId={patientId} />
           <Button variant="outline" size="sm" onClick={exportCsv} className="gap-2">
@@ -271,6 +310,11 @@ export function PhenotypesTable({ paperId, patientId }: { paperId: number; patie
           </Button>
         </div>
       </div>
+      {hpoSkipped && (
+        <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+          {NO_VARIANT_NOTE}
+        </p>
+      )}
       <DataTable
         columns={columns}
         data={phenotypesQuery.data}
