@@ -33,17 +33,17 @@ from lib.agents.mondo_linking_agent import (
 from lib.agents.mondo_linking_agent import (
     agent as mondo_linking_agent,
 )
+from lib.agents.paper_classifier_agent import (
+    PAPER_CLASSIFIER_AGENT_INSTRUCTIONS,
+)
+from lib.agents.paper_classifier_agent import (
+    agent as paper_classifier_agent,
+)
 from lib.agents.paper_extraction_agent import (
     PAPER_EXTRACTION_AGENT_INSTRUCTIONS,
 )
 from lib.agents.paper_extraction_agent import (
     agent as paper_extraction_agent,
-)
-from lib.agents.paper_section_classifier_agent import (
-    PAPER_CLASSIFIER_AGENT_INSTRUCTIONS,
-)
-from lib.agents.paper_section_classifier_agent import (
-    agent as paper_classifier_agent,
 )
 from lib.agents.patient_demographics_agent import (
     PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS,
@@ -406,8 +406,8 @@ async def handle_pdf_parsing(task_id: int) -> None:
         await parse_content(paper_id, force=True, supplement_format=supplement_format)
 
 
-async def handle_paper_section_classifier(task_id: int) -> None:
-    """Classify paper sections as relevant or irrelevant for downstream extraction."""
+async def handle_paper_classifier(task_id: int) -> None:
+    """Decide whether the paper has identifiable cases worth extracting."""
     paper_id: int
     gene_symbol: str
     additional_context: str | None
@@ -439,7 +439,7 @@ async def handle_paper_section_classifier(task_id: int) -> None:
         agent = paper_classifier_agent
 
     result = await Runner.run(agent, message, session=agent_sess)
-    log_run_metrics('PAPER_SECTION_CLASSIFIER', result)
+    log_run_metrics('PAPER_CLASSIFIER', result)
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -450,7 +450,6 @@ async def handle_paper_section_classifier(task_id: int) -> None:
                 task.skip_successors = True
         if paper:
             paper.is_paper_relevant = result.final_output.is_paper_relevant.value
-            paper.section_classifications = result.final_output.model_dump()
             # Add FailedPaperRelevancy tag if paper is not relevant
             if not result.final_output.is_paper_relevant.value:
                 if PaperTag.FailedPaperRelevancy.value not in paper.tags:
@@ -1900,7 +1899,7 @@ async def handle_mondo_linking(task_id: int) -> None:
 
 TASK_HANDLERS: dict[TaskType, Callable[[int], Awaitable[None]]] = {
     TaskType.PDF_PARSING: handle_pdf_parsing,
-    TaskType.PAPER_CLASSIFIER: handle_paper_section_classifier,
+    TaskType.PAPER_CLASSIFIER: handle_paper_classifier,
     TaskType.PAPER_METADATA: handle_paper_metadata,
     TaskType.VARIANT_EXTRACTION: handle_variant_extraction,
     TaskType.PEDIGREE_DESCRIPTION: handle_pedigree_description,
