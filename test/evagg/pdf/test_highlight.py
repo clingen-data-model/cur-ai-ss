@@ -11,8 +11,8 @@ from lib.misc.pdf.highlight import (
     find_best_match,
     words_within,
 )
-from lib.misc.pdf.parse import WordLoc
 from lib.misc.pdf.paths import document_raw_path, document_words_json_path
+from lib.misc.pdf.words import WordLoc
 from lib.models.evidence_block import Citation
 
 

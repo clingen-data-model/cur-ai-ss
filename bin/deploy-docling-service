@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Build the docling service image on Cloud Build and roll it out to Cloud Run.
+# Terraform (infrastructure/terraform/docling-service) creates the service,
+# repository and bucket; this only replaces the running image.
+set -euo pipefail
+
+PROJECT=clingen-caa
+REGION=us-east4
+NAME=docling-service
+
+cd "$(dirname "$0")/.."
+
+if [ -n "$(git status --porcelain)" ]; then
+  echo "warning: uncommitted changes are included in this build" >&2
+fi
+
+IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/${NAME}/${NAME}:$(git rev-parse --short HEAD)"
+
+gcloud builds submit \
+  --project "$PROJECT" --region "$REGION" \
+  --config infrastructure/docling-service/cloudbuild.yaml \
+  --substitutions "_IMAGE=${IMAGE}" .
+
+gcloud run services update "$NAME" \
+  --project "$PROJECT" --region "$REGION" --image "$IMAGE"

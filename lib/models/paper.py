@@ -51,6 +51,7 @@ from sqlalchemy.types import JSON
 from typing_extensions import Self
 
 from lib.core.environment import env
+from lib.misc.pdf.file_format import FileFormat
 from lib.misc.pdf.paths import (
     pdf_raw_path,
     pdf_thumbnail_path,
@@ -114,12 +115,6 @@ class PaperTag(StrEnum):
     TrainingSet = 'TrainingSet'
     ValidationSet = 'ValidationSet'
     FailedPaperRelevancy = 'FailedPaperRelevancy'
-
-
-class FileFormat(StrEnum):
-    PDF = 'pdf'
-    DOCX = 'docx'
-    XLSX = 'xlsx'
 
 
 class ReviewStatus(StrEnum):
