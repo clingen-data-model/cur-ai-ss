@@ -14,6 +14,7 @@ from lib.misc.pdf.anchors import (
     PageBox,
     _PageFrame,
     boxes_for_anchor,
+    caption_boxes_for_anchor,
     load_anchors,
     page_frames,
     user_to_display,
@@ -240,7 +241,8 @@ def citations_to_grobid_annotations(
     its own rectangle, or the table's when the row's is not trusted, and a
     Docling grid row can span most of a page (a transposed table read as a
     few tall rows), so the cell is what the quote points at. A table cited
-    whole and a figure are their boxes as stored.
+    whole, and a figure with no quote, are their boxes as stored; a figure with
+    a quote narrows to it inside its legend, else stays the picture.
     """
     anchors = load_anchors(paper_id)
     frames = page_frames(document_raw_path(paper_id))
@@ -254,11 +256,21 @@ def citations_to_grobid_annotations(
         boxes = boxes_for_anchor(citation.anchor, anchors)
         if not boxes:
             continue
-        narrowable = parsed.kind == AnchorKind.PARAGRAPH or parsed.row is not None
+        # A figure narrows only inside its legend: the picture holds no words
+        # of the paper, and a quote on a figure can only come from the legend.
+        # A table cited whole never narrows.
+        search_boxes = boxes
+        if parsed.kind == AnchorKind.FIGURE:
+            search_boxes = caption_boxes_for_anchor(citation.anchor, anchors)
+        narrowable = (
+            parsed.kind == AnchorKind.PARAGRAPH
+            or parsed.row is not None
+            or (parsed.kind == AnchorKind.FIGURE and bool(search_boxes))
+        )
         if narrowable and citation.quote.strip():
             if words is None:
                 words = _load_words(paper_id)
-            matched = find_best_match(citation.quote, words_within(boxes, words))
+            matched = find_best_match(citation.quote, words_within(search_boxes, words))
             if matched:
                 by_page: defaultdict[int, list[WordLoc]] = defaultdict(list)
                 for word in matched:

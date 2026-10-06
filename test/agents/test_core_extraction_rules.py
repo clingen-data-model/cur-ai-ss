@@ -29,6 +29,21 @@ def test_spec_names_every_id_form_and_the_shortest_span_rule():
     assert 'EXTRACTION WARNING' in CORE_EXTRACTION_SPEC
 
 
+def test_spec_tells_the_agent_to_cite_a_header_cell_through_the_table_id():
+    assert 'The header row has no id of its own' in CORE_EXTRACTION_SPEC
+    assert '"Pat. 1 *"' in CORE_EXTRACTION_SPEC
+    assert 'Never cite a data row for text that appears only in the header' in (
+        CORE_EXTRACTION_SPEC.replace('\n  ', ' ')
+    )
+
+
+def test_patient_extraction_covers_patient_labels_in_a_header_row():
+    text = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
+
+    assert 'one patient per column' in text
+    assert 'the quote is "Pat. 1 *"' in text
+
+
 def test_spec_no_longer_asks_for_the_legacy_fields():
     assert '0-based' not in CORE_EXTRACTION_SPEC
     assert 'Count only tables' not in CORE_EXTRACTION_SPEC
@@ -104,6 +119,10 @@ def test_patient_prompt_uses_pedigree_labels_even_for_a_single_case_report():
 def test_spec_disambiguates_a_cell_that_repeats_across_a_table_row():
     """A matrix table (one column per patient) repeats "+" or "Severe" across a row;
     a bare quote of that cell cannot say whose it is."""
-    assert 'appears more than once in the row' in CORE_EXTRACTION_SPEC
+    assert 'carries only a flag' in CORE_EXTRACTION_SPEC
+    assert 'each row is a patient' in CORE_EXTRACTION_SPEC
+    assert (
+        'never quote only the row' in CORE_EXTRACTION_SPEC.replace('\n  ', ' ').lower()
+    )
     assert '"Hypotonia | + | +"' in CORE_EXTRACTION_SPEC
-    assert 'never quote a repeated cell\n  bare' in CORE_EXTRACTION_SPEC
+    assert 'Never quote a flag or repeated cell bare' in CORE_EXTRACTION_SPEC

@@ -14,7 +14,7 @@ HOW THE TEXT IS LABELLED:
   - [paragraph-N] before a paragraph, list item or caption
   - [table-N] before a table's caption; the table's first column is named "anchor"
     and holds one id per data row, table-N-row-R
-  - [figure-N] before a figure
+  - [figure-N] before a figure; its legend, if any, is the text that follows the id
 - Ids of the supplement (everything at or after the "# Supplementary Material"
   heading) start with supp-: supp-paragraph-N, supp-table-N-row-R, supp-figure-N.
 - Headings ("## Results") carry no id and are never evidence.
@@ -39,8 +39,11 @@ CITATIONS:
     already names it;
   - for a table, cite the row id (table-N-row-R) and put the text of the one cell
     that carries the value in quote; cite the table id (table-N) only for a fact
-    about the table as a whole;
-  - empty when the whole block is the evidence, and always empty for a figure.
+    about the table as a whole or for a header cell (see TABLE EVIDENCE RULES);
+  - empty when the whole block is the evidence;
+  - for a figure, empty when the image itself is the evidence (a pedigree); when a
+    value comes from the figure's legend (the text after the id: "Fig. 3. ... (c)
+    Case 17DG0679 ..."), quote the shortest span of that legend, as for a paragraph.
 - quote MUST be copied verbatim from inside the cited block. Every citation is
   checked against the paper: an anchor that does not exist, or a quote that is not
   found inside its block, is rejected and you will be asked to correct it. Do NOT
@@ -74,16 +77,31 @@ TABLE EVIDENCE RULES:
 - A field is table-derived when the information is presented in a structured
   table (rows and columns) in the source. Cite the row: the id in that row's
   "anchor" column, with the cell text as the quote.
-- When the cell's text appears more than once in the row, a quote of the cell alone
-  does not say which one you mean. This is common when each column is a patient
-  and a row is a feature or a finding: "+", "Yes", "de novo", "Severe", "Heterozygous"
-  repeat across the row. Then quote from the row's first cell (its label) through
-  the cell that carries the value, copied exactly as printed with the "|" separators
-  between cells, and stop at that cell: for the second patient's "+" in the row
-  "Hypotonia | + | +", quote "Hypotonia | + | +"; for the first patient's, quote
-  "Hypotonia | +". Do not include the leading row id. The column picks the patient,
-  so count to the patient's own column and no further; never quote a repeated cell
-  bare.
+- A cell that carries only a flag ("+", "-", "Yes", "No", "Y", "N") or a value that
+  repeats across the row ("de novo", "Severe", "Heterozygous") means nothing on its
+  own: the same text sits under other columns, and the column header says which
+  finding it answers. This is common when each column is a patient and a row is a
+  feature, and equally when each row is a patient and each column is a feature
+  (ventricular dilation, seizures, hearing: Yes, Yes, No ...). Then quote from the
+  row's first cell (its label or id) through the cell that carries the value,
+  copied exactly as printed with the "|" separators between cells, and stop at that
+  cell: for the second patient's "+" in the row "Hypotonia | + | +", quote
+  "Hypotonia | + | +"; for the first patient's, quote "Hypotonia | +"; for the
+  seizures flag of "KCHYD154-1 | c.1823G>A | p.(Arg608His) | Yes | Shunt | Yes | Yes",
+  quote through the cell in the seizures column. Do not include the leading row id
+  column. Find the column by counting cells against the table's header row, and
+  count to the right column and no further.
+- Never quote a flag or repeated cell bare, and never quote only the row's label or
+  id cell for a value that lives in another column: the label says whose row it is,
+  not what the row says. The quote must end on the cell that carries the value.
+- The header row has no id of its own, and no data row contains its text. When the
+  value is a header cell -- above all a patient's label in a table with one patient
+  per column ("Pat. 1 *", "Pat. 2 *") -- cite the table id (table-N) and quote that
+  one header cell alone, copied exactly as printed, footnote markers such as * or
+  a dagger included. Never cite a data row for text that appears only in the
+  header: the row does not contain it and the citation is rejected. Never quote a
+  cell from that patient's column in the label's place: a genotype or feature cell
+  says what the patient has, not who the patient is.
 - A vision-rebuilt table may carry <br> or <sup> markup inside cells; copy the
   cell as printed, the check tolerates markup and spacing differences.
 - A table may be preceded by an "EXTRACTION WARNING" marker, meaning the automated

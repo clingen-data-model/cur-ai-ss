@@ -88,7 +88,11 @@ def _document() -> DoclingDocument:
         prov=_bottom_left(10, 500, 300, 440),
     )
 
-    figure_caption = doc.add_text(label=DocItemLabel.CAPTION, text='Figure 1. Pedigree')
+    figure_caption = doc.add_text(
+        label=DocItemLabel.CAPTION,
+        text='Figure 1. Pedigree',
+        prov=_bottom_left(10, 335, 300, 320),
+    )
     doc.add_picture(caption=figure_caption, prov=_bottom_left(10, 400, 300, 340))
 
     group = doc.add_list_group()
@@ -140,6 +144,11 @@ def test_build_anchored_boxes(paper_id):
     assert by_id['figure-0'].boxes == [
         PageBox(page_no=1, x=10, y=340, width=290, height=60)
     ]
+    # The legend is its own text item: user-space prov, kept apart from the picture.
+    assert by_id['figure-0'].caption_boxes == [
+        PageBox(page_no=1, x=10, y=320, width=290, height=15)
+    ]
+    assert by_id['paragraph-1'].caption_boxes == []
     table = by_id['table-0']
     assert table.boxes == [PageBox(page_no=1, x=10, y=440, width=290, height=60)]
     # Grid cells are TOPLEFT in the displayed frame; rendered row r is grid row

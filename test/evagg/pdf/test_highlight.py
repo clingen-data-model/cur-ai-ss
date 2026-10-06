@@ -407,6 +407,8 @@ WORDS = [
     _word('world', 50, 682, 80, 698, page=2),  # right place, wrong page
     _word('Gene', 10, 462, 40, 478),  # inside table-1's first row (paper_documents)
     _word('cell', 50, 462, 80, 478),
+    _word('Case', 10, 322, 40, 338),  # inside figure-0's legend (paper_documents)
+    _word('17DG0679', 50, 322, 110, 338),
 ]
 
 
@@ -436,6 +438,7 @@ def paper_documents(mocked_root_dir):
             Anchor(
                 id='figure-0',
                 boxes=[PageBox(page_no=1, x=10, y=340, width=290, height=60)],
+                caption_boxes=[PageBox(page_no=1, x=10, y=318, width=290, height=20)],
             ),
         ],
     )
@@ -505,6 +508,24 @@ def test_rows_tables_and_figures_are_their_stored_boxes(paper_documents):
         (1, 10.0, 300.0, 290.0, 60.0),
         (1, 10.0, 400.0, 290.0, 60.0),
     ]
+
+
+def test_figure_with_a_legend_quote_narrows_to_the_legend_words(paper_documents):
+    out = citations_to_grobid_annotations(
+        paper_documents, [Citation(anchor='figure-0', quote='17DG0679')], RED
+    )
+
+    assert _placed(out) == [(1, 50.0, 462.0, 60.0, 16.0)]
+
+
+def test_figure_quote_not_in_the_legend_stays_the_picture(paper_documents, monkeypatch):
+    monkeypatch.setattr(highlight, 'find_best_match', lambda query, words: None)
+
+    out = citations_to_grobid_annotations(
+        paper_documents, [Citation(anchor='figure-0', quote='nothing like it')], RED
+    )
+
+    assert _placed(out) == [(1, 10.0, 400.0, 290.0, 60.0)]
 
 
 def test_table_row_with_a_quote_narrows_to_the_quoted_words(paper_documents):
