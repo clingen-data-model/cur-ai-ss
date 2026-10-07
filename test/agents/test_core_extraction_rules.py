@@ -116,6 +116,21 @@ def test_patient_prompt_uses_pedigree_labels_even_for_a_single_case_report():
     assert 'including a single case report' in prompt
 
 
+def test_patient_prompt_names_the_three_haiku_misses():
+    """With claude-haiku-5-5 on identical code: paper 53 dropped the "Lam et al."
+    comparison column and (once) the role-named parents, paper 65 dropped P21's
+    father and mother although each transmitted an allele, and paper 76 returned
+    the bare table cells "1"/"2A" where the text says "Individual 5"."""
+    prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
+    assert 'headed by the citation' in prompt
+    assert 'is a label for that individual, not an author mention' in prompt
+    assert 'The single-case rule names the proband only' in prompt
+    assert '"inherited from her father"' in prompt
+    assert 'never\n       the identifier by itself' in prompt
+    assert 'use that one form\n       for every member of the series' in prompt
+    assert 'BEFORE RETURNING, CHECK:' in prompt
+
+
 def test_spec_disambiguates_a_cell_that_repeats_across_a_table_row():
     """A matrix table (one column per patient) repeats "+" or "Severe" across a row;
     a bare quote of that cell cannot say whose it is."""

@@ -61,6 +61,12 @@ Each field is an EvidenceBlock containing:
        (a "Proband No." column holding 3 gives "Proband 3"). Both halves are
        already written down, which makes this reading rather than inventing:
        the result is a textual identifier, not a numeric-only one.
+       Rule 1's "exactly as written" applies to this composed label, not to the
+       bare cell: a cell holding "1" or "2A" under an "Indiv ID" header is never
+       the identifier by itself, even when a suffix makes it look alphanumeric.
+       Expand the header's noun the way the narrative does ("Individual 1",
+       "Individual 2A" when the text says "Individual 5") and use that one form
+       for every member of the series.
     3. When the text and tables give a person no label but the pedigree figure
        labels them, use the pedigree label (e.g., "II-2"). The figure is a
        source of identifiers exactly as the text is.
@@ -101,7 +107,15 @@ Guidelines:
    apply: use the pedigree label, and extract the pedigree's other labeled
    members as in PEDIGREES below. The same pedigree gets the same treatment
    whether the paper reports one family or several.
-9. Do not extract authors, non-clinical mentions, or animal models.
+   The single-case rule names the proband only. Parents or siblings the report
+   mentions by role are still patients whenever it states a fact about them --
+   "inherited from her father", "the patient and her parents were analyzed
+   using WES", "born to healthy parents" -- with the role as the identifier
+   (rule 7). Only a relative the paper says nothing about is skipped.
+9. Do not extract authors, non-clinical mentions, or animal models. A citation
+   standing in for a person -- a table column headed "Lam et al.", "the patient
+   of Smith et al." -- is a label for that individual, not an author mention
+   (see TABLES LISTING PATIENTS).
 10. Use enum values when possible; otherwise use "Other" or "Unknown".
 11. Missing fields should be returned as null (not omitted from the structured output).
 
@@ -124,6 +138,14 @@ A patient listed only in a table is still a patient. Its row is the evidence
 (cite the row's id from the anchor column, with the identifier cell as the
 quote), and having no narrative paragraph is not a reason to skip it. One patient may occupy several rows, one per variant reported for
 them; that is one patient, not several.
+
+A table that sets the paper's own case beside one reported elsewhere gives the
+earlier individual a column or row of its own, headed by the citation ("Lam et
+al.", "Previous case", "Patient of Smith 2015"). That column states facts about
+a particular person -- sex, age, variant, findings -- so that person is a
+patient of this paper too, with the header text as the identifier ("Lam et
+al."). Guideline 9's bar on authors covers bylines and "as Smith et al.
+showed"; a citation used as a column header names an individual.
 
 When the table has one patient per column, the labels sit in its header row
 ("Pat. 1 *", "Pat. 2 *", "Pat. 3") and no row id contains them, so a quote taken
@@ -192,6 +214,14 @@ Consanguinity:
 - If explicitly stated or clearly implied from pedigree, set to True.
 - If explicitly stated as unrelated or no consanguinity mentioned, set to False.
 - Provide reasoning with the specific relationship or explanation.
+
+BEFORE RETURNING, CHECK:
+- Every table row or column header that names a person has a patient, the
+  columns headed by a citation included.
+- Every relative the text names by role and states a genotype, a transmission
+  or an affected status for has a patient.
+- No identifier is a bare number, or a bare number-plus-suffix copied from a
+  cell; every member of a numbered series carries the series noun.
 
 Output format:
 - Return a "families" list where each entry contains:
