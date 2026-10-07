@@ -28,6 +28,7 @@ SDK's default error handler would turn the exception into text for the model
 rather than failing the run.
 """
 
+import litellm
 from agents import ModelSettings
 from agents.extensions.models.litellm_model import LitellmModel
 from agents.models.interface import Model
@@ -46,6 +47,60 @@ from lib.core.model_names import (
 # miss, at the cost of a 2x (not 1.25x) write; see docs/anthropic-migration.md
 # for the break-even math.
 _CACHE_CONTROL = {'type': 'ephemeral', 'ttl': '1h'}
+
+# Fallback entries for models Anthropic has released that litellm may not know.
+# litellm loads its model table from the copy bundled with the locked release,
+# then replaces it with the one it fetches from GitHub at process start (and
+# keeps the bundled copy if that fetch fails). A release's bundled copy predates
+# any model launched after it, so whether a new model is known can depend on
+# whether GitHub was reachable at startup. Unknown means litellm reports no
+# native structured output, so it emulates JSON output with a forced
+# tool_choice -- which, next to an agent's real tools, means the model can never
+# call them and the task still "succeeds" (docs/anthropic-migration.md, Blocker
+# 1) -- and no `output_config.effort` support, so `model_settings_for` silently
+# drops the effort an agent asks for.
+#
+# This only declares facts to litellm, in this process; it sends nothing and
+# registers nothing upstream. An entry litellm already has is left alone, so
+# these only matter when the fetch fails or the bundled copy is all there is;
+# delete one when a litellm bump bundles the model.
+#
+# claude-haiku-5-5 (released 2026-10-07): 1M context, 128K output, adaptive
+# thinking. Upstream added its own entry the same day, with tiered pricing; the
+# prices here are only the under-100k-token-prompt rates ($0.10/$0.50 per MTok),
+# so cost tracking on this fallback undercounts calls with larger prompts.
+_UNMAPPED_MODELS: dict[str, dict] = {
+    'claude-haiku-5-5': {
+        'litellm_provider': 'anthropic',
+        'mode': 'chat',
+        'max_tokens': 128_000,
+        'max_input_tokens': 1_000_000,
+        'max_output_tokens': 128_000,
+        'input_cost_per_token': 1e-07,
+        'output_cost_per_token': 5e-07,
+        'supports_native_structured_output': True,
+        'supports_response_schema': True,
+        'supports_output_config': True,
+        'supports_reasoning': True,
+        'supports_vision': True,
+        'supports_function_calling': True,
+        'supports_tool_choice': True,
+        'supports_prompt_caching': True,
+    },
+}
+
+
+def _register_unmapped_models() -> None:
+    missing = {
+        name: facts
+        for name, facts in _UNMAPPED_MODELS.items()
+        if name not in litellm.model_cost
+    }
+    if missing:
+        litellm.register_model(missing)
+
+
+_register_unmapped_models()
 
 
 def extraction_model() -> Model | str:

@@ -1,8 +1,12 @@
+import litellm
 import pytest
 from agents import ModelSettings
 from agents.extensions.models.litellm_model import LitellmModel
+from litellm.llms.anthropic.chat.transformation import AnthropicConfig
 
 from lib.agents.model_factory import (
+    _UNMAPPED_MODELS,
+    _register_unmapped_models,
     extraction_model,
     extraction_model_settings,
     model_settings_for,
@@ -161,6 +165,44 @@ def test_effort_is_dropped_for_a_model_that_rejects_it():
     settings = model_settings_for('anthropic/claude-haiku-4-5-20251001', effort='low')
 
     assert 'output_config' not in settings.extra_args
+
+
+@pytest.mark.parametrize('bare', sorted(_UNMAPPED_MODELS))
+def test_fallback_entries_carry_the_flags_agents_depend_on(bare, monkeypatch):
+    """With the model absent from litellm's table -- its bundled copy, or a failed
+    startup fetch -- registering the fallback must restore native structured
+    output (else litellm forces a json tool_choice next to an agent's real tools
+    and they never get called, with no error: Blocker 1) and effort support
+    (else the effort an agent asks for is silently dropped). Run against a
+    table with the entry removed so the result does not depend on whether this
+    machine could fetch litellm's live map."""
+    monkeypatch.delitem(litellm.model_cost, bare, raising=False)
+    assert not AnthropicConfig._supports_model_capability(
+        bare, 'supports_native_structured_output', 'anthropic'
+    )
+
+    _register_unmapped_models()
+
+    assert AnthropicConfig._supports_model_capability(
+        bare, 'supports_native_structured_output', 'anthropic'
+    )
+    assert AnthropicConfig._model_supports_effort_param(bare, 'anthropic')
+    assert litellm.model_cost[bare]['max_input_tokens'] == 1_000_000
+
+
+def test_an_entry_litellm_already_has_is_not_overwritten(monkeypatch):
+    official = {'litellm_provider': 'anthropic', 'max_input_tokens': 123}
+    monkeypatch.setitem(litellm.model_cost, 'claude-haiku-5-5', official)
+
+    _register_unmapped_models()
+
+    assert litellm.model_cost['claude-haiku-5-5'] == official
+
+
+def test_haiku_5_5_gets_the_requested_effort():
+    settings = model_settings_for('anthropic/claude-haiku-5-5', effort='low')
+
+    assert settings.extra_args['output_config'] == {'effort': 'low'}
 
 
 def test_extraction_model_settings_follows_extraction_model(monkeypatch):

@@ -135,7 +135,7 @@ Configuration is in `lib/core/environment.py` using Pydantic BaseSettings:
 
 **Required:**
 - `EXTRACTION_MODEL` - Text-extraction model as `<provider>/<model>` (default: `openai/gpt-5.6-luna`); prefix required; the
-  dev-caa deployment overrides this to `anthropic/claude-sonnet-5-5` in
+  dev-caa deployment overrides this to `anthropic/claude-haiku-5-5` in
   `infrastructure/ansible/templates/env.j2`
 - `VLM_MODEL` - Vision model, same form (default: `openai/gpt-5.6-sol`; the
   dev-caa deployment overrides this to `anthropic/claude-fable-5-1` in
