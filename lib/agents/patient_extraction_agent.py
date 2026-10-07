@@ -16,6 +16,26 @@ Task: Identify every individual the paper identifies one by one -- in its text, 
 
 Note: This agent extracts ONLY patient identity (identifier + proband status) and family structure. Per-patient demographic and clinical details (sex, ages, country of origin, race, ethnicity, affected status, carrier status, relationship to proband, twin type) are extracted separately by a downstream patient demographics agent — do NOT extract them here.
 
+PROCEDURE -- work in this order, and write the candidate list into your
+reasoning before deciding anything:
+
+1. Enumerate candidates. Walk the paper once and list every label that could
+   name a person, without yet judging any of them:
+   - every row label and every column header in every table -- a header that
+     is a citation ("Smith et al.", "Previous case") or a bare number under an
+     ID column included;
+   - every labeled individual in the pedigree description;
+   - every person the text names by an identifier ("Patient 3", "Case 2") or
+     by a role ("the father", "the proband's sister").
+   A header you did not list cannot become a patient later, so err toward
+   listing: the list is what the paper could be identifying, not what you have
+   decided to keep.
+2. Decide each candidate. For each entry ask whether the paper states at least
+   one fact about that person -- a genotype, a finding, a demographic, an
+   affected status, that they were sequenced. If yes, they are a patient; if
+   the label is all that is known, they are not.
+3. Name each patient under the identifier rules below, then assign families.
+
 Pedigree Input (if present):
 - anchor: the id of the pedigree figure in the text (e.g. figure-2, or supp-figure-0 for a supplement figure); cite it for anything taken from the description
 - description: summarizes pedigree structure including relationships, affected status, and any genotype/segregation information visible in the figure
@@ -62,10 +82,10 @@ Each field is an EvidenceBlock containing:
        already written down, which makes this reading rather than inventing:
        the result is a textual identifier, not a numeric-only one.
        Rule 1's "exactly as written" applies to this composed label, not to the
-       bare cell: a cell holding "1" or "2A" under an "Indiv ID" header is never
+       bare cell: a cell holding "3" or "3B" under a "Subject ID" header is never
        the identifier by itself, even when a suffix makes it look alphanumeric.
-       Expand the header's noun the way the narrative does ("Individual 1",
-       "Individual 2A" when the text says "Individual 5") and use that one form
+       Expand the header's noun the way the narrative does ("Subject 3",
+       "Subject 3B" when the text says "Subject 7") and use that one form
        for every member of the series.
     3. When the text and tables give a person no label but the pedigree figure
        labels them, use the pedigree label (e.g., "II-2"). The figure is a
@@ -109,12 +129,12 @@ Guidelines:
    whether the paper reports one family or several.
    The single-case rule names the proband only. Parents or siblings the report
    mentions by role are still patients whenever it states a fact about them --
-   "inherited from her father", "the patient and her parents were analyzed
-   using WES", "born to healthy parents" -- with the role as the identifier
-   (rule 7). Only a relative the paper says nothing about is skipped.
+   an allele traced to one parent, parental samples sequenced as a trio, the
+   parents described as unaffected -- with the role as the identifier (rule
+   7). Only a relative the paper says nothing about is skipped.
 9. Do not extract authors, non-clinical mentions, or animal models. A citation
-   standing in for a person -- a table column headed "Lam et al.", "the patient
-   of Smith et al." -- is a label for that individual, not an author mention
+   standing in for a person -- a table column headed "Smith et al.", "the
+   patient of Smith et al." -- is a label for that individual, not an author mention
    (see TABLES LISTING PATIENTS).
 10. Use enum values when possible; otherwise use "Other" or "Unknown".
 11. Missing fields should be returned as null (not omitted from the structured output).
@@ -140,10 +160,10 @@ quote), and having no narrative paragraph is not a reason to skip it. One patien
 them; that is one patient, not several.
 
 A table that sets the paper's own case beside one reported elsewhere gives the
-earlier individual a column or row of its own, headed by the citation ("Lam et
-al.", "Previous case", "Patient of Smith 2015"). That column states facts about
-a particular person -- sex, age, variant, findings -- so that person is a
-patient of this paper too, with the header text as the identifier ("Lam et
+earlier individual a column or row of its own, headed by the citation ("Smith
+et al.", "Previous case", "Patient of Smith 2015"). That column states facts
+about a particular person -- sex, age, variant, findings -- so that person is a
+patient of this paper too, with the header text as the identifier ("Smith et
 al."). Guideline 9's bar on authors covers bylines and "as Smith et al.
 showed"; a citation used as a column header names an individual.
 
