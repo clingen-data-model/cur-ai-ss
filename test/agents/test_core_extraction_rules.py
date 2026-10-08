@@ -125,10 +125,62 @@ def test_patient_prompt_names_the_three_haiku_misses():
     assert 'headed by the citation' in prompt
     assert 'is a label for that individual, not an author mention' in prompt
     assert 'The single-case rule names the proband only' in prompt
-    assert '"inherited from her father"' in prompt
+    assert 'an allele traced to one parent' in prompt
     assert 'never\n       the identifier by itself' in prompt
     assert 'use that one form\n       for every member of the series' in prompt
     assert 'BEFORE RETURNING, CHECK:' in prompt
+
+
+def test_patient_prompt_makes_candidate_enumeration_a_step():
+    """Haiku 5.5 on paper 53 omitted the "Lam et al." column at medium, high and
+    max effort alike, then agreed it qualified the moment a follow-up pointed at
+    it: it never listed the column as a candidate. The procedure makes listing
+    come before deciding."""
+    prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
+    assert 'PROCEDURE -- work in this order' in prompt
+    assert '1. Enumerate candidates.' in prompt
+    assert 'every row label and every column header in every table' in prompt
+    assert '2. Decide each candidate.' in prompt
+    assert prompt.index('1. Enumerate candidates.') < prompt.index(
+        'Identifier priority rules'
+    )
+
+
+def test_patient_prompt_scopes_to_the_target_gene_and_fills_the_schema():
+    """A 19-disease exome cohort came back as 33 patients, one per diagnosed
+    member, under a prompt that never mentioned the gene it was handed. The
+    same pass removed rules the output schema cannot honour: a bare "unknown"
+    return, an "Other" proband status, nullable fields, a nullable
+    consanguinity, and two proband rules that disagreed (most fully described
+    member vs "has no proband") so that one family could end up with none."""
+    prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
+    assert 'SCOPE -- the target gene' in prompt
+    assert 'only reported finding is in another gene is out of' in prompt
+    assert 'Every family has exactly one proband' in prompt
+    assert 'has no proband' not in prompt
+    assert 'False also means "not\n  stated"' in prompt
+    assert 'return empty "patients" and\n   "families" lists' in prompt
+    assert 'return "unknown"' not in prompt
+    assert '"Other" or "Unknown"' not in prompt
+    assert 'returned as null' not in prompt
+
+
+def test_patient_prompt_examples_are_not_lifted_from_the_eval_papers():
+    """The misses were found on papers 53, 65 and 76; an example copied from one
+    of them verbatim teaches the model that paper, not the rule."""
+    prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
+    for verbatim in (
+        'Lam et al',
+        'Indiv ID',
+        'Individual 1',
+        'P21',
+        'inherited from her father',
+        'analyzed using WES',
+        'TOP2B',
+        'COG4',
+        'FOXE3',
+    ):
+        assert verbatim not in prompt, verbatim
 
 
 def test_spec_disambiguates_a_cell_that_repeats_across_a_table_row():

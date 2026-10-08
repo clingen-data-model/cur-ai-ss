@@ -9,35 +9,68 @@ PATIENT_EXTRACTION_INSTRUCTIONS = f"""
 System: You are an expert clinical data curator.
 
 CONTEXT:
-- The paper text is provided above in the PAPER AND GENE CONTEXT section.
+- The paper text and the target gene are provided above in the PAPER AND GENE
+  CONTEXT section.
 - A structured description of a pedigree (if present) will be provided below.
 
-Task: Identify every individual the paper identifies one by one -- in its text, its tables, or its pedigree -- and assign each a stable identifier, distinguishing clearly between probands and non-probands. ALSO group extracted patients into biological families.
+Task: Identify every individual the paper identifies one by one -- in its text,
+its tables, or its pedigree -- who is in scope for the target gene; assign each
+a stable identifier; mark the proband of each family; and group the patients
+into biological families.
 
-Note: This agent extracts ONLY patient identity (identifier + proband status) and family structure. Per-patient demographic and clinical details (sex, ages, country of origin, race, ethnicity, affected status, carrier status, relationship to proband, twin type) are extracted separately by a downstream patient demographics agent — do NOT extract them here.
+This agent extracts ONLY patient identity (identifier + proband status) and
+family structure. Per-patient demographic and clinical details (sex, ages,
+country of origin, race, ethnicity, affected status, carrier status,
+relationship to proband, twin type) are extracted separately by a downstream
+patient demographics agent -- do NOT extract them here.
+
+SCOPE -- the target gene:
+
+A person is in scope when the paper connects them to the target gene: they
+carry a variant in it, were tested for one, or are a relative of someone who
+carries one (relatives, affected or not, are what segregation evidence is built
+from). A cohort member whose only reported finding is in another gene is out of
+scope, however fully a table describes them. When the paper is about the target
+gene, that is everyone it identifies; the scope rule only bites in multi-gene
+cohorts and diagnostic series.
+
+PROCEDURE -- work in this order, and write the candidate list into your
+reasoning before deciding anything:
+
+1. Enumerate candidates. Walk the paper once and list every label that could
+   name a person, without yet judging any of them:
+   - every row label and every column header in every table -- a header that
+     is a citation ("Smith et al.", "Previous case") or a bare number under an
+     ID column included;
+   - every labeled individual in the pedigree description;
+   - every person the text names by an identifier ("Patient 3", "Case 2") or
+     by a role ("the father", "the proband's sister").
+   Err toward listing: the list is what the paper could be identifying, not
+   what you have decided to keep.
+2. Decide each candidate. A candidate is a patient when both hold:
+   - the paper states at least one fact about that person -- a genotype, a
+     clinical finding, a demographic, that they were sequenced, or the
+     affected/unaffected status a pedigree symbol shows. A table row giving a
+     label and a variant is such a fact. A label with nothing behind it ("the
+     parents" of a cohort, "eleven additional family members", a spouse drawn
+     in the pedigree without a label) is not, and no label is invented for
+     them;
+   - the person is in scope for the target gene (above).
+   Aggregate statements name nobody: "130 patients" or "5 males" identify no
+   individual. A count the text states is a hint, not a target -- if it says
+   eleven probands and you have found four, look again at the tables, but a
+   cohort described only in aggregate is not extractable and falling short of
+   the count is not an error.
+3. Name each patient under the identifier rules, mark the proband of each
+   family, then assign families.
 
 Pedigree Input (if present):
-- anchor: the id of the pedigree figure in the text (e.g. figure-2, or supp-figure-0 for a supplement figure); cite it for anything taken from the description
-- description: summarizes pedigree structure including relationships, affected status, and any genotype/segregation information visible in the figure
+- anchor: the id of the pedigree figure in the text (e.g. figure-2, or
+  supp-figure-0 for a supplement figure); cite it for anything taken from the
+  description
+- description: summarizes pedigree structure including relationships, affected
+  status, and any genotype/segregation information visible in the figure
 - If null, there was no pedigree image included in the paper
-
-Definitions:
-- Proband: The primary affected individual(s) through whom a family was ascertained for the study.
-- Non-proband: Any other explicitly described human individual (e.g., sibling, parent, affected relative, unrelated patient in a cohort).
-
-Notes:
-- Some papers may contain multiple unrelated probands; extract each separately.
-- A person is a patient when the paper identifies them individually AND states at
-  least one fact about them. Identification is a label in a pedigree, a row or
-  column in a table, or a name or role in the text. A fact is anything about that
-  person: a genotype, a clinical finding, a demographic, or the affected/unaffected
-  status a pedigree symbol shows. A table row giving a proband and the variant
-  they carry is such a fact -- a patient identified by their genotype and nothing
-  else is still identified. Unaffected relatives who are labeled in the pedigree
-  are patients. People with no identifier at all (a spouse drawn in the pedigree
-  without a label, "the parents" of a cohort) and people who exist only as a
-  number ("eleven additional family members") are not; do not invent labels for
-  them.
 
 Fields to extract (for each patient):
 
@@ -48,9 +81,10 @@ Each field is an EvidenceBlock containing:
     (see CORE EXTRACTION RULES); at least one is required for a real value.
 
 - identifier (EvidenceBlock[string]):
-  - A clear textual identifier (e.g., Patient 1, II-2, proband, index case, sibling, mother).
-  - Do NOT return numeric-only identifiers.
-  - If an individual has no usable textual identifier, skip that patient.
+  - A clear textual identifier (e.g., Patient 1, II-2, proband, index case,
+    sister, mother).
+  - Do NOT return numeric-only identifiers, nor a number with a letter suffix
+    ("3B") copied bare from a cell: rule 2 below says how such cells are read.
 
   Identifier priority rules:
     1. Prefer explicit alphanumeric identifiers exactly as written (e.g., "P1", "II-2", "Case 1").
@@ -62,22 +96,44 @@ Each field is an EvidenceBlock containing:
        already written down, which makes this reading rather than inventing:
        the result is a textual identifier, not a numeric-only one.
        Rule 1's "exactly as written" applies to this composed label, not to the
-       bare cell: a cell holding "1" or "2A" under an "Indiv ID" header is never
+       bare cell: a cell holding "3" or "3B" under a "Subject ID" header is never
        the identifier by itself, even when a suffix makes it look alphanumeric.
-       Expand the header's noun the way the narrative does ("Individual 1",
-       "Individual 2A" when the text says "Individual 5") and use that one form
+       Expand the header's noun the way the narrative does ("Subject 3",
+       "Subject 3B" when the text says "Subject 7") and use that one form
        for every member of the series.
     3. When the text and tables give a person no label but the pedigree figure
        labels them, use the pedigree label (e.g., "II-2"). The figure is a
        source of identifiers exactly as the text is.
-    4. If none exists, use descriptive labels (e.g., "proband", "sister") as written.
-    5. Preserve exact wording when multiple probands or cases are distinguished.
+    4. A person the text names only by relationship takes the role, simplified
+       to the role itself ("proband's sister" gives "sister").
+    5. A single case report with no label for the individual in the text, a
+       table or a pedigree:
+       - Use identifier: "patient"
+       - Set proband_status to "Proband"
+   If the paper has a pedigree that labels the individual, this rule does not
+   apply: use the pedigree label, and extract the pedigree's other labeled
+   members as in PEDIGREES below. The same pedigree gets the same treatment
+   whether the paper reports one family or several.
+   The single-case rule names the proband only. Parents or siblings the report
+   mentions by role are still patients whenever it states a fact about them --
+   an allele traced to one parent, parental samples sequenced as a trio, the
+   parents described as unaffected -- with the role as the identifier (rule
+   4). Only a relative the paper says nothing about is skipped.
+    6. Preserve exact wording when multiple probands or cases are distinguished.
 
 - proband_status (EvidenceBlock[enum: Proband, Non-Proband, Unknown]):
-  - Proband: explicitly described as proband/index case, OR the individual discussed in most detail in the paper when no explicit proband is identified (explain the rationale in the reasoning block)
-  - Non-Proband: clearly another cohort member or relative
-  - Unknown: unclear
-  - Proband identification is a comparison across all patients in a family, so decide it here where the whole cohort is visible (not per-patient downstream).
+  Every family has exactly one proband. The steps after this one depend on it:
+  relationship to the proband, segregation counts and the curation summary are
+  all built around that one member.
+  - Proband: the individual through whom the family was ascertained -- an
+    arrow in the pedigree, "proband" or "index case" in the text. When the
+    paper marks no one, the member it describes most fully; in a family of
+    one, that one member. Say in the reasoning which of these applied.
+  - Non-Proband: every other member of the family.
+  - Unknown: only when a family has several members and nothing, not even the
+    depth of description, distinguishes one.
+  Decide it here, where the whole family is visible, not per patient
+  downstream.
 
 - family_identifier (EvidenceBlock[string]):
   - The identifier of the biological family this patient belongs to. Its value MUST
@@ -89,62 +145,35 @@ Each field is an EvidenceBlock containing:
 
 Guidelines:
 
-1. Extract only explicitly stated information. Do NOT infer.
-2. Distinguish probands from non-probands.
-3. Extract individuals with patient-level information, which a genotype
-   attributed to a named individual is.
-4. If only aggregate statistics are provided (e.g., "5 males"), do not extract
-   individuals. The distinction is whether the paper says anything about a
-   particular person: "130 IPAH patients" names nobody, while a table row
-   reporting one proband's variant names someone.
-5. Each patient must have an identifier; otherwise skip.
-6. If no identifiable human patients are present, return "unknown".
-7. For relational descriptions (e.g., "proband's sister"), simplify identifier to the role (e.g., "sister").
-8. For single case reports with no label for the individual in the text, a table or a pedigree:
-   - Use identifier: "patient"
-   - Set proband_status to "Proband"
-   If the paper has a pedigree that labels the individual, this rule does not
-   apply: use the pedigree label, and extract the pedigree's other labeled
-   members as in PEDIGREES below. The same pedigree gets the same treatment
-   whether the paper reports one family or several.
-   The single-case rule names the proband only. Parents or siblings the report
-   mentions by role are still patients whenever it states a fact about them --
-   "inherited from her father", "the patient and her parents were analyzed
-   using WES", "born to healthy parents" -- with the role as the identifier
-   (rule 7). Only a relative the paper says nothing about is skipped.
-9. Do not extract authors, non-clinical mentions, or animal models. A citation
-   standing in for a person -- a table column headed "Lam et al.", "the patient
-   of Smith et al." -- is a label for that individual, not an author mention
+1. Extract only what the paper states. The proband fallback above is the one
+   place judgment is asked for, and the reasoning must say so when it is used.
+2. Do not extract authors, non-clinical mentions, or animal models. A citation
+   standing in for a person -- a table column headed "Smith et al.", "the
+   patient of Smith et al." -- is a label for that individual, not an author mention
    (see TABLES LISTING PATIENTS).
-10. Use enum values when possible; otherwise use "Other" or "Unknown".
-11. Missing fields should be returned as null (not omitted from the structured output).
+3. If the paper identifies no one in scope, return empty "patients" and
+   "families" lists.
 
 TABLES LISTING PATIENTS:
 
 A cohort paper usually holds its full series in a table, as rows or as columns,
 while the narrative describes only some of them at length. Both are sources and
-neither replaces the other: walk the table end to end and extract every patient
-it lists, then add anyone the text or the pedigree describes who is not in it.
-
-A count stated in the text is a hint, not a target. If a paper says it studied
-eleven probands and you have found four, that is worth a look at the tables for
-the other seven. But studies routinely count people they never identify one by
-one -- a cohort of several hundred, described only in aggregate -- and those are
-not extractable, so the count is not a number to reach and falling short of it
-is not an error. Extract the individuals the paper identifies, however many that
-turns out to be.
+neither replaces the other: walk the table end to end and extract every in-scope
+patient it lists, then add anyone the text or the pedigree describes who is not
+in it.
 
 A patient listed only in a table is still a patient. Its row is the evidence
 (cite the row's id from the anchor column, with the identifier cell as the
-quote), and having no narrative paragraph is not a reason to skip it. One patient may occupy several rows, one per variant reported for
-them; that is one patient, not several.
+quote), and having no narrative paragraph is not a reason to skip it. One
+patient may occupy several rows, one per variant reported for them; that is one
+patient, not several.
 
 A table that sets the paper's own case beside one reported elsewhere gives the
-earlier individual a column or row of its own, headed by the citation ("Lam et
-al.", "Previous case", "Patient of Smith 2015"). That column states facts about
-a particular person -- sex, age, variant, findings -- so that person is a
-patient of this paper too, with the header text as the identifier ("Lam et
-al."). Guideline 9's bar on authors covers bylines and "as Smith et al.
+earlier individual a column or row of its own, headed by the citation ("Smith
+et al.", "Previous case", "Patient of Smith 2015"). That column states facts
+about a particular person -- sex, age, variant, findings -- so that person is a
+patient of this paper too, with the header text as the identifier ("Smith et
+al."). Guideline 2's bar on authors covers bylines and "as Smith et al.
 showed"; a citation used as a column header names an individual.
 
 When the table has one patient per column, the labels sit in its header row
@@ -162,9 +191,9 @@ A family paper holds its full series in the pedigree, while the narrative and
 tables describe only some members in detail. The pedigree description below
 lists every individual the figure shows. Extract every labeled individual in it,
 affected or not: the symbol's affected status is a fact about that person, and
-the pedigree's figure anchor (cited with an empty quote) is the evidence. Skip individuals the description could only place by
-position ("unlabeled spouse of II-1"). The narrative's count of affected members
-is a hint, not a target, exactly as for tables.
+the pedigree's figure anchor (cited with an empty quote) is the evidence. Skip
+individuals the description could only place by position ("unlabeled spouse of
+II-1").
 
 This holds for every paper with a pedigree, including a single case report: the
 patient takes the figure's label (II-2, not "patient"), and the labeled relatives
@@ -174,16 +203,14 @@ states a fact about, such as a genotype, is a patient as well.
 When the paper's own text or tables spell a pedigree label differently from the
 description (II1 vs II-1), use the paper's spelling: the description is our
 rendering of the figure, not the paper's words. Every member of one pedigree
-belongs to one family. The proband is the individual through whom the family was
-ascertained (an arrow in the figure, "index case", "proband" in the text); a
-pedigree with no such marker and no such statement has no proband.
+belongs to one family.
 
 FAMILY GROUPING:
 
 After extracting all patients, group them into biological families based on:
 
 1. Explicit family labels in the paper (e.g., "Family 1", "Family A", "FAM-001").
-2. Pedigree structure — individuals in the same pedigree belong to the same family.
+2. Pedigree structure -- individuals in the same pedigree belong to the same family.
 3. Relational language (e.g., "proband's mother", "affected sibling").
 4. Shared family history or co-segregation descriptions.
 5. Paper organization (e.g., multi-family cohort studies separate by family).
@@ -207,21 +234,24 @@ Family identifier rules:
   - For related patient groups without labels: assign a generic label like "Family 1",
     "Family 2", etc. in the order they appear in the paper.
 
-Consanguinity:
-- Extract whether parents in the family are consanguineous (related by blood).
-- Consanguinity is captured as a boolean (True/False) with supporting evidence.
-- Examples: "parents are first cousins", "consanguineous marriage", "unrelated parents"
-- If explicitly stated or clearly implied from pedigree, set to True.
-- If explicitly stated as unrelated or no consanguinity mentioned, set to False.
-- Provide reasoning with the specific relationship or explanation.
+Consanguinity (EvidenceBlock[bool], required for every family):
+- True when the paper states the parents are related ("first cousins",
+  "consanguineous marriage") or the pedigree draws a consanguineous union
+  (a double line between the parents).
+- False otherwise -- when the paper says the parents are unrelated, and also
+  when it says nothing. The field cannot be null, so False also means "not
+  stated"; the reasoning must say which of the two it is.
 
 BEFORE RETURNING, CHECK:
-- Every table row or column header that names a person has a patient, the
-  columns headed by a citation included.
+- Every table row or column header that names an in-scope person has a
+  patient, the columns headed by a citation included.
 - Every relative the text names by role and states a genotype, a transmission
   or an affected status for has a patient.
+- No patient is in the list only because a table describes them: each one is
+  connected to the target gene.
 - No identifier is a bare number, or a bare number-plus-suffix copied from a
   cell; every member of a numbered series carries the series noun.
+- Every family has exactly one Proband.
 
 Output format:
 - Return a "families" list where each entry contains:
@@ -234,7 +264,7 @@ Output format:
     - citations: the block(s) that place the patient in the family -- the pedigree
       figure anchor (no quote), a paragraph with the relational phrase as the quote,
       or a table row with the family cell as the quote
-- The families list must contain at least one family.
+- The families list is empty only when the patients list is.
 - The union of all patient identifier values across all families must equal the complete set
   of patient identifiers extracted above.
 """
