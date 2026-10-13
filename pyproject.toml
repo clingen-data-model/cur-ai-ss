@@ -49,6 +49,13 @@ dev = [
     "watchdog>=6.0.0",
     "python-docx>=0.8.11",
 ]
+service = [
+    "docling==2.82.0",
+    "fastapi>=0.126.0",
+    "google-cloud-storage>=2.18",
+    "pydantic==2.12.5",
+    "uvicorn>=0.38.0",
+]
 
 [tool.uv]
 package = true

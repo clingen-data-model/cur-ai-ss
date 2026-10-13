@@ -36,3 +36,10 @@ module "dev-caa" {
   network_self_link         = data.terraform_remote_state.shared_network.outputs.network.self_link
   subnetwork_self_link      = data.terraform_remote_state.shared_network.outputs.subnetwork.self_link
 }
+
+module "docling-service" {
+  source     = "../docling-service"
+  project_id = data.google_project.project.project_id
+
+  invoker_service_account_emails = [module.dev-caa.service_account_email]
+}

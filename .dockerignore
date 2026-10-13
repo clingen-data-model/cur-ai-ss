@@ -1,0 +1,10 @@
+.git
+.venv
+frontend
+var
+docs
+test
+infrastructure/terraform
+infrastructure/ansible
+**/__pycache__
+.env*

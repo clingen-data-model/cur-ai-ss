@@ -1,0 +1,17 @@
+# Built on Cloud Build (linux/amd64, which is what Cloud Run runs), not locally:
+#   gcloud builds submit --config infrastructure/docling-service/cloudbuild.yaml \
+#     --substitutions=_IMAGE=<repo>/docling-service:<tag> .
+# bin/deploy-docling-service wraps this.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - infrastructure/docling-service/Dockerfile
+      - -t
+      - ${_IMAGE}
+      - .
+images:
+  - ${_IMAGE}
+options:
+  machineType: E2_HIGHCPU_8

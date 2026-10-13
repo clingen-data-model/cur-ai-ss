@@ -19,8 +19,8 @@ from lib.misc.pdf.anchors import (
     page_frames,
     user_to_display,
 )
-from lib.misc.pdf.parse import Polygon, WordLoc
 from lib.misc.pdf.paths import document_raw_path, document_words_json_path
+from lib.misc.pdf.words import Polygon, WordLoc
 from lib.models.evidence_block import Citation
 
 
