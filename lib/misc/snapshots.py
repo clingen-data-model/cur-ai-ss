@@ -131,9 +131,16 @@ def _paper_edit_filter(
     variant_ids: list[int],
     occurrence_ids: list[int],
     segregation_evidence_ids: list[int],
+    phenotype_ids: list[int],
+    hpo_link_ids: list[int],
+    harmonized_variant_ids: list[int],
 ) -> Any:
-    """Every EditDB row reachable from this paper, across its six mutually
-    exclusive entity-FK columns (see EditDB's _ENTITY_FK_COLUMNS)."""
+    """Every EditDB row reachable from this paper, across its nine mutually
+    exclusive entity-FK columns (see EditDB's _ENTITY_FK_COLUMNS). Each column
+    must be listed here: an edit row the dump misses is still cascade-deleted
+    with its entity on restore and never re-inserted, so the history vanishes
+    silently (phenotype, HPO-link and harmonized-variant edits did, until
+    this filter caught up with the columns added after it)."""
     clauses = [EditDB.paper_id == paper_id]
     if family_ids:
         clauses.append(EditDB.family_id.in_(family_ids))
@@ -145,6 +152,12 @@ def _paper_edit_filter(
         clauses.append(EditDB.occurrence_id.in_(occurrence_ids))
     if segregation_evidence_ids:
         clauses.append(EditDB.segregation_evidence_id.in_(segregation_evidence_ids))
+    if phenotype_ids:
+        clauses.append(EditDB.phenotype_id.in_(phenotype_ids))
+    if hpo_link_ids:
+        clauses.append(EditDB.hpo_link_id.in_(hpo_link_ids))
+    if harmonized_variant_ids:
+        clauses.append(EditDB.harmonized_variant_id.in_(harmonized_variant_ids))
     return or_(*clauses)
 
 
@@ -252,6 +265,9 @@ def dump_paper_state(paper_id: int, paper_db: PaperDB, session: Session) -> dict
                 variant_ids=variant_ids,
                 occurrence_ids=occurrence_ids,
                 segregation_evidence_ids=segregation_evidence_ids,
+                phenotype_ids=phenotype_ids,
+                hpo_link_ids=[h.id for h in hpos],
+                harmonized_variant_ids=[h.id for h in harmonized],
             )
         )
         .all()
@@ -566,6 +582,27 @@ def _delete_paper_domain_rows(session: Session, paper_id: int) -> None:
         else []
     )
 
+    hpo_link_ids = (
+        [
+            i
+            for (i,) in session.query(HpoDB.id).filter(
+                HpoDB.phenotype_id.in_(phenotype_ids)
+            )
+        ]
+        if phenotype_ids
+        else []
+    )
+    harmonized_variant_ids = (
+        [
+            i
+            for (i,) in session.query(HarmonizedVariantDB.id).filter(
+                HarmonizedVariantDB.variant_id.in_(variant_ids)
+            )
+        ]
+        if variant_ids
+        else []
+    )
+
     # Edit history and the deletion log have no row of their own to cascade
     # from for paper-level entries (the papers row is never deleted, just
     # overwritten below), so both are deleted explicitly rather than relied
@@ -578,6 +615,9 @@ def _delete_paper_domain_rows(session: Session, paper_id: int) -> None:
             variant_ids=variant_ids,
             occurrence_ids=occurrence_ids,
             segregation_evidence_ids=segregation_evidence_ids,
+            phenotype_ids=phenotype_ids,
+            hpo_link_ids=hpo_link_ids,
+            harmonized_variant_ids=harmonized_variant_ids,
         )
     ).delete(synchronize_session=False)
     session.query(DeletionLogDB).filter(DeletionLogDB.paper_id == paper_id).delete(
