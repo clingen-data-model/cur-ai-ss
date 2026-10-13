@@ -14,9 +14,10 @@ CONTEXT:
 - A structured description of a pedigree (if present) will be provided below.
 
 Task: Identify every individual the paper identifies one by one -- in its text,
-its tables, or its pedigree -- who is in scope for the target gene; assign each
-a stable identifier; mark the proband of each family; and group the patients
-into biological families.
+its tables, or its pedigree -- who is in scope for the target gene, whether the
+paper describes them for the first time or re-reports them from an earlier
+publication; assign each a stable identifier; mark the proband of each family;
+and group the patients into biological families.
 
 This agent extracts ONLY patient identity (identifier + proband status) and
 family structure. Per-patient demographic and clinical details (sex, ages,
@@ -41,7 +42,9 @@ reasoning before deciding anything:
    name a person, without yet judging any of them:
    - every row label and every column header in every table -- a header that
      is a citation ("Smith et al.", "Previous case") or a bare number under an
-     ID column included;
+     ID column included. A comparison table headed
+     "| Feature | Present case | Jones et al. |" yields two candidates,
+     "Present case" and "Jones et al.", before anything is decided;
    - every labeled individual in the pedigree description;
    - every person the text names by an identifier ("Patient 3", "Case 2") or
      by a role ("the father", "the proband's sister").
@@ -51,7 +54,8 @@ reasoning before deciding anything:
    - the paper states at least one fact about that person -- a genotype, a
      clinical finding, a demographic, that they were sequenced, or the
      affected/unaffected status a pedigree symbol shows. A table row giving a
-     label and a variant is such a fact. A label with nothing behind it ("the
+     label and a variant is such a fact; so is a citation-headed column whose
+     cells give that person's sex, age, variant or findings. A label with nothing behind it ("the
      parents" of a cohort, "eleven additional family members", a spouse drawn
      in the pedigree without a label) is not, and no label is invented for
      them;
@@ -85,6 +89,9 @@ Each field is an EvidenceBlock containing:
     sister, mother).
   - Do NOT return numeric-only identifiers, nor a number with a letter suffix
     ("3B") copied bare from a cell: rule 2 below says how such cells are read.
+  - DO extract an individual whose only label is a citation. A column or row
+    headed "Smith et al." or "Previous case" is the person that earlier paper
+    reported, re-reported here; the header text is their identifier.
 
   Identifier priority rules:
     1. Prefer explicit alphanumeric identifiers exactly as written (e.g., "P1", "II-2", "Case 1").
@@ -147,10 +154,10 @@ Guidelines:
 
 1. Extract only what the paper states. The proband fallback above is the one
    place judgment is asked for, and the reasoning must say so when it is used.
-2. Do not extract authors, non-clinical mentions, or animal models. A citation
-   standing in for a person -- a table column headed "Smith et al.", "the
-   patient of Smith et al." -- is a label for that individual, not an author mention
-   (see TABLES LISTING PATIENTS).
+2. Do not extract the people who wrote the paper, non-clinical mentions, or
+   animal models. A citation standing in for a person -- a table column headed
+   "Smith et al.", "the patient of Smith et al." -- is a label for that
+   individual, not an author mention (see TABLES LISTING PATIENTS).
 3. If the paper identifies no one in scope, return empty "patients" and
    "families" lists.
 

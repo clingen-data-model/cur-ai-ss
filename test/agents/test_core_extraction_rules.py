@@ -123,7 +123,7 @@ def test_patient_prompt_names_the_three_haiku_misses():
     the bare table cells "1"/"2A" where the text says "Individual 5"."""
     prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
     assert 'headed by the citation' in prompt
-    assert 'is a label for that individual, not an author mention' in prompt
+    assert 'is a label for that\n   individual, not an author mention' in prompt
     assert 'The single-case rule names the proband only' in prompt
     assert 'an allele traced to one parent' in prompt
     assert 'never\n       the identifier by itself' in prompt
