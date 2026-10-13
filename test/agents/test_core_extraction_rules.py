@@ -166,17 +166,33 @@ def test_patient_prompt_scopes_to_the_target_gene_and_fills_the_schema():
     same pass removed rules the output schema cannot honour: a bare "unknown"
     return, an "Other" proband status, nullable fields, a nullable
     consanguinity, and two proband rules that disagreed (most fully described
-    member vs "has no proband") so that one family could end up with none."""
+    member vs "has no proband") so that one family could end up with none.
+    The one family allowed none is spelled out as an exception (see the
+    re-reported test below), not left to two rules fighting."""
     prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
     assert 'SCOPE -- the target gene' in prompt
     assert 'only reported finding is in another gene is out of' in prompt
-    assert 'Every family has exactly one proband' in prompt
-    assert 'has no proband' not in prompt
+    assert 'Every family the paper reports for the first time has exactly one' in (
+        prompt
+    )
+    assert prompt.count('has no proband') == 1
     assert 'False also means "not\n  stated"' in prompt
     assert 'return empty "patients" and\n   "families" lists' in prompt
     assert 'return "unknown"' not in prompt
     assert '"Other" or "Unknown"' not in prompt
     assert 'returned as null' not in prompt
+
+
+def test_patient_prompt_never_makes_a_re_reported_individual_the_proband():
+    """Once every family had to have a proband, a previously published patient
+    the paper carries as its own table column, and a boy from the discussion
+    whose parents are the evidence, each became the proband of a singleton
+    family: three papers over-counted the unrelated probands curators score
+    by one each. Curation counts the probands a paper adds."""
+    prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
+    assert 'is never the\n  proband here' in prompt
+    assert 'the one exception to\n  the one-proband rule' in prompt
+    assert 'no re-reported individual is one' in prompt
 
 
 def test_patient_prompt_examples_are_not_lifted_from_the_eval_papers():

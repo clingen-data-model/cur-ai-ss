@@ -135,16 +135,28 @@ Each field is an EvidenceBlock containing:
     6. Preserve exact wording when multiple probands or cases are distinguished.
 
 - proband_status (EvidenceBlock[enum: Proband, Non-Proband, Unknown]):
-  Every family has exactly one proband. The steps after this one depend on it:
-  relationship to the proband, segregation counts and the curation summary are
-  all built around that one member.
+  Every family the paper reports for the first time has exactly one proband.
+  The steps after this one depend on it: relationship to the proband,
+  segregation counts and the curation summary are all built around that one
+  member.
   - Proband: the individual through whom the family was ascertained -- an
     arrow in the pedigree, "proband" or "index case" in the text. When the
     paper marks no one, the member it describes most fully; in a family of
     one, that one member. Say in the reasoning which of these applied.
-  - Non-Proband: every other member of the family.
+  - Non-Proband: every other member of the family, and every re-reported
+    individual (next paragraph), whatever their standing in the paper that
+    first described them.
   - Unknown: only when a family has several members and nothing, not even the
     depth of description, distinguishes one.
+  Re-reported individuals. A person the paper carries over from an earlier
+  publication -- a column or row headed by a citation, a case the text says
+  was previously described or reported in a cited reference, a member of
+  another study's cohort shown for comparison -- is extracted but is never the
+  proband here: curation counts the probands this paper adds, and that person
+  was counted when first published. A family made only of re-reported
+  individuals therefore has no proband at all. This is the one exception to
+  the one-proband rule, and the reasoning cites the header or sentence that
+  shows the person was reported before.
   Decide it here, where the whole family is visible, not per patient
   downstream.
 
@@ -266,7 +278,8 @@ BEFORE RETURNING, CHECK:
   connected to the target gene.
 - No identifier is a bare number, or a bare number-plus-suffix copied from a
   cell; every member of a numbered series carries the series noun.
-- Every family has exactly one Proband.
+- Every family the paper reports for the first time has exactly one Proband,
+  and no re-reported individual is one.
 - The first family's identifier reasoning lists every candidate label with
   its decision, and every label it marks as a patient is in "patients".
 
