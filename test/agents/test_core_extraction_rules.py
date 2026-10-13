@@ -144,6 +144,20 @@ def test_patient_prompt_makes_candidate_enumeration_a_step():
     assert prompt.index('1. Enumerate candidates.') < prompt.index(
         'Identifier priority rules'
     )
+    # The list has to land somewhere the model is obliged to write: an existing
+    # free-text field. Haiku went from 0/20 to 6/9 on the citation-headed
+    # column once the list had a home; a bare "list before deciding" did nothing.
+    assert 'written out in full in the reasoning of the\nfirst family' in prompt
+    assert 'lists every candidate label with\n  its decision' in prompt
+
+
+def test_patient_prompt_does_not_treat_describer_labels_as_figure_labels():
+    """A pedigree with no printed identifiers comes back from the describer as
+    I-1, II-2 "assigned by position"; the model then sometimes used those as
+    the identifiers and pulled in the unlabeled siblings as patients."""
+    prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
+    assert "those labels are the describer's, not the paper's" in prompt
+    assert 'assigned by position as no\nlabel at all' in prompt
 
 
 def test_patient_prompt_scopes_to_the_target_gene_and_fills_the_schema():

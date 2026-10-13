@@ -35,8 +35,10 @@ scope, however fully a table describes them. When the paper is about the target
 gene, that is everyone it identifies; the scope rule only bites in multi-gene
 cohorts and diagnostic series.
 
-PROCEDURE -- work in this order, and write the candidate list into your
-reasoning before deciding anything:
+PROCEDURE -- work in this order. The candidate list from step 1, with each
+label's decision from step 2, is written out in full in the reasoning of the
+first family's identifier (there is no other place for it in the output), so
+list before you decide and decide before you write any patient:
 
 1. Enumerate candidates. Walk the paper once and list every label that could
    name a person, without yet judging any of them:
@@ -110,7 +112,11 @@ Each field is an EvidenceBlock containing:
        for every member of the series.
     3. When the text and tables give a person no label but the pedigree figure
        labels them, use the pedigree label (e.g., "II-2"). The figure is a
-       source of identifiers exactly as the text is.
+       source of identifiers exactly as the text is. The pedigree description
+       is not: when it says the figure prints no identifiers and it assigned
+       labels by position, those labels are the describer's, not the paper's,
+       and the people carry no pedigree label for the purposes of these rules
+       (rule 4 or 5 applies instead).
     4. A person the text names only by relationship takes the role, simplified
        to the role itself ("proband's sister" gives "sister").
     5. A single case report with no label for the individual in the text, a
@@ -200,7 +206,9 @@ lists every individual the figure shows. Extract every labeled individual in it,
 affected or not: the symbol's affected status is a fact about that person, and
 the pedigree's figure anchor (cited with an empty quote) is the evidence. Skip
 individuals the description could only place by position ("unlabeled spouse of
-II-1").
+II-1"), and treat a label the description says it assigned by position as no
+label at all: a figure with no printed identifiers leaves the proband as
+"patient" and the relatives under their roles.
 
 This holds for every paper with a pedigree, including a single case report: the
 patient takes the figure's label (II-2, not "patient"), and the labeled relatives
@@ -259,6 +267,8 @@ BEFORE RETURNING, CHECK:
 - No identifier is a bare number, or a bare number-plus-suffix copied from a
   cell; every member of a numbered series carries the series noun.
 - Every family has exactly one Proband.
+- The first family's identifier reasoning lists every candidate label with
+  its decision, and every label it marks as a patient is in "patients".
 
 Output format:
 - Return a "families" list where each entry contains:
