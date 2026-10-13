@@ -568,6 +568,49 @@ def test_edit_history_reverts_with_snapshot(db_session, test_user, snapshot_pape
     assert edits[0].old_value == '"P1"'
 
 
+def test_edit_history_covers_every_editable_entity(
+    db_session, test_user, snapshot_paper
+):
+    """The edits table has one FK column per editable entity. Three of them
+    (phenotype, HPO link, harmonized variant) were added after the snapshot
+    filter and never joined it, so a restore cascade-deleted those edits with
+    their rows and re-inserted nothing: curator history on a phenotype concept,
+    a manual HPO link or a CAid vanished while the edited values came back."""
+    paper = snapshot_paper['paper']
+    phenotype = db_session.query(PhenotypeDB).filter_by(paper_id=paper.id).one()
+    hpo = db_session.query(HpoDB).filter_by(phenotype_id=phenotype.id).one()
+    harmonized = db_session.query(HarmonizedVariantDB).one()
+    segregation = db_session.query(SegregationEvidenceDB).one()
+    edited = [
+        (paper, 'title'),
+        (snapshot_paper['family'], 'identifier'),
+        (snapshot_paper['p1'], 'identifier'),
+        (snapshot_paper['v1'], 'hgvs_c'),
+        (snapshot_paper['pvo1'], 'zygosity'),
+        (segregation, 'has_unexplainable_non_segregations'),
+        (phenotype, 'concept'),
+        (hpo, 'hpo'),
+        (harmonized, 'caid'),
+    ]
+    for obj, field in edited:
+        record_edit(db_session, obj, field, test_user, old_value='before')
+    db_session.flush()
+    assert db_session.query(EditDB).count() == len(edited)
+
+    path = write_snapshot(paper.id, db_session)
+    assert path is not None
+    stored = json.loads(path.read_text())['tables']['edits']
+    assert sorted(e['field_name'] for e in stored) == sorted(f for _, f in edited)
+
+    snapshot_paper['p1'].identifier = 'CHANGED'
+    db_session.flush()
+    assert restore_snapshot(paper.id, path.name, db_session, test_user) is True
+    db_session.expire_all()
+    restored = db_session.query(EditDB).all()
+    assert sorted(e.field_name for e in restored) == sorted(f for _, f in edited)
+    assert all(e.user_id == test_user.id for e in restored)
+
+
 def test_deletion_log_reverts_with_snapshot(db_session, test_user, snapshot_paper):
     """A deletion is a record of something that happened to a row, and the row
     itself reverts with the snapshot -- so the record should match whichever
