@@ -9,7 +9,10 @@ WorkingDirectory=/opt/{{ caa_user }}
 EnvironmentFile=/opt/{{ caa_user }}/.env
 Environment=PATH="/home/{{ caa_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
 
-ExecStart=/opt/{{ caa_user }}/bin/api --host 127.0.0.1 --port 8000
+# nginx strips the /api/ prefix before proxying, so routes match at "/";
+# --root-path tells FastAPI where it is publicly mounted so the Swagger
+# page at /api/docs fetches /api/openapi.json rather than the SPA at /.
+ExecStart=/opt/{{ caa_user }}/bin/api --host 127.0.0.1 --port 8000 --root-path /api
 
 Restart=on-failure
 RestartSec=5
