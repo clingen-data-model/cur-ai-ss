@@ -2,8 +2,10 @@ import hpotk
 from agents import Agent, function_tool
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
+from lib.agents.core_extraction_rules import FLAG_RULES
 from lib.agents.model_factory import decision_model_settings, extraction_model
 from lib.models.evidence_block import ReasoningBlock
+from lib.models.flag import FlaggedReasoningBlock
 from lib.models.phenotype import HPOTerm
 from lib.reference_data.hpo import find_matching_hpo_terms, get_ontology
 
@@ -349,13 +351,24 @@ Write in plain prose. Do not use function names like get_hpo_term() — describe
 
 """
 
-HPO_LINKING_AGENT_INSTRUCTIONS = INSTRUCTIONS
+HPO_LINKING_AGENT_INSTRUCTIONS = (
+    INSTRUCTIONS
+    + '\n\n'
+    + FLAG_RULES
+    + """
+FLAGS for this task: a concept that maps equally well to two terms, a term
+chosen that is broader or narrower than the concept, a concept that names a
+finding the ontology has no term for, a negated or family-history concept
+linked anyway. "about" is the concept you were given, or null. The output is
+the block above with a "flags" list beside it.
+"""
+)
 
 agent = Agent(
     name='hpo_linker',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
     model_settings=decision_model_settings(),
-    output_type=ReasoningBlock[HPOTerm],
+    output_type=FlaggedReasoningBlock[HPOTerm],
     tools=[search_hpo_terms, get_hpo_term, get_hpo_parents, get_hpo_children],
 )

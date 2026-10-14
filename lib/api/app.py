@@ -2724,6 +2724,7 @@ def _flag_resp(flag: FlagDB) -> FlagResp:
         patient_id=flag.patient_id,
         variant_id=flag.variant_id,
         phenotype_id=flag.phenotype_id,
+        occurrence_id=flag.occurrence_id,
         resolved_by_user_id=flag.resolved_by_user_id,
         resolved_by=_user_summary(flag.resolved_by),
         resolved_at=flag.resolved_at,

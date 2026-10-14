@@ -4,11 +4,11 @@ import pytest
 from pydantic import ValidationError
 
 from lib.models import FamilyDB, FlagDB, GeneDB, PaperDB, PatientDB
-from lib.models.flag import ExtractionFlag
+from lib.models.flag import ExtractionFlag, FlaggedReasoningBlock, ReasoningFlag
 from lib.models.patient import PatientExtractionOutput
 from lib.models.phenotype import PhenotypeExtractionOutput
 from lib.models.variant import VariantExtractionOutput
-from lib.tasks.flags import match_label, replace_flags
+from lib.tasks.flags import flags_of, match_label, replace_flags, split_pair
 
 _CITE = [{'anchor': 'paragraph-3', 'quote': 'her sister was not tested'}]
 
@@ -39,6 +39,30 @@ def test_flags_default_to_empty_so_an_older_output_still_loads(model):
 def test_a_flag_needs_a_citation_like_every_other_evidence_block():
     with pytest.raises(ValidationError):
         ExtractionFlag(about=None, flag={'value': 'x', 'reasoning': 'no source'})
+
+
+def test_a_reasoning_flag_has_no_citations_to_give():
+    flag = ReasoningFlag(about='c.1A>G', flag={'value': 'x', 'reasoning': 'y'})
+    assert flag.flag.value == 'x'
+
+
+def test_a_flagged_reasoning_block_is_still_a_reasoning_block():
+    block = FlaggedReasoningBlock[int](
+        value=3,
+        reasoning='r',
+        flags=[{'about': None, 'flag': {'value': 'x', 'reasoning': 'y'}}],
+    )
+    assert (block.value, block.reasoning) == (3, 'r')
+    assert flags_of(block)[0].flag.value == 'x'
+    assert flags_of(FlaggedReasoningBlock[int](value=1, reasoning='r')) == []
+    assert flags_of(object()) == []
+
+
+def test_split_pair_needs_both_halves():
+    assert split_pair('Patient 1 / c.1A>G') == ('Patient 1', 'c.1A>G')
+    assert split_pair('Patient 1') is None
+    assert split_pair(' / c.1A>G') is None
+    assert split_pair('c.1A>G') is None
 
 
 def test_match_label_ignores_case_and_spacing_but_not_content():

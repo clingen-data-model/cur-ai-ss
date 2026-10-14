@@ -1,6 +1,7 @@
 from agents import Agent
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
+from lib.agents.core_extraction_rules import FLAG_RULES
 from lib.agents.model_factory import extraction_model, extraction_model_settings
 from lib.models.patient_variant_occurrences import CompoundHetEvaluationOutput
 
@@ -49,6 +50,20 @@ RULES:
 - If all variants are present but phase is unknown, return an empty pairs list
 - Each pair's reasoning should cite the exact evidence (quote from text, table/figure, pedigree)
 """
+
+COMPOUND_HET_AGENT_INSTRUCTIONS = (
+    COMPOUND_HET_AGENT_INSTRUCTIONS
+    + '\n\n'
+    + FLAG_RULES
+    + """
+FLAGS for this task: two variants the paper calls compound heterozygous
+without saying which, a phase inferred from one parent's genotype alone, a
+pair left out because the evidence was only a general statement, a
+heterozygous variant in the list that the paper never discusses for this
+patient. "about" is a variant description from the list you were given, or
+null. The output carries a "flags" list.
+"""
+)
 
 agent = Agent(
     name='compound_het_evaluator',

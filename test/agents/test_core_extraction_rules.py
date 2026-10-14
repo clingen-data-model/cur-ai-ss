@@ -2,8 +2,11 @@
 
 import pytest
 
-from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
+from lib.agents.compound_het_agent import COMPOUND_HET_AGENT_INSTRUCTIONS
+from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC, FLAG_RULES
+from lib.agents.hpo_linking_agent import HPO_LINKING_AGENT_INSTRUCTIONS
 from lib.agents.manual_output import _JSON_OUTPUT_DIRECTIVE
+from lib.agents.mondo_linking_agent import MONDO_LINKING_AGENT_INSTRUCTIONS
 from lib.agents.paper_extraction_agent import PAPER_EXTRACTION_AGENT_INSTRUCTIONS
 from lib.agents.patient_demographics_agent import (
     PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS,
@@ -15,10 +18,16 @@ from lib.agents.patient_phenotype_linking_agent import (
 from lib.agents.patient_variant_occurrence_agent import (
     PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS,
 )
+from lib.agents.segregation_analysis_computed_agent import (
+    SEGREGATION_ANALYSIS_COMPUTED_AGENT_INSTRUCTIONS,
+)
 from lib.agents.segregation_evidence_extractor import (
     SEGREGATION_EVIDENCE_AGENT_INSTRUCTIONS,
 )
 from lib.agents.variant_extraction_agent import VARIANT_EXTRACTION_AGENT_INSTRUCTIONS
+from lib.agents.variant_harmonization_agent import (
+    VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS,
+)
 
 
 def test_spec_names_every_id_form_and_the_shortest_span_rule():
@@ -231,7 +240,8 @@ def test_spec_states_the_flag_rule_once_for_every_agent():
     dropped, a proband chosen where the paper marks none. Field reasoning only
     covers what was extracted, so the shared spec asks every agent for a flag
     per decision, and each prompt adds only its own examples."""
-    assert 'FLAGS -- decisions a curator should see' in CORE_EXTRACTION_SPEC
+    assert FLAG_RULES in CORE_EXTRACTION_SPEC
+    assert 'FLAGS -- decisions a curator should see' in FLAG_RULES
     assert 'left out under a rule rather\n    than for being nothing at all' in (
         CORE_EXTRACTION_SPEC
     )
@@ -239,6 +249,8 @@ def test_spec_states_the_flag_rule_once_for_every_agent():
     assert 'Do not flag routine extraction' in CORE_EXTRACTION_SPEC
     assert 'one flag per decision, not per item it touches' in CORE_EXTRACTION_SPEC
     assert 'null when it\n    is about something not extracted' in CORE_EXTRACTION_SPEC
+    # The lookup agents have no citations field; the rule says so once.
+    assert 'where the block has citations' in FLAG_RULES
 
 
 @pytest.mark.parametrize(
@@ -250,15 +262,17 @@ def test_spec_states_the_flag_rule_once_for_every_agent():
         PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS,
         PATIENT_PHENOTYPE_LINKING_AGENT_INSTRUCTIONS,
         SEGREGATION_EVIDENCE_AGENT_INSTRUCTIONS,
+        VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS,
+        HPO_LINKING_AGENT_INSTRUCTIONS,
+        MONDO_LINKING_AGENT_INSTRUCTIONS,
+        COMPOUND_HET_AGENT_INSTRUCTIONS,
+        SEGREGATION_ANALYSIS_COMPUTED_AGENT_INSTRUCTIONS,
     ],
 )
-def test_every_flagging_prompt_points_at_the_shared_rule_and_names_about(
+def test_every_flagging_prompt_carries_the_rule_once_and_names_about(
     instructions,
 ):
     assert instructions.count('FLAGS -- decisions a curator should see') == 1
-    assert 'the rule is in CORE EXTRACTION\n' in instructions or (
-        'the rule is in CORE EXTRACTION RULES' in instructions
-    )
     assert '"about" is' in instructions
 
 

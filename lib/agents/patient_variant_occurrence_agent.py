@@ -88,7 +88,7 @@ pedigree symbol alone), a zygosity or inheritance read from context rather than
 stated, a de novo status the paper asserts without parental testing, a patient
 or variant in the input that nothing in the paper connects to anything. The
 output carries a "flags" list; "about" is a patient identifier or a variant
-quote from the input, or null.
+quote from the input, "patient identifier / variant quote" for one pair, or null.
 """
 
 PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS = (

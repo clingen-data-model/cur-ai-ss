@@ -25,7 +25,7 @@ from lib.models.evidence_block import (
     HumanEvidenceBlock,
     ReasoningBlock,
 )
-from lib.models.flag import ExtractionFlag
+from lib.models.flag import ExtractionFlag, ReasoningFlag
 from lib.models.mondo import MondoComponentMapping, MondoTerm
 from lib.models.user import UserSummaryResp
 
@@ -147,6 +147,7 @@ class CompoundHetPair(BaseModel):
 
 class CompoundHetEvaluationOutput(BaseModel):
     pairs: List[CompoundHetPair]
+    flags: List[ReasoningFlag] = Field(default_factory=list)
 
 
 class OccurrencePairRequest(BaseModel):

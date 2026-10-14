@@ -20,22 +20,23 @@ the UI renders it the same way), and who resolved it.
 """
 
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Generic, TypeVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
 from lib.models.base import Base
 from lib.models.datetimes import UtcDatetime
-from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock
+from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock, ReasoningBlock
 from lib.models.user import UserSummaryResp
 
 if TYPE_CHECKING:
     from lib.models.family import FamilyDB
     from lib.models.paper import PaperDB
     from lib.models.patient import PatientDB
+    from lib.models.patient_variant_occurrences import PatientVariantOccurrenceDB
     from lib.models.phenotype import PhenotypeDB
     from lib.models.user import UserDB
     from lib.models.variant import VariantDB
@@ -59,8 +60,37 @@ class ExtractionFlag(BaseModel):
     flag: EvidenceBlock[str]
 
 
+class ReasoningFlag(BaseModel):
+    """The same flag from an agent that works from lookups and structured
+    input rather than the paper's text (harmonization, HPO and MONDO linking,
+    the computed segregation analysis, compound-het phasing): there is no
+    block to cite, so the flag is a reasoning block."""
+
+    about: str | None
+    flag: ReasoningBlock[str]
+
+
+T = TypeVar('T')
+
+
+class FlaggedReasoningBlock(ReasoningBlock[T], Generic[T]):
+    """A ReasoningBlock output with a flags list beside it, for the agents
+    whose whole output is one block (a harmonized variant, an HPO term, a
+    MONDO decision). Handlers keep reading ``value`` and ``reasoning``."""
+
+    flags: list[ReasoningFlag] = Field(default_factory=list)
+
+
+AnyFlag = ExtractionFlag | ReasoningFlag
+
 # The link columns a resolved ``about`` (or a task's own scope) can fill.
-LINK_COLUMNS = ('family_id', 'patient_id', 'variant_id', 'phenotype_id')
+LINK_COLUMNS = (
+    'family_id',
+    'patient_id',
+    'variant_id',
+    'occurrence_id',
+    'phenotype_id',
+)
 
 
 class FlagDB(Base):
@@ -87,6 +117,11 @@ class FlagDB(Base):
     phenotype_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey('phenotypes.id', ondelete='CASCADE'), nullable=True
     )
+    occurrence_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey('patient_variant_occurrences.id', ondelete='CASCADE'),
+        nullable=True,
+    )
     # TaskType name of the agent that raised it. A re-run of that agent
     # replaces its own flags (within its own scope -- the patient, for a
     # per-patient task) and leaves every other agent's alone.
@@ -110,6 +145,9 @@ class FlagDB(Base):
     patient: Mapped['PatientDB | None'] = relationship('PatientDB')
     variant: Mapped['VariantDB | None'] = relationship('VariantDB')
     phenotype: Mapped['PhenotypeDB | None'] = relationship('PhenotypeDB')
+    occurrence: Mapped['PatientVariantOccurrenceDB | None'] = relationship(
+        'PatientVariantOccurrenceDB'
+    )
     resolved_by: Mapped['UserDB | None'] = relationship('UserDB')
 
     __table_args__ = (
@@ -133,6 +171,7 @@ class FlagResp(BaseModel):
     patient_id: int | None = None
     variant_id: int | None = None
     phenotype_id: int | None = None
+    occurrence_id: int | None = None
     resolved_by_user_id: int | None = None
     resolved_by: UserSummaryResp | None = None
     resolved_at: UtcDatetime | None = None

@@ -18,10 +18,12 @@ import requests
 from agents import Agent, function_tool
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
+from lib.agents.core_extraction_rules import FLAG_RULES
 from lib.agents.model_factory import extraction_model, extraction_model_settings
 from lib.agents.variant_annotation_agent import _get_session_with_retries
 from lib.core.environment import env
 from lib.models.evidence_block import ReasoningBlock
+from lib.models.flag import FlaggedReasoningBlock
 from lib.models.variant import (
     GenomeBuild,
     HarmonizedVariant,
@@ -1019,14 +1021,25 @@ REASONING REQUIREMENT
 """
 
 
-VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS = VARIANT_HARMONIZATION_INSTRUCTIONS
+VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS = (
+    VARIANT_HARMONIZATION_INSTRUCTIONS
+    + '\n\n'
+    + FLAG_RULES
+    + """
+FLAGS for this task: a transcript chosen among several the paper could mean, a
+coordinate or rsID that resolved to a different allele than the paper's HGVS, a
+notation normalised in a way that changes its meaning, a variant that could
+only be resolved partially. "about" is the variant as the paper wrote it, or
+null. The output is the block above with a "flags" list beside it.
+"""
+)
 
 agent = Agent(
     name='variant_harmonizer',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
     model_settings=extraction_model_settings(),
-    output_type=ReasoningBlock[HarmonizedVariant],
+    output_type=FlaggedReasoningBlock[HarmonizedVariant],
     tools=[
         select_canonical_transcript,
         resolve_transcript_version,

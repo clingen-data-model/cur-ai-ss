@@ -6,6 +6,7 @@ from collections import Counter
 from agents import Agent, function_tool
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
+from lib.agents.core_extraction_rules import FLAG_RULES
 from lib.agents.model_factory import decision_model_settings, extraction_model
 from lib.models.patient_variant_occurrences import TestingMethod
 from lib.models.segregation_analysis import (
@@ -302,6 +303,16 @@ Reasoning is read by human curators — write it in plain language. Do not use r
 
 SEGREGATION_ANALYSIS_COMPUTED_AGENT_INSTRUCTIONS = (
     SEGREGATION_ANALYSIS_COMPUTED_INSTRUCTIONS
+    + '\n\n'
+    + FLAG_RULES
+    + """
+FLAGS for this task: a family member counted or left out on an assumption
+(an unknown affected status, an untested member, twins of unstated type), a
+methodology defaulted to the conservative row, a count the extracted LOD
+score disagrees with, a non-segregation treated as explained. "about" is a
+member's identifier from the family structure, or null. The output carries a
+"flags" list.
+"""
 )
 
 agent = Agent(

@@ -176,7 +176,7 @@ from lib.models.variant import (
 from lib.reference_data.hpo import find_matching_hpo_terms
 from lib.reference_data.mondo import get_mondo_term
 from lib.tasks.agent_session import agent_session
-from lib.tasks.flags import match_label, replace_flags
+from lib.tasks.flags import flags_of, match_label, replace_flags, split_pair
 from lib.tasks.hpo_link_cache import (
     is_cacheable,
     lookup_hpo_link,
@@ -1181,6 +1181,22 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
         )
         session.add(db_computed)
 
+        members = session.query(PatientDB).filter(PatientDB.family_id == family_id)
+        member_labels = [(m.identifier, m.id) for m in members]
+
+        def resolve_member(about: str) -> dict[str, int]:
+            patient_id = match_label(about, member_labels)
+            return {'patient_id': patient_id} if patient_id is not None else {}
+
+        replace_flags(
+            session,
+            paper_id=task.paper_id,
+            source=TaskType.SEGREGATION_ANALYSIS_COMPUTED.name,
+            flags=flags_of(result.final_output),
+            scope={'family_id': family_id},
+            resolve=resolve_member,
+        )
+
 
 async def handle_variant_harmonization(task_id: int) -> None:
     """Harmonize a variant to standard genomic coordinates."""
@@ -1280,6 +1296,13 @@ async def handle_variant_harmonization(task_id: int) -> None:
         ).delete()
 
         session.add(harmonized_variant_to_db(variant_id, result.final_output))
+        replace_flags(
+            session,
+            paper_id=task.paper_id,
+            source=TaskType.VARIANT_HARMONIZATION.name,
+            flags=flags_of(result.final_output),
+            scope={'variant_id': variant_id},
+        )
 
 
 async def handle_variant_annotation(task_id: int) -> None:
@@ -1485,17 +1508,38 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
                 paper.disease_name = parsed.disease_name.value
                 paper.disease_name_evidence = parsed.disease_name.model_dump()
 
+        patient_labels = [
+            (p['identifier'], p['patient_id']) for p in structured_patients
+        ]
+        variant_labels = [
+            (v['variant_quote'], v['variant_id']) for v in structured_variants
+        ]
+
         def resolve_patient_or_variant(about: str) -> dict[str, int]:
-            patient_id = match_label(
-                about, [(p['identifier'], p['patient_id']) for p in structured_patients]
-            )
+            # "patient / variant" names a pair and links the occurrence row
+            # just written for it; either half alone links that row.
+            pair = split_pair(about)
+            patient_half, variant_half = pair if pair else (about, about)
+            links: dict[str, int] = {}
+            patient_id = match_label(patient_half, patient_labels)
             if patient_id is not None:
-                return {'patient_id': patient_id}
-            variant_id = match_label(
-                about,
-                [(v['variant_quote'], v['variant_id']) for v in structured_variants],
-            )
-            return {'variant_id': variant_id} if variant_id is not None else {}
+                links['patient_id'] = patient_id
+            variant_id = match_label(variant_half, variant_labels)
+            if variant_id is not None:
+                links['variant_id'] = variant_id
+            if patient_id is not None and variant_id is not None:
+                occurrence = (
+                    session.query(PatientVariantOccurrenceDB.id)
+                    .filter(
+                        PatientVariantOccurrenceDB.paper_id == paper_id,
+                        PatientVariantOccurrenceDB.patient_id == patient_id,
+                        PatientVariantOccurrenceDB.variant_id == variant_id,
+                    )
+                    .first()
+                )
+                if occurrence is not None:
+                    links['occurrence_id'] = occurrence[0]
+            return links
 
         replace_flags(
             session,
@@ -1589,6 +1633,43 @@ async def handle_compound_het_evaluation(task_id: int) -> None:
     log_run_metrics('COMPOUND_HET_EVALUATION', result)
 
     with session_scope() as session:
+        het_rows = (
+            session.query(PatientVariantOccurrenceDB)
+            .filter(
+                PatientVariantOccurrenceDB.paper_id == paper_id,
+                PatientVariantOccurrenceDB.patient_id == patient_id,
+            )
+            .all()
+        )
+        variant_labels = [
+            (
+                row.variant.variant_evidence.get('value')
+                if isinstance(row.variant.variant_evidence, dict)
+                else None,
+                row.variant_id,
+            )
+            for row in het_rows
+        ]
+        occurrence_by_variant = {row.variant_id: row.id for row in het_rows}
+
+        def resolve_het_variant(about: str) -> dict[str, int]:
+            variant_id = match_label(about, variant_labels)
+            if variant_id is None:
+                return {}
+            return {
+                'variant_id': variant_id,
+                'occurrence_id': occurrence_by_variant[variant_id],
+            }
+
+        replace_flags(
+            session,
+            paper_id=paper_id,
+            source=TaskType.COMPOUND_HET_EVALUATION.name,
+            flags=flags_of(result.final_output),
+            scope={'patient_id': patient_id},
+            resolve=resolve_het_variant,
+        )
+
         # For each pair in the result, set the pairing and reasoning
         for pair in result.final_output.pairs:
             link_a = (
@@ -1840,6 +1921,21 @@ async def handle_hpo_linking(task_id: int) -> None:
         # no edit history of its own, correctly reporting as agent-derived.
         session.query(HpoDB).filter(HpoDB.phenotype_id == phenotype_id).delete()
         session.add(hpo_to_db(phenotype_id, hpo_result))
+        phenotype_row = session.get(PhenotypeDB, phenotype_id)
+        replace_flags(
+            session,
+            paper_id=task.paper_id,
+            source=TaskType.HPO_LINKING.name,
+            flags=flags_of(hpo_result),
+            scope={
+                'phenotype_id': phenotype_id,
+                **(
+                    {'patient_id': phenotype_row.patient_id}
+                    if phenotype_row is not None
+                    else {}
+                ),
+            },
+        )
 
     # A no-match is left out so one failed walk is not replayed onto every
     # later phenotype sharing the concept.
@@ -1978,6 +2074,17 @@ async def handle_mondo_linking(task_id: int) -> None:
         task = session.get(TaskDB, task_id)
         if not task:
             return
+
+        mondo_scope: dict[str, int] = {}
+        if target.patient_variant_occurrence_id is not None:
+            mondo_scope['occurrence_id'] = target.patient_variant_occurrence_id
+        replace_flags(
+            session,
+            paper_id=target.paper_id,
+            source=task.type.name,
+            flags=flags_of(result.final_output),
+            scope=mondo_scope,
+        )
 
         if target.scope is MondoDiseaseScope.PAPER:
             paper = session.get(PaperDB, target.paper_id)

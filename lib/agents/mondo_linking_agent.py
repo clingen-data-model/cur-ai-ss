@@ -3,6 +3,7 @@
 from agents import Agent, function_tool
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
+from lib.agents.core_extraction_rules import FLAG_RULES
 from lib.agents.hpo_linking_agent import (
     get_hpo_children,
     get_hpo_parents,
@@ -11,6 +12,7 @@ from lib.agents.hpo_linking_agent import (
 )
 from lib.agents.model_factory import decision_model_settings, extraction_model
 from lib.models.evidence_block import ReasoningBlock
+from lib.models.flag import FlaggedReasoningBlock
 from lib.models.mondo import MondoAgentDecision
 from lib.reference_data import mondo
 
@@ -225,12 +227,26 @@ role "primary" and a MONDO mapping matching the top-level selected MONDO term.
 When match_type is "component_only", top-level mondo_id and term must be null.
 """
 
+MONDO_LINKING_AGENT_INSTRUCTIONS = (
+    MONDO_LINKING_AGENT_INSTRUCTIONS
+    + '\n\n'
+    + FLAG_RULES
+    + """
+FLAGS for this task: disease text that fits two MONDO terms about equally, a
+term chosen that is broader than the paper's phrase, a phrase naming a
+phenotype or a gene rather than a disease, an inheritance mode in the text
+that the chosen term contradicts. "about" is the disease text you were
+given, or null. The output is the decision block with a "flags" list beside
+it.
+"""
+)
+
 agent = Agent(
     name='mondo_linker',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
     model_settings=decision_model_settings(),
-    output_type=ReasoningBlock[MondoAgentDecision],
+    output_type=FlaggedReasoningBlock[MondoAgentDecision],
     tools=[
         get_mondo_term,
         search_mondo_terms,

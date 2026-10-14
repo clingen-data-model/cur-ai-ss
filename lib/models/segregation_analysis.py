@@ -10,7 +10,7 @@ from sqlalchemy.types import JSON, Float
 from lib.models.base import Base, PatchModel
 from lib.models.datetimes import UtcDatetime
 from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock, ReasoningBlock
-from lib.models.flag import ExtractionFlag
+from lib.models.flag import ExtractionFlag, ReasoningFlag
 from lib.models.user import UserSummaryResp
 
 if TYPE_CHECKING:
@@ -160,6 +160,7 @@ class SegregationAnalysisComputedNestedResp(BaseModel):
     affected_count: ReasoningBlock[int]
     unaffected_count: ReasoningBlock[int]
     computed_lod_score: ReasoningBlock[float]
+    flags: List[ReasoningFlag] = Field(default_factory=list)
     points_assigned: ReasoningBlock[float]
     meets_minimum_criteria: ReasoningBlock[bool]
 

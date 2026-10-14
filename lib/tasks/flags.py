@@ -7,12 +7,12 @@ module is that, parameterised by the scope and the resolver, so each handler
 contributes only the lookup it alone knows how to do.
 """
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from typing import Any
 
 from sqlalchemy.orm import Session
 
-from lib.models.flag import LINK_COLUMNS, ExtractionFlag, FlagDB
+from lib.models.flag import LINK_COLUMNS, AnyFlag, FlagDB
 
 # ``about`` -> the link columns it names, e.g. {'patient_id': 12}. Empty when
 # nothing matches; the flag is still stored, just unlinked.
@@ -36,12 +36,27 @@ def match_label(about: str, labels: Iterable[tuple[str | None, int]]) -> int | N
     return None
 
 
+def flags_of(output: Any) -> list[AnyFlag]:
+    """The flags list of an agent output, or none: a fallback block built by
+    a handler when the agent gave up, or an output from before flags
+    existed, has no such attribute."""
+    return list(getattr(output, 'flags', None) or [])
+
+
+def split_pair(about: str) -> tuple[str, str] | None:
+    """An ``about`` naming a patient-variant pair as "patient / variant"."""
+    if ' / ' not in about:
+        return None
+    left, _, right = about.partition(' / ')
+    return (left.strip(), right.strip()) if left.strip() and right.strip() else None
+
+
 def replace_flags(
     session: Session,
     *,
     paper_id: int,
     source: str,
-    flags: list[ExtractionFlag],
+    flags: Sequence[AnyFlag],
     scope: dict[str, int] | None = None,
     resolve: Resolver | None = None,
 ) -> list[FlagDB]:
