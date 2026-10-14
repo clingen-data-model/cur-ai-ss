@@ -967,6 +967,9 @@ def _paper_summaries(
         PatientVariantOccurrenceDB.paper_id,
         PatientVariantOccurrenceDB.id,
     )
+    open_flag_counts = _count_by_paper(
+        session, FlagDB.paper_id, FlagDB.id, where=FlagDB.resolved_at.is_(None)
+    )
 
     task_statuses: dict[int, list[TaskStatus]] = defaultdict(list)
     for paper_id, task_status in session.query(TaskDB.paper_id, TaskDB.status):
@@ -1017,6 +1020,7 @@ def _paper_summaries(
             proband_count=proband_counts.get(paper.id, 0),
             variant_count=variant_counts.get(paper.id, 0),
             patient_variant_occurrences_count=occurrence_counts.get(paper.id, 0),
+            open_flag_count=open_flag_counts.get(paper.id, 0),
         )
         for paper in query.all()
     ]

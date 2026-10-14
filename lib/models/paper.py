@@ -456,6 +456,9 @@ class PaperSummaryResp(BaseModel):
     proband_count: int = 0
     variant_count: int = 0
     patient_variant_occurrences_count: int = 0
+    # Curator flags nobody has resolved yet (lib/models/flag.py): a paper with
+    # any is not reviewed, whatever its review_status says.
+    open_flag_count: int = 0
 
     @computed_field  # type: ignore[misc]
     @property

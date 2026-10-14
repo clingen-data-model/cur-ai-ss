@@ -13,6 +13,8 @@ import { deleteVariantPapersPaperIdVariantsVariantIdDelete } from '@/api/generat
 import { DataTable } from '@/components/ui/data-table'
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
 import { ManuallyCreatedIndicator } from '@/components/ManuallyCreatedIndicator'
+import { FlagIndicator } from '@/components/FlagIndicator'
+import type { FlagIndex } from '@/hooks/usePaperFlags'
 import { VariantDetailPanel } from '@/components/VariantDetailPanel'
 import { PipelineGate } from '@/components/PipelineGate'
 import { AddVariantDialog } from '@/components/AddVariantDialog'
@@ -24,10 +26,12 @@ export function UnassociatedVariantsTab({
   paperId,
   variants,
   tasks,
+  flags,
 }: {
   paperId: number
   variants: VariantResp[]
   tasks: TaskResp[]
+  flags: FlagIndex
 }) {
   const queryClient = useQueryClient()
 
@@ -62,6 +66,15 @@ export function UnassociatedVariantsTab({
               },
             ]}
           />
+        ),
+      },
+      {
+        id: 'flags',
+        header: '',
+        size: 28,
+        enableSorting: false,
+        cell: ({ row }) => (
+          <FlagIndicator paperId={paperId} flags={flags.byVariant.get(row.original.id) ?? []} />
         ),
       },
       { id: 'variant', header: 'Variant', accessorFn: (row) => row.variant_description },
@@ -100,7 +113,7 @@ export function UnassociatedVariantsTab({
         ),
       },
     ],
-    [paperId, deleteMutation],
+    [paperId, deleteMutation, flags],
   )
 
   return (

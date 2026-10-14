@@ -12,6 +12,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { FileText } from 'lucide-react'
 import { usePaperOccurrences } from '@/hooks/usePaperOccurrences'
+import { usePaperFlags } from '@/hooks/usePaperFlags'
+import type { FlagIndex } from '@/hooks/usePaperFlags'
+import { FlagIndicator } from '@/components/FlagIndicator'
+import { FlagsTab } from '@/components/FlagsTab'
 import type { OccurrenceRow } from '@/hooks/usePaperOccurrences'
 import { deleteOccurrencePapersPaperIdOccurrencesOccurrenceIdDelete } from '@/api/generated'
 import { DataTable } from '@/components/ui/data-table'
@@ -86,7 +90,26 @@ function VariantLabel({ description, hgvsP }: { description: string; hgvsP: stri
   )
 }
 
-function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRow[] }) {
+/** Every flag that touches an occurrence row: the occurrence's own, plus
+ * the patient's and the variant's, since this tab is where both are read. */
+function rowFlags(flags: FlagIndex, row: OccurrenceRow) {
+  const seen = new Set<number>()
+  return [
+    ...(flags.byOccurrence.get(row.occurrence.id) ?? []),
+    ...(flags.byPatient.get(row.patient.id) ?? []),
+    ...(flags.byVariant.get(row.variant.id) ?? []),
+  ].filter((flag) => !seen.has(flag.id) && seen.add(flag.id))
+}
+
+function OccurrencesTab({
+  paperId,
+  rows,
+  flags,
+}: {
+  paperId: number
+  rows: OccurrenceRow[]
+  flags: FlagIndex
+}) {
   const queryClient = useQueryClient()
   const [expandedCell, setExpandedCell] = useState<{ rowId: string; view: ExpandedView } | null>(null)
 
@@ -140,6 +163,13 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
             ]}
           />
         ),
+      },
+      {
+        id: 'flags',
+        header: '',
+        size: 28,
+        enableSorting: false,
+        cell: ({ row }) => <FlagIndicator paperId={paperId} flags={rowFlags(flags, row.original)} />,
       },
       {
         id: 'expander',
@@ -293,7 +323,7 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
     })
 
     return cols
-  }, [rows, hasPairedVariants, paperId, expandedCell?.rowId, deleteMutation])
+  }, [rows, hasPairedVariants, paperId, expandedCell?.rowId, deleteMutation, flags])
 
   if (rows.length === 0) {
     return (
@@ -314,7 +344,11 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
         getRowCanExpand={() => true}
         expandOnRowClick={false}
         getRowClassName={(row) =>
-          isManuallyCreatedRow(row) ? 'bg-orange-50/60 dark:bg-orange-950/20' : undefined
+          isManuallyCreatedRow(row)
+            ? 'bg-orange-50/60 dark:bg-orange-950/20'
+            : rowFlags(flags, row).some((flag) => flag.resolved_at == null)
+              ? 'bg-violet-50/60 dark:bg-violet-950/20'
+              : undefined
         }
         expanded={expanded}
         onExpandedChange={() => {}}
@@ -333,8 +367,18 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
 export function ExtractionPage() {
   const params = useParams({ from: '/papers/$paperId/extraction' })
   const paperId = parseInt(params.paperId, 10)
-  const { paper, rows, unassociatedPatients, unassociatedVariants, isLoading, isError, error } =
-    usePaperOccurrences(paperId)
+  const {
+    paper,
+    rows,
+    unassociatedPatients,
+    unassociatedVariants,
+    allPatients,
+    allVariants,
+    isLoading,
+    isError,
+    error,
+  } = usePaperOccurrences(paperId)
+  const flags = usePaperFlags(paperId)
   const tasks = paper?.tasks ?? []
   const paperStatus = computeStatus(tasks)
   const [isExporting, setIsExporting] = useState(false)
@@ -444,6 +488,12 @@ export function ExtractionPage() {
                 <span className="ml-1 text-xs text-muted-foreground">({unassociatedVariants.length})</span>
               )}
             </TabsTrigger>
+            <TabsTrigger value="flags">
+              Flags
+              {flags.open.length > 0 && (
+                <span className="ml-1 text-xs text-violet-700 dark:text-violet-400">({flags.open.length})</span>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="pedigree">Pedigree Image &amp; Description</TabsTrigger>
             <TabsTrigger value="paper-metadata">Paper Metadata</TabsTrigger>
           </TabsList>
@@ -454,7 +504,7 @@ export function ExtractionPage() {
               task={TaskType.PATIENT_VARIANT_OCCURRENCES}
               label="Patient/variant linking"
             >
-              <OccurrencesTab paperId={paperId} rows={rows} />
+              <OccurrencesTab paperId={paperId} rows={rows} flags={flags} />
             </PipelineGate>
           </TabsContent>
           <TabsContent value="families" className="pt-3">
@@ -467,6 +517,7 @@ export function ExtractionPage() {
               paperId={paperId}
               patients={unassociatedPatients}
               tasks={tasks}
+              flags={flags}
             />
           </TabsContent>
           <TabsContent value="unassociated-variants" className="pt-3">
@@ -474,7 +525,11 @@ export function ExtractionPage() {
               paperId={paperId}
               variants={unassociatedVariants}
               tasks={tasks}
+              flags={flags}
             />
+          </TabsContent>
+          <TabsContent value="flags" className="pt-3">
+            <FlagsTab paperId={paperId} patients={allPatients} variants={allVariants} />
           </TabsContent>
           <TabsContent value="pedigree" className="pt-3">
             <PedigreeTab paperId={paperId} />

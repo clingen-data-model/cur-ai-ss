@@ -14,6 +14,8 @@ import {
 import type { PhenotypeResp } from '@/api/generated/types.gen'
 import { DataTable } from '@/components/ui/data-table'
 import { EvidencePopover } from '@/components/EvidencePopover'
+import { FlagIndicator } from '@/components/FlagIndicator'
+import { usePaperFlags } from '@/hooks/usePaperFlags'
 import { AddPhenotypeDialog } from '@/components/AddPhenotypeDialog'
 import { RelinkHpoDialog } from '@/components/RelinkHpoDialog'
 import { DeleteIconButton } from '@/components/DeleteIconButton'
@@ -59,6 +61,7 @@ function additionalInfo(phenotype: PhenotypeResp): string {
 
 export function PhenotypesTable({ paperId, patientId }: { paperId: number; patientId: number }) {
   const queryClient = useQueryClient()
+  const flags = usePaperFlags(paperId)
   const phenotypesQuery = useQuery({
     queryKey: ['phenotypes', paperId, patientId],
     queryFn: () =>
@@ -164,6 +167,7 @@ export function PhenotypesTable({ paperId, patientId }: { paperId: number; patie
                 </Badge>
               )}
               <EvidencePopover block={phenotype.concept_evidence} />
+              <FlagIndicator paperId={paperId} flags={flags.byPhenotype.get(phenotype.id) ?? []} />
             </div>
           )
         },
@@ -263,7 +267,7 @@ export function PhenotypesTable({ paperId, patientId }: { paperId: number; patie
         ),
       },
     ],
-    [paperId, copyAllHpoIds, deleteMutation, hpoSkipped],
+    [paperId, copyAllHpoIds, deleteMutation, hpoSkipped, flags],
   )
 
   if (phenotypesQuery.isPending) {

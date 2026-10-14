@@ -15,6 +15,7 @@ import { ReviewStatusCell } from '@/components/ReviewStatusCell'
 import { DeletePaperButton, RerunTaskButton } from '@/components/PaperActions'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import type { PaperSummaryResp } from '@/api/generated/types.gen'
+import { Flag } from 'lucide-react'
 
 /** "3 days ago" from an ISO timestamp; absolute once it stops being useful. */
 function relativeTime(iso: string): string {
@@ -97,6 +98,23 @@ export function PapersTable({ papers }: { papers: PaperSummaryResp[] }) {
       },
       { accessorKey: 'patient_count', header: 'Patients' },
       { accessorKey: 'variant_count', header: 'Variants' },
+      {
+        // Open curator flags: decisions an agent asked a human to look at that
+        // nobody has yet. A paper with any is not reviewed, whatever its
+        // review status says, so it sits next to the counts a reviewer scans.
+        accessorKey: 'open_flag_count',
+        header: 'Flags',
+        cell: ({ getValue }) => {
+          const count = (getValue() as number | undefined) ?? 0
+          if (count === 0) return <span className="text-muted-foreground">—</span>
+          return (
+            <span className="inline-flex items-center gap-1 text-violet-700 dark:text-violet-400">
+              <Flag className="size-3.5" />
+              {count}
+            </span>
+          )
+        },
+      },
       {
         id: 'collaborators',
         header: 'Worked on by',

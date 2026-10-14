@@ -35,6 +35,9 @@ import type {
 } from '@/api/generated/types.gen'
 import { EditableNumberRow, EditableSwitchRow, EditableTextRow, ReadOnlyRow } from '@/components/EditableField'
 import { EvidencePopover } from '@/components/EvidencePopover'
+import { FlagIndicator } from '@/components/FlagIndicator'
+import { usePaperFlags } from '@/hooks/usePaperFlags'
+import type { FlagIndex } from '@/hooks/usePaperFlags'
 import { PatientIdCell } from '@/components/PatientIdCell'
 import { RowExpander } from '@/components/RowExpander'
 import { PatientDetailPanel } from '@/components/PatientDetailPanel'
@@ -61,7 +64,15 @@ function formatNumber(value: number, digits = 2): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(digits)
 }
 
-function FamilyMembers({ paperId, members }: { paperId: number; members: PatientResp[] }) {
+function FamilyMembers({
+  paperId,
+  members,
+  flags,
+}: {
+  paperId: number
+  members: PatientResp[]
+  flags: FlagIndex
+}) {
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const sorted = [...members].sort(
     (a, b) => relationshipRank(a) - relationshipRank(b) || a.identifier.localeCompare(b.identifier, undefined, { numeric: true }),
@@ -70,6 +81,7 @@ function FamilyMembers({ paperId, members }: { paperId: number; members: Patient
     <Table>
       <TableHeader>
         <TableRow>
+          <TableHead className="w-8" />
           <TableHead className="w-8" />
           <TableHead>Patient</TableHead>
           <TableHead>Relationship</TableHead>
@@ -89,6 +101,9 @@ function FamilyMembers({ paperId, members }: { paperId: number; members: Patient
                 <TableCell>
                   <RowExpander expanded={expanded} onToggle={() => setExpandedId(expanded ? null : patient.id)} />
                 </TableCell>
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  <FlagIndicator paperId={paperId} flags={flags.byPatient.get(patient.id) ?? []} />
+                </TableCell>
                 <TableCell className="font-medium">
                   <PatientIdCell
                     paperId={paperId}
@@ -104,7 +119,7 @@ function FamilyMembers({ paperId, members }: { paperId: number; members: Patient
               </TableRow>
               {expanded && (
                 <TableRow>
-                  <TableCell colSpan={5} className="p-0">
+                  <TableCell colSpan={6} className="p-0">
                     <PatientDetailPanel paperId={paperId} patient={patient} />
                   </TableCell>
                 </TableRow>
@@ -236,11 +251,13 @@ function FamilyCard({
   family,
   members,
   seg,
+  flags,
 }: {
   paperId: number
   family: FamilyResp
   members: PatientResp[]
   seg: SegregationAnalysisResp | undefined
+  flags: FlagIndex
 }) {
   const queryClient = useQueryClient()
   const mutation = useMutation({
@@ -282,7 +299,8 @@ function FamilyCard({
             Segregation criteria {criteria.value ? 'met' : 'not met'}
           </Badge>
         )}
-        <span className="ml-auto">
+        <span className="ml-auto flex items-center gap-1">
+          <FlagIndicator paperId={paperId} flags={flags.byFamily.get(family.id) ?? []} />
           <EvidencePopover block={family.identifier_evidence} />
         </span>
       </header>
@@ -304,7 +322,7 @@ function FamilyCard({
         />
       </div>
 
-      <FamilyMembers paperId={paperId} members={members} />
+      <FamilyMembers paperId={paperId} members={members} flags={flags} />
 
       {seg ? (
         <SegregationSection paperId={paperId} family={family} seg={seg} />
@@ -316,6 +334,7 @@ function FamilyCard({
 }
 
 export function FamiliesTab({ paperId }: { paperId: number }) {
+  const flags = usePaperFlags(paperId)
   const familiesQuery = useQuery({
     queryKey: ['families', paperId],
     queryFn: () => getFamiliesPapersPaperIdFamiliesGet({ path: { paper_id: paperId } }),
@@ -387,6 +406,7 @@ export function FamiliesTab({ paperId }: { paperId: number }) {
           family={family}
           members={byFamily.get(family.id) ?? []}
           seg={segByFamily.get(family.id)}
+          flags={flags}
         />
       ))}
       {singles > 0 && (

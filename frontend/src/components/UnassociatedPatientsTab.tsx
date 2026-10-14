@@ -13,6 +13,8 @@ import { deletePatientPapersPaperIdPatientsPatientIdDelete } from '@/api/generat
 import { DataTable } from '@/components/ui/data-table'
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty'
 import { ManuallyCreatedIndicator } from '@/components/ManuallyCreatedIndicator'
+import { FlagIndicator } from '@/components/FlagIndicator'
+import type { FlagIndex } from '@/hooks/usePaperFlags'
 import { PatientIdCell } from '@/components/PatientIdCell'
 import { RowExpander } from '@/components/RowExpander'
 import { PatientDetailPanel } from '@/components/PatientDetailPanel'
@@ -26,10 +28,12 @@ export function UnassociatedPatientsTab({
   paperId,
   patients,
   tasks,
+  flags,
 }: {
   paperId: number
   patients: PatientResp[]
   tasks: TaskResp[]
+  flags: FlagIndex
 }) {
   const queryClient = useQueryClient()
 
@@ -64,6 +68,15 @@ export function UnassociatedPatientsTab({
               },
             ]}
           />
+        ),
+      },
+      {
+        id: 'flags',
+        header: '',
+        size: 28,
+        enableSorting: false,
+        cell: ({ row }) => (
+          <FlagIndicator paperId={paperId} flags={flags.byPatient.get(row.original.id) ?? []} />
         ),
       },
       {
@@ -108,7 +121,7 @@ export function UnassociatedPatientsTab({
         ),
       },
     ],
-    [paperId, deleteMutation],
+    [paperId, deleteMutation, flags],
   )
 
   return (
