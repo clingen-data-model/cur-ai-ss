@@ -75,12 +75,6 @@ class TestingMethod(str, Enum):
     other = 'Other'
 
 
-class CompoundHetConfidence(str, Enum):
-    confirmed = 'confirmed'
-    assumed = 'assumed'
-    uncertain = 'uncertain'
-
-
 # ==============================
 # Pydantic Models (Agent Input/Output)
 # ==============================
@@ -140,9 +134,15 @@ class PatientVariantOccurrenceCreateRequest(BaseModel):
 
 
 class CompoundHetPair(BaseModel):
+    """Two of a patient's heterozygous variants the agent puts in trans.
+    ``reasoning`` is the evidence for the pairing. There is no confidence
+    tier: a pairing the paper does not establish outright is output all the
+    same and flagged (see the agent's instructions), so the curator reads
+    one list of things to check rather than a badge per row."""
+
     variant_id_a: int
     variant_id_b: int
-    confidence: ReasoningBlock[CompoundHetConfidence]
+    reasoning: str
 
 
 class CompoundHetEvaluationOutput(BaseModel):
@@ -202,10 +202,9 @@ class PatientVariantOccurrenceDB(Base):
         ForeignKey('patient_variant_occurrences.id', ondelete='SET NULL'),
         nullable=True,
     )
-    paired_variant_confidence: Mapped[str | None] = mapped_column(String, nullable=True)
-    paired_variant_confidence_reasoning: Mapped[dict | None] = mapped_column(
-        JSON, nullable=True
-    )
+    # ReasoningBlock[bool]: value True (the pair is compound heterozygous)
+    # plus why -- the agent's evidence, or "Manually paired by curator."
+    paired_variant_reasoning: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -297,10 +296,7 @@ class PatientVariantOccurrenceResp(BaseModel):
     mondo: ReasoningBlock[MondoTerm | None]
     mondo_components: list[MondoComponentMapping] = []
     paired_variant_link_id: int | None = None
-    paired_variant_confidence: CompoundHetConfidence | None = None
-    paired_variant_confidence_reasoning: (
-        AttributedReasoningBlock[CompoundHetConfidence] | None
-    ) = None
+    paired_variant_reasoning: AttributedReasoningBlock[bool] | None = None
     updated_at: UtcDatetime
     updated_by_user_id: int | None = None
     updated_by: UserSummaryResp | None = None

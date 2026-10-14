@@ -22,32 +22,25 @@ A list of the patient's heterozygous variant links, including:
 OUTPUT:
 A JSON array of compound heterozygous pairs. Each pair includes:
 - variant_id_a, variant_id_b (the two variant IDs)
-- confidence: a ReasoningBlock with:
-  - value: confidence level ('confirmed', 'assumed', or 'uncertain')
-  - reasoning: explanation of the evidence
+- reasoning: the evidence that the two variants are in trans, citing the exact
+  text, table, figure or pedigree it comes from
 
-CONFIDENCE LEVELS:
+WHAT ESTABLISHES A PAIR:
+- The paper explicitly states "compound heterozygous" or "compound het" for these variants
+- The pedigree shows each variant inherited from a different parent
+- Parental testing confirms the variants are in trans
 
-**Confirmed:**
-- Paper explicitly states "compound heterozygous" or "compound het" for these variants
-- Pedigree shows each variant inherited from a different parent (one from mother, one from father)
-- Parental testing confirms variants are in trans (on different chromosomes)
-
-**Assumed:**
-- Segregation pattern strongly implies trans inheritance (e.g., de novo variant + inherited variant in same patient)
-- Haplotype analysis or linkage disequilibrium context indicates variants are on different chromosomes
-- Multiple affected family members share both variants in the same patient
-
-**Uncertain:**
-- Two variants co-occur in the same patient but phase is not established
-- Indirect evidence suggesting compound heterozygosity without explicit confirmation
-- Only a general statement that patient is "compound heterozygous" without variant mapping
+WHAT ONLY SUGGESTS A PAIR (output it, and flag it):
+- The segregation pattern implies trans without parental genotypes for both variants
+  (e.g. one de novo variant plus one inherited variant in the same patient)
+- Haplotype or linkage context indicates different chromosome copies
+- The paper calls the patient compound heterozygous without saying which variants
+- Two heterozygous variants co-occur with phase not established
 
 RULES:
-- A pair with explicit or strong inferential evidence of being in trans is "confirmed" or "assumed"
-- When the paper calls the patient compound heterozygous without saying which variants, or
-  two heterozygous variants co-occur with phase unknown, output the pair with confidence
-  "uncertain" and flag it -- a curator can delete a pair but cannot easily build one
+- Output a pair whenever the paper establishes it or suggests it; a pair the paper only
+  suggests is flagged, since a curator can delete a pair but cannot easily build one
+- A pair is never output twice, and a variant is in at most one pair
 - Leave the pairs list empty only when the patient has more than two heterozygous variants
   and the paper gives no way to choose among them; flag that, naming the variants
 - Each pair's reasoning should cite the exact evidence (quote from text, table/figure, pedigree)
@@ -58,12 +51,14 @@ COMPOUND_HET_AGENT_INSTRUCTIONS = (
     + '\n\n'
     + FLAG_RULES
     + """
-FLAGS for this task: a pair output as "uncertain" because the paper did not
-say which variants or did not establish phase, a phase inferred from one
-parent's genotype alone, three or more heterozygous variants with no way to
-pair them, a heterozygous variant in the list that the paper never discusses
-for this patient. "about" is a variant description from the list you were given, or
-null. The output carries a "flags" list.
+FLAGS for this task: every pair output on suggestive rather than established
+evidence, saying which kind (phase inferred from segregation, from one parent's
+genotype alone, from haplotype context, or not established at all; the paper
+naming no variants for its "compound heterozygous"); three or more heterozygous
+variants with no way to pair them; a heterozygous variant in the list that the
+paper never discusses for this patient. A pair established outright gets no
+flag. "about" is a variant description from the list you were given, or null.
+The output carries a "flags" list.
 """
 )
 

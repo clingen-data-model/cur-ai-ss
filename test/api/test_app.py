@@ -1907,8 +1907,9 @@ def test_pair_occurrence(
     assert body[occurrence_a.id]['paired_variant_link_id'] == occurrence_b.id
     assert body[occurrence_b.id]['paired_variant_link_id'] == occurrence_a.id
     for row in body.values():
-        assert row['paired_variant_confidence'] == 'confirmed'
-        block = row['paired_variant_confidence_reasoning']
+        block = row['paired_variant_reasoning']
+        assert block['value'] is True
+        assert block['reasoning'] == 'Manually paired by curator.'
         assert block['edited_by_name'] == 'Test User'
         assert block['edited_at'] is not None
     for occurrence in (occurrence_a, occurrence_b):
@@ -1916,7 +1917,7 @@ def test_pair_occurrence(
             db_session.query(EditDB)
             .filter(
                 EditDB.occurrence_id == occurrence.id,
-                EditDB.field_name == 'paired_variant_confidence',
+                EditDB.field_name == 'paired_variant',
             )
             .count()
             == 1
@@ -2008,7 +2009,7 @@ def test_pair_occurrence_clears_stale_partner_symmetrically(
     assert resp.status_code == 200
     body = {row['id']: row for row in resp.json()}
     assert body[occurrence_d.id]['paired_variant_link_id'] is None
-    assert body[occurrence_d.id]['paired_variant_confidence'] is None
+    assert body[occurrence_d.id]['paired_variant_reasoning'] is None
 
     # Re-pair A with C -- B (A's old partner) should come back unpaired.
     resp = client.patch(
@@ -2020,7 +2021,7 @@ def test_pair_occurrence_clears_stale_partner_symmetrically(
     assert body[occurrence_a.id]['paired_variant_link_id'] == occurrence_c.id
     assert body[occurrence_c.id]['paired_variant_link_id'] == occurrence_a.id
     assert body[occurrence_b.id]['paired_variant_link_id'] is None
-    assert body[occurrence_b.id]['paired_variant_confidence'] is None
+    assert body[occurrence_b.id]['paired_variant_reasoning'] is None
 
     # D was never touched by this last call -- confirm it's still unpaired
     # in the DB, not just absent from this response.

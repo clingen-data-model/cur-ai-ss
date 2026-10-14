@@ -205,3 +205,254 @@ def test_edits_attribution_migration_chain(monkeypatch, tmp_path):
         assert names['disease_name'] == 'Ann Author'
         assert names['identifier'] == 'Ann Author'
         assert names['proband_status'] == 'Unknown'  # user_id is NULL
+
+
+_EVIDENCE_COLUMNS = (
+    'transcript_evidence',
+    'protein_accession_evidence',
+    'genomic_accession_evidence',
+    'lrg_accession_evidence',
+    'gene_accession_evidence',
+    'genomic_coordinates_evidence',
+    'genome_build_evidence',
+    'rsid_evidence',
+    'caid_evidence',
+    'hgvs_c_evidence',
+    'hgvs_p_evidence',
+    'hgvs_g_evidence',
+    'variant_type_evidence',
+    'functional_evidence_evidence',
+    'main_focus_evidence',
+)
+
+
+def _insert_variant(connection, paper_id: int, label: str) -> int:
+    columns = ', '.join(_EVIDENCE_COLUMNS)
+    params = ', '.join(f':{c}' for c in _EVIDENCE_COLUMNS)
+    return connection.execute(
+        text(
+            'INSERT INTO variants (paper_id, variant, variant_type, '
+            'functional_evidence, main_focus, variant_evidence, '
+            f'{columns}) '
+            f"VALUES (:paper_id, :label, 'Missense', 0, 0, :variant_evidence, {params}) "
+            'RETURNING id'
+        ),
+        {
+            'paper_id': paper_id,
+            'label': label,
+            'variant_evidence': json.dumps({'value': label, 'reasoning': 'x'}),
+            **{
+                c: json.dumps({'value': None, 'reasoning': 'x'})
+                for c in _EVIDENCE_COLUMNS
+            },
+        },
+    ).scalar_one()
+
+
+def _insert_occurrence(
+    connection,
+    paper_id: int,
+    patient_id: int,
+    variant_id: int,
+    confidence: str | None = None,
+) -> int:
+    reasoning = (
+        json.dumps({'value': confidence, 'reasoning': f'{confidence} because'})
+        if confidence
+        else None
+    )
+    return connection.execute(
+        text(
+            'INSERT INTO patient_variant_occurrences (paper_id, patient_id, '
+            'variant_id, zygosity, inheritance, de_novo, testing_methods, '
+            'zygosity_evidence, inheritance_evidence, de_novo_evidence, '
+            'testing_methods_evidence, paired_variant_confidence, '
+            'paired_variant_confidence_reasoning) '
+            "VALUES (:paper_id, :patient_id, :variant_id, 'Heterozygous', "
+            "'Unknown', 0, '[]', :ev, :ev, :ev, '[]', :confidence, :reasoning) "
+            'RETURNING id'
+        ),
+        {
+            'paper_id': paper_id,
+            'patient_id': patient_id,
+            'variant_id': variant_id,
+            'ev': json.dumps({'value': 'Heterozygous', 'reasoning': 'x'}),
+            'confidence': confidence,
+            'reasoning': reasoning,
+        },
+    ).scalar_one()
+
+
+def test_compound_het_confidence_becomes_a_flag(monkeypatch, tmp_path):
+    """d7b2e4c19f05 turns each assumed/uncertain pair into one open flag on
+    its lower-id half, rewrites every pair's reasoning to a bool block,
+    renames the manual-pairing edit history, and drops/renames the columns
+    -- without CASCADE-deleting the flags that already point at
+    occurrences, and landing alembic_version so a second upgrade is a
+    no-op."""
+
+    monkeypatch.setattr(db.env, 'CAA_ROOT', str(tmp_path))
+    monkeypatch.setattr(db.env, 'SQLLITE_DIR', '')
+    monkeypatch.setattr(db, '_engine', None)
+    monkeypatch.setattr(db, '_session_factory', None)
+
+    repo_root = Path(__file__).resolve().parents[2]
+    cfg = Config(str(repo_root / 'alembic.ini'))
+    command.upgrade(cfg, 'c4e1f7a92b63')
+
+    engine = db.get_engine()
+    with engine.begin() as connection:
+        connection.execute(text('PRAGMA foreign_keys = ON'))
+        user_id = connection.execute(
+            text(
+                'INSERT INTO users (email, hashed_password, first_name, last_name) '
+                "VALUES ('a@example.com', 'x', 'Ann', 'Author') RETURNING id"
+            )
+        ).scalar_one()
+        gene_id = connection.execute(
+            text("INSERT INTO genes (symbol) VALUES ('TESTGENE') RETURNING id")
+        ).scalar_one()
+        paper_id = connection.execute(
+            text(
+                'INSERT INTO papers (gene_id, content_hash, filename, paper_types) '
+                "VALUES (:gene_id, 'h', 'f.pdf', '[]') RETURNING id"
+            ),
+            {'gene_id': gene_id},
+        ).scalar_one()
+        family_id = connection.execute(
+            text(
+                'INSERT INTO families '
+                '(paper_id, identifier, identifier_evidence, consanguinity, '
+                'consanguinity_evidence) '
+                "VALUES (:paper_id, 'F1', :id_ev, 0, :con_ev) RETURNING id"
+            ),
+            {
+                'paper_id': paper_id,
+                'id_ev': json.dumps({'value': 'F1', 'reasoning': 'x'}),
+                'con_ev': json.dumps({'value': False, 'reasoning': 'x'}),
+            },
+        ).scalar_one()
+        age_evidence = json.dumps({'value': None, 'reasoning': 'x'})
+        unattributed = json.dumps({'value': 'Unknown', 'reasoning': 'x'})
+        patient_id = connection.execute(
+            text(
+                'INSERT INTO patients '
+                '(paper_id, family_id, identifier, identifier_evidence, proband_status, '
+                'proband_status_evidence, sex, sex_evidence, age_diagnosis_evidence, '
+                'age_report_evidence, age_death_evidence, country_of_origin, '
+                'country_of_origin_evidence, race, race_evidence, ethnicity, '
+                'ethnicity_evidence, affected_status, affected_status_evidence, '
+                'family_assignment_evidence) '
+                "VALUES (:paper_id, :family_id, 'P1', :unattributed, 'Proband', "
+                ":unattributed, 'Male', :unattributed, :age_ev, :age_ev, :age_ev, "
+                "'Unknown', :unattributed, 'Unknown', :unattributed, 'Unknown', "
+                ":unattributed, 'Affected', :unattributed, :unattributed) "
+                'RETURNING id'
+            ),
+            {
+                'paper_id': paper_id,
+                'family_id': family_id,
+                'age_ev': age_evidence,
+                'unattributed': unattributed,
+            },
+        ).scalar_one()
+
+        variants = [
+            _insert_variant(connection, paper_id, label)
+            for label in ('c.1A>G', 'c.2C>T', 'c.3G>A', 'c.4T>C', 'c.5A>C')
+        ]
+        a = _insert_occurrence(connection, paper_id, patient_id, variants[0], 'assumed')
+        b = _insert_occurrence(connection, paper_id, patient_id, variants[1], 'assumed')
+        c = _insert_occurrence(
+            connection, paper_id, patient_id, variants[2], 'confirmed'
+        )
+        d = _insert_occurrence(
+            connection, paper_id, patient_id, variants[3], 'confirmed'
+        )
+        e = _insert_occurrence(connection, paper_id, patient_id, variants[4])
+        for one, other in ((a, b), (b, a), (c, d), (d, c)):
+            connection.execute(
+                text(
+                    'UPDATE patient_variant_occurrences '
+                    'SET paired_variant_link_id = :other WHERE id = :one'
+                ),
+                {'one': one, 'other': other},
+            )
+        connection.execute(
+            text(
+                'INSERT INTO flags (paper_id, patient_id, occurrence_id, source, '
+                'subject, evidence) VALUES (:paper_id, :patient_id, :occurrence_id, '
+                "'PATIENT_VARIANT_OCCURRENCES', 'older flag', :evidence)"
+            ),
+            {
+                'paper_id': paper_id,
+                'patient_id': patient_id,
+                'occurrence_id': e,
+                'evidence': json.dumps({'value': 'older flag', 'reasoning': 'x'}),
+            },
+        )
+        connection.execute(
+            text(
+                'INSERT INTO edits (occurrence_id, field_name, user_id) '
+                "VALUES (:occurrence_id, 'paired_variant_confidence', :user_id)"
+            ),
+            {'occurrence_id': c, 'user_id': user_id},
+        )
+
+    command.upgrade(cfg, 'head')
+    command.upgrade(cfg, 'head')  # a clean no-op: alembic_version landed
+
+    with engine.begin() as connection:
+        columns = {
+            row[1]
+            for row in connection.execute(
+                text('PRAGMA table_info(patient_variant_occurrences)')
+            )
+        }
+        assert 'paired_variant_confidence' not in columns
+        assert 'paired_variant_confidence_reasoning' not in columns
+        assert 'paired_variant_reasoning' in columns
+
+        rows = {
+            row[0]: (row[1], json.loads(row[2]) if row[2] else None)
+            for row in connection.execute(
+                text(
+                    'SELECT id, paired_variant_link_id, paired_variant_reasoning '
+                    'FROM patient_variant_occurrences ORDER BY id'
+                )
+            )
+        }
+        # Every row survived the table rebuild, pairings intact.
+        assert set(rows) == {a, b, c, d, e}
+        assert rows[a] == (b, {'value': True, 'reasoning': 'assumed because'})
+        assert rows[c] == (d, {'value': True, 'reasoning': 'confirmed because'})
+        assert rows[e] == (None, None)
+
+        flags = connection.execute(
+            text(
+                'SELECT source, subject, occurrence_id, patient_id, variant_id, '
+                'resolved_at, evidence FROM flags ORDER BY id'
+            )
+        ).fetchall()
+        assert len(flags) == 2
+        assert flags[0][0:3] == ('PATIENT_VARIANT_OCCURRENCES', 'older flag', e)
+        source, subject, occurrence_id, flag_patient, flag_variant, resolved, ev = (
+            flags[1]
+        )
+        assert source == 'COMPOUND_HET_EVALUATION'
+        assert subject == 'Compound het pair taken as assumed: c.1A>G with c.2C>T'
+        assert (occurrence_id, flag_patient, flag_variant) == (
+            a,
+            patient_id,
+            variants[0],
+        )
+        assert resolved is None
+        assert json.loads(ev) == {'value': subject, 'reasoning': 'assumed because'}
+
+        assert (
+            connection.execute(
+                text('SELECT field_name FROM edits WHERE occurrence_id = :id'),
+                {'id': c},
+            ).scalar_one()
+            == 'paired_variant'
+        )

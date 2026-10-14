@@ -32,7 +32,6 @@ import {
   EditableZygosityCell,
   MondoDiseaseCell,
 } from '@/components/OccurrenceEditableCells'
-import { ConfidenceBadge } from '@/components/ConfidenceBadge'
 import { EvidencePopover } from '@/components/EvidencePopover'
 import { ManuallyCreatedIndicator } from '@/components/ManuallyCreatedIndicator'
 import { PairOccurrenceDialog } from '@/components/PairOccurrenceDialog'
@@ -244,10 +243,7 @@ function OccurrencesTab({
                   '—'
                 )}
               </span>
-              {occurrence.paired_variant_confidence && (
-                <ConfidenceBadge confidence={occurrence.paired_variant_confidence} />
-              )}
-              <EvidencePopover block={occurrence.paired_variant_confidence_reasoning} />
+              <EvidencePopover block={occurrence.paired_variant_reasoning} />
             </div>
           )
         },

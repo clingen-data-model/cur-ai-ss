@@ -1400,7 +1400,7 @@ def _attach_edit_history(resp: BaseModel, edits: dict[str, EditDB], row: Base) -
     of an already-built response. A block is matched to its field's history by
     the response field name with any ``_evidence``/``_reasoning`` suffix
     stripped (e.g. ``identifier_evidence`` -> ``identifier``,
-    ``paired_variant_confidence_reasoning`` -> ``paired_variant_confidence``;
+    ``paired_variant_reasoning`` -> ``paired_variant``;
     segregation's fields carry no suffix and match as-is). A list of blocks
     (``testing_methods_evidence``) shares its one field's history. A field
     with no edits row keeps no attribution -- nothing stored is trusted for it.
@@ -2152,9 +2152,8 @@ def update_occurrence(
 
 def _clear_pairing(row: PatientVariantOccurrenceDB) -> None:
     row.paired_variant_link_id = None
-    row.paired_variant_confidence = None
-    row.paired_variant_confidence_reasoning = None
-    flag_modified(row, 'paired_variant_confidence_reasoning')
+    row.paired_variant_reasoning = None
+    flag_modified(row, 'paired_variant_reasoning')
 
 
 @app.patch(
@@ -2178,8 +2177,6 @@ def pair_occurrence(
     generic patch endpoint can't express) but returns every row it touched
     rather than just the primary one, since the client needs to see a former
     partner come back unpaired too."""
-    from lib.models.patient_variant_occurrences import CompoundHetConfidence
-
     occurrence_a = (
         session.query(PatientVariantOccurrenceDB)
         .filter(
@@ -2244,27 +2241,19 @@ def pair_occurrence(
                 _clear_pairing(old_b_partner)
                 affected.append(old_b_partner)
 
-        reasoning_block = ReasoningBlock[CompoundHetConfidence](
-            value=CompoundHetConfidence.confirmed,
+        reasoning_block = ReasoningBlock[bool](
+            value=True,
             reasoning='Manually paired by curator.',
         ).model_dump(mode='json')
 
         for occurrence in (occurrence_a, occurrence_b):
-            record_edit(
-                session,
-                occurrence,
-                'paired_variant_confidence',
-                current_user,
-                old_value=occurrence.paired_variant_confidence,
-            )
+            record_edit(session, occurrence, 'paired_variant', current_user)
         occurrence_a.paired_variant_link_id = occurrence_b.id
         occurrence_b.paired_variant_link_id = occurrence_a.id
-        occurrence_a.paired_variant_confidence = CompoundHetConfidence.confirmed.value
-        occurrence_b.paired_variant_confidence = CompoundHetConfidence.confirmed.value
-        occurrence_a.paired_variant_confidence_reasoning = reasoning_block
-        occurrence_b.paired_variant_confidence_reasoning = reasoning_block
-        flag_modified(occurrence_a, 'paired_variant_confidence_reasoning')
-        flag_modified(occurrence_b, 'paired_variant_confidence_reasoning')
+        occurrence_a.paired_variant_reasoning = reasoning_block
+        occurrence_b.paired_variant_reasoning = reasoning_block
+        flag_modified(occurrence_a, 'paired_variant_reasoning')
+        flag_modified(occurrence_b, 'paired_variant_reasoning')
         affected.append(occurrence_b)
 
     for row in affected:
@@ -2300,7 +2289,6 @@ def _patient_variant_occurrence_to_resp(
     """Convert PatientVariantOccurrenceDB to PatientVariantOccurrenceResp."""
     from lib.models import Inheritance, TestingMethod, Zygosity
     from lib.models.evidence_block import ReasoningBlock
-    from lib.models.patient_variant_occurrences import CompoundHetConfidence
 
     resp = PatientVariantOccurrenceResp(
         id=row.id,
@@ -2335,14 +2323,10 @@ def _patient_variant_occurrence_to_resp(
         ),
         mondo_components=_mondo_components(row.mondo_match_context),
         paired_variant_link_id=row.paired_variant_link_id,
-        paired_variant_confidence=CompoundHetConfidence(row.paired_variant_confidence)
-        if row.paired_variant_confidence
-        else None,
-        paired_variant_confidence_reasoning=_from_storage(
-            AttributedReasoningBlock[CompoundHetConfidence],
-            row.paired_variant_confidence_reasoning,
+        paired_variant_reasoning=_from_storage(
+            AttributedReasoningBlock[bool], row.paired_variant_reasoning
         )
-        if row.paired_variant_confidence_reasoning
+        if row.paired_variant_reasoning
         else None,
         updated_at=row.updated_at,
         updated_by_user_id=row.updated_by_user_id,

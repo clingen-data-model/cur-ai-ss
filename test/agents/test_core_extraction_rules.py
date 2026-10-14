@@ -288,3 +288,10 @@ def test_patient_prompt_flag_examples_cover_the_three_kinds_of_decision():
     assert 'A proband chosen where the paper marks none' in prompt
     assert 'A standing changed by a rule here' in prompt
     assert 'has a flag\n  in "flags"; nothing routine does.' in prompt
+
+
+def test_compound_het_prompt_flags_suggested_pairs_instead_of_grading_them():
+    prompt = COMPOUND_HET_AGENT_INSTRUCTIONS
+    assert 'confidence' not in prompt.lower()
+    assert 'WHAT ONLY SUGGESTS A PAIR (output it, and flag it)' in prompt
+    assert 'A pair established outright gets no\nflag.' in prompt
