@@ -431,14 +431,22 @@ def test_compound_het_confidence_becomes_a_flag(monkeypatch, tmp_path):
         flags = connection.execute(
             text(
                 'SELECT source, subject, occurrence_id, patient_id, variant_id, '
-                'resolved_at, evidence FROM flags ORDER BY id'
+                'resolved_at, evidence, paired_occurrence_id FROM flags ORDER BY id'
             )
         ).fetchall()
         assert len(flags) == 2
         assert flags[0][0:3] == ('PATIENT_VARIANT_OCCURRENCES', 'older flag', e)
-        source, subject, occurrence_id, flag_patient, flag_variant, resolved, ev = (
-            flags[1]
-        )
+        (
+            source,
+            subject,
+            occurrence_id,
+            flag_patient,
+            flag_variant,
+            resolved,
+            ev,
+            paired,
+        ) = flags[1]
+        assert paired == b
         assert source == 'COMPOUND_HET_EVALUATION'
         assert subject == 'Compound het pair taken as assumed: c.1A>G with c.2C>T'
         assert (occurrence_id, flag_patient, flag_variant) == (

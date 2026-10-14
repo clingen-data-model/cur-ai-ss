@@ -57,8 +57,9 @@ genotype alone, from haplotype context, or not established at all; the paper
 naming no variants for its "compound heterozygous"); three or more heterozygous
 variants with no way to pair them; a heterozygous variant in the list that the
 paper never discusses for this patient. A pair established outright gets no
-flag. "about" is a variant description from the list you were given, or null.
-The output carries a "flags" list.
+flag. "about" is a variant description from the list you were given, the two
+of a pair written as "first / second", or null. The output carries a "flags"
+list.
 """
 )
 

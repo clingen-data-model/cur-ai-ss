@@ -167,7 +167,7 @@ from lib.models.evidence_block import (
     EvidenceBlock,
     ReasoningBlock,
 )
-from lib.models.flag import FlagDB, FlagResolveRequest, FlagResp
+from lib.models.flag import FlagDB, FlagRerunRequest, FlagResolveRequest, FlagResp
 from lib.models.mondo import MondoComponentMapping, MondoTerm
 from lib.models.patient import (
     AffectedStatus,
@@ -1179,13 +1179,11 @@ def list_tasks(
     return tasks
 
 
-@app.post('/papers/{paper_id}/tasks', response_model=list[TaskResp])
-def create_task(
-    paper_id: int,
-    request: TaskCreateRequest,
-    session: Session = Depends(get_session),
-    current_user: UserDB = Depends(get_current_user),
-) -> Any:
+def _prepare_rerun(
+    session: Session, paper_id: int, task_type: TaskType, skip_successors: bool
+) -> None:
+    """Everything that must happen before a user-triggered re-run of
+    ``task_type`` is queued, shared by the task and flag endpoints."""
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
         raise HTTPException(
@@ -1204,7 +1202,7 @@ def create_task(
     # Fires regardless of skip_successors -- even a single scoped rerun
     # deletes and recreates rows for that scope.
     write_snapshot_safe(
-        session, paper_id, description=f'Before re-running {request.type.value}'
+        session, paper_id, description=f'Before re-running {task_type.value}'
     )
 
     # Clear the previous run's downstream rows first. Their COMPLETED status is
@@ -1212,8 +1210,18 @@ def create_task(
     # start against state this re-run is about to replace -- see
     # invalidate_descendants. Skipped when the caller asked for this task alone,
     # since nothing downstream will run.
-    if not request.skip_successors:
-        invalidate_descendants(session, paper_id, request.type)
+    if not skip_successors:
+        invalidate_descendants(session, paper_id, task_type)
+
+
+@app.post('/papers/{paper_id}/tasks', response_model=list[TaskResp])
+def create_task(
+    paper_id: int,
+    request: TaskCreateRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    _prepare_rerun(session, paper_id, request.type, request.skip_successors)
 
     if (
         request.family_id is None
@@ -2713,6 +2721,7 @@ def _flag_resp(flag: FlagDB) -> FlagResp:
         variant_id=flag.variant_id,
         phenotype_id=flag.phenotype_id,
         occurrence_id=flag.occurrence_id,
+        paired_occurrence_id=flag.paired_occurrence_id,
         resolved_by_user_id=flag.resolved_by_user_id,
         resolved_by=_user_summary(flag.resolved_by),
         resolved_at=flag.resolved_at,
@@ -2772,6 +2781,71 @@ def resolve_flag(
     flag.resolution_note = request.note
     session.flush()
     return _flag_resp(flag)
+
+
+# A task's scope column -> the flag column that holds the same id.
+_FLAG_COLUMN_FOR_SCOPE = {'patient_variant_occurrence_id': 'occurrence_id'}
+
+
+@app.post('/papers/{paper_id}/flags/{flag_id}/rerun', response_model=TaskResp)
+def rerun_flag(
+    paper_id: int,
+    flag_id: int,
+    request: FlagRerunRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """Queue the agent that raised the flag again, for the row it ran on,
+    with the curator's note as its follow-up context (see FlagRerunRequest).
+    The scope comes from the task type, not from every row the flag links:
+    a patient-extraction flag about one patient still re-runs the whole
+    paper, since that is the only way that agent runs."""
+    flag = (
+        session.query(FlagDB)
+        .filter(FlagDB.id == flag_id, FlagDB.paper_id == paper_id)
+        .one_or_none()
+    )
+    if flag is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Flag not found'
+        )
+    try:
+        task_type = TaskType[flag.source]
+    except KeyError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f'Flag was raised by an unknown agent ({flag.source})',
+        )
+
+    scope: dict[str, int] = {}
+    scope_column = task_type.scope_column
+    if scope_column is not None:
+        flag_column = _FLAG_COLUMN_FOR_SCOPE.get(scope_column, scope_column)
+        scope_id = getattr(flag, flag_column)
+        if scope_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f'{task_type.value} runs per {flag_column.removesuffix("_id")}, '
+                    'and this flag is not linked to one'
+                ),
+            )
+        scope[scope_column] = scope_id
+
+    context = f'A curator reviewed your flag "{flag.subject}".'
+    if request.note:
+        context += f' Their note: {request.note.strip()}'
+
+    _prepare_rerun(session, paper_id, task_type, request.skip_successors)
+    return enqueue_task(
+        session,
+        paper_id=paper_id,
+        task_type=task_type,
+        skip_successors=request.skip_successors,
+        additional_context=context,
+        updated_by_user_id=current_user.id,
+        **scope,
+    )
 
 
 @app.get(

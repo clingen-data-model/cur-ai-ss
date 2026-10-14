@@ -7,7 +7,7 @@
 import { useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { useQuery } from '@tanstack/react-query'
-import { Flag } from 'lucide-react'
+import { Flag, RefreshCw } from 'lucide-react'
 import { getFamiliesPapersPaperIdFamiliesGet } from '@/api/generated'
 import type { FlagResp, PatientResp, VariantResp } from '@/api/generated/types.gen'
 import { DataTable } from '@/components/ui/data-table'
@@ -17,7 +17,9 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/
 import { Spinner } from '@/components/ui/spinner'
 import { EvidencePopover } from '@/components/EvidencePopover'
 import { ResolveFlagDialog } from '@/components/ResolveFlagDialog'
-import { usePaperFlags, useResolveFlag } from '@/hooks/usePaperFlags'
+import { RerunFromFlagDialog } from '@/components/RerunFromFlagDialog'
+import { usePaperFlags, useRerunFromFlag, useResolveFlag } from '@/hooks/usePaperFlags'
+import type { OccurrenceRow } from '@/hooks/usePaperOccurrences'
 import { flagSourceLabel, sortFlags } from '@/lib/flags'
 
 const STALE_TIME = 5 * 60 * 1000
@@ -28,15 +30,19 @@ export function FlagsTab({
   paperId,
   patients,
   variants,
+  rows: occurrenceRows,
 }: {
   paperId: number
   patients: PatientResp[]
   variants: VariantResp[]
+  rows: OccurrenceRow[]
 }) {
   const flags = usePaperFlags(paperId)
   const resolve = useResolveFlag(paperId)
+  const rerun = useRerunFromFlag(paperId)
   const [filter, setFilter] = useState<Filter>('open')
   const [resolving, setResolving] = useState<FlagResp | null>(null)
+  const [rerunning, setRerunning] = useState<FlagResp | null>(null)
 
   // Families are not part of the page's shared queries; one small request
   // so a family-level flag can be named rather than numbered.
@@ -48,20 +54,31 @@ export function FlagsTab({
 
   const patientsById = useMemo(() => new Map(patients.map((p) => [p.id, p.identifier])), [patients])
   const variantsById = useMemo(() => new Map(variants.map((v) => [v.id, v.variant_description])), [variants])
+  const variantByOccurrence = useMemo(
+    () => new Map(occurrenceRows.map((r) => [r.occurrence.id, r.variant.variant_description])),
+    [occurrenceRows],
+  )
   const familiesById = useMemo(
     () => new Map((familiesQuery.data ?? []).map((f) => [f.id, f.identifier])),
     [familiesQuery.data],
   )
 
   /** What the flag is about, from the rows it links: "Patient 3 · c.123A>G"
-   * for an occurrence, "Family 2" for a family, nothing for a flag about
-   * something not extracted. A phenotype is named by its patient; the
-   * concept is in the subject already. */
+   * for an occurrence, "Patient 3 · c.123A>G + c.456G>T" for a compound-het
+   * pair, "Family 2" for a family, nothing for a flag about something not
+   * extracted. A phenotype is named by its patient; the concept is in the
+   * subject already. */
   const aboutLabel = (flag: FlagResp): string => {
+    const variant =
+      flag.variant_id != null ? (variantsById.get(flag.variant_id) ?? `Variant #${flag.variant_id}`) : null
+    const partner =
+      flag.paired_occurrence_id != null
+        ? (variantByOccurrence.get(flag.paired_occurrence_id) ?? `Occurrence #${flag.paired_occurrence_id}`)
+        : null
     const parts = [
       flag.family_id != null && (familiesById.get(flag.family_id) ?? `Family #${flag.family_id}`),
       flag.patient_id != null && (patientsById.get(flag.patient_id) ?? `Patient #${flag.patient_id}`),
-      flag.variant_id != null && (variantsById.get(flag.variant_id) ?? `Variant #${flag.variant_id}`),
+      variant && partner ? `${variant} + ${partner}` : variant,
     ].filter((p): p is string => typeof p === 'string')
     return parts.join(' · ')
   }
@@ -130,9 +147,14 @@ export function FlagsTab({
           const flag = row.original
           if (flag.resolved_at == null) {
             return (
-              <Button size="sm" variant="outline" onClick={() => setResolving(flag)}>
-                Resolve
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button size="sm" variant="outline" onClick={() => setResolving(flag)}>
+                  Resolve
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setRerunning(flag)} title="Re-run the agent">
+                  <RefreshCw className="size-3.5" />
+                </Button>
+              </div>
             )
           }
           return (
@@ -150,7 +172,7 @@ export function FlagsTab({
     // aboutLabel reads the three id->label maps; listing them keeps the
     // column fresh when a rename or a late families response lands.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [patientsById, variantsById, familiesById],
+    [patientsById, variantsById, familiesById, variantByOccurrence],
   )
 
   if (flags.isLoading) {
@@ -216,6 +238,19 @@ export function FlagsTab({
         onConfirm={(note) => {
           if (!resolving) return
           resolve.mutate({ flagId: resolving.id, note }, { onSuccess: () => setResolving(null) })
+        }}
+      />
+      <RerunFromFlagDialog
+        paperId={paperId}
+        flag={rerunning}
+        open={rerunning !== null}
+        onOpenChange={(open) => {
+          if (!open) setRerunning(null)
+        }}
+        isPending={rerun.isPending}
+        onConfirm={(note) => {
+          if (!rerunning) return
+          rerun.mutate({ flagId: rerunning.id, note }, { onSuccess: () => setRerunning(null) })
         }}
       />
     </div>

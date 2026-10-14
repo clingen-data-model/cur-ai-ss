@@ -5,12 +5,12 @@
  * resolved, and absent when the row has none.
  *
  * Clicking opens the flags themselves -- agent, subject, reasoning, the
- * citations with "View in PDF", and the resolution or a Resolve button. The
- * "keep" half of review lives here; the "delete" half is the row's own
+ * citations with "View in PDF", and the resolution or Resolve and Re-run
+ * buttons. "Keep" and "ask again" live here; "drop" is the row's own
  * trashcan, since deleting the row takes its flags with it.
  */
 import { useState } from 'react'
-import { FileSearch, Flag } from 'lucide-react'
+import { FileSearch, Flag, RefreshCw } from 'lucide-react'
 import type { FlagResp } from '@/api/generated/types.gen'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -18,7 +18,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { usePdfHighlight } from '@/components/PdfHighlightProvider'
 import { ResolveFlagDialog } from '@/components/ResolveFlagDialog'
-import { useResolveFlag } from '@/hooks/usePaperFlags'
+import { RerunFromFlagDialog } from '@/components/RerunFromFlagDialog'
+import { useRerunFromFlag, useResolveFlag } from '@/hooks/usePaperFlags'
 import { describeAnchor, isSupplementAnchor } from '@/lib/anchors'
 import { flagSourceLabel, sortFlags } from '@/lib/flags'
 
@@ -26,8 +27,16 @@ const TRIGGER_CLASSNAME =
   'inline-flex items-center justify-center size-6 rounded hover:bg-muted cursor-pointer transition-colors'
 
 /** One flag, laid out the same way everywhere it is shown (row popover and
- * the Flags tab). `onResolve` is omitted where resolving is not offered. */
-export function FlagCard({ flag, onResolve }: { flag: FlagResp; onResolve?: (flag: FlagResp) => void }) {
+ * the Flags tab). `onResolve` / `onRerun` are omitted where not offered. */
+export function FlagCard({
+  flag,
+  onResolve,
+  onRerun,
+}: {
+  flag: FlagResp
+  onResolve?: (flag: FlagResp) => void
+  onRerun?: (flag: FlagResp) => void
+}) {
   const { openHighlight, anchorPage } = usePdfHighlight()
   const citations = flag.evidence.citations ?? []
   const open = flag.resolved_at == null
@@ -62,6 +71,12 @@ export function FlagCard({ flag, onResolve }: { flag: FlagResp; onResolve?: (fla
               Resolve
             </Button>
           )}
+          {onRerun && (
+            <Button variant="outline" size="sm" onClick={() => onRerun(flag)}>
+              <RefreshCw className="size-3.5 mr-1.5" />
+              Re-run
+            </Button>
+          )}
           {citations.length > 0 && (
             <Button variant="outline" size="sm" onClick={() => openHighlight({ citations })}>
               <FileSearch className="size-3.5 mr-1.5" />
@@ -84,7 +99,9 @@ export function FlagCard({ flag, onResolve }: { flag: FlagResp; onResolve?: (fla
 
 export function FlagIndicator({ paperId, flags }: { paperId: number; flags: FlagResp[] }) {
   const [resolving, setResolving] = useState<FlagResp | null>(null)
+  const [rerunning, setRerunning] = useState<FlagResp | null>(null)
   const resolve = useResolveFlag(paperId)
+  const rerun = useRerunFromFlag(paperId)
 
   if (flags.length === 0) return null
   const sorted = sortFlags(flags)
@@ -113,7 +130,7 @@ export function FlagIndicator({ paperId, flags }: { paperId: number; flags: Flag
         <PopoverContent className="w-96 max-h-[70vh] overflow-y-auto space-y-3" onClick={(e) => e.stopPropagation()}>
           {sorted.map((flag, index) => (
             <div key={flag.id} className={index > 0 ? 'pt-3 border-t' : undefined}>
-              <FlagCard flag={flag} onResolve={setResolving} />
+              <FlagCard flag={flag} onResolve={setResolving} onRerun={setRerunning} />
             </div>
           ))}
         </PopoverContent>
@@ -128,6 +145,19 @@ export function FlagIndicator({ paperId, flags }: { paperId: number; flags: Flag
         onConfirm={(note) => {
           if (!resolving) return
           resolve.mutate({ flagId: resolving.id, note }, { onSuccess: () => setResolving(null) })
+        }}
+      />
+      <RerunFromFlagDialog
+        paperId={paperId}
+        flag={rerunning}
+        open={rerunning !== null}
+        onOpenChange={(open) => {
+          if (!open) setRerunning(null)
+        }}
+        isPending={rerun.isPending}
+        onConfirm={(note) => {
+          if (!rerunning) return
+          rerun.mutate({ flagId: rerunning.id, note }, { onSuccess: () => setRerunning(null) })
         }}
       />
     </>

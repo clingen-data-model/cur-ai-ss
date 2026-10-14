@@ -3563,3 +3563,106 @@ def test_deleting_a_patient_drops_the_flag_about_them(client, db_session, seeded
     db_session.expire_all()
     rows = client.get(f'/papers/{seeded_paper.id}/flags').json()
     assert [r['subject'] for r in rows] == ['about nobody']
+
+
+def test_rerun_flag_scopes_the_task_to_what_the_agent_runs_on(
+    client, db_session, seeded_paper, test_user
+):
+    """A per-patient agent's flag re-runs that agent for that patient, with
+    the note as follow-up context; a paper-level agent's flag re-runs the
+    whole paper even though the flag names a patient."""
+    patient = _seed_patient(db_session, seeded_paper, identifier='Patient 1')
+    per_patient = _seed_flag(
+        db_session, seeded_paper, subject='pair not phased', patient_id=patient.id
+    )
+    per_patient.source = 'COMPOUND_HET_EVALUATION'
+    paper_wide = _seed_flag(
+        db_session, seeded_paper, subject='chosen as proband', patient_id=patient.id
+    )
+    db_session.flush()
+
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/flags/{per_patient.id}/rerun',
+        json={'note': 'the parents were tested, see table 2'},
+    )
+    assert resp.status_code == 200, resp.text
+    task = resp.json()
+    assert task['type'] == TaskType.COMPOUND_HET_EVALUATION.value
+    assert task['patient_id'] == patient.id
+    assert task['updated_by_user_id'] == test_user.id
+    assert task['additional_context'] == (
+        'A curator reviewed your flag "pair not phased". '
+        'Their note: the parents were tested, see table 2'
+    )
+
+    # The queued task makes the paper busy, which refuses a second rerun
+    # (same guard as POST /tasks); let it finish first.
+    from lib.tasks.models import TaskDB, TaskStatus
+
+    db_session.query(TaskDB).update({'status': TaskStatus.COMPLETED})
+    db_session.flush()
+
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/flags/{paper_wide.id}/rerun',
+        json={'skip_successors': True},
+    )
+    assert resp.status_code == 200, resp.text
+    task = resp.json()
+    assert task['type'] == TaskType.PATIENT_EXTRACTION.value
+    assert task['patient_id'] is None
+    assert task['skip_successors'] is True
+    assert (
+        task['additional_context']
+        == 'A curator reviewed your flag "chosen as proband".'
+    )
+
+
+def test_rerun_flag_refuses_a_scoped_agent_with_no_row_to_run_on(
+    client, db_session, seeded_paper
+):
+    flag = _seed_flag(db_session, seeded_paper, subject='no phenotype matched')
+    flag.source = 'HPO_LINKING'
+    db_session.flush()
+
+    resp = client.post(f'/papers/{seeded_paper.id}/flags/{flag.id}/rerun', json={})
+    assert resp.status_code == 409
+    assert 'per phenotype' in resp.json()['detail']
+
+    resp = client.post(f'/papers/{seeded_paper.id}/flags/{flag.id + 99}/rerun', json={})
+    assert resp.status_code == 404
+
+
+def test_flag_about_a_pair_carries_both_occurrences(
+    client, db_session, seeded_paper, seeded_variant, seeded_unharmonized_variant
+):
+    occurrence_a = _create_patient_variant_occurrence(
+        db_session, seeded_paper, seeded_variant
+    )
+    occurrence_b = _create_patient_variant_occurrence(
+        db_session,
+        seeded_paper,
+        seeded_unharmonized_variant,
+        patient=db_session.get(PatientDB, occurrence_a.patient_id),
+    )
+    flag = _seed_flag(
+        db_session,
+        seeded_paper,
+        subject='phase inferred from one parent',
+        patient_id=occurrence_a.patient_id,
+    )
+    flag.occurrence_id = occurrence_a.id
+    flag.paired_occurrence_id = occurrence_b.id
+    db_session.flush()
+
+    resp = client.get(f'/papers/{seeded_paper.id}/flags')
+    assert resp.status_code == 200
+    [row] = resp.json()
+    assert (row['occurrence_id'], row['paired_occurrence_id']) == (
+        occurrence_a.id,
+        occurrence_b.id,
+    )
+
+    # Deleting either half takes the flag with it.
+    resp = client.delete(f'/papers/{seeded_paper.id}/occurrences/{occurrence_b.id}')
+    assert resp.status_code in (200, 204)
+    assert client.get(f'/papers/{seeded_paper.id}/flags').json() == []

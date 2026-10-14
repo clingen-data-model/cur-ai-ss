@@ -89,6 +89,7 @@ LINK_COLUMNS = (
     'patient_id',
     'variant_id',
     'occurrence_id',
+    'paired_occurrence_id',
     'phenotype_id',
 )
 
@@ -122,6 +123,13 @@ class FlagDB(Base):
         ForeignKey('patient_variant_occurrences.id', ondelete='CASCADE'),
         nullable=True,
     )
+    # The other half when the flag is about a compound-het pair, so it shows
+    # on both rows; ``occurrence_id`` is then the first-named half.
+    paired_occurrence_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey('patient_variant_occurrences.id', ondelete='CASCADE'),
+        nullable=True,
+    )
     # TaskType name of the agent that raised it. A re-run of that agent
     # replaces its own flags (within its own scope -- the patient, for a
     # per-patient task) and leaves every other agent's alone.
@@ -147,7 +155,10 @@ class FlagDB(Base):
     variant: Mapped['VariantDB | None'] = relationship('VariantDB')
     phenotype: Mapped['PhenotypeDB | None'] = relationship('PhenotypeDB')
     occurrence: Mapped['PatientVariantOccurrenceDB | None'] = relationship(
-        'PatientVariantOccurrenceDB'
+        'PatientVariantOccurrenceDB', foreign_keys=[occurrence_id]
+    )
+    paired_occurrence: Mapped['PatientVariantOccurrenceDB | None'] = relationship(
+        'PatientVariantOccurrenceDB', foreign_keys=[paired_occurrence_id]
     )
     resolved_by: Mapped['UserDB | None'] = relationship('UserDB')
 
@@ -173,6 +184,7 @@ class FlagResp(BaseModel):
     variant_id: int | None = None
     phenotype_id: int | None = None
     occurrence_id: int | None = None
+    paired_occurrence_id: int | None = None
     resolved_by_user_id: int | None = None
     resolved_by: UserSummaryResp | None = None
     resolved_at: UtcDatetime | None = None
@@ -187,3 +199,15 @@ class FlagResolveRequest(BaseModel):
     logged in its own right -- so the row needs no history of its own."""
 
     note: str | None = None
+
+
+class FlagRerunRequest(BaseModel):
+    """Re-run the agent that raised a flag, for the row it ran on, with the
+    curator's note as the follow-up context. The task is the same one the
+    scoped rerun buttons queue (see ``/papers/{id}/flags/{flag_id}/rerun``):
+    the agent's session still holds its previous run, so the note reads as a
+    reply to the flag. Its re-run replaces the flag along with the rest of
+    that agent's flags for the scope."""
+
+    note: str | None = None
+    skip_successors: bool = False

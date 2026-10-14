@@ -5,9 +5,9 @@ uncertain, shown as a badge on the occurrence row. The flags table now does
 that job for every agent: a pairing the paper only suggests is output and
 flagged, and the pair itself keeps just its reasoning. This migration
 
-* raises one flag per existing assumed or uncertain pair (linked to the
-  lower-id half, its patient and its variant) so nothing a curator was
-  shown disappears from the review;
+* raises one flag per existing assumed or uncertain pair (linked to both
+  halves, the lower-id one first, plus its patient and variant) so nothing
+  a curator was shown disappears from the review;
 * rewrites every pairing's reasoning block from ``{value: <tier>, ...}`` to
   ``{value: true, ...}`` (ReasoningBlock[bool]: the pair is compound het);
 * renames the edits history for manual pairings from
@@ -88,15 +88,16 @@ def _flag_existing_uncertain_pairs(connection: sa.Connection) -> None:
         connection.execute(
             sa.text(
                 'INSERT INTO flags (paper_id, patient_id, variant_id, '
-                'occurrence_id, source, subject, evidence) '
+                'occurrence_id, paired_occurrence_id, source, subject, evidence) '
                 'VALUES (:paper_id, :patient_id, :variant_id, :occurrence_id, '
-                ':source, :subject, :evidence)'
+                ':paired_occurrence_id, :source, :subject, :evidence)'
             ),
             {
                 'paper_id': row['paper_id'],
                 'patient_id': row['patient_id'],
                 'variant_id': row['variant_id'],
                 'occurrence_id': row['id'],
+                'paired_occurrence_id': partner,
                 'source': _SOURCE,
                 'subject': subject,
                 'evidence': json.dumps({'value': subject, 'reasoning': why}),

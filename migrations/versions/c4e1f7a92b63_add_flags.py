@@ -30,6 +30,7 @@ def upgrade() -> None:
         sa.Column('variant_id', sa.Integer(), nullable=True),
         sa.Column('phenotype_id', sa.Integer(), nullable=True),
         sa.Column('occurrence_id', sa.Integer(), nullable=True),
+        sa.Column('paired_occurrence_id', sa.Integer(), nullable=True),
         sa.Column('source', sa.String(), nullable=False),
         sa.Column('subject', sa.Text(), nullable=False),
         sa.Column('evidence', sa.JSON(), nullable=False),
@@ -51,6 +52,11 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ['occurrence_id'],
+            ['patient_variant_occurrences.id'],
+            ondelete='CASCADE',
+        ),
+        sa.ForeignKeyConstraint(
+            ['paired_occurrence_id'],
             ['patient_variant_occurrences.id'],
             ondelete='CASCADE',
         ),

@@ -24,6 +24,7 @@ from lib.models.flag import (
     ExtractionFlag,
     FlagDB,
     FlaggedReasoningBlock,
+    FlagRerunRequest,
     FlagResolveRequest,
     FlagResp,
     ReasoningFlag,

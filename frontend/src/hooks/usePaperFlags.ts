@@ -10,7 +10,11 @@
 import { useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { listFlagsPapersPaperIdFlagsGet, resolveFlagPapersPaperIdFlagsFlagIdResolvePost } from '@/api/generated'
+import {
+  listFlagsPapersPaperIdFlagsGet,
+  rerunFlagPapersPaperIdFlagsFlagIdRerunPost,
+  resolveFlagPapersPaperIdFlagsFlagIdResolvePost,
+} from '@/api/generated'
 import type { FlagResp } from '@/api/generated/types.gen'
 import { apiErrorMessage } from '@/lib/apiError'
 
@@ -22,12 +26,17 @@ export function isOpen(flag: FlagResp): boolean {
   return flag.resolved_at == null
 }
 
-function groupBy(flags: FlagResp[], key: (flag: FlagResp) => number | null | undefined): Map<number, FlagResp[]> {
+function groupBy(
+  flags: FlagResp[],
+  ...keys: ((flag: FlagResp) => number | null | undefined)[]
+): Map<number, FlagResp[]> {
   const groups = new Map<number, FlagResp[]>()
   for (const flag of flags) {
-    const id = key(flag)
-    if (id == null) continue
-    groups.set(id, [...(groups.get(id) ?? []), flag])
+    for (const key of keys) {
+      const id = key(flag)
+      if (id == null) continue
+      groups.set(id, [...(groups.get(id) ?? []), flag])
+    }
   }
   return groups
 }
@@ -39,6 +48,7 @@ export interface FlagIndex {
   byPatient: Map<number, FlagResp[]>
   byVariant: Map<number, FlagResp[]>
   byPhenotype: Map<number, FlagResp[]>
+  /** Keyed by either half of a compound-het pair, so a pair flag shows on both rows. */
   byOccurrence: Map<number, FlagResp[]>
   /** Flags about nothing extracted: no row to sit on, so only the Flags tab shows them. */
   unlinked: FlagResp[]
@@ -72,14 +82,19 @@ export function usePaperFlags(paperId: number) {
       byPatient: groupBy(all, (f) => f.patient_id),
       byVariant: groupBy(all, (f) => f.variant_id),
       byPhenotype: groupBy(all, (f) => f.phenotype_id),
-      byOccurrence: groupBy(all, (f) => f.occurrence_id),
+      byOccurrence: groupBy(
+        all,
+        (f) => f.occurrence_id,
+        (f) => f.paired_occurrence_id,
+      ),
       unlinked: all.filter(
         (f) =>
           f.family_id == null &&
           f.patient_id == null &&
           f.variant_id == null &&
           f.phenotype_id == null &&
-          f.occurrence_id == null,
+          f.occurrence_id == null &&
+          f.paired_occurrence_id == null,
       ),
     }
   }, [query.data])
@@ -103,5 +118,28 @@ export function useResolveFlag(paperId: number) {
       toast.success('Flag resolved')
     },
     onError: (error) => toast.error(apiErrorMessage(error, 'Failed to resolve flag')),
+  })
+}
+
+/** Queue the agent that raised a flag again, for its row, with a note as the
+ * follow-up context. The server picks the scope from the agent's task type.
+ * The flag goes away when that run writes its own flags. */
+export function useRerunFromFlag(paperId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ flagId, note }: { flagId: number; note: string }) =>
+      rerunFlagPapersPaperIdFlagsFlagIdRerunPost({
+        path: { paper_id: paperId, flag_id: flagId },
+        body: { note: note || null, skip_successors: false },
+        throwOnError: true,
+      }),
+    onSuccess: (task) => {
+      // Queuing a task changes the paper's status, which the papers table
+      // and the progress popover render.
+      queryClient.invalidateQueries({ queryKey: ['papers'] })
+      queryClient.invalidateQueries({ queryKey: ['paper-tasks', paperId] })
+      toast.success(`${task.type} queued`)
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, 'Failed to queue re-run')),
   })
 }

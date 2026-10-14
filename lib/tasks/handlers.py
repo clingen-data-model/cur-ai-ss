@@ -1652,13 +1652,21 @@ async def handle_compound_het_evaluation(task_id: int) -> None:
         occurrence_by_variant = {row.variant_id: row.id for row in het_rows}
 
         def resolve_het_variant(about: str) -> dict[str, int]:
-            variant_id = match_label(about, variant_labels)
+            # One variant, or a pair as "first / second": the pair links
+            # both occurrences so the flag shows on both rows.
+            pair = split_pair(about)
+            first, second = pair if pair else (about, None)
+            variant_id = match_label(first, variant_labels)
             if variant_id is None:
                 return {}
-            return {
+            links = {
                 'variant_id': variant_id,
                 'occurrence_id': occurrence_by_variant[variant_id],
             }
+            partner_id = match_label(second, variant_labels) if second else None
+            if partner_id is not None and partner_id != variant_id:
+                links['paired_occurrence_id'] = occurrence_by_variant[partner_id]
+            return links
 
         replace_flags(
             session,

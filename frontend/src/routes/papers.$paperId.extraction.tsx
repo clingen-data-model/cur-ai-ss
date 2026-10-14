@@ -525,7 +525,7 @@ export function ExtractionPage() {
             />
           </TabsContent>
           <TabsContent value="flags" className="pt-3">
-            <FlagsTab paperId={paperId} patients={allPatients} variants={allVariants} />
+            <FlagsTab paperId={paperId} patients={allPatients} variants={allVariants} rows={rows} />
           </TabsContent>
           <TabsContent value="pedigree" className="pt-3">
             <PedigreeTab paperId={paperId} />
