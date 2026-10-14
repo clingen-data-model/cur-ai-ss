@@ -167,6 +167,7 @@ from lib.models.evidence_block import (
     EvidenceBlock,
     ReasoningBlock,
 )
+from lib.models.flag import FlagDB, FlagResolveRequest, FlagResp
 from lib.models.mondo import MondoComponentMapping, MondoTerm
 from lib.models.patient import (
     AffectedStatus,
@@ -2710,6 +2711,78 @@ def list_deletion_log(
         .order_by(DeletionLogDB.id)
         .all()
     )
+
+
+def _flag_resp(flag: FlagDB) -> FlagResp:
+    return FlagResp(
+        id=flag.id,
+        paper_id=flag.paper_id,
+        patient_id=flag.patient_id,
+        patient_identifier=flag.patient.identifier if flag.patient else None,
+        source=flag.source,
+        subject=flag.subject,
+        evidence=HumanEvidenceBlock[str].model_validate(flag.evidence),
+        resolved_by_user_id=flag.resolved_by_user_id,
+        resolved_by=_user_summary(flag.resolved_by),
+        resolved_at=flag.resolved_at,
+        resolution_note=flag.resolution_note,
+        created_at=flag.created_at,
+    )
+
+
+@app.get('/papers/{paper_id}/flags', response_model=list[FlagResp])
+def list_flags(
+    paper_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """Every curator flag an agent raised for this paper, open ones first."""
+    if session.get(PaperDB, paper_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    flags = (
+        session.query(FlagDB)
+        .options(selectinload(FlagDB.patient), selectinload(FlagDB.resolved_by))
+        .filter(FlagDB.paper_id == paper_id)
+        .order_by(FlagDB.resolved_at.is_not(None), FlagDB.id)
+        .all()
+    )
+    return [_flag_resp(flag) for flag in flags]
+
+
+@app.patch('/papers/{paper_id}/flags/{flag_id}', response_model=FlagResp)
+def resolve_flag(
+    paper_id: int,
+    flag_id: int,
+    request: FlagResolveRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """Mark a flag resolved by the current user (with an optional note), or
+    reopen it. Resolving an already-resolved flag re-attributes it."""
+    flag = (
+        session.query(FlagDB)
+        .options(selectinload(FlagDB.patient))
+        .filter(FlagDB.id == flag_id, FlagDB.paper_id == paper_id)
+        .one_or_none()
+    )
+    if flag is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Flag not found'
+        )
+    if request.resolved:
+        flag.resolved_by_user_id = current_user.id
+        flag.resolved_by = current_user
+        flag.resolved_at = datetime.now(timezone.utc)
+        flag.resolution_note = request.note
+    else:
+        flag.resolved_by_user_id = None
+        flag.resolved_by = None
+        flag.resolved_at = None
+        flag.resolution_note = None
+    session.flush()
+    return _flag_resp(flag)
 
 
 @app.get(

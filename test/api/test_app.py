@@ -19,6 +19,7 @@ from lib.models import (
     ChatMessageDB,
     ChatRole,
     FamilyDB,
+    FlagDB,
     GeneDB,
     HarmonizedVariantDB,
     HpoCandidate,
@@ -3473,3 +3474,94 @@ def test_chat_queue_task_refused_while_paper_has_tasks_in_flight(
     )
     assert run_context.confirmation is None
     snapshot.assert_not_called()
+
+
+def _seed_flag(db_session, seeded_paper, *, subject, patient_id=None):
+    flag = FlagDB(
+        paper_id=seeded_paper.id,
+        patient_id=patient_id,
+        source='PATIENT_EXTRACTION',
+        subject=subject,
+        evidence={
+            'value': subject,
+            'reasoning': 'rule 2: nothing stated about them',
+            'citations': [{'anchor': 'paragraph-3', 'quote': 'her sister'}],
+        },
+    )
+    db_session.add(flag)
+    db_session.flush()
+    return flag
+
+
+def test_list_flags_names_the_patient_and_puts_open_flags_first(
+    client, db_session, seeded_paper
+):
+    patient = _seed_patient(db_session, seeded_paper, identifier='Patient 1')
+    about_patient = _seed_flag(
+        db_session, seeded_paper, subject='chosen as proband', patient_id=patient.id
+    )
+    about_nobody = _seed_flag(db_session, seeded_paper, subject='untested sister')
+
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/flags/{about_patient.id}',
+        json={'resolved': True, 'note': 'agree'},
+    )
+    assert resp.status_code == 200
+
+    resp = client.get(f'/papers/{seeded_paper.id}/flags')
+    assert resp.status_code == 200
+    rows = resp.json()
+    assert [r['subject'] for r in rows] == ['untested sister', 'chosen as proband']
+    assert rows[0]['patient_id'] is None and rows[0]['patient_identifier'] is None
+    assert rows[0]['resolved_by'] is None
+    assert rows[0]['evidence']['citations'][0]['anchor'] == 'paragraph-3'
+    assert rows[1]['patient_id'] == patient.id
+    assert rows[1]['patient_identifier'] == 'Patient 1'
+    assert rows[1]['resolution_note'] == 'agree'
+    assert rows[1]['resolved_by'] is not None
+    assert about_nobody.resolved_at is None
+
+
+def test_resolve_flag_records_the_user_and_reopen_clears_it(
+    client, db_session, seeded_paper, test_user
+):
+    flag = _seed_flag(db_session, seeded_paper, subject='untested sister')
+
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/flags/{flag.id}',
+        json={'resolved': True, 'note': 'curator added her by hand'},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body['resolved_by_user_id'] == test_user.id
+    assert body['resolved_by']['id'] == test_user.id
+    assert body['resolved_at'] is not None
+    assert body['resolution_note'] == 'curator added her by hand'
+
+    resp = client.patch(
+        f'/papers/{seeded_paper.id}/flags/{flag.id}', json={'resolved': False}
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body['resolved_by'] is None
+    assert body['resolved_at'] is None
+    assert body['resolution_note'] is None
+
+
+def test_flag_endpoints_404_for_the_wrong_paper(client, db_session, seeded_paper):
+    flag = _seed_flag(db_session, seeded_paper, subject='untested sister')
+    assert client.get('/papers/999999/flags').status_code == 404
+    resp = client.patch(f'/papers/999999/flags/{flag.id}', json={'resolved': True})
+    assert resp.status_code == 404
+
+
+def test_deleting_a_patient_drops_the_flag_about_them(client, db_session, seeded_paper):
+    patient = _seed_patient(db_session, seeded_paper, identifier='Patient 1')
+    _seed_flag(db_session, seeded_paper, subject='about P1', patient_id=patient.id)
+    _seed_flag(db_session, seeded_paper, subject='about nobody')
+
+    resp = client.delete(f'/papers/{seeded_paper.id}/patients/{patient.id}')
+    assert resp.status_code == 204
+    db_session.expire_all()
+    rows = client.get(f'/papers/{seeded_paper.id}/flags').json()
+    assert [r['subject'] for r in rows] == ['about nobody']

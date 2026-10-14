@@ -126,6 +126,7 @@ from lib.misc.pdf.paths import (
 from lib.models import (
     AnnotatedVariantDB,
     FamilyDB,
+    FlagDB,
     HarmonizedVariantDB,
     HpoDB,
     PaperDB,
@@ -143,6 +144,7 @@ from lib.models import (
 from lib.models.converters import (
     apply_patient_demographics,
     family_to_db,
+    flag_to_db,
     harmonized_variant_to_db,
     hpo_to_db,
     patient_identity_to_db,
@@ -776,6 +778,7 @@ async def handle_patient_extraction(task_id: int) -> None:
             family_entries_by_id[entry.family.identifier.value] = db_family.id
 
         # Insert patients (identity only; demographics filled by a later agent)
+        patient_ids_by_identifier: dict[str, int] = {}
         for patient_info in parsed.patients:
             db_patient = patient_identity_to_db(paper_id, patient_info)
             # Use family_identifier from patient to find correct family
@@ -786,6 +789,29 @@ async def handle_patient_extraction(task_id: int) -> None:
                     patient_info.family_identifier.model_dump()
                 )
             session.add(db_patient)
+            session.flush()
+            patient_ids_by_identifier[patient_info.identifier.value] = db_patient.id
+
+        # Flags about a patient went with the patients just deleted; flags
+        # about something that was never extracted have no row to cascade
+        # from, so this agent's flags are replaced explicitly, by source.
+        session.query(FlagDB).filter(
+            FlagDB.paper_id == paper_id,
+            FlagDB.source == TaskType.PATIENT_EXTRACTION.name,
+        ).delete()
+        for flag in parsed.flags:
+            session.add(
+                flag_to_db(
+                    paper_id,
+                    flag,
+                    source=TaskType.PATIENT_EXTRACTION.name,
+                    patient_id=(
+                        patient_ids_by_identifier.get(flag.patient_identifier)
+                        if flag.patient_identifier is not None
+                        else None
+                    ),
+                )
+            )
 
 
 async def handle_patient_demographics(task_id: int) -> None:

@@ -129,3 +129,139 @@ def test_citation_check_reads_the_paper_once_and_rejects_bad_citations(paper):
     check(good)
     with pytest.raises(CitationError, match="anchor 'paragraph-14' does not exist"):
         check([good, bad])
+
+
+def _flag_output(patients: list[str], flags: list[dict]):
+    from lib.models.patient import (
+        FamilyEntry,
+        PatientExtractionOutput,
+        PatientIdentity,
+        ProbandStatus,
+    )
+
+    def block(value: object) -> dict:
+        return {
+            'value': value,
+            'reasoning': 'test',
+            'citations': [{'anchor': 'paragraph-13', 'quote': 'Eleven'}],
+        }
+
+    return PatientExtractionOutput(
+        patients=[
+            PatientIdentity(
+                identifier=block(p),
+                family_identifier=block('Family 1'),
+                proband_status=block(
+                    ProbandStatus.Proband if i == 0 else ProbandStatus.Non_proband
+                ),
+            )
+            for i, p in enumerate(patients)
+        ],
+        families=[
+            FamilyEntry(
+                family={'identifier': block('Family 1'), 'consanguinity': block(False)},
+                patient_identifiers=[block(p) for p in patients],
+            )
+        ],
+        flags=flags,
+    )
+
+
+@pytest.fixture
+def run_patient_extraction(monkeypatch, db_session, paper):
+    """Drive handle_patient_extraction with a canned agent output: the agent
+    call, its session and the citation check are stubbed, the DB is real."""
+    from types import SimpleNamespace
+
+    from lib.tasks import handlers
+    from lib.tasks.models import TaskDB, TaskStatus, TaskType
+
+    class _Session:
+        async def clear_session(self) -> None:
+            pass
+
+    async def run(output):
+        async def fake_run(agent, message, check, session):
+            return SimpleNamespace(final_output=output, raw_responses=[])
+
+        monkeypatch.setattr(handlers, 'run_with_checked_output', fake_run)
+        monkeypatch.setattr(handlers, 'agent_session', lambda task_id: _Session())
+        monkeypatch.setattr(handlers, 'citation_check', lambda paper_id: None)
+        monkeypatch.setattr(handlers, 'log_run_metrics', lambda *a, **k: None)
+        task = TaskDB(
+            paper_id=paper.id,
+            type=TaskType.PATIENT_EXTRACTION,
+            status=TaskStatus.RUNNING,
+        )
+        db_session.add(task)
+        db_session.commit()
+        await handlers.handle_patient_extraction(task.id)
+        db_session.expire_all()
+
+    return run
+
+
+async def test_patient_extraction_persists_flags_and_links_them_to_patients(
+    db_session, paper, run_patient_extraction
+):
+    from lib.models import FlagDB, PatientDB
+
+    await run_patient_extraction(
+        _flag_output(
+            ['Patient 1', 'Patient 2'],
+            [
+                {
+                    'patient_identifier': 'Patient 2',
+                    'flag': {
+                        'value': 'status implied',
+                        'reasoning': 'affected only by pedigree shading',
+                        'citations': [{'anchor': 'figure-1', 'quote': ''}],
+                    },
+                },
+                {
+                    'patient_identifier': None,
+                    'flag': {
+                        'value': 'untested sister',
+                        'reasoning': 'mentioned once, nothing stated',
+                        'citations': [{'anchor': 'paragraph-13', 'quote': 'Eleven'}],
+                    },
+                },
+            ],
+        )
+    )
+
+    p2 = db_session.query(PatientDB).filter_by(identifier='Patient 2').one()
+    rows = db_session.query(FlagDB).filter_by(paper_id=paper.id).order_by(FlagDB.id)
+    assert [(r.subject, r.patient_id, r.source) for r in rows] == [
+        ('status implied', p2.id, 'PATIENT_EXTRACTION'),
+        ('untested sister', None, 'PATIENT_EXTRACTION'),
+    ]
+
+
+async def test_rerunning_patient_extraction_replaces_only_its_own_flags(
+    db_session, paper, run_patient_extraction
+):
+    from lib.models import FlagDB
+
+    other_agent = FlagDB(
+        paper_id=paper.id,
+        source='VARIANT_EXTRACTION',
+        subject='kept',
+        evidence={'value': 'kept', 'reasoning': 'x', 'citations': []},
+    )
+    db_session.add(other_agent)
+    db_session.commit()
+
+    sister = {
+        'patient_identifier': None,
+        'flag': {
+            'value': 'untested sister',
+            'reasoning': 'mentioned once',
+            'citations': [{'anchor': 'paragraph-13', 'quote': 'Eleven'}],
+        },
+    }
+    await run_patient_extraction(_flag_output(['Patient 1'], [sister]))
+    await run_patient_extraction(_flag_output(['Patient 1'], []))
+
+    rows = db_session.query(FlagDB).filter_by(paper_id=paper.id).all()
+    assert [r.subject for r in rows] == ['kept']

@@ -269,6 +269,28 @@ Consanguinity (EvidenceBlock[bool], required for every family):
   when it says nothing. The field cannot be null, so False also means "not
   stated"; the reasoning must say which of the two it is.
 
+FLAGS -- decisions a curator should see:
+
+Every value you return already carries its reasoning. A flag is for what that
+reasoning cannot carry: a decision about someone who is not in the output, or a
+call the paper itself leaves open. Raise one in "flags" (output format below)
+when:
+- a candidate from step 1 was rejected under a rule rather than for not being
+  a person: a cohort member whose finding is in another gene, a relative the
+  text mentions once with nothing stated about them, an earlier study's cohort
+  shown for comparison. Say which rule applied and what the paper said about
+  them, so a curator who reads the rule differently can add them.
+- a decision rested on a judgment the paper does not settle: no proband is
+  marked and you chose one, the text and a table disagree, a person's affected
+  status or relationship is implied rather than stated, a family's disease is
+  not the one the paper is about.
+- a rule here changed a person's standing in a way a curator may not expect: a
+  re-reported individual extracted as Non-Proband, a family left with no
+  proband, a pedigree label set aside because the figure printed none.
+Do not flag routine extraction: a labeled patient with a stated variant needs
+no flag. Raise one flag per decision, not per person it touches; a cohort of
+other-gene members is one flag that names them.
+
 BEFORE RETURNING, CHECK:
 - Every table row or column header that names an in-scope person has a
   patient, the columns headed by a citation included.
@@ -282,6 +304,8 @@ BEFORE RETURNING, CHECK:
   and no re-reported individual is one.
 - The first family's identifier reasoning lists every candidate label with
   its decision, and every label it marks as a patient is in "patients".
+- Every candidate rejected under a rule, and every judgment call, has a flag
+  in "flags"; nothing routine does.
 
 Output format:
 - Return a "families" list where each entry contains:
@@ -297,6 +321,17 @@ Output format:
 - The families list is empty only when the patients list is.
 - The union of all patient identifier values across all families must equal the complete set
   of patient identifiers extracted above.
+- Return a "flags" list (see FLAGS), empty when there was nothing to flag, where
+  each entry contains:
+  - patient_identifier: the identifier of the extracted patient the flag is
+    about, or null when it is about someone or something not extracted (the
+    usual case).
+  - flag: EvidenceBlock[str] where:
+    - value: a short subject -- who or what it is about, in a few words
+    - reasoning: what you decided, under which rule, and what a curator might
+      decide instead
+    - citations: the block(s) the decision rests on -- the table row or column
+      header, the sentence that mentions the person, the pedigree figure
 """
 
 PATIENT_EXTRACTION_AGENT_INSTRUCTIONS = (

@@ -746,3 +746,65 @@ def test_list_snapshots_skips_row_with_missing_file(db_session, snapshot_paper):
     path.unlink()
 
     assert list_snapshots(paper.id, db_session) == []
+
+
+def test_flags_revert_with_snapshot(db_session, test_user, snapshot_paper):
+    """A flag is part of what an agent run produced, and its resolution is a
+    curator's record about that run -- both go back to the snapshot's point
+    in time, including a flag about nobody (patient_id null), which no
+    cascade would otherwise reach."""
+    from datetime import datetime, timezone
+
+    from lib.models import FlagDB
+
+    paper = snapshot_paper['paper']
+    p1 = snapshot_paper['p1']
+    about_p1 = FlagDB(
+        paper_id=paper.id,
+        patient_id=p1.id,
+        source='PATIENT_EXTRACTION',
+        subject='chosen as proband',
+        evidence=_ev('chosen as proband'),
+        resolved_by_user_id=test_user.id,
+        resolved_at=datetime.now(timezone.utc),
+        resolution_note='agree',
+    )
+    about_nobody = FlagDB(
+        paper_id=paper.id,
+        source='PATIENT_EXTRACTION',
+        subject='untested sister',
+        evidence=_ev('untested sister'),
+    )
+    db_session.add_all([about_p1, about_nobody])
+    db_session.flush()
+    nobody_id = about_nobody.id
+
+    path = write_snapshot(paper.id, db_session)
+    assert path is not None
+
+    db_session.delete(about_nobody)
+    about_p1.resolved_by_user_id = None
+    about_p1.resolved_at = None
+    about_p1.resolution_note = None
+    db_session.add(
+        FlagDB(
+            paper_id=paper.id,
+            source='PATIENT_EXTRACTION',
+            subject='added after the snapshot',
+            evidence=_ev('later'),
+        )
+    )
+    db_session.flush()
+
+    assert restore_snapshot(paper.id, path.name, db_session, test_user) is True
+    db_session.expire_all()
+    rows = (
+        db_session.query(FlagDB).filter_by(paper_id=paper.id).order_by(FlagDB.id).all()
+    )
+    assert [(r.id, r.subject) for r in rows] == [
+        (about_p1.id, 'chosen as proband'),
+        (nobody_id, 'untested sister'),
+    ]
+    assert rows[0].resolved_by_user_id == test_user.id
+    assert rows[0].resolution_note == 'agree'
+    assert rows[0].patient_id == p1.id

@@ -51,6 +51,7 @@ from lib.models import (
 from lib.models.base import row_to_dict
 from lib.models.deletion_log import DeletionLogDB
 from lib.models.edit import EditDB
+from lib.models.flag import FlagDB
 from lib.tasks.models import TaskType
 
 logger = logging.getLogger(__name__)
@@ -67,6 +68,8 @@ _SNAPSHOT_NAME_RE = re.compile(r'^extraction_\d{8}T\d{12}Z\.json$')
 _INSERT_ORDER: list[tuple[str, type[Base]]] = [
     ('families', FamilyDB),
     ('patients', PatientDB),
+    # Flags FK patients (nullable) and users; nothing FKs a flag.
+    ('flags', FlagDB),
     ('pedigrees', PedigreeDB),
     ('phenotypes', PhenotypeDB),
     ('hpos', HpoDB),
@@ -275,11 +278,13 @@ def dump_paper_state(paper_id: int, paper_db: PaperDB, session: Session) -> dict
     deletions = (
         session.query(DeletionLogDB).filter(DeletionLogDB.paper_id == paper_id).all()
     )
+    flags = session.query(FlagDB).filter(FlagDB.paper_id == paper_id).all()
 
     return {
         'paper': row_to_dict(paper_db),
         'families': [row_to_dict(r) for r in families],
         'patients': [row_to_dict(r) for r in patients],
+        'flags': [row_to_dict(r) for r in flags],
         'pedigrees': [row_to_dict(r) for r in pedigrees],
         'phenotypes': [row_to_dict(r) for r in phenotypes],
         'hpos': [row_to_dict(r) for r in hpos],
@@ -652,6 +657,9 @@ def _delete_paper_domain_rows(session: Session, paper_id: int) -> None:
         synchronize_session=False
     )
     session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).delete(
+        synchronize_session=False
+    )
+    session.query(FlagDB).filter(FlagDB.paper_id == paper_id).delete(
         synchronize_session=False
     )
     session.query(PatientDB).filter(PatientDB.paper_id == paper_id).delete(

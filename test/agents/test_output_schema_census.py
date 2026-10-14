@@ -86,7 +86,7 @@ OUTPUT_TYPES: dict[str, Any] = {
 # The four agents slice 4 took under the union limit, with their counts.
 UNDER_THE_UNION_LIMIT_SINCE_SLICE_4 = {
     'variant_extractor': 13,
-    'patient_info_extractor': 0,
+    'patient_info_extractor': 1,  # ExtractionFlag.patient_identifier
     'patient_demographics_extractor': 7,
     'patient_variant_occurrence': 2,
 }

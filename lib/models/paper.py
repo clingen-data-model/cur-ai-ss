@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from lib.models.chat_message import ChatMessageDB
     from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
     from lib.models.family import FamilyDB
+    from lib.models.flag import FlagDB
     from lib.models.patient import PatientDB
     from lib.models.patient_variant_occurrences import (
         Inheritance,
@@ -307,6 +308,9 @@ class PaperDB(Base):
     )
     chat_messages: Mapped[list['ChatMessageDB']] = relationship(
         'ChatMessageDB', back_populates='paper', cascade='all, delete-orphan'
+    )
+    flags: Mapped[list['FlagDB']] = relationship(
+        'FlagDB', back_populates='paper', cascade='all, delete-orphan'
     )
 
 

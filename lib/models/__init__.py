@@ -20,6 +20,7 @@ from lib.models.family import (
     FamilyResp,
     FamilyUpdateRequest,
 )
+from lib.models.flag import ExtractionFlag, FlagDB, FlagResolveRequest, FlagResp
 from lib.models.mondo import (
     MondoAgentDecision,
     MondoCandidate,

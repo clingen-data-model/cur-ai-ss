@@ -223,3 +223,19 @@ def test_spec_disambiguates_a_cell_that_repeats_across_a_table_row():
     )
     assert '"Hypotonia | + | +"' in CORE_EXTRACTION_SPEC
     assert 'Never quote a flag or repeated cell bare' in CORE_EXTRACTION_SPEC
+
+
+def test_patient_prompt_asks_for_curator_flags():
+    """Scoping and the one-proband rule make decisions a curator cannot see from
+    the output: a cohort member left out, a relative mentioned once and
+    dropped, a proband chosen where the paper marks none. Field reasoning only
+    covers what was extracted, so the prompt asks for a flag per decision."""
+    prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
+    assert 'FLAGS -- decisions a curator should see' in prompt
+    assert 'rejected under a rule rather than for not being\n  a person' in prompt
+    assert 'a judgment the paper does not settle' in prompt
+    assert 'Do not flag routine extraction' in prompt
+    assert 'one flag per decision, not per person it touches' in prompt
+    assert 'Return a "flags" list' in prompt
+    assert 'null when it is about someone or something not extracted' in prompt
+    assert 'has a flag\n  in "flags"; nothing routine does.' in prompt
