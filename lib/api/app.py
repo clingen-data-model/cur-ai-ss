@@ -2754,7 +2754,7 @@ def list_flags(
     return [_flag_resp(flag) for flag in flags]
 
 
-@app.patch('/papers/{paper_id}/flags/{flag_id}', response_model=FlagResp)
+@app.post('/papers/{paper_id}/flags/{flag_id}/resolve', response_model=FlagResp)
 def resolve_flag(
     paper_id: int,
     flag_id: int,
@@ -2762,8 +2762,9 @@ def resolve_flag(
     session: Session = Depends(get_session),
     current_user: UserDB = Depends(get_current_user),
 ) -> Any:
-    """Mark a flag resolved by the current user (with an optional note), or
-    reopen it. Resolving an already-resolved flag re-attributes it."""
+    """Mark a flag resolved by the current user, with an optional note.
+    One-way: a flag already resolved is refused with 409, and there is no
+    reopen (see FlagResolveRequest)."""
     flag = (
         session.query(FlagDB)
         .filter(FlagDB.id == flag_id, FlagDB.paper_id == paper_id)
@@ -2773,16 +2774,14 @@ def resolve_flag(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Flag not found'
         )
-    if request.resolved:
-        flag.resolved_by_user_id = current_user.id
-        flag.resolved_by = current_user
-        flag.resolved_at = datetime.now(timezone.utc)
-        flag.resolution_note = request.note
-    else:
-        flag.resolved_by_user_id = None
-        flag.resolved_by = None
-        flag.resolved_at = None
-        flag.resolution_note = None
+    if flag.resolved_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail='Flag already resolved'
+        )
+    flag.resolved_by_user_id = current_user.id
+    flag.resolved_by = current_user
+    flag.resolved_at = datetime.now(timezone.utc)
+    flag.resolution_note = request.note
     session.flush()
     return _flag_resp(flag)
 

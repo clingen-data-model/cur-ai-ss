@@ -136,6 +136,7 @@ class FlagDB(Base):
         DateTime(timezone=True), nullable=True
     )
     resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Write-once (see FlagResolveRequest): the API refuses a second resolve.
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -180,8 +181,9 @@ class FlagResp(BaseModel):
 
 
 class FlagResolveRequest(BaseModel):
-    """``resolved`` true marks the flag as looked at by the current user, with
-    an optional note; false reopens it and clears the note."""
+    """Resolving is one-way and write-once: who looked, when, and what they
+    decided. There is no reopen -- a resolution that turns out wrong is
+    answered by editing or deleting the row the flag points at, which is
+    logged in its own right -- so the row needs no history of its own."""
 
-    resolved: bool
     note: str | None = None

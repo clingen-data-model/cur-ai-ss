@@ -126,8 +126,8 @@ once -- inside `CORE_EXTRACTION_SPEC` for the paper-reading agents, appended dir
 the lookup agents -- and a prompt adds at most a few task-specific examples. The handler
 calls `replace_flags` (`lib/tasks/flags.py`) after writing its rows, with the task's
 scope (the patient, family, variant, phenotype or occurrence a per-entity task ran for)
-and a resolver that turns `about` into the row it just wrote. Flags are listed and
-resolved through `/papers/{id}/flags`.
+and a resolver that turns `about` into the row it just wrote. Flags are listed through
+`/papers/{id}/flags` and resolved, once and for good, through its `/resolve` child.
 
 ## Calling an Agent
 

@@ -3504,9 +3504,9 @@ def test_list_flags_links_the_patient_and_puts_open_flags_first(
     )
     about_nobody = _seed_flag(db_session, seeded_paper, subject='untested sister')
 
-    resp = client.patch(
-        f'/papers/{seeded_paper.id}/flags/{about_patient.id}',
-        json={'resolved': True, 'note': 'agree'},
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/flags/{about_patient.id}/resolve',
+        json={'note': 'agree'},
     )
     assert resp.status_code == 200
 
@@ -3523,14 +3523,14 @@ def test_list_flags_links_the_patient_and_puts_open_flags_first(
     assert about_nobody.resolved_at is None
 
 
-def test_resolve_flag_records_the_user_and_reopen_clears_it(
-    client, db_session, seeded_paper, test_user
-):
+def test_resolve_flag_is_one_way(client, db_session, seeded_paper, test_user):
+    """A resolution is who looked, when, and what they decided; there is no
+    reopen, so a second resolve is refused rather than re-attributed."""
     flag = _seed_flag(db_session, seeded_paper, subject='untested sister')
 
-    resp = client.patch(
-        f'/papers/{seeded_paper.id}/flags/{flag.id}',
-        json={'resolved': True, 'note': 'curator added her by hand'},
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/flags/{flag.id}/resolve',
+        json={'note': 'curator added her by hand'},
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -3539,20 +3539,16 @@ def test_resolve_flag_records_the_user_and_reopen_clears_it(
     assert body['resolved_at'] is not None
     assert body['resolution_note'] == 'curator added her by hand'
 
-    resp = client.patch(
-        f'/papers/{seeded_paper.id}/flags/{flag.id}', json={'resolved': False}
-    )
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body['resolved_by'] is None
-    assert body['resolved_at'] is None
-    assert body['resolution_note'] is None
+    resp = client.post(f'/papers/{seeded_paper.id}/flags/{flag.id}/resolve', json={})
+    assert resp.status_code == 409
+    body = client.get(f'/papers/{seeded_paper.id}/flags').json()[0]
+    assert body['resolution_note'] == 'curator added her by hand'
 
 
 def test_flag_endpoints_404_for_the_wrong_paper(client, db_session, seeded_paper):
     flag = _seed_flag(db_session, seeded_paper, subject='untested sister')
     assert client.get('/papers/999999/flags').status_code == 404
-    resp = client.patch(f'/papers/999999/flags/{flag.id}', json={'resolved': True})
+    resp = client.post(f'/papers/999999/flags/{flag.id}/resolve', json={})
     assert resp.status_code == 404
 
 
