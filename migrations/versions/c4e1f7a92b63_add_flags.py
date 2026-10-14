@@ -25,7 +25,10 @@ def upgrade() -> None:
         'flags',
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
         sa.Column('paper_id', sa.Integer(), nullable=False),
+        sa.Column('family_id', sa.Integer(), nullable=True),
         sa.Column('patient_id', sa.Integer(), nullable=True),
+        sa.Column('variant_id', sa.Integer(), nullable=True),
+        sa.Column('phenotype_id', sa.Integer(), nullable=True),
         sa.Column('source', sa.String(), nullable=False),
         sa.Column('subject', sa.Text(), nullable=False),
         sa.Column('evidence', sa.JSON(), nullable=False),
@@ -39,7 +42,12 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.ForeignKeyConstraint(['paper_id'], ['papers.id'], ondelete='CASCADE'),
+        sa.ForeignKeyConstraint(['family_id'], ['families.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['patient_id'], ['patients.id'], ondelete='CASCADE'),
+        sa.ForeignKeyConstraint(['variant_id'], ['variants.id'], ondelete='CASCADE'),
+        sa.ForeignKeyConstraint(
+            ['phenotype_id'], ['phenotypes.id'], ondelete='CASCADE'
+        ),
         sa.ForeignKeyConstraint(
             ['resolved_by_user_id'], ['users.id'], ondelete='SET NULL'
         ),
@@ -47,9 +55,11 @@ def upgrade() -> None:
     )
     op.create_index('ix_flags_paper_id', 'flags', ['paper_id'], unique=False)
     op.create_index('ix_flags_patient_id', 'flags', ['patient_id'], unique=False)
+    op.create_index('ix_flags_variant_id', 'flags', ['variant_id'], unique=False)
 
 
 def downgrade() -> None:
+    op.drop_index('ix_flags_variant_id', table_name='flags')
     op.drop_index('ix_flags_patient_id', table_name='flags')
     op.drop_index('ix_flags_paper_id', table_name='flags')
     op.drop_table('flags')

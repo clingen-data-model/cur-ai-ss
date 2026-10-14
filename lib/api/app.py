@@ -2717,11 +2717,13 @@ def _flag_resp(flag: FlagDB) -> FlagResp:
     return FlagResp(
         id=flag.id,
         paper_id=flag.paper_id,
-        patient_id=flag.patient_id,
-        patient_identifier=flag.patient.identifier if flag.patient else None,
         source=flag.source,
         subject=flag.subject,
         evidence=HumanEvidenceBlock[str].model_validate(flag.evidence),
+        family_id=flag.family_id,
+        patient_id=flag.patient_id,
+        variant_id=flag.variant_id,
+        phenotype_id=flag.phenotype_id,
         resolved_by_user_id=flag.resolved_by_user_id,
         resolved_by=_user_summary(flag.resolved_by),
         resolved_at=flag.resolved_at,
@@ -2743,7 +2745,7 @@ def list_flags(
         )
     flags = (
         session.query(FlagDB)
-        .options(selectinload(FlagDB.patient), selectinload(FlagDB.resolved_by))
+        .options(selectinload(FlagDB.resolved_by))
         .filter(FlagDB.paper_id == paper_id)
         .order_by(FlagDB.resolved_at.is_not(None), FlagDB.id)
         .all()
@@ -2763,7 +2765,6 @@ def resolve_flag(
     reopen it. Resolving an already-resolved flag re-attributes it."""
     flag = (
         session.query(FlagDB)
-        .options(selectinload(FlagDB.patient))
         .filter(FlagDB.id == flag_id, FlagDB.paper_id == paper_id)
         .one_or_none()
     )

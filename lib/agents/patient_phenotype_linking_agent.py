@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
 from lib.agents.model_factory import extraction_model, extraction_model_settings
-from lib.models import ExtractedPhenotype
+from lib.models import PhenotypeExtractionOutput
 
 INSTRUCTIONS = """
 You are an expert clinical data curator performing structured phenotype extraction
@@ -349,10 +349,16 @@ For each extracted phenotype:
 OUTPUT
 ---------------------------------------------------
 
-Return a **list of JSON objects**, one per extracted phenotype for the provided patient.
+Return an object with a "phenotypes" list, one entry per extracted phenotype
+for the provided patient, and a "flags" list (the rule is in CORE EXTRACTION
+RULES): a finding attributed to the family or cohort rather than to this
+patient and therefore not extracted, a finding whose attribution to this
+patient is ambiguous, a finding stated only in a table flagged with an
+EXTRACTION WARNING. "about" is a concept from the "phenotypes" list, or null.
 
 Example structure:
-[
+{
+ "phenotypes": [
   {
     "patient_id": 123,
     "concept": {
@@ -383,7 +389,9 @@ Example structure:
     "severity": null,
     "modifier": "recurrent"
   }
-]
+ ],
+ "flags": []
+}
 
 Ensure:
 - All required fields are present (patient_id, concept with value/reasoning and at least one citation)
@@ -405,5 +413,5 @@ agent = Agent(
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
     model_settings=extraction_model_settings(),
-    output_type=list[ExtractedPhenotype],
+    output_type=PhenotypeExtractionOutput,
 )

@@ -113,6 +113,17 @@ passes its `output_type` to the runner; the ones whose handler passes `citation_
 the same repair loop from `run_with_checked_output`. Keep both limits in mind when adding
 fields to an output model.
 
+### Flags
+
+A decision a curator should look at but the output cannot show -- something left out
+under a rule, a call the paper leaves open -- goes in a `flags: list[ExtractionFlag]`
+field on the output model (`lib/models/flag.py`: `about`, the identifier of the thing it
+concerns or null, and an evidence block). `CORE_EXTRACTION_SPEC` states the rule once;
+a prompt adds at most a few task-specific examples. The handler calls `replace_flags`
+(`lib/tasks/flags.py`) after writing its rows, with the task's scope (the patient or
+family a per-entity task ran for) and a resolver that turns `about` into the row it just
+wrote. Flags are listed and resolved through `/papers/{id}/flags`.
+
 ## Calling an Agent
 
 ```python

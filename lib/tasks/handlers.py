@@ -126,7 +126,6 @@ from lib.misc.pdf.paths import (
 from lib.models import (
     AnnotatedVariantDB,
     FamilyDB,
-    FlagDB,
     HarmonizedVariantDB,
     HpoDB,
     PaperDB,
@@ -135,6 +134,7 @@ from lib.models import (
     PatientVariantOccurrenceDB,
     PedigreeDB,
     PhenotypeDB,
+    PhenotypeExtractionOutput,
     SegregationAnalysisComputedDB,
     SegregationEvidenceDB,
     TaskDB,
@@ -144,7 +144,6 @@ from lib.models import (
 from lib.models.converters import (
     apply_patient_demographics,
     family_to_db,
-    flag_to_db,
     harmonized_variant_to_db,
     hpo_to_db,
     patient_identity_to_db,
@@ -177,6 +176,7 @@ from lib.models.variant import (
 from lib.reference_data.hpo import find_matching_hpo_terms
 from lib.reference_data.mondo import get_mondo_term
 from lib.tasks.agent_session import agent_session
+from lib.tasks.flags import match_label, replace_flags
 from lib.tasks.hpo_link_cache import (
     is_cacheable,
     lookup_hpo_link,
@@ -563,8 +563,26 @@ async def handle_variant_extraction(task_id: int) -> None:
         session.query(VariantDB).filter(
             VariantDB.paper_id == paper_id,
         ).delete()
-        for variant in parsed.variants:
-            session.add(variant_to_db(paper_id, variant))
+        variant_rows = [variant_to_db(paper_id, variant) for variant in parsed.variants]
+        session.add_all(variant_rows)
+        session.flush()
+
+        def resolve_variant(about: str) -> dict[str, int]:
+            labels = [
+                (label, row.id)
+                for row in variant_rows
+                for label in (row.variant, row.hgvs_c, row.hgvs_p, row.hgvs_g)
+            ]
+            variant_id = match_label(about, labels)
+            return {'variant_id': variant_id} if variant_id is not None else {}
+
+        replace_flags(
+            session,
+            paper_id=paper_id,
+            source=TaskType.VARIANT_EXTRACTION.name,
+            flags=parsed.flags,
+            resolve=resolve_variant,
+        )
 
 
 async def handle_pedigree_description(task_id: int) -> None:
@@ -792,26 +810,20 @@ async def handle_patient_extraction(task_id: int) -> None:
             session.flush()
             patient_ids_by_identifier[patient_info.identifier.value] = db_patient.id
 
-        # Flags about a patient went with the patients just deleted; flags
-        # about something that was never extracted have no row to cascade
-        # from, so this agent's flags are replaced explicitly, by source.
-        session.query(FlagDB).filter(
-            FlagDB.paper_id == paper_id,
-            FlagDB.source == TaskType.PATIENT_EXTRACTION.name,
-        ).delete()
-        for flag in parsed.flags:
-            session.add(
-                flag_to_db(
-                    paper_id,
-                    flag,
-                    source=TaskType.PATIENT_EXTRACTION.name,
-                    patient_id=(
-                        patient_ids_by_identifier.get(flag.patient_identifier)
-                        if flag.patient_identifier is not None
-                        else None
-                    ),
-                )
-            )
+        def resolve_patient_or_family(about: str) -> dict[str, int]:
+            patient_id = match_label(about, patient_ids_by_identifier.items())
+            if patient_id is not None:
+                return {'patient_id': patient_id}
+            family_id = match_label(about, family_entries_by_id.items())
+            return {'family_id': family_id} if family_id is not None else {}
+
+        replace_flags(
+            session,
+            paper_id=paper_id,
+            source=TaskType.PATIENT_EXTRACTION.name,
+            flags=parsed.flags,
+            resolve=resolve_patient_or_family,
+        )
 
 
 async def handle_patient_demographics(task_id: int) -> None:
@@ -907,6 +919,13 @@ async def handle_patient_demographics(task_id: int) -> None:
         if not patient_row:
             return
         apply_patient_demographics(patient_row, parsed)
+        replace_flags(
+            session,
+            paper_id=paper_id,
+            source=TaskType.PATIENT_DEMOGRAPHICS.name,
+            flags=parsed.flags,
+            scope={'patient_id': patient_id},
+        )
 
 
 async def handle_segregation_evidence_extraction(task_id: int) -> None:
@@ -1017,6 +1036,21 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
         # Convert and insert
         db_evidence = segregation_evidence_to_db(family_id, result.final_output)
         session.add(db_evidence)
+
+        members = session.query(PatientDB).filter(PatientDB.family_id == family_id)
+
+        def resolve_member(about: str) -> dict[str, int]:
+            patient_id = match_label(about, [(m.identifier, m.id) for m in members])
+            return {'patient_id': patient_id} if patient_id is not None else {}
+
+        replace_flags(
+            session,
+            paper_id=paper_id,
+            source=TaskType.SEGREGATION_EVIDENCE_EXTRACTION.name,
+            flags=result.final_output.flags,
+            scope={'family_id': family_id},
+            resolve=resolve_member,
+        )
 
 
 async def handle_segregation_analysis_computed(task_id: int) -> None:
@@ -1451,6 +1485,26 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
                 paper.disease_name = parsed.disease_name.value
                 paper.disease_name_evidence = parsed.disease_name.model_dump()
 
+        def resolve_patient_or_variant(about: str) -> dict[str, int]:
+            patient_id = match_label(
+                about, [(p['identifier'], p['patient_id']) for p in structured_patients]
+            )
+            if patient_id is not None:
+                return {'patient_id': patient_id}
+            variant_id = match_label(
+                about,
+                [(v['variant_quote'], v['variant_id']) for v in structured_variants],
+            )
+            return {'variant_id': variant_id} if variant_id is not None else {}
+
+        replace_flags(
+            session,
+            paper_id=paper_id,
+            source=TaskType.PATIENT_VARIANT_OCCURRENCES.name,
+            flags=parsed.flags,
+            resolve=resolve_patient_or_variant,
+        )
+
 
 async def handle_compound_het_evaluation(task_id: int) -> None:
     """Evaluate heterozygous variant pairs for compound heterozygous genotypes."""
@@ -1648,7 +1702,9 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         session.query(PhenotypeDB).filter(PhenotypeDB.patient_id == patient_id).delete()
 
         # Insert results
-        for phenotype in result.final_output:
+        parsed_phenotypes = cast(PhenotypeExtractionOutput, result.final_output)
+        phenotype_rows: list[PhenotypeDB] = []
+        for phenotype in parsed_phenotypes.phenotypes:
             # Ensure patient_id is set on the phenotype
             if phenotype.patient_id is None or phenotype.patient_id != patient_id:
                 phenotype.patient_id = patient_id
@@ -1671,6 +1727,23 @@ async def handle_phenotype_extraction(task_id: int) -> None:
                     f'{", which a curator set" if cached.curated else ""}.',
                 )
             session.add(phenotype_db)
+            phenotype_rows.append(phenotype_db)
+        session.flush()
+
+        def resolve_phenotype(about: str) -> dict[str, int]:
+            phenotype_id = match_label(
+                about, [(row.concept, row.id) for row in phenotype_rows]
+            )
+            return {'phenotype_id': phenotype_id} if phenotype_id is not None else {}
+
+        replace_flags(
+            session,
+            paper_id=paper_id,
+            source=TaskType.PHENOTYPE_EXTRACTION.name,
+            flags=parsed_phenotypes.flags,
+            scope={'patient_id': patient_id},
+            resolve=resolve_phenotype,
+        )
 
 
 async def handle_hpo_linking(task_id: int) -> None:

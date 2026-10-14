@@ -97,6 +97,11 @@ Guidelines:
 1. Extract only explicitly stated information. Do NOT infer.
 2. Use enum values when possible; otherwise use "Other" or "Unknown".
 3. If a field is not stated for this patient, return Unknown (or None for ages/twin_type).
+4. The output also carries a "flags" list (the rule is in CORE EXTRACTION
+   RULES): an age given as a range or at an unclear event, a sex or status
+   implied by a pedigree symbol rather than stated, a relationship to the
+   proband that the pedigree and the text give differently. "about" is this
+   patient's identifier, or null.
 """
 
 PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS = (

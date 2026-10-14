@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, List
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import (
     DateTime,
     ForeignKey,
@@ -22,6 +22,7 @@ from lib.models.evidence_block import (
     AttributedReasoningBlock,
     EvidenceBlock,
 )
+from lib.models.flag import ExtractionFlag
 
 if TYPE_CHECKING:
     from lib.models.paper import PaperDB
@@ -39,6 +40,14 @@ class ExtractedPhenotype(BaseModel):
     location: str | None
     severity: str | None
     modifier: str | None
+
+
+class PhenotypeExtractionOutput(BaseModel):
+    """Output from the patient phenotype linking agent: the phenotypes of the
+    one patient it was run for, plus any flags (see lib.models.flag)."""
+
+    phenotypes: List[ExtractedPhenotype]
+    flags: List[ExtractionFlag] = Field(default_factory=list)
 
 
 class HpoCandidate(BaseModel):

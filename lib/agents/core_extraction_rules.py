@@ -61,6 +61,35 @@ REASONING:
     (e.g. get_hpo_term, clinvar_lookup); describe what you looked up and what you found instead.
   - Any quoted text in reasoning must be copied exactly from the input source text.
 
+FLAGS -- decisions a curator should see:
+
+- Every value you return carries its reasoning. A flag is for what that
+  reasoning cannot carry: a decision about something that is not in your
+  output, or a call the paper itself leaves open. Raise one in the "flags"
+  list of your output when:
+  - something a curator might have expected was left out under a rule rather
+    than for being nothing at all -- a person, variant or finding the paper
+    mentions that a scope, identifier or evidence rule excluded. Say which
+    rule applied and what the paper said, so a curator who reads the rule
+    differently can add it.
+  - a value rests on a judgment the paper does not settle: two sources
+    disagree, a status is implied rather than stated, a choice was made
+    between readings, a rule here changed something's standing in a way a
+    curator may not expect.
+- Do not flag routine extraction: a value stated plainly and cited needs no
+  flag. Raise one flag per decision, not per item it touches; a group left
+  out for one reason is one flag that names its members.
+- Each flag is an object with:
+  - about: the identifier of the extracted thing it concerns, copied exactly
+    from your output or from the input you were given (a patient or family
+    identifier, a variant as written, a phenotype concept), or null when it
+    is about something not extracted -- the usual case.
+  - flag: an evidence block whose value is a short subject (who or what, in a
+    few words), whose reasoning says what you decided, under which rule, and
+    what a curator might decide instead, and whose citations point at the
+    block(s) the decision rests on.
+- "flags" is empty when there was nothing to flag.
+
 PEDIGREE DESCRIPTION RULES:
 
 - Some messages carry a "Pedigree Description" alongside the paper. It is a

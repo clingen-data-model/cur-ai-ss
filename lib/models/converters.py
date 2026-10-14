@@ -2,7 +2,6 @@ from lib.agents.pedigree_describer_agent import PedigreeExtractionOutput
 from lib.models import PatientDB, PedigreeDB, VariantDB
 from lib.models.evidence_block import HumanEvidenceBlock, ReasoningBlock
 from lib.models.family import Family, FamilyDB
-from lib.models.flag import ExtractionFlag, FlagDB
 from lib.models.patient import (
     PatientDemographics,
     PatientIdentity,
@@ -59,24 +58,6 @@ _DEMOGRAPHIC_EVIDENCE_FIELDS = [
     'relationship_to_proband',
     'twin_type',
 ]
-
-
-def flag_to_db(
-    paper_id: int, flag: ExtractionFlag, *, source: str, patient_id: int | None
-) -> FlagDB:
-    """Convert an agent's ExtractionFlag to a FlagDB row.
-
-    ``patient_id`` is resolved by the caller from ``flag.patient_identifier``
-    against the rows it just inserted; ``source`` is the TaskType name of the
-    agent, so its next run can replace exactly its own flags.
-    """
-    return FlagDB(
-        paper_id=paper_id,
-        patient_id=patient_id,
-        source=source,
-        subject=flag.flag.value,
-        evidence=flag.flag.model_dump(),
-    )
 
 
 def patient_identity_to_db(paper_id: int, identity: PatientIdentity) -> PatientDB:

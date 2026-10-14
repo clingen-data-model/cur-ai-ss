@@ -404,6 +404,7 @@ class PatientDemographics(BaseModel):
             value=None, reasoning='Twin status not specified'
         )
     )
+    flags: List[ExtractionFlag] = Field(default_factory=list)
 
     @model_validator(mode='after')
     def validate_age_units(self) -> 'PatientDemographics':
@@ -478,18 +479,6 @@ class PatientExtractionOutput(BaseModel):
         if extra:
             raise ValueError(
                 f'Family assignments reference non-existent patients: {extra}'
-            )
-
-        dangling = {
-            f.patient_identifier
-            for f in self.flags
-            if f.patient_identifier is not None
-            and f.patient_identifier not in patient_identifiers
-        }
-        if dangling:
-            raise ValueError(
-                f'Flags reference non-existent patients: {dangling}. A flag '
-                'about someone who was not extracted has patient_identifier null.'
             )
 
         return self

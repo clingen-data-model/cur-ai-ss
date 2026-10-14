@@ -204,14 +204,14 @@ def run_patient_extraction(monkeypatch, db_session, paper):
 async def test_patient_extraction_persists_flags_and_links_them_to_patients(
     db_session, paper, run_patient_extraction
 ):
-    from lib.models import FlagDB, PatientDB
+    from lib.models import FamilyDB, FlagDB, PatientDB
 
     await run_patient_extraction(
         _flag_output(
             ['Patient 1', 'Patient 2'],
             [
                 {
-                    'patient_identifier': 'Patient 2',
+                    'about': 'Patient 2',
                     'flag': {
                         'value': 'status implied',
                         'reasoning': 'affected only by pedigree shading',
@@ -219,10 +219,18 @@ async def test_patient_extraction_persists_flags_and_links_them_to_patients(
                     },
                 },
                 {
-                    'patient_identifier': None,
+                    'about': None,
                     'flag': {
                         'value': 'untested sister',
                         'reasoning': 'mentioned once, nothing stated',
+                        'citations': [{'anchor': 'paragraph-13', 'quote': 'Eleven'}],
+                    },
+                },
+                {
+                    'about': 'family 1',
+                    'flag': {
+                        'value': 'no proband marked',
+                        'reasoning': 'chose the first described',
                         'citations': [{'anchor': 'paragraph-13', 'quote': 'Eleven'}],
                     },
                 },
@@ -231,10 +239,12 @@ async def test_patient_extraction_persists_flags_and_links_them_to_patients(
     )
 
     p2 = db_session.query(PatientDB).filter_by(identifier='Patient 2').one()
+    family = db_session.query(FamilyDB).filter_by(paper_id=paper.id).one()
     rows = db_session.query(FlagDB).filter_by(paper_id=paper.id).order_by(FlagDB.id)
-    assert [(r.subject, r.patient_id, r.source) for r in rows] == [
-        ('status implied', p2.id, 'PATIENT_EXTRACTION'),
-        ('untested sister', None, 'PATIENT_EXTRACTION'),
+    assert [(r.subject, r.patient_id, r.family_id, r.source) for r in rows] == [
+        ('status implied', p2.id, None, 'PATIENT_EXTRACTION'),
+        ('untested sister', None, None, 'PATIENT_EXTRACTION'),
+        ('no proband marked', None, family.id, 'PATIENT_EXTRACTION'),
     ]
 
 
@@ -253,7 +263,7 @@ async def test_rerunning_patient_extraction_replaces_only_its_own_flags(
     db_session.commit()
 
     sister = {
-        'patient_identifier': None,
+        'about': None,
         'flag': {
             'value': 'untested sister',
             'reasoning': 'mentioned once',

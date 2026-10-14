@@ -234,6 +234,14 @@ Output rules:
   - variant: Structured variant identifier (not general text like "VUS in GENE")
 - Do NOT output variants based solely on accessions (transcript, protein_accession, genomic_accession, lrg_accession, gene_accession)—these support but cannot alone identify a variant
 - Do NOT output variants that only have general descriptive text (e.g., "carries a VUS in TOPBP1")
+- "flags" is a list as CORE EXTRACTION RULES describes; "about" is a variant as
+  written in this output (its hgvs_c, hgvs_p, hgvs_g or variant field), or null
+
+FLAGS for this task (the rule is in CORE EXTRACTION RULES): a variant the paper
+reports that the identifier filter above excluded, a variant left out as
+belonging to another gene when the paper is ambiguous, two notations in the
+paper that disagree for one variant, a transcript or build inferred rather than
+stated.
 """
 
 

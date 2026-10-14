@@ -225,17 +225,47 @@ def test_spec_disambiguates_a_cell_that_repeats_across_a_table_row():
     assert 'Never quote a flag or repeated cell bare' in CORE_EXTRACTION_SPEC
 
 
-def test_patient_prompt_asks_for_curator_flags():
+def test_spec_states_the_flag_rule_once_for_every_agent():
     """Scoping and the one-proband rule make decisions a curator cannot see from
     the output: a cohort member left out, a relative mentioned once and
     dropped, a proband chosen where the paper marks none. Field reasoning only
-    covers what was extracted, so the prompt asks for a flag per decision."""
+    covers what was extracted, so the shared spec asks every agent for a flag
+    per decision, and each prompt adds only its own examples."""
+    assert 'FLAGS -- decisions a curator should see' in CORE_EXTRACTION_SPEC
+    assert 'left out under a rule rather\n    than for being nothing at all' in (
+        CORE_EXTRACTION_SPEC
+    )
+    assert 'a judgment the paper does not settle' in CORE_EXTRACTION_SPEC
+    assert 'Do not flag routine extraction' in CORE_EXTRACTION_SPEC
+    assert 'one flag per decision, not per item it touches' in CORE_EXTRACTION_SPEC
+    assert 'null when it\n    is about something not extracted' in CORE_EXTRACTION_SPEC
+
+
+@pytest.mark.parametrize(
+    'instructions',
+    [
+        PATIENT_EXTRACTION_AGENT_INSTRUCTIONS,
+        PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS,
+        VARIANT_EXTRACTION_AGENT_INSTRUCTIONS,
+        PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS,
+        PATIENT_PHENOTYPE_LINKING_AGENT_INSTRUCTIONS,
+        SEGREGATION_EVIDENCE_AGENT_INSTRUCTIONS,
+    ],
+)
+def test_every_flagging_prompt_points_at_the_shared_rule_and_names_about(
+    instructions,
+):
+    assert instructions.count('FLAGS -- decisions a curator should see') == 1
+    assert 'the rule is in CORE EXTRACTION\n' in instructions or (
+        'the rule is in CORE EXTRACTION RULES' in instructions
+    )
+    assert '"about" is' in instructions
+
+
+def test_patient_prompt_flag_examples_cover_the_three_kinds_of_decision():
     prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
-    assert 'FLAGS -- decisions a curator should see' in prompt
-    assert 'rejected under a rule rather than for not being\n  a person' in prompt
-    assert 'a judgment the paper does not settle' in prompt
-    assert 'Do not flag routine extraction' in prompt
-    assert 'one flag per decision, not per person it touches' in prompt
-    assert 'Return a "flags" list' in prompt
-    assert 'null when it is about someone or something not extracted' in prompt
+    assert 'FLAGS for this task' in prompt
+    assert 'rejected under a rule rather than for not being a\n  person' in prompt
+    assert 'A proband chosen where the paper marks none' in prompt
+    assert 'A standing changed by a rule here' in prompt
     assert 'has a flag\n  in "flags"; nothing routine does.' in prompt

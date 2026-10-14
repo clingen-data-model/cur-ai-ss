@@ -3307,7 +3307,7 @@ def test_load_hpo_link_cache(db_session, seeded_paper):
 def test_phenotype_extraction_takes_cached_hpo_links(
     db_session, seeded_paper, monkeypatch
 ):
-    from lib.models import ExtractedPhenotype
+    from lib.models import ExtractedPhenotype, PhenotypeExtractionOutput
     from lib.tasks import hpo_link_cache
     from lib.tasks.handlers import handle_phenotype_extraction
 
@@ -3350,11 +3350,13 @@ def test_phenotype_extraction_takes_cached_hpo_links(
         )
 
     result = MagicMock()
-    result.final_output = [
-        extracted('SEIZURES'),
-        extracted('Seizures', negated=True),
-        extracted('Ataxia'),
-    ]
+    result.final_output = PhenotypeExtractionOutput(
+        phenotypes=[
+            extracted('SEIZURES'),
+            extracted('Seizures', negated=True),
+            extracted('Ataxia'),
+        ]
+    )
     with patch('lib.tasks.handlers.Runner.run', return_value=result):
         asyncio.run(handle_phenotype_extraction(task.id))
 
@@ -3493,7 +3495,7 @@ def _seed_flag(db_session, seeded_paper, *, subject, patient_id=None):
     return flag
 
 
-def test_list_flags_names_the_patient_and_puts_open_flags_first(
+def test_list_flags_links_the_patient_and_puts_open_flags_first(
     client, db_session, seeded_paper
 ):
     patient = _seed_patient(db_session, seeded_paper, identifier='Patient 1')
@@ -3512,11 +3514,10 @@ def test_list_flags_names_the_patient_and_puts_open_flags_first(
     assert resp.status_code == 200
     rows = resp.json()
     assert [r['subject'] for r in rows] == ['untested sister', 'chosen as proband']
-    assert rows[0]['patient_id'] is None and rows[0]['patient_identifier'] is None
+    assert rows[0]['patient_id'] is None
     assert rows[0]['resolved_by'] is None
     assert rows[0]['evidence']['citations'][0]['anchor'] == 'paragraph-3'
     assert rows[1]['patient_id'] == patient.id
-    assert rows[1]['patient_identifier'] == 'Patient 1'
     assert rows[1]['resolution_note'] == 'agree'
     assert rows[1]['resolved_by'] is not None
     assert about_nobody.resolved_at is None

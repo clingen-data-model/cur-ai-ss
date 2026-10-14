@@ -1,8 +1,8 @@
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON, Float
@@ -10,6 +10,7 @@ from sqlalchemy.types import JSON, Float
 from lib.models.base import Base, PatchModel
 from lib.models.datetimes import UtcDatetime
 from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock, ReasoningBlock
+from lib.models.flag import ExtractionFlag
 from lib.models.user import UserSummaryResp
 
 if TYPE_CHECKING:
@@ -188,6 +189,7 @@ class SegregationEvidenceExtractionOutput(BaseModel):
 
     extracted_lod_score: EvidenceBlock[float | None]
     has_unexplainable_non_segregations: EvidenceBlock[bool]
+    flags: List[ExtractionFlag] = Field(default_factory=list)
 
 
 class SegregationAnalysisComputedOutput(BaseModel):

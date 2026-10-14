@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, List
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import (
     DateTime,
     ForeignKey,
@@ -25,6 +25,7 @@ from lib.models.evidence_block import (
     HumanEvidenceBlock,
     ReasoningBlock,
 )
+from lib.models.flag import ExtractionFlag
 from lib.models.mondo import MondoComponentMapping, MondoTerm
 from lib.models.user import UserSummaryResp
 
@@ -104,6 +105,7 @@ class PatientVariantOccurrence(BaseModel):
 class PatientVariantOccurrenceOutput(BaseModel):
     links: List[PatientVariantOccurrence]
     disease_name: EvidenceBlock[str] | None = None
+    flags: List[ExtractionFlag] = Field(default_factory=list)
 
 
 class PatientVariantOccurrenceUpdateRequest(PatchModel):

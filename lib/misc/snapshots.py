@@ -68,8 +68,6 @@ _SNAPSHOT_NAME_RE = re.compile(r'^extraction_\d{8}T\d{12}Z\.json$')
 _INSERT_ORDER: list[tuple[str, type[Base]]] = [
     ('families', FamilyDB),
     ('patients', PatientDB),
-    # Flags FK patients (nullable) and users; nothing FKs a flag.
-    ('flags', FlagDB),
     ('pedigrees', PedigreeDB),
     ('phenotypes', PhenotypeDB),
     ('hpos', HpoDB),
@@ -79,6 +77,9 @@ _INSERT_ORDER: list[tuple[str, type[Base]]] = [
     ('patient_variant_occurrences', PatientVariantOccurrenceDB),
     ('segregation_evidence', SegregationEvidenceDB),
     ('segregation_analysis_computed', SegregationAnalysisComputedDB),
+    # Flags link families, patients, variants and phenotypes (all nullable)
+    # and users; nothing FKs a flag.
+    ('flags', FlagDB),
     # Edit history and the deletion log version alongside the data they
     # describe -- every FK target above is already inserted by this point.
     # deletion_log has no FK of its own (see its docstring), so its position
@@ -632,6 +633,10 @@ def _delete_paper_domain_rows(session: Session, paper_id: int) -> None:
     session.query(TaskDB).filter(TaskDB.paper_id == paper_id).delete(
         synchronize_session=False
     )
+    # Flags before the rows they link; a flag about nobody has no cascade.
+    session.query(FlagDB).filter(FlagDB.paper_id == paper_id).delete(
+        synchronize_session=False
+    )
     session.query(PatientVariantOccurrenceDB).filter(
         PatientVariantOccurrenceDB.paper_id == paper_id
     ).delete(synchronize_session=False)
@@ -657,9 +662,6 @@ def _delete_paper_domain_rows(session: Session, paper_id: int) -> None:
         synchronize_session=False
     )
     session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).delete(
-        synchronize_session=False
-    )
-    session.query(FlagDB).filter(FlagDB.paper_id == paper_id).delete(
         synchronize_session=False
     )
     session.query(PatientDB).filter(PatientDB.paper_id == paper_id).delete(

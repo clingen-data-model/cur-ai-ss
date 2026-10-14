@@ -77,6 +77,7 @@ from lib.models.phenotype import (
     HPOTerm,
     PhenotypeCreateRequest,
     PhenotypeDB,
+    PhenotypeExtractionOutput,
     PhenotypeResp,
 )
 from lib.models.segregation_analysis import (

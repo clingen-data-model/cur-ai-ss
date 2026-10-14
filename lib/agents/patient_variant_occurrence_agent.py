@@ -81,6 +81,14 @@ Note: Compound heterozygous genotype evaluation (determining if two heterozygous
 - "high": direct, explicit patient-level evidence
 - "moderate": inferred from group/pedigree context, strong indirect support, patient membership unambiguous
 - "low": partially ambiguous textual evidence; never for pure speculation
+
+**Flags** (the rule is in CORE EXTRACTION RULES): a patient-variant pair the paper
+suggests but the linking rules above would not allow (a group statement, a
+pedigree symbol alone), a zygosity or inheritance read from context rather than
+stated, a de novo status the paper asserts without parental testing, a patient
+or variant in the input that nothing in the paper connects to anything. The
+output carries a "flags" list; "about" is a patient identifier or a variant
+quote from the input, or null.
 """
 
 PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS = (

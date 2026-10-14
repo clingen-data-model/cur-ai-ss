@@ -5,14 +5,18 @@ copy of that. It exists for the two things a field's reasoning cannot carry:
 
 - a decision about something that was *not* extracted (a candidate the agent
   rejected under a scoping rule, a relative mentioned once without a stated
-  fact, a cohort member in another gene), which has no row to hang on; and
+  fact, a variant left out for having no structured identifier), which has no
+  row to hang on; and
 - a decision that *was* extracted but turned on a judgment call the paper
-  itself leaves open (no proband marked, text and table disagree, a relative
-  whose status is only implied).
+  itself leaves open (no proband marked, text and table disagree, a zygosity
+  read off a pedigree symbol).
 
-The row is deliberately thin: who raised it, what it is about, the agent's
-evidence block (reasoning plus citations, the same shape as every
-``*_evidence`` column so the UI renders it the same way), and who resolved it.
+Any extraction agent can raise one; the shared rule is the FLAGS section of
+``CORE_EXTRACTION_SPEC``. The row is deliberately thin: who raised it, which
+extracted rows it is about (any of family, patient, variant, phenotype -- a
+flag about a patient's phenotype carries both), the agent's evidence block
+(reasoning plus citations, the same shape as every ``*_evidence`` column so
+the UI renders it the same way), and who resolved it.
 """
 
 from datetime import datetime
@@ -29,23 +33,34 @@ from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock
 from lib.models.user import UserSummaryResp
 
 if TYPE_CHECKING:
+    from lib.models.family import FamilyDB
     from lib.models.paper import PaperDB
     from lib.models.patient import PatientDB
+    from lib.models.phenotype import PhenotypeDB
     from lib.models.user import UserDB
+    from lib.models.variant import VariantDB
 
 
 class ExtractionFlag(BaseModel):
-    """One flag as an agent returns it.
+    """One flag as an agent returns it, in any agent's output.
 
-    ``patient_identifier`` names the extracted patient the flag is about, or is
-    null when the flag is about something that was not extracted -- that is
-    the point of a flag, so null is the common case. ``flag.value`` is a short
-    subject ("sister of the proband, mentioned as unscreened"); the reasoning
-    says what was decided and why; the citations point at the text it rests on.
+    ``about`` names the extracted thing the flag concerns, exactly as it
+    appears in the agent's own output or in the input it was given -- a
+    patient or family identifier, a variant as written, a phenotype concept --
+    or is null when the flag is about something that was not extracted, which
+    is the point of a flag and so the common case. The handler resolves it to
+    the row it just wrote; an ``about`` it cannot match is kept in the subject
+    and reasoning, not lost. ``flag.value`` is a short subject; the reasoning
+    says what was decided and why; the citations point at the text it rests
+    on.
     """
 
-    patient_identifier: str | None
+    about: str | None
     flag: EvidenceBlock[str]
+
+
+# The link columns a resolved ``about`` (or a task's own scope) can fill.
+LINK_COLUMNS = ('family_id', 'patient_id', 'variant_id', 'phenotype_id')
 
 
 class FlagDB(Base):
@@ -55,13 +70,26 @@ class FlagDB(Base):
     paper_id: Mapped[int] = mapped_column(
         Integer, ForeignKey('papers.id', ondelete='CASCADE'), nullable=False
     )
-    # The extracted row the flag is about, when there is one. CASCADE: a flag
-    # about a patient a curator deleted has nothing left to say.
+    # The extracted rows the flag is about, when there are any. Not an
+    # exclusive arc: a flag about one of a patient's phenotypes carries both
+    # ids, so it lists under the patient and goes away with the phenotype.
+    # CASCADE throughout: a flag about a row a curator deleted has nothing
+    # left to say.
+    family_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey('families.id', ondelete='CASCADE'), nullable=True
+    )
     patient_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey('patients.id', ondelete='CASCADE'), nullable=True
     )
+    variant_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey('variants.id', ondelete='CASCADE'), nullable=True
+    )
+    phenotype_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey('phenotypes.id', ondelete='CASCADE'), nullable=True
+    )
     # TaskType name of the agent that raised it. A re-run of that agent
-    # replaces its own flags and leaves every other agent's alone.
+    # replaces its own flags (within its own scope -- the patient, for a
+    # per-patient task) and leaves every other agent's alone.
     source: Mapped[str] = mapped_column(String, nullable=False)
     subject: Mapped[str] = mapped_column(Text, nullable=False)
     evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
@@ -78,25 +106,33 @@ class FlagDB(Base):
     )
 
     paper: Mapped['PaperDB'] = relationship('PaperDB', back_populates='flags')
+    family: Mapped['FamilyDB | None'] = relationship('FamilyDB')
     patient: Mapped['PatientDB | None'] = relationship('PatientDB')
+    variant: Mapped['VariantDB | None'] = relationship('VariantDB')
+    phenotype: Mapped['PhenotypeDB | None'] = relationship('PhenotypeDB')
     resolved_by: Mapped['UserDB | None'] = relationship('UserDB')
 
     __table_args__ = (
         Index('ix_flags_paper_id', 'paper_id'),
         Index('ix_flags_patient_id', 'patient_id'),
+        Index('ix_flags_variant_id', 'variant_id'),
     )
 
 
 class FlagResp(BaseModel):
     id: int
     paper_id: int
-    patient_id: int | None = None
-    patient_identifier: str | None = None
     source: str
     subject: str
     # Lenient on load (no required source), same as every other *_evidence
     # field served to the UI.
     evidence: HumanEvidenceBlock[str]
+    # Which rows it is about; null when the flag is not about one. The UI
+    # already holds the paper's rows and looks the label up by id.
+    family_id: int | None = None
+    patient_id: int | None = None
+    variant_id: int | None = None
+    phenotype_id: int | None = None
     resolved_by_user_id: int | None = None
     resolved_by: UserSummaryResp | None = None
     resolved_at: UtcDatetime | None = None
