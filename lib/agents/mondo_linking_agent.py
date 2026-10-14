@@ -166,8 +166,11 @@ Only use this section when no appropriate full-string MONDO match exists.
 10. If no component should be promoted as the selected paper-level MONDO term,
     return match_type "component_only" when at least one component maps to MONDO
     or HPO.
-11. Return match_type "none" only when no full-string MONDO match exists and no
-    useful component mappings exist.
+11. A "broad" match or a component mapping with a flag beats "none": a
+    curator can narrow a term in one click and cannot easily find one from
+    nothing. Return match_type "none" only when no full-string MONDO match
+    exists and no useful component mappings exist, or the text names no
+    disease at all.
 
 For mapped components:
 - mapped_ontology must be "MONDO" or "HPO".

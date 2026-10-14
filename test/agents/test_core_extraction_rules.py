@@ -246,6 +246,10 @@ def test_spec_states_the_flag_rule_once_for_every_agent():
         CORE_EXTRACTION_SPEC
     )
     assert 'a judgment the paper does not settle' in CORE_EXTRACTION_SPEC
+    # Output in its uncertain form beats nothing: a curator deletes in one
+    # click and adds by hand.
+    assert 'Prefer output a curator can review over nothing' in FLAG_RULES
+    assert 'Leave something out only when' in FLAG_RULES
     assert 'Do not flag routine extraction' in CORE_EXTRACTION_SPEC
     assert 'one flag per decision, not per item it touches' in CORE_EXTRACTION_SPEC
     assert 'null when it\n    is about something not extracted' in CORE_EXTRACTION_SPEC
@@ -279,7 +283,8 @@ def test_every_flagging_prompt_carries_the_rule_once_and_names_about(
 def test_patient_prompt_flag_examples_cover_the_three_kinds_of_decision():
     prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
     assert 'FLAGS for this task' in prompt
-    assert 'rejected under a rule rather than for not being a\n  person' in prompt
+    assert 'left out under the scope rule' in prompt
+    assert 'a patient too, under that role, with a flag' in prompt
     assert 'A proband chosen where the paper marks none' in prompt
     assert 'A standing changed by a rule here' in prompt
     assert 'has a flag\n  in "flags"; nothing routine does.' in prompt

@@ -94,7 +94,9 @@ Each field (except the *_unit fields) is an EvidenceBlock containing:
 
 Guidelines:
 
-1. Extract only explicitly stated information. Do NOT infer.
+1. Extract only explicitly stated information. Do NOT infer. A value the paper
+   implies but does not state (a sex from a pedigree symbol, an age from "in
+   her thirties") stays Unknown or None, and a flag gives the implied value.
 2. Use enum values when possible; otherwise use "Other" or "Unknown".
 3. If a field is not stated for this patient, return Unknown (or None for ages/twin_type).
 4. The output also carries a "flags" list (the rule is in CORE EXTRACTION

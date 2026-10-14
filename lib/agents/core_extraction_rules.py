@@ -4,6 +4,15 @@
 # by appending it to their own instructions. See lib/models/flag.py.
 FLAG_RULES = """FLAGS -- decisions a curator should see:
 
+- Prefer output a curator can review over nothing. When the paper suggests
+  something but does not establish it, produce it in the uncertain form the
+  output allows -- Unknown or Uncertain where a field has one, uncertain:
+  true, a broader term, a Non-Proband -- and flag it. A row a curator can
+  delete costs one click; a row they must add by hand costs the identifier,
+  the evidence and every downstream step. Leave something out only when the
+  output has no uncertain form for it and including it would change a count
+  curators score before review (an extra proband, members of a cohort the
+  target gene does not cover), and flag that too.
 - Every value you return carries its reasoning. A flag is for what that
   reasoning cannot carry: a decision about something that is not in your
   output, or a call the paper itself leaves open. Raise one in the "flags"

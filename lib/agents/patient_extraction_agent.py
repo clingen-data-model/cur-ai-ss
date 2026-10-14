@@ -57,10 +57,13 @@ list before you decide and decide before you write any patient:
      clinical finding, a demographic, that they were sequenced, or the
      affected/unaffected status a pedigree symbol shows. A table row giving a
      label and a variant is such a fact; so is a citation-headed column whose
-     cells give that person's sex, age, variant or findings. A label with nothing behind it ("the
-     parents" of a cohort, "eleven additional family members", a spouse drawn
-     in the pedigree without a label) is not, and no label is invented for
-     them;
+     cells give that person's sex, age, variant or findings. A single person
+     the text names by role with nothing further stated ("her sister was not
+     tested") is a patient too, under that role, with a flag saying nothing
+     was stated. What is not a patient is a label with nobody behind it: a
+     group ("the parents" of a cohort, "eleven additional family members")
+     or a spouse drawn in the pedigree without a label. No label is invented
+     for those;
    - the person is in scope for the target gene (above).
    Aggregate statements name nobody: "130 patients" or "5 males" identify no
    individual. A count the text states is a hint, not a target -- if it says
@@ -271,10 +274,10 @@ Consanguinity (EvidenceBlock[bool], required for every family):
 
 FLAGS for this task (the rule is in CORE EXTRACTION RULES):
 
-- A candidate from step 1 rejected under a rule rather than for not being a
-  person: a cohort member whose finding is in another gene, a relative the
-  text mentions once with nothing stated about them, an earlier study's
-  cohort shown for comparison.
+- A candidate from step 1 left out under the scope rule (a cohort member
+  whose finding is in another gene), or kept on thin ground: a relative the
+  text names once with nothing stated, an earlier study's cohort shown for
+  comparison.
 - A proband chosen where the paper marks none, a family whose disease is not
   the one the paper is about, a status read off a pedigree symbol alone.
 - A standing changed by a rule here: a re-reported individual extracted as
@@ -284,8 +287,8 @@ FLAGS for this task (the rule is in CORE EXTRACTION RULES):
 BEFORE RETURNING, CHECK:
 - Every table row or column header that names an in-scope person has a
   patient, the columns headed by a citation included.
-- Every relative the text names by role and states a genotype, a transmission
-  or an affected status for has a patient.
+- Every relative the text names by role has a patient, flagged when nothing
+  more than the role is stated.
 - No patient is in the list only because a table describes them: each one is
   connected to the target gene.
 - No identifier is a bare number, or a bare number-plus-suffix copied from a

@@ -44,10 +44,12 @@ CONFIDENCE LEVELS:
 - Only a general statement that patient is "compound heterozygous" without variant mapping
 
 RULES:
-- Only output pairs where there is explicit or strong inferential evidence they are in trans
-- Do NOT output pairs based merely on the presence of two heterozygous variants without supporting evidence
-- If the paper does not indicate which variants form a pair, do NOT guess
-- If all variants are present but phase is unknown, return an empty pairs list
+- A pair with explicit or strong inferential evidence of being in trans is "confirmed" or "assumed"
+- When the paper calls the patient compound heterozygous without saying which variants, or
+  two heterozygous variants co-occur with phase unknown, output the pair with confidence
+  "uncertain" and flag it -- a curator can delete a pair but cannot easily build one
+- Leave the pairs list empty only when the patient has more than two heterozygous variants
+  and the paper gives no way to choose among them; flag that, naming the variants
 - Each pair's reasoning should cite the exact evidence (quote from text, table/figure, pedigree)
 """
 
@@ -56,11 +58,11 @@ COMPOUND_HET_AGENT_INSTRUCTIONS = (
     + '\n\n'
     + FLAG_RULES
     + """
-FLAGS for this task: two variants the paper calls compound heterozygous
-without saying which, a phase inferred from one parent's genotype alone, a
-pair left out because the evidence was only a general statement, a
-heterozygous variant in the list that the paper never discusses for this
-patient. "about" is a variant description from the list you were given, or
+FLAGS for this task: a pair output as "uncertain" because the paper did not
+say which variants or did not establish phase, a phase inferred from one
+parent's genotype alone, three or more heterozygous variants with no way to
+pair them, a heterozygous variant in the list that the paper never discusses
+for this patient. "about" is a variant description from the list you were given, or
 null. The output carries a "flags" list.
 """
 )

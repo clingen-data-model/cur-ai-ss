@@ -327,14 +327,15 @@ If the candidate terms do not represent the phenotype meaning:
 
 Only return id: null and name: null after tool exploration reveals no suitable match.
 
-Return an HPOTerm with id: null and name: null when:
-- the phenotype is too vague (e.g., "symptom", "finding")
-- the phenotype is genuinely not represented in HPO
+When no term matches the concept exactly but a broader term covers it, return
+the broader term and flag it: a curator can relink a term in one click and
+cannot easily find one from nothing. Return an HPOTerm with id: null and
+name: null only when:
+- the phenotype is too vague to place anywhere (e.g., "symptom", "finding")
+- the phenotype is genuinely not represented in HPO, not even by a broader term
 - search attempts with multiple phrasings yield no meaningful matches
-- selecting any term would require significant guessing
 
-It is better to return null values than to select an incorrect HPO term,
-but actively use tools before giving up.
+Actively use tools before giving up.
 
 ---------------------------------------------------------------------
 

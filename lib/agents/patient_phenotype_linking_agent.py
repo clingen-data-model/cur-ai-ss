@@ -165,7 +165,9 @@ Extract phenotypes that explicitly belong to the provided patient:
 - If a phenotype is explicitly in family history context, DO NOT extract it
 
 **Ambiguous cases:**
-- If unsure whether a phenotype belongs to the provided patient, skip the extraction
+- If unsure whether a phenotype belongs to the provided patient, extract it with
+  uncertain: true and flag it, rather than skipping it: a curator deletes a
+  wrong row in one click and cannot easily add a missing one
 - Only extract phenotypes clearly attributed to this specific patient
 
 **Affected status:**
@@ -351,10 +353,10 @@ OUTPUT
 
 Return an object with a "phenotypes" list, one entry per extracted phenotype
 for the provided patient, and a "flags" list (the rule is in CORE EXTRACTION
-RULES): a finding attributed to the family or cohort rather than to this
-patient and therefore not extracted, a finding whose attribution to this
-patient is ambiguous, a finding stated only in a table flagged with an
-EXTRACTION WARNING. "about" is a concept from the "phenotypes" list, or null.
+RULES): a finding extracted with uncertain: true because its attribution to
+this patient is implied rather than stated, a relative's finding left out
+under the family-member rule when the sentence could be read either way, a
+finding stated only in a table flagged with an EXTRACTION WARNING. "about" is a concept from the "phenotypes" list, or null.
 
 Example structure:
 {
