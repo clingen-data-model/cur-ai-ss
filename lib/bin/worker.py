@@ -22,7 +22,7 @@ from lib.reference_data.hpo import warm_term_lookup_if_cached
 from lib.tasks.agent_session import clear_task_session, closing_sessions
 from lib.tasks.handlers import TASK_HANDLERS
 from lib.tasks.hpo_link_cache import get_hpo_link_cache
-from lib.tasks.misc import enqueue_successors
+from lib.tasks.misc import enqueue_successors, enqueue_task
 from lib.tasks.models import (
     ACTIVE_STATUSES,
     CLAIMED_STATUSES,
@@ -166,6 +166,9 @@ async def execute_task(task_id: int) -> None:
             paper = session.get(PaperDB, task.paper_id)
             if paper:
                 paper.updated_at = now
+            # Before the snapshot and the email: a verification row queued
+            # here is in flight, so both wait for it (see TERMINAL_TASK_TYPES).
+            _maybe_queue_verification(session, task)
             if error_msg is None and task.type in TERMINAL_TASK_TYPES:
                 _maybe_write_snapshot(session, task.paper_id)
                 _maybe_notify_completion(session, task.paper_id)
@@ -174,36 +177,64 @@ async def execute_task(task_id: int) -> None:
                 _maybe_write_snapshot(session, task.paper_id)
 
 
-def _maybe_write_snapshot(session: Session, paper_id: int) -> None:
-    """Snapshot the paper's extracted state once no pipeline task is in flight.
+def _maybe_queue_verification(session: Session, task: TaskDB) -> None:
+    """Queue the paper's EXTRACTION_VERIFICATION once this completion (or
+    final failure) has left every other task settled. Checked on every task,
+    not just the graph's leaves: a lone re-run that skips its successors, or
+    a pipeline that ends in a failure, settles the paper too. The one row
+    per paper is reset in place by enqueue_task, so a paper that settles
+    again after a re-run is verified again; a verification that is itself
+    running is left alone and the re-run's flags wait for the next settle."""
+    if task.type == TaskType.EXTRACTION_VERIFICATION:
+        return
+    if task.status == TaskStatus.FAILED and task.tries <= MAX_RETRIES:
+        return  # still owed a retry
+    if not _pipeline_idle(
+        session, task.paper_id, ignoring=TaskType.EXTRACTION_VERIFICATION
+    ):
+        return
+    enqueue_task(
+        session,
+        paper_id=task.paper_id,
+        task_type=TaskType.EXTRACTION_VERIFICATION,
+        updated_by_user_id=task.updated_by_user_id,
+    )
 
-    Idle, not all-COMPLETED: a paper whose pipeline ended with a failed task is
-    just as settled, and requiring success meant such a paper never got a
-    completion snapshot at all.
 
-    Several terminal tasks can finish in quick succession; write_snapshot
-    dedupes on a state hash, so repeat calls for an unchanged paper are no-ops.
-    A snapshot failure must never fail the task bookkeeping around it."""
+def _pipeline_idle(
+    session: Session, paper_id: int, ignoring: TaskType | None = None
+) -> bool:
+    """Whether no pipeline task of the paper is in flight or owed a retry.
+
+    Idle, not all-COMPLETED: a paper whose pipeline ended with a failed task
+    is just as settled. ``ignoring`` leaves one type out of the question --
+    the verification row, when deciding whether to queue it."""
     # The session runs with autoflush=False, and the caller has just set the
     # completing task's status to COMPLETED in memory only. Without this flush
     # the query below reads the stale RUNNING row and the check can never pass
     # for the final task of a pipeline -- the exact task meant to trigger it.
     session.flush()
-    in_flight = (
-        session.query(TaskDB.id)
-        .filter(
-            TaskDB.paper_id == paper_id,
-            or_(
-                TaskDB.status.in_(ACTIVE_STATUSES),
-                # Still owed a retry by poll_and_schedule_tasks.
-                (TaskDB.status == TaskStatus.FAILED) & (TaskDB.tries <= MAX_RETRIES),
-            ),
-        )
-        .first()
+    query = session.query(TaskDB.id).filter(
+        TaskDB.paper_id == paper_id,
+        or_(
+            TaskDB.status.in_(ACTIVE_STATUSES),
+            # Still owed a retry by poll_and_schedule_tasks.
+            (TaskDB.status == TaskStatus.FAILED) & (TaskDB.tries <= MAX_RETRIES),
+        ),
     )
-    if in_flight is not None:
-        return
-    write_snapshot_safe(session, paper_id)
+    if ignoring is not None:
+        query = query.filter(TaskDB.type != ignoring)
+    return query.first() is None
+
+
+def _maybe_write_snapshot(session: Session, paper_id: int) -> None:
+    """Snapshot the paper's extracted state once no pipeline task is in flight.
+
+    Several terminal tasks can finish in quick succession; write_snapshot
+    dedupes on a state hash, so repeat calls for an unchanged paper are no-ops.
+    A snapshot failure must never fail the task bookkeeping around it."""
+    if _pipeline_idle(session, paper_id):
+        write_snapshot_safe(session, paper_id)
 
 
 def _maybe_notify_completion(session: Session, paper_id: int) -> None:

@@ -35,6 +35,13 @@ const DAG_EDGES: [TaskType, TaskType][] = [
   ['Patient Variant Occurrences', 'Occurrence MONDO Linking'],
   ['Segregation Evidence Extraction', 'Segregation Analysis Computed'],
   ['Phenotype Extraction', 'HPO Linking'],
+  // Every leaf feeds the closing pass (lib/tasks/models.py TASK_SUCCESSORS).
+  ['Variant Annotation', 'Extraction Verification'],
+  ['Segregation Analysis Computed', 'Extraction Verification'],
+  ['Compound Het Evaluation', 'Extraction Verification'],
+  ['HPO Linking', 'Extraction Verification'],
+  ['Paper MONDO Linking', 'Extraction Verification'],
+  ['Occurrence MONDO Linking', 'Extraction Verification'],
 ]
 
 const ALL_TASK_TYPES: TaskType[] = [
@@ -55,6 +62,7 @@ const ALL_TASK_TYPES: TaskType[] = [
   'Segregation Analysis Computed',
   'Phenotype Extraction',
   'HPO Linking',
+  'Extraction Verification',
 ]
 
 const TASK_DESCRIPTIONS: Record<TaskType, string> = {
@@ -75,6 +83,7 @@ const TASK_DESCRIPTIONS: Record<TaskType, string> = {
   'HPO Linking': 'Maps phenotypes to HPO ontology terms for standardization',
   'Paper MONDO Linking': "Maps the paper's disease name to a MONDO ontology term for standardization",
   'Occurrence MONDO Linking': "Maps a patient-variant occurrence's disease name to a MONDO ontology term for standardization",
+  'Extraction Verification': 'Reviews the finished extraction once every other step has run; merges flags that raise the same decision more than once',
 }
 
 export type NodeStatus = 'idle' | 'pending' | 'running' | 'partial' | 'completed' | 'failed'

@@ -24,6 +24,7 @@ const TRACK_ACCENT: Record<string, string> = {
   patients: 'var(--color-chart-2)',
   variants: 'var(--color-chart-3)',
   analysis: 'var(--color-chart-4)',
+  verification: 'var(--color-chart-5)',
 }
 
 function StatusMarker({ row, accent }: { row: TaskRowProgress; accent: string }) {

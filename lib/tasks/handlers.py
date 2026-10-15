@@ -15,6 +15,12 @@ from lib.agents.compound_het_agent import (
 from lib.agents.compound_het_agent import (
     agent as compound_het_agent,
 )
+from lib.agents.extraction_verification_agent import (
+    EXTRACTION_VERIFICATION_AGENT_INSTRUCTIONS,
+)
+from lib.agents.extraction_verification_agent import (
+    agent as extraction_verification_agent,
+)
 from lib.agents.hpo_linking_agent import (
     HPO_LINKING_AGENT_INSTRUCTIONS,
 )
@@ -155,6 +161,7 @@ from lib.models.converters import (
     variant_to_db,
 )
 from lib.models.evidence_block import ReasoningBlock, verify_citations
+from lib.models.flag import FlagMergeOutput
 from lib.models.mondo import (
     MondoDiseaseScope,
     MondoLinkingTarget,
@@ -176,6 +183,11 @@ from lib.models.variant import (
 from lib.reference_data.hpo import find_matching_hpo_terms
 from lib.reference_data.mondo import get_mondo_term
 from lib.tasks.agent_session import agent_session
+from lib.tasks.extraction_verification import (
+    apply_merge,
+    open_flags,
+    verification_input,
+)
 from lib.tasks.flags import flags_of, match_label, replace_flags, split_pair
 from lib.tasks.hpo_link_cache import (
     CachedHpoLink,
@@ -265,6 +277,7 @@ QA_UNSUPPORTED_TASK_TYPES = {
     TaskType.PDF_PARSING,
     TaskType.VARIANT_ANNOTATION,
     TaskType.COMPOUND_HET_EVALUATION,
+    TaskType.EXTRACTION_VERIFICATION,
 }
 
 QA_FOLLOWUP_MAX_TURNS = 8
@@ -2139,6 +2152,40 @@ async def handle_mondo_linking(task_id: int) -> None:
             occurrence.mondo_match_context = mondo_match_context
 
 
+async def handle_extraction_verification(task_id: int) -> None:
+    """The pipeline's last pass over a paper (see
+    lib.tasks.extraction_verification): ask the agent which open flags say
+    the same thing, and fold each group into its earliest flag. No agent
+    session: the input is the flags themselves, rebuilt from the database
+    on every run, so a re-run never has a stale conversation to continue."""
+    with session_scope() as session:
+        task = session.get(TaskDB, task_id)
+        if not task:
+            return
+        paper_id = task.paper_id
+        flags = open_flags(session, paper_id)
+        if len(flags) < 2:
+            logger.info(
+                f'Paper {paper_id}: {len(flags)} open flag(s), nothing to merge'
+            )
+            return
+        payload = verification_input(flags)
+
+    message = (
+        f'{EXTRACTION_VERIFICATION_AGENT_INSTRUCTIONS}\n\n'
+        f'Open flags on this paper:\n{json.dumps(payload, indent=2)}'
+    )
+    result = await Runner.run(extraction_verification_agent, message)
+    log_run_metrics('EXTRACTION_VERIFICATION', result, paper_id=paper_id)
+    output = result.final_output
+    if not isinstance(output, FlagMergeOutput):
+        raise ValueError(f'Extraction verification returned no groups: {output!r}')
+
+    with session_scope() as session:
+        absorbed = apply_merge(session, paper_id, output)
+    logger.info(f'Paper {paper_id}: {absorbed} repeated flag(s) merged')
+
+
 TASK_HANDLERS: dict[TaskType, Callable[[int], Awaitable[None]]] = {
     TaskType.PDF_PARSING: handle_pdf_parsing,
     TaskType.PAPER_CLASSIFIER: handle_paper_classifier,
@@ -2161,4 +2208,5 @@ TASK_HANDLERS: dict[TaskType, Callable[[int], Awaitable[None]]] = {
     # not the linking logic itself, which is identical either way.
     TaskType.PAPER_MONDO_LINKING: handle_mondo_linking,
     TaskType.OCCURRENCE_MONDO_LINKING: handle_mondo_linking,
+    TaskType.EXTRACTION_VERIFICATION: handle_extraction_verification,
 }

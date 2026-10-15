@@ -36,7 +36,7 @@ class PipelineTrack(NamedTuple):
 # Occurrences, which waits on Patient Demographics *and* Variant Extraction, so
 # it joins after both.
 #
-#     Paper -> { Patients || Variants } -> Analysis
+#     Paper -> { Patients || Variants } -> Analysis -> Verification
 #
 # An estimate therefore adds the stages and takes the longest track within each,
 # rather than the longest track overall (which ignores that three of them queue
@@ -86,6 +86,12 @@ PIPELINE_TRACKS: list[PipelineTrack] = [
             TaskType.OCCURRENCE_MONDO_LINKING,
         ],
         stage=2,
+    ),
+    PipelineTrack(
+        'verification',
+        'Verification',
+        [TaskType.EXTRACTION_VERIFICATION],
+        stage=3,
     ),
 ]
 

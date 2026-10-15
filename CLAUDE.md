@@ -92,6 +92,7 @@ Papers flow through this sequence of agents (all triggered by worker):
 6. **Variant Annotation** → Adds annotations (SpliceAI, etc.)
 7. **Phenotype Extraction + HPO Linking** → Links phenotypes to HPO ontology terms
 8. **Patient-Variant Linking** → Links patients to their variants with inheritance info
+9. **Extraction Verification** → Runs once every other task of the paper has settled (queued by the worker, not by a graph edge); merges curator flags that raise the same decision more than once (`lib/tasks/extraction_verification.py`)
 
 Each agent is implemented with OpenAI API calls. Output files are stored in JSON format alongside the PDF.
 

@@ -58,6 +58,13 @@ class TaskType(StrEnum):
     # jumping back up after it already read complete.
     PAPER_MONDO_LINKING = 'Paper MONDO Linking'
     OCCURRENCE_MONDO_LINKING = 'Occurrence MONDO Linking'  # per-occurrence
+    # The pipeline's last step, one row per paper: a pass over everything the
+    # other agents produced. Queued by the worker once every other task of
+    # the paper has settled (see lib.bin.worker), not by an enqueue_successors
+    # edge, because a paper settles on completions that take no successors
+    # and on final failures too. Today it folds repeated flags into one
+    # (lib.tasks.extraction_verification).
+    EXTRACTION_VERIFICATION = 'Extraction Verification'
 
     @property
     def scope_column(self) -> str | None:
@@ -88,6 +95,7 @@ class TaskType(StrEnum):
             TaskType.HPO_LINKING: 'Maps phenotypes to HPO ontology terms for standardization',
             TaskType.PAPER_MONDO_LINKING: "Maps the paper's disease name to a MONDO ontology term for standardization",
             TaskType.OCCURRENCE_MONDO_LINKING: "Maps a patient-variant occurrence's disease name to a MONDO ontology term for standardization",
+            TaskType.EXTRACTION_VERIFICATION: 'Reviews the finished extraction once every other step has run; merges flags that raise the same decision more than once',
         }
         return descriptions[self]
 
@@ -159,7 +167,7 @@ TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
         TaskType.PATIENT_VARIANT_OCCURRENCES,
     ],
     TaskType.VARIANT_HARMONIZATION: [TaskType.VARIANT_ANNOTATION],
-    TaskType.VARIANT_ANNOTATION: [],
+    TaskType.VARIANT_ANNOTATION: [TaskType.EXTRACTION_VERIFICATION],
     TaskType.PATIENT_VARIANT_OCCURRENCES: [
         TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
         TaskType.COMPOUND_HET_EVALUATION,
@@ -169,17 +177,24 @@ TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
         TaskType.OCCURRENCE_MONDO_LINKING,
     ],
     TaskType.SEGREGATION_EVIDENCE_EXTRACTION: [TaskType.SEGREGATION_ANALYSIS_COMPUTED],
-    TaskType.SEGREGATION_ANALYSIS_COMPUTED: [],
+    TaskType.SEGREGATION_ANALYSIS_COMPUTED: [TaskType.EXTRACTION_VERIFICATION],
     # Also gated on the patient having a variant occurrence, which
     # PATIENT_VARIANT_OCCURRENCES releases without being an edge here -- see
     # enqueue_deferred_hpo_linking.
     TaskType.PHENOTYPE_EXTRACTION: [TaskType.HPO_LINKING],
-    TaskType.HPO_LINKING: [],
-    TaskType.PAPER_MONDO_LINKING: [],
-    TaskType.OCCURRENCE_MONDO_LINKING: [],
+    TaskType.HPO_LINKING: [TaskType.EXTRACTION_VERIFICATION],
+    TaskType.PAPER_MONDO_LINKING: [TaskType.EXTRACTION_VERIFICATION],
+    TaskType.OCCURRENCE_MONDO_LINKING: [TaskType.EXTRACTION_VERIFICATION],
+    # Every leaf of the graph feeds verification. The edges are what make it
+    # a descendant of everything -- so invalidate_descendants clears its row
+    # on any re-run -- and what draws it last in the UI's DAG; the worker,
+    # not enqueue_successors, is what queues it (see TaskType).
+    TaskType.EXTRACTION_VERIFICATION: [],
 }
 
-# Pipeline leaves: task types with no successors.
+# Pipeline leaves: task types with no successors. With verification fed by
+# every other leaf, this is verification alone, so the completion snapshot
+# and the owner's email follow the merged flags rather than precede them.
 TERMINAL_TASK_TYPES: frozenset[TaskType] = frozenset(
     t for t in TaskType if not TASK_SUCCESSORS.get(t)
 )

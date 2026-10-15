@@ -17,6 +17,14 @@ extracted rows it is about (any of family, patient, variant, phenotype -- a
 flag about a patient's phenotype carries both), the agent's evidence block
 (reasoning plus citations, the same shape as every ``*_evidence`` column so
 the UI renders it the same way), and who resolved it.
+
+The agents that raise flags run per patient, per family or per variant, and
+concurrently, so one decision about the paper can be flagged several times
+in different words -- a country taken from the recruitment site, once per
+relative; a pedigree label that differs from the text, once by patient
+extraction and once by demographics. Extraction verification, the
+pipeline's last task (``lib.tasks.extraction_verification``), folds those
+into one flag; ``FlagMergeOutput`` below is what its agent returns.
 """
 
 from datetime import datetime
@@ -121,6 +129,26 @@ class FlaggedReasoningBlock(ReasoningBlock[T], Generic[T]):
 
 
 AnyFlag = ExtractionFlag | ReasoningFlag
+
+
+class FlagMergeGroup(BaseModel):
+    """One decision that was flagged more than once: the flag to keep and
+    the ids it absorbs. ``keep`` is advisory -- the merge keeps the earliest
+    of the group whatever the agent names, so the surviving flag is the one
+    the pipeline raised first and any links or notes on it are the oldest."""
+
+    keep: int
+    merged: list[int]
+    reasoning: str
+
+
+class FlagMergeOutput(BaseModel):
+    """What the flag-merge agent returns (see lib.tasks.extraction_verification): the
+    groups of flags on one paper that say the same thing. A flag in no
+    group stands as it is."""
+
+    groups: list[FlagMergeGroup] = Field(default_factory=list)
+
 
 # The link columns a resolved ``about`` (or a task's own scope) can fill.
 LINK_COLUMNS = (
