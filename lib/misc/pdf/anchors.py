@@ -38,6 +38,7 @@ from docling_core.types.doc import (
     GroupLabel,
     ListItem,
     PictureItem,
+    ProvenanceItem,
     SectionHeaderItem,
     TableItem,
     TextItem,
@@ -368,6 +369,51 @@ def _display_to_user(
     return min(xs), min(ys), max(xs), max(ys)
 
 
+def on_page(box: PageBox, frame: _PageFrame, tol: float = 2.0) -> bool:
+    """Whether any of the box lies inside the page's visible area.
+
+    A PDF may draw content outside its visible box, where the viewer clips it:
+    paper 67 (an MDPI "for peer review" export) draws the text of pages 3 and
+    5 on page 4 as well, some 730 points above and below it. A reader never
+    sees that text, so a box there is nothing to highlight and the text it
+    belongs to is nothing to cite. Across the 94 prod papers on 2026-10-15,
+    215 of 13,475 anchor boxes on 9 papers sat entirely off their page (130 of
+    them in paper 67). ``tol`` keeps a box that merely touches the edge.
+    """
+    return (
+        box.x + box.width > frame.x0 - tol
+        and box.x < frame.x1 + tol
+        and box.y + box.height > frame.y0 - tol
+        and box.y < frame.y1 + tol
+    )
+
+
+def _prov_box(
+    item: DocItem,
+    prov: ProvenanceItem,
+    doc: DoclingDocument,
+    frames: dict[int, _PageFrame],
+) -> tuple[PageBox, _PageFrame] | None:
+    """One prov entry -> its user-space box and page frame; None without a page."""
+    page = doc.pages.get(prov.page_no)
+    if page is None or page.size is None:  # DOCX and friends: no layout
+        return None
+    frame = _frame_for(frames, prov.page_no, page.size.width, page.size.height)
+    if isinstance(item, (TableItem, PictureItem)):
+        # Layout-model output: displayed frame, needs the page's rotation.
+        l, b, r, t = _display_to_user(prov.bbox, frame, page.size.height)
+    else:
+        # Text-layer output: user space already. (TOPLEFT never occurs for
+        # PDF text prov; the conversion is only there so the branch is total.)
+        bl = (
+            prov.bbox
+            if prov.bbox.coord_origin == CoordOrigin.BOTTOMLEFT
+            else prov.bbox.to_bottom_left_origin(page.size.height)
+        )
+        l, b, r, t = bl.l, bl.b, bl.r, bl.t
+    return PageBox(page_no=prov.page_no, x=l, y=b, width=r - l, height=t - b), frame
+
+
 def _prov_boxes(
     item: DocItem, doc: DoclingDocument, frames: dict[int, _PageFrame]
 ) -> list[PageBox]:
@@ -395,30 +441,38 @@ def _prov_boxes(
     ``_display_to_user`` (see the section comment). Items from DOCX/XLSX have no
     pages, so they get no boxes at all. Docling occasionally emits a zero-width
     or zero-height prov (7 of 14,640 anchors across the 94 prod papers); those
-    cover nothing and are dropped.
+    cover nothing and are dropped, as is a box entirely off its page
+    (``on_page``), which covers nothing a reader can see.
     """
     boxes = []
     for prov in item.prov:
-        page = doc.pages.get(prov.page_no)
-        if page is None or page.size is None:  # DOCX and friends: no layout
+        placed = _prov_box(item, prov, doc, frames)
+        if placed is None:
             continue
-        if isinstance(item, (TableItem, PictureItem)):
-            # Layout-model output: displayed frame, needs the page's rotation.
-            frame = _frame_for(frames, prov.page_no, page.size.width, page.size.height)
-            l, b, r, t = _display_to_user(prov.bbox, frame, page.size.height)
-        else:
-            # Text-layer output: user space already. (TOPLEFT never occurs for
-            # PDF text prov; the conversion is only there so the branch is total.)
-            bl = (
-                prov.bbox
-                if prov.bbox.coord_origin == CoordOrigin.BOTTOMLEFT
-                else prov.bbox.to_bottom_left_origin(page.size.height)
-            )
-            l, b, r, t = bl.l, bl.b, bl.r, bl.t
-        if r <= l or t <= b:  # degenerate box: nothing to highlight
+        box, frame = placed
+        if box.width <= 0 or box.height <= 0:  # degenerate box: nothing to highlight
             continue
-        boxes.append(PageBox(page_no=prov.page_no, x=l, y=b, width=r - l, height=t - b))
+        if not on_page(box, frame):
+            continue
+        boxes.append(box)
     return boxes
+
+
+def _visible(
+    item: DocItem, doc: DoclingDocument, frames: dict[int, _PageFrame]
+) -> bool:
+    """Whether a reader can see any of the item: some fragment is on its page.
+
+    An item with no paged prov at all (a DOCX, or an item Docling placed
+    nowhere) is taken as visible, since there is nothing to say otherwise. A
+    text item whose every fragment is clipped off the page is the invisible
+    duplicate described at ``on_page``; ``build_anchored`` leaves it out of
+    the document so that it cannot be cited over the copy a reader can see.
+    """
+    placed = [
+        p for p in (_prov_box(item, prov, doc, frames) for prov in item.prov) if p
+    ]
+    return not placed or any(on_page(box, frame) for box, frame in placed)
 
 
 def _row_boxes(
@@ -645,6 +699,7 @@ def build_anchored(
         unspecified 252                                      -> children are parts of their own
         key_value_items 0, form_items 0                      -> would print untagged
         text inside pictures (263 in one paper)              -> excluded, cite figure-N
+        text clipped off its page (215 boxes in 9 papers)    -> left out (see _visible)
     """
     serializer = MarkdownDocSerializer(
         doc=doc, params=MarkdownParams(escape_html=False, escape_underscores=False)
@@ -685,6 +740,8 @@ def build_anchored(
             # A whole list is one part; tag each item as its own paragraph.
             lines = []
             for item in items:
+                if not _visible(item, doc, frames):
+                    continue
                 anchor_id = make_anchor_id(
                     AnchorKind.PARAGRAPH, _docling_index(item), supplement
                 )
@@ -694,12 +751,19 @@ def build_anchored(
                 anchors.append(
                     Anchor(id=anchor_id, boxes=_prov_boxes(item, doc, frames))
                 )
-            chunks.append('\n'.join(lines))
+            if lines:
+                chunks.append('\n'.join(lines))
         elif items and isinstance(items[0], (SectionHeaderItem, TitleItem)):
             # Headings: printed as '## ...' with no id -- never evidence.
-            chunks.append(part.text.strip())
+            if _visible(items[0], doc, frames):
+                chunks.append(part.text.strip())
         elif items and isinstance(items[0], TextItem) and part.text.strip():
-            text_items = [i for i in items if isinstance(i, TextItem)]
+            # Text drawn off the page is left out entirely (see _visible).
+            text_items = [
+                i for i in items if isinstance(i, TextItem) and _visible(i, doc, frames)
+            ]
+            if not text_items:
+                continue
             parent = items[0].parent.resolve(doc) if items[0].parent else None
             inline = isinstance(parent, GroupItem) and parent.label == GroupLabel.INLINE
             if len(text_items) > 1 and not inline:
@@ -719,9 +783,9 @@ def build_anchored(
                 continue
             # Ordinary paragraph (also an orphan caption whose table/figure was
             # dropped). An inline group merges several TextItems into one part:
-            # the id is the first item's, the boxes are all of theirs.
+            # the id is the first visible item's, the boxes are all of theirs.
             anchor_id = make_anchor_id(
-                AnchorKind.PARAGRAPH, _docling_index(items[0]), supplement
+                AnchorKind.PARAGRAPH, _docling_index(text_items[0]), supplement
             )
             chunks.append(_tagged(anchor_id, part.text.strip()))
             anchors.append(
