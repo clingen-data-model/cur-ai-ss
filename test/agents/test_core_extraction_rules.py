@@ -304,6 +304,19 @@ def test_every_flagging_prompt_carries_the_rule_once_and_names_about(
     assert 'Kinds:' in instructions
 
 
+def test_occurrence_prompt_links_a_parent_named_as_a_variants_origin():
+    """A parental-inheritance statement is enough for a carrier link, flagged
+    as inferred rather than left out: segregation reads parental genotypes
+    from these links, and a run that excluded them (the COG4 paper, third
+    local run) left segregation with nothing while another paper's run
+    linked every parent -- the policy had to be stated."""
+    prompt = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
+    assert "A parent named as the origin of a patient's variant carries it" in prompt
+    assert 'Make the link and flag it as inferred' in prompt
+    assert "Not\n  a parent named as a variant's origin" in prompt
+    assert "only implied by the child's homozygosity" in prompt
+
+
 def test_patient_prompt_flag_examples_cover_the_three_kinds_of_decision():
     prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
     assert 'FLAGS for this task' in prompt
