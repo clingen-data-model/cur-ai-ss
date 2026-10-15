@@ -585,7 +585,7 @@ class AnnotatedVariantResp(BaseModel):
     revel: Optional[float] = None
     alphamissense_class: Optional[str] = None
     alphamissense_score: Optional[float] = None
-    spliceai: Optional[dict] = None  # Serialized SpliceAI
+    spliceai: Optional[SpliceAI] = None
 
     gnomad_top_level_af: Optional[float] = None
     gnomad_ac: Optional[int] = None

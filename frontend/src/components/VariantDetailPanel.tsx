@@ -25,6 +25,7 @@ import { ScopedRerunButton } from '@/components/ScopedRerunButton'
 import { VARIANT_TYPE_OPTIONS } from '@/lib/variantType'
 import { gnomadUrl, clinGenUrl } from '@/lib/variantLinks'
 import { formatGnomadPopulation } from '@/lib/gnomadPopulations'
+import { formatSpliceAI } from '@/lib/spliceai'
 import { harmonizationWarning } from '@/lib/harmonization'
 import { apiErrorMessage } from '@/lib/apiError'
 
@@ -233,6 +234,7 @@ export function VariantDetailPanel({ paperId, variant }: { paperId: number; vari
                 label="AlphaMissense Score"
                 value={annotated.alphamissense_score != null ? annotated.alphamissense_score.toFixed(3) : 'N/A'}
               />
+              <ReadOnlyRow label="SpliceAI" value={formatSpliceAI(annotated.spliceai) ?? 'N/A'} />
               <ReadOnlyRow label="Exon" value={annotated.exon ?? 'N/A'} />
               <ReadOnlyRow label="VEP Consequence" value={annotated.vep_consequence ?? 'N/A'} />
 

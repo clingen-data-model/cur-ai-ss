@@ -140,6 +140,7 @@ from lib.models import (
     SegregationEvidenceDB,
     SegregationEvidenceUpdateRequest,
     SnapshotMeta,
+    SpliceAI,
     TaskDB,
     TokenResp,
     UserCreateRequest,
@@ -1859,7 +1860,11 @@ def _variant_to_resp(row: VariantDB, session: Session) -> VariantResp:
             revel=row.annotated_variant.revel,
             alphamissense_class=row.annotated_variant.alphamissense_class,
             alphamissense_score=row.annotated_variant.alphamissense_score,
-            spliceai=row.annotated_variant.spliceai,
+            spliceai=(
+                SpliceAI.model_validate(row.annotated_variant.spliceai)
+                if row.annotated_variant.spliceai
+                else None
+            ),
             gnomad_top_level_af=row.annotated_variant.gnomad_top_level_af,
             gnomad_ac=row.annotated_variant.gnomad_ac,
             gnomad_an=row.annotated_variant.gnomad_an,
