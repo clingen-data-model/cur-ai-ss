@@ -5,7 +5,7 @@
  * didn't make it into an occurrence: patients/variants extraction found but
  * linking never connected, and the pedigree image/description.
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link } from '@tanstack/react-router'
 import type { ColumnDef, ExpandedState } from '@tanstack/react-table'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -16,6 +16,7 @@ import { usePaperFlags } from '@/hooks/usePaperFlags'
 import type { FlagIndex } from '@/hooks/usePaperFlags'
 import { FlagIndicator } from '@/components/FlagIndicator'
 import { FlagsTab } from '@/components/FlagsTab'
+import type { FlagTarget } from '@/lib/flagTarget'
 import type { OccurrenceRow } from '@/hooks/usePaperOccurrences'
 import { deleteOccurrencePapersPaperIdOccurrencesOccurrenceIdDelete } from '@/api/generated'
 import { DataTable } from '@/components/ui/data-table'
@@ -104,13 +105,21 @@ function OccurrencesTab({
   paperId,
   rows,
   flags,
+  focusOccurrenceId,
 }: {
   paperId: number
   rows: OccurrenceRow[]
   flags: FlagIndex
+  /** An occurrence to open on arrival (from a flag's About chip). */
+  focusOccurrenceId?: number | null
 }) {
   const queryClient = useQueryClient()
-  const [expandedCell, setExpandedCell] = useState<{ rowId: string; view: ExpandedView } | null>(null)
+  const [expandedCell, setExpandedCell] = useState<{ rowId: string; view: ExpandedView } | null>(
+    focusOccurrenceId != null ? { rowId: String(focusOccurrenceId), view: 'patient' } : null,
+  )
+  useEffect(() => {
+    if (focusOccurrenceId != null) setExpandedCell({ rowId: String(focusOccurrenceId), view: 'patient' })
+  }, [focusOccurrenceId])
 
   const toggleExpanded = (rowId: string, view: ExpandedView) => {
     setExpandedCell((prev) => (prev?.rowId === rowId && prev.view === view ? null : { rowId, view }))
@@ -375,6 +384,26 @@ export function ExtractionPage() {
     error,
   } = usePaperOccurrences(paperId)
   const flags = usePaperFlags(paperId)
+  const [tab, setTab] = useState('occurrences')
+  const [focus, setFocus] = useState<FlagTarget | null>(null)
+  /** A flag's About chip: switch to the tab that shows the row and open it.
+   * A variant goes to its occurrence when it has one, else to the
+   * unassociated list; a patient always has a family card. */
+  const navigateToTarget = (target: FlagTarget) => {
+    if (target.kind === 'variant') {
+      const row = rows.find((r) => r.variant.id === target.id)
+      if (row) {
+        setFocus({ kind: 'occurrence', id: row.occurrence.id })
+        setTab('occurrences')
+      } else {
+        setFocus(target)
+        setTab('unassociated-variants')
+      }
+      return
+    }
+    setFocus(target)
+    setTab(target.kind === 'occurrence' ? 'occurrences' : 'families')
+  }
   const tasks = paper?.tasks ?? []
   const paperStatus = computeStatus(tasks)
   const [isExporting, setIsExporting] = useState(false)
@@ -468,7 +497,7 @@ export function ExtractionPage() {
           </div>
         </div>
 
-        <Tabs defaultValue="occurrences">
+        <Tabs value={tab} onValueChange={(next) => setTab(String(next))}>
           <TabsList>
             <TabsTrigger value="occurrences">Occurrences</TabsTrigger>
             <TabsTrigger value="families">Families</TabsTrigger>
@@ -500,12 +529,20 @@ export function ExtractionPage() {
               task={TaskType.PATIENT_VARIANT_OCCURRENCES}
               label="Patient/variant linking"
             >
-              <OccurrencesTab paperId={paperId} rows={rows} flags={flags} />
+              <OccurrencesTab
+                paperId={paperId}
+                rows={rows}
+                flags={flags}
+                focusOccurrenceId={focus?.kind === 'occurrence' ? focus.id : null}
+              />
             </PipelineGate>
           </TabsContent>
           <TabsContent value="families" className="pt-3">
             <PipelineGate tasks={tasks} task={TaskType.PATIENT_EXTRACTION} label="Patient extraction">
-              <FamiliesTab paperId={paperId} />
+              <FamiliesTab
+                paperId={paperId}
+                focus={focus?.kind === 'family' || focus?.kind === 'patient' ? focus : null}
+              />
             </PipelineGate>
           </TabsContent>
           <TabsContent value="unassociated-patients" className="pt-3">
@@ -525,7 +562,13 @@ export function ExtractionPage() {
             />
           </TabsContent>
           <TabsContent value="flags" className="pt-3">
-            <FlagsTab paperId={paperId} patients={allPatients} variants={allVariants} rows={rows} />
+            <FlagsTab
+              paperId={paperId}
+              patients={allPatients}
+              variants={allVariants}
+              rows={rows}
+              onNavigate={navigateToTarget}
+            />
           </TabsContent>
           <TabsContent value="pedigree" className="pt-3">
             <PedigreeTab paperId={paperId} />

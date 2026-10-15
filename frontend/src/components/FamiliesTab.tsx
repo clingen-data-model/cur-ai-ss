@@ -15,7 +15,7 @@
  * Like Streamlit, a family with a single patient is not shown: it has no
  * structure and no segregation to speak of.
  */
-import { Fragment, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -68,12 +68,18 @@ function FamilyMembers({
   paperId,
   members,
   flags,
+  focusPatientId,
 }: {
   paperId: number
   members: PatientResp[]
   flags: FlagIndex
+  /** A member to open on arrival (from a flag's About chip). */
+  focusPatientId?: number | null
 }) {
-  const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [expandedId, setExpandedId] = useState<number | null>(focusPatientId ?? null)
+  useEffect(() => {
+    if (focusPatientId != null) setExpandedId(focusPatientId)
+  }, [focusPatientId])
   const sorted = [...members].sort(
     (a, b) => relationshipRank(a) - relationshipRank(b) || a.identifier.localeCompare(b.identifier, undefined, { numeric: true }),
   )
@@ -252,14 +258,24 @@ function FamilyCard({
   members,
   seg,
   flags,
+  focus,
 }: {
   paperId: number
   family: FamilyResp
   members: PatientResp[]
   seg: SegregationAnalysisResp | undefined
   flags: FlagIndex
+  focus?: FamilyFocus | null
 }) {
   const queryClient = useQueryClient()
+  const focused =
+    focus != null &&
+    ((focus.kind === 'family' && focus.id === family.id) ||
+      (focus.kind === 'patient' && members.some((m) => m.id === focus.id)))
+  const sectionRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (focused) sectionRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }, [focused, focus])
   const mutation = useMutation({
     mutationKey: ['paper-edit', paperId],
     mutationFn: (body: FamilyUpdateRequest) =>
@@ -283,7 +299,7 @@ function FamilyCard({
   const criteria = seg?.computed?.meets_minimum_criteria
 
   return (
-    <section className="rounded-lg border p-4 space-y-4">
+    <section ref={sectionRef} className="rounded-lg border p-4 space-y-4 scroll-mt-4">
       <header className="flex flex-wrap items-center gap-2">
         <h3 className="text-base font-semibold mr-2">{family.identifier}</h3>
         <Badge variant="outline">{members.length} members</Badge>
@@ -322,7 +338,12 @@ function FamilyCard({
         />
       </div>
 
-      <FamilyMembers paperId={paperId} members={members} flags={flags} />
+      <FamilyMembers
+        paperId={paperId}
+        members={members}
+        flags={flags}
+        focusPatientId={focused && focus?.kind === 'patient' ? focus.id : null}
+      />
 
       {seg ? (
         <SegregationSection paperId={paperId} family={family} seg={seg} />
@@ -333,7 +354,10 @@ function FamilyCard({
   )
 }
 
-export function FamiliesTab({ paperId }: { paperId: number }) {
+/** The family or patient a flag's About chip asked to open. */
+export type FamilyFocus = { kind: 'family'; id: number } | { kind: 'patient'; id: number }
+
+export function FamiliesTab({ paperId, focus }: { paperId: number; focus?: FamilyFocus | null }) {
   const flags = usePaperFlags(paperId)
   const familiesQuery = useQuery({
     queryKey: ['families', paperId],
@@ -407,6 +431,7 @@ export function FamiliesTab({ paperId }: { paperId: number }) {
           members={byFamily.get(family.id) ?? []}
           seg={segByFamily.get(family.id)}
           flags={flags}
+          focus={focus}
         />
       ))}
       {singles > 0 && (
