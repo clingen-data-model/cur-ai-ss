@@ -332,6 +332,34 @@ def user_to_display(
     return min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)
 
 
+def displayed_height(frame: _PageFrame) -> float:
+    """The displayed page's height: the visible box's, turned with the page."""
+    return frame.x1 - frame.x0 if frame.rotation in (90, 270) else frame.y1 - frame.y0
+
+
+def display_to_user_point(X: float, Y: float, frame: _PageFrame) -> tuple[float, float]:
+    """A point on the displayed page (top-left origin) -> PDF user space.
+
+    The inverse of the forward mapping in the section comment above:
+
+        rotation   0:  x = X + x0    y = y1 - Y
+        rotation  90:  x = Y + x0    y = X + y0
+        rotation 180:  x = x1 - X    y = Y + y0
+        rotation 270:  x = x1 - Y    y = y1 - X
+
+    Shared by Docling's displayed-frame boxes (``_display_to_user``) and
+    docling-parse's words (``highlight.word_frame_to_user``), so the two
+    cannot drift apart.
+    """
+    if frame.rotation == 90:
+        return Y + frame.x0, X + frame.y0
+    if frame.rotation == 180:
+        return frame.x1 - X, Y + frame.y0
+    if frame.rotation == 270:
+        return frame.x1 - Y, frame.y1 - X
+    return X + frame.x0, frame.y1 - Y
+
+
 def _display_to_user(
     box: BoundingBox, frame: _PageFrame, page_height: float
 ) -> tuple[float, float, float, float]:
@@ -339,31 +367,18 @@ def _display_to_user(
 
     ``box`` may be TOPLEFT (grid cells) or BOTTOMLEFT over the displayed page
     height (table/picture prov); either way it is first made TOPLEFT, i.e. the
-    ``(X, Y)`` of the forward mapping in the section comment above, and then
-    that mapping is inverted:
-
-        rotation   0:  x = X + x0    y = y1 - Y
-        rotation  90:  x = Y + x0    y = X + y0
-        rotation 180:  x = x1 - X    y = Y + y0
-        rotation 270:  x = x1 - Y    y = y1 - X
-
-    Both corners are mapped and re-sorted, since a rotation swaps which corner
-    is which.
+    ``(X, Y)`` of the forward mapping, and then ``display_to_user_point``
+    inverts it. Both corners are mapped and re-sorted, since a rotation swaps
+    which corner is which.
     """
     tl = (
         box
         if box.coord_origin == CoordOrigin.TOPLEFT
         else box.to_top_left_origin(page_height)
     )
-    corners = [(tl.l, tl.t), (tl.r, tl.b)]
-    if frame.rotation == 90:
-        points = [(Y + frame.x0, X + frame.y0) for X, Y in corners]
-    elif frame.rotation == 180:
-        points = [(frame.x1 - X, Y + frame.y0) for X, Y in corners]
-    elif frame.rotation == 270:
-        points = [(frame.x1 - Y, frame.y1 - X) for X, Y in corners]
-    else:
-        points = [(X + frame.x0, frame.y1 - Y) for X, Y in corners]
+    points = [
+        display_to_user_point(X, Y, frame) for X, Y in ((tl.l, tl.t), (tl.r, tl.b))
+    ]
     xs, ys = zip(*points, strict=True)
     return min(xs), min(ys), max(xs), max(ys)
 
