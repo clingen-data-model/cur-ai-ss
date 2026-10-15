@@ -79,9 +79,10 @@ Note: Compound heterozygous genotype evaluation (determining if two heterozygous
   link for that parent: zygosity Heterozygous, testing method left unstated
   unless the paper reports the parent was tested, cited to the statement.
   Make the link and flag it as inferred (below); segregation downstream reads
-  parental genotypes from these links and has nothing without them. A parent
-  whose carrier status is only implied by the child's homozygosity, with no
-  such statement, is not linked.
+  parental genotypes from these links and has nothing without them. The same
+  holds for both parents of a homozygous child when they are among the
+  patients: each carries one copy by descent, so each is linked Heterozygous,
+  cited to the child's homozygous genotype, and flagged as inferred.
 - Do not infer links from generic references or biological plausibility.
 - Negative genotypes (wild-type, homozygous reference, non-carrier) should not be linked.
 

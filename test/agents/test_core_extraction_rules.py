@@ -314,7 +314,7 @@ def test_occurrence_prompt_links_a_parent_named_as_a_variants_origin():
     assert "A parent named as the origin of a patient's variant carries it" in prompt
     assert 'Make the link and flag it as inferred' in prompt
     assert "Not\n  a parent named as a variant's origin" in prompt
-    assert "only implied by the child's homozygosity" in prompt
+    assert 'both parents of a homozygous child' in prompt
 
 
 def test_patient_prompt_flag_examples_cover_the_three_kinds_of_decision():
