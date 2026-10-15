@@ -958,7 +958,7 @@ def test_get_variants_harmonized_and_enriched(client, db_session, seeded_paper):
         revel=0.89,
         alphamissense_class='likely_pathogenic',
         alphamissense_score=0.75,
-        spliceai={'DS_AG': 0.1, 'DS_AL': 0.05, 'DS_DG': 0.2, 'DS_DL': 0.15},
+        spliceai={'max_score': 0.2, 'effect_type': 'DS_DG', 'position': -7},
         gnomad_style_coordinates='17:41196312:AG:A',
         rsid='rs80357906',
         caid='CA123456',
@@ -1024,10 +1024,9 @@ def test_get_variants_harmonized_and_enriched(client, db_session, seeded_paper):
     assert v['annotated_variant']['alphamissense_class'] == 'likely_pathogenic'
     assert v['annotated_variant']['alphamissense_score'] == 0.75
     assert v['annotated_variant']['spliceai'] == {
-        'DS_AG': 0.1,
-        'DS_AL': 0.05,
-        'DS_DG': 0.2,
-        'DS_DL': 0.15,
+        'max_score': 0.2,
+        'effect_type': 'DS_DG',
+        'position': -7,
     }
     assert v['annotated_variant']['gnomad_top_level_af'] == 0.0001
     assert v['annotated_variant']['gnomad_popmax_af'] == 0.0003

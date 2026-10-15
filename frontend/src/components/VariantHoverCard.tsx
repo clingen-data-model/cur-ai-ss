@@ -4,6 +4,7 @@
 import type { VariantResp } from '@/api/generated/types.gen'
 import { gnomadUrl, clinGenUrl } from '@/lib/variantLinks'
 import { formatGnomadPopulation } from '@/lib/gnomadPopulations'
+import { formatSpliceAI } from '@/lib/spliceai'
 
 function formatAf(af: number | null | undefined): string | null {
   if (af == null) return null
@@ -18,6 +19,7 @@ export function VariantHoverCardContent({ variant }: { variant: VariantResp }) {
 
   const popmaxAf = formatAf(annotated?.gnomad_popmax_af)
   const topLevelAf = formatAf(annotated?.gnomad_top_level_af)
+  const spliceAi = formatSpliceAI(annotated?.spliceai)
 
   return (
     <div className="space-y-1.5">
@@ -75,6 +77,13 @@ export function VariantHoverCardContent({ variant }: { variant: VariantResp }) {
           <>
             <dt className="text-muted-foreground">REVEL</dt>
             <dd className="text-right">{annotated.revel.toFixed(3)}</dd>
+          </>
+        )}
+
+        {spliceAi && (
+          <>
+            <dt className="text-muted-foreground">SpliceAI</dt>
+            <dd className="text-right truncate">{spliceAi}</dd>
           </>
         )}
       </dl>
