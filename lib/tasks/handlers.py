@@ -178,6 +178,7 @@ from lib.reference_data.mondo import get_mondo_term
 from lib.tasks.agent_session import agent_session
 from lib.tasks.flags import flags_of, match_label, replace_flags, split_pair
 from lib.tasks.hpo_link_cache import (
+    CachedHpoLink,
     is_cacheable,
     lookup_hpo_link,
     remember_hpo_link,
@@ -1722,6 +1723,30 @@ async def handle_compound_het_evaluation(task_id: int) -> None:
         session.flush()
 
 
+def reused_hpo_link_reasoning(
+    session: Session, cached: CachedHpoLink, paper_id: int
+) -> str:
+    """Why a phenotype carries an HPO term the agent never chose for it: the
+    identical concept was linked before, and that link is copied. Names the
+    patient it came from (and whether that was in this paper), never the
+    phenotype's database id, which a curator cannot follow and which may no
+    longer exist once that patient's phenotypes are re-extracted."""
+    source = session.get(PhenotypeDB, cached.source_phenotype_id)
+    where = 'elsewhere'
+    if source is not None:
+        who = source.patient.identifier
+        where = (
+            f'for {who} in this paper'
+            if source.paper_id == paper_id
+            else f'for {who} in another paper'
+        )
+    by = ' by a curator' if cached.curated else ''
+    return (
+        f'Reused the link {cached.hpo_id} ({cached.hpo_name}) already made{by} '
+        f'{where} for the identical concept.'
+    )
+
+
 async def handle_phenotype_extraction(task_id: int) -> None:
     """Extract phenotypes for a specific patient in paper."""
     paper_id: int
@@ -1816,10 +1841,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
                 phenotype_db.hpo = HpoDB(
                     hpo_id=cached.hpo_id,
                     hpo_name=cached.hpo_name,
-                    reasoning=f'Reused the link {cached.hpo_id} ({cached.hpo_name}) '
-                    f'already made for the identical concept on phenotype '
-                    f'{cached.source_phenotype_id}'
-                    f'{", which a curator set" if cached.curated else ""}.',
+                    reasoning=reused_hpo_link_reasoning(session, cached, paper_id),
                 )
             session.add(phenotype_db)
             phenotype_rows.append(phenotype_db)

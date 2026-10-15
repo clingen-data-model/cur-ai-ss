@@ -33,9 +33,12 @@ function toCsvField(value: string): string {
 
 /* HPO linking is queued only for patients linked to a variant (the pipeline
  * skips the rest without a task, an error or any other trace), so a phenotype
- * with no HPO term can mean "never attempted" as well as "no match". */
+ * with no HPO term can mean "never attempted" as well as "no match". A term
+ * can still appear on such a patient: phenotype extraction copies a link
+ * already made for the identical concept (see reused_hpo_link_reasoning), so
+ * the note is shown only while some phenotype has no term, and says so. */
 const NO_VARIANT_NOTE =
-  'HPO linking was skipped for this patient. It only runs for patients linked to a variant, and this patient has none. Link a variant to this patient, or run HPO Linking from Rerun Agents.'
+  'HPO linking did not run for this patient: it only runs for patients linked to a variant, and this patient has none. Any term shown was reused from a link already made for the same concept; the rest were never attempted. Link a variant to this patient, or run HPO Linking from Rerun Agents.'
 
 function rerunDescription(hasLinkedVariant: boolean | undefined): string {
   const base =
@@ -314,7 +317,7 @@ export function PhenotypesTable({ paperId, patientId }: { paperId: number; patie
           </Button>
         </div>
       </div>
-      {hpoSkipped && (
+      {hpoSkipped && phenotypesQuery.data.some((p) => !p.hpo.value) && (
         <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
           {NO_VARIANT_NOTE}
         </p>

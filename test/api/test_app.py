@@ -3328,10 +3328,25 @@ def test_phenotype_extraction_takes_cached_hpo_links(
     anchored.write_text('[paragraph-1] The proband had q.\n')
     db_session.add(task)
     db_session.commit()
+    # The source of the cached link: a phenotype on another patient in this
+    # paper, named in the reused reasoning instead of its id.
+    origin_patient = _seed_patient(db_session, seeded_paper, 'Origin Patient')
+    origin = PhenotypeDB(
+        paper_id=seeded_paper.id,
+        patient_id=origin_patient.id,
+        concept='Seizures',
+        concept_evidence={'value': 'Seizures', 'reasoning': 'r', 'citations': []},
+    )
+    db_session.add(origin)
+    db_session.commit()
     monkeypatch.setattr(
         hpo_link_cache,
         '_cache',
-        {'seizures': hpo_link_cache.CachedHpoLink('HP:0001250', 'Seizure', 7, False)},
+        {
+            'seizures': hpo_link_cache.CachedHpoLink(
+                'HP:0001250', 'Seizure', origin.id, True
+            )
+        },
     )
     monkeypatch.setattr(hpo_link_cache, '_loaded_at', time.monotonic())
 
@@ -3370,7 +3385,11 @@ def test_phenotype_extraction_takes_cached_hpo_links(
     }
     hit = rows[('SEIZURES', False)].hpo
     assert (hit.hpo_id, hit.hpo_name) == ('HP:0001250', 'Seizure')
-    assert 'phenotype 7' in hit.reasoning
+    assert hit.reasoning == (
+        'Reused the link HP:0001250 (Seizure) already made by a curator '
+        'for Origin Patient in this paper for the identical concept.'
+    )
+    assert str(origin.id) not in hit.reasoning.replace('HP:0001250', '')
     assert rows[('Seizures', True)].hpo is None
     assert rows[('Ataxia', False)].hpo is None
 
