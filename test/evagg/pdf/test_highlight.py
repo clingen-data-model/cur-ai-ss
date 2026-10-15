@@ -563,7 +563,9 @@ def test_unresolvable_citations_contribute_nothing(paper_documents):
 def test_word_frame_to_user_undoes_the_rotation_docling_parse_applied():
     """Paper 87 page 4 (603 x 783, /Rotate 90), the cell "62" of its Table 1:
     words.json has it at x 286..294, y 367..374; PyMuPDF puts the same word at
-    user x 229..236, y 286..294. An unrotated page is a passthrough."""
+    user x 229..236, y 286..294. An unrotated page at the origin passes through;
+    one whose cropbox sits inside the mediabox is measured from the cropbox
+    corner (paper 29: 34 points in on both axes; paper 12: 1 point in x)."""
     frame = _PageFrame(90, 0.0, 0.0, 602.986, 782.986)
     assert word_frame_to_user(286.36, 367.53, frame) == pytest.approx(
         (235.46, 286.36), abs=0.01
@@ -575,6 +577,12 @@ def test_word_frame_to_user_undoes_the_rotation_docling_parse_applied():
         5.0,
         7.0,
     )
+    paper_29 = _PageFrame(0, 34.0157, 34.0157, 620.986, 815.981)
+    assert word_frame_to_user(100.0, 200.0, paper_29) == pytest.approx(
+        (134.0157, 234.0157), abs=0.001
+    )
+    paper_12 = _PageFrame(0, 1.0, 0.0, 611.0, 792.0)
+    assert word_frame_to_user(100.0, 200.0, paper_12) == (101.0, 200.0)
     # Paper 96 page 4: /Rotate 270 on a mediabox [0 251.76 828 827.76], so the
     # frame is offset and the displayed height is the user-space width. words.json
     # has the word "TABLE" at x 68.6..72.2, y 304.5..325.5; PyMuPDF puts it at
