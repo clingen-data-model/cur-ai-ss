@@ -199,10 +199,12 @@ def make_anchor_id(kind: AnchorKind, index: int, supplement: bool) -> str:
 # everything into the first one.
 #
 # 1. PDF user space. The PDF's own coordinates: points, origin at the bottom-left,
-#    y up. Every drawing operator in the page's content stream uses it. So does
-#    ``words.json`` (docling-parse reads the content stream), and so does pdf.js:
-#    ``viewport.convertToViewportPoint(x, y)`` takes user-space input. This is
-#    the frame ``PageBox`` is in. Nothing about rotation or cropping lives here.
+#    y up. Every drawing operator in the page's content stream uses it, and so
+#    does pdf.js: ``viewport.convertToViewportPoint(x, y)`` takes user-space
+#    input. This is the frame ``PageBox`` is in. Nothing about rotation or
+#    cropping lives here. ``words.json`` is *not* in it on a rotated page --
+#    docling-parse reports words in the displayed orientation, y up -- see
+#    ``highlight.word_frame_to_user``, which brings them here.
 #
 # 2. The displayed page. A page can carry ``/Rotate 90`` ("turn me before you show
 #    me") and a cropbox ("only this part of user space is the page"). A viewer

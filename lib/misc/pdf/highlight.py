@@ -160,6 +160,64 @@ def find_best_match(query: str, words: list[WordLoc]) -> list[WordLoc] | None:
 # a paragraph or table-row citation with a quote highlights the quote's words
 # instead of the whole block, and the search is confined to the words inside
 # that block's own boxes, so a miss can widen a highlight but never misplace it.
+#
+# Anchor boxes are in PDF user space; words.json is not, on a rotated page (see
+# ``word_frame_to_user``). The block's boxes are brought into the words' frame
+# for the search, the quote is matched and merged there, where a line of text
+# runs along x, and the result goes back to user space for the viewer.
+
+
+def _displayed_height(frame: _PageFrame) -> float:
+    return frame.x1 - frame.x0 if frame.rotation in (90, 270) else frame.y1 - frame.y0
+
+
+def word_frame_to_user(x: float, y: float, frame: _PageFrame) -> tuple[float, float]:
+    """A point in docling-parse's word frame -> PDF user space.
+
+    docling-parse writes words.json in the *displayed* orientation -- the page
+    as a viewer shows it, ``/Rotate`` applied -- with a bottom-left origin and
+    y up, not in user space as the rest of the page geometry is. Measured, not
+    assumed: on every one of the 19 rotated pages in prod (2026-10-15, ten at
+    90 and nine at 270) the words fit only the rotated page size, and on paper
+    87 page 4 (603 x 783, /Rotate 90) PyMuPDF puts "62" at user x 229..236,
+    y 286..294 where words.json has x 286..294, y 367..374: (y, 603 - x).
+
+    So a word point is first the displayed top-left ``(X, Y)`` of the mapping
+    in anchors.py's "Page geometry" notes, with the y flip against the
+    displayed height, and then that mapping's inverse. An unrotated page is a
+    passthrough: there the two frames coincide, and every unrotated paper has
+    been highlighted on that basis.
+    """
+    if frame.rotation == 0:
+        return x, y
+    X, Y = x, _displayed_height(frame) - y
+    if frame.rotation == 90:
+        return Y + frame.x0, X + frame.y0
+    if frame.rotation == 180:
+        return frame.x1 - X, Y + frame.y0
+    return frame.x1 - Y, frame.y1 - X
+
+
+def _user_box_to_word_frame(
+    box: PageBox, frames: dict[int, _PageFrame]
+) -> PageBox | None:
+    """The inverse of ``word_frame_to_user`` for a box; None for a page not in the PDF."""
+    frame = frames.get(box.page_no)
+    if frame is None:
+        return None
+    if frame.rotation == 0:
+        return box
+    placed = user_to_display(box, frames)
+    if placed is None:
+        return None
+    X, Y, width, height = placed
+    return PageBox(
+        page_no=box.page_no,
+        x=X,
+        y=_displayed_height(frame) - Y - height,
+        width=width,
+        height=height,
+    )
 
 
 def words_within(
@@ -167,9 +225,9 @@ def words_within(
 ) -> list[WordLoc]:
     """The words whose centre lies inside any of the boxes, in their input order.
 
-    Both are in PDF user space with 1-based page numbers (``words.json`` and
-    ``anchors.json`` are built from the same PDF). ``tol`` grows each box by a
-    couple of points so a word sitting exactly on a box edge still counts.
+    Both are in the words' own frame (``word_frame_to_user``) with 1-based page
+    numbers. ``tol`` grows each box by a couple of points so a word sitting
+    exactly on a box edge still counts.
     """
     by_page: defaultdict[int, list[PageBox]] = defaultdict(list)
     for box in boxes:
@@ -188,12 +246,17 @@ def words_within(
     return inside
 
 
-def _polygon_boxes(page_no: int, polygons: list[Polygon]) -> list[PageBox]:
+def _polygon_boxes(
+    page_no: int, polygons: list[Polygon], frame: _PageFrame
+) -> list[PageBox]:
     """Merged word polygons -> user-space boxes (corner order does not matter)."""
     boxes = []
     for p in polygons:
-        xs = (p.x0, p.x1, p.x2, p.x3)
-        ys = (p.y0, p.y1, p.y2, p.y3)
+        corners = [
+            word_frame_to_user(x, y, frame)
+            for x, y in ((p.x0, p.y0), (p.x1, p.y1), (p.x2, p.y2), (p.x3, p.y3))
+        ]
+        xs, ys = zip(*corners, strict=True)
         boxes.append(
             PageBox(
                 page_no=page_no,
@@ -270,7 +333,12 @@ def citations_to_grobid_annotations(
         if narrowable and citation.quote.strip():
             if words is None:
                 words = _load_words(paper_id)
-            matched = find_best_match(citation.quote, words_within(search_boxes, words))
+            word_boxes = [
+                b
+                for b in (_user_box_to_word_frame(b, frames) for b in search_boxes)
+                if b is not None
+            ]
+            matched = find_best_match(citation.quote, words_within(word_boxes, words))
             if matched:
                 by_page: defaultdict[int, list[WordLoc]] = defaultdict(list)
                 for word in matched:
@@ -278,8 +346,9 @@ def citations_to_grobid_annotations(
                 boxes = [
                     box
                     for page_no, page_words in by_page.items()
+                    if page_no in frames
                     for box in _polygon_boxes(
-                        page_no, merge_adjacent_polygons(page_words)
+                        page_no, merge_adjacent_polygons(page_words), frames[page_no]
                     )
                 ]
         annotations.extend(boxes_to_grobid_annotations(boxes, frames, color))
