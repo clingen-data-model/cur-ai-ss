@@ -76,13 +76,17 @@ Note: Compound heterozygous genotype evaluation (determining if two heterozygous
 - A parent named as the origin of a patient's variant carries it. "Paternally
   inherited", "maternal allele", a table cell marking which parent an allele
   came from, or a pedigree drawing the parent as a carrier each establish a
-  link for that parent: zygosity Heterozygous, testing method left unstated
-  unless the paper reports the parent was tested, cited to the statement.
-  Make the link and flag it as inferred (below); segregation downstream reads
-  parental genotypes from these links and has nothing without them. The same
-  holds for both parents of a homozygous child when they are among the
-  patients: each carries one copy by descent, so each is linked Heterozygous,
-  cited to the child's homozygous genotype, and flagged as inferred.
+  link for that parent, cited to the statement. Such a statement says the
+  parent carries at least one copy and nothing more, so zygosity is Unknown
+  with that in its reasoning; write Heterozygous or Homozygous only where the
+  paper gives the parent's own genotype (a table cell reading "Het" against
+  the parent, a sentence reporting the parent's result). Testing method is
+  left unstated unless the paper reports the parent was tested. Make the link
+  and flag it as inferred (below); segregation downstream reads parental
+  genotypes from these links and has nothing without them. The same holds for
+  both parents of a homozygous child when they are among the patients: each
+  carries at least one copy by descent, so each is linked with zygosity
+  Unknown, cited to the child's homozygous genotype, and flagged as inferred.
 - Do not infer links from generic references or biological plausibility.
 - Negative genotypes (wild-type, homozygous reference, non-carrier) should not be linked.
 

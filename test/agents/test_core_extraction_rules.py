@@ -312,9 +312,18 @@ def test_occurrence_prompt_links_a_parent_named_as_a_variants_origin():
     linked every parent -- the policy had to be stated."""
     prompt = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
     assert "A parent named as the origin of a patient's variant carries it" in prompt
-    assert 'Make the link and flag it as inferred' in prompt
+    assert 'Make the link\n  and flag it as inferred' in prompt
     assert "Not\n  a parent named as a variant's origin" in prompt
     assert 'both parents of a homozygous child' in prompt
+    # The statement supports "at least one copy", not a genotype: zygosity
+    # is Unknown unless the paper gives the parent's own result.
+    assert (
+        'carries at least one copy and nothing more, so zygosity is Unknown' in prompt
+    )
+    assert (
+        "write Heterozygous or Homozygous only where the\n  paper gives the parent's own genotype"
+        in prompt
+    )
 
 
 def test_patient_prompt_flag_examples_cover_the_three_kinds_of_decision():
