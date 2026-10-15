@@ -25,6 +25,7 @@ from lib.misc.pdf.anchors import (
     block_texts,
     boxes_for_anchor,
     build_anchored,
+    display_to_user_point,
     load_anchors,
     page_frames,
     parse_anchor,
@@ -662,3 +663,20 @@ def test_block_texts_hand_written_layouts():
         'table-2',
         'table-2-row-0',
     }
+
+
+@pytest.mark.parametrize('rotation', [0, 90, 180, 270])
+def test_display_to_user_point_inverts_user_to_display(rotation):
+    """One inverse serves Docling's prov boxes and docling-parse's words, so it
+    must undo the forward mapping exactly, offsets included, at every rotation."""
+    frame = _PageFrame(rotation, 34.0, 251.76, 620.0, 827.76)
+    box = PageBox(page_no=1, x=100.0, y=400.0, width=50.0, height=20.0)
+    X, Y, width, height = user_to_display(box, {1: frame})
+    corners = [
+        display_to_user_point(X, Y, frame),
+        display_to_user_point(X + width, Y + height, frame),
+    ]
+    xs, ys = zip(*corners, strict=True)
+    assert (min(xs), min(ys), max(xs), max(ys)) == pytest.approx(
+        (100.0, 400.0, 150.0, 420.0)
+    )

@@ -15,6 +15,8 @@ from lib.misc.pdf.anchors import (
     _PageFrame,
     boxes_for_anchor,
     caption_boxes_for_anchor,
+    display_to_user_point,
+    displayed_height,
     load_anchors,
     page_frames,
     user_to_display,
@@ -167,35 +169,29 @@ def find_best_match(query: str, words: list[WordLoc]) -> list[WordLoc] | None:
 # runs along x, and the result goes back to user space for the viewer.
 
 
-def _displayed_height(frame: _PageFrame) -> float:
-    return frame.x1 - frame.x0 if frame.rotation in (90, 270) else frame.y1 - frame.y0
-
-
 def word_frame_to_user(x: float, y: float, frame: _PageFrame) -> tuple[float, float]:
     """A point in docling-parse's word frame -> PDF user space.
 
     docling-parse writes words.json in the *displayed* orientation -- the page
     as a viewer shows it, ``/Rotate`` applied -- with a bottom-left origin and
-    y up, not in user space as the rest of the page geometry is. Measured, not
-    assumed: on every one of the 19 rotated pages in prod (2026-10-15, ten at
-    90 and nine at 270) the words fit only the rotated page size, and on paper
-    87 page 4 (603 x 783, /Rotate 90) PyMuPDF puts "62" at user x 229..236,
-    y 286..294 where words.json has x 286..294, y 367..374: (y, 603 - x).
+    y up over the displayed height: the same frame as Docling's table and
+    picture prov boxes, not user space as the page's text items are. Measured,
+    not assumed: on every one of the 19 rotated pages in prod (2026-10-15, ten
+    at 90 and nine at 270) the words fit only the rotated page size, and on
+    paper 87 page 4 (603 x 783, /Rotate 90) PyMuPDF puts "62" at user
+    x 229..236, y 286..294 where words.json has x 286..294, y 367..374:
+    (y, 603 - x). Paper 96's 270 pages, whose visible box starts at y 251.76,
+    fit only with the box offsets in.
 
-    So a word point is first the displayed top-left ``(X, Y)`` of the mapping
-    in anchors.py's "Page geometry" notes, with the y flip against the
-    displayed height, and then that mapping's inverse. An unrotated page is a
-    passthrough: there the two frames coincide, and every unrotated paper has
-    been highlighted on that basis.
+    So a word point is flipped to the displayed top-left ``(X, Y)`` and then
+    goes through ``display_to_user_point``, like a prov box. An unrotated page
+    is a passthrough, and that too is measured rather than the formula's
+    ``x = X + x0``: paper 12's pages sit one point off the origin and its words
+    match raw user space, not the offset frame.
     """
     if frame.rotation == 0:
         return x, y
-    X, Y = x, _displayed_height(frame) - y
-    if frame.rotation == 90:
-        return Y + frame.x0, X + frame.y0
-    if frame.rotation == 180:
-        return frame.x1 - X, Y + frame.y0
-    return frame.x1 - Y, frame.y1 - X
+    return display_to_user_point(x, displayed_height(frame) - y, frame)
 
 
 def _user_box_to_word_frame(
@@ -214,7 +210,7 @@ def _user_box_to_word_frame(
     return PageBox(
         page_no=box.page_no,
         x=X,
-        y=_displayed_height(frame) - Y - height,
+        y=displayed_height(frame) - Y - height,
         width=width,
         height=height,
     )
