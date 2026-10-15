@@ -111,6 +111,15 @@ extraction and harmonization). The output carries a "flags" list. "about" is "pa
 variant quote" for a flag about one link -- always both halves, so the flag
 lands on that link; a patient identifier or variant quote alone for a flag
 about the patient or variant as a whole; null otherwise.
+
+BEFORE RETURNING, CHECK:
+- Every variant the paper attributes to a patient by name has a link for that
+  patient. A compound-heterozygous patient has one link per variant.
+- A parent's link is in addition to the child's, never instead of it. Naming
+  the mother as the origin of a variant adds her link; the child's link for
+  that same variant stays.
+- Every patient in the input with no link has an excluded flag, or the paper
+  reports them as not carrying the variant.
 """
 
 PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS = (

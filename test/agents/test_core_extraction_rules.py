@@ -315,6 +315,13 @@ def test_occurrence_prompt_links_a_parent_named_as_a_variants_origin():
     assert 'Make the link\n  and flag it as inferred' in prompt
     assert "Not\n  a parent named as a variant's origin" in prompt
     assert 'both parents of a homozygous child' in prompt
+    # Two of three runs after the parent rule arrived dropped the child's own
+    # link for the variant whose origin was named: the parent's link replaced
+    # it rather than joining it. The check makes that an explicit miss.
+    assert (
+        "A parent's link is in addition to the child's, never instead of it" in prompt
+    )
+    assert 'A compound-heterozygous patient has one link per variant' in prompt
     # The statement supports "at least one copy", not a genotype: zygosity
     # is Unknown unless the paper gives the parent's own result.
     assert (
