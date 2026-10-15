@@ -54,23 +54,16 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 const REPO_URL = 'https://github.com/clingen-data-model/cur-ai-ss'
 
 /* The footer's two outbound links: the repository, and a new GitHub issue
- * with the page the reader was on already filled in -- the one fact a bug
- * report from a non-developer most often leaves out. Built at render from
- * the router's location so it follows navigation; the rest of the body is
- * headings for them to fill. */
+ * on the bug-report form (.github/ISSUE_TEMPLATE/bug_report.yml) with its
+ * Page field already filled in -- the one fact a report from a
+ * non-developer most often leaves out. Built at render from the router's
+ * location so it follows navigation. */
 function FooterLinks() {
-  const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const page = typeof window === 'undefined' ? pathname : window.location.href
-  const body = [
-    `**Page:** ${page}`,
-    '',
-    '**What happened**',
-    '',
-    '',
-    '**What I expected**',
-    '',
-  ].join('\n')
-  const issueUrl = `${REPO_URL}/issues/new?${new URLSearchParams({ body }).toString()}`
+  useRouterState({ select: (s) => s.location.pathname })
+  const issueUrl = `${REPO_URL}/issues/new?${new URLSearchParams({
+    template: 'bug_report.yml',
+    page: window.location.href,
+  }).toString()}`
   const linkClass = 'inline-flex items-center gap-1 hover:text-slate-900 hover:underline underline-offset-2'
   return (
     <nav className="flex items-center justify-center gap-5">
