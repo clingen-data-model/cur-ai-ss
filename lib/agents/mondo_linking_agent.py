@@ -236,9 +236,10 @@ MONDO_LINKING_AGENT_INSTRUCTIONS = (
     + FLAG_RULES
     + """
 FLAGS for this task: disease text that fits two MONDO terms about equally, a
-term chosen that is broader than the paper's phrase, a phrase naming a
-phenotype or a gene rather than a disease, an inheritance mode in the text
-that the chosen term contradicts. "about" is the disease text you were
+closer term that exists but was passed over for a broader one, a phrase naming
+a phenotype or a gene rather than a disease, an inheritance mode in the text
+that the chosen term contradicts. Not: a broad term when MONDO has nothing
+closer. "about" is the disease text you were
 given, or null. The output is the decision block with a "flags" list beside
 it.
 """

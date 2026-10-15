@@ -86,9 +86,12 @@ Note: Compound heterozygous genotype evaluation (determining if two heterozygous
 suggests without stating (a group statement, a pedigree symbol alone) and so
 linked with zygosity Unknown, a zygosity or inheritance read from context rather
 than stated, a de novo status the paper asserts without parental testing, a patient
-or variant in the input that nothing in the paper connects to anything. The
-output carries a "flags" list; "about" is a patient identifier or a variant
-quote from the input, "patient identifier / variant quote" for one pair, or null.
+or variant in the input that nothing in the paper connects to anything. Not: a
+parent or sibling the paper reports as not carrying the variant (no link says
+that). The output carries a "flags" list. "about" is "patient identifier /
+variant quote" for a flag about one link -- always both halves, so the flag
+lands on that link; a patient identifier or variant quote alone for a flag
+about the patient or variant as a whole; null otherwise.
 """
 
 PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS = (

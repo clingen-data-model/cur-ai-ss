@@ -356,7 +356,10 @@ for the provided patient, and a "flags" list (the rule is in CORE EXTRACTION
 RULES): a finding extracted with uncertain: true because its attribution to
 this patient is implied rather than stated, a relative's finding left out
 under the family-member rule when the sentence could be read either way, a
-finding stated only in a table flagged with an EXTRACTION WARNING. "about" is a concept from the "phenotypes" list, or null.
+finding stated only in a table flagged with an EXTRACTION WARNING. Not: a
+patient the paper states no findings for (an empty list says that), nor an
+identifier you could not find in the text. "about" is a concept from the
+"phenotypes" list, or null.
 
 Example structure:
 {

@@ -357,11 +357,15 @@ HPO_LINKING_AGENT_INSTRUCTIONS = (
     + '\n\n'
     + FLAG_RULES
     + """
-FLAGS for this task: a concept that maps equally well to two terms, a term
-chosen that is broader or narrower than the concept, a concept that names a
-finding the ontology has no term for, a negated or family-history concept
-linked anyway. "about" is the concept you were given, or null. The output is
-the block above with a "flags" list beside it.
+FLAGS for this task: a concept that maps equally well to two terms; a compound
+concept where the one term the output allows drops a finding a curator would
+want as a second phenotype; a closer term that exists but did not fit cleanly,
+so a broader one was chosen over it; a negated or family-history concept
+linked anyway. Not: a broader term when the ontology has nothing closer, a
+preferred name that differs from the paper's wording, a severity, laterality
+or progression modifier HPO terms do not carry, or whether you called a tool.
+"about" is the concept you were given, or null. The output is the block above
+with a "flags" list beside it.
 """
 )
 

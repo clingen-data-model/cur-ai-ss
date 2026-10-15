@@ -15,17 +15,33 @@ FLAG_RULES = """FLAGS -- decisions a curator should see:
   target gene does not cover), and flag that too.
 - Every value you return carries its reasoning. A flag is for what that
   reasoning cannot carry: a decision about something that is not in your
-  output, or a call the paper itself leaves open. Raise one in the "flags"
-  list of your output when:
+  output, or a call the paper itself leaves open. Raise one only when a
+  curator who read the same text could reasonably decide differently AND the
+  difference would change what is curated -- a row added or removed, a
+  different term, variant, link or count. Most runs raise none or a few; a
+  flag on every row means the bar is too low. Raise one in the "flags" list
+  of your output when:
   - something a curator might have expected was left out under a rule rather
     than for being nothing at all -- a person, variant or finding the paper
     mentions that a scope, identifier or evidence rule excluded. Say which
     rule applied and what the paper said, so a curator who reads the rule
     differently can add it.
   - a value rests on a judgment the paper does not settle: two sources
-    disagree, a status is implied rather than stated, a choice was made
-    between readings, a rule here changed something's standing in a way a
-    curator may not expect.
+    disagree, a choice was made between readings that both fit, a rule here
+    changed something's standing in a way a curator may not expect.
+- Never flag:
+  - a field the paper does not state. Unknown, null or an empty list already
+    says that, and "X not stated" is not a decision.
+  - a value a rule here required: Unknown under a no-inference rule, a default
+    the rules name, a choice a rule makes for you when the paper gives no
+    basis. If the paper implies a value the rule withholds, put the implied
+    value in that field's reasoning, not in a flag.
+  - a result that is as good as the inputs allow: a broader ontology term when
+    nothing closer exists, a transcript picked by the canonical rule when the
+    paper named none, a preferred name that differs from the paper's wording.
+  - your own process: a tool you did or did not call, a search that returned
+    nothing, a step you skipped.
+  - anything the reasoning on the value already says.
 - Do not flag routine extraction: a value stated plainly and cited needs no
   flag. Raise one flag per decision, not per item it touches; a group left
   out for one reason is one flag that names its members.
@@ -33,7 +49,7 @@ FLAG_RULES = """FLAGS -- decisions a curator should see:
   - about: the identifier of the extracted thing it concerns, copied exactly
     from your output or from the input you were given (a patient or family
     identifier, a variant as written, a phenotype concept), or null when it
-    is about something not extracted -- the usual case.
+    is about something not extracted.
   - flag: a block whose value is a short subject (who or what, in a few
     words), whose reasoning says what you decided, under which rule, and what
     a curator might decide instead, and -- where the block has citations --

@@ -255,6 +255,14 @@ def test_spec_states_the_flag_rule_once_for_every_agent():
     assert 'null when it\n    is about something not extracted' in CORE_EXTRACTION_SPEC
     # The lookup agents have no citations field; the rule says so once.
     assert 'where the block has citations' in FLAG_RULES
+    # The bar, after the first local run raised 184 flags on three papers:
+    # most were "not stated", rule-required Unknowns and canonical choices.
+    assert 'Never flag:' in FLAG_RULES
+    assert 'a field the paper does not state' in FLAG_RULES
+    assert 'a value a rule here required' in FLAG_RULES
+    assert 'as good as the inputs allow' in FLAG_RULES
+    assert 'your own process' in FLAG_RULES
+    assert 'Most runs raise none or a few' in FLAG_RULES
 
 
 @pytest.mark.parametrize(
@@ -294,4 +302,7 @@ def test_compound_het_prompt_flags_suggested_pairs_instead_of_grading_them():
     prompt = COMPOUND_HET_AGENT_INSTRUCTIONS
     assert 'confidence' not in prompt.lower()
     assert 'WHAT ONLY SUGGESTS A PAIR (output it, and flag it)' in prompt
-    assert 'A pair established outright gets no\nflag.' in prompt
+    assert (
+        'Not: a pair the paper establishes\noutright -- say nothing about it in "flags"'
+        in prompt
+    )

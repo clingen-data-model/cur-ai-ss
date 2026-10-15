@@ -1026,11 +1026,15 @@ VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS = (
     + '\n\n'
     + FLAG_RULES
     + """
-FLAGS for this task: a transcript chosen among several the paper could mean, a
-coordinate or rsID that resolved to a different allele than the paper's HGVS, a
-notation normalised in a way that changes its meaning, a variant that could
-only be resolved partially. "about" is the variant as the paper wrote it, or
-null. The output is the block above with a "flags" list beside it.
+FLAGS for this task: a transcript chosen among several the paper could mean
+(it names one and the registry another, or its numbering fits two), a
+coordinate or rsID that resolved to a different allele than the paper's HGVS,
+a notation normalised in a way that changes its meaning, a variant that could
+only be resolved partially. Not: the canonical transcript chosen when the
+paper named none, a transcript version number that differs from the paper's,
+a splice variant with no protein change, or which registry you resolved
+through. "about" is the variant as the paper wrote it, or null. The output is
+the block above with a "flags" list beside it.
 """
 )
 

@@ -1516,7 +1516,10 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
 
         def resolve_patient_or_variant(about: str) -> dict[str, int]:
             # "patient / variant" names a pair and links the occurrence row
-            # just written for it; either half alone links that row.
+            # just written for it. A patient alone links that patient's
+            # only link when there is exactly one (the agent writes the
+            # patient's identifier for most flags about their link); with
+            # several, the flag stays on the patient.
             pair = split_pair(about)
             patient_half, variant_half = pair if pair else (about, about)
             links: dict[str, int] = {}
@@ -1526,18 +1529,22 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
             variant_id = match_label(variant_half, variant_labels)
             if variant_id is not None:
                 links['variant_id'] = variant_id
-            if patient_id is not None and variant_id is not None:
-                occurrence = (
-                    session.query(PatientVariantOccurrenceDB.id)
-                    .filter(
-                        PatientVariantOccurrenceDB.paper_id == paper_id,
-                        PatientVariantOccurrenceDB.patient_id == patient_id,
-                        PatientVariantOccurrenceDB.variant_id == variant_id,
-                    )
-                    .first()
+            if patient_id is None:
+                return links
+            query = session.query(
+                PatientVariantOccurrenceDB.id, PatientVariantOccurrenceDB.variant_id
+            ).filter(
+                PatientVariantOccurrenceDB.paper_id == paper_id,
+                PatientVariantOccurrenceDB.patient_id == patient_id,
+            )
+            if variant_id is not None:
+                query = query.filter(
+                    PatientVariantOccurrenceDB.variant_id == variant_id
                 )
-                if occurrence is not None:
-                    links['occurrence_id'] = occurrence[0]
+            occurrences = query.all()
+            if len(occurrences) == 1:
+                links['occurrence_id'] = occurrences[0][0]
+                links['variant_id'] = occurrences[0][1]
             return links
 
         replace_flags(
