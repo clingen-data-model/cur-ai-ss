@@ -26,11 +26,19 @@ A JSON array of compound heterozygous pairs. Each pair includes:
   text, table, figure or pedigree it comes from
 
 WHAT ESTABLISHES A PAIR:
-- The paper explicitly states "compound heterozygous" or "compound het" for these variants
+- The text states that this patient is compound heterozygous for these variants, or
+  names which variant sits on which allele or which parent each came from
 - The pedigree shows each variant inherited from a different parent
 - Parental testing confirms the variants are in trans
+- A table label ("c Het", "Comp Het") counts only together with one of the above for
+  this patient, such as a statement that the parents of such patients carried one
+  variant each
 
 WHAT ONLY SUGGESTS A PAIR (output it, and flag it):
+- A table zygosity label ("c Het", "Comp Het") or a family-level count of
+  compound heterozygous families, with no parental genotypes and no statement of
+  which allele or parent each variant is on for this patient. A label is the
+  paper's conclusion, not the evidence of phase; say so in the flag.
 - The segregation pattern implies trans without parental genotypes for both variants
   (e.g. one de novo variant plus one inherited variant in the same patient)
 - Haplotype or linkage context indicates different chromosome copies

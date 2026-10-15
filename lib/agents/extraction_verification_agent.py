@@ -51,6 +51,10 @@ shape:
 - flags about different people where the reasoning turns on something
   specific to each person.
 
+Flags about different patient-variant links or compound-het pairs (their
+"about" names a variant or a pair, not only a person) are kept apart by the
+system whatever you return, so do not group them.
+
 When in doubt, leave the flags apart: a curator resolving two flags costs a
 click, while a merged pair that should have stayed separate hides a
 decision. Each group names the id to keep (the lowest), the ids it absorbs,

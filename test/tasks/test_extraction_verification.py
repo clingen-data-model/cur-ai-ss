@@ -290,3 +290,122 @@ async def test_the_handler_asks_nothing_with_fewer_than_two_open_flags(
 
     assert calls == []
     assert len(open_flags(db_session, paper_db.id)) == 1
+
+
+def _ev(value=None):
+    return {'value': value, 'reasoning': 'test'}
+
+
+def _occurrence_pair(db_session, paper_id, patient_id, tag):
+    """Two linked occurrences for one patient: the rows a compound-het flag
+    points at with occurrence_id and paired_occurrence_id."""
+    from lib.models import PatientVariantOccurrenceDB, VariantDB
+
+    variants = []
+    for n in (1, 2):
+        v = VariantDB(
+            paper_id=paper_id,
+            variant=f'c.{tag}{n}A>G',
+            transcript='NM_000001.1',
+            genome_build='GRCh38',
+            hgvs_c=f'c.{tag}{n}A>G',
+            variant_type='Missense',
+            functional_evidence=False,
+            main_focus=False,
+            transcript_evidence=_ev('NM_000001.1'),
+            protein_accession_evidence=_ev(),
+            genomic_accession_evidence=_ev(),
+            lrg_accession_evidence=_ev(),
+            gene_accession_evidence=_ev(),
+            genomic_coordinates_evidence=_ev(),
+            genome_build_evidence=_ev('GRCh38'),
+            rsid_evidence=_ev(),
+            caid_evidence=_ev(),
+            variant_evidence=_ev(f'c.{tag}{n}A>G'),
+            hgvs_c_evidence=_ev(f'c.{tag}{n}A>G'),
+            hgvs_p_evidence=_ev(),
+            hgvs_g_evidence=_ev(),
+            variant_type_evidence=_ev('Missense'),
+            functional_evidence_evidence=_ev(False),
+            main_focus_evidence=_ev(False),
+        )
+        db_session.add(v)
+        variants.append(v)
+    db_session.flush()
+    rows = [
+        PatientVariantOccurrenceDB(
+            paper_id=paper_id,
+            patient_id=patient_id,
+            variant_id=v.id,
+            zygosity='Heterozygous',
+            zygosity_evidence=_ev('Heterozygous'),
+            inheritance='Unknown',
+            inheritance_evidence=_ev('Unknown'),
+            de_novo=False,
+            de_novo_evidence=_ev(False),
+            testing_methods=['Sanger Sequencing'],
+            testing_methods_evidence=[_ev('Sanger Sequencing')],
+        )
+        for v in variants
+    ]
+    db_session.add_all(rows)
+    db_session.flush()
+    return rows
+
+
+def test_flags_about_different_links_are_kept_apart(db_session, paper):
+    """Compound-het and occurrence flags are about one pair or link each:
+    folding them would clear the link and take the indicator off the rows."""
+    paper_db, family, (father, mother) = paper
+    fa, fb = _occurrence_pair(db_session, paper_db.id, father.id, 'a')
+    ma, mb = _occurrence_pair(db_session, paper_db.id, mother.id, 'b')
+    a = _flag(
+        paper_db.id,
+        'Trans phase inferred',
+        source='COMPOUND_HET_EVALUATION',
+        patient_id=father.id,
+        occurrence_id=fa.id,
+        paired_occurrence_id=fb.id,
+    )
+    b = _flag(
+        paper_db.id,
+        'Trans phase inferred too',
+        source='COMPOUND_HET_EVALUATION',
+        patient_id=mother.id,
+        occurrence_id=ma.id,
+        paired_occurrence_id=mb.id,
+    )
+    db_session.add_all([a, b])
+    db_session.flush()
+
+    assert apply_merge(db_session, paper_db.id, _groups((a.id, b.id))) == 0
+    assert [
+        (f.occurrence_id, f.paired_occurrence_id)
+        for f in open_flags(db_session, paper_db.id)
+    ] == [(fa.id, fb.id), (ma.id, mb.id)]
+
+
+def test_flags_about_the_same_link_still_merge(db_session, paper):
+    paper_db, family, (father, _) = paper
+    fa, fb = _occurrence_pair(db_session, paper_db.id, father.id, 'a')
+    a = _flag(
+        paper_db.id,
+        'Phase inferred',
+        source='COMPOUND_HET_EVALUATION',
+        patient_id=father.id,
+        occurrence_id=fa.id,
+        paired_occurrence_id=fb.id,
+    )
+    b = _flag(
+        paper_db.id,
+        'Phase inferred again',
+        patient_id=father.id,
+        occurrence_id=fa.id,
+        paired_occurrence_id=fb.id,
+    )
+    db_session.add_all([a, b])
+    db_session.flush()
+
+    assert apply_merge(db_session, paper_db.id, _groups((a.id, b.id))) == 1
+    (survivor,) = open_flags(db_session, paper_db.id)
+    assert (survivor.occurrence_id, survivor.paired_occurrence_id) == (fa.id, fb.id)
