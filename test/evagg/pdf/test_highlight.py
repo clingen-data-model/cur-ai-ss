@@ -4,11 +4,12 @@ import fitz
 import pytest
 
 from lib.misc.pdf import highlight
-from lib.misc.pdf.anchors import Anchor, PageBox, write_anchored
+from lib.misc.pdf.anchors import Anchor, PageBox, _PageFrame, write_anchored
 from lib.misc.pdf.highlight import (
     GrobidAnnotation,
     citations_to_grobid_annotations,
     find_best_match,
+    word_frame_to_user,
     words_within,
 )
 from lib.misc.pdf.parse import WordLoc
@@ -557,6 +558,86 @@ def test_unresolvable_citations_contribute_nothing(paper_documents):
     )
 
     assert _placed(out) == [(1, 10.0, 100.0, 190.0, 20.0)]
+
+
+def test_word_frame_to_user_undoes_the_rotation_docling_parse_applied():
+    """Paper 87 page 4 (603 x 783, /Rotate 90), the cell "62" of its Table 1:
+    words.json has it at x 286..294, y 367..374; PyMuPDF puts the same word at
+    user x 229..236, y 286..294. An unrotated page is a passthrough."""
+    frame = _PageFrame(90, 0.0, 0.0, 602.986, 782.986)
+    assert word_frame_to_user(286.36, 367.53, frame) == pytest.approx(
+        (235.46, 286.36), abs=0.01
+    )
+    assert word_frame_to_user(294.34, 374.07, frame) == pytest.approx(
+        (228.92, 294.34), abs=0.01
+    )
+    assert word_frame_to_user(5.0, 7.0, _PageFrame(0, 0.0, 0.0, 600.0, 800.0)) == (
+        5.0,
+        7.0,
+    )
+    # Paper 96 page 4: /Rotate 270 on a mediabox [0 251.76 828 827.76], so the
+    # frame is offset and the displayed height is the user-space width. words.json
+    # has the word "TABLE" at x 68.6..72.2, y 304.5..325.5; PyMuPDF puts it at
+    # user x 304.5..325.5, y 752.9..760.5 (a looser box around the same glyphs).
+    frame = _PageFrame(270, 0.0, 251.7594, 828.0, 827.7594)
+    assert word_frame_to_user(72.2, 304.5, frame) == pytest.approx(
+        (304.5, 755.56), abs=0.01
+    )
+    assert word_frame_to_user(68.6, 325.5, frame) == pytest.approx(
+        (325.5, 759.16), abs=0.01
+    )
+
+
+@pytest.fixture
+def rotated_paper(mocked_root_dir):
+    """Paper 2: a 600x800 page with /Rotate 90 (displayed 800 wide, 600 tall),
+    one table in user space, and words.json as docling-parse writes it for a
+    rotated page -- in the displayed orientation, y up, in the displayed size."""
+    paper_id = 2
+    # Displayed, the table spans X 50..400 and Y 150..300; in user space
+    # (rotation-90 inverse x = Y, y = X) that is x 150..300, y 50..400.
+    table = PageBox(page_no=1, x=150, y=50, width=150, height=350)
+    write_anchored(
+        paper_id,
+        '[table-0] T\n',
+        [Anchor(id='table-0', boxes=[table], row_boxes=[[]])],
+    )
+    pdf = fitz.open()
+    pdf.new_page(width=600, height=800).set_rotation(90)
+    pdf.save(document_raw_path(paper_id))
+    # "62 y" at displayed X 100..130, Y 200..216 is, y up over the displayed
+    # height of 600, x 100..130, y 384..400 in the word frame. "Elsewhere" sits
+    # at displayed Y 500, below the table; in user space that is x 500, which the
+    # unconverted frames would have read as *inside* the table (y 50..400).
+    words = [
+        _word('62', 100, 384, 115, 400),
+        _word('y', 118, 384, 130, 400),
+        _word('Elsewhere', 100, 84, 150, 100),
+    ]
+    document_words_json_path(paper_id).write_text(
+        json.dumps([w.model_dump() for w in words])
+    )
+    return paper_id
+
+
+def test_rotated_page_quote_is_narrowed_in_the_words_frame(rotated_paper):
+    """The quote is found and merged where docling-parse put it, and the box
+    comes out where the viewer shows that cell: displayed X 100..130, Y 200..216,
+    not rotated a second time (which put it at X 200, Y 100 as a 16 x 30 sliver)."""
+    out = citations_to_grobid_annotations(
+        rotated_paper, [Citation(anchor='table-0-row-0', quote='62 y')], RED
+    )
+    assert _placed(out) == [(1, 100.0, 200.0, 30.0, 16.0)]
+
+
+def test_rotated_page_search_stays_inside_the_cited_block(rotated_paper):
+    """A word outside the table on the displayed page is not a candidate, even
+    though its raw coordinates fall inside the table's user-space box."""
+    out = citations_to_grobid_annotations(
+        rotated_paper, [Citation(anchor='table-0-row-0', quote='Elsewhere')], RED
+    )
+    # Nothing to narrow to: the whole table, displayed (X 50..400, Y 150..300).
+    assert _placed(out) == [(1, 50.0, 150.0, 350.0, 150.0)]
 
 
 def test_missing_words_json_means_no_narrowing(paper_documents):
