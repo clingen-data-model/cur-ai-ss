@@ -640,6 +640,33 @@ def test_rotated_page_search_stays_inside_the_cited_block(rotated_paper):
     assert _placed(out) == [(1, 50.0, 150.0, 350.0, 150.0)]
 
 
+def test_box_off_its_page_contributes_nothing(paper_documents):
+    """An anchors.json written before clipped text was left out can still hold
+    a paragraph drawn off the page (paper 67's paragraph-185 at y -371). It
+    covers nothing a reader can see, so it is skipped like an unknown anchor."""
+    write_anchored(
+        paper_documents,
+        '[paragraph-1] Hello world\n\n[paragraph-9] clipped\n',
+        [
+            Anchor(id='paragraph-1', boxes=[PARAGRAPH]),
+            Anchor(
+                id='paragraph-9',
+                boxes=[PageBox(page_no=1, x=161, y=-371, width=392, height=9)],
+            ),
+        ],
+    )
+    out = citations_to_grobid_annotations(
+        paper_documents,
+        [
+            Citation(anchor='paragraph-9', quote='clipped'),
+            Citation(anchor='paragraph-1'),
+        ],
+        RED,
+    )
+
+    assert _placed(out) == [(1, 10.0, 100.0, 190.0, 20.0)]
+
+
 def test_missing_words_json_means_no_narrowing(paper_documents):
     document_words_json_path(paper_documents).unlink()
 

@@ -565,6 +565,51 @@ def test_zero_area_prov_boxes_are_dropped(paper_id):
     assert anchors[0].boxes == [PageBox(page_no=1, x=10, y=680, width=190, height=20)]
 
 
+def test_text_clipped_off_the_page_is_left_out(paper_id):
+    """Paper 67 draws pages 3 and 5 on page 4 too, 730 points above and below
+    it, where the viewer clips them. Docling keeps that text as page-4 items
+    with off-page prov; they must not become paragraphs, since a reader can
+    only see (and a curator only check) the copy on the page it belongs to."""
+    doc = DoclingDocument(name='clipped')
+    doc.add_page(page_no=1, size=Size(width=600, height=PAGE_HEIGHT))
+    doc.add_text(
+        label=DocItemLabel.TEXT, text='visible', prov=_bottom_left(10, 700, 200, 680)
+    )
+    doc.add_text(
+        label=DocItemLabel.TEXT, text='below', prov=_bottom_left(161, -362, 552, -371)
+    )
+    doc.add_text(
+        label=DocItemLabel.TEXT, text='above', prov=_bottom_left(6, 931, 72, 923)
+    )
+    doc.add_heading('Clipped heading', level=1, prov=_bottom_left(10, -398, 200, -408))
+    # Straddling the bottom edge: part of it shows, so it stays, box and all.
+    doc.add_text(
+        label=DocItemLabel.TEXT, text='edge', prov=_bottom_left(10, 5, 200, -5)
+    )
+    # Wrapped across a page break: one fragment clipped, one not -- kept, with
+    # only the visible fragment's box.
+    wrapped = doc.add_text(
+        label=DocItemLabel.TEXT, text='wrapped', prov=_bottom_left(10, 60, 200, 40)
+    )
+    wrapped.prov.append(_bottom_left(10, -20, 200, -40))
+    group = doc.add_list_group()
+    doc.add_list_item('seen', parent=group, prov=_bottom_left(10, 200, 300, 190))
+    doc.add_list_item('unseen', parent=group, prov=_bottom_left(10, -200, 300, -210))
+
+    md, anchors = build_anchored(doc, paper_id=paper_id)
+
+    assert md == (
+        '[paragraph-0] visible\n\n[paragraph-4] edge\n\n[paragraph-5] wrapped\n\n'
+        '[paragraph-6] - seen\n'
+    )
+    assert [(a.id, a.boxes) for a in anchors] == [
+        ('paragraph-0', [PageBox(page_no=1, x=10, y=680, width=190, height=20)]),
+        ('paragraph-4', [PageBox(page_no=1, x=10, y=-5, width=190, height=10)]),
+        ('paragraph-5', [PageBox(page_no=1, x=10, y=40, width=190, height=20)]),
+        ('paragraph-6', [PageBox(page_no=1, x=10, y=190, width=290, height=10)]),
+    ]
+
+
 def test_blank_items_produce_neither_text_nor_anchor(paper_id):
     doc = DoclingDocument(name='blank')
     doc.add_page(page_no=1, size=Size(width=600, height=PAGE_HEIGHT))

@@ -18,6 +18,7 @@ from lib.misc.pdf.anchors import (
     display_to_user_point,
     displayed_height,
     load_anchors,
+    on_page,
     page_frames,
     user_to_display,
 )
@@ -312,7 +313,13 @@ def citations_to_grobid_annotations(
         parsed = parse_anchor(citation.anchor)
         if parsed is None or parsed.supplement:
             continue
-        boxes = boxes_for_anchor(citation.anchor, anchors)
+        # A stale anchors.json (parsed before clipped text was left out) can
+        # still hold a box off its page; it covers nothing a reader can see.
+        boxes = [
+            b
+            for b in boxes_for_anchor(citation.anchor, anchors)
+            if b.page_no in frames and on_page(b, frames[b.page_no])
+        ]
         if not boxes:
             continue
         # A figure narrows only inside its legend: the picture holds no words
