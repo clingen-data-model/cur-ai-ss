@@ -28,6 +28,7 @@ from lib.agents.variant_extraction_agent import VARIANT_EXTRACTION_AGENT_INSTRUC
 from lib.agents.variant_harmonization_agent import (
     VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS,
 )
+from lib.models.flag import FlagKind
 
 
 def test_spec_names_every_id_form_and_the_shortest_span_rule():
@@ -242,10 +243,10 @@ def test_spec_states_the_flag_rule_once_for_every_agent():
     per decision, and each prompt adds only its own examples."""
     assert FLAG_RULES in CORE_EXTRACTION_SPEC
     assert 'FLAGS -- decisions a curator should see' in FLAG_RULES
-    assert 'left out under a rule rather\n    than for being nothing at all' in (
-        CORE_EXTRACTION_SPEC
-    )
-    assert 'a judgment the paper does not settle' in CORE_EXTRACTION_SPEC
+    # The two things a value's reasoning cannot carry, now as kinds: what a
+    # rule kept out, and a call the paper leaves open.
+    assert 'a rule here kept out of\n    your output' in CORE_EXTRACTION_SPEC
+    assert 'a call the paper itself leaves open' in CORE_EXTRACTION_SPEC
     # Output in its uncertain form beats nothing: a curator deletes in one
     # click and adds by hand.
     assert 'Prefer output a curator can review over nothing' in FLAG_RULES
@@ -263,6 +264,19 @@ def test_spec_states_the_flag_rule_once_for_every_agent():
     assert 'as good as the inputs allow' in FLAG_RULES
     assert 'your own process' in FLAG_RULES
     assert 'Most runs raise none or a few' in FLAG_RULES
+    # The closed list, after the second run still raised 70: a flag is one of
+    # six kinds or it is not a flag, and a decision an upstream task made is
+    # not flagged again downstream.
+    assert (
+        'Every flag is of one kind, and a decision that fits no kind is not a flag'
+        in (FLAG_RULES)
+    )
+    for kind in FlagKind:
+        assert f'  - {kind.value}: ' in FLAG_RULES
+    assert 'Flag only decisions your own output makes' in FLAG_RULES
+    assert 'kind: one of the kinds above' in FLAG_RULES
+    # The old template asked for a counterfactual on every flag, and got one.
+    assert 'what a curator might decide instead' not in FLAG_RULES
 
 
 @pytest.mark.parametrize(
@@ -286,15 +300,18 @@ def test_every_flagging_prompt_carries_the_rule_once_and_names_about(
 ):
     assert instructions.count('FLAGS -- decisions a curator should see') == 1
     assert '"about" is' in instructions
+    # Each task names the kinds it may raise; the rest are not on offer.
+    assert 'Kinds:' in instructions
 
 
 def test_patient_prompt_flag_examples_cover_the_three_kinds_of_decision():
     prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
     assert 'FLAGS for this task' in prompt
-    assert 'left out under the scope rule' in prompt
-    assert 'a patient too, under that role, with a flag' in prompt
-    assert 'A proband chosen where the paper marks none' in prompt
-    assert 'A standing changed by a rule here' in prompt
+    assert 'left out under the scope\n  rule' in prompt
+    assert 'a patient too, under that role; an empty record' in prompt
+    assert 'a proband chosen where the paper marks none' in prompt
+    # Proband and family membership are this task's to flag, nobody else's.
+    assert 'a flag about them is raised\nhere or nowhere' in prompt
     assert 'has a flag\n  in "flags"; nothing routine does.' in prompt
 
 

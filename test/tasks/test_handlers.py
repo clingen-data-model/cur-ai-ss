@@ -211,6 +211,7 @@ async def test_patient_extraction_persists_flags_and_links_them_to_patients(
             ['Patient 1', 'Patient 2'],
             [
                 {
+                    'kind': 'excluded',
                     'about': 'Patient 2',
                     'flag': {
                         'value': 'status implied',
@@ -219,6 +220,7 @@ async def test_patient_extraction_persists_flags_and_links_them_to_patients(
                     },
                 },
                 {
+                    'kind': 'excluded',
                     'about': None,
                     'flag': {
                         'value': 'untested sister',
@@ -227,6 +229,7 @@ async def test_patient_extraction_persists_flags_and_links_them_to_patients(
                     },
                 },
                 {
+                    'kind': 'excluded',
                     'about': 'family 1',
                     'flag': {
                         'value': 'no proband marked',
@@ -256,6 +259,7 @@ async def test_rerunning_patient_extraction_replaces_only_its_own_flags(
     other_agent = FlagDB(
         paper_id=paper.id,
         source='VARIANT_EXTRACTION',
+        kind='excluded',
         subject='kept',
         evidence={'value': 'kept', 'reasoning': 'x', 'citations': []},
     )
@@ -263,6 +267,7 @@ async def test_rerunning_patient_extraction_replaces_only_its_own_flags(
     db_session.commit()
 
     sister = {
+        'kind': 'excluded',
         'about': None,
         'flag': {
             'value': 'untested sister',

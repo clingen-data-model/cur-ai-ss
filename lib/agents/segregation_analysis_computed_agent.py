@@ -306,12 +306,14 @@ SEGREGATION_ANALYSIS_COMPUTED_AGENT_INSTRUCTIONS = (
     + '\n\n'
     + FLAG_RULES
     + """
-FLAGS for this task: a family member counted or left out on an assumption
-(an unknown affected status, an untested member, twins of unstated type), a
-methodology defaulted to the conservative row, a count the extracted LOD
-score disagrees with, a non-segregation treated as explained. "about" is a
-member's identifier from the family structure, or null. The output carries a
-"flags" list.
+FLAGS for this task. Kinds:
+- inferred: a family member counted or left out on an assumption -- an
+  unknown affected status, an untested member, twins of unstated type.
+- conflict: a count the extracted LOD score disagrees with.
+Not: a methodology defaulted to the conservative row (the rule decides it),
+a non-segregation treated as explained (the evidence extractor's flag), nor
+the genotypes and statuses you were given. "about" is a member's identifier
+from the family structure, or null. The output carries a "flags" list.
 """
 )
 

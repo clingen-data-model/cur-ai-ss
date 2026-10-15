@@ -23,7 +23,7 @@ import { ResolveFlagDialog } from '@/components/ResolveFlagDialog'
 import { RerunFromFlagDialog } from '@/components/RerunFromFlagDialog'
 import { usePaperFlags, useRerunFromFlag, useResolveFlag, useResolveFlags } from '@/hooks/usePaperFlags'
 import type { OccurrenceRow } from '@/hooks/usePaperOccurrences'
-import { flagSourceLabel, sortFlags } from '@/lib/flags'
+import { FLAG_KIND_LABELS, flagKindLabel, flagSourceLabel, sortFlags } from '@/lib/flags'
 import type { FlagTarget } from '@/lib/flagTarget'
 
 const STALE_TIME = 5 * 60 * 1000
@@ -266,11 +266,20 @@ export function FlagsTab({
       {
         id: 'subject',
         header: 'Flag',
-        accessorFn: (row) => `${row.subject} ${row.evidence.reasoning ?? ''}`,
+        accessorFn: (row) => `${flagKindLabel(row)} ${row.subject} ${row.evidence.reasoning ?? ''}`,
         cell: ({ row }) => (
           <div className="flex items-start gap-1 max-w-xl whitespace-normal">
             <div className="min-w-0">
-              <p className="font-medium break-words">{row.original.subject}</p>
+              <p className="font-medium break-words">
+                <Badge
+                  variant="outline"
+                  className="mr-1.5 align-middle font-normal text-muted-foreground"
+                  title={FLAG_KIND_LABELS[row.original.kind]?.hint}
+                >
+                  {flagKindLabel(row.original)}
+                </Badge>
+                {row.original.subject}
+              </p>
               {row.original.evidence.reasoning && (
                 <p className="text-xs text-muted-foreground break-words">{row.original.evidence.reasoning}</p>
               )}

@@ -236,16 +236,25 @@ Output rules:
 - Do NOT output variants that only have general descriptive text (e.g., "carries a VUS in TOPBP1")
 - A variant the paper identifies in a form the filter does not list but a reader
   could resolve -- an older name, a protein change written without "p.", an
-  exon-level deletion -- goes in the "variant" field and is flagged, not dropped.
+  exon-level deletion -- goes in the "variant" field, not dropped.
   The filter excludes only text that identifies nothing.
 - "flags" is a list as CORE EXTRACTION RULES describes; "about" is a variant as
   written in this output (its hgvs_c, hgvs_p, hgvs_g or variant field), or null
 
-FLAGS for this task (the rule is in CORE EXTRACTION RULES): a variant the paper
-reports that the identifier filter above excluded, a variant left out as
-belonging to another gene when the paper is ambiguous, two notations in the
-paper that disagree for one variant, a transcript or build inferred rather than
-stated.
+FLAGS for this task (the rule is in CORE EXTRACTION RULES). Kinds:
+
+- excluded: a variant the paper reports in the target gene that the
+  identifier filter above kept out, or one left out as another gene's when
+  the paper is unclear which gene it is in. Not a variant plainly in another
+  gene.
+- ambiguous: a variant kept whose standing a curator may not expect -- an
+  animal ortholog's variant in the same gene, a variant reported only for a
+  previously published case.
+
+Not: two notations in the paper that disagree for one variant -- record the
+table's form, note the other in that variant's reasoning, and leave it to
+harmonization, which can check which one the protein change fits. Not a
+transcript or build the paper does not state.
 """
 
 

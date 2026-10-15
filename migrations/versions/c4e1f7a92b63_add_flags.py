@@ -32,6 +32,7 @@ def upgrade() -> None:
         sa.Column('occurrence_id', sa.Integer(), nullable=True),
         sa.Column('paired_occurrence_id', sa.Integer(), nullable=True),
         sa.Column('source', sa.String(), nullable=False),
+        sa.Column('kind', sa.String(), nullable=False),
         sa.Column('subject', sa.Text(), nullable=False),
         sa.Column('evidence', sa.JSON(), nullable=False),
         sa.Column('resolved_by_user_id', sa.Integer(), nullable=True),

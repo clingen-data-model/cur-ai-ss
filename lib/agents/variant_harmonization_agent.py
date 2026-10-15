@@ -1026,15 +1026,23 @@ VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS = (
     + '\n\n'
     + FLAG_RULES
     + """
-FLAGS for this task: a transcript chosen among several the paper could mean
-(it names one and the registry another, or its numbering fits two), a
-coordinate or rsID that resolved to a different allele than the paper's HGVS,
-a notation normalised in a way that changes its meaning, a variant that could
-only be resolved partially. Not: the canonical transcript chosen when the
-paper named none, a transcript version number that differs from the paper's,
-a splice variant with no protein change, or which registry you resolved
-through. "about" is the variant as the paper wrote it, or null. The output is
-the block above with a "flags" list beside it.
+FLAGS for this task. Kinds:
+- conflict: the paper's own notations do not describe one change -- its c.
+  and p. disagree, its coordinates or rsID resolve to a different allele than
+  its HGVS, or its transcript names one thing and the registry another. Say
+  which you kept and why. This task owns that decision; upstream only
+  records both forms.
+- unresolved: no genomic allele could be derived, or only part of the
+  identity resolved.
+- mismatch: the registry's consequence differs from the paper's where the
+  paper's is the functional one (a splice-driven deletion the registry calls
+  synonymous).
+Not: a transcript chosen by the canonical rule or taken from the matching
+registry record when the paper named none, a version number that differs
+from the paper's, a splice variant with no protein change, a protein-only
+input resolved through a registry, or which registry you used. "about" is
+the variant as the paper wrote it, or null. The output is the block above
+with a "flags" list beside it.
 """
 )
 

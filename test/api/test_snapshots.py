@@ -763,6 +763,7 @@ def test_flags_revert_with_snapshot(db_session, test_user, snapshot_paper):
         paper_id=paper.id,
         patient_id=p1.id,
         source='PATIENT_EXTRACTION',
+        kind='excluded',
         subject='chosen as proband',
         evidence=_ev('chosen as proband'),
         resolved_by_user_id=test_user.id,
@@ -772,6 +773,7 @@ def test_flags_revert_with_snapshot(db_session, test_user, snapshot_paper):
     about_nobody = FlagDB(
         paper_id=paper.id,
         source='PATIENT_EXTRACTION',
+        kind='excluded',
         subject='untested sister',
         evidence=_ev('untested sister'),
     )
@@ -790,6 +792,7 @@ def test_flags_revert_with_snapshot(db_session, test_user, snapshot_paper):
         FlagDB(
             paper_id=paper.id,
             source='PATIENT_EXTRACTION',
+            kind='excluded',
             subject='added after the snapshot',
             evidence=_ev('later'),
         )

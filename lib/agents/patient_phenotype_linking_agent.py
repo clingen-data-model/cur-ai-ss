@@ -353,13 +353,20 @@ OUTPUT
 
 Return an object with a "phenotypes" list, one entry per extracted phenotype
 for the provided patient, and a "flags" list (the rule is in CORE EXTRACTION
-RULES): a finding extracted with uncertain: true because its attribution to
-this patient is implied rather than stated, a relative's finding left out
-under the family-member rule when the sentence could be read either way, a
-finding stated only in a table flagged with an EXTRACTION WARNING. Not: a
-patient the paper states no findings for (an empty list says that), nor an
-identifier you could not find in the text. "about" is a concept from the
-"phenotypes" list, or null.
+RULES). Kinds:
+
+- inferred: a finding extracted with uncertain: true because it reaches this
+  patient through a cohort-level or family-level sentence rather than a
+  statement about them. One flag naming the findings, not one per finding.
+- conflict: the text and a table disagree about a finding for this patient.
+- excluded: a finding left out under the family-member rule when the
+  sentence could be read either way, or stated only in a table carrying an
+  EXTRACTION WARNING.
+
+Not: a patient the paper states no findings for, a scored negative left out
+under the negatives rule, a genetic result that is not a phenotype, nor an
+identifier you could not find in the text -- an empty list says each of
+those. "about" is a concept from the "phenotypes" list, or null.
 
 Example structure:
 {

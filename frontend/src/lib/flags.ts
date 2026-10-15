@@ -16,3 +16,17 @@ export function sortFlags(flags: FlagResp[]): FlagResp[] {
     return aOpen - bOpen || b.id - a.id
   })
 }
+
+/** What each closed flag kind means, for the badge and its tooltip. */
+export const FLAG_KIND_LABELS: Record<string, { label: string; hint: string }> = {
+  excluded: { label: 'Excluded', hint: 'Something the paper describes that a rule kept out of the output' },
+  conflict: { label: 'Conflict', hint: 'Two places in the paper disagree about one value; one was chosen' },
+  ambiguous: { label: 'Ambiguous', hint: 'Two readings of the paper both fit; one was chosen' },
+  inferred: { label: 'Inferred', hint: 'A value taken from somewhere other than a statement about the thing itself' },
+  unresolved: { label: 'Unresolved', hint: 'A lookup could not settle it; the output is partial or empty' },
+  mismatch: { label: 'Mismatch', hint: 'The best available term or record does not fit what the paper says' },
+}
+
+export function flagKindLabel(flag: Pick<FlagResp, 'kind'>): string {
+  return FLAG_KIND_LABELS[flag.kind]?.label ?? flag.kind
+}

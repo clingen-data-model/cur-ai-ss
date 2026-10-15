@@ -328,8 +328,8 @@ If the candidate terms do not represent the phenotype meaning:
 Only return id: null and name: null after tool exploration reveals no suitable match.
 
 When no term matches the concept exactly but a broader term covers it, return
-the broader term and flag it: a curator can relink a term in one click and
-cannot easily find one from nothing. Return an HPOTerm with id: null and
+the broader term and say so in its reasoning: a curator can relink a term in
+one click and cannot easily find one from nothing. Return an HPOTerm with id: null and
 name: null only when:
 - the phenotype is too vague to place anywhere (e.g., "symptom", "finding")
 - the phenotype is genuinely not represented in HPO, not even by a broader term
@@ -357,15 +357,20 @@ HPO_LINKING_AGENT_INSTRUCTIONS = (
     + '\n\n'
     + FLAG_RULES
     + """
-FLAGS for this task: a concept that maps equally well to two terms; a compound
-concept where the one term the output allows drops a finding a curator would
-want as a second phenotype; a closer term that exists but did not fit cleanly,
-so a broader one was chosen over it; a negated or family-history concept
-linked anyway. Not: a broader term when the ontology has nothing closer, a
-preferred name that differs from the paper's wording, a severity, laterality
-or progression modifier HPO terms do not carry, or whether you called a tool.
-"about" is the concept you were given, or null. The output is the block above
-with a "flags" list beside it.
+FLAGS for this task. Kinds:
+- unresolved: no term, or only a provisional one that does not describe the
+  finding.
+- mismatch: the nearest term names a different organ, system or mechanism
+  than the concept (an organ the concept does not state and you assumed), or
+  a negated or family-history concept linked anyway.
+- ambiguous: two candidate terms name different findings and both fit the
+  concept -- not two wordings of one finding.
+Not: a broader term when the ontology has nothing closer, a qualifier,
+severity, laterality, region or progression HPO terms do not carry, a
+compound concept reduced to its main finding, a preferred name that differs
+from the paper's wording, or whether you called a tool. "about" is the
+concept you were given, or null. The output is the block above with a
+"flags" list beside it.
 """
 )
 

@@ -21,7 +21,7 @@ import { ResolveFlagDialog } from '@/components/ResolveFlagDialog'
 import { RerunFromFlagDialog } from '@/components/RerunFromFlagDialog'
 import { useRerunFromFlag, useResolveFlag } from '@/hooks/usePaperFlags'
 import { describeAnchor, isSupplementAnchor } from '@/lib/anchors'
-import { flagSourceLabel, sortFlags } from '@/lib/flags'
+import { FLAG_KIND_LABELS, flagKindLabel, flagSourceLabel, sortFlags } from '@/lib/flags'
 
 const TRIGGER_CLASSNAME =
   'inline-flex items-center justify-center size-6 rounded hover:bg-muted cursor-pointer transition-colors'
@@ -48,7 +48,11 @@ export function FlagCard({
         <Flag className={`size-3.5 mt-0.5 shrink-0 ${open ? 'text-violet-600' : 'text-muted-foreground'}`} />
         <div className="min-w-0 flex-1">
           <p className="font-medium break-words">{flag.subject}</p>
-          <p className="text-xs text-muted-foreground">{flagSourceLabel(flag)}</p>
+          <p className="text-xs text-muted-foreground">
+            <span title={FLAG_KIND_LABELS[flag.kind]?.hint}>{flagKindLabel(flag)}</span>
+            {' · '}
+            {flagSourceLabel(flag)}
+          </p>
         </div>
       </div>
       {flag.evidence.reasoning && <p className="break-words">{flag.evidence.reasoning}</p>}

@@ -51,12 +51,15 @@ COMPOUND_HET_AGENT_INSTRUCTIONS = (
     + '\n\n'
     + FLAG_RULES
     + """
-FLAGS for this task: every pair output on suggestive rather than established
-evidence, saying which kind (phase inferred from segregation, from one parent's
-genotype alone, from haplotype context, or not established at all; the paper
-naming no variants for its "compound heterozygous"); three or more heterozygous
-variants with no way to pair them; a heterozygous variant in the list that the
-paper never discusses for this patient. Not: a pair the paper establishes
+FLAGS for this task. Kinds:
+- inferred: a pair output on suggestive rather than established evidence --
+  phase from segregation, from one parent's genotype alone, or from
+  haplotype context. Say which.
+- ambiguous: the paper calls the patient compound heterozygous naming no
+  variants, or three or more heterozygous variants give no way to pair them.
+- excluded: a heterozygous variant in the list that the paper never
+  discusses for this patient.
+Not: a pair the paper establishes
 outright -- say nothing about it in "flags". "about" is a variant description from the list you were given, the two
 of a pair written as "first / second", or null. The output carries a "flags"
 list.

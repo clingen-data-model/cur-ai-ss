@@ -4,7 +4,12 @@ import pytest
 from pydantic import ValidationError
 
 from lib.models import FamilyDB, FlagDB, GeneDB, PaperDB, PatientDB
-from lib.models.flag import ExtractionFlag, FlaggedReasoningBlock, ReasoningFlag
+from lib.models.flag import (
+    ExtractionFlag,
+    FlaggedReasoningBlock,
+    FlagKind,
+    ReasoningFlag,
+)
 from lib.models.patient import PatientExtractionOutput
 from lib.models.phenotype import PhenotypeExtractionOutput
 from lib.models.variant import VariantExtractionOutput
@@ -15,6 +20,7 @@ _CITE = [{'anchor': 'paragraph-3', 'quote': 'her sister was not tested'}]
 
 def _flag(subject: str, about: str | None = None) -> ExtractionFlag:
     return ExtractionFlag(
+        kind='excluded',
         about=about,
         flag={'value': subject, 'reasoning': 'because', 'citations': _CITE},
     )
@@ -40,9 +46,12 @@ def test_a_flag_about_an_absence_may_cite_nothing():
     # The target gene never mentioned, a relative never described: there is
     # no block to quote, and the flag must still load rather than fail the
     # whole output.
-    flag = ExtractionFlag(about=None, flag={'value': 'x', 'reasoning': 'no source'})
+    flag = ExtractionFlag(
+        kind='excluded', about=None, flag={'value': 'x', 'reasoning': 'no source'}
+    )
     assert flag.flag.citations == []
     cited = ExtractionFlag(
+        kind='excluded',
         about=None,
         flag={
             'value': 'x',
@@ -54,7 +63,9 @@ def test_a_flag_about_an_absence_may_cite_nothing():
 
 
 def test_a_reasoning_flag_has_no_citations_to_give():
-    flag = ReasoningFlag(about='c.1A>G', flag={'value': 'x', 'reasoning': 'y'})
+    flag = ReasoningFlag(
+        kind='unresolved', about='c.1A>G', flag={'value': 'x', 'reasoning': 'y'}
+    )
     assert flag.flag.value == 'x'
 
 
@@ -62,7 +73,13 @@ def test_a_flagged_reasoning_block_is_still_a_reasoning_block():
     block = FlaggedReasoningBlock[int](
         value=3,
         reasoning='r',
-        flags=[{'about': None, 'flag': {'value': 'x', 'reasoning': 'y'}}],
+        flags=[
+            {
+                'kind': 'excluded',
+                'about': None,
+                'flag': {'value': 'x', 'reasoning': 'y'},
+            }
+        ],
     )
     assert (block.value, block.reasoning) == (3, 'r')
     assert flags_of(block)[0].flag.value == 'x'
@@ -159,6 +176,20 @@ def test_replace_flags_resolves_about_and_keeps_an_unmatched_one(db_session, pap
     ]
     assert rows[0].evidence['citations'][0]['anchor'] == 'paragraph-3'
     assert rows[0].source == 'PATIENT_EXTRACTION'
+    assert rows[0].kind == 'excluded'
+
+
+def test_a_flag_must_be_of_a_listed_kind():
+    # The closed list is the bar: a decision that fits no kind is not a flag,
+    # and an agent that invents one fails validation rather than storing it.
+    with pytest.raises(ValidationError):
+        ExtractionFlag(kind='hedge', about=None, flag={'value': 'x', 'reasoning': 'y'})
+    assert (
+        ExtractionFlag(
+            kind='conflict', about=None, flag={'value': 'x', 'reasoning': 'y'}
+        ).kind
+        is FlagKind.CONFLICT
+    )
 
 
 def test_replace_flags_scope_bounds_the_delete_and_stamps_new_rows(db_session, paper):

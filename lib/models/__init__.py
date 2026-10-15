@@ -25,6 +25,7 @@ from lib.models.flag import (
     FlagBulkResolveRequest,
     FlagDB,
     FlaggedReasoningBlock,
+    FlagKind,
     FlagRerunRequest,
     FlagResolveRequest,
     FlagResp,

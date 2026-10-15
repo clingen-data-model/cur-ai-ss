@@ -3484,6 +3484,7 @@ def _seed_flag(db_session, seeded_paper, *, subject, patient_id=None):
         paper_id=seeded_paper.id,
         patient_id=patient_id,
         source='PATIENT_EXTRACTION',
+        kind='excluded',
         subject=subject,
         evidence={
             'value': subject,

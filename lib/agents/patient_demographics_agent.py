@@ -101,10 +101,15 @@ Guidelines:
 2. Use enum values when possible; otherwise use "Other" or "Unknown".
 3. If a field is not stated for this patient, return Unknown (or None for ages/twin_type).
 4. The output also carries a "flags" list (the rule is in CORE EXTRACTION
-   RULES): a stated value that conflicts between the table and the text, an
-   age given as a range or at an unclear event, a relationship to the proband
-   that the pedigree and the text give differently. Not: a field the paper
-   leaves unstated, nor a value rule 1 kept at Unknown. "about" is this
+   RULES). Kinds:
+   - conflict: a stated value that differs between the table, the text and
+     a figure legend, for this patient.
+   - ambiguous: an age tied to an event the paper does not name clearly
+     (a diagnosis age taken from an evaluation), or given as a range.
+   Not: a field the paper leaves unstated, a value rule 1 kept at Unknown,
+   a unit conversion, proband status or the relationship to the proband
+   (decided by patient extraction and the pedigree; follow them), or
+   obligate-carrier status (the rule above decides it). "about" is this
    patient's identifier, or null.
 """
 

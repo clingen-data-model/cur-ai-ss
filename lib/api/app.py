@@ -170,6 +170,7 @@ from lib.models.evidence_block import (
 from lib.models.flag import (
     FlagBulkResolveRequest,
     FlagDB,
+    FlagKind,
     FlagRerunRequest,
     FlagResolveRequest,
     FlagResp,
@@ -2720,6 +2721,7 @@ def _flag_resp(flag: FlagDB) -> FlagResp:
         id=flag.id,
         paper_id=flag.paper_id,
         source=flag.source,
+        kind=FlagKind(flag.kind),
         subject=flag.subject,
         evidence=HumanEvidenceBlock[str].model_validate(flag.evidence),
         family_id=flag.family_id,

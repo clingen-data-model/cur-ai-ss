@@ -120,8 +120,10 @@ under a rule, a call the paper leaves open -- goes in a `flags` list on the outp
 (`lib/models/flag.py`): `ExtractionFlag` (an evidence block, for agents that read the
 paper) or `ReasoningFlag` (a reasoning block, for the lookup agents with nothing to
 cite); an agent whose whole output is one `ReasoningBlock` returns a
-`FlaggedReasoningBlock` instead. Each flag's `about` is the identifier of the thing it
-concerns, or null. `FLAG_RULES` (`lib/agents/core_extraction_rules.py`) states the rule
+`FlaggedReasoningBlock` instead. Each flag's `kind` is one of the closed `FlagKind`
+list (excluded, conflict, ambiguous, inferred, unresolved, mismatch); a prompt's FLAGS
+section says which kinds that task may raise, and a decision that fits none is not a
+flag. Each flag's `about` is the identifier of the thing it concerns, or null. `FLAG_RULES` (`lib/agents/core_extraction_rules.py`) states the rule
 once -- inside `CORE_EXTRACTION_SPEC` for the paper-reading agents, appended directly by
 the lookup agents -- and a prompt adds at most a few task-specific examples. The handler
 calls `replace_flags` (`lib/tasks/flags.py`) after writing its rows, with the task's

@@ -7,28 +7,44 @@ FLAG_RULES = """FLAGS -- decisions a curator should see:
 - Prefer output a curator can review over nothing. When the paper suggests
   something but does not establish it, produce it in the uncertain form the
   output allows -- Unknown or Uncertain where a field has one, uncertain:
-  true, a broader term, a Non-Proband -- and flag it. A row a curator can
-  delete costs one click; a row they must add by hand costs the identifier,
-  the evidence and every downstream step. Leave something out only when the
-  output has no uncertain form for it and including it would change a count
-  curators score before review (an extra proband, members of a cohort the
-  target gene does not cover), and flag that too.
+  true, a broader term, a Non-Proband -- and say so in its reasoning. A row a
+  curator can delete costs one click; a row they must add by hand costs the
+  identifier, the evidence and every downstream step.
+  Leave something out only when the output has no uncertain form for it and
+  including it would change a count curators score before review (an extra
+  proband, members of a cohort the target gene does not cover), and flag
+  that.
 - Every value you return carries its reasoning. A flag is for what that
   reasoning cannot carry: a decision about something that is not in your
   output, or a call the paper itself leaves open. Raise one only when a
   curator who read the same text could reasonably decide differently AND the
   difference would change what is curated -- a row added or removed, a
   different term, variant, link or count. Most runs raise none or a few; a
-  flag on every row means the bar is too low. Raise one in the "flags" list
-  of your output when:
-  - something a curator might have expected was left out under a rule rather
-    than for being nothing at all -- a person, variant or finding the paper
-    mentions that a scope, identifier or evidence rule excluded. Say which
-    rule applied and what the paper said, so a curator who reads the rule
-    differently can add it.
-  - a value rests on a judgment the paper does not settle: two sources
-    disagree, a choice was made between readings that both fit, a rule here
-    changed something's standing in a way a curator may not expect.
+  flag on every row means the bar is too low.
+- Every flag is of one kind, and a decision that fits no kind is not a flag.
+  The FLAGS section of your task says which of these it may raise:
+  - excluded: something the paper describes that a rule here kept out of
+    your output, where the paper gives a curator a reason to keep it -- a
+    person, variant or finding in scope that a scope, identifier or evidence
+    rule excluded, or a candidate left out to keep a count curators score.
+    Say what the paper said and which rule applied. Not a group plainly
+    outside the task.
+  - conflict: two places in the paper disagree about one value, and you
+    chose one.
+  - ambiguous: two readings of the paper both fit, and you chose one.
+  - inferred: a value taken from somewhere other than a statement about the
+    thing itself -- a family-level or cohort-level sentence, a reference's
+    title, a pedigree symbol, surrounding context.
+  - unresolved: a lookup could not settle it -- no identifier, term or
+    record was found, so the output is partial or null where a curator might
+    find one.
+  - mismatch: the best available term or record does not fit what the paper
+    says -- a different organ, system, mechanism or consequence.
+- Flag only decisions your own output makes. A value you were given as input
+  -- a patient's proband status, a family's membership, a variant's
+  notation, a link's zygosity or a parent's carrier status -- was decided by
+  the task that produced it, and its flag, if any, was raised there. Use it
+  as given; do not flag it again.
 - Never flag:
   - a field the paper does not state. Unknown, null or an empty list already
     says that, and "X not stated" is not a decision.
@@ -46,14 +62,15 @@ FLAG_RULES = """FLAGS -- decisions a curator should see:
   flag. Raise one flag per decision, not per item it touches; a group left
   out for one reason is one flag that names its members.
 - Each flag is an object with:
+  - kind: one of the kinds above, from those your task allows.
   - about: the identifier of the extracted thing it concerns, copied exactly
     from your output or from the input you were given (a patient or family
     identifier, a variant as written, a phenotype concept), or null when it
     is about something not extracted.
   - flag: a block whose value is a short subject (who or what, in a few
-    words), whose reasoning says what you decided, under which rule, and what
-    a curator might decide instead, and -- where the block has citations --
-    whose citations point at the block(s) the decision rests on.
+    words), whose reasoning says what the paper says and what you did with
+    it, and -- where the block has citations -- whose citations point at the
+    block(s) the decision rests on.
 - "flags" is empty when there was nothing to flag.
 """
 

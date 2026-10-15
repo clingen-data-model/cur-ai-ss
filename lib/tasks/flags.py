@@ -96,6 +96,7 @@ def replace_flags(
         row = FlagDB(
             paper_id=paper_id,
             source=source,
+            kind=flag.kind.value,
             subject=flag.flag.value,
             evidence=flag.flag.model_dump(),
             **links,

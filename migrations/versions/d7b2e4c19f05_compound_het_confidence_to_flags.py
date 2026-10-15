@@ -88,9 +88,10 @@ def _flag_existing_uncertain_pairs(connection: sa.Connection) -> None:
         connection.execute(
             sa.text(
                 'INSERT INTO flags (paper_id, patient_id, variant_id, '
-                'occurrence_id, paired_occurrence_id, source, subject, evidence) '
+                'occurrence_id, paired_occurrence_id, source, kind, subject, '
+                'evidence) '
                 'VALUES (:paper_id, :patient_id, :variant_id, :occurrence_id, '
-                ':paired_occurrence_id, :source, :subject, :evidence)'
+                ':paired_occurrence_id, :source, :kind, :subject, :evidence)'
             ),
             {
                 'paper_id': row['paper_id'],
@@ -99,6 +100,12 @@ def _flag_existing_uncertain_pairs(connection: sa.Connection) -> None:
                 'occurrence_id': row['id'],
                 'paired_occurrence_id': partner,
                 'source': _SOURCE,
+                # An 'assumed' pair rested on an inference (segregation, one
+                # parent's genotype); an 'uncertain' one on a reading the
+                # paper leaves open.
+                'kind': 'inferred'
+                if row['paired_variant_confidence'] == 'assumed'
+                else 'ambiguous',
                 'subject': subject,
                 'evidence': json.dumps({'value': subject, 'reasoning': why}),
             },

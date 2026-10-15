@@ -20,6 +20,7 @@ the UI renders it the same way), and who resolved it.
 """
 
 from datetime import datetime
+from enum import StrEnum
 from typing import TYPE_CHECKING, ClassVar, Generic, TypeVar
 
 from pydantic import BaseModel, Field
@@ -42,6 +43,29 @@ if TYPE_CHECKING:
     from lib.models.variant import VariantDB
 
 
+class FlagKind(StrEnum):
+    """The closed list of things a flag can be. Every flag names one, and a
+    decision that fits none is not a flag -- the list is the bar, stated as
+    categories rather than as adjectives, after a run on open-ended rules
+    flagged every rule application and every hedge. Each agent's prompt
+    allows a subset; the kinds a task cannot produce (a lookup agent has
+    nothing to exclude, a paper-reading agent nothing to leave unresolved)
+    are simply not offered to it."""
+
+    # Something the paper describes that a rule kept out of the output.
+    EXCLUDED = 'excluded'
+    # Two places in the paper disagree about one value; one was chosen.
+    CONFLICT = 'conflict'
+    # Two readings of the paper both fit; one was chosen.
+    AMBIGUOUS = 'ambiguous'
+    # A value taken from somewhere other than a statement about the thing.
+    INFERRED = 'inferred'
+    # A lookup could not settle it; the output is partial or null.
+    UNRESOLVED = 'unresolved'
+    # The best available term or record does not fit what the paper says.
+    MISMATCH = 'mismatch'
+
+
 class FlagEvidenceBlock(EvidenceBlock[str]):
     """A flag's evidence: cited where the paper says something, and allowed
     to cite nothing where it does not. The common flag is about an absence
@@ -57,7 +81,8 @@ class FlagEvidenceBlock(EvidenceBlock[str]):
 class ExtractionFlag(BaseModel):
     """One flag as an agent returns it, in any agent's output.
 
-    ``about`` names the extracted thing the flag concerns, exactly as it
+    ``kind`` is which of the closed FlagKind categories the decision falls
+    in. ``about`` names the extracted thing the flag concerns, exactly as it
     appears in the agent's own output or in the input it was given -- a
     patient or family identifier, a variant as written, a phenotype concept --
     or is null when the flag is about something that was not extracted, which
@@ -68,6 +93,7 @@ class ExtractionFlag(BaseModel):
     on, when there is any.
     """
 
+    kind: FlagKind
     about: str | None
     flag: FlagEvidenceBlock
 
@@ -78,6 +104,7 @@ class ReasoningFlag(BaseModel):
     the computed segregation analysis, compound-het phasing): there is no
     block to cite, so the flag is a reasoning block."""
 
+    kind: FlagKind
     about: str | None
     flag: ReasoningBlock[str]
 
@@ -146,6 +173,11 @@ class FlagDB(Base):
     # replaces its own flags (within its own scope -- the patient, for a
     # per-patient task) and leaves every other agent's alone.
     source: Mapped[str] = mapped_column(String, nullable=False)
+    # FlagKind's value ('excluded', 'conflict', ...). A plain string column,
+    # like ``source``: the enum is a closed list in the prompts, not a type
+    # the database enforces, and a String round-trips without the
+    # name-versus-value trap SQLEnum has (see CLAUDE.md).
+    kind: Mapped[str] = mapped_column(String, nullable=False)
     subject: Mapped[str] = mapped_column(Text, nullable=False)
     evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
 
@@ -185,6 +217,7 @@ class FlagResp(BaseModel):
     id: int
     paper_id: int
     source: str
+    kind: FlagKind
     subject: str
     # Lenient on load (no required source), same as every other *_evidence
     # field served to the UI.
