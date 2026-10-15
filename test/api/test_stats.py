@@ -11,6 +11,7 @@ def test_every_track_is_reported(client):
         'patients',
         'variants',
         'analysis',
+        'verification',
     ]
     for track in body['tracks']:
         assert track['label']

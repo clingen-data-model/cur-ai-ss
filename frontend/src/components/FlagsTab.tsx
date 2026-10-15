@@ -186,8 +186,9 @@ export function FlagsTab({
               </TooltipTrigger>
               <TooltipContent className="max-w-xs">
                 The extracted rows the flag concerns: a family, a patient, a variant, a patient-variant link
-                (both halves of a compound-het pair), or a phenotype. Click one to open it. "Not extracted"
-                means the flag is about something the agent left out, so there is no row.
+                (both halves of a compound-het pair), or a phenotype. Click one to open it. "Whole paper"
+                means there is no row: the flag is about something the agent left out, or about a decision
+                extraction verification found raised for several patients and folded into one.
               </TooltipContent>
             </Tooltip>
           </span>
@@ -258,7 +259,7 @@ export function FlagsTab({
             <div className="flex flex-wrap items-center gap-1 whitespace-normal">{chips}</div>
           ) : (
             <Badge variant="outline" className="font-normal text-muted-foreground">
-              Not extracted
+              Whole paper
             </Badge>
           )
         },

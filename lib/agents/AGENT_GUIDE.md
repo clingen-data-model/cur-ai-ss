@@ -135,6 +135,18 @@ and `/rerun` queues the raising agent again for its scope (`TaskType.scope_colum
 the curator's note as follow-up context -- which replaces the flag with whatever the
 agent raises next.
 
+The per-entity agents run concurrently and see only their own scope, so one decision is
+often flagged several times in different words (a country inferred from the study site,
+once per relative; a label that differs from the pedigree, once by patient extraction
+and once by demographics). Extraction verification (`lib/agents/extraction_verification_agent.py`,
+`lib/tasks/extraction_verification.py`), the pipeline's last task, reads every open flag
+on the paper and folds each repeated decision into its earliest flag: the absorbed
+flags are deleted, their agent, row and subject appended to the survivor's reasoning,
+and the survivor keeps only the links the group agreed on -- a family when the patients
+differ but share one, nothing when they do not. The worker queues it whenever a paper
+settles, including after a single re-run, so an agent's prompt does not need to know
+what another agent flagged.
+
 ## Calling an Agent
 
 ```python

@@ -32,6 +32,7 @@ const RERUNNABLE_TASK_TYPES: TaskType[] = [
   'Variant Harmonization', 'Variant Annotation', 'Patient Variant Occurrences',
   'Compound Het Evaluation',
   'Phenotype Extraction', 'HPO Linking', 'Paper MONDO Linking', 'Occurrence MONDO Linking',
+  'Extraction Verification',
 ]
 
 /* Shared by RerunTaskButton's own trigger (papers table / gene cards) and the

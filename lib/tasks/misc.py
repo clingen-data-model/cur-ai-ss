@@ -554,7 +554,13 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
             | TaskType.PAPER_MONDO_LINKING
             | TaskType.OCCURRENCE_MONDO_LINKING
         ):
-            # These tasks have no successors
+            # Their one successor, EXTRACTION_VERIFICATION, is queued by the
+            # worker when the whole paper has settled, not here: queued from
+            # each leaf it would run once per leaf, and a paper also settles
+            # on a completion that skips successors or on a final failure.
+            pass
+
+        case TaskType.EXTRACTION_VERIFICATION:
             pass
 
         case _:
