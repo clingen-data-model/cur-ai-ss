@@ -7,7 +7,7 @@
 import { useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { useQuery } from '@tanstack/react-query'
-import { Dna, Flag, Info, RefreshCw, User, Users } from 'lucide-react'
+import { CheckCheck, Dna, Flag, Info, RefreshCw, User, Users } from 'lucide-react'
 import { getFamiliesPapersPaperIdFamiliesGet } from '@/api/generated'
 import type { FlagResp, PatientResp, VariantResp } from '@/api/generated/types.gen'
 import { DataTable } from '@/components/ui/data-table'
@@ -18,9 +18,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Spinner } from '@/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { EvidencePopover } from '@/components/EvidencePopover'
+import { ResolveAllFlagsDialog } from '@/components/ResolveAllFlagsDialog'
 import { ResolveFlagDialog } from '@/components/ResolveFlagDialog'
 import { RerunFromFlagDialog } from '@/components/RerunFromFlagDialog'
-import { usePaperFlags, useRerunFromFlag, useResolveFlag } from '@/hooks/usePaperFlags'
+import { usePaperFlags, useRerunFromFlag, useResolveFlag, useResolveFlags } from '@/hooks/usePaperFlags'
 import type { OccurrenceRow } from '@/hooks/usePaperOccurrences'
 import { flagSourceLabel, sortFlags } from '@/lib/flags'
 import type { FlagTarget } from '@/lib/flagTarget'
@@ -82,10 +83,12 @@ export function FlagsTab({
 }) {
   const flags = usePaperFlags(paperId)
   const resolve = useResolveFlag(paperId)
+  const resolveAll = useResolveFlags(paperId)
   const rerun = useRerunFromFlag(paperId)
   const [filter, setFilter] = useState<Filter>('open')
   const [agent, setAgent] = useState<string>(ANY_AGENT)
   const [resolving, setResolving] = useState<FlagResp | null>(null)
+  const [resolvingAll, setResolvingAll] = useState(false)
   const [rerunning, setRerunning] = useState<FlagResp | null>(null)
 
   // Families are not part of the page's shared queries; one small request
@@ -359,6 +362,12 @@ export function FlagsTab({
           </Button>
         ))}
         <div className="ml-auto flex items-center gap-2">
+          {filter === 'open' && rows.length > 0 && (
+            <Button size="sm" variant="outline" onClick={() => setResolvingAll(true)}>
+              <CheckCheck className="size-3.5 mr-1.5" />
+              Resolve all ({rows.length})
+            </Button>
+          )}
           <label className="text-sm text-muted-foreground whitespace-nowrap">Agent</label>
           <Select value={agent} onValueChange={(next: string | null) => setAgent(next ?? ANY_AGENT)}>
             <SelectTrigger className="w-56">
@@ -397,6 +406,19 @@ export function FlagsTab({
         onConfirm={(note) => {
           if (!resolving) return
           resolve.mutate({ flagId: resolving.id, note }, { onSuccess: () => setResolving(null) })
+        }}
+      />
+      <ResolveAllFlagsDialog
+        count={rows.length}
+        agentLabel={agent === ANY_AGENT ? null : (agents.find(([s]) => s === agent)?.[1] ?? agent)}
+        open={resolvingAll}
+        onOpenChange={setResolvingAll}
+        isPending={resolveAll.isPending}
+        onConfirm={(note) => {
+          resolveAll.mutate(
+            { flagIds: rows.map((f) => f.id), note },
+            { onSuccess: () => setResolvingAll(false) },
+          )
         }}
       />
       <RerunFromFlagDialog

@@ -213,6 +213,19 @@ class FlagResolveRequest(BaseModel):
     note: str | None = None
 
 
+class FlagBulkResolveRequest(BaseModel):
+    """Resolve several flags at once with one note -- the Flags tab's
+    "Resolve all" on whatever its filters show, typically every open flag
+    from one agent. The ids are explicit rather than a filter re-run on the
+    server, so what gets resolved is exactly what the curator was looking
+    at. Flags already resolved are left as they are (their first resolution
+    stands, as for the single endpoint), not refused, since a list that
+    went stale between loading and clicking is the normal case."""
+
+    flag_ids: list[int] = Field(min_length=1)
+    note: str | None = None
+
+
 class FlagRerunRequest(BaseModel):
     """Re-run the agent that raised a flag, for the row it ran on, with the
     curator's note as the follow-up context. The task is the same one the

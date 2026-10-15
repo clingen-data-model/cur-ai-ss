@@ -3546,10 +3546,53 @@ def test_resolve_flag_is_one_way(client, db_session, seeded_paper, test_user):
     assert body['resolution_note'] == 'curator added her by hand'
 
 
+def test_resolve_flags_in_bulk_keeps_earlier_resolutions(
+    client, db_session, seeded_paper, test_user
+):
+    """'Resolve all' sends the ids it was showing; one that was resolved in
+    the meantime keeps its own note rather than being refused or
+    overwritten, and an id from nowhere fails the whole request."""
+    first = _seed_flag(db_session, seeded_paper, subject='broader term')
+    second = _seed_flag(db_session, seeded_paper, subject='qualifier dropped')
+    third = _seed_flag(db_session, seeded_paper, subject='severity dropped')
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/flags/{third.id}/resolve',
+        json={'note': 'looked at this one'},
+    )
+    assert resp.status_code == 200
+
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/flags/resolve',
+        json={
+            'flag_ids': [first.id, second.id, third.id],
+            'note': 'HPO terms accepted',
+        },
+    )
+    assert resp.status_code == 200
+    by_id = {row['id']: row for row in resp.json()}
+    assert set(by_id) == {first.id, second.id, third.id}
+    assert by_id[first.id]['resolution_note'] == 'HPO terms accepted'
+    assert by_id[second.id]['resolution_note'] == 'HPO terms accepted'
+    assert by_id[first.id]['resolved_by']['id'] == test_user.id
+    assert by_id[third.id]['resolution_note'] == 'looked at this one'
+
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/flags/resolve',
+        json={'flag_ids': [first.id, 999999], 'note': 'x'},
+    )
+    assert resp.status_code == 404
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/flags/resolve', json={'flag_ids': []}
+    )
+    assert resp.status_code == 422
+
+
 def test_flag_endpoints_404_for_the_wrong_paper(client, db_session, seeded_paper):
     flag = _seed_flag(db_session, seeded_paper, subject='untested sister')
     assert client.get('/papers/999999/flags').status_code == 404
     resp = client.post(f'/papers/999999/flags/{flag.id}/resolve', json={})
+    assert resp.status_code == 404
+    resp = client.post('/papers/999999/flags/resolve', json={'flag_ids': [flag.id]})
     assert resp.status_code == 404
 
 

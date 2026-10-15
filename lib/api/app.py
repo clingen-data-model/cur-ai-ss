@@ -167,7 +167,13 @@ from lib.models.evidence_block import (
     EvidenceBlock,
     ReasoningBlock,
 )
-from lib.models.flag import FlagDB, FlagRerunRequest, FlagResolveRequest, FlagResp
+from lib.models.flag import (
+    FlagBulkResolveRequest,
+    FlagDB,
+    FlagRerunRequest,
+    FlagResolveRequest,
+    FlagResp,
+)
 from lib.models.mondo import MondoComponentMapping, MondoTerm
 from lib.models.patient import (
     AffectedStatus,
@@ -2781,6 +2787,45 @@ def resolve_flag(
     flag.resolution_note = request.note
     session.flush()
     return _flag_resp(flag)
+
+
+@app.post('/papers/{paper_id}/flags/resolve', response_model=list[FlagResp])
+def resolve_flags(
+    paper_id: int,
+    request: FlagBulkResolveRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """Resolve the listed flags with one note (see FlagBulkResolveRequest).
+    Returns every listed flag, including those that were already resolved
+    and so were left alone. An id that is not a flag on this paper is a
+    404 for the whole request: nothing is resolved."""
+    if session.get(PaperDB, paper_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    wanted = set(request.flag_ids)
+    flags = (
+        session.query(FlagDB)
+        .filter(FlagDB.paper_id == paper_id, FlagDB.id.in_(wanted))
+        .all()
+    )
+    missing = wanted - {flag.id for flag in flags}
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f'Flags not found on this paper: {sorted(missing)}',
+        )
+    now = datetime.now(timezone.utc)
+    for flag in flags:
+        if flag.resolved_at is not None:
+            continue
+        flag.resolved_by_user_id = current_user.id
+        flag.resolved_by = current_user
+        flag.resolved_at = now
+        flag.resolution_note = request.note
+    session.flush()
+    return [_flag_resp(flag) for flag in flags]
 
 
 # A task's scope column -> the flag column that holds the same id.

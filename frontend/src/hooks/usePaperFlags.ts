@@ -14,6 +14,7 @@ import {
   listFlagsPapersPaperIdFlagsGet,
   rerunFlagPapersPaperIdFlagsFlagIdRerunPost,
   resolveFlagPapersPaperIdFlagsFlagIdResolvePost,
+  resolveFlagsPapersPaperIdFlagsResolvePost,
 } from '@/api/generated'
 import type { FlagResp } from '@/api/generated/types.gen'
 import { apiErrorMessage } from '@/lib/apiError'
@@ -118,6 +119,27 @@ export function useResolveFlag(paperId: number) {
       toast.success('Flag resolved')
     },
     onError: (error) => toast.error(apiErrorMessage(error, 'Failed to resolve flag')),
+  })
+}
+
+/** Resolve several flags with one note: the Flags tab's "Resolve all" on
+ * whatever its filters show. The ids go up explicitly, so what is resolved
+ * is exactly what was on screen. */
+export function useResolveFlags(paperId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ flagIds, note }: { flagIds: number[]; note: string }) =>
+      resolveFlagsPapersPaperIdFlagsResolvePost({
+        path: { paper_id: paperId },
+        body: { flag_ids: flagIds, note },
+        throwOnError: true,
+      }),
+    onSuccess: (_data, { flagIds }) => {
+      queryClient.invalidateQueries({ queryKey: ['flags', paperId] })
+      queryClient.invalidateQueries({ queryKey: ['papers'] })
+      toast.success(`${flagIds.length} flag${flagIds.length === 1 ? '' : 's'} resolved`)
+    },
+    onError: (error) => toast.error(apiErrorMessage(error, 'Failed to resolve flags')),
   })
 }
 

@@ -22,6 +22,7 @@ from lib.models.family import (
 )
 from lib.models.flag import (
     ExtractionFlag,
+    FlagBulkResolveRequest,
     FlagDB,
     FlaggedReasoningBlock,
     FlagRerunRequest,
