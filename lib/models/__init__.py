@@ -20,6 +20,17 @@ from lib.models.family import (
     FamilyResp,
     FamilyUpdateRequest,
 )
+from lib.models.flag import (
+    ExtractionFlag,
+    FlagBulkResolveRequest,
+    FlagDB,
+    FlaggedReasoningBlock,
+    FlagKind,
+    FlagRerunRequest,
+    FlagResolveRequest,
+    FlagResp,
+    ReasoningFlag,
+)
 from lib.models.mondo import (
     MondoAgentDecision,
     MondoCandidate,
@@ -76,6 +87,7 @@ from lib.models.phenotype import (
     HPOTerm,
     PhenotypeCreateRequest,
     PhenotypeDB,
+    PhenotypeExtractionOutput,
     PhenotypeResp,
 )
 from lib.models.segregation_analysis import (

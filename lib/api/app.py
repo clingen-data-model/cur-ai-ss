@@ -167,6 +167,14 @@ from lib.models.evidence_block import (
     EvidenceBlock,
     ReasoningBlock,
 )
+from lib.models.flag import (
+    FlagBulkResolveRequest,
+    FlagDB,
+    FlagKind,
+    FlagRerunRequest,
+    FlagResolveRequest,
+    FlagResp,
+)
 from lib.models.mondo import MondoComponentMapping, MondoTerm
 from lib.models.patient import (
     AffectedStatus,
@@ -966,6 +974,9 @@ def _paper_summaries(
         PatientVariantOccurrenceDB.paper_id,
         PatientVariantOccurrenceDB.id,
     )
+    open_flag_counts = _count_by_paper(
+        session, FlagDB.paper_id, FlagDB.id, where=FlagDB.resolved_at.is_(None)
+    )
 
     task_statuses: dict[int, list[TaskStatus]] = defaultdict(list)
     for paper_id, task_status in session.query(TaskDB.paper_id, TaskDB.status):
@@ -1016,6 +1027,7 @@ def _paper_summaries(
             proband_count=proband_counts.get(paper.id, 0),
             variant_count=variant_counts.get(paper.id, 0),
             patient_variant_occurrences_count=occurrence_counts.get(paper.id, 0),
+            open_flag_count=open_flag_counts.get(paper.id, 0),
         )
         for paper in query.all()
     ]
@@ -1174,13 +1186,11 @@ def list_tasks(
     return tasks
 
 
-@app.post('/papers/{paper_id}/tasks', response_model=list[TaskResp])
-def create_task(
-    paper_id: int,
-    request: TaskCreateRequest,
-    session: Session = Depends(get_session),
-    current_user: UserDB = Depends(get_current_user),
-) -> Any:
+def _prepare_rerun(
+    session: Session, paper_id: int, task_type: TaskType, skip_successors: bool
+) -> None:
+    """Everything that must happen before a user-triggered re-run of
+    ``task_type`` is queued, shared by the task and flag endpoints."""
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
         raise HTTPException(
@@ -1199,7 +1209,7 @@ def create_task(
     # Fires regardless of skip_successors -- even a single scoped rerun
     # deletes and recreates rows for that scope.
     write_snapshot_safe(
-        session, paper_id, description=f'Before re-running {request.type.value}'
+        session, paper_id, description=f'Before re-running {task_type.value}'
     )
 
     # Clear the previous run's downstream rows first. Their COMPLETED status is
@@ -1207,8 +1217,18 @@ def create_task(
     # start against state this re-run is about to replace -- see
     # invalidate_descendants. Skipped when the caller asked for this task alone,
     # since nothing downstream will run.
-    if not request.skip_successors:
-        invalidate_descendants(session, paper_id, request.type)
+    if not skip_successors:
+        invalidate_descendants(session, paper_id, task_type)
+
+
+@app.post('/papers/{paper_id}/tasks', response_model=list[TaskResp])
+def create_task(
+    paper_id: int,
+    request: TaskCreateRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    _prepare_rerun(session, paper_id, request.type, request.skip_successors)
 
     if (
         request.family_id is None
@@ -1395,7 +1415,7 @@ def _attach_edit_history(resp: BaseModel, edits: dict[str, EditDB], row: Base) -
     of an already-built response. A block is matched to its field's history by
     the response field name with any ``_evidence``/``_reasoning`` suffix
     stripped (e.g. ``identifier_evidence`` -> ``identifier``,
-    ``paired_variant_confidence_reasoning`` -> ``paired_variant_confidence``;
+    ``paired_variant_reasoning`` -> ``paired_variant``;
     segregation's fields carry no suffix and match as-is). A list of blocks
     (``testing_methods_evidence``) shares its one field's history. A field
     with no edits row keeps no attribution -- nothing stored is trusted for it.
@@ -2147,9 +2167,8 @@ def update_occurrence(
 
 def _clear_pairing(row: PatientVariantOccurrenceDB) -> None:
     row.paired_variant_link_id = None
-    row.paired_variant_confidence = None
-    row.paired_variant_confidence_reasoning = None
-    flag_modified(row, 'paired_variant_confidence_reasoning')
+    row.paired_variant_reasoning = None
+    flag_modified(row, 'paired_variant_reasoning')
 
 
 @app.patch(
@@ -2173,8 +2192,6 @@ def pair_occurrence(
     generic patch endpoint can't express) but returns every row it touched
     rather than just the primary one, since the client needs to see a former
     partner come back unpaired too."""
-    from lib.models.patient_variant_occurrences import CompoundHetConfidence
-
     occurrence_a = (
         session.query(PatientVariantOccurrenceDB)
         .filter(
@@ -2239,27 +2256,19 @@ def pair_occurrence(
                 _clear_pairing(old_b_partner)
                 affected.append(old_b_partner)
 
-        reasoning_block = ReasoningBlock[CompoundHetConfidence](
-            value=CompoundHetConfidence.confirmed,
+        reasoning_block = ReasoningBlock[bool](
+            value=True,
             reasoning='Manually paired by curator.',
         ).model_dump(mode='json')
 
         for occurrence in (occurrence_a, occurrence_b):
-            record_edit(
-                session,
-                occurrence,
-                'paired_variant_confidence',
-                current_user,
-                old_value=occurrence.paired_variant_confidence,
-            )
+            record_edit(session, occurrence, 'paired_variant', current_user)
         occurrence_a.paired_variant_link_id = occurrence_b.id
         occurrence_b.paired_variant_link_id = occurrence_a.id
-        occurrence_a.paired_variant_confidence = CompoundHetConfidence.confirmed.value
-        occurrence_b.paired_variant_confidence = CompoundHetConfidence.confirmed.value
-        occurrence_a.paired_variant_confidence_reasoning = reasoning_block
-        occurrence_b.paired_variant_confidence_reasoning = reasoning_block
-        flag_modified(occurrence_a, 'paired_variant_confidence_reasoning')
-        flag_modified(occurrence_b, 'paired_variant_confidence_reasoning')
+        occurrence_a.paired_variant_reasoning = reasoning_block
+        occurrence_b.paired_variant_reasoning = reasoning_block
+        flag_modified(occurrence_a, 'paired_variant_reasoning')
+        flag_modified(occurrence_b, 'paired_variant_reasoning')
         affected.append(occurrence_b)
 
     for row in affected:
@@ -2295,7 +2304,6 @@ def _patient_variant_occurrence_to_resp(
     """Convert PatientVariantOccurrenceDB to PatientVariantOccurrenceResp."""
     from lib.models import Inheritance, TestingMethod, Zygosity
     from lib.models.evidence_block import ReasoningBlock
-    from lib.models.patient_variant_occurrences import CompoundHetConfidence
 
     resp = PatientVariantOccurrenceResp(
         id=row.id,
@@ -2330,14 +2338,10 @@ def _patient_variant_occurrence_to_resp(
         ),
         mondo_components=_mondo_components(row.mondo_match_context),
         paired_variant_link_id=row.paired_variant_link_id,
-        paired_variant_confidence=CompoundHetConfidence(row.paired_variant_confidence)
-        if row.paired_variant_confidence
-        else None,
-        paired_variant_confidence_reasoning=_from_storage(
-            AttributedReasoningBlock[CompoundHetConfidence],
-            row.paired_variant_confidence_reasoning,
+        paired_variant_reasoning=_from_storage(
+            AttributedReasoningBlock[bool], row.paired_variant_reasoning
         )
-        if row.paired_variant_confidence_reasoning
+        if row.paired_variant_reasoning
         else None,
         updated_at=row.updated_at,
         updated_by_user_id=row.updated_by_user_id,
@@ -2709,6 +2713,185 @@ def list_deletion_log(
         .filter(DeletionLogDB.paper_id == paper_id)
         .order_by(DeletionLogDB.id)
         .all()
+    )
+
+
+def _flag_resp(flag: FlagDB) -> FlagResp:
+    return FlagResp(
+        id=flag.id,
+        paper_id=flag.paper_id,
+        source=flag.source,
+        kind=FlagKind(flag.kind),
+        subject=flag.subject,
+        evidence=HumanEvidenceBlock[str].model_validate(flag.evidence),
+        family_id=flag.family_id,
+        patient_id=flag.patient_id,
+        variant_id=flag.variant_id,
+        phenotype_id=flag.phenotype_id,
+        occurrence_id=flag.occurrence_id,
+        paired_occurrence_id=flag.paired_occurrence_id,
+        resolved_by_user_id=flag.resolved_by_user_id,
+        resolved_by=_user_summary(flag.resolved_by),
+        resolved_at=flag.resolved_at,
+        resolution_note=flag.resolution_note,
+        created_at=flag.created_at,
+    )
+
+
+@app.get('/papers/{paper_id}/flags', response_model=list[FlagResp])
+def list_flags(
+    paper_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """Every curator flag an agent raised for this paper, open ones first."""
+    if session.get(PaperDB, paper_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    flags = (
+        session.query(FlagDB)
+        .options(selectinload(FlagDB.resolved_by))
+        .filter(FlagDB.paper_id == paper_id)
+        .order_by(FlagDB.resolved_at.is_not(None), FlagDB.id)
+        .all()
+    )
+    return [_flag_resp(flag) for flag in flags]
+
+
+@app.post('/papers/{paper_id}/flags/{flag_id}/resolve', response_model=FlagResp)
+def resolve_flag(
+    paper_id: int,
+    flag_id: int,
+    request: FlagResolveRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """Mark a flag resolved by the current user, with an optional note.
+    One-way: a flag already resolved is refused with 409, and there is no
+    reopen (see FlagResolveRequest)."""
+    flag = (
+        session.query(FlagDB)
+        .filter(FlagDB.id == flag_id, FlagDB.paper_id == paper_id)
+        .one_or_none()
+    )
+    if flag is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Flag not found'
+        )
+    if flag.resolved_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail='Flag already resolved'
+        )
+    flag.resolved_by_user_id = current_user.id
+    flag.resolved_by = current_user
+    flag.resolved_at = datetime.now(timezone.utc)
+    flag.resolution_note = request.note
+    session.flush()
+    return _flag_resp(flag)
+
+
+@app.post('/papers/{paper_id}/flags/resolve', response_model=list[FlagResp])
+def resolve_flags(
+    paper_id: int,
+    request: FlagBulkResolveRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """Resolve the listed flags with one note (see FlagBulkResolveRequest).
+    Returns every listed flag, including those that were already resolved
+    and so were left alone. An id that is not a flag on this paper is a
+    404 for the whole request: nothing is resolved."""
+    if session.get(PaperDB, paper_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
+        )
+    wanted = set(request.flag_ids)
+    flags = (
+        session.query(FlagDB)
+        .filter(FlagDB.paper_id == paper_id, FlagDB.id.in_(wanted))
+        .all()
+    )
+    missing = wanted - {flag.id for flag in flags}
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f'Flags not found on this paper: {sorted(missing)}',
+        )
+    now = datetime.now(timezone.utc)
+    for flag in flags:
+        if flag.resolved_at is not None:
+            continue
+        flag.resolved_by_user_id = current_user.id
+        flag.resolved_by = current_user
+        flag.resolved_at = now
+        flag.resolution_note = request.note
+    session.flush()
+    return [_flag_resp(flag) for flag in flags]
+
+
+# A task's scope column -> the flag column that holds the same id.
+_FLAG_COLUMN_FOR_SCOPE = {'patient_variant_occurrence_id': 'occurrence_id'}
+
+
+@app.post('/papers/{paper_id}/flags/{flag_id}/rerun', response_model=TaskResp)
+def rerun_flag(
+    paper_id: int,
+    flag_id: int,
+    request: FlagRerunRequest,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> Any:
+    """Queue the agent that raised the flag again, for the row it ran on,
+    with the curator's note as its follow-up context (see FlagRerunRequest).
+    The scope comes from the task type, not from every row the flag links:
+    a patient-extraction flag about one patient still re-runs the whole
+    paper, since that is the only way that agent runs."""
+    flag = (
+        session.query(FlagDB)
+        .filter(FlagDB.id == flag_id, FlagDB.paper_id == paper_id)
+        .one_or_none()
+    )
+    if flag is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Flag not found'
+        )
+    try:
+        task_type = TaskType[flag.source]
+    except KeyError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f'Flag was raised by an unknown agent ({flag.source})',
+        )
+
+    scope: dict[str, int] = {}
+    scope_column = task_type.scope_column
+    if scope_column is not None:
+        flag_column = _FLAG_COLUMN_FOR_SCOPE.get(scope_column, scope_column)
+        scope_id = getattr(flag, flag_column)
+        if scope_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f'{task_type.value} runs per {flag_column.removesuffix("_id")}, '
+                    'and this flag is not linked to one'
+                ),
+            )
+        scope[scope_column] = scope_id
+
+    context = f'A curator reviewed your flag "{flag.subject}".'
+    if request.note:
+        context += f' Their note: {request.note.strip()}'
+
+    _prepare_rerun(session, paper_id, task_type, request.skip_successors)
+    return enqueue_task(
+        session,
+        paper_id=paper_id,
+        task_type=task_type,
+        skip_successors=request.skip_successors,
+        additional_context=context,
+        updated_by_user_id=current_user.id,
+        **scope,
     )
 
 

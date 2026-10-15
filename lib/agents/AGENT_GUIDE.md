@@ -113,6 +113,28 @@ passes its `output_type` to the runner; the ones whose handler passes `citation_
 the same repair loop from `run_with_checked_output`. Keep both limits in mind when adding
 fields to an output model.
 
+### Flags
+
+A decision a curator should look at but the output cannot show -- something left out
+under a rule, a call the paper leaves open -- goes in a `flags` list on the output model
+(`lib/models/flag.py`): `ExtractionFlag` (an evidence block, for agents that read the
+paper) or `ReasoningFlag` (a reasoning block, for the lookup agents with nothing to
+cite); an agent whose whole output is one `ReasoningBlock` returns a
+`FlaggedReasoningBlock` instead. Each flag's `kind` is one of the closed `FlagKind`
+list (excluded, conflict, ambiguous, inferred, unresolved, mismatch); a prompt's FLAGS
+section says which kinds that task may raise, and a decision that fits none is not a
+flag. Each flag's `about` is the identifier of the thing it concerns, or null. `FLAG_RULES` (`lib/agents/core_extraction_rules.py`) states the rule
+once -- inside `CORE_EXTRACTION_SPEC` for the paper-reading agents, appended directly by
+the lookup agents -- and a prompt adds at most a few task-specific examples. The handler
+calls `replace_flags` (`lib/tasks/flags.py`) after writing its rows, with the task's
+scope (the patient, family, variant, phenotype or occurrence a per-entity task ran for)
+and a resolver that turns `about` into the row it just wrote; a flag about a compound-het
+pair links both occurrences (`occurrence_id`, `paired_occurrence_id`). Flags are listed
+through `/papers/{id}/flags`, resolved, once and for good, through its `/resolve` child,
+and `/rerun` queues the raising agent again for its scope (`TaskType.scope_column`) with
+the curator's note as follow-up context -- which replaces the flag with whatever the
+agent raises next.
+
 ## Calling an Agent
 
 ```python

@@ -73,6 +73,20 @@ Note: Compound heterozygous genotype evaluation (determining if two heterozygous
   - Text sentences or consecutive sentences (paragraph anchor, sentence as quote)
   - Tables or structured lists (row anchor, cell as quote)
   - Pedigree images (figure anchor, no quote)
+- A parent named as the origin of a patient's variant carries it. "Paternally
+  inherited", "maternal allele", a table cell marking which parent an allele
+  came from, or a pedigree drawing the parent as a carrier each establish a
+  link for that parent, cited to the statement. Such a statement says the
+  parent carries at least one copy and nothing more, so zygosity is Unknown
+  with that in its reasoning; write Heterozygous or Homozygous only where the
+  paper gives the parent's own genotype (a table cell reading "Het" against
+  the parent, a sentence reporting the parent's result). Testing method is
+  left unstated unless the paper reports the parent was tested. Make the link
+  and flag it as inferred (below); segregation downstream reads parental
+  genotypes from these links and has nothing without them. The same holds for
+  both parents of a homozygous child when they are among the patients: each
+  carries at least one copy by descent, so each is linked with zygosity
+  Unknown, cited to the child's homozygous genotype, and flagged as inferred.
 - Do not infer links from generic references or biological plausibility.
 - Negative genotypes (wild-type, homozygous reference, non-carrier) should not be linked.
 
@@ -81,6 +95,31 @@ Note: Compound heterozygous genotype evaluation (determining if two heterozygous
 - "high": direct, explicit patient-level evidence
 - "moderate": inferred from group/pedigree context, strong indirect support, patient membership unambiguous
 - "low": partially ambiguous textual evidence; never for pure speculation
+
+**Flags** (the rule is in CORE EXTRACTION RULES). Kinds:
+- inferred: a link, zygosity or inheritance that rests on a group statement, a
+  pedigree symbol, a statement that a variant came from one parent, or the
+  family context rather than on a statement about that patient's genotype; a de
+  novo status the paper asserts without parental testing. The link is this
+  task's decision, so this is where it is flagged -- once, on the link.
+- excluded: a patient or variant in the input that nothing in the paper
+  connects to anything, or an affected member the paper never genotypes. Not
+  a parent named as a variant's origin -- that parent is linked, above.
+Not: a parent or sibling the paper reports as not carrying the variant (no
+link says that), nor a variant's notation (settled by the variant's own
+extraction and harmonization). The output carries a "flags" list. "about" is "patient identifier /
+variant quote" for a flag about one link -- always both halves, so the flag
+lands on that link; a patient identifier or variant quote alone for a flag
+about the patient or variant as a whole; null otherwise.
+
+BEFORE RETURNING, CHECK:
+- Every variant the paper attributes to a patient by name has a link for that
+  patient. A compound-heterozygous patient has one link per variant.
+- A parent's link is in addition to the child's, never instead of it. Naming
+  the mother as the origin of a variant adds her link; the child's link for
+  that same variant stays.
+- Every patient in the input with no link has an excluded flag, or the paper
+  reports them as not carrying the variant.
 """
 
 PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS = (

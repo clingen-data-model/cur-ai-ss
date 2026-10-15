@@ -51,6 +51,7 @@ from lib.models import (
 from lib.models.base import row_to_dict
 from lib.models.deletion_log import DeletionLogDB
 from lib.models.edit import EditDB
+from lib.models.flag import FlagDB
 from lib.tasks.models import TaskType
 
 logger = logging.getLogger(__name__)
@@ -76,6 +77,9 @@ _INSERT_ORDER: list[tuple[str, type[Base]]] = [
     ('patient_variant_occurrences', PatientVariantOccurrenceDB),
     ('segregation_evidence', SegregationEvidenceDB),
     ('segregation_analysis_computed', SegregationAnalysisComputedDB),
+    # Flags link families, patients, variants and phenotypes (all nullable)
+    # and users; nothing FKs a flag.
+    ('flags', FlagDB),
     # Edit history and the deletion log version alongside the data they
     # describe -- every FK target above is already inserted by this point.
     # deletion_log has no FK of its own (see its docstring), so its position
@@ -275,11 +279,13 @@ def dump_paper_state(paper_id: int, paper_db: PaperDB, session: Session) -> dict
     deletions = (
         session.query(DeletionLogDB).filter(DeletionLogDB.paper_id == paper_id).all()
     )
+    flags = session.query(FlagDB).filter(FlagDB.paper_id == paper_id).all()
 
     return {
         'paper': row_to_dict(paper_db),
         'families': [row_to_dict(r) for r in families],
         'patients': [row_to_dict(r) for r in patients],
+        'flags': [row_to_dict(r) for r in flags],
         'pedigrees': [row_to_dict(r) for r in pedigrees],
         'phenotypes': [row_to_dict(r) for r in phenotypes],
         'hpos': [row_to_dict(r) for r in hpos],
@@ -625,6 +631,10 @@ def _delete_paper_domain_rows(session: Session, paper_id: int) -> None:
     )
 
     session.query(TaskDB).filter(TaskDB.paper_id == paper_id).delete(
+        synchronize_session=False
+    )
+    # Flags before the rows they link; a flag about nobody has no cascade.
+    session.query(FlagDB).filter(FlagDB.paper_id == paper_id).delete(
         synchronize_session=False
     )
     session.query(PatientVariantOccurrenceDB).filter(

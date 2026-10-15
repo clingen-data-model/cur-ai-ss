@@ -57,10 +57,13 @@ list before you decide and decide before you write any patient:
      clinical finding, a demographic, that they were sequenced, or the
      affected/unaffected status a pedigree symbol shows. A table row giving a
      label and a variant is such a fact; so is a citation-headed column whose
-     cells give that person's sex, age, variant or findings. A label with nothing behind it ("the
-     parents" of a cohort, "eleven additional family members", a spouse drawn
-     in the pedigree without a label) is not, and no label is invented for
-     them;
+     cells give that person's sex, age, variant or findings. A single person
+     the text names by role with nothing further stated ("her sister was not
+     tested") is a patient too, under that role; an empty record says
+     nothing was stated. What is not a patient is a label with nobody behind it: a
+     group ("the parents" of a cohort, "eleven additional family members")
+     or a spouse drawn in the pedigree without a label. No label is invented
+     for those;
    - the person is in scope for the target gene (above).
    Aggregate statements name nobody: "130 patients" or "5 males" identify no
    individual. A count the text states is a hint, not a target -- if it says
@@ -269,11 +272,25 @@ Consanguinity (EvidenceBlock[bool], required for every family):
   when it says nothing. The field cannot be null, so False also means "not
   stated"; the reasoning must say which of the two it is.
 
+FLAGS for this task (the rule is in CORE EXTRACTION RULES). Kinds:
+
+- excluded: a candidate from step 1 that the paper connects to the target
+  gene or to a reported family and a rule here left out under the scope
+  rule, the identifier rule or the no-label rule -- a sequenced relative
+  with no label, an earlier study's cohort shown for comparison. One flag
+  per rule, naming its members. Not a cohort plainly in other genes.
+- ambiguous: a proband chosen where the paper marks none, a label that
+  could name two people, a family left with no proband because every
+  affected member is re-reported.
+
+This task decides who is a patient, who is the proband and which family each
+belongs to. Later tasks take those as given, so a flag about them is raised
+here or nowhere.
+
 BEFORE RETURNING, CHECK:
 - Every table row or column header that names an in-scope person has a
   patient, the columns headed by a citation included.
-- Every relative the text names by role and states a genotype, a transmission
-  or an affected status for has a patient.
+- Every relative the text names by role has a patient.
 - No patient is in the list only because a table describes them: each one is
   connected to the target gene.
 - No identifier is a bare number, or a bare number-plus-suffix copied from a
@@ -282,6 +299,9 @@ BEFORE RETURNING, CHECK:
   and no re-reported individual is one.
 - The first family's identifier reasoning lists every candidate label with
   its decision, and every label it marks as a patient is in "patients".
+- Every in-scope candidate a rule rejected, and every proband chosen where
+  the paper marks none, has a flag
+  in "flags"; nothing routine does.
 
 Output format:
 - Return a "families" list where each entry contains:
@@ -297,6 +317,8 @@ Output format:
 - The families list is empty only when the patients list is.
 - The union of all patient identifier values across all families must equal the complete set
   of patient identifiers extracted above.
+- Return a "flags" list as CORE EXTRACTION RULES describes; "about" is a patient
+  or family identifier from this output, or null.
 """
 
 PATIENT_EXTRACTION_AGENT_INSTRUCTIONS = (

@@ -15,7 +15,7 @@
  * Like Streamlit, a family with a single patient is not shown: it has no
  * structure and no segregation to speak of.
  */
-import { Fragment, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -35,6 +35,9 @@ import type {
 } from '@/api/generated/types.gen'
 import { EditableNumberRow, EditableSwitchRow, EditableTextRow, ReadOnlyRow } from '@/components/EditableField'
 import { EvidencePopover } from '@/components/EvidencePopover'
+import { FlagIndicator } from '@/components/FlagIndicator'
+import { usePaperFlags } from '@/hooks/usePaperFlags'
+import type { FlagIndex } from '@/hooks/usePaperFlags'
 import { PatientIdCell } from '@/components/PatientIdCell'
 import { RowExpander } from '@/components/RowExpander'
 import { PatientDetailPanel } from '@/components/PatientDetailPanel'
@@ -61,8 +64,22 @@ function formatNumber(value: number, digits = 2): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(digits)
 }
 
-function FamilyMembers({ paperId, members }: { paperId: number; members: PatientResp[] }) {
-  const [expandedId, setExpandedId] = useState<number | null>(null)
+function FamilyMembers({
+  paperId,
+  members,
+  flags,
+  focusPatientId,
+}: {
+  paperId: number
+  members: PatientResp[]
+  flags: FlagIndex
+  /** A member to open on arrival (from a flag's About chip). */
+  focusPatientId?: number | null
+}) {
+  const [expandedId, setExpandedId] = useState<number | null>(focusPatientId ?? null)
+  useEffect(() => {
+    if (focusPatientId != null) setExpandedId(focusPatientId)
+  }, [focusPatientId])
   const sorted = [...members].sort(
     (a, b) => relationshipRank(a) - relationshipRank(b) || a.identifier.localeCompare(b.identifier, undefined, { numeric: true }),
   )
@@ -70,6 +87,7 @@ function FamilyMembers({ paperId, members }: { paperId: number; members: Patient
     <Table>
       <TableHeader>
         <TableRow>
+          <TableHead className="w-8" />
           <TableHead className="w-8" />
           <TableHead>Patient</TableHead>
           <TableHead>Relationship</TableHead>
@@ -89,6 +107,9 @@ function FamilyMembers({ paperId, members }: { paperId: number; members: Patient
                 <TableCell>
                   <RowExpander expanded={expanded} onToggle={() => setExpandedId(expanded ? null : patient.id)} />
                 </TableCell>
+                <TableCell onClick={(e) => e.stopPropagation()}>
+                  <FlagIndicator paperId={paperId} flags={flags.byPatient.get(patient.id) ?? []} />
+                </TableCell>
                 <TableCell className="font-medium">
                   <PatientIdCell
                     paperId={paperId}
@@ -104,7 +125,7 @@ function FamilyMembers({ paperId, members }: { paperId: number; members: Patient
               </TableRow>
               {expanded && (
                 <TableRow>
-                  <TableCell colSpan={5} className="p-0">
+                  <TableCell colSpan={6} className="p-0">
                     <PatientDetailPanel paperId={paperId} patient={patient} />
                   </TableCell>
                 </TableRow>
@@ -236,13 +257,25 @@ function FamilyCard({
   family,
   members,
   seg,
+  flags,
+  focus,
 }: {
   paperId: number
   family: FamilyResp
   members: PatientResp[]
   seg: SegregationAnalysisResp | undefined
+  flags: FlagIndex
+  focus?: FamilyFocus | null
 }) {
   const queryClient = useQueryClient()
+  const focused =
+    focus != null &&
+    ((focus.kind === 'family' && focus.id === family.id) ||
+      (focus.kind === 'patient' && members.some((m) => m.id === focus.id)))
+  const sectionRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (focused) sectionRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }, [focused, focus])
   const mutation = useMutation({
     mutationKey: ['paper-edit', paperId],
     mutationFn: (body: FamilyUpdateRequest) =>
@@ -266,7 +299,7 @@ function FamilyCard({
   const criteria = seg?.computed?.meets_minimum_criteria
 
   return (
-    <section className="rounded-lg border p-4 space-y-4">
+    <section ref={sectionRef} className="rounded-lg border p-4 space-y-4 scroll-mt-4">
       <header className="flex flex-wrap items-center gap-2">
         <h3 className="text-base font-semibold mr-2">{family.identifier}</h3>
         <Badge variant="outline">{members.length} members</Badge>
@@ -282,7 +315,8 @@ function FamilyCard({
             Segregation criteria {criteria.value ? 'met' : 'not met'}
           </Badge>
         )}
-        <span className="ml-auto">
+        <span className="ml-auto flex items-center gap-1">
+          <FlagIndicator paperId={paperId} flags={flags.byFamily.get(family.id) ?? []} />
           <EvidencePopover block={family.identifier_evidence} />
         </span>
       </header>
@@ -304,7 +338,12 @@ function FamilyCard({
         />
       </div>
 
-      <FamilyMembers paperId={paperId} members={members} />
+      <FamilyMembers
+        paperId={paperId}
+        members={members}
+        flags={flags}
+        focusPatientId={focused && focus?.kind === 'patient' ? focus.id : null}
+      />
 
       {seg ? (
         <SegregationSection paperId={paperId} family={family} seg={seg} />
@@ -315,7 +354,11 @@ function FamilyCard({
   )
 }
 
-export function FamiliesTab({ paperId }: { paperId: number }) {
+/** The family or patient a flag's About chip asked to open. */
+export type FamilyFocus = { kind: 'family'; id: number } | { kind: 'patient'; id: number }
+
+export function FamiliesTab({ paperId, focus }: { paperId: number; focus?: FamilyFocus | null }) {
+  const flags = usePaperFlags(paperId)
   const familiesQuery = useQuery({
     queryKey: ['families', paperId],
     queryFn: () => getFamiliesPapersPaperIdFamiliesGet({ path: { paper_id: paperId } }),
@@ -387,6 +430,8 @@ export function FamiliesTab({ paperId }: { paperId: number }) {
           family={family}
           members={byFamily.get(family.id) ?? []}
           seg={segByFamily.get(family.id)}
+          flags={flags}
+          focus={focus}
         />
       ))}
       {singles > 0 && (

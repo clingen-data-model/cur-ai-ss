@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from lib.models.chat_message import ChatMessageDB
     from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
     from lib.models.family import FamilyDB
+    from lib.models.flag import FlagDB
     from lib.models.patient import PatientDB
     from lib.models.patient_variant_occurrences import (
         Inheritance,
@@ -308,6 +309,9 @@ class PaperDB(Base):
     chat_messages: Mapped[list['ChatMessageDB']] = relationship(
         'ChatMessageDB', back_populates='paper', cascade='all, delete-orphan'
     )
+    flags: Mapped[list['FlagDB']] = relationship(
+        'FlagDB', back_populates='paper', cascade='all, delete-orphan'
+    )
 
 
 class PaperExtractionOutput(BaseModel):
@@ -452,6 +456,9 @@ class PaperSummaryResp(BaseModel):
     proband_count: int = 0
     variant_count: int = 0
     patient_variant_occurrences_count: int = 0
+    # Curator flags nobody has resolved yet (lib/models/flag.py): a paper with
+    # any is not reviewed, whatever its review_status says.
+    open_flag_count: int = 0
 
     @computed_field  # type: ignore[misc]
     @property

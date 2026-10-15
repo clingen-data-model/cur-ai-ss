@@ -94,9 +94,23 @@ Each field (except the *_unit fields) is an EvidenceBlock containing:
 
 Guidelines:
 
-1. Extract only explicitly stated information. Do NOT infer.
+1. Extract only explicitly stated information. Do NOT infer. A value the paper
+   implies but does not state (a sex from a pedigree symbol or a kinship word,
+   an age from "in her thirties") stays Unknown or None; say the implied value
+   in that field's reasoning. That is the rule working, not a flag.
 2. Use enum values when possible; otherwise use "Other" or "Unknown".
 3. If a field is not stated for this patient, return Unknown (or None for ages/twin_type).
+4. The output also carries a "flags" list (the rule is in CORE EXTRACTION
+   RULES). Kinds:
+   - conflict: a stated value that differs between the table, the text and
+     a figure legend, for this patient.
+   - ambiguous: an age tied to an event the paper does not name clearly
+     (a diagnosis age taken from an evaluation), or given as a range.
+   Not: a field the paper leaves unstated, a value rule 1 kept at Unknown,
+   a unit conversion, proband status or the relationship to the proband
+   (decided by patient extraction and the pedigree; follow them), or
+   obligate-carrier status (the rule above decides it). "about" is this
+   patient's identifier, or null.
 """
 
 PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS = (

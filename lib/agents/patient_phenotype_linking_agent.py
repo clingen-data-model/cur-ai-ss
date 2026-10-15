@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
 from lib.agents.model_factory import extraction_model, extraction_model_settings
-from lib.models import ExtractedPhenotype
+from lib.models import PhenotypeExtractionOutput
 
 INSTRUCTIONS = """
 You are an expert clinical data curator performing structured phenotype extraction
@@ -165,7 +165,9 @@ Extract phenotypes that explicitly belong to the provided patient:
 - If a phenotype is explicitly in family history context, DO NOT extract it
 
 **Ambiguous cases:**
-- If unsure whether a phenotype belongs to the provided patient, skip the extraction
+- If unsure whether a phenotype belongs to the provided patient, extract it with
+  uncertain: true and flag it, rather than skipping it: a curator deletes a
+  wrong row in one click and cannot easily add a missing one
 - Only extract phenotypes clearly attributed to this specific patient
 
 **Affected status:**
@@ -349,10 +351,26 @@ For each extracted phenotype:
 OUTPUT
 ---------------------------------------------------
 
-Return a **list of JSON objects**, one per extracted phenotype for the provided patient.
+Return an object with a "phenotypes" list, one entry per extracted phenotype
+for the provided patient, and a "flags" list (the rule is in CORE EXTRACTION
+RULES). Kinds:
+
+- inferred: a finding extracted with uncertain: true because it reaches this
+  patient through a cohort-level or family-level sentence rather than a
+  statement about them. One flag naming the findings, not one per finding.
+- conflict: the text and a table disagree about a finding for this patient.
+- excluded: a finding left out under the family-member rule when the
+  sentence could be read either way, or stated only in a table carrying an
+  EXTRACTION WARNING.
+
+Not: a patient the paper states no findings for, a scored negative left out
+under the negatives rule, a genetic result that is not a phenotype, nor an
+identifier you could not find in the text -- an empty list says each of
+those. "about" is a concept from the "phenotypes" list, or null.
 
 Example structure:
-[
+{
+ "phenotypes": [
   {
     "patient_id": 123,
     "concept": {
@@ -383,7 +401,9 @@ Example structure:
     "severity": null,
     "modifier": "recurrent"
   }
-]
+ ],
+ "flags": []
+}
 
 Ensure:
 - All required fields are present (patient_id, concept with value/reasoning and at least one citation)
@@ -405,5 +425,5 @@ agent = Agent(
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
     model_settings=extraction_model_settings(),
-    output_type=list[ExtractedPhenotype],
+    output_type=PhenotypeExtractionOutput,
 )

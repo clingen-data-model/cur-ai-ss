@@ -18,10 +18,12 @@ import requests
 from agents import Agent, function_tool
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
+from lib.agents.core_extraction_rules import FLAG_RULES
 from lib.agents.model_factory import extraction_model, extraction_model_settings
 from lib.agents.variant_annotation_agent import _get_session_with_retries
 from lib.core.environment import env
 from lib.models.evidence_block import ReasoningBlock
+from lib.models.flag import FlaggedReasoningBlock
 from lib.models.variant import (
     GenomeBuild,
     HarmonizedVariant,
@@ -1019,14 +1021,37 @@ REASONING REQUIREMENT
 """
 
 
-VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS = VARIANT_HARMONIZATION_INSTRUCTIONS
+VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS = (
+    VARIANT_HARMONIZATION_INSTRUCTIONS
+    + '\n\n'
+    + FLAG_RULES
+    + """
+FLAGS for this task. Kinds:
+- conflict: the paper's own notations do not describe one change -- its c.
+  and p. disagree, its coordinates or rsID resolve to a different allele than
+  its HGVS, or its transcript names one thing and the registry another. Say
+  which you kept and why. This task owns that decision; upstream only
+  records both forms.
+- unresolved: no genomic allele could be derived, or only part of the
+  identity resolved.
+- mismatch: the registry's consequence differs from the paper's where the
+  paper's is the functional one (a splice-driven deletion the registry calls
+  synonymous).
+Not: a transcript chosen by the canonical rule or taken from the matching
+registry record when the paper named none, a version number that differs
+from the paper's, a splice variant with no protein change, a protein-only
+input resolved through a registry, or which registry you used. "about" is
+the variant as the paper wrote it, or null. The output is the block above
+with a "flags" list beside it.
+"""
+)
 
 agent = Agent(
     name='variant_harmonizer',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
     model_settings=extraction_model_settings(),
-    output_type=ReasoningBlock[HarmonizedVariant],
+    output_type=FlaggedReasoningBlock[HarmonizedVariant],
     tools=[
         select_canonical_transcript,
         resolve_transcript_version,

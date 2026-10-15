@@ -3,6 +3,7 @@
 from agents import Agent, function_tool
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
+from lib.agents.core_extraction_rules import FLAG_RULES
 from lib.agents.hpo_linking_agent import (
     get_hpo_children,
     get_hpo_parents,
@@ -11,6 +12,7 @@ from lib.agents.hpo_linking_agent import (
 )
 from lib.agents.model_factory import decision_model_settings, extraction_model
 from lib.models.evidence_block import ReasoningBlock
+from lib.models.flag import FlaggedReasoningBlock
 from lib.models.mondo import MondoAgentDecision
 from lib.reference_data import mondo
 
@@ -164,8 +166,11 @@ Only use this section when no appropriate full-string MONDO match exists.
 10. If no component should be promoted as the selected paper-level MONDO term,
     return match_type "component_only" when at least one component maps to MONDO
     or HPO.
-11. Return match_type "none" only when no full-string MONDO match exists and no
-    useful component mappings exist.
+11. A "broad" match or a component mapping beats "none": a
+    curator can narrow a term in one click and cannot easily find one from
+    nothing. Return match_type "none" only when no full-string MONDO match
+    exists and no useful component mappings exist, or the text names no
+    disease at all.
 
 For mapped components:
 - mapped_ontology must be "MONDO" or "HPO".
@@ -225,12 +230,31 @@ role "primary" and a MONDO mapping matching the top-level selected MONDO term.
 When match_type is "component_only", top-level mondo_id and term must be null.
 """
 
+MONDO_LINKING_AGENT_INSTRUCTIONS = (
+    MONDO_LINKING_AGENT_INSTRUCTIONS
+    + '\n\n'
+    + FLAG_RULES
+    + """
+FLAGS for this task. Kinds:
+- ambiguous: disease text that fits two MONDO terms about equally and they
+  name different diseases.
+- unresolved: no MONDO term, or a phrase naming a phenotype or a gene rather
+  than a disease.
+- mismatch: an inheritance mode in the text that the chosen term
+  contradicts.
+Not: a broad term when MONDO has nothing closer, nor a syndromic or
+inheritance nuance the term does not express. "about" is the disease text you
+were given, or null. The output is the decision block with a "flags" list
+beside it.
+"""
+)
+
 agent = Agent(
     name='mondo_linker',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
     model_settings=decision_model_settings(),
-    output_type=ReasoningBlock[MondoAgentDecision],
+    output_type=FlaggedReasoningBlock[MondoAgentDecision],
     tools=[
         get_mondo_term,
         search_mondo_terms,

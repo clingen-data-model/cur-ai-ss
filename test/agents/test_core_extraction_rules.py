@@ -2,8 +2,11 @@
 
 import pytest
 
-from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
+from lib.agents.compound_het_agent import COMPOUND_HET_AGENT_INSTRUCTIONS
+from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC, FLAG_RULES
+from lib.agents.hpo_linking_agent import HPO_LINKING_AGENT_INSTRUCTIONS
 from lib.agents.manual_output import _JSON_OUTPUT_DIRECTIVE
+from lib.agents.mondo_linking_agent import MONDO_LINKING_AGENT_INSTRUCTIONS
 from lib.agents.paper_extraction_agent import PAPER_EXTRACTION_AGENT_INSTRUCTIONS
 from lib.agents.patient_demographics_agent import (
     PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS,
@@ -15,10 +18,17 @@ from lib.agents.patient_phenotype_linking_agent import (
 from lib.agents.patient_variant_occurrence_agent import (
     PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS,
 )
+from lib.agents.segregation_analysis_computed_agent import (
+    SEGREGATION_ANALYSIS_COMPUTED_AGENT_INSTRUCTIONS,
+)
 from lib.agents.segregation_evidence_extractor import (
     SEGREGATION_EVIDENCE_AGENT_INSTRUCTIONS,
 )
 from lib.agents.variant_extraction_agent import VARIANT_EXTRACTION_AGENT_INSTRUCTIONS
+from lib.agents.variant_harmonization_agent import (
+    VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS,
+)
+from lib.models.flag import FlagKind
 
 
 def test_spec_names_every_id_form_and_the_shortest_span_rule():
@@ -223,3 +233,122 @@ def test_spec_disambiguates_a_cell_that_repeats_across_a_table_row():
     )
     assert '"Hypotonia | + | +"' in CORE_EXTRACTION_SPEC
     assert 'Never quote a flag or repeated cell bare' in CORE_EXTRACTION_SPEC
+
+
+def test_spec_states_the_flag_rule_once_for_every_agent():
+    """Scoping and the one-proband rule make decisions a curator cannot see from
+    the output: a cohort member left out, a relative mentioned once and
+    dropped, a proband chosen where the paper marks none. Field reasoning only
+    covers what was extracted, so the shared spec asks every agent for a flag
+    per decision, and each prompt adds only its own examples."""
+    assert FLAG_RULES in CORE_EXTRACTION_SPEC
+    assert 'FLAGS -- decisions a curator should see' in FLAG_RULES
+    # The two things a value's reasoning cannot carry, now as kinds: what a
+    # rule kept out, and a call the paper leaves open.
+    assert 'a rule here kept out of\n    your output' in CORE_EXTRACTION_SPEC
+    assert 'a call the paper itself leaves open' in CORE_EXTRACTION_SPEC
+    # Output in its uncertain form beats nothing: a curator deletes in one
+    # click and adds by hand.
+    assert 'Prefer output a curator can review over nothing' in FLAG_RULES
+    assert 'Leave something out only when' in FLAG_RULES
+    assert 'Do not flag routine extraction' in CORE_EXTRACTION_SPEC
+    assert 'one flag per decision, not per item it touches' in CORE_EXTRACTION_SPEC
+    assert 'null when it\n    is about something not extracted' in CORE_EXTRACTION_SPEC
+    # The lookup agents have no citations field; the rule says so once.
+    assert 'where the block has citations' in FLAG_RULES
+    # The bar, after the first local run raised 184 flags on three papers:
+    # most were "not stated", rule-required Unknowns and canonical choices.
+    assert 'Never flag:' in FLAG_RULES
+    assert 'a field the paper does not state' in FLAG_RULES
+    assert 'a value a rule here required' in FLAG_RULES
+    assert 'as good as the inputs allow' in FLAG_RULES
+    assert 'your own process' in FLAG_RULES
+    assert 'Most runs raise none or a few' in FLAG_RULES
+    # The closed list, after the second run still raised 70: a flag is one of
+    # six kinds or it is not a flag, and a decision an upstream task made is
+    # not flagged again downstream.
+    assert (
+        'Every flag is of one kind, and a decision that fits no kind is not a flag'
+        in (FLAG_RULES)
+    )
+    for kind in FlagKind:
+        assert f'  - {kind.value}: ' in FLAG_RULES
+    assert 'Flag only decisions your own output makes' in FLAG_RULES
+    assert 'kind: one of the kinds above' in FLAG_RULES
+    # The old template asked for a counterfactual on every flag, and got one.
+    assert 'what a curator might decide instead' not in FLAG_RULES
+
+
+@pytest.mark.parametrize(
+    'instructions',
+    [
+        PATIENT_EXTRACTION_AGENT_INSTRUCTIONS,
+        PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS,
+        VARIANT_EXTRACTION_AGENT_INSTRUCTIONS,
+        PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS,
+        PATIENT_PHENOTYPE_LINKING_AGENT_INSTRUCTIONS,
+        SEGREGATION_EVIDENCE_AGENT_INSTRUCTIONS,
+        VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS,
+        HPO_LINKING_AGENT_INSTRUCTIONS,
+        MONDO_LINKING_AGENT_INSTRUCTIONS,
+        COMPOUND_HET_AGENT_INSTRUCTIONS,
+        SEGREGATION_ANALYSIS_COMPUTED_AGENT_INSTRUCTIONS,
+    ],
+)
+def test_every_flagging_prompt_carries_the_rule_once_and_names_about(
+    instructions,
+):
+    assert instructions.count('FLAGS -- decisions a curator should see') == 1
+    assert '"about" is' in instructions
+    # Each task names the kinds it may raise; the rest are not on offer.
+    assert 'Kinds:' in instructions
+
+
+def test_occurrence_prompt_links_a_parent_named_as_a_variants_origin():
+    """A parental-inheritance statement is enough for a carrier link, flagged
+    as inferred rather than left out: segregation reads parental genotypes
+    from these links, and a run that excluded them (the COG4 paper, third
+    local run) left segregation with nothing while another paper's run
+    linked every parent -- the policy had to be stated."""
+    prompt = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
+    assert "A parent named as the origin of a patient's variant carries it" in prompt
+    assert 'Make the link\n  and flag it as inferred' in prompt
+    assert "Not\n  a parent named as a variant's origin" in prompt
+    assert 'both parents of a homozygous child' in prompt
+    # Two of three runs after the parent rule arrived dropped the child's own
+    # link for the variant whose origin was named: the parent's link replaced
+    # it rather than joining it. The check makes that an explicit miss.
+    assert (
+        "A parent's link is in addition to the child's, never instead of it" in prompt
+    )
+    assert 'A compound-heterozygous patient has one link per variant' in prompt
+    # The statement supports "at least one copy", not a genotype: zygosity
+    # is Unknown unless the paper gives the parent's own result.
+    assert (
+        'carries at least one copy and nothing more, so zygosity is Unknown' in prompt
+    )
+    assert (
+        "write Heterozygous or Homozygous only where the\n  paper gives the parent's own genotype"
+        in prompt
+    )
+
+
+def test_patient_prompt_flag_examples_cover_the_three_kinds_of_decision():
+    prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
+    assert 'FLAGS for this task' in prompt
+    assert 'left out under the scope\n  rule' in prompt
+    assert 'a patient too, under that role; an empty record' in prompt
+    assert 'a proband chosen where the paper marks none' in prompt
+    # Proband and family membership are this task's to flag, nobody else's.
+    assert 'a flag about them is raised\nhere or nowhere' in prompt
+    assert 'has a flag\n  in "flags"; nothing routine does.' in prompt
+
+
+def test_compound_het_prompt_flags_suggested_pairs_instead_of_grading_them():
+    prompt = COMPOUND_HET_AGENT_INSTRUCTIONS
+    assert 'confidence' not in prompt.lower()
+    assert 'WHAT ONLY SUGGESTS A PAIR (output it, and flag it)' in prompt
+    assert (
+        'Not: a pair the paper establishes\noutright -- say nothing about it in "flags"'
+        in prompt
+    )

@@ -43,6 +43,17 @@ Return two EvidenceBlocks with:
   the pedigree figure with no quote (see CORE EXTRACTION RULES)
 At least one citation is required for non-null values.
 For null values (e.g., no LOD score mentioned), citations may be empty.
+The output also carries a "flags" list (the rule is in CORE EXTRACTION RULES).
+Kinds:
+- conflict: a member whose genotype or status the text and the figure give
+  differently; a LOD score the paper gives for a different variant or
+  disease than the one asked about.
+- ambiguous: a non-segregation the paper explains away.
+Not: a genotype or LOD score the paper does not report, a member outside the
+family structure you were given (its membership was decided upstream), nor
+the parents' genotypes or carrier status, which come to you from the links
+already made. "about" is a member's identifier from the family structure, or
+null.
 """
 
 SEGREGATION_EVIDENCE_AGENT_INSTRUCTIONS = (

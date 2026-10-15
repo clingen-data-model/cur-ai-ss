@@ -2,8 +2,10 @@ import hpotk
 from agents import Agent, function_tool
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
+from lib.agents.core_extraction_rules import FLAG_RULES
 from lib.agents.model_factory import decision_model_settings, extraction_model
 from lib.models.evidence_block import ReasoningBlock
+from lib.models.flag import FlaggedReasoningBlock
 from lib.models.phenotype import HPOTerm
 from lib.reference_data.hpo import find_matching_hpo_terms, get_ontology
 
@@ -325,14 +327,15 @@ If the candidate terms do not represent the phenotype meaning:
 
 Only return id: null and name: null after tool exploration reveals no suitable match.
 
-Return an HPOTerm with id: null and name: null when:
-- the phenotype is too vague (e.g., "symptom", "finding")
-- the phenotype is genuinely not represented in HPO
+When no term matches the concept exactly but a broader term covers it, return
+the broader term and say so in its reasoning: a curator can relink a term in
+one click and cannot easily find one from nothing. Return an HPOTerm with id: null and
+name: null only when:
+- the phenotype is too vague to place anywhere (e.g., "symptom", "finding")
+- the phenotype is genuinely not represented in HPO, not even by a broader term
 - search attempts with multiple phrasings yield no meaningful matches
-- selecting any term would require significant guessing
 
-It is better to return null values than to select an incorrect HPO term,
-but actively use tools before giving up.
+Actively use tools before giving up.
 
 ---------------------------------------------------------------------
 
@@ -349,13 +352,33 @@ Write in plain prose. Do not use function names like get_hpo_term() — describe
 
 """
 
-HPO_LINKING_AGENT_INSTRUCTIONS = INSTRUCTIONS
+HPO_LINKING_AGENT_INSTRUCTIONS = (
+    INSTRUCTIONS
+    + '\n\n'
+    + FLAG_RULES
+    + """
+FLAGS for this task. Kinds:
+- unresolved: no term, or only a provisional one that does not describe the
+  finding.
+- mismatch: the nearest term names a different organ, system or mechanism
+  than the concept (an organ the concept does not state and you assumed), or
+  a negated or family-history concept linked anyway.
+- ambiguous: two candidate terms name different findings and both fit the
+  concept -- not two wordings of one finding.
+Not: a broader term when the ontology has nothing closer, a qualifier,
+severity, laterality, region or progression HPO terms do not carry, a
+compound concept reduced to its main finding, a preferred name that differs
+from the paper's wording, or whether you called a tool. "about" is the
+concept you were given, or null. The output is the block above with a
+"flags" list beside it.
+"""
+)
 
 agent = Agent(
     name='hpo_linker',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
     model_settings=decision_model_settings(),
-    output_type=ReasoningBlock[HPOTerm],
+    output_type=FlaggedReasoningBlock[HPOTerm],
     tools=[search_hpo_terms, get_hpo_term, get_hpo_parents, get_hpo_children],
 )

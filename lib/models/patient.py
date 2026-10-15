@@ -21,6 +21,7 @@ from lib.models.base import Base, PatchModel
 from lib.models.datetimes import UtcDatetime
 from lib.models.evidence_block import EvidenceBlock, HumanEvidenceBlock
 from lib.models.family import Family
+from lib.models.flag import ExtractionFlag
 from lib.models.paper import PaperDB
 from lib.models.user import UserSummaryResp
 
@@ -403,6 +404,7 @@ class PatientDemographics(BaseModel):
             value=None, reasoning='Twin status not specified'
         )
     )
+    flags: List[ExtractionFlag] = Field(default_factory=list)
 
     @model_validator(mode='after')
     def validate_age_units(self) -> 'PatientDemographics':
@@ -454,6 +456,10 @@ class FamilyEntry(BaseModel):
 class PatientExtractionOutput(BaseModel):
     patients: List[PatientIdentity]
     families: List[FamilyEntry]
+    # Decisions a curator should look at, including things deliberately not
+    # extracted (see lib.models.flag). Defaults to empty so an older stored
+    # output still loads.
+    flags: List[ExtractionFlag] = Field(default_factory=list)
 
     @model_validator(mode='after')
     def validate_family_coverage(self) -> 'PatientExtractionOutput':

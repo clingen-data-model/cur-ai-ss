@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, TypeAlias
 
-from pydantic import BaseModel, ConfigDict, computed_field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 from sqlalchemy import (
     Boolean,
     DateTime,
@@ -27,6 +27,7 @@ from lib.models.evidence_block import (
     HumanEvidenceBlock,
     ReasoningBlock,
 )
+from lib.models.flag import ExtractionFlag
 from lib.models.paper import PaperDB
 from lib.models.user import UserSummaryResp
 
@@ -180,6 +181,7 @@ class VariantExtractionOutput(BaseModel):
     """Output from variant extraction agent."""
 
     variants: List[Variant]
+    flags: List[ExtractionFlag] = Field(default_factory=list)
 
 
 class HarmonizedVariant(BaseModel):

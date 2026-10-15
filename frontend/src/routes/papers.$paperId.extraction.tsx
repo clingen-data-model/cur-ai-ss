@@ -5,13 +5,19 @@
  * didn't make it into an occurrence: patients/variants extraction found but
  * linking never connected, and the pedigree image/description.
  */
-import { useMemo, useState } from 'react'
-import { useParams, Link } from '@tanstack/react-router'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useParams, useSearch, Link } from '@tanstack/react-router'
 import type { ColumnDef, ExpandedState } from '@tanstack/react-table'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { FileText } from 'lucide-react'
 import { usePaperOccurrences } from '@/hooks/usePaperOccurrences'
+import { usePaperFlags } from '@/hooks/usePaperFlags'
+import type { FlagIndex } from '@/hooks/usePaperFlags'
+import { FlagIndicator } from '@/components/FlagIndicator'
+import { FlagsTab } from '@/components/FlagsTab'
+import type { FlagTarget } from '@/lib/flagTarget'
+import { DEFAULT_EXTRACTION_TAB, isExtractionTab, type ExtractionTab } from '@/lib/extractionTabs'
 import type { OccurrenceRow } from '@/hooks/usePaperOccurrences'
 import { deleteOccurrencePapersPaperIdOccurrencesOccurrenceIdDelete } from '@/api/generated'
 import { DataTable } from '@/components/ui/data-table'
@@ -28,7 +34,6 @@ import {
   EditableZygosityCell,
   MondoDiseaseCell,
 } from '@/components/OccurrenceEditableCells'
-import { ConfidenceBadge } from '@/components/ConfidenceBadge'
 import { EvidencePopover } from '@/components/EvidencePopover'
 import { ManuallyCreatedIndicator } from '@/components/ManuallyCreatedIndicator'
 import { PairOccurrenceDialog } from '@/components/PairOccurrenceDialog'
@@ -86,9 +91,36 @@ function VariantLabel({ description, hgvsP }: { description: string; hgvsP: stri
   )
 }
 
-function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRow[] }) {
+/** Every flag that touches an occurrence row: the occurrence's own, plus
+ * the patient's and the variant's, since this tab is where both are read. */
+function rowFlags(flags: FlagIndex, row: OccurrenceRow) {
+  const seen = new Set<number>()
+  return [
+    ...(flags.byOccurrence.get(row.occurrence.id) ?? []),
+    ...(flags.byPatient.get(row.patient.id) ?? []),
+    ...(flags.byVariant.get(row.variant.id) ?? []),
+  ].filter((flag) => !seen.has(flag.id) && seen.add(flag.id))
+}
+
+function OccurrencesTab({
+  paperId,
+  rows,
+  flags,
+  focusOccurrenceId,
+}: {
+  paperId: number
+  rows: OccurrenceRow[]
+  flags: FlagIndex
+  /** An occurrence to open on arrival (from a flag's About chip). */
+  focusOccurrenceId?: number | null
+}) {
   const queryClient = useQueryClient()
-  const [expandedCell, setExpandedCell] = useState<{ rowId: string; view: ExpandedView } | null>(null)
+  const [expandedCell, setExpandedCell] = useState<{ rowId: string; view: ExpandedView } | null>(
+    focusOccurrenceId != null ? { rowId: String(focusOccurrenceId), view: 'patient' } : null,
+  )
+  useEffect(() => {
+    if (focusOccurrenceId != null) setExpandedCell({ rowId: String(focusOccurrenceId), view: 'patient' })
+  }, [focusOccurrenceId])
 
   const toggleExpanded = (rowId: string, view: ExpandedView) => {
     setExpandedCell((prev) => (prev?.rowId === rowId && prev.view === view ? null : { rowId, view }))
@@ -140,6 +172,13 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
             ]}
           />
         ),
+      },
+      {
+        id: 'flags',
+        header: '',
+        size: 28,
+        enableSorting: false,
+        cell: ({ row }) => <FlagIndicator paperId={paperId} flags={rowFlags(flags, row.original)} />,
       },
       {
         id: 'expander',
@@ -214,10 +253,7 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
                   '—'
                 )}
               </span>
-              {occurrence.paired_variant_confidence && (
-                <ConfidenceBadge confidence={occurrence.paired_variant_confidence} />
-              )}
-              <EvidencePopover block={occurrence.paired_variant_confidence_reasoning} />
+              <EvidencePopover block={occurrence.paired_variant_reasoning} />
             </div>
           )
         },
@@ -293,7 +329,7 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
     })
 
     return cols
-  }, [rows, hasPairedVariants, paperId, expandedCell?.rowId, deleteMutation])
+  }, [rows, hasPairedVariants, paperId, expandedCell?.rowId, deleteMutation, flags])
 
   if (rows.length === 0) {
     return (
@@ -314,7 +350,11 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
         getRowCanExpand={() => true}
         expandOnRowClick={false}
         getRowClassName={(row) =>
-          isManuallyCreatedRow(row) ? 'bg-orange-50/60 dark:bg-orange-950/20' : undefined
+          isManuallyCreatedRow(row)
+            ? 'bg-orange-50/60 dark:bg-orange-950/20'
+            : rowFlags(flags, row).some((flag) => flag.resolved_at == null)
+              ? 'bg-violet-50/60 dark:bg-violet-950/20'
+              : undefined
         }
         expanded={expanded}
         onExpandedChange={() => {}}
@@ -333,8 +373,46 @@ function OccurrencesTab({ paperId, rows }: { paperId: number; rows: OccurrenceRo
 export function ExtractionPage() {
   const params = useParams({ from: '/papers/$paperId/extraction' })
   const paperId = parseInt(params.paperId, 10)
-  const { paper, rows, unassociatedPatients, unassociatedVariants, isLoading, isError, error } =
-    usePaperOccurrences(paperId)
+  const {
+    paper,
+    rows,
+    unassociatedPatients,
+    unassociatedVariants,
+    allPatients,
+    allVariants,
+    isLoading,
+    isError,
+    error,
+  } = usePaperOccurrences(paperId)
+  const flags = usePaperFlags(paperId)
+  // The open tab lives in the URL so the papers table (and a pasted link)
+  // can land on Families or Flags directly; the default stays out of it.
+  const search = useSearch({ from: '/papers/$paperId/extraction' })
+  const navigate = useNavigate({ from: '/papers/$paperId/extraction' })
+  const tab: ExtractionTab = search.tab ?? DEFAULT_EXTRACTION_TAB
+  const setTab = (next: string) => {
+    if (!isExtractionTab(next)) return
+    void navigate({ search: next === DEFAULT_EXTRACTION_TAB ? {} : { tab: next }, replace: true })
+  }
+  const [focus, setFocus] = useState<FlagTarget | null>(null)
+  /** A flag's About chip: switch to the tab that shows the row and open it.
+   * A variant goes to its occurrence when it has one, else to the
+   * unassociated list; a patient always has a family card. */
+  const navigateToTarget = (target: FlagTarget) => {
+    if (target.kind === 'variant') {
+      const row = rows.find((r) => r.variant.id === target.id)
+      if (row) {
+        setFocus({ kind: 'occurrence', id: row.occurrence.id })
+        setTab('occurrences')
+      } else {
+        setFocus(target)
+        setTab('unassociated-variants')
+      }
+      return
+    }
+    setFocus(target)
+    setTab(target.kind === 'occurrence' ? 'occurrences' : 'families')
+  }
   const tasks = paper?.tasks ?? []
   const paperStatus = computeStatus(tasks)
   const [isExporting, setIsExporting] = useState(false)
@@ -428,7 +506,7 @@ export function ExtractionPage() {
           </div>
         </div>
 
-        <Tabs defaultValue="occurrences">
+        <Tabs value={tab} onValueChange={(next) => setTab(String(next))}>
           <TabsList>
             <TabsTrigger value="occurrences">Occurrences</TabsTrigger>
             <TabsTrigger value="families">Families</TabsTrigger>
@@ -444,6 +522,12 @@ export function ExtractionPage() {
                 <span className="ml-1 text-xs text-muted-foreground">({unassociatedVariants.length})</span>
               )}
             </TabsTrigger>
+            <TabsTrigger value="flags">
+              Flags
+              {flags.open.length > 0 && (
+                <span className="ml-1 text-xs text-violet-700 dark:text-violet-400">({flags.open.length})</span>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="pedigree">Pedigree Image &amp; Description</TabsTrigger>
             <TabsTrigger value="paper-metadata">Paper Metadata</TabsTrigger>
           </TabsList>
@@ -454,12 +538,20 @@ export function ExtractionPage() {
               task={TaskType.PATIENT_VARIANT_OCCURRENCES}
               label="Patient/variant linking"
             >
-              <OccurrencesTab paperId={paperId} rows={rows} />
+              <OccurrencesTab
+                paperId={paperId}
+                rows={rows}
+                flags={flags}
+                focusOccurrenceId={focus?.kind === 'occurrence' ? focus.id : null}
+              />
             </PipelineGate>
           </TabsContent>
           <TabsContent value="families" className="pt-3">
             <PipelineGate tasks={tasks} task={TaskType.PATIENT_EXTRACTION} label="Patient extraction">
-              <FamiliesTab paperId={paperId} />
+              <FamiliesTab
+                paperId={paperId}
+                focus={focus?.kind === 'family' || focus?.kind === 'patient' ? focus : null}
+              />
             </PipelineGate>
           </TabsContent>
           <TabsContent value="unassociated-patients" className="pt-3">
@@ -467,6 +559,7 @@ export function ExtractionPage() {
               paperId={paperId}
               patients={unassociatedPatients}
               tasks={tasks}
+              flags={flags}
             />
           </TabsContent>
           <TabsContent value="unassociated-variants" className="pt-3">
@@ -474,6 +567,16 @@ export function ExtractionPage() {
               paperId={paperId}
               variants={unassociatedVariants}
               tasks={tasks}
+              flags={flags}
+            />
+          </TabsContent>
+          <TabsContent value="flags" className="pt-3">
+            <FlagsTab
+              paperId={paperId}
+              patients={allPatients}
+              variants={allVariants}
+              rows={rows}
+              onNavigate={navigateToTarget}
             />
           </TabsContent>
           <TabsContent value="pedigree" className="pt-3">

@@ -113,6 +113,8 @@ export function usePaperOccurrences(paperId: number) {
     rows,
     unassociatedPatients,
     unassociatedVariants,
+    allPatients: patientsQuery.data ?? [],
+    allVariants: variantsQuery.data ?? [],
     isLoading:
       paperQuery.isPending ||
       occurrencesQuery.isPending ||

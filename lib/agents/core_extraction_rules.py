@@ -1,4 +1,80 @@
-CORE_EXTRACTION_SPEC = """
+# The flag rule is stated once, here, and reaches every agent: the paper-
+# reading agents through CORE_EXTRACTION_SPEC, the lookup agents
+# (harmonization, HPO and MONDO linking, compound het, computed segregation)
+# by appending it to their own instructions. See lib/models/flag.py.
+FLAG_RULES = """FLAGS -- decisions a curator should see:
+
+- Prefer output a curator can review over nothing. When the paper suggests
+  something but does not establish it, produce it in the uncertain form the
+  output allows -- Unknown or Uncertain where a field has one, uncertain:
+  true, a broader term, a Non-Proband -- and say so in its reasoning. A row a
+  curator can delete costs one click; a row they must add by hand costs the
+  identifier, the evidence and every downstream step.
+  Leave something out only when the output has no uncertain form for it and
+  including it would change a count curators score before review (an extra
+  proband, members of a cohort the target gene does not cover), and flag
+  that.
+- Every value you return carries its reasoning. A flag is for what that
+  reasoning cannot carry: a decision about something that is not in your
+  output, or a call the paper itself leaves open. Raise one only when a
+  curator who read the same text could reasonably decide differently AND the
+  difference would change what is curated -- a row added or removed, a
+  different term, variant, link or count. Most runs raise none or a few; a
+  flag on every row means the bar is too low.
+- Every flag is of one kind, and a decision that fits no kind is not a flag.
+  The FLAGS section of your task says which of these it may raise:
+  - excluded: something the paper describes that a rule here kept out of
+    your output, where the paper gives a curator a reason to keep it -- a
+    person, variant or finding in scope that a scope, identifier or evidence
+    rule excluded, or a candidate left out to keep a count curators score.
+    Say what the paper said and which rule applied. Not a group plainly
+    outside the task.
+  - conflict: two places in the paper disagree about one value, and you
+    chose one.
+  - ambiguous: two readings of the paper both fit, and you chose one.
+  - inferred: a value taken from somewhere other than a statement about the
+    thing itself -- a family-level or cohort-level sentence, a reference's
+    title, a pedigree symbol, surrounding context.
+  - unresolved: a lookup could not settle it -- no identifier, term or
+    record was found, so the output is partial or null where a curator might
+    find one.
+  - mismatch: the best available term or record does not fit what the paper
+    says -- a different organ, system, mechanism or consequence.
+- Flag only decisions your own output makes. A value you were given as input
+  -- a patient's proband status, a family's membership, a variant's
+  notation, a link's zygosity or a parent's carrier status -- was decided by
+  the task that produced it, and its flag, if any, was raised there. Use it
+  as given; do not flag it again.
+- Never flag:
+  - a field the paper does not state. Unknown, null or an empty list already
+    says that, and "X not stated" is not a decision.
+  - a value a rule here required: Unknown under a no-inference rule, a default
+    the rules name, a choice a rule makes for you when the paper gives no
+    basis. If the paper implies a value the rule withholds, put the implied
+    value in that field's reasoning, not in a flag.
+  - a result that is as good as the inputs allow: a broader ontology term when
+    nothing closer exists, a transcript picked by the canonical rule when the
+    paper named none, a preferred name that differs from the paper's wording.
+  - your own process: a tool you did or did not call, a search that returned
+    nothing, a step you skipped.
+  - anything the reasoning on the value already says.
+- Do not flag routine extraction: a value stated plainly and cited needs no
+  flag. Raise one flag per decision, not per item it touches; a group left
+  out for one reason is one flag that names its members.
+- Each flag is an object with:
+  - kind: one of the kinds above, from those your task allows.
+  - about: the identifier of the extracted thing it concerns, copied exactly
+    from your output or from the input you were given (a patient or family
+    identifier, a variant as written, a phenotype concept), or null when it
+    is about something not extracted.
+  - flag: a block whose value is a short subject (who or what, in a few
+    words), whose reasoning says what the paper says and what you did with
+    it, and -- where the block has citations -- whose citations point at the
+    block(s) the decision rests on.
+- "flags" is empty when there was nothing to flag.
+"""
+
+_SPEC_HEAD = """
 ---
 
 The following rules define the evidence and extraction contract:
@@ -61,6 +137,9 @@ REASONING:
     (e.g. get_hpo_term, clinvar_lookup); describe what you looked up and what you found instead.
   - Any quoted text in reasoning must be copied exactly from the input source text.
 
+"""
+
+_SPEC_TAIL = """
 PEDIGREE DESCRIPTION RULES:
 
 - Some messages carry a "Pedigree Description" alongside the paper. It is a
@@ -111,3 +190,5 @@ TABLE EVIDENCE RULES:
     paper does not report it. Say the value could not be read, rather than that it was
     not reported.
 """
+
+CORE_EXTRACTION_SPEC = _SPEC_HEAD + FLAG_RULES + _SPEC_TAIL

@@ -19,6 +19,7 @@ from lib.models import (
     ChatMessageDB,
     ChatRole,
     FamilyDB,
+    FlagDB,
     GeneDB,
     HarmonizedVariantDB,
     HpoCandidate,
@@ -1906,8 +1907,9 @@ def test_pair_occurrence(
     assert body[occurrence_a.id]['paired_variant_link_id'] == occurrence_b.id
     assert body[occurrence_b.id]['paired_variant_link_id'] == occurrence_a.id
     for row in body.values():
-        assert row['paired_variant_confidence'] == 'confirmed'
-        block = row['paired_variant_confidence_reasoning']
+        block = row['paired_variant_reasoning']
+        assert block['value'] is True
+        assert block['reasoning'] == 'Manually paired by curator.'
         assert block['edited_by_name'] == 'Test User'
         assert block['edited_at'] is not None
     for occurrence in (occurrence_a, occurrence_b):
@@ -1915,7 +1917,7 @@ def test_pair_occurrence(
             db_session.query(EditDB)
             .filter(
                 EditDB.occurrence_id == occurrence.id,
-                EditDB.field_name == 'paired_variant_confidence',
+                EditDB.field_name == 'paired_variant',
             )
             .count()
             == 1
@@ -2007,7 +2009,7 @@ def test_pair_occurrence_clears_stale_partner_symmetrically(
     assert resp.status_code == 200
     body = {row['id']: row for row in resp.json()}
     assert body[occurrence_d.id]['paired_variant_link_id'] is None
-    assert body[occurrence_d.id]['paired_variant_confidence'] is None
+    assert body[occurrence_d.id]['paired_variant_reasoning'] is None
 
     # Re-pair A with C -- B (A's old partner) should come back unpaired.
     resp = client.patch(
@@ -2019,7 +2021,7 @@ def test_pair_occurrence_clears_stale_partner_symmetrically(
     assert body[occurrence_a.id]['paired_variant_link_id'] == occurrence_c.id
     assert body[occurrence_c.id]['paired_variant_link_id'] == occurrence_a.id
     assert body[occurrence_b.id]['paired_variant_link_id'] is None
-    assert body[occurrence_b.id]['paired_variant_confidence'] is None
+    assert body[occurrence_b.id]['paired_variant_reasoning'] is None
 
     # D was never touched by this last call -- confirm it's still unpaired
     # in the DB, not just absent from this response.
@@ -3306,7 +3308,7 @@ def test_load_hpo_link_cache(db_session, seeded_paper):
 def test_phenotype_extraction_takes_cached_hpo_links(
     db_session, seeded_paper, monkeypatch
 ):
-    from lib.models import ExtractedPhenotype
+    from lib.models import ExtractedPhenotype, PhenotypeExtractionOutput
     from lib.tasks import hpo_link_cache
     from lib.tasks.handlers import handle_phenotype_extraction
 
@@ -3326,10 +3328,25 @@ def test_phenotype_extraction_takes_cached_hpo_links(
     anchored.write_text('[paragraph-1] The proband had q.\n')
     db_session.add(task)
     db_session.commit()
+    # The source of the cached link: a phenotype on another patient in this
+    # paper, named in the reused reasoning instead of its id.
+    origin_patient = _seed_patient(db_session, seeded_paper, 'Origin Patient')
+    origin = PhenotypeDB(
+        paper_id=seeded_paper.id,
+        patient_id=origin_patient.id,
+        concept='Seizures',
+        concept_evidence={'value': 'Seizures', 'reasoning': 'r', 'citations': []},
+    )
+    db_session.add(origin)
+    db_session.commit()
     monkeypatch.setattr(
         hpo_link_cache,
         '_cache',
-        {'seizures': hpo_link_cache.CachedHpoLink('HP:0001250', 'Seizure', 7, False)},
+        {
+            'seizures': hpo_link_cache.CachedHpoLink(
+                'HP:0001250', 'Seizure', origin.id, True
+            )
+        },
     )
     monkeypatch.setattr(hpo_link_cache, '_loaded_at', time.monotonic())
 
@@ -3349,11 +3366,13 @@ def test_phenotype_extraction_takes_cached_hpo_links(
         )
 
     result = MagicMock()
-    result.final_output = [
-        extracted('SEIZURES'),
-        extracted('Seizures', negated=True),
-        extracted('Ataxia'),
-    ]
+    result.final_output = PhenotypeExtractionOutput(
+        phenotypes=[
+            extracted('SEIZURES'),
+            extracted('Seizures', negated=True),
+            extracted('Ataxia'),
+        ]
+    )
     with patch('lib.tasks.handlers.Runner.run', return_value=result):
         asyncio.run(handle_phenotype_extraction(task.id))
 
@@ -3366,7 +3385,11 @@ def test_phenotype_extraction_takes_cached_hpo_links(
     }
     hit = rows[('SEIZURES', False)].hpo
     assert (hit.hpo_id, hit.hpo_name) == ('HP:0001250', 'Seizure')
-    assert 'phenotype 7' in hit.reasoning
+    assert hit.reasoning == (
+        'Reused the link HP:0001250 (Seizure) already made by a curator '
+        'for Origin Patient in this paper for the identical concept.'
+    )
+    assert str(origin.id) not in hit.reasoning.replace('HP:0001250', '')
     assert rows[('Seizures', True)].hpo is None
     assert rows[('Ataxia', False)].hpo is None
 
@@ -3473,3 +3496,236 @@ def test_chat_queue_task_refused_while_paper_has_tasks_in_flight(
     )
     assert run_context.confirmation is None
     snapshot.assert_not_called()
+
+
+def _seed_flag(db_session, seeded_paper, *, subject, patient_id=None):
+    flag = FlagDB(
+        paper_id=seeded_paper.id,
+        patient_id=patient_id,
+        source='PATIENT_EXTRACTION',
+        kind='excluded',
+        subject=subject,
+        evidence={
+            'value': subject,
+            'reasoning': 'rule 2: nothing stated about them',
+            'citations': [{'anchor': 'paragraph-3', 'quote': 'her sister'}],
+        },
+    )
+    db_session.add(flag)
+    db_session.flush()
+    return flag
+
+
+def test_list_flags_links_the_patient_and_puts_open_flags_first(
+    client, db_session, seeded_paper
+):
+    patient = _seed_patient(db_session, seeded_paper, identifier='Patient 1')
+    about_patient = _seed_flag(
+        db_session, seeded_paper, subject='chosen as proband', patient_id=patient.id
+    )
+    about_nobody = _seed_flag(db_session, seeded_paper, subject='untested sister')
+
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/flags/{about_patient.id}/resolve',
+        json={'note': 'agree'},
+    )
+    assert resp.status_code == 200
+
+    resp = client.get(f'/papers/{seeded_paper.id}/flags')
+    assert resp.status_code == 200
+    rows = resp.json()
+    assert [r['subject'] for r in rows] == ['untested sister', 'chosen as proband']
+    assert rows[0]['patient_id'] is None
+    assert rows[0]['resolved_by'] is None
+    assert rows[0]['evidence']['citations'][0]['anchor'] == 'paragraph-3'
+    assert rows[1]['patient_id'] == patient.id
+    assert rows[1]['resolution_note'] == 'agree'
+    assert rows[1]['resolved_by'] is not None
+    assert about_nobody.resolved_at is None
+
+
+def test_resolve_flag_is_one_way(client, db_session, seeded_paper, test_user):
+    """A resolution is who looked, when, and what they decided; there is no
+    reopen, so a second resolve is refused rather than re-attributed."""
+    flag = _seed_flag(db_session, seeded_paper, subject='untested sister')
+
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/flags/{flag.id}/resolve',
+        json={'note': 'curator added her by hand'},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body['resolved_by_user_id'] == test_user.id
+    assert body['resolved_by']['id'] == test_user.id
+    assert body['resolved_at'] is not None
+    assert body['resolution_note'] == 'curator added her by hand'
+
+    resp = client.post(f'/papers/{seeded_paper.id}/flags/{flag.id}/resolve', json={})
+    assert resp.status_code == 409
+    body = client.get(f'/papers/{seeded_paper.id}/flags').json()[0]
+    assert body['resolution_note'] == 'curator added her by hand'
+
+
+def test_resolve_flags_in_bulk_keeps_earlier_resolutions(
+    client, db_session, seeded_paper, test_user
+):
+    """'Resolve all' sends the ids it was showing; one that was resolved in
+    the meantime keeps its own note rather than being refused or
+    overwritten, and an id from nowhere fails the whole request."""
+    first = _seed_flag(db_session, seeded_paper, subject='broader term')
+    second = _seed_flag(db_session, seeded_paper, subject='qualifier dropped')
+    third = _seed_flag(db_session, seeded_paper, subject='severity dropped')
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/flags/{third.id}/resolve',
+        json={'note': 'looked at this one'},
+    )
+    assert resp.status_code == 200
+
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/flags/resolve',
+        json={
+            'flag_ids': [first.id, second.id, third.id],
+            'note': 'HPO terms accepted',
+        },
+    )
+    assert resp.status_code == 200
+    by_id = {row['id']: row for row in resp.json()}
+    assert set(by_id) == {first.id, second.id, third.id}
+    assert by_id[first.id]['resolution_note'] == 'HPO terms accepted'
+    assert by_id[second.id]['resolution_note'] == 'HPO terms accepted'
+    assert by_id[first.id]['resolved_by']['id'] == test_user.id
+    assert by_id[third.id]['resolution_note'] == 'looked at this one'
+
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/flags/resolve',
+        json={'flag_ids': [first.id, 999999], 'note': 'x'},
+    )
+    assert resp.status_code == 404
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/flags/resolve', json={'flag_ids': []}
+    )
+    assert resp.status_code == 422
+
+
+def test_flag_endpoints_404_for_the_wrong_paper(client, db_session, seeded_paper):
+    flag = _seed_flag(db_session, seeded_paper, subject='untested sister')
+    assert client.get('/papers/999999/flags').status_code == 404
+    resp = client.post(f'/papers/999999/flags/{flag.id}/resolve', json={})
+    assert resp.status_code == 404
+    resp = client.post('/papers/999999/flags/resolve', json={'flag_ids': [flag.id]})
+    assert resp.status_code == 404
+
+
+def test_deleting_a_patient_drops_the_flag_about_them(client, db_session, seeded_paper):
+    patient = _seed_patient(db_session, seeded_paper, identifier='Patient 1')
+    _seed_flag(db_session, seeded_paper, subject='about P1', patient_id=patient.id)
+    _seed_flag(db_session, seeded_paper, subject='about nobody')
+
+    resp = client.delete(f'/papers/{seeded_paper.id}/patients/{patient.id}')
+    assert resp.status_code == 204
+    db_session.expire_all()
+    rows = client.get(f'/papers/{seeded_paper.id}/flags').json()
+    assert [r['subject'] for r in rows] == ['about nobody']
+
+
+def test_rerun_flag_scopes_the_task_to_what_the_agent_runs_on(
+    client, db_session, seeded_paper, test_user
+):
+    """A per-patient agent's flag re-runs that agent for that patient, with
+    the note as follow-up context; a paper-level agent's flag re-runs the
+    whole paper even though the flag names a patient."""
+    patient = _seed_patient(db_session, seeded_paper, identifier='Patient 1')
+    per_patient = _seed_flag(
+        db_session, seeded_paper, subject='pair not phased', patient_id=patient.id
+    )
+    per_patient.source = 'COMPOUND_HET_EVALUATION'
+    paper_wide = _seed_flag(
+        db_session, seeded_paper, subject='chosen as proband', patient_id=patient.id
+    )
+    db_session.flush()
+
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/flags/{per_patient.id}/rerun',
+        json={'note': 'the parents were tested, see table 2'},
+    )
+    assert resp.status_code == 200, resp.text
+    task = resp.json()
+    assert task['type'] == TaskType.COMPOUND_HET_EVALUATION.value
+    assert task['patient_id'] == patient.id
+    assert task['updated_by_user_id'] == test_user.id
+    assert task['additional_context'] == (
+        'A curator reviewed your flag "pair not phased". '
+        'Their note: the parents were tested, see table 2'
+    )
+
+    # The queued task makes the paper busy, which refuses a second rerun
+    # (same guard as POST /tasks); let it finish first.
+    from lib.tasks.models import TaskDB, TaskStatus
+
+    db_session.query(TaskDB).update({'status': TaskStatus.COMPLETED})
+    db_session.flush()
+
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/flags/{paper_wide.id}/rerun',
+        json={'skip_successors': True},
+    )
+    assert resp.status_code == 200, resp.text
+    task = resp.json()
+    assert task['type'] == TaskType.PATIENT_EXTRACTION.value
+    assert task['patient_id'] is None
+    assert task['skip_successors'] is True
+    assert (
+        task['additional_context']
+        == 'A curator reviewed your flag "chosen as proband".'
+    )
+
+
+def test_rerun_flag_refuses_a_scoped_agent_with_no_row_to_run_on(
+    client, db_session, seeded_paper
+):
+    flag = _seed_flag(db_session, seeded_paper, subject='no phenotype matched')
+    flag.source = 'HPO_LINKING'
+    db_session.flush()
+
+    resp = client.post(f'/papers/{seeded_paper.id}/flags/{flag.id}/rerun', json={})
+    assert resp.status_code == 409
+    assert 'per phenotype' in resp.json()['detail']
+
+    resp = client.post(f'/papers/{seeded_paper.id}/flags/{flag.id + 99}/rerun', json={})
+    assert resp.status_code == 404
+
+
+def test_flag_about_a_pair_carries_both_occurrences(
+    client, db_session, seeded_paper, seeded_variant, seeded_unharmonized_variant
+):
+    occurrence_a = _create_patient_variant_occurrence(
+        db_session, seeded_paper, seeded_variant
+    )
+    occurrence_b = _create_patient_variant_occurrence(
+        db_session,
+        seeded_paper,
+        seeded_unharmonized_variant,
+        patient=db_session.get(PatientDB, occurrence_a.patient_id),
+    )
+    flag = _seed_flag(
+        db_session,
+        seeded_paper,
+        subject='phase inferred from one parent',
+        patient_id=occurrence_a.patient_id,
+    )
+    flag.occurrence_id = occurrence_a.id
+    flag.paired_occurrence_id = occurrence_b.id
+    db_session.flush()
+
+    resp = client.get(f'/papers/{seeded_paper.id}/flags')
+    assert resp.status_code == 200
+    [row] = resp.json()
+    assert (row['occurrence_id'], row['paired_occurrence_id']) == (
+        occurrence_a.id,
+        occurrence_b.id,
+    )
+
+    # Deleting either half takes the flag with it.
+    resp = client.delete(f'/papers/{seeded_paper.id}/occurrences/{occurrence_b.id}')
+    assert resp.status_code in (200, 204)
+    assert client.get(f'/papers/{seeded_paper.id}/flags').json() == []

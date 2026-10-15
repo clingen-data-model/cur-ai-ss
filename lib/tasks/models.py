@@ -16,6 +16,21 @@ if TYPE_CHECKING:
     from lib.models.user import UserDB
 
 
+# TaskType member name -> the TaskDB column its handler reads (see
+# TaskType.scope_column). Everything else runs over the whole paper.
+_SCOPE_COLUMNS: dict[str, str] = {
+    'PATIENT_DEMOGRAPHICS': 'patient_id',
+    'PHENOTYPE_EXTRACTION': 'patient_id',
+    'COMPOUND_HET_EVALUATION': 'patient_id',
+    'SEGREGATION_EVIDENCE_EXTRACTION': 'family_id',
+    'SEGREGATION_ANALYSIS_COMPUTED': 'family_id',
+    'VARIANT_HARMONIZATION': 'variant_id',
+    'VARIANT_ANNOTATION': 'variant_id',
+    'HPO_LINKING': 'phenotype_id',
+    'OCCURRENCE_MONDO_LINKING': 'patient_variant_occurrence_id',
+}
+
+
 class TaskType(StrEnum):
     """Pipeline task types in execution order."""
 
@@ -43,6 +58,14 @@ class TaskType(StrEnum):
     # jumping back up after it already read complete.
     PAPER_MONDO_LINKING = 'Paper MONDO Linking'
     OCCURRENCE_MONDO_LINKING = 'Occurrence MONDO Linking'  # per-occurrence
+
+    @property
+    def scope_column(self) -> str | None:
+        """The TaskDB column this type's handler reads its one row from, or
+        None for a type that runs over the whole paper. What a re-run of a
+        single instance must set -- a task row scoped by any other column is
+        a row the handler ignores and the queue never dedups against."""
+        return _SCOPE_COLUMNS.get(self.name)
 
     @property
     def description(self) -> str:
