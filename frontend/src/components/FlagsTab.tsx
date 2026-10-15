@@ -388,10 +388,14 @@ export function FlagsTab({
                 }
               </SelectValue>
             </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ANY_AGENT}>Any ({byState.length})</SelectItem>
+            {/* The popup otherwise takes the trigger's width and clips the
+             * longest agent name; let it grow to its content, in smaller type. */}
+            <SelectContent className="w-auto min-w-(--anchor-width)">
+              <SelectItem value={ANY_AGENT} className="text-xs">
+                Any ({byState.length})
+              </SelectItem>
               {agents.map(([source, label]) => (
-                <SelectItem key={source} value={source}>
+                <SelectItem key={source} value={source} className="text-xs whitespace-nowrap">
                   {label} ({agentCounts.get(source) ?? 0})
                 </SelectItem>
               ))}
