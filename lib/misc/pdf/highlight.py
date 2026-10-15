@@ -181,17 +181,17 @@ def word_frame_to_user(x: float, y: float, frame: _PageFrame) -> tuple[float, fl
     at 90 and nine at 270) the words fit only the rotated page size, and on
     paper 87 page 4 (603 x 783, /Rotate 90) PyMuPDF puts "62" at user
     x 229..236, y 286..294 where words.json has x 286..294, y 367..374:
-    (y, 603 - x). Paper 96's 270 pages, whose visible box starts at y 251.76,
-    fit only with the box offsets in.
+    (y, 603 - x). The frame is measured from the visible box, not the page's
+    raw origin: paper 96's 270 pages have a mediabox starting at y 251.76,
+    and papers 12 and 29 an unrotated cropbox 1 and 34 points inside a larger
+    mediabox; all fit only with the box offsets in. The same rule holds on
+    every one of the 1,148 prod pages with words (median error 0.2 points
+    against PyMuPDF), so there is no special case for an unrotated page: at
+    the origin the flip here and the inverse's own flip simply cancel.
 
     So a word point is flipped to the displayed top-left ``(X, Y)`` and then
-    goes through ``display_to_user_point``, like a prov box. An unrotated page
-    is a passthrough, and that too is measured rather than the formula's
-    ``x = X + x0``: paper 12's pages sit one point off the origin and its words
-    match raw user space, not the offset frame.
+    goes through ``display_to_user_point``, exactly like a prov box.
     """
-    if frame.rotation == 0:
-        return x, y
     return display_to_user_point(x, displayed_height(frame) - y, frame)
 
 
@@ -202,8 +202,6 @@ def _user_box_to_word_frame(
     frame = frames.get(box.page_no)
     if frame is None:
         return None
-    if frame.rotation == 0:
-        return box
     placed = user_to_display(box, frames)
     if placed is None:
         return None
