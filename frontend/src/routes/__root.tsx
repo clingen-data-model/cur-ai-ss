@@ -4,6 +4,7 @@
 import '@/lib/api'
 import React, { useEffect } from 'react'
 import { Link, Outlet, useNavigate, useParams, useRouterState } from '@tanstack/react-router'
+import { Bug, GitBranch } from 'lucide-react'
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Spinner } from '@/components/ui/spinner'
@@ -50,6 +51,41 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+const REPO_URL = 'https://github.com/clingen-data-model/cur-ai-ss'
+
+/* The footer's two outbound links: the repository, and a new GitHub issue
+ * with the page the reader was on already filled in -- the one fact a bug
+ * report from a non-developer most often leaves out. Built at render from
+ * the router's location so it follows navigation; the rest of the body is
+ * headings for them to fill. */
+function FooterLinks() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const page = typeof window === 'undefined' ? pathname : window.location.href
+  const body = [
+    `**Page:** ${page}`,
+    '',
+    '**What happened**',
+    '',
+    '',
+    '**What I expected**',
+    '',
+  ].join('\n')
+  const issueUrl = `${REPO_URL}/issues/new?${new URLSearchParams({ body }).toString()}`
+  const linkClass = 'inline-flex items-center gap-1 hover:text-slate-900 hover:underline underline-offset-2'
+  return (
+    <nav className="flex items-center justify-center gap-5">
+      <a href={REPO_URL} target="_blank" rel="noopener noreferrer" className={linkClass}>
+        <GitBranch className="size-3.5" aria-hidden="true" />
+        GitHub
+      </a>
+      <a href={issueUrl} target="_blank" rel="noopener noreferrer" className={linkClass}>
+        <Bug className="size-3.5" aria-hidden="true" />
+        Report a bug
+      </a>
+    </nav>
+  )
+}
+
 function Layout() {
   const { token } = useAuth()
 
@@ -91,8 +127,9 @@ function Layout() {
 
       {/* Footer */}
       <footer className="bg-slate-100 border-t border-slate-200">
-        <div className="container mx-auto px-4 py-4 text-center text-sm text-slate-600">
+        <div className="container mx-auto px-4 py-4 flex flex-col items-center gap-1.5 text-center text-sm text-slate-600">
           <p>Gene Curation w/ AI-Assistance</p>
+          <FooterLinks />
         </div>
       </footer>
 
