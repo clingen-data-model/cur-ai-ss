@@ -19,8 +19,9 @@ lib.tasks.handlers runs the two around the model call:
   delete by scope), so a merge survives the re-runs that follow it.
 
 The agent's grouping is checked before it is applied -- ids must be open
-flags of this paper, a flag in at most one group, two or more per group --
-and a group that fails stays unmerged.
+flags of this paper, a flag in at most one group, two or more per group,
+and not about different patient-variant links -- and a group that fails
+stays unmerged.
 """
 
 import logging
@@ -97,7 +98,8 @@ def _checked_groups(
     output: FlagMergeOutput, by_id: dict[int, FlagDB]
 ) -> list[list[FlagDB]]:
     """The agent's groups as rows, earliest first; a group with an unknown,
-    resolved or already-used id, or fewer than two flags, is skipped."""
+    resolved or already-used id, fewer than two flags, or flags about
+    different patient-variant links, is skipped."""
     groups: list[list[FlagDB]] = []
     used: set[int] = set()
     for group in output.groups:
@@ -109,8 +111,22 @@ def _checked_groups(
                 'Flag merge group skipped, ids not all open and unused: %s', sorted(ids)
             )
             continue
+        rows = sorted((by_id[i] for i in ids), key=lambda f: f.id)
+        # A flag linked to a patient-variant link, or to a compound-het pair
+        # of them, is about that row: the curator needs it there. Folding two
+        # such flags about different links would clear the link and take the
+        # indicator off both rows, so they stay apart. Flags about the same
+        # link, or with none, merge as before.
+        if len({(f.occurrence_id, f.paired_occurrence_id) for f in rows}) > 1 and any(
+            f.occurrence_id is not None for f in rows
+        ):
+            logger.info(
+                'Flag merge group kept apart, flags are about different links: %s',
+                sorted(ids),
+            )
+            continue
         used |= ids
-        groups.append(sorted((by_id[i] for i in ids), key=lambda f: f.id))
+        groups.append(rows)
     return groups
 
 
