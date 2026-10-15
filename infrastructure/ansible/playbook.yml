@@ -331,6 +331,12 @@
       shell: curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
       args:
         creates: /etc/apt/sources.list.d/nodesource.list
+      # The script runs apt itself, outside the apt module, so apt's needrestart
+      # hook gets a TTY and asks which services to restart -- a prompt nobody
+      # answers. On 2026-10-15 a deploy hung on it for a quarter of an hour.
+      environment:
+        NEEDRESTART_MODE: a
+        DEBIAN_FRONTEND: noninteractive
 
     - name: Install Node.js
       apt:
