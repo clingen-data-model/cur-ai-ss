@@ -20,7 +20,7 @@ the UI renders it the same way), and who resolved it.
 """
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Generic, TypeVar
+from typing import TYPE_CHECKING, ClassVar, Generic, TypeVar
 
 from pydantic import BaseModel, Field
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, func
@@ -42,6 +42,18 @@ if TYPE_CHECKING:
     from lib.models.variant import VariantDB
 
 
+class FlagEvidenceBlock(EvidenceBlock[str]):
+    """A flag's evidence: cited where the paper says something, and allowed
+    to cite nothing where it does not. The common flag is about an absence
+    (the target gene never mentioned, a relative never described), and an
+    absence has no block to quote. The value is the flag's subject, which
+    EvidenceBlock's "Unknown"/False exemptions never match, so the base
+    requirement would reject exactly those flags and fail the whole output
+    (seen on the first local run: an ITPR3 paper uploaded under MASP1)."""
+
+    require_source: ClassVar[bool] = False
+
+
 class ExtractionFlag(BaseModel):
     """One flag as an agent returns it, in any agent's output.
 
@@ -53,11 +65,11 @@ class ExtractionFlag(BaseModel):
     the row it just wrote; an ``about`` it cannot match is kept in the subject
     and reasoning, not lost. ``flag.value`` is a short subject; the reasoning
     says what was decided and why; the citations point at the text it rests
-    on.
+    on, when there is any.
     """
 
     about: str | None
-    flag: EvidenceBlock[str]
+    flag: FlagEvidenceBlock
 
 
 class ReasoningFlag(BaseModel):

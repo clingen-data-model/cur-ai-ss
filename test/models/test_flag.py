@@ -36,9 +36,21 @@ def test_flags_default_to_empty_so_an_older_output_still_loads(model):
     assert model(**kwargs).flags == []
 
 
-def test_a_flag_needs_a_citation_like_every_other_evidence_block():
-    with pytest.raises(ValidationError):
-        ExtractionFlag(about=None, flag={'value': 'x', 'reasoning': 'no source'})
+def test_a_flag_about_an_absence_may_cite_nothing():
+    # The target gene never mentioned, a relative never described: there is
+    # no block to quote, and the flag must still load rather than fail the
+    # whole output.
+    flag = ExtractionFlag(about=None, flag={'value': 'x', 'reasoning': 'no source'})
+    assert flag.flag.citations == []
+    cited = ExtractionFlag(
+        about=None,
+        flag={
+            'value': 'x',
+            'reasoning': 'y',
+            'citations': [{'anchor': 'paragraph-3', 'quote': 'her sister'}],
+        },
+    )
+    assert cited.flag.citations[0].anchor == 'paragraph-3'
 
 
 def test_a_reasoning_flag_has_no_citations_to_give():
