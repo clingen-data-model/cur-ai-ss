@@ -22,6 +22,7 @@ import { RootLayout } from './routes/__root'
 import { HomePage } from './routes/index'
 import { LoginPage } from './routes/login'
 import { ExtractionPage } from './routes/papers.$paperId.extraction'
+import { isExtractionTab, type ExtractionTab } from './lib/extractionTabs'
 import { SettingsPage } from './routes/settings'
 
 const rootRoute = new RootRoute({
@@ -108,10 +109,21 @@ const settingsRoute = new Route({
   component: SettingsPage,
 })
 
+export interface ExtractionSearch {
+  /** The open tab. Absent means 'occurrences', the default, which is left
+   * out of the URL the same way the index route leaves out its defaults. */
+  tab?: ExtractionTab
+}
+
 const papersExtractionRoute = new Route({
   getParentRoute: () => rootRoute,
   path: '/papers/$paperId/extraction',
   component: ExtractionPage,
+  validateSearch: (search: Record<string, unknown>): ExtractionSearch => {
+    const parsed: ExtractionSearch = {}
+    if (isExtractionTab(search.tab) && search.tab !== 'occurrences') parsed.tab = search.tab
+    return parsed
+  },
 })
 
 export const routeTree = rootRoute.addChildren([

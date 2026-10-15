@@ -6,7 +6,7 @@
  * linking never connected, and the pedigree image/description.
  */
 import { useEffect, useMemo, useState } from 'react'
-import { useParams, Link } from '@tanstack/react-router'
+import { useNavigate, useParams, useSearch, Link } from '@tanstack/react-router'
 import type { ColumnDef, ExpandedState } from '@tanstack/react-table'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -17,6 +17,7 @@ import type { FlagIndex } from '@/hooks/usePaperFlags'
 import { FlagIndicator } from '@/components/FlagIndicator'
 import { FlagsTab } from '@/components/FlagsTab'
 import type { FlagTarget } from '@/lib/flagTarget'
+import { DEFAULT_EXTRACTION_TAB, isExtractionTab, type ExtractionTab } from '@/lib/extractionTabs'
 import type { OccurrenceRow } from '@/hooks/usePaperOccurrences'
 import { deleteOccurrencePapersPaperIdOccurrencesOccurrenceIdDelete } from '@/api/generated'
 import { DataTable } from '@/components/ui/data-table'
@@ -384,7 +385,15 @@ export function ExtractionPage() {
     error,
   } = usePaperOccurrences(paperId)
   const flags = usePaperFlags(paperId)
-  const [tab, setTab] = useState('occurrences')
+  // The open tab lives in the URL so the papers table (and a pasted link)
+  // can land on Families or Flags directly; the default stays out of it.
+  const search = useSearch({ from: '/papers/$paperId/extraction' })
+  const navigate = useNavigate({ from: '/papers/$paperId/extraction' })
+  const tab: ExtractionTab = search.tab ?? DEFAULT_EXTRACTION_TAB
+  const setTab = (next: string) => {
+    if (!isExtractionTab(next)) return
+    void navigate({ search: next === DEFAULT_EXTRACTION_TAB ? {} : { tab: next }, replace: true })
+  }
   const [focus, setFocus] = useState<FlagTarget | null>(null)
   /** A flag's About chip: switch to the tab that shows the row and open it.
    * A variant goes to its occurrence when it has one, else to the

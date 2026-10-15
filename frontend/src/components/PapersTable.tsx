@@ -7,6 +7,7 @@
 import { useMemo } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Link } from '@tanstack/react-router'
+import type { ExtractionTab } from '@/lib/extractionTabs'
 import { DataTable } from '@/components/ui/data-table'
 import { Collaborators } from '@/components/Collaborators'
 import { StatusBadge } from '@/components/StatusBadge'
@@ -25,6 +26,35 @@ function relativeTime(iso: string): string {
   if (days === 1) return 'Yesterday'
   if (days < 30) return `${days} days ago`
   return then.toLocaleDateString()
+}
+
+/** A count that opens the tab listing what it counts. Zero is a dash,
+ * since there is nothing on that tab to open. */
+function CountLink({
+  paperId,
+  tab,
+  count,
+  className,
+  icon,
+}: {
+  paperId: number
+  tab: ExtractionTab
+  count: number | undefined
+  className?: string
+  icon?: React.ReactNode
+}) {
+  if (!count) return <span className="text-muted-foreground">—</span>
+  return (
+    <Link
+      to="/papers/$paperId/extraction"
+      params={{ paperId: String(paperId) }}
+      search={tab === 'occurrences' ? {} : { tab }}
+      className={`inline-flex items-center gap-1 hover:underline underline-offset-4 ${className ?? ''}`}
+    >
+      {icon}
+      {count}
+    </Link>
+  )
 }
 
 export function PapersTable({ papers }: { papers: PaperSummaryResp[] }) {
@@ -96,24 +126,37 @@ export function PapersTable({ papers }: { papers: PaperSummaryResp[] }) {
         header: 'Review Status',
         cell: ({ row }) => <ReviewStatusCell paper={row.original} />,
       },
-      { accessorKey: 'patient_count', header: 'Patients' },
-      { accessorKey: 'variant_count', header: 'Variants' },
+      // The three counts link into the tab that lists what was counted:
+      // patients to Families, variants to Occurrences, flags to Flags.
+      {
+        accessorKey: 'patient_count',
+        header: 'Patients',
+        cell: ({ row, getValue }) => (
+          <CountLink paperId={row.original.id} tab="families" count={getValue() as number | undefined} />
+        ),
+      },
+      {
+        accessorKey: 'variant_count',
+        header: 'Variants',
+        cell: ({ row, getValue }) => (
+          <CountLink paperId={row.original.id} tab="occurrences" count={getValue() as number | undefined} />
+        ),
+      },
       {
         // Open curator flags: decisions an agent asked a human to look at that
         // nobody has yet. A paper with any is not reviewed, whatever its
         // review status says, so it sits next to the counts a reviewer scans.
         accessorKey: 'open_flag_count',
         header: 'Flags',
-        cell: ({ getValue }) => {
-          const count = (getValue() as number | undefined) ?? 0
-          if (count === 0) return <span className="text-muted-foreground">—</span>
-          return (
-            <span className="inline-flex items-center gap-1 text-violet-700 dark:text-violet-400">
-              <Flag className="size-3.5" />
-              {count}
-            </span>
-          )
-        },
+        cell: ({ row, getValue }) => (
+          <CountLink
+            paperId={row.original.id}
+            tab="flags"
+            count={getValue() as number | undefined}
+            className="text-violet-700 dark:text-violet-400"
+            icon={<Flag className="size-3.5" />}
+          />
+        ),
       },
       {
         id: 'collaborators',
