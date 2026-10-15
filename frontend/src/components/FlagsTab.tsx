@@ -134,12 +134,24 @@ export function FlagsTab({
       .join(' · ')
   }
 
-  const rows = useMemo(() => {
-    const byState =
-      filter === 'open' ? flags.open : filter === 'resolved' ? flags.all.filter((f) => f.resolved_at != null) : flags.all
-    const picked = agent === ANY_AGENT ? byState : byState.filter((f) => f.source === agent)
-    return sortFlags(picked)
-  }, [flags.all, flags.open, filter, agent])
+  // The two filters cross: the state buttons count within the chosen
+  // agent, and the dropdown counts within the chosen state, so each
+  // control says what picking it would show.
+  const resolved = useMemo(() => flags.all.filter((f) => f.resolved_at != null), [flags.all])
+  const byState = filter === 'open' ? flags.open : filter === 'resolved' ? resolved : flags.all
+  const byAgent = useMemo(
+    () => (agent === ANY_AGENT ? flags.all : flags.all.filter((f) => f.source === agent)),
+    [flags.all, agent],
+  )
+  const agentCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const flag of byState) counts.set(flag.source, (counts.get(flag.source) ?? 0) + 1)
+    return counts
+  }, [byState])
+  const rows = useMemo(
+    () => sortFlags(agent === ANY_AGENT ? byState : byState.filter((f) => f.source === agent)),
+    [byState, agent],
+  )
 
   const columns: ColumnDef<FlagResp>[] = useMemo(
     () => [
@@ -325,16 +337,16 @@ export function FlagsTab({
     )
   }
 
-  const resolvedCount = flags.all.length - flags.open.length
+  const openCount = byAgent.filter((f) => f.resolved_at == null).length
 
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-1">
         {(
           [
-            ['open', `Open (${flags.open.length})`],
-            ['resolved', `Resolved (${resolvedCount})`],
-            ['all', `All (${flags.all.length})`],
+            ['open', `Open (${openCount})`],
+            ['resolved', `Resolved (${byAgent.length - openCount})`],
+            ['all', `All (${byAgent.length})`],
           ] as const
         ).map(([value, label]) => (
           <Button
@@ -352,15 +364,17 @@ export function FlagsTab({
             <SelectTrigger className="w-56">
               <SelectValue>
                 {(value: string | null) =>
-                  value === null || value === ANY_AGENT ? 'Any' : (agents.find(([s]) => s === value)?.[1] ?? value)
+                  value === null || value === ANY_AGENT
+                    ? `Any (${byState.length})`
+                    : `${agents.find(([s]) => s === value)?.[1] ?? value} (${agentCounts.get(value) ?? 0})`
                 }
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={ANY_AGENT}>Any</SelectItem>
+              <SelectItem value={ANY_AGENT}>Any ({byState.length})</SelectItem>
               {agents.map(([source, label]) => (
                 <SelectItem key={source} value={source}>
-                  {label}
+                  {label} ({agentCounts.get(source) ?? 0})
                 </SelectItem>
               ))}
             </SelectContent>
