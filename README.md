@@ -1,6 +1,6 @@
 # Curation AI Assistant
 
-A web-based tool for extracting and curating genetic evidence from scientific papers. This system uses AI agents to automatically extract patient information, genetic variants, and phenotypes from research PDFs, then links them to standard databases (HPO ontology). Researchers can review, edit, and validate the extracted data through an interactive interface.
+A web-based tool for extracting and curating genetic evidence from scientific papers. This system uses AI agents to automatically extract patient information, genetic variants, and phenotypes from research PDFs, then links them to standard ontologies (HPO for phenotypes, MONDO for diseases). Researchers can review, edit, and validate the extracted data through an interactive interface.
 
 ## What It Does
 
@@ -8,7 +8,8 @@ A web-based tool for extracting and curating genetic evidence from scientific pa
 - Upload a scientific paper (PDF) describing genetic cases
 - AI agents extract: patients, their phenotypes, genetic variants, and family relationships
 - Variants are harmonized to standard genomic coordinates and enriched with annotations
-- Phenotypes are automatically linked to HPO (Human Phenotype Ontology) terms
+- Phenotypes are automatically linked to HPO (Human Phenotype Ontology) terms, and the paper's disease to MONDO
+- Anything an agent could not settle is raised as a flag for the curator, and repeated flags are merged into one
 
 **Interactive Curation**
 - Review extracted data in a clean, organized UI
@@ -19,7 +20,7 @@ A web-based tool for extracting and curating genetic evidence from scientific pa
 **Pipeline Architecture**
 - **Backend API**: FastAPI server managing data storage and retrieval
 - **React SPA**: The UI for browsing papers and curating data, served at the site root
-- **Background Worker**: Runs extraction agents in sequence, updating progress in real-time
+- **Background Worker**: Runs the extraction agents as a task pipeline, updating progress in real-time
 - **SQLite Database**: Stores papers, patients, variants, phenotypes, and all extracted data
 
 ## Quick Start
@@ -29,23 +30,33 @@ A web-based tool for extracting and curating genetic evidence from scientific pa
 - **Python** 3.12 or above
 - **git**
 - **uv** — [installation guide](https://docs.astral.sh/uv/getting-started/installation/)
-- **make** (optional, for development tasks)
-- **OpenAI API key** with available billing (the free tier doesn't work)
+- **Anthropic API key** with available billing — [console.anthropic.com](https://console.anthropic.com/settings/keys).
+  An OpenAI key is only needed if you point a model setting at `openai/…`
 - **Node** 24 (see `.node-version`) and **pnpm** 12 — only needed to work on the React frontend
 
-### Set Up OpenAI API Key
+### Configure
 
-1. Go to [OpenAI API Dashboard](https://platform.openai.com/account/api-keys)
-2. Log in or create an account
-3. Click “Create new secret key”
-4. Copy the key and set environment variables:
+Settings are read from a `.env` file (or the environment); `template.env` lists them.
 
 ```bash
-export OPENAI_API_KEY="your_key_here"
-# Model names are '<provider>/<model>'; the prefix is required.
-export EXTRACTION_MODEL="openai/gpt-5.6-luna"
-export VLM_MODEL="openai/gpt-5.6-sol"
+cp template.env .env
 ```
+
+Set at least these:
+
+```bash
+ANTHROPIC_API_KEY="your_key_here"
+JWT_SECRET_KEY="a long random string"   # signs login tokens; use a strong value in production
+
+# Model names are '<provider>/<model>'; the prefix is required.
+EXTRACTION_MODEL="anthropic/claude-haiku-5-5"   # text extraction agents
+VLM_MODEL="anthropic/claude-fable-5-1"          # reads page and table images
+```
+
+`CHAT_MODEL` (the chat agent) defaults to `anthropic/claude-opus-5`, so an Anthropic key
+is needed whichever providers the other two settings name. `openai/` models also work
+(set `OPENAI_API_KEY`); the three model settings may name different providers. A model
+whose provider key is missing fails at startup.
 
 ### Install and Run
 
@@ -59,14 +70,20 @@ uv sync
 uv pip install -e .
 ```
 
+The API applies database migrations on startup, so there is no separate schema step.
+
 ## Development
 
 ### Testing & Linting
 
+These are the checks CI runs:
+
 ```bash
-make ci                                    # Run all checks (linting, type checking, tests)
-make test                                  # Run tests with coverage report
-uv run pytest test/models/test_converters.py  # Run a specific test file
+uv run ruff check lib                      # Lint
+uv run ruff format --check lib test        # Formatting
+uv run mypy lib                            # Type checking
+uv run pytest test --cov=lib --cov-report=term-missing   # Tests with coverage
+uv run pytest test/models/test_converters.py             # A specific test file
 ```
 
 ### Running the Full Application
@@ -98,18 +115,18 @@ Try extracting genetic evidence from a real paper on MASP1 (Mannan-binding lecti
 
 **Step 1: Download the paper**
 ```bash
-# PMID: 26419238 — “MASP1 variants and complications of mannose-binding lectin deficiency”
-curl -L -o masp1_paper.pdf “https://pmc.ncbi.nlm.nih.gov/articles/PMC4657649/pdf/12882_2015_Article_208.pdf”
+# PMID: 26419238 — "MASP1 variants and complications of mannose-binding lectin deficiency"
+curl -L -o masp1_paper.pdf "https://pmc.ncbi.nlm.nih.gov/articles/PMC4657649/pdf/12882_2015_Article_208.pdf"
 ```
 
 **Step 2: Upload via the UI**
 1. Open the dashboard: `http://localhost:8501`
-2. Click “Upload Paper” and select `masp1_paper.pdf`
-3. Enter a name (e.g., “MASP1 Variants - Kidney Disease”)
+2. Click "Upload Paper" and select `masp1_paper.pdf`
+3. Enter a name (e.g., "MASP1 Variants - Kidney Disease")
 
 **Step 3: Watch extraction progress**
 - The background worker automatically starts processing the paper
-- Extraction pipeline runs: Paper → Patients → Variants → HPO Phenotypes
+- The pipeline runs from the PDF through patients, variants and phenotypes to ontology links (see the steps below)
 - Monitor progress in the UI dashboard
 
 **Step 4: Review and curate**
@@ -125,7 +142,7 @@ curl -L -o masp1_paper.pdf “https://pmc.ncbi.nlm.nih.gov/articles/PMC4657649/p
 
 **Backend API** (`lib/api/app.py`)
 - FastAPI server with PDF upload, data storage, and retrieval endpoints
-- Serves the frontend and manages database access
+- Manages database access; nginx serves the built frontend alongside it in production
 - CORS configured for the SPA's dev server
 
 **React SPA** (`frontend/`)
@@ -146,26 +163,39 @@ curl -L -o masp1_paper.pdf “https://pmc.ncbi.nlm.nih.gov/articles/PMC4657649/p
 
 ### Extraction Pipeline
 
-Each uploaded paper flows through these automated extraction steps:
+Each uploaded paper flows through these automated steps, run by the worker as tasks:
 
-1. **Paper Extraction** — Parse PDF, extract metadata and tables
-2. **Patient Extraction** — Identify patients and their demographics
-3. **Variant Extraction** — Extract genetic variant information
-4. **Variant Harmonization** — Normalize to standard genomic coordinates
-5. **Variant Enrichment** — Add annotations (SpliceAI, SIFT, etc.)
-6. **Phenotype Extraction** — Extract phenotypic descriptions
-7. **HPO Linking** — Match phenotypes to HPO ontology terms
-8. **Patient-Variant Linking** — Associate variants with patients and inheritance info
+1. **Paper Extraction** — Parse the PDF; extract metadata, text and tables (a vision model
+   rebuilds tables the parser garbled)
+2. **Patient Extraction** — Identify patients, demographics and proband status
+3. **Pedigree Description** — Describe family relationships
+4. **Variant Extraction** — Extract genetic variant information
+5. **Variant Harmonization** — Normalize variants to standard genomic coordinates
+6. **Variant Annotation** — Add annotations (SpliceAI, etc.)
+7. **Phenotype Extraction and HPO Linking** — Extract phenotypes and match them to HPO terms
+8. **Patient-Variant Occurrences** — Link patients to their variants, with inheritance and
+   testing info; evaluate compound-heterozygous pairs
+9. **Segregation and MONDO Linking** — Extract and compute segregation evidence per family;
+   link the paper's disease to MONDO
+10. **Extraction Verification** — Runs once everything else has settled, and merges flags
+    that raise the same decision more than once
+
+Per-patient, per-family and per-variant steps fan out and run concurrently. Output files are
+stored as JSON next to the PDF.
 
 ### Data Models
 
 All entities are defined with **Pydantic** (serialization) and **SQLAlchemy ORM** (database):
 
 - **Paper** — Research paper with extraction status
+- **Family** and **Pedigree** — Family structure and consanguinity, with the paper's pedigree description
 - **Patient** — Extracted patient demographics and clinical info
 - **Phenotype** — Extracted phenotypes with HPO matching candidates
-- **Variant** — Extracted, harmonized, and enriched genetic variants
-- **PatientVariantLink** — Associations between patients and their variants
+- **Variant** — Extracted, harmonized, and annotated genetic variants
+- **PatientVariantOccurrence** — Associations between patients and their variants
+- **Segregation evidence and analysis** — Per-family evidence from the paper and the computed result
+- **Flag** — A decision an agent could not settle, for a curator to resolve
+- **Evidence** — Text blocks and citations from the paper supporting each extracted value
 
 See `lib/models/` for full model definitions and `CLAUDE.md` for code patterns.
 
