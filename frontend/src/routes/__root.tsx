@@ -91,7 +91,7 @@ function Layout() {
       <header className="gradient-header border-b border-slate-200">
         <div className="w-full px-6 py-2 flex items-center justify-between">
           {/* Link (not <a href="/">) so the router prepends the basepath — a raw '/'
-              would leave the SPA for the Streamlit UI when served under '/v2'. Likewise
+              would ignore the router's basepath if the app were served under a prefix. Likewise
               the logo resolves against BASE_URL, since public/ assets are emitted under
               the base path. */}
           <Link to="/" className="hover:opacity-80 transition-opacity">

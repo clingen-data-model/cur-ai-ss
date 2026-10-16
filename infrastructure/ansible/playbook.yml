@@ -319,7 +319,7 @@
         mode: "0600"
       notify: Restart services
 
-    # --- Frontend (React SPA served at /v2) ---
+    # --- Frontend (React SPA served at /) ---
     #
     # Ordered after the env file on purpose: `pnpm build` runs a prebuild hook that
     # imports lib.api.app to regenerate the OpenAPI spec, and that import reads .env
@@ -364,7 +364,7 @@
 
     - name: Build frontend
       become_user: "{{ caa_user }}"
-      # VITE_BASE_PATH puts every asset URL under /v2/ to match the nginx location;
+      # VITE_BASE_PATH is the root the nginx location serves the SPA from;
       # VITE_API_URL keeps API calls same-origin so nginx proxies them to the API.
       # uv must be on PATH for the prebuild spec generation.
       command: pnpm build
@@ -372,7 +372,7 @@
         chdir: "/opt/{{ caa_user }}/frontend"
       environment:
         PATH: "/home/{{ caa_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
-        VITE_BASE_PATH: "/v2/"
+        VITE_BASE_PATH: "/"
         VITE_API_URL: "/api"
       changed_when: true
 

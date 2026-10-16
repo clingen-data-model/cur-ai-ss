@@ -51,46 +51,31 @@ server {
         proxy_read_timeout 60s;
     }
 
-    # React SPA (v2) - static build output from `pnpm build`, served directly by nginx.
+    # React SPA - static build output from `pnpm build`, served directly by nginx.
     #
-    # Mounted under a prefix (it replaced the Streamlit UI, which used to own '/').
-    # The build is done at deploy time with VITE_BASE_PATH=/v2/,
-    # so every emitted asset URL already carries the prefix, and VITE_API_URL=/api, so
-    # the SPA talks to the API block above same-origin (no CORS, no second hostname).
-    location /v2/ {
-        alias /opt/{{ caa_user }}/frontend/dist/;
+    # The build is done at deploy time with VITE_BASE_PATH=/, so every emitted asset
+    # URL is root-relative, and VITE_API_URL=/api, so the SPA talks to the API block
+    # above same-origin (no CORS, no second hostname).
+    location / {
+        root /opt/{{ caa_user }}/frontend/dist;
 
         # Client-side routing: unknown paths fall through to the SPA entry point so a
-        # deep link (/v2/papers/12/patients) is resolved by the router instead of 404ing.
-        try_files $uri $uri/ /v2/index.html;
-    }
-
-    # Bare /v2 has no trailing slash, so it misses the block above and would resolve
-    # relative asset URLs against '/'. Redirect instead.
-    location = /v2 {
-        return 301 /v2/;
+        # deep link (/papers/12/patients) is resolved by the router instead of 404ing.
+        try_files $uri $uri/ /index.html;
     }
 
     # Vite fingerprints asset filenames (index-a1b2c3.js), so they are immutable.
     # `expires` rather than `add_header Cache-Control`: a block containing add_header
     # stops inheriting the server-level security headers, and expires does not.
-    location /v2/assets/ {
+    location /assets/ {
         alias /opt/{{ caa_user }}/frontend/dist/assets/;
         expires 1y;
     }
 
     # The SPA shell must never be cached, or a browser keeps loading the old bundle
     # (whose fingerprinted assets are gone) after a redeploy.
-    location = /v2/index.html {
+    location = /index.html {
         alias /opt/{{ caa_user }}/frontend/dist/index.html;
         expires -1;
-    }
-
-    # Streamlit is retired: the SPA is the only UI, still mounted at /v2/ above. A
-    # temporary (302) redirect, not 301, so browsers do not cache it for the day the
-    # SPA moves to '/'. Anything not matched above (the old Streamlit paths, bare '/')
-    # lands on the SPA.
-    location / {
-        return 302 /v2/;
     }
 }

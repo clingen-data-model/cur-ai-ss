@@ -18,7 +18,7 @@ A web-based tool for extracting and curating genetic evidence from scientific pa
 
 **Pipeline Architecture**
 - **Backend API**: FastAPI server managing data storage and retrieval
-- **React SPA**: The UI for browsing papers and curating data, served under `/v2`
+- **React SPA**: The UI for browsing papers and curating data, served at the site root
 - **Background Worker**: Runs extraction agents in sequence, updating progress in real-time
 - **SQLite Database**: Stores papers, patients, variants, phenotypes, and all extracted data
 
@@ -135,7 +135,7 @@ curl -L -o masp1_paper.pdf “https://pmc.ncbi.nlm.nih.gov/articles/PMC4657649/p
   schema change becomes a frontend type error rather than a runtime 404
 - The only UI (it replaced Streamlit): dashboard, paper pages for editing patients,
   families and segregation, variants and phenotypes, and the PDF evidence viewer; served
-  under `/v2`
+  at the site root
 - Architecture and a description of every JavaScript dependency: `frontend/README.md`
 
 **Background Worker** (`lib/bin/worker.py`)
@@ -182,9 +182,8 @@ Everything runs on a single GCP VM (`dev-caa`, defined in
 
 | Path | Served by | Notes |
 | --- | --- | --- |
-| `/` | nginx | Temporary (302) redirect to `/v2/`; also catches the old Streamlit paths |
 | `/api/` | FastAPI on `127.0.0.1:8000` | Proxied; the `/api` prefix is stripped before it reaches FastAPI |
-| `/v2/` | `frontend/dist/` on disk | Static files. Unknown paths fall back to `/v2/index.html` so the SPA router can resolve deep links |
+| `/` | `frontend/dist/` on disk | Static files. Unknown paths fall back to `/index.html` so the SPA router can resolve deep links. |
 
 The API and worker run as systemd **user** services (`api`, `worker`) under the `caa`
 user. (A host deployed before Streamlit was retired also had a `ui` service; the playbook
@@ -230,7 +229,7 @@ the Broad network, or from the VM itself (its own IP is allowlisted).
 
 The frontend build step runs after `.env` is written, because regenerating the OpenAPI
 spec imports the FastAPI app and therefore needs a valid environment. It builds with
-`VITE_BASE_PATH=/v2/` and `VITE_API_URL=/api`; see `frontend/README.md` for what those
+`VITE_BASE_PATH=/` and `VITE_API_URL=/api`; see `frontend/README.md` for what those
 control and for the build's known caveats.
 
 Deploy a specific ref with `-e git_version=<ref>`, preview with `--check`, or run

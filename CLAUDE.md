@@ -70,7 +70,7 @@ This is a research paper analysis system that extracts genetic information (pati
    - The API client in `src/api/generated/` is generated from the FastAPI OpenAPI schema
      by `pnpm build` — never edit it by hand, and regenerate after changing API models
    - The only UI (Streamlit has been retired): dashboard, paper pages, PDF evidence
-     viewer. Served under `/v2`; nginx redirects `/` there
+     viewer. Served at the site root
    - **See `frontend/README.md`** for architecture, the base-path rules, and a
      description of every JavaScript dependency
 
@@ -300,13 +300,13 @@ Extracts OpenAPI schema from FastAPI app and generates `frontend/api-spec.json`.
 **OpenAI agents:** Uses `openai_agents.Runner` for structured outputs. Models must have Pydantic schema for OpenAI to use as response schema.
 
 **Deployment:** One GCP VM (`dev-caa`, domain `gene-curation-ai.app`) behind nginx:
-FastAPI at `/api/` (prefix stripped), the React SPA's static build at `/v2/`, and a
-temporary redirect from `/` to `/v2/`. Deploy with `ansible-playbook -i dev-caa.us-east4-a.clingen-caa, infrastructure/ansible/playbook.yml`,
+FastAPI at `/api/` (prefix stripped), the React SPA's static build at `/`. Deploy with `ansible-playbook -i dev-caa.us-east4-a.clingen-caa, infrastructure/ansible/playbook.yml`,
 which pulls `main` from GitHub — so changes must be merged and pushed before deploying.
 See the Deployment section of `README.md`.
 
-**The SPA is served under a path prefix**, so anything root-relative in `frontend/` must
-be built from `import.meta.env.BASE_URL` or it escapes `/v2` and lands on the root redirect:
+**The SPA is built against a configurable base path** (`VITE_BASE_PATH`, `/` today), so
+anything root-relative in `frontend/` must be built from `import.meta.env.BASE_URL`, or it
+breaks the day the app is served under a prefix again:
 
 - Navigate with `<Link>` from TanStack Router, never `<a href="/...">`
 - Reference `public/` assets as `` `${import.meta.env.BASE_URL}<file>` `` in TSX, or

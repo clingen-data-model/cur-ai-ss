@@ -5,7 +5,7 @@ import { client } from '@/api/generated/client.gen'
  * Set to '/api' by the VM build so requests stay same-origin behind nginx; unset in
  * local dev, where the API runs on its own port. Exported because paper thumbnails and
  * PDFs are plain <img>/pdf.js URLs rather than SDK calls, and they have to resolve
- * against the same origin as the SDK or they 404 under the '/v2' prefix.
+ * against the same origin as the SDK or they 404 behind the nginx /api proxy.
  */
 export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 

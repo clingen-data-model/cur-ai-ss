@@ -34,10 +34,9 @@ const queryClient = new QueryClient({
 
 // File-based routing with type-safe params.
 //
-// basepath comes from Vite's `base` (VITE_BASE_PATH), so the same bundle works at '/'
-// locally and under '/v2/' on the VM (nginx redirects '/' there). Without it
-// the router would match against the full pathname and treat '/v2/papers/1' as unknown.
-// The trailing slash Vite always includes is stripped: the router expects '/v2', not '/v2/'.
+// basepath comes from Vite's `base` (VITE_BASE_PATH), '/' both locally and on the VM; the
+// router would otherwise break if the app were ever served under a prefix again. The
+// trailing slash Vite always includes is stripped: the router expects '/sub', not '/sub/'.
 const basepath = import.meta.env.BASE_URL.replace(/\/$/, '') || '/'
 const router = createRouter({ routeTree, basepath })
 
