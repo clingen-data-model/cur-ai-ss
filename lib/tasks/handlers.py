@@ -41,6 +41,7 @@ from lib.agents.mondo_linking_agent import (
 )
 from lib.agents.paper_classifier_agent import (
     PAPER_CLASSIFIER_AGENT_INSTRUCTIONS,
+    ExclusionReason,
 )
 from lib.agents.paper_classifier_agent import (
     agent as paper_classifier_agent,
@@ -422,6 +423,22 @@ async def handle_pdf_parsing(task_id: int) -> None:
         await parse_content(paper_id, force=True, supplement_format=supplement_format)
 
 
+def classification_tags(
+    current: list[str], relevant: bool, reason: ExclusionReason
+) -> list[str]:
+    """``current`` with the classifier's tags set to its latest verdict.
+
+    A re-run that now passes, or fails for a different reason, must not keep a
+    stale tag; every other tag (training set and so on) is left alone."""
+    verdict_tags = {PaperTag.FailedPaperRelevancy.value, PaperTag.WrongGenePaper.value}
+    wanted: list[str] = []
+    if not relevant:
+        wanted.append(PaperTag.FailedPaperRelevancy.value)
+        if reason == ExclusionReason.NO_CASES_FOR_GENE:
+            wanted.append(PaperTag.WrongGenePaper.value)
+    return [t for t in current if t not in verdict_tags] + wanted
+
+
 async def handle_paper_classifier(task_id: int) -> None:
     """Decide whether the paper has identifiable cases worth extracting."""
     paper_id: int
@@ -465,12 +482,14 @@ async def handle_paper_classifier(task_id: int) -> None:
             if not result.final_output.is_paper_relevant.value:
                 task.skip_successors = True
         if paper:
-            paper.is_paper_relevant = result.final_output.is_paper_relevant.value
-            # Add FailedPaperRelevancy tag if paper is not relevant
-            if not result.final_output.is_paper_relevant.value:
-                if PaperTag.FailedPaperRelevancy.value not in paper.tags:
-                    paper.tags.append(PaperTag.FailedPaperRelevancy.value)
-                    flag_modified(paper, 'tags')
+            relevant = result.final_output.is_paper_relevant.value
+            paper.is_paper_relevant = relevant
+            tags = classification_tags(
+                list(paper.tags), relevant, result.final_output.exclusion_reason
+            )
+            if tags != list(paper.tags):
+                paper.tags = tags
+                flag_modified(paper, 'tags')
 
 
 async def handle_paper_metadata(task_id: int) -> None:
