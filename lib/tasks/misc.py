@@ -611,7 +611,7 @@ def summarize_paper_task_status(
     retry does not read as broken, and failed wins over completed so one failure
     is never hidden by its siblings succeeding.
 
-    Mirrors computeStatus in the frontend's TaskDAG.tsx. Distinct from
+    Mirrors computeStatus in the frontend's lib/taskState.ts. Distinct from
     infer_paper_status above, which has four states; see PaperTaskStatus.
     """
     from lib.models.paper import PaperTaskStatus

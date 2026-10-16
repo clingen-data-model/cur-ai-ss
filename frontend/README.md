@@ -69,7 +69,7 @@ src/
     papers.$paperId.extraction.tsx   Paper detail: occurrences, families (structure and
                         segregation analysis), unassociated patients/variants,
                         pedigree -- tabbed
-  components/           Feature components (GeneTable, TaskDAG, ReviewStatusCell, ...)
+  components/           Feature components (GeneTable, TaskTimeline, ReviewStatusCell, ...)
     ui/                 Vendored shadcn/ui primitives - owned code, edit freely
   api/generated/        Generated API client (gitignored, see below)
   lib/
@@ -184,8 +184,6 @@ declared but not imported anywhere in `src/` yet.
 | `cmdk` | Command-menu / filterable list primitive | Backs `ui/command.tsx`, which `ui/combobox.tsx` builds on (e.g. HPO term pickers). |
 | `embla-carousel-react` | Carousel engine | Backs `ui/carousel.tsx`, pulled in with the shadcn carousel component. |
 | `react-resizable-panels` | Draggable split panes | Backs `ui/resizable.tsx`, used for the paper detail split view. |
-| `@xyflow/react` | Interactive node/edge canvas (React Flow) | Renders the extraction task DAG in `TaskDAG.tsx`. |
-| `@dagrejs/dagre` | Directed-graph layout algorithm | Computes node positions for that DAG before React Flow draws it — React Flow does not do layout itself. |
 | `react-pdf` | React wrapper around PDF.js | The only PDF renderer: `PaperMetadataTab.tsx` and `PdfViewer.tsx` (the evidence "View in PDF" sheet). It brings its own `pdfjs-dist`; nothing else may depend on that package — see the caveat below. |
 | `zustand` | Minimal global state store | `stores/ui.ts`, for UI state that shouldn't live in the URL or the query cache. |
 | `react-markdown` | Renders a markdown string as React elements | `PedigreeTab.tsx`, for the vision model's freeform pedigree description (headings, lists, bold); `DocumentEvidenceViewer.tsx`, the evidence sheet's "Markdown" tab. The document viewer's custom `p`/`tr`/`table` components read each block's `[anchor-id]` tag off the hast `node` react-markdown hands them, so no remark/rehype plugin (and no `unist-util-visit` dependency) is needed. |

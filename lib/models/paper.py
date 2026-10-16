@@ -402,7 +402,7 @@ class PaperTaskStatus(StrEnum):
     an amber "In progress"), so it needs the finer split.
 
     Values are lowercase to match the NodeStatus union in the frontend's
-    TaskDAG.tsx, which keys its badge map off them directly -- so the API hands
+    lib/taskState.ts, which keys its badge map off them directly -- so the API hands
     back exactly the string the UI already switches on, with nothing to map.
     """
 
@@ -421,7 +421,7 @@ class PaperSummaryResp(BaseModel):
     paper, which measured at 90.5% of a 4.97 MB response across 95 papers --
     9,092 task objects -- to render one status badge per paper. `status` below
     replaces all of it; the full task list is fetched per paper from
-    GET /papers/{paper_id}/tasks when the DAG dialog opens.
+    GET /papers/{paper_id}/tasks when its progress popover opens.
 
     Fields track what the list views actually read -- plural, which an earlier
     revision of this docstring got wrong. It said proband_count, updated_by and

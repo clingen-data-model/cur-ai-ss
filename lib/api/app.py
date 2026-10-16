@@ -1048,7 +1048,7 @@ def list_papers(
     Tasks are not embedded. They were 90.5% of that payload -- 9,092 objects --
     and the list view reduces them to a single badge per paper. Only the status
     column is read here, so only that column is selected; the full task list is
-    fetched per paper from GET /papers/{paper_id}/tasks when the DAG is opened.
+    fetched per paper from GET /papers/{paper_id}/tasks when its progress popover opens.
 
     Counts come from grouped COUNTs rather than from len() over eager-loaded
     relationships.
