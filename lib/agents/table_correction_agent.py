@@ -1,4 +1,4 @@
-"""Agent to correct corrupted table markdown using OpenAI vision."""
+"""Agent to correct corrupted table markdown using the vision model."""
 
 import json
 import logging
@@ -7,8 +7,9 @@ from pathlib import Path
 from agents import Agent, Runner, function_tool
 from pydantic import BaseModel
 
-from lib.agents.model_factory import extraction_model, extraction_model_settings
+from lib.agents.model_factory import model_settings_for, resolve_model
 from lib.agents.vision import vlm_describe
+from lib.core.environment import env
 from lib.core.logging import setup_logging
 from lib.misc.images import image_to_data_url
 from lib.misc.pdf.paths import (
@@ -51,8 +52,13 @@ def table_correction_agent_for_image(image_path: Path) -> Agent:
     return Agent(
         name='table_corrector',
         instructions=TABLE_CORRECTION_INSTRUCTIONS,
-        model=extraction_model(),
-        model_settings=extraction_model_settings(),
+        # The vision model, not the extraction model: this agent's whole job is
+        # judging a table image, and it must also accept what the vision read
+        # returns. On the extraction model (Haiku on dev-caa) it rejected a
+        # faithful Fable reading of paper 80's tooth-agenesis chart as
+        # unrecoverable.
+        model=resolve_model(env.VLM_MODEL),
+        model_settings=model_settings_for(env.VLM_MODEL),
         output_type=TableCorrectionResult,
         tools=[extract_table_from_image],
     )
