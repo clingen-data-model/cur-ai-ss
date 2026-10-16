@@ -9,7 +9,8 @@ lib.tasks.handlers runs the two around the model call:
 
 - the earliest flag of each group survives, the rest are deleted, and the
   survivor's reasoning gains a line per absorbed flag naming the agent, the
-  row and the subject, so nothing the model said is lost from view;
+  row and the subject, and its citations join the survivor's, so nothing
+  the model said or quoted is lost from view;
 - the survivor keeps only the links the group agrees on. A decision that
   was flagged for the father and again for the mother is not about either
   of them: its patient link is cleared and, when they share a family, the
@@ -112,6 +113,16 @@ def _checked_groups(
             )
             continue
         rows = sorted((by_id[i] for i in ids), key=lambda f: f.id)
+        # One decision is one kind of decision raised by one agent: a
+        # conflict is not an inference, and two agents' flags rest on
+        # different prompts and different evidence. The agent is told this,
+        # but a grouping across either is rejected here whatever it says.
+        if len({f.kind for f in rows}) > 1 or len({f.source for f in rows}) > 1:
+            logger.info(
+                'Flag merge group kept apart, flags differ in kind or agent: %s',
+                sorted(ids),
+            )
+            continue
         # A flag linked to a patient-variant link, or to a compound-het pair
         # of them, is about that row: the curator needs it there. Folding two
         # such flags about different links would clear the link and take the
@@ -163,6 +174,16 @@ def apply_merge(session: Session, paper_id: int, output: FlagMergeOutput) -> int
             if note not in reasoning:
                 reasoning = f'{reasoning}\n\n{note}' if reasoning else note
         evidence['reasoning'] = reasoning
+        citations = list(evidence.get('citations') or [])
+        seen = {(c.get('anchor'), c.get('quote')) for c in citations}
+        for flag in rest:
+            for citation in (flag.evidence or {}).get('citations') or []:
+                key = (citation.get('anchor'), citation.get('quote'))
+                if key not in seen:
+                    seen.add(key)
+                    citations.append(citation)
+        if citations:
+            evidence['citations'] = citations
         survivor.evidence = evidence
         for column, value in _covering_links(group).items():
             setattr(survivor, column, value)

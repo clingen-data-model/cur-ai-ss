@@ -23,7 +23,7 @@ an id, the agent that raised it, its kind, what it is about (a patient,
 family, variant or phenotype, or null), a subject and the reasoning behind
 it. The agents ran separately -- one per patient, per family or per variant,
 and at the same time -- so the same decision about the paper may appear more
-than once, worded differently, about different people, or from two agents.
+than once, worded differently or about different people.
 
 Return the groups of flags that are ONE decision raised more than once. A
 curator should see each decision once, so the flags in a group will be
@@ -35,9 +35,9 @@ fact about the paper:
 - the same inference applied to several people (a country, race or
   ethnicity taken from the study site or cohort description; a status read
   off the same pedigree feature);
-- the same conflict or ambiguity in the paper noticed by two agents (a
-  label that differs between the text and a figure; a proband the paper
-  does not mark);
+- the same conflict or ambiguity in the paper noticed in several runs of
+  one agent (a label that differs between the text and a figure; a proband
+  the paper does not mark);
 - the same person, variant or finding excluded for the same reason.
 
 Two flags are NOT the same decision when they merely share a kind or a
@@ -50,6 +50,10 @@ shape:
   birthplace);
 - flags about different people where the reasoning turns on something
   specific to each person.
+
+Only flags of the same kind raised by the same agent can be one decision:
+the system rejects a group that mixes kinds or agents, so a conflict and an
+inference about the same fact stay separate.
 
 Flags about different patient-variant links or compound-het pairs (their
 "about" names a variant or a pair, not only a person) are kept apart by the
