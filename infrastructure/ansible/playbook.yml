@@ -355,9 +355,7 @@
       # if the lockfile and package.json disagree, rather than silently re-resolving.
       # Without it a deploy that changed nothing could pick up a bad upstream minor,
       # since every runtime dependency is ^-ranged.
-      command: pnpm install --frozen-lockfile
-      args:
-        chdir: "/opt/{{ caa_user }}/frontend"
+      command: "/opt/{{ caa_user }}/bin/ui install --frozen-lockfile"
       environment:
         PATH: "/home/{{ caa_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
       changed_when: true
@@ -367,9 +365,7 @@
       # VITE_BASE_PATH is the root the nginx location serves the SPA from;
       # VITE_API_URL keeps API calls same-origin so nginx proxies them to the API.
       # uv must be on PATH for the prebuild spec generation.
-      command: pnpm build
-      args:
-        chdir: "/opt/{{ caa_user }}/frontend"
+      command: "/opt/{{ caa_user }}/bin/ui build"
       environment:
         PATH: "/home/{{ caa_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin"
         VITE_BASE_PATH: "/"

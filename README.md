@@ -105,7 +105,9 @@ Start the backend, worker and frontend in separate terminals:
 ./bin/ui
 ```
 
-This runs `pnpm dev` in `frontend/`, installing dependencies first if they are missing.
+This runs `pnpm dev` in `frontend/`, installing dependencies first if they are missing. It also wraps
+the other scripts (`./bin/ui build`, `./bin/ui lint`, `./bin/ui type-check`); the deploy uses it for
+the install and build.
 See `frontend/README.md` for the frontend toolchain and its dependencies.
 
 ### Example: Extract Evidence from a Paper with MASP1 Gene
