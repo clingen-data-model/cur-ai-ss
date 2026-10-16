@@ -7,7 +7,7 @@ body:
     attributes:
       label: Page
       description: The address of the page where it happened. The "Report a bug" link in the site footer fills this in.
-      placeholder: https://gene-curation-ai.app/v2/papers/…
+      placeholder: https://gene-curation-ai.app/papers/…
   - type: textarea
     id: what-happened
     attributes:

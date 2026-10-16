@@ -3,8 +3,8 @@
 React + TypeScript single-page app, the application's only UI (it replaced Streamlit). It
 talks to the FastAPI backend through a fully generated, typed client.
 
-In production it is served as **static files by nginx under the `/v2/` prefix**; nginx
-redirects `/` to it (a 302, so the SPA can move to `/` later). See [Deployment](#deployment) below.
+In production it is served as **static files by nginx at the site root**; the old
+`/v2/...` URLs redirect (301) to the same path. See [Deployment](#deployment) below.
 
 ## Setup
 
@@ -105,7 +105,7 @@ Two environment variables shape the build, both set by the playbook:
 
 | Variable | Local default | VM value | Purpose |
 | --- | --- | --- | --- |
-| `VITE_BASE_PATH` | `/` | `/v2/` | Vite `base`. Rewrites every emitted asset URL and is exposed as `import.meta.env.BASE_URL`. |
+| `VITE_BASE_PATH` | `/` | `/` | Vite `base`. Rewrites every emitted asset URL and is exposed as `import.meta.env.BASE_URL`. |
 | `VITE_API_URL` | unset → `http://localhost:8000` | `/api` | Base URL for API calls and API-served assets. Same-origin on the VM, so nginx proxies it and CORS never applies. |
 
 Anything root-relative has to be built from `import.meta.env.BASE_URL`, or it escapes the
@@ -166,7 +166,7 @@ declared but not imported anywhere in `src/` yet.
 | --- | --- | --- |
 | `react` | UI library (v19) | Everything. |
 | `react-dom` | React's DOM renderer | `main.tsx` mounts the app with `createRoot`. |
-| `@tanstack/react-router` | Type-safe router | Route components live in `routes/`, registered by hand in `routeTree.ts` (the codegen plugin is not installed). Given a `basepath` so the app works under `/v2`. |
+| `@tanstack/react-router` | Type-safe router | Route components live in `routes/`, registered by hand in `routeTree.ts` (the codegen plugin is not installed). Given a `basepath` so the app works under any prefix it is served from. |
 | `@tanstack/react-query` | Server-state cache | All API reads/mutations: caching, deduping, background refetch, invalidation. Used in 7 files. |
 | `@tanstack/react-table` | Headless table logic (no markup) | Sorting/filtering/row models behind `GeneTable` and `ui/data-table`. |
 | `@tanstack/react-form` | Form state and validation | **Unused** — no imports yet. |
@@ -197,7 +197,7 @@ declared but not imported anywhere in `src/` yet.
 
 | Package | What it is | How this app uses it |
 | --- | --- | --- |
-| `vite` | Dev server and bundler | `pnpm dev` (HMR) and `pnpm build`. Owns the `base`/`/v2` rewriting. |
+| `vite` | Dev server and bundler | `pnpm dev` (HMR) and `pnpm build`. Owns the `base` rewriting. |
 | `@vitejs/plugin-react` | React support for Vite | JSX transform and Fast Refresh. |
 | `typescript` | Compiler and type checker | `tsc -b` gates the build; `pnpm type-check` runs it alone. |
 | `@types/react`, `@types/react-dom` | React type definitions | Types for the two untyped runtime packages. |

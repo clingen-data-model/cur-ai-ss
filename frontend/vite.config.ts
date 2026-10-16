@@ -7,9 +7,8 @@ import tailwindcss from '@tailwindcss/vite'
  * - Build minifies with esbuild
  *
  * Deploy-time environment variables (both are set by the Ansible build step):
- * - VITE_BASE_PATH  Public path the app is served under. Defaults to '/' for local
- *                   dev; the VM build sets '/v2/' (nginx redirects '/' there, so the
- *                   SPA can move to '/' later). Vite rewrites every emitted
+ * - VITE_BASE_PATH  Public path the app is served under. Defaults to '/', which
+ *                   the VM build also uses (the SPA owns the site root). Vite rewrites every emitted
  *                   asset URL against this and exposes it as import.meta.env.BASE_URL,
  *                   which the router and any root-relative asset must be built from.
  * - VITE_API_URL    Base URL the API is reached at. Unset locally, where lib/api.ts
