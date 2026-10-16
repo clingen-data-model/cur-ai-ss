@@ -3,8 +3,7 @@
 React + TypeScript single-page app, the application's only UI (it replaced Streamlit). It
 talks to the FastAPI backend through a fully generated, typed client.
 
-In production it is served as **static files by nginx at the site root**; the old
-`/v2/...` URLs redirect (301) to the same path. See [Deployment](#deployment) below.
+In production it is served as **static files by nginx at the site root**. See [Deployment](#deployment) below.
 
 ## Setup
 

@@ -70,7 +70,7 @@ This is a research paper analysis system that extracts genetic information (pati
    - The API client in `src/api/generated/` is generated from the FastAPI OpenAPI schema
      by `pnpm build` — never edit it by hand, and regenerate after changing API models
    - The only UI (Streamlit has been retired): dashboard, paper pages, PDF evidence
-     viewer. Served at the site root (the old `/v2/...` URLs redirect to it)
+     viewer. Served at the site root
    - **See `frontend/README.md`** for architecture, the base-path rules, and a
      description of every JavaScript dependency
 
@@ -300,8 +300,7 @@ Extracts OpenAPI schema from FastAPI app and generates `frontend/api-spec.json`.
 **OpenAI agents:** Uses `openai_agents.Runner` for structured outputs. Models must have Pydantic schema for OpenAI to use as response schema.
 
 **Deployment:** One GCP VM (`dev-caa`, domain `gene-curation-ai.app`) behind nginx:
-FastAPI at `/api/` (prefix stripped), the React SPA's static build at `/` (the old `/v2/...`
-URLs 301 to the same path at the root). Deploy with `ansible-playbook -i dev-caa.us-east4-a.clingen-caa, infrastructure/ansible/playbook.yml`,
+FastAPI at `/api/` (prefix stripped), the React SPA's static build at `/`. Deploy with `ansible-playbook -i dev-caa.us-east4-a.clingen-caa, infrastructure/ansible/playbook.yml`,
 which pulls `main` from GitHub — so changes must be merged and pushed before deploying.
 See the Deployment section of `README.md`.
 

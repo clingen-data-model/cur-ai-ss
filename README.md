@@ -183,7 +183,7 @@ Everything runs on a single GCP VM (`dev-caa`, defined in
 | Path | Served by | Notes |
 | --- | --- | --- |
 | `/api/` | FastAPI on `127.0.0.1:8000` | Proxied; the `/api` prefix is stripped before it reaches FastAPI |
-| `/` | `frontend/dist/` on disk | Static files. Unknown paths fall back to `/index.html` so the SPA router can resolve deep links. The old `/v2/...` URLs are redirected (301) to the same path at the root |
+| `/` | `frontend/dist/` on disk | Static files. Unknown paths fall back to `/index.html` so the SPA router can resolve deep links. |
 
 The API and worker run as systemd **user** services (`api`, `worker`) under the `caa`
 user. (A host deployed before Streamlit was retired also had a `ui` service; the playbook

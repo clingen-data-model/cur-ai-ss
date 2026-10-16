@@ -78,13 +78,4 @@ server {
         alias /opt/{{ caa_user }}/frontend/dist/index.html;
         expires -1;
     }
-
-    # The SPA used to live under /v2/. Keep every old link (bookmarks, emailed URLs,
-    # bug reports) working by sending it to the same path at the root.
-    location = /v2 {
-        return 301 /;
-    }
-    location /v2/ {
-        rewrite ^/v2/(.*)$ /$1 permanent;
-    }
 }
