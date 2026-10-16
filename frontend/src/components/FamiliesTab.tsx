@@ -2,7 +2,7 @@
  * replacement for the last Streamlit view (lib/ui/paper/patients.py's
  * _render_family_group).
  *
- * A card shows the family's own fields (identifier, consanguinity), its
+ * A family's detail shows the family's own fields (identifier, consanguinity), its
  * members as a pedigree-style table, and the segregation analysis: the two
  * values the extraction agent collected from the paper (editable, with an
  * edit note) and the six the computation agent derived from the family's
@@ -11,6 +11,10 @@
  * The data has no parent/child links, only each person's relationship to the
  * proband, so members are grouped by that relationship rather than drawn as a
  * tree; the paper's own figure is on the Pedigree tab.
+ *
+ * Families are listed in a table, one row each, with the caret that opens a
+ * row's detail (the same expander as the occurrences table); the row shows the
+ * counts and the segregation verdict, the open detail is everything above.
  *
  * Like Streamlit, a family with a single patient is not shown: it has no
  * structure and no segregation to speak of.
@@ -34,7 +38,6 @@ import type {
   SegregationEvidenceUpdateRequest,
 } from '@/api/generated/types.gen'
 import { EditableNumberRow, EditableSwitchRow, EditableTextRow, ReadOnlyRow } from '@/components/EditableField'
-import { EvidencePopover } from '@/components/EvidencePopover'
 import { FlagIndicator } from '@/components/FlagIndicator'
 import { usePaperFlags } from '@/hooks/usePaperFlags'
 import type { FlagIndex } from '@/hooks/usePaperFlags'
@@ -252,30 +255,22 @@ function SegregationSection({
   )
 }
 
-function FamilyCard({
+function FamilyDetail({
   paperId,
   family,
   members,
   seg,
   flags,
-  focus,
+  focusPatientId,
 }: {
   paperId: number
   family: FamilyResp
   members: PatientResp[]
   seg: SegregationAnalysisResp | undefined
   flags: FlagIndex
-  focus?: FamilyFocus | null
+  focusPatientId?: number | null
 }) {
   const queryClient = useQueryClient()
-  const focused =
-    focus != null &&
-    ((focus.kind === 'family' && focus.id === family.id) ||
-      (focus.kind === 'patient' && members.some((m) => m.id === focus.id)))
-  const sectionRef = useRef<HTMLElement>(null)
-  useEffect(() => {
-    if (focused) sectionRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
-  }, [focused, focus])
   const mutation = useMutation({
     mutationKey: ['paper-edit', paperId],
     mutationFn: (body: FamilyUpdateRequest) =>
@@ -293,34 +288,8 @@ function FamilyCard({
     onError: (error) => toast.error(apiErrorMessage(error, 'Failed to save family')),
   })
 
-  const affected = members.filter((p) => p.affected_status === 'Affected').length
-  const unaffected = members.filter((p) => p.affected_status === 'Unaffected').length
-  const unknown = members.length - affected - unaffected
-  const criteria = seg?.computed?.meets_minimum_criteria
-
   return (
-    <section ref={sectionRef} className="rounded-lg border p-4 space-y-4 scroll-mt-4">
-      <header className="flex flex-wrap items-center gap-2">
-        <h3 className="text-base font-semibold mr-2">{family.identifier}</h3>
-        <Badge variant="outline">{members.length} members</Badge>
-        <Badge variant="outline">{affected} affected</Badge>
-        <Badge variant="outline">{unaffected} unaffected</Badge>
-        {unknown > 0 && <Badge variant="outline">{unknown} unknown</Badge>}
-        {family.consanguinity && <Badge variant="outline">Consanguineous</Badge>}
-        {criteria && (
-          <Badge
-            variant="outline"
-            className={criteria.value ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}
-          >
-            Segregation criteria {criteria.value ? 'met' : 'not met'}
-          </Badge>
-        )}
-        <span className="ml-auto flex items-center gap-1">
-          <FlagIndicator paperId={paperId} flags={flags.byFamily.get(family.id) ?? []} />
-          <EvidencePopover block={family.identifier_evidence} />
-        </span>
-      </header>
-
+    <div className="p-4 space-y-4">
       <div className="max-w-2xl">
         <EditableTextRow
           label="Family identifier"
@@ -338,19 +307,93 @@ function FamilyCard({
         />
       </div>
 
-      <FamilyMembers
-        paperId={paperId}
-        members={members}
-        flags={flags}
-        focusPatientId={focused && focus?.kind === 'patient' ? focus.id : null}
-      />
+      <FamilyMembers paperId={paperId} members={members} flags={flags} focusPatientId={focusPatientId} />
 
       {seg ? (
         <SegregationSection paperId={paperId} family={family} seg={seg} />
       ) : (
         <p className="text-sm text-muted-foreground">No segregation analysis for this family yet.</p>
       )}
-    </section>
+    </div>
+  )
+}
+
+function FamilyRow({
+  paperId,
+  family,
+  members,
+  seg,
+  flags,
+  expanded,
+  onToggle,
+  focus,
+}: {
+  paperId: number
+  family: FamilyResp
+  members: PatientResp[]
+  seg: SegregationAnalysisResp | undefined
+  flags: FlagIndex
+  expanded: boolean
+  onToggle: () => void
+  focus?: FamilyFocus | null
+}) {
+  const focused =
+    focus != null &&
+    ((focus.kind === 'family' && focus.id === family.id) ||
+      (focus.kind === 'patient' && members.some((m) => m.id === focus.id)))
+  const rowRef = useRef<HTMLTableRowElement>(null)
+  useEffect(() => {
+    if (focused) rowRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }, [focused, focus])
+
+  const affected = members.filter((p) => p.affected_status === 'Affected').length
+  const unaffected = members.filter((p) => p.affected_status === 'Unaffected').length
+  const unknown = members.length - affected - unaffected
+  const criteria = seg?.computed?.meets_minimum_criteria
+
+  return (
+    <Fragment>
+      <TableRow ref={rowRef} className="cursor-pointer scroll-mt-4" onClick={onToggle}>
+        <TableCell>
+          <RowExpander expanded={expanded} onToggle={onToggle} />
+        </TableCell>
+        <TableCell onClick={(e) => e.stopPropagation()}>
+          <FlagIndicator paperId={paperId} flags={flags.byFamily.get(family.id) ?? []} />
+        </TableCell>
+        <TableCell className="font-medium">{family.identifier}</TableCell>
+        <TableCell>{members.length}</TableCell>
+        <TableCell>{affected}</TableCell>
+        <TableCell>{unaffected}</TableCell>
+        <TableCell>{unknown}</TableCell>
+        <TableCell>{family.consanguinity ? 'Yes' : 'No'}</TableCell>
+        <TableCell>
+          {criteria ? (
+            <Badge
+              variant="outline"
+              className={criteria.value ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}
+            >
+              {criteria.value ? 'Met' : 'Not met'}
+            </Badge>
+          ) : (
+            '—'
+          )}
+        </TableCell>
+      </TableRow>
+      {expanded && (
+        <TableRow>
+          <TableCell colSpan={9} className="p-0">
+            <FamilyDetail
+              paperId={paperId}
+              family={family}
+              members={members}
+              seg={seg}
+              flags={flags}
+              focusPatientId={focused && focus?.kind === 'patient' ? focus.id : null}
+            />
+          </TableCell>
+        </TableRow>
+      )}
+    </Fragment>
   )
 }
 
@@ -359,6 +402,7 @@ export type FamilyFocus = { kind: 'family'; id: number } | { kind: 'patient'; id
 
 export function FamiliesTab({ paperId, focus }: { paperId: number; focus?: FamilyFocus | null }) {
   const flags = usePaperFlags(paperId)
+  const [expanded, setExpanded] = useState<Set<number>>(new Set())
   const familiesQuery = useQuery({
     queryKey: ['families', paperId],
     queryFn: () => getFamiliesPapersPaperIdFamiliesGet({ path: { paper_id: paperId } }),
@@ -378,6 +422,17 @@ export function FamiliesTab({ paperId, focus }: { paperId: number; focus?: Famil
   const families = familiesQuery.data
   const patients = patientsQuery.data
   const segregation = segregationQuery.data
+
+  // A flag's About chip opens the family it names, or the patient's family.
+  const focusedFamilyId =
+    focus == null
+      ? null
+      : focus.kind === 'family'
+        ? focus.id
+        : (patients?.find((p) => p.id === focus.id)?.family_id ?? null)
+  useEffect(() => {
+    if (focusedFamilyId != null) setExpanded((prev) => new Set(prev).add(focusedFamilyId))
+  }, [focusedFamilyId, focus])
 
   if (familiesQuery.isError || patientsQuery.isError || segregationQuery.isError) {
     return (
@@ -421,19 +476,45 @@ export function FamiliesTab({ paperId, focus }: { paperId: number; focus?: Famil
     )
   }
 
+  const toggle = (id: number) =>
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (!next.delete(id)) next.add(id)
+      return next
+    })
+
   return (
     <div className="space-y-4">
-      {multi.map((family) => (
-        <FamilyCard
-          key={family.id}
-          paperId={paperId}
-          family={family}
-          members={byFamily.get(family.id) ?? []}
-          seg={segByFamily.get(family.id)}
-          flags={flags}
-          focus={focus}
-        />
-      ))}
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-8" />
+            <TableHead className="w-8" />
+            <TableHead>Family</TableHead>
+            <TableHead>Members</TableHead>
+            <TableHead>Affected</TableHead>
+            <TableHead>Unaffected</TableHead>
+            <TableHead>Unknown</TableHead>
+            <TableHead>Consanguineous</TableHead>
+            <TableHead>Segregation criteria</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {multi.map((family) => (
+            <FamilyRow
+              key={family.id}
+              paperId={paperId}
+              family={family}
+              members={byFamily.get(family.id) ?? []}
+              seg={segByFamily.get(family.id)}
+              flags={flags}
+              expanded={expanded.has(family.id)}
+              onToggle={() => toggle(family.id)}
+              focus={focus}
+            />
+          ))}
+        </TableBody>
+      </Table>
       {singles > 0 && (
         <p className="text-xs text-muted-foreground">
           {singles} single-patient {singles === 1 ? 'family is' : 'families are'} not shown: there is no structure or
