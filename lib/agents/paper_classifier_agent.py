@@ -1,3 +1,5 @@
+from enum import StrEnum
+
 from agents import Agent
 from pydantic import BaseModel
 
@@ -107,8 +109,17 @@ target gene.
 """
 
 
+class ExclusionReason(StrEnum):
+    """Why a paper was judged not relevant; ``none`` when it was relevant."""
+
+    NONE = 'none'
+    NO_IDENTIFIABLE_CASES = 'no_identifiable_cases'
+    NO_CASES_FOR_GENE = 'no_cases_for_gene'
+
+
 class PaperClassificationOutput(BaseModel):
     is_paper_relevant: ReasoningBlock[bool]
+    exclusion_reason: ExclusionReason
 
 
 PAPER_CLASSIFIER_AGENT_INSTRUCTIONS = PAPER_CLASSIFIER_INSTRUCTIONS
