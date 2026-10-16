@@ -1,13 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# The React dev server (http://localhost:8501), run from frontend/ whatever the
-# caller's directory. Installs dependencies on first run; extra arguments go to
-# `pnpm dev` (e.g. `./bin/ui --host`).
+# Wraps the frontend's pnpm commands, run from frontend/ whatever the caller's
+# directory:
+#
+#   ./bin/ui                    dev server on http://localhost:8501 (installs
+#                               dependencies first if node_modules is missing)
+#   ./bin/ui --host             extra flags go to the dev server
+#   ./bin/ui build              pnpm build   (what the Ansible deploy runs)
+#   ./bin/ui install --frozen-lockfile
+#   ./bin/ui type-check | lint  any other package.json script
 cd "$(dirname "$0")/../frontend"
 
-if [ ! -d node_modules ]; then
+# No command, or a leading flag, means the dev server.
+command="dev"
+if [ $# -gt 0 ] && [[ "$1" != -* ]]; then
+  command="$1"
+  shift
+fi
+
+if [ "$command" = "dev" ] && [ ! -d node_modules ]; then
   pnpm install
 fi
 
-pnpm dev "$@"
+pnpm "$command" "$@"

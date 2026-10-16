@@ -23,7 +23,7 @@ uv run pytest test/path/to/test_file.py  # Run a specific test
 ```bash
 ./bin/api       # FastAPI backend (port 8000)
 ./bin/worker    # Background job processor
-./bin/ui        # React dev server on port 8501 (wraps `pnpm dev`)
+./bin/ui        # React dev server on port 8501; `./bin/ui <script>` runs any pnpm script (Ansible uses install/build)
 ```
 
 **Frontend setup (first time only):**
