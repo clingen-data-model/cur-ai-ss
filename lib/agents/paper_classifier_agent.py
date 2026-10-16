@@ -1,5 +1,3 @@
-from enum import StrEnum
-
 from agents import Agent
 from pydantic import BaseModel
 
@@ -103,27 +101,14 @@ Assess the paper holistically:
 Can specific variants, phenotypes, and case identifiers be connected in a way that supports structured extraction
 of patient-variant relationships?
 
-Also provide a brief reasoning (1-2 sentences) explaining your assessment, and say in
-exclusion_reason why a paper was not relevant:
-- "none" when the paper is relevant;
-- "no_cases_for_gene" when the paper has identifiable cases but none is connected to the target gene
-  (including when it concerns a different gene altogether);
-- "no_identifiable_cases" for every other reason (a review, aggregate-only data, no stable case labels,
-  and so on). When a paper fails both ways, use "no_identifiable_cases".
+Also provide a brief reasoning (1-2 sentences) explaining your assessment. For a paper that is not
+relevant, say which requirement it fails: no identifiable cases, or no cases connected to the
+target gene.
 """
-
-
-class ExclusionReason(StrEnum):
-    """Why a paper was judged not relevant; ``none`` when it was relevant."""
-
-    NONE = 'none'
-    NO_IDENTIFIABLE_CASES = 'no_identifiable_cases'
-    NO_CASES_FOR_GENE = 'no_cases_for_gene'
 
 
 class PaperClassificationOutput(BaseModel):
     is_paper_relevant: ReasoningBlock[bool]
-    exclusion_reason: ExclusionReason
 
 
 PAPER_CLASSIFIER_AGENT_INSTRUCTIONS = PAPER_CLASSIFIER_INSTRUCTIONS

@@ -22,7 +22,6 @@ const TAG_COLORS: Record<PaperTag, string> = {
   'TrainingSet': 'bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300',
   'ValidationSet': 'bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300',
   'FailedPaperRelevancy': 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300',
-  'WrongGenePaper': 'bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300',
 }
 
 
