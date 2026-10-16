@@ -454,3 +454,67 @@ def test_absorbed_citations_join_the_survivor_without_repeats(db_session, paper)
         shared,
         {'anchor': 'table-1', 'quote': 'Taiwan'},
     ]
+
+
+def test_occurrence_flags_for_one_variant_in_different_people_merge(db_session, paper):
+    """Paper 80: sixteen relatives linked to one variant, each flagged for
+    the same pedigree statement. They share the variant, so they merge and
+    the survivor keeps it."""
+    paper_db, family, (father, mother) = paper
+    fa, fb = _occurrence_pair(db_session, paper_db.id, father.id, 'a')
+    ma, mb = _occurrence_pair(db_session, paper_db.id, mother.id, 'b')
+    shared = fa.variant_id
+    ma.variant_id = shared
+    db_session.flush()
+    a = _flag(
+        paper_db.id,
+        'Affected status from pedigree',
+        source='PATIENT_VARIANT_OCCURRENCES',
+        patient_id=father.id,
+        variant_id=shared,
+        occurrence_id=fa.id,
+    )
+    b = _flag(
+        paper_db.id,
+        'Affected status from pedigree',
+        source='PATIENT_VARIANT_OCCURRENCES',
+        patient_id=mother.id,
+        variant_id=shared,
+        occurrence_id=ma.id,
+    )
+    db_session.add_all([a, b])
+    db_session.flush()
+
+    assert apply_merge(db_session, paper_db.id, _groups((a.id, b.id))) == 1
+    (survivor,) = open_flags(db_session, paper_db.id)
+    assert (survivor.variant_id, survivor.patient_id, survivor.occurrence_id) == (
+        shared,
+        None,
+        None,
+    )
+    assert survivor.family_id == family.id
+
+
+def test_occurrence_flags_for_one_patient_s_variants_merge(db_session, paper):
+    paper_db, family, (father, _) = paper
+    fa, fb = _occurrence_pair(db_session, paper_db.id, father.id, 'a')
+    a = _flag(
+        paper_db.id,
+        'Phase from the table',
+        patient_id=father.id,
+        variant_id=fa.variant_id,
+        occurrence_id=fa.id,
+    )
+    b = _flag(
+        paper_db.id,
+        'Phase from the table too',
+        patient_id=father.id,
+        variant_id=fb.variant_id,
+        occurrence_id=fb.id,
+    )
+    db_session.add_all([a, b])
+    db_session.flush()
+
+    assert apply_merge(db_session, paper_db.id, _groups((a.id, b.id))) == 1
+    (survivor,) = open_flags(db_session, paper_db.id)
+    assert (survivor.patient_id, survivor.occurrence_id) == (father.id, None)

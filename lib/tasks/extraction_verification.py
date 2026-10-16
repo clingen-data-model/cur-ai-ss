@@ -21,8 +21,8 @@ lib.tasks.handlers runs the two around the model call:
 
 The agent's grouping is checked before it is applied -- ids must be open
 flags of this paper, a flag in at most one group, two or more per group,
-and occurrence-linked flags sharing a patient or a variant -- and a group that fails
-stays unmerged.
+all of one kind and one agent, and occurrence-linked flags sharing a patient
+or a variant -- and a group that fails stays unmerged.
 """
 
 import logging
@@ -99,8 +99,9 @@ def _checked_groups(
     output: FlagMergeOutput, by_id: dict[int, FlagDB]
 ) -> list[list[FlagDB]]:
     """The agent's groups as rows, earliest first; a group with an unknown,
-    resolved or already-used id, fewer than two flags, or occurrence-linked
-    flags sharing neither a patient nor a variant, is skipped."""
+    resolved or already-used id, fewer than two flags, flags of different
+    kinds or agents, or occurrence-linked flags sharing neither a patient
+    nor a variant, is skipped."""
     groups: list[list[FlagDB]] = []
     used: set[int] = set()
     for group in output.groups:
@@ -123,13 +124,21 @@ def _checked_groups(
                 sorted(ids),
             )
             continue
-        # A flag linked to a patient-variant link, or to a compound-het pair
-        # of them, is about that row: the curator needs it there. Folding two
-        # such flags about different links would clear the link and take the
-        # indicator off both rows, so they stay apart. Flags about the same
-        # link, or with none, merge as before.
-        if len({(f.occurrence_id, f.paired_occurrence_id) for f in rows}) > 1 and any(
-            f.occurrence_id is not None for f in rows
+        # A flag linked to a patient-variant link is about that row, and
+        # folding two about different links clears the link and takes the
+        # indicator off both rows. That is only worth it when the flags
+        # still share something to stay attached to: the same patient (one
+        # person's several links) or the same variant (several people
+        # carrying it, flagged for one pedigree-wide statement). Flags
+        # sharing neither -- two compound-het pairs in different people --
+        # stay apart. Flags with no occurrence link merge as before.
+        shares_patient = len({f.patient_id for f in rows}) == 1 and rows[0].patient_id
+        shares_variant = len({f.variant_id for f in rows}) == 1 and rows[0].variant_id
+        if (
+            len({f.occurrence_id for f in rows}) > 1
+            and any(f.occurrence_id is not None for f in rows)
+            and not shares_patient
+            and not shares_variant
         ):
             logger.info(
                 'Flag merge group kept apart, flags share no patient or variant: %s',
