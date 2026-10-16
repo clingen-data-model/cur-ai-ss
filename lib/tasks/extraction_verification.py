@@ -21,7 +21,7 @@ lib.tasks.handlers runs the two around the model call:
 
 The agent's grouping is checked before it is applied -- ids must be open
 flags of this paper, a flag in at most one group, two or more per group,
-and not about different patient-variant links -- and a group that fails
+and occurrence-linked flags sharing a patient or a variant -- and a group that fails
 stays unmerged.
 """
 
@@ -99,8 +99,8 @@ def _checked_groups(
     output: FlagMergeOutput, by_id: dict[int, FlagDB]
 ) -> list[list[FlagDB]]:
     """The agent's groups as rows, earliest first; a group with an unknown,
-    resolved or already-used id, fewer than two flags, or flags about
-    different patient-variant links, is skipped."""
+    resolved or already-used id, fewer than two flags, or occurrence-linked
+    flags sharing neither a patient nor a variant, is skipped."""
     groups: list[list[FlagDB]] = []
     used: set[int] = set()
     for group in output.groups:
@@ -132,7 +132,7 @@ def _checked_groups(
             f.occurrence_id is not None for f in rows
         ):
             logger.info(
-                'Flag merge group kept apart, flags are about different links: %s',
+                'Flag merge group kept apart, flags share no patient or variant: %s',
                 sorted(ids),
             )
             continue
