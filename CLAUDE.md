@@ -19,10 +19,11 @@ uv run pytest test --cov=lib --cov-report=term-missing  # Run all tests with cov
 uv run pytest test/path/to/test_file.py  # Run a specific test
 ```
 
-**Run the application (two terminals, plus the frontend dev server below):**
+**Run the application (three terminals):**
 ```bash
 ./bin/api       # FastAPI backend (port 8000)
 ./bin/worker    # Background job processor
+./bin/ui        # React dev server on port 8501 (wraps `pnpm dev`)
 ```
 
 **Frontend setup (first time only):**

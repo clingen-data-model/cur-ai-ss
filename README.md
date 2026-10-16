@@ -102,11 +102,10 @@ Start the backend, worker and frontend in separate terminals:
 
 **Terminal 3 — React frontend** (runs on `http://localhost:8501`)
 ```bash
-cd frontend
-pnpm install
-pnpm dev
+./bin/ui
 ```
 
+This runs `pnpm dev` in `frontend/`, installing dependencies first if they are missing.
 See `frontend/README.md` for the frontend toolchain and its dependencies.
 
 ### Example: Extract Evidence from a Paper with MASP1 Gene

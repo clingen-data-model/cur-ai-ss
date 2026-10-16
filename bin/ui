@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# The React dev server (http://localhost:8501), run from frontend/ whatever the
+# caller's directory. Installs dependencies on first run; extra arguments go to
+# `pnpm dev` (e.g. `./bin/ui --host`).
+cd "$(dirname "$0")/../frontend"
+
+if [ ! -d node_modules ]; then
+  pnpm install
+fi
+
+pnpm dev "$@"
