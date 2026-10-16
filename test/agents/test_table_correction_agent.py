@@ -58,3 +58,12 @@ async def test_a_decline_still_answers_empty(monkeypatch):
     tool = _tool(monkeypatch, lambda *_: None)
 
     assert await tool.on_invoke_tool(_tool_context('x'), '{}') == ''
+
+
+def test_the_agent_runs_on_the_vision_model_not_the_extraction_model(monkeypatch):
+    monkeypatch.setattr(tca.env, 'EXTRACTION_MODEL', 'openai/extraction-model')
+    monkeypatch.setattr(tca.env, 'VLM_MODEL', 'openai/vision-model')
+
+    agent = tca.table_correction_agent_for_image(Path('table.png'))
+
+    assert agent.model == 'vision-model'
