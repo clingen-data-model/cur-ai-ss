@@ -136,3 +136,21 @@ export function paperBusyMessage(tasks: TaskResp[], action: string): string | nu
     `Wait for ${total !== 1 ? 'them' : 'it'} to finish before ${action}.`
   )
 }
+
+/** One paper's tasks folded to a single badge state. Mirrors
+ * summarize_paper_task_status in lib/tasks/misc.py, which the list views get
+ * from the API instead. */
+export type NodeStatus = 'idle' | 'pending' | 'running' | 'partial' | 'completed' | 'failed'
+
+export function computeStatus(tasks: TaskResp[]): NodeStatus {
+  if (!tasks || tasks.length === 0) return 'idle'
+  const statuses = tasks.map(t => t.status)
+  // Running only. A Queued task has been claimed by the scheduler but has not
+  // started, so it falls through to 'pending' with the tasks still waiting to
+  // be claimed -- the two are the same thing to anyone reading the graph.
+  if (statuses.some(s => s === 'Running')) return 'running'
+  if (statuses.some(s => s === 'Failed')) return 'failed'
+  if (statuses.every(s => s === 'Completed')) return 'completed'
+  if (statuses.some(s => s === 'Completed')) return 'partial'
+  return 'pending'
+}
