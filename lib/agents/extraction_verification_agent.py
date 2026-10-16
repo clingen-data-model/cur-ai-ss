@@ -55,9 +55,10 @@ Only flags of the same kind raised by the same agent can be one decision:
 the system rejects a group that mixes kinds or agents, so a conflict and an
 inference about the same fact stay separate.
 
-Flags about different patient-variant links or compound-het pairs (their
-"about" names a variant or a pair, not only a person) are kept apart by the
-system whatever you return, so do not group them.
+Flags about different compound-het pairs in different people are kept apart
+by the system whatever you return, so do not group them. Flags about the same
+variant in different people, or the same person's several variants, can be
+one decision when one statement in the paper explains them all.
 
 When in doubt, leave the flags apart: a curator resolving two flags costs a
 click, while a merged pair that should have stayed separate hides a
