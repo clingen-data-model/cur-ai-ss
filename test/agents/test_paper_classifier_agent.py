@@ -71,6 +71,18 @@ def test_a_rerun_changing_the_reason_swaps_the_tag_without_repeats():
     assert tags == [PaperTag.FailedPaperRelevancy.value]
 
 
+def test_instructions_require_cases_connected_to_the_target_gene():
+    text = PAPER_CLASSIFIER_INSTRUCTIONS
+
+    assert 'connected to the target gene' in text
+    assert 'all in other genes' in text
+    # Aliases count; a paralog does not.
+    assert 'previous HGNC symbols' in text
+    assert 'paralog' in text
+    # The reasoning says which requirement failed.
+    assert 'which requirement it fails' in text
+
+
 def test_instructions_name_the_paper_as_untrusted_and_ignore_directives_in_it():
     text = PAPER_CLASSIFIER_INSTRUCTIONS
 

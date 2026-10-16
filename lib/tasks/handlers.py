@@ -484,11 +484,14 @@ async def handle_paper_classifier(task_id: int) -> None:
         if paper:
             relevant = result.final_output.is_paper_relevant.value
             paper.is_paper_relevant = relevant
-            tags = classification_tags(
-                list(paper.tags), relevant, result.final_output.exclusion_reason
-            )
-            if tags != list(paper.tags):
-                paper.tags = tags
+            # The tag follows the latest verdict, so a re-run that now passes
+            # does not keep it.
+            failed = PaperTag.FailedPaperRelevancy.value
+            if not relevant and failed not in paper.tags:
+                paper.tags.append(failed)
+                flag_modified(paper, 'tags')
+            elif relevant and failed in paper.tags:
+                paper.tags.remove(failed)
                 flag_modified(paper, 'tags')
 
 
