@@ -402,8 +402,7 @@ export function ExtractionPage() {
   /** A flag's About chip: switch to the tab that shows the row, turn to its
    * page and open it. A patient or variant opens inside its first occurrence
    * (on its own panel) or, when it has none, in its Unassociated tab. A
-   * family opens its card, except a family of one, which the Families tab does
-   * not list: that opens the patient. */
+   * family opens its row in the Families tab. */
   const navigateToTarget = (target: FlagTarget) => {
     const go = (next: ExtractionTab, to: FlagTarget) => {
       setFocus(to)
@@ -420,9 +419,7 @@ export function ExtractionPage() {
       if (row) go('occurrences', { kind: 'occurrence', id: row.occurrence.id, view: 'variant' })
       else go('unassociated-variants', target)
     } else {
-      const members = allPatients.filter((p) => p.family_id === target.id)
-      if (members.length === 1) navigateToTarget({ kind: 'patient', id: members[0].id })
-      else go('families', target)
+      go('families', target)
     }
   }
   const tasks = paper?.tasks ?? []
