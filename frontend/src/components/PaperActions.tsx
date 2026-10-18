@@ -12,6 +12,7 @@ import { createTaskPapersPaperIdTasksPost, deletePaperPapersPaperIdDelete } from
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { TASK_HELP } from '@/lib/taskHelp'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogMedia, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import type { PaperSummaryResp, TaskType } from '@/api/generated/types.gen'
 import { usePaperBusy } from '@/hooks/usePaperBusy'
@@ -23,7 +24,7 @@ import { apiErrorMessage } from '@/lib/apiError'
 type RerunnablePaper = Pick<PaperSummaryResp, 'id' | 'title' | 'filename'>
 
 // Every task type is rerunnable except 'General Paper Question', which is only
-// ever created ad hoc by the chat router. Mirrors lib/ui/paper/header.py.
+// ever created ad hoc by the chat router.
 const RERUNNABLE_TASK_TYPES: TaskType[] = [
   'PDF Parsing', 'Paper Classifier', 'Paper Metadata',
   'Variant Extraction', 'Pedigree Description', 'Patient Extraction',
@@ -98,12 +99,18 @@ function RerunTaskDialog({
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="max-h-40">
+              {/* Not aligned to the trigger: with the selected item pinned over
+                  it, a short scrolling list floated up over the dialog and
+                  showed a slice that did not include the selection. */}
+              <SelectContent className="max-h-64" alignItemWithTrigger={false}>
                 {RERUNNABLE_TASK_TYPES.map(t => (
                   <SelectItem key={t} value={t}>{t}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {taskType in TASK_HELP && (
+              <p className="text-xs text-muted-foreground">{TASK_HELP[taskType as keyof typeof TASK_HELP]}</p>
+            )}
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium">
