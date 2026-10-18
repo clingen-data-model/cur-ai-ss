@@ -5,10 +5,14 @@
  * button -- so they moved unchanged rather than being reimplemented.
  */
 import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { RefreshCw, Trash2 } from 'lucide-react'
-import { createTaskPapersPaperIdTasksPost, deletePaperPapersPaperIdDelete } from '@/api/generated'
+import {
+  createTaskPapersPaperIdTasksPost,
+  deletePaperPapersPaperIdDelete,
+  listTaskTypesTaskTypesGet,
+} from '@/api/generated'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -23,7 +27,7 @@ import { apiErrorMessage } from '@/lib/apiError'
 type RerunnablePaper = Pick<PaperSummaryResp, 'id' | 'title' | 'filename'>
 
 // Every task type is rerunnable except 'General Paper Question', which is only
-// ever created ad hoc by the chat router. Mirrors lib/ui/paper/header.py.
+// ever created ad hoc by the chat router.
 const RERUNNABLE_TASK_TYPES: TaskType[] = [
   'PDF Parsing', 'Paper Classifier', 'Paper Metadata',
   'Variant Extraction', 'Pedigree Description', 'Patient Extraction',
@@ -55,6 +59,15 @@ function RerunTaskDialog({
   const [skipSuccessors, setSkipSuccessors] = useState(false)
   const [context, setContext] = useState('')
   const busy = usePaperBusy(paper.id, open)
+  // What each step is for, from the backend's own definition of the task types;
+  // fixed for the life of a deploy, so fetched once.
+  const taskTypesQuery = useQuery({
+    queryKey: ['task-types'],
+    queryFn: () => listTaskTypesTaskTypesGet({ throwOnError: true }),
+    staleTime: Infinity,
+    enabled: open,
+  })
+  const taskHelp = taskTypesQuery.data?.find((t) => t.type === taskType)?.description
 
   const mutation = useMutation({
     mutationFn: () => createTaskPapersPaperIdTasksPost({
@@ -98,12 +111,16 @@ function RerunTaskDialog({
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="max-h-40">
+              {/* Not aligned to the trigger: with the selected item pinned over
+                  it, a short scrolling list floated up over the dialog and
+                  showed a slice that did not include the selection. */}
+              <SelectContent className="max-h-64" alignItemWithTrigger={false}>
                 {RERUNNABLE_TASK_TYPES.map(t => (
                   <SelectItem key={t} value={t}>{t}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {taskHelp && <p className="text-xs text-muted-foreground">{taskHelp}</p>}
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium">
