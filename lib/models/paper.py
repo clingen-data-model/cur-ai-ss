@@ -115,9 +115,6 @@ class PaperTag(StrEnum):
     TrainingSet = 'TrainingSet'
     ValidationSet = 'ValidationSet'
     FailedPaperRelevancy = 'FailedPaperRelevancy'
-    # Set with FailedPaperRelevancy when the paper has cases but none for this
-    # paper's gene, so a paper uploaded under the wrong gene can be told apart.
-    WrongGenePaper = 'WrongGenePaper'
 
 
 class FileFormat(StrEnum):
