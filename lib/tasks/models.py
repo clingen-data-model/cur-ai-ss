@@ -76,28 +76,36 @@ class TaskType(StrEnum):
 
     @property
     def description(self) -> str:
-        """Return a human-readable description with context about what this task does."""
+        """One sentence on what this step is for: shown to curators in the Rerun
+        Agent dialog (via GET /task-types) and listed for the chat agent."""
         descriptions: dict[TaskType, str] = {
-            TaskType.PDF_PARSING: 'Parses PDF file and extract text, tables, and images',
-            TaskType.PAPER_CLASSIFIER: 'Classifies paper sections by relevance and evaluates if paper contains extractable patient-variant pairs',
-            TaskType.PAPER_METADATA: 'Extracts paper title, authors, publication date, and other metadata; resolve to PubMed article',
-            TaskType.VARIANT_EXTRACTION: 'Identifies genetic variants mentioned in the paper',
-            TaskType.PEDIGREE_DESCRIPTION: 'Analyzes the images in the paper to determine if there is a describable pedigree',
-            TaskType.PATIENT_EXTRACTION: 'Identifies patients, assigns identifiers and proband status, and groups them into families',
-            TaskType.PATIENT_DEMOGRAPHICS: 'Attaches demographic and clinical details (sex, ages, race, ethnicity, affected status, etc.) to each identified patient',
-            TaskType.SEGREGATION_EVIDENCE_EXTRACTION: 'Collects segregation analysis evidence within each family',
-            TaskType.SEGREGATION_ANALYSIS_COMPUTED: 'Computes segregation analysis results per family',
-            TaskType.VARIANT_HARMONIZATION: 'Normalizes variants to standard genomic coordinates using ClinVar, dbSNP, ClinGen Allele Registry, and VariantValidator',
-            TaskType.VARIANT_ANNOTATION: 'Adds annotations (SpliceAI, conservation scores, etc.) to variants',
-            TaskType.PATIENT_VARIANT_OCCURRENCES: 'Associates patients with their variants and inheritance patterns',
-            TaskType.COMPOUND_HET_EVALUATION: 'Evaluates pairs of heterozygous variants to identify compound heterozygous genotypes',
-            TaskType.PHENOTYPE_EXTRACTION: 'Extracts phenotype text spans per patient',
-            TaskType.HPO_LINKING: 'Maps phenotypes to HPO ontology terms for standardization',
-            TaskType.PAPER_MONDO_LINKING: "Maps the paper's disease name to a MONDO ontology term for standardization",
-            TaskType.OCCURRENCE_MONDO_LINKING: "Maps a patient-variant occurrence's disease name to a MONDO ontology term for standardization",
-            TaskType.EXTRACTION_VERIFICATION: 'Reviews the finished extraction once every other step has run; merges flags that raise the same decision more than once',
+            TaskType.PDF_PARSING: 'Reads the PDF into the text, tables and figures that every other step works from.',
+            TaskType.PAPER_CLASSIFIER: 'Decides whether the paper has identifiable cases for this gene worth extracting; if not, the pipeline stops.',
+            TaskType.PAPER_METADATA: 'Finds the title, authors, journal and year, and matches the paper to its PubMed record.',
+            TaskType.VARIANT_EXTRACTION: 'Finds the genetic variants the paper reports, written as the paper writes them.',
+            TaskType.PEDIGREE_DESCRIPTION: "Looks through the paper's figures for a family tree and describes the relationships and affected status it shows.",
+            TaskType.PATIENT_EXTRACTION: 'Identifies each patient the paper describes, marks the probands and groups patients into families.',
+            TaskType.PATIENT_DEMOGRAPHICS: "Fills in each patient's sex, ages, ancestry, affected status and relationship to the proband.",
+            TaskType.SEGREGATION_EVIDENCE_EXTRACTION: 'Collects what the paper says about whether variants track with disease in each family, such as LOD scores.',
+            TaskType.SEGREGATION_ANALYSIS_COMPUTED: 'Calculates segregation counts and points for each family from its extracted patients and variants.',
+            TaskType.VARIANT_HARMONIZATION: 'Converts each variant to standard coordinates and identifiers (HGVS, rsID, ClinGen allele) using ClinVar, the Allele Registry and VariantValidator.',
+            TaskType.VARIANT_ANNOTATION: 'Adds predictions and scores, such as SpliceAI, to each harmonized variant.',
+            TaskType.PATIENT_VARIANT_OCCURRENCES: 'Links each patient to the variants they carry, with inheritance and testing details.',
+            TaskType.COMPOUND_HET_EVALUATION: "Works out whether a patient's two variants sit on opposite copies of the gene (compound heterozygous).",
+            TaskType.PHENOTYPE_EXTRACTION: "Pulls each patient's clinical features out of the text as the paper describes them.",
+            TaskType.HPO_LINKING: "Matches each patient's clinical features to standard HPO terms.",
+            TaskType.PAPER_MONDO_LINKING: "Matches the paper's disease name to a MONDO disease term.",
+            TaskType.OCCURRENCE_MONDO_LINKING: 'Matches the disease named for a patient-variant pair to a MONDO disease term.',
+            TaskType.EXTRACTION_VERIFICATION: 'Reviews the finished extraction and merges flags that raise the same decision more than once.',
         }
         return descriptions[self]
+
+
+class TaskTypeResp(BaseModel):
+    """GET /task-types: a pipeline step and what it is for."""
+
+    type: TaskType
+    description: str
 
 
 class TaskStatus(StrEnum):

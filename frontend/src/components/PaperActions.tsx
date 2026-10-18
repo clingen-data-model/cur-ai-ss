@@ -5,14 +5,17 @@
  * button -- so they moved unchanged rather than being reimplemented.
  */
 import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { RefreshCw, Trash2 } from 'lucide-react'
-import { createTaskPapersPaperIdTasksPost, deletePaperPapersPaperIdDelete } from '@/api/generated'
+import {
+  createTaskPapersPaperIdTasksPost,
+  deletePaperPapersPaperIdDelete,
+  listTaskTypesTaskTypesGet,
+} from '@/api/generated'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { TASK_HELP } from '@/lib/taskHelp'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogMedia, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import type { PaperSummaryResp, TaskType } from '@/api/generated/types.gen'
 import { usePaperBusy } from '@/hooks/usePaperBusy'
@@ -56,6 +59,15 @@ function RerunTaskDialog({
   const [skipSuccessors, setSkipSuccessors] = useState(false)
   const [context, setContext] = useState('')
   const busy = usePaperBusy(paper.id, open)
+  // What each step is for, from the backend's own definition of the task types;
+  // fixed for the life of a deploy, so fetched once.
+  const taskTypesQuery = useQuery({
+    queryKey: ['task-types'],
+    queryFn: () => listTaskTypesTaskTypesGet({ throwOnError: true }),
+    staleTime: Infinity,
+    enabled: open,
+  })
+  const taskHelp = taskTypesQuery.data?.find((t) => t.type === taskType)?.description
 
   const mutation = useMutation({
     mutationFn: () => createTaskPapersPaperIdTasksPost({
@@ -108,9 +120,7 @@ function RerunTaskDialog({
                 ))}
               </SelectContent>
             </Select>
-            {taskType in TASK_HELP && (
-              <p className="text-xs text-muted-foreground">{TASK_HELP[taskType as keyof typeof TASK_HELP]}</p>
-            )}
+            {taskHelp && <p className="text-xs text-muted-foreground">{taskHelp}</p>}
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium">

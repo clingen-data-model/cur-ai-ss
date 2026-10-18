@@ -207,7 +207,7 @@ from lib.tasks import (
 from lib.tasks.agent_session import chat_session, closing_sessions
 from lib.tasks.handlers import log_run_metrics
 from lib.tasks.misc import paper_busy_message, summarize_paper_task_status
-from lib.tasks.models import ACTIVE_STATUSES, TaskStatus, TaskType
+from lib.tasks.models import ACTIVE_STATUSES, TaskStatus, TaskType, TaskTypeResp
 from lib.tasks.tracks import PIPELINE_TRACKS
 
 logger = logging.getLogger(__name__)
@@ -3198,6 +3198,15 @@ def list_genes(
     if limit is not None:
         query = query.limit(limit)
     return query.all()
+
+
+@app.get('/task-types', response_model=list[TaskTypeResp])
+def list_task_types(
+    current_user: UserDB = Depends(get_current_user),
+) -> list[TaskTypeResp]:
+    """Every pipeline step with a one-sentence description of its purpose, in
+    pipeline order, for the Rerun Agent dialog's help text."""
+    return [TaskTypeResp(type=t, description=t.description) for t in TaskType]
 
 
 @app.post('/papers/{paper_id}/highlight', response_model=list[GrobidAnnotation])
