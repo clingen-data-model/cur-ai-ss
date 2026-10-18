@@ -15,6 +15,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { ManuallyCreatedIndicator } from '@/components/ManuallyCreatedIndicator'
 import { FlagIndicator } from '@/components/FlagIndicator'
 import type { FlagIndex } from '@/hooks/usePaperFlags'
+import type { FlagTarget } from '@/lib/flagTarget'
 import { PatientIdCell } from '@/components/PatientIdCell'
 import { RowExpander } from '@/components/RowExpander'
 import { PatientDetailPanel } from '@/components/PatientDetailPanel'
@@ -29,13 +30,20 @@ export function UnassociatedPatientsTab({
   patients,
   tasks,
   flags,
+  focus,
 }: {
   paperId: number
   patients: PatientResp[]
   tasks: TaskResp[]
   flags: FlagIndex
+  /** A patient to open on arrival (from a flag's About chip). */
+  focus?: FlagTarget | null
 }) {
   const queryClient = useQueryClient()
+  const reveal = useMemo(
+    () => (focus?.kind === 'patient' ? { rowId: String(focus.id) } : null),
+    [focus],
+  )
 
   const deleteMutation = useMutation({
     mutationFn: (patientId: number) =>
@@ -156,6 +164,7 @@ export function UnassociatedPatientsTab({
             filterPlaceholder="Filter patients..."
             getRowId={(row) => String(row.id)}
             getRowCanExpand={() => true}
+            reveal={reveal}
             renderSubComponent={({ row }) => (
               <PatientDetailPanel paperId={paperId} patient={row} />
             )}

@@ -16,8 +16,10 @@
  * row's detail (the same expander as the occurrences table); the row shows the
  * counts and the segregation verdict, the open detail is everything above.
  *
- * Like Streamlit, a family with a single patient is not shown: it has no
- * structure and no segregation to speak of.
+ * A family of one is listed too (below the larger families): it has no
+ * structure and no segregation to speak of, but its identifier and
+ * consanguinity are still editable here and flags about the family point at
+ * this row, so hiding it left those with nowhere to go.
  */
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -312,7 +314,11 @@ function FamilyDetail({
       {seg ? (
         <SegregationSection paperId={paperId} family={family} seg={seg} />
       ) : (
-        <p className="text-sm text-muted-foreground">No segregation analysis for this family yet.</p>
+        <p className="text-sm text-muted-foreground">
+          {members.length === 1
+            ? 'Segregation analysis does not apply to a family of one.'
+            : 'No segregation analysis for this family yet.'}
+        </p>
       )}
     </div>
   )
@@ -459,18 +465,21 @@ export function FamiliesTab({ paperId, focus }: { paperId: number; focus?: Famil
   }
   const segByFamily = new Map(segregation.map((s) => [s.family_id, s]))
 
-  const multi = families.filter((f) => (byFamily.get(f.id)?.length ?? 0) > 1)
-  const singles = families.filter((f) => (byFamily.get(f.id)?.length ?? 0) === 1).length
+  // Larger families first -- they are where structure and segregation live --
+  // then by identifier, so the order does not shuffle as data reloads.
+  const size = (id: number) => byFamily.get(id)?.length ?? 0
+  const ordered = [...families].sort(
+    (a, b) =>
+      Number(size(b.id) > 1) - Number(size(a.id) > 1) ||
+      a.identifier.localeCompare(b.identifier, undefined, { numeric: true }),
+  )
 
-  if (multi.length === 0) {
+  if (ordered.length === 0) {
     return (
       <Empty className="border">
         <EmptyHeader>
-          <EmptyTitle>No multi-member families</EmptyTitle>
-          <EmptyDescription>
-            Family structure and segregation only apply to families with more than one extracted patient
-            {singles > 0 ? `; this paper has ${singles} single-patient ${singles === 1 ? 'family' : 'families'}.` : '.'}
-          </EmptyDescription>
+          <EmptyTitle>No families</EmptyTitle>
+          <EmptyDescription>No families have been extracted for this paper yet.</EmptyDescription>
         </EmptyHeader>
       </Empty>
     )
@@ -500,7 +509,7 @@ export function FamiliesTab({ paperId, focus }: { paperId: number; focus?: Famil
           </TableRow>
         </TableHeader>
         <TableBody>
-          {multi.map((family) => (
+          {ordered.map((family) => (
             <FamilyRow
               key={family.id}
               paperId={paperId}
@@ -515,12 +524,6 @@ export function FamiliesTab({ paperId, focus }: { paperId: number; focus?: Famil
           ))}
         </TableBody>
       </Table>
-      {singles > 0 && (
-        <p className="text-xs text-muted-foreground">
-          {singles} single-patient {singles === 1 ? 'family is' : 'families are'} not shown: there is no structure or
-          segregation to display.
-        </p>
-      )}
     </div>
   )
 }

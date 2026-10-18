@@ -229,7 +229,9 @@ export function FlagsTab({
                 key="variant"
                 kind="variant"
                 label={variantsById.get(id) ?? `Variant #${id}`}
-                onClick={onNavigate && (() => go(linkTarget ?? { kind: 'variant', id }))}
+                onClick={
+                  onNavigate && (() => go(linkTarget ? { ...linkTarget, view: 'variant' } : { kind: 'variant', id }))
+                }
               />,
             )
           }
@@ -240,7 +242,7 @@ export function FlagsTab({
                 key="pair"
                 kind="variant"
                 label={`+ ${variantByOccurrence.get(id) ?? `Occurrence #${id}`}`}
-                onClick={onNavigate && (() => go({ kind: 'occurrence', id }))}
+                onClick={onNavigate && (() => go({ kind: 'occurrence', id, view: 'variant' }))}
               />,
             )
           }
