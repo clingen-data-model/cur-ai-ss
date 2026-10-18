@@ -1,0 +1,22 @@
+name: Feature request
+description: Something you wish the curation tool could do
+labels: ["enhancement"]
+body:
+  - type: input
+    id: page
+    attributes:
+      label: Page
+      description: The address of the page you were on. The "Request a feature" link in the site footer fills this in.
+      placeholder: https://gene-curation-ai.app/papers/…
+  - type: textarea
+    id: request
+    attributes:
+      label: What would you like to be able to do
+      description: Describe it in terms of your curation work, not how it should be built. A sketch or screenshot helps.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it would help
+      description: What you do today instead, or what it costs you.

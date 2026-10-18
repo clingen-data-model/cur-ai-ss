@@ -4,7 +4,7 @@
 import '@/lib/api'
 import React, { useEffect } from 'react'
 import { Link, Outlet, useNavigate, useParams, useRouterState } from '@tanstack/react-router'
-import { Bug, GitBranch } from 'lucide-react'
+import { Bug, GitBranch, Lightbulb } from 'lucide-react'
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { Spinner } from '@/components/ui/spinner'
@@ -53,17 +53,15 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
 const REPO_URL = 'https://github.com/clingen-data-model/cur-ai-ss'
 
-/* The footer's two outbound links: the repository, and a new GitHub issue
- * on the bug-report form (.github/ISSUE_TEMPLATE/bug_report.yml) with its
- * Page field already filled in -- the one fact a report from a
- * non-developer most often leaves out. Built at render from the router's
- * location so it follows navigation. */
+/* The footer's outbound links: the repository, and a new GitHub issue on the
+ * bug-report or feature-request form (.github/ISSUE_TEMPLATE/) with its Page
+ * field already filled in -- the one fact a report from a non-developer most
+ * often leaves out. Built at render from the router's location so they
+ * follow navigation. */
 function FooterLinks() {
   useRouterState({ select: (s) => s.location.pathname })
-  const issueUrl = `${REPO_URL}/issues/new?${new URLSearchParams({
-    template: 'bug_report.yml',
-    page: window.location.href,
-  }).toString()}`
+  const issueUrl = (template: string) =>
+    `${REPO_URL}/issues/new?${new URLSearchParams({ template, page: window.location.href }).toString()}`
   const linkClass = 'inline-flex items-center gap-1 hover:text-slate-900 hover:underline underline-offset-2'
   return (
     <nav className="flex items-center justify-center gap-5">
@@ -71,9 +69,13 @@ function FooterLinks() {
         <GitBranch className="size-3.5" aria-hidden="true" />
         GitHub
       </a>
-      <a href={issueUrl} target="_blank" rel="noopener noreferrer" className={linkClass}>
+      <a href={issueUrl('bug_report.yml')} target="_blank" rel="noopener noreferrer" className={linkClass}>
         <Bug className="size-3.5" aria-hidden="true" />
         Report a bug
+      </a>
+      <a href={issueUrl('feature_request.yml')} target="_blank" rel="noopener noreferrer" className={linkClass}>
+        <Lightbulb className="size-3.5" aria-hidden="true" />
+        Request a feature
       </a>
     </nav>
   )
