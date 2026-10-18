@@ -206,7 +206,11 @@ from lib.tasks import (
 )
 from lib.tasks.agent_session import chat_session, closing_sessions
 from lib.tasks.handlers import log_run_metrics
-from lib.tasks.misc import paper_busy_message, summarize_paper_task_status
+from lib.tasks.misc import (
+    notify_on_next_completion,
+    paper_busy_message,
+    summarize_paper_task_status,
+)
 from lib.tasks.models import ACTIVE_STATUSES, TaskStatus, TaskType, TaskTypeResp
 from lib.tasks.tracks import PIPELINE_TRACKS
 
@@ -1188,7 +1192,11 @@ def list_tasks(
 
 
 def _prepare_rerun(
-    session: Session, paper_id: int, task_type: TaskType, skip_successors: bool
+    session: Session,
+    paper_id: int,
+    task_type: TaskType,
+    skip_successors: bool,
+    user_id: int,
 ) -> None:
     """Everything that must happen before a user-triggered re-run of
     ``task_type`` is queued, shared by the task and flag endpoints."""
@@ -1212,6 +1220,8 @@ def _prepare_rerun(
     write_snapshot_safe(
         session, paper_id, description=f'Before re-running {task_type.value}'
     )
+    # The person who asked for this run is the one to email when it finishes.
+    notify_on_next_completion(session, paper_id, user_id)
 
     # Clear the previous run's downstream rows first. Their COMPLETED status is
     # what the fan-in readiness gates read, and left in place it lets a successor
@@ -1229,7 +1239,9 @@ def create_task(
     session: Session = Depends(get_session),
     current_user: UserDB = Depends(get_current_user),
 ) -> Any:
-    _prepare_rerun(session, paper_id, request.type, request.skip_successors)
+    _prepare_rerun(
+        session, paper_id, request.type, request.skip_successors, current_user.id
+    )
 
     if (
         request.family_id is None
@@ -2888,7 +2900,9 @@ def rerun_flag(
     if request.note:
         context += f' Their note: {request.note.strip()}'
 
-    _prepare_rerun(session, paper_id, task_type, request.skip_successors)
+    _prepare_rerun(
+        session, paper_id, task_type, request.skip_successors, current_user.id
+    )
     return enqueue_task(
         session,
         paper_id=paper_id,

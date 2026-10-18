@@ -17,6 +17,7 @@ from lib.core.environment import env
 from lib.core.logging import setup_logging
 from lib.misc.snapshots import write_snapshot_safe
 from lib.models import TaskDB
+from lib.models.flag import FlagDB
 from lib.models.paper import PaperDB
 from lib.reference_data.hpo import warm_term_lookup_if_cached
 from lib.tasks.agent_session import clear_task_session, closing_sessions
@@ -280,13 +281,27 @@ def _maybe_notify_completion(session: Session, paper_id: int) -> None:
         return
 
     title = paper.title or paper.filename
+    open_flags = (
+        session.query(FlagDB)
+        .filter(FlagDB.paper_id == paper_id, FlagDB.resolved_at.is_(None))
+        .count()
+    )
+    link = f'{env.PROTOCOL}{env.API_ENDPOINT}/papers/{paper_id}/extraction'
+    if open_flags:
+        link += '?tab=flags'
+    flags_line = (
+        f'{open_flags} flag{"" if open_flags == 1 else "s"} to review.\n\n'
+        if open_flags
+        else ''
+    )
     try:
         send_email(
             to=user.email,
             subject=f'Extraction complete: {title}',
             body=(
                 f'Extraction finished for "{title}".\n\n'
-                f'{env.PROTOCOL}{env.API_ENDPOINT}\n\n'
+                f'{flags_line}'
+                f'{link}\n\n'
                 'You are receiving this because paper completion notifications '
                 'are enabled in your settings.'
             ),
