@@ -139,3 +139,72 @@ def test_send_failure_leaves_the_paper_eligible(
     )
     _maybe_notify_completion(db_session, paper.id)
     assert len(sent) == 1
+
+
+def _flag(session, paper, resolved: bool = False):
+    from datetime import datetime, timezone
+
+    from lib.models.flag import FlagDB
+
+    session.add(
+        FlagDB(
+            paper_id=paper.id,
+            source='VARIANT_HARMONIZATION',
+            kind='conflict',
+            subject='s',
+            evidence={},
+            resolved_at=datetime.now(timezone.utc) if resolved else None,
+        )
+    )
+    session.flush()
+
+
+def test_links_to_the_paper_and_counts_open_flags(db_session, paper_with_owner, sent):
+    paper, _ = paper_with_owner()
+    _add_tasks(db_session, paper, TaskStatus.COMPLETED)
+    _flag(db_session, paper)
+    _flag(db_session, paper)
+    _flag(db_session, paper, resolved=True)
+
+    _maybe_notify_completion(db_session, paper.id)
+
+    body = sent[0]['body']
+    assert f'/papers/{paper.id}/extraction?tab=flags' in body
+    assert '2 flags to review' in body
+
+
+def test_no_flags_links_to_the_default_tab(db_session, paper_with_owner, sent):
+    paper, _ = paper_with_owner()
+    _add_tasks(db_session, paper, TaskStatus.COMPLETED)
+
+    _maybe_notify_completion(db_session, paper.id)
+
+    body = sent[0]['body']
+    assert body.count(f'/papers/{paper.id}/extraction') == 1
+    assert 'tab=flags' not in body
+    assert 'to review' not in body
+
+
+def test_a_rerun_rearms_the_email_for_the_user_who_asked(
+    db_session, paper_with_owner, sent
+):
+    from lib.tasks.misc import notify_on_next_completion
+
+    paper, owner = paper_with_owner()
+    other = UserDB(
+        email='rerunner@example.com',
+        hashed_password='x',
+        first_name='Grace',
+        last_name='Hopper',
+        notify_on_paper_complete=True,
+    )
+    db_session.add(other)
+    db_session.flush()
+    _add_tasks(db_session, paper, TaskStatus.COMPLETED)
+    _maybe_notify_completion(db_session, paper.id)
+    assert [c['to'] for c in sent] == [owner.email]
+
+    notify_on_next_completion(db_session, paper.id, other.id)
+    _maybe_notify_completion(db_session, paper.id)
+
+    assert [c['to'] for c in sent] == [owner.email, other.email]

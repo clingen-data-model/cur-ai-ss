@@ -776,3 +776,22 @@ def get_all_successor_levels(task_type: TaskType) -> list[list[TaskType]]:
         current_level = next_level
 
     return levels
+
+
+def notify_on_next_completion(session: Session, paper_id: int, user_id: int) -> None:
+    """Make the paper's next pipeline completion email ``user_id``.
+
+    A completion email fires once per paper (``completion_notified_at``), so a
+    re-run would never mail anyone again; and it goes to ``paper.updated_by``,
+    which would still be whoever last touched the paper rather than whoever
+    just asked for the re-run. Called by every user-initiated re-run, after the
+    pre-re-run snapshot so that snapshot still records the paper as it was.
+    """
+    from lib.models.paper import PaperDB
+
+    paper = session.get(PaperDB, paper_id)
+    if paper is None:
+        return
+    paper.completion_notified_at = None
+    paper.updated_by_user_id = user_id
+    session.expire(paper, ['updated_by'])  # drop a relationship loaded for the old id

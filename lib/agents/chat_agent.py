@@ -30,6 +30,7 @@ from lib.tasks.misc import (
     enqueue_task,
     infer_paper_status_detail,
     invalidate_descendants,
+    notify_on_next_completion,
     paper_busy_message,
 )
 from lib.tasks.models import CLAIMED_STATUSES, TaskDB, TaskResp, TaskType
@@ -269,6 +270,8 @@ def _make_queue_task_tool(paper_id: int, user_id: int) -> Any:
             write_snapshot_safe(
                 session, paper_id, description=f'Before re-running {task_type.value}'
             )
+
+            notify_on_next_completion(session, paper_id, user_id)
 
             if not skip_successors:
                 invalidate_descendants(session, paper_id, task_type)
