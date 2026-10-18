@@ -106,21 +106,24 @@ function OccurrencesTab({
   paperId,
   rows,
   flags,
-  focusOccurrenceId,
+  focus,
 }: {
   paperId: number
   rows: OccurrenceRow[]
   flags: FlagIndex
-  /** An occurrence to open on arrival (from a flag's About chip). */
-  focusOccurrenceId?: number | null
+  /** An occurrence to open on arrival (from a flag's About chip), on the
+   * panel the chip names. A new object is a new request, so the same row can
+   * be asked for again after the reader has closed it. */
+  focus?: Extract<FlagTarget, { kind: 'occurrence' }> | null
 }) {
   const queryClient = useQueryClient()
   const [expandedCell, setExpandedCell] = useState<{ rowId: string; view: ExpandedView } | null>(
-    focusOccurrenceId != null ? { rowId: String(focusOccurrenceId), view: 'patient' } : null,
+    focus ? { rowId: String(focus.id), view: focus.view ?? 'patient' } : null,
   )
   useEffect(() => {
-    if (focusOccurrenceId != null) setExpandedCell({ rowId: String(focusOccurrenceId), view: 'patient' })
-  }, [focusOccurrenceId])
+    if (focus) setExpandedCell({ rowId: String(focus.id), view: focus.view ?? 'patient' })
+  }, [focus])
+  const reveal = useMemo(() => (focus ? { rowId: String(focus.id) } : null), [focus])
 
   const toggleExpanded = (rowId: string, view: ExpandedView) => {
     setExpandedCell((prev) => (prev?.rowId === rowId && prev.view === view ? null : { rowId, view }))
@@ -358,6 +361,7 @@ function OccurrencesTab({
         }
         expanded={expanded}
         onExpandedChange={() => {}}
+        reveal={reveal}
         renderSubComponent={({ row }) =>
           expandedCell?.view === 'patient' ? (
             <PatientDetailPanel paperId={paperId} patient={row.patient} />
@@ -395,23 +399,31 @@ export function ExtractionPage() {
     void navigate({ search: next === DEFAULT_EXTRACTION_TAB ? {} : { tab: next }, replace: true })
   }
   const [focus, setFocus] = useState<FlagTarget | null>(null)
-  /** A flag's About chip: switch to the tab that shows the row and open it.
-   * A variant goes to its occurrence when it has one, else to the
-   * unassociated list; a patient always has a family card. */
+  /** A flag's About chip: switch to the tab that shows the row, turn to its
+   * page and open it. A patient or variant opens inside its first occurrence
+   * (on its own panel) or, when it has none, in its Unassociated tab. A
+   * family opens its card, except a family of one, which the Families tab does
+   * not list: that opens the patient. */
   const navigateToTarget = (target: FlagTarget) => {
-    if (target.kind === 'variant') {
-      const row = rows.find((r) => r.variant.id === target.id)
-      if (row) {
-        setFocus({ kind: 'occurrence', id: row.occurrence.id })
-        setTab('occurrences')
-      } else {
-        setFocus(target)
-        setTab('unassociated-variants')
-      }
-      return
+    const go = (next: ExtractionTab, to: FlagTarget) => {
+      setFocus(to)
+      setTab(next)
     }
-    setFocus(target)
-    setTab(target.kind === 'occurrence' ? 'occurrences' : 'families')
+    if (target.kind === 'occurrence') {
+      go('occurrences', target)
+    } else if (target.kind === 'patient') {
+      const row = rows.find((r) => r.patient.id === target.id)
+      if (row) go('occurrences', { kind: 'occurrence', id: row.occurrence.id, view: 'patient' })
+      else go('unassociated-patients', target)
+    } else if (target.kind === 'variant') {
+      const row = rows.find((r) => r.variant.id === target.id)
+      if (row) go('occurrences', { kind: 'occurrence', id: row.occurrence.id, view: 'variant' })
+      else go('unassociated-variants', target)
+    } else {
+      const members = allPatients.filter((p) => p.family_id === target.id)
+      if (members.length === 1) navigateToTarget({ kind: 'patient', id: members[0].id })
+      else go('families', target)
+    }
   }
   const tasks = paper?.tasks ?? []
   const paperStatus = computeStatus(tasks)
@@ -506,7 +518,15 @@ export function ExtractionPage() {
           </div>
         </div>
 
-        <Tabs value={tab} onValueChange={(next) => setTab(String(next))}>
+        <Tabs
+          value={tab}
+          onValueChange={(next) => {
+            // The reader chose this tab: a stale chip target must not reopen
+            // a row when they come back to it.
+            setFocus(null)
+            setTab(String(next))
+          }}
+        >
           <TabsList>
             <TabsTrigger value="occurrences">Occurrences</TabsTrigger>
             <TabsTrigger value="families">Families</TabsTrigger>
@@ -542,7 +562,7 @@ export function ExtractionPage() {
                 paperId={paperId}
                 rows={rows}
                 flags={flags}
-                focusOccurrenceId={focus?.kind === 'occurrence' ? focus.id : null}
+                focus={focus?.kind === 'occurrence' ? focus : null}
               />
             </PipelineGate>
           </TabsContent>
@@ -560,6 +580,7 @@ export function ExtractionPage() {
               patients={unassociatedPatients}
               tasks={tasks}
               flags={flags}
+              focus={focus}
             />
           </TabsContent>
           <TabsContent value="unassociated-variants" className="pt-3">
@@ -568,6 +589,7 @@ export function ExtractionPage() {
               variants={unassociatedVariants}
               tasks={tasks}
               flags={flags}
+              focus={focus}
             />
           </TabsContent>
           <TabsContent value="flags" className="pt-3">

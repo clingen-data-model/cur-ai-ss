@@ -15,6 +15,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { ManuallyCreatedIndicator } from '@/components/ManuallyCreatedIndicator'
 import { FlagIndicator } from '@/components/FlagIndicator'
 import type { FlagIndex } from '@/hooks/usePaperFlags'
+import type { FlagTarget } from '@/lib/flagTarget'
 import { VariantDetailPanel } from '@/components/VariantDetailPanel'
 import { PipelineGate } from '@/components/PipelineGate'
 import { AddVariantDialog } from '@/components/AddVariantDialog'
@@ -27,13 +28,20 @@ export function UnassociatedVariantsTab({
   variants,
   tasks,
   flags,
+  focus,
 }: {
   paperId: number
   variants: VariantResp[]
   tasks: TaskResp[]
   flags: FlagIndex
+  /** A variant to open on arrival (from a flag's About chip). */
+  focus?: FlagTarget | null
 }) {
   const queryClient = useQueryClient()
+  const reveal = useMemo(
+    () => (focus?.kind === 'variant' ? { rowId: String(focus.id) } : null),
+    [focus],
+  )
 
   const deleteMutation = useMutation({
     mutationFn: (variantId: number) =>
@@ -148,6 +156,7 @@ export function UnassociatedVariantsTab({
             filterPlaceholder="Filter variants..."
             getRowId={(row) => String(row.id)}
             getRowCanExpand={() => true}
+            reveal={reveal}
             renderSubComponent={({ row }) => (
               <VariantDetailPanel paperId={paperId} variant={row} />
             )}

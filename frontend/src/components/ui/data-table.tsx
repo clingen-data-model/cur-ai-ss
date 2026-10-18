@@ -42,6 +42,11 @@ interface DataTableProps<TData, TValue> {
   /** Extra class(es) for a specific row's <TableRow> -- e.g. tinting a
    * curator-created row -- merged with the expand-cursor class above. */
   getRowClassName?: (row: TData) => string | undefined
+  /** Bring a row into view: clears a filter that hides it, turns to the page
+   * it is on, scrolls to it and (when expansion is uncontrolled) opens it.
+   * A new object is a new request, so asking for the same row again after the
+   * reader has moved away or closed it works. */
+  reveal?: { rowId: string } | null
 }
 
 export function DataTable<TData, TValue>({
@@ -57,6 +62,7 @@ export function DataTable<TData, TValue>({
   onExpandedChange: onExpandedChangeProp,
   expandOnRowClick = true,
   getRowClassName,
+  reveal,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = React.useState('')
@@ -81,11 +87,46 @@ export function DataTable<TData, TValue>({
     initialState: { pagination: { pageSize } },
   })
 
+  // A reveal needs the filtered, sorted order to know the row's page, and a
+  // filter that hides the row has to be cleared first, which changes that
+  // order -- so the request is held until the table can place the row.
+  const [pendingReveal, setPendingReveal] = React.useState<string | null>(null)
+  const [scrollTarget, setScrollTarget] = React.useState<string | null>(null)
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  React.useEffect(() => {
+    if (reveal) setPendingReveal(reveal.rowId)
+  }, [reveal])
+  React.useEffect(() => {
+    if (pendingReveal === null) return
+    const index = table.getPrePaginationRowModel().rows.findIndex((r) => r.id === pendingReveal)
+    if (index === -1) {
+      if (globalFilter) setGlobalFilter('')
+      else setPendingReveal(null)
+      return
+    }
+    table.setPageIndex(Math.floor(index / table.getState().pagination.pageSize))
+    if (expandedProp === undefined) setExpandedState({ [pendingReveal]: true })
+    setScrollTarget(pendingReveal)
+    setPendingReveal(null)
+  }, [pendingReveal, globalFilter, sorting, data, table, expandedProp])
+  React.useEffect(() => {
+    if (scrollTarget === null) return
+    // Cleared inside the frame, not before it: this effect's cleanup runs when
+    // the target changes, and would cancel a frame that had not fired yet.
+    const frame = requestAnimationFrame(() => {
+      containerRef.current
+        ?.querySelector(`[data-row-id="${CSS.escape(scrollTarget)}"]`)
+        ?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      setScrollTarget(null)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [scrollTarget])
+
   const pageIndex = table.getState().pagination.pageIndex
   const pageCount = table.getPageCount()
 
   return (
-    <div className={cn('space-y-2', className)}>
+    <div ref={containerRef} className={cn('space-y-2', className)}>
       <Input
         placeholder={filterPlaceholder}
         value={globalFilter}
@@ -127,6 +168,7 @@ export function DataTable<TData, TValue>({
               table.getRowModel().rows.map((row) => (
                 <React.Fragment key={row.id}>
                   <TableRow
+                    data-row-id={row.id}
                     onClick={
                       expandOnRowClick && row.getCanExpand()
                         ? () => row.toggleExpanded()
