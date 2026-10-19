@@ -50,7 +50,7 @@ JWT_SECRET_KEY="a long random string"   # signs login tokens; use a strong value
 
 # Model names are '<provider>/<model>'; the prefix is required.
 EXTRACTION_MODEL="anthropic/claude-haiku-5-5"   # text extraction agents
-VLM_MODEL="anthropic/claude-fable-5-1"          # reads page and table images
+VLM_MODEL="anthropic/claude-opus-5-5"           # reads page and table images
 ```
 
 `CHAT_MODEL` (the chat agent) defaults to `anthropic/claude-opus-5`, so an Anthropic key

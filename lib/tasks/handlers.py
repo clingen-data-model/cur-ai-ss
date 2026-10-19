@@ -161,7 +161,7 @@ from lib.models.converters import (
     variant_to_db,
 )
 from lib.models.evidence_block import ReasoningBlock, verify_citations
-from lib.models.flag import FlagMergeOutput
+from lib.models.flag import AnyFlag, FlagMergeOutput
 from lib.models.mondo import (
     MondoDiseaseScope,
     MondoLinkingTarget,
@@ -2069,6 +2069,11 @@ async def handle_mondo_linking(task_id: int) -> None:
     selected_mondo_id: str | None = None
     selected_mondo_term: str | None = None
     mondo_match_context: dict | None = None
+    # No disease text means no agent run, and so nothing to flag; the task
+    # still completes below, clearing the link and any flags a previous run
+    # with a disease name left (a paper whose metadata pass found no disease
+    # name used to crash here on an unbound `result`).
+    flags: list[AnyFlag] = []
 
     if query:
         agent_sess = agent_session(task_id)
@@ -2123,6 +2128,7 @@ async def handle_mondo_linking(task_id: int) -> None:
             'query': query,
             'agent_reasoning': result.final_output.reasoning,
         }
+        flags = flags_of(result.final_output)
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -2136,7 +2142,7 @@ async def handle_mondo_linking(task_id: int) -> None:
             session,
             paper_id=target.paper_id,
             source=task.type.name,
-            flags=flags_of(result.final_output),
+            flags=flags,
             scope=mondo_scope,
         )
 
