@@ -371,3 +371,23 @@ def test_compound_het_prompt_flags_suggested_pairs_instead_of_grading_them():
         'Not: a pair the paper establishes\noutright -- say nothing about it in "flags"'
         in prompt
     )
+
+
+def test_demographics_prompt_reads_sex_from_the_pedigree_and_kinship_words():
+    """Paper 101 (CASP2) came back with 10 of 22 patients' sex Unknown while the
+    pedigree description gave a sex for every one of them; 86 patients across
+    20 papers on dev carried the same reasoning. The field rule said "stated in
+    text or pedigree" and guideline 1 listed "a sex from a pedigree symbol or a
+    kinship word" among the values the paper merely implies -- so the same run
+    read Male from one square and refused the next. A square or circle is the
+    paper stating sex in pedigree notation, and "her brother" states it in
+    words; neither is an inference."""
+    prompt = PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS
+    assert 'a square is the paper stating Male and a circle\n      Female' in prompt
+    assert '"her brother" states Male for the brother' in prompt
+    assert 'none of them\n    leaves sex Unknown' in prompt
+    assert 'A pedigree symbol and a\n   kinship word are not implications' in prompt
+    assert 'a sex from a pedigree symbol or a kinship word' not in prompt
+    # Text and figure disagreeing is a conflict to surface, not a coin flip.
+    assert 'take the text\n    and raise a conflict flag' in prompt
+    assert 'a "brother" drawn\n     as a circle' in prompt

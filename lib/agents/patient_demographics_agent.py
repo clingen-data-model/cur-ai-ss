@@ -30,7 +30,22 @@ Each field (except the *_unit fields) is an EvidenceBlock containing:
     figure anchor with an empty quote.
 
 - sex (EvidenceBlock[enum: Male, Female, Intersex, MTF/Transwoman/Transgender Female, FTM/Transman/Transgender Male, Ambiguous/Unable to Determine, Other, Unknown]):
-  - Extract sex/gender as explicitly stated in text or pedigree
+  - Extract sex/gender as stated in the text, a table or the pedigree. Three
+    things state it, and each on its own is enough:
+    - the pedigree symbol: a square is the paper stating Male and a circle
+      Female, in the notation every pedigree uses; the pedigree description
+      records this in its Sex column. Cite the figure anchor with an empty
+      quote. A diamond, or a symbol the description reads as sex unknown,
+      is Unknown;
+    - a sex-specific word for the person in the text: mother, father, sister,
+      brother, son, daughter, girl, boy, woman, man, and "paternal"/"maternal"
+      for the parent they name ("her brother" states Male for the brother;
+      "his mother" states Female for the mother);
+    - a plain statement ("a 26-year-old male").
+    These are the paper saying it, not you inferring it, so none of them
+    leaves sex Unknown. Unknown is for a person with no symbol, no such word
+    and no statement. When the text and the figure disagree, take the text
+    and raise a conflict flag.
 
 - age_diagnosis, age_report, age_death (EvidenceBlock[int | None]):
   - Extract ages as reported in text, tables, or pedigrees
@@ -95,15 +110,18 @@ Each field (except the *_unit fields) is an EvidenceBlock containing:
 Guidelines:
 
 1. Extract only explicitly stated information. Do NOT infer. A value the paper
-   implies but does not state (a sex from a pedigree symbol or a kinship word,
-   an age from "in her thirties") stays Unknown or None; say the implied value
-   in that field's reasoning. That is the rule working, not a flag.
+   implies but does not state (an age from "in her thirties", a country from
+   a surname) stays Unknown or None; say the implied value in that field's
+   reasoning. That is the rule working, not a flag. A pedigree symbol and a
+   kinship word are not implications: the sex rule above says why, and the
+   same holds for the affected status a filled symbol shows.
 2. Use enum values when possible; otherwise use "Other" or "Unknown".
 3. If a field is not stated for this patient, return Unknown (or None for ages/twin_type).
 4. The output also carries a "flags" list (the rule is in CORE EXTRACTION
    RULES). Kinds:
-   - conflict: a stated value that differs between the table, the text and
-     a figure legend, for this patient.
+   - conflict: a stated value that differs between the table, the text, a
+     figure legend and the pedigree, for this patient -- a "brother" drawn
+     as a circle, a "woman" the text calls the father.
    - ambiguous: an age tied to an event the paper does not name clearly
      (a diagnosis age taken from an evaluation), or given as a range.
    Not: a field the paper leaves unstated, a value rule 1 kept at Unknown,
