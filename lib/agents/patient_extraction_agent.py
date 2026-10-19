@@ -60,10 +60,17 @@ list before you decide and decide before you write any patient:
      cells give that person's sex, age, variant or findings. A single person
      the text names by role with nothing further stated ("her sister was not
      tested") is a patient too, under that role; an empty record says
-     nothing was stated. What is not a patient is a label with nobody behind it: a
-     group ("the parents" of a cohort, "eleven additional family members")
-     or a spouse drawn in the pedigree without a label. No label is invented
-     for those;
+     nothing was stated. A person needs no printed label to count: every
+     symbol in the pedigree is one person, and the sex and status the symbol
+     shows are facts about them, so a symbol the figure leaves unlabeled -- a
+     married-in spouse, an untested sibling -- is a patient as much as a
+     labeled one (PEDIGREES below says how to name them). A fixed set of
+     specific people the text names collectively is each of them: "the
+     parents" of one proband are a mother and a father, two patients under
+     those roles, and "two paternal aunts" are two patients. What is not a
+     patient is a group whose members cannot be told apart -- "the parents"
+     of a cohort, "eleven additional family members", "several affected
+     relatives" -- because no fact can be attached to any one of them;
    - the person is in scope for the target gene (above).
    Aggregate statements name nobody: "130 patients" or "5 males" identify no
    individual. A count the text states is a hint, not a target -- if it says
@@ -115,14 +122,27 @@ Each field is an EvidenceBlock containing:
        for every member of the series.
     3. When the text and tables give a person no label but the pedigree figure
        labels them, use the pedigree label (e.g., "II-2"). The figure is a
-       source of identifiers exactly as the text is. The pedigree description
-       is not: when it says the figure prints no identifiers and it assigned
-       labels by position, those labels are the describer's, not the paper's,
-       and the people carry no pedigree label for the purposes of these rules
-       (rule 4 or 5 applies instead).
-    4. A person the text names only by relationship takes the role, simplified
-       to the role itself ("proband's sister" gives "sister").
-    5. A single case report with no label for the individual in the text, a
+       source of identifiers exactly as the text is.
+    4. A person the paper names only by relationship takes the role, simplified
+       to the role itself ("proband's sister" gives "sister"). Two people the
+       text names together by role are two patients ("the parents" gives
+       "mother" and "father"); when the role alone would name two people
+       ("two paternal aunts"), number them in the order the text gives
+       ("paternal aunt 1", "paternal aunt 2") and say so in the reasoning.
+       A pedigree symbol the figure leaves unlabeled is still named by the
+       text or legend whenever they refer to that person by role ("the
+       proband's father", "an unaffected brother"): match the symbol to the
+       role through the description's relationships and use the role.
+    5. Only when the paper names a person nowhere -- no identifier in the
+       text or a table (rules 1-2), no printed label in the figure (rule 3),
+       and no role in the text or legend (rule 4) -- does the positional
+       label the pedigree description assigns ("II-3") become the identifier.
+       It is the one name that picks out that symbol and nobody else, but it
+       is ours, not the paper's: the reasoning says the paper prints no label
+       for this person and names them nowhere, and the person gets an
+       "inferred" flag (FLAGS below). Rules 1-4 are exhausted first, every
+       time; a positional label never stands in for a label the paper gives.
+    6. A single case report with no label for the individual in the text, a
        table or a pedigree:
        - Use identifier: "patient"
        - Set proband_status to "Proband"
@@ -135,7 +155,7 @@ Each field is an EvidenceBlock containing:
    an allele traced to one parent, parental samples sequenced as a trio, the
    parents described as unaffected -- with the role as the identifier (rule
    4). Only a relative the paper says nothing about is skipped.
-    6. Preserve exact wording when multiple probands or cases are distinguished.
+    7. Preserve exact wording when multiple probands or cases are distinguished.
 
 - proband_status (EvidenceBlock[enum: Proband, Non-Proband, Unknown]):
   Every family the paper reports for the first time has exactly one proband.
@@ -217,16 +237,30 @@ PEDIGREES:
 
 A family paper holds its full series in the pedigree, while the narrative and
 tables describe only some members in detail. The pedigree description below
-lists every individual the figure shows. Extract every labeled individual in it,
-affected or not: the symbol's affected status is a fact about that person, and
-the pedigree's figure anchor (cited with an empty quote) is the evidence. Skip
-individuals the description could only place by position ("unlabeled spouse of
-II-1"), and treat a label the description says it assigned by position as no
-label at all: a figure with no printed identifiers leaves the proband as
-"patient" and the relatives under their roles.
+lists every individual the figure shows. Extract every individual in it,
+labeled or not, affected or not, blood relative or married in: each symbol is
+one person, the symbol's sex and affected/carrier status are facts about that
+person, and the pedigree's figure anchor (cited with an empty quote) is the
+evidence. Segregation evidence is built from exactly these people -- the
+unaffected sibling who was not tested, the spouse who is an obligate carrier --
+so leaving an unlabeled symbol out loses what the figure was drawn to show.
+
+Naming follows the identifier rules in order. A labeled symbol takes the
+figure's label (II-2). An unlabeled symbol takes whatever the paper calls that
+person elsewhere -- an identifier in the text or a table, or a role in the text
+or figure legend ("the proband's father"), matched to the symbol through the
+description's relationships (rule 4). Only a symbol the paper names nowhere
+takes the positional label the description gives it ("II-3"; "unlabeled spouse
+of II-1" rendered as the position the description assigns), with the reasoning
+saying the paper prints no label and names the person nowhere, and an
+"inferred" flag (rule 5). A figure that prints no identifiers at all leaves the
+proband as "patient" (rule 6) and the relatives under their roles where the
+paper supplies one, and under their positional labels otherwise. Say in the
+first family's reasoning when the figure prints no labels, so a curator knows
+every positional identifier in that family is ours.
 
 This holds for every paper with a pedigree, including a single case report: the
-patient takes the figure's label (II-2, not "patient"), and the labeled relatives
+patient takes the figure's label (II-2, not "patient"), and the other symbols
 are patients too. A relative the text names only by role ("her mother") and
 states a fact about, such as a genotype, is a patient as well.
 
@@ -275,10 +309,16 @@ Consanguinity (EvidenceBlock[bool], required for every family):
 FLAGS for this task (the rule is in CORE EXTRACTION RULES). Kinds:
 
 - excluded: a candidate from step 1 that the paper connects to the target
-  gene or to a reported family and a rule here left out under the scope
-  rule, the identifier rule or the no-label rule -- a sequenced relative
-  with no label, an earlier study's cohort shown for comparison. One flag
-  per rule, naming its members. Not a cohort plainly in other genes.
+  gene or to a reported family and a rule here left out -- an earlier
+  study's cohort shown for comparison, a group of relatives the text never
+  tells apart. One flag per rule, naming its members. Not a cohort plainly in
+  other genes. A relative is never excluded for lacking a label: an unlabeled
+  pedigree symbol or a role-named parent is extracted (above), not flagged
+  here.
+- inferred: a patient whose identifier is a positional label from the
+  pedigree description rather than a label the paper prints, or a role the
+  text names only collectively ("the parents"). One flag per family naming
+  the members, so a curator can check the figure once.
 - ambiguous: a proband chosen where the paper marks none, a label that
   could name two people, a family left with no proband because every
   affected member is re-reported.
@@ -290,7 +330,10 @@ here or nowhere.
 BEFORE RETURNING, CHECK:
 - Every table row or column header that names an in-scope person has a
   patient, the columns headed by a citation included.
-- Every relative the text names by role has a patient.
+- Every relative the text names by role has a patient, the members of "the
+  parents" as two.
+- Every individual the pedigree description lists has a patient, labeled or
+  not, and every positional identifier carries an "inferred" flag.
 - No patient is in the list only because a table describes them: each one is
   connected to the target gene.
 - No identifier is a bare number, or a bare number-plus-suffix copied from a
