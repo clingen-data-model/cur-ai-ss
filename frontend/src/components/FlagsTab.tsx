@@ -2,7 +2,8 @@
  * things that were not extracted, which have no row to sit on, and the place
  * to review the rest in one pass. Each row names the agent, what the flag is
  * about (the linked rows, each a link to its tab), the subject and reasoning,
- * and the resolution or Resolve / Re-run buttons. Open flags come first.
+ * and the resolution or Resolve / Re-run buttons. Open flags come first;
+ * every column header sorts, and the Type pill explains its kind on hover.
  */
 import { useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -18,12 +19,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Spinner } from '@/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { EvidencePopover } from '@/components/EvidencePopover'
+import { FlagKindBadge } from '@/components/FlagKindBadge'
 import { ResolveAllFlagsDialog } from '@/components/ResolveAllFlagsDialog'
 import { ResolveFlagDialog } from '@/components/ResolveFlagDialog'
 import { RerunFromFlagDialog } from '@/components/RerunFromFlagDialog'
 import { usePaperFlags, useRerunFromFlag, useResolveFlag, useResolveFlags } from '@/hooks/usePaperFlags'
 import type { OccurrenceRow } from '@/hooks/usePaperOccurrences'
-import { FLAG_KIND_LABELS, flagKindLabel, flagSourceLabel, sortFlags } from '@/lib/flags'
+import { flagKindLabel, flagSourceLabel, sortFlags } from '@/lib/flags'
 import type { FlagTarget } from '@/lib/flagTarget'
 
 const STALE_TIME = 5 * 60 * 1000
@@ -267,22 +269,21 @@ export function FlagsTab({
         },
       },
       {
+        // Its own column, so the table can sort by kind. Rows of one kind
+        // keep the list's order (open first, newest first) within the group.
+        id: 'kind',
+        header: 'Type',
+        accessorFn: (row) => flagKindLabel(row),
+        cell: ({ row }) => <FlagKindBadge flag={row.original} />,
+      },
+      {
         id: 'subject',
         header: 'Flag',
-        accessorFn: (row) => `${flagKindLabel(row)} ${row.subject} ${row.evidence.reasoning ?? ''}`,
+        accessorFn: (row) => `${row.subject} ${row.evidence.reasoning ?? ''}`,
         cell: ({ row }) => (
           <div className="flex items-start gap-1 max-w-xl whitespace-normal">
             <div className="min-w-0">
-              <p className="font-medium break-words">
-                <Badge
-                  variant="outline"
-                  className="mr-1.5 align-middle font-normal text-muted-foreground"
-                  title={FLAG_KIND_LABELS[row.original.kind]?.hint}
-                >
-                  {flagKindLabel(row.original)}
-                </Badge>
-                {row.original.subject}
-              </p>
+              <p className="font-medium break-words">{row.original.subject}</p>
               {row.original.evidence.reasoning && (
                 <p className="text-xs text-muted-foreground break-words">{row.original.evidence.reasoning}</p>
               )}
