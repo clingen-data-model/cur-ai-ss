@@ -76,17 +76,36 @@ Note: Compound heterozygous genotype evaluation (determining if two heterozygous
 - A parent named as the origin of a patient's variant carries it. "Paternally
   inherited", "maternal allele", a table cell marking which parent an allele
   came from, or a pedigree drawing the parent as a carrier each establish a
-  link for that parent, cited to the statement. Such a statement says the
-  parent carries at least one copy and nothing more, so zygosity is Unknown
-  with that in its reasoning; write Heterozygous or Homozygous only where the
-  paper gives the parent's own genotype (a table cell reading "Het" against
-  the parent, a sentence reporting the parent's result). Testing method is
-  left unstated unless the paper reports the parent was tested. Make the link
-  and flag it as inferred (below); segregation downstream reads parental
+  link for that parent, cited to the statement. Whether the link also gets a
+  zygosity depends on whether the paper reports that parent's own genotype,
+  and it reports it in more places than the narrative:
+  - a genotype label printed against the person in the pedigree ("+/-",
+    "wt/m", "M/+", "het", "+/+"), with or without a chromatogram beside it,
+    is the paper stating that person's result, exactly as a table cell
+    reading "Het" is. The pedigree description carries these labels; cite
+    the figure anchor and write the zygosity the label says. A label the
+    description reads as a genotype is not a symbol: a half-filled or dotted
+    carrier symbol with no label is the pedigree's convention for "carrier",
+    which says one copy at least and nothing more;
+  - a sentence about the tested relatives as a group ("healthy family members
+    had either heterozygous or wild-type alleles", "both parents were
+    heterozygous carriers") reports each named-or-drawn carrier's genotype
+    when the pedigree or a table shows that person was among those tested;
+  - a table cell or a sentence reporting the parent's own result (as before).
+  Any of these makes the zygosity Heterozygous (or what the label says),
+  stated rather than inferred, and the link is not flagged. Only when none of
+  them exists -- the parent is drawn as a carrier symbol, or named only as the
+  allele's origin, or is simply the parent of a homozygous child -- does the
+  statement say "carries at least one copy" and nothing more: then zygosity
+  is Unknown with that in its reasoning, and the link is flagged as inferred
+  (below). Testing method is left unstated unless the paper reports the
+  parent was tested; a chromatogram shown for the person is such a report.
+  Make the link in every case; segregation downstream reads parental
   genotypes from these links and has nothing without them. The same holds for
   both parents of a homozygous child when they are among the patients: each
-  carries at least one copy by descent, so each is linked with zygosity
-  Unknown, cited to the child's homozygous genotype, and flagged as inferred.
+  carries at least one copy by descent, so each is linked, with the zygosity
+  the paper gives them where it gives one, and otherwise Unknown, cited to the
+  child's homozygous genotype, and flagged as inferred.
 - Do not infer links from generic references or biological plausibility.
 - Negative genotypes (wild-type, homozygous reference, non-carrier) should not be linked.
 
@@ -97,11 +116,14 @@ Note: Compound heterozygous genotype evaluation (determining if two heterozygous
 - "low": partially ambiguous textual evidence; never for pure speculation
 
 **Flags** (the rule is in CORE EXTRACTION RULES). Kinds:
-- inferred: a link, zygosity or inheritance that rests on a group statement, a
-  pedigree symbol, a statement that a variant came from one parent, or the
-  family context rather than on a statement about that patient's genotype; a de
-  novo status the paper asserts without parental testing. The link is this
-  task's decision, so this is where it is flagged -- once, on the link.
+- inferred: a link, zygosity or inheritance that rests on a pedigree carrier
+  symbol with no genotype label, a statement that a variant came from one
+  parent, or the family context rather than on a statement about that
+  patient's genotype; a de novo status the paper asserts without parental
+  testing. Not a zygosity read from a genotype label in the pedigree or from
+  a sentence reporting the tested relatives' results: those are the paper's
+  statements. The link is this task's decision, so this is where it is
+  flagged -- once, on the link.
 - excluded: a patient or variant in the input that nothing in the paper
   connects to anything, or an affected member the paper never genotypes. Not
   a parent named as a variant's origin -- that parent is linked, above.

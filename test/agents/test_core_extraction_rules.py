@@ -330,7 +330,8 @@ def test_occurrence_prompt_links_a_parent_named_as_a_variants_origin():
     linked every parent -- the policy had to be stated."""
     prompt = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
     assert "A parent named as the origin of a patient's variant carries it" in prompt
-    assert 'Make the link\n  and flag it as inferred' in prompt
+    assert 'Make the link in every case' in prompt
+    assert 'the link is flagged as inferred\n  (below)' in prompt
     assert "Not\n  a parent named as a variant's origin" in prompt
     assert 'both parents of a homozygous child' in prompt
     # Two of three runs after the parent rule arrived dropped the child's own
@@ -340,14 +341,38 @@ def test_occurrence_prompt_links_a_parent_named_as_a_variants_origin():
         "A parent's link is in addition to the child's, never instead of it" in prompt
     )
     assert 'A compound-heterozygous patient has one link per variant' in prompt
-    # The statement supports "at least one copy", not a genotype: zygosity
-    # is Unknown unless the paper gives the parent's own result.
-    assert (
-        'carries at least one copy and nothing more, so zygosity is Unknown' in prompt
+    # Naming a parent as the allele's origin supports "at least one copy", not
+    # a genotype: zygosity is Unknown unless the paper gives the parent's own
+    # result -- which it can do in the pedigree as well as in the text.
+    assert 'then zygosity\n  is Unknown with that in its reasoning' in prompt
+    assert "depends on whether the paper reports that parent's own genotype" in (prompt)
+
+
+def test_occurrence_prompt_reads_a_pedigree_genotype_label_as_a_stated_genotype():
+    """Paper 101 (CASP2): all nine parents came back with zygosity Unknown,
+    with reasoning "own genotype not stated in the text", while the pedigree
+    printed "+/-" under each genotyped parent with a chromatogram beside it
+    and the text said "healthy family members had either heterozygous or
+    wild-type alleles". The rule listed a table cell and a sentence as the
+    ways a paper states a parent's genotype and put "a pedigree drawing the
+    parent as a carrier" with the inferences; a genotype label is a result,
+    a carrier symbol is a convention, and the prompt has to say which."""
+    prompt = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
+    assert 'a genotype label printed against the person in the pedigree' in prompt
+    assert "is the paper stating that person's result, exactly as a table cell" in (
+        prompt
     )
+    assert 'a half-filled or dotted\n    carrier symbol with no label' in prompt
     assert (
-        "write Heterozygous or Homozygous only where the\n  paper gives the parent's own genotype"
-        in prompt
+        'healthy family members\n    had either heterozygous or wild-type alleles'
+        in (prompt)
+    )
+    assert 'stated rather than inferred, and the link is not flagged' in prompt
+    assert 'a chromatogram shown for the person is such a report' in prompt
+    # The flag kind no longer calls every pedigree-sourced zygosity inferred.
+    assert 'Not a zygosity read from a genotype label in the pedigree' in prompt
+    assert 'carries at least one copy and nothing more, so zygosity is Unknown' not in (
+        prompt
     )
 
 
