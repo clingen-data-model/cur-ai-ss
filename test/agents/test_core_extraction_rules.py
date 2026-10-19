@@ -166,15 +166,18 @@ def test_patient_prompt_extracts_every_pedigree_symbol_and_role_named_relative()
     and relatives the text names collectively ("the parents"): seven of the
     ten PATIENT_EXTRACTION exclusion flags on dev were exactly those people,
     genotyped parents and untested siblings included -- the individuals
-    segregation evidence is built from. Every symbol is now a patient under
-    the describer's positional label, married-in spouses included, with an
-    "inferred" flag in place of the old "excluded" one."""
+    segregation evidence is built from. Every symbol is now a patient, married-in
+    spouses included, with an "inferred" flag in place of the old "excluded"
+    one. The describer's positional label is the last resort, used if and only
+    if the paper names the person nowhere: a role in the text ("the proband's
+    father") is a label the paper gives and always wins over "I-1"."""
     prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
     assert 'A person needs no printed label to count' in prompt
     assert 'labeled or not, affected or not, blood relative or married in' in prompt
-    assert (
-        'that positional label (the description\'s\n       "II-3") is the identifier'
-        in (prompt)
+    assert '5. Only when the paper names a person nowhere' in prompt
+    assert 'a positional label never stands in for a label the paper gives' in prompt
+    assert 'Only a symbol the paper names nowhere\ntakes the positional label' in (
+        prompt
     )
     assert '"the\n     parents" of one proband are a mother and a father' in prompt
     assert 'A relative is never excluded for lacking a label' in prompt

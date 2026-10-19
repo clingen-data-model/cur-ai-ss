@@ -122,22 +122,27 @@ Each field is an EvidenceBlock containing:
        for every member of the series.
     3. When the text and tables give a person no label but the pedigree figure
        labels them, use the pedigree label (e.g., "II-2"). The figure is a
-       source of identifiers exactly as the text is. When the figure prints no
-       label for a person, the pedigree description still places them by
-       generation and position, and that positional label (the description's
-       "II-3") is the identifier: it is the one name that picks out that
-       symbol and nobody else. The reasoning says the paper prints no label
-       and the position is the describer's, and the person gets an "inferred"
-       flag (FLAGS below). A role from the text (rule 4) is preferred over a
-       positional label only when the figure prints no labels at all and the
-       text supplies the role: "father" is the paper's word, "I-1" is ours.
-    4. A person the text names only by relationship takes the role, simplified
+       source of identifiers exactly as the text is.
+    4. A person the paper names only by relationship takes the role, simplified
        to the role itself ("proband's sister" gives "sister"). Two people the
        text names together by role are two patients ("the parents" gives
        "mother" and "father"); when the role alone would name two people
        ("two paternal aunts"), number them in the order the text gives
        ("paternal aunt 1", "paternal aunt 2") and say so in the reasoning.
-    5. A single case report with no label for the individual in the text, a
+       A pedigree symbol the figure leaves unlabeled is still named by the
+       text or legend whenever they refer to that person by role ("the
+       proband's father", "an unaffected brother"): match the symbol to the
+       role through the description's relationships and use the role.
+    5. Only when the paper names a person nowhere -- no identifier in the
+       text or a table (rules 1-2), no printed label in the figure (rule 3),
+       and no role in the text or legend (rule 4) -- does the positional
+       label the pedigree description assigns ("II-3") become the identifier.
+       It is the one name that picks out that symbol and nobody else, but it
+       is ours, not the paper's: the reasoning says the paper prints no label
+       for this person and names them nowhere, and the person gets an
+       "inferred" flag (FLAGS below). Rules 1-4 are exhausted first, every
+       time; a positional label never stands in for a label the paper gives.
+    6. A single case report with no label for the individual in the text, a
        table or a pedigree:
        - Use identifier: "patient"
        - Set proband_status to "Proband"
@@ -150,7 +155,7 @@ Each field is an EvidenceBlock containing:
    an allele traced to one parent, parental samples sequenced as a trio, the
    parents described as unaffected -- with the role as the identifier (rule
    4). Only a relative the paper says nothing about is skipped.
-    6. Preserve exact wording when multiple probands or cases are distinguished.
+    7. Preserve exact wording when multiple probands or cases are distinguished.
 
 - proband_status (EvidenceBlock[enum: Proband, Non-Proband, Unknown]):
   Every family the paper reports for the first time has exactly one proband.
@@ -240,14 +245,19 @@ evidence. Segregation evidence is built from exactly these people -- the
 unaffected sibling who was not tested, the spouse who is an obligate carrier --
 so leaving an unlabeled symbol out loses what the figure was drawn to show.
 
-A labeled symbol takes the figure's label (II-2). An unlabeled symbol takes the
-positional label the description gives it ("II-3", "unlabeled spouse of II-1"
-rendered as the position the description assigns), with the reasoning saying
-the paper prints no label, and an "inferred" flag. A figure that prints no
-identifiers at all leaves the proband as "patient" (rule 5) and the relatives
-under their roles where the text supplies one, and under their positional
-labels otherwise. Say in the first family's reasoning when the figure prints no
-labels, so a curator knows every positional identifier in that family is ours.
+Naming follows the identifier rules in order. A labeled symbol takes the
+figure's label (II-2). An unlabeled symbol takes whatever the paper calls that
+person elsewhere -- an identifier in the text or a table, or a role in the text
+or figure legend ("the proband's father"), matched to the symbol through the
+description's relationships (rule 4). Only a symbol the paper names nowhere
+takes the positional label the description gives it ("II-3"; "unlabeled spouse
+of II-1" rendered as the position the description assigns), with the reasoning
+saying the paper prints no label and names the person nowhere, and an
+"inferred" flag (rule 5). A figure that prints no identifiers at all leaves the
+proband as "patient" (rule 6) and the relatives under their roles where the
+paper supplies one, and under their positional labels otherwise. Say in the
+first family's reasoning when the figure prints no labels, so a curator knows
+every positional identifier in that family is ours.
 
 This holds for every paper with a pedigree, including a single case report: the
 patient takes the figure's label (II-2, not "patient"), and the other symbols
