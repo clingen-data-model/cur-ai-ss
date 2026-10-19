@@ -140,8 +140,10 @@ Configuration is in `lib/core/environment.py` using Pydantic BaseSettings:
   dev-caa deployment overrides this to `anthropic/claude-haiku-5-5` in
   `infrastructure/ansible/templates/env.j2`
 - `VLM_MODEL` - Vision model, same form (default: `openai/gpt-5.6-sol`; the
-  dev-caa deployment overrides this to `anthropic/claude-fable-5-1` in
-  `infrastructure/ansible/templates/env.j2`)
+  dev-caa deployment overrides this to `anthropic/claude-opus-5-5` in
+  `infrastructure/ansible/templates/env.j2`; it was Fable 5.1 until 2026-10-19,
+  when Fable's safety classifier deterministically refused a table-correction
+  call on paper 106 and failed its PDF parse)
 - `OPENAI_API_KEY` - required whenever a configured model names `openai/`
 - `JWT_SECRET_KEY` - Secret used to sign auth access tokens (set a strong value in prod)
 
