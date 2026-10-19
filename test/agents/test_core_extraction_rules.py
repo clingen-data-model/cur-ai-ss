@@ -161,13 +161,28 @@ def test_patient_prompt_makes_candidate_enumeration_a_step():
     assert 'lists every candidate label with\n  its decision' in prompt
 
 
-def test_patient_prompt_does_not_treat_describer_labels_as_figure_labels():
-    """A pedigree with no printed identifiers comes back from the describer as
-    I-1, II-2 "assigned by position"; the model then sometimes used those as
-    the identifiers and pulled in the unlabeled siblings as patients."""
+def test_patient_prompt_extracts_every_pedigree_symbol_and_role_named_relative():
+    """The prompt used to skip pedigree members the paper prints no label for
+    and relatives the text names collectively ("the parents"): seven of the
+    ten PATIENT_EXTRACTION exclusion flags on dev were exactly those people,
+    genotyped parents and untested siblings included -- the individuals
+    segregation evidence is built from. Every symbol is now a patient under
+    the describer's positional label, married-in spouses included, with an
+    "inferred" flag in place of the old "excluded" one."""
     prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
-    assert "those labels are the describer's, not the paper's" in prompt
-    assert 'assigned by position as no\nlabel at all' in prompt
+    assert 'A person needs no printed label to count' in prompt
+    assert 'labeled or not, affected or not, blood relative or married in' in prompt
+    assert (
+        'that positional label (the description\'s\n       "II-3") is the identifier'
+        in (prompt)
+    )
+    assert '"the\n     parents" of one proband are a mother and a father' in prompt
+    assert 'A relative is never excluded for lacking a label' in prompt
+    assert 'Every individual the pedigree description lists has a patient' in prompt
+    # The old rule, in all three of the places it was stated.
+    assert 'no label is invented' not in prompt.lower()
+    assert "those labels are the describer's, not the paper's" not in prompt
+    assert 'assigned by position as no\nlabel at all' not in prompt
 
 
 def test_patient_prompt_scopes_to_the_target_gene_and_fills_the_schema():
@@ -336,8 +351,9 @@ def test_occurrence_prompt_links_a_parent_named_as_a_variants_origin():
 def test_patient_prompt_flag_examples_cover_the_three_kinds_of_decision():
     prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
     assert 'FLAGS for this task' in prompt
-    assert 'left out under the scope\n  rule' in prompt
+    assert 'a rule here left out -- an earlier\n  study' in prompt
     assert 'a patient too, under that role; an empty record' in prompt
+    assert '- inferred: a patient whose identifier is a positional label' in prompt
     assert 'a proband chosen where the paper marks none' in prompt
     # Proband and family membership are this task's to flag, nobody else's.
     assert 'a flag about them is raised\nhere or nowhere' in prompt
