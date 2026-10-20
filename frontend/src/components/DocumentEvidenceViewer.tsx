@@ -228,7 +228,7 @@ export function DocumentEvidenceViewer({
       return (
         <p {...props} data-anchor={anchor ?? undefined} data-evidence-highlight={highlight ? '' : undefined}>
           {empty ? (
-            <span className="italic text-muted-foreground">{describeAnchor(anchor)} (no image)</span>
+            <span className="italic text-muted-foreground">{describeAnchor(anchor)} (missing)</span>
           ) : (
             content
           )}
