@@ -51,6 +51,7 @@ import { Badge } from '@/components/ui/badge'
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 import { Spinner } from '@/components/ui/spinner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { apiErrorMessage } from '@/lib/apiError'
 
 const STALE_TIME = 5 * 60 * 1000
@@ -96,7 +97,22 @@ function FamilyMembers({
           <TableHead className="w-8" />
           <TableHead>Patient</TableHead>
           <TableHead>Relationship</TableHead>
-          <TableHead>Carrier</TableHead>
+          <TableHead>
+            {/* The field is obligate-carrier status, not carrier status: a
+             * genotyped carrier is a No here. Headed "Carrier" with
+             * Obligate/No cells, that No read as "not a carrier". */}
+            <Tooltip>
+              <TooltipTrigger
+                render={<span className="underline decoration-dotted underline-offset-4 cursor-help" />}
+              >
+                Obligate carrier
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                Inferred to carry the variant from pedigree position alone, such as the parent of an affected
+                child. No means not inferred that way: genotyped, affected, or not in an obligate position.
+              </TooltipContent>
+            </Tooltip>
+          </TableHead>
           <TableHead>Twin</TableHead>
         </TableRow>
       </TableHeader>
@@ -124,7 +140,7 @@ function FamilyMembers({
                 </TableCell>
                 <TableCell>{patient.relationship_to_proband ?? '—'}</TableCell>
                 <TableCell>
-                  {patient.is_obligate_carrier == null ? '—' : patient.is_obligate_carrier ? 'Obligate' : 'No'}
+                  {patient.is_obligate_carrier == null ? '—' : patient.is_obligate_carrier ? 'Yes' : 'No'}
                 </TableCell>
                 <TableCell>{patient.twin_type ?? '—'}</TableCell>
               </TableRow>
