@@ -23,6 +23,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { CONTEXT_NOTE, TaskSuccessors } from '@/components/TaskSuccessors'
 import { apiErrorMessage } from '@/lib/apiError'
 import { usePaperBusy } from '@/hooks/usePaperBusy'
 
@@ -105,8 +106,12 @@ export function ScopedRerunButton({
               placeholder="Any specific instructions for this run..."
               rows={3}
             />
+            <p className="text-xs text-muted-foreground">{CONTEXT_NOTE}</p>
           </div>
-          {busy && <p className="text-sm text-amber-700 dark:text-amber-400">{busy}</p>}
+          {/* Same chain the paper-wide dialog shows; a scoped re-run queues
+           * the same successor types, scoped where they fan out. */}
+          <TaskSuccessors taskType={taskType} />
+          {busy &&<p className="text-sm text-amber-700 dark:text-amber-400">{busy}</p>}
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
