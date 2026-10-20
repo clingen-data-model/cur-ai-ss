@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogMedia, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
-import type { PaperSummaryResp, TaskType } from '@/api/generated/types.gen'
+import type { PaperSummaryResp, TaskType, TaskTypeResp } from '@/api/generated/types.gen'
 import { usePaperBusy } from '@/hooks/usePaperBusy'
 import { apiErrorMessage } from '@/lib/apiError'
 
@@ -38,6 +38,28 @@ const RERUNNABLE_TASK_TYPES: TaskType[] = [
   'Phenotype Extraction', 'HPO Linking', 'Paper MONDO Linking', 'Occurrence MONDO Linking',
   'Extraction Verification',
 ]
+
+/** The steps a re-run of `root` sets in motion, one row per depth. A step
+ * sits at the longest path from the root, so it is listed after everything it
+ * waits on: Extraction Verification, fed by every leaf, always lands last.
+ * Within a row, pipeline order. */
+function successorLevels(root: TaskType, taskTypes: TaskTypeResp[]): TaskType[][] {
+  const edges = new Map(taskTypes.map((t) => [t.type, t.successors]))
+  const order = new Map(taskTypes.map((t, i) => [t.type, i]))
+  const depth = new Map<TaskType, number>()
+  const visit = (task: TaskType, d: number) => {
+    for (const next of edges.get(task) ?? []) {
+      if ((depth.get(next) ?? -1) < d) {
+        depth.set(next, d)
+        visit(next, d + 1)
+      }
+    }
+  }
+  visit(root, 0)
+  const levels: TaskType[][] = []
+  for (const [task, d] of depth) (levels[d] ??= []).push(task)
+  return levels.map((level) => level.sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0)))
+}
 
 /* Shared by RerunTaskButton's own trigger (papers table / gene cards) and the
  * "Re-run agents" button atop the task-timeline popovers -- same dialog
@@ -68,6 +90,8 @@ function RerunTaskDialog({
     enabled: open,
   })
   const taskHelp = taskTypesQuery.data?.find((t) => t.type === taskType)?.description
+  const describe = (t: TaskType) => taskTypesQuery.data?.find((row) => row.type === t)?.description
+  const levels = taskTypesQuery.data ? successorLevels(taskType, taskTypesQuery.data) : []
 
   const mutation = useMutation({
     mutationFn: () => createTaskPapersPaperIdTasksPost({
@@ -133,16 +157,44 @@ function RerunTaskDialog({
               rows={3}
               className="w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none resize-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
             />
+            <p className="text-xs text-muted-foreground">
+              Given to this task only, as a follow-up to its previous run. The tasks it triggers run fresh,
+              without it.
+            </p>
           </div>
-          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={skipSuccessors}
-              onChange={(e) => setSkipSuccessors(e.target.checked)}
-              className="cursor-pointer"
-            />
-            Skip successor tasks
-          </label>
+          <div className="space-y-1.5">
+            <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={skipSuccessors}
+                onChange={(e) => setSkipSuccessors(e.target.checked)}
+                className="cursor-pointer"
+              />
+              Skip successor tasks
+            </label>
+            {/* What else this re-run sets in motion, a row per depth: the
+             * dependency chain the checkbox cuts, so "skip" is a choice about
+             * something visible. Dimmed, not hidden, when skipped. */}
+            {taskTypesQuery.data &&
+              (levels.length > 0 ? (
+                <div className={`text-xs ${skipSuccessors ? 'text-muted-foreground/50' : 'text-muted-foreground'}`}>
+                  <p>{skipSuccessors ? 'Would otherwise also run:' : 'Also runs, in turn:'}</p>
+                  {levels.map((level, i) => (
+                    <p key={i} style={{ paddingLeft: `${(i + 1) * 0.75}rem` }}>
+                      <span aria-hidden>→ </span>
+                      {level.map((t, j) => (
+                        <span key={t} title={describe(t)}>
+                          {j > 0 && ', '}
+                          {t}
+                        </span>
+                      ))}
+                    </p>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">Nothing runs after this task.</p>
+              ))}
+          </div>
           {busy && <p className="text-sm text-amber-700 dark:text-amber-400">{busy}</p>}
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
