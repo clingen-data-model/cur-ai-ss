@@ -9,10 +9,14 @@
  *
  * The numbers are Docling item indices -- the same ones that key the
  * tables/N.* and images/N.png files -- not the paper's own "Table 2"
- * numbering, so a chip built from describeAnchor() says "Table 1 · row 7"
- * where the paper's caption may say "Table 2". That is why the chip also
- * carries the PDF page (GET /papers/{id}/anchor-pages): "Table 7 · row 3 ·
- * p. 13" is findable, "Table 7" alone is not.
+ * numbering, so a chip built from describeAnchor() says "Table 2 · row 8"
+ * where the paper's caption may say "Table 3". That is why the chip also
+ * carries the PDF page (GET /papers/{id}/anchor-pages): "Table 8 · row 4 ·
+ * p. 13" is findable, "Table 8" alone is not.
+ *
+ * Only the display counts from one: describeAnchor() adds 1 to the index and
+ * row so a curator never meets "Image 0" or "row 0". The ids keep their
+ * 0-based numbers, which is what the API, the files and the agents use.
  */
 export type AnchorKind = 'paragraph' | 'table' | 'figure'
 
@@ -53,15 +57,16 @@ const KIND_LABEL: Record<AnchorKind, string> = {
   figure: 'Image',
 }
 
-/** A short human label: "Paragraph 54", "Table 1 · row 7 · p. 13",
- * "Supplement · Image 0". The page is appended when known (the supplement
+/** A short human label, counted from one: 'paragraph-53' -> "Paragraph 54",
+ * 'table-1-row-7' -> "Table 2 · row 8 · p. 13", 'supp-figure-0' ->
+ * "Supplement · Image 1". The page is appended when known (the supplement
  * has none, nor does a paper that is not parsed yet). */
 export function describeAnchor(id: string, page?: number): string {
   const parsed = parseAnchor(id)
   if (!parsed) return id
-  const parts = [`${KIND_LABEL[parsed.kind]} ${parsed.index}`]
+  const parts = [`${KIND_LABEL[parsed.kind]} ${parsed.index + 1}`]
   if (parsed.supplement) parts.unshift('Supplement')
-  if (parsed.row !== null) parts.push(`row ${parsed.row}`)
+  if (parsed.row !== null) parts.push(`row ${parsed.row + 1}`)
   if (page !== undefined) parts.push(`p. ${page}`)
   return parts.join(' · ')
 }
