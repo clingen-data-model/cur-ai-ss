@@ -47,11 +47,14 @@ export function tableOfRow(id: string): string {
 const KIND_LABEL: Record<AnchorKind, string> = {
   paragraph: 'Paragraph',
   table: 'Table',
-  figure: 'Figure',
+  // "Image", not "Figure": the index is Docling's picture count, so it
+  // rarely matches the paper's own figure numbering, and "Figure 3" invited
+  // a search for a figure the paper calls something else.
+  figure: 'Image',
 }
 
 /** A short human label: "Paragraph 54", "Table 1 · row 7 · p. 13",
- * "Supplement · Figure 0". The page is appended when known (the supplement
+ * "Supplement · Image 0". The page is appended when known (the supplement
  * has none, nor does a paper that is not parsed yet). */
 export function describeAnchor(id: string, page?: number): string {
   const parsed = parseAnchor(id)
