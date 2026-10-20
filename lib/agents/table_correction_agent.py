@@ -5,9 +5,10 @@ import logging
 from pathlib import Path
 
 from agents import Agent, Runner, function_tool
+from agents.exceptions import MaxTurnsExceeded
 from pydantic import BaseModel
 
-from lib.agents.model_factory import model_settings_for, resolve_model
+from lib.agents.model_factory import ModelDeclined, model_settings_for, resolve_model
 from lib.agents.vision import vlm_describe
 from lib.core.environment import env
 from lib.core.logging import setup_logging
@@ -21,6 +22,13 @@ from lib.misc.pdf.paths import (
 
 setup_logging()
 logger = logging.getLogger(__name__)
+
+# A judge run is two model turns: one that calls extract_table_from_image (or
+# answers outright for a clean table), one that returns the verdict. Twice
+# that is room for a retry of a malformed answer; it is not room for the
+# SDK's default of ten, which on a classifier refusal is ten billed copies of
+# the same empty turn before MaxTurnsExceeded (see ModelDeclined).
+JUDGE_MAX_TURNS = 4
 
 VISION_EXTRACTION_PROMPT = """
 Extract this table as structured markdown.
@@ -144,12 +152,29 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
             f'Table ID: {table_id}\n\nMarkdown to evaluate:\n```\n{table_markdown}\n```'
         )
 
-        # Run agent
-        result = await Runner.run(agent, message)
-
         unrecovered_path = pdf_table_unrecovered_path(
             paper_id, table_id, supplement=supplement
         )
+
+        try:
+            result = await Runner.run(agent, message, max_turns=JUDGE_MAX_TURNS)
+        except (MaxTurnsExceeded, ModelDeclined) as exc:
+            # The model would not, or could not, give a verdict. That is an
+            # outcome this step already has a bucket for -- the table is left
+            # as parsed and marked unrecovered, so anchored.md carries the
+            # warning -- and not a reason to fail the paper's parse, which is
+            # what a propagated exception does. ModelDeclined is the provider's
+            # safety classifier refusing the judge call (model_factory says how
+            # a refusal otherwise becomes MaxTurnsExceeded); MaxTurnsExceeded
+            # here is the same thing seen through a model whose adapter did
+            # not surface it, or a judge that lost its way, and in either
+            # case asking the same question again gets the same answer.
+            logger.warning(
+                f'Table {table_id}: no verdict from the judge ({exc}); leaving '
+                f'the original markdown in place and marking it unrecovered'
+            )
+            unrecovered_path.touch()
+            continue
 
         if not result.final_output.is_corrupted:
             logger.info(f'Table {table_id} looks OK')

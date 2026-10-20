@@ -28,6 +28,8 @@ SDK's default error handler would turn the exception into text for the model
 rather than failing the run.
 """
 
+from typing import Any
+
 import litellm
 from agents import ModelSettings
 from agents.extensions.models.litellm_model import LitellmModel
@@ -223,12 +225,65 @@ def vlm_model() -> str:
     return env.VLM_MODEL
 
 
+class ModelDeclined(Exception):
+    """The provider's safety classifier declined the request before the model
+    answered it.
+
+    Anthropic returns this as a normal HTTP 200 with ``stop_reason:
+    "refusal"`` and an empty ``content``; litellm reports it as
+    ``finish_reason == "content_filter"``. The agents SDK's LitellmModel reads
+    only the message, which here has no text and no tool call, so it builds
+    an empty turn -- and the run loop treats an empty turn as "run again" with
+    the same input, which gets the same refusal, until max_turns ends the run
+    as MaxTurnsExceeded. Every one of those turns is a billed request in the
+    categories Anthropic bills before output (bio, among others). Seen live
+    2026-10-19: Fable 5.1's bio classifier refused the table-correction judge
+    call for paper 106 table 2 (an enzyme-activity table), ten times, then
+    failed the paper's PDF parse with a message that said nothing about why.
+
+    Raising here instead fails the run on the first refusal with the reason
+    in the message. A caller that has a defined outcome for "the model would
+    not say" (table correction leaves the table unrecovered) catches it;
+    anywhere else the task fails once with a readable error.
+    """
+
+    def __init__(self, model: str, finish_reason: str) -> None:
+        self.model = model
+        self.finish_reason = finish_reason
+        super().__init__(
+            f'{model} declined the request (finish_reason={finish_reason}); '
+            f"the provider's safety classifier refused it before the model answered"
+        )
+
+
+class _DeclineAwareLitellmModel(LitellmModel):
+    """LitellmModel that raises ModelDeclined on a classifier refusal rather
+    than returning the empty turn the run loop would retry (see ModelDeclined).
+
+    Overrides the private ``_fetch_response`` because it is the one place the
+    litellm response is still whole; ``get_response`` has dropped the finish
+    reason by the time it returns. Pinned to the locked agents SDK (0.7.0):
+    test_a_refusal_raises_model_declined exercises the real ``get_response``
+    path, so an upgrade that renames or reshapes the hook fails there rather
+    than silently restoring the loop.
+    """
+
+    async def _fetch_response(self, *args: Any, **kwargs: Any) -> Any:
+        response = await super()._fetch_response(*args, **kwargs)
+        if isinstance(response, litellm.types.utils.ModelResponse):
+            choices = response.choices
+            first = choices[0] if choices else None
+            if getattr(first, 'finish_reason', None) == 'content_filter':
+                raise ModelDeclined(self.model, 'content_filter')
+        return response
+
+
 def resolve_model(name: str) -> Model | str:
     provider, bare = split_provider(name)
     if provider == 'openai':
         return bare
     if provider in ROUTABLE_PROVIDERS:
-        return LitellmModel(name, api_key=provider_api_key(name))
+        return _DeclineAwareLitellmModel(name, api_key=provider_api_key(name))
     raise ValueError(
         f'Model {name!r} names provider {provider!r}, which has no route yet. '
         f'Supported: {", ".join(sorted(ROUTABLE_PROVIDERS))}.'
