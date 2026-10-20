@@ -92,7 +92,7 @@ Papers flow through this sequence of agents (all triggered by worker):
 5. **Variant Harmonization** → Normalizes variants to standard formats
 6. **Variant Annotation** → Adds annotations (SpliceAI, etc.)
 7. **Phenotype Extraction + HPO Linking** → Links phenotypes to HPO ontology terms
-8. **Patient-Variant Linking** → Links patients to their variants with inheritance info
+8. **Patient-Variant Linking** → Links patients to their variants with inheritance info. Waits on Patient Extraction and Variant Extraction, not on demographics, which it never reads; segregation (evidence extraction, then the computed analysis) is the step that waits on the last per-patient demographics run, since it reads affected status (`TASK_SUCCESSORS` in `lib/tasks/models.py`)
 9. **Extraction Verification** → Runs once every other task of the paper has settled (queued by the worker, not by a graph edge); merges curator flags that raise the same decision more than once (`lib/tasks/extraction_verification.py`)
 
 Each agent is implemented with OpenAI API calls. Output files are stored in JSON format alongside the PDF.

@@ -33,8 +33,9 @@ class PipelineTrack(NamedTuple):
 # Reading TASK_SUCCESSORS: nothing starts until PDF Parsing and Paper Classifier
 # have run, and Patients and Variants both hang off the classifier -- so Paper
 # comes first and those two fork from it. Analysis begins at Patient Variant
-# Occurrences, which waits on Patient Demographics *and* Variant Extraction, so
-# it joins after both.
+# Occurrences, which waits on Patient Extraction *and* Variant Extraction, so
+# it joins after both (segregation, further in, also waits on the last
+# Patient Demographics).
 #
 #     Paper -> { Patients || Variants } -> Analysis -> Verification
 #

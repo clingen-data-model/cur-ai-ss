@@ -311,19 +311,39 @@ def invalidate_descendants(session: Session, paper_id: int, task_type: TaskType)
     return len(stale)
 
 
+def _enqueue_segregation_for_all_families(
+    session: Session, paper_id: int, user_id: int | None
+) -> None:
+    """Queue SEGREGATION_EVIDENCE_EXTRACTION for each family of the paper: the
+    fan-in of PATIENT_VARIANT_OCCURRENCES and the last PATIENT_DEMOGRAPHICS,
+    called from whichever completes second."""
+    from lib.models import FamilyDB
+
+    families = session.query(FamilyDB).filter(FamilyDB.paper_id == paper_id).all()
+    for family in families:
+        enqueue_task(
+            session,
+            paper_id=paper_id,
+            task_type=TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
+            family_id=family.id,
+            updated_by_user_id=user_id,
+        )
+
+
 def enqueue_successors(session: Session, task: TaskDB) -> None:
     """Create successor tasks when a task completes.
 
     Each case is explicit about what successors to create and any entity ID
-    filtering/expansion needed. PATIENT_VARIANT_OCCURRENCES and HPO_LINKING (see
-    enqueue_deferred_hpo_linking) are the tasks that wait on multiple
-    independent predecessors.
+    filtering/expansion needed. PATIENT_VARIANT_OCCURRENCES (patients and
+    variants), SEGREGATION_EVIDENCE_EXTRACTION (occurrences and every
+    patient's demographics) and HPO_LINKING (see enqueue_deferred_hpo_linking)
+    are the tasks that wait on multiple independent predecessors.
 
     The triggering user (``task.updated_by_user_id``) is propagated to successor
     tasks so the attribution chain is preserved end-to-end. Tasks triggered by the
     worker itself (initial pipeline runs) have no user and stay unattributed.
     """
-    from lib.models import FamilyDB, PatientDB, VariantDB
+    from lib.models import PatientDB, VariantDB
 
     user_id = task.updated_by_user_id
 
@@ -380,11 +400,10 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     updated_by_user_id=user_id,
                 )
 
-            # With no patients there will be no demographics tasks to drive
-            # PATIENT_VARIANT_OCCURRENCES, so gate it here (on VARIANT_EXTRACTION).
-            if not patients and _task_completed(
-                session, task.paper_id, TaskType.VARIANT_EXTRACTION
-            ):
+            # Fan-in with VARIANT_EXTRACTION: occurrences needs the patients
+            # and the variants, and runs alongside demographics (which it
+            # does not read -- see TASK_SUCCESSORS).
+            if _task_completed(session, task.paper_id, TaskType.VARIANT_EXTRACTION):
                 enqueue_task(
                     session,
                     paper_id=task.paper_id,
@@ -402,17 +421,16 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 updated_by_user_id=user_id,
             )
 
-            # Fan-in: once all patients have demographics and variants are
-            # extracted, patient-variant occurrences can run.
+            # Fan-in with PATIENT_VARIANT_OCCURRENCES: segregation reads every
+            # patient's affected status, so it waits for the last demographics
+            # run. Queued for every family, not just this patient's: a re-run
+            # of demographics (scoped or not) has already cleared every
+            # family's segregation rows (invalidate_descendants), and the
+            # paper settles with a full set only if each is queued again.
             if _patient_demographics_ready(session, task.paper_id) and _task_completed(
-                session, task.paper_id, TaskType.VARIANT_EXTRACTION
+                session, task.paper_id, TaskType.PATIENT_VARIANT_OCCURRENCES
             ):
-                enqueue_task(
-                    session,
-                    paper_id=task.paper_id,
-                    task_type=TaskType.PATIENT_VARIANT_OCCURRENCES,
-                    updated_by_user_id=user_id,
-                )
+                _enqueue_segregation_for_all_families(session, task.paper_id, user_id)
 
         case TaskType.VARIANT_EXTRACTION:
             # Expand to per-variant VARIANT_HARMONIZATION tasks
@@ -430,9 +448,8 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     updated_by_user_id=user_id,
                 )
 
-            # Gate PATIENT_VARIANT_OCCURRENCES on patient identity + all per-patient
-            # demographics also being done.
-            if _patient_demographics_ready(session, task.paper_id):
+            # Fan-in with PATIENT_EXTRACTION (see that case).
+            if _task_completed(session, task.paper_id, TaskType.PATIENT_EXTRACTION):
                 enqueue_task(
                     session,
                     paper_id=task.paper_id,
@@ -450,18 +467,11 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
             )
 
         case TaskType.PATIENT_VARIANT_OCCURRENCES:
-            # Expand to per-family SEGREGATION_EVIDENCE_EXTRACTION tasks
-            families = (
-                session.query(FamilyDB).filter(FamilyDB.paper_id == task.paper_id).all()
-            )
-            for family in families:
-                enqueue_task(
-                    session,
-                    paper_id=task.paper_id,
-                    task_type=TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
-                    family_id=family.id,
-                    updated_by_user_id=user_id,
-                )
+            # Per-family SEGREGATION_EVIDENCE_EXTRACTION, once every patient's
+            # demographics is in (the PATIENT_DEMOGRAPHICS case covers the
+            # other order).
+            if _patient_demographics_ready(session, task.paper_id):
+                _enqueue_segregation_for_all_families(session, task.paper_id, user_id)
 
             # Expand to per-patient COMPOUND_HET_EVALUATION for patients with ≥2 heterozygous variants
             from sqlalchemy import distinct

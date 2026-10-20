@@ -164,10 +164,20 @@ TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
         TaskType.PEDIGREE_DESCRIPTION,
     ],
     TaskType.PEDIGREE_DESCRIPTION: [TaskType.PATIENT_EXTRACTION],
-    TaskType.PATIENT_EXTRACTION: [TaskType.PATIENT_DEMOGRAPHICS],
+    # Occurrences hangs off patient *identity*, not demographics: its agent is
+    # given each patient's id, identifier and citations and nothing
+    # demographics fills in. Demographics used to sit between the two as an
+    # ordering trick, which made a one-patient demographics re-run re-link
+    # the whole paper. What demographics does feed -- affected status,
+    # proband status, sex -- is read by the two segregation steps, so those
+    # hang off it instead (gated below on every patient's run being in).
+    TaskType.PATIENT_EXTRACTION: [
+        TaskType.PATIENT_DEMOGRAPHICS,
+        TaskType.PATIENT_VARIANT_OCCURRENCES,
+    ],
     TaskType.PATIENT_DEMOGRAPHICS: [
         TaskType.PHENOTYPE_EXTRACTION,
-        TaskType.PATIENT_VARIANT_OCCURRENCES,
+        TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
     ],
     TaskType.PAPER_METADATA: [TaskType.PAPER_MONDO_LINKING],
     TaskType.VARIANT_EXTRACTION: [
@@ -177,6 +187,9 @@ TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
     TaskType.VARIANT_HARMONIZATION: [TaskType.VARIANT_ANNOTATION],
     TaskType.VARIANT_ANNOTATION: [TaskType.EXTRACTION_VERIFICATION],
     TaskType.PATIENT_VARIANT_OCCURRENCES: [
+        # Fan-in with PATIENT_DEMOGRAPHICS: segregation reads the links and
+        # the affected statuses, so whichever of the two finishes last
+        # queues it (see enqueue_successors).
         TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
         TaskType.COMPOUND_HET_EVALUATION,
         # Re-links the paper-level task (case-level occurrence extraction may
