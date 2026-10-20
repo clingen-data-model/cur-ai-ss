@@ -14,11 +14,13 @@ import {
   Race,
   RelationshipToProband,
   SexAtBirth,
+  TaskType,
   TwinType,
 } from '@/api/generated/types.gen'
 import type { PatientResp, PatientUpdateRequest } from '@/api/generated/types.gen'
 import { EditableAgeRow, EditableSelectRow, EditableSwitchRow, EditableTextRow } from '@/components/EditableField'
 import { PhenotypesTable } from '@/components/PhenotypesTable'
+import { ScopedRerunButton } from '@/components/ScopedRerunButton'
 import { apiErrorMessage } from '@/lib/apiError'
 
 export function PatientDetailPanel({ paperId, patient }: { paperId: number; patient: PatientResp }) {
@@ -46,7 +48,16 @@ export function PatientDetailPanel({ paperId, patient }: { paperId: number; pati
 
   return (
     <div className="p-4 bg-muted/30">
-      <h4 className="text-sm font-semibold mb-2">Patient</h4>
+      <div className="flex items-center justify-between mb-2 max-w-xl">
+        <h4 className="text-sm font-semibold">Patient</h4>
+        <ScopedRerunButton
+          paperId={paperId}
+          taskType={TaskType.PATIENT_DEMOGRAPHICS}
+          scope={{ patient_id: patient.id }}
+          label="Re-run demographics"
+          description="Re-runs demographics for this patient only -- sex, ages, ancestry, affected status, carrier status and relationship to the proband -- overwriting the fields below. Then re-runs this patient's phenotype extraction and the paper's patient-variant links."
+        />
+      </div>
       <div className="max-w-xl">
         <EditableTextRow
           label="Identifier"
