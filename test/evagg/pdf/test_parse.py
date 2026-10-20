@@ -2,7 +2,15 @@ import json
 import shutil
 from unittest.mock import MagicMock, patch
 
-from lib.agents.table_correction_agent import TableCorrectionResult, correct_tables
+import pytest
+from agents.exceptions import MaxTurnsExceeded
+
+from lib.agents.model_factory import ModelDeclined
+from lib.agents.table_correction_agent import (
+    JUDGE_MAX_TURNS,
+    TableCorrectionResult,
+    correct_tables,
+)
 from lib.bin.backfill_documents import backfill_paper
 from lib.misc.pdf.anchors import load_anchors
 from lib.misc.pdf.parse import parse_content
@@ -259,6 +267,49 @@ async def test_recovered_table_clears_a_stale_unrecovered_marker():
     )
 
     assert not pdf_table_unrecovered_path(paper_id, 0).exists()
+
+
+@pytest.mark.parametrize(
+    'no_verdict',
+    [
+        MaxTurnsExceeded('Max turns (4) exceeded'),
+        ModelDeclined('anthropic/claude-fable-5-1', 'content_filter'),
+    ],
+    ids=['max_turns', 'declined'],
+)
+async def test_a_judge_with_no_verdict_marks_the_table_unrecovered(no_verdict):
+    """A safety-classifier refusal of the judge call (paper 106, table 2) used
+    to propagate as MaxTurnsExceeded and fail the whole PDF parse. Either way
+    the judge ends without a verdict, the table is left as parsed, marked, and
+    the next table is still checked."""
+    paper_id = 987023
+    garbled = '| Mock ND |\n|---|\n| Wild-type 146.7 |'
+    clean = '| Individual | Age |\n|---|---|\n| HN-F25 | 8 (11) |'
+    _seed_table(paper_id, 0, garbled, f'intro\n\n{garbled}\n\n{clean}\n\noutro')
+    pdf_table_markdown_path(paper_id, 1).write_text(clean)
+    pdf_table_unrecovered_path(paper_id, 1).touch()  # from an earlier run
+
+    ok = MagicMock()
+    ok.final_output = TableCorrectionResult(is_corrupted=False)
+    with (
+        patch(
+            'lib.agents.table_correction_agent.image_to_data_url',
+            return_value='https://example.com/image.png',
+        ),
+        patch('agents.Runner.run', side_effect=[no_verdict, ok]) as run,
+    ):
+        await correct_tables(paper_id)  # must not raise
+
+    assert pdf_table_unrecovered_path(paper_id, 0).exists()
+    assert not pdf_table_vision_markdown_path(paper_id, 0).exists()
+    assert pdf_table_markdown_path(paper_id, 0).read_text() == garbled
+    # The second table got its own run and its stale marker cleared.
+    assert not pdf_table_unrecovered_path(paper_id, 1).exists()
+    assert run.call_count == 2
+    # Bounded: a refusal is one billed request per turn, not the SDK's ten.
+    assert all(
+        call.kwargs['max_turns'] == JUDGE_MAX_TURNS for call in run.call_args_list
+    )
 
 
 async def test_clean_table_leaves_no_marker():

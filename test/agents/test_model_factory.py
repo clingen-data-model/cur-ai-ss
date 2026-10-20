@@ -1,11 +1,15 @@
+from unittest.mock import AsyncMock, patch
+
 import litellm
 import pytest
-from agents import ModelSettings
+from agents import ModelResponse, ModelSettings
 from agents.extensions.models.litellm_model import LitellmModel
+from agents.models.interface import ModelTracing
 from litellm.llms.anthropic.chat.transformation import AnthropicConfig
 
 from lib.agents.model_factory import (
     _UNMAPPED_MODELS,
+    ModelDeclined,
     _register_unmapped_models,
     extraction_model,
     extraction_model_settings,
@@ -35,6 +39,71 @@ def test_anthropic_routes_through_litellm_with_the_full_name():
 
     assert isinstance(model, LitellmModel)
     assert model.model == 'anthropic/claude-sonnet-5'
+
+
+def _litellm_reply(
+    finish_reason: str, content: str | None
+) -> litellm.types.utils.ModelResponse:
+    return litellm.types.utils.ModelResponse(
+        choices=[
+            litellm.types.utils.Choices(
+                finish_reason=finish_reason,
+                message=litellm.types.utils.Message(content=content),
+            )
+        ],
+        usage=litellm.types.utils.Usage(
+            prompt_tokens=5, completion_tokens=0, total_tokens=5
+        ),
+    )
+
+
+async def _get_response(model: LitellmModel) -> ModelResponse:
+    return await model.get_response(
+        system_instructions=None,
+        input='Table ID: 2',
+        model_settings=ModelSettings(),
+        tools=[],
+        output_schema=None,
+        handoffs=[],
+        tracing=ModelTracing.DISABLED,
+    )
+
+
+async def test_a_refusal_raises_model_declined():
+    """Anthropic's classifier refusal is a 200 with no content, which litellm
+    reports as finish_reason content_filter and the SDK would turn into an
+    empty turn to be retried until max_turns. It must surface as an exception
+    on the first turn, through the real get_response path -- this test is also
+    the pin on the private hook the subclass overrides."""
+    model = resolve_model('anthropic/claude-fable-5-1')
+    assert isinstance(model, LitellmModel)
+
+    with patch.object(
+        LitellmModel,
+        '_fetch_response',
+        new=AsyncMock(return_value=_litellm_reply('content_filter', None)),
+    ):
+        with pytest.raises(ModelDeclined) as info:
+            await _get_response(model)
+
+    assert info.value.model == 'anthropic/claude-fable-5-1'
+    assert info.value.finish_reason == 'content_filter'
+    assert 'declined' in str(info.value)
+
+
+async def test_an_ordinary_answer_passes_through_unchanged():
+    model = resolve_model('anthropic/claude-fable-5-1')
+    assert isinstance(model, LitellmModel)
+
+    with patch.object(
+        LitellmModel,
+        '_fetch_response',
+        new=AsyncMock(return_value=_litellm_reply('stop', 'fine')),
+    ):
+        response = await _get_response(model)
+
+    assert [item.type for item in response.output] == ['message']
+    assert response.usage.input_tokens == 5
 
 
 def test_anthropic_carries_the_configured_key(monkeypatch):

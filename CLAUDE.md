@@ -143,7 +143,10 @@ Configuration is in `lib/core/environment.py` using Pydantic BaseSettings:
   dev-caa deployment overrides this to `anthropic/claude-opus-5-5` in
   `infrastructure/ansible/templates/env.j2`; it was Fable 5.1 until 2026-10-19,
   when Fable's safety classifier deterministically refused a table-correction
-  call on paper 106 and failed its PDF parse)
+  call on paper 106 and failed its PDF parse). A classifier refusal through
+  LiteLLM now raises `ModelDeclined` (`lib/agents/model_factory.py`) on the
+  first turn instead of looping to `MaxTurnsExceeded`; table correction
+  catches it and marks the table unrecovered
 - `OPENAI_API_KEY` - required whenever a configured model names `openai/`
 - `JWT_SECRET_KEY` - Secret used to sign auth access tokens (set a strong value in prod)
 
