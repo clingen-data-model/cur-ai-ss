@@ -23,6 +23,8 @@ interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
   data: TData[]
   filterPlaceholder?: string
+  /** Extra controls on the search-box row, such as a view toggle. */
+  toolbar?: React.ReactNode
   pageSize?: number
   renderSubComponent?: (props: { row: TData }) => React.ReactNode
   getRowCanExpand?: (row: TData) => boolean
@@ -53,6 +55,7 @@ export function DataTable<TData, TValue>({
   columns,
   data,
   filterPlaceholder = 'Filter...',
+  toolbar,
   pageSize = 10,
   renderSubComponent,
   getRowCanExpand,
@@ -127,12 +130,15 @@ export function DataTable<TData, TValue>({
 
   return (
     <div ref={containerRef} className={cn('space-y-2', className)}>
-      <Input
-        placeholder={filterPlaceholder}
-        value={globalFilter}
-        onChange={(e) => setGlobalFilter(e.target.value)}
-        className="max-w-sm"
-      />
+      <div className="flex items-center gap-4">
+        <Input
+          placeholder={filterPlaceholder}
+          value={globalFilter}
+          onChange={(e) => setGlobalFilter(e.target.value)}
+          className="max-w-sm"
+        />
+        {toolbar}
+      </div>
       <div className="rounded-lg border">
         <Table>
           <TableHeader>

@@ -54,7 +54,8 @@ import { ReviewStatusCell } from '@/components/ReviewStatusCell'
 import { StatusBadge } from '@/components/StatusBadge'
 import { computeStatus } from '@/lib/taskState'
 import { apiErrorMessage } from '@/lib/apiError'
-import { TaskType } from '@/api/generated/types.gen'
+import { ProbandStatus, TaskType } from '@/api/generated/types.gen'
+import { Switch } from '@/components/ui/switch'
 import { PedigreeTab } from '@/components/PedigreeTab'
 import { FamiliesTab } from '@/components/FamiliesTab'
 import { PaperMetadataTab } from '@/components/PaperMetadataTab'
@@ -102,6 +103,10 @@ function rowFlags(flags: FlagIndex, row: OccurrenceRow) {
   ].filter((flag) => !seen.has(flag.id) && seen.add(flag.id))
 }
 
+function isProbandRow(row: OccurrenceRow): boolean {
+  return row.patient.proband_status === ProbandStatus.PROBAND
+}
+
 function OccurrencesTab({
   paperId,
   rows,
@@ -120,10 +125,22 @@ function OccurrencesTab({
   const [expandedCell, setExpandedCell] = useState<{ rowId: string; view: ExpandedView } | null>(
     focus ? { rowId: String(focus.id), view: focus.view ?? 'patient' } : null,
   )
+  // Proband-only view: the probands' rows alone, the relatives hidden. Plain
+  // page state like the table's search box, and lifted the same way the
+  // search is when a flag chip names a relative's row, rather than scrolling
+  // to a row that is not there.
+  const [probandOnly, setProbandOnly] = useState(false)
   useEffect(() => {
-    if (focus) setExpandedCell({ rowId: String(focus.id), view: focus.view ?? 'patient' })
+    if (!focus) return
+    setExpandedCell({ rowId: String(focus.id), view: focus.view ?? 'patient' })
+    const target = rows.find((r) => r.occurrence.id === focus.id)
+    if (target && !isProbandRow(target)) setProbandOnly(false)
+    // rows is read, not watched: a data refresh must not re-open the row.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focus])
   const reveal = useMemo(() => (focus ? { rowId: String(focus.id) } : null), [focus])
+  const probandCount = useMemo(() => rows.filter(isProbandRow).length, [rows])
+  const visibleRows = useMemo(() => (probandOnly ? rows.filter(isProbandRow) : rows), [rows, probandOnly])
 
   const toggleExpanded = (rowId: string, view: ExpandedView) => {
     setExpandedCell((prev) => (prev?.rowId === rowId && prev.view === view ? null : { rowId, view }))
@@ -344,11 +361,22 @@ function OccurrencesTab({
 
   return (
     <>
-      <p className="text-sm text-muted-foreground mb-2">{rows.length} total occurrences</p>
+      <p className="text-sm text-muted-foreground mb-2">
+        {probandOnly
+          ? `${visibleRows.length} proband occurrence${visibleRows.length === 1 ? '' : 's'} of ${rows.length}`
+          : `${rows.length} total occurrences`}
+      </p>
       <DataTable
         columns={columns}
-        data={rows}
+        data={visibleRows}
         filterPlaceholder="Filter occurrences..."
+        toolbar={
+          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+            <Switch checked={probandOnly} onCheckedChange={setProbandOnly} />
+            Proband only
+            <span className="text-muted-foreground">({probandCount})</span>
+          </label>
+        }
         getRowId={(row) => String(row.occurrence.id)}
         getRowCanExpand={() => true}
         expandOnRowClick={false}
