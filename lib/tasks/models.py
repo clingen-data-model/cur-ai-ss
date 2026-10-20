@@ -102,10 +102,13 @@ class TaskType(StrEnum):
 
 
 class TaskTypeResp(BaseModel):
-    """GET /task-types: a pipeline step and what it is for."""
+    """GET /task-types: a pipeline step, what it is for, and the steps its
+    completion queues (its TASK_SUCCESSORS edges), so the Rerun Agent dialog
+    can show what else a re-run sets in motion."""
 
     type: TaskType
     description: str
+    successors: list[TaskType]
 
 
 class TaskStatus(StrEnum):
