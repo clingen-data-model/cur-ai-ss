@@ -2420,6 +2420,16 @@ def test_patient_variant_occurrence_successor_enqueues_paper_and_occurrence_mond
         seeded_variant,
         disease_name='   ',
     )
+    # Segregation is a fan-in of occurrences and the patients' demographics
+    # (test/tasks/test_successor_graph.py); with patient extraction in and no
+    # per-patient demographics rows, the demographics side counts as ready.
+    db_session.add(
+        TaskDB(
+            paper_id=seeded_paper.id,
+            type=TaskType.PATIENT_EXTRACTION,
+            status=TaskStatus.COMPLETED,
+        )
+    )
     task = TaskDB(
         paper_id=seeded_paper.id,
         type=TaskType.PATIENT_VARIANT_OCCURRENCES,
