@@ -9,6 +9,7 @@ from lib.models.paper import PedigreeDB
 from lib.tasks.handlers import (
     cited_text,
     format_paper_context,
+    paper_global_context,
     paper_input,
     patient_extraction_message,
     pedigree_input,
@@ -280,3 +281,29 @@ async def test_rerunning_patient_extraction_replaces_only_its_own_flags(
 
     rows = db_session.query(FlagDB).filter_by(paper_id=paper.id).all()
     assert [r.subject for r in rows] == ['kept']
+
+
+def test_paper_context_carries_curator_notes_after_the_gene():
+    """The notes ride in the paper block, so every agent on the paper sends the
+    same bytes and the shared prompt-cache prefix still holds."""
+    plain = format_paper_context('text', 'MSX1')
+    noted = format_paper_context('text', 'MSX1', 'Ignore the supplement cohort.')
+
+    assert noted.startswith(plain)
+    assert noted.endswith(
+        'A human curator is re-running the extraction of this paper and has '
+        'given additional instructions for the whole run. Follow them where '
+        'they bear on your task:\nIgnore the supplement cohort.'
+    )
+    assert format_paper_context('text', 'MSX1', None) == plain
+    assert format_paper_context('text', 'MSX1', '') == plain
+
+
+def test_paper_global_context_reads_the_paper_row(db_session, paper):
+    assert paper_global_context(paper.id) is None
+    assert paper_global_context(paper.id + 1000) is None
+
+    paper.paper_global_additional_context = 'Patients are numbered per family.'
+    db_session.commit()
+
+    assert paper_global_context(paper.id) == 'Patients are numbered per family.'

@@ -355,3 +355,15 @@ class TaskCreateRequest(BaseModel):
     patient_variant_occurrence_id: int | None = None
     skip_successors: bool = False
     additional_context: str | None = None
+
+
+class RerunAllRequest(BaseModel):
+    """Re-run every task of a paper, from the top of the pipeline."""
+
+    # PDF parsing is not an agent and rebuilds the anchored text, tables and
+    # images the agents cite, so re-parsing is a choice: without it the run
+    # starts at the paper classifier, on the parse already on disk.
+    reparse_pdf: bool = False
+    # Paper-wide notes for every agent that reads the paper; replaces the
+    # previous notes, and None clears them.
+    additional_context: str | None = None
