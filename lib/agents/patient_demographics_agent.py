@@ -41,7 +41,10 @@ Each field (except the *_unit fields) is an EvidenceBlock containing:
       brother, son, daughter, girl, boy, woman, man, and "paternal"/"maternal"
       for the parent they name ("her brother" states Male for the brother;
       "his mother" states Female for the mother);
-    - a plain statement ("a 26-year-old male").
+    - a plain statement ("a 26-year-old male"), about the person or about
+      every member of a group the paper puts them in ("all affected
+      individuals were male", "the twelve female probands"; see
+      COHORT AND FAMILY DESCRIPTIONS).
     These are the paper saying it, not you inferring it, so none of them
     leaves sex Unknown. Unknown is for a person with no symbol, no such word
     and no statement. When the text and the figure disagree, take the text
@@ -61,20 +64,45 @@ Each field (except the *_unit fields) is an EvidenceBlock containing:
   - Note that these are not EvidenceBlocks, we only expect the raw enum!
 
 - country_of_origin (EvidenceBlock[enum of valid country names]):
-  - Extract from explicit geographic references
+  - Extract from geographic references: a statement about the patient, their
+    family, or the cohort they belong to (see COHORT AND FAMILY DESCRIPTIONS).
+    "32 unrelated Finnish families" states Finland for every member of those
+    families. A study site, a surname or an identifier prefix states nothing.
 
 - race (EvidenceBlock[enum: American Indian or Alaska Native, Asian, Black, Native Hawaiian or Other Pacific Islander, White, Mixed, Unknown]):
-  - Normalize specific subgroups to the closest enum value when applicable.
-  - Extract from demographic tables or textual descriptions
+  - Extract from demographic tables, textual descriptions, or the description
+    of the patient's family or cohort (see COHORT AND FAMILY DESCRIPTIONS).
+  - A population, nationality or ancestry names a race through the enum's
+    (US census) categories: origins in Europe, the Middle East or North Africa
+    are White ("Caucasian", "European descent", Turkish, Iranian); sub-Saharan
+    Africa is Black ("African American", Nigerian); East, South and Southeast
+    Asia are Asian (Japanese, Chinese, Indian, Vietnamese, "an East Asian
+    cohort");
+    the indigenous peoples of the Americas are American Indian or Alaska
+    Native; Pacific islands are Native Hawaiian or Other Pacific Islander.
+    Mixed when the paper says so. "Hispanic" names no race (see ethnicity).
 
 - ethnicity (EvidenceBlock[enum: Hispanic or Latino, Not Hispanic or Latino, Unknown]):
-  - Extract from demographic tables or textual descriptions
+  - Extract from demographic tables, textual descriptions, or the description
+    of the patient's family or cohort (see COHORT AND FAMILY DESCRIPTIONS).
   - This is independent of race; a patient can be any race and Hispanic or Latino, or not
+  - Hispanic or Latino is an origin in Spain, Mexico, Cuba, Puerto Rico or
+    Central or South America, whatever the race: a Mexican, Puerto Rican or
+    Colombian patient or cohort is Hispanic or Latino. An origin that is none
+    of those (a Finnish, Japanese or Nigerian population) states Not Hispanic
+    or Latino. A description that could hold either ("European", "White",
+    "American", a US study site) leaves it Unknown.
 
 - affected_status (EvidenceBlock[enum: Affected, Unaffected, Unknown]):
-  - Affected: explicitly reported condition
-  - Unaffected: explicitly reported as not affected
-  - Unknown: not stated or unclear
+  - Affected: the paper reports the condition for the patient, in a statement
+    about them, a filled pedigree symbol, or the description of their cohort
+    (see COHORT AND FAMILY DESCRIPTIONS): "23 unrelated patients with
+    hereditary cardiomyopathy" states Affected for each of the 23, and "all
+    affected individuals" for each member it covers.
+  - Unaffected: explicitly reported as not affected, or an open pedigree symbol
+  - Unknown: not stated or unclear. Proband status or a genotype alone is not
+    a report of the condition: a patient who carries the pathogenic variant is
+    not Affected unless the paper says so about them or their cohort.
 
 - is_obligate_carrier (EvidenceBlock[bool]):
   - True: individual is inferred to carry the variant by virtue of their pedigree position alone
@@ -107,14 +135,45 @@ Each field (except the *_unit fields) is an EvidenceBlock containing:
   - null: patient is not a twin
   - Extract only when explicitly mentioned; if not a twin, return null.
 
+COHORT AND FAMILY DESCRIPTIONS:
+
+A paper describes its patients as a group before it describes any of them:
+"32 unrelated Finnish families with hereditary cardiomyopathy", "an East
+Asian cohort", "all participants were of European descent", "23 patients
+with biallelic variants in the gene". Such a sentence is the paper stating
+that fact for every member of the group, and the member's field takes it as
+a stated value:
+
+- Cite the sentence (or the table section, heading or legend that places the
+  patient in the group), and say in the reasoning that the value comes from
+  the cohort or family description. This is routine extraction, not a flag.
+- A statement about the patient themself wins when it differs ("one family of
+  Estonian origin" among Finnish families makes that family's members
+  Estonian, not Finnish). The cohort fills what the patient's own description
+  leaves out.
+- The group must be one the paper puts this patient in. The affected probands
+  of a disease cohort are "the patients with the disease"; an Unaffected
+  parent drawn open on the pedigree is not, and does not become Affected
+  because the cohort is. A patient described only by a count or a share
+  ("most were of European descent", "9 of 23 families were Finnish") is not
+  placed in the group, so the field stays Unknown with the implied value in
+  its reasoning.
+- A mixed cohort ("18 Finnish and 5 Estonian families") with nothing placing
+  the patient in one part fills the field whose enum value is the same for
+  every part (Finnish and Estonian are both White, and both Not Hispanic or
+  Latino) and leaves the one that differs (country) Unknown, naming the
+  candidates in the reasoning. An identifier prefix is not a placement.
+
 Guidelines:
 
-1. Extract only explicitly stated information. Do NOT infer. A value the paper
-   implies but does not state (an age from "in her thirties", a country from
-   a surname) stays Unknown or None; say the implied value in that field's
-   reasoning. That is the rule working, not a flag. A pedigree symbol and a
-   kinship word are not implications: the sex rule above says why, and the
-   same holds for the affected status a filled symbol shows.
+1. Extract only stated information. Do NOT infer. A value the paper implies
+   but does not state (an age from "in her thirties", a country from a surname
+   or a study site, an affected status from a genotype) stays Unknown or None;
+   say the implied value in that field's reasoning. That is the rule working,
+   not a flag. A pedigree symbol, a kinship word and a cohort or family
+   description are not implications: the sex rule and COHORT AND FAMILY
+   DESCRIPTIONS above say why, and the same holds for the affected status a
+   filled symbol shows.
 2. Use enum values when possible; otherwise use "Other" or "Unknown".
 3. If a field is not stated for this patient, return Unknown (or None for ages/twin_type).
 4. The output also carries a "flags" list (the rule is in CORE EXTRACTION
@@ -125,7 +184,9 @@ Guidelines:
    - ambiguous: an age tied to an event the paper does not name clearly
      (a diagnosis age taken from an evaluation), or given as a range.
    Not: a field the paper leaves unstated, a value rule 1 kept at Unknown,
-   a unit conversion, proband status or the relationship to the proband
+   a value taken from the cohort or family description (the rule above makes
+   it a statement about the member), a unit conversion, proband status or
+   the relationship to the proband
    (decided by patient extraction and the pedigree; follow them), or
    obligate-carrier status (the rule above decides it). "about" is this
    patient's identifier, or null.

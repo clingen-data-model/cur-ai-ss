@@ -376,6 +376,37 @@ def test_occurrence_prompt_reads_a_pedigree_genotype_label_as_a_stated_genotype(
     )
 
 
+def test_occurrence_prompt_takes_a_whole_cohort_genotype_statement_as_stated():
+    """The prompt already read a sentence about the tested relatives as a
+    group as each relative's result, but scored anything else from "group
+    context" moderate and flagged it inferred -- so a paper that gives every
+    proband's zygosity in one sentence left every link Unknown. The same rule
+    the demographics and phenotype prompts carry: a statement about every
+    member of a group the paper puts the patient in is a statement about
+    them; a share places nobody; a group whose members differ leaves the
+    differing value to each patient's own result."""
+    prompt = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
+    assert 'A statement about every member of the cohort or of a family' in prompt
+    assert 'stated, cited to the sentence, high confidence, not\n  flagged' in prompt
+    assert (
+        'A share\n  of the group ("most", "15 of 18 probands") places nobody' in prompt
+    )
+    assert "leaves the zygosity\n  to each patient's own result" in prompt
+    assert 'or a statement about every\n  member of a group' in prompt  # confidence
+    assert 'or from a statement\n  about every member of the cohort or family' in prompt
+    assert 'inferred from group/pedigree context' not in prompt
+
+
+def test_compound_het_prompt_takes_a_whole_cohort_phase_statement_as_established():
+    """Same rule as the other paper-reading prompts: phase confirmed for every
+    compound heterozygous patient in the cohort is confirmed for this one."""
+    prompt = COMPOUND_HET_AGENT_INSTRUCTIONS
+    assert 'said about every compound heterozygous patient in the cohort' in prompt
+    assert (
+        'a\n  statement about part of the group ("in most families") is not' in prompt
+    )
+
+
 def test_patient_prompt_flag_examples_cover_the_three_kinds_of_decision():
     prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
     assert 'FLAGS for this task' in prompt
@@ -411,8 +442,82 @@ def test_demographics_prompt_reads_sex_from_the_pedigree_and_kinship_words():
     assert 'a square is the paper stating Male and a circle\n      Female' in prompt
     assert '"her brother" states Male for the brother' in prompt
     assert 'none of them\n    leaves sex Unknown' in prompt
-    assert 'A pedigree symbol and a\n   kinship word are not implications' in prompt
+    assert (
+        'A pedigree symbol, a kinship word and a cohort or family\n   description are not implications'
+        in prompt
+    )
     assert 'a sex from a pedigree symbol or a kinship word' not in prompt
     # Text and figure disagreeing is a conflict to surface, not a coin flip.
     assert 'take the text\n    and raise a conflict flag' in prompt
     assert 'a "brother" drawn\n     as a circle' in prompt
+
+
+def test_demographics_prompt_takes_ancestry_and_status_from_the_cohort_description():
+    """Paper 109 (PKD1, "41 unrelated Thai families" in "an Asian population")
+    came back with race Asian and country Thailand for most probands and
+    Unknown for the rest, each run citing the no-inference guideline the
+    other way; affected status was Unknown for a proband of the ADPKD cohort
+    and Affected-by-genotype for another. Curators read a cohort description
+    as the paper stating that fact for every member, so the prompt says so,
+    says which groups count and which do not (a share, a mixed cohort), and
+    keeps it off the flag list."""
+    prompt = PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS
+    assert 'COHORT AND FAMILY DESCRIPTIONS:' in prompt
+    assert 'the paper stating\nthat fact for every member of the group' in prompt
+    assert 'This is routine extraction, not a flag' in prompt
+    # Each of the five fields points at the rule; sex lists what states it, so
+    # the cohort sentence has to be on that list.
+    for field in ('sex', 'country_of_origin', 'race', 'ethnicity', 'affected_status'):
+        head = prompt.index(f'- {field} (')
+        assert 'COHORT AND FAMILY DESCRIPTIONS' in prompt[head : head + 1300], field
+    assert '"all affected\n      individuals were male"' in prompt
+    # The enum is the census one, so a nationality maps to it deterministically.
+    assert 'East, South and Southeast\n    Asia are Asian (Japanese, Chinese' in prompt
+    assert (
+        'An origin that is none\n    of those (a Finnish, Japanese or Nigerian population) states Not Hispanic'
+        in prompt
+    )
+    # The limits: the patient's own statement wins, a share places nobody, a
+    # mixed cohort fills only the field its parts agree on, an unaffected
+    # relative is not a member of the disease cohort.
+    assert 'A statement about the patient themself wins' in prompt
+    assert (
+        '("most were of European descent", "9 of 23 families were Finnish")' in prompt
+    )
+    assert 'Finnish and Estonian are both White' in prompt
+    assert 'leaves the one that differs (country) Unknown' in prompt
+    assert 'does not become Affected\n  because the cohort is' in prompt
+    # The old openings that let a run refuse the cohort are gone, and genotype
+    # alone still does not make a patient Affected.
+    assert 'Extract from explicit geographic references\n' not in prompt
+    assert 'Affected: explicitly reported condition' not in prompt
+    assert 'a genotype alone is not\n    a report of the condition' in prompt
+    assert 'a value taken from the cohort or family description' in prompt
+
+
+def test_phenotype_prompt_takes_a_whole_cohort_finding_as_stated():
+    """Paper 112 (ADAM22): "All affected individuals presented moderate-profound
+    global developmental delay", scored 20/20 in the abstract, reached 7 of
+    the 20 patients. The prompt said a cohort statement was evidence and then
+    listed any finding taken from one as uncertain and flagged, so runs split
+    between extracting it and leaving it. It is stated, for every member of a
+    group the paper puts the patient in; a share ("12 of 20") places nobody."""
+    prompt = PATIENT_PHENOTYPE_LINKING_AGENT_INSTRUCTIONS
+    assert 'is the paper\nstating that finding for every member of the group' in prompt
+    assert 'uncertain: false, cited to that\nsentence' in prompt
+    assert (
+        '"all affected\nindividuals" covers an Affected patient and not an Unaffected relative'
+        in prompt
+    )
+    assert '"most", "the majority", 12 of 17 --\nnames nobody' in prompt
+    # The column and the cohort sentence are two findings, not one, and the
+    # dedup step keeps a pair the paper joins with a slash.
+    assert 'the patient has both, and they are not duplicates' in prompt
+    assert "are different by the paper's own account" in prompt
+    assert 'the splitting rule below made them separate\nentries' in prompt
+    # The flag kind keeps only the case where membership is unclear.
+    assert 'a group the paper does not clearly place\n  them in' in prompt
+    assert 'through a cohort-level or family-level sentence' not in prompt
+    # The shared rule no longer calls every cohort sentence an inference.
+    assert 'a family-level or cohort-level sentence' not in FLAG_RULES
+    assert 'a group the paper does not place it in' in FLAG_RULES

@@ -33,8 +33,10 @@ FLAG_RULES = """FLAGS -- decisions a curator should see:
     chose one.
   - ambiguous: two readings of the paper both fit, and you chose one.
   - inferred: a value taken from somewhere other than a statement about the
-    thing itself -- a family-level or cohort-level sentence, a reference's
-    title, a pedigree symbol, surrounding context.
+    thing itself -- a sentence about a group the paper does not place it in,
+    a reference's title, a pedigree symbol, surrounding context. (A sentence
+    about every member of a cohort or family the paper puts it in is a
+    statement about it, where your task says so.)
   - unresolved: a lookup could not settle it -- no identifier, term or
     record was found, so the output is partial or null where a curator might
     find one.

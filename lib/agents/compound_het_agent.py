@@ -30,6 +30,11 @@ WHAT ESTABLISHES A PAIR:
   names which variant sits on which allele or which parent each came from
 - The pedigree shows each variant inherited from a different parent
 - Parental testing confirms the variants are in trans
+- Any of the above said about every compound heterozygous patient in the cohort
+  ("parental testing confirmed the trans configuration in all cases", "each
+  variant was inherited from a different parent in every family") is the paper
+  saying it about this patient, when the paper puts them in that group; a
+  statement about part of the group ("in most families") is not
 - A table label ("c Het", "Comp Het") counts only together with one of the above for
   this patient, such as a statement that the parents of such patients carried one
   variant each
