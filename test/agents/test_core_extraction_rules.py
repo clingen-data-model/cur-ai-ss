@@ -397,6 +397,16 @@ def test_occurrence_prompt_takes_a_whole_cohort_genotype_statement_as_stated():
     assert 'inferred from group/pedigree context' not in prompt
 
 
+def test_compound_het_prompt_takes_a_whole_cohort_phase_statement_as_established():
+    """Same rule as the other paper-reading prompts: phase confirmed for every
+    compound heterozygous patient in the cohort is confirmed for this one."""
+    prompt = COMPOUND_HET_AGENT_INSTRUCTIONS
+    assert 'said about every compound heterozygous patient in the cohort' in prompt
+    assert (
+        'a\n  statement about part of the group ("in most families") is not' in prompt
+    )
+
+
 def test_patient_prompt_flag_examples_cover_the_three_kinds_of_decision():
     prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
     assert 'FLAGS for this task' in prompt
