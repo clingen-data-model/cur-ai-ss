@@ -1605,6 +1605,107 @@ def test_create_task_scoped_to_variant(client, seeded_paper, seeded_variant, tes
     assert tasks[0]['updated_by_user_id'] == test_user.id
 
 
+def test_rerun_all_starts_at_the_classifier_and_sets_notes(
+    client, db_session, seeded_paper, test_user
+):
+    """Without re-parsing, the run starts at the classifier, and the successor
+    graph queues everything else; the notes are stored on the paper."""
+    db_session.add(
+        TaskDB(
+            paper_id=seeded_paper.id,
+            type=TaskType.PATIENT_EXTRACTION,
+            status=TaskStatus.COMPLETED,
+        )
+    )
+    db_session.commit()
+
+    with patch('lib.api.app.write_snapshot_safe'):
+        response = client.post(
+            f'/papers/{seeded_paper.id}/rerun-all',
+            json={'additional_context': '  Ignore the supplement cohort.  '},
+        )
+
+    assert response.status_code == 200
+    tasks = response.json()
+    assert [t['type'] for t in tasks] == [TaskType.PAPER_CLASSIFIER.value]
+    assert tasks[0]['status'] == 'Pending'
+    assert tasks[0]['updated_by_user_id'] == test_user.id
+    # The previous run's downstream rows are cleared so they cannot satisfy a
+    # fan-in gate for this run.
+    db_session.expire_all()
+    assert (
+        db_session.query(TaskDB)
+        .filter(
+            TaskDB.paper_id == seeded_paper.id,
+            TaskDB.type == TaskType.PATIENT_EXTRACTION,
+        )
+        .count()
+        == 0
+    )
+    assert seeded_paper.agent_notes == 'Ignore the supplement cohort.'
+    assert (
+        client.get(f'/papers/{seeded_paper.id}').json()['agent_notes']
+        == 'Ignore the supplement cohort.'
+    )
+
+
+def test_rerun_all_with_reparse_starts_at_pdf_parsing(client, seeded_paper):
+    with patch('lib.api.app.write_snapshot_safe'):
+        response = client.post(
+            f'/papers/{seeded_paper.id}/rerun-all', json={'reparse_pdf': True}
+        )
+
+    assert response.status_code == 200
+    assert [t['type'] for t in response.json()] == [TaskType.PDF_PARSING.value]
+
+
+def test_rerun_all_replaces_and_clears_notes(client, db_session, seeded_paper):
+    seeded_paper.agent_notes = 'old note'
+    db_session.commit()
+
+    with patch('lib.api.app.write_snapshot_safe'):
+        client.post(
+            f'/papers/{seeded_paper.id}/rerun-all',
+            json={'additional_context': 'new note'},
+        )
+    db_session.expire_all()
+    assert seeded_paper.agent_notes == 'new note'
+
+    # Finish the run so the paper is not busy, then clear with an empty box.
+    db_session.query(TaskDB).delete()
+    db_session.commit()
+    with patch('lib.api.app.write_snapshot_safe'):
+        client.post(
+            f'/papers/{seeded_paper.id}/rerun-all', json={'additional_context': '  '}
+        )
+    db_session.expire_all()
+    assert seeded_paper.agent_notes is None
+
+
+def test_rerun_all_refused_while_paper_has_tasks_in_flight(
+    client, db_session, seeded_paper
+):
+    db_session.add(
+        TaskDB(
+            paper_id=seeded_paper.id,
+            type=TaskType.HPO_LINKING,
+            status=TaskStatus.RUNNING,
+        )
+    )
+    db_session.commit()
+
+    with patch('lib.api.app.write_snapshot_safe') as snapshot:
+        response = client.post(f'/papers/{seeded_paper.id}/rerun-all', json={})
+
+    assert response.status_code == 409
+    snapshot.assert_not_called()
+
+
+def test_rerun_all_requires_authentication(unauth_client, seeded_paper):
+    response = unauth_client.post(f'/papers/{seeded_paper.id}/rerun-all', json={})
+    assert response.status_code == 401
+
+
 def test_create_task_requires_authentication(unauth_client, seeded_paper):
     """Anonymous task enqueue is rejected."""
     response = unauth_client.post(

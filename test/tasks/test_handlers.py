@@ -10,6 +10,7 @@ from lib.tasks.handlers import (
     cited_text,
     format_paper_context,
     paper_input,
+    paper_notes,
     patient_extraction_message,
     pedigree_input,
 )
@@ -280,3 +281,28 @@ async def test_rerunning_patient_extraction_replaces_only_its_own_flags(
 
     rows = db_session.query(FlagDB).filter_by(paper_id=paper.id).all()
     assert [r.subject for r in rows] == ['kept']
+
+
+def test_paper_context_carries_curator_notes_after_the_gene():
+    """The notes ride in the paper block, so every agent on the paper sends the
+    same bytes and the shared prompt-cache prefix still holds."""
+    plain = format_paper_context('text', 'MSX1')
+    noted = format_paper_context('text', 'MSX1', 'Ignore the supplement cohort.')
+
+    assert noted.startswith(plain)
+    assert noted.endswith(
+        'Curator notes for this paper (apply them to your task where they bear '
+        'on it):\nIgnore the supplement cohort.'
+    )
+    assert format_paper_context('text', 'MSX1', None) == plain
+    assert format_paper_context('text', 'MSX1', '') == plain
+
+
+def test_paper_notes_reads_the_paper_row(db_session, paper):
+    assert paper_notes(paper.id) is None
+    assert paper_notes(paper.id + 1000) is None
+
+    paper.agent_notes = 'Patients are numbered per family.'
+    db_session.commit()
+
+    assert paper_notes(paper.id) == 'Patients are numbered per family.'

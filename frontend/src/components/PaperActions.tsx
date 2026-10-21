@@ -4,13 +4,15 @@
  * Nothing about them was card-specific -- both take a paper and render an icon
  * button -- so they moved unchanged rather than being reimplemented.
  */
-import { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { RefreshCw, Trash2 } from 'lucide-react'
 import {
   createTaskPapersPaperIdTasksPost,
   deletePaperPapersPaperIdDelete,
+  getPaperPapersPaperIdGet,
+  rerunAllPapersPaperIdRerunAllPost,
 } from '@/api/generated'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
@@ -39,6 +41,16 @@ const RERUNNABLE_TASK_TYPES: TaskType[] = [
   'Extraction Verification',
 ]
 
+/* The dropdown's first entry: every task, from the top of the pipeline. It is
+ * not a TaskType, so it never reaches the task endpoint -- it has its own
+ * (POST /papers/{id}/rerun-all). */
+const ALL_TASKS = 'All tasks'
+type RerunChoice = TaskType | typeof ALL_TASKS
+
+/** Under the box in "All tasks" mode; the per-task counterpart is CONTEXT_NOTE. */
+const ALL_CONTEXT_NOTE =
+  'Shown to every agent that reads the paper, on its fresh run, and kept on the paper for later runs. Replaces the previous notes; clear the box to remove them.'
+
 /* Shared by RerunTaskButton's own trigger (papers table / gene cards) and the
  * "Re-run agents" button atop the task-timeline popovers -- same dialog
  * either way. Kept as one definition so the two triggers can't drift into
@@ -55,30 +67,58 @@ function RerunTaskDialog({
   initialTaskType?: TaskType
 }) {
   const queryClient = useQueryClient()
-  const [taskType, setTaskType] = useState<TaskType>(initialTaskType)
+  const [choice, setChoice] = useState<RerunChoice>(initialTaskType)
   const [skipSuccessors, setSkipSuccessors] = useState(false)
+  const [reparsePdf, setReparsePdf] = useState(false)
   const [context, setContext] = useState('')
+  const [contextTouched, setContextTouched] = useState(false)
+  const allTasks = choice === ALL_TASKS
+  const taskType = allTasks ? null : choice
   const busy = usePaperBusy(paper.id, open)
   // What each step is for, from the backend's own definition of the task types.
   const taskTypesQuery = useTaskTypes(open)
-  const taskHelp = taskTypesQuery.data?.find((t) => t.type === taskType)?.description
+  const taskHelp = taskType
+    ? taskTypesQuery.data?.find((t) => t.type === taskType)?.description
+    : undefined
+
+  // The notes already on the paper, so "All tasks" edits them in place rather
+  // than starting from a blank box that would silently replace them.
+  const notesQuery = useQuery({
+    queryKey: ['paper-agent-notes', paper.id],
+    queryFn: () => getPaperPapersPaperIdGet({ path: { paper_id: paper.id }, throwOnError: true }),
+    enabled: open && allTasks,
+    select: (resp) => resp.agent_notes ?? '',
+  })
+  useEffect(() => {
+    if (allTasks && !contextTouched && notesQuery.data !== undefined) setContext(notesQuery.data)
+  }, [allTasks, contextTouched, notesQuery.data])
 
   const mutation = useMutation({
-    mutationFn: () => createTaskPapersPaperIdTasksPost({
-      path: { paper_id: paper.id },
-      body: { type: taskType, skip_successors: skipSuccessors, additional_context: context || null },
-      throwOnError: true,
-    }),
+    mutationFn: () => taskType === null
+      ? rerunAllPapersPaperIdRerunAllPost({
+          path: { paper_id: paper.id },
+          body: { reparse_pdf: reparsePdf, additional_context: context || null },
+          throwOnError: true,
+        })
+      : createTaskPapersPaperIdTasksPost({
+          path: { paper_id: paper.id },
+          body: { type: taskType, skip_successors: skipSuccessors, additional_context: context || null },
+          throwOnError: true,
+        }),
     onSuccess: () => {
       // Queuing a task changes the paper's status, which both the cards and the
       // papers table render. Without this the badge keeps reading Done until
       // something else happens to refetch.
       queryClient.invalidateQueries({ queryKey: ['papers'] })
       queryClient.invalidateQueries({ queryKey: ['paper-tasks', paper.id] })
-      toast.success('Task queued')
+      queryClient.invalidateQueries({ queryKey: ['paper-agent-notes', paper.id] })
+      queryClient.invalidateQueries({ queryKey: ['paper', paper.id] })
+      toast.success(allTasks ? 'Re-running all tasks' : 'Task queued')
       onOpenChange(false)
       setContext('')
+      setContextTouched(false)
       setSkipSuccessors(false)
+      setReparsePdf(false)
     },
     onError: (error) => toast.error(apiErrorMessage(error, 'Failed to queue task')),
   })
@@ -89,7 +129,7 @@ function RerunTaskDialog({
       onOpenChange={(next) => {
         // Re-opening (e.g. a different row's icon) should show that row's type,
         // not whatever was last picked from the dropdown.
-        if (next) setTaskType(initialTaskType)
+        if (next) setChoice(initialTaskType)
         onOpenChange(next)
       }}
     >
@@ -101,7 +141,7 @@ function RerunTaskDialog({
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Task</label>
-            <Select value={taskType} onValueChange={(v) => setTaskType(v as TaskType)}>
+            <Select value={choice} onValueChange={(v) => setChoice(v as RerunChoice)}>
               <SelectTrigger className="w-full">
                 <SelectValue />
               </SelectTrigger>
@@ -109,40 +149,75 @@ function RerunTaskDialog({
                   it, a short scrolling list floated up over the dialog and
                   showed a slice that did not include the selection. */}
               <SelectContent className="max-h-64" alignItemWithTrigger={false}>
+                <SelectItem value={ALL_TASKS}>{ALL_TASKS}</SelectItem>
                 {RERUNNABLE_TASK_TYPES.map(t => (
                   <SelectItem key={t} value={t}>{t}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
             {taskHelp && <p className="text-xs text-muted-foreground">{taskHelp}</p>}
+            {allTasks && (
+              <p className="text-xs text-muted-foreground">
+                Every task, from the top of the pipeline, each agent starting fresh.
+              </p>
+            )}
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium">
-              Additional context <span className="text-muted-foreground font-normal">(optional)</span>
+              {allTasks ? 'Notes for every agent' : 'Additional context'}{' '}
+              <span className="text-muted-foreground font-normal">(optional)</span>
             </label>
             <textarea
               value={context}
-              onChange={(e) => setContext(e.target.value)}
-              placeholder="Any specific instructions for this task run..."
+              onChange={(e) => {
+                setContext(e.target.value)
+                setContextTouched(true)
+              }}
+              placeholder={
+                allTasks
+                  ? 'Anything every agent should know about this paper...'
+                  : 'Any specific instructions for this task run...'
+              }
               rows={3}
               className="w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none resize-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
             />
-            <p className="text-xs text-muted-foreground">{CONTEXT_NOTE}</p>
+            <p className="text-xs text-muted-foreground">
+              {allTasks ? ALL_CONTEXT_NOTE : CONTEXT_NOTE}
+            </p>
           </div>
-          <div className="space-y-1.5">
-            <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={skipSuccessors}
-                onChange={(e) => setSkipSuccessors(e.target.checked)}
-                className="cursor-pointer"
-              />
-              Skip successor tasks
-            </label>
-            {/* The dependency chain the checkbox cuts, so "skip" is a choice
-             * about something visible. */}
-            <TaskSuccessors taskType={taskType} skipped={skipSuccessors} />
-          </div>
+          {taskType === null ? (
+            <div className="space-y-1.5">
+              <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={reparsePdf}
+                  onChange={(e) => setReparsePdf(e.target.checked)}
+                  className="cursor-pointer"
+                />
+                Also re-parse the PDF
+              </label>
+              <p className="text-xs text-muted-foreground">
+                Rebuilds the text, tables and images the agents cite. Off, the run starts at
+                Paper Classifier and uses the parse already on disk.
+              </p>
+              <TaskSuccessors taskType={reparsePdf ? 'PDF Parsing' : 'Paper Classifier'} />
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={skipSuccessors}
+                  onChange={(e) => setSkipSuccessors(e.target.checked)}
+                  className="cursor-pointer"
+                />
+                Skip successor tasks
+              </label>
+              {/* The dependency chain the checkbox cuts, so "skip" is a choice
+               * about something visible. */}
+              <TaskSuccessors taskType={taskType} skipped={skipSuccessors} />
+            </div>
+          )}
           {busy && <p className="text-sm text-amber-700 dark:text-amber-400">{busy}</p>}
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
