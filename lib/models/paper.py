@@ -456,6 +456,9 @@ class PaperSummaryResp(BaseModel):
     # Columns on the paper row, so free: the query loads the row either way.
     disease_name: str | None = None
     pmid: str | None = None
+    # Prefills the re-run dialog's "All tasks" tab, which would otherwise have
+    # to fetch the whole paper just to read this.
+    paper_global_additional_context: str | None = None
     # Who last touched the paper itself, as distinct from collaborators, which
     # is everyone who has touched anything under it.
     updated_by: 'UserSummaryResp | None' = None

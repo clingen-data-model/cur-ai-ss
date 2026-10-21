@@ -1657,6 +1657,20 @@ def test_rerun_all_starts_at_the_classifier_and_sets_notes(
     )
 
 
+def test_papers_list_carries_global_context_for_the_rerun_dialog(
+    client, db_session, seeded_paper
+):
+    """The dialog prefills its All tasks tab from the list row it was opened
+    from, so the context has to be on the summary and not need a fetch."""
+    seeded_paper.paper_global_additional_context = 'Ignore the supplement cohort.'
+    db_session.commit()
+
+    rows = client.get('/papers').json()
+
+    row = next(r for r in rows if r['id'] == seeded_paper.id)
+    assert row['paper_global_additional_context'] == 'Ignore the supplement cohort.'
+
+
 def test_rerun_all_with_reparse_starts_at_pdf_parsing(client, seeded_paper):
     with patch('lib.api.app.write_snapshot_safe'):
         response = client.post(
