@@ -2950,6 +2950,7 @@ def rerun_flag(
     )
     paper = session.get(PaperDB, paper_id)
     assert paper is not None  # _prepare_rerun 404s a missing paper
+    set_paper_context(paper, request.additional_context)
     add_paper_context(paper, context)
     return enqueue_task(
         session,

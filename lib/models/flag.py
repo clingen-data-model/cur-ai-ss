@@ -288,12 +288,17 @@ class FlagBulkResolveRequest(BaseModel):
 
 
 class FlagRerunRequest(BaseModel):
-    """Re-run the agent that raised a flag, for the row it ran on, with the
-    curator's note as the follow-up context. The task is the same one the
-    scoped rerun buttons queue (see ``/papers/{id}/flags/{flag_id}/rerun``):
-    the agent's session still holds its previous run, so the note reads as a
-    reply to the flag. Its re-run replaces the flag along with the rest of
-    that agent's flags for the scope."""
+    """Re-run the agent that raised a flag, for the row it ran on. The task is
+    the same one the scoped rerun buttons queue (see
+    ``/papers/{id}/flags/{flag_id}/rerun``); its re-run replaces the flag
+    along with the rest of that agent's flags for the scope.
 
+    ``additional_context`` is the paper's one context field, as on
+    TaskCreateRequest (None leaves it, blank clears it, else replaces it);
+    the dialog shows it so the curator sees what the note joins. The review
+    itself, with ``note``, is then appended as a paragraph that stays for
+    every later run."""
+
+    additional_context: str | None = None
     note: str | None = None
     skip_successors: bool = False

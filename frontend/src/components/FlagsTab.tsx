@@ -446,9 +446,12 @@ export function FlagsTab({
           if (!open) setRerunning(null)
         }}
         isPending={rerun.isPending}
-        onConfirm={(note) => {
+        onConfirm={({ context, note }) => {
           if (!rerunning) return
-          rerun.mutate({ flagId: rerunning.id, note }, { onSuccess: () => setRerunning(null) })
+          rerun.mutate(
+            { flagId: rerunning.id, context, note },
+            { onSuccess: () => setRerunning(null) },
+          )
         }}
       />
     </div>

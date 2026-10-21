@@ -143,23 +143,26 @@ export function useResolveFlags(paperId: number) {
   })
 }
 
-/** Queue the agent that raised a flag again, for its row, with a note as the
- * follow-up context. The server picks the scope from the agent's task type.
- * The flag goes away when that run writes its own flags. */
+/** Queue the agent that raised a flag again, for its row. The paper's context
+ * (the dialog's box, sent back whole) is saved first, then the review and the
+ * note are appended to it. The server picks the scope from the agent's task
+ * type. The flag goes away when that run writes its own flags. */
 export function useRerunFromFlag(paperId: number) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ flagId, note }: { flagId: number; note: string }) =>
+    mutationFn: ({ flagId, context, note }: { flagId: number; context: string; note: string }) =>
       rerunFlagPapersPaperIdFlagsFlagIdRerunPost({
         path: { paper_id: paperId, flag_id: flagId },
-        body: { note: note || null, skip_successors: false },
+        body: { additional_context: context, note: note || null, skip_successors: false },
         throwOnError: true,
       }),
     onSuccess: (task) => {
       // Queuing a task changes the paper's status, which the papers table
-      // and the progress popover render.
+      // and the progress popover render; the paper query carries the context
+      // the next dialog prefills from.
       queryClient.invalidateQueries({ queryKey: ['papers'] })
       queryClient.invalidateQueries({ queryKey: ['paper-tasks', paperId] })
+      queryClient.invalidateQueries({ queryKey: ['paper', paperId] })
       toast.success(`${task.type} queued`)
     },
     onError: (error) => toast.error(apiErrorMessage(error, 'Failed to queue re-run')),

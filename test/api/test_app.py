@@ -3997,6 +3997,33 @@ def test_rerun_flag_scopes_the_task_to_what_the_agent_runs_on(
     )
 
 
+def test_rerun_flag_takes_the_edited_context_then_appends_the_review(
+    client, db_session, seeded_paper
+):
+    """The dialog shows the paper's context to edit; the edit lands first and
+    the review paragraph goes after it."""
+    seeded_paper.paper_global_additional_context = 'Old note.\n\nStale line.'
+    db_session.commit()
+    patient = _seed_patient(db_session, seeded_paper, identifier='Patient 1')
+    flag = _seed_flag(
+        db_session, seeded_paper, subject='sex unclear', patient_id=patient.id
+    )
+    flag.source = 'PATIENT_DEMOGRAPHICS'
+    db_session.flush()
+
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/flags/{flag.id}/rerun',
+        json={'additional_context': 'Old note.', 'note': 'see the pedigree'},
+    )
+    assert resp.status_code == 200, resp.text
+    db_session.expire_all()
+    assert seeded_paper.paper_global_additional_context == (
+        'Old note.\n\n'
+        'A curator reviewed the Patient Demographics flag "sex unclear" and '
+        'asked for that step to run again. Their note: see the pedigree'
+    )
+
+
 def test_rerun_flag_refuses_a_scoped_agent_with_no_row_to_run_on(
     client, db_session, seeded_paper
 ):
