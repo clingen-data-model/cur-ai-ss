@@ -1023,6 +1023,7 @@ def _paper_summaries(
             updated_at=paper.updated_at,
             status=summarize_paper_task_status(task_statuses.get(paper.id, [])),
             disease_name=paper.disease_name,
+            paper_global_additional_context=paper.paper_global_additional_context,
             pmid=paper.pmid,
             updated_by=(
                 users.get(paper.updated_by_user_id)

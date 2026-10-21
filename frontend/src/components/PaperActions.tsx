@@ -5,13 +5,12 @@
  * button -- so they moved unchanged rather than being reimplemented.
  */
 import { useEffect, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { RefreshCw, Trash2 } from 'lucide-react'
 import {
   createTaskPapersPaperIdTasksPost,
   deletePaperPapersPaperIdDelete,
-  getPaperPapersPaperIdGet,
   rerunAllPapersPaperIdRerunAllPost,
 } from '@/api/generated'
 import { Button } from '@/components/ui/button'
@@ -27,7 +26,10 @@ import { apiErrorMessage } from '@/lib/apiError'
 /* The fields RerunTaskDialog actually needs -- narrower than PaperSummaryResp
  * so it can also take a PaperResp (the paper-detail page's shape, which has
  * no gene_symbol/status/thumbnail_url) without a fake/partial object. */
-type RerunnablePaper = Pick<PaperSummaryResp, 'id' | 'title' | 'filename'>
+type RerunnablePaper = Pick<
+  PaperSummaryResp,
+  'id' | 'title' | 'filename' | 'paper_global_additional_context'
+>
 
 // Every task type is rerunnable except 'General Paper Question', which is only
 // ever created ad hoc by the chat router.
@@ -81,26 +83,25 @@ function RerunTaskDialog({
   const [context, setContext] = useState('')
   const [reparsePdf, setReparsePdf] = useState(false)
   const [globalContext, setGlobalContext] = useState('')
-  const [globalContextTouched, setGlobalContextTouched] = useState(false)
   const allTab = tab === 'all'
   const busy = usePaperBusy(paper.id, open)
   // What each step is for, from the backend's own definition of the task types.
   const taskTypesQuery = useTaskTypes(open)
   const taskHelp = taskTypesQuery.data?.find((t) => t.type === taskType)?.description
 
-  // The global context already on the paper, so the tab edits it in place
-  // rather than starting from a blank box that would silently replace it.
-  const globalContextQuery = useQuery({
-    queryKey: ['paper-global-additional-context', paper.id],
-    queryFn: () => getPaperPapersPaperIdGet({ path: { paper_id: paper.id }, throwOnError: true }),
-    enabled: open && allTab,
-    select: (resp) => resp.paper_global_additional_context ?? '',
-  })
+  // Opening the dialog starts from what the paper already holds, whichever
+  // trigger opened it, so the All tasks tab edits the global context in place
+  // rather than starting from a blank box that would silently replace it. It
+  // comes off the paper row the caller already has: no request of its own.
   useEffect(() => {
-    if (!globalContextTouched && globalContextQuery.data !== undefined) {
-      setGlobalContext(globalContextQuery.data)
-    }
-  }, [globalContextTouched, globalContextQuery.data])
+    if (!open) return
+    setTab('single')
+    setTaskType(initialTaskType)
+    setGlobalContext(paper.paper_global_additional_context ?? '')
+    // Only when the dialog opens: a refetch of the paper while it is open
+    // must not overwrite what the curator has typed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   const mutation = useMutation({
     mutationFn: () => allTab
@@ -120,31 +121,18 @@ function RerunTaskDialog({
       // something else happens to refetch.
       queryClient.invalidateQueries({ queryKey: ['papers'] })
       queryClient.invalidateQueries({ queryKey: ['paper-tasks', paper.id] })
-      queryClient.invalidateQueries({ queryKey: ['paper-global-additional-context', paper.id] })
       queryClient.invalidateQueries({ queryKey: ['paper', paper.id] })
       toast.success(allTab ? 'Re-running all tasks' : 'Task queued')
       onOpenChange(false)
       setContext('')
       setSkipSuccessors(false)
       setReparsePdf(false)
-      setGlobalContextTouched(false)
     },
     onError: (error) => toast.error(apiErrorMessage(error, 'Failed to queue task')),
   })
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        // Re-opening (e.g. a different row's icon) should show that row's type
-        // on the first tab, not whatever was last picked.
-        if (next) {
-          setTab('single')
-          setTaskType(initialTaskType)
-        }
-        onOpenChange(next)
-      }}
-    >
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent onClick={(e) => e.stopPropagation()}>
         <div className="space-y-4">
           <div>
@@ -212,10 +200,7 @@ function RerunTaskDialog({
                 </label>
                 <textarea
                   value={globalContext}
-                  onChange={(e) => {
-                    setGlobalContext(e.target.value)
-                    setGlobalContextTouched(true)
-                  }}
+                  onChange={(e) => setGlobalContext(e.target.value)}
                   placeholder="Anything every agent should know, or Task name: an instruction for one task..."
                   rows={3}
                   className={TEXTAREA_CLASS}
@@ -237,7 +222,6 @@ function RerunTaskDialog({
                   Rebuilds the text, tables and images the agents cite. Off, the run starts at
                   Paper Classifier and uses the parse already on disk.
                 </p>
-                <TaskSuccessors taskType={reparsePdf ? 'PDF Parsing' : 'Paper Classifier'} />
               </div>
             </TabsContent>
           </Tabs>
