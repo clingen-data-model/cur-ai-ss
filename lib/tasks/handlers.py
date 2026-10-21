@@ -183,6 +183,7 @@ from lib.models.variant import (
 from lib.reference_data.hpo import find_matching_hpo_terms
 from lib.reference_data.mondo import get_mondo_term
 from lib.tasks.agent_session import agent_session
+from lib.tasks.context_notes import EVERY_TASK, render_context_notes
 from lib.tasks.extraction_verification import (
     apply_merge,
     open_flags,
@@ -346,29 +347,32 @@ async def ask_task_agent(
 
 
 def paper_global_context(paper_id: int) -> str | None:
-    """The paper's additional context -- what a curator gave on a re-run -- or
-    None."""
+    """The paper's additional context -- the notes curators gave on re-runs,
+    rendered for a prompt (``render_context_notes``) -- or None."""
     with session_scope() as session:
         paper = session.get(PaperDB, paper_id)
-        return paper.paper_global_additional_context if paper else None
+        return render_context_notes(paper.context_notes) if paper else None
 
 
 def curator_notes_section(notes: str, task_type: TaskType) -> str:
     """The paper's additional context, as one prompt section for ``task_type``.
 
-    The agent is told which agent it is: the context is one text for the
-    whole paper, so an instruction in it may be meant for another step, and
-    the agent needs its own name to tell. ``paper_input`` carries the section
-    for the agents that read the paper; the agents that never see the paper
-    text (HPO linking, variant harmonization, pedigree description) put it in
-    their own first message.
+    The agent is told which agent it is: the notes are one list for the
+    whole paper, so a note may be meant for another step, and the agent
+    needs its own name to tell. Each note's bracketed label says which step
+    and, for a row's re-run, which row it was given for. ``paper_input``
+    carries the section for the agents that read the paper; the agents that
+    never see the paper text (HPO linking, variant harmonization, pedigree
+    description) put it in their own first message.
     """
     return (
-        'A human curator is re-running the extraction of this paper and has '
-        'given additional instructions, which every step of the pipeline '
-        f'reads. You are the {task_type.value} agent: follow the instructions '
-        'that bear on your task, and leave the ones meant for other steps to '
-        f'them.\n\n{notes}'
+        'A human curator has given additional instructions for this paper, '
+        'which every step of the pipeline reads. Each note is labelled with '
+        'the step, and the patient, variant or phenotype, it was given for; '
+        f'"{EVERY_TASK}" means every step. You are the {task_type.value} '
+        'agent: follow the notes that bear on your task, and leave the ones '
+        'meant for other steps to them. A note about one patient, variant or '
+        f'phenotype applies to that one only.\n\n{notes}'
     )
 
 
@@ -1806,9 +1810,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
             return
 
         paper_row = session.get(PaperDB, paper_id)
-        has_global_context = bool(
-            paper_row and paper_row.paper_global_additional_context
-        )
+        has_global_context = bool(paper_row and paper_row.context_notes)
 
         # Idempotent: delete-then-insert
         # Phenotypes are scoped by patient_id, which is already run-versioned

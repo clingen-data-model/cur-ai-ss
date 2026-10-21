@@ -6,7 +6,7 @@
  * POST /papers/{paper_id}/tasks endpoint with that id set, so the task-queue
  * dedup/reset logic in enqueue_task applies exactly as it does for the
  * unscoped button. */
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { RefreshCw } from 'lucide-react'
@@ -22,10 +22,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { TaskSuccessors } from '@/components/TaskSuccessors'
-import { PaperContextField } from '@/components/PaperContextField'
+import { PaperContextNotes } from '@/components/PaperContextNotes'
 import { apiErrorMessage } from '@/lib/apiError'
 import { usePaperBusy } from '@/hooks/usePaperBusy'
-import { usePaperAdditionalContext } from '@/hooks/usePaperAdditionalContext'
+import { usePaperContextNotes } from '@/hooks/usePaperContextNotes'
 
 interface TaskScope {
   family_id?: number
@@ -52,14 +52,7 @@ export function ScopedRerunButton({
   const [open, setOpen] = useState(false)
   const [context, setContext] = useState('')
   const busy = usePaperBusy(paperId, open)
-  // The box is the paper's one context field, so it opens on what is there.
-  const paperContext = usePaperAdditionalContext(paperId, open)
-  useEffect(() => {
-    if (open && paperContext.loaded) setContext(paperContext.context ?? '')
-    // Only when the dialog opens or the context first loads: a refetch while
-    // it is open must not overwrite what the curator has typed.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, paperContext.loaded])
+  const notes = usePaperContextNotes(paperId, open)
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -105,7 +98,13 @@ export function ScopedRerunButton({
             <DialogTitle>{label}</DialogTitle>
             <DialogDescription>{description}</DialogDescription>
           </DialogHeader>
-          <PaperContextField value={context} onChange={setContext} disabled={!paperContext.loaded} />
+          <PaperContextNotes
+            paperId={paperId}
+            notes={notes}
+            value={context}
+            onChange={setContext}
+            addHelp={`Saved as a note labelled “${taskType}” and this row: every agent reads it on every later run too, until it is removed above.`}
+          />
           {/* Same chain the paper-wide dialog shows; a scoped re-run queues
            * the same successor types, scoped where they fan out. */}
           <TaskSuccessors taskType={taskType} />
@@ -116,7 +115,7 @@ export function ScopedRerunButton({
             </Button>
             <Button
               onClick={() => mutation.mutate()}
-              disabled={mutation.isPending || !!busy || !paperContext.loaded}
+              disabled={mutation.isPending || !!busy}
             >
               {mutation.isPending ? 'Queuing...' : 'Confirm'}
             </Button>

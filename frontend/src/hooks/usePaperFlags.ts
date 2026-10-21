@@ -150,16 +150,16 @@ export function useResolveFlags(paperId: number) {
 export function useRerunFromFlag(paperId: number) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ flagId, context, note }: { flagId: number; context: string; note: string }) =>
+    mutationFn: ({ flagId, note }: { flagId: number; note: string }) =>
       rerunFlagPapersPaperIdFlagsFlagIdRerunPost({
         path: { paper_id: paperId, flag_id: flagId },
-        body: { additional_context: context, note: note || null, skip_successors: false },
+        body: { note: note || null, skip_successors: false },
         throwOnError: true,
       }),
     onSuccess: (task) => {
       // Queuing a task changes the paper's status, which the papers table
-      // and the progress popover render; the paper query carries the context
-      // the next dialog prefills from.
+      // and the progress popover render; the paper query carries the notes
+      // the next dialog lists.
       queryClient.invalidateQueries({ queryKey: ['papers'] })
       queryClient.invalidateQueries({ queryKey: ['paper-tasks', paperId] })
       queryClient.invalidateQueries({ queryKey: ['paper', paperId] })

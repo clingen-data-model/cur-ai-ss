@@ -159,10 +159,10 @@ export function FlagIndicator({ paperId, flags }: { paperId: number; flags: Flag
           if (!open) setRerunning(null)
         }}
         isPending={rerun.isPending}
-        onConfirm={({ context, note }) => {
+        onConfirm={(note) => {
           if (!rerunning) return
           rerun.mutate(
-            { flagId: rerunning.id, context, note },
+            { flagId: rerunning.id, note },
             { onSuccess: () => setRerunning(null) },
           )
         }}

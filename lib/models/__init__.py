@@ -61,6 +61,11 @@ from lib.models.paper import (
     PedigreeResp,
     ReviewStatus,
 )
+from lib.models.paper_context_note import (
+    ContextNoteSource,
+    PaperContextNoteDB,
+    PaperContextNoteResp,
+)
 from lib.models.patient import (
     PatientCreateRequest,
     PatientDB,

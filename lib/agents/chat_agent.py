@@ -21,12 +21,13 @@ from lib.misc.snapshots import write_snapshot_safe
 from lib.models.base import row_to_dict
 from lib.models.family import FamilyDB
 from lib.models.paper import PaperDB
+from lib.models.paper_context_note import ContextNoteSource
 from lib.models.patient import PatientDB
 from lib.models.phenotype import PhenotypeDB
 from lib.models.variant import VariantDB
+from lib.tasks.context_notes import add_context_note, anchor_for
 from lib.tasks.handlers import QA_UNSUPPORTED_TASK_TYPES, ask_task_agent
 from lib.tasks.misc import (
-    add_paper_context,
     enqueue_all_instances,
     enqueue_task,
     infer_paper_status_detail,
@@ -245,8 +246,10 @@ def _make_queue_task_tool(paper_id: int, user_id: int) -> Any:
         top-level id in the right field, plus its label as entity_label. If
         the user gave extra guidance for the rerun (e.g. "treat patient 3 as
         the proband"), pass it as additional_context: it is added to the
-        paper's additional context, which every agent reads on every run.
-        Returns a user-facing confirmation -- reply with exactly that text."""
+        paper's additional context as a note labelled with this task type
+        and entity_label, which every agent reads on every run until a
+        curator removes it. Returns a user-facing confirmation -- reply with
+        exactly that text."""
         if task_type not in _RUNNABLE_TASK_TYPES:
             return f'"{task_type}" is not a runnable task; answer it as a question instead.'
 
@@ -278,8 +281,14 @@ def _make_queue_task_tool(paper_id: int, user_id: int) -> Any:
             if not skip_successors:
                 invalidate_descendants(session, paper_id, task_type)
 
-            if additional_context and additional_context.strip():
-                add_paper_context(paper, additional_context)
+            add_context_note(
+                session,
+                paper_id,
+                additional_context,
+                source=ContextNoteSource.CHAT,
+                anchor=anchor_for(task_type.value, entity_label),
+                user_id=user_id,
+            )
 
             if no_scope:
                 tasks = enqueue_all_instances(

@@ -352,12 +352,14 @@ class TaskCreateRequest(BaseModel):
     phenotype_id: int | None = None
     patient_variant_occurrence_id: int | None = None
     skip_successors: bool = False
-    # The paper's additional context (papers.paper_global_additional_context),
-    # the one place a curator's instructions go: every agent reads it on every
-    # run. None leaves it as it is; blank clears it; anything else replaces it.
-    # There is no per-task context -- a task used to get its own as a follow-up
-    # in its old conversation, and a curator who picked the wrong task in the
-    # dialog left the right agent unaware of it.
+    # A note to add to the paper's additional context (paper_context_notes),
+    # the one place a curator's instructions go: every agent reads every note
+    # on every run, and a note stays until a curator removes it. Blank adds
+    # nothing. The note is anchored to this task type and, for a scoped run,
+    # its row, so the agents can tell what it is for. There is no per-task
+    # context -- a task used to get its own as a follow-up in its old
+    # conversation, and a curator who picked the wrong task in the dialog
+    # left the right agent unaware of it.
     additional_context: str | None = None
 
 
@@ -368,5 +370,6 @@ class RerunAllRequest(BaseModel):
     # images the agents cite, so re-parsing is a choice: without it the run
     # starts at the paper classifier, on the parse already on disk.
     reparse_pdf: bool = False
-    # The paper's additional context, as on TaskCreateRequest.
+    # A note to add to the paper's additional context, as on
+    # TaskCreateRequest, anchored to no step: it is for all of them.
     additional_context: str | None = None

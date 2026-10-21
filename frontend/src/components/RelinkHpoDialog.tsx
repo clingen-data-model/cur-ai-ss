@@ -12,7 +12,7 @@
  * phenotype's HPO link with no agent involved. "Re-run agent" instead queues
  * the HPO_LINKING task for just this phenotype (the same task-queue endpoint
  * PaperActions.tsx's paper-wide "Rerun Agents" button uses), with the paper's
- * additional context on show to edit first (PaperContextField) -- for when
+ * context notes on show, and a box to add one (PaperContextNotes) -- for when
  * the curator wants the agent to try again with a hint rather than overriding
  * it by hand. That queues async work on the worker, so there is no immediate
  * result here beyond a confirmation toast; the row picks up the new match
@@ -22,7 +22,7 @@
  * and TaskTimeline.tsx use for "re-run this agent" -- both open onto a re-run
  * flow (this one via a tab, since a manual pick is also on offer), so the icon
  * means the same thing everywhere it appears. */
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Pencil, RefreshCw } from 'lucide-react'
@@ -42,10 +42,10 @@ import {
 } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { HpoCombobox } from '@/components/HpoCombobox'
-import { PaperContextField } from '@/components/PaperContextField'
+import { PaperContextNotes } from '@/components/PaperContextNotes'
 import { apiErrorMessage } from '@/lib/apiError'
 import { usePaperBusy } from '@/hooks/usePaperBusy'
-import { usePaperAdditionalContext } from '@/hooks/usePaperAdditionalContext'
+import { usePaperContextNotes } from '@/hooks/usePaperContextNotes'
 
 export function RelinkHpoDialog({
   paperId,
@@ -90,14 +90,7 @@ export function RelinkHpoDialog({
   // The manual tab writes directly and stays usable; only the agent tab
   // queues a task, which the API refuses while the paper is busy.
   const busy = usePaperBusy(paperId, open)
-  // The box is the paper's one context field, so it opens on what is there.
-  const paperContext = usePaperAdditionalContext(paperId, open)
-  useEffect(() => {
-    if (open && paperContext.loaded) setContext(paperContext.context ?? '')
-    // Only when the dialog opens or the context first loads: a refetch while
-    // it is open must not overwrite what the curator has typed.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, paperContext.loaded])
+  const notes = usePaperContextNotes(paperId, open)
 
   const rerunMutation = useMutation({
     mutationFn: () =>
@@ -187,10 +180,12 @@ export function RelinkHpoDialog({
               </DialogFooter>
             </TabsContent>
             <TabsContent value="agent" className="space-y-4 pt-3">
-              <PaperContextField
+              <PaperContextNotes
+                paperId={paperId}
+                notes={notes}
                 value={context}
                 onChange={setContext}
-                disabled={!paperContext.loaded}
+                addHelp={`Saved as a note labelled “HPO Linking” and this phenotype: every agent reads it on every later run too, until it is removed above.`}
               />
               <p className="text-xs text-muted-foreground">
                 Re-runs the HPO linking agent for this phenotype in the background. The result
@@ -203,7 +198,7 @@ export function RelinkHpoDialog({
                 </Button>
                 <Button
                   onClick={() => rerunMutation.mutate()}
-                  disabled={rerunMutation.isPending || !!busy || !paperContext.loaded}
+                  disabled={rerunMutation.isPending || !!busy}
                 >
                   {rerunMutation.isPending ? 'Queuing...' : 'Re-run agent'}
                 </Button>

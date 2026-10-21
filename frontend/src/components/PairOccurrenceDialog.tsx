@@ -9,7 +9,7 @@
  * picking a partner for the first time, RefreshCw for changing an existing
  * pairing.
  */
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Link2, RefreshCw } from 'lucide-react'
@@ -32,10 +32,10 @@ import {
 } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { PaperContextField } from '@/components/PaperContextField'
+import { PaperContextNotes } from '@/components/PaperContextNotes'
 import { apiErrorMessage } from '@/lib/apiError'
 import { usePaperBusy } from '@/hooks/usePaperBusy'
-import { usePaperAdditionalContext } from '@/hooks/usePaperAdditionalContext'
+import { usePaperContextNotes } from '@/hooks/usePaperContextNotes'
 
 const NONE_VALUE = '__none__'
 
@@ -80,14 +80,7 @@ export function PairOccurrenceDialog({
   // The manual tab writes directly and stays usable; only the agent tab
   // queues a task, which the API refuses while the paper is busy.
   const busy = usePaperBusy(paperId, open)
-  // The box is the paper's one context field, so it opens on what is there.
-  const paperContext = usePaperAdditionalContext(paperId, open)
-  useEffect(() => {
-    if (open && paperContext.loaded) setContext(paperContext.context ?? '')
-    // Only when the dialog opens or the context first loads: a refetch while
-    // it is open must not overwrite what the curator has typed.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, paperContext.loaded])
+  const notes = usePaperContextNotes(paperId, open)
 
   const rerunMutation = useMutation({
     mutationFn: () =>
@@ -199,10 +192,12 @@ export function PairOccurrenceDialog({
               </DialogFooter>
             </TabsContent>
             <TabsContent value="agent" className="space-y-4 pt-3">
-              <PaperContextField
+              <PaperContextNotes
+                paperId={paperId}
+                notes={notes}
                 value={context}
                 onChange={setContext}
-                disabled={!paperContext.loaded}
+                addHelp={`Saved as a note labelled “Compound Het Evaluation” and this patient: every agent reads it on every later run too, until it is removed above.`}
               />
               <p className="text-xs text-muted-foreground">
                 Re-runs compound-het evaluation for this patient in the background. The result
@@ -215,7 +210,7 @@ export function PairOccurrenceDialog({
                 </Button>
                 <Button
                   onClick={() => rerunMutation.mutate()}
-                  disabled={rerunMutation.isPending || !!busy || !paperContext.loaded}
+                  disabled={rerunMutation.isPending || !!busy}
                 >
                   {rerunMutation.isPending ? 'Queuing...' : 'Re-run agent'}
                 </Button>

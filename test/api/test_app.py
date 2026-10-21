@@ -40,9 +40,26 @@ from lib.models import (
 from lib.models.deletion_log import DeletionLogDB
 from lib.models.edit import EditDB
 from lib.models.paper import PedigreeDB
+from lib.models.paper_context_note import PaperContextNoteDB
 from lib.tasks import TaskCreateRequest
 from lib.tasks.agent_session import chat_session
 from lib.tasks.models import TaskStatus, TaskType
+
+
+def _add_note(db_session, paper, text, anchor=None):
+    """A note in the paper's additional context, as a dialog would leave it."""
+    note = PaperContextNoteDB(
+        paper_id=paper.id, text=text, source='curator', anchor=anchor
+    )
+    db_session.add(note)
+    db_session.commit()
+    return note
+
+
+def _notes(db_session, paper):
+    """The paper's notes as (anchor, text), oldest first."""
+    db_session.expire_all()
+    return [(n.anchor, n.text) for n in paper.context_notes]
 
 
 @pytest.fixture
@@ -1619,29 +1636,28 @@ def test_rerun_all_starts_at_the_classifier_and_sets_notes(
         .count()
         == 0
     )
-    assert (
-        seeded_paper.paper_global_additional_context == 'Ignore the supplement cohort.'
-    )
-    assert (
-        client.get(f'/papers/{seeded_paper.id}').json()[
-            'paper_global_additional_context'
-        ]
-        == 'Ignore the supplement cohort.'
-    )
+    # A note to every task: no anchor, attributed to who asked.
+    assert _notes(db_session, seeded_paper) == [(None, 'Ignore the supplement cohort.')]
+    (note,) = client.get(f'/papers/{seeded_paper.id}').json()['context_notes']
+    assert note['text'] == 'Ignore the supplement cohort.'
+    assert note['anchor'] is None
+    assert note['source'] == 'curator'
+    assert note['created_by']['id'] == test_user.id
 
 
-def test_papers_list_carries_global_context_for_the_rerun_dialog(
+def test_papers_list_carries_context_notes_for_the_rerun_dialog(
     client, db_session, seeded_paper
 ):
-    """The dialog prefills its All tasks tab from the list row it was opened
-    from, so the context has to be on the summary and not need a fetch."""
-    seeded_paper.paper_global_additional_context = 'Ignore the supplement cohort.'
-    db_session.commit()
+    """The dialog opened from a list row shows the notes from that row, so
+    they have to be on the summary and not need a fetch."""
+    _add_note(db_session, seeded_paper, 'Ignore the supplement cohort.')
 
     rows = client.get('/papers').json()
 
     row = next(r for r in rows if r['id'] == seeded_paper.id)
-    assert row['paper_global_additional_context'] == 'Ignore the supplement cohort.'
+    assert [n['text'] for n in row['context_notes']] == [
+        'Ignore the supplement cohort.'
+    ]
 
 
 def test_rerun_all_with_reparse_starts_at_pdf_parsing(client, seeded_paper):
@@ -1654,26 +1670,27 @@ def test_rerun_all_with_reparse_starts_at_pdf_parsing(client, seeded_paper):
     assert [t['type'] for t in response.json()] == [TaskType.PDF_PARSING.value]
 
 
-def test_rerun_all_replaces_and_clears_notes(client, db_session, seeded_paper):
-    seeded_paper.paper_global_additional_context = 'old note'
-    db_session.commit()
+def test_rerun_all_adds_a_note_and_keeps_the_earlier_ones(
+    client, db_session, seeded_paper
+):
+    """Notes accumulate: a later re-run's note joins the earlier ones rather
+    than replacing them, and a run without one adds nothing."""
+    _add_note(db_session, seeded_paper, 'old note')
 
     with patch('lib.api.app.write_snapshot_safe'):
         client.post(
             f'/papers/{seeded_paper.id}/rerun-all',
             json={'additional_context': 'new note'},
         )
-    db_session.expire_all()
-    assert seeded_paper.paper_global_additional_context == 'new note'
+    assert _notes(db_session, seeded_paper) == [(None, 'old note'), (None, 'new note')]
 
-    # Finish the run so the paper is not busy. Not sending the field leaves
-    # the context alone; an empty box clears it.
+    # Finish the run so the paper is not busy. Not sending the field, or
+    # sending a blank one, adds nothing.
     db_session.query(TaskDB).delete()
     db_session.commit()
     with patch('lib.api.app.write_snapshot_safe'):
         client.post(f'/papers/{seeded_paper.id}/rerun-all', json={})
-    db_session.expire_all()
-    assert seeded_paper.paper_global_additional_context == 'new note'
+    assert len(_notes(db_session, seeded_paper)) == 2
 
     db_session.query(TaskDB).delete()
     db_session.commit()
@@ -1681,8 +1698,29 @@ def test_rerun_all_replaces_and_clears_notes(client, db_session, seeded_paper):
         client.post(
             f'/papers/{seeded_paper.id}/rerun-all', json={'additional_context': '  '}
         )
-    db_session.expire_all()
-    assert seeded_paper.paper_global_additional_context is None
+    assert len(_notes(db_session, seeded_paper)) == 2
+
+
+def test_delete_context_note(client, db_session, seeded_paper):
+    """A curator takes a note out of the list; the rest stay, in order."""
+    keep = _add_note(db_session, seeded_paper, 'keep')
+    drop = _add_note(db_session, seeded_paper, 'drop')
+
+    resp = client.delete(f'/papers/{seeded_paper.id}/context-notes/{drop.id}')
+
+    assert resp.status_code == 204
+    assert _notes(db_session, seeded_paper) == [(None, 'keep')]
+    # Gone, or never this paper's: either way a 404.
+    assert (
+        client.delete(f'/papers/{seeded_paper.id}/context-notes/{drop.id}').status_code
+        == 404
+    )
+    assert (
+        client.delete(
+            f'/papers/{seeded_paper.id + 1}/context-notes/{keep.id}'
+        ).status_code
+        == 404
+    )
 
 
 def test_rerun_all_refused_while_paper_has_tasks_in_flight(
@@ -1709,58 +1747,67 @@ def test_rerun_all_requires_authentication(unauth_client, seeded_paper):
     assert response.status_code == 401
 
 
-def test_create_task_additional_context_replaces_the_papers_context(
-    client, db_session, seeded_paper
-):
-    """One field for the paper: a single-task run sends the whole box back,
-    which replaces what was there; the task row carries nothing of its own."""
-    seeded_paper.paper_global_additional_context = 'Use Brazil for every patient.'
-    db_session.commit()
+def test_create_task_adds_a_note_anchored_to_the_task(client, db_session, seeded_paper):
+    """A single-task run's context becomes a note labelled with the task, so
+    every later agent can tell which step it was for; the task row carries
+    nothing of its own."""
+    _add_note(db_session, seeded_paper, 'Use Brazil for every patient.')
 
     with patch('lib.api.app.write_snapshot_safe'):
         response = client.post(
             f'/papers/{seeded_paper.id}/tasks',
             json={
                 'type': 'HPO Linking',
-                'additional_context': '  Use Brazil.\n\nTreat seizures as febrile.  ',
+                'additional_context': '  Treat seizures as febrile.  ',
             },
         )
 
     assert response.status_code == 200
     assert 'additional_context' not in response.json()[0]
-    db_session.expire_all()
-    assert seeded_paper.paper_global_additional_context == (
-        'Use Brazil.\n\nTreat seizures as febrile.'
-    )
+    assert _notes(db_session, seeded_paper) == [
+        (None, 'Use Brazil for every patient.'),
+        ('HPO Linking', 'Treat seizures as febrile.'),
+    ]
 
 
-def test_create_task_without_additional_context_leaves_the_papers_context(
+def test_create_task_for_one_row_anchors_the_note_to_that_row(
     client, db_session, seeded_paper
 ):
-    """None is "not sent", not "clear": a client that does not show the box
-    (the chat agent, a flag's re-run) must not wipe what a curator wrote."""
-    seeded_paper.paper_global_additional_context = 'Keep me.'
-    db_session.commit()
+    """A scoped run names its row in the label, so a later run of the same
+    agent on another row knows the note is not about it."""
+    patient = _seed_patient(db_session, seeded_paper, identifier='P85')
+    with patch('lib.api.app.write_snapshot_safe'):
+        client.post(
+            f'/papers/{seeded_paper.id}/tasks',
+            json={
+                'type': 'Patient Demographics',
+                'patient_id': patient.id,
+                'additional_context': 'Use Brazil.',
+            },
+        )
+    assert _notes(db_session, seeded_paper) == [
+        ('Patient Demographics · patient P85', 'Use Brazil.')
+    ]
+
+
+def test_create_task_without_or_with_blank_context_adds_no_note(
+    client, db_session, seeded_paper
+):
+    _add_note(db_session, seeded_paper, 'Keep me.')
     with patch('lib.api.app.write_snapshot_safe'):
         client.post(
             f'/papers/{seeded_paper.id}/tasks', json={'type': 'Variant Extraction'}
         )
-    db_session.expire_all()
-    assert seeded_paper.paper_global_additional_context == 'Keep me.'
+    assert _notes(db_session, seeded_paper) == [(None, 'Keep me.')]
 
-
-def test_create_task_blank_additional_context_clears_the_papers_context(
-    client, db_session, seeded_paper
-):
-    seeded_paper.paper_global_additional_context = 'Old.'
+    db_session.query(TaskDB).delete()
     db_session.commit()
     with patch('lib.api.app.write_snapshot_safe'):
         client.post(
             f'/papers/{seeded_paper.id}/tasks',
             json={'type': 'Variant Extraction', 'additional_context': '   '},
         )
-    db_session.expire_all()
-    assert seeded_paper.paper_global_additional_context is None
+    assert _notes(db_session, seeded_paper) == [(None, 'Keep me.')]
 
 
 def test_create_task_requires_authentication(unauth_client, seeded_paper):
@@ -3567,7 +3614,7 @@ def test_phenotype_extraction_skips_cached_hpo_links_given_global_context(
     from lib.tasks.handlers import handle_phenotype_extraction
 
     patient = _seed_patient(db_session, seeded_paper, 'Context Patient')
-    seeded_paper.paper_global_additional_context = 'Treat all seizures as febrile.'
+    _add_note(db_session, seeded_paper, 'Treat all seizures as febrile.')
     task = TaskDB(
         paper_id=seeded_paper.id,
         type=TaskType.PHENOTYPE_EXTRACTION,
@@ -3637,7 +3684,7 @@ def test_variant_harmonization_prompt_carries_global_context(
 ):
     from lib.tasks.handlers import handle_variant_harmonization
 
-    seeded_paper.paper_global_additional_context = 'Use GRCh37 throughout.'
+    _add_note(db_session, seeded_paper, 'Use GRCh37 throughout.')
     task = TaskDB(
         paper_id=seeded_paper.id,
         type=TaskType.VARIANT_HARMONIZATION,
@@ -3665,7 +3712,7 @@ def test_hpo_linking_prompt_carries_global_context(db_session, seeded_paper):
 
     patient = _seed_patient(db_session, seeded_paper, 'HPO Patient')
     phenotype = _seed_phenotype(db_session, patient)
-    seeded_paper.paper_global_additional_context = 'Onset was in infancy.'
+    _add_note(db_session, seeded_paper, 'Onset was in infancy.')
     task = TaskDB(
         paper_id=seeded_paper.id,
         type=TaskType.HPO_LINKING,
@@ -3688,7 +3735,7 @@ def test_hpo_linking_prompt_carries_global_context(db_session, seeded_paper):
 def test_pedigree_description_prompt_carries_global_context(db_session, seeded_paper):
     from lib.tasks.handlers import handle_pedigree_description
 
-    seeded_paper.paper_global_additional_context = 'Ignore the supplement pedigree.'
+    _add_note(db_session, seeded_paper, 'Ignore the supplement pedigree.')
     task = TaskDB(
         paper_id=seeded_paper.id,
         type=TaskType.PEDIGREE_DESCRIPTION,
@@ -3944,9 +3991,9 @@ def test_rerun_flag_scopes_the_task_to_what_the_agent_runs_on(
     client, db_session, seeded_paper, test_user
 ):
     """A per-patient agent's flag re-runs that agent for that patient, and the
-    review (with the note) joins the paper's additional context; a
-    paper-level agent's flag re-runs the whole paper even though the flag
-    names a patient."""
+    note joins the paper's additional context anchored to the agent, the
+    patient and the flag; a paper-level agent's flag re-runs the whole paper
+    even though the flag names a patient, and without a note adds nothing."""
     patient = _seed_patient(db_session, seeded_paper, identifier='Patient 1')
     per_patient = _seed_flag(
         db_session, seeded_paper, subject='pair not phased', patient_id=patient.id
@@ -3966,12 +4013,15 @@ def test_rerun_flag_scopes_the_task_to_what_the_agent_runs_on(
     assert task['type'] == TaskType.COMPOUND_HET_EVALUATION.value
     assert task['patient_id'] == patient.id
     assert task['updated_by_user_id'] == test_user.id
-    db_session.expire_all()
-    assert seeded_paper.paper_global_additional_context == (
-        'A curator reviewed the Compound Het Evaluation flag "pair not phased" '
-        'and asked for that step to run again. '
-        'Their note: the parents were tested, see table 2'
-    )
+    assert _notes(db_session, seeded_paper) == [
+        (
+            'Compound Het Evaluation · patient Patient 1 · flag "pair not phased"',
+            'the parents were tested, see table 2',
+        )
+    ]
+    (note,) = seeded_paper.context_notes
+    assert note.flag_id == per_patient.id
+    assert note.source == 'flag'
 
     # The queued task makes the paper busy, which refuses a second rerun
     # (same guard as POST /tasks); let it finish first.
@@ -3989,39 +4039,45 @@ def test_rerun_flag_scopes_the_task_to_what_the_agent_runs_on(
     assert task['type'] == TaskType.PATIENT_EXTRACTION.value
     assert task['patient_id'] is None
     assert task['skip_successors'] is True
-    # Appended after the first review, so nothing a curator wrote is lost.
-    db_session.expire_all()
-    assert seeded_paper.paper_global_additional_context.endswith(
-        '\n\nA curator reviewed the Patient Extraction flag "chosen as proband" '
-        'and asked for that step to run again.'
-    )
+    # No note, no new entry: the earlier one is untouched.
+    assert len(_notes(db_session, seeded_paper)) == 1
 
 
-def test_rerun_flag_takes_the_edited_context_then_appends_the_review(
+def test_rerun_flag_note_replaces_that_flags_earlier_note(
     client, db_session, seeded_paper
 ):
-    """The dialog shows the paper's context to edit; the edit lands first and
-    the review paragraph goes after it."""
-    seeded_paper.paper_global_additional_context = 'Old note.\n\nStale line.'
-    db_session.commit()
+    """Re-running the same flag with a better note swaps the old note for
+    it, so the two do not stack; other notes stay."""
+    _add_note(db_session, seeded_paper, 'Old note.')
     patient = _seed_patient(db_session, seeded_paper, identifier='Patient 1')
     flag = _seed_flag(
         db_session, seeded_paper, subject='sex unclear', patient_id=patient.id
     )
     flag.source = 'PATIENT_DEMOGRAPHICS'
     db_session.flush()
+    anchor = 'Patient Demographics · patient Patient 1 · flag "sex unclear"'
 
     resp = client.post(
         f'/papers/{seeded_paper.id}/flags/{flag.id}/rerun',
-        json={'additional_context': 'Old note.', 'note': 'see the pedigree'},
+        json={'note': 'see the pedigree'},
     )
     assert resp.status_code == 200, resp.text
-    db_session.expire_all()
-    assert seeded_paper.paper_global_additional_context == (
-        'Old note.\n\n'
-        'A curator reviewed the Patient Demographics flag "sex unclear" and '
-        'asked for that step to run again. Their note: see the pedigree'
+    assert _notes(db_session, seeded_paper) == [
+        (None, 'Old note.'),
+        (anchor, 'see the pedigree'),
+    ]
+
+    db_session.query(TaskDB).update({'status': TaskStatus.COMPLETED})
+    db_session.commit()
+    resp = client.post(
+        f'/papers/{seeded_paper.id}/flags/{flag.id}/rerun',
+        json={'note': 'see the pedigree, figure 1: she is shaded'},
     )
+    assert resp.status_code == 200, resp.text
+    assert _notes(db_session, seeded_paper) == [
+        (None, 'Old note.'),
+        (anchor, 'see the pedigree, figure 1: she is shaded'),
+    ]
 
 
 def test_rerun_flag_refuses_a_scoped_agent_with_no_row_to_run_on(

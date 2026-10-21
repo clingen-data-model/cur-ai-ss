@@ -65,6 +65,7 @@ from lib.models.evidence_block import (
 )
 from lib.models.gene_disease_relation import GeneDiseaseRelation
 from lib.models.mondo import MondoComponentMapping, MondoTerm
+from lib.models.paper_context_note import PaperContextNoteDB, PaperContextNoteResp
 from lib.models.patient_variant_occurrences import Inheritance
 from lib.models.user import UserSummaryResp
 from lib.tasks.models import TaskResp
@@ -212,14 +213,6 @@ class PaperDB(Base):
         'UserDB', foreign_keys=[review_assignee_user_id]
     )
 
-    # Curator notes every agent that reads the paper is given, set by "re-run
-    # everything" (see POST /papers/{id}/rerun-all). Per-task additional
-    # context is a follow-up to that one task's conversation and is not passed
-    # on to its successors; this is the paper-wide counterpart.
-    paper_global_additional_context: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
-
     # Paper extraction metadata (populated asynchronously by extraction agent)
     title: Mapped[str | None] = mapped_column(String, nullable=True)
     first_author: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -320,6 +313,15 @@ class PaperDB(Base):
     flags: Mapped[list['FlagDB']] = relationship(
         'FlagDB', back_populates='paper', cascade='all, delete-orphan'
     )
+    # A curator's additional context, one note per entry, which every agent
+    # reads on every run (lib/models/paper_context_note.py). Oldest first:
+    # the order the agents and the dialogs show them in.
+    context_notes: Mapped[list['PaperContextNoteDB']] = relationship(
+        'PaperContextNoteDB',
+        back_populates='paper',
+        cascade='all, delete-orphan',
+        order_by='PaperContextNoteDB.id',
+    )
 
 
 class PaperExtractionOutput(BaseModel):
@@ -376,7 +378,7 @@ class PaperResp(PaperExtractionOutput):
     updated_by: UserSummaryResp | None = None
     review_status: ReviewStatus = ReviewStatus.NOT_ASSIGNED
     review_assignee: UserSummaryResp | None = None
-    paper_global_additional_context: str | None = None
+    context_notes: list[PaperContextNoteResp] = []
     tasks: list['TaskResp'] = []
     patient_count: int = 0
     proband_count: int = 0
@@ -456,9 +458,9 @@ class PaperSummaryResp(BaseModel):
     # Columns on the paper row, so free: the query loads the row either way.
     disease_name: str | None = None
     pmid: str | None = None
-    # Prefills the re-run dialog's "All tasks" tab, which would otherwise have
-    # to fetch the whole paper just to read this.
-    paper_global_additional_context: str | None = None
+    # The re-run dialog opened from a list row shows them, and would otherwise
+    # have to fetch the whole paper just to read them. A handful per paper.
+    context_notes: list[PaperContextNoteResp] = []
     # Who last touched the paper itself, as distinct from collaborators, which
     # is everyone who has touched anything under it.
     updated_by: 'UserSummaryResp | None' = None

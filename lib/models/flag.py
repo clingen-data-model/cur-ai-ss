@@ -293,12 +293,10 @@ class FlagRerunRequest(BaseModel):
     ``/papers/{id}/flags/{flag_id}/rerun``); its re-run replaces the flag
     along with the rest of that agent's flags for the scope.
 
-    ``additional_context`` is the paper's one context field, as on
-    TaskCreateRequest (None leaves it, blank clears it, else replaces it);
-    the dialog shows it so the curator sees what the note joins. The review
-    itself, with ``note``, is then appended as a paragraph that stays for
-    every later run."""
+    ``note`` is added to the paper's additional context (paper_context_notes),
+    anchored to the agent, the row and the flag's subject, where it stays
+    for every later run of every agent; re-running the same flag again
+    replaces it. Blank adds nothing: the run is then just a fresh run."""
 
-    additional_context: str | None = None
     note: str | None = None
     skip_successors: bool = False

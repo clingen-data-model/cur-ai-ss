@@ -9,7 +9,7 @@ from lib.models.patient_variant_occurrences import (
 )
 
 if TYPE_CHECKING:
-    from lib.models.paper import PaperDB, PaperTaskStatus
+    from lib.models.paper import PaperTaskStatus
 
 from lib.tasks.models import (
     ACTIVE_STATUSES,
@@ -799,22 +799,3 @@ def notify_on_next_completion(session: Session, paper_id: int, user_id: int) -> 
     paper.completion_notified_at = None
     paper.updated_by_user_id = user_id
     session.expire(paper, ['updated_by'])  # drop a relationship loaded for the old id
-
-
-def set_paper_context(paper: 'PaperDB', text: str | None) -> None:
-    """Apply a request's ``additional_context`` to the paper: None leaves the
-    context as it is, blank clears it, anything else replaces it. The dialogs
-    show the current text and send back the whole box, so what the curator
-    sees is what every agent gets."""
-    if text is None:
-        return
-    paper.paper_global_additional_context = text.strip() or None
-
-
-def add_paper_context(paper: 'PaperDB', text: str) -> None:
-    """Append a paragraph to the paper's additional context, for the paths
-    with no box to edit it in (the chat agent, a flag's note)."""
-    existing = paper.paper_global_additional_context
-    paper.paper_global_additional_context = (
-        f'{existing.rstrip()}\n\n{text.strip()}' if existing else text.strip()
-    )

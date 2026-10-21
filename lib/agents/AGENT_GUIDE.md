@@ -132,9 +132,9 @@ and a resolver that turns `about` into the row it just wrote; a flag about a com
 pair links both occurrences (`occurrence_id`, `paired_occurrence_id`). Flags are listed
 through `/papers/{id}/flags`, resolved, once and for good, through its `/resolve` child,
 and `/rerun` queues the raising agent again for its scope (`TaskType.scope_column`),
-adding the review and the curator's note to the paper's additional context (the one
-context every agent reads; see CLAUDE.md, Task Management) -- which replaces the flag
-with whatever the agent raises next.
+adding the curator's note to the paper's additional context as a note anchored to the
+agent, the row and the flag (the one list of notes every agent reads; see CLAUDE.md,
+Task Management) -- which replaces the flag with whatever the agent raises next.
 
 The per-entity agents run concurrently and see only their own scope, so one decision is
 often flagged several times in different words (a country inferred from the study site,

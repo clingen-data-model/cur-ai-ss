@@ -6,6 +6,7 @@ from lib.agents.patient_extraction_agent import PATIENT_EXTRACTION_AGENT_INSTRUC
 from lib.misc.pdf.paths import document_anchored_md_path
 from lib.models import GeneDB, PaperDB
 from lib.models.paper import PedigreeDB
+from lib.models.paper_context_note import PaperContextNoteDB
 from lib.tasks.handlers import (
     cited_text,
     curator_notes_block,
@@ -303,18 +304,20 @@ async def test_rerunning_patient_extraction_replaces_only_its_own_flags(
 
 
 def test_curator_section_names_the_agent():
-    """One text for the whole paper, so the agent is told who it is and that
-    some instructions may be for other steps."""
+    """One list of notes for the whole paper, so the agent is told who it is,
+    how the notes are labelled, and that some may be for other steps or rows."""
     section = curator_notes_section(
-        'Ignore the supplement cohort.', TaskType.HPO_LINKING
+        '1. [All tasks] Ignore the supplement cohort.', TaskType.HPO_LINKING
     )
 
     assert section.startswith(
-        'A human curator is re-running the extraction of this paper and has '
-        'given additional instructions, which every step of the pipeline reads. '
-        'You are the HPO Linking agent: '
+        'A human curator has given additional instructions for this paper, '
+        'which every step of the pipeline reads. Each note is labelled with '
+        'the step, and the patient, variant or phenotype, it was given for; '
+        '"All tasks" means every step. You are the HPO Linking agent: '
     )
-    assert section.endswith('\n\nIgnore the supplement cohort.')
+    assert 'applies to that one only' in section
+    assert section.endswith('\n\n1. [All tasks] Ignore the supplement cohort.')
     # Same notes, different agent: only the identity changes.
     assert 'You are the Patient Demographics agent:' in curator_notes_section(
         'Ignore the supplement cohort.', TaskType.PATIENT_DEMOGRAPHICS
@@ -325,19 +328,42 @@ def test_paper_curator_section_is_none_without_context(db_session, paper):
     assert paper_curator_section(paper.id, TaskType.PAPER_CLASSIFIER) is None
     assert curator_notes_block(paper.id, TaskType.PAPER_CLASSIFIER) == ''
 
-    paper.paper_global_additional_context = 'Use Brazil.'
+    db_session.add(
+        PaperContextNoteDB(paper_id=paper.id, text='Use Brazil.', source='curator')
+    )
     db_session.commit()
 
     section = paper_curator_section(paper.id, TaskType.PAPER_CLASSIFIER)
-    assert section is not None and section.endswith('Use Brazil.')
+    assert section is not None and section.endswith('1. [All tasks] Use Brazil.')
     assert curator_notes_block(paper.id, TaskType.PAPER_CLASSIFIER) == f'{section}\n\n'
 
 
-def test_paper_global_context_reads_the_paper_row(db_session, paper):
+def test_paper_global_context_renders_the_papers_notes(db_session, paper):
+    """Numbered, oldest first, each led by what it was given for -- the step
+    and row for a scoped run, "All tasks" for none -- so the agent reading
+    the list can tell which notes are its own."""
     assert paper_global_context(paper.id) is None
     assert paper_global_context(paper.id + 1000) is None
 
-    paper.paper_global_additional_context = 'Patients are numbered per family.'
+    db_session.add_all(
+        [
+            PaperContextNoteDB(
+                paper_id=paper.id,
+                text='Patients are numbered per family.',
+                source='curator',
+            ),
+            PaperContextNoteDB(
+                paper_id=paper.id,
+                text='Use Brazil.',
+                source='flag',
+                anchor='Patient Demographics · patient P85 · flag "country inferred"',
+            ),
+        ]
+    )
     db_session.commit()
 
-    assert paper_global_context(paper.id) == 'Patients are numbered per family.'
+    assert paper_global_context(paper.id) == (
+        '1. [All tasks] Patients are numbered per family.\n\n'
+        '2. [Patient Demographics · patient P85 · flag "country inferred"] '
+        'Use Brazil.'
+    )

@@ -20,17 +20,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogMedia, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import type { PaperSummaryResp, TaskType } from '@/api/generated/types.gen'
 import { TaskSuccessors, useTaskTypes } from '@/components/TaskSuccessors'
-import { PaperContextField } from '@/components/PaperContextField'
+import { EVERY_TASK, PaperContextNotes } from '@/components/PaperContextNotes'
 import { usePaperBusy } from '@/hooks/usePaperBusy'
 import { apiErrorMessage } from '@/lib/apiError'
 
 /* The fields RerunTaskDialog actually needs -- narrower than PaperSummaryResp
  * so it can also take a PaperResp (the paper-detail page's shape, which has
  * no gene_symbol/status/thumbnail_url) without a fake/partial object. */
-type RerunnablePaper = Pick<
-  PaperSummaryResp,
-  'id' | 'title' | 'filename' | 'paper_global_additional_context'
->
+type RerunnablePaper = Pick<PaperSummaryResp, 'id' | 'title' | 'filename' | 'context_notes'>
 
 // Every task type is rerunnable except 'General Paper Question', which is only
 // ever created ad hoc by the chat router.
@@ -52,9 +49,9 @@ type RerunTab = 'single' | 'all'
 /* Shared by RerunTaskButton's own trigger (papers table / gene cards) and the
  * "Re-run agents" button atop the task-timeline popovers -- same dialog
  * either way. Kept as one definition so the two triggers can't drift into
- * asking for different fields. Two tabs, one task or every task, over one
- * Additional context box: the paper's single context field, which both
- * tabs send back whole (PaperContextField.tsx says why there is only one). */
+ * asking for different fields. Two tabs, one task or every task, over the
+ * paper's context notes and a box to add one, which the server labels with
+ * the chosen task, or with "All tasks" (PaperContextNotes.tsx). */
 function RerunTaskDialog({
   paper,
   open,
@@ -78,21 +75,14 @@ function RerunTaskDialog({
   const taskTypesQuery = useTaskTypes(open)
   const taskHelp = taskTypesQuery.data?.find((t) => t.type === taskType)?.description
 
-  // Opening the dialog starts from what the paper already holds, whichever
-  // trigger opened it, so the box edits the context in place rather than
-  // starting blank and silently replacing it. It comes off the paper row the
-  // caller already has: no request of its own.
   useEffect(() => {
     if (!open) return
     setTab('single')
     setTaskType(initialTaskType)
     setSkipSuccessors(false)
     setReparsePdf(false)
-    setContext(paper.paper_global_additional_context ?? '')
-    // Only when the dialog opens: a refetch of the paper while it is open
-    // must not overwrite what the curator has typed.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+    setContext('')
+  }, [open, initialTaskType])
 
   const mutation = useMutation({
     mutationFn: () => allTab
@@ -109,8 +99,8 @@ function RerunTaskDialog({
     onSuccess: () => {
       // Queuing a task changes the paper's status, which both the cards and the
       // papers table render. Without this the badge keeps reading Done until
-      // something else happens to refetch. The paper queries carry the context
-      // the next open of any dialog prefills from.
+      // something else happens to refetch. The paper queries carry the notes
+      // the next open of any dialog lists.
       queryClient.invalidateQueries({ queryKey: ['papers'] })
       queryClient.invalidateQueries({ queryKey: ['paper-tasks', paper.id] })
       queryClient.invalidateQueries({ queryKey: ['paper', paper.id] })
@@ -187,7 +177,19 @@ function RerunTaskDialog({
               </div>
             </TabsContent>
           </Tabs>
-          <PaperContextField value={context} onChange={setContext} />
+          {/* The notes come off the paper row the caller already has: no
+           * request of its own (opening this dialog used to jitter on one). */}
+          <PaperContextNotes
+            paperId={paper.id}
+            notes={paper.context_notes ?? []}
+            value={context}
+            onChange={setContext}
+            addHelp={
+              allTab
+                ? `Saved as a note for ${EVERY_TASK}: every agent reads it on every later run too, until it is removed above.`
+                : `Saved as a note labelled “${taskType}”: every agent reads it on every later run too, until it is removed above.`
+            }
+          />
           {busy && <p className="text-sm text-amber-700 dark:text-amber-400">{busy}</p>}
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>

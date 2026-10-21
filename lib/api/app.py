@@ -97,6 +97,7 @@ from lib.models import (
     ChatMessageResp,
     ChatRole,
     CitationHighlightRequest,
+    ContextNoteSource,
     DocumentResp,
     FamilyCreateRequest,
     FamilyDB,
@@ -114,6 +115,8 @@ from lib.models import (
     HumanEvidenceBlock,
     LoginRequest,
     OccurrencePairRequest,
+    PaperContextNoteDB,
+    PaperContextNoteResp,
     PaperDB,
     PaperResetRequest,
     PaperResetResp,
@@ -206,12 +209,16 @@ from lib.tasks import (
     invalidate_descendants,
 )
 from lib.tasks.agent_session import chat_session, closing_sessions
+from lib.tasks.context_notes import (
+    add_context_note,
+    anchor_for,
+    flag_scope_label,
+    scope_label,
+)
 from lib.tasks.handlers import log_run_metrics
 from lib.tasks.misc import (
-    add_paper_context,
     notify_on_next_completion,
     paper_busy_message,
-    set_paper_context,
     summarize_paper_task_status,
 )
 from lib.tasks.models import (
@@ -1004,7 +1011,10 @@ def _paper_summaries(
         for user in session.query(UserDB).all()
     }
 
-    query = session.query(PaperDB).options(selectinload(PaperDB.gene))
+    query = session.query(PaperDB).options(
+        selectinload(PaperDB.gene),
+        selectinload(PaperDB.context_notes).selectinload(PaperContextNoteDB.created_by),
+    )
     if paper_ids is not None:
         if not paper_ids:
             return []
@@ -1025,7 +1035,10 @@ def _paper_summaries(
             updated_at=paper.updated_at,
             status=summarize_paper_task_status(task_statuses.get(paper.id, [])),
             disease_name=paper.disease_name,
-            paper_global_additional_context=paper.paper_global_additional_context,
+            context_notes=[
+                PaperContextNoteResp.model_validate(note)
+                for note in paper.context_notes
+            ],
             pmid=paper.pmid,
             updated_by=(
                 users.get(paper.updated_by_user_id)
@@ -1159,7 +1172,9 @@ def _paper_to_resp(row: PaperDB, session: Session) -> PaperResp:
         updated_by=_user_summary(row.updated_by),
         review_status=row.review_status,
         review_assignee=_user_summary(row.review_assignee),
-        paper_global_additional_context=row.paper_global_additional_context,
+        context_notes=[
+            PaperContextNoteResp.model_validate(note) for note in row.context_notes
+        ],
         tasks=[
             TaskResp.model_validate(task, from_attributes=True) for task in row.tasks
         ],
@@ -1253,9 +1268,24 @@ def create_task(
     _prepare_rerun(
         session, paper_id, request.type, request.skip_successors, current_user.id
     )
-    paper = session.get(PaperDB, paper_id)
-    assert paper is not None  # _prepare_rerun 404s a missing paper
-    set_paper_context(paper, request.additional_context)
+    add_context_note(
+        session,
+        paper_id,
+        request.additional_context,
+        source=ContextNoteSource.CURATOR,
+        anchor=anchor_for(
+            request.type.value,
+            scope_label(
+                session,
+                family_id=request.family_id,
+                patient_id=request.patient_id,
+                variant_id=request.variant_id,
+                phenotype_id=request.phenotype_id,
+                patient_variant_occurrence_id=request.patient_variant_occurrence_id,
+            ),
+        ),
+        user_id=current_user.id,
+    )
 
     if (
         request.family_id is None
@@ -1303,9 +1333,13 @@ def rerun_all(
     """
     root = TaskType.PDF_PARSING if request.reparse_pdf else TaskType.PAPER_CLASSIFIER
     _prepare_rerun(session, paper_id, root, False, current_user.id)
-    paper = session.get(PaperDB, paper_id)
-    assert paper is not None  # _prepare_rerun 404s a missing paper
-    set_paper_context(paper, request.additional_context)
+    add_context_note(
+        session,
+        paper_id,
+        request.additional_context,
+        source=ContextNoteSource.CURATOR,
+        user_id=current_user.id,
+    )
 
     return [
         enqueue_task(
@@ -1388,6 +1422,35 @@ async def send_chat_message(
     session.add(assistant_message)
     session.flush()
     return assistant_message
+
+
+@app.delete(
+    '/papers/{paper_id}/context-notes/{note_id}',
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_context_note(
+    paper_id: int,
+    note_id: int,
+    session: Session = Depends(get_session),
+    current_user: UserDB = Depends(get_current_user),
+) -> None:
+    """Take a note out of the paper's additional context, so no later run
+    reads it. The notes are listed on the paper (PaperResp.context_notes);
+    adding one is part of queueing a run, since that is when a curator has
+    something to say."""
+    note = (
+        session.query(PaperContextNoteDB)
+        .filter(
+            PaperContextNoteDB.id == note_id, PaperContextNoteDB.paper_id == paper_id
+        )
+        .one_or_none()
+    )
+    if note is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail='Context note not found'
+        )
+    session.delete(note)
+    session.commit()
 
 
 @app.delete('/papers/{paper_id}/chat/messages', status_code=status.HTTP_204_NO_CONTENT)
@@ -2901,9 +2964,10 @@ def rerun_flag(
     current_user: UserDB = Depends(get_current_user),
 ) -> Any:
     """Queue the agent that raised the flag again, for the row it ran on.
-    That a curator reviewed the flag, and their note, go into the paper's
-    additional context, which every agent reads (see FlagRerunRequest). The
-    scope comes from the task type, not from every row the flag links:
+    The curator's note goes into the paper's additional context, anchored
+    to the agent, the row and the flag, where every agent reads it (see
+    FlagRerunRequest). The scope comes from the task type, not from every
+    row the flag links:
     a patient-extraction flag about one patient still re-runs the whole
     paper, since that is the only way that agent runs."""
     flag = (
@@ -2938,20 +3002,18 @@ def rerun_flag(
             )
         scope[scope_column] = scope_id
 
-    context = (
-        f'A curator reviewed the {task_type.value} flag "{flag.subject}" '
-        f'and asked for that step to run again.'
-    )
-    if request.note:
-        context += f' Their note: {request.note.strip()}'
-
     _prepare_rerun(
         session, paper_id, task_type, request.skip_successors, current_user.id
     )
-    paper = session.get(PaperDB, paper_id)
-    assert paper is not None  # _prepare_rerun 404s a missing paper
-    set_paper_context(paper, request.additional_context)
-    add_paper_context(paper, context)
+    add_context_note(
+        session,
+        paper_id,
+        request.note,
+        source=ContextNoteSource.FLAG,
+        anchor=anchor_for(task_type.value, flag_scope_label(flag), flag),
+        flag_id=flag.id,
+        user_id=current_user.id,
+    )
     return enqueue_task(
         session,
         paper_id=paper_id,

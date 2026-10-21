@@ -64,7 +64,11 @@ def test_snapshot_covers_every_paper_scoped_table():
     # along with it -- see _INSERT_ORDER. (deletion_log has no FK of its own,
     # see its docstring, so it was never "reachable" by the walk below in the
     # first place; it's listed here only for symmetry with edits.)
-    excluded: set[str] = {'chat_messages', 'snapshots'}
+    #
+    # paper_context_notes is excluded for the chat_messages reason: a
+    # curator's instructions to the agents are not extraction output, and a
+    # restore to before a re-run must not take back the notes written for it.
+    excluded: set[str] = {'chat_messages', 'paper_context_notes', 'snapshots'}
     snapshotted = {model.__table__.name for _, model in _INSERT_ORDER} | {'papers'}
 
     reachable = {'papers'}

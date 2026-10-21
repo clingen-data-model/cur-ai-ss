@@ -4,12 +4,11 @@
  * by whatever the agent raises on that run, so this is the "ask again" half
  * of review next to Resolve ("keep it") and the row's trashcan ("drop it").
  *
- * The paper's one Additional context field is on show (PaperContextField),
- * because the note does not go to this run alone: the server appends "A
- * curator reviewed the <agent> flag ... Their note: ..." to that field, where
- * it stays for every later run of every agent. Seeing the field, with the
- * paragraphs earlier reviews left in it, is what makes that plain -- and the
- * place to prune them. */
+ * The paper's context notes are on show (PaperContextNotes), because the
+ * note does not go to this run alone: the server saves it as a note
+ * labelled with the agent, the row and the flag, which every agent reads on
+ * every later run. Re-running the same flag again replaces that note; the
+ * list is where to remove one that no longer applies. */
 import { useEffect, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
 import {
@@ -21,12 +20,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import type { FlagResp } from '@/api/generated/types.gen'
-import { PaperContextField } from '@/components/PaperContextField'
+import { PaperContextNotes } from '@/components/PaperContextNotes'
 import { usePaperBusy } from '@/hooks/usePaperBusy'
-import { usePaperAdditionalContext } from '@/hooks/usePaperAdditionalContext'
+import { usePaperContextNotes } from '@/hooks/usePaperContextNotes'
 import { flagSourceLabel } from '@/lib/flags'
 
 export function RerunFromFlagDialog({
@@ -41,23 +38,16 @@ export function RerunFromFlagDialog({
   flag: FlagResp | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  onConfirm: (input: { context: string; note: string }) => void
+  onConfirm: (note: string) => void
   isPending?: boolean
 }) {
   const [note, setNote] = useState('')
-  const [context, setContext] = useState('')
   const busy = usePaperBusy(paperId, open)
-  const paperContext = usePaperAdditionalContext(paperId, open)
+  const notes = usePaperContextNotes(paperId, open)
 
   useEffect(() => {
     if (open) setNote('')
   }, [open, flag?.id])
-  useEffect(() => {
-    if (open && paperContext.loaded) setContext(paperContext.context ?? '')
-    // Only when the dialog opens or the context first loads: a refetch while
-    // it is open must not overwrite what the curator has typed.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, paperContext.loaded])
 
   const agent = flag ? flagSourceLabel(flag) : 'agent'
 
@@ -67,39 +57,26 @@ export function RerunFromFlagDialog({
         <DialogHeader>
           <DialogTitle>Re-run {agent}</DialogTitle>
           <DialogDescription>
-            Runs the agent again for the row it flagged, telling it a curator looked at{' '}
+            Runs the agent again for the row it flagged as{' '}
             <span className="font-medium text-foreground">{flag?.subject}</span>. The flag is
             replaced by whatever that run raises; the row is snapshotted first.
           </DialogDescription>
         </DialogHeader>
-        <PaperContextField value={context} onChange={setContext} disabled={!paperContext.loaded} />
-        <div className="space-y-1.5">
-          <Label>
-            Note to the agent <span className="text-muted-foreground font-normal">(optional)</span>
-          </Label>
-          <Textarea
-            autoFocus
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="What it missed, or where to look..."
-            rows={3}
-          />
-          <p className="text-xs text-muted-foreground">
-            Added to the end of the context above as &ldquo;A curator reviewed the {agent} flag
-            &lsquo;{flag?.subject}&rsquo; and asked for that step to run again. Their note:
-            &hellip;&rdquo; It stays there for every later run; remove it from the box above when
-            it no longer applies.
-          </p>
-        </div>
+        <PaperContextNotes
+          paperId={paperId}
+          notes={notes}
+          value={note}
+          onChange={setNote}
+          addLabel="Note to the agent"
+          addPlaceholder="What it missed, or where to look..."
+          addHelp={`Saved as a note labelled “${agent}”, this row and the flag: every agent reads it on every later run too, until it is removed above. Re-running this flag again replaces it.`}
+        />
         {busy && <p className="text-sm text-amber-700 dark:text-amber-400">{busy}</p>}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button
-            onClick={() => onConfirm({ context, note: note.trim() })}
-            disabled={isPending || !!busy || !paperContext.loaded}
-          >
+          <Button onClick={() => onConfirm(note.trim())} disabled={isPending || !!busy}>
             <RefreshCw className="size-3.5 mr-1.5" />
             {isPending ? 'Queuing...' : 'Re-run'}
           </Button>
