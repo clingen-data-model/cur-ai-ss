@@ -376,6 +376,27 @@ def test_occurrence_prompt_reads_a_pedigree_genotype_label_as_a_stated_genotype(
     )
 
 
+def test_occurrence_prompt_takes_a_whole_cohort_genotype_statement_as_stated():
+    """The prompt already read a sentence about the tested relatives as a
+    group as each relative's result, but scored anything else from "group
+    context" moderate and flagged it inferred -- so a paper that gives every
+    proband's zygosity in one sentence left every link Unknown. The same rule
+    the demographics and phenotype prompts carry: a statement about every
+    member of a group the paper puts the patient in is a statement about
+    them; a share places nobody; a group whose members differ leaves the
+    differing value to each patient's own result."""
+    prompt = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
+    assert 'A statement about every member of the cohort or of a family' in prompt
+    assert 'stated, cited to the sentence, high confidence, not\n  flagged' in prompt
+    assert (
+        'A share\n  of the group ("most", "15 of 18 probands") places nobody' in prompt
+    )
+    assert "leaves the zygosity\n  to each patient's own result" in prompt
+    assert 'or a statement about every\n  member of a group' in prompt  # confidence
+    assert 'or from a statement\n  about every member of the cohort or family' in prompt
+    assert 'inferred from group/pedigree context' not in prompt
+
+
 def test_patient_prompt_flag_examples_cover_the_three_kinds_of_decision():
     prompt = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
     assert 'FLAGS for this task' in prompt

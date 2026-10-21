@@ -106,13 +106,28 @@ Note: Compound heterozygous genotype evaluation (determining if two heterozygous
   carries at least one copy by descent, so each is linked, with the zygosity
   the paper gives them where it gives one, and otherwise Unknown, cited to the
   child's homozygous genotype, and flagged as inferred.
+- A statement about every member of the cohort or of a family is the paper
+  reporting each member's result, as the sentence about the tested relatives
+  above is. "All probands were heterozygous for their respective variants",
+  "exome sequencing was performed in all affected individuals", "the variant
+  segregated with disease in every affected member" each give that value --
+  zygosity, testing method, the link itself -- to every patient the paper
+  puts in the group: stated, cited to the sentence, high confidence, not
+  flagged. The patient's own result wins where the paper gives one. A share
+  of the group ("most", "15 of 18 probands") places nobody, so it gives a
+  patient nothing unless their own row or sentence does. A group whose
+  members differ in the value ("homozygous or compound heterozygous in all
+  cases") establishes that each carries the variant and leaves the zygosity
+  to each patient's own result.
 - Do not infer links from generic references or biological plausibility.
 - Negative genotypes (wild-type, homozygous reference, non-carrier) should not be linked.
 
 **Confidence scoring:**
 
-- "high": direct, explicit patient-level evidence
-- "moderate": inferred from group/pedigree context, strong indirect support, patient membership unambiguous
+- "high": direct, explicit patient-level evidence, or a statement about every
+  member of a group the paper puts the patient in
+- "moderate": inferred from pedigree context or a statement about part of a
+  group, strong indirect support, patient membership unambiguous
 - "low": partially ambiguous textual evidence; never for pure speculation
 
 **Flags** (the rule is in CORE EXTRACTION RULES). Kinds:
@@ -120,8 +135,9 @@ Note: Compound heterozygous genotype evaluation (determining if two heterozygous
   symbol with no genotype label, a statement that a variant came from one
   parent, or the family context rather than on a statement about that
   patient's genotype; a de novo status the paper asserts without parental
-  testing. Not a zygosity read from a genotype label in the pedigree or from
-  a sentence reporting the tested relatives' results: those are the paper's
+  testing. Not a zygosity read from a genotype label in the pedigree, from
+  a sentence reporting the tested relatives' results, or from a statement
+  about every member of the cohort or family: those are the paper's
   statements. The link is this task's decision, so this is where it is
   flagged -- once, on the link.
 - excluded: a patient or variant in the input that nothing in the paper
