@@ -138,7 +138,6 @@ from lib.models import (
     PaperTag,
     PatientDB,
     PatientVariantOccurrenceDB,
-    PedigreeDB,
     PhenotypeDB,
     PhenotypeExtractionOutput,
     SegregationAnalysisComputedDB,
@@ -150,17 +149,18 @@ from lib.models import (
 from lib.models.converters import (
     apply_patient_demographics,
     family_to_db,
+    figure_description_to_db,
     harmonized_variant_to_db,
     hpo_to_db,
     patient_identity_to_db,
     patient_variant_occurrence_to_db,
-    pedigree_to_db,
     phenotype_to_db,
     segregation_analysis_computed_to_db,
     segregation_evidence_to_db,
     variant_to_db,
 )
 from lib.models.evidence_block import ReasoningBlock, verify_citations
+from lib.models.figure import FigureDescriptionDB, pedigree_figure
 from lib.models.flag import AnyFlag, FlagMergeOutput
 from lib.models.mondo import (
     MondoDiseaseScope,
@@ -648,7 +648,8 @@ async def handle_variant_extraction(task_id: int) -> None:
 
 
 async def handle_figure_description(task_id: int) -> None:
-    """Describe the paper's evidence figures (today: the first pedigree)."""
+    """Describe the paper's evidence figures (today: the first pedigree), one
+    ``figure_descriptions`` row per figure described."""
     paper_id: int
     additional_context: str | None
     with session_scope() as session:
@@ -729,16 +730,18 @@ async def handle_figure_description(task_id: int) -> None:
 
     with session_scope() as session:
         # Idempotent: delete-then-insert
-        session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).delete()
+        session.query(FigureDescriptionDB).filter(
+            FigureDescriptionDB.paper_id == paper_id
+        ).delete()
         if output and output.found:
-            session.add(pedigree_to_db(paper_id, output))
+            session.add(figure_description_to_db(paper_id, output))
 
 
-def pedigree_input(pedigree_row: PedigreeDB | None) -> dict | None:
+def pedigree_input(pedigree_row: FigureDescriptionDB | None) -> dict | None:
     """The pedigree as the agents see it: the figure anchor to cite, and the text.
 
-    ``PedigreeDB.image_id`` is the Docling picture index, the same N as the
-    ``figure-N`` id printed in the anchored text, so the anchor is exact.
+    ``image_id`` is the Docling picture index, the same N as the ``figure-N``
+    id printed in the anchored text, so the anchor is exact.
     """
     if pedigree_row is None:
         return None
@@ -791,10 +794,7 @@ def patient_extraction_message(
     supplement_format = paper.supplement_format if paper else None
     gene_symbol = paper.gene.symbol if paper else None
 
-    pedigree_row = (
-        session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).first()
-    )
-    pedigree_descriptions_output = pedigree_input(pedigree_row)
+    pedigree_descriptions_output = pedigree_input(pedigree_figure(session, paper_id))
 
     paper_markdown = fulltext_md(paper_id, supplement_format)
     return paper_input(
@@ -944,10 +944,9 @@ async def handle_patient_demographics(task_id: int) -> None:
         )
         proband_identifier = proband_row.identifier if proband_row else None
 
-        pedigree_row = (
-            session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).first()
+        pedigree_descriptions_output = pedigree_input(
+            pedigree_figure(session, paper_id)
         )
-        pedigree_descriptions_output = pedigree_input(pedigree_row)
 
     agent_sess = agent_session(task_id)
 
@@ -1518,9 +1517,7 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
             for p in patient_rows
         ]
 
-        pedigree_row = (
-            session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).first()
-        )
+        pedigree_row = pedigree_figure(session, paper_id)
         pedigree_descriptions_output = (
             {
                 'image_id': pedigree_row.image_id,
@@ -1677,9 +1674,7 @@ async def handle_compound_het_evaluation(task_id: int) -> None:
         supplement_format = paper.supplement_format
 
         # Get pedigree description
-        pedigree_row = (
-            session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).first()
-        )
+        pedigree_row = pedigree_figure(session, paper_id)
         pedigree_description = (
             pedigree_row.description if pedigree_row else 'No pedigree information'
         )

@@ -58,7 +58,7 @@ import { computeStatus } from '@/lib/taskState'
 import { apiErrorMessage } from '@/lib/apiError'
 import { ProbandStatus, TaskType } from '@/api/generated/types.gen'
 import { Switch } from '@/components/ui/switch'
-import { PedigreeTab } from '@/components/PedigreeTab'
+import { FiguresTab } from '@/components/FiguresTab'
 import { FamiliesTab } from '@/components/FamiliesTab'
 import { PaperMetadataTab } from '@/components/PaperMetadataTab'
 import { PdfHighlightProvider } from '@/components/PdfHighlightProvider'
@@ -639,7 +639,7 @@ export function ExtractionPage() {
             />
           </TabsContent>
           <TabsContent value="figures" className="pt-3">
-            <PedigreeTab paperId={paperId} />
+            <FiguresTab paperId={paperId} />
           </TabsContent>
           <TabsContent value="paper-metadata" className="pt-3 h-[70vh]">
             {paper && <PaperMetadataTab paper={paper} />}

@@ -61,7 +61,12 @@ from lib.misc.avatars import (
 from lib.misc.curation.models import CurationSummaryRow
 from lib.misc.curation.pptx import build_curation_pptx
 from lib.misc.curation.summary import build_curation_row
-from lib.misc.pdf.anchors import anchor_pages, load_anchors
+from lib.misc.pdf.anchors import (
+    AnchorKind,
+    anchor_pages,
+    load_anchors,
+    make_anchor_id,
+)
 from lib.misc.pdf.highlight import (
     GrobidAnnotation,
     citations_to_grobid_annotations,
@@ -129,8 +134,6 @@ from lib.models import (
     PatientVariantOccurrenceDB,
     PatientVariantOccurrenceResp,
     PatientVariantOccurrenceUpdateRequest,
-    PedigreeDB,
-    PedigreeResp,
     PhenotypeCreateRequest,
     PhenotypeDB,
     PhenotypeResp,
@@ -167,6 +170,7 @@ from lib.models.evidence_block import (
     EvidenceBlock,
     ReasoningBlock,
 )
+from lib.models.figure import FigureDescriptionResp, FigureKind, described_figures
 from lib.models.flag import (
     FlagBulkResolveRequest,
     FlagDB,
@@ -1694,33 +1698,36 @@ def update_family(
     return _family_to_resp(family_db, session)
 
 
-@app.get('/papers/{paper_id}/pedigree', response_model=PedigreeResp | None)
-def get_pedigree(
+@app.get('/papers/{paper_id}/figures', response_model=list[FigureDescriptionResp])
+def get_figures(
     paper_id: int,
     session: Session = Depends(get_session),
     current_user: UserDB = Depends(get_current_user),
 ) -> Any:
+    """The figures the Figure Description step described, main text first."""
     paper_db = session.get(PaperDB, paper_id)
     if not paper_db:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail='Paper not found'
         )
-    pedigree = (
-        session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).one_or_none()
-    )
-    if not pedigree:
-        return None
-    return PedigreeResp(
-        image_id=pedigree.image_id,
-        is_supplement=pedigree.is_supplement,
-        description=pedigree.description,
-        # image_id is the Docling picture index (the N of figure-N).
-        image_url=str(
-            document_image_path(
-                paper_id, pedigree.image_id, supplement=pedigree.is_supplement
-            )
-        ),
-    )
+    return [
+        FigureDescriptionResp(
+            image_id=figure.image_id,
+            is_supplement=figure.is_supplement,
+            anchor=make_anchor_id(
+                AnchorKind.FIGURE, figure.image_id, figure.is_supplement
+            ),
+            kinds=[FigureKind(k) for k in figure.kinds],
+            description=figure.description,
+            # image_id is the Docling picture index (the N of figure-N).
+            image_url=str(
+                document_image_path(
+                    paper_id, figure.image_id, supplement=figure.is_supplement
+                )
+            ),
+        )
+        for figure in described_figures(session, paper_id)
+    ]
 
 
 def _seg_evidence_block(value: Any, evidence_dict: dict | None) -> HumanEvidenceBlock:

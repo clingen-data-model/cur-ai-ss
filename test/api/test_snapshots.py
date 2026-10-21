@@ -21,13 +21,13 @@ from lib.models import (
     DeletionLogDB,
     EditDB,
     FamilyDB,
+    FigureDescriptionDB,
     GeneDB,
     HarmonizedVariantDB,
     HpoDB,
     PaperDB,
     PatientDB,
     PatientVariantOccurrenceDB,
-    PedigreeDB,
     PhenotypeDB,
     SegregationAnalysisComputedDB,
     SegregationEvidenceDB,
@@ -185,7 +185,11 @@ def snapshot_paper(db_session):
     )
     db_session.add_all([p1, p2])
     db_session.flush()
-    db_session.add(PedigreeDB(paper_id=paper.id, image_id=1, description='pedigree'))
+    db_session.add(
+        FigureDescriptionDB(
+            paper_id=paper.id, image_id=1, kinds=['Pedigree'], description='pedigree'
+        )
+    )
     phenotype = PhenotypeDB(
         paper_id=paper.id,
         patient_id=p1.id,
@@ -348,7 +352,7 @@ def test_reset_roundtrip(client, db_session, test_user, snapshot_paper):
     )
     assert db_session.query(SegregationEvidenceDB).count() == 1
     assert db_session.query(SegregationAnalysisComputedDB).count() == 1
-    assert db_session.query(PedigreeDB).count() == 1
+    assert db_session.query(FigureDescriptionDB).count() == 1
 
     # Task history reverts with the snapshot: pre-snapshot tasks are back with
     # scope intact, the post-snapshot task is gone.
@@ -811,6 +815,36 @@ def test_flags_revert_with_snapshot(db_session, test_user, snapshot_paper):
     assert rows[0].resolved_by_user_id == test_user.id
     assert rows[0].resolution_note == 'agree'
     assert rows[0].patient_id == p1.id
+
+
+def test_snapshot_written_with_a_pedigrees_table_still_restores(
+    db_session, test_user, snapshot_paper
+):
+    """Before c4d8e1f2a9b7 a snapshot carried a ``pedigrees`` table (one
+    pedigree per paper, no kinds). Restore reads it as figure_descriptions
+    rows of kind Pedigree instead of restoring no figure at all."""
+    paper = snapshot_paper['paper']
+    path = write_snapshot(paper.id, db_session)
+    assert path is not None
+    data = json.loads(path.read_text())
+    figures = data['tables'].pop('figure_descriptions')
+    assert len(figures) == 1
+    data['tables']['pedigrees'] = [
+        {k: v for k, v in figures[0].items() if k != 'kinds'}
+    ]
+    path.write_text(json.dumps(data))
+    db_session.query(FigureDescriptionDB).delete()
+    db_session.flush()
+
+    assert restore_snapshot(paper.id, path.name, db_session, test_user) is True
+    db_session.expire_all()
+    restored = db_session.query(FigureDescriptionDB).filter_by(paper_id=paper.id).one()
+    assert (restored.id, restored.image_id, restored.kinds, restored.description) == (
+        figures[0]['id'],
+        1,
+        ['Pedigree'],
+        'pedigree',
+    )
 
 
 def test_snapshot_written_before_the_task_rename_still_restores(

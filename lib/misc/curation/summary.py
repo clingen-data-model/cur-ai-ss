@@ -4,7 +4,8 @@ from sqlalchemy.orm import Session, joinedload
 from lib.misc.curation.models import CurationSummaryRow, SectionContent
 from lib.misc.pdf.paths import document_image_path
 from lib.models.family import FamilyDB
-from lib.models.paper import PaperDB, PedigreeDB
+from lib.models.figure import pedigree_figure
+from lib.models.paper import PaperDB
 from lib.models.patient import AffectedStatus, PatientDB, ProbandStatus
 from lib.models.patient_variant_occurrences import PatientVariantOccurrenceDB
 from lib.models.phenotype import HpoDB, PhenotypeDB
@@ -155,7 +156,7 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
 
     # 4. Build one row per proband
     rows: list[CurationSummaryRow] = []
-    pedigree = session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).first()
+    pedigree = pedigree_figure(session, paper_id)
     pedigree_image_path_str = None
     if pedigree:
         path = document_image_path(

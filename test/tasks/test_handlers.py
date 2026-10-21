@@ -5,7 +5,7 @@ import pytest
 from lib.agents.patient_extraction_agent import PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
 from lib.misc.pdf.paths import document_anchored_md_path
 from lib.models import GeneDB, PaperDB
-from lib.models.paper import PedigreeDB
+from lib.models.figure import FigureDescriptionDB
 from lib.tasks.handlers import (
     cited_text,
     format_paper_context,
@@ -39,7 +39,12 @@ def test_message_is_paper_then_instructions_then_pedigree(db_session, paper):
     data and comes last, which is also where the instructions say it is
     ("provided below")."""
     db_session.add(
-        PedigreeDB(paper_id=paper.id, image_id=3, description='II-1 affected female')
+        FigureDescriptionDB(
+            paper_id=paper.id,
+            image_id=3,
+            kinds=['Pedigree'],
+            description='II-1 affected female',
+        )
     )
     db_session.flush()
 
@@ -65,6 +70,37 @@ def test_message_without_a_pedigree_says_none(db_session, paper):
     assert data_item['content'] == 'Pedigree Description:\nNone'
 
 
+def test_message_reads_the_first_pedigree_not_other_figures(db_session, paper):
+    """The agents still read one pedigree; a described figure of another
+    kind, or a later pedigree, is not it."""
+    db_session.add_all(
+        [
+            FigureDescriptionDB(
+                paper_id=paper.id, image_id=0, kinds=['Gel'], description='gel'
+            ),
+            FigureDescriptionDB(
+                paper_id=paper.id,
+                image_id=5,
+                kinds=['Pedigree'],
+                description='second',
+            ),
+            FigureDescriptionDB(
+                paper_id=paper.id,
+                image_id=2,
+                kinds=['Pedigree', 'Chromatogram'],
+                description='first',
+            ),
+        ]
+    )
+    db_session.flush()
+
+    *_, data_item = patient_extraction_message(db_session, paper.id)
+
+    assert data_item['content'] == (
+        "Pedigree Description:\n{'anchor': 'figure-2', 'description': 'first'}"
+    )
+
+
 def test_paper_input_with_and_without_data():
     paper = 'PAPER AND GENE CONTEXT\n\nPaper (fulltext md):\nx\n\nGene: G'
 
@@ -80,8 +116,12 @@ def test_paper_input_with_and_without_data():
 
 
 def test_pedigree_input_names_the_figure_anchor():
-    main = PedigreeDB(paper_id=1, image_id=2, description='d')
-    supplement = PedigreeDB(paper_id=1, image_id=0, description='d', is_supplement=True)
+    main = FigureDescriptionDB(
+        paper_id=1, image_id=2, kinds=['Pedigree'], description='d'
+    )
+    supplement = FigureDescriptionDB(
+        paper_id=1, image_id=0, kinds=['Pedigree'], description='d', is_supplement=True
+    )
 
     assert pedigree_input(main) == {'anchor': 'figure-2', 'description': 'd'}
     assert pedigree_input(supplement) == {'anchor': 'supp-figure-0', 'description': 'd'}

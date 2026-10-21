@@ -39,7 +39,7 @@ from lib.models import (
 )
 from lib.models.deletion_log import DeletionLogDB
 from lib.models.edit import EditDB
-from lib.models.paper import PedigreeDB
+from lib.models.figure import FigureDescriptionDB
 from lib.tasks import TaskCreateRequest
 from lib.tasks.agent_session import chat_session
 from lib.tasks.models import TaskStatus, TaskType
@@ -640,24 +640,48 @@ def test_get_patients_paper_not_found(client):
     assert response.json()['detail'] == 'Paper not found'
 
 
-def test_get_pedigree_image_url_is_the_anchored_documents_image(
+def test_get_figures_lists_each_described_figure_main_text_first(
     client, db_session, seeded_paper
 ):
-    """PedigreeDB.image_id is the Docling picture index (the N of figure-N), so
+    """One entry per described figure with its kinds and the anchor the
+    agents cite. image_id is the Docling picture index (the N of figure-N), so
     the image is documents/{id}/{main,supplement}/images/N.png."""
-    db_session.add(
-        PedigreeDB(
-            paper_id=seeded_paper.id, image_id=4, description='ped', is_supplement=True
-        )
+    db_session.add_all(
+        [
+            FigureDescriptionDB(
+                paper_id=seeded_paper.id,
+                image_id=4,
+                kinds=['Pedigree'],
+                description='ped',
+                is_supplement=True,
+            ),
+            FigureDescriptionDB(
+                paper_id=seeded_paper.id,
+                image_id=2,
+                kinds=['Chromatogram', 'Gel'],
+                description='traces',
+            ),
+        ]
     )
     db_session.flush()
 
-    resp = client.get(f'/papers/{seeded_paper.id}/pedigree').json()
+    resp = client.get(f'/papers/{seeded_paper.id}/figures').json()
 
-    assert resp['image_id'] == 4
-    assert resp['image_url'] == str(
+    assert [(f['anchor'], f['kinds']) for f in resp] == [
+        ('figure-2', ['Chromatogram', 'Gel']),
+        ('supp-figure-4', ['Pedigree']),
+    ]
+    assert resp[1]['image_id'] == 4
+    assert resp[1]['is_supplement'] is True
+    assert resp[1]['description'] == 'ped'
+    assert resp[1]['image_url'] == str(
         document_image_path(seeded_paper.id, 4, supplement=True)
     )
+
+
+def test_get_figures_is_empty_without_described_figures(client, seeded_paper):
+    assert client.get(f'/papers/{seeded_paper.id}/figures').json() == []
+    assert client.get('/papers/999999/figures').status_code == 404
 
 
 def test_get_patients_returns_stored_citations(client, db_session, seeded_paper):

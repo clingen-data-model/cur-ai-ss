@@ -33,12 +33,13 @@ from lib.models import (
     AnnotatedVariantDB,
     Base,
     FamilyDB,
+    FigureDescriptionDB,
+    FigureKind,
     HarmonizedVariantDB,
     HpoDB,
     PaperDB,
     PatientDB,
     PatientVariantOccurrenceDB,
-    PedigreeDB,
     PhenotypeDB,
     SegregationAnalysisComputedDB,
     SegregationEvidenceDB,
@@ -68,7 +69,7 @@ _SNAPSHOT_NAME_RE = re.compile(r'^extraction_\d{8}T\d{12}Z\.json$')
 _INSERT_ORDER: list[tuple[str, type[Base]]] = [
     ('families', FamilyDB),
     ('patients', PatientDB),
-    ('pedigrees', PedigreeDB),
+    ('figure_descriptions', FigureDescriptionDB),
     ('phenotypes', PhenotypeDB),
     ('hpos', HpoDB),
     ('variants', VariantDB),
@@ -209,7 +210,11 @@ def dump_paper_state(paper_id: int, paper_db: PaperDB, session: Session) -> dict
     families = session.query(FamilyDB).filter(FamilyDB.paper_id == paper_id).all()
     family_ids = [f.id for f in families]
     patients = session.query(PatientDB).filter(PatientDB.paper_id == paper_id).all()
-    pedigrees = session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).all()
+    figures = (
+        session.query(FigureDescriptionDB)
+        .filter(FigureDescriptionDB.paper_id == paper_id)
+        .all()
+    )
     phenotypes = (
         session.query(PhenotypeDB).filter(PhenotypeDB.paper_id == paper_id).all()
     )
@@ -286,7 +291,7 @@ def dump_paper_state(paper_id: int, paper_db: PaperDB, session: Session) -> dict
         'families': [row_to_dict(r) for r in families],
         'patients': [row_to_dict(r) for r in patients],
         'flags': [row_to_dict(r) for r in flags],
-        'pedigrees': [row_to_dict(r) for r in pedigrees],
+        'figure_descriptions': [row_to_dict(r) for r in figures],
         'phenotypes': [row_to_dict(r) for r in phenotypes],
         'hpos': [row_to_dict(r) for r in hpos],
         'variants': [row_to_dict(r) for r in variants],
@@ -526,6 +531,24 @@ _LEGACY_ENUM_VALUES: dict[type[Enum], dict[str, Enum]] = {
 }
 
 
+def _upgrade_legacy_tables(tables: dict) -> dict:
+    """A file written before a table was reshaped, read as the current shape.
+
+    The ``pedigrees`` table (one pedigree per paper) became
+    ``figure_descriptions`` (every described figure, with its kinds); its
+    rows are pedigrees by definition.
+    """
+    if 'pedigrees' in tables and 'figure_descriptions' not in tables:
+        tables = {
+            **{k: v for k, v in tables.items() if k != 'pedigrees'},
+            'figure_descriptions': [
+                {**row, 'kinds': [FigureKind.PEDIGREE.value]}
+                for row in tables['pedigrees']
+            ],
+        }
+    return tables
+
+
 def _coerce_value(column: Column, value: object) -> object:
     if value is None:
         return None
@@ -673,9 +696,9 @@ def _delete_paper_domain_rows(session: Session, paper_id: int) -> None:
     session.query(PhenotypeDB).filter(PhenotypeDB.paper_id == paper_id).delete(
         synchronize_session=False
     )
-    session.query(PedigreeDB).filter(PedigreeDB.paper_id == paper_id).delete(
-        synchronize_session=False
-    )
+    session.query(FigureDescriptionDB).filter(
+        FigureDescriptionDB.paper_id == paper_id
+    ).delete(synchronize_session=False)
     session.query(PatientDB).filter(PatientDB.paper_id == paper_id).delete(
         synchronize_session=False
     )
@@ -704,7 +727,7 @@ def restore_snapshot(
     data = json.loads(path.read_text())
     if data.get('meta', {}).get('version') != SNAPSHOT_FILE_VERSION:
         raise SnapshotIncompatibleError(f'Unsupported snapshot file version in {name}')
-    tables: dict = data['tables']
+    tables: dict = _upgrade_legacy_tables(data['tables'])
 
     paper_db = session.get(PaperDB, paper_id)
     if paper_db is None:
