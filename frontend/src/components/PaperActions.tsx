@@ -16,6 +16,7 @@ import {
 } from '@/api/generated'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogMedia, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import type { PaperSummaryResp, TaskType } from '@/api/generated/types.gen'
@@ -41,20 +42,22 @@ const RERUNNABLE_TASK_TYPES: TaskType[] = [
   'Extraction Verification',
 ]
 
-/* The dropdown's first entry: every task, from the top of the pipeline. It is
- * not a TaskType, so it never reaches the task endpoint -- it has its own
- * (POST /papers/{id}/rerun-all). */
-const ALL_TASKS = 'All tasks'
-type RerunChoice = TaskType | typeof ALL_TASKS
+/* The dialog's two tabs. "All tasks" is not a TaskType, so it never reaches
+ * the task endpoint -- it has its own (POST /papers/{id}/rerun-all). */
+type RerunTab = 'single' | 'all'
 
-/** Under the box in "All tasks" mode; the per-task counterpart is CONTEXT_NOTE. */
-const ALL_CONTEXT_NOTE =
+/** Under the "All tasks" box; the per-task counterpart is CONTEXT_NOTE. */
+const GLOBAL_CONTEXT_NOTE =
   'Shown to every agent that reads the paper, on its fresh run, and kept on the paper for later runs. Replaces the previous notes; clear the box to remove them.'
+
+const TEXTAREA_CLASS =
+  'w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none resize-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50'
 
 /* Shared by RerunTaskButton's own trigger (papers table / gene cards) and the
  * "Re-run agents" button atop the task-timeline popovers -- same dialog
  * either way. Kept as one definition so the two triggers can't drift into
- * asking for different fields. */
+ * asking for different fields. Two tabs: one task (with its own follow-up
+ * context) or every task (with context global to the paper). */
 function RerunTaskDialog({
   paper,
   open,
@@ -67,37 +70,38 @@ function RerunTaskDialog({
   initialTaskType?: TaskType
 }) {
   const queryClient = useQueryClient()
-  const [choice, setChoice] = useState<RerunChoice>(initialTaskType)
+  const [tab, setTab] = useState<RerunTab>('single')
+  const [taskType, setTaskType] = useState<TaskType>(initialTaskType)
   const [skipSuccessors, setSkipSuccessors] = useState(false)
-  const [reparsePdf, setReparsePdf] = useState(false)
   const [context, setContext] = useState('')
-  const [contextTouched, setContextTouched] = useState(false)
-  const allTasks = choice === ALL_TASKS
-  const taskType = allTasks ? null : choice
+  const [reparsePdf, setReparsePdf] = useState(false)
+  const [globalContext, setGlobalContext] = useState('')
+  const [globalContextTouched, setGlobalContextTouched] = useState(false)
+  const allTab = tab === 'all'
   const busy = usePaperBusy(paper.id, open)
   // What each step is for, from the backend's own definition of the task types.
   const taskTypesQuery = useTaskTypes(open)
-  const taskHelp = taskType
-    ? taskTypesQuery.data?.find((t) => t.type === taskType)?.description
-    : undefined
+  const taskHelp = taskTypesQuery.data?.find((t) => t.type === taskType)?.description
 
-  // The notes already on the paper, so "All tasks" edits them in place rather
-  // than starting from a blank box that would silently replace them.
-  const notesQuery = useQuery({
+  // The global context already on the paper, so the tab edits it in place
+  // rather than starting from a blank box that would silently replace it.
+  const globalContextQuery = useQuery({
     queryKey: ['paper-global-additional-context', paper.id],
     queryFn: () => getPaperPapersPaperIdGet({ path: { paper_id: paper.id }, throwOnError: true }),
-    enabled: open && allTasks,
+    enabled: open && allTab,
     select: (resp) => resp.paper_global_additional_context ?? '',
   })
   useEffect(() => {
-    if (allTasks && !contextTouched && notesQuery.data !== undefined) setContext(notesQuery.data)
-  }, [allTasks, contextTouched, notesQuery.data])
+    if (!globalContextTouched && globalContextQuery.data !== undefined) {
+      setGlobalContext(globalContextQuery.data)
+    }
+  }, [globalContextTouched, globalContextQuery.data])
 
   const mutation = useMutation({
-    mutationFn: () => taskType === null
+    mutationFn: () => allTab
       ? rerunAllPapersPaperIdRerunAllPost({
           path: { paper_id: paper.id },
-          body: { reparse_pdf: reparsePdf, additional_context: context || null },
+          body: { reparse_pdf: reparsePdf, additional_context: globalContext || null },
           throwOnError: true,
         })
       : createTaskPapersPaperIdTasksPost({
@@ -113,12 +117,12 @@ function RerunTaskDialog({
       queryClient.invalidateQueries({ queryKey: ['paper-tasks', paper.id] })
       queryClient.invalidateQueries({ queryKey: ['paper-global-additional-context', paper.id] })
       queryClient.invalidateQueries({ queryKey: ['paper', paper.id] })
-      toast.success(allTasks ? 'Re-running all tasks' : 'Task queued')
+      toast.success(allTab ? 'Re-running all tasks' : 'Task queued')
       onOpenChange(false)
       setContext('')
-      setContextTouched(false)
       setSkipSuccessors(false)
       setReparsePdf(false)
+      setGlobalContextTouched(false)
     },
     onError: (error) => toast.error(apiErrorMessage(error, 'Failed to queue task')),
   })
@@ -127,9 +131,12 @@ function RerunTaskDialog({
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        // Re-opening (e.g. a different row's icon) should show that row's type,
-        // not whatever was last picked from the dropdown.
-        if (next) setChoice(initialTaskType)
+        // Re-opening (e.g. a different row's icon) should show that row's type
+        // on the first tab, not whatever was last picked.
+        if (next) {
+          setTab('single')
+          setTaskType(initialTaskType)
+        }
         onOpenChange(next)
       }}
     >
@@ -139,90 +146,100 @@ function RerunTaskDialog({
             <h2 className="text-base font-semibold">Rerun Agent</h2>
             <p className="text-sm text-muted-foreground mt-0.5">{paper.title ?? paper.filename}</p>
           </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">Task</label>
-            <Select value={choice} onValueChange={(v) => setChoice(v as RerunChoice)}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              {/* Not aligned to the trigger: with the selected item pinned over
-                  it, a short scrolling list floated up over the dialog and
-                  showed a slice that did not include the selection. */}
-              <SelectContent className="max-h-64" alignItemWithTrigger={false}>
-                <SelectItem value={ALL_TASKS}>{ALL_TASKS}</SelectItem>
-                {RERUNNABLE_TASK_TYPES.map(t => (
-                  <SelectItem key={t} value={t}>{t}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {taskHelp && <p className="text-xs text-muted-foreground">{taskHelp}</p>}
-            {allTasks && (
-              <p className="text-xs text-muted-foreground">
-                Every task, from the top of the pipeline, each agent starting fresh.
-              </p>
-            )}
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">
-              {allTasks ? 'Notes for every agent' : 'Additional context'}{' '}
-              <span className="text-muted-foreground font-normal">(optional)</span>
-            </label>
-            <textarea
-              value={context}
-              onChange={(e) => {
-                setContext(e.target.value)
-                setContextTouched(true)
-              }}
-              placeholder={
-                allTasks
-                  ? 'Anything every agent should know about this paper...'
-                  : 'Any specific instructions for this task run...'
-              }
-              rows={3}
-              className="w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none resize-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-            />
-            <p className="text-xs text-muted-foreground">
-              {allTasks ? ALL_CONTEXT_NOTE : CONTEXT_NOTE}
-            </p>
-          </div>
-          {taskType === null ? (
-            <div className="space-y-1.5">
-              <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={reparsePdf}
-                  onChange={(e) => setReparsePdf(e.target.checked)}
-                  className="cursor-pointer"
+          <Tabs value={tab} onValueChange={(v) => setTab(v as RerunTab)}>
+            <TabsList className="w-full">
+              <TabsTrigger value="single">Single task</TabsTrigger>
+              <TabsTrigger value="all">All tasks</TabsTrigger>
+            </TabsList>
+            <TabsContent value="single" className="space-y-4 pt-2">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Task</label>
+                <Select value={taskType} onValueChange={(v) => setTaskType(v as TaskType)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  {/* Not aligned to the trigger: with the selected item pinned over
+                      it, a short scrolling list floated up over the dialog and
+                      showed a slice that did not include the selection. */}
+                  <SelectContent className="max-h-64" alignItemWithTrigger={false}>
+                    {RERUNNABLE_TASK_TYPES.map(t => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {taskHelp && <p className="text-xs text-muted-foreground">{taskHelp}</p>}
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">
+                  Additional context <span className="text-muted-foreground font-normal">(optional)</span>
+                </label>
+                <textarea
+                  value={context}
+                  onChange={(e) => setContext(e.target.value)}
+                  placeholder="Any specific instructions for this task run..."
+                  rows={3}
+                  className={TEXTAREA_CLASS}
                 />
-                Also re-parse the PDF
-              </label>
+                <p className="text-xs text-muted-foreground">{CONTEXT_NOTE}</p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={skipSuccessors}
+                    onChange={(e) => setSkipSuccessors(e.target.checked)}
+                    className="cursor-pointer"
+                  />
+                  Skip successor tasks
+                </label>
+                {/* The dependency chain the checkbox cuts, so "skip" is a choice
+                 * about something visible. */}
+                <TaskSuccessors taskType={taskType} skipped={skipSuccessors} />
+              </div>
+            </TabsContent>
+            <TabsContent value="all" className="space-y-4 pt-2">
               <p className="text-xs text-muted-foreground">
-                Rebuilds the text, tables and images the agents cite. Off, the run starts at
-                Paper Classifier and uses the parse already on disk.
+                Re-runs every task from the top of the pipeline, each agent starting fresh.
               </p>
-              <TaskSuccessors taskType={reparsePdf ? 'PDF Parsing' : 'Paper Classifier'} />
-            </div>
-          ) : (
-            <div className="space-y-1.5">
-              <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={skipSuccessors}
-                  onChange={(e) => setSkipSuccessors(e.target.checked)}
-                  className="cursor-pointer"
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">
+                  Context for every agent <span className="text-muted-foreground font-normal">(optional)</span>
+                </label>
+                <textarea
+                  value={globalContext}
+                  onChange={(e) => {
+                    setGlobalContext(e.target.value)
+                    setGlobalContextTouched(true)
+                  }}
+                  placeholder="Anything every agent should know about this paper..."
+                  rows={3}
+                  className={TEXTAREA_CLASS}
                 />
-                Skip successor tasks
-              </label>
-              {/* The dependency chain the checkbox cuts, so "skip" is a choice
-               * about something visible. */}
-              <TaskSuccessors taskType={taskType} skipped={skipSuccessors} />
-            </div>
-          )}
+                <p className="text-xs text-muted-foreground">{GLOBAL_CONTEXT_NOTE}</p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={reparsePdf}
+                    onChange={(e) => setReparsePdf(e.target.checked)}
+                    className="cursor-pointer"
+                  />
+                  Also re-parse the PDF
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Rebuilds the text, tables and images the agents cite. Off, the run starts at
+                  Paper Classifier and uses the parse already on disk.
+                </p>
+                <TaskSuccessors taskType={reparsePdf ? 'PDF Parsing' : 'Paper Classifier'} />
+              </div>
+            </TabsContent>
+          </Tabs>
           {busy && <p className="text-sm text-amber-700 dark:text-amber-400">{busy}</p>}
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button onClick={() => mutation.mutate()} disabled={mutation.isPending || !!busy}>
-              {mutation.isPending ? 'Queuing...' : 'Confirm Rerun'}
+              {mutation.isPending ? 'Queuing...' : allTab ? 'Confirm Rerun All' : 'Confirm Rerun'}
             </Button>
           </div>
         </div>
