@@ -3658,13 +3658,13 @@ def test_hpo_linking_prompt_carries_global_context(db_session, seeded_paper):
     assert 'Onset was in infancy.' in _first_message(run)
 
 
-def test_pedigree_description_prompt_carries_global_context(db_session, seeded_paper):
-    from lib.tasks.handlers import handle_pedigree_description
+def test_figure_description_prompt_carries_global_context(db_session, seeded_paper):
+    from lib.tasks.handlers import handle_figure_description
 
     seeded_paper.paper_global_additional_context = 'Ignore the supplement pedigree.'
     task = TaskDB(
         paper_id=seeded_paper.id,
-        type=TaskType.PEDIGREE_DESCRIPTION,
+        type=TaskType.FIGURE_DESCRIPTION,
         status=TaskStatus.RUNNING,
     )
     db_session.add(task)
@@ -3674,7 +3674,7 @@ def test_pedigree_description_prompt_carries_global_context(db_session, seeded_p
         'lib.tasks.handlers.Runner.run', side_effect=RuntimeError('stop')
     ) as run:
         with pytest.raises(RuntimeError):
-            asyncio.run(handle_pedigree_description(task.id))
+            asyncio.run(handle_figure_description(task.id))
 
     assert 'Ignore the supplement pedigree.' in _first_message(run)
 

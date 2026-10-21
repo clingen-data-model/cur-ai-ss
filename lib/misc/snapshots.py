@@ -516,6 +516,16 @@ def write_snapshot_safe(
         return None
 
 
+# Enum values that snapshot files were written with and that a member no
+# longer carries. Snapshots store the *value* (_encode_value), so renaming a
+# member's value strands every file written before the rename; map here
+# rather than rewriting files on disk.
+_LEGACY_ENUM_VALUES: dict[type[Enum], dict[str, Enum]] = {
+    # a3f9c2e7d1b4: the step grew from the pedigree to every evidence figure.
+    TaskType: {'Pedigree Description': TaskType.FIGURE_DESCRIPTION},
+}
+
+
 def _coerce_value(column: Column, value: object) -> object:
     if value is None:
         return None
@@ -524,7 +534,9 @@ def _coerce_value(column: Column, value: object) -> object:
         and column.type.enum_class is not None
         and isinstance(value, str)
     ):
-        return column.type.enum_class(value)
+        enum_class = column.type.enum_class
+        legacy = _LEGACY_ENUM_VALUES.get(enum_class, {}).get(value)
+        return legacy if legacy is not None else enum_class(value)
     if isinstance(column.type, DateTime) and isinstance(value, str):
         return datetime.fromisoformat(value)
     return value

@@ -229,7 +229,7 @@ def invalidate_descendants(session: Session, paper_id: int, task_type: TaskType)
     That is not hypothetical. Re-running PAPER_CLASSIFIER lets VARIANT_EXTRACTION
     (fast) satisfy the gate using the *previous* run's PATIENT_EXTRACTION and
     PATIENT_DEMOGRAPHICS rows, because PATIENT_EXTRACTION sits behind the slow
-    PEDIGREE_DESCRIPTION and has not been re-queued yet. PATIENT_VARIANT_OCCURRENCES
+    FIGURE_DESCRIPTION and has not been re-queued yet. PATIENT_VARIANT_OCCURRENCES
     then runs concurrently with PATIENT_EXTRACTION -- which deletes and recreates
     the paper's patients -- and its INSERT dies on a FOREIGN KEY constraint
     against a patient that no longer exists.
@@ -328,11 +328,11 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
             enqueue_task(
                 session,
                 paper_id=task.paper_id,
-                task_type=TaskType.PEDIGREE_DESCRIPTION,
+                task_type=TaskType.FIGURE_DESCRIPTION,
                 updated_by_user_id=user_id,
             )
 
-        case TaskType.PEDIGREE_DESCRIPTION:
+        case TaskType.FIGURE_DESCRIPTION:
             enqueue_task(
                 session,
                 paper_id=task.paper_id,

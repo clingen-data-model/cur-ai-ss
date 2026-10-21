@@ -38,7 +38,10 @@ class TaskType(StrEnum):
     PAPER_CLASSIFIER = 'Paper Classifier'
     PAPER_METADATA = 'Paper Metadata'
     VARIANT_EXTRACTION = 'Variant Extraction'
-    PEDIGREE_DESCRIPTION = 'Pedigree Description'
+    # Was PEDIGREE_DESCRIPTION / 'Pedigree Description' until migration
+    # a3f9c2e7d1b4 renamed the stored name; snapshots written before it carry
+    # the old value and lib.misc.snapshots maps it back.
+    FIGURE_DESCRIPTION = 'Figure Description'
     PATIENT_EXTRACTION = 'Patient Extraction'
     PATIENT_DEMOGRAPHICS = 'Patient Demographics'  # per-patient
 
@@ -83,7 +86,7 @@ class TaskType(StrEnum):
             TaskType.PAPER_CLASSIFIER: 'Decides whether the paper has identifiable cases for this gene worth extracting; if not, the pipeline stops.',
             TaskType.PAPER_METADATA: 'Finds the title, authors, journal and year, and matches the paper to its PubMed record.',
             TaskType.VARIANT_EXTRACTION: 'Finds the genetic variants the paper reports, written as the paper writes them.',
-            TaskType.PEDIGREE_DESCRIPTION: "Looks through the paper's figures for a family tree and describes the relationships and affected status it shows.",
+            TaskType.FIGURE_DESCRIPTION: "Looks through the paper's figures for a family tree and describes the relationships and affected status it shows.",
             TaskType.PATIENT_EXTRACTION: 'Identifies each patient the paper describes, marks the probands and groups patients into families.',
             TaskType.PATIENT_DEMOGRAPHICS: "Fills in each patient's sex, ages, ancestry, affected status and relationship to the proband.",
             TaskType.SEGREGATION_EVIDENCE_EXTRACTION: 'Collects what the paper says about whether variants track with disease in each family, such as LOD scores.',
@@ -164,9 +167,9 @@ TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
     TaskType.PAPER_CLASSIFIER: [
         TaskType.PAPER_METADATA,
         TaskType.VARIANT_EXTRACTION,
-        TaskType.PEDIGREE_DESCRIPTION,
+        TaskType.FIGURE_DESCRIPTION,
     ],
-    TaskType.PEDIGREE_DESCRIPTION: [TaskType.PATIENT_EXTRACTION],
+    TaskType.FIGURE_DESCRIPTION: [TaskType.PATIENT_EXTRACTION],
     # Occurrences hangs off patient *identity*, not demographics: its agent is
     # given each patient's id, identifier and citations and nothing
     # demographics fills in. Demographics used to sit between the two as an

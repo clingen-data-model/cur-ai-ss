@@ -22,7 +22,7 @@ import { RootLayout } from './routes/__root'
 import { HomePage } from './routes/index'
 import { LoginPage } from './routes/login'
 import { ExtractionPage } from './routes/papers.$paperId.extraction'
-import { isExtractionTab, type ExtractionTab } from './lib/extractionTabs'
+import { parseExtractionTab, type ExtractionTab } from './lib/extractionTabs'
 import { SettingsPage } from './routes/settings'
 
 const rootRoute = new RootRoute({
@@ -121,7 +121,8 @@ const papersExtractionRoute = new Route({
   component: ExtractionPage,
   validateSearch: (search: Record<string, unknown>): ExtractionSearch => {
     const parsed: ExtractionSearch = {}
-    if (isExtractionTab(search.tab) && search.tab !== 'occurrences') parsed.tab = search.tab
+    const tab = parseExtractionTab(search.tab)
+    if (tab !== undefined && tab !== 'occurrences') parsed.tab = tab
     return parsed
   },
 })

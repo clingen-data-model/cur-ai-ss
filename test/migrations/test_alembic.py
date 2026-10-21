@@ -468,3 +468,57 @@ def test_compound_het_confidence_becomes_a_flag(monkeypatch, tmp_path):
             ).scalar_one()
             == 'paired_variant'
         )
+
+
+def test_pedigree_description_tasks_are_renamed(monkeypatch, tmp_path):
+    """a3f9c2e7d1b4 rewrites the stored member name of every pedigree task
+    row; SQLEnum maps rows back by name, so an unrenamed row would raise
+    LookupError on the first read of the tasks table. Downgrade restores it."""
+
+    monkeypatch.setattr(db.env, 'CAA_ROOT', str(tmp_path))
+    monkeypatch.setattr(db.env, 'SQLLITE_DIR', '')
+    monkeypatch.setattr(db, '_engine', None)
+    monkeypatch.setattr(db, '_session_factory', None)
+
+    repo_root = Path(__file__).resolve().parents[2]
+    cfg = Config(str(repo_root / 'alembic.ini'))
+    command.upgrade(cfg, 'e8c3a5d1f7b2')
+
+    engine = db.get_engine()
+    with engine.begin() as connection:
+        gene_id = connection.execute(
+            text("INSERT INTO genes (symbol) VALUES ('TESTGENE') RETURNING id")
+        ).scalar_one()
+        paper_id = connection.execute(
+            text(
+                'INSERT INTO papers (gene_id, content_hash, filename, paper_types) '
+                "VALUES (:gene_id, 'h', 'f.pdf', '[]') RETURNING id"
+            ),
+            {'gene_id': gene_id},
+        ).scalar_one()
+        for task_type in ('PEDIGREE_DESCRIPTION', 'PATIENT_EXTRACTION'):
+            connection.execute(
+                text(
+                    'INSERT INTO tasks (paper_id, type, status, tries, skip_successors) '
+                    "VALUES (:paper_id, :type, 'COMPLETED', 1, 0)"
+                ),
+                {'paper_id': paper_id, 'type': task_type},
+            )
+
+    command.upgrade(cfg, 'a3f9c2e7d1b4')
+    with engine.begin() as connection:
+        types = (
+            connection.execute(text('SELECT type FROM tasks ORDER BY id'))
+            .scalars()
+            .all()
+        )
+    assert types == ['FIGURE_DESCRIPTION', 'PATIENT_EXTRACTION']
+
+    command.downgrade(cfg, 'e8c3a5d1f7b2')
+    with engine.begin() as connection:
+        types = (
+            connection.execute(text('SELECT type FROM tasks ORDER BY id'))
+            .scalars()
+            .all()
+        )
+    assert types == ['PEDIGREE_DESCRIPTION', 'PATIENT_EXTRACTION']

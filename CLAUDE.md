@@ -87,7 +87,7 @@ Papers flow through this sequence of agents (all triggered by worker):
 
 1. **Paper Extraction** → Parses PDF, extracts metadata, markdown content, tables
 2. **Patient Extraction** → Identifies patients, demographics, proband status
-3. **Pedigree Description** → Describes family relationships
+3. **Figure Description** → Describes the paper's pedigree figure (the step that will cover genotyping images too)
 4. **Variant Extraction** → Extracts genetic variant information
 5. **Variant Harmonization** → Normalizes variants to standard formats
 6. **Variant Annotation** → Adds annotations (SpliceAI, etc.)
