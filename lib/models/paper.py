@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from lib.models.chat_message import ChatMessageDB
     from lib.models.evidence_block import EvidenceBlock, ReasoningBlock
     from lib.models.family import FamilyDB
+    from lib.models.figure import FigureDescriptionDB
     from lib.models.flag import FlagDB
     from lib.models.patient import PatientDB
     from lib.models.patient_variant_occurrences import (
@@ -295,11 +296,8 @@ class PaperDB(Base):
     families: Mapped[list['FamilyDB']] = relationship(
         'FamilyDB', back_populates='paper', cascade='all, delete-orphan'
     )
-    pedigree: Mapped['PedigreeDB | None'] = relationship(
-        'PedigreeDB',
-        back_populates='paper',
-        cascade='all, delete-orphan',
-        uselist=False,
+    figure_descriptions: Mapped[list['FigureDescriptionDB']] = relationship(
+        'FigureDescriptionDB', back_populates='paper', cascade='all, delete-orphan'
     )
     variants: Mapped[list['VariantDB']] = relationship(
         'VariantDB', back_populates='paper', cascade='all, delete-orphan'
@@ -541,42 +539,3 @@ class DocumentResp(BaseModel):
 
     main: str
     supplement: str | None = None
-
-
-class PedigreeDB(Base):
-    __tablename__ = 'pedigrees'
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    paper_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey('papers.id', ondelete='CASCADE'),
-        nullable=False,
-        unique=True,
-    )
-    image_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    # image_id is namespaced separately per supplement/main (see document_image_path),
-    # so this is required to know which file image_id actually names.
-    is_supplement: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default='0'
-    )
-    description: Mapped[str] = mapped_column(Text, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
-
-    paper: Mapped['PaperDB'] = relationship('PaperDB', back_populates='pedigree')
-
-    __table_args__ = (
-        UniqueConstraint('paper_id', 'image_id'),
-        Index('ix_pedigrees_paper_id', 'paper_id'),
-    )
-
-
-class PedigreeResp(BaseModel):
-    image_id: int
-    is_supplement: bool
-    description: str
-    image_url: str

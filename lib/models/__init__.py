@@ -20,6 +20,7 @@ from lib.models.family import (
     FamilyResp,
     FamilyUpdateRequest,
 )
+from lib.models.figure import FigureDescriptionDB, FigureDescriptionResp, FigureKind
 from lib.models.flag import (
     ExtractionFlag,
     FlagBulkResolveRequest,
@@ -57,8 +58,6 @@ from lib.models.paper import (
     PaperTag,
     PaperType,
     PaperUpdateRequest,
-    PedigreeDB,
-    PedigreeResp,
     ReviewStatus,
 )
 from lib.models.patient import (

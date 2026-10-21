@@ -87,7 +87,7 @@ Papers flow through this sequence of agents (all triggered by worker):
 
 1. **Paper Extraction** → Parses PDF, extracts metadata, markdown content, tables
 2. **Patient Extraction** → Identifies patients, demographics, proband status
-3. **Figure Description** → Describes the paper's pedigree figure (the step that will cover genotyping images too)
+3. **Figure Description** → Describes the paper's evidence figures, one `figure_descriptions` row per figure with its `kinds` (`FigureKind` in `lib/models/figure.py`); today the describer reports only the first pedigree, and the downstream agents read that one (`pedigree_figure`)
 4. **Variant Extraction** → Extracts genetic variant information
 5. **Variant Harmonization** → Normalizes variants to standard formats
 6. **Variant Annotation** → Adds annotations (SpliceAI, etc.)

@@ -6,9 +6,11 @@ from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
 from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from lib.api import db
 from lib.models import Base
+from lib.models.figure import FigureDescriptionDB, FigureKind
 
 
 def test_alembic_upgrade_head(monkeypatch, tmp_path):
@@ -522,3 +524,87 @@ def test_pedigree_description_tasks_are_renamed(monkeypatch, tmp_path):
             .all()
         )
     assert types == ['PEDIGREE_DESCRIPTION', 'PATIENT_EXTRACTION']
+
+
+def test_pedigrees_become_figure_descriptions(monkeypatch, tmp_path):
+    """c4d8e1f2a9b7 copies every pedigrees row into figure_descriptions as a
+    Pedigree-kind figure, id and all, and drops pedigrees. The ORM reads the
+    copied rows back with kinds as a list. Downgrade brings the pedigrees
+    table back with the first pedigree of each paper."""
+
+    monkeypatch.setattr(db.env, 'CAA_ROOT', str(tmp_path))
+    monkeypatch.setattr(db.env, 'SQLLITE_DIR', '')
+    monkeypatch.setattr(db, '_engine', None)
+    monkeypatch.setattr(db, '_session_factory', None)
+
+    repo_root = Path(__file__).resolve().parents[2]
+    cfg = Config(str(repo_root / 'alembic.ini'))
+    command.upgrade(cfg, 'a3f9c2e7d1b4')
+
+    engine = db.get_engine()
+    with engine.begin() as connection:
+        gene_id = connection.execute(
+            text("INSERT INTO genes (symbol) VALUES ('TESTGENE') RETURNING id")
+        ).scalar_one()
+        paper_ids = [
+            connection.execute(
+                text(
+                    'INSERT INTO papers (gene_id, content_hash, filename, paper_types) '
+                    "VALUES (:gene_id, :hash, 'f.pdf', '[]') RETURNING id"
+                ),
+                {'gene_id': gene_id, 'hash': f'h{n}'},
+            ).scalar_one()
+            for n in range(3)
+        ]
+        connection.execute(
+            text(
+                'INSERT INTO pedigrees (paper_id, image_id, is_supplement, '
+                "description) VALUES (:a, 3, 0, 'main'), (:b, 0, 1, 'supp')"
+            ),
+            {'a': paper_ids[0], 'b': paper_ids[1]},
+        )
+        pedigree_ids = (
+            connection.execute(text('SELECT id FROM pedigrees ORDER BY id'))
+            .scalars()
+            .all()
+        )
+
+    command.upgrade(cfg, 'head')
+    command.upgrade(cfg, 'head')  # a clean no-op: alembic_version landed
+
+    with engine.begin() as connection:
+        tables = {
+            row[0]
+            for row in connection.execute(
+                text("SELECT name FROM sqlite_master WHERE type = 'table'")
+            )
+        }
+        assert 'pedigrees' not in tables
+        rows = connection.execute(
+            text(
+                'SELECT id, paper_id, image_id, is_supplement, kinds, description '
+                'FROM figure_descriptions ORDER BY id'
+            )
+        ).fetchall()
+    assert [tuple(r) for r in rows] == [
+        (pedigree_ids[0], paper_ids[0], 3, 0, '["Pedigree"]', 'main'),
+        (pedigree_ids[1], paper_ids[1], 0, 1, '["Pedigree"]', 'supp'),
+    ]
+
+    with Session(engine) as session:
+        figures = session.query(FigureDescriptionDB).order_by('id').all()
+        assert [f.kinds for f in figures] == [['Pedigree'], ['Pedigree']]
+        assert all(f.shows(FigureKind.PEDIGREE) for f in figures)
+
+    command.downgrade(cfg, 'a3f9c2e7d1b4')
+    with engine.begin() as connection:
+        rows = connection.execute(
+            text(
+                'SELECT id, paper_id, image_id, is_supplement, description '
+                'FROM pedigrees ORDER BY id'
+            )
+        ).fetchall()
+    assert [tuple(r) for r in rows] == [
+        (pedigree_ids[0], paper_ids[0], 3, 0, 'main'),
+        (pedigree_ids[1], paper_ids[1], 0, 1, 'supp'),
+    ]

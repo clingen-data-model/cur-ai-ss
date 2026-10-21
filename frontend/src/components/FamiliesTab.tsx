@@ -10,7 +10,7 @@
  *
  * The data has no parent/child links, only each person's relationship to the
  * proband, so members are grouped by that relationship rather than drawn as a
- * tree; the paper's own figure is on the Pedigree tab.
+ * tree; the paper's own figure is on the Figure Descriptions tab.
  *
  * Families are listed in a table, one row each, with the caret that opens a
  * row's detail (the same expander as the occurrences table); the row shows the
