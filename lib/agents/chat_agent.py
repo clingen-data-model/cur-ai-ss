@@ -26,6 +26,7 @@ from lib.models.phenotype import PhenotypeDB
 from lib.models.variant import VariantDB
 from lib.tasks.handlers import QA_UNSUPPORTED_TASK_TYPES, ask_task_agent
 from lib.tasks.misc import (
+    add_paper_context,
     enqueue_all_instances,
     enqueue_task,
     infer_paper_status_detail,
@@ -243,8 +244,9 @@ def _make_queue_task_tool(paper_id: int, user_id: int) -> Any:
         type, first call list_paper_entities and pass the matched entity's
         top-level id in the right field, plus its label as entity_label. If
         the user gave extra guidance for the rerun (e.g. "treat patient 3 as
-        the proband"), pass it as additional_context. Returns a user-facing
-        confirmation -- reply with exactly that text."""
+        the proband"), pass it as additional_context: it is added to the
+        paper's additional context, which every agent reads on every run.
+        Returns a user-facing confirmation -- reply with exactly that text."""
         if task_type not in _RUNNABLE_TASK_TYPES:
             return f'"{task_type}" is not a runnable task; answer it as a question instead.'
 
@@ -276,13 +278,15 @@ def _make_queue_task_tool(paper_id: int, user_id: int) -> Any:
             if not skip_successors:
                 invalidate_descendants(session, paper_id, task_type)
 
+            if additional_context and additional_context.strip():
+                add_paper_context(paper, additional_context)
+
             if no_scope:
                 tasks = enqueue_all_instances(
                     session,
                     paper_id=paper_id,
                     task_type=task_type,
                     skip_successors=skip_successors,
-                    additional_context=additional_context,
                     updated_by_user_id=user_id,
                 )
             else:
@@ -296,7 +300,6 @@ def _make_queue_task_tool(paper_id: int, user_id: int) -> Any:
                         variant_id=variant_id,
                         phenotype_id=phenotype_id,
                         patient_variant_occurrence_id=patient_variant_occurrence_id,
-                        additional_context=additional_context,
                         skip_successors=skip_successors,
                         updated_by_user_id=user_id,
                     )
@@ -352,7 +355,9 @@ with Y as additional_context, not a separate question.
     instead of guessing.
   - If the request is paper-wide (no entity named), call queue_task with every
     entity id left null.
-  - Pass any extra guidance as additional_context.
+  - Pass any extra guidance as additional_context. It is added to the paper's
+    additional context, which every agent reads on every run, so name the
+    step it is for if it is not for all of them.
   - Call queue_task, then reply with exactly its return value and nothing else.
 
 QUESTIONS

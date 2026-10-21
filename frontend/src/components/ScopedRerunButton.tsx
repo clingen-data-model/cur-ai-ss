@@ -6,15 +6,13 @@
  * POST /papers/{paper_id}/tasks endpoint with that id set, so the task-queue
  * dedup/reset logic in enqueue_task applies exactly as it does for the
  * unscoped button. */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { RefreshCw } from 'lucide-react'
 import { createTaskPapersPaperIdTasksPost } from '@/api/generated'
 import type { TaskType } from '@/api/generated/types.gen'
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
-import { Label } from '@/components/ui/label'
 import {
   Dialog,
   DialogContent,
@@ -23,9 +21,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { CONTEXT_NOTE, TaskSuccessors } from '@/components/TaskSuccessors'
+import { TaskSuccessors } from '@/components/TaskSuccessors'
+import { PaperContextField } from '@/components/PaperContextField'
 import { apiErrorMessage } from '@/lib/apiError'
 import { usePaperBusy } from '@/hooks/usePaperBusy'
+import { usePaperAdditionalContext } from '@/hooks/usePaperAdditionalContext'
 
 interface TaskScope {
   family_id?: number
@@ -52,6 +52,14 @@ export function ScopedRerunButton({
   const [open, setOpen] = useState(false)
   const [context, setContext] = useState('')
   const busy = usePaperBusy(paperId, open)
+  // The box is the paper's one context field, so it opens on what is there.
+  const paperContext = usePaperAdditionalContext(paperId, open)
+  useEffect(() => {
+    if (open && paperContext.loaded) setContext(paperContext.context ?? '')
+    // Only when the dialog opens or the context first loads: a refetch while
+    // it is open must not overwrite what the curator has typed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, paperContext.loaded])
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -60,7 +68,7 @@ export function ScopedRerunButton({
         body: {
           type: taskType,
           ...scope,
-          additional_context: context.trim() || null,
+          additional_context: context,
           skip_successors: false,
         },
         throwOnError: true,
@@ -71,6 +79,7 @@ export function ScopedRerunButton({
       // happens to refetch it.
       queryClient.invalidateQueries({ queryKey: ['papers'] })
       queryClient.invalidateQueries({ queryKey: ['paper-tasks', paperId] })
+      queryClient.invalidateQueries({ queryKey: ['paper', paperId] })
       toast.success(`${taskType} queued`)
       setOpen(false)
       setContext('')
@@ -96,18 +105,7 @@ export function ScopedRerunButton({
             <DialogTitle>{label}</DialogTitle>
             <DialogDescription>{description}</DialogDescription>
           </DialogHeader>
-          <div className="space-y-1.5">
-            <Label>
-              Additional context <span className="text-muted-foreground font-normal">(optional)</span>
-            </Label>
-            <Textarea
-              value={context}
-              onChange={(e) => setContext(e.target.value)}
-              placeholder="Any specific instructions for this run..."
-              rows={3}
-            />
-            <p className="text-xs text-muted-foreground">{CONTEXT_NOTE}</p>
-          </div>
+          <PaperContextField value={context} onChange={setContext} disabled={!paperContext.loaded} />
           {/* Same chain the paper-wide dialog shows; a scoped re-run queues
            * the same successor types, scoped where they fan out. */}
           <TaskSuccessors taskType={taskType} />
@@ -116,7 +114,10 @@ export function ScopedRerunButton({
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={() => mutation.mutate()} disabled={mutation.isPending || !!busy}>
+            <Button
+              onClick={() => mutation.mutate()}
+              disabled={mutation.isPending || !!busy || !paperContext.loaded}
+            >
               {mutation.isPending ? 'Queuing...' : 'Confirm'}
             </Button>
           </DialogFooter>

@@ -302,20 +302,21 @@ async def test_rerunning_patient_extraction_replaces_only_its_own_flags(
     assert [r.subject for r in rows] == ['kept']
 
 
-def test_curator_section_names_the_agent_and_explains_the_markers():
+def test_curator_section_names_the_agent():
+    """One text for the whole paper, so the agent is told who it is and that
+    some instructions may be for other steps."""
     section = curator_notes_section(
         'Ignore the supplement cohort.', TaskType.HPO_LINKING
     )
 
     assert section.startswith(
         'A human curator is re-running the extraction of this paper and has '
-        'given additional instructions. You are the HPO Linking agent.\n'
+        'given additional instructions, which every step of the pipeline reads. '
+        'You are the HPO Linking agent: '
     )
-    assert 'the later one wins' in section
-    assert '"[Given when re-running only the X task]"' in section
     assert section.endswith('\n\nIgnore the supplement cohort.')
     # Same notes, different agent: only the identity changes.
-    assert 'You are the Patient Demographics agent.' in curator_notes_section(
+    assert 'You are the Patient Demographics agent:' in curator_notes_section(
         'Ignore the supplement cohort.', TaskType.PATIENT_DEMOGRAPHICS
     )
 

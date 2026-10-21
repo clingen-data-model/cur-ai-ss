@@ -9,7 +9,7 @@ from lib.models.patient_variant_occurrences import (
 )
 
 if TYPE_CHECKING:
-    from lib.models.paper import PaperTaskStatus
+    from lib.models.paper import PaperDB, PaperTaskStatus
 
 from lib.tasks.models import (
     ACTIVE_STATUSES,
@@ -33,7 +33,6 @@ def enqueue_task(
     phenotype_id: int | None = None,
     patient_variant_occurrence_id: int | None = None,
     skip_successors: bool = False,
-    additional_context: str | None = None,
     updated_by_user_id: int | None = None,
 ) -> TaskDB:
     """Create or reset a task to PENDING status.
@@ -76,7 +75,6 @@ def enqueue_task(
         # moment a handler picks the task up.
         existing_task.started_at = None
         existing_task.skip_successors = skip_successors
-        existing_task.additional_context = additional_context
         existing_task.updated_by_user_id = updated_by_user_id
         session.flush()
         return existing_task
@@ -92,7 +90,6 @@ def enqueue_task(
             patient_variant_occurrence_id=patient_variant_occurrence_id,
             status=TaskStatus.PENDING,
             skip_successors=skip_successors,
-            additional_context=additional_context,
             updated_by_user_id=updated_by_user_id,
         )
         session.add(new_task)
@@ -105,7 +102,6 @@ def enqueue_all_instances(
     paper_id: int,
     task_type: TaskType,
     skip_successors: bool = False,
-    additional_context: str | None = None,
     updated_by_user_id: int | None = None,
 ) -> list[TaskDB]:
     """Re-queue all instances of a task type for a paper.
@@ -132,7 +128,6 @@ def enqueue_all_instances(
                 task.tries = 0
                 task.error_message = None
                 task.skip_successors = skip_successors
-                task.additional_context = additional_context
                 task.updated_by_user_id = updated_by_user_id
                 # See enqueue_task: the previous attempt's start time is not
                 # this one's.
@@ -147,7 +142,6 @@ def enqueue_all_instances(
             paper_id=paper_id,
             task_type=task_type,
             skip_successors=skip_successors,
-            additional_context=additional_context,
             updated_by_user_id=updated_by_user_id,
         )
         return [task]
@@ -807,15 +801,20 @@ def notify_on_next_completion(session: Session, paper_id: int, user_id: int) -> 
     session.expire(paper, ['updated_by'])  # drop a relationship loaded for the old id
 
 
-def task_context_entry(task_type: TaskType, text: str) -> str:
-    """One re-run's context, marked with the task it was written for. The
-    marker text is what ``curator_notes_section`` tells the agents to read."""
-    return f'[Given when re-running only the {task_type.value} task] {text.strip()}'
+def set_paper_context(paper: 'PaperDB', text: str | None) -> None:
+    """Apply a request's ``additional_context`` to the paper: None leaves the
+    context as it is, blank clears it, anything else replaces it. The dialogs
+    show the current text and send back the whole box, so what the curator
+    sees is what every agent gets."""
+    if text is None:
+        return
+    paper.paper_global_additional_context = text.strip() or None
 
 
-def append_task_context(existing: str | None, task_type: TaskType, text: str) -> str:
-    """``existing`` with a single-task run's context added after it, so the
-    paper's additional context reads oldest first and a later instruction
-    overrides an earlier one."""
-    entry = task_context_entry(task_type, text)
-    return f'{existing.rstrip()}\n\n{entry}' if existing and existing.strip() else entry
+def add_paper_context(paper: 'PaperDB', text: str) -> None:
+    """Append a paragraph to the paper's additional context, for the paths
+    with no box to edit it in (the chat agent, a flag's note)."""
+    existing = paper.paper_global_additional_context
+    paper.paper_global_additional_context = (
+        f'{existing.rstrip()}\n\n{text.strip()}' if existing else text.strip()
+    )

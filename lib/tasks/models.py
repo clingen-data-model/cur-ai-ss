@@ -279,7 +279,6 @@ class TaskDB(Base):
     skip_successors: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default='0'
     )
-    additional_context: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # When the worker last moved this task to RUNNING. NULL until it does, and
     # re-stamped on a retry, so it always describes the attempt that produced
@@ -334,7 +333,6 @@ class TaskResp(BaseModel):
     tries: int
     error_message: str | None
     skip_successors: bool
-    additional_context: str | None
     family_id: int | None
     patient_id: int | None
     variant_id: int | None
@@ -354,13 +352,13 @@ class TaskCreateRequest(BaseModel):
     phenotype_id: int | None = None
     patient_variant_occurrence_id: int | None = None
     skip_successors: bool = False
+    # The paper's additional context (papers.paper_global_additional_context),
+    # the one place a curator's instructions go: every agent reads it on every
+    # run. None leaves it as it is; blank clears it; anything else replaces it.
+    # There is no per-task context -- a task used to get its own as a follow-up
+    # in its old conversation, and a curator who picked the wrong task in the
+    # dialog left the right agent unaware of it.
     additional_context: str | None = None
-    # Context for this one task, kept in the paper's additional context
-    # instead of a follow-up in the task's own conversation: appended under a
-    # marker naming the task, so every agent reads it and the others know to
-    # ignore it. The task then runs fresh. Used by the re-run dialog, where a
-    # picker that named the wrong task used to leave the right one unaware.
-    paper_context: str | None = None
 
 
 class RerunAllRequest(BaseModel):
@@ -370,6 +368,5 @@ class RerunAllRequest(BaseModel):
     # images the agents cite, so re-parsing is a choice: without it the run
     # starts at the paper classifier, on the parse already on disk.
     reparse_pdf: bool = False
-    # Paper-wide notes for every agent that reads the paper; replaces the
-    # previous notes, and None clears them.
+    # The paper's additional context, as on TaskCreateRequest.
     additional_context: str | None = None

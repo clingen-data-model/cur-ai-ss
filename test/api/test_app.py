@@ -1544,33 +1544,6 @@ def test_enqueue_all_instances_for_splatted_task(client, seeded_paper, db_sessio
     assert {t['family_id'] for t in tasks} == {family1.id, family2.id}
 
 
-def test_enqueue_clears_additional_context_without_context(
-    client, seeded_paper, db_session
-):
-    """Re-enqueueing without additional_context clears the old context and
-    resets the task to run fresh."""
-    task = TaskDB(
-        paper_id=seeded_paper.id,
-        type=TaskType.HPO_LINKING,
-        status=TaskStatus.COMPLETED,
-        additional_context='old context',
-    )
-    db_session.add(task)
-    db_session.commit()
-
-    response = client.post(
-        f'/papers/{seeded_paper.id}/tasks',
-        json=TaskCreateRequest(
-            type=TaskType.HPO_LINKING,
-        ).model_dump(),
-    )
-    assert response.status_code == 200
-    tasks = response.json()
-    assert len(tasks) == 1
-    assert tasks[0]['additional_context'] is None
-    assert tasks[0]['status'] == 'Pending'
-
-
 def test_create_task_records_updated_by(client, seeded_paper, test_user):
     """A user-triggered task records who enqueued it and surfaces updated_by."""
     response = client.post(
@@ -1693,7 +1666,15 @@ def test_rerun_all_replaces_and_clears_notes(client, db_session, seeded_paper):
     db_session.expire_all()
     assert seeded_paper.paper_global_additional_context == 'new note'
 
-    # Finish the run so the paper is not busy, then clear with an empty box.
+    # Finish the run so the paper is not busy. Not sending the field leaves
+    # the context alone; an empty box clears it.
+    db_session.query(TaskDB).delete()
+    db_session.commit()
+    with patch('lib.api.app.write_snapshot_safe'):
+        client.post(f'/papers/{seeded_paper.id}/rerun-all', json={})
+    db_session.expire_all()
+    assert seeded_paper.paper_global_additional_context == 'new note'
+
     db_session.query(TaskDB).delete()
     db_session.commit()
     with patch('lib.api.app.write_snapshot_safe'):
@@ -1728,12 +1709,11 @@ def test_rerun_all_requires_authentication(unauth_client, seeded_paper):
     assert response.status_code == 401
 
 
-def test_create_task_paper_context_is_appended_under_the_task_marker(
+def test_create_task_additional_context_replaces_the_papers_context(
     client, db_session, seeded_paper
 ):
-    """A single task's context goes into the paper's additional context, after
-    what is already there and under a marker naming the task; the task itself
-    carries no follow-up context, so it runs fresh."""
+    """One field for the paper: a single-task run sends the whole box back,
+    which replaces what was there; the task row carries nothing of its own."""
     seeded_paper.paper_global_additional_context = 'Use Brazil for every patient.'
     db_session.commit()
 
@@ -1742,70 +1722,45 @@ def test_create_task_paper_context_is_appended_under_the_task_marker(
             f'/papers/{seeded_paper.id}/tasks',
             json={
                 'type': 'HPO Linking',
-                'paper_context': '  Treat seizures as febrile.  ',
+                'additional_context': '  Use Brazil.\n\nTreat seizures as febrile.  ',
             },
         )
 
     assert response.status_code == 200
-    assert response.json()[0]['additional_context'] is None
+    assert 'additional_context' not in response.json()[0]
     db_session.expire_all()
     assert seeded_paper.paper_global_additional_context == (
-        'Use Brazil for every patient.\n\n'
-        '[Given when re-running only the HPO Linking task] '
-        'Treat seizures as febrile.'
-    )
-
-    # A second run appends again, so the later instruction comes last.
-    db_session.query(TaskDB).delete()
-    db_session.commit()
-    with patch('lib.api.app.write_snapshot_safe'):
-        client.post(
-            f'/papers/{seeded_paper.id}/tasks',
-            json={
-                'type': 'Patient Demographics',
-                'paper_context': 'Sex is on the pedigree.',
-            },
-        )
-    db_session.expire_all()
-    assert seeded_paper.paper_global_additional_context.endswith(
-        '\n\n[Given when re-running only the Patient Demographics task] '
-        'Sex is on the pedigree.'
-    )
-    assert seeded_paper.paper_global_additional_context.startswith(
-        'Use Brazil for every patient.'
+        'Use Brazil.\n\nTreat seizures as febrile.'
     )
 
 
-def test_create_task_paper_context_starts_the_field_when_empty(
+def test_create_task_without_additional_context_leaves_the_papers_context(
     client, db_session, seeded_paper
 ):
-    with patch('lib.api.app.write_snapshot_safe'):
-        client.post(
-            f'/papers/{seeded_paper.id}/tasks',
-            json={
-                'type': 'Variant Extraction',
-                'paper_context': 'Ignore the supplement.',
-            },
-        )
-    db_session.expire_all()
-    assert seeded_paper.paper_global_additional_context == (
-        '[Given when re-running only the Variant Extraction task] '
-        'Ignore the supplement.'
-    )
-
-
-def test_create_task_blank_paper_context_leaves_the_field_alone(
-    client, db_session, seeded_paper
-):
+    """None is "not sent", not "clear": a client that does not show the box
+    (the chat agent, a flag's re-run) must not wipe what a curator wrote."""
     seeded_paper.paper_global_additional_context = 'Keep me.'
     db_session.commit()
     with patch('lib.api.app.write_snapshot_safe'):
         client.post(
-            f'/papers/{seeded_paper.id}/tasks',
-            json={'type': 'Variant Extraction', 'paper_context': '   '},
+            f'/papers/{seeded_paper.id}/tasks', json={'type': 'Variant Extraction'}
         )
     db_session.expire_all()
     assert seeded_paper.paper_global_additional_context == 'Keep me.'
+
+
+def test_create_task_blank_additional_context_clears_the_papers_context(
+    client, db_session, seeded_paper
+):
+    seeded_paper.paper_global_additional_context = 'Old.'
+    db_session.commit()
+    with patch('lib.api.app.write_snapshot_safe'):
+        client.post(
+            f'/papers/{seeded_paper.id}/tasks',
+            json={'type': 'Variant Extraction', 'additional_context': '   '},
+        )
+    db_session.expire_all()
+    assert seeded_paper.paper_global_additional_context is None
 
 
 def test_create_task_requires_authentication(unauth_client, seeded_paper):
@@ -3530,10 +3485,6 @@ def test_phenotype_extraction_takes_cached_hpo_links(
         type=TaskType.PHENOTYPE_EXTRACTION,
         patient_id=patient.id,
         status=TaskStatus.RUNNING,
-        # Takes the follow-up branch, which never reads the paper text itself;
-        # the citation check still does, so the anchored document must hold the
-        # block the concepts cite.
-        additional_context='again',
     )
     anchored = document_anchored_md_path(seeded_paper.id)
     anchored.parent.mkdir(parents=True, exist_ok=True)
@@ -3622,7 +3573,6 @@ def test_phenotype_extraction_skips_cached_hpo_links_given_global_context(
         type=TaskType.PHENOTYPE_EXTRACTION,
         patient_id=patient.id,
         status=TaskStatus.RUNNING,
-        additional_context='again',
     )
     anchored = document_anchored_md_path(seeded_paper.id)
     anchored.parent.mkdir(parents=True, exist_ok=True)
@@ -3993,9 +3943,10 @@ def test_deleting_a_patient_drops_the_flag_about_them(client, db_session, seeded
 def test_rerun_flag_scopes_the_task_to_what_the_agent_runs_on(
     client, db_session, seeded_paper, test_user
 ):
-    """A per-patient agent's flag re-runs that agent for that patient, with
-    the note as follow-up context; a paper-level agent's flag re-runs the
-    whole paper even though the flag names a patient."""
+    """A per-patient agent's flag re-runs that agent for that patient, and the
+    review (with the note) joins the paper's additional context; a
+    paper-level agent's flag re-runs the whole paper even though the flag
+    names a patient."""
     patient = _seed_patient(db_session, seeded_paper, identifier='Patient 1')
     per_patient = _seed_flag(
         db_session, seeded_paper, subject='pair not phased', patient_id=patient.id
@@ -4015,8 +3966,10 @@ def test_rerun_flag_scopes_the_task_to_what_the_agent_runs_on(
     assert task['type'] == TaskType.COMPOUND_HET_EVALUATION.value
     assert task['patient_id'] == patient.id
     assert task['updated_by_user_id'] == test_user.id
-    assert task['additional_context'] == (
-        'A curator reviewed your flag "pair not phased". '
+    db_session.expire_all()
+    assert seeded_paper.paper_global_additional_context == (
+        'A curator reviewed the Compound Het Evaluation flag "pair not phased" '
+        'and asked for that step to run again. '
         'Their note: the parents were tested, see table 2'
     )
 
@@ -4036,9 +3989,11 @@ def test_rerun_flag_scopes_the_task_to_what_the_agent_runs_on(
     assert task['type'] == TaskType.PATIENT_EXTRACTION.value
     assert task['patient_id'] is None
     assert task['skip_successors'] is True
-    assert (
-        task['additional_context']
-        == 'A curator reviewed your flag "chosen as proband".'
+    # Appended after the first review, so nothing a curator wrote is lost.
+    db_session.expire_all()
+    assert seeded_paper.paper_global_additional_context.endswith(
+        '\n\nA curator reviewed the Patient Extraction flag "chosen as proband" '
+        'and asked for that step to run again.'
     )
 
 

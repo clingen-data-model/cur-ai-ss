@@ -208,9 +208,10 @@ from lib.tasks import (
 from lib.tasks.agent_session import chat_session, closing_sessions
 from lib.tasks.handlers import log_run_metrics
 from lib.tasks.misc import (
-    append_task_context,
+    add_paper_context,
     notify_on_next_completion,
     paper_busy_message,
+    set_paper_context,
     summarize_paper_task_status,
 )
 from lib.tasks.models import (
@@ -1252,16 +1253,9 @@ def create_task(
     _prepare_rerun(
         session, paper_id, request.type, request.skip_successors, current_user.id
     )
-
-    if request.paper_context and request.paper_context.strip():
-        paper = session.get(PaperDB, paper_id)
-        assert paper is not None  # _prepare_rerun 404s a missing paper
-        paper.paper_global_additional_context = append_task_context(
-            paper.paper_global_additional_context,
-            request.type,
-            request.paper_context,
-        )
-        session.flush()
+    paper = session.get(PaperDB, paper_id)
+    assert paper is not None  # _prepare_rerun 404s a missing paper
+    set_paper_context(paper, request.additional_context)
 
     if (
         request.family_id is None
@@ -1275,7 +1269,6 @@ def create_task(
             paper_id=paper_id,
             task_type=request.type,
             skip_successors=request.skip_successors,
-            additional_context=request.additional_context,
             updated_by_user_id=current_user.id,
         )
     else:
@@ -1289,7 +1282,6 @@ def create_task(
             phenotype_id=request.phenotype_id,
             patient_variant_occurrence_id=request.patient_variant_occurrence_id,
             skip_successors=request.skip_successors,
-            additional_context=request.additional_context,
             updated_by_user_id=current_user.id,
         )
         tasks = [task]
@@ -1303,23 +1295,17 @@ def rerun_all(
     session: Session = Depends(get_session),
     current_user: UserDB = Depends(get_current_user),
 ) -> Any:
-    """Re-run every task of a paper, with notes every agent is given.
+    """Re-run every task of a paper.
 
     Starts at the root of the pipeline and lets the successor graph queue the
-    rest, so each agent starts a fresh conversation. Without ``reparse_pdf``
-    the root is the paper classifier: everything but PDF parsing.
+    rest. Without ``reparse_pdf`` the root is the paper classifier: everything
+    but PDF parsing.
     """
     root = TaskType.PDF_PARSING if request.reparse_pdf else TaskType.PAPER_CLASSIFIER
     _prepare_rerun(session, paper_id, root, False, current_user.id)
-
     paper = session.get(PaperDB, paper_id)
     assert paper is not None  # _prepare_rerun 404s a missing paper
-    # Replaces rather than appends: the dialog shows the current notes, so what
-    # is submitted is what the curator wants every agent to see.
-    paper.paper_global_additional_context = (
-        request.additional_context or ''
-    ).strip() or None
-    session.flush()
+    set_paper_context(paper, request.additional_context)
 
     return [
         enqueue_task(
@@ -2914,9 +2900,10 @@ def rerun_flag(
     session: Session = Depends(get_session),
     current_user: UserDB = Depends(get_current_user),
 ) -> Any:
-    """Queue the agent that raised the flag again, for the row it ran on,
-    with the curator's note as its follow-up context (see FlagRerunRequest).
-    The scope comes from the task type, not from every row the flag links:
+    """Queue the agent that raised the flag again, for the row it ran on.
+    That a curator reviewed the flag, and their note, go into the paper's
+    additional context, which every agent reads (see FlagRerunRequest). The
+    scope comes from the task type, not from every row the flag links:
     a patient-extraction flag about one patient still re-runs the whole
     paper, since that is the only way that agent runs."""
     flag = (
@@ -2951,19 +2938,24 @@ def rerun_flag(
             )
         scope[scope_column] = scope_id
 
-    context = f'A curator reviewed your flag "{flag.subject}".'
+    context = (
+        f'A curator reviewed the {task_type.value} flag "{flag.subject}" '
+        f'and asked for that step to run again.'
+    )
     if request.note:
         context += f' Their note: {request.note.strip()}'
 
     _prepare_rerun(
         session, paper_id, task_type, request.skip_successors, current_user.id
     )
+    paper = session.get(PaperDB, paper_id)
+    assert paper is not None  # _prepare_rerun 404s a missing paper
+    add_paper_context(paper, context)
     return enqueue_task(
         session,
         paper_id=paper_id,
         task_type=task_type,
         skip_successors=request.skip_successors,
-        additional_context=context,
         updated_by_user_id=current_user.id,
         **scope,
     )

@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogMedia, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import type { PaperSummaryResp, TaskType } from '@/api/generated/types.gen'
 import { TaskSuccessors, useTaskTypes } from '@/components/TaskSuccessors'
+import { PaperContextField } from '@/components/PaperContextField'
 import { usePaperBusy } from '@/hooks/usePaperBusy'
 import { apiErrorMessage } from '@/lib/apiError'
 
@@ -48,29 +49,12 @@ const RERUNNABLE_TASK_TYPES: TaskType[] = [
  * the task endpoint -- it has its own (POST /papers/{id}/rerun-all). */
 type RerunTab = 'single' | 'all'
 
-/** Under the Single task box. The context is not a follow-up to the task's old
- * conversation: it joins the paper's context, marked as written for this task,
- * so a wrong pick cannot leave the right agent unaware of it. */
-const TASK_CONTEXT_NOTE =
-  'Added to the end of the paper\u2019s context, marked as given for this task. Every agent reads it and the others ignore it; later instructions override earlier ones. The task runs fresh, not as a follow-up.'
-
-/** Under the "All tasks" box. */
-const GLOBAL_CONTEXT_NOTE =
-  'Shown to every agent on its fresh run, and kept on the paper for later runs. This is the paper\u2019s whole context, including what single-task runs added: replaced when you confirm, and cleared with an empty box.'
-
-/** Agents read all of it and skip what is not about their task, so a line
- * that opens with the task's name tells the right one it is meant for it. */
-const GLOBAL_CONTEXT_HINT =
-  'If an instruction is for one task, start it with that task\u2019s name, e.g. \u201cHPO Linking: treat all seizures as febrile.\u201d'
-
-const TEXTAREA_CLASS =
-  'w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none resize-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50'
-
 /* Shared by RerunTaskButton's own trigger (papers table / gene cards) and the
  * "Re-run agents" button atop the task-timeline popovers -- same dialog
  * either way. Kept as one definition so the two triggers can't drift into
- * asking for different fields. Two tabs: one task (with its own follow-up
- * context) or every task (with context global to the paper). */
+ * asking for different fields. Two tabs, one task or every task, over one
+ * Additional context box: the paper's single context field, which both
+ * tabs send back whole (PaperContextField.tsx says why there is only one). */
 function RerunTaskDialog({
   paper,
   open,
@@ -86,9 +70,8 @@ function RerunTaskDialog({
   const [tab, setTab] = useState<RerunTab>('single')
   const [taskType, setTaskType] = useState<TaskType>(initialTaskType)
   const [skipSuccessors, setSkipSuccessors] = useState(false)
-  const [context, setContext] = useState('')
   const [reparsePdf, setReparsePdf] = useState(false)
-  const [globalContext, setGlobalContext] = useState('')
+  const [context, setContext] = useState('')
   const allTab = tab === 'all'
   const busy = usePaperBusy(paper.id, open)
   // What each step is for, from the backend's own definition of the task types.
@@ -96,14 +79,16 @@ function RerunTaskDialog({
   const taskHelp = taskTypesQuery.data?.find((t) => t.type === taskType)?.description
 
   // Opening the dialog starts from what the paper already holds, whichever
-  // trigger opened it, so the All tasks tab edits the global context in place
-  // rather than starting from a blank box that would silently replace it. It
-  // comes off the paper row the caller already has: no request of its own.
+  // trigger opened it, so the box edits the context in place rather than
+  // starting blank and silently replacing it. It comes off the paper row the
+  // caller already has: no request of its own.
   useEffect(() => {
     if (!open) return
     setTab('single')
     setTaskType(initialTaskType)
-    setGlobalContext(paper.paper_global_additional_context ?? '')
+    setSkipSuccessors(false)
+    setReparsePdf(false)
+    setContext(paper.paper_global_additional_context ?? '')
     // Only when the dialog opens: a refetch of the paper while it is open
     // must not overwrite what the curator has typed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -113,26 +98,24 @@ function RerunTaskDialog({
     mutationFn: () => allTab
       ? rerunAllPapersPaperIdRerunAllPost({
           path: { paper_id: paper.id },
-          body: { reparse_pdf: reparsePdf, additional_context: globalContext || null },
+          body: { reparse_pdf: reparsePdf, additional_context: context },
           throwOnError: true,
         })
       : createTaskPapersPaperIdTasksPost({
           path: { paper_id: paper.id },
-          body: { type: taskType, skip_successors: skipSuccessors, paper_context: context || null },
+          body: { type: taskType, skip_successors: skipSuccessors, additional_context: context },
           throwOnError: true,
         }),
     onSuccess: () => {
       // Queuing a task changes the paper's status, which both the cards and the
       // papers table render. Without this the badge keeps reading Done until
-      // something else happens to refetch.
+      // something else happens to refetch. The paper queries carry the context
+      // the next open of any dialog prefills from.
       queryClient.invalidateQueries({ queryKey: ['papers'] })
       queryClient.invalidateQueries({ queryKey: ['paper-tasks', paper.id] })
       queryClient.invalidateQueries({ queryKey: ['paper', paper.id] })
       toast.success(allTab ? 'Re-running all tasks' : 'Task queued')
       onOpenChange(false)
-      setContext('')
-      setSkipSuccessors(false)
-      setReparsePdf(false)
     },
     onError: (error) => toast.error(apiErrorMessage(error, 'Failed to queue task')),
   })
@@ -169,19 +152,6 @@ function RerunTaskDialog({
                 {taskHelp && <p className="text-xs text-muted-foreground">{taskHelp}</p>}
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm font-medium">
-                  Additional context <span className="text-muted-foreground font-normal">(optional)</span>
-                </label>
-                <textarea
-                  value={context}
-                  onChange={(e) => setContext(e.target.value)}
-                  placeholder="Any specific instructions for this task run..."
-                  rows={3}
-                  className={TEXTAREA_CLASS}
-                />
-                <p className="text-xs text-muted-foreground">{TASK_CONTEXT_NOTE}</p>
-              </div>
-              <div className="space-y-1.5">
                 <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
                   <input
                     type="checkbox"
@@ -201,20 +171,6 @@ function RerunTaskDialog({
                 Re-runs every task from the top of the pipeline, each agent starting fresh.
               </p>
               <div className="space-y-1.5">
-                <label className="text-sm font-medium">
-                  Context for every agent <span className="text-muted-foreground font-normal">(optional)</span>
-                </label>
-                <textarea
-                  value={globalContext}
-                  onChange={(e) => setGlobalContext(e.target.value)}
-                  placeholder="Anything every agent should know, or Task name: an instruction for one task..."
-                  rows={3}
-                  className={TEXTAREA_CLASS}
-                />
-                <p className="text-xs text-muted-foreground">{GLOBAL_CONTEXT_HINT}</p>
-                <p className="text-xs text-muted-foreground">{GLOBAL_CONTEXT_NOTE}</p>
-              </div>
-              <div className="space-y-1.5">
                 <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
                   <input
                     type="checkbox"
@@ -231,6 +187,7 @@ function RerunTaskDialog({
               </div>
             </TabsContent>
           </Tabs>
+          <PaperContextField value={context} onChange={setContext} />
           {busy && <p className="text-sm text-amber-700 dark:text-amber-400">{busy}</p>}
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>

@@ -9,7 +9,7 @@
  * picking a partner for the first time, RefreshCw for changing an existing
  * pairing.
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Link2, RefreshCw } from 'lucide-react'
@@ -22,7 +22,6 @@ import type { PatientVariantOccurrenceResp } from '@/api/generated/types.gen'
 import type { OccurrenceRow } from '@/hooks/usePaperOccurrences'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
   DialogContent,
@@ -33,8 +32,10 @@ import {
 } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { PaperContextField } from '@/components/PaperContextField'
 import { apiErrorMessage } from '@/lib/apiError'
 import { usePaperBusy } from '@/hooks/usePaperBusy'
+import { usePaperAdditionalContext } from '@/hooks/usePaperAdditionalContext'
 
 const NONE_VALUE = '__none__'
 
@@ -79,6 +80,14 @@ export function PairOccurrenceDialog({
   // The manual tab writes directly and stays usable; only the agent tab
   // queues a task, which the API refuses while the paper is busy.
   const busy = usePaperBusy(paperId, open)
+  // The box is the paper's one context field, so it opens on what is there.
+  const paperContext = usePaperAdditionalContext(paperId, open)
+  useEffect(() => {
+    if (open && paperContext.loaded) setContext(paperContext.context ?? '')
+    // Only when the dialog opens or the context first loads: a refetch while
+    // it is open must not overwrite what the curator has typed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, paperContext.loaded])
 
   const rerunMutation = useMutation({
     mutationFn: () =>
@@ -87,13 +96,14 @@ export function PairOccurrenceDialog({
         body: {
           type: TaskType.COMPOUND_HET_EVALUATION,
           patient_id: occurrence.patient_id,
-          additional_context: context.trim() || null,
+          additional_context: context,
           skip_successors: false,
         },
         throwOnError: true,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['paper-tasks', paperId] })
+      queryClient.invalidateQueries({ queryKey: ['paper', paperId] })
       toast.success('Compound het evaluation agent queued')
       setOpen(false)
       setContext('')
@@ -189,18 +199,11 @@ export function PairOccurrenceDialog({
               </DialogFooter>
             </TabsContent>
             <TabsContent value="agent" className="space-y-4 pt-3">
-              <div className="space-y-1.5">
-                <Label>
-                  Additional context{' '}
-                  <span className="text-muted-foreground font-normal">(optional)</span>
-                </Label>
-                <Textarea
-                  value={context}
-                  onChange={(e) => setContext(e.target.value)}
-                  placeholder="Any specific instructions for the agent's next attempt..."
-                  rows={3}
-                />
-              </div>
+              <PaperContextField
+                value={context}
+                onChange={setContext}
+                disabled={!paperContext.loaded}
+              />
               <p className="text-xs text-muted-foreground">
                 Re-runs compound-het evaluation for this patient in the background. The result
                 will show up here once it's done.
@@ -212,7 +215,7 @@ export function PairOccurrenceDialog({
                 </Button>
                 <Button
                   onClick={() => rerunMutation.mutate()}
-                  disabled={rerunMutation.isPending || !!busy}
+                  disabled={rerunMutation.isPending || !!busy || !paperContext.loaded}
                 >
                   {rerunMutation.isPending ? 'Queuing...' : 'Re-run agent'}
                 </Button>

@@ -1,5 +1,6 @@
-/* Re-runs the agent that raised a flag, for the row it ran on, with the
- * curator's note as its follow-up context -- the flag's counterpart to
+/* Re-runs the agent that raised a flag, for the row it ran on; that a curator
+ * reviewed the flag, and their note, are added to the paper's additional
+ * context, which every agent reads -- the flag's counterpart to
  * ScopedRerunButton, which the server scopes itself from the flag (see
  * POST /papers/{id}/flags/{flag_id}/rerun). The flag is replaced by whatever
  * the agent raises on that run, so this is the "ask again" half of review
@@ -65,6 +66,10 @@ export function RerunFromFlagDialog({
             placeholder="What it missed, or where to look..."
             rows={3}
           />
+          <p className="text-xs text-muted-foreground">
+            Added to the paper&rsquo;s additional context, with the flag it answers, so every
+            later run sees it too.
+          </p>
         </div>
         {busy && <p className="text-sm text-amber-700 dark:text-amber-400">{busy}</p>}
         <DialogFooter>

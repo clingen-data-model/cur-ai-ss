@@ -19,10 +19,6 @@ export function useTaskTypes(enabled = true) {
   })
 }
 
-/** Under the Additional context box of both dialogs. */
-export const CONTEXT_NOTE =
-  'Given to this task only, as a follow-up to its previous run. The tasks it triggers run fresh, without it.'
-
 /** The steps a re-run of `root` sets in motion, one row per depth. A step
  * sits at the longest path from the root, so it is listed after everything it
  * waits on: Extraction Verification, fed by every leaf, always lands last.

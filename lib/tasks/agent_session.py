@@ -1,9 +1,9 @@
-"""Local session storage for the additional-context rerun feature.
+"""Local session storage for each task's agent conversation.
 
-Every extraction task can be re-run with follow-up feedback (the "Rerun
-Agents" popover's "Additional context" field), and the agent needs its prior
-turns to make sense of a follow-up. That used to mean OpenAI's Responses API
-server-side conversation_id -- a live external dependency that only worked
+A task's run is a conversation (tool calls, repair turns), and the chat
+panel's ask_extraction_agent tool consults that conversation afterwards
+(lib.tasks.handlers.ask_task_agent). Keeping it used to mean OpenAI's
+Responses API server-side conversation_id -- a live external dependency that only worked
 for openai/ models (LitellmModel ignores conversation_id entirely; see
 model_factory.py). This module replaces it with the agents SDK's own
 SQLiteSession, stored locally and keyed by the task's own id.

@@ -15,7 +15,6 @@ def _task(**kwargs):
         tries=1,
         skip_successors=False,
         error_message=None,
-        additional_context=None,
         family_id=None,
         patient_id=None,
         variant_id=None,
