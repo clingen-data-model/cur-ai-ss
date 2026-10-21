@@ -14,10 +14,10 @@ from lib.core.environment import env
 from lib.core.logging import setup_logging
 from lib.misc.images import image_to_data_url
 from lib.misc.pdf.paths import (
-    pdf_table_image_path,
-    pdf_table_unrecovered_path,
-    pdf_table_vision_markdown_path,
-    pdf_tables_dir,
+    document_table_image_path,
+    document_table_unrecovered_path,
+    document_table_vision_markdown_path,
+    document_tables_dir,
 )
 
 setup_logging()
@@ -119,12 +119,13 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
     as one of two presence files beside the table: ``N.vision.md`` (corrupt
     and rebuilt from the image -- the rebuilt markdown) or ``N.unrecovered``
     (corrupt and the image did not yield a faithful table); neither means the
-    table was clean. ``raw.md`` is left untouched: ``build_anchored``
-    (``lib.misc.pdf.anchors``) reads the vision file and the unrecovered
-    marker when it writes ``anchored.md``, so corrections and the warning are
-    applied at build time.
+    table was clean. ``N.md``, Docling's own reading, is left untouched:
+    ``build_anchored`` (``lib.misc.pdf.anchors``) reads the vision file and
+    the unrecovered marker when it writes ``anchored.md``, so corrections and
+    the warning are applied at build time. N is the Docling table index, the
+    same N as the table-N anchor.
     """
-    tables_dir = pdf_tables_dir(paper_id, supplement=supplement)
+    tables_dir = document_tables_dir(paper_id, supplement=supplement)
     if not tables_dir.exists():
         return
 
@@ -143,7 +144,9 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
 
         logger.info(f'Checking table {table_id} for corruption...')
 
-        image_path = pdf_table_image_path(paper_id, table_id, supplement=supplement)
+        image_path = document_table_image_path(
+            paper_id, table_id, supplement=supplement
+        )
         agent = table_correction_agent_for_image(image_path)
 
         # Build prompt with table markdown only. The vision tool reads the image
@@ -152,7 +155,7 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
             f'Table ID: {table_id}\n\nMarkdown to evaluate:\n```\n{table_markdown}\n```'
         )
 
-        unrecovered_path = pdf_table_unrecovered_path(
+        unrecovered_path = document_table_unrecovered_path(
             paper_id, table_id, supplement=supplement
         )
 
@@ -199,7 +202,7 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
         logger.info(f'Table {table_id} was corrupted, corrected version ready')
 
         # Write vision file
-        vision_path = pdf_table_vision_markdown_path(
+        vision_path = document_table_vision_markdown_path(
             paper_id, table_id, supplement=supplement
         )
         vision_path.write_text(result.final_output.corrected_markdown)

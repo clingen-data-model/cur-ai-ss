@@ -161,7 +161,7 @@ Configuration is in `lib/core/environment.py` using Pydantic BaseSettings:
 
 **Directories (relative to `CAA_ROOT`, default `/var/caa`):**
 - `sqllite/` - Database file
-- `extracted_pdfs/` - Parsed PDF content and output JSONs
+- `documents/` - Per paper: the uploaded files, parsed and anchored text, table and figure images, thumbnail and extraction snapshots (layout in `lib/misc/pdf/paths.py`)
 - `evagg/` - (Legacy, may be deprecated)
 - `logs/` - Application logs
 - `reference_data/` - HPO data cache
@@ -247,7 +247,7 @@ def upgrade() -> None:
 
 **Agent implementation:**
 - Agents use `openai_agents` library (structured outputs)
-- Store outputs in JSON files alongside PDFs (paths via `lib/misc/pdf/paths.py`)
+- Agent output goes to the database through the converters below, not to files beside the paper
 - Update database with converter functions (`lib/models/converters.py`)
 - Log with Python's `logging` module
 - **See `lib/agents/AGENT_GUIDE.md` for writing new agents** — tools, instructions, output models, calling patterns
@@ -285,8 +285,7 @@ Extracts OpenAPI schema from FastAPI app and generates `frontend/api-spec.json`.
 
 ## Important Notes
 
-**PDF file organization:** All extracted content for a paper is stored in a directory named after the paper ID. Use path functions from `lib/misc/pdf/paths.py` to build consistent paths:
-- `pdf_raw_path()`, `pdf_markdown_path()`, `pdf_highlighted_path()`, etc.
+**Paper file organization:** Everything on disk for a paper lives under `documents/<paper_id>/`: `thumbnail.png` and `snapshots/` at the top, then `main/` and `supplement/`, each holding the uploaded `raw.*`, `words.json`, `anchored.md`, `anchors.json`, `tables/` and `images/`. Tables and images are keyed by Docling index, the same N as the `table-N` and `figure-N` anchors. Use the `document_*` helpers in `lib/misc/pdf/paths.py`; the Docling document itself is not kept, so a re-parse (`parse_content(force=True)`) rebuilds everything from `raw.*`. The old `extracted_pdfs/` layout was retired in 2026-10 (`lib/bin/retire_extracted_pdfs.py` moved the last live files).
 
 **Pipeline status:** `PipelineStatus` enum tracks paper extraction progress. Worker updates this. UI shows status with icons (⏳🟡❌✔️🎉).
 

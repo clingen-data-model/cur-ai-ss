@@ -159,10 +159,6 @@ result = agent.run(pdf_markdown=content, paper_id=paper_id)
 db_entry = convert_to_db_model(result)
 session.add(db_entry)
 session.commit()
-
-# Save JSON alongside PDF
-output_path = pdf_json_path(paper_id, 'my_agent')
-output_path.write_text(result.model_dump_json(indent=2))
 ```
 
 Agents are invoked from `lib/bin/worker.py` as part of the extraction pipeline.
@@ -192,6 +188,6 @@ the list.
 ## Reference
 
 - **Full example:** See `lib/agents/hpo_linking_agent.py` for a complete agent with multiple tools and edge-case handling
-- **Output storage:** `lib/misc/pdf/paths.py` has path builders for storing JSON outputs
+- **Paper files:** `lib/misc/pdf/paths.py` has the path builders for everything kept per paper (`documents/<id>/`: the upload, anchored text, table and figure images)
 - **Database conversion:** `lib/models/converters.py` converts agent outputs to database models
 - **Config:** `lib/core/environment.py` provides `EXTRACTION_MODEL` / `VLM_MODEL` ('<provider>/<model>' names, prefix required, e.g. `openai/gpt-5.6-luna`) plus `OPENAI_API_KEY`. Agents get their model via `lib/agents/model_factory.extraction_model()`, vision tools via `vlm_model()`.

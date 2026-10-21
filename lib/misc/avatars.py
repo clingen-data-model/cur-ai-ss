@@ -1,6 +1,6 @@
 """Avatar image storage on the VM disk.
 
-Avatars live under ``{CAA_ROOT}/avatars/`` beside ``extracted_pdfs/``, and are
+Avatars live under ``{CAA_ROOT}/avatars/`` beside ``documents/``, and are
 served by the same ``StaticFiles`` mount that already serves PDF thumbnails. That
 mount is unauthenticated, which is a requirement rather than an oversight here:
 an ``<img src>`` cannot carry an Authorization header, so anything a browser

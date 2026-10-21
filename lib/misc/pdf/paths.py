@@ -9,107 +9,34 @@ if TYPE_CHECKING:
 SUPPLEMENTARY_MATERIAL_HEADER = '# Supplementary Material'
 
 
-def pdf_dir(paper_id: int) -> Path:
-    return env.extracted_pdf_dir / str(paper_id)
+# --- Document layout: {CAA_ROOT}/documents/{paper_id}
+#
+#   documents/{id}/thumbnail.png          first page, for the papers table
+#   documents/{id}/snapshots/*.json       extraction snapshots (lib.misc.snapshots)
+#   documents/{id}/main/                  the paper (document_dir)
+#   documents/{id}/supplement/            the supplement, if any
+#
+# Each of main/ and supplement/ holds raw.{pdf,docx,xlsx}, words.json,
+# anchored.md, anchors.json, tables/, images/ and the _SUCCESS marker. Tables
+# and images are keyed by their Docling index (#/tables/N, #/pictures/N),
+# which is also the number in the anchor ids (table-N, figure-N) printed into
+# anchored.md -- one numbering everywhere, assigned by Docling.
 
 
-def pdf_supplements_dir(paper_id: int) -> Path:
-    return pdf_dir(paper_id) / 'supplements'
+def document_paper_dir(paper_id: int) -> Path:
+    return env.documents_dir / str(paper_id)
+
+
+def document_thumbnail_path(paper_id: int) -> Path:
+    return document_paper_dir(paper_id) / 'thumbnail.png'
 
 
 def snapshots_dir(paper_id: int) -> Path:
-    return pdf_dir(paper_id) / 'snapshots'
-
-
-def pdf_raw_path(
-    paper_id: int, supplement: bool = False, file_format: str | None = None
-) -> Path:
-    base = pdf_supplements_dir(paper_id) if supplement else pdf_dir(paper_id)
-    if supplement and file_format:
-        return base / f'raw.{file_format}'
-    return base / 'raw.pdf'
-
-
-def pdf_thumbnail_path(paper_id: int) -> Path:
-    return pdf_dir(paper_id) / 'thumbnail.png'
-
-
-def pdf_tables_dir(paper_id: int, supplement: bool = False) -> Path:
-    base = pdf_supplements_dir(paper_id) if supplement else pdf_dir(paper_id)
-    return base / 'tables'
-
-
-def pdf_images_dir(paper_id: int, supplement: bool = False) -> Path:
-    base = pdf_supplements_dir(paper_id) if supplement else pdf_dir(paper_id)
-    return base / 'images'
-
-
-def pdf_markdown_path(paper_id: int, supplement: bool = False) -> Path:
-    base = pdf_supplements_dir(paper_id) if supplement else pdf_dir(paper_id)
-    return base / 'raw.md'
-
-
-def pdf_json_path(paper_id: int, supplement: bool = False) -> Path:
-    base = pdf_supplements_dir(paper_id) if supplement else pdf_dir(paper_id)
-    return base / 'raw.json'
-
-
-def pdf_words_json_path(paper_id: int, supplement: bool = False) -> Path:
-    base = pdf_supplements_dir(paper_id) if supplement else pdf_dir(paper_id)
-    return base / 'words.json'
-
-
-def pdf_extraction_success_path(paper_id: int, supplement: bool = False) -> Path:
-    base = pdf_supplements_dir(paper_id) if supplement else pdf_dir(paper_id)
-    return base / '_SUCCESS'
-
-
-def pdf_image_path(paper_id: int, image_id: int, supplement: bool = False) -> Path:
-    return pdf_images_dir(paper_id, supplement) / f'{image_id}.png'
-
-
-def pdf_table_image_path(
-    paper_id: int, table_id: int, supplement: bool = False
-) -> Path:
-    return pdf_tables_dir(paper_id, supplement) / f'{table_id}.png'
-
-
-def pdf_table_markdown_path(
-    paper_id: int, table_id: int, supplement: bool = False
-) -> Path:
-    return pdf_tables_dir(paper_id, supplement) / f'{table_id}.md'
-
-
-def pdf_table_vision_markdown_path(
-    paper_id: int, table_id: int, supplement: bool = False
-) -> Path:
-    return pdf_tables_dir(paper_id, supplement) / f'{table_id}.vision.md'
-
-
-def pdf_table_unrecovered_path(
-    paper_id: int, table_id: int, supplement: bool = False
-) -> Path:
-    """Present iff the correction agent judged the table corrupt and could not
-    rebuild it from the image. Symmetric with ``.vision.md``: that file present
-    means corrected, this one present means unrecovered, neither means clean.
-    """
-    return pdf_tables_dir(paper_id, supplement) / f'{table_id}.unrecovered'
-
-
-def paper_section_classification_path(paper_id: int) -> Path:
-    return pdf_dir(paper_id) / 'paper_section_classification.json'
-
-
-# --- Anchor-indexed document layout: {CAA_ROOT}/documents/{paper_id}/{main|supplement}
-#
-# Written side by side with the extracted_pdfs/ layout above while both exist.
-# Tables and images here are keyed by their Docling index (#/tables/N,
-# #/pictures/N), which is also the number in the anchor ids (table-N, figure-N)
-# printed into anchored.md -- one numbering everywhere, assigned by Docling.
+    return document_paper_dir(paper_id) / 'snapshots'
 
 
 def document_dir(paper_id: int, supplement: bool = False) -> Path:
-    return env.documents_dir / str(paper_id) / ('supplement' if supplement else 'main')
+    return document_paper_dir(paper_id) / ('supplement' if supplement else 'main')
 
 
 def document_raw_path(
@@ -205,8 +132,7 @@ def fulltext_md(paper_id: int, supplement_format: 'FileFormat | None' = None) ->
 
     ``anchored.md`` (see ``lib.misc.pdf.anchors``) is written after table
     correction, so it already carries the vision-rebuilt tables and the
-    unrecovered-table marker; nothing is applied at read time. ``raw.md`` is a
-    debugging artifact now and the agents never see it.
+    unrecovered-table marker; nothing is applied at read time.
     """
     main = document_anchored_md_path(paper_id).read_text()
     return main + _supplement_block(paper_id, supplement_format)

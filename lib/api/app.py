@@ -74,10 +74,9 @@ from lib.misc.pdf.paths import (
     document_anchored_md_path,
     document_anchors_path,
     document_image_path,
-    pdf_dir,
-    pdf_raw_path,
-    pdf_supplements_dir,
-    pdf_thumbnail_path,
+    document_paper_dir,
+    document_raw_path,
+    document_thumbnail_path,
 )
 from lib.misc.snapshots import (
     InvalidSnapshotNameError,
@@ -474,14 +473,16 @@ def put_paper(
         paper_db.tasks.append(task)
         session.flush()
 
-        pdf_raw_path(paper_db.id).parent.mkdir(parents=True, exist_ok=True)
-        with open(pdf_raw_path(paper_db.id), 'wb') as f:
+        document_raw_path(paper_db.id).parent.mkdir(parents=True, exist_ok=True)
+        with open(document_raw_path(paper_db.id), 'wb') as f:
             f.write(main_content)
-        with open(pdf_thumbnail_path(paper_db.id), 'wb') as fp:
+        with open(document_thumbnail_path(paper_db.id), 'wb') as fp:
             fp.write(pdf_first_page_to_thumbnail_pymupdf_bytes(main_content))
 
         if supplement_file:
-            pdf_supplements_dir(paper_db.id).mkdir(parents=True, exist_ok=True)
+            document_raw_path(paper_db.id, supplement=True).parent.mkdir(
+                parents=True, exist_ok=True
+            )
             supplement_content = supplement_file.file.read()
             if (
                 supplement_file.content_type
@@ -496,7 +497,7 @@ def put_paper(
             else:
                 paper_db.supplement_format = FileFormat.PDF
             with open(
-                pdf_raw_path(
+                document_raw_path(
                     paper_db.id,
                     supplement=True,
                     file_format=paper_db.supplement_format.value,
@@ -715,10 +716,10 @@ def delete_paper(
     if not paper_db:
         return
 
-    # Delete extracted PDF directory
-    pdf_directory = pdf_dir(paper_id)
-    if pdf_directory.exists():
-        shutil.rmtree(pdf_directory)
+    # Everything on disk for the paper: uploads, parse, thumbnail, snapshots.
+    paper_directory = document_paper_dir(paper_id)
+    if paper_directory.exists():
+        shutil.rmtree(paper_directory)
 
     record_deletion(
         session,
@@ -1713,8 +1714,7 @@ def get_pedigree(
         image_id=pedigree.image_id,
         is_supplement=pedigree.is_supplement,
         description=pedigree.description,
-        # image_id is the Docling picture index (the N of figure-N), so the file
-        # lives in the anchored document folder, not the legacy extracted_pdfs one.
+        # image_id is the Docling picture index (the N of figure-N).
         image_url=str(
             document_image_path(
                 paper_id, pedigree.image_id, supplement=pedigree.is_supplement

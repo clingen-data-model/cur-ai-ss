@@ -2617,7 +2617,7 @@ def test_update_variant_rejects_harmonized_update_before_harmonization(
 def test_cache_headers_on_static_files(client):
     """Test that static files get 24-hour cache headers."""
     # Mock a static file request by calling a path under CAA_ROOT
-    response = client.get(f'{env.CAA_ROOT}/extracted_pdfs/1/thumbnail.png')
+    response = client.get(f'{env.CAA_ROOT}/documents/1/thumbnail.png')
     # Even if 404, the cache header middleware should have run
     assert response.headers.get('Cache-Control') == 'public, max-age=86400'
 

@@ -18,7 +18,6 @@ from docling.document_converter import (
 )
 from docling_core.types.doc import (
     DoclingDocument,
-    ImageRefMode,
     PictureItem,
     TableItem,
 )
@@ -36,22 +35,8 @@ from lib.misc.pdf.paths import (
     document_success_path,
     document_table_image_path,
     document_table_markdown_path,
-    document_table_unrecovered_path,
-    document_table_vision_markdown_path,
     document_tables_dir,
     document_words_json_path,
-    pdf_extraction_success_path,
-    pdf_image_path,
-    pdf_images_dir,
-    pdf_json_path,
-    pdf_markdown_path,
-    pdf_raw_path,
-    pdf_table_image_path,
-    pdf_table_markdown_path,
-    pdf_table_unrecovered_path,
-    pdf_table_vision_markdown_path,
-    pdf_tables_dir,
-    pdf_words_json_path,
 )
 from lib.models import PaperDB
 from lib.models.paper import FileFormat
@@ -113,9 +98,19 @@ def parse_words_json(stream: BytesIO) -> list[WordLoc]:
     return words_json
 
 
+def _reset_dir(path: Path) -> None:
+    """An empty directory: a re-parse never inherits the previous parse's
+    tables, images or correction markers, whose Docling numbering may differ."""
+    if path.exists():
+        shutil.rmtree(path)
+    path.mkdir(parents=True)
+
+
 def _parse_xlsx_content(paper_id: int, content: bytes) -> None:
-    images_dir = pdf_images_dir(paper_id, supplement=True)
-    images_dir.mkdir(parents=True, exist_ok=True)
+    """The XLSX supplement has no Docling document: convert it to markdown and
+    tag that as it is (``anchored_from_markdown``)."""
+    images_dir = document_images_dir(paper_id, supplement=True)
+    _reset_dir(images_dir)
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
@@ -134,63 +129,34 @@ def _parse_xlsx_content(paper_id: int, content: bytes) -> None:
             if src_dir.exists():
                 for src_img in sorted(src_dir.iterdir()):
                     if src_img.suffix.lower() == '.png':
-                        dest = pdf_image_path(paper_id, image_id, supplement=True)
+                        dest = document_image_path(paper_id, image_id, supplement=True)
                         shutil.copy2(src_img, dest)
-                        # Absolute, matching the path docling itself writes
-                        # for the main paper's images (see parse_content) --
-                        # the frontend rewrites any image src rooted at
-                        # CAA_ROOT to a URL, and only recognizes that form.
+                        # Absolute, rooted at CAA_ROOT, like the figure paths
+                        # build_anchored prints for the main paper: the
+                        # frontend rewrites an image src of that form to a
+                        # URL, and only recognizes that form.
                         ref_map[f'{src_subdir}/{src_img.name}'] = str(dest)
                         image_id += 1
 
         for old_ref, new_ref in ref_map.items():
             md_text = md_text.replace(old_ref, new_ref)
 
-        pdf_markdown_path(paper_id, supplement=True).write_text(md_text)
-
-    write_anchored_xlsx(paper_id, md_text)
-
-
-# --- the anchor-indexed document layout (documents/{id}/{main|supplement}) ----
-#
-# Written alongside extracted_pdfs/ by parse_content and, for papers parsed
-# before it existed, by lib/bin/backfill_documents.py -- both through the two
-# functions below, so the two paths cannot drift.
+    md, anchors = anchored_from_markdown(md_text, supplement=True)
+    write_anchored(paper_id, md, anchors, supplement=True)
 
 
-def _copy_if_exists(src: Path, dest: Path) -> None:
-    if src.exists():
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dest)
-
-
-def write_anchored_document(
-    document: DoclingDocument,
-    paper_id: int,
-    *,
-    supplement: bool = False,
-    file_format: str | None = None,
+def write_tables_and_images(
+    document: DoclingDocument, paper_id: int, *, supplement: bool = False
 ) -> None:
-    """Populate documents/{id}/{main|supplement} from a parsed Docling document.
+    """Crop every table and picture out of a parsed Docling document into the
+    paper's tables/ and images/, keyed by Docling index -- the N of the
+    table-N and figure-N anchors. A table gets Docling's own markdown beside
+    its image, for the correction agent to judge."""
+    tables_dir = document_tables_dir(paper_id, supplement)
+    images_dir = document_images_dir(paper_id, supplement)
+    _reset_dir(tables_dir)
+    _reset_dir(images_dir)
 
-    Tables and images are keyed by Docling index. The extracted_pdfs/ layout
-    numbers them by a counter that only advances for items Docling could crop,
-    so the correction agent's ``N.vision.md``/``N.unrecovered`` are
-    re-keyed here by replaying that counter over the same items.
-    """
-    document_tables_dir(paper_id, supplement).mkdir(parents=True, exist_ok=True)
-    document_images_dir(paper_id, supplement).mkdir(parents=True, exist_ok=True)
-
-    _copy_if_exists(
-        pdf_raw_path(paper_id, supplement=supplement, file_format=file_format),
-        document_raw_path(paper_id, supplement, file_format),
-    )
-    _copy_if_exists(
-        pdf_words_json_path(paper_id, supplement=supplement),
-        document_words_json_path(paper_id, supplement),
-    )
-
-    old_table_id = 0
     for element, _level in document.iterate_items():
         if isinstance(element, TableItem):
             index = int(element.self_ref.rsplit('/', 1)[1])
@@ -202,15 +168,6 @@ def write_anchored_document(
                     document_table_image_path(paper_id, index, supplement), 'wb'
                 ) as fp:
                     table_image.save(fp, 'PNG')
-                _copy_if_exists(
-                    pdf_table_vision_markdown_path(paper_id, old_table_id, supplement),
-                    document_table_vision_markdown_path(paper_id, index, supplement),
-                )
-                _copy_if_exists(
-                    pdf_table_unrecovered_path(paper_id, old_table_id, supplement),
-                    document_table_unrecovered_path(paper_id, index, supplement),
-                )
-                old_table_id += 1
 
         if isinstance(element, PictureItem):
             index = int(element.self_ref.rsplit('/', 1)[1])
@@ -218,44 +175,25 @@ def write_anchored_document(
                 with open(document_image_path(paper_id, index, supplement), 'wb') as fp:
                     image.save(fp, 'PNG')
 
-    md, anchors = build_anchored(document, paper_id=paper_id, supplement=supplement)
-    write_anchored(paper_id, md, anchors, supplement)
-    document_success_path(paper_id, supplement).touch()
-
-
-def write_anchored_xlsx(paper_id: int, md_text: str) -> None:
-    """The XLSX supplement has no Docling document: tag its markdown as it is."""
-    supplement = True
-    document_images_dir(paper_id, supplement).mkdir(parents=True, exist_ok=True)
-    _copy_if_exists(
-        pdf_raw_path(paper_id, supplement=True, file_format=FileFormat.XLSX.value),
-        document_raw_path(paper_id, supplement, FileFormat.XLSX.value),
-    )
-    old_images = pdf_images_dir(paper_id, supplement)
-    new_images = document_images_dir(paper_id, supplement)
-    for image in sorted(old_images.glob('*.png')) if old_images.exists() else []:
-        shutil.copy2(image, new_images / image.name)
-    md, anchors = anchored_from_markdown(
-        md_text.replace(str(old_images), str(new_images)), supplement=supplement
-    )
-    write_anchored(paper_id, md, anchors, supplement)
-    document_success_path(paper_id, supplement).touch()
-
 
 async def parse_content(
     paper_id: int,
     force: bool = False,
     supplement_format: FileFormat | None = None,
 ) -> None:
+    """Parse the paper (or its supplement) into documents/{id}/{main|supplement}.
+
+    Reads raw.{pdf,docx,xlsx}; writes words.json, tables/, images/, and after
+    table correction the anchored.md and anchors.json every agent and the
+    highlighter read. The Docling document itself is not kept: a re-parse
+    rebuilds everything from the raw file.
+    """
     supplement = supplement_format is not None
 
-    if (
-        not force
-        and pdf_extraction_success_path(paper_id, supplement=supplement).exists()
-    ):
+    if not force and document_success_path(paper_id, supplement=supplement).exists():
         return
 
-    raw = pdf_raw_path(
+    raw = document_raw_path(
         paper_id,
         supplement=supplement,
         file_format=supplement_format.value if supplement_format else None,
@@ -267,11 +205,8 @@ async def parse_content(
 
     if supplement_format == FileFormat.XLSX:
         _parse_xlsx_content(paper_id, content)
-        pdf_extraction_success_path(paper_id, supplement=True).touch()
+        document_success_path(paper_id, supplement=True).touch()
         return
-
-    pdf_images_dir(paper_id, supplement=supplement).mkdir(parents=True, exist_ok=True)
-    pdf_tables_dir(paper_id, supplement=supplement).mkdir(parents=True, exist_ok=True)
 
     format_options: dict[InputFormat, FormatOption]
     if supplement_format == FileFormat.DOCX:
@@ -282,6 +217,8 @@ async def parse_content(
                 backend=PyPdfiumDocumentBackend,
                 pipeline_options=PdfPipelineOptions(
                     images_scale=IMAGE_RESOLUTION_SCALE,
+                    # Page renders are what the table and picture crops are
+                    # cut from; they are not saved.
                     generate_page_images=True,
                     generate_picture_images=True,
                 ),
@@ -294,61 +231,14 @@ async def parse_content(
         source=DocumentStream(name='content', stream=BytesIO(content)),
     ).document
 
-    document.save_as_markdown(
-        pdf_markdown_path(paper_id, supplement=supplement),
-        image_mode=ImageRefMode.REFERENCED,
-        escape_html=False,
-        escaping_underscores=False,
-    )
-
-    document.save_as_json(
-        pdf_json_path(paper_id, supplement=supplement),
-        image_mode=ImageRefMode.REFERENCED,
-    )
-
-    table_id, image_id = 0, 0
-
-    for element, _level in document.iterate_items():
-        if (
-            isinstance(element, TableItem)
-            and (table_image := element.get_image(document)) is not None
-        ):
-            with open(
-                pdf_table_image_path(paper_id, table_id, supplement=supplement), 'wb'
-            ) as fp:
-                table_image.save(fp, 'PNG')
-
-            with open(
-                pdf_table_markdown_path(paper_id, table_id, supplement=supplement), 'w'
-            ) as fp:
-                fp.write(element.export_to_markdown(document))
-
-            table_id += 1
-
-        if (
-            isinstance(element, PictureItem)
-            and (image := element.get_image(document)) is not None
-        ):
-            with open(
-                pdf_image_path(paper_id, image_id, supplement=supplement), 'wb'
-            ) as fp:
-                image.save(fp, 'PNG')
-
-            image_id += 1
+    write_tables_and_images(document, paper_id, supplement=supplement)
 
     words_json = parse_words_json(BytesIO(content))
-
-    with open(pdf_words_json_path(paper_id, supplement=supplement), 'w') as fp:
+    with open(document_words_json_path(paper_id, supplement=supplement), 'w') as fp:
         json.dump([w.model_dump() for w in words_json], fp, indent=2)
 
     await correct_tables(paper_id, supplement=supplement)
 
-    write_anchored_document(
-        document,
-        paper_id,
-        supplement=supplement,
-        file_format=supplement_format.value if supplement_format else None,
-    )
-
-    with open(pdf_extraction_success_path(paper_id, supplement=supplement), 'w') as fp:
-        fp.write('')
+    md, anchors = build_anchored(document, paper_id=paper_id, supplement=supplement)
+    write_anchored(paper_id, md, anchors, supplement)
+    document_success_path(paper_id, supplement=supplement).touch()

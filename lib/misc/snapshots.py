@@ -1,6 +1,6 @@
 """Versioned on-disk snapshots of a paper's extracted database state.
 
-A snapshot is one JSON file under ``<pdf_dir>/snapshots/`` holding a faithful
+A snapshot is one JSON file under ``documents/<id>/snapshots/`` holding a faithful
 column dump of every paper-scoped table, written when the extraction pipeline
 completes and right before a rerun is queued (so an edit or deletion made
 between the two is never silently lost to the rerun's delete-and-recreate).
