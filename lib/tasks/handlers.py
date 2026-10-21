@@ -365,6 +365,26 @@ def paper_global_context(paper_id: int) -> str | None:
         return paper.paper_global_additional_context if paper else None
 
 
+def curator_notes_section(notes: str) -> str:
+    """The curator's context for the whole paper, as one prompt section.
+
+    ``format_paper_context`` carries it for the agents that read the paper; the
+    agents that never see the paper text (HPO linking, variant harmonization,
+    pedigree description) append it to their own first message.
+    """
+    return (
+        'Curator notes for this paper (apply them to your task where they '
+        f'bear on it):\n{notes}'
+    )
+
+
+def curator_notes_block(paper_id: int) -> str:
+    """``curator_notes_section`` plus the blank line that follows it, or ''
+    when the paper has none, for splicing into a first message."""
+    notes = paper_global_context(paper_id)
+    return f'{curator_notes_section(notes)}\n\n' if notes else ''
+
+
 def format_paper_context(
     paper_markdown: str,
     gene_symbol: str | None = None,
@@ -389,10 +409,7 @@ def format_paper_context(
     if gene_symbol:
         sections.append(f'Gene: {gene_symbol}')
     if notes:
-        sections.append(
-            'Curator notes for this paper (apply them to your task where '
-            f'they bear on it):\n{notes}'
-        )
+        sections.append(curator_notes_section(notes))
     return '\n\n'.join(sections)
 
 
@@ -678,7 +695,10 @@ async def handle_pedigree_description(task_id: int) -> None:
     else:
         # Initial query: build full message with pedigree images + instructions
         await agent_sess.clear_session()
-        message = f'{combined_text}\n\n{PEDIGREE_DESCRIBER_AGENT_INSTRUCTIONS}'
+        message = (
+            f'{combined_text}\n\n{curator_notes_block(paper_id)}'
+            f'{PEDIGREE_DESCRIBER_AGENT_INSTRUCTIONS}'
+        )
 
     agent, capture = pedigree_describer_agent_for_paper(paper_id)
     result = await Runner.run(
@@ -1253,6 +1273,7 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
 async def handle_variant_harmonization(task_id: int) -> None:
     """Harmonize a variant to standard genomic coordinates."""
     variant_id: int | None = None
+    paper_id: int
     additional_context: str | None = None
     variant_input: dict | None = None
 
@@ -1262,6 +1283,7 @@ async def handle_variant_harmonization(task_id: int) -> None:
             return
 
         variant_id = task.variant_id
+        paper_id = task.paper_id
         if variant_id is None:
             raise ValueError(
                 f'Task {task_id}: VARIANT_HARMONIZATION requires variant_id'
@@ -1293,6 +1315,7 @@ async def handle_variant_harmonization(task_id: int) -> None:
         await agent_sess.clear_session()
         message = (
             f'Variant JSON:\n{json.dumps(variant_input, indent=2)}\n\n'
+            f'{curator_notes_block(paper_id)}'
             f'{VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS}'
         )
 
@@ -1874,6 +1897,11 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         if not task:
             return
 
+        paper_row = session.get(PaperDB, paper_id)
+        has_global_context = bool(
+            paper_row and paper_row.paper_global_additional_context
+        )
+
         # Idempotent: delete-then-insert
         # Phenotypes are scoped by patient_id, which is already run-versioned
         session.query(PhenotypeDB).filter(PhenotypeDB.patient_id == patient_id).delete()
@@ -1889,9 +1917,12 @@ async def handle_phenotype_extraction(task_id: int) -> None:
             # A concept linked before gets that link now, so it never needs an
             # HPO_LINKING task (enqueue_deferred_hpo_linking skips phenotypes
             # that already have one).
+            # Unless the curator gave the paper global context: a link made
+            # without it must not stand in for the HPO agent, which would
+            # otherwise never see the context.
             cached = (
                 lookup_hpo_link(phenotype_db.concept)
-                if is_cacheable(phenotype_db)
+                if is_cacheable(phenotype_db) and not has_global_context
                 else None
             )
             if cached is not None:
@@ -1923,6 +1954,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
 async def handle_hpo_linking(task_id: int) -> None:
     """Link a phenotype to HPO terms."""
     phenotype_id: int | None = None
+    paper_id: int
     additional_context: str | None = None
     phenotype_data: dict | None = None
 
@@ -1931,6 +1963,7 @@ async def handle_hpo_linking(task_id: int) -> None:
         if not task:
             return
 
+        paper_id = task.paper_id
         phenotype_id = task.phenotype_id
         if phenotype_id is None:
             raise ValueError(f'Task {task_id}: HPO_LINKING requires phenotype_id')
@@ -1964,6 +1997,7 @@ async def handle_hpo_linking(task_id: int) -> None:
         await agent_sess.clear_session()
         message = (
             f'Phenotype JSON:\n{json.dumps(phenotype_data, indent=2)}\n\n'
+            f'{curator_notes_block(paper_id)}'
             f'{HPO_LINKING_AGENT_INSTRUCTIONS}'
         )
         if additional_context is not None:

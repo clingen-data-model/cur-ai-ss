@@ -1,5 +1,6 @@
 import asyncio
 import io
+import json
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
@@ -9,6 +10,9 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select, update
 
+from lib.agents.variant_harmonization_agent import (
+    VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS,
+)
 from lib.api.app import app
 from lib.api.auth import get_current_user
 from lib.api.db import get_session, session_scope
@@ -3506,6 +3510,156 @@ def test_phenotype_extraction_takes_cached_hpo_links(
     assert str(origin.id) not in hit.reasoning.replace('HP:0001250', '')
     assert rows[('Seizures', True)].hpo is None
     assert rows[('Ataxia', False)].hpo is None
+
+
+def test_phenotype_extraction_skips_cached_hpo_links_given_global_context(
+    db_session, seeded_paper, monkeypatch
+):
+    """A link made without the paper's global context must not stand in for
+    the HPO agent, which would never see the context."""
+    from lib.models import ExtractedPhenotype, PhenotypeExtractionOutput
+    from lib.tasks import hpo_link_cache
+    from lib.tasks.handlers import handle_phenotype_extraction
+
+    patient = _seed_patient(db_session, seeded_paper, 'Context Patient')
+    seeded_paper.paper_global_additional_context = 'Treat all seizures as febrile.'
+    task = TaskDB(
+        paper_id=seeded_paper.id,
+        type=TaskType.PHENOTYPE_EXTRACTION,
+        patient_id=patient.id,
+        status=TaskStatus.RUNNING,
+        additional_context='again',
+    )
+    anchored = document_anchored_md_path(seeded_paper.id)
+    anchored.parent.mkdir(parents=True, exist_ok=True)
+    anchored.write_text('[paragraph-1] The proband had q.\n')
+    db_session.add(task)
+    db_session.commit()
+    origin_patient = _seed_patient(db_session, seeded_paper, 'Origin Patient')
+    origin = PhenotypeDB(
+        paper_id=seeded_paper.id,
+        patient_id=origin_patient.id,
+        concept='Seizures',
+        concept_evidence={'value': 'Seizures', 'reasoning': 'r', 'citations': []},
+    )
+    db_session.add(origin)
+    db_session.commit()
+    monkeypatch.setattr(
+        hpo_link_cache,
+        '_cache',
+        {
+            'seizures': hpo_link_cache.CachedHpoLink(
+                'HP:0001250', 'Seizure', origin.id, True
+            )
+        },
+    )
+    monkeypatch.setattr(hpo_link_cache, '_loaded_at', time.monotonic())
+
+    result = MagicMock()
+    result.final_output = PhenotypeExtractionOutput(
+        phenotypes=[
+            ExtractedPhenotype(
+                patient_id=patient.id,
+                concept=dict(
+                    value='Seizures',
+                    reasoning='r',
+                    citations=[dict(anchor='paragraph-1', quote='q')],
+                ),
+                onset=None,
+                location=None,
+                severity=None,
+                modifier=None,
+            )
+        ]
+    )
+    with patch('lib.tasks.handlers.Runner.run', return_value=result):
+        asyncio.run(handle_phenotype_extraction(task.id))
+
+    db_session.expire_all()
+    row = (
+        db_session.query(PhenotypeDB).filter(PhenotypeDB.patient_id == patient.id).one()
+    )
+    assert row.hpo is None  # left for HPO_LINKING to link, with the context
+
+
+def _first_message(run) -> str:
+    """The first message a patched Runner.run was given, as text."""
+    message = run.call_args.args[1]
+    return message if isinstance(message, str) else json.dumps(message)
+
+
+def test_variant_harmonization_prompt_carries_global_context(
+    db_session, seeded_paper, seeded_variant
+):
+    from lib.tasks.handlers import handle_variant_harmonization
+
+    seeded_paper.paper_global_additional_context = 'Use GRCh37 throughout.'
+    task = TaskDB(
+        paper_id=seeded_paper.id,
+        type=TaskType.VARIANT_HARMONIZATION,
+        variant_id=seeded_variant.id,
+        status=TaskStatus.RUNNING,
+    )
+    db_session.add(task)
+    db_session.commit()
+
+    with patch(
+        'lib.tasks.handlers.Runner.run', side_effect=RuntimeError('stop')
+    ) as run:
+        with pytest.raises(RuntimeError):
+            asyncio.run(handle_variant_harmonization(task.id))
+
+    message = _first_message(run)
+    assert 'Use GRCh37 throughout.' in message
+    assert message.index('Use GRCh37 throughout.') < message.index(
+        VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS[:80]
+    )
+
+
+def test_hpo_linking_prompt_carries_global_context(db_session, seeded_paper):
+    from lib.tasks.handlers import handle_hpo_linking
+
+    patient = _seed_patient(db_session, seeded_paper, 'HPO Patient')
+    phenotype = _seed_phenotype(db_session, patient)
+    seeded_paper.paper_global_additional_context = 'Onset was in infancy.'
+    task = TaskDB(
+        paper_id=seeded_paper.id,
+        type=TaskType.HPO_LINKING,
+        phenotype_id=phenotype.id,
+        status=TaskStatus.RUNNING,
+    )
+    db_session.add(task)
+    db_session.commit()
+
+    with (
+        patch('lib.tasks.handlers.find_matching_hpo_terms', return_value=[]),
+        patch('lib.tasks.handlers.Runner.run', side_effect=RuntimeError('stop')) as run,
+    ):
+        with pytest.raises(RuntimeError):
+            asyncio.run(handle_hpo_linking(task.id))
+
+    assert 'Onset was in infancy.' in _first_message(run)
+
+
+def test_pedigree_description_prompt_carries_global_context(db_session, seeded_paper):
+    from lib.tasks.handlers import handle_pedigree_description
+
+    seeded_paper.paper_global_additional_context = 'Ignore the supplement pedigree.'
+    task = TaskDB(
+        paper_id=seeded_paper.id,
+        type=TaskType.PEDIGREE_DESCRIPTION,
+        status=TaskStatus.RUNNING,
+    )
+    db_session.add(task)
+    db_session.commit()
+
+    with patch(
+        'lib.tasks.handlers.Runner.run', side_effect=RuntimeError('stop')
+    ) as run:
+        with pytest.raises(RuntimeError):
+            asyncio.run(handle_pedigree_description(task.id))
+
+    assert 'Ignore the supplement pedigree.' in _first_message(run)
 
 
 def test_hpo_link_cache_reloads_after_interval(db_session, seeded_paper, monkeypatch):
