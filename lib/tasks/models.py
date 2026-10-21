@@ -202,9 +202,8 @@ TASK_SUCCESSORS: dict[TaskType, list[TaskType]] = {
     ],
     TaskType.SEGREGATION_EVIDENCE_EXTRACTION: [TaskType.SEGREGATION_ANALYSIS_COMPUTED],
     TaskType.SEGREGATION_ANALYSIS_COMPUTED: [TaskType.EXTRACTION_VERIFICATION],
-    # Also gated on the patient having a variant occurrence, which
-    # PATIENT_VARIANT_OCCURRENCES releases without being an edge here -- see
-    # enqueue_deferred_hpo_linking.
+    # One HPO_LINKING per phenotype the run produced that the HPO link cache
+    # did not already link (enqueue_successors).
     TaskType.PHENOTYPE_EXTRACTION: [TaskType.HPO_LINKING],
     TaskType.HPO_LINKING: [TaskType.EXTRACTION_VERIFICATION],
     TaskType.PAPER_MONDO_LINKING: [TaskType.EXTRACTION_VERIFICATION],

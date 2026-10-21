@@ -197,7 +197,11 @@ export function PatientDetailPanel({ paperId, patient }: { paperId: number; pati
       </div>
 
       <div className="mt-4 border-t pt-4">
-        <PhenotypesTable paperId={paperId} patientId={patient.id} />
+        <PhenotypesTable
+          paperId={paperId}
+          patientId={patient.id}
+          affectedStatus={patient.affected_status}
+        />
       </div>
     </div>
   )
