@@ -10,6 +10,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { Spinner } from '@/components/ui/spinner'
 import { ActivityIndicator } from '@/components/ActivityIndicator'
 import { ChatBubble } from '@/components/ChatBubble'
+import { useTaskTypes } from '@/components/TaskSuccessors'
 import { UserMenu } from '@/components/UserMenu'
 import { AuthProvider, useAuth } from '@/lib/auth'
 
@@ -83,6 +84,11 @@ function FooterLinks() {
 
 function Layout() {
   const { token } = useAuth()
+  // The re-run dialogs read these (what each task is for, what it triggers).
+  // Fetched once when the app loads, signed in, rather than when the first
+  // dialog opens, where the request made its contents pop in. Fixed for the
+  // life of a deploy, so the cache keeps it.
+  useTaskTypes(token !== null)
 
   return (
     <div className="min-h-screen flex flex-col">
