@@ -36,6 +36,14 @@ function toCsvField(value: string): string {
 const RERUN_TEXT =
   'Re-runs phenotype extraction for this patient. When it completes, every existing phenotype for this patient -- including any added or edited manually -- is replaced with the new results, and HPO linking runs for each new phenotype.'
 
+/* The pipeline does not extract phenotypes for a patient its demographics
+ * marked Unaffected (lib/tasks/misc.py, enqueue_successors), and leaves no
+ * task, error or other trace of that -- so with no phenotypes to show, the
+ * table says so rather than letting "No phenotypes extracted" read as a
+ * miss. Re-extract Phenotypes runs it regardless. */
+const UNAFFECTED_NOTE =
+  'Phenotype extraction did not run for this patient: the pipeline skips patients marked Unaffected, since their features are not evidence for the gene. Re-extract Phenotypes runs it anyway, with HPO linking.'
+
 function additionalInfo(phenotype: PhenotypeResp): string {
   return [
     phenotype.onset && `Onset: ${phenotype.onset}`,
@@ -47,7 +55,15 @@ function additionalInfo(phenotype: PhenotypeResp): string {
     .join(' · ')
 }
 
-export function PhenotypesTable({ paperId, patientId }: { paperId: number; patientId: number }) {
+export function PhenotypesTable({
+  paperId,
+  patientId,
+  affectedStatus,
+}: {
+  paperId: number
+  patientId: number
+  affectedStatus: string
+}) {
   const queryClient = useQueryClient()
   const flags = usePaperFlags(paperId)
   const phenotypesQuery = useQuery({
@@ -257,7 +273,13 @@ export function PhenotypesTable({ paperId, patientId }: { paperId: number; patie
             <AddPhenotypeDialog paperId={paperId} patientId={patientId} />
           </div>
         </div>
-        <p className="text-sm text-muted-foreground">No phenotypes extracted.</p>
+        {affectedStatus === 'Unaffected' ? (
+          <p className="whitespace-normal break-words rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+            {UNAFFECTED_NOTE}
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground">No phenotypes extracted.</p>
+        )}
       </div>
     )
   }
