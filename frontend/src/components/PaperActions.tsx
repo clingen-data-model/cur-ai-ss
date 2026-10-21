@@ -48,7 +48,12 @@ type RerunTab = 'single' | 'all'
 
 /** Under the "All tasks" box; the per-task counterpart is CONTEXT_NOTE. */
 const GLOBAL_CONTEXT_NOTE =
-  'Shown to every agent that reads the paper, on its fresh run, and kept on the paper for later runs. Replaces the previous notes; clear the box to remove them.'
+  'Shown to every agent on its fresh run, and kept on the paper for later runs. Replaces the previous context; clear the box to remove it.'
+
+/** Agents read all of it and skip what is not about their task, so a line
+ * that opens with the task's name tells the right one it is meant for it. */
+const GLOBAL_CONTEXT_HINT =
+  'If an instruction is for one task, start it with that task\u2019s name, e.g. \u201cHPO Linking: treat all seizures as febrile.\u201d'
 
 const TEXTAREA_CLASS =
   'w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none resize-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50'
@@ -211,10 +216,11 @@ function RerunTaskDialog({
                     setGlobalContext(e.target.value)
                     setGlobalContextTouched(true)
                   }}
-                  placeholder="Anything every agent should know about this paper..."
+                  placeholder="Anything every agent should know, or Task name: an instruction for one task..."
                   rows={3}
                   className={TEXTAREA_CLASS}
                 />
+                <p className="text-xs text-muted-foreground">{GLOBAL_CONTEXT_HINT}</p>
                 <p className="text-xs text-muted-foreground">{GLOBAL_CONTEXT_NOTE}</p>
               </div>
               <div className="space-y-1.5">
