@@ -8,12 +8,16 @@ from lib.models import GeneDB, PaperDB
 from lib.models.paper import PedigreeDB
 from lib.tasks.handlers import (
     cited_text,
+    curator_notes_block,
+    curator_notes_section,
     format_paper_context,
+    paper_curator_section,
     paper_global_context,
     paper_input,
     patient_extraction_message,
     pedigree_input,
 )
+from lib.tasks.models import TaskType
 
 
 @pytest.fixture
@@ -77,6 +81,21 @@ def test_paper_input_with_and_without_data():
         {'role': 'user', 'content': paper},
         {'role': 'user', 'content': 'rules'},
     ]
+
+
+def test_paper_input_puts_the_curator_section_after_the_instructions():
+    """After, not before: the paper block and the instructions sit at the
+    prompt-cache breakpoints (indices 1 and 2) and stay the same bytes for
+    every agent; the section names its agent, so it comes after both."""
+    assert paper_input('paper', 'rules', 'data', curator_section='for you') == [
+        {'role': 'user', 'content': 'paper'},
+        {'role': 'user', 'content': 'rules'},
+        {'role': 'user', 'content': 'for you'},
+        {'role': 'user', 'content': 'data'},
+    ]
+    assert paper_input('paper', 'rules', curator_section=None) == paper_input(
+        'paper', 'rules'
+    )
 
 
 def test_pedigree_input_names_the_figure_anchor():
@@ -283,20 +302,34 @@ async def test_rerunning_patient_extraction_replaces_only_its_own_flags(
     assert [r.subject for r in rows] == ['kept']
 
 
-def test_paper_context_carries_curator_notes_after_the_gene():
-    """The notes ride in the paper block, so every agent on the paper sends the
-    same bytes and the shared prompt-cache prefix still holds."""
-    plain = format_paper_context('text', 'MSX1')
-    noted = format_paper_context('text', 'MSX1', 'Ignore the supplement cohort.')
-
-    assert noted.startswith(plain)
-    assert noted.endswith(
-        'A human curator is re-running the extraction of this paper and has '
-        'given additional instructions for the whole run. Follow them where '
-        'they bear on your task:\nIgnore the supplement cohort.'
+def test_curator_section_names_the_agent_and_explains_the_markers():
+    section = curator_notes_section(
+        'Ignore the supplement cohort.', TaskType.HPO_LINKING
     )
-    assert format_paper_context('text', 'MSX1', None) == plain
-    assert format_paper_context('text', 'MSX1', '') == plain
+
+    assert section.startswith(
+        'A human curator is re-running the extraction of this paper and has '
+        'given additional instructions. You are the HPO Linking agent.\n'
+    )
+    assert 'the later one wins' in section
+    assert '"[Given when re-running only the X task]"' in section
+    assert section.endswith('\n\nIgnore the supplement cohort.')
+    # Same notes, different agent: only the identity changes.
+    assert 'You are the Patient Demographics agent.' in curator_notes_section(
+        'Ignore the supplement cohort.', TaskType.PATIENT_DEMOGRAPHICS
+    )
+
+
+def test_paper_curator_section_is_none_without_context(db_session, paper):
+    assert paper_curator_section(paper.id, TaskType.PAPER_CLASSIFIER) is None
+    assert curator_notes_block(paper.id, TaskType.PAPER_CLASSIFIER) == ''
+
+    paper.paper_global_additional_context = 'Use Brazil.'
+    db_session.commit()
+
+    section = paper_curator_section(paper.id, TaskType.PAPER_CLASSIFIER)
+    assert section is not None and section.endswith('Use Brazil.')
+    assert curator_notes_block(paper.id, TaskType.PAPER_CLASSIFIER) == f'{section}\n\n'
 
 
 def test_paper_global_context_reads_the_paper_row(db_session, paper):

@@ -355,6 +355,12 @@ class TaskCreateRequest(BaseModel):
     patient_variant_occurrence_id: int | None = None
     skip_successors: bool = False
     additional_context: str | None = None
+    # Context for this one task, kept in the paper's additional context
+    # instead of a follow-up in the task's own conversation: appended under a
+    # marker naming the task, so every agent reads it and the others know to
+    # ignore it. The task then runs fresh. Used by the re-run dialog, where a
+    # picker that named the wrong task used to leave the right one unaware.
+    paper_context: str | None = None
 
 
 class RerunAllRequest(BaseModel):

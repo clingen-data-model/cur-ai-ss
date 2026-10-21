@@ -1728,6 +1728,86 @@ def test_rerun_all_requires_authentication(unauth_client, seeded_paper):
     assert response.status_code == 401
 
 
+def test_create_task_paper_context_is_appended_under_the_task_marker(
+    client, db_session, seeded_paper
+):
+    """A single task's context goes into the paper's additional context, after
+    what is already there and under a marker naming the task; the task itself
+    carries no follow-up context, so it runs fresh."""
+    seeded_paper.paper_global_additional_context = 'Use Brazil for every patient.'
+    db_session.commit()
+
+    with patch('lib.api.app.write_snapshot_safe'):
+        response = client.post(
+            f'/papers/{seeded_paper.id}/tasks',
+            json={
+                'type': 'HPO Linking',
+                'paper_context': '  Treat seizures as febrile.  ',
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()[0]['additional_context'] is None
+    db_session.expire_all()
+    assert seeded_paper.paper_global_additional_context == (
+        'Use Brazil for every patient.\n\n'
+        '[Given when re-running only the HPO Linking task] '
+        'Treat seizures as febrile.'
+    )
+
+    # A second run appends again, so the later instruction comes last.
+    db_session.query(TaskDB).delete()
+    db_session.commit()
+    with patch('lib.api.app.write_snapshot_safe'):
+        client.post(
+            f'/papers/{seeded_paper.id}/tasks',
+            json={
+                'type': 'Patient Demographics',
+                'paper_context': 'Sex is on the pedigree.',
+            },
+        )
+    db_session.expire_all()
+    assert seeded_paper.paper_global_additional_context.endswith(
+        '\n\n[Given when re-running only the Patient Demographics task] '
+        'Sex is on the pedigree.'
+    )
+    assert seeded_paper.paper_global_additional_context.startswith(
+        'Use Brazil for every patient.'
+    )
+
+
+def test_create_task_paper_context_starts_the_field_when_empty(
+    client, db_session, seeded_paper
+):
+    with patch('lib.api.app.write_snapshot_safe'):
+        client.post(
+            f'/papers/{seeded_paper.id}/tasks',
+            json={
+                'type': 'Variant Extraction',
+                'paper_context': 'Ignore the supplement.',
+            },
+        )
+    db_session.expire_all()
+    assert seeded_paper.paper_global_additional_context == (
+        '[Given when re-running only the Variant Extraction task] '
+        'Ignore the supplement.'
+    )
+
+
+def test_create_task_blank_paper_context_leaves_the_field_alone(
+    client, db_session, seeded_paper
+):
+    seeded_paper.paper_global_additional_context = 'Keep me.'
+    db_session.commit()
+    with patch('lib.api.app.write_snapshot_safe'):
+        client.post(
+            f'/papers/{seeded_paper.id}/tasks',
+            json={'type': 'Variant Extraction', 'paper_context': '   '},
+        )
+    db_session.expire_all()
+    assert seeded_paper.paper_global_additional_context == 'Keep me.'
+
+
 def test_create_task_requires_authentication(unauth_client, seeded_paper):
     """Anonymous task enqueue is rejected."""
     response = unauth_client.post(

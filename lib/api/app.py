@@ -208,6 +208,7 @@ from lib.tasks import (
 from lib.tasks.agent_session import chat_session, closing_sessions
 from lib.tasks.handlers import log_run_metrics
 from lib.tasks.misc import (
+    append_task_context,
     notify_on_next_completion,
     paper_busy_message,
     summarize_paper_task_status,
@@ -1251,6 +1252,16 @@ def create_task(
     _prepare_rerun(
         session, paper_id, request.type, request.skip_successors, current_user.id
     )
+
+    if request.paper_context and request.paper_context.strip():
+        paper = session.get(PaperDB, paper_id)
+        assert paper is not None  # _prepare_rerun 404s a missing paper
+        paper.paper_global_additional_context = append_task_context(
+            paper.paper_global_additional_context,
+            request.type,
+            request.paper_context,
+        )
+        session.flush()
 
     if (
         request.family_id is None

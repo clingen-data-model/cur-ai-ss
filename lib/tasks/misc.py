@@ -805,3 +805,17 @@ def notify_on_next_completion(session: Session, paper_id: int, user_id: int) -> 
     paper.completion_notified_at = None
     paper.updated_by_user_id = user_id
     session.expire(paper, ['updated_by'])  # drop a relationship loaded for the old id
+
+
+def task_context_entry(task_type: TaskType, text: str) -> str:
+    """One re-run's context, marked with the task it was written for. The
+    marker text is what ``curator_notes_section`` tells the agents to read."""
+    return f'[Given when re-running only the {task_type.value} task] {text.strip()}'
+
+
+def append_task_context(existing: str | None, task_type: TaskType, text: str) -> str:
+    """``existing`` with a single-task run's context added after it, so the
+    paper's additional context reads oldest first and a later instruction
+    overrides an earlier one."""
+    entry = task_context_entry(task_type, text)
+    return f'{existing.rstrip()}\n\n{entry}' if existing and existing.strip() else entry

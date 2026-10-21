@@ -19,7 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogMedia, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import type { PaperSummaryResp, TaskType } from '@/api/generated/types.gen'
-import { CONTEXT_NOTE, TaskSuccessors, useTaskTypes } from '@/components/TaskSuccessors'
+import { TaskSuccessors, useTaskTypes } from '@/components/TaskSuccessors'
 import { usePaperBusy } from '@/hooks/usePaperBusy'
 import { apiErrorMessage } from '@/lib/apiError'
 
@@ -48,9 +48,15 @@ const RERUNNABLE_TASK_TYPES: TaskType[] = [
  * the task endpoint -- it has its own (POST /papers/{id}/rerun-all). */
 type RerunTab = 'single' | 'all'
 
-/** Under the "All tasks" box; the per-task counterpart is CONTEXT_NOTE. */
+/** Under the Single task box. The context is not a follow-up to the task's old
+ * conversation: it joins the paper's context, marked as written for this task,
+ * so a wrong pick cannot leave the right agent unaware of it. */
+const TASK_CONTEXT_NOTE =
+  'Added to the end of the paper\u2019s context, marked as given for this task. Every agent reads it and the others ignore it; later instructions override earlier ones. The task runs fresh, not as a follow-up.'
+
+/** Under the "All tasks" box. */
 const GLOBAL_CONTEXT_NOTE =
-  'Shown to every agent on its fresh run, and kept on the paper for later runs. Replaces the previous context; clear the box to remove it.'
+  'Shown to every agent on its fresh run, and kept on the paper for later runs. This is the paper\u2019s whole context, including what single-task runs added: replaced when you confirm, and cleared with an empty box.'
 
 /** Agents read all of it and skip what is not about their task, so a line
  * that opens with the task's name tells the right one it is meant for it. */
@@ -112,7 +118,7 @@ function RerunTaskDialog({
         })
       : createTaskPapersPaperIdTasksPost({
           path: { paper_id: paper.id },
-          body: { type: taskType, skip_successors: skipSuccessors, additional_context: context || null },
+          body: { type: taskType, skip_successors: skipSuccessors, paper_context: context || null },
           throwOnError: true,
         }),
     onSuccess: () => {
@@ -173,7 +179,7 @@ function RerunTaskDialog({
                   rows={3}
                   className={TEXTAREA_CLASS}
                 />
-                <p className="text-xs text-muted-foreground">{CONTEXT_NOTE}</p>
+                <p className="text-xs text-muted-foreground">{TASK_CONTEXT_NOTE}</p>
               </div>
               <div className="space-y-1.5">
                 <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
