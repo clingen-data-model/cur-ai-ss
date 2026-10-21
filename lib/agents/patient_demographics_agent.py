@@ -41,7 +41,10 @@ Each field (except the *_unit fields) is an EvidenceBlock containing:
       brother, son, daughter, girl, boy, woman, man, and "paternal"/"maternal"
       for the parent they name ("her brother" states Male for the brother;
       "his mother" states Female for the mother);
-    - a plain statement ("a 26-year-old male").
+    - a plain statement ("a 26-year-old male"), about the person or about
+      every member of a group the paper puts them in ("all affected
+      individuals were male", "the twelve female probands"; see
+      COHORT AND FAMILY DESCRIPTIONS).
     These are the paper saying it, not you inferring it, so none of them
     leaves sex Unknown. Unknown is for a person with no symbol, no such word
     and no statement. When the text and the figure disagree, take the text

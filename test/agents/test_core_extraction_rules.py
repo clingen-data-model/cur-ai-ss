@@ -455,10 +455,12 @@ def test_demographics_prompt_takes_ancestry_and_status_from_the_cohort_descripti
     assert 'COHORT AND FAMILY DESCRIPTIONS:' in prompt
     assert 'the paper stating\nthat fact for every member of the group' in prompt
     assert 'This is routine extraction, not a flag' in prompt
-    # Each of the four fields points at the rule.
-    for field in ('country_of_origin', 'race', 'ethnicity', 'affected_status'):
+    # Each of the five fields points at the rule; sex lists what states it, so
+    # the cohort sentence has to be on that list.
+    for field in ('sex', 'country_of_origin', 'race', 'ethnicity', 'affected_status'):
         head = prompt.index(f'- {field} (')
-        assert 'COHORT AND FAMILY DESCRIPTIONS' in prompt[head : head + 900], field
+        assert 'COHORT AND FAMILY DESCRIPTIONS' in prompt[head : head + 1300], field
+    assert '"all affected\n      individuals were male"' in prompt
     # The enum is the census one, so a nationality maps to it deterministically.
     assert 'East, South and Southeast\n    Asia are Asian (Japanese, Chinese' in prompt
     assert (
