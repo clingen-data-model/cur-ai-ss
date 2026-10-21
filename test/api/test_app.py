@@ -1642,9 +1642,13 @@ def test_rerun_all_starts_at_the_classifier_and_sets_notes(
         .count()
         == 0
     )
-    assert seeded_paper.agent_notes == 'Ignore the supplement cohort.'
     assert (
-        client.get(f'/papers/{seeded_paper.id}').json()['agent_notes']
+        seeded_paper.paper_global_additional_context == 'Ignore the supplement cohort.'
+    )
+    assert (
+        client.get(f'/papers/{seeded_paper.id}').json()[
+            'paper_global_additional_context'
+        ]
         == 'Ignore the supplement cohort.'
     )
 
@@ -1660,7 +1664,7 @@ def test_rerun_all_with_reparse_starts_at_pdf_parsing(client, seeded_paper):
 
 
 def test_rerun_all_replaces_and_clears_notes(client, db_session, seeded_paper):
-    seeded_paper.agent_notes = 'old note'
+    seeded_paper.paper_global_additional_context = 'old note'
     db_session.commit()
 
     with patch('lib.api.app.write_snapshot_safe'):
@@ -1669,7 +1673,7 @@ def test_rerun_all_replaces_and_clears_notes(client, db_session, seeded_paper):
             json={'additional_context': 'new note'},
         )
     db_session.expire_all()
-    assert seeded_paper.agent_notes == 'new note'
+    assert seeded_paper.paper_global_additional_context == 'new note'
 
     # Finish the run so the paper is not busy, then clear with an empty box.
     db_session.query(TaskDB).delete()
@@ -1679,7 +1683,7 @@ def test_rerun_all_replaces_and_clears_notes(client, db_session, seeded_paper):
             f'/papers/{seeded_paper.id}/rerun-all', json={'additional_context': '  '}
         )
     db_session.expire_all()
-    assert seeded_paper.agent_notes is None
+    assert seeded_paper.paper_global_additional_context is None
 
 
 def test_rerun_all_refused_while_paper_has_tasks_in_flight(

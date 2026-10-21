@@ -216,7 +216,9 @@ class PaperDB(Base):
     # everything" (see POST /papers/{id}/rerun-all). Per-task additional
     # context is a follow-up to that one task's conversation and is not passed
     # on to its successors; this is the paper-wide counterpart.
-    agent_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    paper_global_additional_context: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
 
     # Paper extraction metadata (populated asynchronously by extraction agent)
     title: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -374,7 +376,7 @@ class PaperResp(PaperExtractionOutput):
     updated_by: UserSummaryResp | None = None
     review_status: ReviewStatus = ReviewStatus.NOT_ASSIGNED
     review_assignee: UserSummaryResp | None = None
-    agent_notes: str | None = None
+    paper_global_additional_context: str | None = None
     tasks: list['TaskResp'] = []
     patient_count: int = 0
     proband_count: int = 0

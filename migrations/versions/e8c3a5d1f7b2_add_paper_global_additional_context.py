@@ -1,4 +1,4 @@
-"""papers.agent_notes: paper-wide notes for every agent
+"""papers.paper_global_additional_context: paper-wide notes for every agent
 
 "Re-run everything" lets a curator give context to the whole pipeline. A
 task's own additional context is a follow-up to that one task's conversation
@@ -29,7 +29,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column('papers', sa.Column('agent_notes', sa.Text(), nullable=True))
+    op.add_column(
+        'papers', sa.Column('paper_global_additional_context', sa.Text(), nullable=True)
+    )
 
 
 def downgrade() -> None:
@@ -39,7 +41,7 @@ def downgrade() -> None:
 
     try:
         with op.batch_alter_table('papers', schema=None) as batch_op:
-            batch_op.drop_column('agent_notes')
+            batch_op.drop_column('paper_global_additional_context')
     finally:
         with op.get_context().autocommit_block():
             connection.exec_driver_sql('PRAGMA foreign_keys = ON')

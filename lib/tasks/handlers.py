@@ -358,11 +358,11 @@ async def ask_task_agent(
     return str(result.final_output)
 
 
-def paper_notes(paper_id: int) -> str | None:
+def paper_global_context(paper_id: int) -> str | None:
     """The paper-wide curator notes ("re-run everything" sets them), or None."""
     with session_scope() as session:
         paper = session.get(PaperDB, paper_id)
-        return paper.agent_notes if paper else None
+        return paper.paper_global_additional_context if paper else None
 
 
 def format_paper_context(
@@ -375,7 +375,7 @@ def format_paper_context(
     Args:
         paper_markdown: The full paper content
         gene_symbol: Optional gene symbol to include
-        notes: Paper-wide curator notes (``paper_notes``). They ride in this
+        notes: Paper-wide curator notes (``paper_global_context``). They ride in this
             block, not in the per-task data, so every agent on the paper gets
             the same bytes and the shared prompt-cache prefix still holds.
 
@@ -468,7 +468,9 @@ async def handle_paper_classifier(task_id: int) -> None:
         await agent_sess.clear_session()
         paper_markdown = fulltext_md(paper_id, supplement_format)
         message = paper_input(
-            format_paper_context(paper_markdown, gene_symbol, paper_notes(paper_id)),
+            format_paper_context(
+                paper_markdown, gene_symbol, paper_global_context(paper_id)
+            ),
             PAPER_CLASSIFIER_AGENT_INSTRUCTIONS,
         )
         agent = paper_classifier_agent
@@ -528,7 +530,9 @@ async def handle_paper_metadata(task_id: int) -> None:
         await agent_sess.clear_session()
         paper_markdown = fulltext_md(paper_id, supplement_format)
         message = paper_input(
-            format_paper_context(paper_markdown, gene_symbol, paper_notes(paper_id)),
+            format_paper_context(
+                paper_markdown, gene_symbol, paper_global_context(paper_id)
+            ),
             PAPER_EXTRACTION_AGENT_INSTRUCTIONS,
         )
         agent = paper_extraction_agent
@@ -578,7 +582,9 @@ async def handle_variant_extraction(task_id: int) -> None:
         await agent_sess.clear_session()
         paper_markdown = fulltext_md(paper_id, supplement_format)
         message = paper_input(
-            format_paper_context(paper_markdown, gene_symbol, paper_notes(paper_id)),
+            format_paper_context(
+                paper_markdown, gene_symbol, paper_global_context(paper_id)
+            ),
             VARIANT_EXTRACTION_AGENT_INSTRUCTIONS,
         )
         agent = variant_extraction_agent
@@ -771,7 +777,9 @@ def patient_extraction_message(
 
     paper_markdown = fulltext_md(paper_id, supplement_format)
     return paper_input(
-        format_paper_context(paper_markdown, gene_symbol, paper_notes(paper_id)),
+        format_paper_context(
+            paper_markdown, gene_symbol, paper_global_context(paper_id)
+        ),
         PATIENT_EXTRACTION_AGENT_INSTRUCTIONS,
         f'Pedigree Description:\n{pedigree_descriptions_output}',
     )
@@ -931,7 +939,9 @@ async def handle_patient_demographics(task_id: int) -> None:
         await agent_sess.clear_session()
         paper_markdown = fulltext_md(paper_id, supplement_format)
         message = paper_input(
-            format_paper_context(paper_markdown, gene_symbol, paper_notes(paper_id)),
+            format_paper_context(
+                paper_markdown, gene_symbol, paper_global_context(paper_id)
+            ),
             PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS,
             f'Patient JSON:\n{patient_data}\n\n'
             f'Proband Identifier:\n{proband_identifier}\n\n'
@@ -1046,7 +1056,9 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
         await agent_sess.clear_session()
         paper_markdown = fulltext_md(paper_id, supplement_format)
         message = paper_input(
-            format_paper_context(paper_markdown, gene_symbol, paper_notes(paper_id)),
+            format_paper_context(
+                paper_markdown, gene_symbol, paper_global_context(paper_id)
+            ),
             SEGREGATION_EVIDENCE_AGENT_INSTRUCTIONS,
             f'Family Structure: {json.dumps(family_info, indent=2, default=str)}',
         )
@@ -1190,7 +1202,9 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
         await agent_sess.clear_session()
         paper_markdown = fulltext_md(paper_id, supplement_format)
         message = paper_input(
-            format_paper_context(paper_markdown, gene_symbol, paper_notes(paper_id)),
+            format_paper_context(
+                paper_markdown, gene_symbol, paper_global_context(paper_id)
+            ),
             SEGREGATION_ANALYSIS_COMPUTED_AGENT_INSTRUCTIONS,
             f'Family Structure and Data: {json.dumps(family_info, indent=2, default=str)}',
         )
@@ -1503,7 +1517,9 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
         await agent_sess.clear_session()
         paper_markdown = fulltext_md(paper_id, supplement_format)
         message = paper_input(
-            format_paper_context(paper_markdown, gene_symbol, paper_notes(paper_id)),
+            format_paper_context(
+                paper_markdown, gene_symbol, paper_global_context(paper_id)
+            ),
             PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS,
             f'Variants JSON:\n{structured_variants}\n\n'
             f'Patients JSON:\n{structured_patients}\n\n'
@@ -1660,7 +1676,9 @@ async def handle_compound_het_evaluation(task_id: int) -> None:
         # Get paper markdown
         paper_markdown = fulltext_md(paper_id, supplement_format)
         message = paper_input(
-            format_paper_context(paper_markdown, gene_symbol, paper_notes(paper_id)),
+            format_paper_context(
+                paper_markdown, gene_symbol, paper_global_context(paper_id)
+            ),
             COMPOUND_HET_AGENT_INSTRUCTIONS,
             f'Patient: {patient.identifier}\n\n'
             f'Pedigree Description:\n{pedigree_description}\n\n'
@@ -1834,7 +1852,9 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         await agent_sess.clear_session()
         paper_markdown = fulltext_md(paper_id, supplement_format)
         message = paper_input(
-            format_paper_context(paper_markdown, gene_symbol, paper_notes(paper_id)),
+            format_paper_context(
+                paper_markdown, gene_symbol, paper_global_context(paper_id)
+            ),
             PATIENT_PHENOTYPE_LINKING_AGENT_INSTRUCTIONS,
             f'Structured Patient JSON:\n{[patient_data]}',
         )
@@ -2116,7 +2136,7 @@ async def handle_mondo_linking(task_id: int) -> None:
                 format_paper_context(
                     paper_markdown,
                     target.gene_symbol,
-                    paper_notes(target.paper_id),
+                    paper_global_context(target.paper_id),
                 ),
                 MONDO_LINKING_AGENT_INSTRUCTIONS,
                 f'MONDO linking target JSON:\n{json.dumps(target_payload, indent=2)}',

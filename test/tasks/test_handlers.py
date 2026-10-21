@@ -9,8 +9,8 @@ from lib.models.paper import PedigreeDB
 from lib.tasks.handlers import (
     cited_text,
     format_paper_context,
+    paper_global_context,
     paper_input,
-    paper_notes,
     patient_extraction_message,
     pedigree_input,
 )
@@ -298,11 +298,11 @@ def test_paper_context_carries_curator_notes_after_the_gene():
     assert format_paper_context('text', 'MSX1', '') == plain
 
 
-def test_paper_notes_reads_the_paper_row(db_session, paper):
-    assert paper_notes(paper.id) is None
-    assert paper_notes(paper.id + 1000) is None
+def test_paper_global_context_reads_the_paper_row(db_session, paper):
+    assert paper_global_context(paper.id) is None
+    assert paper_global_context(paper.id + 1000) is None
 
-    paper.agent_notes = 'Patients are numbered per family.'
+    paper.paper_global_additional_context = 'Patients are numbered per family.'
     db_session.commit()
 
-    assert paper_notes(paper.id) == 'Patients are numbered per family.'
+    assert paper_global_context(paper.id) == 'Patients are numbered per family.'

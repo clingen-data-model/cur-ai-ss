@@ -1156,7 +1156,7 @@ def _paper_to_resp(row: PaperDB, session: Session) -> PaperResp:
         updated_by=_user_summary(row.updated_by),
         review_status=row.review_status,
         review_assignee=_user_summary(row.review_assignee),
-        agent_notes=row.agent_notes,
+        paper_global_additional_context=row.paper_global_additional_context,
         tasks=[
             TaskResp.model_validate(task, from_attributes=True) for task in row.tasks
         ],
@@ -1304,7 +1304,9 @@ def rerun_all(
     assert paper is not None  # _prepare_rerun 404s a missing paper
     # Replaces rather than appends: the dialog shows the current notes, so what
     # is submitted is what the curator wants every agent to see.
-    paper.agent_notes = (request.additional_context or '').strip() or None
+    paper.paper_global_additional_context = (
+        request.additional_context or ''
+    ).strip() or None
     session.flush()
 
     return [

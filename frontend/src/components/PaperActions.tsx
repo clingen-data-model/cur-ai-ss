@@ -84,10 +84,10 @@ function RerunTaskDialog({
   // The notes already on the paper, so "All tasks" edits them in place rather
   // than starting from a blank box that would silently replace them.
   const notesQuery = useQuery({
-    queryKey: ['paper-agent-notes', paper.id],
+    queryKey: ['paper-global-additional-context', paper.id],
     queryFn: () => getPaperPapersPaperIdGet({ path: { paper_id: paper.id }, throwOnError: true }),
     enabled: open && allTasks,
-    select: (resp) => resp.agent_notes ?? '',
+    select: (resp) => resp.paper_global_additional_context ?? '',
   })
   useEffect(() => {
     if (allTasks && !contextTouched && notesQuery.data !== undefined) setContext(notesQuery.data)
@@ -111,7 +111,7 @@ function RerunTaskDialog({
       // something else happens to refetch.
       queryClient.invalidateQueries({ queryKey: ['papers'] })
       queryClient.invalidateQueries({ queryKey: ['paper-tasks', paper.id] })
-      queryClient.invalidateQueries({ queryKey: ['paper-agent-notes', paper.id] })
+      queryClient.invalidateQueries({ queryKey: ['paper-global-additional-context', paper.id] })
       queryClient.invalidateQueries({ queryKey: ['paper', paper.id] })
       toast.success(allTasks ? 'Re-running all tasks' : 'Task queued')
       onOpenChange(false)
