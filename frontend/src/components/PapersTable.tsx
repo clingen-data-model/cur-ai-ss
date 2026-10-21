@@ -18,14 +18,23 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import type { PaperSummaryResp } from '@/api/generated/types.gen'
 import { Flag } from 'lucide-react'
 
-/** "3 days ago" from an ISO timestamp; absolute once it stops being useful. */
+/** "Today 13:25", "Yesterday 09:02", "3 days ago", then the date once the
+ * day stops being useful. The column sorts on the full timestamp, so the
+ * two recent labels carry the local time: a day's papers would otherwise
+ * read as one undifferentiated "Today" in an order the eye cannot check. */
 function relativeTime(iso: string): string {
   const then = new Date(iso)
   const days = Math.floor((Date.now() - then.getTime()) / 86_400_000)
-  if (days < 1) return 'Today'
-  if (days === 1) return 'Yesterday'
+  const time = then.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+  if (days < 1) return `Today ${time}`
+  if (days === 1) return `Yesterday ${time}`
   if (days < 30) return `${days} days ago`
   return then.toLocaleDateString()
+}
+
+/** The full local timestamp, for the tooltip on every row. */
+function fullTime(iso: string): string {
+  return new Date(iso).toLocaleString()
 }
 
 /** A count that opens the tab listing what it counts. Zero is a dash,
@@ -171,7 +180,10 @@ export function PapersTable({ papers }: { papers: PaperSummaryResp[] }) {
         accessorKey: 'updated_at',
         header: 'Updated',
         cell: ({ getValue }) => (
-          <span className="text-muted-foreground whitespace-nowrap">
+          <span
+            className="text-muted-foreground whitespace-nowrap"
+            title={fullTime(getValue() as string)}
+          >
             {relativeTime(getValue() as string)}
           </span>
         ),
