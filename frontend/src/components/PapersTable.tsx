@@ -18,13 +18,20 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import type { PaperSummaryResp } from '@/api/generated/types.gen'
 import { Flag } from 'lucide-react'
 
+/** Midnight starting the local calendar day of `date`. */
+function startOfDay(date: Date): number {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+}
+
 /** "Today 13:25", "Yesterday 09:02", "3 days ago", then the date once the
  * day stops being useful. The column sorts on the full timestamp, so the
  * two recent labels carry the local time: a day's papers would otherwise
- * read as one undifferentiated "Today" in an order the eye cannot check. */
+ * read as one undifferentiated "Today" in an order the eye cannot check.
+ * Days are local calendar days, not 24-hour windows: counted in windows,
+ * yesterday 4 PM was "Today 4 PM" at 3 PM, a time still to come. */
 function relativeTime(iso: string): string {
   const then = new Date(iso)
-  const days = Math.floor((Date.now() - then.getTime()) / 86_400_000)
+  const days = Math.round((startOfDay(new Date()) - startOfDay(then)) / 86_400_000)
   const time = then.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
   if (days < 1) return `Today ${time}`
   if (days === 1) return `Yesterday ${time}`
