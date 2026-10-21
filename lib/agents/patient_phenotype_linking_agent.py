@@ -174,10 +174,13 @@ Extract phenotypes that explicitly belong to the provided patient:
 - affected_status tells you what to expect, not what to extract. It was assigned by
   an earlier step and can be wrong, so it never overrides what the text says.
 - For an Unaffected patient, never infer a finding from family membership, the
-  pedigree or a statement about "the family" or "the affected individuals", and
-  never reason that they are "assumed to be" affected.
+  pedigree or a statement about "the family", "the affected individuals" or
+  the cohort of patients, and never reason that they are "assumed to be"
+  affected.
 - Extract a finding for any patient only when the paper states it for that
-  individual (a clinical-features table column counts). That holds for an
+  individual (a clinical-features table column counts, and so does a statement
+  about every member of a group the paper puts them in -- see FINDING THE
+  PHENOTYPES). That holds for an
   Unaffected patient too, even when the finding resembles the family's phenotype:
   carriers can have mild or unrelated findings.
 - If a stated finding seems to contradict the status, extract it anyway and say
@@ -193,18 +196,35 @@ place, and no single place holds all of them.
 1. LIST the candidate findings for this patient, going to each source in turn:
    - the case description that names them by identifier;
    - their column in each clinical features table;
-   - figure captions, pedigree legends and patient summaries naming them.
+   - figure captions, pedigree legends and patient summaries naming them;
+   - the statements about every member of a group they belong to ("all
+     affected individuals had ...", a feature scored in every patient of the
+     cohort), one candidate per finding such a statement names, written
+     down as the statement words it rather than as the nearest table
+     heading.
 2. Extract from the list you built.
 
 Do not skip step 1. Listing first is what makes the extraction complete: a
 finding you never wrote down is one you cannot decide to keep or drop.
 
-A statement about the cohort as a whole -- "all the individuals presented with
-ID", "the 17 patients shared a wide mouth and deep-set eyes" -- is evidence
-about this patient too, and extracting it is correct. But it is never the whole
-answer, because it names what everyone shares and says nothing about what
-distinguishes this patient. It does not stand in for their column or their case
-description, and finding one is not a reason to stop looking.
+A statement about the cohort as a whole -- "all affected individuals had
+sensorineural hearing loss", "the 17 patients shared a wide mouth and
+deep-set eyes", a feature scored in every patient (17/17) -- is the paper
+stating that finding for every member of the group, this patient included.
+Extract it for them as a stated finding: uncertain: false, cited to that
+sentence, with the reasoning saying it comes from the cohort description, and
+no flag. The group must be one the paper puts this patient in: "all affected
+individuals" covers an Affected patient and not an Unaffected relative. A
+statement about part of the group -- "most", "the majority", 12 of 17 --
+names nobody, so it is not a finding for this patient unless their column or
+case description places them in that part.
+
+A cohort statement is never the whole answer, because it names what everyone
+shares and says nothing about what distinguishes this patient. It does not
+stand in for their column or their case description, and finding one is not a
+reason to stop looking. Nor does a column stand in for it: when the table
+scores the nearest thing under its own heading and the text names a finding
+for everyone, the patient has both, and they are not duplicates.
 
 ---------------------------------------------------
 CLINICAL FEATURES TABLES
@@ -277,6 +297,12 @@ Examples:
 
 - "seizures" + "generalized tonic-clonic seizures"
   → keep "generalized tonic-clonic seizures"
+
+Merge only wordings of one finding. Two findings the paper lists side by
+side -- in one sentence (the splitting rule below made them separate
+entries), joined with a slash, or one scored in a table and the other named
+in the text -- are different by the paper's own account, however often they
+go together, and are never merged.
 
 Avoid returning redundant phenotypes for the same patient.
 
@@ -356,8 +382,12 @@ for the provided patient, and a "flags" list (the rule is in CORE EXTRACTION
 RULES). Kinds:
 
 - inferred: a finding extracted with uncertain: true because it reaches this
-  patient through a cohort-level or family-level sentence rather than a
-  statement about them. One flag naming the findings, not one per finding.
+  patient through a sentence about a group the paper does not clearly place
+  them in -- "the affected siblings" for a patient whose status is Unknown,
+  "both families" when it is unclear this one is meant. Not a finding from a
+  statement about the whole cohort or family this patient belongs to; that
+  is stated (FINDING THE PHENOTYPES). One flag naming the findings, not one
+  per finding.
 - conflict: the text and a table disagree about a finding for this patient.
 - excluded: a finding left out under the family-member rule when the
   sentence could be read either way, or stated only in a table carrying an
