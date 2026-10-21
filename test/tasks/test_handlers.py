@@ -291,8 +291,9 @@ def test_paper_context_carries_curator_notes_after_the_gene():
 
     assert noted.startswith(plain)
     assert noted.endswith(
-        'Curator notes for this paper (apply them to your task where they bear '
-        'on it):\nIgnore the supplement cohort.'
+        'A human curator is re-running the extraction of this paper and has '
+        'given additional instructions for the whole run. Follow them where '
+        'they bear on your task:\nIgnore the supplement cohort.'
     )
     assert format_paper_context('text', 'MSX1', None) == plain
     assert format_paper_context('text', 'MSX1', '') == plain

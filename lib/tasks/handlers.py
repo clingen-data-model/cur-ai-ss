@@ -373,8 +373,9 @@ def curator_notes_section(notes: str) -> str:
     pedigree description) append it to their own first message.
     """
     return (
-        'Curator notes for this paper (apply them to your task where they '
-        f'bear on it):\n{notes}'
+        'A human curator is re-running the extraction of this paper and has '
+        'given additional instructions for the whole run. Follow them where '
+        f'they bear on your task:\n{notes}'
     )
 
 
