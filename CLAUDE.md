@@ -285,7 +285,7 @@ Extracts OpenAPI schema from FastAPI app and generates `frontend/api-spec.json`.
 
 ## Important Notes
 
-**Paper file organization:** Everything on disk for a paper lives under `documents/<paper_id>/`: `thumbnail.png` and `snapshots/` at the top, then `main/` and `supplement/`, each holding the uploaded `raw.*`, `words.json`, `anchored.md`, `anchors.json`, `tables/` and `images/`. Tables and images are keyed by Docling index, the same N as the `table-N` and `figure-N` anchors. Use the `document_*` helpers in `lib/misc/pdf/paths.py`; the Docling document itself is not kept, so a re-parse (`parse_content(force=True)`) rebuilds everything from `raw.*`. The old `extracted_pdfs/` layout was retired in 2026-10 (`lib/bin/retire_extracted_pdfs.py` moved the last live files).
+**Paper file organization:** Everything on disk for a paper lives under `documents/<paper_id>/`: `thumbnail.png` and `snapshots/` at the top, then `main/` and `supplement/`, each holding the uploaded `raw.*`, `words.json`, `anchored.md`, `anchors.json`, `tables/` and `images/`. Tables and images are keyed by Docling index, the same N as the `table-N` and `figure-N` anchors. Use the `document_*` helpers in `lib/misc/pdf/paths.py`; the Docling document itself is not kept, so a re-parse (`parse_content(force=True)`) rebuilds everything from `raw.*`. The old `extracted_pdfs/` layout was retired in 2026-10 (PR #417 moved the last live files and the folder was deleted from dev-caa).
 
 **Pipeline status:** `PipelineStatus` enum tracks paper extraction progress. Worker updates this. UI shows status with icons (⏳🟡❌✔️🎉).
 
