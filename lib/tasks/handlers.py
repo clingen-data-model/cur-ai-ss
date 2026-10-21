@@ -289,7 +289,7 @@ def _agent_for_task_type(task_type: TaskType, paper_id: int) -> Agent | None:
     QA_UNSUPPORTED_TASK_TYPES)."""
     if task_type in QA_UNSUPPORTED_TASK_TYPES:
         return None
-    if task_type == TaskType.PEDIGREE_DESCRIPTION:
+    if task_type == TaskType.FIGURE_DESCRIPTION:
         agent, _capture = pedigree_describer_agent_for_paper(paper_id)
         return agent
     return {
@@ -647,8 +647,8 @@ async def handle_variant_extraction(task_id: int) -> None:
         )
 
 
-async def handle_pedigree_description(task_id: int) -> None:
-    """Describe pedigree images from paper."""
+async def handle_figure_description(task_id: int) -> None:
+    """Describe the paper's evidence figures (today: the first pedigree)."""
     paper_id: int
     additional_context: str | None
     with session_scope() as session:
@@ -707,7 +707,7 @@ async def handle_pedigree_description(task_id: int) -> None:
         message,
         session=agent_sess,
     )
-    log_run_metrics('PEDIGREE_DESCRIPTION', result)
+    log_run_metrics('FIGURE_DESCRIPTION', result)
 
     output = result.final_output
     # The analysis is the vision model's; the agent only routes figures to it and
@@ -2280,7 +2280,7 @@ TASK_HANDLERS: dict[TaskType, Callable[[int], Awaitable[None]]] = {
     TaskType.PAPER_CLASSIFIER: handle_paper_classifier,
     TaskType.PAPER_METADATA: handle_paper_metadata,
     TaskType.VARIANT_EXTRACTION: handle_variant_extraction,
-    TaskType.PEDIGREE_DESCRIPTION: handle_pedigree_description,
+    TaskType.FIGURE_DESCRIPTION: handle_figure_description,
     TaskType.PATIENT_EXTRACTION: handle_patient_extraction,
     TaskType.PATIENT_DEMOGRAPHICS: handle_patient_demographics,
     TaskType.SEGREGATION_EVIDENCE_EXTRACTION: handle_segregation_evidence_extraction,

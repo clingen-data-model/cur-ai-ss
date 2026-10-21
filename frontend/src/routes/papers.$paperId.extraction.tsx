@@ -3,7 +3,8 @@
  * tab -- one row per patient/variant link, editable inline, with click-to-
  * expand Patient/Variant detail panels. The other three tabs surface what
  * didn't make it into an occurrence: patients/variants extraction found but
- * linking never connected, and the pedigree image/description.
+ * linking never connected, and the described figures (pedigree and
+ * genotyping images).
  */
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearch, Link } from '@tanstack/react-router'
@@ -24,6 +25,7 @@ import { DataTable } from '@/components/ui/data-table'
 import { Spinner } from '@/components/ui/spinner'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { API_BASE_URL, getAccessToken } from '@/lib/api'
 import {
   EditableDeNovoCell,
@@ -402,6 +404,13 @@ function OccurrencesTab({
   )
 }
 
+/** What the Figure Descriptions tab can hold: the figure kinds extraction
+ * reads for curation fields, as the tab's hover text. */
+const FIGURE_DESCRIPTIONS_HINT =
+  'The figures extraction reads: pedigrees, and genotyping images such as ' +
+  'Sanger chromatograms, gels and restriction digests, copy-number plots ' +
+  '(MLPA, array), sequencing read pileups, and karyotypes or FISH.'
+
 export function ExtractionPage() {
   const params = useParams({ from: '/papers/$paperId/extraction' })
   const paperId = parseInt(params.paperId, 10)
@@ -573,7 +582,10 @@ export function ExtractionPage() {
                 <span className="ml-1 text-xs text-violet-700 dark:text-violet-400">({flags.open.length})</span>
               )}
             </TabsTrigger>
-            <TabsTrigger value="pedigree">Pedigree Image &amp; Description</TabsTrigger>
+            <Tooltip>
+              <TooltipTrigger render={<TabsTrigger value="figures">Figure Descriptions</TabsTrigger>} />
+              <TooltipContent className="max-w-xs">{FIGURE_DESCRIPTIONS_HINT}</TooltipContent>
+            </Tooltip>
             <TabsTrigger value="paper-metadata">Paper Metadata</TabsTrigger>
           </TabsList>
 
@@ -626,7 +638,7 @@ export function ExtractionPage() {
               onNavigate={navigateToTarget}
             />
           </TabsContent>
-          <TabsContent value="pedigree" className="pt-3">
+          <TabsContent value="figures" className="pt-3">
             <PedigreeTab paperId={paperId} />
           </TabsContent>
           <TabsContent value="paper-metadata" className="pt-3 h-[70vh]">

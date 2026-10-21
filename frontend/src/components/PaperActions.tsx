@@ -35,7 +35,7 @@ type RerunnablePaper = Pick<
 // ever created ad hoc by the chat router.
 const RERUNNABLE_TASK_TYPES: TaskType[] = [
   'PDF Parsing', 'Paper Classifier', 'Paper Metadata',
-  'Variant Extraction', 'Pedigree Description', 'Patient Extraction',
+  'Variant Extraction', 'Figure Description', 'Patient Extraction',
   'Patient Demographics',
   'Segregation Evidence Extraction', 'Segregation Analysis Computed',
   'Variant Harmonization', 'Variant Annotation', 'Patient Variant Occurrences',

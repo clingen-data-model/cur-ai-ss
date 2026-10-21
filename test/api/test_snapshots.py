@@ -811,3 +811,40 @@ def test_flags_revert_with_snapshot(db_session, test_user, snapshot_paper):
     assert rows[0].resolved_by_user_id == test_user.id
     assert rows[0].resolution_note == 'agree'
     assert rows[0].patient_id == p1.id
+
+
+def test_snapshot_written_before_the_task_rename_still_restores(
+    db_session, test_user, snapshot_paper
+):
+    """Snapshots store enum *values*. The pedigree step became Figure
+    Description (a3f9c2e7d1b4), so a file from before it names a value no
+    member carries; restore maps it instead of failing on the whole file."""
+    paper = snapshot_paper['paper']
+    db_session.add(
+        TaskDB(
+            paper_id=paper.id,
+            type=TaskType.FIGURE_DESCRIPTION,
+            status=TaskStatus.COMPLETED,
+        )
+    )
+    db_session.flush()
+    path = write_snapshot(paper.id, db_session)
+    assert path is not None
+    data = json.loads(path.read_text())
+    renamed = [t for t in data['tables']['tasks'] if t['type'] == 'Figure Description']
+    assert len(renamed) == 1
+    renamed[0]['type'] = 'Pedigree Description'
+    path.write_text(json.dumps(data))
+    # Something to revert, or restore reports "already matches" and returns
+    # without reading the rows.
+    snapshot_paper['p1'].identifier = 'CHANGED'
+    db_session.flush()
+
+    assert restore_snapshot(paper.id, path.name, db_session, test_user) is True
+    db_session.expire_all()
+    assert (
+        db_session.query(TaskDB)
+        .filter_by(paper_id=paper.id, type=TaskType.FIGURE_DESCRIPTION)
+        .count()
+        == 1
+    )

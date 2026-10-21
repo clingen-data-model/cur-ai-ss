@@ -85,7 +85,7 @@ def test_terminal_task_has_no_descendants(db_session, paper):
 def test_closes_the_patient_variant_occurrence_race(db_session, paper):
     """The actual bug, in the order it happened on paper 27.
 
-    PATIENT_EXTRACTION sits behind the slow PEDIGREE_DESCRIPTION, so when the
+    PATIENT_EXTRACTION sits behind the slow FIGURE_DESCRIPTION, so when the
     fast VARIANT_EXTRACTION finishes it asks the gate whether patients are
     ready -- and the *previous* run's COMPLETED rows say yes. That enqueues
     PATIENT_VARIANT_OCCURRENCES against a patient set PATIENT_EXTRACTION is

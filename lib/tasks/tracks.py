@@ -57,7 +57,7 @@ PIPELINE_TRACKS: list[PipelineTrack] = [
         'patients',
         'Patients',
         [
-            TaskType.PEDIGREE_DESCRIPTION,
+            TaskType.FIGURE_DESCRIPTION,
             TaskType.PATIENT_EXTRACTION,
             TaskType.PATIENT_DEMOGRAPHICS,
             TaskType.PHENOTYPE_EXTRACTION,

@@ -169,7 +169,7 @@ Each uploaded paper flows through these automated steps, run by the worker as ta
 1. **Paper Extraction** — Parse the PDF; extract metadata, text and tables (a vision model
    rebuilds tables the parser garbled)
 2. **Patient Extraction** — Identify patients, demographics and proband status
-3. **Pedigree Description** — Describe family relationships
+3. **Figure Description** — Describe the pedigree figure
 4. **Variant Extraction** — Extract genetic variant information
 5. **Variant Harmonization** — Normalize variants to standard genomic coordinates
 6. **Variant Annotation** — Add annotations (SpliceAI, etc.)
