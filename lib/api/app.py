@@ -1714,8 +1714,7 @@ def get_pedigree(
         image_id=pedigree.image_id,
         is_supplement=pedigree.is_supplement,
         description=pedigree.description,
-        # image_id is the Docling picture index (the N of figure-N), so the file
-        # lives in the anchored document folder, not the legacy extracted_pdfs one.
+        # image_id is the Docling picture index (the N of figure-N).
         image_url=str(
             document_image_path(
                 paper_id, pedigree.image_id, supplement=pedigree.is_supplement
