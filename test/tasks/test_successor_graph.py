@@ -11,7 +11,7 @@ demographics, queued by whichever finishes second.
 
 import pytest
 
-from lib.models import FamilyDB, GeneDB, PaperDB, PatientDB
+from lib.models import FamilyDB, GeneDB, HpoDB, PaperDB, PatientDB, PhenotypeDB
 from lib.tasks.misc import enqueue_successors, invalidate_descendants
 from lib.tasks.models import TASK_SUCCESSORS, TaskDB, TaskStatus, TaskType
 
@@ -240,3 +240,56 @@ def test_a_demographics_rerun_leaves_occurrences_and_their_branch_alone(
         TaskType.PAPER_MONDO_LINKING,
         TaskType.OCCURRENCE_MONDO_LINKING,
     }
+
+
+def test_demographics_skips_phenotypes_for_an_unaffected_patient(db_session, paper):
+    """An unaffected relative's features are not evidence for the gene, so
+    the pipeline does not extract them; Unknown still counts as affected."""
+    f1 = _family(db_session, paper, 'Family 1')
+    unaffected = _patient(db_session, paper, f1, 'I-1')
+    unaffected.affected_status = 'Unaffected'
+    unknown = _patient(db_session, paper, f1, 'II-1')
+    db_session.flush()
+
+    for patient in (unaffected, unknown):
+        enqueue_successors(
+            db_session,
+            _task(
+                db_session, paper, TaskType.PATIENT_DEMOGRAPHICS, patient_id=patient.id
+            ),
+        )
+
+    assert _queued(db_session, TaskType.PHENOTYPE_EXTRACTION) == {(unknown.id, None)}
+
+
+def test_phenotype_extraction_queues_hpo_for_every_unlinked_phenotype(
+    db_session, paper
+):
+    """Whatever the patient's variants: linking used to wait for a variant
+    occurrence, which left a manual phenotype run linking nothing. A
+    phenotype the extraction linked from the cache needs no task."""
+    f1 = _family(db_session, paper, 'Family 1')
+    p1 = _patient(db_session, paper, f1, 'II-1')  # no occurrence
+    evidence = {'value': 'x', 'reasoning': 't', 'citations': []}
+    unlinked = PhenotypeDB(
+        paper_id=paper.id,
+        patient_id=p1.id,
+        concept='Seizures',
+        concept_evidence=evidence,
+    )
+    cached = PhenotypeDB(
+        paper_id=paper.id, patient_id=p1.id, concept='Ataxia', concept_evidence=evidence
+    )
+    cached.hpo = HpoDB(hpo_id='HP:0001251', hpo_name='Ataxia', reasoning='cached')
+    db_session.add_all([unlinked, cached])
+    db_session.flush()
+
+    enqueue_successors(
+        db_session,
+        _task(db_session, paper, TaskType.PHENOTYPE_EXTRACTION, patient_id=p1.id),
+    )
+
+    queued = db_session.query(TaskDB).filter(
+        TaskDB.type == TaskType.HPO_LINKING, TaskDB.status == TaskStatus.PENDING
+    )
+    assert {t.phenotype_id for t in queued} == {unlinked.id}

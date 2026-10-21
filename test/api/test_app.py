@@ -3410,9 +3410,13 @@ def _hpo_linking_phenotype_ids(db_session, paper_id) -> set[int]:
     }
 
 
-def test_phenotype_extraction_links_hpo_only_for_variant_linked_patients(
+def test_phenotype_extraction_queues_hpo_linking_whatever_the_patients_variants(
     db_session, seeded_paper, seeded_variant
 ):
+    """Every phenotype the run produced gets a linking task, linked to a
+    variant or not -- except one the extraction already linked from the
+    cache. Linking used to wait for a variant occurrence, which left a
+    curator's phenotype re-run linking nothing."""
     from lib.tasks.misc import enqueue_successors
 
     linked = _create_patient_variant_occurrence(
@@ -3422,7 +3426,7 @@ def test_phenotype_extraction_links_hpo_only_for_variant_linked_patients(
     linked_phenotype = _seed_phenotype(db_session, linked)
     already_linked = _seed_phenotype(db_session, linked, 'Ataxia')
     already_linked.hpo = HpoDB(hpo_id='HP:0001251', hpo_name='Ataxia', reasoning='x')
-    _seed_phenotype(db_session, unlinked)
+    unlinked_phenotype = _seed_phenotype(db_session, unlinked)
 
     for patient in (linked, unlinked):
         task = TaskDB(
@@ -3436,23 +3440,22 @@ def test_phenotype_extraction_links_hpo_only_for_variant_linked_patients(
         enqueue_successors(db_session, task)
 
     assert _hpo_linking_phenotype_ids(db_session, seeded_paper.id) == {
-        linked_phenotype.id
+        linked_phenotype.id,
+        unlinked_phenotype.id,
     }
 
 
-def test_patient_variant_occurrences_releases_hpo_linking(
+def test_patient_variant_occurrences_queues_no_hpo_linking(
     db_session, seeded_paper, seeded_variant
 ):
-    """Phenotype extraction usually finishes before occurrences exist, so the
-    occurrences task is the one that finds the patient linked."""
+    """Linking hangs off phenotype extraction alone now; occurrences
+    completing queues none, so an occurrences re-run never re-links."""
     from lib.tasks.misc import enqueue_successors
 
-    unlinked = _seed_patient(db_session, seeded_paper, 'No Variant Patient')
-    _seed_phenotype(db_session, unlinked)
     occurrence = _create_patient_variant_occurrence(
         db_session, seeded_paper, seeded_variant
     )
-    phenotype = _seed_phenotype(db_session, occurrence.patient)
+    _seed_phenotype(db_session, occurrence.patient)
     task = TaskDB(
         paper_id=seeded_paper.id,
         type=TaskType.PATIENT_VARIANT_OCCURRENCES,
@@ -3463,7 +3466,7 @@ def test_patient_variant_occurrences_releases_hpo_linking(
 
     enqueue_successors(db_session, task)
 
-    assert _hpo_linking_phenotype_ids(db_session, seeded_paper.id) == {phenotype.id}
+    assert _hpo_linking_phenotype_ids(db_session, seeded_paper.id) == set()
 
 
 def test_create_occurrence_does_not_queue_hpo_linking(

@@ -1825,8 +1825,8 @@ async def handle_phenotype_extraction(task_id: int) -> None:
                 phenotype.patient_id = patient_id
             phenotype_db = phenotype_to_db(paper_id, phenotype)
             # A concept linked before gets that link now, so it never needs an
-            # HPO_LINKING task (enqueue_deferred_hpo_linking skips phenotypes
-            # that already have one).
+            # HPO_LINKING task (enqueue_successors skips phenotypes that
+            # already have one).
             # Unless the curator gave the paper global context: a link made
             # without it must not stand in for the HPO agent, which would
             # otherwise never see the context.
