@@ -51,9 +51,10 @@ switches to the Docling index too -- this also fixes the existing drift bug wher
 
 ### `anchored.md` + `anchors.json` -- the two artifacts everything derives from
 
-**Implemented in chunk 1** (`lib/misc/pdf/anchors.py`, written by `parse_content` and by
-`lib/bin/backfill_documents.py` into `{CAA_ROOT}/documents/{id}/{main|supplement}/`,
-side by side with `extracted_pdfs/`). Built from the `DoclingDocument` with
+**Implemented in chunk 1** (`lib/misc/pdf/anchors.py`, written by `parse_content` into
+`{CAA_ROOT}/documents/{id}/{main|supplement}/`; it was written side by side with
+`extracted_pdfs/`, with a backfill script for older papers, until that layout was
+retired in 2026-10). Built from the `DoclingDocument` with
 `MarkdownDocSerializer(doc, params=MarkdownParams(escape_html=False,
 escape_underscores=False)).get_parts()` -- one part per body item, in reading order;
 a captioned table/figure part spans its caption too; a list part spans its items.

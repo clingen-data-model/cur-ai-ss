@@ -49,9 +49,9 @@ export function withHighlight(content: string, match: TextMatch | null): string 
   return content.slice(0, match.start) + '<mark>' + content.slice(match.start, match.end) + '</mark>' + content.slice(match.end)
 }
 
-/* Docling writes each figure's `src` as the absolute filesystem path it saved
- * the image to on the API host (e.g. `/var/caa/extracted_pdfs/20/raw_artifacts/
- * image_000002_<hash>.png`) -- the same kind of server-relative path the API
+/* The anchored markdown writes each figure's `src` as the absolute filesystem
+ * path of the image on the API host (e.g. `/var/caa/documents/20/main/images/
+ * 2.png`) -- the same kind of server-relative path the API
  * returns for thumbnail_url/pdf_url/avatar_url, which every other caller in
  * this app resolves by prefixing API_BASE_URL (see PedigreeTab.tsx). Left
  * alone, the browser instead resolves it against the SPA's own origin.

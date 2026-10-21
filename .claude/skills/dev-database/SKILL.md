@@ -14,7 +14,7 @@ The development instance runs on the GCE VM `dev-caa` (zone `us-east4-a`, projec
 - Environment file: `/opt/caa/.env`
 - Data root (`CAA_ROOT`): `/var/caa`
   - Database: `/var/caa/sqllite/app.db`
-  - Extracted PDFs + snapshots: `/var/caa/extracted_pdfs/<paper_id>/`
+  - Per-paper files (uploaded PDF, parsed text, images, thumbnail, snapshots): `/var/caa/documents/<paper_id>/`
 
 ## SSH
 

@@ -56,9 +56,9 @@ class Env(BaseSettings):
     # Directories
     CAA_ROOT: str = '/var/caa'
     SQLLITE_DIR: str = 'sqllite'
-    EXTRACTED_PDF_DIR: str = 'extracted_pdfs'
-    # Anchor-indexed documents (anchored.md + anchors.json per paper), written
-    # side by side with EXTRACTED_PDF_DIR while the two layouts coexist.
+    # Everything kept per paper: the uploaded files, the parsed and anchored
+    # text, table and figure images, the thumbnail and extraction snapshots
+    # (layout in lib/misc/pdf/paths.py).
     DOCUMENTS_DIR: str = 'documents'
     REFERENCE_DATA_DIR: str = 'reference_data'
 
@@ -117,10 +117,6 @@ class Env(BaseSettings):
     @property
     def sqlite_dir(self) -> Path:
         return Path(self.CAA_ROOT) / self.SQLLITE_DIR
-
-    @property
-    def extracted_pdf_dir(self) -> Path:
-        return Path(self.CAA_ROOT) / self.EXTRACTED_PDF_DIR
 
     @property
     def documents_dir(self) -> Path:

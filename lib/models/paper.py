@@ -53,8 +53,8 @@ from typing_extensions import Self
 
 from lib.core.environment import env
 from lib.misc.pdf.paths import (
-    pdf_raw_path,
-    pdf_thumbnail_path,
+    document_raw_path,
+    document_thumbnail_path,
 )
 from lib.models.base import Base, PatchModel
 from lib.models.evidence_block import (
@@ -283,9 +283,9 @@ class PaperDB(Base):
         )
 
     def with_content(self) -> 'PaperDB':
-        if not pdf_raw_path(self.id).exists():
+        if not document_raw_path(self.id).exists():
             raise RuntimeError('Raw PDF must exist prior to calling this method')
-        with open(pdf_raw_path(self.id), 'rb') as f:
+        with open(document_raw_path(self.id), 'rb') as f:
             self.content = f.read()
         return self
 
@@ -392,14 +392,12 @@ class PaperResp(PaperExtractionOutput):
     @computed_field  # type: ignore[misc]
     @property
     def thumbnail_url(self) -> str:
-        from lib.misc.pdf.paths import pdf_thumbnail_path
-
-        return str(pdf_thumbnail_path(self.id))
+        return str(document_thumbnail_path(self.id))
 
     @computed_field  # type: ignore[misc]
     @property
     def pdf_url(self) -> str:
-        return str(pdf_raw_path(self.id))
+        return str(document_raw_path(self.id))
 
 
 class PaperTaskStatus(StrEnum):
@@ -475,9 +473,7 @@ class PaperSummaryResp(BaseModel):
     @computed_field  # type: ignore[misc]
     @property
     def thumbnail_url(self) -> str:
-        from lib.misc.pdf.paths import pdf_thumbnail_path
-
-        return str(pdf_thumbnail_path(self.id))
+        return str(document_thumbnail_path(self.id))
 
 
 class PaperReviewUpdateRequest(BaseModel):
