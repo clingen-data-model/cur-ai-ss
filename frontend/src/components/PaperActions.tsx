@@ -11,7 +11,6 @@ import { RefreshCw, Trash2 } from 'lucide-react'
 import {
   createTaskPapersPaperIdTasksPost,
   deletePaperPapersPaperIdDelete,
-  rerunAllPapersPaperIdRerunAllPost,
 } from '@/api/generated'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
@@ -26,10 +25,7 @@ import { apiErrorMessage } from '@/lib/apiError'
 /* The fields RerunTaskDialog actually needs -- narrower than PaperSummaryResp
  * so it can also take a PaperResp (the paper-detail page's shape, which has
  * no gene_symbol/status/thumbnail_url) without a fake/partial object. */
-type RerunnablePaper = Pick<
-  PaperSummaryResp,
-  'id' | 'title' | 'filename' | 'paper_global_additional_context'
->
+type RerunnablePaper = Pick<PaperSummaryResp, 'id' | 'title' | 'filename'>
 
 // Every task type is rerunnable except 'General Paper Question', which is only
 // ever created ad hoc by the chat router.
@@ -44,13 +40,14 @@ const RERUNNABLE_TASK_TYPES: TaskType[] = [
   'Extraction Verification',
 ]
 
-/* The dialog's two tabs. "All tasks" is not a TaskType, so it never reaches
- * the task endpoint -- it has its own (POST /papers/{id}/rerun-all). */
+/* The dialog's two tabs. "All tasks" is not a TaskType: it queues the root
+ * task (PDF Parsing, or Paper Classifier to keep the parse on disk) through
+ * the same task endpoint, and a note on that task comes down to every agent. */
 type RerunTab = 'single' | 'all'
 
 /** Under the "All tasks" box; the per-task counterpart is CONTEXT_NOTE. */
 const GLOBAL_CONTEXT_NOTE =
-  'Shown to every agent on its fresh run, and kept on the paper for later runs. Replaces the previous context; clear the box to remove it.'
+  'Shown to every agent on this run, as context given for the whole re-run.'
 
 /** Agents read all of it and skip what is not about their task, so a line
  * that opens with the task's name tells the right one it is meant for it. */
@@ -64,7 +61,7 @@ const TEXTAREA_CLASS =
  * "Re-run agents" button atop the task-timeline popovers -- same dialog
  * either way. Kept as one definition so the two triggers can't drift into
  * asking for different fields. Two tabs: one task (with its own follow-up
- * context) or every task (with context global to the paper). */
+ * context) or every task (with context for the whole run). */
 function RerunTaskDialog({
   paper,
   open,
@@ -89,32 +86,27 @@ function RerunTaskDialog({
   const taskTypesQuery = useTaskTypes(open)
   const taskHelp = taskTypesQuery.data?.find((t) => t.type === taskType)?.description
 
-  // Opening the dialog starts from what the paper already holds, whichever
-  // trigger opened it, so the All tasks tab edits the global context in place
-  // rather than starting from a blank box that would silently replace it. It
-  // comes off the paper row the caller already has: no request of its own.
+  // Opening the dialog starts from the trigger's task type, whichever trigger
+  // opened it.
   useEffect(() => {
     if (!open) return
     setTab('single')
     setTaskType(initialTaskType)
-    setGlobalContext(paper.paper_global_additional_context ?? '')
-    // Only when the dialog opens: a refetch of the paper while it is open
-    // must not overwrite what the curator has typed.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+  }, [open, initialTaskType])
 
   const mutation = useMutation({
-    mutationFn: () => allTab
-      ? rerunAllPapersPaperIdRerunAllPost({
-          path: { paper_id: paper.id },
-          body: { reparse_pdf: reparsePdf, additional_context: globalContext || null },
-          throwOnError: true,
-        })
-      : createTaskPapersPaperIdTasksPost({
-          path: { paper_id: paper.id },
-          body: { type: taskType, skip_successors: skipSuccessors, additional_context: context || null },
-          throwOnError: true,
-        }),
+    mutationFn: () =>
+      createTaskPapersPaperIdTasksPost({
+        path: { paper_id: paper.id },
+        body: allTab
+          ? {
+              type: reparsePdf ? 'PDF Parsing' : 'Paper Classifier',
+              skip_successors: false,
+              additional_context: globalContext || null,
+            }
+          : { type: taskType, skip_successors: skipSuccessors, additional_context: context || null },
+        throwOnError: true,
+      }),
     onSuccess: () => {
       // Queuing a task changes the paper's status, which both the cards and the
       // papers table render. Without this the badge keeps reading Done until
@@ -125,6 +117,7 @@ function RerunTaskDialog({
       toast.success(allTab ? 'Re-running all tasks' : 'Task queued')
       onOpenChange(false)
       setContext('')
+      setGlobalContext('')
       setSkipSuccessors(false)
       setReparsePdf(false)
     },

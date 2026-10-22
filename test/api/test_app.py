@@ -1578,6 +1578,7 @@ def test_enqueue_clears_additional_context_without_context(
         type=TaskType.HPO_LINKING,
         status=TaskStatus.COMPLETED,
         additional_context='old context',
+        context_origin=TaskType.PHENOTYPE_EXTRACTION,
     )
     db_session.add(task)
     db_session.commit()
@@ -1592,6 +1593,7 @@ def test_enqueue_clears_additional_context_without_context(
     tasks = response.json()
     assert len(tasks) == 1
     assert tasks[0]['additional_context'] is None
+    assert tasks[0]['context_origin'] is None
     assert tasks[0]['status'] == 'Pending'
 
 
@@ -1633,11 +1635,12 @@ def test_create_task_scoped_to_variant(client, seeded_paper, seeded_variant, tes
     assert tasks[0]['updated_by_user_id'] == test_user.id
 
 
-def test_rerun_all_starts_at_the_classifier_and_sets_notes(
+def test_a_note_on_pdf_parsing_is_the_run_all_note(
     client, db_session, seeded_paper, test_user
 ):
-    """Without re-parsing, the run starts at the classifier, and the successor
-    graph queues everything else; the notes are stored on the paper."""
+    """There is no run-all endpoint: queuing the root task with a note through
+    the task endpoint re-runs everything, and the note comes down to every
+    descendant (test_successor_graph), labelled as given for the whole run."""
     db_session.add(
         TaskDB(
             paper_id=seeded_paper.id,
@@ -1649,15 +1652,20 @@ def test_rerun_all_starts_at_the_classifier_and_sets_notes(
 
     with patch('lib.api.app.write_snapshot_safe'):
         response = client.post(
-            f'/papers/{seeded_paper.id}/rerun-all',
-            json={'additional_context': '  Ignore the supplement cohort.  '},
+            f'/papers/{seeded_paper.id}/tasks',
+            json=TaskCreateRequest(
+                type=TaskType.PDF_PARSING,
+                additional_context='Ignore the supplement cohort.',
+            ).model_dump(),
         )
 
     assert response.status_code == 200
-    tasks = response.json()
-    assert [t['type'] for t in tasks] == [TaskType.PAPER_CLASSIFIER.value]
-    assert tasks[0]['status'] == 'Pending'
-    assert tasks[0]['updated_by_user_id'] == test_user.id
+    (task,) = response.json()
+    assert task['type'] == TaskType.PDF_PARSING.value
+    assert task['status'] == 'Pending'
+    assert task['additional_context'] == 'Ignore the supplement cohort.'
+    assert task['context_origin'] is None
+    assert task['updated_by_user_id'] == test_user.id
     # The previous run's downstream rows are cleared so they cannot satisfy a
     # fan-in gate for this run.
     db_session.expire_all()
@@ -1671,85 +1679,9 @@ def test_rerun_all_starts_at_the_classifier_and_sets_notes(
         == 0
     )
     assert (
-        seeded_paper.paper_global_additional_context == 'Ignore the supplement cohort.'
+        'paper_global_additional_context'
+        not in client.get(f'/papers/{seeded_paper.id}').json()
     )
-    assert (
-        client.get(f'/papers/{seeded_paper.id}').json()[
-            'paper_global_additional_context'
-        ]
-        == 'Ignore the supplement cohort.'
-    )
-
-
-def test_papers_list_carries_global_context_for_the_rerun_dialog(
-    client, db_session, seeded_paper
-):
-    """The dialog prefills its All tasks tab from the list row it was opened
-    from, so the context has to be on the summary and not need a fetch."""
-    seeded_paper.paper_global_additional_context = 'Ignore the supplement cohort.'
-    db_session.commit()
-
-    rows = client.get('/papers').json()
-
-    row = next(r for r in rows if r['id'] == seeded_paper.id)
-    assert row['paper_global_additional_context'] == 'Ignore the supplement cohort.'
-
-
-def test_rerun_all_with_reparse_starts_at_pdf_parsing(client, seeded_paper):
-    with patch('lib.api.app.write_snapshot_safe'):
-        response = client.post(
-            f'/papers/{seeded_paper.id}/rerun-all', json={'reparse_pdf': True}
-        )
-
-    assert response.status_code == 200
-    assert [t['type'] for t in response.json()] == [TaskType.PDF_PARSING.value]
-
-
-def test_rerun_all_replaces_and_clears_notes(client, db_session, seeded_paper):
-    seeded_paper.paper_global_additional_context = 'old note'
-    db_session.commit()
-
-    with patch('lib.api.app.write_snapshot_safe'):
-        client.post(
-            f'/papers/{seeded_paper.id}/rerun-all',
-            json={'additional_context': 'new note'},
-        )
-    db_session.expire_all()
-    assert seeded_paper.paper_global_additional_context == 'new note'
-
-    # Finish the run so the paper is not busy, then clear with an empty box.
-    db_session.query(TaskDB).delete()
-    db_session.commit()
-    with patch('lib.api.app.write_snapshot_safe'):
-        client.post(
-            f'/papers/{seeded_paper.id}/rerun-all', json={'additional_context': '  '}
-        )
-    db_session.expire_all()
-    assert seeded_paper.paper_global_additional_context is None
-
-
-def test_rerun_all_refused_while_paper_has_tasks_in_flight(
-    client, db_session, seeded_paper
-):
-    db_session.add(
-        TaskDB(
-            paper_id=seeded_paper.id,
-            type=TaskType.HPO_LINKING,
-            status=TaskStatus.RUNNING,
-        )
-    )
-    db_session.commit()
-
-    with patch('lib.api.app.write_snapshot_safe') as snapshot:
-        response = client.post(f'/papers/{seeded_paper.id}/rerun-all', json={})
-
-    assert response.status_code == 409
-    snapshot.assert_not_called()
-
-
-def test_rerun_all_requires_authentication(unauth_client, seeded_paper):
-    response = unauth_client.post(f'/papers/{seeded_paper.id}/rerun-all', json={})
-    assert response.status_code == 401
 
 
 def test_create_task_requires_authentication(unauth_client, seeded_paper):
@@ -3477,10 +3409,8 @@ def test_phenotype_extraction_takes_cached_hpo_links(
         type=TaskType.PHENOTYPE_EXTRACTION,
         patient_id=patient.id,
         status=TaskStatus.RUNNING,
-        # Takes the follow-up branch, which never reads the paper text itself;
-        # the citation check still does, so the anchored document must hold the
-        # block the concepts cite.
-        additional_context='again',
+        # No curator note: a note on the run, like paper-wide notes, skips the
+        # cache so the HPO agent sees it (test_a_note_on_the_run_skips_the_cache).
     )
     anchored = document_anchored_md_path(seeded_paper.id)
     anchored.parent.mkdir(parents=True, exist_ok=True)
@@ -3553,23 +3483,23 @@ def test_phenotype_extraction_takes_cached_hpo_links(
     assert rows[('Ataxia', False)].hpo is None
 
 
-def test_phenotype_extraction_skips_cached_hpo_links_given_global_context(
+def test_phenotype_extraction_skips_cached_hpo_links_given_a_curator_note(
     db_session, seeded_paper, monkeypatch
 ):
-    """A link made without the paper's global context must not stand in for
-    the HPO agent, which would never see the context."""
+    """A link made without the curator's note, which comes down to HPO linking,
+    must not stand in for the HPO agent, which would never see it."""
     from lib.models import ExtractedPhenotype, PhenotypeExtractionOutput
     from lib.tasks import hpo_link_cache
     from lib.tasks.handlers import handle_phenotype_extraction
 
     patient = _seed_patient(db_session, seeded_paper, 'Context Patient')
-    seeded_paper.paper_global_additional_context = 'Treat all seizures as febrile.'
     task = TaskDB(
         paper_id=seeded_paper.id,
         type=TaskType.PHENOTYPE_EXTRACTION,
         patient_id=patient.id,
         status=TaskStatus.RUNNING,
-        additional_context='again',
+        additional_context='Treat all seizures as febrile.',
+        context_origin=TaskType.PDF_PARSING,
     )
     anchored = document_anchored_md_path(seeded_paper.id)
     anchored.parent.mkdir(parents=True, exist_ok=True)
@@ -3629,17 +3559,18 @@ def _first_message(run) -> str:
     return message if isinstance(message, str) else json.dumps(message)
 
 
-def test_variant_harmonization_prompt_carries_global_context(
+def test_variant_harmonization_prompt_carries_an_inherited_note_last(
     db_session, seeded_paper, seeded_variant
 ):
     from lib.tasks.handlers import handle_variant_harmonization
 
-    seeded_paper.paper_global_additional_context = 'Use GRCh37 throughout.'
     task = TaskDB(
         paper_id=seeded_paper.id,
         type=TaskType.VARIANT_HARMONIZATION,
         variant_id=seeded_variant.id,
         status=TaskStatus.RUNNING,
+        additional_context='Use GRCh37 throughout.',
+        context_origin=TaskType.VARIANT_EXTRACTION,
     )
     db_session.add(task)
     db_session.commit()
@@ -3651,23 +3582,25 @@ def test_variant_harmonization_prompt_carries_global_context(
             asyncio.run(handle_variant_harmonization(task.id))
 
     message = _first_message(run)
-    assert 'Use GRCh37 throughout.' in message
-    assert message.index('Use GRCh37 throughout.') < message.index(
-        VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS[:80]
+    assert message.endswith('\nUse GRCh37 throughout.')
+    assert 'supplied to Variant Extraction' in message
+    assert message.index(VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS[:80]) < message.index(
+        'Use GRCh37 throughout.'
     )
 
 
-def test_hpo_linking_prompt_carries_global_context(db_session, seeded_paper):
+def test_hpo_linking_prompt_carries_an_inherited_note_last(db_session, seeded_paper):
     from lib.tasks.handlers import handle_hpo_linking
 
     patient = _seed_patient(db_session, seeded_paper, 'HPO Patient')
     phenotype = _seed_phenotype(db_session, patient)
-    seeded_paper.paper_global_additional_context = 'Onset was in infancy.'
     task = TaskDB(
         paper_id=seeded_paper.id,
         type=TaskType.HPO_LINKING,
         phenotype_id=phenotype.id,
         status=TaskStatus.RUNNING,
+        additional_context='Onset was in infancy.',
+        context_origin=TaskType.PHENOTYPE_EXTRACTION,
     )
     db_session.add(task)
     db_session.commit()
@@ -3679,7 +3612,9 @@ def test_hpo_linking_prompt_carries_global_context(db_session, seeded_paper):
         with pytest.raises(RuntimeError):
             asyncio.run(handle_hpo_linking(task.id))
 
-    assert 'Onset was in infancy.' in _first_message(run)
+    message = _first_message(run)
+    assert message.endswith('\nOnset was in infancy.')
+    assert 'supplied to Phenotype Extraction' in message
 
 
 def test_hpo_link_cache_reloads_after_interval(db_session, seeded_paper, monkeypatch):

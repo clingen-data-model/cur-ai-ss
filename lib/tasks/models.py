@@ -282,6 +282,14 @@ class TaskDB(Base):
         Boolean, nullable=False, default=False, server_default='0'
     )
     additional_context: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Where additional_context came from. NULL: a curator gave it to this task,
+    # and the run is a follow-up turn in the task's own conversation. Set to a
+    # TaskType: the note was given to that task (an ancestor) and came down
+    # the successor graph (enqueue_successors), so this run starts fresh with
+    # the note in its first message, labelled as supplied to that step.
+    context_origin: Mapped[TaskType | None] = mapped_column(
+        SQLEnum(TaskType), nullable=True
+    )
 
     # When the worker last moved this task to RUNNING. NULL until it does, and
     # re-stamped on a retry, so it always describes the attempt that produced
@@ -337,6 +345,7 @@ class TaskResp(BaseModel):
     error_message: str | None
     skip_successors: bool
     additional_context: str | None
+    context_origin: TaskType | None = None
     family_id: int | None
     patient_id: int | None
     variant_id: int | None
@@ -356,16 +365,4 @@ class TaskCreateRequest(BaseModel):
     phenotype_id: int | None = None
     patient_variant_occurrence_id: int | None = None
     skip_successors: bool = False
-    additional_context: str | None = None
-
-
-class RerunAllRequest(BaseModel):
-    """Re-run every task of a paper, from the top of the pipeline."""
-
-    # PDF parsing is not an agent and rebuilds the anchored text, tables and
-    # images the agents cite, so re-parsing is a choice: without it the run
-    # starts at the paper classifier, on the parse already on disk.
-    reparse_pdf: bool = False
-    # Paper-wide notes for every agent that reads the paper; replaces the
-    # previous notes, and None clears them.
     additional_context: str | None = None

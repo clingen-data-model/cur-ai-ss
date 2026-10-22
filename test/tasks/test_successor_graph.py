@@ -293,3 +293,74 @@ def test_phenotype_extraction_queues_hpo_for_every_unlinked_phenotype(
         TaskDB.type == TaskType.HPO_LINKING, TaskDB.status == TaskStatus.PENDING
     )
     assert {t.phenotype_id for t in queued} == {unlinked.id}
+
+
+def _context(db_session, task_type):
+    return {
+        (t.patient_id, t.additional_context, t.context_origin)
+        for t in db_session.query(TaskDB).filter(
+            TaskDB.type == task_type, TaskDB.status == TaskStatus.PENDING
+        )
+    }
+
+
+def test_a_note_comes_down_to_every_successor_naming_the_task_it_was_given_to(
+    db_session, paper
+):
+    """A curator's note on one run reaches each descendant with context_origin
+    naming the task the curator gave it to, all the way down."""
+    family = _family(db_session, paper, 'Family 1')
+    p1 = _patient(db_session, paper, family, 'II-1')
+    p2 = _patient(db_session, paper, family, 'II-2')
+    extraction = _task(
+        db_session,
+        paper,
+        TaskType.PATIENT_EXTRACTION,
+        additional_context='Name patients by pedigree position.',
+    )
+
+    enqueue_successors(db_session, extraction)
+
+    assert _context(db_session, TaskType.PATIENT_DEMOGRAPHICS) == {
+        (p1.id, 'Name patients by pedigree position.', TaskType.PATIENT_EXTRACTION),
+        (p2.id, 'Name patients by pedigree position.', TaskType.PATIENT_EXTRACTION),
+    }
+
+    # One level further: demographics did not get the note itself, so the
+    # origin it passes on is still patient extraction, not its own type.
+    demographics = (
+        db_session.query(TaskDB)
+        .filter(
+            TaskDB.type == TaskType.PATIENT_DEMOGRAPHICS, TaskDB.patient_id == p1.id
+        )
+        .one()
+    )
+    demographics.status = TaskStatus.COMPLETED
+    enqueue_successors(db_session, demographics)
+
+    assert _context(db_session, TaskType.PHENOTYPE_EXTRACTION) == {
+        (p1.id, 'Name patients by pedigree position.', TaskType.PATIENT_EXTRACTION),
+    }
+
+
+def test_a_run_without_a_note_passes_none_and_clears_an_inherited_one(
+    db_session, paper
+):
+    family = _family(db_session, paper, 'Family 1')
+    p1 = _patient(db_session, paper, family, 'II-1')
+    stale = _task(
+        db_session,
+        paper,
+        TaskType.PATIENT_DEMOGRAPHICS,
+        patient_id=p1.id,
+        additional_context='from an earlier run',
+        context_origin=TaskType.PATIENT_EXTRACTION,
+    )
+
+    enqueue_successors(
+        db_session, _task(db_session, paper, TaskType.PATIENT_EXTRACTION)
+    )
+
+    db_session.refresh(stale)
+    assert stale.status == TaskStatus.PENDING
+    assert (stale.additional_context, stale.context_origin) == (None, None)

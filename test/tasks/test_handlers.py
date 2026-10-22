@@ -11,7 +11,6 @@ from lib.models.figure import FigureDescriptionDB, FigureKind
 from lib.tasks.handlers import (
     cited_text,
     format_paper_context,
-    paper_global_context,
     paper_input,
     patient_extraction_message,
 )
@@ -317,32 +316,6 @@ async def test_rerunning_patient_extraction_replaces_only_its_own_flags(
     assert [r.subject for r in rows] == ['kept']
 
 
-def test_paper_context_carries_curator_notes_after_the_gene():
-    """The notes ride in the paper block, so every agent on the paper sends the
-    same bytes and the shared prompt-cache prefix still holds."""
-    plain = format_paper_context('text', 'MSX1')
-    noted = format_paper_context('text', 'MSX1', 'Ignore the supplement cohort.')
-
-    assert noted.startswith(plain)
-    assert noted.endswith(
-        'A human curator is re-running the extraction of this paper and has '
-        'given additional instructions for the whole run. Follow them where '
-        'they bear on your task:\nIgnore the supplement cohort.'
-    )
-    assert format_paper_context('text', 'MSX1', None) == plain
-    assert format_paper_context('text', 'MSX1', '') == plain
-
-
-def test_paper_global_context_reads_the_paper_row(db_session, paper):
-    assert paper_global_context(paper.id) is None
-    assert paper_global_context(paper.id + 1000) is None
-
-    paper.paper_global_additional_context = 'Patients are numbered per family.'
-    db_session.commit()
-
-    assert paper_global_context(paper.id) == 'Patients are numbered per family.'
-
-
 def test_paper_figures_lists_every_figure_with_an_image_main_first(paper):
     """The figures the describer visits: each figure-N anchor whose
     images/N.png exists, main text before supplement, with the alt text the
@@ -382,21 +355,6 @@ def test_paper_figures_lists_every_figure_with_an_image_main_first(paper):
     ]
 
 
-def test_figure_description_notes_join_paper_and_task_context(db_session, paper):
-    from lib.tasks.handlers import figure_description_notes
-
-    assert figure_description_notes(paper.id, None) is None
-    assert figure_description_notes(paper.id, 'III-3 is the proband') == (
-        'III-3 is the proband'
-    )
-    paper.paper_global_additional_context = 'Families are lettered.'
-    db_session.commit()
-    assert figure_description_notes(paper.id, None) == 'Families are lettered.'
-    assert figure_description_notes(paper.id, 'III-3 is the proband') == (
-        'Families are lettered.\n\nIII-3 is the proband'
-    )
-
-
 async def test_figure_description_stores_one_row_per_described_figure(
     monkeypatch, db_session, paper
 ):
@@ -411,7 +369,6 @@ async def test_figure_description_stores_one_row_per_described_figure(
             paper_id=paper.id, image_id=9, kinds=['Pedigree'], description='stale'
         )
     )
-    paper.paper_global_additional_context = 'Families are lettered.'
     task = TaskDB(
         paper_id=paper.id,
         type=TaskType.FIGURE_DESCRIPTION,
@@ -443,9 +400,159 @@ async def test_figure_description_stores_one_row_per_described_figure(
     assert seen == {
         'paper_id': paper.id,
         'figures': figures,
-        'notes': 'Families are lettered.\n\nIII-3 is the proband',
+        'notes': 'III-3 is the proband',
     }
     rows = db_session.query(FigureDescriptionDB).filter_by(paper_id=paper.id).all()
     assert [(r.image_id, r.kinds, r.description) for r in rows] == [
         (2, ['Pedigree', 'Gel'], 'pedigree and digest')
     ]
+
+
+# --- A curator's note on a fresh run (inherited, or own with no conversation)
+
+
+class _ItemsSession:
+    def __init__(self, items):
+        self.items = items
+        self.cleared = False
+
+    async def get_items(self, limit=None):
+        return self.items[:limit] if limit else self.items
+
+    async def clear_session(self) -> None:
+        self.cleared = True
+
+
+async def test_a_note_is_a_follow_up_only_for_its_own_task_with_a_conversation():
+    from lib.tasks.handlers import continues_conversation
+    from lib.tasks.models import TaskType
+
+    note = 'III-3 is the proband'
+    assert await continues_conversation(_ItemsSession([{'role': 'user'}]), note, None)
+    # Inherited from a predecessor: the inputs just changed, so never a follow-up.
+    assert not await continues_conversation(
+        _ItemsSession([{'role': 'user'}]), note, TaskType.PATIENT_EXTRACTION
+    )
+    # Own note but nothing to follow up on (a retry cleared the session).
+    assert not await continues_conversation(_ItemsSession([]), note, None)
+
+
+def test_curator_note_section_names_the_step_an_inherited_note_was_given_to():
+    from lib.tasks.handlers import curator_note_section
+    from lib.tasks.models import TaskType
+
+    inherited = curator_note_section('Use Brazil.', TaskType.PATIENT_DEMOGRAPHICS)
+    assert inherited.startswith(
+        'This user-provided context was supplied to Patient Demographics, '
+    )
+    assert 'might also be relevant here' in inherited
+    assert inherited.endswith('\nUse Brazil.')
+    own = curator_note_section('Use Brazil.', None)
+    assert own.startswith('A human curator re-ran this step')
+    assert own.endswith('\nUse Brazil.')
+    for root in (TaskType.PDF_PARSING, TaskType.PAPER_CLASSIFIER):
+        whole = curator_note_section('Use Brazil.', root)
+        assert whole.startswith(
+            'This user-provided context was given for this re-run of the whole paper'
+        )
+        assert whole.endswith('\nUse Brazil.')
+
+
+def test_with_curator_note_appends_an_item_or_a_section_and_leaves_none_alone():
+    from lib.tasks.handlers import paper_input, with_curator_note
+    from lib.tasks.models import TaskType
+
+    items = paper_input('PAPER', 'INSTRUCTIONS', 'DATA')
+    assert with_curator_note(items, None, None) is items
+    with_note = with_curator_note(items, 'Use Brazil.', TaskType.PATIENT_EXTRACTION)
+    assert isinstance(with_note, list)
+    assert [i['content'] for i in with_note[:3]] == ['PAPER', 'INSTRUCTIONS', 'DATA']
+    assert str(with_note[3]['content']).endswith('\nUse Brazil.')
+    assert 'supplied to Patient Extraction' in str(with_note[3]['content'])
+
+    text = with_curator_note('Variant JSON: {}', 'Use GRCh37.', None)
+    assert isinstance(text, str)
+    assert text.startswith('Variant JSON: {}\n\nA human curator re-ran this step')
+
+
+async def test_patient_extraction_runs_fresh_with_an_inherited_note_last(
+    monkeypatch, db_session, paper
+):
+    """A note that came down from Figure Description starts a fresh run whose
+    first message ends with the note, labelled as supplied to that step."""
+    from types import SimpleNamespace
+
+    from lib.tasks import handlers
+    from lib.tasks.models import TaskDB, TaskStatus, TaskType
+
+    session = _ItemsSession([{'role': 'user', 'content': 'an old conversation'}])
+    seen: dict = {}
+
+    async def fake_run(agent, message, check, session):
+        seen['message'] = message
+        return SimpleNamespace(
+            final_output=_flag_output(['Patient 1'], []), raw_responses=[]
+        )
+
+    monkeypatch.setattr(handlers, 'run_with_checked_output', fake_run)
+    monkeypatch.setattr(handlers, 'agent_session', lambda task_id: session)
+    monkeypatch.setattr(handlers, 'citation_check', lambda paper_id: None)
+    monkeypatch.setattr(handlers, 'log_run_metrics', lambda *a, **k: None)
+    task = TaskDB(
+        paper_id=paper.id,
+        type=TaskType.PATIENT_EXTRACTION,
+        status=TaskStatus.RUNNING,
+        additional_context='Read every figure for family members.',
+        context_origin=TaskType.FIGURE_DESCRIPTION,
+    )
+    db_session.add(task)
+    db_session.commit()
+
+    await handlers.handle_patient_extraction(task.id)
+
+    assert session.cleared
+    message = seen['message']
+    assert isinstance(message, list)
+    assert message[0]['content'].startswith('PAPER AND GENE CONTEXT')
+    last = str(message[-1]['content'])
+    assert last.startswith(
+        'This user-provided context was supplied to Figure Description'
+    )
+    assert last.endswith('\nRead every figure for family members.')
+    assert 'review your previous analysis' not in last
+
+
+async def test_figure_description_labels_an_inherited_note(
+    monkeypatch, db_session, paper
+):
+    """The describer has no conversation, so an inherited note joins its
+    vision prompts with the same label the agents get."""
+    from lib.tasks import handlers
+    from lib.tasks.models import TaskDB, TaskStatus, TaskType
+
+    task = TaskDB(
+        paper_id=paper.id,
+        type=TaskType.FIGURE_DESCRIPTION,
+        status=TaskStatus.RUNNING,
+        additional_context='Six pedigrees over three figures.',
+        context_origin=TaskType.PDF_PARSING,
+    )
+    db_session.add(task)
+    db_session.commit()
+    seen: dict = {}
+
+    def fake_describe(paper_id, figs, notes):
+        seen['notes'] = notes
+        return []
+
+    monkeypatch.setattr(handlers, 'paper_figures', lambda paper_id: [])
+    monkeypatch.setattr(handlers, 'describe_figures', fake_describe)
+
+    await handlers.handle_figure_description(task.id)
+
+    # Its only ancestors are the two root tasks, so an inherited note is by
+    # construction one for the whole re-run.
+    assert seen['notes'].startswith(
+        'This user-provided context was given for this re-run of the whole paper'
+    )
+    assert seen['notes'].endswith('\nSix pedigrees over three figures.')
