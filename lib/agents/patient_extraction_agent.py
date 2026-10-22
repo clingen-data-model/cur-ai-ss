@@ -3,7 +3,10 @@ from agents import Agent
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
 from lib.agents.model_facing import model_facing_output
-from lib.agents.model_factory import extraction_model, extraction_model_settings
+from lib.agents.model_factory import (
+    patient_extraction_model,
+    patient_extraction_model_settings,
+)
 from lib.models.patient import PatientExtractionOutput
 
 PATIENT_EXTRACTION_INSTRUCTIONS = f"""
@@ -372,8 +375,9 @@ PATIENT_EXTRACTION_AGENT_INSTRUCTIONS = (
 agent = Agent(
     name='patient_info_extractor',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
-    model=extraction_model(),
-    model_settings=extraction_model_settings(),
+    # VLM_MODEL, not EXTRACTION_MODEL: see patient_extraction_model.
+    model=patient_extraction_model(),
+    model_settings=patient_extraction_model_settings(),
     # 0 union/nullable schema nodes since slice 4 of the evidence-anchors work,
     # under Anthropic's limit of 16; test_output_schema_census guards it.
     output_type=model_facing_output(PatientExtractionOutput),

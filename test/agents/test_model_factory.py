@@ -14,6 +14,8 @@ from lib.agents.model_factory import (
     extraction_model,
     extraction_model_settings,
     model_settings_for,
+    patient_extraction_model,
+    patient_extraction_model_settings,
     provider_api_key,
     resolve_model,
     vlm_model,
@@ -122,6 +124,21 @@ def test_configured_models_resolve_from_env(monkeypatch):
     monkeypatch.setattr(env, 'VLM_MODEL', 'openai/gpt-5.6-sol')
 
     assert extraction_model() == 'gpt-5.6-luna'
+
+
+def test_patient_extraction_runs_on_the_vlm_model(monkeypatch):
+    """The one text agent on VLM_MODEL (see patient_extraction_model)."""
+    monkeypatch.setattr(env, 'EXTRACTION_MODEL', 'anthropic/claude-haiku-5-5')
+    monkeypatch.setattr(env, 'VLM_MODEL', 'anthropic/claude-opus-5-5')
+
+    model = patient_extraction_model()
+    assert isinstance(model, LitellmModel)
+    assert model.model == 'anthropic/claude-opus-5-5'
+    assert patient_extraction_model_settings().extra_args is not None
+
+    monkeypatch.setattr(env, 'VLM_MODEL', 'openai/gpt-5.6-sol')
+    assert patient_extraction_model() == 'gpt-5.6-sol'
+    assert patient_extraction_model_settings() == ModelSettings()
 
 
 def test_vlm_model_keeps_its_prefix(monkeypatch):
