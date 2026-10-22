@@ -21,7 +21,7 @@ export function useTaskTypes(enabled = true) {
 
 /** Under the Additional context box of both dialogs. */
 export const CONTEXT_NOTE =
-  'A follow-up to this task\u2019s previous run. The tasks it triggers run fresh and are shown the note too, as context given to this step. On PDF Parsing or Paper Classifier it reaches every agent: that is the run-all.'
+  'A follow-up to this task\u2019s previous run. The tasks it triggers run fresh and are shown the note too, as context given to this step.'
 
 /** The steps a re-run of `root` sets in motion, one row per depth. A step
  * sits at the longest path from the root, so it is listed after everything it
