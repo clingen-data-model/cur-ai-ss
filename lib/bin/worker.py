@@ -32,7 +32,15 @@ from lib.tasks.models import (
     TaskType,
 )
 
-LEASE_TIMEOUT_S = 1800
+# A claimed task's lease is never refreshed during its run, so the timeout
+# must exceed the longest legitimate run of its type or a healthy task gets
+# reset mid-run and runs twice. Over 9,500 completed runs on dev-caa through
+# 2026-10-22, no agent task passed 13 min; PDF Parsing, whose Docling pass
+# scales with page count on a CPU VM, reached 15 min on a 44-page supplement.
+DEFAULT_LEASE_TIMEOUT_S = 1200
+LEASE_TIMEOUT_S: dict[TaskType, int] = {
+    TaskType.PDF_PARSING: 1800,
+}
 POLL_INTERVAL_S = 10
 MAX_RETRIES = 2
 RETRY_DELAY_S = 30
@@ -66,55 +74,83 @@ except Exception:
     logger.warning('Failed to load the HPO link cache at startup', exc_info=True)
 
 
-# Task ids this process currently holds RUNNING -- populated/cleared by
-# execute_task, read by _release_in_flight_tasks on a graceful shutdown so a
-# deploy's service restart doesn't leave them orphaned until LEASE_TIMEOUT_S.
-_in_flight_tasks: set[int] = set()
+# Set by the shutdown signal. The poller stops claiming on it, execute_task
+# declines to start on it, and the final sweep can then reset every claimed
+# row knowing nothing will claim another behind its back.
+_shutting_down = False
+# Held for the length of a poll, so the shutdown sweep waits for a poll that
+# was mid-claim when the signal arrived rather than racing its commit.
+_poll_lock = asyncio.Lock()
 
 
-async def _release_in_flight_tasks() -> None:
-    """Release this process's leases immediately on shutdown, same reset (and
-    same PENDING-vs-abandon retry-limit check) poll_and_schedule_tasks already
-    applies to a task that timed out -- PENDING plus a cleared session, so the
-    retry starts from a clean slate rather than piling a fresh prompt onto an
-    interrupted one. Without this, these tasks just sit RUNNING, invisible to
-    the poller, until the lease timeout notices them on its own."""
-    if not _in_flight_tasks:
-        return
-    task_ids = list(_in_flight_tasks)
-    logger.info(f'Releasing {len(task_ids)} in-flight task(s) before shutdown')
+async def _sweep_claimed_tasks(event: str) -> int:
+    """Release every QUEUED or RUNNING task, on shutdown and again on startup.
+
+    This is the only worker process, so at either moment a claimed row can
+    belong to no live run: on shutdown they are all this process's, and it is
+    about to exit; on startup they are whatever the last process left, which
+    is nothing when it shut down in order and everything it held when it was
+    killed outright. Resetting them all is therefore exact, and it needs no
+    bookkeeping of which rows this process holds -- the in-memory set it
+    replaced missed tasks still waiting on a semaphore and tasks claimed by a
+    poll that ran during the shutdown itself, which then sat RUNNING until the
+    lease timeout.
+
+    Same reset, and same PENDING-vs-abandon retry check, that the lease
+    timeout applies: PENDING with a cleared session, so the retry starts from
+    a clean slate rather than piling a fresh prompt onto an interrupted one.
+    The status write is one transaction with no await inside, so a handler
+    completing at the same instant lands wholly before or wholly after it.
+    Returns the number of rows touched."""
     now = datetime.datetime.now(datetime.timezone.utc)
     to_clear: list[int] = []
+    swept = 0
     with session_scope() as session:
-        for task_id in task_ids:
-            task = session.get(TaskDB, task_id)
-            if task is None:
-                continue
-            if task.tries < MAX_RETRIES:
+        claimed = (
+            session.query(TaskDB).filter(TaskDB.status.in_(CLAIMED_STATUSES)).all()
+        )
+        for task in claimed:
+            swept += 1
+            # A QUEUED task never started its attempt (tries counts starts),
+            # so it has nothing to clear and no attempt to count against it.
+            if task.status == TaskStatus.QUEUED or task.tries < MAX_RETRIES:
+                if task.status == TaskStatus.RUNNING:
+                    to_clear.append(task.id)
                 task.status = TaskStatus.PENDING
-                to_clear.append(task_id)
             else:
                 task.status = TaskStatus.FAILED
-                task.error_message = 'Worker shut down mid-task and exhausted retries'
+                task.error_message = f'Worker {event} mid-task and exhausted retries'
             task.updated_at = now
+    if swept:
+        logger.info(f'Worker {event}: released {swept} claimed task(s)')
     for task_id in to_clear:
         await clear_task_session(task_id)
+    return swept
 
 
 async def _shutdown() -> None:
     try:
-        await _release_in_flight_tasks()
+        async with _poll_lock:
+            await _sweep_claimed_tasks('shut down')
     finally:
         os._exit(0)
 
 
 def _handle_shutdown_signal(sig: int) -> None:
-    logger.info(f'Received signal {sig}, releasing in-flight tasks before shutdown')
+    global _shutting_down
+    if _shutting_down:
+        return  # systemd delivers the signal to the whole group; one sweep is enough
+    _shutting_down = True
+    logger.info(f'Received signal {sig}, releasing claimed tasks before shutdown')
     asyncio.create_task(_shutdown())
 
 
 async def execute_task(task_id: int) -> None:
     """Execute a single task handler."""
+    if _shutting_down:
+        # Leave the row QUEUED for the sweep rather than start an attempt the
+        # exit is about to kill, which would cost it a try.
+        return
     # Mark task as RUNNING, then close session before async work
     task_type = None
     with session_scope() as session:
@@ -135,7 +171,6 @@ async def execute_task(task_id: int) -> None:
         task_type = task.type
 
     # Handler manages its own session - no session held across async boundaries
-    _in_flight_tasks.add(task_id)
     handler = TASK_HANDLERS[task_type]
     error_msg = None
     try:
@@ -146,8 +181,6 @@ async def execute_task(task_id: int) -> None:
     except Exception as e:
         logger.exception(f'Task {task_id} ({task_type}) failed')
         error_msg = str(e)
-    finally:
-        _in_flight_tasks.discard(task_id)
 
     # Update final status in a new session
     with session_scope() as session:
@@ -359,14 +392,31 @@ async def execute_task_with_semaphore(
         await execute_task(task_id)
 
 
+def lease_timeout_s(task_type: TaskType) -> int:
+    return LEASE_TIMEOUT_S.get(task_type, DEFAULT_LEASE_TIMEOUT_S)
+
+
 async def poll_and_schedule_tasks(
     global_semaphore: asyncio.Semaphore,
     semaphores: dict[TaskType, asyncio.Semaphore],
 ) -> None:
     """Poll for pending tasks and schedule them (non-blocking)."""
+    async with _poll_lock:
+        if _shutting_down:
+            return
+        await _poll_and_schedule_tasks(global_semaphore, semaphores)
+
+
+async def _poll_and_schedule_tasks(
+    global_semaphore: asyncio.Semaphore,
+    semaphores: dict[TaskType, asyncio.Semaphore],
+) -> None:
     with session_scope() as session:
         now = datetime.datetime.now(datetime.timezone.utc)
-        expired_cutoff = now - datetime.timedelta(seconds=LEASE_TIMEOUT_S)
+        # Rows older than the shortest timeout are candidates; each is then
+        # held to its own type's timeout.
+        shortest = min(DEFAULT_LEASE_TIMEOUT_S, *LEASE_TIMEOUT_S.values())
+        expired_cutoff = now - datetime.timedelta(seconds=shortest)
 
         # Reset timed-out claimed tasks back to PENDING (only if retries remain)
         timed_out_tasks = (
@@ -378,6 +428,13 @@ async def poll_and_schedule_tasks(
             .all()
         )
         for task in timed_out_tasks:
+            timeout_s = lease_timeout_s(task.type)
+            # SQLite hands the column back naive; it was written in UTC.
+            claimed_at = task.updated_at.replace(
+                tzinfo=task.updated_at.tzinfo or datetime.timezone.utc
+            )
+            if claimed_at >= now - datetime.timedelta(seconds=timeout_s):
+                continue
             if task.tries < MAX_RETRIES:
                 logger.info(
                     f'Resetting timed-out task {task.id} ({task.type}) (attempt {task.tries + 1}/{MAX_RETRIES + 1})'
@@ -390,7 +447,7 @@ async def poll_and_schedule_tasks(
                 )
                 task.status = TaskStatus.FAILED
                 task.error_message = (
-                    f'Task exceeded lease timeout ({LEASE_TIMEOUT_S}s) and max retries'
+                    f'Task exceeded lease timeout ({timeout_s}s) and max retries'
                 )
             task.updated_at = now
 
@@ -476,6 +533,8 @@ async def main_async() -> None:
         semaphores[task_type] = asyncio.Semaphore(limit)
 
     logger.info('Starting task worker')
+    # Whatever the last process left claimed is nobody's now (see the sweep).
+    await _sweep_claimed_tasks('restarted')
     while True:
         logger.info('Looking for work')
         try:

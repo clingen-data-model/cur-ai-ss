@@ -1,5 +1,8 @@
-"""Graceful SIGTERM/SIGINT handling: in-flight leases get released instead of
-sitting RUNNING until the lease timeout notices them."""
+"""Claimed tasks are swept back to PENDING on shutdown and on startup, instead
+of sitting QUEUED or RUNNING until the lease timeout notices them."""
+
+import asyncio
+import datetime
 
 import pytest
 
@@ -11,19 +14,18 @@ TYPE = TaskType.PDF_PARSING
 
 
 @pytest.fixture
-def running_task(db_session):
-    def _make(tries: int) -> TaskDB:
-        gene = GeneDB(symbol='BRCA1')
-        db_session.add(gene)
-        db_session.flush()
-        paper = PaperDB(
-            gene_id=gene.id, filename='p.pdf', content_hash='h', title='A paper'
-        )
-        db_session.add(paper)
-        db_session.flush()
-        task = TaskDB(
-            paper_id=paper.id, type=TYPE, status=TaskStatus.RUNNING, tries=tries
-        )
+def make_task(db_session):
+    gene = GeneDB(symbol='BRCA1')
+    db_session.add(gene)
+    db_session.flush()
+    paper = PaperDB(
+        gene_id=gene.id, filename='p.pdf', content_hash='h', title='A paper'
+    )
+    db_session.add(paper)
+    db_session.flush()
+
+    def _make(status: TaskStatus, tries: int = 0) -> TaskDB:
+        task = TaskDB(paper_id=paper.id, type=TYPE, status=status, tries=tries)
         db_session.add(task)
         db_session.commit()
         return task
@@ -31,55 +33,174 @@ def running_task(db_session):
     return _make
 
 
-async def test_release_resets_a_retriable_task_to_pending(
-    db_session, running_task, monkeypatch
-):
-    task = running_task(tries=1)
-    monkeypatch.setattr(worker, '_in_flight_tasks', {task.id})
+@pytest.fixture
+def cleared(monkeypatch) -> list[int]:
+    ids: list[int] = []
 
-    await worker._release_in_flight_tasks()
+    async def record(task_id: int) -> None:
+        ids.append(task_id)
 
+    monkeypatch.setattr(worker, 'clear_task_session', record)
+    return ids
+
+
+@pytest.fixture
+def not_shutting_down(monkeypatch):
+    monkeypatch.setattr(worker, '_shutting_down', False)
+
+
+def _status(db_session, task_id: int) -> TaskDB:
     db_session.expire_all()
-    refreshed = db_session.get(TaskDB, task.id)
-    assert refreshed.status == TaskStatus.PENDING
+    return db_session.get(TaskDB, task_id)
 
 
-async def test_release_abandons_a_task_that_exhausted_retries(
-    db_session, running_task, monkeypatch
+async def test_sweep_resets_a_running_task_with_a_retry_left_and_clears_its_session(
+    db_session, make_task, cleared
 ):
-    task = running_task(tries=worker.MAX_RETRIES)
-    monkeypatch.setattr(worker, '_in_flight_tasks', {task.id})
+    task = make_task(TaskStatus.RUNNING, tries=1)
 
-    await worker._release_in_flight_tasks()
+    assert await worker._sweep_claimed_tasks('shut down') == 1
 
-    db_session.expire_all()
-    refreshed = db_session.get(TaskDB, task.id)
+    assert _status(db_session, task.id).status == TaskStatus.PENDING
+    assert cleared == [task.id]
+
+
+async def test_sweep_abandons_a_running_task_on_its_last_try_naming_the_event(
+    db_session, make_task, cleared
+):
+    task = make_task(TaskStatus.RUNNING, tries=worker.MAX_RETRIES)
+
+    await worker._sweep_claimed_tasks('restarted')
+
+    refreshed = _status(db_session, task.id)
     assert refreshed.status == TaskStatus.FAILED
-    assert refreshed.error_message == 'Worker shut down mid-task and exhausted retries'
+    assert refreshed.error_message == 'Worker restarted mid-task and exhausted retries'
+    assert cleared == []
 
 
-async def test_release_is_a_noop_with_nothing_in_flight(monkeypatch):
-    monkeypatch.setattr(worker, '_in_flight_tasks', set())
-    await worker._release_in_flight_tasks()  # must not raise
-
-
-async def test_execute_task_tracks_the_task_as_in_flight_only_while_running(
-    db_session, running_task, monkeypatch
+async def test_sweep_resets_a_queued_task_whatever_its_tries_without_clearing(
+    db_session, make_task, cleared
 ):
-    task = running_task(tries=0)
-    db_session.get(TaskDB, task.id).status = TaskStatus.PENDING
-    db_session.commit()
-    monkeypatch.setattr(worker, '_in_flight_tasks', set())
+    # QUEUED never started an attempt, so it has no session and nothing to count.
+    task = make_task(TaskStatus.QUEUED, tries=worker.MAX_RETRIES)
 
-    seen_in_flight = False
+    await worker._sweep_claimed_tasks('shut down')
+
+    assert _status(db_session, task.id).status == TaskStatus.PENDING
+    assert cleared == []
+
+
+async def test_sweep_leaves_settled_and_pending_rows_alone(
+    db_session, make_task, cleared
+):
+    rows = [
+        make_task(TaskStatus.PENDING),
+        make_task(TaskStatus.COMPLETED, tries=1),
+        make_task(TaskStatus.FAILED, tries=3),
+    ]
+
+    assert await worker._sweep_claimed_tasks('shut down') == 0
+
+    for row, expected in zip(
+        rows, (TaskStatus.PENDING, TaskStatus.COMPLETED, TaskStatus.FAILED)
+    ):
+        assert _status(db_session, row.id).status == expected
+    assert cleared == []
+
+
+async def test_execute_task_declines_to_claim_while_shutting_down(
+    db_session, make_task, monkeypatch
+):
+    task = make_task(TaskStatus.QUEUED, tries=1)
+    monkeypatch.setattr(worker, '_shutting_down', True)
+    ran = False
 
     async def run(task_id: int) -> None:
-        nonlocal seen_in_flight
-        seen_in_flight = task_id in worker._in_flight_tasks
+        nonlocal ran
+        ran = True
 
     monkeypatch.setitem(worker.TASK_HANDLERS, TYPE, run)
 
     await worker.execute_task(task.id)
 
-    assert seen_in_flight
-    assert task.id not in worker._in_flight_tasks
+    assert not ran
+    refreshed = _status(db_session, task.id)
+    assert refreshed.status == TaskStatus.QUEUED  # left for the sweep
+    assert refreshed.tries == 1  # the attempt that never started costs nothing
+
+
+async def test_execute_task_runs_a_claimed_task_when_not_shutting_down(
+    db_session, make_task, not_shutting_down, monkeypatch
+):
+    task = make_task(TaskStatus.QUEUED)
+    ran = False
+
+    async def run(task_id: int) -> None:
+        nonlocal ran
+        ran = True
+
+    monkeypatch.setitem(worker.TASK_HANDLERS, TYPE, run)
+
+    await worker.execute_task(task.id)
+
+    assert ran
+    assert _status(db_session, task.id).status == TaskStatus.COMPLETED
+
+
+async def test_the_poller_claims_nothing_once_shutting_down(
+    db_session, make_task, monkeypatch
+):
+    task = make_task(TaskStatus.PENDING)
+    monkeypatch.setattr(worker, '_shutting_down', True)
+    semaphores = {t: asyncio.Semaphore(1) for t in TaskType}
+
+    await worker.poll_and_schedule_tasks(asyncio.Semaphore(1), semaphores)
+
+    assert _status(db_session, task.id).status == TaskStatus.PENDING
+
+
+async def test_the_lease_timeout_holds_each_task_to_its_own_types_limit(
+    db_session, make_task, cleared, not_shutting_down, monkeypatch
+):
+    # Both claimed 25 min ago: past the default 20 min, within PDF Parsing's 30.
+    parse = make_task(TaskStatus.RUNNING, tries=1)
+    agent = make_task(TaskStatus.RUNNING, tries=1)
+    agent.type = TaskType.PATIENT_DEMOGRAPHICS
+    claimed = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+        minutes=25
+    )
+    for task in (parse, agent):
+        task.updated_at = claimed
+    db_session.commit()
+
+    async def no_run(*args: object, **kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr(worker, 'execute_task_with_semaphore', no_run)
+    semaphores = {t: asyncio.Semaphore(1) for t in TaskType}
+
+    await worker.poll_and_schedule_tasks(asyncio.Semaphore(1), semaphores)
+
+    assert cleared == [agent.id]  # reset, session cleared, then claimed again
+    refreshed = _status(db_session, parse.id)
+    assert refreshed.status == TaskStatus.RUNNING
+    assert refreshed.updated_at.replace(tzinfo=None) == claimed.replace(tzinfo=None)
+
+
+async def test_the_signal_handler_sets_the_flag_and_schedules_one_shutdown(
+    monkeypatch, not_shutting_down
+):
+    scheduled: list[object] = []
+
+    def fake_create_task(coro: object) -> None:
+        scheduled.append(coro)
+        coro.close()  # type: ignore[attr-defined]
+
+    monkeypatch.setattr(worker.asyncio, 'create_task', fake_create_task)
+
+    # systemd signals the whole control group, so the handler fires more than once
+    worker._handle_shutdown_signal(15)
+    worker._handle_shutdown_signal(15)
+
+    assert worker._shutting_down is True
+    assert len(scheduled) == 1
