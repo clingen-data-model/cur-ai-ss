@@ -35,6 +35,7 @@ def enqueue_task(
     skip_successors: bool = False,
     additional_context: str | None = None,
     updated_by_user_id: int | None = None,
+    context_origin: TaskType | None = None,
 ) -> TaskDB:
     """Create or reset a task to PENDING status.
 
@@ -44,6 +45,8 @@ def enqueue_task(
 
     ``updated_by_user_id`` records who triggered the task; leave ``None`` for
     machine enqueues (worker successors) so they stay unattributed.
+    ``context_origin`` is set only by enqueue_successors, naming the task the
+    note was given to; a curator's own enqueue leaves it None.
     """
     # Check if task exists (SQLAlchemy converts == None to IS NULL)
     existing_task = (
@@ -77,6 +80,7 @@ def enqueue_task(
         existing_task.started_at = None
         existing_task.skip_successors = skip_successors
         existing_task.additional_context = additional_context
+        existing_task.context_origin = context_origin
         existing_task.updated_by_user_id = updated_by_user_id
         session.flush()
         return existing_task
@@ -93,6 +97,7 @@ def enqueue_task(
             status=TaskStatus.PENDING,
             skip_successors=skip_successors,
             additional_context=additional_context,
+            context_origin=context_origin,
             updated_by_user_id=updated_by_user_id,
         )
         session.add(new_task)
@@ -133,6 +138,7 @@ def enqueue_all_instances(
                 task.error_message = None
                 task.skip_successors = skip_successors
                 task.additional_context = additional_context
+                task.context_origin = None
                 task.updated_by_user_id = updated_by_user_id
                 # See enqueue_task: the previous attempt's start time is not
                 # this one's.
@@ -267,7 +273,11 @@ def invalidate_descendants(session: Session, paper_id: int, task_type: TaskType)
 
 
 def _enqueue_segregation_for_all_families(
-    session: Session, paper_id: int, user_id: int | None
+    session: Session,
+    paper_id: int,
+    user_id: int | None,
+    note: str | None = None,
+    origin: TaskType | None = None,
 ) -> None:
     """Queue SEGREGATION_EVIDENCE_EXTRACTION for each family of the paper: the
     fan-in of PATIENT_VARIANT_OCCURRENCES and the last PATIENT_DEMOGRAPHICS,
@@ -282,6 +292,8 @@ def _enqueue_segregation_for_all_families(
             task_type=TaskType.SEGREGATION_EVIDENCE_EXTRACTION,
             family_id=family.id,
             updated_by_user_id=user_id,
+            additional_context=note,
+            context_origin=origin,
         )
 
 
@@ -297,11 +309,20 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
     The triggering user (``task.updated_by_user_id``) is propagated to successor
     tasks so the attribution chain is preserved end-to-end. Tasks triggered by the
     worker itself (initial pipeline runs) have no user and stay unattributed.
+
+    A curator's note on the task (``additional_context``) is propagated too,
+    with ``context_origin`` naming the task it was given to -- this one, or the
+    ancestor it came down from -- so every descendant's fresh run sees it as
+    "supplied to <that step>, and might be relevant here". The note lives on
+    this one chain of runs: the next enqueue of a descendant without a note
+    clears it.
     """
     from lib.models import PatientDB, VariantDB
     from lib.models.patient import AffectedStatus
 
     user_id = task.updated_by_user_id
+    note = task.additional_context
+    origin = (task.context_origin or task.type) if note is not None else None
 
     match task.type:
         case TaskType.PDF_PARSING:
@@ -310,6 +331,8 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 paper_id=task.paper_id,
                 task_type=TaskType.PAPER_CLASSIFIER,
                 updated_by_user_id=user_id,
+                additional_context=note,
+                context_origin=origin,
             )
 
         case TaskType.PAPER_CLASSIFIER:
@@ -318,18 +341,24 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 paper_id=task.paper_id,
                 task_type=TaskType.PAPER_METADATA,
                 updated_by_user_id=user_id,
+                additional_context=note,
+                context_origin=origin,
             )
             enqueue_task(
                 session,
                 paper_id=task.paper_id,
                 task_type=TaskType.VARIANT_EXTRACTION,
                 updated_by_user_id=user_id,
+                additional_context=note,
+                context_origin=origin,
             )
             enqueue_task(
                 session,
                 paper_id=task.paper_id,
                 task_type=TaskType.FIGURE_DESCRIPTION,
                 updated_by_user_id=user_id,
+                additional_context=note,
+                context_origin=origin,
             )
 
         case TaskType.FIGURE_DESCRIPTION:
@@ -338,6 +367,8 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 paper_id=task.paper_id,
                 task_type=TaskType.PATIENT_EXTRACTION,
                 updated_by_user_id=user_id,
+                additional_context=note,
+                context_origin=origin,
             )
 
         case TaskType.PATIENT_EXTRACTION:
@@ -354,6 +385,8 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     task_type=TaskType.PATIENT_DEMOGRAPHICS,
                     patient_id=patient.id,
                     updated_by_user_id=user_id,
+                    additional_context=note,
+                    context_origin=origin,
                 )
 
             # Fan-in with VARIANT_EXTRACTION: occurrences needs the patients
@@ -365,6 +398,8 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     paper_id=task.paper_id,
                     task_type=TaskType.PATIENT_VARIANT_OCCURRENCES,
                     updated_by_user_id=user_id,
+                    additional_context=note,
+                    context_origin=origin,
                 )
 
         case TaskType.PATIENT_DEMOGRAPHICS:
@@ -386,6 +421,8 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     task_type=TaskType.PHENOTYPE_EXTRACTION,
                     patient_id=task.patient_id,
                     updated_by_user_id=user_id,
+                    additional_context=note,
+                    context_origin=origin,
                 )
 
             # Fan-in with PATIENT_VARIANT_OCCURRENCES: segregation reads every
@@ -397,7 +434,9 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
             if _patient_demographics_ready(session, task.paper_id) and _task_completed(
                 session, task.paper_id, TaskType.PATIENT_VARIANT_OCCURRENCES
             ):
-                _enqueue_segregation_for_all_families(session, task.paper_id, user_id)
+                _enqueue_segregation_for_all_families(
+                    session, task.paper_id, user_id, note, origin
+                )
 
         case TaskType.VARIANT_EXTRACTION:
             # Expand to per-variant VARIANT_HARMONIZATION tasks
@@ -413,6 +452,8 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     task_type=TaskType.VARIANT_HARMONIZATION,
                     variant_id=variant.id,
                     updated_by_user_id=user_id,
+                    additional_context=note,
+                    context_origin=origin,
                 )
 
             # Fan-in with PATIENT_EXTRACTION (see that case).
@@ -422,6 +463,8 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     paper_id=task.paper_id,
                     task_type=TaskType.PATIENT_VARIANT_OCCURRENCES,
                     updated_by_user_id=user_id,
+                    additional_context=note,
+                    context_origin=origin,
                 )
 
         case TaskType.VARIANT_HARMONIZATION:
@@ -431,6 +474,8 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 task_type=TaskType.VARIANT_ANNOTATION,
                 variant_id=task.variant_id,
                 updated_by_user_id=user_id,
+                additional_context=note,
+                context_origin=origin,
             )
 
         case TaskType.PATIENT_VARIANT_OCCURRENCES:
@@ -438,7 +483,9 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
             # demographics is in (the PATIENT_DEMOGRAPHICS case covers the
             # other order).
             if _patient_demographics_ready(session, task.paper_id):
-                _enqueue_segregation_for_all_families(session, task.paper_id, user_id)
+                _enqueue_segregation_for_all_families(
+                    session, task.paper_id, user_id, note, origin
+                )
 
             # Expand to per-patient COMPOUND_HET_EVALUATION for patients with ≥2 heterozygous variants
             from sqlalchemy import distinct
@@ -461,6 +508,8 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     task_type=TaskType.COMPOUND_HET_EVALUATION,
                     patient_id=patient_id,
                     updated_by_user_id=user_id,
+                    additional_context=note,
+                    context_origin=origin,
                 )
 
             # Re-link paper disease context after case-level occurrence extraction,
@@ -469,6 +518,8 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 session,
                 paper_id=task.paper_id,
                 task_type=TaskType.PAPER_MONDO_LINKING,
+                additional_context=note,
+                context_origin=origin,
             )
 
             # Expand to per-occurrence OCCURRENCE_MONDO_LINKING tasks for
@@ -485,6 +536,8 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     session,
                     paper_id=task.paper_id,
                     task_type=TaskType.OCCURRENCE_MONDO_LINKING,
+                    additional_context=note,
+                    context_origin=origin,
                     patient_variant_occurrence_id=occurrence.id,
                 )
 
@@ -495,6 +548,8 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 task_type=TaskType.SEGREGATION_ANALYSIS_COMPUTED,
                 family_id=task.family_id,
                 updated_by_user_id=user_id,
+                additional_context=note,
+                context_origin=origin,
             )
 
         case TaskType.PHENOTYPE_EXTRACTION:
@@ -525,6 +580,8 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     task_type=TaskType.HPO_LINKING,
                     phenotype_id=phenotype.id,
                     updated_by_user_id=user_id,
+                    additional_context=note,
+                    context_origin=origin,
                 )
 
         case TaskType.PAPER_METADATA:
@@ -532,6 +589,8 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 session,
                 paper_id=task.paper_id,
                 task_type=TaskType.PAPER_MONDO_LINKING,
+                additional_context=note,
+                context_origin=origin,
             )
 
         case (

@@ -1578,6 +1578,7 @@ def test_enqueue_clears_additional_context_without_context(
         type=TaskType.HPO_LINKING,
         status=TaskStatus.COMPLETED,
         additional_context='old context',
+        context_origin=TaskType.PHENOTYPE_EXTRACTION,
     )
     db_session.add(task)
     db_session.commit()
@@ -1592,6 +1593,7 @@ def test_enqueue_clears_additional_context_without_context(
     tasks = response.json()
     assert len(tasks) == 1
     assert tasks[0]['additional_context'] is None
+    assert tasks[0]['context_origin'] is None
     assert tasks[0]['status'] == 'Pending'
 
 
@@ -3477,10 +3479,8 @@ def test_phenotype_extraction_takes_cached_hpo_links(
         type=TaskType.PHENOTYPE_EXTRACTION,
         patient_id=patient.id,
         status=TaskStatus.RUNNING,
-        # Takes the follow-up branch, which never reads the paper text itself;
-        # the citation check still does, so the anchored document must hold the
-        # block the concepts cite.
-        additional_context='again',
+        # No curator note: a note on the run, like paper-wide notes, skips the
+        # cache so the HPO agent sees it (test_a_note_on_the_run_skips_the_cache).
     )
     anchored = document_anchored_md_path(seeded_paper.id)
     anchored.parent.mkdir(parents=True, exist_ok=True)
@@ -3553,23 +3553,28 @@ def test_phenotype_extraction_takes_cached_hpo_links(
     assert rows[('Ataxia', False)].hpo is None
 
 
-def test_phenotype_extraction_skips_cached_hpo_links_given_global_context(
-    db_session, seeded_paper, monkeypatch
+@pytest.mark.parametrize('given_to', ['the paper', 'the run'])
+def test_phenotype_extraction_skips_cached_hpo_links_given_curator_notes(
+    db_session, seeded_paper, monkeypatch, given_to
 ):
-    """A link made without the paper's global context must not stand in for
-    the HPO agent, which would never see the context."""
+    """A link made without the curator's notes -- the paper's global context,
+    or a note on this run, which comes down to HPO linking -- must not stand
+    in for the HPO agent, which would never see them."""
     from lib.models import ExtractedPhenotype, PhenotypeExtractionOutput
     from lib.tasks import hpo_link_cache
     from lib.tasks.handlers import handle_phenotype_extraction
 
     patient = _seed_patient(db_session, seeded_paper, 'Context Patient')
-    seeded_paper.paper_global_additional_context = 'Treat all seizures as febrile.'
+    if given_to == 'the paper':
+        seeded_paper.paper_global_additional_context = 'Treat all seizures as febrile.'
     task = TaskDB(
         paper_id=seeded_paper.id,
         type=TaskType.PHENOTYPE_EXTRACTION,
         patient_id=patient.id,
         status=TaskStatus.RUNNING,
-        additional_context='again',
+        additional_context='Treat all seizures as febrile.'
+        if given_to == 'the run'
+        else None,
     )
     anchored = document_anchored_md_path(seeded_paper.id)
     anchored.parent.mkdir(parents=True, exist_ok=True)

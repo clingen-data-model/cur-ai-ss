@@ -5,6 +5,7 @@ from typing import Any, Awaitable, Callable, cast
 
 from agents import Agent, Runner, ToolCallItem, TResponseInputItem
 from agents.exceptions import MaxTurnsExceeded
+from agents.memory import SQLiteSession
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
@@ -268,6 +269,52 @@ def build_followup_prompt(additional_context: str) -> str:
     return f'Please review your previous analysis in light of the following additional context:\n\n{additional_context}'
 
 
+async def continues_conversation(
+    agent_sess: SQLiteSession, note: str, origin: TaskType | None
+) -> bool:
+    """Whether this run is a follow-up turn in the task's own conversation.
+
+    It is when a curator gave the note to this task itself (``origin`` is
+    None, see TaskDB.context_origin) and there is a conversation to follow up
+    on. Otherwise the run starts fresh and the note, if any, goes into the
+    first message (``with_curator_note``): a note inherited from a predecessor
+    must not be a follow-up, since the task's inputs changed with that
+    predecessor's re-run; and a note to a task whose session a retry cleared
+    (lib/bin/worker.py) used to be sent as a bare "review your previous
+    analysis" with nothing to review.
+    """
+    return origin is None and bool(await agent_sess.get_items(limit=1))
+
+
+def curator_note_section(note: str, origin: TaskType | None) -> str:
+    """The curator's note as a prompt section for a fresh run: the task's own
+    note, or one supplied to the step it came down from."""
+    if origin is None:
+        lead = 'A human curator re-ran this step with the following note.'
+    else:
+        lead = (
+            f'This user-provided context was supplied to {origin.value}, an '
+            'earlier step this run follows from, and might also be relevant here.'
+        )
+    return f'{lead} Follow it where it bears on your task:\n{note}'
+
+
+def with_curator_note(
+    message: AgentInput, note: str | None, origin: TaskType | None
+) -> AgentInput:
+    """``message`` with the curator's note after it, as a last input item (or
+    a last section of a plain-text message), or unchanged when there is none.
+    Last so the paper block, instructions and data keep their prompt-cache
+    breakpoints (``paper_input``)."""
+    if note is None:
+        return message
+    section = curator_note_section(note, origin)
+    if isinstance(message, str):
+        return f'{message}\n\n{section}'
+    items: list[TResponseInputItem] = [*message, {'role': 'user', 'content': section}]
+    return items
+
+
 # Tasks with no agent conversation to consult: PDF_PARSING and VARIANT_ANNOTATION
 # are mechanical (no LLM call at all), COMPOUND_HET_EVALUATION runs without a
 # session (see handle_compound_het_evaluation) so it has no persisted history,
@@ -472,11 +519,14 @@ async def handle_paper_classifier(task_id: int) -> None:
         paper_id = task.paper_id
         gene_symbol = paper.gene.symbol
         additional_context = task.additional_context
+        context_origin = task.context_origin
         supplement_format = paper.supplement_format
 
     agent_sess = agent_session(task_id)
 
-    if additional_context is not None:
+    if additional_context is not None and await continues_conversation(
+        agent_sess, additional_context, context_origin
+    ):
         # Follow-up: agent has context from conversation
         message: AgentInput = build_followup_prompt(additional_context)
         agent = paper_classifier_agent
@@ -491,6 +541,7 @@ async def handle_paper_classifier(task_id: int) -> None:
             PAPER_CLASSIFIER_AGENT_INSTRUCTIONS,
         )
         agent = paper_classifier_agent
+        message = with_curator_note(message, additional_context, context_origin)
 
     result = await Runner.run(agent, message, session=agent_sess)
     log_run_metrics('PAPER_CLASSIFIER', result)
@@ -534,11 +585,14 @@ async def handle_paper_metadata(task_id: int) -> None:
         paper_id = task.paper_id
         gene_symbol = paper.gene.symbol
         additional_context = task.additional_context
+        context_origin = task.context_origin
         supplement_format = paper.supplement_format
 
     agent_sess = agent_session(task_id)
 
-    if additional_context is not None:
+    if additional_context is not None and await continues_conversation(
+        agent_sess, additional_context, context_origin
+    ):
         # Follow-up: agent has context from conversation
         message: AgentInput = build_followup_prompt(additional_context)
         agent = paper_extraction_agent
@@ -553,6 +607,7 @@ async def handle_paper_metadata(task_id: int) -> None:
             PAPER_EXTRACTION_AGENT_INSTRUCTIONS,
         )
         agent = paper_extraction_agent
+        message = with_curator_note(message, additional_context, context_origin)
 
     result = await run_with_checked_output(
         agent,
@@ -586,11 +641,14 @@ async def handle_variant_extraction(task_id: int) -> None:
         paper_id = task.paper_id
         gene_symbol = paper.gene.symbol
         additional_context = task.additional_context
+        context_origin = task.context_origin
         supplement_format = paper.supplement_format
 
     agent_sess = agent_session(task_id)
 
-    if additional_context is not None:
+    if additional_context is not None and await continues_conversation(
+        agent_sess, additional_context, context_origin
+    ):
         # Follow-up: agent has context from conversation
         message: AgentInput = build_followup_prompt(additional_context)
         agent = variant_extraction_agent
@@ -605,6 +663,7 @@ async def handle_variant_extraction(task_id: int) -> None:
             VARIANT_EXTRACTION_AGENT_INSTRUCTIONS,
         )
         agent = variant_extraction_agent
+        message = with_curator_note(message, additional_context, context_origin)
 
     result, parsed = await run_with_manual_output(
         agent,
@@ -697,9 +756,15 @@ async def handle_figure_description(task_id: int) -> None:
             return
         paper_id = task.paper_id
         additional_context = task.additional_context
+        context_origin = task.context_origin
 
     figures = paper_figures(paper_id)
-    notes = figure_description_notes(paper_id, additional_context)
+    notes = figure_description_notes(
+        paper_id,
+        curator_note_section(additional_context, context_origin)
+        if additional_context is not None and context_origin is not None
+        else additional_context,
+    )
     # Synchronous vision calls, one or more per figure; off the event loop so
     # the worker's other tasks keep going.
     described = await asyncio.to_thread(describe_figures, paper_id, figures, notes)
@@ -796,12 +861,14 @@ async def handle_patient_extraction(task_id: int) -> None:
 
         paper_id = task.paper_id
         additional_context = task.additional_context
-        if additional_context is None:
-            initial_message = patient_extraction_message(session, paper_id)
+        context_origin = task.context_origin
+        initial_message = patient_extraction_message(session, paper_id)
 
     agent_sess = agent_session(task_id)
 
-    if additional_context is not None:
+    if additional_context is not None and await continues_conversation(
+        agent_sess, additional_context, context_origin
+    ):
         # Follow-up: agent has context from conversation, just pass new instructions
         message: AgentInput = build_followup_prompt(additional_context)
         agent = patient_extraction_agent
@@ -811,6 +878,7 @@ async def handle_patient_extraction(task_id: int) -> None:
         assert initial_message is not None
         message = initial_message
         agent = patient_extraction_agent
+        message = with_curator_note(message, additional_context, context_origin)
 
     result = await run_with_checked_output(
         agent, message, citation_check(paper_id), session=agent_sess
@@ -893,6 +961,7 @@ async def handle_patient_demographics(task_id: int) -> None:
             )
 
         additional_context = task.additional_context
+        context_origin = task.context_origin
 
         paper = session.get(PaperDB, paper_id)
         supplement_format = paper.supplement_format if paper else None
@@ -923,7 +992,9 @@ async def handle_patient_demographics(task_id: int) -> None:
 
     agent_sess = agent_session(task_id)
 
-    if additional_context is not None:
+    if additional_context is not None and await continues_conversation(
+        agent_sess, additional_context, context_origin
+    ):
         # Follow-up: agent has context from conversation
         message: AgentInput = build_followup_prompt(additional_context)
         agent = patient_demographics_agent
@@ -940,6 +1011,7 @@ async def handle_patient_demographics(task_id: int) -> None:
             f'Proband Identifier:\n{proband_identifier}',
         )
         agent = patient_demographics_agent
+        message = with_curator_note(message, additional_context, context_origin)
 
     result, parsed = await run_with_manual_output(
         agent,
@@ -995,6 +1067,7 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
         gene_symbol = paper.gene.symbol
         supplement_format = paper.supplement_format
         additional_context = task.additional_context
+        context_origin = task.context_origin
 
         family = session.get(FamilyDB, family_id)
         if not family:
@@ -1039,7 +1112,9 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
 
     agent_sess = agent_session(task_id)
 
-    if additional_context is not None:
+    if additional_context is not None and await continues_conversation(
+        agent_sess, additional_context, context_origin
+    ):
         # Follow-up: agent has context from conversation
         message: AgentInput = build_followup_prompt(additional_context)
         agent = segregation_evidence_extractor
@@ -1055,6 +1130,7 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
             f'Family Structure: {json.dumps(family_info, indent=2, default=str)}',
         )
         agent = segregation_evidence_extractor
+        message = with_curator_note(message, additional_context, context_origin)
 
     result = await run_with_checked_output(
         agent,
@@ -1122,6 +1198,7 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
         gene_symbol = paper.gene.symbol
         supplement_format = paper.supplement_format
         additional_context = task.additional_context
+        context_origin = task.context_origin
 
         family = session.get(FamilyDB, family_id)
         if not family:
@@ -1186,7 +1263,9 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
 
     agent_sess = agent_session(task_id)
 
-    if additional_context is not None:
+    if additional_context is not None and await continues_conversation(
+        agent_sess, additional_context, context_origin
+    ):
         # Follow-up: agent has context from conversation
         message: AgentInput = build_followup_prompt(additional_context)
     else:
@@ -1200,6 +1279,7 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
             SEGREGATION_ANALYSIS_COMPUTED_AGENT_INSTRUCTIONS,
             f'Family Structure and Data: {json.dumps(family_info, indent=2, default=str)}',
         )
+        message = with_curator_note(message, additional_context, context_origin)
 
     result = await Runner.run(
         segregation_analysis_computed_agent,
@@ -1262,6 +1342,7 @@ async def handle_variant_harmonization(task_id: int) -> None:
             )
 
         additional_context = task.additional_context
+        context_origin = task.context_origin
 
         paper = session.get(PaperDB, task.paper_id)
         if not paper:
@@ -1279,7 +1360,9 @@ async def handle_variant_harmonization(task_id: int) -> None:
 
     agent_sess = agent_session(task_id)
 
-    if additional_context is not None:
+    if additional_context is not None and await continues_conversation(
+        agent_sess, additional_context, context_origin
+    ):
         # Follow-up: agent has context from conversation
         message: AgentInput = build_followup_prompt(additional_context)
     else:
@@ -1290,6 +1373,7 @@ async def handle_variant_harmonization(task_id: int) -> None:
             f'{curator_notes_block(paper_id)}'
             f'{VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS}'
         )
+        message = with_curator_note(message, additional_context, context_origin)
 
     result = await Runner.run(
         variant_harmonization_agent,
@@ -1454,6 +1538,7 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
 
         paper_id = task.paper_id
         additional_context = task.additional_context
+        context_origin = task.context_origin
 
         paper = session.get(PaperDB, paper_id)
         supplement_format = paper.supplement_format if paper else None
@@ -1490,7 +1575,9 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
 
     agent_sess = agent_session(task_id)
 
-    if additional_context is not None:
+    if additional_context is not None and await continues_conversation(
+        agent_sess, additional_context, context_origin
+    ):
         # Follow-up: agent has context from conversation
         message: AgentInput = build_followup_prompt(additional_context)
         agent = patient_variant_occurrence_agent
@@ -1507,6 +1594,7 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
             f'Patients JSON:\n{structured_patients}',
         )
         agent = patient_variant_occurrence_agent
+        message = with_curator_note(message, additional_context, context_origin)
 
     result = await run_with_checked_output(
         agent, message, citation_check(paper_id), session=agent_sess
@@ -1796,6 +1884,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
             )
 
         additional_context = task.additional_context
+        context_origin = task.context_origin
 
         paper = session.get(PaperDB, paper_id)
         supplement_format = paper.supplement_format if paper else None
@@ -1816,7 +1905,9 @@ async def handle_phenotype_extraction(task_id: int) -> None:
 
     agent_sess = agent_session(task_id)
 
-    if additional_context is not None:
+    if additional_context is not None and await continues_conversation(
+        agent_sess, additional_context, context_origin
+    ):
         # Follow-up: agent has context from conversation
         message: AgentInput = build_followup_prompt(additional_context)
         agent = patient_phenotype_linking_agent
@@ -1832,6 +1923,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
             f'Structured Patient JSON:\n{[patient_data]}',
         )
         agent = patient_phenotype_linking_agent
+        message = with_curator_note(message, additional_context, context_origin)
 
     result = await run_with_checked_output(
         agent,
@@ -1848,8 +1940,11 @@ async def handle_phenotype_extraction(task_id: int) -> None:
             return
 
         paper_row = session.get(PaperDB, paper_id)
-        has_global_context = bool(
-            paper_row and paper_row.paper_global_additional_context
+        # Curator notes, paper-wide or on this run (its own or inherited), skip
+        # the HPO link cache below so the HPO agent actually sees them.
+        has_curator_notes = bool(
+            (paper_row and paper_row.paper_global_additional_context)
+            or additional_context
         )
 
         # Idempotent: delete-then-insert
@@ -1872,7 +1967,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
             # otherwise never see the context.
             cached = (
                 lookup_hpo_link(phenotype_db.concept)
-                if is_cacheable(phenotype_db) and not has_global_context
+                if is_cacheable(phenotype_db) and not has_curator_notes
                 else None
             )
             if cached is not None:
@@ -1919,6 +2014,7 @@ async def handle_hpo_linking(task_id: int) -> None:
             raise ValueError(f'Task {task_id}: HPO_LINKING requires phenotype_id')
 
         additional_context = task.additional_context
+        context_origin = task.context_origin
 
         phenotype_row = session.get(PhenotypeDB, phenotype_id)
         if not phenotype_row:
@@ -1937,7 +2033,9 @@ async def handle_hpo_linking(task_id: int) -> None:
 
     agent_sess = agent_session(task_id)
 
-    if additional_context is not None and await agent_sess.get_items(limit=1):
+    if additional_context is not None and await continues_conversation(
+        agent_sess, additional_context, context_origin
+    ):
         # Follow-up: agent has context from conversation
         message: AgentInput = build_followup_prompt(additional_context)
     else:
@@ -1950,8 +2048,7 @@ async def handle_hpo_linking(task_id: int) -> None:
             f'{curator_notes_block(paper_id)}'
             f'{HPO_LINKING_AGENT_INSTRUCTIONS}'
         )
-        if additional_context is not None:
-            message += f'\n\nAdditional context:\n\n{additional_context}'
+        message = with_curator_note(message, additional_context, context_origin)
 
     try:
         result = await Runner.run(
@@ -2087,6 +2184,7 @@ async def handle_mondo_linking(task_id: int) -> None:
         paper = session.get(PaperDB, target.paper_id)
         supplement_format = paper.supplement_format if paper else None
         additional_context = task.additional_context
+        context_origin = task.context_origin
 
     query = target.disease_text.strip() if target.disease_text else ''
     selected_mondo_id: str | None = None
@@ -2100,7 +2198,9 @@ async def handle_mondo_linking(task_id: int) -> None:
 
     if query:
         agent_sess = agent_session(task_id)
-        if additional_context is not None:
+        if additional_context is not None and await continues_conversation(
+            agent_sess, additional_context, context_origin
+        ):
             # Rerun with feedback: continue the existing conversation instead of
             # resending the paper context.
             message: AgentInput = build_followup_prompt(additional_context)
@@ -2125,6 +2225,7 @@ async def handle_mondo_linking(task_id: int) -> None:
                 MONDO_LINKING_AGENT_INSTRUCTIONS,
                 f'MONDO linking target JSON:\n{json.dumps(target_payload, indent=2)}',
             )
+            message = with_curator_note(message, additional_context, context_origin)
         result = await Runner.run(
             mondo_linking_agent,
             message,

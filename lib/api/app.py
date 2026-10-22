@@ -2962,6 +2962,7 @@ def rerun_flag(
         skip_successors=request.skip_successors,
         additional_context=context,
         updated_by_user_id=current_user.id,
+        context_origin=None,
         **scope,
     )
 
