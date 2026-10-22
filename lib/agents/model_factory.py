@@ -115,27 +115,18 @@ def extraction_model_settings() -> ModelSettings:
     return model_settings_for(env.EXTRACTION_MODEL)
 
 
-def patient_extraction_model() -> Model | str:
-    """The model patient extraction runs on: ``VLM_MODEL``, the stronger model
-    of every deployment, not ``EXTRACTION_MODEL``.
-
-    Patient extraction is the one text agent whose output the rest of the
-    pipeline is keyed on (every per-patient task fans out from its roster),
-    and the one Haiku 5.5 gets wrong in a way no prompt has fixed: it reads
-    the subjects the narrative describes and skips the pedigree's other
-    members, so segregation has nothing to count (paper 108: 11 patients on
-    Haiku across repeated runs, 46-49 on Opus 5.5 and Sonnet 5.5 with the
-    same prompt, 2026-10-22). One call per paper, so the price of the
-    stronger model is bounded. Its paper block is a separate prompt-cache
-    entry from the other agents' (a cache is per model), which is the cost of
-    the split.
-    """
-    return resolve_model(env.VLM_MODEL)
+def linking_model() -> Model | str:
+    """The model the ontology-linking agents (HPO, MONDO) run on:
+    ``LINKING_MODEL``, which a deployment may set cheaper than
+    ``EXTRACTION_MODEL`` (see lib/core/environment.py for why)."""
+    return resolve_model(env.LINKING_MODEL)
 
 
-def patient_extraction_model_settings() -> ModelSettings:
-    """Model settings for patient extraction, following ``VLM_MODEL``."""
-    return model_settings_for(env.VLM_MODEL)
+def linking_model_settings() -> ModelSettings:
+    """Model settings for the ontology-linking agents: their model's cache
+    breakpoints at low effort, for the reasons ``decision_model_settings``
+    gives."""
+    return model_settings_for(env.LINKING_MODEL, effort='low')
 
 
 def decision_model_settings() -> ModelSettings:
