@@ -226,12 +226,15 @@ def vlm_model() -> str:
 
 
 class ModelDeclined(Exception):
-    """The provider's safety classifier declined the request before the model
-    answered it.
+    """The provider's safety classifier declined the request: before the model
+    answered it, or partway through the answer.
 
     Anthropic returns this as a normal HTTP 200 with ``stop_reason:
-    "refusal"`` and an empty ``content``; litellm reports it as
-    ``finish_reason == "content_filter"``. The agents SDK's LitellmModel reads
+    "refusal"``, the content empty (a refusal before output) or cut off (a
+    classifier that reads the output as it streams, such as the
+    ``reasoning_extraction`` guard lib/agents/model_facing.py exists for);
+    litellm reports either as ``finish_reason == "content_filter"`` and drops
+    the category. The agents SDK's LitellmModel reads
     only the message, which here has no text and no tool call, so it builds
     an empty turn -- and the run loop treats an empty turn as "run again" with
     the same input, which gets the same refusal, until max_turns ends the run
@@ -252,7 +255,7 @@ class ModelDeclined(Exception):
         self.finish_reason = finish_reason
         super().__init__(
             f'{model} declined the request (finish_reason={finish_reason}); '
-            f"the provider's safety classifier refused it before the model answered"
+            f"the provider's safety classifier refused it, before or during the answer"
         )
 
 

@@ -7,15 +7,15 @@ FLAG_RULES = """FLAGS -- decisions a curator should see:
 - Prefer output a curator can review over nothing. When the paper suggests
   something but does not establish it, produce it in the uncertain form the
   output allows -- Unknown or Uncertain where a field has one, uncertain:
-  true, a broader term, a Non-Proband -- and say so in its reasoning. A row a
+  true, a broader term, a Non-Proband -- and say so in its basis. A row a
   curator can delete costs one click; a row they must add by hand costs the
   identifier, the evidence and every downstream step.
   Leave something out only when the output has no uncertain form for it and
   including it would change a count curators score before review (an extra
   proband, members of a cohort the target gene does not cover), and flag
   that.
-- Every value you return carries its reasoning. A flag is for what that
-  reasoning cannot carry: a decision about something that is not in your
+- Every value you return carries its basis. A flag is for what that
+  basis cannot carry: a decision about something that is not in your
   output, or a call the paper itself leaves open. Raise one only when a
   curator who read the same text could reasonably decide differently AND the
   difference would change what is curated -- a row added or removed, a
@@ -53,13 +53,13 @@ FLAG_RULES = """FLAGS -- decisions a curator should see:
   - a value a rule here required: Unknown under a no-inference rule, a default
     the rules name, a choice a rule makes for you when the paper gives no
     basis. If the paper implies a value the rule withholds, put the implied
-    value in that field's reasoning, not in a flag.
+    value in that field's basis, not in a flag.
   - a result that is as good as the inputs allow: a broader ontology term when
     nothing closer exists, a transcript picked by the canonical rule when the
     paper named none, a preferred name that differs from the paper's wording.
   - your own process: a tool you did or did not call, a search that returned
     nothing, a step you skipped.
-  - anything the reasoning on the value already says.
+  - anything the basis on the value already says.
 - Do not flag routine extraction: a value stated plainly and cited needs no
   flag. Raise one flag per decision, not per item it touches; a group left
   out for one reason is one flag that names its members.
@@ -70,7 +70,7 @@ FLAG_RULES = """FLAGS -- decisions a curator should see:
     identifier, a variant as written, a phenotype concept), or null when it
     is about something not extracted.
   - flag: a block whose value is a short subject (who or what, in a few
-    words), whose reasoning says what the paper says and what you did with
+    words), whose basis says what the paper says and what you did with
     it, and -- where the block has citations -- whose citations point at the
     block(s) the decision rests on.
 - "flags" is empty when there was nothing to flag.
@@ -101,7 +101,7 @@ HOW THE TEXT IS LABELLED:
 
 EvidenceBlock requirements:
   - value: the extracted value
-  - reasoning: required explanation (see REASONING below)
+  - basis: required explanation (see BASIS below)
   - citations: a list of {"anchor", "quote"} objects, one per block the value rests on
 
 CITATIONS:
@@ -133,14 +133,14 @@ CITATIONS:
   assigned, a conclusion that follows from a rule), cite the block that supports
   the underlying fact rather than leaving citations empty.
 
-REASONING:
+BASIS:
 
-- reasoning MAY include verbatim quotes from the input source text if helpful.
-  - reasoning should primarily explain how the value was derived and why it was chosen.
-  - reasoning is read by human curators reviewing extracted data — write it in plain language
+- basis MAY include verbatim quotes from the input source text if helpful.
+  - basis should primarily explain how the value was derived and why it was chosen.
+  - basis is read by human curators reviewing extracted data — write it in plain language
     as if explaining your decision to a colleague. Do not use raw function or tool names
     (e.g. get_hpo_term, clinvar_lookup); describe what you looked up and what you found instead.
-  - Any quoted text in reasoning must be copied exactly from the input source text.
+  - Any quoted text in basis must be copied exactly from the input source text.
 
 """
 

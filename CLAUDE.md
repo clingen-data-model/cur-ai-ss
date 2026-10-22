@@ -250,6 +250,7 @@ def upgrade() -> None:
 - Agent output goes to the database through the converters below, not to files beside the paper
 - Update database with converter functions (`lib/models/converters.py`)
 - Log with Python's `logging` module
+- The word "reasoning" never reaches a model. Every evidence block's `reasoning` field is presented to the model as `basis` (`lib/agents/model_facing.py`: wrap `output_type` in `model_facing_output(...)`, write prompt prose with "basis"; `test_no_agent_prose_asks_for_reasoning` guards it). Anthropic's `reasoning_extraction` classifier otherwise cuts Sonnet 5.5 and Opus 5.5 off partway through the JSON (found 2026-10-22 on papers 108 and 106; Haiku has no such guard). The database, API and UI keep `reasoning`
 - **See `lib/agents/AGENT_GUIDE.md` for writing new agents** — tools, instructions, output models, calling patterns
 
 ## Common Tasks

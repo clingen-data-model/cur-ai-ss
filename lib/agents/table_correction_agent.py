@@ -8,6 +8,7 @@ from agents import Agent, Runner, function_tool
 from agents.exceptions import MaxTurnsExceeded
 from pydantic import BaseModel
 
+from lib.agents.model_facing import model_facing_output
 from lib.agents.model_factory import ModelDeclined, model_settings_for, resolve_model
 from lib.agents.vision import vlm_describe
 from lib.core.environment import env
@@ -67,7 +68,7 @@ def table_correction_agent_for_image(image_path: Path) -> Agent:
         # unrecoverable.
         model=resolve_model(env.VLM_MODEL),
         model_settings=model_settings_for(env.VLM_MODEL),
-        output_type=TableCorrectionResult,
+        output_type=model_facing_output(TableCorrectionResult),
         tools=[extract_table_from_image],
     )
 

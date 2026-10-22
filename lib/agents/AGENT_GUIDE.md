@@ -87,7 +87,12 @@ class MyOutput(BaseModel):
 ### Evidence and citations
 
 Any extracted value a curator will check goes in an `EvidenceBlock` (`lib/models/evidence_block.py`):
-`value`, `reasoning`, and `citations`, a list of `{anchor, quote}`. The text agents read is
+`value`, `reasoning`, and `citations`, a list of `{anchor, quote}`. The model never sees the
+word `reasoning`: `lib/agents/model_facing.py` presents the field as `basis` in every output
+schema (wrap an agent's `output_type` in `model_facing_output(...)`; the manual-output path
+does it itself) and maps it back on the reply, and prompt prose says "basis" too
+(`test_no_agent_prose_asks_for_reasoning`). Anthropic's `reasoning_extraction` classifier
+otherwise cuts Sonnet and Opus off mid-answer. The text agents read is
 the anchored document (`lib/misc/pdf/anchors.py`): every paragraph is prefixed
 `[paragraph-N]`, every table `[table-N]` with an `anchor` column of `table-N-row-R` ids, every
 figure `[figure-N]`; supplement ids start with `supp-`. An agent cites by copying an id as

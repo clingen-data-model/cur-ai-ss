@@ -19,6 +19,7 @@ from agents import Agent, function_tool
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import FLAG_RULES
+from lib.agents.model_facing import model_facing_output
 from lib.agents.model_factory import extraction_model, extraction_model_settings
 from lib.agents.variant_annotation_agent import _get_session_with_retries
 from lib.core.environment import env
@@ -851,7 +852,7 @@ Action
             Call select_canonical_transcript(gene, genome_build or GRCh38 default)
             Replace transcript with returned versioned transcript.
 
-        Record the resolved transcript and which path was taken in reasoning.
+        Record the resolved transcript and which path was taken in basis.
 
     2. Construct:
         transcript + ":" + hgvs_c
@@ -921,7 +922,7 @@ the record's aliases and protein_change. Before rejecting a record because
 the codon does not match:
     - If the queried change (any of its forms: Arg31Pro, R31P, p.R31P) appears
       in the record's aliases or protein_change, it IS the variant. Accept it,
-      proceed with Case A or B, and state the numbering mapping in reasoning
+      proceed with Case A or B, and state the numbering mapping in basis
       ("paper's Arg31Pro is homeodomain-relative; ClinVar names the same
       change p.Arg202Pro, alias R31P").
     - If the record's condition matches the paper's disease and the gene and
@@ -985,7 +986,7 @@ STATE 6 — FINALIZATION
 ============================================================
 
 Return a single harmonized variant object with:
-- reasoning (clear human-readable summary)
+- basis (clear human-readable summary)
 - allele_registry_resolver fields if available: rsid, caid, hgvs_c, hgvs_g, hgvs_p
 - gnomad_style_coordinates if derived from VariantValidator
 
@@ -1005,10 +1006,10 @@ low:
     - No resolution possible
 
 ============================================================
-REASONING REQUIREMENT
+BASIS REQUIREMENT
 ============================================================
 
-- Populate reasoning with a clear, human-readable summary written for a human curator.
+- Populate basis with a clear, human-readable summary written for a human curator.
 - Short declarative sentences, numerically ordered.
 - Lead with which resolution path was taken and why (e.g., "No genomic coordinates or rsID provided, so resolved via transcript HGVS (State 3)" or "rsID present — resolved directly via identifier lookup (State 2)"). This gives the curator an immediate sense of the harmonization approach.
 - Then describe what happened at each step: which states were entered, why each was entered or skipped, and what was found.
@@ -1051,7 +1052,7 @@ agent = Agent(
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
     model_settings=extraction_model_settings(),
-    output_type=FlaggedReasoningBlock[HarmonizedVariant],
+    output_type=model_facing_output(FlaggedReasoningBlock[HarmonizedVariant]),
     tools=[
         select_canonical_transcript,
         resolve_transcript_version,

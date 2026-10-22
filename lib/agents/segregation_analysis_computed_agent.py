@@ -7,6 +7,7 @@ from agents import Agent, function_tool
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import FLAG_RULES
+from lib.agents.model_facing import model_facing_output
 from lib.agents.model_factory import decision_model_settings, extraction_model
 from lib.models.patient_variant_occurrences import TestingMethod
 from lib.models.segregation_analysis import (
@@ -225,12 +226,12 @@ Your task:
 
 0. **Determine scoring method** (call compute_scoring_method tool first):
    - Collect all `inheritance` values from the patient-variant links
-   - Pass them to `compute_scoring_method` to get the scoring method (Dominant or Recessive) and reasoning
+   - Pass them to `compute_scoring_method` to get the scoring method (Dominant or Recessive) and basis
    - Use this scoring method for all subsequent steps
 
 0.5. **Determine sequencing methodology** (call compute_sequencing_methodology tool):
    - Flatten all `testing_methods` values from the patient-variant links into a single list
-   - Pass them to `compute_sequencing_methodology` to get the sequencing methodology and reasoning
+   - Pass them to `compute_sequencing_methodology` to get the sequencing methodology and basis
    - Use this methodology when calling `assign_points` in step 5
 
 1. **Extract segregation count**: Count affected individuals (excluding proband) + obligate carriers, accounting for twins
@@ -257,7 +258,7 @@ Your task:
    Example: Proband + 2 dizygotic affected siblings with variant = 2 segregations (not 3)
    Example: Proband + 2 monozygotic affected siblings with variant = 1 segregation
 
-   Provide detailed reasoning showing which individuals were counted and how twins were handled
+   Provide detailed basis showing which individuals were counted and how twins were handled
 
 2. **Extract affected/unaffected counts**:
 
@@ -269,27 +270,27 @@ Your task:
    - affected_count: number of affected siblings ONLY (not including parents)
    - unaffected_count: number of unaffected siblings ONLY (not including parents)
    - **DO NOT include parents in either count**, even if they are known carriers
-   - Reasoning: Parents are obligate heterozygous carriers; only siblings are at same risk as proband to inherit two variants
+   - Basis: Parents are obligate heterozygous carriers; only siblings are at same risk as proband to inherit two variants
    - Example: Proband (affected) + affected sibling + unaffected sibling + carrier parent = affected_count=1, unaffected_count=1 (parent excluded)
 
 3. **Check minimum criteria** (call check_minimum_criteria tool):
    - Pass: segregation_count, affected_count, scoring_method, has_unexplainable_non_segregations
-   - Returns: meets_criteria boolean and reasoning
+   - Returns: meets_criteria boolean and basis
    - Criteria: no unexplainable non-segregations, plus scoring-method-specific thresholds
 
 4. **Calculate LOD score** (call calculate_lod_score tool):
    - Pass: segregation_count, affected_count, unaffected_count, scoring_method, extracted_lod_score
-   - Returns: lod_score float and reasoning
+   - Returns: lod_score float and basis
    - Uses published LOD if available; otherwise applies ClinGen formula
 
 5. **Assign points** (call assign_points tool):
    - Pass: lod_score, sequencing_methodology, meets_minimum_criteria boolean
-   - Returns: points float and reasoning
+   - Returns: points float and basis
    - Applies Figure 6 matrix based on methodology and criteria
 
-Output all six computed values with clear reasoning: segregation_count, affected_count, unaffected_count, computed_lod_score, points_assigned, meets_minimum_criteria.
+Output all six computed values with clear basis: segregation_count, affected_count, unaffected_count, computed_lod_score, points_assigned, meets_minimum_criteria.
 
-Reasoning is read by human curators — write it in plain language. Do not use raw tool or function names (e.g. compute_scoring_method, assign_points); describe what was computed and why instead (e.g., "Inheritance values indicate dominant pattern, so dominant LOD formula applied").
+Basis is read by human curators — write it in plain language. Do not use raw tool or function names (e.g. compute_scoring_method, assign_points); describe what was computed and why instead (e.g., "Inheritance values indicate dominant pattern, so dominant LOD formula applied").
 
 ## Edge Cases
 
@@ -322,7 +323,7 @@ agent = Agent(
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
     model_settings=decision_model_settings(),
-    output_type=SegregationAnalysisComputedOutput,
+    output_type=model_facing_output(SegregationAnalysisComputedOutput),
     tools=[
         compute_scoring_method,
         compute_sequencing_methodology,

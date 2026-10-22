@@ -32,6 +32,7 @@ from agents import AgentOutputSchema
 
 from lib.agents.compound_het_agent import agent as compound_het_agent
 from lib.agents.hpo_linking_agent import agent as hpo_linking_agent
+from lib.agents.model_facing import ModelFacingOutputSchema
 from lib.agents.mondo_linking_agent import agent as mondo_linking_agent
 from lib.agents.paper_classifier_agent import agent as paper_classifier_agent
 from lib.agents.paper_extraction_agent import agent as paper_extraction_agent
@@ -122,7 +123,12 @@ def _count_union_nodes(node: Any) -> int:
 
 def union_node_count(output_type: Any) -> int:
     """Union/nullable nodes in the schema the SDK sends for ``output_type``."""
-    schema = copy.deepcopy(AgentOutputSchema(output_type).json_schema())
+    # Module-level agents carry the model-facing wrapper (lib.agents.model_facing);
+    # the types behind the manual-output agents are bare Pydantic models.
+    if isinstance(output_type, ModelFacingOutputSchema):
+        schema = copy.deepcopy(output_type.json_schema())
+    else:
+        schema = copy.deepcopy(AgentOutputSchema(output_type).json_schema())
     defs = schema.pop('$defs', {})
     return _count_union_nodes(_dereference(schema, defs))
 

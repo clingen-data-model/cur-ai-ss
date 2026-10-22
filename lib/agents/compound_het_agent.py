@@ -2,6 +2,7 @@ from agents import Agent
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import FLAG_RULES
+from lib.agents.model_facing import model_facing_output
 from lib.agents.model_factory import extraction_model, extraction_model_settings
 from lib.models.patient_variant_occurrences import CompoundHetEvaluationOutput
 
@@ -25,7 +26,7 @@ A list of the patient's heterozygous variant links, including:
 OUTPUT:
 A JSON array of compound heterozygous pairs. Each pair includes:
 - variant_id_a, variant_id_b (the two variant IDs)
-- reasoning: the evidence that the two variants are in trans, citing the exact
+- basis: the evidence that the two variants are in trans, citing the exact
   text, table, figure or pedigree it comes from
 
 WHAT ESTABLISHES A PAIR:
@@ -59,7 +60,7 @@ RULES:
 - A pair is never output twice, and a variant is in at most one pair
 - Leave the pairs list empty only when the patient has more than two heterozygous variants
   and the paper gives no way to choose among them; flag that, naming the variants
-- Each pair's reasoning should cite the exact evidence (quote from text, table/figure, pedigree)
+- Each pair's basis should cite the exact evidence (quote from text, table/figure, pedigree)
 """
 
 COMPOUND_HET_AGENT_INSTRUCTIONS = (
@@ -87,5 +88,5 @@ agent = Agent(
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
     model_settings=extraction_model_settings(),
-    output_type=CompoundHetEvaluationOutput,
+    output_type=model_facing_output(CompoundHetEvaluationOutput),
 )

@@ -10,6 +10,7 @@ from lib.agents.hpo_linking_agent import (
     get_hpo_term,
     search_hpo_terms,
 )
+from lib.agents.model_facing import model_facing_output
 from lib.agents.model_factory import decision_model_settings, extraction_model
 from lib.models.evidence_block import ReasoningBlock
 from lib.models.flag import FlaggedReasoningBlock
@@ -181,7 +182,7 @@ For mapped components:
 
 For unmapped or excluded components:
 - mapped_ontology, mondo, hpo, confidence, and relationship should be null.
-- reasoning must explain why no mapping was selected.
+- basis must explain why no mapping was selected.
 
 Ontology inspection:
 - Use get_mondo_term() to verify definitions, synonyms, xrefs, parents, and
@@ -203,7 +204,7 @@ Decision guidance:
 - For component fallback, top-level mondo_id may be null even when component
   mappings exist.
 
-Reasoning requirements:
+Basis requirements:
 - Explain how you interpreted the disease text.
 - Mention which searches and candidate terms you evaluated (e.g., "Searched for 'dilated cardiomyopathy', top result was MONDO:0005021").
 - State why generic, ambiguous, wrong-gene, animal, or component-only candidates
@@ -254,7 +255,7 @@ agent = Agent(
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
     model_settings=decision_model_settings(),
-    output_type=FlaggedReasoningBlock[MondoAgentDecision],
+    output_type=model_facing_output(FlaggedReasoningBlock[MondoAgentDecision]),
     tools=[
         get_mondo_term,
         search_mondo_terms,

@@ -8,6 +8,7 @@ from agents import Agent, function_tool
 from pydantic import BaseModel
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
+from lib.agents.model_facing import model_facing_output
 from lib.agents.model_factory import extraction_model, extraction_model_settings
 from lib.core.environment import env
 from lib.models import PaperExtractionOutput
@@ -189,7 +190,7 @@ Classify the paper into at MOST two of the following types:
 Extract the disease name and mode of inheritance associated with this gene in the paper:
 - **disease_name**: The name or description of the disease/phenotype caused by variants in this gene (e.g., "Stargardt disease", "retinitis pigmentosa", "dilated cardiomyopathy"). Extract from the abstract, introduction, or case descriptions.
 - **disease_inheritance_mode**: The primary mode of inheritance for this gene-disease relationship as stated or implied in the paper (e.g., "Autosomal Recessive", "Autosomal Dominant", "X-linked Recessive"). Extract from the abstract or clinical findings.
-- Include reasoning that identifies where in the paper this information was found.
+- Include basis that identifies where in the paper this information was found.
 - Both fields are EvidenceBlocks: give citations into the paper text, each an
   {"anchor", "quote"} pair where anchor is a block id copied exactly as printed in
   the text (e.g. paragraph-12) and quote is the shortest verbatim span of that block
@@ -210,6 +211,6 @@ agent = Agent(
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
     model_settings=extraction_model_settings(),
-    output_type=PaperExtractionOutput,
+    output_type=model_facing_output(PaperExtractionOutput),
     tools=[pubmed_search_and_titles, pubmed_fetch_one],
 )

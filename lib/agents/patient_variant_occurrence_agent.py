@@ -2,6 +2,7 @@ from agents import Agent
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
+from lib.agents.model_facing import model_facing_output
 from lib.agents.model_factory import extraction_model, extraction_model_settings
 from lib.models.patient_variant_occurrences import PatientVariantOccurrenceOutput
 
@@ -111,7 +112,7 @@ Note: Compound heterozygous genotype evaluation (determining if two heterozygous
   them exists -- the parent is drawn as a carrier symbol, or named only as the
   allele's origin, or is simply the parent of a homozygous child -- does the
   statement say "carries at least one copy" and nothing more: then zygosity
-  is Unknown with that in its reasoning, and the link is flagged as inferred
+  is Unknown with that in its basis, and the link is flagged as inferred
   (below). Testing method is left unstated unless the paper reports the
   parent was tested; a chromatogram shown for the person is such a report.
   Make the link in every case; segregation downstream reads parental
@@ -185,5 +186,5 @@ agent = Agent(
     model_settings=extraction_model_settings(),
     # 2 union/nullable schema nodes since slice 4 of the evidence-anchors work,
     # under Anthropic's limit of 16; test_output_schema_census guards it.
-    output_type=PatientVariantOccurrenceOutput,
+    output_type=model_facing_output(PatientVariantOccurrenceOutput),
 )

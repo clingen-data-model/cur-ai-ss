@@ -3,6 +3,7 @@ from agents import Agent, function_tool
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import FLAG_RULES
+from lib.agents.model_facing import model_facing_output
 from lib.agents.model_factory import decision_model_settings, extraction_model
 from lib.models.evidence_block import ReasoningBlock
 from lib.models.flag import FlaggedReasoningBlock
@@ -136,7 +137,7 @@ Always return an HPOTerm object with:
     - id (str or null): HPO identifier e.g. "HP:0001250", or null if no match found
     - name (str or null): HPO term name e.g. "Seizure", or null if no match found
 
-Your reasoning about the decision is captured separately in the framework's reasoning field.
+Your basis about the decision is captured separately in the framework's basis field.
 
 Examples:
 
@@ -328,7 +329,7 @@ If the candidate terms do not represent the phenotype meaning:
 Only return id: null and name: null after tool exploration reveals no suitable match.
 
 When no term matches the concept exactly but a broader term covers it, return
-the broader term and say so in its reasoning: a curator can relink a term in
+the broader term and say so in its basis: a curator can relink a term in
 one click and cannot easily find one from nothing. Return an HPOTerm with id: null and
 name: null only when:
 - the phenotype is too vague to place anywhere (e.g., "symptom", "finding")
@@ -339,9 +340,9 @@ Actively use tools before giving up.
 
 ---------------------------------------------------------------------
 
-HPO REASONING REQUIREMENTS (BRIEF)
+HPO BASIS REQUIREMENTS (BRIEF)
 
-The `hpo.reasoning` field is a short audit note for a human curator, not a
+The `hpo.basis` field is a short audit note for a human curator, not a
 transcript -- it is displayed as-is and never parsed. In 1-2 sentences, state
 the final selection (or null) and the one or two facts that justified it (a
 candidate confirmed or rejected, a search that found or failed to find a
@@ -379,6 +380,6 @@ agent = Agent(
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
     model_settings=decision_model_settings(),
-    output_type=FlaggedReasoningBlock[HPOTerm],
+    output_type=model_facing_output(FlaggedReasoningBlock[HPOTerm]),
     tools=[search_hpo_terms, get_hpo_term, get_hpo_parents, get_hpo_children],
 )
