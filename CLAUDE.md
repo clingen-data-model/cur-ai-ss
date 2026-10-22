@@ -301,7 +301,7 @@ Extracts OpenAPI schema from FastAPI app and generates `frontend/api-spec.json`.
 - Task models: `TaskDB` (ORM), `TaskResp` (API response), `TaskCreateRequest` (for queueing)
 - Task status and dependency logic in `lib/tasks/models.py` and `lib/tasks/misc.py`
 
-**Lease-based concurrency:** Worker uses database leases to prevent multiple workers processing the same paper. Lease timeout is 900s.
+**Claimed tasks and the single worker:** the poller marks a task QUEUED when it claims it and RUNNING when its attempt starts; a claimed row older than `LEASE_TIMEOUT_S` (1800 s, never refreshed during a run, so it must exceed the longest legitimate task: PDF Parsing has reached 15 min) is reset to PENDING with a retry left, else FAILED. There is one worker process, and the worker relies on it: on a shutdown signal it stops polling and sweeps *every* claimed row back to PENDING (session cleared) or FAILED on its last try, and it runs the same sweep before its first poll, so a crash or a kill leaves nothing claimed past the next start (`_sweep_claimed_tasks` in `lib/bin/worker.py`). A second worker would steal the first one's live tasks.
 
 **PDF highlighting:** Words/images can be highlighted in PDFs with colors (red, orange, yellow, blue, green, violet, gray, primary). Uses Grobid annotations for word positioning.
 
