@@ -21,6 +21,7 @@ from lib.agents.extraction_verification_agent import (
 from lib.agents.extraction_verification_agent import (
     agent as extraction_verification_agent,
 )
+from lib.agents.figure_describer import FigureRef, describe_figures
 from lib.agents.hpo_linking_agent import (
     HPO_LINKING_AGENT_INSTRUCTIONS,
 )
@@ -74,10 +75,6 @@ from lib.agents.patient_variant_occurrence_agent import (
 )
 from lib.agents.patient_variant_occurrence_agent import (
     agent as patient_variant_occurrence_agent,
-)
-from lib.agents.pedigree_describer_agent import (
-    PEDIGREE_DESCRIBER_AGENT_INSTRUCTIONS,
-    pedigree_describer_agent_for_paper,
 )
 from lib.agents.segregation_analysis_computed_agent import (
     SEGREGATION_ANALYSIS_COMPUTED_AGENT_INSTRUCTIONS,
@@ -271,13 +268,16 @@ def build_followup_prompt(additional_context: str) -> str:
 
 
 # Tasks with no agent conversation to consult: PDF_PARSING and VARIANT_ANNOTATION
-# are mechanical (no LLM call at all), and COMPOUND_HET_EVALUATION runs without a
-# session (see handle_compound_het_evaluation) so it has no persisted history.
+# are mechanical (no LLM call at all), COMPOUND_HET_EVALUATION runs without a
+# session (see handle_compound_het_evaluation) so it has no persisted history,
+# and FIGURE_DESCRIPTION is one vision call per figure, no agent
+# (lib/agents/figure_describer.py); what it found is on the figures tab.
 QA_UNSUPPORTED_TASK_TYPES = {
     TaskType.PDF_PARSING,
     TaskType.VARIANT_ANNOTATION,
     TaskType.COMPOUND_HET_EVALUATION,
     TaskType.EXTRACTION_VERIFICATION,
+    TaskType.FIGURE_DESCRIPTION,
 }
 
 QA_FOLLOWUP_MAX_TURNS = 8
@@ -289,9 +289,6 @@ def _agent_for_task_type(task_type: TaskType, paper_id: int) -> Agent | None:
     QA_UNSUPPORTED_TASK_TYPES)."""
     if task_type in QA_UNSUPPORTED_TASK_TYPES:
         return None
-    if task_type == TaskType.FIGURE_DESCRIPTION:
-        agent, _capture = pedigree_describer_agent_for_paper(paper_id)
-        return agent
     return {
         TaskType.PAPER_CLASSIFIER: paper_classifier_agent,
         TaskType.PAPER_METADATA: paper_extraction_agent,
@@ -369,8 +366,9 @@ def curator_notes_section(notes: str) -> str:
     """The curator's context for the whole paper, as one prompt section.
 
     ``format_paper_context`` carries it for the agents that read the paper; the
-    agents that never see the paper text (HPO linking, variant harmonization,
-    pedigree description) append it to their own first message.
+    agents that never see the paper text (HPO linking, variant harmonization)
+    append it to their own first message, and figure description puts it in
+    its vision prompts.
     """
     return (
         'A human curator is re-running the extraction of this paper and has '
@@ -647,9 +645,49 @@ async def handle_variant_extraction(task_id: int) -> None:
         )
 
 
+def paper_figures(paper_id: int) -> list[FigureRef]:
+    """Every figure of the anchored document that has an image file, main
+    text first: the Docling picture index (the N of figure-N, and of
+    documents/{id}/{main,supplement}/images/N.png), which section, and the
+    caption the anchored text carries for it (its alt text), if any."""
+    figures: list[FigureRef] = []
+    for is_supplement in (False, True):
+        anchored = document_anchored_md_path(paper_id, supplement=is_supplement)
+        if not anchored.exists():
+            continue
+        captions = block_texts(anchored.read_text())
+        for anchor in load_anchors(paper_id, supplement=is_supplement):
+            parsed_id = parse_anchor(anchor.id)
+            if parsed_id is None or parsed_id.kind != AnchorKind.FIGURE:
+                continue
+            if not document_image_path(
+                paper_id, parsed_id.index, supplement=is_supplement
+            ).exists():
+                continue
+            figures.append(
+                FigureRef(
+                    image_id=parsed_id.index,
+                    is_supplement=is_supplement,
+                    caption=captions.get(anchor.id) or None,
+                )
+            )
+    return figures
+
+
+def figure_description_notes(
+    paper_id: int, additional_context: str | None
+) -> str | None:
+    """What the curator wants the describer to know: the paper-wide re-run
+    notes and the context of a re-run of this task, either or both."""
+    notes = [n for n in (paper_global_context(paper_id), additional_context) if n]
+    return '\n\n'.join(notes) if notes else None
+
+
 async def handle_figure_description(task_id: int) -> None:
-    """Describe the paper's evidence figures (today: the first pedigree), one
-    ``figure_descriptions`` row per figure described."""
+    """Describe every readable figure of the paper, one ``figure_descriptions``
+    row each (see lib/agents/figure_describer.py). Not an agent run: the
+    vision model is asked about each figure directly, so a re-run with
+    context puts that context in its prompts rather than into a conversation."""
     paper_id: int
     additional_context: str | None
     with session_scope() as session:
@@ -659,82 +697,23 @@ async def handle_figure_description(task_id: int) -> None:
         paper_id = task.paper_id
         additional_context = task.additional_context
 
-    combined_text = ''
-
-    # List figures by id + caption. The agent picks a pedigree from the captions,
-    # then the analyze_pedigree_image tool loads the image bytes on demand — so we
-    # never put image URLs (or data URLs) into the prompt text.
-    #
-    # Figures come from the anchored document, so image_id is the Docling
-    # picture index: the N of the figure-N id the other agents cite, and the N
-    # of documents/{id}/{main,supplement}/images/N.png the tool loads.
-    for is_supplement, label in ((False, 'Pipeline'), (True, 'Supplement')):
-        anchored = document_anchored_md_path(paper_id, supplement=is_supplement)
-        if not anchored.exists():
-            continue
-        captions = block_texts(anchored.read_text())
-        for anchor in load_anchors(paper_id, supplement=is_supplement):
-            parsed_id = parse_anchor(anchor.id)
-            if parsed_id is None or parsed_id.kind != AnchorKind.FIGURE:
-                continue
-            image = document_image_path(
-                paper_id, parsed_id.index, supplement=is_supplement
-            )
-            if not image.exists():
-                continue
-            caption_text = captions.get(anchor.id) or 'No caption'
-            logger.info(f'Listing {label.lower()} figure {anchor.id} from {image}')
-            combined_text += f'[{label} Figure {anchor.id}]\n'
-            combined_text += f'image_id: {parsed_id.index}\n'
-            combined_text += f'is_supplement: {is_supplement}\n'
-            combined_text += f'Caption: {caption_text}\n\n'
-
-    agent_sess = agent_session(task_id)
-
-    if additional_context is not None:
-        # Follow-up: agent has context from conversation
-        message: AgentInput = build_followup_prompt(additional_context)
-    else:
-        # Initial query: build full message with pedigree images + instructions
-        await agent_sess.clear_session()
-        message = (
-            f'{combined_text}\n\n{curator_notes_block(paper_id)}'
-            f'{PEDIGREE_DESCRIBER_AGENT_INSTRUCTIONS}'
-        )
-
-    agent, capture = pedigree_describer_agent_for_paper(paper_id)
-    result = await Runner.run(
-        agent,
-        message,
-        session=agent_sess,
+    figures = paper_figures(paper_id)
+    notes = figure_description_notes(paper_id, additional_context)
+    # Synchronous vision calls, one or more per figure; off the event loop so
+    # the worker's other tasks keep going.
+    described = await asyncio.to_thread(describe_figures, paper_id, figures, notes)
+    logger.info(
+        f'Paper {paper_id}: {len(figures)} figures visited, {len(described)} described'
     )
-    log_run_metrics('FIGURE_DESCRIPTION', result)
-
-    output = result.final_output
-    # The analysis is the vision model's; the agent only routes figures to it and
-    # copies the answer back, so store what the tool returned rather than the
-    # copy. Follow-ups are left alone: there the curator asked for a rewrite.
-    if (
-        additional_context is None
-        and output
-        and output.found
-        and capture.description is not None
-    ):
-        output = output.model_copy(
-            update={
-                'image_id': capture.image_id,
-                'is_supplement': capture.is_supplement,
-                'description': capture.description,
-            }
-        )
 
     with session_scope() as session:
         # Idempotent: delete-then-insert
         session.query(FigureDescriptionDB).filter(
             FigureDescriptionDB.paper_id == paper_id
         ).delete()
-        if output and output.found:
-            session.add(figure_description_to_db(paper_id, output))
+        session.add_all(
+            figure_description_to_db(paper_id, figure) for figure in described
+        )
 
 
 def pedigree_input(pedigree_row: FigureDescriptionDB | None) -> dict | None:

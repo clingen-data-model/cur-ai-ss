@@ -3682,27 +3682,6 @@ def test_hpo_linking_prompt_carries_global_context(db_session, seeded_paper):
     assert 'Onset was in infancy.' in _first_message(run)
 
 
-def test_figure_description_prompt_carries_global_context(db_session, seeded_paper):
-    from lib.tasks.handlers import handle_figure_description
-
-    seeded_paper.paper_global_additional_context = 'Ignore the supplement pedigree.'
-    task = TaskDB(
-        paper_id=seeded_paper.id,
-        type=TaskType.FIGURE_DESCRIPTION,
-        status=TaskStatus.RUNNING,
-    )
-    db_session.add(task)
-    db_session.commit()
-
-    with patch(
-        'lib.tasks.handlers.Runner.run', side_effect=RuntimeError('stop')
-    ) as run:
-        with pytest.raises(RuntimeError):
-            asyncio.run(handle_figure_description(task.id))
-
-    assert 'Ignore the supplement pedigree.' in _first_message(run)
-
-
 def test_hpo_link_cache_reloads_after_interval(db_session, seeded_paper, monkeypatch):
     """A curator's relink lands in the API process; the worker's cache only
     sees it by reloading from the database."""

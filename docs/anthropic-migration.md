@@ -546,7 +546,7 @@ there too. Trust our own live, reproducible result over a secondhand report.
 | `mondo_linking_agent` | 11 | yes |
 | `paper_extraction_agent` / `patient_phenotype_linking_agent` / `segregation_evidence_extractor` | 7 | yes |
 | `variant_harmonization_agent` | 6 | yes |
-| `hpo_linking_agent` / `pedigree_describer_agent` | 2 | yes |
+| `hpo_linking_agent` / `pedigree_describer_agent` (since replaced by `figure_describer.py`, plain vision calls) | 2 | yes |
 | `table_correction_agent` | 1 | yes |
 | `compound_het_agent` / `paper_section_classifier_agent` / `segregation_analysis_computed_agent` | 0 | yes |
 

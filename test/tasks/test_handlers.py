@@ -2,10 +2,11 @@
 
 import pytest
 
+from lib.agents.figure_describer import FigureRef
 from lib.agents.patient_extraction_agent import PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
 from lib.misc.pdf.paths import document_anchored_md_path
 from lib.models import GeneDB, PaperDB
-from lib.models.figure import FigureDescriptionDB
+from lib.models.figure import FigureDescriptionDB, FigureKind
 from lib.tasks.handlers import (
     cited_text,
     format_paper_context,
@@ -347,3 +348,111 @@ def test_paper_global_context_reads_the_paper_row(db_session, paper):
     db_session.commit()
 
     assert paper_global_context(paper.id) == 'Patients are numbered per family.'
+
+
+def test_paper_figures_lists_every_figure_with_an_image_main_first(paper):
+    """The figures the describer visits: each figure-N anchor whose
+    images/N.png exists, main text before supplement, with the alt text the
+    anchored document carries as its caption (None when it has none)."""
+    from lib.misc.pdf.anchors import Anchor, write_anchored
+    from lib.misc.pdf.paths import document_image_path
+    from lib.tasks.handlers import paper_figures
+
+    write_anchored(
+        paper.id,
+        '[figure-0] ![Figure 1. Photographs](x/0.png)\n\n'
+        '[paragraph-1] text\n\n'
+        '[figure-2] ![](x/2.png)\n\n'
+        '[figure-3] ![no file](x/3.png)\n',
+        [
+            Anchor(id='figure-0'),
+            Anchor(id='paragraph-1'),
+            Anchor(id='figure-2'),
+            Anchor(id='figure-3'),
+        ],
+    )
+    write_anchored(
+        paper.id,
+        '[supp-figure-0] ![Figure S1](x/0.png)\n',
+        [Anchor(id='supp-figure-0')],
+        supplement=True,
+    )
+    for image_id, supplement in ((0, False), (2, False), (0, True)):
+        path = document_image_path(paper.id, image_id, supplement=supplement)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b'png')
+
+    assert paper_figures(paper.id) == [
+        FigureRef(0, False, 'Figure 1. Photographs'),
+        FigureRef(2, False, None),
+        FigureRef(0, True, 'Figure S1'),
+    ]
+
+
+def test_figure_description_notes_join_paper_and_task_context(db_session, paper):
+    from lib.tasks.handlers import figure_description_notes
+
+    assert figure_description_notes(paper.id, None) is None
+    assert figure_description_notes(paper.id, 'III-3 is the proband') == (
+        'III-3 is the proband'
+    )
+    paper.paper_global_additional_context = 'Families are lettered.'
+    db_session.commit()
+    assert figure_description_notes(paper.id, None) == 'Families are lettered.'
+    assert figure_description_notes(paper.id, 'III-3 is the proband') == (
+        'Families are lettered.\n\nIII-3 is the proband'
+    )
+
+
+async def test_figure_description_stores_one_row_per_described_figure(
+    monkeypatch, db_session, paper
+):
+    """The handler hands every figure and the curator's notes to the describer
+    and replaces the paper's rows with what came back, kinds and all."""
+    from lib.agents.figure_describer import DescribedFigure
+    from lib.tasks import handlers
+    from lib.tasks.models import TaskDB, TaskStatus, TaskType
+
+    db_session.add(
+        FigureDescriptionDB(
+            paper_id=paper.id, image_id=9, kinds=['Pedigree'], description='stale'
+        )
+    )
+    paper.paper_global_additional_context = 'Families are lettered.'
+    task = TaskDB(
+        paper_id=paper.id,
+        type=TaskType.FIGURE_DESCRIPTION,
+        status=TaskStatus.RUNNING,
+        additional_context='III-3 is the proband',
+    )
+    db_session.add(task)
+    db_session.commit()
+    figures = [FigureRef(1, False, None), FigureRef(2, False, 'traces')]
+    seen: dict = {}
+
+    def fake_describe(paper_id, figs, notes):
+        seen.update(paper_id=paper_id, figures=figs, notes=notes)
+        return [
+            DescribedFigure(
+                image_id=2,
+                is_supplement=False,
+                kinds=[FigureKind.PEDIGREE, FigureKind.GEL],
+                description='pedigree and digest',
+            )
+        ]
+
+    monkeypatch.setattr(handlers, 'paper_figures', lambda paper_id: figures)
+    monkeypatch.setattr(handlers, 'describe_figures', fake_describe)
+
+    await handlers.handle_figure_description(task.id)
+    db_session.expire_all()
+
+    assert seen == {
+        'paper_id': paper.id,
+        'figures': figures,
+        'notes': 'Families are lettered.\n\nIII-3 is the proband',
+    }
+    rows = db_session.query(FigureDescriptionDB).filter_by(paper_id=paper.id).all()
+    assert [(r.image_id, r.kinds, r.description) for r in rows] == [
+        (2, ['Pedigree', 'Gel'], 'pedigree and digest')
+    ]

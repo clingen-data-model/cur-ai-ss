@@ -1,5 +1,5 @@
-from lib.agents.pedigree_describer_agent import PedigreeExtractionOutput
-from lib.models import FigureDescriptionDB, FigureKind, PatientDB, VariantDB
+from lib.agents.figure_describer import DescribedFigure
+from lib.models import FigureDescriptionDB, PatientDB, VariantDB
 from lib.models.evidence_block import HumanEvidenceBlock, ReasoningBlock
 from lib.models.family import Family, FamilyDB
 from lib.models.patient import (
@@ -92,16 +92,14 @@ def apply_patient_demographics(
 
 
 def figure_description_to_db(
-    paper_id: int, pedigree: PedigreeExtractionOutput
+    paper_id: int, figure: DescribedFigure
 ) -> FigureDescriptionDB:
-    """The described figure row for what the describer found: today always a
-    pedigree, since that is the only kind the describer reports."""
     return FigureDescriptionDB(
         paper_id=paper_id,
-        image_id=pedigree.image_id,
-        is_supplement=pedigree.is_supplement,
-        kinds=[FigureKind.PEDIGREE.value],
-        description=pedigree.description,
+        image_id=figure.image_id,
+        is_supplement=figure.is_supplement,
+        kinds=[kind.value for kind in figure.kinds],
+        description=figure.description,
     )
 
 
