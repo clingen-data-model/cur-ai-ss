@@ -213,14 +213,6 @@ class PaperDB(Base):
         'UserDB', foreign_keys=[review_assignee_user_id]
     )
 
-    # Curator notes every agent that reads the paper is given, set by "re-run
-    # everything" (see POST /papers/{id}/rerun-all). Per-task additional
-    # context is a follow-up to that one task's conversation and is not passed
-    # on to its successors; this is the paper-wide counterpart.
-    paper_global_additional_context: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
-
     # Paper extraction metadata (populated asynchronously by extraction agent)
     title: Mapped[str | None] = mapped_column(String, nullable=True)
     first_author: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -374,7 +366,6 @@ class PaperResp(PaperExtractionOutput):
     updated_by: UserSummaryResp | None = None
     review_status: ReviewStatus = ReviewStatus.NOT_ASSIGNED
     review_assignee: UserSummaryResp | None = None
-    paper_global_additional_context: str | None = None
     tasks: list['TaskResp'] = []
     patient_count: int = 0
     proband_count: int = 0
@@ -452,9 +443,6 @@ class PaperSummaryResp(BaseModel):
     # Columns on the paper row, so free: the query loads the row either way.
     disease_name: str | None = None
     pmid: str | None = None
-    # Prefills the re-run dialog's "All tasks" tab, which would otherwise have
-    # to fetch the whole paper just to read this.
-    paper_global_additional_context: str | None = None
     # Who last touched the paper itself, as distinct from collaborators, which
     # is everyone who has touched anything under it.
     updated_by: 'UserSummaryResp | None' = None

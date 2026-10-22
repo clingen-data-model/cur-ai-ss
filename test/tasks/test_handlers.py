@@ -11,7 +11,6 @@ from lib.models.figure import FigureDescriptionDB, FigureKind
 from lib.tasks.handlers import (
     cited_text,
     format_paper_context,
-    paper_global_context,
     paper_input,
     patient_extraction_message,
 )
@@ -317,32 +316,6 @@ async def test_rerunning_patient_extraction_replaces_only_its_own_flags(
     assert [r.subject for r in rows] == ['kept']
 
 
-def test_paper_context_carries_curator_notes_after_the_gene():
-    """The notes ride in the paper block, so every agent on the paper sends the
-    same bytes and the shared prompt-cache prefix still holds."""
-    plain = format_paper_context('text', 'MSX1')
-    noted = format_paper_context('text', 'MSX1', 'Ignore the supplement cohort.')
-
-    assert noted.startswith(plain)
-    assert noted.endswith(
-        'A human curator is re-running the extraction of this paper and has '
-        'given additional instructions for the whole run. Follow them where '
-        'they bear on your task:\nIgnore the supplement cohort.'
-    )
-    assert format_paper_context('text', 'MSX1', None) == plain
-    assert format_paper_context('text', 'MSX1', '') == plain
-
-
-def test_paper_global_context_reads_the_paper_row(db_session, paper):
-    assert paper_global_context(paper.id) is None
-    assert paper_global_context(paper.id + 1000) is None
-
-    paper.paper_global_additional_context = 'Patients are numbered per family.'
-    db_session.commit()
-
-    assert paper_global_context(paper.id) == 'Patients are numbered per family.'
-
-
 def test_paper_figures_lists_every_figure_with_an_image_main_first(paper):
     """The figures the describer visits: each figure-N anchor whose
     images/N.png exists, main text before supplement, with the alt text the
@@ -382,21 +355,6 @@ def test_paper_figures_lists_every_figure_with_an_image_main_first(paper):
     ]
 
 
-def test_figure_description_notes_join_paper_and_task_context(db_session, paper):
-    from lib.tasks.handlers import figure_description_notes
-
-    assert figure_description_notes(paper.id, None) is None
-    assert figure_description_notes(paper.id, 'III-3 is the proband') == (
-        'III-3 is the proband'
-    )
-    paper.paper_global_additional_context = 'Families are lettered.'
-    db_session.commit()
-    assert figure_description_notes(paper.id, None) == 'Families are lettered.'
-    assert figure_description_notes(paper.id, 'III-3 is the proband') == (
-        'Families are lettered.\n\nIII-3 is the proband'
-    )
-
-
 async def test_figure_description_stores_one_row_per_described_figure(
     monkeypatch, db_session, paper
 ):
@@ -411,7 +369,6 @@ async def test_figure_description_stores_one_row_per_described_figure(
             paper_id=paper.id, image_id=9, kinds=['Pedigree'], description='stale'
         )
     )
-    paper.paper_global_additional_context = 'Families are lettered.'
     task = TaskDB(
         paper_id=paper.id,
         type=TaskType.FIGURE_DESCRIPTION,
@@ -443,7 +400,7 @@ async def test_figure_description_stores_one_row_per_described_figure(
     assert seen == {
         'paper_id': paper.id,
         'figures': figures,
-        'notes': 'Families are lettered.\n\nIII-3 is the proband',
+        'notes': 'III-3 is the proband',
     }
     rows = db_session.query(FigureDescriptionDB).filter_by(paper_id=paper.id).all()
     assert [(r.image_id, r.kinds, r.description) for r in rows] == [
@@ -493,6 +450,12 @@ def test_curator_note_section_names_the_step_an_inherited_note_was_given_to():
     own = curator_note_section('Use Brazil.', None)
     assert own.startswith('A human curator re-ran this step')
     assert own.endswith('\nUse Brazil.')
+    for root in (TaskType.PDF_PARSING, TaskType.PAPER_CLASSIFIER):
+        whole = curator_note_section('Use Brazil.', root)
+        assert whole.startswith(
+            'This user-provided context was given for this re-run of the whole paper'
+        )
+        assert whole.endswith('\nUse Brazil.')
 
 
 def test_with_curator_note_appends_an_item_or_a_section_and_leaves_none_alone():
@@ -563,7 +526,7 @@ async def test_figure_description_labels_an_inherited_note(
     monkeypatch, db_session, paper
 ):
     """The describer has no conversation, so an inherited note joins its
-    vision prompts with the same "supplied to X" label the agents get."""
+    vision prompts with the same label the agents get."""
     from lib.tasks import handlers
     from lib.tasks.models import TaskDB, TaskStatus, TaskType
 
@@ -587,7 +550,9 @@ async def test_figure_description_labels_an_inherited_note(
 
     await handlers.handle_figure_description(task.id)
 
+    # Its only ancestors are the two root tasks, so an inherited note is by
+    # construction one for the whole re-run.
     assert seen['notes'].startswith(
-        'This user-provided context was supplied to PDF Parsing'
+        'This user-provided context was given for this re-run of the whole paper'
     )
     assert seen['notes'].endswith('\nSix pedigrees over three figures.')

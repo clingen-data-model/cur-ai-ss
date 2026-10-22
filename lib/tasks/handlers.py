@@ -288,9 +288,17 @@ async def continues_conversation(
 
 def curator_note_section(note: str, origin: TaskType | None) -> str:
     """The curator's note as a prompt section for a fresh run: the task's own
-    note, or one supplied to the step it came down from."""
+    note, one given for the whole re-run (on PDF Parsing or Paper Classifier),
+    or one supplied to the step it came down from."""
     if origin is None:
         lead = 'A human curator re-ran this step with the following note.'
+    elif origin in (TaskType.PDF_PARSING, TaskType.PAPER_CLASSIFIER):
+        # Everything descends from these two, so a note on either is the
+        # curator's note for the whole re-run of the paper.
+        lead = (
+            'This user-provided context was given for this re-run of the whole '
+            'paper and might be relevant here.'
+        )
     else:
         lead = (
             f'This user-provided context was supplied to {origin.value}, an '
@@ -403,48 +411,16 @@ async def ask_task_agent(
     return str(result.final_output)
 
 
-def paper_global_context(paper_id: int) -> str | None:
-    """The paper-wide curator notes ("re-run everything" sets them), or None."""
-    with session_scope() as session:
-        paper = session.get(PaperDB, paper_id)
-        return paper.paper_global_additional_context if paper else None
-
-
-def curator_notes_section(notes: str) -> str:
-    """The curator's context for the whole paper, as one prompt section.
-
-    ``format_paper_context`` carries it for the agents that read the paper; the
-    agents that never see the paper text (HPO linking, variant harmonization)
-    append it to their own first message, and figure description puts it in
-    its vision prompts.
-    """
-    return (
-        'A human curator is re-running the extraction of this paper and has '
-        'given additional instructions for the whole run. Follow them where '
-        f'they bear on your task:\n{notes}'
-    )
-
-
-def curator_notes_block(paper_id: int) -> str:
-    """``curator_notes_section`` plus the blank line that follows it, or ''
-    when the paper has none, for splicing into a first message."""
-    notes = paper_global_context(paper_id)
-    return f'{curator_notes_section(notes)}\n\n' if notes else ''
-
-
-def format_paper_context(
-    paper_markdown: str,
-    gene_symbol: str | None = None,
-    notes: str | None = None,
-) -> str:
+def format_paper_context(paper_markdown: str, gene_symbol: str | None = None) -> str:
     """Format paper and gene context for inclusion in message input.
+
+    The same bytes for every agent and every run on a paper (a curator's note
+    rides last, in ``with_curator_note``, never here), so the shared
+    prompt-cache prefix holds.
 
     Args:
         paper_markdown: The full paper content
         gene_symbol: Optional gene symbol to include
-        notes: Paper-wide curator notes (``paper_global_context``). They ride in this
-            block, not in the per-task data, so every agent on the paper gets
-            the same bytes and the shared prompt-cache prefix still holds.
 
     Returns:
         Formatted paper context string
@@ -455,8 +431,6 @@ def format_paper_context(
     ]
     if gene_symbol:
         sections.append(f'Gene: {gene_symbol}')
-    if notes:
-        sections.append(curator_notes_section(notes))
     return '\n\n'.join(sections)
 
 
@@ -535,9 +509,7 @@ async def handle_paper_classifier(task_id: int) -> None:
         await agent_sess.clear_session()
         paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
-            format_paper_context(
-                paper_markdown, gene_symbol, paper_global_context(paper_id)
-            ),
+            format_paper_context(paper_markdown, gene_symbol),
             PAPER_CLASSIFIER_AGENT_INSTRUCTIONS,
         )
         agent = paper_classifier_agent
@@ -601,9 +573,7 @@ async def handle_paper_metadata(task_id: int) -> None:
         await agent_sess.clear_session()
         paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
-            format_paper_context(
-                paper_markdown, gene_symbol, paper_global_context(paper_id)
-            ),
+            format_paper_context(paper_markdown, gene_symbol),
             PAPER_EXTRACTION_AGENT_INSTRUCTIONS,
         )
         agent = paper_extraction_agent
@@ -657,9 +627,7 @@ async def handle_variant_extraction(task_id: int) -> None:
         await agent_sess.clear_session()
         paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
-            format_paper_context(
-                paper_markdown, gene_symbol, paper_global_context(paper_id)
-            ),
+            format_paper_context(paper_markdown, gene_symbol),
             VARIANT_EXTRACTION_AGENT_INSTRUCTIONS,
         )
         agent = variant_extraction_agent
@@ -734,15 +702,6 @@ def paper_figures(paper_id: int) -> list[FigureRef]:
     return figures
 
 
-def figure_description_notes(
-    paper_id: int, additional_context: str | None
-) -> str | None:
-    """What the curator wants the describer to know: the paper-wide re-run
-    notes and the context of a re-run of this task, either or both."""
-    notes = [n for n in (paper_global_context(paper_id), additional_context) if n]
-    return '\n\n'.join(notes) if notes else None
-
-
 async def handle_figure_description(task_id: int) -> None:
     """Describe every readable figure of the paper, one ``figure_descriptions``
     row each (see lib/agents/figure_describer.py). Not an agent run: the
@@ -759,11 +718,12 @@ async def handle_figure_description(task_id: int) -> None:
         context_origin = task.context_origin
 
     figures = paper_figures(paper_id)
-    notes = figure_description_notes(
-        paper_id,
+    # The describer has no conversation, so a note joins its vision prompts;
+    # one that came down from a predecessor is labelled like the agents' are.
+    notes = (
         curator_note_section(additional_context, context_origin)
         if additional_context is not None and context_origin is not None
-        else additional_context,
+        else additional_context
     )
     # Synchronous vision calls, one or more per figure; off the event loop so
     # the worker's other tasks keep going.
@@ -842,9 +802,7 @@ def patient_extraction_message(
 
     paper_markdown = paper_text(paper_id, supplement_format)
     return paper_input(
-        format_paper_context(
-            paper_markdown, gene_symbol, paper_global_context(paper_id)
-        ),
+        format_paper_context(paper_markdown, gene_symbol),
         PATIENT_EXTRACTION_AGENT_INSTRUCTIONS,
     )
 
@@ -1003,9 +961,7 @@ async def handle_patient_demographics(task_id: int) -> None:
         await agent_sess.clear_session()
         paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
-            format_paper_context(
-                paper_markdown, gene_symbol, paper_global_context(paper_id)
-            ),
+            format_paper_context(paper_markdown, gene_symbol),
             PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS,
             f'Patient JSON:\n{patient_data}\n\n'
             f'Proband Identifier:\n{proband_identifier}',
@@ -1123,9 +1079,7 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
         await agent_sess.clear_session()
         paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
-            format_paper_context(
-                paper_markdown, gene_symbol, paper_global_context(paper_id)
-            ),
+            format_paper_context(paper_markdown, gene_symbol),
             SEGREGATION_EVIDENCE_AGENT_INSTRUCTIONS,
             f'Family Structure: {json.dumps(family_info, indent=2, default=str)}',
         )
@@ -1273,9 +1227,7 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
         await agent_sess.clear_session()
         paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
-            format_paper_context(
-                paper_markdown, gene_symbol, paper_global_context(paper_id)
-            ),
+            format_paper_context(paper_markdown, gene_symbol),
             SEGREGATION_ANALYSIS_COMPUTED_AGENT_INSTRUCTIONS,
             f'Family Structure and Data: {json.dumps(family_info, indent=2, default=str)}',
         )
@@ -1370,7 +1322,6 @@ async def handle_variant_harmonization(task_id: int) -> None:
         await agent_sess.clear_session()
         message = (
             f'Variant JSON:\n{json.dumps(variant_input, indent=2)}\n\n'
-            f'{curator_notes_block(paper_id)}'
             f'{VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS}'
         )
         message = with_curator_note(message, additional_context, context_origin)
@@ -1586,9 +1537,7 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
         await agent_sess.clear_session()
         paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
-            format_paper_context(
-                paper_markdown, gene_symbol, paper_global_context(paper_id)
-            ),
+            format_paper_context(paper_markdown, gene_symbol),
             PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS,
             f'Variants JSON:\n{structured_variants}\n\n'
             f'Patients JSON:\n{structured_patients}',
@@ -1738,9 +1687,7 @@ async def handle_compound_het_evaluation(task_id: int) -> None:
         # Get paper markdown
         paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
-            format_paper_context(
-                paper_markdown, gene_symbol, paper_global_context(paper_id)
-            ),
+            format_paper_context(paper_markdown, gene_symbol),
             COMPOUND_HET_AGENT_INSTRUCTIONS,
             f'Patient: {patient.identifier}\n\n'
             f'Heterozygous Variants for This Patient:\n'
@@ -1916,9 +1863,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         await agent_sess.clear_session()
         paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
-            format_paper_context(
-                paper_markdown, gene_symbol, paper_global_context(paper_id)
-            ),
+            format_paper_context(paper_markdown, gene_symbol),
             PATIENT_PHENOTYPE_LINKING_AGENT_INSTRUCTIONS,
             f'Structured Patient JSON:\n{[patient_data]}',
         )
@@ -1939,13 +1884,9 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         if not task:
             return
 
-        paper_row = session.get(PaperDB, paper_id)
-        # Curator notes, paper-wide or on this run (its own or inherited), skip
-        # the HPO link cache below so the HPO agent actually sees them.
-        has_curator_notes = bool(
-            (paper_row and paper_row.paper_global_additional_context)
-            or additional_context
-        )
+        # A curator's note on this run (its own or inherited) skips the HPO
+        # link cache below, so the HPO agent, which inherits it, actually sees it.
+        has_curator_notes = additional_context is not None
 
         # Idempotent: delete-then-insert
         # Phenotypes are scoped by patient_id, which is already run-versioned
@@ -2045,7 +1986,6 @@ async def handle_hpo_linking(task_id: int) -> None:
         await agent_sess.clear_session()
         message = (
             f'Phenotype JSON:\n{json.dumps(phenotype_data, indent=2)}\n\n'
-            f'{curator_notes_block(paper_id)}'
             f'{HPO_LINKING_AGENT_INSTRUCTIONS}'
         )
         message = with_curator_note(message, additional_context, context_origin)
@@ -2217,11 +2157,7 @@ async def handle_mondo_linking(task_id: int) -> None:
                 'inheritance_mode': target.inheritance_mode,
             }
             message = paper_input(
-                format_paper_context(
-                    paper_markdown,
-                    target.gene_symbol,
-                    paper_global_context(target.paper_id),
-                ),
+                format_paper_context(paper_markdown, target.gene_symbol),
                 MONDO_LINKING_AGENT_INSTRUCTIONS,
                 f'MONDO linking target JSON:\n{json.dumps(target_payload, indent=2)}',
             )

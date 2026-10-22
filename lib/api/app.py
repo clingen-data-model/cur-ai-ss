@@ -202,7 +202,6 @@ from lib.reference_data.hpo import (
     warm_term_lookup_if_cached,
 )
 from lib.tasks import (
-    RerunAllRequest,
     TaskCreateRequest,
     TaskResp,
     enqueue_all_instances,
@@ -1029,7 +1028,6 @@ def _paper_summaries(
             updated_at=paper.updated_at,
             status=summarize_paper_task_status(task_statuses.get(paper.id, [])),
             disease_name=paper.disease_name,
-            paper_global_additional_context=paper.paper_global_additional_context,
             pmid=paper.pmid,
             updated_by=(
                 users.get(paper.updated_by_user_id)
@@ -1163,7 +1161,6 @@ def _paper_to_resp(row: PaperDB, session: Session) -> PaperResp:
         updated_by=_user_summary(row.updated_by),
         review_status=row.review_status,
         review_assignee=_user_summary(row.review_assignee),
-        paper_global_additional_context=row.paper_global_additional_context,
         tasks=[
             TaskResp.model_validate(task, from_attributes=True) for task in row.tasks
         ],
@@ -1289,41 +1286,6 @@ def create_task(
         )
         tasks = [task]
     return tasks
-
-
-@app.post('/papers/{paper_id}/rerun-all', response_model=list[TaskResp])
-def rerun_all(
-    paper_id: int,
-    request: RerunAllRequest,
-    session: Session = Depends(get_session),
-    current_user: UserDB = Depends(get_current_user),
-) -> Any:
-    """Re-run every task of a paper, with notes every agent is given.
-
-    Starts at the root of the pipeline and lets the successor graph queue the
-    rest, so each agent starts a fresh conversation. Without ``reparse_pdf``
-    the root is the paper classifier: everything but PDF parsing.
-    """
-    root = TaskType.PDF_PARSING if request.reparse_pdf else TaskType.PAPER_CLASSIFIER
-    _prepare_rerun(session, paper_id, root, False, current_user.id)
-
-    paper = session.get(PaperDB, paper_id)
-    assert paper is not None  # _prepare_rerun 404s a missing paper
-    # Replaces rather than appends: the dialog shows the current notes, so what
-    # is submitted is what the curator wants every agent to see.
-    paper.paper_global_additional_context = (
-        request.additional_context or ''
-    ).strip() or None
-    session.flush()
-
-    return [
-        enqueue_task(
-            session,
-            paper_id=paper_id,
-            task_type=root,
-            updated_by_user_id=current_user.id,
-        )
-    ]
 
 
 @app.get('/papers/{paper_id}/chat/messages', response_model=list[ChatMessageResp])
