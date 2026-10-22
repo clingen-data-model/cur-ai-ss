@@ -139,7 +139,8 @@ Configuration is in `lib/core/environment.py` using Pydantic BaseSettings:
 - `EXTRACTION_MODEL` - Text-extraction model as `<provider>/<model>` (default: `openai/gpt-5.6-luna`); prefix required; the
   dev-caa deployment overrides this to `anthropic/claude-haiku-5-5` in
   `infrastructure/ansible/templates/env.j2`
-- `VLM_MODEL` - Vision model, same form; also the model patient extraction runs on, the one text agent not on `EXTRACTION_MODEL`, because Haiku 5.5 skips the pedigree's members and every per-patient task fans out from that roster (`patient_extraction_model` in `lib/agents/model_factory.py`, 2026-10-22) (default: `openai/gpt-5.6-sol`; the
+- `LINKING_MODEL` - The model the two ontology-linking agents (HPO, MONDO) run on, same form (default: `openai/gpt-5.6-luna`; dev-caa sets `anthropic/claude-haiku-5-5`). Every other agent is on `EXTRACTION_MODEL`, which dev-caa moved to `anthropic/claude-sonnet-5-5` on 2026-10-22: the Haiku 5.5 trial showed its HPO links match Sonnet's, while no prompt fixed its paper-reading failures (skipped pedigree members on paper 108, a cohort-wide testing method applied to 3 of 11 subjects in three runs where Sonnet gave 11 of 11 in three). Linking is many small calls per paper, extraction a few large ones, so this is where the cost split pays
+- `VLM_MODEL` - Vision model, same form (default: `openai/gpt-5.6-sol`; the
   dev-caa deployment overrides this to `anthropic/claude-opus-5-5` in
   `infrastructure/ansible/templates/env.j2`; it was Fable 5.1 until 2026-10-19,
   when Fable's safety classifier deterministically refused a table-correction

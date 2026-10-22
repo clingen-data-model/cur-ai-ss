@@ -4,7 +4,7 @@ from agents import Agent, function_tool
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import FLAG_RULES
 from lib.agents.model_facing import model_facing_output
-from lib.agents.model_factory import decision_model_settings, extraction_model
+from lib.agents.model_factory import linking_model, linking_model_settings
 from lib.models.evidence_block import ReasoningBlock
 from lib.models.flag import FlaggedReasoningBlock
 from lib.models.phenotype import HPOTerm
@@ -378,8 +378,9 @@ concept you were given, or null. The output is the block above with a
 agent = Agent(
     name='hpo_linker',
     instructions=BASE_SYSTEM_INSTRUCTIONS,
-    model=extraction_model(),
-    model_settings=decision_model_settings(),
+    # LINKING_MODEL, not EXTRACTION_MODEL: see lib/core/environment.py.
+    model=linking_model(),
+    model_settings=linking_model_settings(),
     output_type=model_facing_output(FlaggedReasoningBlock[HPOTerm]),
     tools=[search_hpo_terms, get_hpo_term, get_hpo_parents, get_hpo_children],
 )

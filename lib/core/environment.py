@@ -32,7 +32,16 @@ class Env(BaseSettings):
     # required ('openai/gpt-5.6-luna', 'anthropic/claude-sonnet-5').
     # 'openai/' goes to the agents SDK's default provider, 'anthropic/'
     # through LiteLLM -- see lib/agents/model_factory.py.
+    # EXTRACTION_MODEL is what every agent that reads the paper (or decides
+    # over what was read from it) runs on. LINKING_MODEL is for the two
+    # ontology-linking agents (HPO, MONDO), which read a short extracted
+    # phrase and choose among candidates their tools return: many calls per
+    # paper, each small, where a cheaper model holds up (the Haiku 5.5 trial:
+    # HPO links matched Sonnet's on 66 of 68 shared phenotypes) and where the
+    # paper-reading agents' failures (skipped pedigree members, a cohort-wide
+    # method applied to some subjects) do not arise.
     EXTRACTION_MODEL: str = 'openai/gpt-5.6-luna'
+    LINKING_MODEL: str = 'openai/gpt-5.6-luna'
     VLM_MODEL: str = 'openai/gpt-5.6-sol'
     # Separate from EXTRACTION_MODEL so chat's model choice (interactive,
     # latency-sensitive) can move independently of extraction's.
@@ -94,6 +103,7 @@ class Env(BaseSettings):
         """
         for setting, model in (
             ('EXTRACTION_MODEL', self.EXTRACTION_MODEL),
+            ('LINKING_MODEL', self.LINKING_MODEL),
             ('VLM_MODEL', self.VLM_MODEL),
             ('CHAT_MODEL', self.CHAT_MODEL),
         ):

@@ -3,13 +3,19 @@ from pydantic import ValidationError
 
 from lib.core.environment import Env
 
-# Both keys are pinned explicitly, including to None: Env still reads os.environ,
-# so without this a developer with ANTHROPIC_API_KEY exported gets different
-# results than CI. An explicit None in init kwargs does override the environment.
+# Both keys and every model are pinned explicitly, including to None: Env
+# still reads os.environ, so without this a developer with ANTHROPIC_API_KEY
+# exported, or with Claude models in a .env that litellm's import loads into
+# the environment, gets different results than CI. An explicit None in init
+# kwargs does override the environment.
 BASE = {
     'JWT_SECRET_KEY': 'test-secret-key-padded-to-thirty-two-plus-bytes',
     'OPENAI_API_KEY': 'sk-openai',
     'ANTHROPIC_API_KEY': None,
+    'EXTRACTION_MODEL': 'openai/gpt-5.6-luna',
+    'LINKING_MODEL': 'openai/gpt-5.6-luna',
+    'VLM_MODEL': 'openai/gpt-5.6-sol',
+    'CHAT_MODEL': 'openai/gpt-5.6-luna',
 }
 
 
@@ -69,6 +75,11 @@ def test_misspelled_provider_cannot_skip_the_key_check():
     through the key checks."""
     with pytest.raises(ValidationError, match='no route yet'):
         _env(EXTRACTION_MODEL='opanai/gpt-5.6-luna', OPENAI_API_KEY=None)
+
+
+def test_linking_model_is_validated_too():
+    with pytest.raises(ValidationError, match='LINKING_MODEL='):
+        _env(LINKING_MODEL='gemini/some-model')
 
 
 def test_vlm_model_is_validated_too():

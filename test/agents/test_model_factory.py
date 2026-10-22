@@ -13,9 +13,9 @@ from lib.agents.model_factory import (
     _register_unmapped_models,
     extraction_model,
     extraction_model_settings,
+    linking_model,
+    linking_model_settings,
     model_settings_for,
-    patient_extraction_model,
-    patient_extraction_model_settings,
     provider_api_key,
     resolve_model,
     vlm_model,
@@ -126,19 +126,22 @@ def test_configured_models_resolve_from_env(monkeypatch):
     assert extraction_model() == 'gpt-5.6-luna'
 
 
-def test_patient_extraction_runs_on_the_vlm_model(monkeypatch):
-    """The one text agent on VLM_MODEL (see patient_extraction_model)."""
-    monkeypatch.setattr(env, 'EXTRACTION_MODEL', 'anthropic/claude-haiku-5-5')
-    monkeypatch.setattr(env, 'VLM_MODEL', 'anthropic/claude-opus-5-5')
+def test_linking_agents_follow_linking_model(monkeypatch):
+    """HPO and MONDO linking run on LINKING_MODEL, at low effort; every other
+    agent on EXTRACTION_MODEL (see lib/core/environment.py)."""
+    monkeypatch.setattr(env, 'EXTRACTION_MODEL', 'anthropic/claude-opus-5-5')
+    monkeypatch.setattr(env, 'LINKING_MODEL', 'anthropic/claude-haiku-5-5')
 
-    model = patient_extraction_model()
+    model = linking_model()
     assert isinstance(model, LitellmModel)
-    assert model.model == 'anthropic/claude-opus-5-5'
-    assert patient_extraction_model_settings().extra_args is not None
+    assert model.model == 'anthropic/claude-haiku-5-5'
+    settings = linking_model_settings()
+    assert settings.extra_args is not None
+    assert settings.extra_args['output_config'] == {'effort': 'low'}
 
-    monkeypatch.setattr(env, 'VLM_MODEL', 'openai/gpt-5.6-sol')
-    assert patient_extraction_model() == 'gpt-5.6-sol'
-    assert patient_extraction_model_settings() == ModelSettings()
+    monkeypatch.setattr(env, 'LINKING_MODEL', 'openai/gpt-5.6-luna')
+    assert linking_model() == 'gpt-5.6-luna'
+    assert linking_model_settings() == ModelSettings()
 
 
 def test_vlm_model_keeps_its_prefix(monkeypatch):
