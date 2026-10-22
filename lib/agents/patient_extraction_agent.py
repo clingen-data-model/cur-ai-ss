@@ -82,13 +82,10 @@ list before you decide and decide before you write any patient:
 3. Name each patient under the identifier rules, mark the proband of each
    family, then assign families.
 
-Pedigree Input (if present):
-- anchor: the id of the pedigree figure in the text (e.g. figure-2, or
-  supp-figure-0 for a supplement figure); cite it for anything taken from the
-  description
-- description: summarizes pedigree structure including relationships, affected
-  status, and any genotype/segregation information visible in the figure
-- If null, there was no pedigree image included in the paper
+A pedigree reaches you only as the "Figure description" block under its
+figure id in the paper text; there is no separate pedigree input. Cite that
+figure's anchor for anything taken from the block. A paper whose figures carry
+no such block had no pedigree the describer could read.
 
 Fields to extract (for each patient):
 
