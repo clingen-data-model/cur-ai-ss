@@ -348,6 +348,30 @@ def test_occurrence_prompt_links_a_parent_named_as_a_variants_origin():
     assert "depends on whether the paper reports that parent's own genotype" in (prompt)
 
 
+def test_occurrence_prompt_gives_a_labelled_person_the_familys_testing_method():
+    """Paper 106 (CHST3): Figure 1 prints A/G under both parents of each
+    family, with a trace and a digest lane under each, and the Methods say
+    the PCR products were sequenced in both directions. The four affected
+    children got Sanger Sequencing from that sentence; the four parents, whose
+    zygosity came from the label, got no method, because only a chromatogram
+    counted as a report that a parent was tested. A printed genotype is such
+    a report, and the method is the one the paper names for the family."""
+    prompt = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
+    assert 'so is a genotype label printed against them' in prompt
+    assert 'a person\n  with a printed genotype was genotyped' in prompt
+    assert (
+        'the one the\n  paper says it used to find or confirm the variant in that family'
+        in (prompt)
+    )
+    assert 'Genotyping when the paper names none' in prompt
+    # An unstated method is an empty list, not the Unknown member (paper 111
+    # used the one, every other paper the other).
+    assert 'empty list when the paper does not say how this patient was tested' in (
+        prompt
+    )
+    assert 'never\n  `Unknown` for that' in prompt
+
+
 def test_occurrence_prompt_reads_a_pedigree_genotype_label_as_a_stated_genotype():
     """Paper 101 (CASP2): all nine parents came back with zygosity Unknown,
     with reasoning "own genotype not stated in the text", while the pedigree
@@ -368,7 +392,9 @@ def test_occurrence_prompt_reads_a_pedigree_genotype_label_as_a_stated_genotype(
         in (prompt)
     )
     assert 'stated rather than inferred, and the link is not flagged' in prompt
-    assert 'a chromatogram shown for the person is such a report' in prompt
+    assert 'A chromatogram, lane or trace shown for the person is\n  such a report' in (
+        prompt
+    )
     # The flag kind no longer calls every pedigree-sourced zygosity inferred.
     assert 'Not a zygosity read from a genotype label in the pedigree' in prompt
     assert 'carries at least one copy and nothing more, so zygosity is Unknown' not in (

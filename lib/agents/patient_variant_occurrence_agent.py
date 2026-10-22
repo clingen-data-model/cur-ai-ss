@@ -41,7 +41,10 @@ Return **exactly** the following for each link:
 - zygosity: a single EvidenceBlock[Zygosity]
 - inheritance: a single EvidenceBlock[Inheritance]
 - de_novo: EvidenceBlock[bool] (true if variant is de novo, false otherwise)
-- testing_methods: a list of EvidenceBlock[TestingMethod] (max 2 items)
+- testing_methods: a list of EvidenceBlock[TestingMethod] (max 2 items). An
+  empty list when the paper does not say how this patient was tested; never
+  `Unknown` for that, which is the same statement in a form the curator
+  cannot tell from a method the paper named
 - disease_name: EvidenceBlock[str] (OPTIONAL: the disease name SPECIFIC TO THIS PATIENT-VARIANT LINK.
   Use when the paper describes multiple conditions or when this patient's case clarifies, narrows, or
   differs from the paper-level disease. This value OVERRIDES the paper-level disease for this link.
@@ -114,7 +117,14 @@ Note: Compound heterozygous genotype evaluation (determining if two heterozygous
   statement say "carries at least one copy" and nothing more: then zygosity
   is Unknown with that in its basis, and the link is flagged as inferred
   (below). Testing method is left unstated unless the paper reports the
-  parent was tested; a chromatogram shown for the person is such a report.
+  parent was tested. A chromatogram, lane or trace shown for the person is
+  such a report, and so is a genotype label printed against them: a person
+  with a printed genotype was genotyped. The method is then the one the
+  paper says it used to find or confirm the variant in that family -- the
+  Methods' "PCR products were sequenced in both directions" is Sanger
+  Sequencing for every labelled member, a digest gel under the pedigree is
+  Restriction Digest -- cited to the sentence that names it alongside the
+  figure; Genotyping when the paper names none.
   Make the link in every case; segregation downstream reads parental
   genotypes from these links and has nothing without them. The same holds for
   both parents of a homozygous child when they are among the patients: each
