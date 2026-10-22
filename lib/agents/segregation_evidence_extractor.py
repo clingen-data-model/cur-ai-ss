@@ -2,6 +2,7 @@ from agents import Agent
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
+from lib.agents.model_facing import model_facing_output
 from lib.agents.model_factory import extraction_model, extraction_model_settings
 from lib.models.segregation_analysis import SegregationEvidenceExtractionOutput
 
@@ -19,8 +20,8 @@ Extract the following fields:
 
 1. extracted_lod_score (EvidenceBlock[float | None]):
    - Search for explicit LOD scores mentioned in the paper for this family.
-   - If found, return the numeric LOD score value with the quote and reasoning.
-   - If not found, return value=None with reasoning explaining why (e.g., "Paper does not report LOD score for this family").
+   - If found, return the numeric LOD score value with the quote and basis.
+   - If not found, return value=None with basis explaining why (e.g., "Paper does not report LOD score for this family").
    - LOD scores may appear in:
      * Text (e.g., "LOD score of 3.2", "multipoint LOD = 2.5")
      * Tables showing LOD scores by family
@@ -31,13 +32,13 @@ Extract the following fields:
    - This indicates incomplete segregation (non-segregating cases).
    - Use the family structure and variant information provided to make this assessment.
    - Return true if such individuals exist, false if segregation is complete or unclear.
-   - Reasoning should explain which individuals (if any) are non-segregators, or why segregation is unclear.
+   - Basis should explain which individuals (if any) are non-segregators, or why segregation is unclear.
    - Note: If the paper doesn't explicitly discuss segregation or variant carriers, still make your best assessment based on available information.
 
 Output format:
 Return two EvidenceBlocks with:
 - value: the extracted data
-- reasoning: explanation of how you determined this
+- basis: explanation of how you determined this
 - citations: the block(s) the value rests on, each as {"anchor", "quote"} -- a
   paragraph with the LOD sentence as the quote, a table row with the LOD cell, or
   the pedigree figure with no quote (see CORE EXTRACTION RULES)
@@ -66,5 +67,5 @@ agent = Agent(
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
     model_settings=extraction_model_settings(),
-    output_type=SegregationEvidenceExtractionOutput,
+    output_type=model_facing_output(SegregationEvidenceExtractionOutput),
 )

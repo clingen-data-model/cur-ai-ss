@@ -2,6 +2,7 @@ from agents import Agent
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
+from lib.agents.model_facing import model_facing_output
 from lib.agents.model_factory import extraction_model, extraction_model_settings
 from lib.models.patient import PatientExtractionOutput
 
@@ -38,7 +39,7 @@ gene, that is everyone it identifies; the scope rule only bites in multi-gene
 cohorts and diagnostic series.
 
 PROCEDURE -- work in this order. The candidate list from step 1, with each
-label's decision from step 2, is written out in full in the reasoning of the
+label's decision from step 2, is written out in full in the basis of the
 first family's identifier (there is no other place for it in the output), so
 list before you decide and decide before you write any patient:
 
@@ -91,7 +92,7 @@ Fields to extract (for each patient):
 
 Each field is an EvidenceBlock containing:
   - value: the extracted data
-  - reasoning: explanation of how the value was determined
+  - basis: explanation of how the value was determined
   - citations: the blocks of the text the value rests on, each as {{"anchor", "quote"}}
     (see CORE EXTRACTION RULES); at least one is required for a real value.
 
@@ -127,7 +128,7 @@ Each field is an EvidenceBlock containing:
        text names together by role are two patients ("the parents" gives
        "mother" and "father"); when the role alone would name two people
        ("two paternal aunts"), number them in the order the text gives
-       ("paternal aunt 1", "paternal aunt 2") and say so in the reasoning.
+       ("paternal aunt 1", "paternal aunt 2") and say so in the basis.
        A pedigree symbol the figure leaves unlabeled is still named by the
        text or legend whenever they refer to that person by role ("the
        proband's father", "an unaffected brother"): match the symbol to the
@@ -137,7 +138,7 @@ Each field is an EvidenceBlock containing:
        and no role in the text or legend (rule 4) -- does the positional
        label the pedigree description assigns ("II-3") become the identifier.
        It is the one name that picks out that symbol and nobody else, but it
-       is ours, not the paper's: the reasoning says the paper prints no label
+       is ours, not the paper's: the basis says the paper prints no label
        for this person and names them nowhere, and the person gets an
        "inferred" flag (FLAGS below). Rules 1-4 are exhausted first, every
        time; a positional label never stands in for a label the paper gives.
@@ -164,7 +165,7 @@ Each field is an EvidenceBlock containing:
   - Proband: the individual through whom the family was ascertained -- an
     arrow in the pedigree, "proband" or "index case" in the text. When the
     paper marks no one, the member it describes most fully; in a family of
-    one, that one member. Say in the reasoning which of these applied.
+    one, that one member. Say in the basis which of these applied.
   - Non-Proband: every other member of the family, and every re-reported
     individual (next paragraph), whatever their standing in the paper that
     first described them.
@@ -177,7 +178,7 @@ Each field is an EvidenceBlock containing:
   proband here: curation counts the probands this paper adds, and that person
   was counted when first published. A family made only of re-reported
   individuals therefore has no proband at all. This is the one exception to
-  the one-proband rule, and the reasoning cites the header or sentence that
+  the one-proband rule, and the basis cites the header or sentence that
   shows the person was reported before.
   Decide it here, where the whole family is visible, not per patient
   downstream.
@@ -187,13 +188,13 @@ Each field is an EvidenceBlock containing:
     exactly match the identifier of one of the families in the "families" list below.
   - Every patient must carry a family_identifier; it is how each patient is linked to
     its family (see FAMILY GROUPING for how to derive and label families).
-  - reasoning should explain the linkage (e.g., "listed under Family 2 in Table 1",
+  - basis should explain the linkage (e.g., "listed under Family 2 in Table 1",
     "described as the proband's sibling").
 
 Guidelines:
 
 1. Extract only what the paper states. The proband fallback above is the one
-   place judgment is asked for, and the reasoning must say so when it is used.
+   place judgment is asked for, and the basis must say so when it is used.
 2. Do not extract the people who wrote the paper, non-clinical mentions, or
    animal models. A citation standing in for a person -- a table column headed
    "Smith et al.", "the patient of Smith et al." -- is a label for that
@@ -250,12 +251,12 @@ person elsewhere -- an identifier in the text or a table, or a role in the text
 or figure legend ("the proband's father"), matched to the symbol through the
 description's relationships (rule 4). Only a symbol the paper names nowhere
 takes the positional label the description gives it ("II-3"; "unlabeled spouse
-of II-1" rendered as the position the description assigns), with the reasoning
+of II-1" rendered as the position the description assigns), with the basis
 saying the paper prints no label and names the person nowhere, and an
 "inferred" flag (rule 5). A figure that prints no identifiers at all leaves the
 proband as "patient" (rule 6) and the relatives under their roles where the
 paper supplies one, and under their positional labels otherwise. Say in the
-first family's reasoning when the figure prints no labels, so a curator knows
+first family's basis when the figure prints no labels, so a curator knows
 every positional identifier in that family is ours.
 
 This holds for every paper with a pedigree, including a single case report: the
@@ -303,7 +304,7 @@ Consanguinity (EvidenceBlock[bool], required for every family):
   (a double line between the parents).
 - False otherwise -- when the paper says the parents are unrelated, and also
   when it says nothing. The field cannot be null, so False also means "not
-  stated"; the reasoning must say which of the two it is.
+  stated"; the basis must say which of the two it is.
 
 FLAGS for this task (the rule is in CORE EXTRACTION RULES). Kinds:
 
@@ -339,7 +340,7 @@ BEFORE RETURNING, CHECK:
   cell; every member of a numbered series carries the series noun.
 - Every family the paper reports for the first time has exactly one Proband,
   and no re-reported individual is one.
-- The first family's identifier reasoning lists every candidate label with
+- The first family's identifier basis lists every candidate label with
   its decision, and every label it marks as a patient is in "patients".
 - Every in-scope candidate a rule rejected, and every proband chosen where
   the paper marks none, has a flag
@@ -352,7 +353,7 @@ Output format:
     - consanguinity: EvidenceBlock[bool] (whether parents are consanguineous)
   - patient_identifiers: list of EvidenceBlocks[str] where:
     - value: the patient identifier (matching the patient identifier values extracted above)
-    - reasoning: explanation of how the patient was linked to this family (e.g., "explicitly listed in Figure 2 pedigree", "described as proband's sibling in text", "appears in Family 1 label")
+    - basis: explanation of how the patient was linked to this family (e.g., "explicitly listed in Figure 2 pedigree", "described as proband's sibling in text", "appears in Family 1 label")
     - citations: the block(s) that place the patient in the family -- the pedigree
       figure anchor (no quote), a paragraph with the relational phrase as the quote,
       or a table row with the family cell as the quote
@@ -375,5 +376,5 @@ agent = Agent(
     model_settings=extraction_model_settings(),
     # 0 union/nullable schema nodes since slice 4 of the evidence-anchors work,
     # under Anthropic's limit of 16; test_output_schema_census guards it.
-    output_type=PatientExtractionOutput,
+    output_type=model_facing_output(PatientExtractionOutput),
 )

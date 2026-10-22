@@ -14,13 +14,14 @@ question is only whether two of them describe one decision.
 from agents import Agent
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
+from lib.agents.model_facing import model_facing_output
 from lib.agents.model_factory import decision_model_settings, extraction_model
 from lib.models.flag import FlagMergeOutput
 
 EXTRACTION_VERIFICATION_AGENT_INSTRUCTIONS = """
 You are given the open curator flags on one paper, as a JSON list. Each has
 an id, the agent that raised it, its kind, what it is about (a patient,
-family, variant or phenotype, or null), a subject and the reasoning behind
+family, variant or phenotype, or null), a subject and the basis behind
 it. The agents ran separately -- one per patient, per family or per variant,
 and at the same time -- so the same decision about the paper may appear more
 than once, worded differently or about different people.
@@ -48,7 +49,7 @@ shape:
 - the same kind of decision resting on different facts (a country inferred
   for one patient from the study site and for another from a stated
   birthplace);
-- flags about different people where the reasoning turns on something
+- flags about different people where the basis turns on something
   specific to each person.
 
 Only flags of the same kind raised by the same agent can be one decision:
@@ -73,5 +74,5 @@ agent = Agent(
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
     model_settings=decision_model_settings(),
-    output_type=FlagMergeOutput,
+    output_type=model_facing_output(FlagMergeOutput),
 )

@@ -33,6 +33,8 @@ from typing import Any, TypeVar
 from agents import Agent, Runner, RunResult, TResponseInputItem
 from pydantic import BaseModel, ValidationError
 
+from lib.agents.model_facing import MODEL_FACING_WORD, from_model_keys, to_model_schema
+
 logger = logging.getLogger(__name__)
 
 T = TypeVar('T', bound=BaseModel)
@@ -42,7 +44,7 @@ _JSON_OUTPUT_DIRECTIVE = (
     'fences, no commentary before or after. It must validate against this '
     'JSON Schema exactly:\n\n{schema}\n\n'
     'The schema above cannot express one of its own rules, because it is a '
-    'cross-field check: any object shaped like {{"value", "reasoning", '
+    'cross-field check: any object shaped like {{"value", "' + MODEL_FACING_WORD + '", '
     '"citations"}} is an evidence block, and citations MUST hold at '
     'least one {{"anchor", "quote"}} entry unless value is null, "Unknown", '
     'or false. A block whose value is a concrete answer but whose citations '
@@ -72,6 +74,26 @@ Check = Callable[[Any], None]
 AgentInput = str | list[TResponseInputItem]
 
 _FENCE_RE = re.compile(r'^```(?:json)?\s*\n?(.*?)\n?```$', re.DOTALL)
+
+
+def output_directive(output_type: type[BaseModel]) -> str:
+    """The schema directive appended to a manual-output agent's instructions:
+    the output type's JSON schema as the model sees it (lib.agents.model_facing)."""
+    return _JSON_OUTPUT_DIRECTIVE.format(
+        schema=json.dumps(to_model_schema(output_type.model_json_schema()), indent=2)
+    )
+
+
+def parse_model_output(output_type: type[T], text: str) -> T:
+    """``text`` (the model's reply, fences stripped) as ``output_type``, with the
+    model-facing keys mapped back first. Raises ``ValidationError`` or
+    ``ValueError`` (malformed JSON) like ``model_validate_json`` would."""
+    try:
+        parsed = json.loads(_strip_code_fence(text))
+    except json.JSONDecodeError:
+        # Let pydantic report the malformed JSON in its own terms.
+        return output_type.model_validate_json(_strip_code_fence(text))
+    return output_type.model_validate(from_model_keys(parsed))
 
 
 def _strip_code_fence(text: str) -> str:
@@ -116,16 +138,12 @@ async def run_with_manual_output(
     model; a `ValueError` it raises is repaired the same way, with its message
     as the feedback (see `verify_citations` in lib.models.evidence_block).
     """
-    directive = _JSON_OUTPUT_DIRECTIVE.format(
-        schema=json.dumps(output_type.model_json_schema(), indent=2)
-    )
-    prompt = _append_to_instructions(message, directive)
+    prompt = _append_to_instructions(message, output_directive(output_type))
 
     result = await Runner.run(agent, prompt, **runner_kwargs)
     for attempt in range(1, max_attempts + 1):
-        text = _strip_code_fence(str(result.final_output))
         try:
-            parsed = output_type.model_validate_json(text)
+            parsed = parse_model_output(output_type, str(result.final_output))
             if check is not None:
                 check(parsed)
             return result, parsed

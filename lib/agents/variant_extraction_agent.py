@@ -14,7 +14,7 @@ CONTEXT:
 
 Task:
 Extract all explicitly mentioned genetic variants associated with the target gene from the text.
-Each extracted value MUST be wrapped in an EvidenceBlock (value, reasoning, citations -- see CORE EXTRACTION RULES).
+Each extracted value MUST be wrapped in an EvidenceBlock (value, basis, citations -- see CORE EXTRACTION RULES).
 
 Key Variant Extraction Principles:
 - Extract ONLY variants explicitly stated in the provided text.
@@ -119,7 +119,7 @@ DISALLOWED inference:
 - Nucleotide changes without coordinate system
 - Any inference requiring transcript selection
 
-Critical: If reasoning cannot clearly justify the inferred value, value MUST be null.
+Critical: If basis cannot clearly justify the inferred value, value MUST be null.
 
 ------------------------------
 VARIANT TYPE CLASSIFICATION
@@ -158,7 +158,7 @@ For the "variant" field (overall variant identification):
   - null only if no clear variant identifier is present
 - citations → the block(s) that identify this variant (required if value is non-null): the
   paragraph with the naming phrase as the quote, or the table row with the variant cell as the quote
-- reasoning → explanation of how this variant was identified (which section, context, data type, etc.)
+- basis → explanation of how this variant was identified (which section, context, data type, etc.)
 
 ------------------------------
 FUNCTIONAL EVIDENCE ASSESSMENT
@@ -172,7 +172,7 @@ For the "functional_evidence" field:
 - value → boolean indicating whether functional validation is present (true/false)
 - citations → the block(s) describing the functional evidence (required if value is true): a
   paragraph with the describing sentence as the quote, a table row, or a figure (no quote)
-- reasoning → explanation of how functional evidence was determined
+- basis → explanation of how functional evidence was determined
 
 ------------------------------
 MAIN VARIANT FOCUS
@@ -200,7 +200,7 @@ Rules:
 Evidence:
 - citations → the block(s) demonstrating how the paper treats the variant, with the
   phrase or table cell as the quote
-- reasoning → explain why the variant is considered primary or secondary
+- basis → explain why the variant is considered primary or secondary
 
 ------------------------------
 OUTPUT FORMAT
@@ -210,8 +210,8 @@ The output is an object with a "variants" list, each variant shaped like:
   "variants": [
     {
       "gene": "BRAF",
-      "transcript": { "value": "NM_004333.5", "reasoning": "...", "citations": [{ "anchor": "paragraph-12", "quote": "NM_004333.5" }] },
-      "hgvs_c": { "value": "c.1799T>A", "reasoning": "...", "citations": [{ "anchor": "table-1-row-3", "quote": "c.1799T>A" }] },
+      "transcript": { "value": "NM_004333.5", "basis": "...", "citations": [{ "anchor": "paragraph-12", "quote": "NM_004333.5" }] },
+      "hgvs_c": { "value": "c.1799T>A", "basis": "...", "citations": [{ "anchor": "table-1-row-3", "quote": "c.1799T>A" }] },
       ...
     }
   ]
@@ -219,7 +219,7 @@ The output is an object with a "variants" list, each variant shaped like:
 
 Output rules:
 - "variants" is empty if none are found
-- Every field is an EvidenceBlock: value (or null), reasoning, and citations, each {"anchor", "quote"}
+- Every field is an EvidenceBlock: value (or null), basis, and citations, each {"anchor", "quote"}
 - A figure is cited by its figure-N anchor with an empty quote
 - Null values are acceptable for any value field
 - The fields are gene, transcript, protein_accession, genomic_accession, lrg_accession, gene_accession, genomic_coordinates, genome_build, rsid, caid, variant, hgvs_c, hgvs_p, hgvs_g, variant_type, functional_evidence
@@ -252,7 +252,7 @@ FLAGS for this task (the rule is in CORE EXTRACTION RULES). Kinds:
   previously published case.
 
 Not: two notations in the paper that disagree for one variant -- record the
-table's form, note the other in that variant's reasoning, and leave it to
+table's form, note the other in that variant's basis, and leave it to
 harmonization, which can check which one the protein change fits. Not a
 transcript or build the paper does not state.
 """

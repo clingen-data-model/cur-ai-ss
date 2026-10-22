@@ -25,7 +25,7 @@ Fields to extract:
 
 Each field (except the *_unit fields) is an EvidenceBlock containing:
   - value: the extracted data
-  - reasoning: explanation of how the value was determined
+  - basis: explanation of how the value was determined
   - citations: the blocks of the text the value rests on, each as {"anchor", "quote"}
     (see CORE EXTRACTION RULES); at least one is required unless the value is
     Unknown/None. A value read from a figure description cites that figure's
@@ -147,7 +147,7 @@ that fact for every member of the group, and the member's field takes it as
 a stated value:
 
 - Cite the sentence (or the table section, heading or legend that places the
-  patient in the group), and say in the reasoning that the value comes from
+  patient in the group), and say in the basis that the value comes from
   the cohort or family description. This is routine extraction, not a flag.
 - A statement about the patient themself wins when it differs ("one family of
   Estonian origin" among Finnish families makes that family's members
@@ -159,19 +159,19 @@ a stated value:
   because the cohort is. A patient described only by a count or a share
   ("most were of European descent", "9 of 23 families were Finnish") is not
   placed in the group, so the field stays Unknown with the implied value in
-  its reasoning.
+  its basis.
 - A mixed cohort ("18 Finnish and 5 Estonian families") with nothing placing
   the patient in one part fills the field whose enum value is the same for
   every part (Finnish and Estonian are both White, and both Not Hispanic or
   Latino) and leaves the one that differs (country) Unknown, naming the
-  candidates in the reasoning. An identifier prefix is not a placement.
+  candidates in the basis. An identifier prefix is not a placement.
 
 Guidelines:
 
 1. Extract only stated information. Do NOT infer. A value the paper implies
    but does not state (an age from "in her thirties", a country from a surname
    or a study site, an affected status from a genotype) stays Unknown or None;
-   say the implied value in that field's reasoning. That is the rule working,
+   say the implied value in that field's basis. That is the rule working,
    not a flag. A pedigree symbol, a kinship word and a cohort or family
    description are not implications: the sex rule and COHORT AND FAMILY
    DESCRIPTIONS above say why, and the same holds for the affected status a

@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from lib.agents.base_instructions import BASE_SYSTEM_INSTRUCTIONS
 from lib.agents.core_extraction_rules import CORE_EXTRACTION_SPEC
+from lib.agents.model_facing import model_facing_output
 from lib.agents.model_factory import extraction_model, extraction_model_settings
 from lib.models import PhenotypeExtractionOutput
 
@@ -36,7 +37,7 @@ For every valid phenotype extraction, return:
 - patient_id
 - concept (EvidenceBlock[str]):
   - value: the phenotype text
-  - reasoning: explanation of why this is a phenotype and how it links to the patient
+  - basis: explanation of why this is a phenotype and how it links to the patient
   - citations: the block(s) mentioning the phenotype for this patient, each as
     {"anchor", "quote"}: the paragraph with the sentence as the quote, or the table
     row with the cell as the quote (see CORE EXTRACTION RULES). At least one is
@@ -123,7 +124,7 @@ PHENOTYPE FIELD DEFINITIONS
 
 1. **concept** (EvidenceBlock[str]):
    - **value**: The exact phenotype text (observable trait, sign, or symptom).
-   - **reasoning**: Explain WHY this is a phenotype and HOW you determined which patient it belongs to.
+   - **basis**: Explain WHY this is a phenotype and HOW you determined which patient it belongs to.
    - **citations**: Evidence sources, anchor + quote (see CORE EXTRACTION RULES below).
 
 2. **negated**: true if the text explicitly states the patient does NOT have the phenotype
@@ -184,7 +185,7 @@ Extract phenotypes that explicitly belong to the provided patient:
   Unaffected patient too, even when the finding resembles the family's phenotype:
   carriers can have mild or unrelated findings.
 - If a stated finding seems to contradict the status, extract it anyway and say
-  so in the reasoning. If nothing is stated for the patient, return an empty list.
+  so in the basis. If nothing is stated for the patient, return an empty list.
 
 ---------------------------------------------------
 FINDING THE PHENOTYPES
@@ -212,7 +213,7 @@ sensorineural hearing loss", "the 17 patients shared a wide mouth and
 deep-set eyes", a feature scored in every patient (17/17) -- is the paper
 stating that finding for every member of the group, this patient included.
 Extract it for them as a stated finding: uncertain: false, cited to that
-sentence, with the reasoning saying it comes from the cohort description, and
+sentence, with the basis saying it comes from the cohort description, and
 no flag. The group must be one the paper puts this patient in: "all affected
 individuals" covers an Affected patient and not an Unaffected relative. A
 statement about part of the group -- "most", "the majority", 12 of 17 --
@@ -342,7 +343,7 @@ DO return THREE separate entries:
 ]
 
 Each phenotype gets its own entry citing the same block, with the span that
-names that phenotype as its quote, and individual value and reasoning fields.
+names that phenotype as its quote, and individual value and basis fields.
 
 ---------------------------------------------------
 GENETIC DISEASE RELEVANCE FILTER
@@ -368,7 +369,7 @@ For each extracted phenotype:
 - Confirm patient_id matches one of the patient IDs in the provided patient list
 - Confirm all boolean fields are true/false (not "yes"/"no" or strings)
 - Confirm concept.value is a SINGLE phenotype string (not a list)
-- Confirm concept.reasoning explains the phenotype and patient linkage
+- Confirm concept.basis explains the phenotype and patient linkage
 - Follow CORE EXTRACTION RULES for evidence validation (anchor copied as printed, quote verbatim from that block)
 - If multiple phenotypes are mentioned in one sentence, split them into separate entries
 - If any check fails, adjust or skip the extraction
@@ -405,7 +406,7 @@ Example structure:
     "patient_id": 123,
     "concept": {
       "value": "developmental delay",
-      "reasoning": "The patient is described as having delayed milestones in the clinical summary.",
+      "basis": "The patient is described as having delayed milestones in the clinical summary.",
       "citations": [{"anchor": "paragraph-27", "quote": "global developmental delay"}]
     },
     "negated": false,
@@ -420,7 +421,7 @@ Example structure:
     "patient_id": 123,
     "concept": {
       "value": "seizures",
-      "reasoning": "Seizures are explicitly mentioned as a key clinical feature of this patient.",
+      "basis": "Seizures are explicitly mentioned as a key clinical feature of this patient.",
       "citations": [{"anchor": "table-2-row-4", "quote": "recurrent seizures"}]
     },
     "negated": false,
@@ -436,12 +437,12 @@ Example structure:
 }
 
 Ensure:
-- All required fields are present (patient_id, concept with value/reasoning and at least one citation)
+- All required fields are present (patient_id, concept with value/basis and at least one citation)
 - All optional fields are either provided if mentioned in text, or null/omitted
 - Each phenotype has the patient_id of the provided patient
 - concept.value is a SINGLE phenotype string (never a list)
 - Every citation quote is actual text from the cited block (not paraphrased)
-- concept.reasoning explains the extraction and why it applies to this patient
+- concept.basis explains the extraction and why it applies to this patient
 - Each distinct phenotype is extracted as a separate entry (no lists in concept.value)
 - The pedigree figure is not a source of phenotypes; do not cite it here
 """
@@ -455,5 +456,5 @@ agent = Agent(
     instructions=BASE_SYSTEM_INSTRUCTIONS,
     model=extraction_model(),
     model_settings=extraction_model_settings(),
-    output_type=PhenotypeExtractionOutput,
+    output_type=model_facing_output(PhenotypeExtractionOutput),
 )

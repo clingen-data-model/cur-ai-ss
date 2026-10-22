@@ -157,7 +157,7 @@ def test_patient_prompt_makes_candidate_enumeration_a_step():
     # The list has to land somewhere the model is obliged to write: an existing
     # free-text field. Haiku went from 0/20 to 6/9 on the citation-headed
     # column once the list had a home; a bare "list before deciding" did nothing.
-    assert 'written out in full in the reasoning of the\nfirst family' in prompt
+    assert 'written out in full in the basis of the\nfirst family' in prompt
     assert 'lists every candidate label with\n  its decision' in prompt
 
 
@@ -344,7 +344,7 @@ def test_occurrence_prompt_links_a_parent_named_as_a_variants_origin():
     # Naming a parent as the allele's origin supports "at least one copy", not
     # a genotype: zygosity is Unknown unless the paper gives the parent's own
     # result -- which it can do in the pedigree as well as in the text.
-    assert 'then zygosity\n  is Unknown with that in its reasoning' in prompt
+    assert 'then zygosity\n  is Unknown with that in its basis' in prompt
     assert "depends on whether the paper reports that parent's own genotype" in (prompt)
 
 
