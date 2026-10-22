@@ -21,6 +21,7 @@ from lib.agents.extraction_verification_agent import (
 from lib.agents.extraction_verification_agent import (
     agent as extraction_verification_agent,
 )
+from lib.agents.figure_describer import FigureRef, describe_figures
 from lib.agents.hpo_linking_agent import (
     HPO_LINKING_AGENT_INSTRUCTIONS,
 )
@@ -75,10 +76,6 @@ from lib.agents.patient_variant_occurrence_agent import (
 from lib.agents.patient_variant_occurrence_agent import (
     agent as patient_variant_occurrence_agent,
 )
-from lib.agents.pedigree_describer_agent import (
-    PEDIGREE_DESCRIBER_AGENT_INSTRUCTIONS,
-    pedigree_describer_agent_for_paper,
-)
 from lib.agents.segregation_analysis_computed_agent import (
     SEGREGATION_ANALYSIS_COMPUTED_AGENT_INSTRUCTIONS,
 )
@@ -123,6 +120,7 @@ from lib.misc.pdf.anchors import (
     paper_block_texts,
     parse_anchor,
 )
+from lib.misc.pdf.figure_text import figure_texts, splice_figure_descriptions
 from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import (
     document_anchored_md_path,
@@ -160,7 +158,7 @@ from lib.models.converters import (
     variant_to_db,
 )
 from lib.models.evidence_block import ReasoningBlock, verify_citations
-from lib.models.figure import FigureDescriptionDB, pedigree_figure
+from lib.models.figure import FigureDescriptionDB, described_figures
 from lib.models.flag import AnyFlag, FlagMergeOutput
 from lib.models.mondo import (
     MondoDiseaseScope,
@@ -271,13 +269,16 @@ def build_followup_prompt(additional_context: str) -> str:
 
 
 # Tasks with no agent conversation to consult: PDF_PARSING and VARIANT_ANNOTATION
-# are mechanical (no LLM call at all), and COMPOUND_HET_EVALUATION runs without a
-# session (see handle_compound_het_evaluation) so it has no persisted history.
+# are mechanical (no LLM call at all), COMPOUND_HET_EVALUATION runs without a
+# session (see handle_compound_het_evaluation) so it has no persisted history,
+# and FIGURE_DESCRIPTION is one vision call per figure, no agent
+# (lib/agents/figure_describer.py); what it found is on the figures tab.
 QA_UNSUPPORTED_TASK_TYPES = {
     TaskType.PDF_PARSING,
     TaskType.VARIANT_ANNOTATION,
     TaskType.COMPOUND_HET_EVALUATION,
     TaskType.EXTRACTION_VERIFICATION,
+    TaskType.FIGURE_DESCRIPTION,
 }
 
 QA_FOLLOWUP_MAX_TURNS = 8
@@ -289,9 +290,6 @@ def _agent_for_task_type(task_type: TaskType, paper_id: int) -> Agent | None:
     QA_UNSUPPORTED_TASK_TYPES)."""
     if task_type in QA_UNSUPPORTED_TASK_TYPES:
         return None
-    if task_type == TaskType.FIGURE_DESCRIPTION:
-        agent, _capture = pedigree_describer_agent_for_paper(paper_id)
-        return agent
     return {
         TaskType.PAPER_CLASSIFIER: paper_classifier_agent,
         TaskType.PAPER_METADATA: paper_extraction_agent,
@@ -369,8 +367,9 @@ def curator_notes_section(notes: str) -> str:
     """The curator's context for the whole paper, as one prompt section.
 
     ``format_paper_context`` carries it for the agents that read the paper; the
-    agents that never see the paper text (HPO linking, variant harmonization,
-    pedigree description) append it to their own first message.
+    agents that never see the paper text (HPO linking, variant harmonization)
+    append it to their own first message, and figure description puts it in
+    its vision prompts.
     """
     return (
         'A human curator is re-running the extraction of this paper and has '
@@ -484,7 +483,7 @@ async def handle_paper_classifier(task_id: int) -> None:
     else:
         # Initial query: build full message with paper + instructions
         await agent_sess.clear_session()
-        paper_markdown = fulltext_md(paper_id, supplement_format)
+        paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
             format_paper_context(
                 paper_markdown, gene_symbol, paper_global_context(paper_id)
@@ -546,7 +545,7 @@ async def handle_paper_metadata(task_id: int) -> None:
     else:
         # Initial query: build full message with paper + instructions
         await agent_sess.clear_session()
-        paper_markdown = fulltext_md(paper_id, supplement_format)
+        paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
             format_paper_context(
                 paper_markdown, gene_symbol, paper_global_context(paper_id)
@@ -598,7 +597,7 @@ async def handle_variant_extraction(task_id: int) -> None:
     else:
         # Initial query: build full message with paper + instructions
         await agent_sess.clear_session()
-        paper_markdown = fulltext_md(paper_id, supplement_format)
+        paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
             format_paper_context(
                 paper_markdown, gene_symbol, paper_global_context(paper_id)
@@ -647,9 +646,49 @@ async def handle_variant_extraction(task_id: int) -> None:
         )
 
 
+def paper_figures(paper_id: int) -> list[FigureRef]:
+    """Every figure of the anchored document that has an image file, main
+    text first: the Docling picture index (the N of figure-N, and of
+    documents/{id}/{main,supplement}/images/N.png), which section, and the
+    caption the anchored text carries for it (its alt text), if any."""
+    figures: list[FigureRef] = []
+    for is_supplement in (False, True):
+        anchored = document_anchored_md_path(paper_id, supplement=is_supplement)
+        if not anchored.exists():
+            continue
+        captions = block_texts(anchored.read_text())
+        for anchor in load_anchors(paper_id, supplement=is_supplement):
+            parsed_id = parse_anchor(anchor.id)
+            if parsed_id is None or parsed_id.kind != AnchorKind.FIGURE:
+                continue
+            if not document_image_path(
+                paper_id, parsed_id.index, supplement=is_supplement
+            ).exists():
+                continue
+            figures.append(
+                FigureRef(
+                    image_id=parsed_id.index,
+                    is_supplement=is_supplement,
+                    caption=captions.get(anchor.id) or None,
+                )
+            )
+    return figures
+
+
+def figure_description_notes(
+    paper_id: int, additional_context: str | None
+) -> str | None:
+    """What the curator wants the describer to know: the paper-wide re-run
+    notes and the context of a re-run of this task, either or both."""
+    notes = [n for n in (paper_global_context(paper_id), additional_context) if n]
+    return '\n\n'.join(notes) if notes else None
+
+
 async def handle_figure_description(task_id: int) -> None:
-    """Describe the paper's evidence figures (today: the first pedigree), one
-    ``figure_descriptions`` row per figure described."""
+    """Describe every readable figure of the paper, one ``figure_descriptions``
+    row each (see lib/agents/figure_describer.py). Not an agent run: the
+    vision model is asked about each figure directly, so a re-run with
+    context puts that context in its prompts rather than into a conversation."""
     paper_id: int
     additional_context: str | None
     with session_scope() as session:
@@ -659,98 +698,36 @@ async def handle_figure_description(task_id: int) -> None:
         paper_id = task.paper_id
         additional_context = task.additional_context
 
-    combined_text = ''
-
-    # List figures by id + caption. The agent picks a pedigree from the captions,
-    # then the analyze_pedigree_image tool loads the image bytes on demand — so we
-    # never put image URLs (or data URLs) into the prompt text.
-    #
-    # Figures come from the anchored document, so image_id is the Docling
-    # picture index: the N of the figure-N id the other agents cite, and the N
-    # of documents/{id}/{main,supplement}/images/N.png the tool loads.
-    for is_supplement, label in ((False, 'Pipeline'), (True, 'Supplement')):
-        anchored = document_anchored_md_path(paper_id, supplement=is_supplement)
-        if not anchored.exists():
-            continue
-        captions = block_texts(anchored.read_text())
-        for anchor in load_anchors(paper_id, supplement=is_supplement):
-            parsed_id = parse_anchor(anchor.id)
-            if parsed_id is None or parsed_id.kind != AnchorKind.FIGURE:
-                continue
-            image = document_image_path(
-                paper_id, parsed_id.index, supplement=is_supplement
-            )
-            if not image.exists():
-                continue
-            caption_text = captions.get(anchor.id) or 'No caption'
-            logger.info(f'Listing {label.lower()} figure {anchor.id} from {image}')
-            combined_text += f'[{label} Figure {anchor.id}]\n'
-            combined_text += f'image_id: {parsed_id.index}\n'
-            combined_text += f'is_supplement: {is_supplement}\n'
-            combined_text += f'Caption: {caption_text}\n\n'
-
-    agent_sess = agent_session(task_id)
-
-    if additional_context is not None:
-        # Follow-up: agent has context from conversation
-        message: AgentInput = build_followup_prompt(additional_context)
-    else:
-        # Initial query: build full message with pedigree images + instructions
-        await agent_sess.clear_session()
-        message = (
-            f'{combined_text}\n\n{curator_notes_block(paper_id)}'
-            f'{PEDIGREE_DESCRIBER_AGENT_INSTRUCTIONS}'
-        )
-
-    agent, capture = pedigree_describer_agent_for_paper(paper_id)
-    result = await Runner.run(
-        agent,
-        message,
-        session=agent_sess,
+    figures = paper_figures(paper_id)
+    notes = figure_description_notes(paper_id, additional_context)
+    # Synchronous vision calls, one or more per figure; off the event loop so
+    # the worker's other tasks keep going.
+    described = await asyncio.to_thread(describe_figures, paper_id, figures, notes)
+    logger.info(
+        f'Paper {paper_id}: {len(figures)} figures visited, {len(described)} described'
     )
-    log_run_metrics('FIGURE_DESCRIPTION', result)
-
-    output = result.final_output
-    # The analysis is the vision model's; the agent only routes figures to it and
-    # copies the answer back, so store what the tool returned rather than the
-    # copy. Follow-ups are left alone: there the curator asked for a rewrite.
-    if (
-        additional_context is None
-        and output
-        and output.found
-        and capture.description is not None
-    ):
-        output = output.model_copy(
-            update={
-                'image_id': capture.image_id,
-                'is_supplement': capture.is_supplement,
-                'description': capture.description,
-            }
-        )
 
     with session_scope() as session:
         # Idempotent: delete-then-insert
         session.query(FigureDescriptionDB).filter(
             FigureDescriptionDB.paper_id == paper_id
         ).delete()
-        if output and output.found:
-            session.add(figure_description_to_db(paper_id, output))
+        session.add_all(
+            figure_description_to_db(paper_id, figure) for figure in described
+        )
 
 
-def pedigree_input(pedigree_row: FigureDescriptionDB | None) -> dict | None:
-    """The pedigree as the agents see it: the figure anchor to cite, and the text.
-
-    ``image_id`` is the Docling picture index, the same N as the ``figure-N``
-    id printed in the anchored text, so the anchor is exact.
-    """
-    if pedigree_row is None:
-        return None
-    return {
-        'anchor': make_anchor_id(
-            AnchorKind.FIGURE, pedigree_row.image_id, pedigree_row.is_supplement
-        ),
-        'description': pedigree_row.description,
-    }
+def paper_text(paper_id: int, supplement_format: FileFormat | None = None) -> str:
+    """The paper as the agents read it: ``fulltext_md`` with every described
+    figure's description spliced in under its figure id (see
+    lib/misc/pdf/figure_text.py). The same bytes for every agent on the paper,
+    so the shared prompt-cache prefix holds; it changes when PDF parsing or
+    Figure Description re-runs."""
+    with session_scope() as session:
+        figures = described_figures(session, paper_id)
+        return splice_figure_descriptions(
+            fulltext_md(paper_id, supplement_format), figures
+        )
 
 
 def citation_check(paper_id: int) -> Check:
@@ -759,9 +736,13 @@ def citation_check(paper_id: int) -> Check:
 
     Handed to the repair loop (``run_with_checked_output``) is sent back to the model with the field, the anchor and what was wrong,
     instead of being stored. The block texts are read once per
-    run, not per attempt.
+    run, not per attempt. A figure's text is its legend plus its description,
+    so a quote copied from the description checks out.
     """
-    texts = paper_block_texts(paper_id)
+    with session_scope() as session:
+        texts = figure_texts(
+            paper_block_texts(paper_id), described_figures(session, paper_id)
+        )
     return lambda output: verify_citations(output, texts)
 
 
@@ -785,24 +766,21 @@ def patient_extraction_message(
 ) -> list[TResponseInputItem]:
     """The initial message the patient extraction agent gets for a paper.
 
-    Paper context (relevant sections), the pedigree description if one was
-    extracted, and the instructions. One function so anything that wants to run
-    the agent outside the worker (lib/bin/patient_extraction_stability.py) sends
+    Paper context (with the figure descriptions spliced in) and the
+    instructions. One function so anything that wants to run the agent
+    outside the worker (lib/bin/patient_extraction_stability.py) sends
     exactly what production sends.
     """
     paper = session.get(PaperDB, paper_id)
     supplement_format = paper.supplement_format if paper else None
     gene_symbol = paper.gene.symbol if paper else None
 
-    pedigree_descriptions_output = pedigree_input(pedigree_figure(session, paper_id))
-
-    paper_markdown = fulltext_md(paper_id, supplement_format)
+    paper_markdown = paper_text(paper_id, supplement_format)
     return paper_input(
         format_paper_context(
             paper_markdown, gene_symbol, paper_global_context(paper_id)
         ),
         PATIENT_EXTRACTION_AGENT_INSTRUCTIONS,
-        f'Pedigree Description:\n{pedigree_descriptions_output}',
     )
 
 
@@ -901,7 +879,6 @@ async def handle_patient_demographics(task_id: int) -> None:
     additional_context: str | None = None
     patient_data: dict | None = None
     proband_identifier: str | None = None
-    pedigree_descriptions_output: dict | None = None
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -944,10 +921,6 @@ async def handle_patient_demographics(task_id: int) -> None:
         )
         proband_identifier = proband_row.identifier if proband_row else None
 
-        pedigree_descriptions_output = pedigree_input(
-            pedigree_figure(session, paper_id)
-        )
-
     agent_sess = agent_session(task_id)
 
     if additional_context is not None:
@@ -957,15 +930,14 @@ async def handle_patient_demographics(task_id: int) -> None:
     else:
         # Initial query: build full message with paper + patient data + instructions
         await agent_sess.clear_session()
-        paper_markdown = fulltext_md(paper_id, supplement_format)
+        paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
             format_paper_context(
                 paper_markdown, gene_symbol, paper_global_context(paper_id)
             ),
             PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS,
             f'Patient JSON:\n{patient_data}\n\n'
-            f'Proband Identifier:\n{proband_identifier}\n\n'
-            f'Pedigree Description:\n{pedigree_descriptions_output}',
+            f'Proband Identifier:\n{proband_identifier}',
         )
         agent = patient_demographics_agent
 
@@ -1074,7 +1046,7 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
     else:
         # Initial query: build full message with paper + family data + instructions
         await agent_sess.clear_session()
-        paper_markdown = fulltext_md(paper_id, supplement_format)
+        paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
             format_paper_context(
                 paper_markdown, gene_symbol, paper_global_context(paper_id)
@@ -1220,7 +1192,7 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
     else:
         # Initial query: build full message with paper + family data + instructions
         await agent_sess.clear_session()
-        paper_markdown = fulltext_md(paper_id, supplement_format)
+        paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
             format_paper_context(
                 paper_markdown, gene_symbol, paper_global_context(paper_id)
@@ -1473,7 +1445,6 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
     paper_id: int
     structured_variants: list
     structured_patients: list
-    pedigree_descriptions_output: dict | None
     additional_context: str | None
     supplement_format: FileFormat | None = None
     with session_scope() as session:
@@ -1517,16 +1488,6 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
             for p in patient_rows
         ]
 
-        pedigree_row = pedigree_figure(session, paper_id)
-        pedigree_descriptions_output = (
-            {
-                'image_id': pedigree_row.image_id,
-                'description': pedigree_row.description,
-            }
-            if pedigree_row
-            else None
-        )
-
     agent_sess = agent_session(task_id)
 
     if additional_context is not None:
@@ -1536,15 +1497,14 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
     else:
         # Initial query: build full message with paper + variant/patient data + instructions
         await agent_sess.clear_session()
-        paper_markdown = fulltext_md(paper_id, supplement_format)
+        paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
             format_paper_context(
                 paper_markdown, gene_symbol, paper_global_context(paper_id)
             ),
             PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS,
             f'Variants JSON:\n{structured_variants}\n\n'
-            f'Patients JSON:\n{structured_patients}\n\n'
-            f'Pedigree Description:\n{pedigree_descriptions_output}',
+            f'Patients JSON:\n{structured_patients}',
         )
         agent = patient_variant_occurrence_agent
 
@@ -1673,13 +1633,8 @@ async def handle_compound_het_evaluation(task_id: int) -> None:
 
         supplement_format = paper.supplement_format
 
-        # Get pedigree description
-        pedigree_row = pedigree_figure(session, paper_id)
-        pedigree_description = (
-            pedigree_row.description if pedigree_row else 'No pedigree information'
-        )
-
-        # Build message with patient info, variants, and pedigree
+        # Build message with patient info and variants; the figure
+        # descriptions (pedigree, parental traces) are in the paper text.
         variants_json = [
             {
                 'variant_id': link.variant_id,
@@ -1693,14 +1648,13 @@ async def handle_compound_het_evaluation(task_id: int) -> None:
         ]
 
         # Get paper markdown
-        paper_markdown = fulltext_md(paper_id, supplement_format)
+        paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
             format_paper_context(
                 paper_markdown, gene_symbol, paper_global_context(paper_id)
             ),
             COMPOUND_HET_AGENT_INSTRUCTIONS,
             f'Patient: {patient.identifier}\n\n'
-            f'Pedigree Description:\n{pedigree_description}\n\n'
             f'Heterozygous Variants for This Patient:\n'
             f'{json.dumps(variants_json, indent=2)}',
         )
@@ -1869,7 +1823,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
     else:
         # Initial query: build full message with paper + patient data + instructions
         await agent_sess.clear_session()
-        paper_markdown = fulltext_md(paper_id, supplement_format)
+        paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
             format_paper_context(
                 paper_markdown, gene_symbol, paper_global_context(paper_id)
@@ -2155,7 +2109,7 @@ async def handle_mondo_linking(task_id: int) -> None:
             # cache the other paper agents already warmed, then append the
             # MONDO-specific target and instructions.
             await agent_sess.clear_session()
-            paper_markdown = fulltext_md(target.paper_id, supplement_format)
+            paper_markdown = paper_text(target.paper_id, supplement_format)
             target_payload = {
                 'scope': target.scope.value,
                 'patient_variant_occurrence_id': target.patient_variant_occurrence_id,

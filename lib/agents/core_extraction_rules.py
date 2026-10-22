@@ -92,7 +92,9 @@ HOW THE TEXT IS LABELLED:
   - [paragraph-N] before a paragraph, list item or caption
   - [table-N] before a table's caption; the table's first column is named "anchor"
     and holds one id per data row, table-N-row-R
-  - [figure-N] before a figure; its legend, if any, is the text that follows the id
+  - [figure-N] before a figure; its legend, if any, is the text that follows the id,
+    and a figure that could be read carries a quoted "Figure description" block
+    right under the id (see FIGURE DESCRIPTION RULES)
 - Ids of the supplement (everything at or after the "# Supplementary Material"
   heading) start with supp-: supp-paragraph-N, supp-table-N-row-R, supp-figure-N.
 - Headings ("## Results") carry no id and are never evidence.
@@ -119,9 +121,10 @@ CITATIONS:
     that carries the value in quote; cite the table id (table-N) only for a fact
     about the table as a whole or for a header cell (see TABLE EVIDENCE RULES);
   - empty when the whole block is the evidence;
-  - for a figure, empty when the image itself is the evidence (a pedigree); when a
-    value comes from the figure's legend (the text after the id: "Fig. 3. ... (c)
-    Case 17DG0679 ..."), quote the shortest span of that legend, as for a paragraph.
+  - for a figure, empty when the image as a whole is the evidence; when a value
+    comes from the figure's legend (the text after the id: "Fig. 3. ... (c) Case
+    17DG0679 ...") or from its "Figure description" block, quote the shortest span
+    of that text, as for a paragraph.
 - quote MUST be copied verbatim from inside the cited block. Every citation is
   checked against the paper: an anchor that does not exist, or a quote that is not
   found inside its block, is rejected and you will be asked to correct it. Do NOT
@@ -142,16 +145,23 @@ REASONING:
 """
 
 _SPEC_TAIL = """
-PEDIGREE DESCRIPTION RULES:
+FIGURE DESCRIPTION RULES:
 
-- Some messages carry a "Pedigree Description" alongside the paper. It is a
-  reading of a figure, written for you, and is NOT part of the paper's text. It
-  names the figure it describes by its anchor (e.g. figure-2 or supp-figure-0).
-- Never quote it. A quote is checked against the paper, so a sentence copied from
-  the description points the curator at something the document does not contain.
-- For a value taken from it, cite that figure anchor with an empty quote. The
-  figure alone is sufficient evidence.
-- Its wording may still inform reasoning, which is yours to write.
+- A figure that could be read carries, right under its [figure-N] id, a quoted
+  block headed "Figure description" that names what the figure shows (Pedigree,
+  Chromatogram, Gel, Copy-number plot, Read pileup, Karyotype or FISH) and
+  describes it: every individual a pedigree draws, with sex and affected status;
+  for genotyping evidence, which labelled individual each trace, lane or panel
+  belongs to, the variant shown and that individual's result.
+- It is a vision model's reading of the image, not the paper's own words, and the
+  curator sees the same block. Treat what it reports as what the figure shows:
+  a symbol's sex and status, a trace's result, a lane's digest pattern are the
+  paper stating those facts in its figure.
+- For a value taken from it, cite the figure's anchor. The quote may be empty
+  (the image as a whole) or the shortest span of the description that states
+  the fact, copied verbatim; the check accepts either.
+- Figures with no block were not read (a photograph, a schematic, a chart); the
+  legend is all the text they have.
 
 TABLE EVIDENCE RULES:
 

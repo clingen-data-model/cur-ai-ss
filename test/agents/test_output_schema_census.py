@@ -43,7 +43,6 @@ from lib.agents.patient_phenotype_linking_agent import (
 from lib.agents.patient_variant_occurrence_agent import (
     agent as patient_variant_occurrence_agent,
 )
-from lib.agents.pedigree_describer_agent import PedigreeExtractionOutput
 from lib.agents.segregation_analysis_computed_agent import (
     agent as segregation_analysis_computed_agent,
 )
@@ -58,9 +57,9 @@ from lib.models.variant import VariantExtractionOutput
 
 ANTHROPIC_UNION_NODE_LIMIT = 16
 
-# Module-level agents, plus the output types of the two agents that are built
-# per call (pedigree describer, table corrector) because they close over a
-# paper id for their tools.
+# Module-level agents, plus the output type of the one agent that is built
+# per call (table corrector) because it closes over a paper id for its tool.
+# Figure description is vision calls without an agent (figure_describer.py).
 OUTPUT_TYPES: dict[str, Any] = {
     agent.name: agent.output_type
     for agent in (
@@ -79,7 +78,6 @@ OUTPUT_TYPES: dict[str, Any] = {
         variant_harmonization_agent,
     )
 } | {
-    'pedigree_describer': PedigreeExtractionOutput,
     'table_corrector': TableCorrectionResult,
 }
 

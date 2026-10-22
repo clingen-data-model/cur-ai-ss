@@ -67,6 +67,7 @@ from lib.misc.pdf.anchors import (
     load_anchors,
     make_anchor_id,
 )
+from lib.misc.pdf.figure_text import splice_figure_descriptions
 from lib.misc.pdf.highlight import (
     GrobidAnnotation,
     citations_to_grobid_annotations,
@@ -3347,10 +3348,12 @@ def paper_document(
 ) -> DocumentResp:
     """The anchored markdown of the paper and, if it has one, its supplement.
 
-    This is the text the agents read and cite (``fulltext_md`` is built from
-    it), with every block's id printed in, so the SPA's Markdown tab can find a
-    cited block by id instead of re-matching a quote. It changes only when PDF
-    parsing re-runs.
+    This is the text the agents read and cite (``paper_text`` in
+    lib/tasks/handlers.py is built the same way), with every block's id
+    printed in and each described figure's description quoted under its id,
+    so the SPA's Markdown tab can find a cited block by id instead of
+    re-matching a quote. It changes when PDF parsing or Figure Description
+    re-runs.
     """
     if not session.get(PaperDB, paper_id):
         raise HTTPException(
@@ -3362,8 +3365,11 @@ def paper_document(
             status_code=status.HTTP_404_NOT_FOUND,
             detail='Document not yet available for this paper',
         )
+    figures = described_figures(session, paper_id)
     supplement = document_anchored_md_path(paper_id, supplement=True)
     return DocumentResp(
-        main=main.read_text(),
-        supplement=supplement.read_text() if supplement.exists() else None,
+        main=splice_figure_descriptions(main.read_text(), figures),
+        supplement=splice_figure_descriptions(supplement.read_text(), figures)
+        if supplement.exists()
+        else None,
     )

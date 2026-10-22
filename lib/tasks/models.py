@@ -86,7 +86,7 @@ class TaskType(StrEnum):
             TaskType.PAPER_CLASSIFIER: 'Decides whether the paper has identifiable cases for this gene worth extracting; if not, the pipeline stops.',
             TaskType.PAPER_METADATA: 'Finds the title, authors, journal and year, and matches the paper to its PubMed record.',
             TaskType.VARIANT_EXTRACTION: 'Finds the genetic variants the paper reports, written as the paper writes them.',
-            TaskType.FIGURE_DESCRIPTION: "Looks through the paper's figures for a family tree and describes the relationships and affected status it shows.",
+            TaskType.FIGURE_DESCRIPTION: 'Looks at every figure, says which show a pedigree or genotyping evidence (Sanger traces, gels, copy-number plots, read pileups, karyotypes or FISH), and describes those for the later steps.',
             TaskType.PATIENT_EXTRACTION: 'Identifies each patient the paper describes, marks the probands and groups patients into families.',
             TaskType.PATIENT_DEMOGRAPHICS: "Fills in each patient's sex, ages, ancestry, affected status and relationship to the proband.",
             TaskType.SEGREGATION_EVIDENCE_EXTRACTION: 'Collects what the paper says about whether variants track with disease in each family, such as LOD scores.',

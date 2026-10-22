@@ -1,13 +1,18 @@
-/* The figures the Figure Description step described: each one's image and
- * the vision model's analysis, main text first. Today the step describes
- * only the first pedigree, so the list holds at most one figure. */
+/* The figures the Figure Description step described, one sub-tab per figure,
+ * main text first: the kinds the step saw in it (a pedigree, a chromatogram,
+ * a gel...), its image and the vision model's reading. Each tab is named by
+ * the figure's anchor in the paper text, not the paper's own figure number. */
 import { useQuery } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { getFiguresPapersPaperIdFiguresGet } from '@/api/generated'
 import type { FigureDescriptionResp } from '@/api/generated'
 import { API_BASE_URL } from '@/lib/api'
+import { describeAnchor } from '@/lib/anchors'
+import { usePdfHighlight } from '@/components/PdfHighlightProvider'
+import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 const STALE_TIME = 5 * 60 * 1000
 
@@ -27,21 +32,49 @@ export function FiguresTab({ paperId }: { paperId: number }) {
   }
 
   if (!figures || figures.length === 0) {
-    return <p className="text-sm text-muted-foreground">No described figures.</p>
+    return (
+      <p className="text-sm text-muted-foreground">
+        No described figures. The Figure Description step describes the figures that show a
+        pedigree or genotyping evidence; re-run it from Rerun Agents to read this paper's figures.
+      </p>
+    )
   }
 
+  // The list is keyed by paper, so a re-run that describes a different set of
+  // figures remounts the tabs and the first figure is selected again.
   return (
-    <div className="flex flex-col gap-10 max-w-2xl mx-auto py-2">
+    <Tabs key={figures.map((figure) => figure.anchor).join()} defaultValue={figures[0].anchor}>
+      <TabsList variant="line">
+        {figures.map((figure) => (
+          <TabsTrigger key={figure.anchor} value={figure.anchor} title={figure.anchor}>
+            {describeAnchor(figure.anchor)}
+          </TabsTrigger>
+        ))}
+      </TabsList>
       {figures.map((figure) => (
-        <DescribedFigure key={figure.anchor} figure={figure} />
+        <TabsContent key={figure.anchor} value={figure.anchor} className="pt-3">
+          <DescribedFigure figure={figure} />
+        </TabsContent>
       ))}
-    </div>
+    </Tabs>
   )
 }
 
 function DescribedFigure({ figure }: { figure: FigureDescriptionResp }) {
+  const { anchorPage } = usePdfHighlight()
+  const page = anchorPage(figure.anchor)
   return (
-    <section className="flex flex-col items-center gap-4">
+    <section className="flex flex-col items-center gap-4 max-w-2xl mx-auto">
+      <div className="w-full flex flex-wrap items-center gap-2">
+        {figure.kinds.map((kind) => (
+          <Badge key={kind} variant="outline" className="font-normal text-muted-foreground">
+            {kind}
+          </Badge>
+        ))}
+        {page !== undefined && (
+          <span className="ml-auto text-xs text-muted-foreground">p. {page}</span>
+        )}
+      </div>
       <img
         src={`${API_BASE_URL}${figure.image_url}`}
         alt={figure.kinds.join(', ')}

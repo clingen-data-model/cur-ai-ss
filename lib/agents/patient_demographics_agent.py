@@ -13,7 +13,9 @@ CONTEXT:
   (identifier + proband status). Extract demographics for THAT patient only.
 - The proband identifier for this patient's family is provided below as
   "Proband Identifier" so relationship_to_proband can be determined.
-- A structured description of a pedigree (if present) will be provided below.
+- Each figure that could be read (a pedigree, Sanger traces, a gel) carries its
+  description in the paper text, in a quoted "Figure description" block right
+  under its [figure-N] id.
 
 Task: Extract demographic and clinical attributes for the single provided patient.
 Do NOT extract other patients, re-derive the patient's identifier, or reassign
@@ -26,8 +28,8 @@ Each field (except the *_unit fields) is an EvidenceBlock containing:
   - reasoning: explanation of how the value was determined
   - citations: the blocks of the text the value rests on, each as {"anchor", "quote"}
     (see CORE EXTRACTION RULES); at least one is required unless the value is
-    Unknown/None. A value read from the pedigree description cites the pedigree's
-    figure anchor with an empty quote.
+    Unknown/None. A value read from a figure description cites that figure's
+    anchor, with an empty quote or the span of the description that states it.
 
 - sex (EvidenceBlock[enum: Male, Female, Intersex, MTF/Transwoman/Transgender Female, FTM/Transman/Transgender Male, Ambiguous/Unable to Determine, Other, Unknown]):
   - Extract sex/gender as stated in the text, a table or the pedigree. Three

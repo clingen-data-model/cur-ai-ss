@@ -5,7 +5,10 @@
  * re-found: a `[paragraph-54]` tag in the source names the block, and a
  * citation's quote only ever *narrows* the highlight inside that block (a
  * <mark> around the quoted span); a quote that cannot be located leaves the
- * whole block highlighted. Rows, tables and figures never narrow.
+ * whole block highlighted. Rows and tables never narrow. A figure keeps its
+ * highlight and, when the quote is found in the "Figure description"
+ * blockquote the API splices under it (lib/misc/pdf/figure_text.py), also
+ * gets a <mark> around the quoted span there.
  *
  * How the ids get from the source to the DOM: the tag stays in the text and
  * react-markdown's custom components read it back off the hast `node` they
@@ -140,12 +143,27 @@ interface Prepared {
 
 const SUPPLEMENT_DIVIDER = '\n\n# Supplementary Material\n\n'
 
+/* A quote from a figure description is matched across the blockquote's own
+ * line prefixes: a run of whitespace in the quote may be a newline plus the
+ * next line's `> ` in the source. */
+function findQuoteInBlockquote(quote: string, text: string): TextMatch | null {
+  const trimmed = quote.trim()
+  if (!trimmed || !text) return null
+  const pattern = trimmed
+    .split(/\s+/)
+    .map((token) => token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('(?:\\s|^>|\\n>)+')
+  const match = new RegExp(pattern, 'im').exec(text)
+  return match ? { start: match.index, end: match.index + match[0].length } : null
+}
+
 function prepareDocument(main: string, supplement: string | null | undefined, citations: Citation[]): Prepared {
   const source = supplement ? `${main}${SUPPLEMENT_DIVIDER}${supplement}` : main
   const quotes = new Map<string, string>()
   for (const citation of citations) {
     const quote = citation.quote?.trim()
-    if (quote && parseAnchor(citation.anchor)?.kind === 'paragraph') quotes.set(citation.anchor, quote)
+    const kind = parseAnchor(citation.anchor)?.kind
+    if (quote && (kind === 'paragraph' || kind === 'figure')) quotes.set(citation.anchor, quote)
   }
 
   const lines = source.split('\n')
@@ -170,6 +188,19 @@ function prepareDocument(main: string, supplement: string | null | undefined, ci
     const quote = quotes.get(tag[1])
     if (!quote) {
       out.push(line)
+      continue
+    }
+    if (parseAnchor(tag[1])?.kind === 'figure') {
+      // The figure line, then its description blockquote (every line `>`).
+      // The figure stays highlighted whether or not the quote is found; a
+      // found quote is marked inside the description as well.
+      out.push(line)
+      let j = i + 1
+      while (j < lines.length && lines[j].startsWith('>')) j++
+      const description = lines.slice(i + 1, j).join('\n')
+      const hit = findQuoteInBlockquote(quote, description)
+      out.push(hit ? withHighlight(description, hit) : description)
+      i = j - 1
       continue
     }
     let j = i + 1 // the block: this line up to the next blank line or fence
@@ -294,6 +325,7 @@ export function DocumentEvidenceViewer({
           [&_li]:my-0.5 [&_table]:border-collapse [&_table]:my-2
           [&_th]:border [&_th]:px-2 [&_th]:py-1 [&_td]:border [&_td]:px-2 [&_td]:py-1
           [&_mark]:rounded [&_mark]:px-0.5
+          [&_blockquote]:border-l-2 [&_blockquote]:border-muted-foreground/40 [&_blockquote]:pl-3 [&_blockquote]:my-2 [&_blockquote]:text-muted-foreground
           [&_p[data-evidence-highlight]]:bg-yellow-200 [&_p[data-evidence-highlight]]:rounded
           [&_tr[data-evidence-highlight]>td]:bg-yellow-200
           [&_table[data-evidence-highlight]]:ring-2 [&_table[data-evidence-highlight]]:ring-yellow-300
