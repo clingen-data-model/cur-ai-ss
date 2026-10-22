@@ -27,6 +27,7 @@ from pydantic import BaseModel
 from xldown import excel_to_markdown
 
 from lib.agents.table_correction_agent import correct_tables
+from lib.misc.pdf import layout
 from lib.misc.pdf.anchors import anchored_from_markdown, build_anchored, write_anchored
 from lib.misc.pdf.paths import (
     document_image_path,
@@ -42,6 +43,10 @@ from lib.models import PaperDB
 from lib.models.paper import FileFormat
 
 IMAGE_RESOLUTION_SCALE = 4.0
+
+# A multi-panel figure comes out of Docling whole rather than as its one
+# best-scoring panel (see lib/misc/pdf/layout.py).
+layout.install()
 
 
 class Polygon(BaseModel):
