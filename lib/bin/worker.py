@@ -32,7 +32,15 @@ from lib.tasks.models import (
     TaskType,
 )
 
-LEASE_TIMEOUT_S = 1800
+# A claimed task's lease is never refreshed during its run, so the timeout
+# must exceed the longest legitimate run of its type or a healthy task gets
+# reset mid-run and runs twice. Over 9,500 completed runs on dev-caa through
+# 2026-10-22, no agent task passed 13 min; PDF Parsing, whose Docling pass
+# scales with page count on a CPU VM, reached 15 min on a 44-page supplement.
+DEFAULT_LEASE_TIMEOUT_S = 1200
+LEASE_TIMEOUT_S: dict[TaskType, int] = {
+    TaskType.PDF_PARSING: 1800,
+}
 POLL_INTERVAL_S = 10
 MAX_RETRIES = 2
 RETRY_DELAY_S = 30
@@ -384,6 +392,10 @@ async def execute_task_with_semaphore(
         await execute_task(task_id)
 
 
+def lease_timeout_s(task_type: TaskType) -> int:
+    return LEASE_TIMEOUT_S.get(task_type, DEFAULT_LEASE_TIMEOUT_S)
+
+
 async def poll_and_schedule_tasks(
     global_semaphore: asyncio.Semaphore,
     semaphores: dict[TaskType, asyncio.Semaphore],
@@ -401,7 +413,10 @@ async def _poll_and_schedule_tasks(
 ) -> None:
     with session_scope() as session:
         now = datetime.datetime.now(datetime.timezone.utc)
-        expired_cutoff = now - datetime.timedelta(seconds=LEASE_TIMEOUT_S)
+        # Rows older than the shortest timeout are candidates; each is then
+        # held to its own type's timeout.
+        shortest = min(DEFAULT_LEASE_TIMEOUT_S, *LEASE_TIMEOUT_S.values())
+        expired_cutoff = now - datetime.timedelta(seconds=shortest)
 
         # Reset timed-out claimed tasks back to PENDING (only if retries remain)
         timed_out_tasks = (
@@ -413,6 +428,13 @@ async def _poll_and_schedule_tasks(
             .all()
         )
         for task in timed_out_tasks:
+            timeout_s = lease_timeout_s(task.type)
+            # SQLite hands the column back naive; it was written in UTC.
+            claimed_at = task.updated_at.replace(
+                tzinfo=task.updated_at.tzinfo or datetime.timezone.utc
+            )
+            if claimed_at >= now - datetime.timedelta(seconds=timeout_s):
+                continue
             if task.tries < MAX_RETRIES:
                 logger.info(
                     f'Resetting timed-out task {task.id} ({task.type}) (attempt {task.tries + 1}/{MAX_RETRIES + 1})'
@@ -425,7 +447,7 @@ async def _poll_and_schedule_tasks(
                 )
                 task.status = TaskStatus.FAILED
                 task.error_message = (
-                    f'Task exceeded lease timeout ({LEASE_TIMEOUT_S}s) and max retries'
+                    f'Task exceeded lease timeout ({timeout_s}s) and max retries'
                 )
             task.updated_at = now
 

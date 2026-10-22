@@ -2,6 +2,7 @@
 of sitting QUEUED or RUNNING until the lease timeout notices them."""
 
 import asyncio
+import datetime
 
 import pytest
 
@@ -156,6 +157,34 @@ async def test_the_poller_claims_nothing_once_shutting_down(
     await worker.poll_and_schedule_tasks(asyncio.Semaphore(1), semaphores)
 
     assert _status(db_session, task.id).status == TaskStatus.PENDING
+
+
+async def test_the_lease_timeout_holds_each_task_to_its_own_types_limit(
+    db_session, make_task, cleared, not_shutting_down, monkeypatch
+):
+    # Both claimed 25 min ago: past the default 20 min, within PDF Parsing's 30.
+    parse = make_task(TaskStatus.RUNNING, tries=1)
+    agent = make_task(TaskStatus.RUNNING, tries=1)
+    agent.type = TaskType.PATIENT_DEMOGRAPHICS
+    claimed = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+        minutes=25
+    )
+    for task in (parse, agent):
+        task.updated_at = claimed
+    db_session.commit()
+
+    async def no_run(*args: object, **kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr(worker, 'execute_task_with_semaphore', no_run)
+    semaphores = {t: asyncio.Semaphore(1) for t in TaskType}
+
+    await worker.poll_and_schedule_tasks(asyncio.Semaphore(1), semaphores)
+
+    assert cleared == [agent.id]  # reset, session cleared, then claimed again
+    refreshed = _status(db_session, parse.id)
+    assert refreshed.status == TaskStatus.RUNNING
+    assert refreshed.updated_at.replace(tzinfo=None) == claimed.replace(tzinfo=None)
 
 
 async def test_the_signal_handler_sets_the_flag_and_schedules_one_shutdown(
