@@ -1,12 +1,16 @@
-/* The figures the Figure Description step described: each one's image and
- * the vision model's analysis, main text first. Today the step describes
- * only the first pedigree, so the list holds at most one figure. */
+/* The figures the Figure Description step described: each one's image, the
+ * kinds the step saw in it (a pedigree, a chromatogram, a gel...) and the
+ * vision model's reading, main text first. The label over each figure is
+ * its anchor in the paper text, not the paper's own figure number. */
 import { useQuery } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { getFiguresPapersPaperIdFiguresGet } from '@/api/generated'
 import type { FigureDescriptionResp } from '@/api/generated'
 import { API_BASE_URL } from '@/lib/api'
+import { describeAnchor } from '@/lib/anchors'
+import { usePdfHighlight } from '@/components/PdfHighlightProvider'
+import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
 
 const STALE_TIME = 5 * 60 * 1000
@@ -27,7 +31,12 @@ export function FiguresTab({ paperId }: { paperId: number }) {
   }
 
   if (!figures || figures.length === 0) {
-    return <p className="text-sm text-muted-foreground">No described figures.</p>
+    return (
+      <p className="text-sm text-muted-foreground">
+        No described figures. The Figure Description step describes the figures that show a
+        pedigree or genotyping evidence; re-run it from Rerun Agents to read this paper's figures.
+      </p>
+    )
   }
 
   return (
@@ -40,8 +49,19 @@ export function FiguresTab({ paperId }: { paperId: number }) {
 }
 
 function DescribedFigure({ figure }: { figure: FigureDescriptionResp }) {
+  const { anchorPage } = usePdfHighlight()
   return (
     <section className="flex flex-col items-center gap-4">
+      <div className="w-full flex flex-wrap items-center gap-2">
+        <span className="text-sm font-medium" title={figure.anchor}>
+          {describeAnchor(figure.anchor, anchorPage(figure.anchor))}
+        </span>
+        {figure.kinds.map((kind) => (
+          <Badge key={kind} variant="outline" className="font-normal text-muted-foreground">
+            {kind}
+          </Badge>
+        ))}
+      </div>
       <img
         src={`${API_BASE_URL}${figure.image_url}`}
         alt={figure.kinds.join(', ')}
