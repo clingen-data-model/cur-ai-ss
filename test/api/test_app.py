@@ -4017,3 +4017,47 @@ def test_flag_about_a_pair_carries_both_occurrences(
     resp = client.delete(f'/papers/{seeded_paper.id}/occurrences/{occurrence_b.id}')
     assert resp.status_code in (200, 204)
     assert client.get(f'/papers/{seeded_paper.id}/flags').json() == []
+
+
+def test_paper_document_splices_each_figure_description_under_its_figure(
+    client, db_session, seeded_paper
+):
+    """The Markdown tab shows what the agents read: the anchored text with
+    every described figure's block quoted under its id, in the section the
+    figure belongs to."""
+    from lib.misc.pdf.figure_text import figure_description_block
+    from lib.misc.pdf.paths import document_anchored_md_path
+
+    main = document_anchored_md_path(seeded_paper.id)
+    main.parent.mkdir(parents=True, exist_ok=True)
+    main.write_text('[paragraph-0] Text.\n\n[figure-1] ![](x/1.png)\n')
+    supplement = document_anchored_md_path(seeded_paper.id, supplement=True)
+    supplement.parent.mkdir(parents=True, exist_ok=True)
+    supplement.write_text('[supp-figure-1] ![Fig S1](x/1.png)\n')
+    rows = [
+        FigureDescriptionDB(
+            paper_id=seeded_paper.id, image_id=1, kinds=['Pedigree'], description='main'
+        ),
+        FigureDescriptionDB(
+            paper_id=seeded_paper.id,
+            image_id=1,
+            is_supplement=True,
+            kinds=['Gel'],
+            description='supp',
+        ),
+    ]
+    db_session.add_all(rows)
+    db_session.commit()
+
+    resp = client.get(f'/papers/{seeded_paper.id}/document').json()
+
+    assert resp['main'] == (
+        '[paragraph-0] Text.\n\n[figure-1] ![](x/1.png)\n'
+        + figure_description_block(rows[0])
+        + '\n'
+    )
+    assert resp['supplement'] == (
+        '[supp-figure-1] ![Fig S1](x/1.png)\n'
+        + figure_description_block(rows[1])
+        + '\n'
+    )

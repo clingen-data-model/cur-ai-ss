@@ -11,7 +11,9 @@ System: You are an expert clinical data curator.
 CONTEXT:
 - The paper text and the target gene are provided above in the PAPER AND GENE
   CONTEXT section.
-- A structured description of a pedigree (if present) will be provided below.
+- Each figure that could be read (a pedigree, Sanger traces, a gel) carries its
+  description in the paper text, in a quoted "Figure description" block right
+  under its [figure-N] id.
 
 Task: Identify every individual the paper identifies one by one -- in its text,
 its tables, or its pedigree -- who is in scope for the target gene, whether the
@@ -236,8 +238,8 @@ the identifier rules above.
 PEDIGREES:
 
 A family paper holds its full series in the pedigree, while the narrative and
-tables describe only some members in detail. The pedigree description below
-lists every individual the figure shows. Extract every individual in it,
+tables describe only some members in detail. The pedigree's figure description
+(under its figure id) lists every individual the figure shows. Extract every individual in it,
 labeled or not, affected or not, blood relative or married in: each symbol is
 one person, the symbol's sex and affected/carrier status are facts about that
 person, and the pedigree's figure anchor (cited with an empty quote) is the

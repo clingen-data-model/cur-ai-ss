@@ -166,10 +166,11 @@ Agents are invoked from `lib/bin/worker.py` as part of the extraction pipeline.
 **Send the paper through `paper_input`** (`lib/tasks/handlers.py`), never inlined into
 the task text: `paper_input(format_paper_context(markdown, gene_symbol), INSTRUCTIONS,
 task_data)` gives the runner three input items in this order: the paper block (paper
-plus gene, byte-identical across agents), the agent's instruction constant
-(byte-identical across runs of that agent), and last the data for this run (patient JSON,
-pedigree description,
-...). Omit `task_data` for an agent that reads the paper alone. The prompt-cache
+plus gene, byte-identical across agents; get the markdown from `paper_text`, which
+splices every figure description in under its figure id), the agent's instruction
+constant (byte-identical across runs of that agent), and last the data for this run
+(patient JSON, variants JSON, ...). Omit `task_data` for an agent that reads the paper
+alone. The prompt-cache
 breakpoints in `lib/agents/model_factory.py` target those items by position, so every
 agent on a paper reads the paper block the first one wrote, and every run of one agent
 reads its instructions after the first, instead of re-sending ~25k tokens of paper and

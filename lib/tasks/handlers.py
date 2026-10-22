@@ -120,6 +120,7 @@ from lib.misc.pdf.anchors import (
     paper_block_texts,
     parse_anchor,
 )
+from lib.misc.pdf.figure_text import figure_texts, splice_figure_descriptions
 from lib.misc.pdf.parse import parse_content
 from lib.misc.pdf.paths import (
     document_anchored_md_path,
@@ -157,7 +158,7 @@ from lib.models.converters import (
     variant_to_db,
 )
 from lib.models.evidence_block import ReasoningBlock, verify_citations
-from lib.models.figure import FigureDescriptionDB, pedigree_figure
+from lib.models.figure import FigureDescriptionDB, described_figures
 from lib.models.flag import AnyFlag, FlagMergeOutput
 from lib.models.mondo import (
     MondoDiseaseScope,
@@ -482,7 +483,7 @@ async def handle_paper_classifier(task_id: int) -> None:
     else:
         # Initial query: build full message with paper + instructions
         await agent_sess.clear_session()
-        paper_markdown = fulltext_md(paper_id, supplement_format)
+        paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
             format_paper_context(
                 paper_markdown, gene_symbol, paper_global_context(paper_id)
@@ -544,7 +545,7 @@ async def handle_paper_metadata(task_id: int) -> None:
     else:
         # Initial query: build full message with paper + instructions
         await agent_sess.clear_session()
-        paper_markdown = fulltext_md(paper_id, supplement_format)
+        paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
             format_paper_context(
                 paper_markdown, gene_symbol, paper_global_context(paper_id)
@@ -596,7 +597,7 @@ async def handle_variant_extraction(task_id: int) -> None:
     else:
         # Initial query: build full message with paper + instructions
         await agent_sess.clear_session()
-        paper_markdown = fulltext_md(paper_id, supplement_format)
+        paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
             format_paper_context(
                 paper_markdown, gene_symbol, paper_global_context(paper_id)
@@ -716,20 +717,17 @@ async def handle_figure_description(task_id: int) -> None:
         )
 
 
-def pedigree_input(pedigree_row: FigureDescriptionDB | None) -> dict | None:
-    """The pedigree as the agents see it: the figure anchor to cite, and the text.
-
-    ``image_id`` is the Docling picture index, the same N as the ``figure-N``
-    id printed in the anchored text, so the anchor is exact.
-    """
-    if pedigree_row is None:
-        return None
-    return {
-        'anchor': make_anchor_id(
-            AnchorKind.FIGURE, pedigree_row.image_id, pedigree_row.is_supplement
-        ),
-        'description': pedigree_row.description,
-    }
+def paper_text(paper_id: int, supplement_format: FileFormat | None = None) -> str:
+    """The paper as the agents read it: ``fulltext_md`` with every described
+    figure's description spliced in under its figure id (see
+    lib/misc/pdf/figure_text.py). The same bytes for every agent on the paper,
+    so the shared prompt-cache prefix holds; it changes when PDF parsing or
+    Figure Description re-runs."""
+    with session_scope() as session:
+        figures = described_figures(session, paper_id)
+        return splice_figure_descriptions(
+            fulltext_md(paper_id, supplement_format), figures
+        )
 
 
 def citation_check(paper_id: int) -> Check:
@@ -738,9 +736,13 @@ def citation_check(paper_id: int) -> Check:
 
     Handed to the repair loop (``run_with_checked_output``) is sent back to the model with the field, the anchor and what was wrong,
     instead of being stored. The block texts are read once per
-    run, not per attempt.
+    run, not per attempt. A figure's text is its legend plus its description,
+    so a quote copied from the description checks out.
     """
-    texts = paper_block_texts(paper_id)
+    with session_scope() as session:
+        texts = figure_texts(
+            paper_block_texts(paper_id), described_figures(session, paper_id)
+        )
     return lambda output: verify_citations(output, texts)
 
 
@@ -764,24 +766,21 @@ def patient_extraction_message(
 ) -> list[TResponseInputItem]:
     """The initial message the patient extraction agent gets for a paper.
 
-    Paper context (relevant sections), the pedigree description if one was
-    extracted, and the instructions. One function so anything that wants to run
-    the agent outside the worker (lib/bin/patient_extraction_stability.py) sends
+    Paper context (with the figure descriptions spliced in) and the
+    instructions. One function so anything that wants to run the agent
+    outside the worker (lib/bin/patient_extraction_stability.py) sends
     exactly what production sends.
     """
     paper = session.get(PaperDB, paper_id)
     supplement_format = paper.supplement_format if paper else None
     gene_symbol = paper.gene.symbol if paper else None
 
-    pedigree_descriptions_output = pedigree_input(pedigree_figure(session, paper_id))
-
-    paper_markdown = fulltext_md(paper_id, supplement_format)
+    paper_markdown = paper_text(paper_id, supplement_format)
     return paper_input(
         format_paper_context(
             paper_markdown, gene_symbol, paper_global_context(paper_id)
         ),
         PATIENT_EXTRACTION_AGENT_INSTRUCTIONS,
-        f'Pedigree Description:\n{pedigree_descriptions_output}',
     )
 
 
@@ -880,7 +879,6 @@ async def handle_patient_demographics(task_id: int) -> None:
     additional_context: str | None = None
     patient_data: dict | None = None
     proband_identifier: str | None = None
-    pedigree_descriptions_output: dict | None = None
 
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
@@ -923,10 +921,6 @@ async def handle_patient_demographics(task_id: int) -> None:
         )
         proband_identifier = proband_row.identifier if proband_row else None
 
-        pedigree_descriptions_output = pedigree_input(
-            pedigree_figure(session, paper_id)
-        )
-
     agent_sess = agent_session(task_id)
 
     if additional_context is not None:
@@ -936,15 +930,14 @@ async def handle_patient_demographics(task_id: int) -> None:
     else:
         # Initial query: build full message with paper + patient data + instructions
         await agent_sess.clear_session()
-        paper_markdown = fulltext_md(paper_id, supplement_format)
+        paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
             format_paper_context(
                 paper_markdown, gene_symbol, paper_global_context(paper_id)
             ),
             PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS,
             f'Patient JSON:\n{patient_data}\n\n'
-            f'Proband Identifier:\n{proband_identifier}\n\n'
-            f'Pedigree Description:\n{pedigree_descriptions_output}',
+            f'Proband Identifier:\n{proband_identifier}',
         )
         agent = patient_demographics_agent
 
@@ -1053,7 +1046,7 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
     else:
         # Initial query: build full message with paper + family data + instructions
         await agent_sess.clear_session()
-        paper_markdown = fulltext_md(paper_id, supplement_format)
+        paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
             format_paper_context(
                 paper_markdown, gene_symbol, paper_global_context(paper_id)
@@ -1199,7 +1192,7 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
     else:
         # Initial query: build full message with paper + family data + instructions
         await agent_sess.clear_session()
-        paper_markdown = fulltext_md(paper_id, supplement_format)
+        paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
             format_paper_context(
                 paper_markdown, gene_symbol, paper_global_context(paper_id)
@@ -1452,7 +1445,6 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
     paper_id: int
     structured_variants: list
     structured_patients: list
-    pedigree_descriptions_output: dict | None
     additional_context: str | None
     supplement_format: FileFormat | None = None
     with session_scope() as session:
@@ -1496,16 +1488,6 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
             for p in patient_rows
         ]
 
-        pedigree_row = pedigree_figure(session, paper_id)
-        pedigree_descriptions_output = (
-            {
-                'image_id': pedigree_row.image_id,
-                'description': pedigree_row.description,
-            }
-            if pedigree_row
-            else None
-        )
-
     agent_sess = agent_session(task_id)
 
     if additional_context is not None:
@@ -1515,15 +1497,14 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
     else:
         # Initial query: build full message with paper + variant/patient data + instructions
         await agent_sess.clear_session()
-        paper_markdown = fulltext_md(paper_id, supplement_format)
+        paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
             format_paper_context(
                 paper_markdown, gene_symbol, paper_global_context(paper_id)
             ),
             PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS,
             f'Variants JSON:\n{structured_variants}\n\n'
-            f'Patients JSON:\n{structured_patients}\n\n'
-            f'Pedigree Description:\n{pedigree_descriptions_output}',
+            f'Patients JSON:\n{structured_patients}',
         )
         agent = patient_variant_occurrence_agent
 
@@ -1652,13 +1633,8 @@ async def handle_compound_het_evaluation(task_id: int) -> None:
 
         supplement_format = paper.supplement_format
 
-        # Get pedigree description
-        pedigree_row = pedigree_figure(session, paper_id)
-        pedigree_description = (
-            pedigree_row.description if pedigree_row else 'No pedigree information'
-        )
-
-        # Build message with patient info, variants, and pedigree
+        # Build message with patient info and variants; the figure
+        # descriptions (pedigree, parental traces) are in the paper text.
         variants_json = [
             {
                 'variant_id': link.variant_id,
@@ -1672,14 +1648,13 @@ async def handle_compound_het_evaluation(task_id: int) -> None:
         ]
 
         # Get paper markdown
-        paper_markdown = fulltext_md(paper_id, supplement_format)
+        paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
             format_paper_context(
                 paper_markdown, gene_symbol, paper_global_context(paper_id)
             ),
             COMPOUND_HET_AGENT_INSTRUCTIONS,
             f'Patient: {patient.identifier}\n\n'
-            f'Pedigree Description:\n{pedigree_description}\n\n'
             f'Heterozygous Variants for This Patient:\n'
             f'{json.dumps(variants_json, indent=2)}',
         )
@@ -1848,7 +1823,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
     else:
         # Initial query: build full message with paper + patient data + instructions
         await agent_sess.clear_session()
-        paper_markdown = fulltext_md(paper_id, supplement_format)
+        paper_markdown = paper_text(paper_id, supplement_format)
         message = paper_input(
             format_paper_context(
                 paper_markdown, gene_symbol, paper_global_context(paper_id)
@@ -2134,7 +2109,7 @@ async def handle_mondo_linking(task_id: int) -> None:
             # cache the other paper agents already warmed, then append the
             # MONDO-specific target and instructions.
             await agent_sess.clear_session()
-            paper_markdown = fulltext_md(target.paper_id, supplement_format)
+            paper_markdown = paper_text(target.paper_id, supplement_format)
             target_payload = {
                 'scope': target.scope.value,
                 'patient_variant_occurrence_id': target.patient_variant_occurrence_id,

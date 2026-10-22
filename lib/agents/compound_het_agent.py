@@ -12,7 +12,10 @@ a compound heterozygous genotype (variants in trans on different chromosome copi
 CONTEXT:
 - Patient identifier and paper context provided above
 - The patient carries multiple heterozygous variants in the target gene
-- Pedigree description (if available) showing family structure and inheritance
+- Figures that could be read (a pedigree, parental Sanger traces, a gel) carry
+  their description in the paper text, in a quoted "Figure description" block
+  under their [figure-N] id: a trace or lane showing which parent carries which
+  variant is evidence of phase, cited to that figure
 
 INPUT:
 A list of the patient's heterozygous variant links, including:

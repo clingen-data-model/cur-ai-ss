@@ -23,9 +23,12 @@ You will also receive:
    - patient_id (database ID)
    - identifier (e.g., "Patient 1", "Proband", "II-3")
    - identifier_citations (the text and anchors that established the identifier)
-3. Any pedigree description. Includes:
-   - anchor (the pedigree figure's id in the text, e.g. figure-2; cite it for anything taken from the description)
-   - description (summary of family structure, affected status, genotype/segregation)
+
+Each figure that could be read carries its description in the paper text, in a
+quoted "Figure description" block right under its [figure-N] id: a pedigree's
+individuals and their status, and for genotyping figures which labelled
+individual each trace, lane or panel belongs to, the variant shown and the
+result. Cite the figure's anchor for anything taken from it.
 
 Your task:
 
@@ -82,8 +85,19 @@ Note: Compound heterozygous genotype evaluation (determining if two heterozygous
   - a genotype label printed against the person in the pedigree ("+/-",
     "wt/m", "M/+", "het", "+/+"), with or without a chromatogram beside it,
     is the paper stating that person's result, exactly as a table cell
-    reading "Het" is. The pedigree description carries these labels; cite
-    the figure anchor and write the zygosity the label says. A label the
+    reading "Het" is. The figure description carries these labels; cite
+    the figure anchor and write the zygosity the label says;
+  - a genotyping figure read for that person: a Sanger trace described as
+    a double peak at the variant position is the paper reporting
+    Heterozygous, a single mutant peak Homozygous (or Hemizygous where the
+    paper says so); a restriction digest lane, a copy-number ratio or a read
+    pileup likewise reports the result the description reads from it. Cite
+    the figure anchor with the span of the description that states it, and
+    take the testing method from what the figure is: Sanger Sequencing for a
+    chromatogram, Restriction Digest for a digest gel, Chromosomal
+    Microarray for an array copy-number plot, the sequencing the read pileup
+    comes from (Exome Sequencing, Genome Sequencing, a panel) when the paper
+    names it, else leave the method to what the text states; A label the
     description reads as a genotype is not a symbol: a half-filled or dotted
     carrier symbol with no label is the pedigree's convention for "carrier",
     which says one copy at least and nothing more;
