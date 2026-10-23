@@ -59,6 +59,7 @@ class Inheritance(str, Enum):
 
 class TestingMethod(str, Enum):
     chromosomal_microarray = 'Chromosomal Microarray'
+    mlpa = 'MLPA'
     next_generation_sequencing_panels = 'Next-generation Sequencing Panels'
     exome_sequencing = 'Exome Sequencing'
     genome_sequencing = 'Genome Sequencing'

@@ -33,6 +33,7 @@ _TESTING_TO_METHODOLOGY = {
     TestingMethod.denaturing_gradient_gel.value: SequencingMethodology.CandidateGene.value,
     TestingMethod.high_resolution_melting.value: SequencingMethodology.CandidateGene.value,
     TestingMethod.restriction_digest.value: SequencingMethodology.CandidateGene.value,
+    TestingMethod.mlpa.value: SequencingMethodology.CandidateGene.value,
     TestingMethod.single_strand_conformation_polymorphism.value: SequencingMethodology.CandidateGene.value,
     # Fallbacks
     TestingMethod.unknown.value: SequencingMethodology.Unknown.value,
