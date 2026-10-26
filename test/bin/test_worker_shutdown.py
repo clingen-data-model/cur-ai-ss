@@ -1,7 +1,6 @@
 """Claimed tasks are swept back to PENDING on shutdown and on startup, instead
 of sitting QUEUED or RUNNING until the lease timeout notices them."""
 
-import asyncio
 import datetime
 
 import pytest
@@ -108,10 +107,10 @@ async def test_sweep_leaves_settled_and_pending_rows_alone(
     assert cleared == []
 
 
-async def test_execute_task_declines_to_claim_while_shutting_down(
+async def test_execute_task_declines_to_run_while_shutting_down(
     db_session, make_task, monkeypatch
 ):
-    task = make_task(TaskStatus.QUEUED, tries=1)
+    task = make_task(TaskStatus.RUNNING, tries=1)
     monkeypatch.setattr(worker, '_shutting_down', True)
     ran = False
 
@@ -121,18 +120,16 @@ async def test_execute_task_declines_to_claim_while_shutting_down(
 
     monkeypatch.setitem(worker.TASK_HANDLERS, TYPE, run)
 
-    await worker.execute_task(task.id)
+    await worker.execute_task(task.id, attempt=1)
 
     assert not ran
-    refreshed = _status(db_session, task.id)
-    assert refreshed.status == TaskStatus.QUEUED  # left for the sweep
-    assert refreshed.tries == 1  # the attempt that never started costs nothing
+    assert _status(db_session, task.id).status == TaskStatus.RUNNING  # for the sweep
 
 
-async def test_execute_task_runs_a_claimed_task_when_not_shutting_down(
+async def test_execute_task_runs_a_started_attempt_when_not_shutting_down(
     db_session, make_task, not_shutting_down, monkeypatch
 ):
-    task = make_task(TaskStatus.QUEUED)
+    task = make_task(TaskStatus.RUNNING, tries=1)
     ran = False
 
     async def run(task_id: int) -> None:
@@ -141,7 +138,7 @@ async def test_execute_task_runs_a_claimed_task_when_not_shutting_down(
 
     monkeypatch.setitem(worker.TASK_HANDLERS, TYPE, run)
 
-    await worker.execute_task(task.id)
+    await worker.execute_task(task.id, attempt=1)
 
     assert ran
     assert _status(db_session, task.id).status == TaskStatus.COMPLETED
@@ -152,9 +149,8 @@ async def test_the_poller_claims_nothing_once_shutting_down(
 ):
     task = make_task(TaskStatus.PENDING)
     monkeypatch.setattr(worker, '_shutting_down', True)
-    semaphores = {t: asyncio.Semaphore(1) for t in TaskType}
 
-    await worker.poll_and_schedule_tasks(asyncio.Semaphore(1), semaphores)
+    await worker.poll_and_schedule_tasks()
 
     assert _status(db_session, task.id).status == TaskStatus.PENDING
 
@@ -162,29 +158,30 @@ async def test_the_poller_claims_nothing_once_shutting_down(
 async def test_the_lease_timeout_holds_each_task_to_its_own_types_limit(
     db_session, make_task, cleared, not_shutting_down, monkeypatch
 ):
-    # Both claimed 25 min ago: past the default 20 min, within PDF Parsing's 30.
+    # Both started 25 min ago: past the default 20 min, within PDF Parsing's 30.
     parse = make_task(TaskStatus.RUNNING, tries=1)
     agent = make_task(TaskStatus.RUNNING, tries=1)
     agent.type = TaskType.PATIENT_DEMOGRAPHICS
-    claimed = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
+    began = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(
         minutes=25
     )
     for task in (parse, agent):
-        task.updated_at = claimed
+        task.started_at = began
     db_session.commit()
 
-    async def no_run(*args: object, **kwargs: object) -> None:
+    async def no_run(task_id: int, attempt: int) -> None:
         return None
 
-    monkeypatch.setattr(worker, 'execute_task_with_semaphore', no_run)
-    semaphores = {t: asyncio.Semaphore(1) for t in TaskType}
+    monkeypatch.setattr(worker, 'execute_task', no_run)
 
-    await worker.poll_and_schedule_tasks(asyncio.Semaphore(1), semaphores)
+    await worker.poll_and_schedule_tasks()
 
-    assert cleared == [agent.id]  # reset, session cleared, then claimed again
+    assert cleared == [agent.id]  # retired, session cleared, then started again
+    assert _status(db_session, agent.id).tries == 2
     refreshed = _status(db_session, parse.id)
     assert refreshed.status == TaskStatus.RUNNING
-    assert refreshed.updated_at.replace(tzinfo=None) == claimed.replace(tzinfo=None)
+    assert refreshed.tries == 1
+    assert refreshed.started_at.replace(tzinfo=None) == began.replace(tzinfo=None)
 
 
 async def test_the_signal_handler_sets_the_flag_and_schedules_one_shutdown(

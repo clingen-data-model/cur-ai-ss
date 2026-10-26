@@ -568,9 +568,8 @@ def list_active_papers(
       PENDING  enqueued, not yet claimed. The scheduler polls every 10s, and
                with PDF parsing limited to one at a time a second paper waits
                here for the length of the first paper's parse.
-      QUEUED   claimed by the scheduler, about to execute. Set at
-               worker.py:282 to stop a task being scheduled twice, so it is
-               brief -- but a poll can land inside it.
+      QUEUED   no longer written: the worker claims a task by starting it.
+               Rows from before 2026-10-26 can still carry it.
       RUNNING  a handler is executing it.
 
     Matching only the last two -- which this did at first -- left a paper the

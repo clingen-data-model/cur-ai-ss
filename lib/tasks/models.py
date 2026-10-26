@@ -126,10 +126,10 @@ class TaskStatus(StrEnum):
 # coinciding and the difference is easy to get backwards.
 #
 # WAITING is what a user sees: the task is not executing. PENDING and QUEUED are
-# both that. Their difference is the scheduler's bookkeeping -- QUEUED means it
-# has claimed the row so it cannot schedule it twice (worker.py) -- and nothing
-# a person is waiting on should be described by which side of that claim it
-# happens to sit on.
+# both that. QUEUED was the scheduler's bookkeeping, a row claimed but parked
+# in an in-process queue; since 2026-10-26 claiming a task is starting it
+# (worker.py), so the worker writes PENDING and RUNNING only. The member stays
+# for rows written before then and is treated as claimed wherever it turns up.
 WAITING_STATUSES: frozenset[TaskStatus] = frozenset(
     {TaskStatus.PENDING, TaskStatus.QUEUED}
 )

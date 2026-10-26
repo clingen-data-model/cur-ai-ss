@@ -4,8 +4,7 @@ import datetime
 import logging
 import os
 import signal
-import time
-from typing import Any
+from collections import Counter
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -32,11 +31,12 @@ from lib.tasks.models import (
     TaskType,
 )
 
-# A claimed task's lease is never refreshed during its run, so the timeout
-# must exceed the longest legitimate run of its type or a healthy task gets
-# reset mid-run and runs twice. Over 9,500 completed runs on dev-caa through
-# 2026-10-22, no agent task passed 13 min; PDF Parsing, whose Docling pass
-# scales with page count on a CPU VM, reached 15 min on a 44-page supplement.
+# An attempt's lease runs from started_at and is never refreshed, so the
+# timeout must exceed the longest legitimate run of its type or a healthy
+# attempt gets retired mid-run and started over. Over 9,500 completed runs on
+# dev-caa through 2026-10-22, no agent task passed 13 min; PDF Parsing, whose
+# Docling pass scales with page count on a CPU VM, reached 15 min on a 44-page
+# supplement.
 DEFAULT_LEASE_TIMEOUT_S = 1200
 LEASE_TIMEOUT_S: dict[TaskType, int] = {
     TaskType.PDF_PARSING: 1800,
@@ -45,6 +45,9 @@ POLL_INTERVAL_S = 10
 MAX_RETRIES = 2
 RETRY_DELAY_S = 30
 
+# How many attempts may be RUNNING at once, overall and per type. Admission
+# is decided from the table on every poll (see _poll_and_schedule_tasks): a
+# task is claimed only when a slot is free, and claiming it is starting it.
 GLOBAL_CONCURRENCY = 30
 TASK_CONCURRENCY: dict[TaskType, int] = {
     TaskType.PDF_PARSING: 1,
@@ -53,9 +56,9 @@ TASK_CONCURRENCY: dict[TaskType, int] = {
 }
 DEFAULT_CONCURRENCY = 20
 
-# Prompt-cache warm-up window for the fan-out gate below: a little under the
-# 1h TTL the breakpoints use (lib/agents/model_factory.py), so a batch that
-# starts inside the window can trust the entry is still there.
+# Prompt-cache warm-up window for the fan-out gate in admission: a little
+# under the 1h TTL the breakpoints use (lib/agents/model_factory.py), so a
+# batch that starts inside the window can trust the entry is still there.
 CACHE_WARM_S = 50 * 60
 
 setup_logging()
@@ -75,8 +78,9 @@ except Exception:
 
 
 # Set by the shutdown signal. The poller stops claiming on it, execute_task
-# declines to start on it, and the final sweep can then reset every claimed
-# row knowing nothing will claim another behind its back.
+# declines to run an attempt the sweep is about to retire, and the final sweep
+# can then reset every claimed row knowing nothing will claim another behind
+# its back.
 _shutting_down = False
 # Held for the length of a poll, so the shutdown sweep waits for a poll that
 # was mid-claim when the signal arrived rather than racing its commit.
@@ -91,10 +95,9 @@ async def _sweep_claimed_tasks(event: str) -> int:
     about to exit; on startup they are whatever the last process left, which
     is nothing when it shut down in order and everything it held when it was
     killed outright. Resetting them all is therefore exact, and it needs no
-    bookkeeping of which rows this process holds -- the in-memory set it
-    replaced missed tasks still waiting on a semaphore and tasks claimed by a
-    poll that ran during the shutdown itself, which then sat RUNNING until the
-    lease timeout.
+    bookkeeping of which rows this process holds. QUEUED is a status the
+    worker no longer writes (claiming and starting became one write on
+    2026-10-26); a row still in it is from before and is released the same.
 
     Same reset, and same PENDING-vs-abandon retry check, that the lease
     timeout applies: PENDING with a cleared session, so the retry starts from
@@ -145,29 +148,38 @@ def _handle_shutdown_signal(sig: int) -> None:
     asyncio.create_task(_shutdown())
 
 
-async def execute_task(task_id: int) -> None:
-    """Execute a single task handler."""
+def start_attempt(task: TaskDB, now: datetime.datetime) -> int:
+    """Stamp the start of an attempt on a claimed row and return its number.
+
+    Both timestamps, deliberately: updated_at is overwritten when the task
+    reaches a terminal status, which is what makes it the finish time.
+    started_at is the only record of when the attempt began, and a retry
+    re-stamps it so the pair always describes the same attempt. The number
+    (tries after the increment) is the attempt's token: execute_task writes
+    an outcome only while the row still carries it."""
+    task.status = TaskStatus.RUNNING
+    task.started_at = now
+    task.updated_at = now
+    task.tries += 1
+    return task.tries
+
+
+async def execute_task(task_id: int, attempt: int) -> None:
+    """Run the handler for an attempt started by start_attempt and record its
+    outcome, unless the row has moved on. The lease sweep retires an attempt
+    that ran too long by resetting its row, and the retry then runs beside
+    the coroutine this one never got to cancel; the row's status and tries
+    say which attempt is current, and only that one may write. A stale
+    outcome is logged and dropped, successors and all."""
     if _shutting_down:
-        # Leave the row QUEUED for the sweep rather than start an attempt the
-        # exit is about to kill, which would cost it a try.
+        # The sweep is about to retire this attempt; do not start a handler
+        # the exit will kill.
         return
-    # Mark task as RUNNING, then close session before async work
-    task_type = None
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
         if not task:
             logger.warning(f'Task {task_id} not found')
             return
-
-        started = datetime.datetime.now(datetime.timezone.utc)
-        task.status = TaskStatus.RUNNING
-        # Both, deliberately: updated_at is overwritten when the task reaches a
-        # terminal status, which is what makes it the finish time. started_at is
-        # the only record of when the attempt began, and a retry re-stamps it so
-        # the pair always describes the same attempt.
-        task.started_at = started
-        task.updated_at = started
-        task.tries += 1
         task_type = task.type
 
     # Handler manages its own session - no session held across async boundaries
@@ -185,30 +197,38 @@ async def execute_task(task_id: int) -> None:
     # Update final status in a new session
     with session_scope() as session:
         task = session.get(TaskDB, task_id)
-        if task:
-            now = datetime.datetime.now(datetime.timezone.utc)
-            if error_msg is None:
-                task.status = TaskStatus.COMPLETED
-                task.updated_at = now
-                task.error_message = None
-                if not task.skip_successors:
-                    enqueue_successors(session, task)
-            else:
-                task.status = TaskStatus.FAILED
-                task.updated_at = now
-                task.error_message = error_msg
-            paper = session.get(PaperDB, task.paper_id)
-            if paper:
-                paper.updated_at = now
-            # Before the snapshot and the email: a verification row queued
-            # here is in flight, so both wait for it (see TERMINAL_TASK_TYPES).
-            _maybe_queue_verification(session, task)
-            if error_msg is None and task.type in TERMINAL_TASK_TYPES:
-                _maybe_write_snapshot(session, task.paper_id)
-                _maybe_notify_completion(session, task.paper_id)
-            elif error_msg is not None and task.tries > MAX_RETRIES:
-                # A final failure can be the last thing a pipeline does.
-                _maybe_write_snapshot(session, task.paper_id)
+        if not task:
+            return
+        if task.status != TaskStatus.RUNNING or task.tries != attempt:
+            logger.warning(
+                f'Attempt {attempt} of task {task_id} ({task_type}) was retired '
+                f'while it ran (row is {task.status}, tries {task.tries}); '
+                f'dropping its outcome'
+            )
+            return
+        now = datetime.datetime.now(datetime.timezone.utc)
+        if error_msg is None:
+            task.status = TaskStatus.COMPLETED
+            task.updated_at = now
+            task.error_message = None
+            if not task.skip_successors:
+                enqueue_successors(session, task)
+        else:
+            task.status = TaskStatus.FAILED
+            task.updated_at = now
+            task.error_message = error_msg
+        paper = session.get(PaperDB, task.paper_id)
+        if paper:
+            paper.updated_at = now
+        # Before the snapshot and the email: a verification row queued
+        # here is in flight, so both wait for it (see TERMINAL_TASK_TYPES).
+        _maybe_queue_verification(session, task)
+        if error_msg is None and task.type in TERMINAL_TASK_TYPES:
+            _maybe_write_snapshot(session, task.paper_id)
+            _maybe_notify_completion(session, task.paper_id)
+        elif error_msg is not None and task.tries > MAX_RETRIES:
+            # A final failure can be the last thing a pipeline does.
+            _maybe_write_snapshot(session, task.paper_id)
 
 
 def _maybe_queue_verification(session: Session, task: TaskDB) -> None:
@@ -349,95 +369,69 @@ def _maybe_notify_completion(session: Session, paper_id: int) -> None:
     paper.completion_notified_at = datetime.datetime.now(datetime.timezone.utc)
 
 
-# Fan-out gate, keyed by (paper, task type). Anthropic makes a prompt-cache
-# entry available only once the first response that wrote it has begun, so if
-# the 25 demographics tasks of a paper all start at once every one of them
-# writes the paper prefix and none reads it. The first task of a paper+type
-# runs alone; the rest wait on its lock, find the gate warm, and run together
-# under the ordinary semaphores. Costs one task's latency per paper+type per
-# warm window, for every provider (no branch to keep in step with the model
-# config; OpenAI's automatic caching likes a warmed prefix just as much).
-_fanout_gates: dict[tuple[int, TaskType], asyncio.Lock] = {}
-_warm_until: dict[tuple[int, TaskType], float] = {}
-
-
-def _gate_is_warm(key: tuple[int, TaskType]) -> bool:
-    return _warm_until.get(key, 0.0) > time.monotonic()
-
-
-async def execute_task_with_semaphore(
-    task_id: int,
-    global_semaphore: asyncio.Semaphore,
-    type_semaphore: asyncio.Semaphore,
-    paper_id: int | None = None,
-    task_type: TaskType | None = None,
-) -> None:
-    """Execute task, respecting global and type-specific concurrency limits
-    and the per-paper fan-out gate (when the caller says which paper+type)."""
-    async with global_semaphore, type_semaphore:
-        if paper_id is None or task_type is None:
-            await execute_task(task_id)
-            return
-        key = (paper_id, task_type)
-        lock = _fanout_gates.setdefault(key, asyncio.Lock())
-        async with lock:
-            if not _gate_is_warm(key):
-                try:
-                    await execute_task(task_id)
-                finally:
-                    # Success or failure, the request went out and wrote the
-                    # prefix; a retry must not serialise the others again.
-                    _warm_until[key] = time.monotonic() + CACHE_WARM_S
-                return
-        await execute_task(task_id)
-
-
 def lease_timeout_s(task_type: TaskType) -> int:
     return LEASE_TIMEOUT_S.get(task_type, DEFAULT_LEASE_TIMEOUT_S)
 
 
-async def poll_and_schedule_tasks(
-    global_semaphore: asyncio.Semaphore,
-    semaphores: dict[TaskType, asyncio.Semaphore],
-) -> None:
-    """Poll for pending tasks and schedule them (non-blocking)."""
+def _utc(stamp: datetime.datetime) -> datetime.datetime:
+    # SQLite hands the column back naive; it was written in UTC.
+    return stamp.replace(tzinfo=stamp.tzinfo or datetime.timezone.utc)
+
+
+async def poll_and_schedule_tasks() -> None:
+    """One poll: retire expired attempts, re-queue retries, start what fits."""
     async with _poll_lock:
         if _shutting_down:
             return
-        await _poll_and_schedule_tasks(global_semaphore, semaphores)
+        await _poll_and_schedule_tasks()
 
 
-async def _poll_and_schedule_tasks(
-    global_semaphore: asyncio.Semaphore,
-    semaphores: dict[TaskType, asyncio.Semaphore],
-) -> None:
+async def _poll_and_schedule_tasks() -> None:
+    """Everything the scheduler knows is in the tasks table, and a poll is
+    one transaction over it. Admission is decided from counts of RUNNING rows
+    against the limits above, so a task is claimed only when it can start,
+    and claiming it is starting it (start_attempt): there is no in-process
+    queue, nothing waits for a slot, and an attempt's lease runs from the
+    moment it actually began. A freed slot is refilled on the next poll, up
+    to POLL_INTERVAL_S later, which against runs of minutes is nothing.
+
+    The fan-out gate is decided here too. Anthropic makes a prompt-cache
+    entry available only once the first response that wrote it has begun, so
+    if the 25 demographics tasks of a paper all start at once every one of
+    them writes the paper prefix and none reads it. A (paper, type) batch
+    whose first attempt is RUNNING and has not yet finished admits nothing
+    more; once an attempt of the batch has finished, success or failure,
+    within CACHE_WARM_S, the rest start together. Costs one task's latency
+    per batch per warm window, for every provider (no branch to keep in step
+    with the model config; OpenAI's automatic caching likes a warmed prefix
+    just as much)."""
+    started: list[tuple[int, int]] = []
     with session_scope() as session:
         now = datetime.datetime.now(datetime.timezone.utc)
-        # Rows older than the shortest timeout are candidates; each is then
-        # held to its own type's timeout.
+
+        # Retire attempts that have outrun their type's lease: PENDING with a
+        # cleared session while retries remain, else FAILED. The coroutine
+        # still running the old attempt finds the row moved on and drops its
+        # outcome (execute_task).
         shortest = min(DEFAULT_LEASE_TIMEOUT_S, *LEASE_TIMEOUT_S.values())
         expired_cutoff = now - datetime.timedelta(seconds=shortest)
-
-        # Reset timed-out claimed tasks back to PENDING (only if retries remain)
         timed_out_tasks = (
             session.query(TaskDB)
             .filter(
-                TaskDB.status.in_(CLAIMED_STATUSES),
-                TaskDB.updated_at < expired_cutoff,
+                TaskDB.status == TaskStatus.RUNNING,
+                TaskDB.started_at < expired_cutoff,
             )
             .all()
         )
         for task in timed_out_tasks:
             timeout_s = lease_timeout_s(task.type)
-            # SQLite hands the column back naive; it was written in UTC.
-            claimed_at = task.updated_at.replace(
-                tzinfo=task.updated_at.tzinfo or datetime.timezone.utc
-            )
-            if claimed_at >= now - datetime.timedelta(seconds=timeout_s):
+            if task.started_at is None or _utc(
+                task.started_at
+            ) >= now - datetime.timedelta(seconds=timeout_s):
                 continue
             if task.tries < MAX_RETRIES:
                 logger.info(
-                    f'Resetting timed-out task {task.id} ({task.type}) (attempt {task.tries + 1}/{MAX_RETRIES + 1})'
+                    f'Retiring timed-out attempt of task {task.id} ({task.type}) (attempt {task.tries + 1}/{MAX_RETRIES + 1} next)'
                 )
                 task.status = TaskStatus.PENDING
                 await clear_task_session(task.id)
@@ -473,51 +467,62 @@ async def _poll_and_schedule_tasks(
 
         session.flush()
 
-        # Fetch pending tasks grouped by type
-        pending_tasks: dict[TaskType, list[tuple[int, int]]] = {}
-        for task_type in TaskType:
-            limit = TASK_CONCURRENCY.get(task_type, DEFAULT_CONCURRENCY)
-            tier_tasks = (
-                session.query(TaskDB)
-                .filter(
-                    TaskDB.type == task_type,
-                    TaskDB.status == TaskStatus.PENDING,
-                )
-                .limit(limit)
-                .all()
+        # Admission: what is running, and which batches are warm.
+        running = session.query(TaskDB).filter(TaskDB.status == TaskStatus.RUNNING)
+        total = 0
+        by_type: Counter[TaskType] = Counter()
+        running_batches: set[tuple[int, TaskType]] = set()
+        for task in running:
+            total += 1
+            by_type[task.type] += 1
+            running_batches.add((task.paper_id, task.type))
+        warm_since = now - datetime.timedelta(seconds=CACHE_WARM_S)
+        warm_batches = {
+            (paper_id, task_type)
+            for paper_id, task_type in session.query(TaskDB.paper_id, TaskDB.type)
+            .filter(
+                TaskDB.status.in_((TaskStatus.COMPLETED, TaskStatus.FAILED)),
+                TaskDB.updated_at >= warm_since,
             )
-            if tier_tasks:
-                pending_tasks[task_type] = [(t.id, t.paper_id) for t in tier_tasks]
-                # Mark as QUEUED to prevent re-scheduling before execution
-                for task in tier_tasks:
-                    task.status = TaskStatus.QUEUED
-                    task.updated_at = now
+            .distinct()
+        }
+
+        for task_type in TaskType:
+            free = (
+                TASK_CONCURRENCY.get(task_type, DEFAULT_CONCURRENCY)
+                - by_type[task_type]
+            )
+            if free <= 0 or total >= GLOBAL_CONCURRENCY:
+                continue
+            pending = (
+                session.query(TaskDB)
+                .filter(TaskDB.type == task_type, TaskDB.status == TaskStatus.PENDING)
+                .order_by(TaskDB.id)
+            )
+            for task in pending:
+                if free <= 0 or total >= GLOBAL_CONCURRENCY:
+                    break
+                batch = (task.paper_id, task_type)
+                if batch in running_batches and batch not in warm_batches:
+                    continue  # the batch's first attempt is still warming the cache
+                started.append((task.id, start_attempt(task, now)))
+                running_batches.add(batch)
+                free -= 1
+                total += 1
 
         session.flush()
 
-    if not pending_tasks:
+    if not started:
         logger.info('Found no pending tasks')
         return
 
-    # Schedule tasks with global and type-specific semaphores (non-blocking)
-    total_scheduled = 0
-    for task_type, tasks in pending_tasks.items():
-        for task_id, paper_id in tasks:
-            asyncio.create_task(
-                execute_task_with_semaphore(
-                    task_id,
-                    global_semaphore,
-                    semaphores[task_type],
-                    paper_id=paper_id,
-                    task_type=task_type,
-                )
-            )
-            total_scheduled += 1
-    logger.info(f'Scheduled {total_scheduled} tasks')
+    for task_id, attempt in started:
+        asyncio.create_task(execute_task(task_id, attempt))
+    logger.info(f'Started {len(started)} tasks')
 
 
 async def main_async() -> None:
-    """Main async loop: continuously poll for tasks and schedule them."""
+    """Main async loop: poll the table and start what fits, forever."""
     # add_signal_handler (not signal.signal) so the handler can schedule the
     # async release above on this same loop rather than running as a plain
     # synchronous interrupt.
@@ -525,20 +530,13 @@ async def main_async() -> None:
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, _handle_shutdown_signal, sig)
 
-    # Create global and type-specific semaphores
-    global_semaphore = asyncio.Semaphore(GLOBAL_CONCURRENCY)
-    semaphores: dict[TaskType, asyncio.Semaphore] = {}
-    for task_type in TaskType:
-        limit = TASK_CONCURRENCY.get(task_type, DEFAULT_CONCURRENCY)
-        semaphores[task_type] = asyncio.Semaphore(limit)
-
     logger.info('Starting task worker')
     # Whatever the last process left claimed is nobody's now (see the sweep).
     await _sweep_claimed_tasks('restarted')
     while True:
         logger.info('Looking for work')
         try:
-            await poll_and_schedule_tasks(global_semaphore, semaphores)
+            await poll_and_schedule_tasks()
         except Exception:
             logger.exception('Unexpected error in worker loop')
         await asyncio.sleep(POLL_INTERVAL_S)
