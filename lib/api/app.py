@@ -2928,7 +2928,7 @@ def rerun_flag(
 
 @app.get(
     '/papers/{paper_id}/curation-row',
-    response_model=CurationSummaryRow,
+    response_model=list[CurationSummaryRow],
 )
 def get_curation_row(
     paper_id: int,

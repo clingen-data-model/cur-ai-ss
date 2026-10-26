@@ -165,7 +165,6 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
         if path.exists():
             pedigree_image_path_str = str(path)
 
-    first_row = True
     for proband in probands:
         family = proband.family
 
@@ -399,12 +398,11 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
                 score_sections = family_score_map.get(family.id, [])
 
                 # Create one row for this proband/variant pair
-                # Publication/Testing only on first row
-                pub_test = publication_and_testing_sections if first_row else []
                 rows.append(
                     CurationSummaryRow(
                         paper_id=paper_id,
-                        publication_and_testing=pub_test,
+                        patient_id=proband.id,
+                        publication_and_testing=publication_and_testing_sections,
                         proband=proband_section,
                         variant_info=variant_section,
                         clinical_presentation=clinical_sections,
@@ -413,18 +411,17 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
                         pedigree_image_path=pedigree_image_path_str,
                     )
                 )
-                first_row = False
         else:
             # No variants for this proband - create one row anyway
             variant_section = [
                 SectionContent(title='Variants', content='No variants for this proband')
             ]
             score_sections = family_score_map.get(family.id, [])
-            pub_test = publication_and_testing_sections if first_row else []
             rows.append(
                 CurationSummaryRow(
                     paper_id=paper_id,
-                    publication_and_testing=pub_test,
+                    patient_id=proband.id,
+                    publication_and_testing=publication_and_testing_sections,
                     proband=proband_section,
                     variant_info=variant_section,
                     clinical_presentation=clinical_sections,
@@ -433,6 +430,5 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
                     pedigree_image_path=pedigree_image_path_str,
                 )
             )
-            first_row = False
 
     return rows
