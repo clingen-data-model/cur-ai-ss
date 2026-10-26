@@ -67,3 +67,43 @@ def test_the_agent_runs_on_the_vision_model_not_the_extraction_model(monkeypatch
     agent = tca.table_correction_agent_for_image(Path('table.png'))
 
     assert agent.model == 'vision-model'
+
+
+@pytest.mark.parametrize(
+    'markdown',
+    [
+        '| gene | status |\n| --- | --- |\n| BRCA1 | + |',
+        '| gene | status |\n|:---|---:|\n| BRCA1 | + |\n| BRCA2 | - |',
+        'gene | status\n--- | ---\nBRCA1 | +',  # pipes at the edges are optional
+        # A dense symbol grid is a table like any other.
+        '| Variant | A | B | C |\n|---|---|---|---|\n| p.X | + | - | na |\n| p.Y | U | + | - |',
+    ],
+)
+def test_a_well_formed_table_is_a_header_a_separator_and_uniform_rows(markdown):
+    assert tca.is_well_formed_table(markdown)
+
+
+@pytest.mark.parametrize(
+    'markdown',
+    [
+        '',
+        'The table could not be read reliably from the image.',
+        '| gene |\n| --- |',  # no data row
+        '| gene | status |\n| --- | --- |\n| BRCA1 |',  # ragged
+        '| gene | status |\n| BRCA1 | + |\n| BRCA2 | - |',  # no separator
+    ],
+)
+def test_anything_else_is_not_a_well_formed_table(markdown):
+    assert not tca.is_well_formed_table(markdown)
+
+
+def test_the_judge_rejects_on_structure_not_on_what_the_table_is_a_grid_of():
+    """Paper 125 table 1 (2026-10-26): a 26-by-16 grid of +/- symbols came back
+    from the vision read complete and well-formed, and the judge threw it away
+    in three runs of four because its instructions named 'dense matrices of
+    tiny symbols' as the example of an unrecoverable table. It cannot see the
+    image, so structure is the only test it can apply."""
+    text = ' '.join(tca.TABLE_CORRECTION_INSTRUCTIONS.split())
+    assert 'dense matrices' not in text
+    assert 'well-formed' in text
+    assert 'not a reason to reject' in text
