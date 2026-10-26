@@ -60,6 +60,7 @@ def started(monkeypatch) -> list[int]:
     """Record which attempts the poll started, without running any handler,
     so rows stay RUNNING for the next poll to count."""
     monkeypatch.setattr(worker, '_shutting_down', False)
+    monkeypatch.setattr(worker, '_attempts', {})  # see test_worker_shutdown
     ids: list[int] = []
 
     async def record(task_id: int, attempt: int) -> None:

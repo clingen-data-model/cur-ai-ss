@@ -43,9 +43,7 @@ def test_queued_when_the_last_task_completes(db_session, paper):
     assert _verifications(db_session, paper) == [(TaskStatus.PENDING, 0)]
 
 
-@pytest.mark.parametrize(
-    'status', [TaskStatus.PENDING, TaskStatus.QUEUED, TaskStatus.RUNNING]
-)
+@pytest.mark.parametrize('status', [TaskStatus.PENDING, TaskStatus.RUNNING])
 def test_not_queued_while_another_task_is_in_flight(db_session, paper, status):
     _task(db_session, paper, status, TaskType.PHENOTYPE_EXTRACTION)
     done = _task(db_session, paper, TaskStatus.COMPLETED)

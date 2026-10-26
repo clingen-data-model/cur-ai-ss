@@ -83,11 +83,12 @@ def test_requeue_snapshots_the_paper_first(db_session, gene):
     assert [s.description for s in snapshots] == ['Before re-running']
 
 
-@pytest.mark.parametrize('status', [TaskStatus.RUNNING, TaskStatus.QUEUED])
-def test_a_busy_paper_is_skipped_untouched(db_session, gene, status):
+def test_a_busy_paper_is_skipped_untouched(db_session, gene):
     paper = _paper(db_session, gene, 'a')
     _task(db_session, paper, TaskType.PAPER_CLASSIFIER, status=TaskStatus.COMPLETED)
-    live = _task(db_session, paper, TaskType.PATIENT_EXTRACTION, status=status)
+    live = _task(
+        db_session, paper, TaskType.PATIENT_EXTRACTION, status=TaskStatus.RUNNING
+    )
 
     reason = requeue_paper(db_session, paper.id, TaskType.PAPER_CLASSIFIER, 'test')
 

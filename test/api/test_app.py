@@ -2917,19 +2917,17 @@ def test_active_papers_lists_only_work_in_flight(
     assert [p['id'] for p in active] == [busy]
 
 
-@pytest.mark.parametrize('waiting', [TaskStatus.PENDING, TaskStatus.QUEUED])
 def test_active_papers_counts_waiting_work_as_in_flight(
-    client, test_pdf, db_session, seeded_genes, waiting
+    client, test_pdf, db_session, seeded_genes
 ):
     """Work the user is waiting on counts even though nothing executes it yet.
 
-    Both occur. PENDING is where a task waits to be claimed -- the scheduler
-    polls every 10s, and PDF parsing runs one at a time, so a second paper waits
-    there for the whole of the first one's parse. QUEUED is the brief window
-    after the scheduler claims it (worker.py:282, which stops it being scheduled
-    twice) and before the handler starts. An earlier version matched only the
-    latter, so a paper just queued read as idle.
+    PENDING is where a task waits to be claimed -- the scheduler polls every
+    10s, and PDF parsing runs one at a time, so a second paper waits there for
+    the whole of the first one's parse. An earlier version matched only
+    RUNNING, so a paper just queued read as idle.
     """
+    waiting = TaskStatus.PENDING
     paper_id = client.put(
         '/papers',
         files={'uploaded_file': ('p.pdf', test_pdf, 'application/pdf')},

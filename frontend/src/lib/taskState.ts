@@ -57,12 +57,7 @@ export function taskState(
   if (matching.length === 0) return 'not-started'
   if (matching.some((t) => t.status === TaskStatus.FAILED)) return 'failed'
   if (matching.some((t) => t.status === TaskStatus.RUNNING)) return 'running'
-  if (
-    matching.some(
-      (t) => t.status === TaskStatus.PENDING || t.status === TaskStatus.QUEUED,
-    )
-  )
-    return 'waiting'
+  if (matching.some((t) => t.status === TaskStatus.PENDING)) return 'waiting'
   return 'complete'
 }
 
@@ -114,7 +109,6 @@ export function taskStateMessage(
  * owed. Re-running and restoring are both refused (409) while any exist. */
 export const ACTIVE_TASK_STATUSES: ReadonlySet<TaskStatus> = new Set([
   TaskStatus.PENDING,
-  TaskStatus.QUEUED,
   TaskStatus.RUNNING,
 ])
 
@@ -145,9 +139,6 @@ export type NodeStatus = 'idle' | 'pending' | 'running' | 'partial' | 'completed
 export function computeStatus(tasks: TaskResp[]): NodeStatus {
   if (!tasks || tasks.length === 0) return 'idle'
   const statuses = tasks.map(t => t.status)
-  // Running only. A Queued task has been claimed by the scheduler but has not
-  // started, so it falls through to 'pending' with the tasks still waiting to
-  // be claimed -- the two are the same thing to anyone reading the graph.
   if (statuses.some(s => s === 'Running')) return 'running'
   if (statuses.some(s => s === 'Failed')) return 'failed'
   if (statuses.every(s => s === 'Completed')) return 'completed'

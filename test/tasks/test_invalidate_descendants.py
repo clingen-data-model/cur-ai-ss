@@ -52,11 +52,12 @@ def test_leaves_the_requeued_type_alone(db_session, paper):
     assert db_session.get(TaskDB, own.id) is not None
 
 
-@pytest.mark.parametrize('status', [TaskStatus.RUNNING, TaskStatus.QUEUED])
-def test_spares_in_flight_rows(db_session, paper, status):
+def test_spares_in_flight_rows(db_session, paper):
     """A handler is mid-flight against these; deleting the row out from under it
     relocates the failure rather than removing it."""
-    live = _task(db_session, paper, TaskType.PATIENT_EXTRACTION, status=status)
+    live = _task(
+        db_session, paper, TaskType.PATIENT_EXTRACTION, status=TaskStatus.RUNNING
+    )
 
     removed = invalidate_descendants(db_session, paper.id, TaskType.PAPER_CLASSIFIER)
 

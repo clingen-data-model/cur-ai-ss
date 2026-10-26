@@ -25,7 +25,6 @@ from lib.tasks.hpo_link_cache import get_hpo_link_cache
 from lib.tasks.misc import enqueue_successors, enqueue_task
 from lib.tasks.models import (
     ACTIVE_STATUSES,
-    CLAIMED_STATUSES,
     TERMINAL_TASK_TYPES,
     TaskStatus,
     TaskType,
@@ -42,6 +41,14 @@ LEASE_TIMEOUT_S: dict[TaskType, int] = {
     TaskType.PDF_PARSING: 1800,
 }
 POLL_INTERVAL_S = 10
+# Retries after the first attempt, so MAX_RETRIES + 1 attempts in all. A row's
+# tries counts the attempts started on it, so a row with tries <= MAX_RETRIES
+# is still owed a retry and one with tries > MAX_RETRIES has had its last.
+# Every check in this module uses that one inequality: the retry sweep, the
+# lease and shutdown sweeps, the idle check and the final-failure snapshot.
+# The two sweeps used to say "< MAX_RETRIES", which marked a task FAILED
+# "exhausted retries" one attempt early and then the retry sweep revived it
+# 30 s later anyway.
 MAX_RETRIES = 2
 RETRY_DELAY_S = 30
 
@@ -85,19 +92,46 @@ _shutting_down = False
 # Held for the length of a poll, so the shutdown sweep waits for a poll that
 # was mid-claim when the signal arrived rather than racing its commit.
 _poll_lock = asyncio.Lock()
+# The coroutine running each live attempt, keyed by (task id, attempt number),
+# so the lease sweep can cancel the attempt it retires instead of leaving it
+# to run on beside its retry. Keeping the handle is also what asyncio asks
+# for: the loop holds only weak references to its tasks, so one nobody keeps
+# can be collected mid-run.
+_attempts: dict[tuple[int, int], asyncio.Task[None]] = {}
+
+
+def _launch(task_id: int, attempt: int) -> None:
+    key = (task_id, attempt)
+    handle = asyncio.create_task(execute_task(task_id, attempt))
+    _attempts[key] = handle
+
+    def _forget(done: asyncio.Task[None]) -> None:
+        if _attempts.get(key) is done:
+            del _attempts[key]
+
+    handle.add_done_callback(_forget)
+
+
+def _cancel_attempt(task_id: int, attempt: int) -> bool:
+    """Ask the coroutine running an attempt to stop. True if there was one to
+    ask. Cancellation lands at the coroutine's next await, so a handler in
+    the middle of a model call stops there, while one that has pushed its
+    work to a thread (Docling, in PDF Parsing) runs that work to the end
+    before it notices; either way execute_task sees the cancellation and
+    writes nothing."""
+    handle = _attempts.get((task_id, attempt))
+    return handle is not None and handle.cancel()
 
 
 async def _sweep_claimed_tasks(event: str) -> int:
-    """Release every QUEUED or RUNNING task, on shutdown and again on startup.
+    """Release every RUNNING task, on shutdown and again on startup.
 
-    This is the only worker process, so at either moment a claimed row can
+    This is the only worker process, so at either moment a RUNNING row can
     belong to no live run: on shutdown they are all this process's, and it is
     about to exit; on startup they are whatever the last process left, which
     is nothing when it shut down in order and everything it held when it was
     killed outright. Resetting them all is therefore exact, and it needs no
-    bookkeeping of which rows this process holds. QUEUED is a status the
-    worker no longer writes (claiming and starting became one write on
-    2026-10-26); a row still in it is from before and is released the same.
+    bookkeeping of which rows this process holds.
 
     Same reset, and same PENDING-vs-abandon retry check, that the lease
     timeout applies: PENDING with a cleared session, so the retry starts from
@@ -109,23 +143,20 @@ async def _sweep_claimed_tasks(event: str) -> int:
     to_clear: list[int] = []
     swept = 0
     with session_scope() as session:
-        claimed = (
-            session.query(TaskDB).filter(TaskDB.status.in_(CLAIMED_STATUSES)).all()
+        running = (
+            session.query(TaskDB).filter(TaskDB.status == TaskStatus.RUNNING).all()
         )
-        for task in claimed:
+        for task in running:
             swept += 1
-            # A QUEUED task never started its attempt (tries counts starts),
-            # so it has nothing to clear and no attempt to count against it.
-            if task.status == TaskStatus.QUEUED or task.tries < MAX_RETRIES:
-                if task.status == TaskStatus.RUNNING:
-                    to_clear.append(task.id)
+            if task.tries <= MAX_RETRIES:
+                to_clear.append(task.id)
                 task.status = TaskStatus.PENDING
             else:
                 task.status = TaskStatus.FAILED
                 task.error_message = f'Worker {event} mid-task and exhausted retries'
             task.updated_at = now
     if swept:
-        logger.info(f'Worker {event}: released {swept} claimed task(s)')
+        logger.info(f'Worker {event}: released {swept} running task(s)')
     for task_id in to_clear:
         await clear_task_session(task_id)
     return swept
@@ -167,10 +198,13 @@ def start_attempt(task: TaskDB, now: datetime.datetime) -> int:
 async def execute_task(task_id: int, attempt: int) -> None:
     """Run the handler for an attempt started by start_attempt and record its
     outcome, unless the row has moved on. The lease sweep retires an attempt
-    that ran too long by resetting its row, and the retry then runs beside
-    the coroutine this one never got to cancel; the row's status and tries
-    say which attempt is current, and only that one may write. A stale
-    outcome is logged and dropped, successors and all."""
+    that ran too long by cancelling its coroutine and resetting its row. The
+    cancellation unwinds this function at the handler's next await, with no
+    outcome written; the check on the row below is the backstop for an
+    attempt the cancel did not reach in time (its handler was in a thread,
+    or it returned on the same loop turn): the row's status and tries say
+    which attempt is current, and only that one may write. A stale outcome
+    is logged and dropped, successors and all."""
     if _shutting_down:
         # The sweep is about to retire this attempt; do not start a handler
         # the exit will kill.
@@ -190,6 +224,10 @@ async def execute_task(task_id: int, attempt: int) -> None:
         # (their connections live on executor threads; see agent_session.py).
         with closing_sessions():
             await handler(task_id)
+    except asyncio.CancelledError:
+        # Retired by the lease sweep, which has already reset the row.
+        logger.info(f'Attempt {attempt} of task {task_id} ({task_type}) was cancelled')
+        raise
     except Exception as e:
         logger.exception(f'Task {task_id} ({task_type}) failed')
         error_msg = str(e)
@@ -409,10 +447,10 @@ async def _poll_and_schedule_tasks() -> None:
     with session_scope() as session:
         now = datetime.datetime.now(datetime.timezone.utc)
 
-        # Retire attempts that have outrun their type's lease: PENDING with a
-        # cleared session while retries remain, else FAILED. The coroutine
-        # still running the old attempt finds the row moved on and drops its
-        # outcome (execute_task).
+        # Retire attempts that have outrun their type's lease: cancel the
+        # coroutine, then PENDING with a cleared session while retries remain,
+        # else FAILED. Should the cancel land late, the coroutine finds the
+        # row moved on and drops its outcome (execute_task).
         shortest = min(DEFAULT_LEASE_TIMEOUT_S, *LEASE_TIMEOUT_S.values())
         expired_cutoff = now - datetime.timedelta(seconds=shortest)
         timed_out_tasks = (
@@ -429,15 +467,16 @@ async def _poll_and_schedule_tasks() -> None:
                 task.started_at
             ) >= now - datetime.timedelta(seconds=timeout_s):
                 continue
-            if task.tries < MAX_RETRIES:
+            cancelled = ', cancelled' if _cancel_attempt(task.id, task.tries) else ''
+            if task.tries <= MAX_RETRIES:
                 logger.info(
-                    f'Retiring timed-out attempt of task {task.id} ({task.type}) (attempt {task.tries + 1}/{MAX_RETRIES + 1} next)'
+                    f'Retiring timed-out attempt {task.tries} of task {task.id} ({task.type}){cancelled} (attempt {task.tries + 1}/{MAX_RETRIES + 1} next)'
                 )
                 task.status = TaskStatus.PENDING
                 await clear_task_session(task.id)
             else:
                 logger.info(
-                    f'Abandoning timed-out task {task.id} ({task.type}) (exhausted retries at {task.tries})'
+                    f'Abandoning timed-out task {task.id} ({task.type}){cancelled} (exhausted retries at {task.tries})'
                 )
                 task.status = TaskStatus.FAILED
                 task.error_message = (
@@ -517,7 +556,7 @@ async def _poll_and_schedule_tasks() -> None:
         return
 
     for task_id, attempt in started:
-        asyncio.create_task(execute_task(task_id, attempt))
+        _launch(task_id, attempt)
     logger.info(f'Started {len(started)} tasks')
 
 

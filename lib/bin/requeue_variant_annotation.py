@@ -15,7 +15,7 @@ status-reset and lease semantics match a normal manual rerun.
 TASK_SUCCESSORS anyway; kept explicit for clarity.
 
 Queues in batches of ``--batch-size`` (default 20) and waits for every task
-in a batch to leave an ACTIVE status (Pending/Queued/Running) before queuing
+in a batch to leave an ACTIVE status (Pending/Running) before queuing
 the next, so at most one batch's worth of enrichment calls (VEP/gnomAD/
 ClinVar lookups) are ever in flight against upstream APIs. The worker's own
 ``TASK_CONCURRENCY[VARIANT_ANNOTATION] = 10`` still governs how many of a

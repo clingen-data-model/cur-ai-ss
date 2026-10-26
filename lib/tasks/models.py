@@ -114,38 +114,28 @@ class TaskTypeResp(BaseModel):
     successors: list[TaskType]
 
 
+# PENDING is waiting to be claimed, RUNNING is claimed: the worker claims a task
+# by starting it (lib.bin.worker.start_attempt), so there is no state between
+# the two. There used to be: QUEUED, a row the poller had claimed but parked in
+# an in-process queue. It was dropped on 2026-10-26 along with that queue
+# (migration 7c1e5a9d3b2f turned any row still carrying it back into PENDING).
+# No docstring here: a StrEnum's docstring becomes the OpenAPI description.
 class TaskStatus(StrEnum):
     PENDING = 'Pending'
-    QUEUED = 'Queued'
     RUNNING = 'Running'
     COMPLETED = 'Completed'
     FAILED = 'Failed'
 
 
-# The groupings of TaskStatus that matter, named because they overlap without
-# coinciding and the difference is easy to get backwards.
-#
-# WAITING is what a user sees: the task is not executing. PENDING and QUEUED are
-# both that. QUEUED was the scheduler's bookkeeping, a row claimed but parked
-# in an in-process queue; since 2026-10-26 claiming a task is starting it
-# (worker.py), so the worker writes PENDING and RUNNING only. The member stays
-# for rows written before then and is treated as claimed wherever it turns up.
-WAITING_STATUSES: frozenset[TaskStatus] = frozenset(
-    {TaskStatus.PENDING, TaskStatus.QUEUED}
-)
-
-# CLAIMED is what the scheduler sees: this row is spoken for, so do not re-queue
-# it and do not delete it out from under a handler. QUEUED belongs with RUNNING
-# here, and with PENDING above -- which is precisely why both names exist.
-CLAIMED_STATUSES: frozenset[TaskStatus] = frozenset(
-    {TaskStatus.QUEUED, TaskStatus.RUNNING}
-)
-
 # ACTIVE is everything short of a terminal status: work the paper is still
 # owed. Display reads it as "something is happening here"; the reset paths read
 # it as "data is still moving, do not overwrite it". Those are the same
-# question, so they share the name rather than each spelling out the trio.
-ACTIVE_STATUSES: frozenset[TaskStatus] = WAITING_STATUSES | {TaskStatus.RUNNING}
+# question, so they share the name rather than each spelling out the pair.
+# A RUNNING row is additionally *claimed*: do not re-queue it and do not
+# delete it out from under its handler.
+ACTIVE_STATUSES: frozenset[TaskStatus] = frozenset(
+    {TaskStatus.PENDING, TaskStatus.RUNNING}
+)
 
 
 class InferredPaperStatus(StrEnum):
