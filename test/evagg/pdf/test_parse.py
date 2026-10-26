@@ -221,6 +221,29 @@ async def test_unrecovered_marker_written_when_unrecoverable(mocked_root_dir):
     assert not document_table_vision_markdown_path(paper_id, 0).exists()
 
 
+async def test_an_accepted_extraction_that_is_not_a_table_is_marked_unrecovered(
+    mocked_root_dir,
+):
+    """The judge's acceptance is checked in code: prose, or a ragged grid, is
+    never written as a correction however the verdict reads."""
+    paper_id = 987022
+    garbled = '| b | Clin mt1 |\n|---|---|\n| IVI | * |'
+    _seed_table(paper_id, 0, garbled)
+
+    await _run_correct_tables(
+        paper_id,
+        TableCorrectionResult(
+            is_corrupted=True,
+            corrected_markdown='I could not read this table from the image.',
+            conversion_successful=True,
+            is_recoverable=True,
+        ),
+    )
+
+    assert document_table_unrecovered_path(paper_id, 0).exists()
+    assert not document_table_vision_markdown_path(paper_id, 0).exists()
+
+
 async def test_recovered_table_clears_a_stale_unrecovered_marker(mocked_root_dir):
     paper_id = 987021
     garbled = '| b | Clin mt1 |\n|---|---|\n| IVI | * |'

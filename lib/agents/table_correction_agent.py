@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from pathlib import Path
 
 from agents import Agent, Runner, function_tool
@@ -95,22 +96,42 @@ A corrupted table has signs like:
 - Headers with mostly numbers/special chars
 - Cell content that's jumbled or doesn't make sense
 - Missing actual column headers
+- Running text (a journal footer, a page header) spliced into cells
 
 A good table has:
 - Readable headers describing columns
 - Consistent cell alignment
 - Content that makes semantic sense
 
-Set conversion_successful to true only if the corrected_markdown is a valid markdown table
-with proper pipe delimiters and header rows. If extraction failed or returned invalid
-markdown, set it to false.
+Judging the corrected version: you cannot see the image, so judge the extraction on
+its structure, not on whether you can vouch for every cell. Accept it (conversion_successful
+true, is_recoverable true, corrected_markdown set to it verbatim) when it is a well-formed
+markdown table: a header row, a separator row, data rows, the same number of cells in
+every row, and no running text mixed into the cells. A dense grid of +, -, na or U
+symbols, a manifestation or pedigree grid, or a table whose rows and columns are the
+transpose of the markdown you were given is a normal outcome of reading the image, not a
+reason to reject it. Reject it (conversion_successful false, is_recoverable false,
+corrected_markdown null) only when it is not a markdown table at all, is mostly empty, is
+visibly a fragment (far fewer cells than the markdown you were given), or is prose saying
+the table could not be read. Never edit, complete or invent cells yourself: the extraction
+is returned as it came or not at all. A rejection is an acceptable outcome, not a failure --
+the original markdown will simply be left in place."""
 
-Some tables cannot be faithfully recovered at all -- for example, dense matrices of tiny
-symbols (+/-/*), pedigree/manifestation grids, or images where the cell structure is
-genuinely ambiguous. Do not invent or hallucinate content for these. If the table is
-corrupted and the image does not yield a faithful, trustworthy markdown table, set
-is_recoverable to false and conversion_successful to false. This is an acceptable outcome,
-not a failure -- the original markdown will simply be left in place."""
+
+def is_well_formed_table(markdown: str) -> bool:
+    """A header row, a separator row and at least one data row, every row
+    with the header's number of cells. The structural test behind the judge's
+    acceptance, applied in code as well: the judge has no view of the image,
+    so structure is all either of them can check, and an extraction that
+    passes it is kept whatever the table is a grid of."""
+    rows = [line.strip() for line in markdown.strip().splitlines() if line.strip()]
+    if len(rows) < 3:
+        return False
+    cells = [row.strip('|').split('|') for row in rows]
+    width = len(cells[0])
+    if not all(re.fullmatch(r'\s*:?-+:?\s*', cell) for cell in cells[1]):
+        return False
+    return all(len(row) == width for row in cells)
 
 
 async def correct_tables(paper_id: int, supplement: bool = False) -> None:
@@ -196,6 +217,14 @@ async def correct_tables(paper_id: int, supplement: bool = False) -> None:
                 f'Table {table_id} is corrupted but could not be recovered; '
                 f'leaving original markdown in place (recoverable='
                 f'{result.final_output.is_recoverable})'
+            )
+            unrecovered_path.touch()
+            continue
+
+        if not is_well_formed_table(result.final_output.corrected_markdown):
+            logger.warning(
+                f'Table {table_id}: the judge accepted an extraction that is not '
+                f'a well-formed markdown table; leaving original markdown in place'
             )
             unrecovered_path.touch()
             continue
