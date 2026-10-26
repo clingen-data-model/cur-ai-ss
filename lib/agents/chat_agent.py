@@ -33,7 +33,7 @@ from lib.tasks.misc import (
     notify_on_next_completion,
     paper_busy_message,
 )
-from lib.tasks.models import CLAIMED_STATUSES, TaskDB, TaskResp, TaskType
+from lib.tasks.models import TaskDB, TaskResp, TaskStatus, TaskType
 
 # Excluded from chat-triggered reruns: PDF parsing and paper classification
 # run before there is any extracted data to chat about, and variant
@@ -303,7 +303,7 @@ def _make_queue_task_tool(paper_id: int, user_id: int) -> Any:
                 ]
 
             target = f' for "{entity_label}"' if entity_label else ''
-            if len(tasks) == 1 and tasks[0].status in CLAIMED_STATUSES:
+            if len(tasks) == 1 and tasks[0].status == TaskStatus.RUNNING:
                 # Already in flight; enqueue_task left it unchanged, so any new
                 # guidance was not applied -- don't claim it was.
                 confirmation = (

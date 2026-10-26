@@ -558,23 +558,20 @@ def list_active_papers(
 
     Separate from GET /papers with a filter because that one computes a status
     for every paper before anything could be filtered on it -- the same cost as
-    returning all of them. This starts from tasks instead, where RUNNING and
-    QUEUED are indexed, so it reads a handful of rows rather than 94 papers.
-    That matters: this is the one endpoint the UI polls.
+    returning all of them. This starts from tasks instead, where status is
+    indexed, so it reads a handful of rows rather than 94 papers. That
+    matters: this is the one endpoint the UI polls.
 
-    All three waiting states count, which is the whole of the task lifecycle
+    Both non-terminal states count, which is the whole of the task lifecycle
     before a handler finishes:
 
       PENDING  enqueued, not yet claimed. The scheduler polls every 10s, and
                with PDF parsing limited to one at a time a second paper waits
                here for the length of the first paper's parse.
-      QUEUED   claimed by the scheduler, about to execute. Set at
-               worker.py:282 to stop a task being scheduled twice, so it is
-               brief -- but a poll can land inside it.
       RUNNING  a handler is executing it.
 
-    Matching only the last two -- which this did at first -- left a paper the
-    user had just queued reading as idle, because PENDING is where it spends the
+    Matching only RUNNING -- which this did at first -- left a paper the user
+    had just queued reading as idle, because PENDING is where it spends the
     wait.
     """
     active_paper_ids = [

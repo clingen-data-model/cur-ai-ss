@@ -608,3 +608,57 @@ def test_pedigrees_become_figure_descriptions(monkeypatch, tmp_path):
         (pedigree_ids[0], paper_ids[0], 3, 0, 'main'),
         (pedigree_ids[1], paper_ids[1], 0, 1, 'supp'),
     ]
+
+
+def test_queued_task_rows_become_pending(monkeypatch, tmp_path):
+    """7c1e5a9d3b2f drops the QUEUED member. A row still carrying the old name
+    would raise LookupError on the first read of the tasks table (SQLEnum maps
+    by name), so the migration turns it PENDING -- the state it was in, since
+    QUEUED never started an attempt -- and leaves every other row alone."""
+    from lib.models import TaskDB
+    from lib.tasks.models import TaskStatus
+
+    monkeypatch.setattr(db.env, 'CAA_ROOT', str(tmp_path))
+    monkeypatch.setattr(db.env, 'SQLLITE_DIR', '')
+    monkeypatch.setattr(db, '_engine', None)
+    monkeypatch.setattr(db, '_session_factory', None)
+
+    repo_root = Path(__file__).resolve().parents[2]
+    cfg = Config(str(repo_root / 'alembic.ini'))
+    command.upgrade(cfg, 'd2f8a6c4e1b9')
+
+    engine = db.get_engine()
+    with engine.begin() as connection:
+        gene_id = connection.execute(
+            text("INSERT INTO genes (symbol) VALUES ('TESTGENE') RETURNING id")
+        ).scalar_one()
+        paper_id = connection.execute(
+            text(
+                'INSERT INTO papers (gene_id, content_hash, filename, paper_types) '
+                "VALUES (:gene_id, 'h', 'f.pdf', '[]') RETURNING id"
+            ),
+            {'gene_id': gene_id},
+        ).scalar_one()
+        for task_type, task_status in (
+            ('PDF_PARSING', 'QUEUED'),
+            ('PAPER_CLASSIFIER', 'RUNNING'),
+            ('PAPER_METADATA', 'COMPLETED'),
+        ):
+            connection.execute(
+                text(
+                    'INSERT INTO tasks (paper_id, type, status, tries, skip_successors) '
+                    'VALUES (:paper_id, :type, :status, 1, 0)'
+                ),
+                {'paper_id': paper_id, 'type': task_type, 'status': task_status},
+            )
+
+    command.upgrade(cfg, 'head')
+    command.upgrade(cfg, 'head')  # a clean no-op: alembic_version landed
+
+    with Session(engine) as session:
+        statuses = [task.status for task in session.query(TaskDB).order_by(TaskDB.id)]
+    assert statuses == [
+        TaskStatus.PENDING,
+        TaskStatus.RUNNING,
+        TaskStatus.COMPLETED,
+    ]

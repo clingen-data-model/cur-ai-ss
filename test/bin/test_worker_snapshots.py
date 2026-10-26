@@ -53,9 +53,7 @@ def test_snapshots_when_a_failure_is_final(db_session, paper, written):
     assert written == [paper.id]
 
 
-@pytest.mark.parametrize(
-    'status', [TaskStatus.PENDING, TaskStatus.QUEUED, TaskStatus.RUNNING]
-)
+@pytest.mark.parametrize('status', [TaskStatus.PENDING, TaskStatus.RUNNING])
 def test_skips_while_a_task_is_active(db_session, paper, written, status):
     _task(db_session, paper, TaskStatus.COMPLETED)
     _task(db_session, paper, status)

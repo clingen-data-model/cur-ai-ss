@@ -53,14 +53,13 @@ export function PaperProgressPopover({
     // actively watching is worth the occasional repeated-rows fetch for the
     // snappier feel. Off entirely once nothing is in flight -- a finished
     // paper's popover has nothing left to learn by polling. "In flight" must
-    // include Pending, not just
-    // Queued/Running: a successor task is created Pending the instant its
-    // predecessor completes, and only flips to Queued once the worker's next
-    // poll claims it (up to 10s later). Checking Running/Queued alone meant
-    // that gap could be the exact moment a fetch landed -- nothing yet
-    // Running or Queued, so this returned false and polling stopped for good,
-    // leaving a real (if not-yet-claimed) successor stuck showing gray until
-    // the popover was closed and reopened.
+    // include Pending, not just Running: a successor task is created Pending
+    // the instant its predecessor completes, and only flips to Running once
+    // the worker's next poll starts it (up to 10s later). Checking Running
+    // alone meant that gap could be the exact moment a fetch landed --
+    // nothing yet Running, so this returned false and polling stopped for
+    // good, leaving a real (if not-yet-started) successor stuck showing gray
+    // until the popover was closed and reopened.
     refetchInterval: (query) =>
       query.state.data?.some((t) => t.status !== 'Completed' && t.status !== 'Failed')
         ? 3_000

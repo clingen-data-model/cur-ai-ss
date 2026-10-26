@@ -1,12 +1,20 @@
 """started_at, and the durations it makes computable."""
 
+import datetime
+
 import pytest
 
+from lib.api.db import session_scope
 from lib.bin import worker
 from lib.models import GeneDB, PaperDB, TaskDB
 from lib.tasks.models import TaskStatus, TaskType
 
 TYPE = TaskType.PDF_PARSING
+
+
+@pytest.fixture(autouse=True)
+def not_shutting_down(monkeypatch):
+    monkeypatch.setattr(worker, '_shutting_down', False)
 
 
 @pytest.fixture
@@ -26,6 +34,15 @@ def queued_task(db_session):
     return task
 
 
+async def _run(task_id: int) -> None:
+    """Start an attempt the way a poll does, then execute it."""
+    with session_scope() as session:
+        attempt = worker.start_attempt(
+            session.get(TaskDB, task_id), datetime.datetime.now(datetime.timezone.utc)
+        )
+    await worker.execute_task(task_id, attempt)
+
+
 def _handler(monkeypatch, fail: bool = False):
     async def run(task_id: int) -> None:
         if fail:
@@ -40,7 +57,7 @@ async def test_started_at_is_stamped_when_the_task_runs(
     assert queued_task.started_at is None
     _handler(monkeypatch)
 
-    await worker.execute_task(queued_task.id)
+    await _run(queued_task.id)
 
     db_session.expire_all()
     task = db_session.get(TaskDB, queued_task.id)
@@ -57,7 +74,7 @@ async def test_started_at_is_stamped_even_when_the_task_fails(
     the cases that happened to succeed."""
     _handler(monkeypatch, fail=True)
 
-    await worker.execute_task(queued_task.id)
+    await _run(queued_task.id)
 
     db_session.expire_all()
     task = db_session.get(TaskDB, queued_task.id)
@@ -70,14 +87,14 @@ async def test_a_retry_restamps_started_at(db_session, queued_task, monkeypatch)
     not the first one ever made -- otherwise a retried task reports a duration
     spanning every attempt and the wait between them."""
     _handler(monkeypatch, fail=True)
-    await worker.execute_task(queued_task.id)
+    await _run(queued_task.id)
     db_session.expire_all()
     first = db_session.get(TaskDB, queued_task.id).started_at
 
     db_session.get(TaskDB, queued_task.id).status = TaskStatus.PENDING
     db_session.commit()
     _handler(monkeypatch)
-    await worker.execute_task(queued_task.id)
+    await _run(queued_task.id)
 
     db_session.expire_all()
     task = db_session.get(TaskDB, queued_task.id)
@@ -91,7 +108,7 @@ async def test_started_at_is_exposed_on_the_response_model(
     from lib.tasks.models import TaskResp
 
     _handler(monkeypatch)
-    await worker.execute_task(queued_task.id)
+    await _run(queued_task.id)
 
     db_session.expire_all()
     resp = TaskResp.model_validate(

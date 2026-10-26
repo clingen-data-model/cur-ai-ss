@@ -30,9 +30,7 @@ def test_idle_paper_is_not_busy(db_session, paper):
     assert paper_busy_message(db_session, paper.id, 're-running') is None
 
 
-@pytest.mark.parametrize(
-    'status', [TaskStatus.PENDING, TaskStatus.QUEUED, TaskStatus.RUNNING]
-)
+@pytest.mark.parametrize('status', [TaskStatus.PENDING, TaskStatus.RUNNING])
 def test_any_active_status_is_busy(db_session, paper, status):
     _task(db_session, paper, TaskType.PDF_PARSING, status)
 

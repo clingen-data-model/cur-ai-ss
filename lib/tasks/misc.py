@@ -13,7 +13,6 @@ if TYPE_CHECKING:
 
 from lib.tasks.models import (
     ACTIVE_STATUSES,
-    CLAIMED_STATUSES,
     TASK_SUCCESSORS,
     InferredPaperStatus,
     TaskDB,
@@ -64,8 +63,8 @@ def enqueue_task(
     )
 
     if existing_task:
-        # Skip re-queuing if task is already running or queued
-        if existing_task.status in CLAIMED_STATUSES:
+        # Skip re-queuing if task is already running
+        if existing_task.status == TaskStatus.RUNNING:
             return existing_task
         # Reset existing task
         existing_task.status = TaskStatus.PENDING
@@ -129,10 +128,10 @@ def enqueue_all_instances(
     )
 
     if existing_tasks:
-        # Re-queue all existing instances, skip if running or queued
+        # Re-queue all existing instances, skip if running
         results = []
         for task in existing_tasks:
-            if task.status not in CLAIMED_STATUSES:
+            if task.status != TaskStatus.RUNNING:
                 task.status = TaskStatus.PENDING
                 task.tries = 0
                 task.error_message = None
@@ -246,7 +245,7 @@ def invalidate_descendants(session: Session, paper_id: int, task_type: TaskType)
     stale COMPLETED signal without making anything runnable; enqueue_successors
     recreates each row when its predecessor actually finishes.
 
-    Claimed rows are left alone: the scheduler is mid-flight against them, and
+    RUNNING rows are left alone: a handler is mid-flight against them, and
     deleting one out from under it would relocate the failure rather than remove
     it. Those rows can still go COMPLETED and re-stale the gate, which is
     a far narrower window than the one this closes.
@@ -262,7 +261,7 @@ def invalidate_descendants(session: Session, paper_id: int, task_type: TaskType)
         .filter(
             TaskDB.paper_id == paper_id,
             TaskDB.type.in_(descendants),
-            TaskDB.status.notin_(CLAIMED_STATUSES),
+            TaskDB.status != TaskStatus.RUNNING,
         )
         .all()
     )
@@ -666,9 +665,6 @@ def summarize_paper_task_status(
     statuses = list(statuses)
     if not statuses:
         return PaperTaskStatus.IDLE
-    # Only RUNNING: a QUEUED task has been claimed but is not executing, so
-    # calling it "Running" tells the user something that is not yet true. It
-    # falls through to the waiting branches below, alongside PENDING.
     if any(s == TaskStatus.RUNNING for s in statuses):
         return PaperTaskStatus.RUNNING
     if any(s == TaskStatus.FAILED for s in statuses):
