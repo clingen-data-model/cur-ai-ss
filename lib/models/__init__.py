@@ -76,6 +76,7 @@ from lib.models.patient_variant_occurrences import (
     PatientVariantOccurrenceResp,
     PatientVariantOccurrenceUpdateRequest,
     TestingMethod,
+    VariantInheritance,
     Zygosity,
 )
 from lib.models.phenotype import (

@@ -2339,7 +2339,7 @@ def _patient_variant_occurrence_to_resp(
     session: Session,
 ) -> PatientVariantOccurrenceResp:
     """Convert PatientVariantOccurrenceDB to PatientVariantOccurrenceResp."""
-    from lib.models import Inheritance, TestingMethod, Zygosity
+    from lib.models import Inheritance, TestingMethod, VariantInheritance, Zygosity
     from lib.models.evidence_block import ReasoningBlock
 
     resp = PatientVariantOccurrenceResp(
@@ -2354,8 +2354,10 @@ def _patient_variant_occurrence_to_resp(
         inheritance_evidence=_from_storage(
             HumanEvidenceBlock, row.inheritance_evidence
         ),
-        de_novo=row.de_novo,
-        de_novo_evidence=_from_storage(HumanEvidenceBlock, row.de_novo_evidence),
+        variant_inheritance=VariantInheritance(row.variant_inheritance),
+        variant_inheritance_evidence=_from_storage(
+            HumanEvidenceBlock, row.variant_inheritance_evidence
+        ),
         testing_methods=[TestingMethod(m) for m in row.testing_methods],
         testing_methods_evidence=[
             _from_storage(AttributedEvidenceBlock, m)
@@ -2671,8 +2673,10 @@ def create_occurrence(
         zygosity_evidence=manual_evidence_block(create_request.zygosity),
         inheritance=create_request.inheritance,
         inheritance_evidence=manual_evidence_block(create_request.inheritance),
-        de_novo=create_request.de_novo,
-        de_novo_evidence=manual_evidence_block(create_request.de_novo),
+        variant_inheritance=create_request.variant_inheritance,
+        variant_inheritance_evidence=manual_evidence_block(
+            create_request.variant_inheritance
+        ),
         testing_methods=create_request.testing_methods,
         testing_methods_evidence=[
             manual_evidence_block(method) for method in create_request.testing_methods
@@ -2687,7 +2691,7 @@ def create_occurrence(
     record_edits(
         session,
         occurrence_db,
-        ['zygosity', 'inheritance', 'de_novo']
+        ['zygosity', 'inheritance', 'variant_inheritance']
         + (['testing_methods'] if create_request.testing_methods else []),
         current_user,
     )

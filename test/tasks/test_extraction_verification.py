@@ -340,8 +340,8 @@ def _occurrence_pair(db_session, paper_id, patient_id, tag):
             zygosity_evidence=_ev('Heterozygous'),
             inheritance='Unknown',
             inheritance_evidence=_ev('Unknown'),
-            de_novo=False,
-            de_novo_evidence=_ev(False),
+            variant_inheritance='Unknown',
+            variant_inheritance_evidence=_ev('Unknown'),
             testing_methods=['Sanger Sequencing'],
             testing_methods_evidence=[_ev('Sanger Sequencing')],
         )

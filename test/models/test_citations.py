@@ -25,6 +25,7 @@ from lib.models.patient_variant_occurrences import (
     PatientVariantOccurrence,
     PatientVariantOccurrenceOutput,
     TestingMethod,
+    VariantInheritance,
     Zygosity,
 )
 
@@ -291,7 +292,9 @@ def test_nested_output_is_walked_and_every_problem_has_a_path():
                 reasoning='r',
                 citations=[Citation(anchor='paragraph-77')],
             ),
-            de_novo=EvidenceBlock(value=False, reasoning='r'),
+            variant_inheritance=EvidenceBlock(
+                value=VariantInheritance.unknown, reasoning='r'
+            ),
             testing_methods=[
                 EvidenceBlock(
                     value=TestingMethod.exome_sequencing,

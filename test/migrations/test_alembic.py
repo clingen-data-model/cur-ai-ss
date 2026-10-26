@@ -756,3 +756,137 @@ def test_task_budget_model_reads_back_false_for_old_rows(monkeypatch, tmp_path):
     with Session(engine) as session:
         task = session.query(TaskDB).one()
         assert task.budget_model is False
+
+
+def _insert_patient(connection, paper_id: int, identifier: str) -> int:
+    evidence = json.dumps({'value': 'Unknown', 'reasoning': 'x'})
+    family_id = connection.execute(
+        text(
+            'INSERT INTO families '
+            '(paper_id, identifier, identifier_evidence, consanguinity, '
+            'consanguinity_evidence) '
+            "VALUES (:paper_id, 'F1', :ev, 0, :ev) RETURNING id"
+        ),
+        {'paper_id': paper_id, 'ev': evidence},
+    ).scalar_one()
+    return connection.execute(
+        text(
+            'INSERT INTO patients '
+            '(paper_id, family_id, identifier, identifier_evidence, proband_status, '
+            'proband_status_evidence, sex, sex_evidence, age_diagnosis_evidence, '
+            'age_report_evidence, age_death_evidence, country_of_origin, '
+            'country_of_origin_evidence, race, race_evidence, ethnicity, '
+            'ethnicity_evidence, affected_status, affected_status_evidence, '
+            'family_assignment_evidence) '
+            "VALUES (:paper_id, :family_id, :identifier, :ev, 'Proband', :ev, "
+            "'Male', :ev, :ev, :ev, :ev, 'Unknown', :ev, 'Unknown', :ev, 'Unknown', "
+            ":ev, 'Affected', :ev, :ev) RETURNING id"
+        ),
+        {
+            'paper_id': paper_id,
+            'family_id': family_id,
+            'identifier': identifier,
+            'ev': evidence,
+        },
+    ).scalar_one()
+
+
+def test_de_novo_becomes_variant_inheritance(monkeypatch, tmp_path):
+    """a4e7c2d9f1b3 replaces the de_novo boolean with the variant-inheritance
+    enum. A de novo row reads back as 'De novo', every other row as 'Unknown',
+    and the de_novo evidence carries over as the new field's evidence with only
+    its value replaced, so the agent's reasoning survives."""
+    from lib.models import PatientVariantOccurrenceDB
+
+    monkeypatch.setattr(db.env, 'CAA_ROOT', str(tmp_path))
+    monkeypatch.setattr(db.env, 'SQLLITE_DIR', '')
+    monkeypatch.setattr(db, '_engine', None)
+    monkeypatch.setattr(db, '_session_factory', None)
+
+    repo_root = Path(__file__).resolve().parents[2]
+    cfg = Config(str(repo_root / 'alembic.ini'))
+    command.upgrade(cfg, 'd4e8f1a2b3c5')
+
+    engine = db.get_engine()
+    with engine.begin() as connection:
+        gene_id = connection.execute(
+            text("INSERT INTO genes (symbol) VALUES ('TESTGENE') RETURNING id")
+        ).scalar_one()
+        paper_id = connection.execute(
+            text(
+                'INSERT INTO papers (gene_id, content_hash, filename, paper_types) '
+                "VALUES (:gene_id, 'h', 'f.pdf', '[]') RETURNING id"
+            ),
+            {'gene_id': gene_id},
+        ).scalar_one()
+        connection.execute(
+            text(
+                'INSERT INTO figure_descriptions '
+                '(paper_id, image_id, is_supplement, kinds, description) '
+                "VALUES (:paper_id, 3, 0, '[\"Pedigree\"]', 'a family')"
+            ),
+            {'paper_id': paper_id},
+        )
+        patient_id = _insert_patient(connection, paper_id, 'P1')
+        variant_ids = [_insert_variant(connection, paper_id, v) for v in ('a', 'b')]
+        for variant_id, de_novo in zip(variant_ids, (1, 0)):
+            connection.execute(
+                text(
+                    'INSERT INTO patient_variant_occurrences (paper_id, patient_id, '
+                    'variant_id, zygosity, inheritance, de_novo, testing_methods, '
+                    'zygosity_evidence, inheritance_evidence, de_novo_evidence, '
+                    'testing_methods_evidence) '
+                    "VALUES (:paper_id, :patient_id, :variant_id, 'Heterozygous', "
+                    "'Unknown', :de_novo, '[]', :ev, :ev, :de_novo_ev, '[]')"
+                ),
+                {
+                    'paper_id': paper_id,
+                    'patient_id': patient_id,
+                    'variant_id': variant_id,
+                    'de_novo': de_novo,
+                    'ev': json.dumps({'value': 'x', 'reasoning': 'x'}),
+                    'de_novo_ev': json.dumps(
+                        {
+                            'value': bool(de_novo),
+                            'reasoning': f'parents tested: {de_novo}',
+                            'citations': [{'anchor': 'paragraph-3', 'quote': 'q'}],
+                        }
+                    ),
+                },
+            )
+
+    command.upgrade(cfg, 'head')
+    command.upgrade(cfg, 'head')  # a clean no-op: alembic_version landed
+
+    with Session(engine) as session:
+        rows = (
+            session.query(PatientVariantOccurrenceDB)
+            .order_by(PatientVariantOccurrenceDB.variant_id)
+            .all()
+        )
+        assert [r.variant_inheritance for r in rows] == ['De novo', 'Unknown']
+        assert [r.variant_inheritance_evidence['value'] for r in rows] == [
+            'De novo',
+            'Unknown',
+        ]
+        assert [r.variant_inheritance_evidence['reasoning'] for r in rows] == [
+            'parents tested: 1',
+            'parents tested: 0',
+        ]
+        assert rows[0].variant_inheritance_evidence['citations'] == [
+            {'anchor': 'paragraph-3', 'quote': 'q'}
+        ]
+        assert not hasattr(rows[0], 'de_novo')
+
+    command.downgrade(cfg, 'd4e8f1a2b3c5')
+    with engine.begin() as connection:
+        de_novo = (
+            connection.execute(
+                text(
+                    'SELECT de_novo FROM patient_variant_occurrences ORDER BY variant_id'
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert de_novo == [1, 0]
