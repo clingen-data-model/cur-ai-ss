@@ -53,6 +53,10 @@ from lib.models.base import row_to_dict
 from lib.models.deletion_log import DeletionLogDB
 from lib.models.edit import EditDB
 from lib.models.flag import FlagDB
+from lib.models.patient_variant_occurrences import (
+    VariantOrigin,
+    origin_not_extracted_evidence,
+)
 from lib.tasks.models import TaskType
 
 logger = logging.getLogger(__name__)
@@ -531,6 +535,22 @@ _LEGACY_ENUM_VALUES: dict[type[Enum], dict[str, Enum]] = {
 }
 
 
+def _upgrade_legacy_occurrence(row: dict) -> dict:
+    """An occurrence row written before a4e7c2d9f1b3 carries ``de_novo``
+    instead of ``origin``; read it as the migration did, so a restore keeps
+    the de novo calls (and the reasoning behind every de novo decision)
+    rather than defaulting them to Unknown. A row with ``origin`` is current,
+    and a row of any other table has neither key."""
+    if 'origin' in row or 'de_novo' not in row:
+        return row
+    origin = (
+        VariantOrigin.de_novo.value if row['de_novo'] else VariantOrigin.unknown.value
+    )
+    evidence = dict(row.get('de_novo_evidence') or origin_not_extracted_evidence())
+    evidence['value'] = origin
+    return {**row, 'origin': origin, 'origin_evidence': evidence}
+
+
 def _upgrade_legacy_tables(tables: dict) -> dict:
     """A file written before a table was reshaped, read as the current shape.
 
@@ -743,7 +763,10 @@ def restore_snapshot(
     pair_links: dict[int, int] = {}
     for key, model in _INSERT_ORDER:
         table = _model_table(model)
-        rows = [_coerce_row(table, r) for r in tables.get(key, [])]
+        rows = [
+            _coerce_row(table, _upgrade_legacy_occurrence(r))
+            for r in tables.get(key, [])
+        ]
         if key == 'patient_variant_occurrences':
             pair_links = {
                 r['id']: r['paired_variant_link_id']

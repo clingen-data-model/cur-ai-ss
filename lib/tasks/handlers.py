@@ -1061,6 +1061,7 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
                     'patient_id': vl.patient_id,
                     'variant_id': vl.variant_id,
                     'zygosity': vl.zygosity,
+                    'origin': vl.origin,
                 }
                 for vl in variant_links
             ],

@@ -1,6 +1,6 @@
 /* The fields editable directly from the Occurrences table: Variant Type (a
  * field of the variant, saved through the variant endpoint), then the
- * occurrence-level Zygosity, Inheritance, De Novo, Testing Methods and
+ * occurrence-level Zygosity, Mode of inheritance, Origin, Testing Methods and
  * Disease Name.
  */
 import { useState } from 'react'
@@ -11,7 +11,7 @@ import {
   updateOccurrencePapersPaperIdOccurrencesOccurrenceIdPatch,
   updateVariantPapersPaperIdVariantsVariantIdPatch,
 } from '@/api/generated'
-import { Inheritance, TestingMethod, Zygosity } from '@/api/generated/types.gen'
+import { Inheritance, TestingMethod, VariantOrigin, Zygosity } from '@/api/generated/types.gen'
 import type {
   PatientVariantOccurrenceResp,
   PatientVariantOccurrenceUpdateRequest,
@@ -24,7 +24,6 @@ import { usePendingEdit } from '@/hooks/usePendingEdit'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Switch } from '@/components/ui/switch'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Command, CommandGroup, CommandItem, CommandList } from '@/components/ui/command'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -189,7 +188,7 @@ export function EditableInheritanceCell({
       <HumanEditNoteDialog
         open={pending.isOpen}
         onOpenChange={(open) => !open && pending.cancel()}
-        fieldLabel="Inheritance"
+        fieldLabel="Mode of inheritance"
         defaultNote={occurrence.inheritance_evidence.human_edit_note}
         isPending={mutation.isPending}
         onConfirm={(note) => pending.confirm(note)}
@@ -200,7 +199,10 @@ export function EditableInheritanceCell({
   )
 }
 
-export function EditableDeNovoCell({
+/** Which parent this patient's copy of the variant came from, or de novo.
+ * Distinct from the mode of inheritance above: see VariantOrigin in
+ * lib/models/patient_variant_occurrences.py. */
+export function EditableOriginCell({
   paperId,
   occurrence,
 }: {
@@ -208,22 +210,35 @@ export function EditableDeNovoCell({
   occurrence: PatientVariantOccurrenceResp
 }) {
   const mutation = useOccurrenceMutation(paperId, occurrence.id)
-  const pending = usePendingEdit<boolean>((value, note) =>
-    mutation.mutate({ de_novo: value, de_novo_human_edit_note: note }),
+  const pending = usePendingEdit<string>((value, note) =>
+    mutation.mutate({ origin: value as VariantOrigin, origin_human_edit_note: note }),
   )
   return (
     <div className="flex items-center gap-1">
-      <Switch checked={occurrence.de_novo} onCheckedChange={(v) => pending.propose(v)} />
-      <EvidencePopover block={occurrence.de_novo_evidence} />
+      <Select value={occurrence.origin} onValueChange={(v) => v && pending.propose(v)}>
+        {/* Same width as the mode select; the longest option is only ever
+         * clipped in the closed trigger. */}
+        <SelectTrigger size="sm" className="h-7 w-36 text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {Object.values(VariantOrigin).map((o) => (
+            <SelectItem key={o} value={o}>
+              {o}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <EvidencePopover block={occurrence.origin_evidence} />
       <HumanEditNoteDialog
         open={pending.isOpen}
         onOpenChange={(open) => !open && pending.cancel()}
-        fieldLabel="De Novo"
-        defaultNote={occurrence.de_novo_evidence.human_edit_note}
+        fieldLabel="Origin"
+        defaultNote={occurrence.origin_evidence.human_edit_note}
         isPending={mutation.isPending}
         onConfirm={(note) => pending.confirm(note)}
-        beforeValue={occurrence.de_novo ? 'Yes' : 'No'}
-        afterValue={pending.pendingValue ? 'Yes' : 'No'}
+        beforeValue={occurrence.origin}
+        afterValue={pending.pendingValue ?? occurrence.origin}
       />
     </div>
   )

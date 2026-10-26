@@ -1,6 +1,6 @@
 /* Modal for linking an unassociated patient to an existing variant --
  * creates the occurrence with just patient_id/variant_id; zygosity,
- * inheritance, de_novo, and testing_methods all default and are editable
+ * inheritance, origin, and testing_methods all default and are editable
  * afterward like any other occurrence field. The variant list is every
  * variant on the paper, not just unassociated ones: a variant can already be
  * linked to other patients (e.g. a shared recessive allele) and still be a

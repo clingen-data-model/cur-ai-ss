@@ -105,7 +105,7 @@ All models are defined with Pydantic (for serialization) and SQLAlchemy ORM (for
 - **Patient** (`lib/models/patient.py`) - Patient demographics and clinical data
 - **Phenotype** (`lib/models/phenotype.py`) - Extracted phenotypes with HPO matching candidates and confidence scores
 - **Variant** (`lib/models/variant.py`) - Extracted, harmonized, and annotated variants
-- **PatientVariantLink** (`lib/models/patient_variant_link.py`) - Links patients to variants with inheritance/testing info
+- **PatientVariantOccurrence** (`lib/models/patient_variant_occurrences.py`) - Links patients to variants with zygosity, testing info and two distinct inheritance facts: `inheritance` is the *mode* (Dominant, Recessive, ..., the same enum as the paper's `disease_inheritance_mode`; labelled "Mode of inheritance" in the UI) and `origin` is which parent the copy came from (Maternal, Paternal, Both parents, De novo, ...). They were one field until 2026-10-26, when the agent was found reading a paper's "Inheritance: Maternal" table cell as a mode; `origin` replaced the `de_novo` boolean (migration `a4e7c2d9f1b3`), and rows from before it carry origin Unknown until Patient Variant Occurrences is re-run (`lib.bin.requeue_papers --all --from-task 'Patient Variant Occurrences'`)
 - **Evidence** (`lib/models/evidence_block.py`) - Text blocks from paper supporting extracted data
 
 Models use a consistent pattern:

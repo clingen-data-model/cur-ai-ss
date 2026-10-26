@@ -1096,8 +1096,8 @@ def _create_patient_variant_occurrence(
         zygosity_evidence=_ev('Heterozygous'),
         inheritance='Dominant',
         inheritance_evidence=_ev('Dominant'),
-        de_novo=False,
-        de_novo_evidence=_ev(False),
+        origin='Unknown',
+        origin_evidence=_ev('Unknown'),
         testing_methods=['Sanger Sequencing'],
         testing_methods_evidence=[_ev('Sanger Sequencing')],
         disease_name=disease_name,
@@ -1858,7 +1858,7 @@ def test_update_occurrence(client, db_session, seeded_paper, seeded_variant, tes
     assert body['testing_methods_note'] == 'Confirmed via supplement'
     # Untouched fields are preserved.
     assert body['inheritance'] == 'Dominant'
-    assert body['de_novo'] is False
+    assert body['origin'] == 'Unknown'
 
     # Per-field attribution snapshot on the edited evidence block.
     zygosity_evidence = body['zygosity_evidence']
@@ -2263,7 +2263,7 @@ def test_create_occurrence(client, db_session, seeded_paper, seeded_variant):
     body = resp.json()
     assert body['zygosity'] == 'Unknown'
     assert body['inheritance'] == 'Unknown'
-    assert body['de_novo'] is False
+    assert body['origin'] == 'Unknown'
     assert body['testing_methods'] == []
 
     resp = client.post(
@@ -3355,7 +3355,7 @@ def test_create_occurrence_does_not_queue_hpo_linking(
             'variant_id': seeded_variant.id,
             'zygosity': 'Heterozygous',
             'inheritance': 'Unknown',
-            'de_novo': False,
+            'origin': 'Unknown',
             'testing_methods': [],
         },
     )

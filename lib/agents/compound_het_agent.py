@@ -22,6 +22,10 @@ INPUT:
 A list of the patient's heterozygous variant links, including:
 - variant_id
 - variant descriptions (HGVS, rsID, etc.)
+- origin: which parent that copy came from, as the link extraction read it
+  from the paper (Maternal, Paternal, De novo, ...), or Unknown. Two links
+  of opposite parental origin are in trans by definition; cite the paper's
+  statement the origins were read from, not the field itself.
 
 OUTPUT:
 A JSON array of compound heterozygous pairs. Each pair includes:

@@ -224,8 +224,8 @@ def snapshot_paper(db_session):
         zygosity_evidence=_ev('Heterozygous'),
         inheritance='Dominant',
         inheritance_evidence=_ev('Dominant'),
-        de_novo=False,
-        de_novo_evidence=_ev(False),
+        origin='Unknown',
+        origin_evidence=_ev('Unknown'),
         testing_methods=['Sanger Sequencing'],
         testing_methods_evidence=[_ev('Sanger Sequencing')],
     )
@@ -882,3 +882,46 @@ def test_snapshot_written_before_the_task_rename_still_restores(
         .count()
         == 1
     )
+
+
+def test_snapshot_from_before_origin_keeps_its_de_novo_calls(
+    db_session, test_user, snapshot_paper
+):
+    """A file written when occurrences had a de_novo boolean restores with
+    that call as origin 'De novo' (else 'Unknown') and the de novo evidence
+    as the origin evidence, rather than the column's not-extracted default."""
+    paper = snapshot_paper['paper']
+    path = write_snapshot(paper.id, db_session)
+    assert path is not None
+    data = json.loads(path.read_text())
+
+    rows = data['tables']['patient_variant_occurrences']
+    assert len(rows) >= 2
+    for row, de_novo in zip(rows, (True, False)):
+        del row['origin']
+        del row['origin_evidence']
+        row['de_novo'] = de_novo
+        row['de_novo_evidence'] = {
+            'value': de_novo,
+            'reasoning': f'de novo: {de_novo}',
+            'citations': [],
+        }
+    snapshot_paper['p1'].identifier = 'EDITED'  # so the restore is not a no-op
+    db_session.flush()
+    path.write_text(json.dumps(data))
+
+    assert restore_snapshot(paper.id, path.name, db_session, test_user) is True
+
+    db_session.expire_all()  # the restore inserts rows under reused ids
+    restored = (
+        db_session.query(PatientVariantOccurrenceDB)
+        .filter(PatientVariantOccurrenceDB.paper_id == paper.id)
+        .order_by(PatientVariantOccurrenceDB.id)
+        .all()
+    )
+    assert [r.origin for r in restored[:2]] == ['De novo', 'Unknown']
+    assert [r.origin_evidence['reasoning'] for r in restored[:2]] == [
+        'de novo: True',
+        'de novo: False',
+    ]
+    assert restored[0].origin_evidence['value'] == 'De novo'

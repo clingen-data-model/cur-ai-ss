@@ -28,7 +28,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { API_BASE_URL, getAccessToken } from '@/lib/api'
 import {
-  EditableDeNovoCell,
+  EditableOriginCell,
   EditableDiseaseNameCell,
   EditableInheritanceCell,
   EditableTestingMethodsCell,
@@ -290,13 +290,13 @@ function OccurrencesTab({
       },
       {
         id: 'inheritance',
-        header: 'Inheritance',
+        header: 'Mode of inheritance',
         cell: ({ row }) => <EditableInheritanceCell paperId={paperId} occurrence={row.original.occurrence} />,
       },
       {
-        id: 'de_novo',
-        header: 'De Novo',
-        cell: ({ row }) => <EditableDeNovoCell paperId={paperId} occurrence={row.original.occurrence} />,
+        id: 'origin',
+        header: 'Origin',
+        cell: ({ row }) => <EditableOriginCell paperId={paperId} occurrence={row.original.occurrence} />,
       },
       {
         id: 'testing_methods',

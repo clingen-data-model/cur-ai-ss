@@ -9,7 +9,12 @@ through its successors. PDF parsing is not re-run unless asked for with
 ``--from-task``.
 
 Papers are chosen by PMID, from the ``PMID`` column of a CSV (default: the
-training set, ``var/training_papers.csv``), and/or by ``--paper-id``.
+training set, ``var/training_papers.csv``), by ``--paper-id``, or ``--all``
+for every paper in the database -- the backfill after a schema change that
+added an extracted field, such as the occurrence ``origin`` of a4e7c2d9f1b3::
+
+    uv run python -m lib.bin.requeue_papers --all \\
+        --from-task 'Patient Variant Occurrences'
 
 To compare a new model against the old one, write baseline snapshots *before*
 deploying the change::
@@ -218,6 +223,11 @@ def main() -> None:
         help='Run this paper id (repeatable); replaces the default PMID file.',
     )
     parser.add_argument(
+        '--all',
+        action='store_true',
+        help='Run every paper in the database; replaces the default PMID file.',
+    )
+    parser.add_argument(
         '--from-task',
         type=TaskType,
         default=DEFAULT_FROM_TASK,
@@ -238,10 +248,16 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    pmids_file = args.pmids_file or (None if args.paper_id else DEFAULT_PMIDS_FILE)
+    pmids_file = args.pmids_file or (
+        None if args.paper_id or args.all else DEFAULT_PMIDS_FILE
+    )
     pmids = read_pmids(pmids_file) if pmids_file else []
     with session_scope() as session:
-        paper_ids, missing = resolve_papers(session, pmids, args.paper_id)
+        missing: list[str] = []
+        if args.all:
+            paper_ids = sorted(i for (i,) in session.query(PaperDB.id))
+        else:
+            paper_ids, missing = resolve_papers(session, pmids, args.paper_id)
 
     print(
         f'{len(paper_ids)} papers to {"snapshot" if args.snapshot_only else "re-run"}.'
