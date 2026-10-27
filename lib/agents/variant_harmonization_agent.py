@@ -719,7 +719,8 @@ You may not call dbsnp_lookup more than once.
 You should not need to call select_canonical_transcript for the gene more than once per genome build.
 You should not need to call genomic_accession_for_gene_and_transcript more than once per gene and transcript.
 After allele_registry_resolver, you may call gnomad_style_ids_from_variant_validator once if needed to derive gnomad-style coordinates.
-The pipeline MUST terminate after allele_registry_resolver (and optionally the follow-up VariantValidator call for gnomad coordinates).
+The pipeline MUST terminate after allele_registry_resolver (and optionally the follow-up VariantValidator call for gnomad coordinates),
+unless the consequence check of State 3 rejects what the registry returned; then the next numbering candidate, or State 4, follows.
 
 Goal:
 Normalize the provided variant to a GRCh38 gnomAD-style identifier and resolve via
@@ -763,6 +764,34 @@ only the characters already present, never inventing a change the paper does not
 state, and never return the unreadable string as your answer. The lookups are
 the check -- a reading that is wrong will not resolve, which is the signal to
 try another one rather than to stop.
+
+Numbering check. The format is not the only thing an older paper does
+differently: its nucleotide positions may not be HGVS c. positions at all.
+Papers written before HGVS commonly count from the first base of a GenBank
+mRNA rather than from the A of the ATG, so every position is too high by the
+length of the 5' UTR, and a transcript field holding a GenBank accession
+(X12345, M98765) instead of an NM_ or ENST one is the paper saying so. So
+whenever both a coding position and a residue are known -- hgvs_c or a
+nucleotide change in the variant string, and hgvs_p or a protein change in
+the variant string -- check them against each other before projecting
+anything. Residue N is encoded by c.(3N-2) to c.3N, so the position must
+fall in that window: "c.598C>T" with "Arg200Ter" does (codon 200 is
+c.598-600); "C810T" with "R200X" does not. A position outside the window
+is not a c. coordinate on any RefSeq transcript, and must not be projected
+as one. A wrong position is not always rejected by VariantValidator: when
+the reference base at the wrong position happens to match, the string
+projects cleanly onto a different residue and comes back as a real allele
+with an rsID. Record what
+you found and follow the numbering rule in State 3. The check needs a
+residue. A position with no residue beside it is projected as written when
+the paper's transcript is a RefSeq or Ensembl one or none is named, but not
+when the transcript is a GenBank accession: the paper has said its numbering
+is against another sequence, the position cannot be checked, and projecting
+it would resolve a different allele just as cleanly ("Del 1 bp (G810)"
+projected as c.810del deletes whatever base sits there, a frameshift at a
+residue the paper never mentions). Such a variant goes to State 4 if it has a protein
+change, and otherwise returns with every normalized field null and an
+unresolved flag that says why.
 
 Proceed to State 1.
 
@@ -833,9 +862,20 @@ STATE 3 — TRANSCRIPT-BASED PROJECTION
 ============================================================
 
 Condition:
-hgvs_c present.
+hgvs_c present, or a coding change readable from the variant string (State 0).
 
 Action
+
+    Numbering. If the State 0 check found the paper's position outside the
+    residue's window, the paper's number is not sent anywhere. The candidate
+    c. positions are the three of the window, c.(3N-2), c.(3N-1) and c.3N,
+    each with the paper's reference and alternate bases: "C810T" with
+    "R200X" gives c.598C>T, c.599C>T and c.600C>T. Project them in turn
+    from step 2 (VariantValidator rejects a reference base that does not
+    match, which is part of the check) and keep the first whose registry
+    consequence passes step 5. If none does, proceed to State 4 with the
+    protein change. State the mapping in basis ("the paper's 810 is
+    c.598 on NM_000000.4; its numbering runs 212 ahead").
 
     1. Resolve a versioned transcript, preserving the paper's transcript when possible:
 
@@ -848,7 +888,8 @@ Action
             If it returns null (base accession not supported / retired), fall back to
             select_canonical_transcript(gene, genome_build or GRCh38 default).
 
-        b) If transcript MISSING entirely:
+        b) If transcript MISSING entirely, or is a GenBank accession rather
+           than a RefSeq or Ensembl one:
             Call select_canonical_transcript(gene, genome_build or GRCh38 default)
             Replace transcript with returned versioned transcript.
 
@@ -869,6 +910,23 @@ Action
         The resolver will prioritize HGVS queries, which don't depend on gnomAD presence.
             - If multiple results returned:
                 - Select the result most compatible with input variant context (hgvs_c, hgvs_p, transcript, genomic coordinates).
+
+        Consequence check. Before returning, read the registry's hgvs_p
+        against what the paper said. It must name the paper's residue
+        number and, for a substitution, the paper's substituted residue
+        ("=" for a silent change, "Ter" for a stop), and it must agree with
+        the paper's variant_type: a Synonymous input that resolved to a
+        missense consequence is not the paper's allele. A base the paper
+        names is part of the check too: "Del 1 bp (G810)" deletes a G, and
+        a resolved allele that deletes a C is not it. A consequence at the
+        paper's residue that differs only in kind -- a splice-driven deletion
+        the registry calls synonymous -- is the same allele; keep it and
+        raise a mismatch flag. A consequence at another residue, or with
+        other amino acids, is a different allele: the projection failed,
+        whatever VariantValidator accepted. Do not return it with a note.
+        Go on with the next numbering candidate if there is one, else to
+        State 4. With no residue to check against, return the result.
+
             RETURN result with all fields populated.
             - NOTE: Even if allele_registry_resolver returns no match (None), still return with
               hgvs_c populated and other resolver fields set to None.
@@ -1040,7 +1098,9 @@ FLAGS for this task. Kinds:
   synonymous).
 Not: a transcript chosen by the canonical rule or taken from the matching
 registry record when the paper named none, a version number that differs
-from the paper's, a splice variant with no protein change, a protein-only
+from the paper's, a nucleotide position the numbering check of State 0 found
+counted from an mRNA start (its c. and p. describe one change; say the
+mapping in basis), a splice variant with no protein change, a protein-only
 input resolved through a registry, or which registry you used. "about" is
 the variant as the paper wrote it, or null. The output is the block above
 with a "flags" list beside it.

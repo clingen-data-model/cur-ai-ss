@@ -62,3 +62,41 @@ def test_state_4_tells_the_agent_to_read_the_aliases_before_rejecting():
         < rules.index('aliases or protein_change')
         < rules.index('Case A')
     )
+
+
+def test_state_0_checks_the_paper_position_against_the_residue_window():
+    """Paper 109 (PKD1, 2000) numbers from the L33243 mRNA start, 211 ahead of
+    HGVS c.; 'C7696T' projected cleanly onto Leu2566 and was stored as a real
+    allele. The window check is what catches that before projection."""
+    rules = VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS
+    assert 'Residue N is encoded by c.(3N-2) to c.3N' in rules
+    assert '"C810T" with "R200X" does not' in rules
+    assert rules.index('Numbering check') < rules.index('STATE 1')
+
+
+def test_state_3_projects_the_window_candidates_and_vetoes_a_wrong_consequence():
+    rules = VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS
+    state_3 = rules[rules.index('STATE 3') : rules.index('STATE 4')]
+    assert 'c.598C>T, c.599C>T and c.600C>T' in state_3
+    assert 'Consequence check' in state_3
+    assert 'a Synonymous input that resolved' in state_3
+    assert 'Do not return it with a note' in state_3
+    assert state_3.index('Numbering.') < state_3.index('1. Resolve')
+    assert state_3.index('Call allele_registry_resolver') < state_3.index(
+        'Consequence check'
+    )
+
+
+def test_a_genbank_transcript_sends_the_agent_to_the_canonical_one():
+    rules = VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS
+    assert 'is a GenBank accession rather' in rules
+    assert 'counted from an mRNA start' in rules  # and it is not a conflict flag
+
+
+def test_an_uncheckable_position_on_a_genbank_sequence_is_not_projected():
+    """The first run of the rule projected paper 109's 'Del 1 bp (G3336)' as
+    c.3336del: no residue to check, so the mRNA-start number went through and
+    resolved a frameshift the paper never describes."""
+    rules = VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS
+    assert 'but not\nwhen the transcript is a GenBank accession' in rules
+    assert 'a resolved allele that deletes a C is not it' in rules
