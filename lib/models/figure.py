@@ -53,7 +53,7 @@ class CaptionSource(StrEnum):
     DOCLING and ADJACENT are the paper's own words, copied: the first linked
     to the picture by the PDF parser, the second the heading or paragraph
     printed beside an unlinked picture, taken by rule (see the rule above
-    ``_adopt_orphan_legends`` in lib/misc/pdf/anchors.py). MODEL_CHOSEN is
+    ``_legend_item`` in lib/misc/pdf/anchors.py). MODEL_CHOSEN is
     also a copied block, but the vision model picked which, from the prose
     around the figure, having looked at the picture. MODEL_TRANSCRIBED is
     the model's reading of a legend printed inside the image, the one kind

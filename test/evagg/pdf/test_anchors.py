@@ -731,7 +731,7 @@ def test_display_to_user_point_inverts_user_to_display(rotation):
     )
 
 
-# --- orphan figure legends (see the rule above _adopt_orphan_legends) -------
+# --- orphan figure legends (see the rule above _legend_item in anchors.py) ---
 
 
 @pytest.mark.parametrize(

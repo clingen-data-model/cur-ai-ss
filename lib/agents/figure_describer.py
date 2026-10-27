@@ -19,7 +19,7 @@ directly, twice at most:
 
 A figure the anchored document carries no caption for (Docling attached
 none and the parser found no legend beside it, see the rule above
-``_adopt_orphan_legends`` in lib/misc/pdf/anchors.py) gets a third question
+``_legend_item`` in lib/misc/pdf/anchors.py) gets a third question
 first, ``find_legend``: shown the prose printed around it, which block is its
 legend, or what legend is printed inside the image, or none. Only a readable
 figure is asked, since only those get a row; the answer is the row's
