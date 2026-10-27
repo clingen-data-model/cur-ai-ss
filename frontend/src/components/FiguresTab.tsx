@@ -10,6 +10,7 @@ import { getFiguresPapersPaperIdFiguresGet } from '@/api/generated'
 import type { FigureDescriptionResp } from '@/api/generated'
 import { API_BASE_URL } from '@/lib/api'
 import { describeAnchor } from '@/lib/anchors'
+import type { CaptionSource } from '@/api/generated'
 import { usePdfHighlight } from '@/components/PdfHighlightProvider'
 import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
@@ -20,6 +21,16 @@ const STALE_TIME = 5 * 60 * 1000
 // "Figure 2.", "Fig. 1", "Supplementary Figure 3", "Figure S1": the paper's
 // own number for the figure, at the head of its legend.
 const FIGURE_NUMBER = /^\s*(?:(supplementa(?:ry|l)|suppl\.?)\s+)?fig(?:ure|\.)?\s*(S?\d+)/i
+
+// How the legend under a figure was arrived at, in a reader's words: the
+// paper's own text linked by the PDF parser or taken from beside the picture,
+// or the vision model's pick of a nearby block or its reading of the image.
+const SOURCE_LABEL: Record<CaptionSource, string> = {
+  Docling: 'linked by the parser',
+  'Adjacent text': 'taken from beside the figure',
+  'Model chose': 'chosen by the vision model',
+  'Model transcribed': 'transcribed from the image by the vision model',
+}
 
 /** The tab's name: the figure number its legend opens with, else its anchor. */
 export function figureLabel(figure: Pick<FigureDescriptionResp, 'anchor' | 'caption'>): string {
@@ -97,6 +108,11 @@ function DescribedFigure({ figure }: { figure: FigureDescriptionResp }) {
         {figure.caption ? (
           <figcaption className="w-full text-sm text-foreground/80 leading-snug">
             {figure.caption}
+            {figure.caption_source && (
+              <span className="block mt-1 text-xs text-muted-foreground italic">
+                Legend {SOURCE_LABEL[figure.caption_source]}
+              </span>
+            )}
           </figcaption>
         ) : (
           <figcaption className="w-full text-xs text-muted-foreground italic">

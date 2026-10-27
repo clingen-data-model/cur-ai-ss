@@ -34,24 +34,48 @@ from lib.api.db import session_scope
 from lib.core.logging import setup_logging
 from lib.misc.images import image_to_data_url
 from lib.misc.pdf.anchors import (
+    adjacent_legends,
+    attached_captions,
     document_anchored_md_path,
     figure_neighbourhoods,
-    paper_figure_captions,
+    load_anchors,
 )
 from lib.misc.pdf.figure_text import figure_anchor
 from lib.misc.pdf.paths import document_image_path
-from lib.models.figure import FigureDescriptionDB
+from lib.models.figure import CaptionSource, FigureDescriptionDB
 
 setup_logging()
 logger = logging.getLogger(__name__)
 
 
-def _nearby(paper_id: int) -> dict[str, list[tuple[str, str]]]:
-    out = figure_neighbourhoods(document_anchored_md_path(paper_id).read_text())
-    supplement = document_anchored_md_path(paper_id, supplement=True)
-    if supplement.exists():
-        out.update(figure_neighbourhoods(supplement.read_text()))
-    return out
+class _Document:
+    """What the paper's anchored text says about its figures, main and
+    supplement merged: each figure's caption with its source where the text
+    gives one, and the prose around every figure for the model."""
+
+    def __init__(self, paper_id: int) -> None:
+        self.captions: dict[str, tuple[str, CaptionSource]] = {}
+        self.nearby: dict[str, list[tuple[str, str]]] = {}
+        for supplement in (False, True):
+            path = document_anchored_md_path(paper_id, supplement=supplement)
+            if supplement and not path.exists():
+                continue
+            markdown = path.read_text()
+            adopted = {
+                a.id
+                for a in load_anchors(paper_id, supplement=supplement)
+                if a.caption_adopted
+            }
+            for figure_id, text in adjacent_legends(markdown).items():
+                self.captions[figure_id] = (text, CaptionSource.ADJACENT)
+            for figure_id, text in attached_captions(markdown).items():
+                source = (
+                    CaptionSource.ADJACENT
+                    if figure_id in adopted
+                    else CaptionSource.DOCLING
+                )
+                self.captions[figure_id] = (text, source)
+            self.nearby.update(figure_neighbourhoods(markdown))
 
 
 def backfill_paper(session: Session, paper_id: int, ask_model: bool = True) -> int:
@@ -68,24 +92,26 @@ def backfill_paper(session: Session, paper_id: int, ask_model: bool = True) -> i
     )
     if not rows:
         return 0
-    captions = paper_figure_captions(paper_id)
-    nearby = _nearby(paper_id) if ask_model else {}
+    document = _Document(paper_id)
     filled = 0
     for row in rows:
         anchor = figure_anchor(row)
-        caption = captions.get(anchor)
-        if caption is None and ask_model:
+        found = document.captions.get(anchor)
+        if found is None and ask_model:
             image = document_image_path(paper_id, row.image_id, row.is_supplement)
             if image.exists():
-                caption = find_legend(
-                    image_to_data_url(image), tuple(nearby.get(anchor, [])), None
+                legend = find_legend(
+                    image_to_data_url(image),
+                    tuple(document.nearby.get(anchor, [])),
+                    None,
                 )
+                found = (legend.text, legend.source) if legend else None
                 logger.info(
                     f'Paper {paper_id} {anchor}: model '
-                    + (f'chose {caption[:80]!r}' if caption else 'found no legend')
+                    + (f'{found[1]}: {found[0][:80]!r}' if found else 'found no legend')
                 )
-        if caption is not None:
-            row.caption = caption
+        if found is not None:
+            row.caption, row.caption_source = found
             filled += 1
     return filled
 

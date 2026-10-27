@@ -337,9 +337,11 @@ def test_figure_with_image_renders_image_reference(paper_id):
     image.parent.mkdir(parents=True)
     image.write_bytes(b'png')
 
-    md, _ = build_anchored(_document(), paper_id=paper_id)
+    md, anchors = build_anchored(_document(), paper_id=paper_id)
 
     assert f'[figure-0] ![Figure 1. Pedigree]({image})' in md.splitlines()
+    # A caption Docling linked itself is not an adopted one.
+    assert not next(a for a in anchors if a.id == 'figure-0').caption_adopted
 
 
 def test_supplement_ids_are_prefixed(paper_id):
@@ -879,6 +881,7 @@ def test_build_anchored_adopts_a_heading_legend_below_an_uncaptioned_picture(
     assert '[paragraph-1] (A) Pedigrees of families 1-7.' in lines
     figure = anchors[0]
     assert figure.id == 'figure-0'
+    assert figure.caption_adopted  # anchors.json says this was the rule, not Docling
     assert len(figure.caption_boxes) == 1
     assert figure.caption_boxes != figure.boxes
     assert [a.id for a in anchors] == ['figure-0', 'paragraph-1']
@@ -918,6 +921,7 @@ def test_build_anchored_does_not_adopt_prose_beside_an_uncaptioned_picture(
     assert '[figure-0] <!-- image -->' in lines
     assert '[paragraph-0] Figure 1 shows the whole kindred.' in lines
     assert anchors[0].caption_boxes == []
+    assert not anchors[0].caption_adopted
     assert [a.id for a in anchors] == ['figure-0', 'paragraph-0', 'paragraph-1']
 
 

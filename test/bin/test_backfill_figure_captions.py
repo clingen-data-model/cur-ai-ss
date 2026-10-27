@@ -3,12 +3,13 @@ anchored text on disk, the same text a re-run of Figure Description reads."""
 
 import pytest
 
+from lib.agents.figure_describer import Legend
 from lib.bin import backfill_figure_captions as script
 from lib.bin.backfill_figure_captions import backfill, backfill_paper
 from lib.misc.pdf.anchors import Anchor, write_anchored
 from lib.misc.pdf.paths import document_anchored_md_path, document_image_path
 from lib.models import GeneDB, PaperDB
-from lib.models.figure import FigureDescriptionDB
+from lib.models.figure import CaptionSource, FigureDescriptionDB
 
 
 @pytest.fixture
@@ -55,7 +56,7 @@ def _write_documents(paper):
     write_anchored(
         paper.id,
         '[supp-figure-0] ![Figure S1. Traces](x/0.png)\n',
-        [Anchor(id='supp-figure-0')],
+        [Anchor(id='supp-figure-0', caption_adopted=True)],
         supplement=True,
     )
 
@@ -82,11 +83,13 @@ def test_fills_captionless_rows_from_both_sections(db_session, paper):
     rows = db_session.query(FigureDescriptionDB).order_by(
         FigureDescriptionDB.is_supplement, FigureDescriptionDB.image_id
     )
-    assert [(r.is_supplement, r.image_id, r.caption) for r in rows] == [
-        (False, 0, 'Figure 1. The family'),
-        (False, 2, 'Figure 2. Traces of the proband'),
-        (False, 3, None),
-        (True, 0, 'Figure S1. Traces'),
+    assert [
+        (r.is_supplement, r.image_id, r.caption, r.caption_source) for r in rows
+    ] == [
+        (False, 0, 'Figure 1. The family', CaptionSource.DOCLING),
+        (False, 2, 'Figure 2. Traces of the proband', CaptionSource.ADJACENT),
+        (False, 3, None, None),
+        (True, 0, 'Figure S1. Traces', CaptionSource.ADJACENT),  # adopted at parse
     ]
     assert (
         '## Figure 2. Traces of the proband'
@@ -149,7 +152,10 @@ def test_a_figure_the_text_gives_no_legend_for_is_asked_of_the_model(
 
     def fake_find_legend(image_url, nearby, notes):
         asked.append((image_url, nearby, notes))
-        return 'Figure 3. The model read this off the image'
+        return Legend(
+            'Figure 3. The model read this off the image',
+            CaptionSource.MODEL_TRANSCRIBED,
+        )
 
     monkeypatch.setattr(script, 'find_legend', fake_find_legend)
     monkeypatch.setattr(script, 'image_to_data_url', lambda path: f'data:{path.name}')
@@ -167,9 +173,15 @@ def test_a_figure_the_text_gives_no_legend_for_is_asked_of_the_model(
             None,
         )
     ]
-    captions = {r.image_id: r.caption for r in db_session.query(FigureDescriptionDB)}
+    captions = {
+        r.image_id: (r.caption, r.caption_source)
+        for r in db_session.query(FigureDescriptionDB)
+    }
     assert captions == {
-        2: 'Figure 2. Traces of the proband',
-        3: 'Figure 3. The model read this off the image',
-        7: None,
+        2: ('Figure 2. Traces of the proband', CaptionSource.ADJACENT),
+        3: (
+            'Figure 3. The model read this off the image',
+            CaptionSource.MODEL_TRANSCRIBED,
+        ),
+        7: (None, None),
     }

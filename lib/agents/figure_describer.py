@@ -34,13 +34,14 @@ that can act on them.
 
 import logging
 from dataclasses import dataclass
+from typing import NamedTuple
 
 from pydantic import BaseModel
 
 from lib.agents.vision import vlm_describe
 from lib.misc.images import image_to_data_url
 from lib.misc.pdf.paths import document_image_path
-from lib.models.figure import FigureKind
+from lib.models.figure import CaptionSource, FigureKind
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,9 @@ class FigureRef:
     image_id: int
     is_supplement: bool
     caption: str | None = None
+    # Where the caption came from (DOCLING or ADJACENT: the anchored text
+    # carries it); None with the caption.
+    caption_source: CaptionSource | None = None
     # The prose printed around the figure, (label, text) in reading order
     # (``figure_neighbourhoods``): what ``find_legend`` chooses from when the
     # caption is None.
@@ -63,9 +67,19 @@ class DescribedFigure(BaseModel):
     image_id: int
     is_supplement: bool
     kinds: list[FigureKind]
-    # The caption the model was shown, kept so the row can be served with it.
+    # The caption the model was shown, and how it was arrived at, kept so the
+    # row can be served with both.
     caption: str | None = None
+    caption_source: CaptionSource | None = None
     description: str
+
+
+class Legend(NamedTuple):
+    """What ``find_legend`` found: the text and which way (a block the model
+    chose, or its transcription of the image)."""
+
+    text: str
+    source: CaptionSource
 
 
 # The vision model answers with exactly this when a figure is of no readable kind.
@@ -141,26 +155,30 @@ def _nearby_section(nearby: tuple[tuple[str, str], ...]) -> str:
     return '\n'.join(f'[{label}] {text}' for label, text in nearby)
 
 
-def parse_legend(answer: str | None, nearby: tuple[tuple[str, str], ...]) -> str | None:
+def parse_legend(
+    answer: str | None, nearby: tuple[tuple[str, str], ...]
+) -> Legend | None:
     """The legend a ``find_legend`` answer names: a nearby block's text when
-    the answer is its label (brackets, quotes and a trailing period allowed),
-    the transcription after ``TEXT:``, else None, so an answer that is not
-    one of the three forms costs a missing caption, never a wrong one."""
+    the answer is its label (brackets, quotes and a trailing period allowed;
+    MODEL_CHOSEN), the transcription after ``TEXT:`` (MODEL_TRANSCRIBED),
+    else None, so an answer that is not one of the three forms costs a
+    missing caption, never a wrong one."""
     if answer is None:
         return None
     line = answer.strip().split('\n', 1)[0].strip()
     if line.upper().startswith(LEGEND_TEXT_PREFIX):
         text = line[len(LEGEND_TEXT_PREFIX) :].strip()
-        return text or None
+        return Legend(text, CaptionSource.MODEL_TRANSCRIBED) if text else None
     label = line.strip('[]`"\'. ')
     if label.upper() == NO_LEGEND:
         return None
-    return next((text for l, text in nearby if l == label), None)
+    chosen = next((text for l, text in nearby if l == label), None)
+    return Legend(chosen, CaptionSource.MODEL_CHOSEN) if chosen is not None else None
 
 
 def find_legend(
     image_url: str, nearby: tuple[tuple[str, str], ...], notes: str | None
-) -> str | None:
+) -> Legend | None:
     """The legend of a figure the document attaches none to, as the vision
     model picks it from the prose around the figure or reads it off the
     image; None when it finds none or gives no usable answer."""
@@ -279,12 +297,14 @@ def describe_figures(
             logger.info(f'Paper {paper_id} {label}: no readable kind')
             continue
         logger.info(f'Paper {paper_id} {label}: {", ".join(k.value for k in kinds)}')
-        caption = figure.caption
+        caption, source = figure.caption, figure.caption_source
         if caption is None:
-            caption = find_legend(image_url, figure.nearby, notes)
+            legend = find_legend(image_url, figure.nearby, notes)
+            if legend is not None:
+                caption, source = legend
             logger.info(
                 f'Paper {paper_id} {label}: legend '
-                + (f'found: {caption[:60]!r}' if caption else 'not found')
+                + (f'{source}: {caption[:60]!r}' if caption else 'not found')
             )
         description = describe_figure(image_url, kinds, caption, notes)
         if description is None:
@@ -296,6 +316,7 @@ def describe_figures(
                 is_supplement=figure.is_supplement,
                 kinds=kinds,
                 caption=caption,
+                caption_source=source,
                 description=description,
             )
         )

@@ -1,11 +1,16 @@
-"""Add figure_descriptions.caption: the legend as printed, kept with the row
+"""Add figure_descriptions.caption and caption_source: the legend, kept with the row
 
 The caption the Figure Description step reads to the vision model has only
 ever lived in the anchored Markdown, as the alt text of the figure's
 ``[figure-N] ![caption](...)`` line, so the figures page could not show a
 figure beside its legend without parsing the document on every request.
-The step now stores the caption it read on the row, and the figures endpoint
-serves it. Nullable: a figure Docling attached no caption to has none.
+The step now stores the caption it read on the row, with where it came from
+(``CaptionSource``: linked by Docling, the block printed beside the picture
+by rule, a block the vision model chose, or the model's transcription of a
+legend drawn inside the image), and the figures endpoint serves both. Both
+nullable, with no default: a figure with no caption has no source either.
+The source column is a VARCHAR of the member *name* (see CLAUDE.md on
+SQLEnum), with no CHECK constraint.
 
 Rows from before this migration are filled from the anchored text on disk
 by ``lib.bin.backfill_figure_captions`` (no model call: the text is the same
@@ -38,8 +43,23 @@ def upgrade() -> None:
     op.add_column(
         'figure_descriptions', sa.Column('caption', sa.Text(), nullable=True)
     )
+    op.add_column(
+        'figure_descriptions',
+        sa.Column(
+            'caption_source',
+            sa.Enum(
+                'DOCLING',
+                'ADJACENT',
+                'MODEL_CHOSEN',
+                'MODEL_TRANSCRIBED',
+                name='captionsource',
+            ),
+            nullable=True,
+        ),
+    )
 
 
 def downgrade() -> None:
     with op.batch_alter_table('figure_descriptions', schema=None) as batch_op:
+        batch_op.drop_column('caption_source')
         batch_op.drop_column('caption')

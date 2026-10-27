@@ -39,7 +39,7 @@ from lib.models import (
 )
 from lib.models.deletion_log import DeletionLogDB
 from lib.models.edit import EditDB
-from lib.models.figure import FigureDescriptionDB
+from lib.models.figure import CaptionSource, FigureDescriptionDB
 from lib.tasks import TaskCreateRequest
 from lib.tasks.agent_session import chat_session
 from lib.tasks.models import TaskStatus, TaskType
@@ -660,6 +660,7 @@ def test_get_figures_lists_each_described_figure_main_text_first(
                 image_id=2,
                 kinds=['Chromatogram', 'Gel'],
                 caption='Figure 2. Sanger traces of the proband.',
+                caption_source=CaptionSource.MODEL_CHOSEN,
                 description='traces',
             ),
         ]
@@ -673,7 +674,9 @@ def test_get_figures_lists_each_described_figure_main_text_first(
         ('supp-figure-4', ['Pedigree']),
     ]
     assert resp[0]['caption'] == 'Figure 2. Sanger traces of the proband.'
-    assert resp[1]['caption'] is None  # Docling attached no legend to it
+    assert resp[0]['caption_source'] == 'Model chose'
+    assert resp[1]['caption'] is None  # nothing gave it a legend
+    assert resp[1]['caption_source'] is None
     assert resp[1]['image_id'] == 4
     assert resp[1]['is_supplement'] is True
     assert resp[1]['description'] == 'ped'

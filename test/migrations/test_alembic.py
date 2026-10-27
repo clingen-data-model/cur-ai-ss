@@ -665,9 +665,10 @@ def test_queued_task_rows_become_pending(monkeypatch, tmp_path):
 
 
 def test_figure_caption_column_reads_back_as_none_for_old_rows(monkeypatch, tmp_path):
-    """b7e2f9c4d6a1 adds figure_descriptions.caption in place. A row described
-    before it reads back through the ORM with caption None (the backfill
-    script fills it from disk later), and every other column is untouched."""
+    """b7e2f9c4d6a1 adds figure_descriptions.caption and caption_source in
+    place. A row described before it reads back through the ORM with both
+    None (the backfill script fills them later), and every other column is
+    untouched."""
     from lib.models.figure import FigureDescriptionDB
 
     monkeypatch.setattr(db.env, 'CAA_ROOT', str(tmp_path))
@@ -705,9 +706,10 @@ def test_figure_caption_column_reads_back_as_none_for_old_rows(monkeypatch, tmp_
 
     with Session(engine) as session:
         row = session.query(FigureDescriptionDB).one()
-        assert (row.image_id, row.kinds, row.caption, row.description) == (
-            3,
-            ['Pedigree'],
-            None,
-            'a family',
-        )
+        assert (
+            row.image_id,
+            row.kinds,
+            row.caption,
+            row.caption_source,
+            row.description,
+        ) == (3, ['Pedigree'], None, None, 'a family')

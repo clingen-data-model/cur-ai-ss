@@ -100,6 +100,7 @@ def figure_description_to_db(
         is_supplement=figure.is_supplement,
         kinds=[kind.value for kind in figure.kinds],
         caption=figure.caption,
+        caption_source=figure.caption_source,
         description=figure.description,
     )
 

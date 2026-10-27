@@ -10,6 +10,7 @@ from lib.agents.figure_describer import (
     NOT_A_PEDIGREE,
     PEDIGREE_VISION_PROMPT,
     FigureRef,
+    Legend,
     describe_figure,
     describe_figures,
     find_legend,
@@ -17,7 +18,9 @@ from lib.agents.figure_describer import (
     parse_legend,
 )
 from lib.misc.pdf.paths import document_image_path
-from lib.models.figure import FigureKind
+from lib.models.figure import CaptionSource, FigureKind
+
+CHOSE, TRANSCRIBED = CaptionSource.MODEL_CHOSEN, CaptionSource.MODEL_TRANSCRIBED
 
 
 @pytest.mark.parametrize(
@@ -219,19 +222,23 @@ _NEARBY = (
     'answer, legend',
     [
         pytest.param(
-            'paragraph-208', 'Figure 3. Mutations Identified in the ALX3 Gene', id='id'
+            'paragraph-208',
+            Legend('Figure 3. Mutations Identified in the ALX3 Gene', CHOSE),
+            id='id',
         ),
         pytest.param(
             '[paragraph-208]',
-            'Figure 3. Mutations Identified in the ALX3 Gene',
+            Legend('Figure 3. Mutations Identified in the ALX3 Gene', CHOSE),
             id='bracketed-id',
         ),
         pytest.param(
-            'heading', 'Figure 2. Pedigrees and Disease Localization', id='heading'
+            'heading',
+            Legend('Figure 2. Pedigrees and Disease Localization', CHOSE),
+            id='heading',
         ),
         pytest.param(
             'TEXT: Figure 2. RB1 variants in tumour samples.',
-            'Figure 2. RB1 variants in tumour samples.',
+            Legend('Figure 2. RB1 variants in tumour samples.', TRANSCRIBED),
             id='transcribed-from-image',
         ),
         pytest.param('NONE', None, id='none'),
@@ -245,7 +252,7 @@ _NEARBY = (
         # Only the first line counts: a justification after it is ignored.
         pytest.param(
             'paragraph-208\nIt names the ALX3 mutations shown.',
-            'Figure 3. Mutations Identified in the ALX3 Gene',
+            Legend('Figure 3. Mutations Identified in the ALX3 Gene', CHOSE),
             id='first-line',
         ),
     ],
@@ -267,7 +274,7 @@ def test_find_legend_shows_the_prose_around_the_figure(monkeypatch):
 
     legend = find_legend('data:img', _NEARBY, 'the proband is III-3')
 
-    assert legend == 'Figure 3. Mutations Identified in the ALX3 Gene'
+    assert legend == Legend('Figure 3. Mutations Identified in the ALX3 Gene', CHOSE)
     assert seen['image_url'] == 'data:img'
     assert seen['prompt'].startswith(LEGEND_PROMPT)
     assert '[paragraph-207] Splicing' in seen['prompt']
@@ -303,16 +310,16 @@ def test_describe_figures_asks_the_legend_only_of_a_readable_figure_without_one(
         describer, 'image_to_data_url', lambda path: f'data:[figure-{path.stem}]'
     )
     figures = [
-        FigureRef(0, False, 'Figure 1. Traces', nearby=_NEARBY),
+        FigureRef(0, False, 'Figure 1. Traces', CaptionSource.DOCLING, _NEARBY),
         FigureRef(1, False, None, nearby=_NEARBY),
         FigureRef(2, False, None, nearby=_NEARBY),
     ]
 
     described = describe_figures(7, figures)
 
-    assert [(d.image_id, d.caption) for d in described] == [
-        (0, 'Figure 1. Traces'),
-        (2, 'Figure 3. Mutations Identified in the ALX3 Gene'),
+    assert [(d.image_id, d.caption, d.caption_source) for d in described] == [
+        (0, 'Figure 1. Traces', CaptionSource.DOCLING),
+        (2, 'Figure 3. Mutations Identified in the ALX3 Gene', CHOSE),
     ]
     legend_prompts = [p for p in prompts if p.startswith(LEGEND_PROMPT)]
     assert len(legend_prompts) == 1

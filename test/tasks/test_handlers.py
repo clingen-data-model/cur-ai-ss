@@ -7,7 +7,7 @@ from lib.agents.patient_extraction_agent import PATIENT_EXTRACTION_AGENT_INSTRUC
 from lib.misc.pdf.figure_text import figure_description_block
 from lib.misc.pdf.paths import document_anchored_md_path
 from lib.models import GeneDB, PaperDB
-from lib.models.figure import FigureDescriptionDB, FigureKind
+from lib.models.figure import CaptionSource, FigureDescriptionDB, FigureKind
 from lib.tasks.handlers import (
     cited_text,
     format_paper_context,
@@ -345,7 +345,7 @@ def test_paper_figures_lists_every_figure_with_an_image_main_first(paper):
     write_anchored(
         paper.id,
         '[supp-figure-0] ![Figure S1](x/0.png)\n',
-        [Anchor(id='supp-figure-0')],
+        [Anchor(id='supp-figure-0', caption_adopted=True)],
         supplement=True,
     )
     for image_id, supplement in ((0, False), (2, False), (4, False), (0, True)):
@@ -355,11 +355,18 @@ def test_paper_figures_lists_every_figure_with_an_image_main_first(paper):
 
     figures = paper_figures(paper.id)
 
-    assert [(f.image_id, f.is_supplement, f.caption) for f in figures] == [
-        (0, False, 'Figure 1. Photographs'),
-        (2, False, None),
-        (4, False, 'Figure 3. Mutations Identified in the ALX3 Gene'),
-        (0, True, 'Figure S1'),
+    assert [
+        (f.image_id, f.is_supplement, f.caption, f.caption_source) for f in figures
+    ] == [
+        (0, False, 'Figure 1. Photographs', CaptionSource.DOCLING),
+        (2, False, None, None),
+        (
+            4,
+            False,
+            'Figure 3. Mutations Identified in the ALX3 Gene',
+            CaptionSource.ADJACENT,
+        ),
+        (0, True, 'Figure S1', CaptionSource.ADJACENT),  # anchors.json says adopted
     ]
     # The prose around each figure, for the describer's legend question.
     assert figures[1].nearby == (
@@ -403,6 +410,7 @@ async def test_figure_description_stores_one_row_per_described_figure(
                 is_supplement=False,
                 kinds=[FigureKind.PEDIGREE, FigureKind.GEL],
                 caption='traces',
+                caption_source=CaptionSource.MODEL_TRANSCRIBED,
                 description='pedigree and digest',
             )
         ]
@@ -419,8 +427,16 @@ async def test_figure_description_stores_one_row_per_described_figure(
         'notes': 'III-3 is the proband',
     }
     rows = db_session.query(FigureDescriptionDB).filter_by(paper_id=paper.id).all()
-    assert [(r.image_id, r.kinds, r.caption, r.description) for r in rows] == [
-        (2, ['Pedigree', 'Gel'], 'traces', 'pedigree and digest')
+    assert [
+        (r.image_id, r.kinds, r.caption, r.caption_source, r.description) for r in rows
+    ] == [
+        (
+            2,
+            ['Pedigree', 'Gel'],
+            'traces',
+            CaptionSource.MODEL_TRANSCRIBED,
+            'pedigree and digest',
+        )
     ]
 
 

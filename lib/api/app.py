@@ -1679,6 +1679,7 @@ def get_figures(
             ),
             kinds=[FigureKind(k) for k in figure.kinds],
             caption=figure.caption,
+            caption_source=figure.caption_source,
             description=figure.description,
             # image_id is the Docling picture index (the N of figure-N).
             image_url=str(
