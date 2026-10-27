@@ -934,18 +934,19 @@ def test_build_anchored_gives_a_legend_to_the_picture_above_it_only(paper_id):
 
 def test_figure_neighbourhoods_list_the_prose_around_each_figure():
     """Headings and paragraphs within the radius on either side, in reading
-    order, labelled by anchor id (headings have none); tables and other
-    figures are passed over without counting."""
+    order, labelled by anchor id, or for a heading (which has none) by its
+    block index, so that no two blocks in view share a label; tables and
+    other figures are passed over without counting."""
     nearby = figure_neighbourhoods(_ORPHANED, radius=2)
 
     assert nearby['figure-1'] == [
-        ('heading', 'Results'),
-        ('heading', 'Figure 2. Pedigrees and Disease Localization'),
+        ('heading-0', 'Results'),
+        ('heading-3', 'Figure 2. Pedigrees and Disease Localization'),
         ('paragraph-3', '(A) Pedigrees of families 1-7. (B) Linkage analysis.'),
     ]
     assert nearby['figure-5'] == [
         ('paragraph-4', 'Fig. 3.'),
         ('paragraph-6', 'Figure 4 shows nothing: this is body prose.'),
-        ('heading', 'Supplementary Figure 1. Sanger traces of every proband'),
+        ('heading-14', 'Supplementary Figure 1. Sanger traces of every proband'),
     ]
     assert set(nearby) == {f'figure-{i}' for i in range(7)}
