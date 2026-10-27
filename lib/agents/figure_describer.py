@@ -49,6 +49,8 @@ class DescribedFigure(BaseModel):
     image_id: int
     is_supplement: bool
     kinds: list[FigureKind]
+    # The caption the model was shown, kept so the row can be served with it.
+    caption: str | None = None
     description: str
 
 
@@ -216,6 +218,7 @@ def describe_figures(
                 image_id=figure.image_id,
                 is_supplement=figure.is_supplement,
                 kinds=kinds,
+                caption=figure.caption,
                 description=description,
             )
         )

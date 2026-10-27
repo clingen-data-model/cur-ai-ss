@@ -659,6 +659,7 @@ def test_get_figures_lists_each_described_figure_main_text_first(
                 paper_id=seeded_paper.id,
                 image_id=2,
                 kinds=['Chromatogram', 'Gel'],
+                caption='Figure 2. Sanger traces of the proband.',
                 description='traces',
             ),
         ]
@@ -671,6 +672,8 @@ def test_get_figures_lists_each_described_figure_main_text_first(
         ('figure-2', ['Chromatogram', 'Gel']),
         ('supp-figure-4', ['Pedigree']),
     ]
+    assert resp[0]['caption'] == 'Figure 2. Sanger traces of the proband.'
+    assert resp[1]['caption'] is None  # Docling attached no legend to it
     assert resp[1]['image_id'] == 4
     assert resp[1]['is_supplement'] is True
     assert resp[1]['description'] == 'ped'

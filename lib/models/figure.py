@@ -65,6 +65,11 @@ class FigureDescriptionDB(Base):
     )
     # FigureKind values, as strings.
     kinds: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    # The legend as printed, as the anchored document carries it (the alt text
+    # of the figure's line) and as the step read it to the vision model. None
+    # when Docling attached no caption to the picture. Rows from before
+    # b7e2f9c4d6a1 are filled by lib.bin.backfill_figure_captions.
+    caption: Mapped[str | None] = mapped_column(Text, nullable=True)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -115,5 +120,7 @@ class FigureDescriptionResp(BaseModel):
     # The id printed in the anchored text (figure-N or supp-figure-N).
     anchor: str
     kinds: list[FigureKind]
+    # The legend as printed in the paper, if Docling attached one to the picture.
+    caption: str | None
     description: str
     image_url: str

@@ -359,7 +359,8 @@ async def test_figure_description_stores_one_row_per_described_figure(
     monkeypatch, db_session, paper
 ):
     """The handler hands every figure and the curator's notes to the describer
-    and replaces the paper's rows with what came back, kinds and all."""
+    and replaces the paper's rows with what came back, kinds and the caption
+    the model was shown included."""
     from lib.agents.figure_describer import DescribedFigure
     from lib.tasks import handlers
     from lib.tasks.models import TaskDB, TaskStatus, TaskType
@@ -387,6 +388,7 @@ async def test_figure_description_stores_one_row_per_described_figure(
                 image_id=2,
                 is_supplement=False,
                 kinds=[FigureKind.PEDIGREE, FigureKind.GEL],
+                caption='traces',
                 description='pedigree and digest',
             )
         ]
@@ -403,8 +405,8 @@ async def test_figure_description_stores_one_row_per_described_figure(
         'notes': 'III-3 is the proband',
     }
     rows = db_session.query(FigureDescriptionDB).filter_by(paper_id=paper.id).all()
-    assert [(r.image_id, r.kinds, r.description) for r in rows] == [
-        (2, ['Pedigree', 'Gel'], 'pedigree and digest')
+    assert [(r.image_id, r.kinds, r.caption, r.description) for r in rows] == [
+        (2, ['Pedigree', 'Gel'], 'traces', 'pedigree and digest')
     ]
 
 

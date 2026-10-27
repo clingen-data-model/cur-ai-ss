@@ -1,7 +1,8 @@
 /* The figures the Figure Description step described, one sub-tab per figure,
  * main text first: the kinds the step saw in it (a pedigree, a chromatogram,
- * a gel...), its image and the vision model's reading. Each tab is named by
- * the figure's anchor in the paper text, not the paper's own figure number. */
+ * a gel...), its image, the legend as printed and the vision model's reading.
+ * A tab is named by the paper's own figure number when its legend starts with
+ * one ("Figure 2.", "Fig. S1"), else by the figure's anchor in the paper text. */
 import { useQuery } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -15,6 +16,18 @@ import { Spinner } from '@/components/ui/spinner'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 const STALE_TIME = 5 * 60 * 1000
+
+// "Figure 2.", "Fig. 1", "Supplementary Figure 3", "Figure S1": the paper's
+// own number for the figure, at the head of its legend.
+const FIGURE_NUMBER = /^\s*(?:(supplementa(?:ry|l)|suppl\.?)\s+)?fig(?:ure|\.)?\s*(S?\d+)/i
+
+/** The tab's name: the figure number its legend opens with, else its anchor. */
+export function figureLabel(figure: Pick<FigureDescriptionResp, 'anchor' | 'caption'>): string {
+  const match = figure.caption?.match(FIGURE_NUMBER)
+  if (!match) return describeAnchor(figure.anchor)
+  const number = match[2].toUpperCase()
+  return match[1] && !number.startsWith('S') ? `Figure S${number}` : `Figure ${number}`
+}
 
 export function FiguresTab({ paperId }: { paperId: number }) {
   const { data: figures, isPending } = useQuery({
@@ -47,7 +60,7 @@ export function FiguresTab({ paperId }: { paperId: number }) {
       <TabsList variant="line">
         {figures.map((figure) => (
           <TabsTrigger key={figure.anchor} value={figure.anchor} title={figure.anchor}>
-            {describeAnchor(figure.anchor)}
+            {figureLabel(figure)}
           </TabsTrigger>
         ))}
       </TabsList>
@@ -75,11 +88,22 @@ function DescribedFigure({ figure }: { figure: FigureDescriptionResp }) {
           <span className="ml-auto text-xs text-muted-foreground">p. {page}</span>
         )}
       </div>
-      <img
-        src={`${API_BASE_URL}${figure.image_url}`}
-        alt={figure.kinds.join(', ')}
-        className="max-w-full rounded-lg border"
-      />
+      <figure className="flex flex-col items-center gap-2">
+        <img
+          src={`${API_BASE_URL}${figure.image_url}`}
+          alt={figure.caption ?? figure.kinds.join(', ')}
+          className="max-w-full rounded-lg border"
+        />
+        {figure.caption ? (
+          <figcaption className="w-full text-sm text-foreground/80 leading-snug">
+            {figure.caption}
+          </figcaption>
+        ) : (
+          <figcaption className="w-full text-xs text-muted-foreground italic">
+            No legend was attached to this figure in the parsed text.
+          </figcaption>
+        )}
+      </figure>
       <div
         className="w-full text-sm text-muted-foreground
           [&_h1]:text-base [&_h1]:font-semibold [&_h1]:text-foreground [&_h1]:mt-3 [&_h1]:mb-1

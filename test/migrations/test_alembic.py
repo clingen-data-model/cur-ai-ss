@@ -662,3 +662,52 @@ def test_queued_task_rows_become_pending(monkeypatch, tmp_path):
         TaskStatus.RUNNING,
         TaskStatus.COMPLETED,
     ]
+
+
+def test_figure_caption_column_reads_back_as_none_for_old_rows(monkeypatch, tmp_path):
+    """b7e2f9c4d6a1 adds figure_descriptions.caption in place. A row described
+    before it reads back through the ORM with caption None (the backfill
+    script fills it from disk later), and every other column is untouched."""
+    from lib.models.figure import FigureDescriptionDB
+
+    monkeypatch.setattr(db.env, 'CAA_ROOT', str(tmp_path))
+    monkeypatch.setattr(db.env, 'SQLLITE_DIR', '')
+    monkeypatch.setattr(db, '_engine', None)
+    monkeypatch.setattr(db, '_session_factory', None)
+
+    repo_root = Path(__file__).resolve().parents[2]
+    cfg = Config(str(repo_root / 'alembic.ini'))
+    command.upgrade(cfg, '7c1e5a9d3b2f')
+
+    engine = db.get_engine()
+    with engine.begin() as connection:
+        gene_id = connection.execute(
+            text("INSERT INTO genes (symbol) VALUES ('TESTGENE') RETURNING id")
+        ).scalar_one()
+        paper_id = connection.execute(
+            text(
+                'INSERT INTO papers (gene_id, content_hash, filename, paper_types) '
+                "VALUES (:gene_id, 'h', 'f.pdf', '[]') RETURNING id"
+            ),
+            {'gene_id': gene_id},
+        ).scalar_one()
+        connection.execute(
+            text(
+                'INSERT INTO figure_descriptions '
+                '(paper_id, image_id, is_supplement, kinds, description) '
+                "VALUES (:paper_id, 3, 0, '[\"Pedigree\"]', 'a family')"
+            ),
+            {'paper_id': paper_id},
+        )
+
+    command.upgrade(cfg, 'head')
+    command.upgrade(cfg, 'head')  # a clean no-op: alembic_version landed
+
+    with Session(engine) as session:
+        row = session.query(FigureDescriptionDB).one()
+        assert (row.image_id, row.kinds, row.caption, row.description) == (
+            3,
+            ['Pedigree'],
+            None,
+            'a family',
+        )
