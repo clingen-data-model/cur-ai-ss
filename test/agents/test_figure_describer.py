@@ -6,15 +6,21 @@ from lib.agents import figure_describer as describer
 from lib.agents.figure_describer import (
     CLASSIFY_PROMPT,
     EVIDENCE_VISION_PROMPT,
+    LEGEND_PROMPT,
     NOT_A_PEDIGREE,
     PEDIGREE_VISION_PROMPT,
     FigureRef,
+    Legend,
     describe_figure,
     describe_figures,
+    find_legend,
     parse_kinds,
+    parse_legend,
 )
 from lib.misc.pdf.paths import document_image_path
-from lib.models.figure import FigureKind
+from lib.models.figure import CaptionSource, FigureKind
+
+CHOSE, TRANSCRIBED = CaptionSource.MODEL_CHOSEN, CaptionSource.MODEL_TRANSCRIBED
 
 
 @pytest.mark.parametrize(
@@ -197,3 +203,127 @@ def test_provider_failure_fails_the_task_instead_of_answering(monkeypatch):
 
     with pytest.raises(RuntimeError, match='connection reset'):
         describe_figures(1, [FigureRef(0, False)])
+
+
+# --- the legend question ------------------------------------------------------
+
+_NEARBY = (
+    (
+        'paragraph-81',
+        'We used dense surface modeling to analyze the facial morphology.',
+    ),
+    ('paragraph-207', 'Splicing'),
+    ('paragraph-208', 'Figure 3. Mutations Identified in the ALX3 Gene'),
+    ('heading', 'Figure 2. Pedigrees and Disease Localization'),
+)
+
+
+@pytest.mark.parametrize(
+    'answer, legend',
+    [
+        pytest.param(
+            'paragraph-208',
+            Legend('Figure 3. Mutations Identified in the ALX3 Gene', CHOSE),
+            id='id',
+        ),
+        pytest.param(
+            '[paragraph-208]',
+            Legend('Figure 3. Mutations Identified in the ALX3 Gene', CHOSE),
+            id='bracketed-id',
+        ),
+        pytest.param(
+            'heading',
+            Legend('Figure 2. Pedigrees and Disease Localization', CHOSE),
+            id='heading',
+        ),
+        pytest.param(
+            'TEXT: Figure 2. RB1 variants in tumour samples.',
+            Legend('Figure 2. RB1 variants in tumour samples.', TRANSCRIBED),
+            id='transcribed-from-image',
+        ),
+        pytest.param('NONE', None, id='none'),
+        pytest.param('none.', None, id='none-chatty'),
+        pytest.param(None, None, id='no-answer'),
+        pytest.param('TEXT:', None, id='empty-transcription'),
+        # An answer in none of the three forms is a missing caption, never a
+        # wrong one: a made-up id, or a block's text instead of its id.
+        pytest.param('paragraph-999', None, id='unknown-id'),
+        pytest.param('Figure 3. Mutations Identified', None, id='text-not-id'),
+        # Only the first line counts: a justification after it is ignored.
+        pytest.param(
+            'paragraph-208\nIt names the ALX3 mutations shown.',
+            Legend('Figure 3. Mutations Identified in the ALX3 Gene', CHOSE),
+            id='first-line',
+        ),
+    ],
+)
+def test_parse_legend(answer, legend):
+    assert parse_legend(answer, _NEARBY) == legend
+
+
+def test_find_legend_shows_the_prose_around_the_figure(monkeypatch):
+    """The prompt lists every nearby block with its id, so the model can
+    answer with one; the curator's notes follow as in every other prompt."""
+    seen: dict = {}
+
+    def vision(image_url, prompt):
+        seen.update(image_url=image_url, prompt=prompt)
+        return 'paragraph-208'
+
+    monkeypatch.setattr(describer, 'vlm_describe', vision)
+
+    legend = find_legend('data:img', _NEARBY, 'the proband is III-3')
+
+    assert legend == Legend('Figure 3. Mutations Identified in the ALX3 Gene', CHOSE)
+    assert seen['image_url'] == 'data:img'
+    assert seen['prompt'].startswith(LEGEND_PROMPT)
+    assert '[paragraph-207] Splicing' in seen['prompt']
+    assert '[heading] Figure 2. Pedigrees and Disease Localization' in seen['prompt']
+    assert seen['prompt'].endswith('the proband is III-3')
+
+
+def test_find_legend_asks_nothing_with_nothing_to_choose_from(monkeypatch):
+    monkeypatch.setattr(describer, 'vlm_describe', lambda *_: pytest.fail('asked'))
+
+    assert find_legend('data:img', (), None) is None
+
+
+def test_describe_figures_asks_the_legend_only_of_a_readable_figure_without_one(
+    monkeypatch,
+):
+    """Three figures: one captioned (not asked), one uncaptioned and
+    unreadable (not asked: it gets no row), one uncaptioned and readable
+    (asked; the answer is its caption, shown to the describing prompt and
+    stored on the figure)."""
+    prompts: list[str] = []
+
+    def scripted(image_url: str, prompt: str) -> str | None:
+        prompts.append(prompt)
+        if prompt.startswith(CLASSIFY_PROMPT):
+            return 'NONE' if '[figure-1]' in image_url else 'Chromatogram'
+        if prompt.startswith(LEGEND_PROMPT):
+            return 'paragraph-208'
+        return 'II-1 heterozygous'
+
+    monkeypatch.setattr(describer, 'vlm_describe', scripted)
+    monkeypatch.setattr(
+        describer, 'image_to_data_url', lambda path: f'data:[figure-{path.stem}]'
+    )
+    figures = [
+        FigureRef(0, False, 'Figure 1. Traces', CaptionSource.DOCLING, _NEARBY),
+        FigureRef(1, False, None, nearby=_NEARBY),
+        FigureRef(2, False, None, nearby=_NEARBY),
+    ]
+
+    described = describe_figures(7, figures)
+
+    assert [(d.image_id, d.caption, d.caption_source) for d in described] == [
+        (0, 'Figure 1. Traces', CaptionSource.DOCLING),
+        (2, 'Figure 3. Mutations Identified in the ALX3 Gene', CHOSE),
+    ]
+    legend_prompts = [p for p in prompts if p.startswith(LEGEND_PROMPT)]
+    assert len(legend_prompts) == 1
+    # The describing prompt for figure-2 was written with the found legend.
+    evidence = [p for p in prompts if p.startswith(EVIDENCE_VISION_PROMPT[:40])]
+    assert 'Figure 3. Mutations Identified in the ALX3 Gene' in evidence[-1]
+    assert 'Figure 1. Traces' in evidence[0]

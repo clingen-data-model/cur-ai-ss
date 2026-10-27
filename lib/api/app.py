@@ -1678,6 +1678,8 @@ def get_figures(
                 AnchorKind.FIGURE, figure.image_id, figure.is_supplement
             ),
             kinds=[FigureKind(k) for k in figure.kinds],
+            caption=figure.caption,
+            caption_source=figure.caption_source,
             description=figure.description,
             # image_id is the Docling picture index (the N of figure-N).
             image_url=str(

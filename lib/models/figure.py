@@ -22,6 +22,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 from sqlalchemy.types import JSON
 
@@ -46,6 +47,25 @@ class FigureKind(StrEnum):
     KARYOTYPE_OR_FISH = 'Karyotype or FISH'
 
 
+class CaptionSource(StrEnum):
+    """Where a stored caption came from, so a reader knows how far to trust it.
+
+    DOCLING and ADJACENT are the paper's own words, copied: the first linked
+    to the picture by the PDF parser, the second the heading or paragraph
+    printed beside an unlinked picture, taken by rule (see the rule above
+    ``_legend_item`` in lib/misc/pdf/anchors.py). MODEL_CHOSEN is
+    also a copied block, but the vision model picked which, from the prose
+    around the figure, having looked at the picture. MODEL_TRANSCRIBED is
+    the model's reading of a legend printed inside the image, the one kind
+    of caption no block of the text holds (``find_legend``).
+    """
+
+    DOCLING = 'Docling'
+    ADJACENT = 'Adjacent text'
+    MODEL_CHOSEN = 'Model chose'
+    MODEL_TRANSCRIBED = 'Model transcribed'
+
+
 class FigureDescriptionDB(Base):
     __tablename__ = 'figure_descriptions'
 
@@ -65,6 +85,16 @@ class FigureDescriptionDB(Base):
     )
     # FigureKind values, as strings.
     kinds: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    # The legend as printed, as the anchored document carries it (the alt text
+    # of the figure's line) and as the step read it to the vision model. None
+    # when Docling attached no caption to the picture. Rows from before
+    # b7e2f9c4d6a1 are filled by lib.bin.backfill_figure_captions.
+    caption: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # How the caption was arrived at; None whenever caption is. Stored by
+    # member name (SQLEnum default), nullable with no default.
+    caption_source: Mapped[CaptionSource | None] = mapped_column(
+        SQLEnum(CaptionSource), nullable=True
+    )
     description: Mapped[str] = mapped_column(Text, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -115,5 +145,9 @@ class FigureDescriptionResp(BaseModel):
     # The id printed in the anchored text (figure-N or supp-figure-N).
     anchor: str
     kinds: list[FigureKind]
+    # The legend, and how it was arrived at (see CaptionSource); both None
+    # when the figure has none.
+    caption: str | None
+    caption_source: CaptionSource | None
     description: str
     image_url: str

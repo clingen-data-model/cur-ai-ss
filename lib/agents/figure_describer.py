@@ -17,6 +17,16 @@ directly, twice at most:
    variant, with what result and by what method. A figure of both sorts
    (a pedigree beside its Sanger traces) gets both, one after the other.
 
+A figure the anchored document carries no caption for (Docling attached
+none and the parser found no legend beside it, see the rule above
+``_legend_item`` in lib/misc/pdf/anchors.py) gets a third question
+first, ``find_legend``: shown the prose printed around it, which block is its
+legend, or what legend is printed inside the image, or none. Only a readable
+figure is asked, since only those get a row; the answer is the row's
+``caption`` and the context for ``describe_figure``. The model sees what no
+rule can: that five panels are redox titrations and belong to the "Figure 3"
+legend two paragraphs down, or that the legend is drawn in the image.
+
 A curator's notes (the paper-wide re-run context, or a re-run of this task
 with context) go into every prompt, since the vision model is the only one
 that can act on them.
@@ -24,13 +34,14 @@ that can act on them.
 
 import logging
 from dataclasses import dataclass
+from typing import NamedTuple
 
 from pydantic import BaseModel
 
 from lib.agents.vision import vlm_describe
 from lib.misc.images import image_to_data_url
 from lib.misc.pdf.paths import document_image_path
-from lib.models.figure import FigureKind
+from lib.models.figure import CaptionSource, FigureKind
 
 logger = logging.getLogger(__name__)
 
@@ -43,13 +54,32 @@ class FigureRef:
     image_id: int
     is_supplement: bool
     caption: str | None = None
+    # Where the caption came from (DOCLING or ADJACENT: the anchored text
+    # carries it); None with the caption.
+    caption_source: CaptionSource | None = None
+    # The prose printed around the figure, (label, text) in reading order
+    # (``figure_neighbourhoods``): what ``find_legend`` chooses from when the
+    # caption is None.
+    nearby: tuple[tuple[str, str], ...] = ()
 
 
 class DescribedFigure(BaseModel):
     image_id: int
     is_supplement: bool
     kinds: list[FigureKind]
+    # The caption the model was shown, and how it was arrived at, kept so the
+    # row can be served with both.
+    caption: str | None = None
+    caption_source: CaptionSource | None = None
     description: str
+
+
+class Legend(NamedTuple):
+    """What ``find_legend`` found: the text and which way (a block the model
+    chose, or its transcription of the image)."""
+
+    text: str
+    source: CaptionSource
 
 
 # The vision model answers with exactly this when a figure is of no readable kind.
@@ -103,6 +133,64 @@ For every panel, lane or trace:
 - The method the panel evidences, if it can be told (Sanger sequencing, restriction digest, MLPA, array, read alignment, karyotype, FISH)
 
 Keep it to what the image shows. Copy labels exactly as printed, do not infer sex or affected status, and say when a label or result cannot be read rather than guessing."""
+
+
+# The model's answer when none of the blocks is the legend and none is drawn in the image.
+NO_LEGEND = 'NONE'
+# Prefix of an answer that transcribes a legend printed inside the image.
+LEGEND_TEXT_PREFIX = 'TEXT:'
+
+LEGEND_PROMPT = f"""The parsed text of this paper attaches no legend to this figure. Below are the blocks of text printed near it, in reading order, each with its id. Which block is this figure's legend: the text that names and explains this very figure, usually opening "Figure N." or "Fig. N"? Decide from the image: what it shows, its panel letters, any figure number drawn in it. A block that merely refers to the figure from the body text ("Figure 1 shows...") is not its legend, and a legend for a different figure is not either. A multi-panel figure may have been cut into one image per panel; the legend of the whole figure is then this panel's legend too.
+
+Answer with exactly one line:
+- the id of the legend block, or
+- {LEGEND_TEXT_PREFIX} followed by the legend transcribed from the image, when the legend is printed inside the image itself and in none of the blocks, or
+- {NO_LEGEND} when neither.
+
+Blocks near the figure:
+"""
+
+
+def _nearby_section(nearby: tuple[tuple[str, str], ...]) -> str:
+    return '\n'.join(f'[{label}] {text}' for label, text in nearby)
+
+
+def parse_legend(
+    answer: str | None, nearby: tuple[tuple[str, str], ...]
+) -> Legend | None:
+    """The legend a ``find_legend`` answer names: a nearby block's text when
+    the answer is its label (brackets, quotes and a trailing period allowed;
+    MODEL_CHOSEN), the transcription after ``TEXT:`` (MODEL_TRANSCRIBED),
+    else None, so an answer that is not one of the three forms costs a
+    missing caption, never a wrong one."""
+    if answer is None:
+        return None
+    line = answer.strip().split('\n', 1)[0].strip()
+    if line.upper().startswith(LEGEND_TEXT_PREFIX):
+        text = line[len(LEGEND_TEXT_PREFIX) :].strip()
+        return Legend(text, CaptionSource.MODEL_TRANSCRIBED) if text else None
+    label = line.strip('[]`"\'. ')
+    if label.upper() == NO_LEGEND:
+        return None
+    chosen = next((text for l, text in nearby if l == label), None)
+    return Legend(chosen, CaptionSource.MODEL_CHOSEN) if chosen is not None else None
+
+
+def find_legend(
+    image_url: str, nearby: tuple[tuple[str, str], ...], notes: str | None
+) -> Legend | None:
+    """The legend of a figure the document attaches none to, as the vision
+    model picks it from the prose around the figure or reads it off the
+    image; None when it finds none or gives no usable answer."""
+    if not nearby:
+        return None
+    answer = vlm_describe(
+        image_url, LEGEND_PROMPT + _nearby_section(nearby) + _notes_section(notes)
+    )
+    legend = parse_legend(answer, nearby)
+    if answer is not None and legend is None and answer.strip().upper() != NO_LEGEND:
+        logger.warning(f'Legend answer named no block: {answer.strip()[:80]!r}')
+    return legend
 
 
 def _caption_section(caption: str | None) -> str:
@@ -192,8 +280,10 @@ def describe_figures(
 ) -> list[DescribedFigure]:
     """Classify every figure and describe the readable ones, in the order given.
 
-    A figure of no readable kind, or one the model would not describe, is
-    left out. A provider or network error propagates: not reaching the model
+    A readable figure with no caption is asked its legend first
+    (``find_legend``), so the description is written with it and the row
+    stores it. A figure of no readable kind, or one the model would not
+    describe, is left out. A provider or network error propagates: not reaching the model
     is a task failure, not a finding about the paper.
     """
     described: list[DescribedFigure] = []
@@ -207,7 +297,16 @@ def describe_figures(
             logger.info(f'Paper {paper_id} {label}: no readable kind')
             continue
         logger.info(f'Paper {paper_id} {label}: {", ".join(k.value for k in kinds)}')
-        description = describe_figure(image_url, kinds, figure.caption, notes)
+        caption, source = figure.caption, figure.caption_source
+        if caption is None:
+            legend = find_legend(image_url, figure.nearby, notes)
+            if legend is not None:
+                caption, source = legend
+            logger.info(
+                f'Paper {paper_id} {label}: legend '
+                + (f'{source}: {caption[:60]!r}' if caption else 'not found')
+            )
+        description = describe_figure(image_url, kinds, caption, notes)
         if description is None:
             logger.warning(f'Paper {paper_id} {label}: no usable description')
             continue
@@ -216,6 +315,8 @@ def describe_figures(
                 image_id=figure.image_id,
                 is_supplement=figure.is_supplement,
                 kinds=kinds,
+                caption=caption,
+                caption_source=source,
                 description=description,
             )
         )

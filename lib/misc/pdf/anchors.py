@@ -23,7 +23,7 @@ when the rebuilt table has the grid's row count, else they are empty.
 import json
 import re
 from pathlib import Path
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import fitz
 from docling_core.transforms.serializer.markdown import (
@@ -79,6 +79,8 @@ __all__ = [  # the id grammar lives in anchor_ids.py; re-exported here unchanged
     'make_anchor_id',
     'page_frames',
     'paper_block_texts',
+    'figure_neighbourhoods',
+    'is_figure_legend',
     'parse_anchor',
     'user_to_display',
     'write_anchored',
@@ -124,6 +126,10 @@ class Anchor(BaseModel):
     # ``boxes``. A citation of the figure with no quote is the picture; one with
     # a quote from the legend narrows to those words inside these boxes.
     caption_boxes: list[PageBox] = []
+    # Figures only: the caption is a heading or paragraph the parser took for
+    # the picture's legend by rule (see ``_legend_item``), not a caption
+    # Docling linked to it. Absent from files written before the rule.
+    caption_adopted: bool = False
 
 
 def boxes_for_anchor(anchor_id: str, anchors: list[Anchor]) -> list[PageBox]:
@@ -618,34 +624,145 @@ def _figure_text(
     *,
     paper_id: int,
     supplement: bool,
+    legend: TextItem | None = None,
 ) -> tuple[str, Anchor]:
-    """One picture -> '[figure-N] ![caption](images/N.png)' and its Anchor."""
+    """One picture -> '[figure-N] ![caption](images/N.png)' and its Anchor.
+
+    The caption is what Docling attached to the picture or, for a picture it
+    attached nothing to, the orphan legend ``build_anchored`` found beside it
+    (``legend``, see the rule above ``_legend_item``), which then stands in for a
+    caption item in every respect: alt text and caption boxes.
+    """
     index = _docling_index(picture)
     anchor_id = make_anchor_id(AnchorKind.FIGURE, index, supplement)
+    # The legend is a text item of its own, with text-layer prov (user space).
+    caption_items: list[DocItem] = [
+        item
+        for ref in picture.captions
+        if isinstance(item := ref.resolve(doc), DocItem)
+    ]
     caption = serializer.serialize_captions(item=picture).text.strip()
+    if legend is not None:
+        caption_items = [legend]
+        caption = legend.text.strip()
     image_path = document_image_path(paper_id, index, supplement)
     if image_path.exists():
         # Absolute path rooted at CAA_ROOT: the form the frontend rewrites to a URL.
         body = f'![{caption}]({image_path})'
     else:
         body = caption or '<!-- image -->'
-    # The legend is a text item of its own, with text-layer prov (user space).
     caption_boxes = [
-        box
-        for ref in picture.captions
-        if isinstance(caption_item := ref.resolve(doc), DocItem)
-        for box in _prov_boxes(caption_item, doc, frames)
+        box for item in caption_items for box in _prov_boxes(item, doc, frames)
     ]
     return f'[{anchor_id}] {body}', Anchor(
         id=anchor_id,
         boxes=_prov_boxes(picture, doc, frames),
         caption_boxes=caption_boxes,
+        caption_adopted=legend is not None,
     )
 
 
 def _tagged(anchor_id: str, text: str) -> str:
     """'[id] text'; multi-line text (a fenced code block) gets the tag on its own line."""
     return f'[{anchor_id}]{chr(10) if chr(10) in text else " "}{text}'
+
+
+# --- orphan figure legends ---------------------------------------------------
+#
+# Docling links a legend to its picture when its layout model labelled the
+# block 'caption' and the reading-order stage found the picture beside it.
+# On dev's 90 described figures (2026-10-27) that failed for 24, four ways:
+#
+#   1. The legend's title line is set in bold, so the layout model labels it
+#      a section header and it is never a caption candidate. It comes out as
+#      a heading right under the picture ('## Figure 2. Pedigrees and
+#      Disease Localization') with the panel descriptions as paragraphs
+#      under it. Cell Press / AJHG style; 6 of the 24.
+#   2. The legend is labelled plain text and stays a paragraph under the
+#      picture ('[paragraph-57] Figure 1. Family tree of the affected
+#      kindred. The proband is...'), or only its label does ('Fig. 1.' on a
+#      line of its own, the body in the next paragraph). 3.
+#   3. A multi-panel figure came out of Docling as one picture per panel
+#      (paper 114: eight chromatograms under one 'Supplementary Figure 1'
+#      heading). One legend, several pictures; at most one of them gets it.
+#   4. Nothing recognisable is adjacent: a stray label Docling lifted out of
+#      the image sits between ('Splicing' under a gel), the legend is
+#      printed inside the image, or it is elsewhere on the page. 10.
+#
+# One rule, at parse time, recovers 1 and 2; it is a one-part lookahead in
+# ``build_anchored``, and this is the whole of it:
+#
+#   a. The walk sees the document as Docling's serializer parts, one per
+#      output block in reading order. A captioned picture is one part made
+#      of two items (caption text, picture); an uncaptioned picture is a
+#      part of the picture alone; a heading or paragraph is a part of one
+#      text item.
+#   b. At a picture with no Docling caption, the walk looks at the next
+#      part and nothing else.
+#   c. ``_legend_item`` says whether that part can serve as a legend: made
+#      of exactly one item (so not a captioned picture, a table, a form
+#      region or an inline group), that item a text item (a heading or a
+#      paragraph), not a list item, visible on its page (Docling's off-page
+#      duplicates are never used), and its text passing ``is_figure_legend``
+#      ('Figure N.', 'Fig. N', 'Figure SN:', 'Supplementary Figure N',
+#      'FIGURE N'; not 'Figure 1 shows').
+#   d. ``_figure_text`` then treats the item as if Docling had linked it:
+#      its text is the figure line's alt text, its page boxes are the
+#      figure's caption boxes, and the anchor is marked
+#      ``caption_adopted``.
+#   e. The walk skips that part on its next turn, so the block is not also
+#      printed on its own. A heading would have had no anchor anyway; a
+#      paragraph's id is absent, the same gap a Docling caption leaves.
+#
+# No search, no scoring, no second candidate, no memory across pictures
+# beyond the one index. Only the block under the picture is tried (none of
+# dev's nine recoveries was above), and only that block: panel descriptions
+# that follow a title stay citable paragraphs, since where a legend ends is
+# not something a rule can tell. Cases 3 and 4 are the Figure Description
+# step's: for a readable figure whose line still carries no caption, it
+# shows the vision model the prose around the figure
+# (``figure_neighbourhoods``) and asks which block is its legend
+# (``find_legend`` in lib/agents/figure_describer.py). That answer goes on
+# the figure's row, never back into this file: parsing runs first, with no
+# model, and the describer reads what parsing wrote.
+
+_FIGURE_LEGEND = re.compile(
+    r'^(?:supplement(?:ary|al)\s+|suppl\.?\s+)?'
+    r'fig(?:ure|\.)?\s*S?\d+[a-z]?(?=\s*[.:|]|\s*$)',
+    re.IGNORECASE,
+)
+_FIGURE_LEGEND_CAPS = re.compile(
+    r'^(?:SUPPLEMENT(?:ARY|AL)\s+)?FIG(?:URE|\.)?\s*S?\d+\b'
+)
+
+
+def is_figure_legend(text: str) -> bool:
+    """Whether a block opens the way a figure legend does.
+
+    Accepts 'Figure 2. Pedigrees', 'Fig. 1.', 'Figure S1: Traces',
+    'Figure 3 | Title' (Nature), 'Supplementary Figure 1. Sanger' and the
+    unpunctuated all-caps 'FIGURE 1 Title' (Wiley). Rejects body prose that
+    merely opens with a reference ('Figure 1 shows the pedigree', 'Figures 1
+    and 2'): the number must be followed by a period, colon, bar or the end
+    of the block unless the label is in capitals.
+    """
+    text = text.strip()
+    return bool(_FIGURE_LEGEND.match(text) or _FIGURE_LEGEND_CAPS.match(text))
+
+
+def _legend_item(
+    part: Any, doc: DoclingDocument, frames: dict[int, _PageFrame]
+) -> TextItem | None:
+    """The part's item if the part could serve a picture as its legend: one
+    visible heading or text item (not a list item, table or picture) whose
+    text opens like a figure legend. Else None."""
+    items = [span.item for span in part.spans]
+    if len(items) != 1 or not isinstance(items[0], TextItem):
+        return None
+    item = items[0]
+    if isinstance(item, ListItem) or not _visible(item, doc, frames):
+        return None
+    return item if is_figure_legend(item.text) else None
 
 
 def build_anchored(
@@ -687,6 +804,8 @@ def build_anchored(
        A caption inside a table/figure part is consumed by that branch and
        gets no id of its own, which is why paragraph numbers have gaps:
        ``#/texts/96`` exists in Docling but is the caption of ``table-0``.
+       So is a heading or paragraph an uncaptioned picture adopted as its
+       legend (the rule above ``_legend_item``).
 
     4. Join the chunks with blank lines (one markdown block each) and return
        the anchors in the order their ids appear in the text.
@@ -727,7 +846,11 @@ def build_anchored(
     chunks: list[str] = []
     anchors: list[Anchor] = []
 
-    for part in serializer.get_parts():
+    parts = list(serializer.get_parts())
+    adopted: int | None = None  # the part the last figure took as its legend
+    for index, part in enumerate(parts):
+        if index == adopted:
+            continue  # consumed into the figure line above it (rule step e)
         # A part is one block of output; its spans are the items it was made from.
         items = [span.item for span in part.spans]
         table = next((i for i in items if isinstance(i, TableItem)), None)
@@ -742,6 +865,14 @@ def build_anchored(
             anchors.append(anchor)
         elif picture is not None:
             # Captioned picture: spans = [caption text, picture]; one figure anchor.
+            # An uncaptioned one adopts the part right under it when
+            # _legend_item says that can be its legend (steps b-d of the rule
+            # above _legend_item); the skip at the top of the loop is step e.
+            legend = None
+            if not picture.captions and index + 1 < len(parts):
+                legend = _legend_item(parts[index + 1], doc, frames)
+                if legend is not None:
+                    adopted = index + 1
             text, anchor = _figure_text(
                 picture,
                 doc,
@@ -749,6 +880,7 @@ def build_anchored(
                 frames,
                 paper_id=paper_id,
                 supplement=supplement,
+                legend=legend,
             )
             chunks.append(text)
             anchors.append(anchor)
@@ -903,6 +1035,60 @@ def block_texts(markdown: str) -> dict[str, str]:
         lines.append(line)
     close()
     return texts
+
+
+_HEADING_LINE = re.compile(r'^#+\s*(.*)$')
+
+
+HEADING_LABEL = 'heading'
+
+
+def _prose_block(block: str) -> tuple[str, str] | None:
+    """A heading's or paragraph's (label, text): the anchor id, or
+    ``HEADING_LABEL`` for a heading, which has none; the text with the tag or
+    heading marks stripped and its lines joined. None for a table, figure or
+    row block, which is never prose."""
+    first, *rest = block.split('\n')
+    heading = _HEADING_LINE.match(first)
+    if heading:
+        label, text = HEADING_LABEL, heading.group(1)
+    elif tag := _TAG_LINE.match(first):
+        parsed = parse_anchor(tag.group(1))
+        if parsed is None or parsed.kind is not AnchorKind.PARAGRAPH:
+            return None
+        label, text = tag.group(1), tag.group(2) or ''
+    elif first.startswith(('|', _UNRECOVERED_PREFIX)):
+        return None  # a table's rows, or the warning over an unrecovered one
+    else:
+        label, text = HEADING_LABEL, first  # an untagged block (a form area)
+    return label, ' '.join(line.strip() for line in (text, *rest) if line.strip())
+
+
+def figure_neighbourhoods(
+    markdown: str, radius: int = 10
+) -> dict[str, list[tuple[str, str]]]:
+    """Each figure id of an anchored document -> the prose printed around it:
+    up to ``radius`` headings or paragraphs before it and after it, in
+    reading order, as (label, text) with the label an anchor id or
+    ``HEADING_LABEL``. Tables and other figures are passed over, not
+    counted. What the figure describer shows the vision model when it asks
+    which block is a figure's legend (``find_legend``)."""
+    blocks = [b for b in re.split(r'\n\s*\n', markdown) if b.strip()]
+    figure_at: dict[int, str] = {}
+    prose: dict[int, tuple[str, str]] = {}
+    for i, block in enumerate(blocks):
+        tag = _TAG_LINE.match(block.split('\n', 1)[0])
+        parsed = parse_anchor(tag.group(1)) if tag else None
+        if tag and parsed is not None and parsed.kind is AnchorKind.FIGURE:
+            figure_at[i] = tag.group(1)
+        elif (p := _prose_block(block)) is not None and p[1]:
+            prose[i] = p
+    out: dict[str, list[tuple[str, str]]] = {}
+    for i, figure_id in figure_at.items():
+        before = [prose[j] for j in range(i - 1, -1, -1) if j in prose][:radius]
+        after = [prose[j] for j in range(i + 1, len(blocks)) if j in prose][:radius]
+        out[figure_id] = before[::-1] + after
+    return out
 
 
 def paper_block_texts(paper_id: int) -> dict[str, str]:
