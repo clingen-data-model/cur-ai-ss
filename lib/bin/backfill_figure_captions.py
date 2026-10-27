@@ -3,10 +3,14 @@
 
 The Figure Description step stores the caption it read to the vision model
 (migration b7e2f9c4d6a1); rows from before it carry none. The caption is the
-alt text of the figure's line in the anchored Markdown on disk, which is
-exactly what a re-run would read, so this copies it from there instead of
-re-running the step (no model call). A figure whose line has no alt text is
-left None, as a re-run would leave it.
+alt text of the figure's line in the anchored Markdown on disk, or, when
+Docling attached none, the orphan legend printed right beside the figure
+(``figure_captions`` in lib/misc/pdf/anchors.py, the same rule the parser now
+applies when it builds the document). That is exactly what a re-run of the
+step would read, so this copies it instead of re-running (no model call). A
+figure with neither is left None, as a re-run would leave it. The anchored
+text itself is not rewritten: consuming an orphan paragraph into its figure
+would retire an id that stored citations may point at.
 
 Fills only rows whose caption is None, so it is safe to re-run. A paper whose
 anchored text is missing is skipped and counted.
@@ -21,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from lib.api.db import session_scope
 from lib.core.logging import setup_logging
-from lib.misc.pdf.anchors import paper_block_texts
+from lib.misc.pdf.anchors import paper_figure_captions
 from lib.misc.pdf.figure_text import figure_anchor
 from lib.models.figure import FigureDescriptionDB
 
@@ -42,10 +46,10 @@ def backfill_paper(session: Session, paper_id: int) -> int:
     )
     if not rows:
         return 0
-    texts = paper_block_texts(paper_id)
+    captions = paper_figure_captions(paper_id)
     filled = 0
     for row in rows:
-        caption = texts.get(figure_anchor(row)) or None
+        caption = captions.get(figure_anchor(row))
         if caption is not None:
             row.caption = caption
             filled += 1

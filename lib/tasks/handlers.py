@@ -115,7 +115,7 @@ from lib.core.environment import env
 from lib.core.logging import setup_logging
 from lib.misc.pdf.anchors import (
     AnchorKind,
-    block_texts,
+    figure_captions,
     load_anchors,
     make_anchor_id,
     paper_block_texts,
@@ -677,13 +677,15 @@ def paper_figures(paper_id: int) -> list[FigureRef]:
     """Every figure of the anchored document that has an image file, main
     text first: the Docling picture index (the N of figure-N, and of
     documents/{id}/{main,supplement}/images/N.png), which section, and the
-    caption the anchored text carries for it (its alt text), if any."""
+    caption the anchored text carries for it, if any: its alt text, or the
+    orphan legend printed beside it in a document anchored before the parser
+    adopted those (``figure_captions``)."""
     figures: list[FigureRef] = []
     for is_supplement in (False, True):
         anchored = document_anchored_md_path(paper_id, supplement=is_supplement)
         if not anchored.exists():
             continue
-        captions = block_texts(anchored.read_text())
+        captions = figure_captions(anchored.read_text())
         for anchor in load_anchors(paper_id, supplement=is_supplement):
             parsed_id = parse_anchor(anchor.id)
             if parsed_id is None or parsed_id.kind != AnchorKind.FIGURE:
@@ -696,7 +698,7 @@ def paper_figures(paper_id: int) -> list[FigureRef]:
                 FigureRef(
                     image_id=parsed_id.index,
                     is_supplement=is_supplement,
-                    caption=captions.get(anchor.id) or None,
+                    caption=captions.get(anchor.id),
                 )
             )
     return figures

@@ -26,6 +26,8 @@ from lib.misc.pdf.anchors import (
     boxes_for_anchor,
     build_anchored,
     display_to_user_point,
+    figure_captions,
+    is_figure_legend,
     load_anchors,
     page_frames,
     parse_anchor,
@@ -725,3 +727,218 @@ def test_display_to_user_point_inverts_user_to_display(rotation):
     assert (min(xs), min(ys), max(xs), max(ys)) == pytest.approx(
         (100.0, 400.0, 150.0, 420.0)
     )
+
+
+# --- orphan figure legends (see the rule above _adopt_orphan_legends) -------
+
+
+@pytest.mark.parametrize(
+    'text',
+    [
+        pytest.param('Figure 2. Pedigrees and Disease Localization', id='title-period'),
+        pytest.param('Fig. 1.', id='label-alone'),
+        pytest.param('Fig 3. No period after Fig', id='fig-no-period'),
+        pytest.param('Figure S1: Kinase assay', id='supplement-colon'),
+        pytest.param('Figure 3 | Genomic analyses', id='nature-bar'),
+        pytest.param('Supplementary Figure 1. Sanger sequencing', id='supplementary'),
+        pytest.param('Extended Data Fig. 2. Haplotypes', id='extended-data'),
+        pytest.param('FIGURE 1 Pedigree of family A', id='wiley-caps-no-punctuation'),
+        pytest.param('Figure 1A. The proband', id='panel-letter'),
+        pytest.param('  Figure 4.', id='leading-space'),
+    ],
+)
+def test_a_block_that_opens_like_a_legend_is_one(text):
+    assert is_figure_legend(text)
+
+
+@pytest.mark.parametrize(
+    'text',
+    [
+        pytest.param('Figure 1 shows the pedigree of family A.', id='prose-reference'),
+        pytest.param('Figures 1 and 2 summarise the cohort.', id='plural-reference'),
+        pytest.param('As in Figure 2. the proband', id='reference-mid-sentence'),
+        pytest.param('Table 1. Clinical features', id='table-legend'),
+        pytest.param('(A) Pedigrees of families 1-7.', id='panel-description'),
+        pytest.param('Figure', id='label-without-number'),
+        pytest.param('', id='empty'),
+    ],
+)
+def test_a_block_that_merely_mentions_a_figure_is_not_a_legend(text):
+    assert not is_figure_legend(text)
+
+
+_ORPHANED = """## Results
+
+[figure-0] ![Figure 1. Photographs](x/0.png)
+
+[figure-1] ![](x/1.png)
+
+## Figure 2. Pedigrees and Disease Localization
+
+[paragraph-3] (A) Pedigrees of families 1-7. (B) Linkage analysis.
+
+[paragraph-4] Fig. 3.
+
+[figure-2] ![](x/2.png)
+
+[figure-3] ![](x/3.png)
+
+[paragraph-6] Figure 4 shows nothing: this is body prose.
+
+[figure-4] ![](x/4.png)
+
+[table-0] Table 2. Variants
+
+| anchor | a |
+|---|---|
+| table-0-row-0 | 1 |
+
+[figure-5] ![](x/5.png)
+
+[figure-6] ![](x/6.png)
+
+## Supplementary Figure 1. Sanger traces of every proband
+"""
+
+
+def test_figure_captions_adopts_the_legend_beside_an_uncaptioned_figure():
+    """Case by case, from the dev survey the rule was written against:
+    an attached caption is served as is; a bold title Docling made a heading
+    (case 1) is adopted by the figure above it; a paragraph that is only the
+    label (case 2) is adopted by the figure below it; body prose that opens
+    with a reference is not a legend; a table beside a figure is not one
+    either; and one legend serves one figure, so of two panels above a shared
+    heading (case 3) only the nearer gets it. Only the title block is
+    adopted: the panel descriptions under a heading stay where they are."""
+    captions = figure_captions(_ORPHANED)
+
+    assert captions == {
+        'figure-0': 'Figure 1. Photographs',
+        'figure-1': 'Figure 2. Pedigrees and Disease Localization',
+        'figure-2': 'Fig. 3.',
+        'figure-6': 'Supplementary Figure 1. Sanger traces of every proband',
+    }
+    # figure-3: prose after, a figure before. figure-4: prose before (not a
+    # legend), a table after. figure-5: table before, figure-6 after.
+    assert 'figure-3' not in captions
+    assert 'figure-4' not in captions
+    assert 'figure-5' not in captions
+
+
+def test_figure_captions_leaves_the_text_itself_alone():
+    """Reading back adopts nothing into the document: the heading and the
+    paragraph are still blocks of their own (block_texts still lists the
+    paragraph), since stored citations may point at them."""
+    assert block_texts(_ORPHANED)['paragraph-4'] == 'Fig. 3.'
+
+
+def _uncaptioned_picture_document(*, legend_first: bool, legend: str, heading: bool):
+    """A page with one picture and one text block beside it (a heading or a
+    paragraph), the text before or after the picture, plus a trailing
+    paragraph so the walk has something after the legend."""
+    doc = DoclingDocument(name='test')
+    doc.add_page(page_no=1, size=Size(width=600, height=PAGE_HEIGHT))
+
+    def add_legend() -> None:
+        prov = _bottom_left(10, 335, 300, 320)
+        if heading:
+            doc.add_heading(legend, level=1, prov=prov)
+        else:
+            doc.add_text(label=DocItemLabel.TEXT, text=legend, prov=prov)
+
+    if legend_first:
+        add_legend()
+    doc.add_picture(prov=_bottom_left(10, 400, 300, 340))
+    if not legend_first:
+        add_legend()
+    doc.add_text(
+        label=DocItemLabel.TEXT,
+        text='(A) Pedigrees of families 1-7.',
+        prov=_bottom_left(10, 315, 300, 300),
+    )
+    return doc
+
+
+def test_build_anchored_adopts_a_heading_legend_below_an_uncaptioned_picture(
+    paper_id,
+):
+    """Case 1: the bold legend title Docling labelled a section header, right
+    under the picture. It becomes the figure's caption, with its box as the
+    caption box, and is not printed as a heading; the panel description
+    under it stays a paragraph of its own."""
+    doc = _uncaptioned_picture_document(
+        legend_first=False, legend='Figure 2. Pedigrees and Disease', heading=True
+    )
+
+    md, anchors = build_anchored(doc, paper_id=paper_id)
+
+    lines = md.splitlines()
+    assert '[figure-0] Figure 2. Pedigrees and Disease' in lines
+    assert not any(line.startswith('## Figure') for line in lines)
+    assert '[paragraph-1] (A) Pedigrees of families 1-7.' in lines
+    figure = anchors[0]
+    assert figure.id == 'figure-0'
+    assert len(figure.caption_boxes) == 1
+    assert figure.caption_boxes != figure.boxes
+    assert [a.id for a in anchors] == ['figure-0', 'paragraph-1']
+
+
+def test_build_anchored_adopts_a_paragraph_legend_above_an_uncaptioned_picture(
+    paper_id,
+):
+    """Case 2: the legend labelled plain text, set above the picture. The
+    paragraph is consumed into the figure line, like a Docling caption, so
+    there is no paragraph-0; the paragraph after the picture is untouched."""
+    doc = _uncaptioned_picture_document(
+        legend_first=True, legend='Fig. 1. The affected kindred', heading=False
+    )
+
+    md, anchors = build_anchored(doc, paper_id=paper_id)
+
+    lines = md.splitlines()
+    assert '[figure-0] Fig. 1. The affected kindred' in lines
+    assert [a.id for a in anchors] == ['figure-0', 'paragraph-1']
+    assert len(anchors[0].caption_boxes) == 1
+
+
+def test_build_anchored_does_not_adopt_prose_beside_an_uncaptioned_picture(
+    paper_id,
+):
+    """A paragraph that merely opens with a figure reference stays a
+    paragraph: the picture is left without a caption rather than given the
+    wrong one."""
+    doc = _uncaptioned_picture_document(
+        legend_first=False, legend='Figure 1 shows the whole kindred.', heading=False
+    )
+
+    md, anchors = build_anchored(doc, paper_id=paper_id)
+
+    lines = md.splitlines()
+    assert '[figure-0] <!-- image -->' in lines
+    assert '[paragraph-0] Figure 1 shows the whole kindred.' in lines
+    assert anchors[0].caption_boxes == []
+    assert [a.id for a in anchors] == ['figure-0', 'paragraph-0', 'paragraph-1']
+
+
+def test_build_anchored_prefers_the_block_after_and_serves_a_legend_once(paper_id):
+    """Two uncaptioned pictures around one legend: the one above it adopts it
+    (the block after is tried first), the one below gets nothing. Case 3,
+    the shared legend of a run of panels, is deliberately not spread."""
+    doc = DoclingDocument(name='test')
+    doc.add_page(page_no=1, size=Size(width=600, height=PAGE_HEIGHT))
+    doc.add_picture(prov=_bottom_left(10, 500, 300, 440))
+    doc.add_heading(
+        'Supplementary Figure 1. Sanger traces',
+        level=1,
+        prov=_bottom_left(10, 435, 300, 420),
+    )
+    doc.add_picture(prov=_bottom_left(10, 415, 300, 340))
+
+    md, anchors = build_anchored(doc, paper_id=paper_id)
+
+    assert md.splitlines() == [
+        '[figure-0] Supplementary Figure 1. Sanger traces',
+        '',
+        '[figure-1] <!-- image -->',
+    ]
+    assert [len(a.caption_boxes) for a in anchors] == [1, 0]

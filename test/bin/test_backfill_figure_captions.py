@@ -5,6 +5,7 @@ import pytest
 
 from lib.bin.backfill_figure_captions import backfill, backfill_paper
 from lib.misc.pdf.anchors import Anchor, write_anchored
+from lib.misc.pdf.paths import document_anchored_md_path
 from lib.models import GeneDB, PaperDB
 from lib.models.figure import FigureDescriptionDB
 
@@ -32,12 +33,23 @@ def _row(paper, image_id, supplement=False, caption=None):
 
 
 def _write_documents(paper):
+    """Main text: an attached caption (figure-0), an orphan legend heading
+    under figure-2 (adopted), and figure-3 with only prose beside it."""
     write_anchored(
         paper.id,
         '[figure-0] ![Figure 1. The family](x/0.png)\n\n'
         '[paragraph-1] text\n\n'
-        '[figure-2] ![](x/2.png)\n',
-        [Anchor(id='figure-0'), Anchor(id='paragraph-1'), Anchor(id='figure-2')],
+        '[figure-2] ![](x/2.png)\n\n'
+        '## Figure 2. Traces of the proband\n\n'
+        '[figure-3] ![](x/3.png)\n\n'
+        '[paragraph-4] Figure 3 shows nothing here.\n',
+        [
+            Anchor(id='figure-0'),
+            Anchor(id='paragraph-1'),
+            Anchor(id='figure-2'),
+            Anchor(id='figure-3'),
+            Anchor(id='paragraph-4'),
+        ],
     )
     write_anchored(
         paper.id,
@@ -49,22 +61,30 @@ def _write_documents(paper):
 
 def test_fills_captionless_rows_from_both_sections(db_session, paper):
     """Main and supplement rows each get the alt text of their own figure
-    line; a figure whose line has no alt text stays None, as a re-run would
-    leave it."""
+    line, or the orphan legend printed beside it (figure-2's heading, the
+    rule the parser now applies itself); a figure with neither stays None,
+    as a re-run would leave it. The anchored text is not rewritten."""
     _write_documents(paper)
-    db_session.add_all([_row(paper, 0), _row(paper, 2), _row(paper, 0, True)])
+    db_session.add_all(
+        [_row(paper, 0), _row(paper, 2), _row(paper, 3), _row(paper, 0, True)]
+    )
     db_session.flush()
 
-    assert backfill_paper(db_session, paper.id) == 2
+    assert backfill_paper(db_session, paper.id) == 3
 
     rows = db_session.query(FigureDescriptionDB).order_by(
         FigureDescriptionDB.is_supplement, FigureDescriptionDB.image_id
     )
     assert [(r.is_supplement, r.image_id, r.caption) for r in rows] == [
         (False, 0, 'Figure 1. The family'),
-        (False, 2, None),
+        (False, 2, 'Figure 2. Traces of the proband'),
+        (False, 3, None),
         (True, 0, 'Figure S1. Traces'),
     ]
+    assert (
+        '## Figure 2. Traces of the proband'
+        in document_anchored_md_path(paper.id).read_text()
+    )
 
 
 def test_a_row_that_has_a_caption_is_left_alone(db_session, paper):

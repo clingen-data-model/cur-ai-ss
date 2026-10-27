@@ -319,7 +319,9 @@ async def test_rerunning_patient_extraction_replaces_only_its_own_flags(
 def test_paper_figures_lists_every_figure_with_an_image_main_first(paper):
     """The figures the describer visits: each figure-N anchor whose
     images/N.png exists, main text before supplement, with the alt text the
-    anchored document carries as its caption (None when it has none)."""
+    anchored document carries as its caption, or, in a document anchored
+    before the parser adopted orphan legends, the legend printed beside it
+    (figure-4 here); None when it has neither."""
     from lib.misc.pdf.anchors import Anchor, write_anchored
     from lib.misc.pdf.paths import document_image_path
     from lib.tasks.handlers import paper_figures
@@ -329,12 +331,15 @@ def test_paper_figures_lists_every_figure_with_an_image_main_first(paper):
         '[figure-0] ![Figure 1. Photographs](x/0.png)\n\n'
         '[paragraph-1] text\n\n'
         '[figure-2] ![](x/2.png)\n\n'
-        '[figure-3] ![no file](x/3.png)\n',
+        '[figure-3] ![no file](x/3.png)\n\n'
+        '[figure-4] ![](x/4.png)\n\n'
+        '## Figure 3. Mutations Identified in the ALX3 Gene\n',
         [
             Anchor(id='figure-0'),
             Anchor(id='paragraph-1'),
             Anchor(id='figure-2'),
             Anchor(id='figure-3'),
+            Anchor(id='figure-4'),
         ],
     )
     write_anchored(
@@ -343,7 +348,7 @@ def test_paper_figures_lists_every_figure_with_an_image_main_first(paper):
         [Anchor(id='supp-figure-0')],
         supplement=True,
     )
-    for image_id, supplement in ((0, False), (2, False), (0, True)):
+    for image_id, supplement in ((0, False), (2, False), (4, False), (0, True)):
         path = document_image_path(paper.id, image_id, supplement=supplement)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b'png')
@@ -351,6 +356,7 @@ def test_paper_figures_lists_every_figure_with_an_image_main_first(paper):
     assert paper_figures(paper.id) == [
         FigureRef(0, False, 'Figure 1. Photographs'),
         FigureRef(2, False, None),
+        FigureRef(4, False, 'Figure 3. Mutations Identified in the ALX3 Gene'),
         FigureRef(0, True, 'Figure S1'),
     ]
 
