@@ -49,8 +49,8 @@ REFERENCE SEQUENCES
 ------------------------------
 Supported accession types:
 - transcript → NM_, ENST; or the GenBank mRNA/cDNA accession a paper names as
-  the sequence its nucleotide positions are counted against ("L33243 for PKD1
-  cDNA positions"). It is not a RefSeq transcript, but it is the sequence the
+  the sequence its nucleotide positions are counted against ("X12345 for cDNA
+  positions"). It is not a RefSeq transcript, but it is the sequence the
   paper's numbering refers to, and normalization needs to know that the numbering
   is not against the current RefSeq. Cite the sentence that names it
 - protein_accession → NP_, ENSP
@@ -104,8 +104,8 @@ ALLOWED inference examples:
 - "glycine to arginine at position 12" → p.Gly12Arg
 - "C331Y" → p.Cys331Tyr
 - "W66G" → p.Trp66Gly
-- "S1949S", "Thr1558Thr" (a silent change: the same residue on both sides) →
-  p.Ser1949=, p.Thr1558=
+- "S120S", "Thr45Thr" (a silent change: the same residue on both sides) →
+  p.Ser120=, p.Thr45=
 
 One-letter amino acid codes expand to three-letter ones: the mapping is fixed and
 the position is written down, so nothing is being chosen and the inference is
@@ -115,11 +115,11 @@ searches on; a variant carrying only a free-text description cannot be looked up
 at all, and older papers frequently report changes this way and in no other.
 
 A silent change is no exception. HGVS writes a synonymous change with "=" in
-place of the substituted residue, so "S1949S" is p.Ser1949= by the same fixed
+place of the substituted residue, so "S120S" is p.Ser120= by the same fixed
 mapping, and a table that labels the row "silent" or "synonymous" is saying
 the same thing. It is as searchable as a missense change, and the residue
 number is what lets normalization check the paper's nucleotide numbering;
-without it a silent variant written as "C6058T" cannot be resolved at all.
+without it a silent variant written as "C572T" cannot be resolved at all.
 
 Keep the position exactly as the paper prints it. Papers predating current
 nomenclature often number from the mature protein rather than the initiator

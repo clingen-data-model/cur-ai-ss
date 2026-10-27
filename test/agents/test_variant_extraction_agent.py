@@ -12,16 +12,16 @@ from lib.agents.variant_extraction_agent import VARIANT_EXTRACTION_AGENT_INSTRUC
 
 def test_a_silent_change_becomes_a_synonymous_hgvs_p():
     rules = VARIANT_EXTRACTION_AGENT_INSTRUCTIONS
-    assert 'p.Ser1949=, p.Thr1558=' in rules
-    assert '"S1949S" is p.Ser1949= by the same fixed' in rules
+    assert 'p.Ser120=, p.Thr45=' in rules
+    assert '"S120S" is p.Ser120= by the same fixed' in rules
     allowed = rules[rules.index('ALLOWED inference') : rules.index('DISALLOWED')]
     assert 'A silent change is no exception' in allowed
 
 
 def test_a_genbank_cdna_reference_is_kept_as_the_transcript():
     rules = VARIANT_EXTRACTION_AGENT_INSTRUCTIONS
-    assert '"L33243 for PKD1' in rules
-    assert rules.index('L33243') < rules.index('protein_accession → NP_')
+    assert '"X12345 for cDNA' in rules
+    assert rules.index('X12345') < rules.index('protein_accession → NP_')
 
 
 def test_nucleotide_changes_are_still_not_turned_into_hgvs_c():

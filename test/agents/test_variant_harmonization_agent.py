@@ -70,14 +70,14 @@ def test_state_0_checks_the_paper_position_against_the_residue_window():
     allele. The window check is what catches that before projection."""
     rules = VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS
     assert 'Residue N is encoded by c.(3N-2) to c.3N' in rules
-    assert '"C5168T" with "Q1653X" does not' in rules
+    assert '"C810T" with "R200X" does not' in rules
     assert rules.index('Numbering check') < rules.index('STATE 1')
 
 
 def test_state_3_projects_the_window_candidates_and_vetoes_a_wrong_consequence():
     rules = VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS
     state_3 = rules[rules.index('STATE 3') : rules.index('STATE 4')]
-    assert 'c.5845C>T, c.5846C>T and c.5847C>T' in state_3
+    assert 'c.598C>T, c.599C>T and c.600C>T' in state_3
     assert 'Consequence check' in state_3
     assert 'a Synonymous input that resolved' in state_3
     assert 'Do not return it with a note' in state_3
