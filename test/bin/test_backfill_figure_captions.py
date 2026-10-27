@@ -7,7 +7,11 @@ from lib.agents.figure_describer import Legend
 from lib.bin import backfill_figure_captions as script
 from lib.bin.backfill_figure_captions import backfill, backfill_paper
 from lib.misc.pdf.anchors import Anchor, write_anchored
-from lib.misc.pdf.paths import document_anchored_md_path, document_image_path
+from lib.misc.pdf.paths import (
+    document_anchored_md_path,
+    document_anchors_path,
+    document_image_path,
+)
 from lib.models import GeneDB, PaperDB
 from lib.models.figure import CaptionSource, FigureDescriptionDB
 
@@ -36,7 +40,10 @@ def _row(paper, image_id, supplement=False, caption=None):
 
 def _write_documents(paper):
     """Main text: an attached caption (figure-0), an orphan legend heading
-    under figure-2 (adopted), and figure-3 with only prose beside it."""
+    under figure-2 (which the parser would adopt today, but this document
+    predates that), and figure-3 with only prose beside it; a supplement
+    whose one caption anchors.json marks as adopted. Image files for every
+    figure, since the describer lists only figures that have one."""
     write_anchored(
         paper.id,
         '[figure-0] ![Figure 1. The family](x/0.png)\n\n'
@@ -59,6 +66,10 @@ def _write_documents(paper):
         [Anchor(id='supp-figure-0', caption_adopted=True)],
         supplement=True,
     )
+    for image_id, supplement in ((0, False), (2, False), (3, False), (0, True)):
+        path = document_image_path(paper.id, image_id, supplement=supplement)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b'png')
 
 
 @pytest.fixture(autouse=True)
@@ -69,16 +80,16 @@ def no_model(monkeypatch):
 
 def test_fills_captionless_rows_from_both_sections(db_session, paper):
     """Main and supplement rows each get the alt text of their own figure
-    line, or the orphan legend printed beside it (figure-2's heading, the
-    rule the parser now applies itself); a figure with neither stays None,
-    as a re-run would leave it. The anchored text is not rewritten."""
+    line with its source; a figure whose line has none stays None without
+    the model, whatever is printed beside it (figure-2's heading is the
+    model's to pick). The anchored text is not rewritten."""
     _write_documents(paper)
     db_session.add_all(
         [_row(paper, 0), _row(paper, 2), _row(paper, 3), _row(paper, 0, True)]
     )
     db_session.flush()
 
-    assert backfill_paper(db_session, paper.id, ask_model=False) == 3
+    assert backfill_paper(db_session, paper.id, ask_model=False) == 2
 
     rows = db_session.query(FigureDescriptionDB).order_by(
         FigureDescriptionDB.is_supplement, FigureDescriptionDB.image_id
@@ -87,7 +98,7 @@ def test_fills_captionless_rows_from_both_sections(db_session, paper):
         (r.is_supplement, r.image_id, r.caption, r.caption_source) for r in rows
     ] == [
         (False, 0, 'Figure 1. The family', CaptionSource.DOCLING),
-        (False, 2, 'Figure 2. Traces of the proband', CaptionSource.ADJACENT),
+        (False, 2, None, None),
         (False, 3, None, None),
         (True, 0, 'Figure S1. Traces', CaptionSource.ADJACENT),  # adopted at parse
     ]
@@ -107,7 +118,17 @@ def test_a_row_that_has_a_caption_is_left_alone(db_session, paper):
     assert db_session.query(FigureDescriptionDB).one().caption == 'kept'
 
 
-def test_a_paper_without_anchored_text_raises(db_session, paper):
+def test_a_paper_without_anchored_text_fills_nothing(db_session, paper):
+    db_session.add(_row(paper, 0))
+    db_session.flush()
+
+    assert backfill_paper(db_session, paper.id) == 0
+
+
+def test_a_paper_whose_anchors_file_is_missing_raises(db_session, paper):
+    """The entry point catches this per paper and counts it as skipped."""
+    _write_documents(paper)
+    document_anchors_path(paper.id).unlink()
     db_session.add(_row(paper, 0))
     db_session.flush()
 
@@ -138,16 +159,14 @@ def test_backfill_walks_every_paper_and_skips_the_unreadable(db_session, paper):
 def test_a_figure_the_text_gives_no_legend_for_is_asked_of_the_model(
     monkeypatch, db_session, paper
 ):
-    """figure-3 has only prose beside it, so the model is shown its image and
-    the prose around it, the way the describer does; its answer is stored.
-    figure-2, which the text's own rule covers, is not asked. A row whose
-    image is gone is not asked either."""
+    """figure-3's line carries no caption, so the model is shown its image
+    and the prose around it, the way the describer does; its answer is
+    stored. figure-0, whose line carries one, is not asked. A row whose
+    image is gone (figure-7) is not asked either: the describer would not
+    visit it."""
     _write_documents(paper)
-    db_session.add_all([_row(paper, 2), _row(paper, 3), _row(paper, 7)])
+    db_session.add_all([_row(paper, 0), _row(paper, 3), _row(paper, 7)])
     db_session.flush()
-    image = document_image_path(paper.id, 3)
-    image.parent.mkdir(parents=True, exist_ok=True)
-    image.write_bytes(b'png')
     asked: list = []
 
     def fake_find_legend(image_url, nearby, notes):
@@ -178,7 +197,7 @@ def test_a_figure_the_text_gives_no_legend_for_is_asked_of_the_model(
         for r in db_session.query(FigureDescriptionDB)
     }
     assert captions == {
-        2: ('Figure 2. Traces of the proband', CaptionSource.ADJACENT),
+        0: ('Figure 1. The family', CaptionSource.DOCLING),
         3: (
             'Figure 3. The model read this off the image',
             CaptionSource.MODEL_TRANSCRIBED,

@@ -26,7 +26,6 @@ from lib.misc.pdf.anchors import (
     boxes_for_anchor,
     build_anchored,
     display_to_user_point,
-    figure_captions,
     figure_neighbourhoods,
     is_figure_legend,
     load_anchors,
@@ -744,7 +743,6 @@ def test_display_to_user_point_inverts_user_to_display(rotation):
         pytest.param('Figure S1: Kinase assay', id='supplement-colon'),
         pytest.param('Figure 3 | Genomic analyses', id='nature-bar'),
         pytest.param('Supplementary Figure 1. Sanger sequencing', id='supplementary'),
-        pytest.param('Extended Data Fig. 2. Haplotypes', id='extended-data'),
         pytest.param('FIGURE 1 Pedigree of family A', id='wiley-caps-no-punctuation'),
         pytest.param('Figure 1A. The proband', id='panel-letter'),
         pytest.param('  Figure 4.', id='leading-space'),
@@ -804,37 +802,6 @@ _ORPHANED = """## Results
 """
 
 
-def test_figure_captions_adopts_the_legend_beside_an_uncaptioned_figure():
-    """Case by case, from the dev survey the rule was written against:
-    an attached caption is served as is; a bold title Docling made a heading
-    (case 1) is adopted by the figure above it; a paragraph that is only the
-    label (case 2) is adopted by the figure below it; body prose that opens
-    with a reference is not a legend; a table beside a figure is not one
-    either; and one legend serves one figure, so of two panels above a shared
-    heading (case 3) only the nearer gets it. Only the title block is
-    adopted: the panel descriptions under a heading stay where they are."""
-    captions = figure_captions(_ORPHANED)
-
-    assert captions == {
-        'figure-0': 'Figure 1. Photographs',
-        'figure-1': 'Figure 2. Pedigrees and Disease Localization',
-        'figure-2': 'Fig. 3.',
-        'figure-6': 'Supplementary Figure 1. Sanger traces of every proband',
-    }
-    # figure-3: prose after, a figure before. figure-4: prose before (not a
-    # legend), a table after. figure-5: table before, figure-6 after.
-    assert 'figure-3' not in captions
-    assert 'figure-4' not in captions
-    assert 'figure-5' not in captions
-
-
-def test_figure_captions_leaves_the_text_itself_alone():
-    """Reading back adopts nothing into the document: the heading and the
-    paragraph are still blocks of their own (block_texts still lists the
-    paragraph), since stored citations may point at them."""
-    assert block_texts(_ORPHANED)['paragraph-4'] == 'Fig. 3.'
-
-
 def _uncaptioned_picture_document(*, legend_first: bool, legend: str, heading: bool):
     """A page with one picture and one text block beside it (a heading or a
     paragraph), the text before or after the picture, plus a trailing
@@ -887,14 +854,14 @@ def test_build_anchored_adopts_a_heading_legend_below_an_uncaptioned_picture(
     assert [a.id for a in anchors] == ['figure-0', 'paragraph-1']
 
 
-def test_build_anchored_adopts_a_paragraph_legend_above_an_uncaptioned_picture(
+def test_build_anchored_adopts_a_paragraph_legend_under_an_uncaptioned_picture(
     paper_id,
 ):
-    """Case 2: the legend labelled plain text, set above the picture. The
+    """Case 2: the legend labelled plain text, under the picture. The
     paragraph is consumed into the figure line, like a Docling caption, so
-    there is no paragraph-0; the paragraph after the picture is untouched."""
+    there is no paragraph-0; the paragraph after it is untouched."""
     doc = _uncaptioned_picture_document(
-        legend_first=True, legend='Fig. 1. The affected kindred', heading=False
+        legend_first=False, legend='Fig. 1. The affected kindred', heading=False
     )
 
     md, anchors = build_anchored(doc, paper_id=paper_id)
@@ -903,6 +870,22 @@ def test_build_anchored_adopts_a_paragraph_legend_above_an_uncaptioned_picture(
     assert '[figure-0] Fig. 1. The affected kindred' in lines
     assert [a.id for a in anchors] == ['figure-0', 'paragraph-1']
     assert len(anchors[0].caption_boxes) == 1
+    assert anchors[0].caption_adopted
+
+
+def test_build_anchored_does_not_adopt_a_legend_above_the_picture(paper_id):
+    """Only the block under the picture is tried: a legend set above it
+    stays a paragraph (none of dev's recoveries was above; the describer's
+    question covers the rest)."""
+    doc = _uncaptioned_picture_document(
+        legend_first=True, legend='Fig. 1. The affected kindred', heading=False
+    )
+
+    md, anchors = build_anchored(doc, paper_id=paper_id)
+
+    assert '[paragraph-0] Fig. 1. The affected kindred' in md.splitlines()
+    assert [a.id for a in anchors] == ['paragraph-0', 'figure-0', 'paragraph-1']
+    assert not anchors[1].caption_adopted
 
 
 def test_build_anchored_does_not_adopt_prose_beside_an_uncaptioned_picture(
@@ -925,10 +908,10 @@ def test_build_anchored_does_not_adopt_prose_beside_an_uncaptioned_picture(
     assert [a.id for a in anchors] == ['figure-0', 'paragraph-0', 'paragraph-1']
 
 
-def test_build_anchored_prefers_the_block_after_and_serves_a_legend_once(paper_id):
-    """Two uncaptioned pictures around one legend: the one above it adopts it
-    (the block after is tried first), the one below gets nothing. Case 3,
-    the shared legend of a run of panels, is deliberately not spread."""
+def test_build_anchored_gives_a_legend_to_the_picture_above_it_only(paper_id):
+    """Two uncaptioned pictures around one legend: the one above it adopts
+    it, the one below gets nothing. Case 3, the shared legend of a run of
+    panels, is deliberately not spread by rule."""
     doc = DoclingDocument(name='test')
     doc.add_page(page_no=1, size=Size(width=600, height=PAGE_HEIGHT))
     doc.add_picture(prov=_bottom_left(10, 500, 300, 440))

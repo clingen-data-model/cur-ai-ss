@@ -115,8 +115,7 @@ from lib.core.environment import env
 from lib.core.logging import setup_logging
 from lib.misc.pdf.anchors import (
     AnchorKind,
-    adjacent_legends,
-    attached_captions,
+    block_texts,
     figure_neighbourhoods,
     load_anchors,
     make_anchor_id,
@@ -682,21 +681,19 @@ async def handle_variant_extraction(task_id: int) -> None:
 def paper_figures(paper_id: int) -> list[FigureRef]:
     """Every figure of the anchored document that has an image file, main
     text first: the Docling picture index (the N of figure-N, and of
-    documents/{id}/{main,supplement}/images/N.png), which section, and the
-    caption the anchored text carries for it, if any, with its source: its
-    alt text (DOCLING, or ADJACENT when anchors.json says the parser adopted
-    it), or the orphan legend printed beside it in a document anchored
-    before the parser adopted those (``adjacent_legends``, ADJACENT); and
-    the prose around it, for the describer to ask the model which block is
-    the legend when there is none (``figure_neighbourhoods``)."""
+    documents/{id}/{main,supplement}/images/N.png), which section, the
+    caption its line carries if any (its alt text) with where that came
+    from (DOCLING, or ADJACENT when anchors.json says the parser adopted the
+    block under the picture), and the prose around it, for the describer to
+    ask the model which block is the legend when there is none
+    (``figure_neighbourhoods``)."""
     figures: list[FigureRef] = []
     for is_supplement in (False, True):
         anchored = document_anchored_md_path(paper_id, supplement=is_supplement)
         if not anchored.exists():
             continue
         markdown = anchored.read_text()
-        attached = attached_captions(markdown)
-        adjacent = adjacent_legends(markdown)
+        captions = block_texts(markdown)
         neighbourhoods = figure_neighbourhoods(markdown)
         for anchor in load_anchors(paper_id, supplement=is_supplement):
             parsed_id = parse_anchor(anchor.id)
@@ -706,23 +703,19 @@ def paper_figures(paper_id: int) -> list[FigureRef]:
                 paper_id, parsed_id.index, supplement=is_supplement
             ).exists():
                 continue
-            if anchor.id in attached:
-                caption = attached[anchor.id]
-                source = (
-                    CaptionSource.ADJACENT
-                    if anchor.caption_adopted
-                    else CaptionSource.DOCLING
-                )
-            elif anchor.id in adjacent:
-                caption, source = adjacent[anchor.id], CaptionSource.ADJACENT
-            else:
-                caption, source = None, None
+            caption = captions.get(anchor.id) or None
             figures.append(
                 FigureRef(
                     image_id=parsed_id.index,
                     is_supplement=is_supplement,
                     caption=caption,
-                    caption_source=source,
+                    caption_source=(
+                        None
+                        if caption is None
+                        else CaptionSource.ADJACENT
+                        if anchor.caption_adopted
+                        else CaptionSource.DOCLING
+                    ),
                     nearby=tuple(neighbourhoods.get(anchor.id, [])),
                 )
             )

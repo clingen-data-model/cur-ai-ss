@@ -319,9 +319,10 @@ async def test_rerunning_patient_extraction_replaces_only_its_own_flags(
 def test_paper_figures_lists_every_figure_with_an_image_main_first(paper):
     """The figures the describer visits: each figure-N anchor whose
     images/N.png exists, main text before supplement, with the alt text the
-    anchored document carries as its caption, or, in a document anchored
-    before the parser adopted orphan legends, the legend printed beside it
-    (figure-4 here); None when it has neither."""
+    anchored document carries as its caption and where it came from
+    (anchors.json says whether the parser adopted it). A figure with no alt
+    text has none, whatever is printed beside it (figure-4: that is the
+    describer's question, which gets the prose around it)."""
     from lib.misc.pdf.anchors import Anchor, write_anchored
     from lib.misc.pdf.paths import document_image_path
     from lib.tasks.handlers import paper_figures
@@ -360,16 +361,11 @@ def test_paper_figures_lists_every_figure_with_an_image_main_first(paper):
     ] == [
         (0, False, 'Figure 1. Photographs', CaptionSource.DOCLING),
         (2, False, None, None),
-        (
-            4,
-            False,
-            'Figure 3. Mutations Identified in the ALX3 Gene',
-            CaptionSource.ADJACENT,
-        ),
+        (4, False, None, None),
         (0, True, 'Figure S1', CaptionSource.ADJACENT),  # anchors.json says adopted
     ]
     # The prose around each figure, for the describer's legend question.
-    assert figures[1].nearby == (
+    assert figures[2].nearby == (
         ('paragraph-1', 'text'),
         ('heading', 'Figure 3. Mutations Identified in the ALX3 Gene'),
     )
