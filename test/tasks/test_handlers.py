@@ -353,12 +353,20 @@ def test_paper_figures_lists_every_figure_with_an_image_main_first(paper):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b'png')
 
-    assert paper_figures(paper.id) == [
-        FigureRef(0, False, 'Figure 1. Photographs'),
-        FigureRef(2, False, None),
-        FigureRef(4, False, 'Figure 3. Mutations Identified in the ALX3 Gene'),
-        FigureRef(0, True, 'Figure S1'),
+    figures = paper_figures(paper.id)
+
+    assert [(f.image_id, f.is_supplement, f.caption) for f in figures] == [
+        (0, False, 'Figure 1. Photographs'),
+        (2, False, None),
+        (4, False, 'Figure 3. Mutations Identified in the ALX3 Gene'),
+        (0, True, 'Figure S1'),
     ]
+    # The prose around each figure, for the describer's legend question.
+    assert figures[1].nearby == (
+        ('paragraph-1', 'text'),
+        ('heading', 'Figure 3. Mutations Identified in the ALX3 Gene'),
+    )
+    assert figures[3].nearby == ()
 
 
 async def test_figure_description_stores_one_row_per_described_figure(

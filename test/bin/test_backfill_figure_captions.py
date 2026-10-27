@@ -3,9 +3,10 @@ anchored text on disk, the same text a re-run of Figure Description reads."""
 
 import pytest
 
+from lib.bin import backfill_figure_captions as script
 from lib.bin.backfill_figure_captions import backfill, backfill_paper
 from lib.misc.pdf.anchors import Anchor, write_anchored
-from lib.misc.pdf.paths import document_anchored_md_path
+from lib.misc.pdf.paths import document_anchored_md_path, document_image_path
 from lib.models import GeneDB, PaperDB
 from lib.models.figure import FigureDescriptionDB
 
@@ -59,6 +60,12 @@ def _write_documents(paper):
     )
 
 
+@pytest.fixture(autouse=True)
+def no_model(monkeypatch):
+    """The model is asked only where a test says so."""
+    monkeypatch.setattr(script, 'find_legend', lambda *_: pytest.fail('asked'))
+
+
 def test_fills_captionless_rows_from_both_sections(db_session, paper):
     """Main and supplement rows each get the alt text of their own figure
     line, or the orphan legend printed beside it (figure-2's heading, the
@@ -70,7 +77,7 @@ def test_fills_captionless_rows_from_both_sections(db_session, paper):
     )
     db_session.flush()
 
-    assert backfill_paper(db_session, paper.id) == 3
+    assert backfill_paper(db_session, paper.id, ask_model=False) == 3
 
     rows = db_session.query(FigureDescriptionDB).order_by(
         FigureDescriptionDB.is_supplement, FigureDescriptionDB.image_id
@@ -115,7 +122,7 @@ def test_backfill_walks_every_paper_and_skips_the_unreadable(db_session, paper):
     db_session.add_all([_row(paper, 0), _row(other, 0)])
     db_session.commit()
 
-    backfill()
+    backfill(ask_model=False)
     db_session.expire_all()
 
     captions = {
@@ -123,3 +130,46 @@ def test_backfill_walks_every_paper_and_skips_the_unreadable(db_session, paper):
         for r in db_session.query(FigureDescriptionDB)
     }
     assert captions == {(paper.id, 0): 'Figure 1. The family', (other.id, 0): None}
+
+
+def test_a_figure_the_text_gives_no_legend_for_is_asked_of_the_model(
+    monkeypatch, db_session, paper
+):
+    """figure-3 has only prose beside it, so the model is shown its image and
+    the prose around it, the way the describer does; its answer is stored.
+    figure-2, which the text's own rule covers, is not asked. A row whose
+    image is gone is not asked either."""
+    _write_documents(paper)
+    db_session.add_all([_row(paper, 2), _row(paper, 3), _row(paper, 7)])
+    db_session.flush()
+    image = document_image_path(paper.id, 3)
+    image.parent.mkdir(parents=True, exist_ok=True)
+    image.write_bytes(b'png')
+    asked: list = []
+
+    def fake_find_legend(image_url, nearby, notes):
+        asked.append((image_url, nearby, notes))
+        return 'Figure 3. The model read this off the image'
+
+    monkeypatch.setattr(script, 'find_legend', fake_find_legend)
+    monkeypatch.setattr(script, 'image_to_data_url', lambda path: f'data:{path.name}')
+
+    assert backfill_paper(db_session, paper.id) == 2
+
+    assert asked == [
+        (
+            'data:3.png',
+            (
+                ('paragraph-1', 'text'),
+                ('heading', 'Figure 2. Traces of the proband'),
+                ('paragraph-4', 'Figure 3 shows nothing here.'),
+            ),
+            None,
+        )
+    ]
+    captions = {r.image_id: r.caption for r in db_session.query(FigureDescriptionDB)}
+    assert captions == {
+        2: 'Figure 2. Traces of the proband',
+        3: 'Figure 3. The model read this off the image',
+        7: None,
+    }

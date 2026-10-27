@@ -116,6 +116,7 @@ from lib.core.logging import setup_logging
 from lib.misc.pdf.anchors import (
     AnchorKind,
     figure_captions,
+    figure_neighbourhoods,
     load_anchors,
     make_anchor_id,
     paper_block_texts,
@@ -679,13 +680,17 @@ def paper_figures(paper_id: int) -> list[FigureRef]:
     documents/{id}/{main,supplement}/images/N.png), which section, and the
     caption the anchored text carries for it, if any: its alt text, or the
     orphan legend printed beside it in a document anchored before the parser
-    adopted those (``figure_captions``)."""
+    adopted those (``figure_captions``); and the prose around it, for the
+    describer to ask the model which block is the legend when there is
+    none (``figure_neighbourhoods``)."""
     figures: list[FigureRef] = []
     for is_supplement in (False, True):
         anchored = document_anchored_md_path(paper_id, supplement=is_supplement)
         if not anchored.exists():
             continue
-        captions = figure_captions(anchored.read_text())
+        markdown = anchored.read_text()
+        captions = figure_captions(markdown)
+        neighbourhoods = figure_neighbourhoods(markdown)
         for anchor in load_anchors(paper_id, supplement=is_supplement):
             parsed_id = parse_anchor(anchor.id)
             if parsed_id is None or parsed_id.kind != AnchorKind.FIGURE:
@@ -699,6 +704,7 @@ def paper_figures(paper_id: int) -> list[FigureRef]:
                     image_id=parsed_id.index,
                     is_supplement=is_supplement,
                     caption=captions.get(anchor.id),
+                    nearby=tuple(neighbourhoods.get(anchor.id, [])),
                 )
             )
     return figures

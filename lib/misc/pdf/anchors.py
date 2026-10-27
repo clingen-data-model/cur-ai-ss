@@ -81,6 +81,8 @@ __all__ = [  # the id grammar lives in anchor_ids.py; re-exported here unchanged
     'paper_block_texts',
     'paper_figure_captions',
     'figure_captions',
+    'figure_neighbourhoods',
+    'HEADING_LABEL',
     'is_figure_legend',
     'parse_anchor',
     'user_to_display',
@@ -1041,23 +1043,63 @@ def block_texts(markdown: str) -> dict[str, str]:
 _HEADING_LINE = re.compile(r'^#+\s*(.*)$')
 
 
-def _legend_block_text(block: str) -> str | None:
-    """The block's text if it is a heading or paragraph that opens like a
-    figure legend (``is_figure_legend``), lines joined; None for anything
-    else, tables, figures and list rows included."""
+HEADING_LABEL = 'heading'
+
+
+def _prose_block(block: str) -> tuple[str, str] | None:
+    """A heading's or paragraph's (label, text): the anchor id, or
+    ``HEADING_LABEL`` for a heading, which has none; the text with the tag or
+    heading marks stripped and its lines joined. None for a table, figure or
+    row block, which is never prose."""
     first, *rest = block.split('\n')
     heading = _HEADING_LINE.match(first)
     if heading:
-        text = heading.group(1)
+        label, text = HEADING_LABEL, heading.group(1)
     elif tag := _TAG_LINE.match(first):
         parsed = parse_anchor(tag.group(1))
         if parsed is None or parsed.kind is not AnchorKind.PARAGRAPH:
             return None
-        text = tag.group(2) or ''
+        label, text = tag.group(1), tag.group(2) or ''
+    elif first.startswith(('|', _UNRECOVERED_PREFIX)):
+        return None  # a table's rows, or the warning over an unrecovered one
     else:
-        text = first  # an untagged block (a form area)
-    text = ' '.join(line.strip() for line in (text, *rest) if line.strip())
-    return text if is_figure_legend(text) else None
+        label, text = HEADING_LABEL, first  # an untagged block (a form area)
+    return label, ' '.join(line.strip() for line in (text, *rest) if line.strip())
+
+
+def _legend_block_text(block: str) -> str | None:
+    """The block's text if it is a heading or paragraph that opens like a
+    figure legend (``is_figure_legend``), lines joined; None for anything
+    else, tables, figures and list rows included."""
+    prose = _prose_block(block)
+    return prose[1] if prose is not None and is_figure_legend(prose[1]) else None
+
+
+def figure_neighbourhoods(
+    markdown: str, radius: int = 6
+) -> dict[str, list[tuple[str, str]]]:
+    """Each figure id of an anchored document -> the prose printed around it:
+    up to ``radius`` headings or paragraphs before it and after it, in
+    reading order, as (label, text) with the label an anchor id or
+    ``HEADING_LABEL``. Tables and other figures are passed over, not
+    counted. What the figure describer shows the vision model when it asks
+    which block is a figure's legend (``find_legend``)."""
+    blocks = [b for b in re.split(r'\n\s*\n', markdown) if b.strip()]
+    figure_at: dict[int, str] = {}
+    prose: dict[int, tuple[str, str]] = {}
+    for i, block in enumerate(blocks):
+        tag = _TAG_LINE.match(block.split('\n', 1)[0])
+        parsed = parse_anchor(tag.group(1)) if tag else None
+        if tag and parsed is not None and parsed.kind is AnchorKind.FIGURE:
+            figure_at[i] = tag.group(1)
+        elif (p := _prose_block(block)) is not None and p[1]:
+            prose[i] = p
+    out: dict[str, list[tuple[str, str]]] = {}
+    for i, figure_id in figure_at.items():
+        before = [prose[j] for j in range(i - 1, -1, -1) if j in prose][:radius]
+        after = [prose[j] for j in range(i + 1, len(blocks)) if j in prose][:radius]
+        out[figure_id] = before[::-1] + after
+    return out
 
 
 def figure_captions(markdown: str) -> dict[str, str]:

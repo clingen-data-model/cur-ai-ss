@@ -16,11 +16,14 @@ PAPER = (
 )
 
 
-def _figure(image_id: int, kinds: list[str], description: str, supplement=False):
+def _figure(
+    image_id: int, kinds: list[str], description: str, supplement=False, caption=None
+):
     return FigureDescriptionDB(
         image_id=image_id,
         is_supplement=supplement,
         kinds=kinds,
+        caption=caption,
         description=description,
     )
 
@@ -89,3 +92,43 @@ def test_figure_texts_extend_the_legend_with_the_description():
         'figure-2': 'Subject 1: single T peak',
     }
     assert texts['figure-2'] == ''  # the input is not changed
+
+
+def test_splice_puts_a_stored_legend_under_a_figure_line_that_has_none():
+    """figure-2's line carries no alt text, so the legend the describer found
+    for it leads the block, as the paper's words; figure-0's line already
+    carries its legend, so its block does not repeat it."""
+    figures = [
+        _figure(0, ['Pedigree'], 'the family', caption='Figure 1. Photographs'),
+        _figure(2, ['Gel'], 'lane 2 digested', caption='Figure 2. Restriction digest'),
+    ]
+
+    spliced = splice_figure_descriptions(PAPER, figures)
+
+    assert (
+        '[figure-2] ![](x/2.png)\n'
+        '> **Figure legend**: Figure 2. Restriction digest\n'
+        '>\n'
+        '> **Figure description** (Gel)'
+    ) in spliced
+    assert (
+        '[figure-0] ![Figure 1. Photographs](x/0.png)\n'
+        '> **Figure description** (Pedigree)'
+    ) in spliced
+    assert spliced.count('Figure 1. Photographs') == 1
+
+
+def test_figure_texts_add_a_stored_legend_only_where_the_text_has_none():
+    """A quote from a legend the describer found checks out against its
+    figure; a figure whose text already carries its legend gets the
+    description alone, so the legend is not doubled."""
+    texts = {'figure-0': 'Figure 1. Photographs', 'figure-2': ''}
+    figures = [
+        _figure(0, ['Pedigree'], 'the family', caption='Figure 1. Photographs'),
+        _figure(2, ['Gel'], 'lane 2 digested', caption='Figure 2. Restriction digest'),
+    ]
+
+    assert figure_texts(texts, figures) == {
+        'figure-0': 'Figure 1. Photographs\nthe family',
+        'figure-2': 'Figure 2. Restriction digest\nlane 2 digested',
+    }

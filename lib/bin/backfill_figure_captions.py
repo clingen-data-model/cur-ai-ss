@@ -8,34 +8,56 @@ Docling attached none, the orphan legend printed right beside the figure
 (``figure_captions`` in lib/misc/pdf/anchors.py, the same rule the parser now
 applies when it builds the document). That is exactly what a re-run of the
 step would read, so this copies it instead of re-running (no model call). A
-figure with neither is left None, as a re-run would leave it. The anchored
-text itself is not rewritten: consuming an orphan paragraph into its figure
-would retire an id that stored citations may point at.
+figure with neither is asked of the vision model the way the step now asks
+(``find_legend``: shown the figure and the prose around it, which block is
+its legend, or what legend is printed in the image), unless ``--no-model``;
+one small call per such row, each choice logged so the run can be read
+before it is trusted. A figure with no answer is left None, as a re-run
+would leave it. The anchored text itself is not rewritten: consuming an
+orphan paragraph into its figure would retire an id that stored citations
+may point at.
 
 Fills only rows whose caption is None, so it is safe to re-run. A paper whose
 anchored text is missing is skipped and counted.
 
 Usage:
-    uv run python -m lib.bin.backfill_figure_captions
+    uv run python -m lib.bin.backfill_figure_captions [--no-model]
 """
 
 import logging
+import sys
 
 from sqlalchemy.orm import Session
 
+from lib.agents.figure_describer import find_legend
 from lib.api.db import session_scope
 from lib.core.logging import setup_logging
-from lib.misc.pdf.anchors import paper_figure_captions
+from lib.misc.images import image_to_data_url
+from lib.misc.pdf.anchors import (
+    document_anchored_md_path,
+    figure_neighbourhoods,
+    paper_figure_captions,
+)
 from lib.misc.pdf.figure_text import figure_anchor
+from lib.misc.pdf.paths import document_image_path
 from lib.models.figure import FigureDescriptionDB
 
 setup_logging()
 logger = logging.getLogger(__name__)
 
 
-def backfill_paper(session: Session, paper_id: int) -> int:
-    """Fill the paper's caption-less rows from its anchored text; how many
-    got one. Raises OSError when the paper has no anchored text."""
+def _nearby(paper_id: int) -> dict[str, list[tuple[str, str]]]:
+    out = figure_neighbourhoods(document_anchored_md_path(paper_id).read_text())
+    supplement = document_anchored_md_path(paper_id, supplement=True)
+    if supplement.exists():
+        out.update(figure_neighbourhoods(supplement.read_text()))
+    return out
+
+
+def backfill_paper(session: Session, paper_id: int, ask_model: bool = True) -> int:
+    """Fill the paper's caption-less rows from its anchored text, then, for
+    those still without, from the model (``ask_model``); how many got one.
+    Raises OSError when the paper has no anchored text."""
     rows = (
         session.query(FigureDescriptionDB)
         .filter(
@@ -47,16 +69,28 @@ def backfill_paper(session: Session, paper_id: int) -> int:
     if not rows:
         return 0
     captions = paper_figure_captions(paper_id)
+    nearby = _nearby(paper_id) if ask_model else {}
     filled = 0
     for row in rows:
-        caption = captions.get(figure_anchor(row))
+        anchor = figure_anchor(row)
+        caption = captions.get(anchor)
+        if caption is None and ask_model:
+            image = document_image_path(paper_id, row.image_id, row.is_supplement)
+            if image.exists():
+                caption = find_legend(
+                    image_to_data_url(image), tuple(nearby.get(anchor, [])), None
+                )
+                logger.info(
+                    f'Paper {paper_id} {anchor}: model '
+                    + (f'chose {caption[:80]!r}' if caption else 'found no legend')
+                )
         if caption is not None:
             row.caption = caption
             filled += 1
     return filled
 
 
-def backfill() -> None:
+def backfill(ask_model: bool = True) -> None:
     with session_scope() as session:
         paper_ids = [
             i
@@ -72,7 +106,7 @@ def backfill() -> None:
         # One session per paper so one paper's missing files roll back nothing else.
         try:
             with session_scope() as session:
-                n = backfill_paper(session, paper_id)
+                n = backfill_paper(session, paper_id, ask_model)
             logger.info(f'Paper {paper_id}: {n} captions filled')
             filled += n
         except OSError:
@@ -86,4 +120,4 @@ def backfill() -> None:
 
 
 if __name__ == '__main__':
-    backfill()
+    backfill(ask_model='--no-model' not in sys.argv[1:])

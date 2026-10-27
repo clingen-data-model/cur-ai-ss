@@ -27,6 +27,7 @@ from lib.misc.pdf.anchors import (
     build_anchored,
     display_to_user_point,
     figure_captions,
+    figure_neighbourhoods,
     is_figure_legend,
     load_anchors,
     page_frames,
@@ -942,3 +943,22 @@ def test_build_anchored_prefers_the_block_after_and_serves_a_legend_once(paper_i
         '[figure-1] <!-- image -->',
     ]
     assert [len(a.caption_boxes) for a in anchors] == [1, 0]
+
+
+def test_figure_neighbourhoods_list_the_prose_around_each_figure():
+    """Headings and paragraphs within the radius on either side, in reading
+    order, labelled by anchor id (headings have none); tables and other
+    figures are passed over without counting."""
+    nearby = figure_neighbourhoods(_ORPHANED, radius=2)
+
+    assert nearby['figure-1'] == [
+        ('heading', 'Results'),
+        ('heading', 'Figure 2. Pedigrees and Disease Localization'),
+        ('paragraph-3', '(A) Pedigrees of families 1-7. (B) Linkage analysis.'),
+    ]
+    assert nearby['figure-5'] == [
+        ('paragraph-4', 'Fig. 3.'),
+        ('paragraph-6', 'Figure 4 shows nothing: this is body prose.'),
+        ('heading', 'Supplementary Figure 1. Sanger traces of every proband'),
+    ]
+    assert set(nearby) == {f'figure-{i}' for i in range(7)}
