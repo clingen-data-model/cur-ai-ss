@@ -186,7 +186,7 @@ def test_a_figure_the_text_gives_no_legend_for_is_asked_of_the_model(
             'data:3.png',
             (
                 ('paragraph-1', 'text'),
-                ('heading', 'Figure 2. Traces of the proband'),
+                ('heading-3', 'Figure 2. Traces of the proband'),
                 ('paragraph-4', 'Figure 3 shows nothing here.'),
             ),
             None,

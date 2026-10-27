@@ -214,7 +214,7 @@ _NEARBY = (
     ),
     ('paragraph-207', 'Splicing'),
     ('paragraph-208', 'Figure 3. Mutations Identified in the ALX3 Gene'),
-    ('heading', 'Figure 2. Pedigrees and Disease Localization'),
+    ('heading-9', 'Figure 2. Pedigrees and Disease Localization'),
 )
 
 
@@ -232,7 +232,7 @@ _NEARBY = (
             id='bracketed-id',
         ),
         pytest.param(
-            'heading',
+            'heading-9',
             Legend('Figure 2. Pedigrees and Disease Localization', CHOSE),
             id='heading',
         ),
@@ -278,7 +278,7 @@ def test_find_legend_shows_the_prose_around_the_figure(monkeypatch):
     assert seen['image_url'] == 'data:img'
     assert seen['prompt'].startswith(LEGEND_PROMPT)
     assert '[paragraph-207] Splicing' in seen['prompt']
-    assert '[heading] Figure 2. Pedigrees and Disease Localization' in seen['prompt']
+    assert '[heading-9] Figure 2. Pedigrees and Disease Localization' in seen['prompt']
     assert seen['prompt'].endswith('the proband is III-3')
 
 

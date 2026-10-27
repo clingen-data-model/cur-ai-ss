@@ -367,7 +367,7 @@ def test_paper_figures_lists_every_figure_with_an_image_main_first(paper):
     # The prose around each figure, for the describer's legend question.
     assert figures[2].nearby == (
         ('paragraph-1', 'text'),
-        ('heading', 'Figure 3. Mutations Identified in the ALX3 Gene'),
+        ('heading-5', 'Figure 3. Mutations Identified in the ALX3 Gene'),
     )
     assert figures[3].nearby == ()
 

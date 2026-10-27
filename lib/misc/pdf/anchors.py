@@ -1069,8 +1069,12 @@ def figure_neighbourhoods(
 ) -> dict[str, list[tuple[str, str]]]:
     """Each figure id of an anchored document -> the prose printed around it:
     up to ``radius`` headings or paragraphs before it and after it, in
-    reading order, as (label, text) with the label an anchor id or
-    ``HEADING_LABEL``. Tables and other figures are passed over, not
+    reading order, as (label, text) with the label an anchor id or, for a
+    heading, which has none, ``HEADING_LABEL`` with the block's index in the
+    document ('heading-12'): every label is unique, so the model can answer
+    with one. (With the bare word, the first dev backfill saw the model
+    answer in prose for the two figures whose legend was one of several
+    headings in view.) Tables and other figures are passed over, not
     counted. What the figure describer shows the vision model when it asks
     which block is a figure's legend (``find_legend``)."""
     blocks = [b for b in re.split(r'\n\s*\n', markdown) if b.strip()]
@@ -1082,7 +1086,8 @@ def figure_neighbourhoods(
         if tag and parsed is not None and parsed.kind is AnchorKind.FIGURE:
             figure_at[i] = tag.group(1)
         elif (p := _prose_block(block)) is not None and p[1]:
-            prose[i] = p
+            label, text = p
+            prose[i] = (f'{label}-{i}' if label == HEADING_LABEL else label, text)
     out: dict[str, list[tuple[str, str]]] = {}
     for i, figure_id in figure_at.items():
         before = [prose[j] for j in range(i - 1, -1, -1) if j in prose][:radius]
