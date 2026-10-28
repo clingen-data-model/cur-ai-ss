@@ -35,6 +35,7 @@ from lib.agents.manual_output import (
     run_with_checked_output,
     run_with_manual_output,
 )
+from lib.agents.model_factory import agent_on_tier
 from lib.agents.mondo_linking_agent import (
     MONDO_LINKING_AGENT_INSTRUCTIONS,
 )
@@ -498,6 +499,7 @@ async def handle_paper_classifier(task_id: int) -> None:
         paper_id = task.paper_id
         gene_symbol = paper.gene.symbol
         additional_context = task.additional_context
+        budget_model = task.budget_model
         context_origin = task.context_origin
         supplement_format = paper.supplement_format
 
@@ -520,7 +522,9 @@ async def handle_paper_classifier(task_id: int) -> None:
         agent = paper_classifier_agent
         message = with_curator_note(message, additional_context, context_origin)
 
-    result = await Runner.run(agent, message, session=agent_sess)
+    result = await Runner.run(
+        agent_on_tier(agent, budget_model), message, session=agent_sess
+    )
     log_run_metrics('PAPER_CLASSIFIER', result)
 
     with session_scope() as session:
@@ -562,6 +566,7 @@ async def handle_paper_metadata(task_id: int) -> None:
         paper_id = task.paper_id
         gene_symbol = paper.gene.symbol
         additional_context = task.additional_context
+        budget_model = task.budget_model
         context_origin = task.context_origin
         supplement_format = paper.supplement_format
 
@@ -585,7 +590,7 @@ async def handle_paper_metadata(task_id: int) -> None:
         message = with_curator_note(message, additional_context, context_origin)
 
     result = await run_with_checked_output(
-        agent,
+        agent_on_tier(agent, budget_model),
         message,
         citation_check(paper_id),
         session=agent_sess,
@@ -616,6 +621,7 @@ async def handle_variant_extraction(task_id: int) -> None:
         paper_id = task.paper_id
         gene_symbol = paper.gene.symbol
         additional_context = task.additional_context
+        budget_model = task.budget_model
         context_origin = task.context_origin
         supplement_format = paper.supplement_format
 
@@ -639,7 +645,7 @@ async def handle_variant_extraction(task_id: int) -> None:
         message = with_curator_note(message, additional_context, context_origin)
 
     result, parsed = await run_with_manual_output(
-        agent,
+        agent_on_tier(agent, budget_model),
         message,
         VariantExtractionOutput,
         check=citation_check(paper_id),
@@ -839,6 +845,7 @@ async def handle_patient_extraction(task_id: int) -> None:
 
         paper_id = task.paper_id
         additional_context = task.additional_context
+        budget_model = task.budget_model
         context_origin = task.context_origin
         initial_message = patient_extraction_message(session, paper_id)
 
@@ -859,7 +866,10 @@ async def handle_patient_extraction(task_id: int) -> None:
         message = with_curator_note(message, additional_context, context_origin)
 
     result = await run_with_checked_output(
-        agent, message, citation_check(paper_id), session=agent_sess
+        agent_on_tier(agent, budget_model),
+        message,
+        citation_check(paper_id),
+        session=agent_sess,
     )
     parsed = cast(PatientExtractionOutput, result.final_output)
     log_run_metrics('PATIENT_EXTRACTION', result)
@@ -939,6 +949,7 @@ async def handle_patient_demographics(task_id: int) -> None:
             )
 
         additional_context = task.additional_context
+        budget_model = task.budget_model
         context_origin = task.context_origin
 
         paper = session.get(PaperDB, paper_id)
@@ -990,7 +1001,7 @@ async def handle_patient_demographics(task_id: int) -> None:
         message = with_curator_note(message, additional_context, context_origin)
 
     result, parsed = await run_with_manual_output(
-        agent,
+        agent_on_tier(agent, budget_model),
         message,
         PatientDemographics,
         check=citation_check(paper_id),
@@ -1043,6 +1054,7 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
         gene_symbol = paper.gene.symbol
         supplement_format = paper.supplement_format
         additional_context = task.additional_context
+        budget_model = task.budget_model
         context_origin = task.context_origin
 
         family = session.get(FamilyDB, family_id)
@@ -1107,7 +1119,7 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
         message = with_curator_note(message, additional_context, context_origin)
 
     result = await run_with_checked_output(
-        agent,
+        agent_on_tier(agent, budget_model),
         message,
         citation_check(paper_id),
         session=agent_sess,
@@ -1172,6 +1184,7 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
         gene_symbol = paper.gene.symbol
         supplement_format = paper.supplement_format
         additional_context = task.additional_context
+        budget_model = task.budget_model
         context_origin = task.context_origin
 
         family = session.get(FamilyDB, family_id)
@@ -1254,7 +1267,7 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
         message = with_curator_note(message, additional_context, context_origin)
 
     result = await Runner.run(
-        segregation_analysis_computed_agent,
+        agent_on_tier(segregation_analysis_computed_agent, budget_model),
         message,
         session=agent_sess,
     )
@@ -1314,6 +1327,7 @@ async def handle_variant_harmonization(task_id: int) -> None:
             )
 
         additional_context = task.additional_context
+        budget_model = task.budget_model
         context_origin = task.context_origin
 
         paper = session.get(PaperDB, task.paper_id)
@@ -1347,7 +1361,7 @@ async def handle_variant_harmonization(task_id: int) -> None:
         message = with_curator_note(message, additional_context, context_origin)
 
     result = await Runner.run(
-        variant_harmonization_agent,
+        agent_on_tier(variant_harmonization_agent, budget_model),
         message,
         max_turns=15,
         session=agent_sess,
@@ -1509,6 +1523,7 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
 
         paper_id = task.paper_id
         additional_context = task.additional_context
+        budget_model = task.budget_model
         context_origin = task.context_origin
 
         paper = session.get(PaperDB, paper_id)
@@ -1566,7 +1581,10 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
         message = with_curator_note(message, additional_context, context_origin)
 
     result = await run_with_checked_output(
-        agent, message, citation_check(paper_id), session=agent_sess
+        agent_on_tier(agent, budget_model),
+        message,
+        citation_check(paper_id),
+        session=agent_sess,
     )
     parsed = cast(PatientVariantOccurrenceOutput, result.final_output)
     log_run_metrics('PATIENT_VARIANT_OCCURRENCE', result)
@@ -1661,6 +1679,7 @@ async def handle_compound_het_evaluation(task_id: int) -> None:
 
         paper_id = task.paper_id
         patient_id = task.patient_id
+        budget_model = task.budget_model
         if patient_id is None:
             raise ValueError(
                 f'Task {task_id}: COMPOUND_HET_EVALUATION requires patient_id'
@@ -1717,7 +1736,7 @@ async def handle_compound_het_evaluation(task_id: int) -> None:
         agent_to_use = compound_het_agent
 
     result = await Runner.run(
-        agent_to_use,
+        agent_on_tier(agent_to_use, budget_model),
         message,
     )
     log_run_metrics('COMPOUND_HET_EVALUATION', result)
@@ -1851,6 +1870,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
             )
 
         additional_context = task.additional_context
+        budget_model = task.budget_model
         context_origin = task.context_origin
 
         paper = session.get(PaperDB, paper_id)
@@ -1891,7 +1911,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         message = with_curator_note(message, additional_context, context_origin)
 
     result = await run_with_checked_output(
-        agent,
+        agent_on_tier(agent, budget_model),
         message,
         citation_check(paper_id),
         session=agent_sess,
@@ -2258,6 +2278,7 @@ async def handle_extraction_verification(task_id: int) -> None:
         if not task:
             return
         paper_id = task.paper_id
+        budget_model = task.budget_model
         flags = open_flags(session, paper_id)
         if len(flags) < 2:
             logger.info(
@@ -2270,7 +2291,9 @@ async def handle_extraction_verification(task_id: int) -> None:
         f'{EXTRACTION_VERIFICATION_AGENT_INSTRUCTIONS}\n\n'
         f'Open flags on this paper:\n{json.dumps(payload, indent=2)}'
     )
-    result = await Runner.run(extraction_verification_agent, message)
+    result = await Runner.run(
+        agent_on_tier(extraction_verification_agent, budget_model), message
+    )
     log_run_metrics('EXTRACTION_VERIFICATION', result, paper_id=paper_id)
     output = result.final_output
     if not isinstance(output, FlagMergeOutput):

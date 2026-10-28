@@ -297,3 +297,4 @@ class FlagRerunRequest(BaseModel):
 
     note: str | None = None
     skip_successors: bool = False
+    budget_model: bool = False

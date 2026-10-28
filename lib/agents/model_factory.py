@@ -28,10 +28,11 @@ SDK's default error handler would turn the exception into text for the model
 rather than failing the run.
 """
 
+import logging
 from typing import Any
 
 import litellm
-from agents import ModelSettings
+from agents import Agent, ModelSettings
 from agents.extensions.models.litellm_model import LitellmModel
 from agents.models.interface import Model
 from litellm.llms.anthropic.chat.transformation import AnthropicConfig
@@ -49,6 +50,8 @@ from lib.core.model_names import (
 # miss, at the cost of a 2x (not 1.25x) write; see docs/anthropic-migration.md
 # for the break-even math.
 _CACHE_CONTROL = {'type': 'ephemeral', 'ttl': '1h'}
+
+logger = logging.getLogger(__name__)
 
 # Fallback entries for models Anthropic has released that litellm may not know.
 # litellm loads its model table from the copy bundled with the locked release,
@@ -113,6 +116,37 @@ def extraction_model() -> Model | str:
 def extraction_model_settings() -> ModelSettings:
     """Model settings every text-extraction agent runs with."""
     return model_settings_for(env.EXTRACTION_MODEL)
+
+
+def agent_on_tier(agent: Agent, budget: bool) -> Agent:
+    """The agent a task's run uses: ``agent`` itself for an ordinary run,
+    or, when the task's ``budget_model`` flag is set, the same agent on
+    ``EXTRACTION_BUDGET_MODEL``.
+
+    A clone rather than a ``RunConfig`` override: ``ModelSettings.resolve``
+    merges ``extra_args`` dict-wise, so an override could never *remove* the
+    ``output_config.effort`` an agent sets, and a budget model that rejects
+    the parameter would 400 on every call. The clone rebuilds its settings
+    for the budget model from scratch, carrying the agent's effort across
+    only when ``model_settings_for`` finds that model accepts it. The agents
+    are module-level singletons built on ``extraction_model()``; a per-run
+    clone leaves them as they were for the next task.
+
+    Only the handlers whose agent runs on ``EXTRACTION_MODEL`` call this.
+    Linking (``LINKING_MODEL``) and vision (``VLM_MODEL``) are configured
+    separately and a quick run does not move them. With no
+    ``EXTRACTION_BUDGET_MODEL`` configured a budget run is an ordinary run.
+    """
+    name = env.EXTRACTION_BUDGET_MODEL
+    if not budget or name is None:
+        return agent
+    extra = agent.model_settings.extra_args or {}
+    effort = (extra.get('output_config') or {}).get('effort')
+    logger.info(f'{agent.name}: running on the budget model {name}')
+    return agent.clone(
+        model=resolve_model(name),
+        model_settings=model_settings_for(name, effort=effort),
+    )
 
 
 def linking_model() -> Model | str:

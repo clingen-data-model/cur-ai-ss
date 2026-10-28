@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 import litellm
 import pytest
-from agents import ModelResponse, ModelSettings
+from agents import Agent, ModelResponse, ModelSettings
 from agents.extensions.models.litellm_model import LitellmModel
 from agents.models.interface import ModelTracing
 from litellm.llms.anthropic.chat.transformation import AnthropicConfig
@@ -11,6 +11,7 @@ from lib.agents.model_factory import (
     _UNMAPPED_MODELS,
     ModelDeclined,
     _register_unmapped_models,
+    agent_on_tier,
     extraction_model,
     extraction_model_settings,
     linking_model,
@@ -315,3 +316,55 @@ def test_split_provider_returns_both_halves():
 def test_bare_or_malformed_names_rejected(name):
     with pytest.raises(ValueError, match='provider prefix'):
         split_provider(name)
+
+
+def _agent(effort: str | None = None) -> Agent:
+    extra: dict = {'cache_control_injection_points': []}
+    if effort is not None:
+        extra['output_config'] = {'effort': effort}
+    return Agent(
+        name='probe',
+        instructions='x',
+        model=LitellmModel(model='anthropic/claude-sonnet-5-5'),
+        model_settings=ModelSettings(extra_args=extra),
+    )
+
+
+def test_an_ordinary_run_gets_the_agent_itself(monkeypatch):
+    monkeypatch.setattr(env, 'EXTRACTION_BUDGET_MODEL', 'anthropic/claude-haiku-5-5')
+    agent = _agent()
+    assert agent_on_tier(agent, budget=False) is agent
+
+
+def test_a_budget_run_with_no_budget_model_configured_is_an_ordinary_run(
+    monkeypatch,
+):
+    monkeypatch.setattr(env, 'EXTRACTION_BUDGET_MODEL', None)
+    agent = _agent()
+    assert agent_on_tier(agent, budget=True) is agent
+
+
+def test_a_budget_run_clones_the_agent_onto_the_budget_model(monkeypatch):
+    """A clone, with its settings rebuilt for the budget model and the
+    original left as it was for the next task."""
+    monkeypatch.setattr(env, 'ANTHROPIC_API_KEY', 'sk-ant')
+    monkeypatch.setattr(env, 'EXTRACTION_BUDGET_MODEL', 'anthropic/claude-haiku-5-5')
+    agent = _agent(effort='low')
+    clone = agent_on_tier(agent, budget=True)
+    assert clone is not agent
+    assert isinstance(clone.model, LitellmModel)
+    assert clone.model.model == 'anthropic/claude-haiku-5-5'
+    assert clone.name == agent.name and clone.tools == agent.tools
+    assert agent.model.model == 'anthropic/claude-sonnet-5-5'
+    # The agent's effort comes across when the budget model accepts it
+    # (claude-haiku-5-5 does: see _UNMAPPED_MODELS), as a fresh settings
+    # object rather than a merge that could never drop it.
+    assert clone.model_settings.extra_args['output_config'] == {'effort': 'low'}
+    assert 'cache_control_injection_points' in clone.model_settings.extra_args
+
+
+def test_a_budget_run_on_an_openai_model_sends_no_anthropic_arguments(monkeypatch):
+    monkeypatch.setattr(env, 'EXTRACTION_BUDGET_MODEL', 'openai/gpt-5.6-mini')
+    clone = agent_on_tier(_agent(effort='low'), budget=True)
+    assert clone.model == 'gpt-5.6-mini'
+    assert clone.model_settings == ModelSettings()

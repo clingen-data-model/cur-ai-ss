@@ -1266,6 +1266,7 @@ def create_task(
             skip_successors=request.skip_successors,
             additional_context=request.additional_context,
             updated_by_user_id=current_user.id,
+            budget_model=request.budget_model,
         )
     else:
         task = enqueue_task(
@@ -1280,6 +1281,7 @@ def create_task(
             skip_successors=request.skip_successors,
             additional_context=request.additional_context,
             updated_by_user_id=current_user.id,
+            budget_model=request.budget_model,
         )
         tasks = [task]
     return tasks
@@ -2924,6 +2926,7 @@ def rerun_flag(
         additional_context=context,
         updated_by_user_id=current_user.id,
         context_origin=None,
+        budget_model=request.budget_model,
         **scope,
     )
 

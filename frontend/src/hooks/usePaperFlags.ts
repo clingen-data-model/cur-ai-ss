@@ -149,10 +149,18 @@ export function useResolveFlags(paperId: number) {
 export function useRerunFromFlag(paperId: number) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ flagId, note }: { flagId: number; note: string }) =>
+    mutationFn: ({
+      flagId,
+      note,
+      budgetModel = false,
+    }: {
+      flagId: number
+      note: string
+      budgetModel?: boolean
+    }) =>
       rerunFlagPapersPaperIdFlagsFlagIdRerunPost({
         path: { paper_id: paperId, flag_id: flagId },
-        body: { note: note || null, skip_successors: false },
+        body: { note: note || null, skip_successors: false, budget_model: budgetModel },
         throwOnError: true,
       }),
     onSuccess: (task) => {

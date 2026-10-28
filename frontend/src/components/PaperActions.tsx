@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogMedia, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import type { PaperSummaryResp, TaskType } from '@/api/generated/types.gen'
 import { CONTEXT_NOTE, TaskSuccessors, useTaskTypes } from '@/components/TaskSuccessors'
+import { QuickRunCheckbox } from '@/components/QuickRunCheckbox'
 import { usePaperBusy } from '@/hooks/usePaperBusy'
 import { apiErrorMessage } from '@/lib/apiError'
 
@@ -77,6 +78,9 @@ function RerunTaskDialog({
   const [tab, setTab] = useState<RerunTab>('single')
   const [taskType, setTaskType] = useState<TaskType>(initialTaskType)
   const [skipSuccessors, setSkipSuccessors] = useState(false)
+  // One box for both tabs: a quick run of the root task is a quick run of
+  // the whole paper, the same way its note reaches every agent.
+  const [budgetModel, setBudgetModel] = useState(false)
   const [context, setContext] = useState('')
   const [reparsePdf, setReparsePdf] = useState(false)
   const [globalContext, setGlobalContext] = useState('')
@@ -103,8 +107,14 @@ function RerunTaskDialog({
               type: reparsePdf ? 'PDF Parsing' : 'Paper Classifier',
               skip_successors: false,
               additional_context: globalContext || null,
+              budget_model: budgetModel,
             }
-          : { type: taskType, skip_successors: skipSuccessors, additional_context: context || null },
+          : {
+              type: taskType,
+              skip_successors: skipSuccessors,
+              additional_context: context || null,
+              budget_model: budgetModel,
+            },
         throwOnError: true,
       }),
     onSuccess: () => {
@@ -119,6 +129,7 @@ function RerunTaskDialog({
       setContext('')
       setGlobalContext('')
       setSkipSuccessors(false)
+      setBudgetModel(false)
       setReparsePdf(false)
     },
     onError: (error) => toast.error(apiErrorMessage(error, 'Failed to queue task')),
@@ -182,6 +193,7 @@ function RerunTaskDialog({
                  * about something visible. */}
                 <TaskSuccessors taskType={taskType} skipped={skipSuccessors} />
               </div>
+              <QuickRunCheckbox checked={budgetModel} onChange={setBudgetModel} />
             </TabsContent>
             <TabsContent value="all" className="space-y-4 pt-2">
               <p className="text-xs text-muted-foreground">
@@ -216,6 +228,7 @@ function RerunTaskDialog({
                   Paper Classifier and uses the parse already on disk.
                 </p>
               </div>
+              <QuickRunCheckbox checked={budgetModel} onChange={setBudgetModel} />
             </TabsContent>
           </Tabs>
           {busy && <p className="text-sm text-amber-700 dark:text-amber-400">{busy}</p>}

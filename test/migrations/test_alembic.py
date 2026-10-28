@@ -713,3 +713,46 @@ def test_figure_caption_column_reads_back_as_none_for_old_rows(monkeypatch, tmp_
             row.caption_source,
             row.description,
         ) == (3, ['Pedigree'], None, None, 'a family')
+
+
+def test_task_budget_model_reads_back_false_for_old_rows(monkeypatch, tmp_path):
+    """c3d9e1f7a2b4 adds tasks.budget_model in place. A task from before it
+    ran on the ordinary model and reads back False through the ORM."""
+    from lib.tasks.models import TaskDB
+
+    monkeypatch.setattr(db.env, 'CAA_ROOT', str(tmp_path))
+    monkeypatch.setattr(db.env, 'SQLLITE_DIR', '')
+    monkeypatch.setattr(db, '_engine', None)
+    monkeypatch.setattr(db, '_session_factory', None)
+
+    repo_root = Path(__file__).resolve().parents[2]
+    cfg = Config(str(repo_root / 'alembic.ini'))
+    command.upgrade(cfg, 'b7e2f9c4d6a1')
+
+    engine = db.get_engine()
+    with engine.begin() as connection:
+        gene_id = connection.execute(
+            text("INSERT INTO genes (symbol) VALUES ('TESTGENE') RETURNING id")
+        ).scalar_one()
+        paper_id = connection.execute(
+            text(
+                'INSERT INTO papers (gene_id, content_hash, filename, paper_types) '
+                "VALUES (:gene_id, 'h', 'f.pdf', '[]') RETURNING id"
+            ),
+            {'gene_id': gene_id},
+        ).scalar_one()
+        connection.execute(
+            text(
+                'INSERT INTO tasks (paper_id, type, status, tries, skip_successors, '
+                "updated_at) VALUES (:paper_id, 'VARIANT_EXTRACTION', 'COMPLETED', "
+                '1, 0, CURRENT_TIMESTAMP)'
+            ),
+            {'paper_id': paper_id},
+        )
+
+    command.upgrade(cfg, 'head')
+    command.upgrade(cfg, 'head')  # a clean no-op: alembic_version landed
+
+    with Session(engine) as session:
+        task = session.query(TaskDB).one()
+        assert task.budget_model is False
