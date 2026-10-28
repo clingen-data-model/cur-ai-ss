@@ -8,13 +8,14 @@
  * lib/taskTimeline; this file only renders them.
  */
 import type { CSSProperties } from 'react'
-import { Check, X } from 'lucide-react'
+import { Check, X, Zap } from 'lucide-react'
 import { useNow } from '@/hooks/useNow'
 import { formatElapsedLive, taskTypeProgress } from '@/lib/taskTimeline'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import type { TaskResp, TaskStatsResp } from '@/api/generated/types.gen'
 import type { TaskRowProgress } from '@/lib/taskTimeline'
+import { QUICK_RUN_LABEL } from '@/components/QuickRunCheckbox'
 
 // Same palette PipelineProgress used, keyed by the track ids in
 // lib/tasks/tracks.py -- one colour per track so the list reads as four
@@ -77,6 +78,17 @@ function TaskRow({ row }: { row: TaskRowProgress }) {
           <span className="text-muted-foreground"> ({row.instanceCount})</span>
         )}
       </span>
+
+      {/* A quick run looks like any other row once it is done; the marker is
+        * how a curator tells a result they should read with that in mind. */}
+      {row.quick && (
+        <Tooltip>
+          <TooltipTrigger render={<span className="flex shrink-0 cursor-help" />}>
+            <Zap className="size-3 text-muted-foreground" />
+          </TooltipTrigger>
+          <TooltipContent>{QUICK_RUN_LABEL}</TooltipContent>
+        </Tooltip>
+      )}
 
       {row.elapsedSeconds !== null && (
         <span className="ml-auto shrink-0 text-xs tabular-nums text-muted-foreground">

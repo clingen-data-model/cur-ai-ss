@@ -4000,3 +4000,17 @@ def test_paper_document_splices_each_figure_description_under_its_figure(
         + figure_description_block(rows[1])
         + '\n'
     )
+
+
+def test_create_task_carries_the_quick_run_flag(client, seeded_paper):
+    """The Rerun dialog's "Quick run" box: the task runs on the budget model
+    and says so in the response, so the timeline can mark it."""
+    response = client.post(
+        f'/papers/{seeded_paper.id}/tasks',
+        json=TaskCreateRequest(
+            type=TaskType.VARIANT_EXTRACTION, budget_model=True
+        ).model_dump(),
+    )
+    assert response.status_code == 200
+    assert response.json()[0]['budget_model'] is True
+    assert TaskCreateRequest(type=TaskType.VARIANT_EXTRACTION).budget_model is False

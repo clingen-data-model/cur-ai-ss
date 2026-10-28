@@ -35,6 +35,7 @@ def enqueue_task(
     additional_context: str | None = None,
     updated_by_user_id: int | None = None,
     context_origin: TaskType | None = None,
+    budget_model: bool = False,
 ) -> TaskDB:
     """Create or reset a task to PENDING status.
 
@@ -46,6 +47,8 @@ def enqueue_task(
     machine enqueues (worker successors) so they stay unattributed.
     ``context_origin`` is set only by enqueue_successors, naming the task the
     note was given to; a curator's own enqueue leaves it None.
+    ``budget_model`` runs the task on EXTRACTION_BUDGET_MODEL; like the note
+    it describes this run, so a re-queue without it clears it.
     """
     # Check if task exists (SQLAlchemy converts == None to IS NULL)
     existing_task = (
@@ -80,6 +83,7 @@ def enqueue_task(
         existing_task.skip_successors = skip_successors
         existing_task.additional_context = additional_context
         existing_task.context_origin = context_origin
+        existing_task.budget_model = budget_model
         existing_task.updated_by_user_id = updated_by_user_id
         session.flush()
         return existing_task
@@ -97,6 +101,7 @@ def enqueue_task(
             skip_successors=skip_successors,
             additional_context=additional_context,
             context_origin=context_origin,
+            budget_model=budget_model,
             updated_by_user_id=updated_by_user_id,
         )
         session.add(new_task)
@@ -111,6 +116,7 @@ def enqueue_all_instances(
     skip_successors: bool = False,
     additional_context: str | None = None,
     updated_by_user_id: int | None = None,
+    budget_model: bool = False,
 ) -> list[TaskDB]:
     """Re-queue all instances of a task type for a paper.
 
@@ -138,6 +144,7 @@ def enqueue_all_instances(
                 task.skip_successors = skip_successors
                 task.additional_context = additional_context
                 task.context_origin = None
+                task.budget_model = budget_model
                 task.updated_by_user_id = updated_by_user_id
                 # See enqueue_task: the previous attempt's start time is not
                 # this one's.
@@ -154,6 +161,7 @@ def enqueue_all_instances(
             skip_successors=skip_successors,
             additional_context=additional_context,
             updated_by_user_id=updated_by_user_id,
+            budget_model=budget_model,
         )
         return [task]
 
@@ -314,7 +322,8 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
     ancestor it came down from -- so every descendant's fresh run sees it as
     "supplied to <that step>, and might be relevant here". The note lives on
     this one chain of runs: the next enqueue of a descendant without a note
-    clears it.
+    clears it. ``budget_model`` travels the same way: a quick run of one task
+    is a quick run of everything it triggers.
     """
     from lib.models import PatientDB, VariantDB
     from lib.models.patient import AffectedStatus
@@ -322,6 +331,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
     user_id = task.updated_by_user_id
     note = task.additional_context
     origin = (task.context_origin or task.type) if note is not None else None
+    budget = task.budget_model
 
     match task.type:
         case TaskType.PDF_PARSING:
@@ -332,6 +342,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 updated_by_user_id=user_id,
                 additional_context=note,
                 context_origin=origin,
+                budget_model=budget,
             )
 
         case TaskType.PAPER_CLASSIFIER:
@@ -342,6 +353,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 updated_by_user_id=user_id,
                 additional_context=note,
                 context_origin=origin,
+                budget_model=budget,
             )
             enqueue_task(
                 session,
@@ -350,6 +362,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 updated_by_user_id=user_id,
                 additional_context=note,
                 context_origin=origin,
+                budget_model=budget,
             )
             enqueue_task(
                 session,
@@ -358,6 +371,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 updated_by_user_id=user_id,
                 additional_context=note,
                 context_origin=origin,
+                budget_model=budget,
             )
 
         case TaskType.FIGURE_DESCRIPTION:
@@ -368,6 +382,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 updated_by_user_id=user_id,
                 additional_context=note,
                 context_origin=origin,
+                budget_model=budget,
             )
 
         case TaskType.PATIENT_EXTRACTION:
@@ -386,6 +401,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     updated_by_user_id=user_id,
                     additional_context=note,
                     context_origin=origin,
+                    budget_model=budget,
                 )
 
             # Fan-in with VARIANT_EXTRACTION: occurrences needs the patients
@@ -399,6 +415,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     updated_by_user_id=user_id,
                     additional_context=note,
                     context_origin=origin,
+                    budget_model=budget,
                 )
 
         case TaskType.PATIENT_DEMOGRAPHICS:
@@ -422,6 +439,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     updated_by_user_id=user_id,
                     additional_context=note,
                     context_origin=origin,
+                    budget_model=budget,
                 )
 
             # Fan-in with PATIENT_VARIANT_OCCURRENCES: segregation reads every
@@ -453,6 +471,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     updated_by_user_id=user_id,
                     additional_context=note,
                     context_origin=origin,
+                    budget_model=budget,
                 )
 
             # Fan-in with PATIENT_EXTRACTION (see that case).
@@ -464,6 +483,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     updated_by_user_id=user_id,
                     additional_context=note,
                     context_origin=origin,
+                    budget_model=budget,
                 )
 
         case TaskType.VARIANT_HARMONIZATION:
@@ -475,6 +495,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 updated_by_user_id=user_id,
                 additional_context=note,
                 context_origin=origin,
+                budget_model=budget,
             )
 
         case TaskType.PATIENT_VARIANT_OCCURRENCES:
@@ -509,6 +530,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     updated_by_user_id=user_id,
                     additional_context=note,
                     context_origin=origin,
+                    budget_model=budget,
                 )
 
             # Re-link paper disease context after case-level occurrence extraction,
@@ -519,6 +541,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 task_type=TaskType.PAPER_MONDO_LINKING,
                 additional_context=note,
                 context_origin=origin,
+                budget_model=budget,
             )
 
             # Expand to per-occurrence OCCURRENCE_MONDO_LINKING tasks for
@@ -537,6 +560,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     task_type=TaskType.OCCURRENCE_MONDO_LINKING,
                     additional_context=note,
                     context_origin=origin,
+                    budget_model=budget,
                     patient_variant_occurrence_id=occurrence.id,
                 )
 
@@ -549,6 +573,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 updated_by_user_id=user_id,
                 additional_context=note,
                 context_origin=origin,
+                budget_model=budget,
             )
 
         case TaskType.PHENOTYPE_EXTRACTION:
@@ -581,6 +606,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                     updated_by_user_id=user_id,
                     additional_context=note,
                     context_origin=origin,
+                    budget_model=budget,
                 )
 
         case TaskType.PAPER_METADATA:
@@ -590,6 +616,7 @@ def enqueue_successors(session: Session, task: TaskDB) -> None:
                 task_type=TaskType.PAPER_MONDO_LINKING,
                 additional_context=note,
                 context_origin=origin,
+                budget_model=budget,
             )
 
         case (

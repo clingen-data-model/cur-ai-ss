@@ -364,3 +364,29 @@ def test_a_run_without_a_note_passes_none_and_clears_an_inherited_one(
     db_session.refresh(stale)
     assert stale.status == TaskStatus.PENDING
     assert (stale.additional_context, stale.context_origin) == (None, None)
+
+
+def test_a_quick_run_queues_quick_successors(db_session, paper):
+    """budget_model is a property of the run: what a quick run of Paper
+    Classifier triggers is a quick run too, all the way down."""
+    classifier = _task(db_session, paper, TaskType.PAPER_CLASSIFIER, budget_model=True)
+    enqueue_successors(db_session, classifier)
+    queued = (
+        db_session.query(TaskDB)
+        .filter(TaskDB.paper_id == paper.id, TaskDB.status == TaskStatus.PENDING)
+        .all()
+    )
+    assert {t.type for t in queued} == {
+        TaskType.PAPER_METADATA,
+        TaskType.VARIANT_EXTRACTION,
+        TaskType.FIGURE_DESCRIPTION,
+    }
+    assert all(t.budget_model for t in queued)
+
+
+def test_an_ordinary_re_run_clears_a_successor_s_quick_flag(db_session, paper):
+    from lib.tasks.misc import enqueue_task
+
+    _task(db_session, paper, TaskType.PAPER_METADATA, budget_model=True)
+    task = enqueue_task(db_session, paper.id, TaskType.PAPER_METADATA)
+    assert task.budget_model is False

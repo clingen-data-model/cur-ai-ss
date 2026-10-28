@@ -104,3 +104,21 @@ def test_the_failing_setting_is_named():
     """The message says which setting to go fix."""
     with pytest.raises(ValidationError, match='VLM_MODEL='):
         _env(VLM_MODEL='gemini/some-model')
+
+
+def test_budget_model_is_optional_and_falls_back_to_the_extraction_model():
+    """Unset, a quick run is an ordinary run: the box in the UI is safe on a
+    deployment that has not chosen a cheaper model."""
+    assert _env().EXTRACTION_BUDGET_MODEL is None
+
+
+def test_budget_model_is_validated_like_the_others():
+    with pytest.raises(ValidationError, match='EXTRACTION_BUDGET_MODEL'):
+        _env(EXTRACTION_BUDGET_MODEL='anthropic/claude-haiku-5-5')  # no key
+    with pytest.raises(ValidationError, match='provider prefix'):
+        _env(EXTRACTION_BUDGET_MODEL='claude-haiku-5-5')  # bare name
+    env = _env(
+        EXTRACTION_BUDGET_MODEL='anthropic/claude-haiku-5-5',
+        ANTHROPIC_API_KEY='sk-ant',
+    )
+    assert env.EXTRACTION_BUDGET_MODEL == 'anthropic/claude-haiku-5-5'

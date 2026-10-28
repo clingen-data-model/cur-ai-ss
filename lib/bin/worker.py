@@ -290,6 +290,7 @@ def _maybe_queue_verification(session: Session, task: TaskDB) -> None:
         paper_id=task.paper_id,
         task_type=TaskType.EXTRACTION_VERIFICATION,
         updated_by_user_id=task.updated_by_user_id,
+        budget_model=task.budget_model,
     )
 
 

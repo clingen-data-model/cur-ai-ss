@@ -42,6 +42,14 @@ class Env(BaseSettings):
     # method applied to some subjects) do not arise.
     EXTRACTION_MODEL: str = 'openai/gpt-5.6-luna'
     LINKING_MODEL: str = 'openai/gpt-5.6-luna'
+    # The cheaper model a curator can pick for one run from the Rerun dialog
+    # ("Quick run"): every agent EXTRACTION_MODEL covers runs on it for that
+    # task and the tasks it triggers (tasks.budget_model). Unset, a quick run
+    # is an ordinary run, so the box is safe before a deployment configures
+    # one. dev-caa sets Haiku 5.5, which the 2026-10 trial found matched
+    # Sonnet on most papers and missed pedigree members on the hardest
+    # (CLAUDE.md, LINKING_MODEL).
+    EXTRACTION_BUDGET_MODEL: Optional[str] = None
     VLM_MODEL: str = 'openai/gpt-5.6-sol'
     # Separate from EXTRACTION_MODEL so chat's model choice (interactive,
     # latency-sensitive) can move independently of extraction's.
@@ -103,10 +111,13 @@ class Env(BaseSettings):
         """
         for setting, model in (
             ('EXTRACTION_MODEL', self.EXTRACTION_MODEL),
+            ('EXTRACTION_BUDGET_MODEL', self.EXTRACTION_BUDGET_MODEL),
             ('LINKING_MODEL', self.LINKING_MODEL),
             ('VLM_MODEL', self.VLM_MODEL),
             ('CHAT_MODEL', self.CHAT_MODEL),
         ):
+            if model is None:
+                continue  # the one optional model: unset means EXTRACTION_MODEL
             provider, _ = split_provider(model)
             if provider not in ROUTABLE_PROVIDERS:
                 supported = ', '.join(sorted(ROUTABLE_PROVIDERS))
