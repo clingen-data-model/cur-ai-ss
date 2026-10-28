@@ -263,16 +263,34 @@ def log_run_metrics(task_type: str, result: Any, **metadata: Any) -> None:
             )
 
 
-def build_followup_prompt(additional_context: str) -> str:
-    """Build a follow-up prompt for continuing an existing agent conversation.
+def build_followup_prompt(additional_context: str, task_data: str | None = None) -> str:
+    """A follow-up turn in the task's own conversation: the task's data as it
+    stands now, then the curator's note.
 
-    Args:
-        additional_context: Context/feedback to provide to the agent
-
-    Returns:
-        Formatted follow-up prompt
+    The data is restated because the conversation holds the first run's copy
+    of it, and the rows it was read from may have been edited since: the
+    proband set by hand after extraction found none, a variant's notation
+    corrected, a patient's affected status changed. Without the restatement
+    the agent reasons from stale inputs and the note has nothing to point at
+    ("update the relationships now that there is a proband" told the
+    demographics agent nothing about who the proband was). ``task_data`` is
+    the same string the handler's first message carries as its data item,
+    so the agent sees before and after in one conversation. The paper and
+    the instructions are not restated: neither changes between runs of one
+    task (a re-parse reaches the task down the successor graph, as a fresh
+    run). Handlers whose first message is the paper alone pass nothing.
     """
-    return f'Please review your previous analysis in light of the following additional context:\n\n{additional_context}'
+    review = (
+        'Please review your previous analysis in light of the following '
+        f'additional context:\n\n{additional_context}'
+    )
+    if task_data is None:
+        return review
+    return (
+        "This task's data as it stands now. It may have been edited since your "
+        'previous run; where it differs from what you were given before, these '
+        f'values are the ones that hold:\n\n{task_data}\n\n{review}'
+    )
 
 
 async def continues_conversation(
@@ -508,7 +526,8 @@ async def handle_paper_classifier(task_id: int) -> None:
     if additional_context is not None and await continues_conversation(
         agent_sess, additional_context, context_origin
     ):
-        # Follow-up: agent has context from conversation
+        # Follow-up: the conversation holds the paper, which is this task's
+        # only input, so there is no data to restate (build_followup_prompt).
         message: AgentInput = build_followup_prompt(additional_context)
         agent = paper_classifier_agent
     else:
@@ -980,12 +999,15 @@ async def handle_patient_demographics(task_id: int) -> None:
         proband_identifier = proband_row.identifier if proband_row else None
 
     agent_sess = agent_session(task_id)
+    task_data = (
+        f'Patient JSON:\n{patient_data}\n\nProband Identifier:\n{proband_identifier}'
+    )
 
     if additional_context is not None and await continues_conversation(
         agent_sess, additional_context, context_origin
     ):
         # Follow-up: agent has context from conversation
-        message: AgentInput = build_followup_prompt(additional_context)
+        message: AgentInput = build_followup_prompt(additional_context, task_data)
         agent = patient_demographics_agent
     else:
         # Initial query: build full message with paper + patient data + instructions
@@ -994,8 +1016,7 @@ async def handle_patient_demographics(task_id: int) -> None:
         message = paper_input(
             format_paper_context(paper_markdown, gene_symbol),
             PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS,
-            f'Patient JSON:\n{patient_data}\n\n'
-            f'Proband Identifier:\n{proband_identifier}',
+            task_data,
         )
         agent = patient_demographics_agent
         message = with_curator_note(message, additional_context, context_origin)
@@ -1099,12 +1120,13 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
         }
 
     agent_sess = agent_session(task_id)
+    task_data = f'Family Structure: {json.dumps(family_info, indent=2, default=str)}'
 
     if additional_context is not None and await continues_conversation(
         agent_sess, additional_context, context_origin
     ):
         # Follow-up: agent has context from conversation
-        message: AgentInput = build_followup_prompt(additional_context)
+        message: AgentInput = build_followup_prompt(additional_context, task_data)
         agent = segregation_evidence_extractor
     else:
         # Initial query: build full message with paper + family data + instructions
@@ -1113,7 +1135,7 @@ async def handle_segregation_evidence_extraction(task_id: int) -> None:
         message = paper_input(
             format_paper_context(paper_markdown, gene_symbol),
             SEGREGATION_EVIDENCE_AGENT_INSTRUCTIONS,
-            f'Family Structure: {json.dumps(family_info, indent=2, default=str)}',
+            task_data,
         )
         agent = segregation_evidence_extractor
         message = with_curator_note(message, additional_context, context_origin)
@@ -1249,12 +1271,15 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
         }
 
     agent_sess = agent_session(task_id)
+    task_data = (
+        f'Family Structure and Data: {json.dumps(family_info, indent=2, default=str)}'
+    )
 
     if additional_context is not None and await continues_conversation(
         agent_sess, additional_context, context_origin
     ):
         # Follow-up: agent has context from conversation
-        message: AgentInput = build_followup_prompt(additional_context)
+        message: AgentInput = build_followup_prompt(additional_context, task_data)
     else:
         # Initial query: build full message with paper + family data + instructions
         await agent_sess.clear_session()
@@ -1262,7 +1287,7 @@ async def handle_segregation_analysis_computed(task_id: int) -> None:
         message = paper_input(
             format_paper_context(paper_markdown, gene_symbol),
             SEGREGATION_ANALYSIS_COMPUTED_AGENT_INSTRUCTIONS,
-            f'Family Structure and Data: {json.dumps(family_info, indent=2, default=str)}',
+            task_data,
         )
         message = with_curator_note(message, additional_context, context_origin)
 
@@ -1345,19 +1370,17 @@ async def handle_variant_harmonization(task_id: int) -> None:
         }
 
     agent_sess = agent_session(task_id)
+    task_data = f'Variant JSON:\n{json.dumps(variant_input, indent=2)}'
 
     if additional_context is not None and await continues_conversation(
         agent_sess, additional_context, context_origin
     ):
         # Follow-up: agent has context from conversation
-        message: AgentInput = build_followup_prompt(additional_context)
+        message: AgentInput = build_followup_prompt(additional_context, task_data)
     else:
         # Initial query: build full message with variant data + instructions
         await agent_sess.clear_session()
-        message = (
-            f'Variant JSON:\n{json.dumps(variant_input, indent=2)}\n\n'
-            f'{VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS}'
-        )
+        message = f'{task_data}\n\n{VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS}'
         message = with_curator_note(message, additional_context, context_origin)
 
     result = await Runner.run(
@@ -1560,12 +1583,13 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
         ]
 
     agent_sess = agent_session(task_id)
+    task_data = f'Variants JSON:\n{structured_variants}\n\nPatients JSON:\n{structured_patients}'
 
     if additional_context is not None and await continues_conversation(
         agent_sess, additional_context, context_origin
     ):
         # Follow-up: agent has context from conversation
-        message: AgentInput = build_followup_prompt(additional_context)
+        message: AgentInput = build_followup_prompt(additional_context, task_data)
         agent = patient_variant_occurrence_agent
     else:
         # Initial query: build full message with paper + variant/patient data + instructions
@@ -1574,8 +1598,7 @@ async def handle_patient_variant_occurrence(task_id: int) -> None:
         message = paper_input(
             format_paper_context(paper_markdown, gene_symbol),
             PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS,
-            f'Variants JSON:\n{structured_variants}\n\n'
-            f'Patients JSON:\n{structured_patients}',
+            task_data,
         )
         agent = patient_variant_occurrence_agent
         message = with_curator_note(message, additional_context, context_origin)
@@ -1891,12 +1914,13 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         }
 
     agent_sess = agent_session(task_id)
+    task_data = f'Structured Patient JSON:\n{[patient_data]}'
 
     if additional_context is not None and await continues_conversation(
         agent_sess, additional_context, context_origin
     ):
         # Follow-up: agent has context from conversation
-        message: AgentInput = build_followup_prompt(additional_context)
+        message: AgentInput = build_followup_prompt(additional_context, task_data)
         agent = patient_phenotype_linking_agent
     else:
         # Initial query: build full message with paper + patient data + instructions
@@ -1905,7 +1929,7 @@ async def handle_phenotype_extraction(task_id: int) -> None:
         message = paper_input(
             format_paper_context(paper_markdown, gene_symbol),
             PATIENT_PHENOTYPE_LINKING_AGENT_INSTRUCTIONS,
-            f'Structured Patient JSON:\n{[patient_data]}',
+            task_data,
         )
         agent = patient_phenotype_linking_agent
         message = with_curator_note(message, additional_context, context_origin)
@@ -2013,21 +2037,19 @@ async def handle_hpo_linking(task_id: int) -> None:
         }
 
     agent_sess = agent_session(task_id)
+    task_data = f'Phenotype JSON:\n{json.dumps(phenotype_data, indent=2)}'
 
     if additional_context is not None and await continues_conversation(
         agent_sess, additional_context, context_origin
     ):
         # Follow-up: agent has context from conversation
-        message: AgentInput = build_followup_prompt(additional_context)
+        message: AgentInput = build_followup_prompt(additional_context, task_data)
     else:
         # Initial query: build full message with phenotype data + instructions.
         # A follow-up lands here too when there is no conversation to follow
         # up on -- a link reused from the HPO link cache never ran the agent.
         await agent_sess.clear_session()
-        message = (
-            f'Phenotype JSON:\n{json.dumps(phenotype_data, indent=2)}\n\n'
-            f'{HPO_LINKING_AGENT_INSTRUCTIONS}'
-        )
+        message = f'{task_data}\n\n{HPO_LINKING_AGENT_INSTRUCTIONS}'
         message = with_curator_note(message, additional_context, context_origin)
 
     try:
@@ -2178,28 +2200,31 @@ async def handle_mondo_linking(task_id: int) -> None:
 
     if query:
         agent_sess = agent_session(task_id)
+        target_payload = {
+            'scope': target.scope.value,
+            'patient_variant_occurrence_id': target.patient_variant_occurrence_id,
+            'disease_text': target.disease_text,
+            'inheritance_mode': target.inheritance_mode,
+        }
+        task_data = (
+            f'MONDO linking target JSON:\n{json.dumps(target_payload, indent=2)}'
+        )
         if additional_context is not None and await continues_conversation(
             agent_sess, additional_context, context_origin
         ):
             # Rerun with feedback: continue the existing conversation instead of
             # resending the paper context.
-            message: AgentInput = build_followup_prompt(additional_context)
+            message: AgentInput = build_followup_prompt(additional_context, task_data)
         else:
             # Lead with the shared paper-context prefix so the API can reuse the
             # cache the other paper agents already warmed, then append the
             # MONDO-specific target and instructions.
             await agent_sess.clear_session()
             paper_markdown = paper_text(target.paper_id, supplement_format)
-            target_payload = {
-                'scope': target.scope.value,
-                'patient_variant_occurrence_id': target.patient_variant_occurrence_id,
-                'disease_text': target.disease_text,
-                'inheritance_mode': target.inheritance_mode,
-            }
             message = paper_input(
                 format_paper_context(paper_markdown, target.gene_symbol),
                 MONDO_LINKING_AGENT_INSTRUCTIONS,
-                f'MONDO linking target JSON:\n{json.dumps(target_payload, indent=2)}',
+                task_data,
             )
             message = with_curator_note(message, additional_context, context_origin)
         result = await Runner.run(
