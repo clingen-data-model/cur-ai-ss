@@ -584,3 +584,106 @@ async def test_figure_description_labels_an_inherited_note(
         'This user-provided context was given for this re-run of the whole paper'
     )
     assert seen['notes'].endswith('\nSix pedigrees over three figures.')
+
+
+def test_build_followup_prompt_restates_the_data_ahead_of_the_note():
+    """The conversation holds the first run's data; a follow-up carries the
+    rows as they stand now, before the note, or just the note for a task
+    whose only input is the paper."""
+    from lib.tasks.handlers import build_followup_prompt
+
+    bare = build_followup_prompt('Set II-2 as the proband.')
+    assert bare.startswith('Please review your previous analysis')
+    assert bare.endswith('\nSet II-2 as the proband.')
+
+    restated = build_followup_prompt(
+        'Set II-2 as the proband.', 'Patient JSON:\n{...}\n\nProband Identifier:\nII-2'
+    )
+    assert restated.startswith("This task's data as it stands now.")
+    assert restated.index('Proband Identifier:\nII-2') < restated.index(
+        'Please review your previous analysis'
+    )
+    assert restated.endswith('\nSet II-2 as the proband.')
+
+
+async def test_demographics_follow_up_carries_the_proband_set_since_the_first_run(
+    monkeypatch, db_session, paper
+):
+    """Extraction found no proband; a curator marked one by hand and re-ran
+    demographics for a relative with a note. The follow-up turn must name the
+    proband, which the conversation's first message read as None."""
+    from lib.models import FamilyDB, PatientDB
+    from lib.tasks import handlers
+    from lib.tasks.models import TaskDB, TaskStatus, TaskType
+
+    family = FamilyDB(
+        paper_id=paper.id,
+        identifier='F1',
+        identifier_evidence=dict(value='F1', reasoning='test'),
+        consanguinity=False,
+        consanguinity_evidence=dict(value=False, reasoning='test'),
+    )
+    db_session.add(family)
+    db_session.flush()
+    unknown = dict(value='Unknown', reasoning='test')
+    none = dict(value=None, reasoning='test')
+    rows = {}
+    for identifier, proband in (('II-1', 'Unknown'), ('II-2', 'Proband')):
+        rows[identifier] = PatientDB(
+            paper_id=paper.id,
+            family_id=family.id,
+            identifier=identifier,
+            proband_status=proband,  # II-2: the curator's edit
+            sex='Unknown',
+            country_of_origin='Unknown',
+            race='Unknown',
+            ethnicity='Unknown',
+            affected_status='Unknown',
+            identifier_evidence=dict(value=identifier, reasoning='test'),
+            family_assignment_evidence=dict(value='F1', reasoning='test'),
+            proband_status_evidence=unknown,
+            sex_evidence=unknown,
+            country_of_origin_evidence=unknown,
+            race_evidence=unknown,
+            ethnicity_evidence=unknown,
+            affected_status_evidence=unknown,
+            age_diagnosis_evidence=none,
+            age_report_evidence=none,
+            age_death_evidence=none,
+        )
+        db_session.add(rows[identifier])
+    db_session.flush()
+    task = TaskDB(
+        paper_id=paper.id,
+        type=TaskType.PATIENT_DEMOGRAPHICS,
+        status=TaskStatus.RUNNING,
+        patient_id=rows['II-1'].id,
+        additional_context='Update the relationships now that there is a proband.',
+        context_origin=None,
+    )
+    db_session.add(task)
+    db_session.commit()
+
+    class _Captured(Exception):
+        pass
+
+    seen: dict = {}
+
+    async def fake_run(agent, message, output_type, *, check, session):
+        seen['message'] = message
+        raise _Captured
+
+    session = _ItemsSession([{'role': 'user', 'content': 'the first run'}])
+    monkeypatch.setattr(handlers, 'run_with_manual_output', fake_run)
+    monkeypatch.setattr(handlers, 'agent_session', lambda task_id: session)
+    monkeypatch.setattr(handlers, 'citation_check', lambda paper_id: None)
+
+    with pytest.raises(_Captured):
+        await handlers.handle_patient_demographics(task.id)
+
+    message = seen['message']
+    assert isinstance(message, str)  # a follow-up turn, not a fresh first message
+    assert not session.cleared
+    assert "This task's data as it stands now" in message
+    assert 'Proband Identifier:\nII-2' in message
+    assert message.index('II-2') < message.index('Update the relationships')
