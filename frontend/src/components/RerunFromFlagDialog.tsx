@@ -19,6 +19,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import type { FlagResp } from '@/api/generated/types.gen'
 import { usePaperBusy } from '@/hooks/usePaperBusy'
+import { QuickRunCheckbox } from '@/components/QuickRunCheckbox'
 import { flagSourceLabel } from '@/lib/flags'
 
 export function RerunFromFlagDialog({
@@ -33,14 +34,18 @@ export function RerunFromFlagDialog({
   flag: FlagResp | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  onConfirm: (note: string) => void
+  onConfirm: (note: string, budgetModel: boolean) => void
   isPending?: boolean
 }) {
   const [note, setNote] = useState('')
+  const [budgetModel, setBudgetModel] = useState(false)
   const busy = usePaperBusy(paperId, open)
 
   useEffect(() => {
-    if (open) setNote('')
+    if (open) {
+      setNote('')
+      setBudgetModel(false)
+    }
   }, [open, flag?.id])
 
   return (
@@ -66,12 +71,16 @@ export function RerunFromFlagDialog({
             rows={3}
           />
         </div>
+        <QuickRunCheckbox checked={budgetModel} onChange={setBudgetModel} />
         {busy && <p className="text-sm text-amber-700 dark:text-amber-400">{busy}</p>}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={() => onConfirm(note.trim())} disabled={isPending || !!busy}>
+          <Button
+            onClick={() => onConfirm(note.trim(), budgetModel)}
+            disabled={isPending || !!busy}
+          >
             <RefreshCw className="size-3.5 mr-1.5" />
             {isPending ? 'Queuing...' : 'Re-run'}
           </Button>

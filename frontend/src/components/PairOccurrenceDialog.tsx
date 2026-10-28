@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { QuickRunCheckbox } from '@/components/QuickRunCheckbox'
 import { apiErrorMessage } from '@/lib/apiError'
 import { usePaperBusy } from '@/hooks/usePaperBusy'
 
@@ -52,11 +53,13 @@ export function PairOccurrenceDialog({
   const currentPartnerId = occurrence.paired_variant_link_id ?? null
   const [partnerId, setPartnerId] = useState<number | null>(currentPartnerId)
   const [context, setContext] = useState('')
+  const [budgetModel, setBudgetModel] = useState(false)
   const hasExistingPairing = currentPartnerId != null
 
   const reset = () => {
     setPartnerId(currentPartnerId)
     setContext('')
+    setBudgetModel(false)
   }
 
   const pairMutation = useMutation({
@@ -89,6 +92,7 @@ export function PairOccurrenceDialog({
           patient_id: occurrence.patient_id,
           additional_context: context.trim() || null,
           skip_successors: false,
+          budget_model: budgetModel,
         },
         throwOnError: true,
       }),
@@ -97,6 +101,7 @@ export function PairOccurrenceDialog({
       toast.success('Compound het evaluation agent queued')
       setOpen(false)
       setContext('')
+    setBudgetModel(false)
     },
     onError: (error) => toast.error(apiErrorMessage(error, 'Failed to queue agent re-run')),
   })
@@ -201,6 +206,7 @@ export function PairOccurrenceDialog({
                   rows={3}
                 />
               </div>
+              <QuickRunCheckbox checked={budgetModel} onChange={setBudgetModel} />
               <p className="text-xs text-muted-foreground">
                 Re-runs compound-het evaluation for this patient in the background. The result
                 will show up here once it's done.

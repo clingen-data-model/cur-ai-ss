@@ -280,6 +280,15 @@ class TaskDB(Base):
     context_origin: Mapped[TaskType | None] = mapped_column(
         SQLEnum(TaskType), nullable=True
     )
+    # Run on EXTRACTION_BUDGET_MODEL instead of EXTRACTION_MODEL: the Rerun
+    # dialog's "Quick run" box. A property of the run, not the task, so it
+    # comes down the successor graph like additional_context and is reset by
+    # the next enqueue without it. Only the agents on the extraction model
+    # read it (lib.agents.model_factory.agent_on_tier); linking and vision
+    # keep their own settings.
+    budget_model: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default='0'
+    )
 
     # When the worker last moved this task to RUNNING. NULL until it does, and
     # re-stamped on a retry, so it always describes the attempt that produced
@@ -334,6 +343,7 @@ class TaskResp(BaseModel):
     tries: int
     error_message: str | None
     skip_successors: bool
+    budget_model: bool = False
     additional_context: str | None
     context_origin: TaskType | None = None
     family_id: int | None
@@ -355,4 +365,6 @@ class TaskCreateRequest(BaseModel):
     phenotype_id: int | None = None
     patient_variant_occurrence_id: int | None = None
     skip_successors: bool = False
+    # Run this task and what it triggers on the budget model (see TaskDB).
+    budget_model: bool = False
     additional_context: str | None = None

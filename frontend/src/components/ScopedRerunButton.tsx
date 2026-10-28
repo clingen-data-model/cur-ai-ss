@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { CONTEXT_NOTE, TaskSuccessors } from '@/components/TaskSuccessors'
+import { QuickRunCheckbox } from '@/components/QuickRunCheckbox'
 import { apiErrorMessage } from '@/lib/apiError'
 import { usePaperBusy } from '@/hooks/usePaperBusy'
 
@@ -51,6 +52,7 @@ export function ScopedRerunButton({
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const [context, setContext] = useState('')
+  const [budgetModel, setBudgetModel] = useState(false)
   const busy = usePaperBusy(paperId, open)
 
   const mutation = useMutation({
@@ -62,6 +64,7 @@ export function ScopedRerunButton({
           ...scope,
           additional_context: context.trim() || null,
           skip_successors: false,
+          budget_model: budgetModel,
         },
         throwOnError: true,
       }),
@@ -74,6 +77,7 @@ export function ScopedRerunButton({
       toast.success(`${taskType} queued`)
       setOpen(false)
       setContext('')
+      setBudgetModel(false)
     },
     onError: (error) => toast.error(apiErrorMessage(error, 'Failed to queue task')),
   })
@@ -88,7 +92,10 @@ export function ScopedRerunButton({
         open={open}
         onOpenChange={(next) => {
           setOpen(next)
-          if (!next) setContext('')
+          if (!next) {
+            setContext('')
+            setBudgetModel(false)
+          }
         }}
       >
         <DialogContent onClick={(e) => e.stopPropagation()}>
@@ -111,6 +118,7 @@ export function ScopedRerunButton({
           {/* Same chain the paper-wide dialog shows; a scoped re-run queues
            * the same successor types, scoped where they fan out. */}
           <TaskSuccessors taskType={taskType} />
+          <QuickRunCheckbox checked={budgetModel} onChange={setBudgetModel} />
           {busy &&<p className="text-sm text-amber-700 dark:text-amber-400">{busy}</p>}
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>

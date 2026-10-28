@@ -35,6 +35,8 @@ export interface TaskRowProgress {
   errorMessage: string | null
   /** How many rows of this type exist -- >1 for a fan-out type (per-patient, etc). */
   instanceCount: number
+  /** Any instance ran as a quick run (tasks.budget_model): the cheaper model. */
+  quick: boolean
 }
 
 function earliestStart(tasks: TaskResp[]): number | null {
@@ -99,6 +101,7 @@ export function taskTypeProgress(
       elapsedSeconds,
       errorMessage: failed.find((t) => t.error_message)?.error_message ?? null,
       instanceCount: mine.length,
+      quick: mine.some((t) => t.budget_model === true),
     }
   })
 }

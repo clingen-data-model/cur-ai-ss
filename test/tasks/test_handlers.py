@@ -584,3 +584,56 @@ async def test_figure_description_labels_an_inherited_note(
         'This user-provided context was given for this re-run of the whole paper'
     )
     assert seen['notes'].endswith('\nSix pedigrees over three figures.')
+
+
+@pytest.mark.asyncio
+async def test_a_quick_task_runs_its_agent_on_the_budget_model(
+    monkeypatch, db_session, paper
+):
+    """The handler hands run_with_checked_output a clone on
+    EXTRACTION_BUDGET_MODEL when the task row says so, and the agent itself
+    otherwise."""
+    from types import SimpleNamespace
+
+    from agents.extensions.models.litellm_model import LitellmModel
+
+    from lib.core.environment import env
+    from lib.models.patient import PatientExtractionOutput
+    from lib.tasks import handlers
+    from lib.tasks.models import TaskDB, TaskStatus, TaskType
+
+    monkeypatch.setattr(env, 'ANTHROPIC_API_KEY', 'sk-ant')
+    monkeypatch.setattr(env, 'EXTRACTION_BUDGET_MODEL', 'anthropic/claude-haiku-5-5')
+
+    class _Session:
+        async def clear_session(self) -> None:
+            pass
+
+    seen = []
+
+    async def fake_run(agent, message, check, session):
+        seen.append(agent)
+        return SimpleNamespace(
+            final_output=PatientExtractionOutput(patients=[], families=[]),
+            raw_responses=[],
+        )
+
+    monkeypatch.setattr(handlers, 'run_with_checked_output', fake_run)
+    monkeypatch.setattr(handlers, 'agent_session', lambda task_id: _Session())
+    monkeypatch.setattr(handlers, 'citation_check', lambda paper_id: None)
+    monkeypatch.setattr(handlers, 'log_run_metrics', lambda *a, **k: None)
+    for budget in (True, False):
+        task = TaskDB(
+            paper_id=paper.id,
+            type=TaskType.PATIENT_EXTRACTION,
+            status=TaskStatus.RUNNING,
+            budget_model=budget,
+        )
+        db_session.add(task)
+        db_session.commit()
+        await handlers.handle_patient_extraction(task.id)
+
+    quick, ordinary = seen
+    assert isinstance(quick.model, LitellmModel)
+    assert quick.model.model == 'anthropic/claude-haiku-5-5'
+    assert ordinary is handlers.patient_extraction_agent
