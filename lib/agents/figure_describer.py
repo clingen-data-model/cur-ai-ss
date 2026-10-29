@@ -11,8 +11,8 @@ directly, twice at most:
    kind (a clinical photograph, a protein schematic, a frequency chart) is
    left undescribed.
 2. ``describe_figure``: the description the downstream agents read. A
-   pedigree gets ``PEDIGREE_VISION_PROMPT``, unchanged from when it was the
-   only kind; every other kind gets ``EVIDENCE_VISION_PROMPT``, which asks
+   pedigree gets ``PEDIGREE_VISION_PROMPT``; every other kind gets
+   ``EVIDENCE_VISION_PROMPT``, which asks
    for what a curator would take from the figure: who was tested, for which
    variant, with what result and by what method. A figure of both sorts
    (a pedigree beside its Sanger traces) gets both, one after the other.
@@ -98,7 +98,6 @@ CLASSIFY_PROMPT = f"""Which of these kinds of figure does this image contain? A 
 
 Answer with the matching kind names exactly as written above, separated by semicolons, or exactly {NO_READABLE_KIND} if the image contains none of them (for example a clinical photograph, a protein or gene schematic, a chart of cohort frequencies, histology, a brain scan, a growth chart). Decide from the image itself; the caption is context, not the answer. Answer with the list only, nothing else."""
 
-# Unchanged from when the pedigree was the only figure described.
 PEDIGREE_VISION_PROMPT = """First determine whether this image is a pedigree (family tree) diagram.
 If it is NOT a pedigree diagram, respond with exactly NOT_A_PEDIGREE and nothing else.
 
@@ -118,6 +117,8 @@ Then describe:
 - The proband if present
 - Number of generations
 - Any uncertainties due to image resolution or clarity
+
+The caption printed below, when there is one, is the paper's legend for this figure. Read the meaning of marks from it -- an asterisk, a dot, a half-filled symbol, an arrow, a slash -- and say which individuals carry each mark and what the legend says it means. A mark the legend does not define is reported as undefined. The structure of the family comes from the image.
 
 IMPORTANT: List every visible individual, even if some details are unclear. Do not infer missing details."""
 
@@ -246,15 +247,17 @@ def describe_figure(
     """The description for a figure of these kinds, or None when the model
     gave no usable answer for any of them.
 
-    A pedigree gets the pedigree prompt alone, as it always has (the caption
-    is not shown to it). Any other kind gets the evidence prompt with the
-    caption, whose panel labels are often the only link from a trace to a
-    person. A figure of both sorts gets both texts, the pedigree first.
+    Both prompts are shown the caption. For a pedigree it is the legend
+    that defines the marks (the pedigree prompt used to go without it, and a
+    model reading an asterisk the legend defined reported it as undefined);
+    for the other kinds its panel labels are often the only link from a trace
+    to a person. A figure of both sorts gets both texts, the pedigree first.
     """
     parts: list[str] = []
     if FigureKind.PEDIGREE in kinds:
         pedigree = vlm_describe(
-            image_url, PEDIGREE_VISION_PROMPT + _notes_section(notes)
+            image_url,
+            PEDIGREE_VISION_PROMPT + _caption_section(caption) + _notes_section(notes),
         )
         # A half-described pedigree stored as authoritative is worse than none,
         # so None stays None; NOT_A_PEDIGREE is the model changing its mind.

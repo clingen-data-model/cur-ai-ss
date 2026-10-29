@@ -74,16 +74,24 @@ class _Vision:
         raise AssertionError(f'unexpected prompt: {prompt[:60]}')
 
 
-def test_a_pedigree_gets_the_pedigree_prompt_alone(monkeypatch):
-    """The pedigree prompt is what it was when the pedigree was the only
-    kind described: no caption, nothing appended."""
+def test_a_pedigree_gets_the_pedigree_prompt_with_the_caption(monkeypatch):
+    """The legend is where the marks are defined. Shown a pedigree without it,
+    the model reported an asterisk the legend defined ("analyzed (indicated
+    by an asterisk)") as "not defined in the image"."""
     vision = _Vision('Pedigree')
     monkeypatch.setattr(describer, 'vlm_describe', vision)
 
-    description = describe_figure('data:', [FigureKind.PEDIGREE], 'Fig 2', None)
+    description = describe_figure(
+        'data:', [FigureKind.PEDIGREE], 'Fig 2. Asterisk: genotyped.', None
+    )
 
     assert description == 'II-1 affected female'
-    assert vision.prompts == [PEDIGREE_VISION_PROMPT]
+    (prompt,) = vision.prompts
+    assert prompt.startswith(PEDIGREE_VISION_PROMPT)
+    assert prompt.endswith(
+        'Caption as printed in the paper:\nFig 2. Asterisk: genotyped.'
+    )
+    assert 'legend for this figure' in PEDIGREE_VISION_PROMPT
 
 
 def test_evidence_kinds_get_the_evidence_prompt_with_the_caption(monkeypatch):
