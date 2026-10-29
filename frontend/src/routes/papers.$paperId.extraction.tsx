@@ -29,7 +29,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { API_BASE_URL, getAccessToken } from '@/lib/api'
 import {
   EditableDeNovoCell,
-  EditableVariantInheritanceCell,
   EditableDiseaseNameCell,
   EditableInheritanceCell,
   EditableTestingMethodsCell,
@@ -299,11 +298,6 @@ function OccurrencesTab({
         id: 'de_novo',
         header: 'De Novo',
         cell: ({ row }) => <EditableDeNovoCell paperId={paperId} occurrence={row.original.occurrence} />,
-      },
-      {
-        id: 'variant_inheritance',
-        header: 'Variant inheritance',
-        cell: ({ row }) => <EditableVariantInheritanceCell paperId={paperId} occurrence={row.original.occurrence} />,
       },
       {
         id: 'testing_methods',

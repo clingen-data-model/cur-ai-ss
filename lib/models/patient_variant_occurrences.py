@@ -68,8 +68,7 @@ class Inheritance(str, Enum):
 # variant came from, an occurrence's ``variant_inheritance``. One value per
 # patient-variant pair, so a compound heterozygote's two variants each carry
 # their own. Replaced the ``de_novo`` boolean (migration a4e7c2d9f1b3), whose
-# True is ``de_novo`` here; the UI's De Novo switch is now a view on this
-# value.
+# True is ``de_novo`` here; the UI exposes it only as the De Novo switch.
 class VariantInheritance(str, Enum):
     maternal = 'Maternal'
     paternal = 'Paternal'

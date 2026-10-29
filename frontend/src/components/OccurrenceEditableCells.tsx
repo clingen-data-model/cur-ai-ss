@@ -1,7 +1,7 @@
 /* The fields editable directly from the Occurrences table: Variant Type (a
  * field of the variant, saved through the variant endpoint), then the
- * occurrence-level Zygosity, Inheritance mechanism, De Novo and Variant
- * inheritance (two views on one field), Testing Methods and Disease Name.
+ * occurrence-level Zygosity, Inheritance mechanism, De Novo, Testing Methods
+ * and Disease Name.
  */
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -200,9 +200,9 @@ export function EditableInheritanceCell({
   )
 }
 
-/** The De Novo switch, kept from before variant_inheritance existed as a
- * view on that field: on when it is De novo; switching on writes De novo,
- * switching off writes Unknown (the switch cannot know which parent). */
+/** The only UI on the occurrence's variant_inheritance (Maternal, Paternal,
+ * De novo, ...): checked when it is De novo. Switching on writes De novo,
+ * switching off writes Unknown; the evidence popover shows the full value. */
 export function EditableDeNovoCell({
   paperId,
   occurrence,
@@ -233,52 +233,6 @@ export function EditableDeNovoCell({
         afterValue={
           pending.pendingValue ? VariantInheritance.DE_NOVO : VariantInheritance.UNKNOWN
         }
-      />
-    </div>
-  )
-}
-
-/** Which parent this patient's copy of the variant came from, or de novo.
- * Distinct from the inheritance mechanism above: see VariantInheritance in
- * lib/models/patient_variant_occurrences.py. The De Novo switch is a view on
- * the same field. */
-export function EditableVariantInheritanceCell({
-  paperId,
-  occurrence,
-}: {
-  paperId: number
-  occurrence: PatientVariantOccurrenceResp
-}) {
-  const mutation = useOccurrenceMutation(paperId, occurrence.id)
-  const pending = usePendingEdit<string>((value, note) =>
-    mutation.mutate({ variant_inheritance: value as VariantInheritance, variant_inheritance_human_edit_note: note }),
-  )
-  return (
-    <div className="flex items-center gap-1">
-      <Select value={occurrence.variant_inheritance} onValueChange={(v) => v && pending.propose(v)}>
-        {/* Same width as the mechanism select; the longest option is only
-         * ever clipped in the closed trigger. */}
-        <SelectTrigger size="sm" className="h-7 w-36 text-xs">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {Object.values(VariantInheritance).map((o) => (
-            <SelectItem key={o} value={o}>
-              {o}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <EvidencePopover block={occurrence.variant_inheritance_evidence} />
-      <HumanEditNoteDialog
-        open={pending.isOpen}
-        onOpenChange={(open) => !open && pending.cancel()}
-        fieldLabel="Variant inheritance"
-        defaultNote={occurrence.variant_inheritance_evidence.human_edit_note}
-        isPending={mutation.isPending}
-        onConfirm={(note) => pending.confirm(note)}
-        beforeValue={occurrence.variant_inheritance}
-        afterValue={pending.pendingValue ?? occurrence.variant_inheritance}
       />
     </div>
   )

@@ -8,8 +8,8 @@ on dev-caa 232 of 866 occurrence reasonings named a parent, mapped to a
 mechanism inconsistently even within one paper. ``variant_inheritance``
 (Maternal, Paternal, Both parents, De novo, Inherited (parent not stated),
 Unknown) gives that fact a field; the ``de_novo`` boolean, which was one
-value of it, goes. The UI keeps its De Novo switch as a view on the new
-column.
+value of it, goes. The UI keeps its De Novo switch, now a boolean view on
+the new column, and exposes nothing else of it.
 
 Backfill: a de novo row becomes ``variant_inheritance = 'De novo'`` and
 every other row ``'Unknown'``; the de_novo evidence block carries over as
