@@ -105,6 +105,7 @@ _PAPER_RESTORE_COLUMNS = (
     'paper_types',
     'tags',
     'is_paper_relevant',
+    'is_paper_relevant_evidence',
     'section_classifications',
     'disease_name',
     'disease_name_evidence',

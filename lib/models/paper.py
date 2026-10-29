@@ -235,6 +235,10 @@ class PaperDB(Base):
     is_paper_relevant: Mapped[bool | None] = mapped_column(
         nullable=True,
     )
+    # The classifier's verdict with its basis (a ReasoningBlock[bool]): what
+    # a curator reads when a paper came back not relevant. The verdict alone
+    # was stored until 2026-10-29, so older rows are None here.
+    is_paper_relevant_evidence: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     section_classifications: Mapped[dict | None] = mapped_column(
         JSON,
         nullable=True,
@@ -355,6 +359,7 @@ class PaperResp(PaperExtractionOutput):
     filename: str
     tags: list[PaperTag] = []
     is_paper_relevant: bool | None = None
+    is_paper_relevant_evidence: ReasoningBlock[bool] | None = None
     disease_name: str | None = None
     disease_name_evidence: HumanEvidenceBlock[str] | None = None
     disease_inheritance_mode: Inheritance | None = None

@@ -554,8 +554,10 @@ async def handle_paper_classifier(task_id: int) -> None:
             if not result.final_output.is_paper_relevant.value:
                 task.skip_successors = True
         if paper:
-            relevant = result.final_output.is_paper_relevant.value
+            verdict = result.final_output.is_paper_relevant
+            relevant = verdict.value
             paper.is_paper_relevant = relevant
+            paper.is_paper_relevant_evidence = verdict.model_dump()
             # The tag follows the latest verdict, so a re-run that now passes
             # does not keep it.
             failed = PaperTag.FailedPaperRelevancy.value

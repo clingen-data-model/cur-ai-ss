@@ -1133,6 +1133,11 @@ def _paper_to_resp(row: PaperDB, session: Session) -> PaperResp:
         filename=row.filename,
         tags=[PaperTag(tag) for tag in row.tags],
         is_paper_relevant=row.is_paper_relevant,
+        is_paper_relevant_evidence=_from_storage(
+            ReasoningBlock[bool], row.is_paper_relevant_evidence
+        )
+        if row.is_paper_relevant_evidence
+        else None,
         disease_name=row.disease_name,
         disease_name_evidence=_from_storage(
             HumanEvidenceBlock, row.disease_name_evidence

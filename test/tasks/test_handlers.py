@@ -740,3 +740,57 @@ async def test_a_quick_task_runs_its_agent_on_the_budget_model(
     assert isinstance(quick.model, LitellmModel)
     assert quick.model.model == 'anthropic/claude-haiku-5-5'
     assert ordinary is handlers.patient_extraction_agent
+
+
+async def test_the_classifier_stores_its_basis_beside_the_verdict(
+    monkeypatch, db_session, paper
+):
+    """Paper 47 (a mouse Grxcr2 study) came back not relevant with a two-
+    sentence basis that lived only in the task's conversation: the handler
+    stored the bool and the tag. The block is stored whole now, so the paper
+    page can say why nothing downstream ran."""
+    from types import SimpleNamespace
+
+    from lib.agents.paper_classifier_agent import PaperClassificationOutput
+    from lib.models.evidence_block import ReasoningBlock
+    from lib.models.paper import PaperTag
+    from lib.tasks import handlers
+    from lib.tasks.models import TaskDB, TaskStatus, TaskType
+
+    class _Session:
+        async def clear_session(self) -> None:
+            pass
+
+    async def fake_run(agent, message, session):
+        return SimpleNamespace(
+            final_output=PaperClassificationOutput(
+                is_paper_relevant=ReasoningBlock[bool](
+                    value=False,
+                    reasoning='Mainly a mouse study; the human screen reports only '
+                    'aggregate results with no case identifiers.',
+                )
+            ),
+            raw_responses=[],
+        )
+
+    monkeypatch.setattr(handlers, 'Runner', SimpleNamespace(run=fake_run))
+    monkeypatch.setattr(handlers, 'agent_session', lambda task_id: _Session())
+    monkeypatch.setattr(handlers, 'paper_text', lambda *a, **k: 'paper')
+    monkeypatch.setattr(handlers, 'log_run_metrics', lambda *a, **k: None)
+    task = TaskDB(
+        paper_id=paper.id, type=TaskType.PAPER_CLASSIFIER, status=TaskStatus.RUNNING
+    )
+    db_session.add(task)
+    db_session.commit()
+
+    await handlers.handle_paper_classifier(task.id)
+
+    db_session.expire_all()
+    assert paper.is_paper_relevant is False
+    assert paper.is_paper_relevant_evidence == {
+        'value': False,
+        'reasoning': 'Mainly a mouse study; the human screen reports only '
+        'aggregate results with no case identifiers.',
+    }
+    assert PaperTag.FailedPaperRelevancy.value in paper.tags
+    assert db_session.get(TaskDB, task.id).skip_successors is True

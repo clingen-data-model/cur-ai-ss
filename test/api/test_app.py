@@ -4014,3 +4014,25 @@ def test_create_task_carries_the_quick_run_flag(client, seeded_paper):
     assert response.status_code == 200
     assert response.json()[0]['budget_model'] is True
     assert TaskCreateRequest(type=TaskType.VARIANT_EXTRACTION).budget_model is False
+
+
+def test_get_paper_carries_the_classifier_basis(client, db_session, seeded_paper):
+    """The verdict block is on the paper response, so the page can show why a
+    paper was judged not relevant; a paper classified before the column
+    existed carries None."""
+    response = client.get(f'/papers/{seeded_paper.id}')
+    assert response.json()['is_paper_relevant_evidence'] is None
+
+    seeded_paper.is_paper_relevant = False
+    seeded_paper.is_paper_relevant_evidence = {
+        'value': False,
+        'reasoning': 'No identifiable cases for the target gene.',
+    }
+    db_session.flush()
+
+    body = client.get(f'/papers/{seeded_paper.id}').json()
+    assert body['is_paper_relevant'] is False
+    assert body['is_paper_relevant_evidence'] == {
+        'value': False,
+        'reasoning': 'No identifiable cases for the target gene.',
+    }
