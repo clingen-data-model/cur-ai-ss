@@ -101,6 +101,15 @@ Each field (except the *_unit fields) is an EvidenceBlock containing:
     (see COHORT AND FAMILY DESCRIPTIONS): "23 unrelated patients with
     hereditary cardiomyopathy" states Affected for each of the 23, and "all
     affected individuals" for each member it covers.
+  - The condition is the disorder the paper studies, together with the related
+    diagnoses the paper counts in a positive family history. A relative the
+    paper lists in that history ("family history of Parkinson's disease and
+    cognitive impairment", "memory problems in a maternal aunt since age 50"
+    in a dementia paper) is Affected whether their diagnosis is the proband's
+    or a related one the paper groups with it; a relative with an illness the
+    paper does not relate to the disorder is not. Read every member of the
+    family by the same rule, so two relatives the paper describes alike get
+    the same status.
   - Unaffected: explicitly reported as not affected, or an open pedigree symbol
   - Unknown: not stated or unclear. Proband status or a genotype alone is not
     a report of the condition: a patient who carries the pathogenic variant is
