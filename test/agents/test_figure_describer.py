@@ -82,7 +82,7 @@ def test_a_pedigree_gets_the_pedigree_prompt_with_the_caption(monkeypatch):
     monkeypatch.setattr(describer, 'vlm_describe', vision)
 
     description = describe_figure(
-        'data:', [FigureKind.PEDIGREE], 'Fig 2. Asterisk: genotyped.', None
+        'data:', [FigureKind.PEDIGREE], 'Fig 2. Asterisk: genotyped.', (), None
     )
 
     assert description == 'II-1 affected female'
@@ -94,12 +94,50 @@ def test_a_pedigree_gets_the_pedigree_prompt_with_the_caption(monkeypatch):
     assert 'legend for this figure' in PEDIGREE_VISION_PROMPT
 
 
+def test_the_prose_around_the_figure_reaches_both_describing_prompts(monkeypatch):
+    """Docling linked only the legend's title line to the MAG paper's Fig. 1;
+    the '(A) Pedigrees...' paragraph under it defined the asterisk, and the
+    model shown the title alone reported the mark undefined. Both prompts
+    now carry the blocks around the figure, after the caption and before the
+    curator's notes, under a sentence saying the legend may continue there."""
+    vision = _Vision('Pedigree; Gel')
+    monkeypatch.setattr(describer, 'vlm_describe', vision)
+    nearby = (
+        ('paragraph-60', 'NA, not available.'),
+        (
+            'paragraph-64',
+            '(A) Pedigrees. Tested individuals are marked with asterisks.',
+        ),
+    )
+
+    describe_figure(
+        'data:', [FigureKind.PEDIGREE, FigureKind.GEL], 'Fig. 1. Title.', nearby, 'note'
+    )
+
+    assert len(vision.prompts) == 2
+    for prompt in vision.prompts:
+        assert 'Caption as printed in the paper:\nFig. 1. Title.' in prompt
+        assert 'Text printed around this figure' in prompt
+        assert '[paragraph-64] (A) Pedigrees. Tested individuals' in prompt
+        assert prompt.index('Caption as printed') < prompt.index('[paragraph-60]')
+        assert prompt.index('[paragraph-64]') < prompt.index('A human curator')
+    assert 'may continue it' in PEDIGREE_VISION_PROMPT
+
+    vision.prompts.clear()
+    describe_figure('data:', [FigureKind.PEDIGREE], None, (), None)
+    assert 'Text printed around' not in vision.prompts[0]
+
+
 def test_evidence_kinds_get_the_evidence_prompt_with_the_caption(monkeypatch):
     vision = _Vision('Chromatogram; Gel')
     monkeypatch.setattr(describer, 'vlm_describe', vision)
 
     description = describe_figure(
-        'data:', [FigureKind.CHROMATOGRAM, FigureKind.GEL], '(A) II-1 (B) II-2', None
+        'data:',
+        [FigureKind.CHROMATOGRAM, FigureKind.GEL],
+        '(A) II-1 (B) II-2',
+        (),
+        None,
     )
 
     assert description == 'II-1: heterozygous c.1A>G (double peak)'
@@ -115,7 +153,7 @@ def test_a_figure_of_both_sorts_gets_both_texts_pedigree_first(monkeypatch):
     monkeypatch.setattr(describer, 'vlm_describe', vision)
 
     description = describe_figure(
-        'data:', [FigureKind.PEDIGREE, FigureKind.CHROMATOGRAM], None, None
+        'data:', [FigureKind.PEDIGREE, FigureKind.CHROMATOGRAM], None, (), None
     )
 
     assert description == (
@@ -149,7 +187,7 @@ def test_no_usable_answer_drops_that_part_not_the_figure(monkeypatch):
     changing its mind with NOT_A_PEDIGREE; the evidence text still stands."""
     monkeypatch.setattr(describer, 'vlm_describe', _Vision('', pedigree=None))
     assert (
-        describe_figure('data:', [FigureKind.PEDIGREE, FigureKind.GEL], None, None)
+        describe_figure('data:', [FigureKind.PEDIGREE, FigureKind.GEL], None, (), None)
         == 'II-1: heterozygous c.1A>G (double peak)'
     )
 
@@ -157,7 +195,7 @@ def test_no_usable_answer_drops_that_part_not_the_figure(monkeypatch):
         describer, 'vlm_describe', _Vision('', pedigree=NOT_A_PEDIGREE, evidence=None)
     )
     assert (
-        describe_figure('data:', [FigureKind.PEDIGREE, FigureKind.GEL], None, None)
+        describe_figure('data:', [FigureKind.PEDIGREE, FigureKind.GEL], None, (), None)
         is None
     )
 
