@@ -43,3 +43,11 @@ def test_stop_lost_is_a_variant_type_told_apart_from_stop_gained():
     ]
     assert '- stop lost\n' in types
     assert 'the opposite of stop gained' in types
+
+
+def test_a_frameshift_is_labelled_by_its_nucleotide_change():
+    """c.517_521dup (MAG, PMID 32629324) was labelled Frameshift because the paper
+    said "frameshift", with the dup in hand to say insertion."""
+    rules = VARIANT_EXTRACTION_AGENT_INSTRUCTIONS
+    assert 'dup or ins is\n  frameshift insertion, del is frameshift deletion' in rules
+    assert 'Plain frameshift only when the paper gives no change' in rules

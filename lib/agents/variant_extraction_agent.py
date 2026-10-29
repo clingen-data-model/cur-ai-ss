@@ -149,6 +149,9 @@ EXACT variant type labels (use exactly as specified):
 
 Rules:
 - Use labels exactly as specified above.
+- A frameshift takes its label from the nucleotide change: dup or ins is
+  frameshift insertion, del is frameshift deletion (c.517_521dup [p.Trp174*] is a
+  frameshift insertion). Plain frameshift only when the paper gives no change.
 - stop lost is the termination codon changed to an amino-acid codon so
   translation reads on (p.Ter500Glnext*?, "stop-loss", "nonstop", "read-through"):
   the opposite of stop gained, where a new stop ends the protein early.
