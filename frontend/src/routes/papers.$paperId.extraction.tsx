@@ -52,6 +52,7 @@ import { PipelineGate } from '@/components/PipelineGate'
 import { DeleteIconButton } from '@/components/DeleteIconButton'
 import { RestoreSnapshotButton } from '@/components/RestoreSnapshotButton'
 import { PaperProgressPopover } from '@/components/PaperProgressPopover'
+import { PaperRelevanceNotice } from '@/components/PaperRelevanceNotice'
 import { ReviewStatusCell } from '@/components/ReviewStatusCell'
 import { StatusBadge } from '@/components/StatusBadge'
 import { computeStatus } from '@/lib/taskState'
@@ -551,6 +552,8 @@ export function ExtractionPage() {
             </Button>
           </div>
         </div>
+
+        {paper && <PaperRelevanceNotice paper={paper} />}
 
         <Tabs
           value={tab}
