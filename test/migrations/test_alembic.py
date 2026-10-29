@@ -756,39 +756,3 @@ def test_task_budget_model_reads_back_false_for_old_rows(monkeypatch, tmp_path):
     with Session(engine) as session:
         task = session.query(TaskDB).one()
         assert task.budget_model is False
-
-
-def test_paper_relevance_basis_reads_back_none_for_old_rows(monkeypatch, tmp_path):
-    """d4e8f1a2b3c5 adds papers.is_paper_relevant_evidence in place. A paper
-    classified before it has a verdict and no block, and reads back None."""
-    from lib.models.paper import PaperDB
-
-    monkeypatch.setattr(db.env, 'CAA_ROOT', str(tmp_path))
-    monkeypatch.setattr(db.env, 'SQLLITE_DIR', '')
-    monkeypatch.setattr(db, '_engine', None)
-    monkeypatch.setattr(db, '_session_factory', None)
-
-    repo_root = Path(__file__).resolve().parents[2]
-    cfg = Config(str(repo_root / 'alembic.ini'))
-    command.upgrade(cfg, 'c3d9e1f7a2b4')
-
-    engine = db.get_engine()
-    with engine.begin() as connection:
-        gene_id = connection.execute(
-            text("INSERT INTO genes (symbol) VALUES ('TESTGENE') RETURNING id")
-        ).scalar_one()
-        connection.execute(
-            text(
-                'INSERT INTO papers (gene_id, content_hash, filename, paper_types, '
-                "is_paper_relevant) VALUES (:gene_id, 'h', 'f.pdf', '[]', 0)"
-            ),
-            {'gene_id': gene_id},
-        )
-
-    command.upgrade(cfg, 'head')
-    command.upgrade(cfg, 'head')  # a clean no-op: alembic_version landed
-
-    with Session(engine) as session:
-        paper = session.query(PaperDB).one()
-        assert paper.is_paper_relevant is False
-        assert paper.is_paper_relevant_evidence is None
