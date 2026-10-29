@@ -124,6 +124,7 @@ class VariantType(str, Enum):
     missense = 'Missense'
     frameshift = 'Frameshift'
     stop_gained = 'Stop Gained'
+    stop_lost = 'Stop Lost'
     splice_donor = 'Splice Donor'
     splice_acceptor = 'Splice Acceptor'
     splice_region = 'Splice Region'

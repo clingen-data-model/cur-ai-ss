@@ -29,3 +29,17 @@ def test_nucleotide_changes_are_still_not_turned_into_hgvs_c():
         'Nucleotide changes without coordinate system'
         in VARIANT_EXTRACTION_AGENT_INSTRUCTIONS
     )
+
+
+def test_stop_lost_is_a_variant_type_told_apart_from_stop_gained():
+    """A read-through variant was classed as stop gained or unknown for want of
+    a label; the enum, the prompt's label list and its rule now carry it."""
+    from lib.models.variant import VariantType
+
+    assert VariantType('Stop Lost') is VariantType.stop_lost
+    rules = VARIANT_EXTRACTION_AGENT_INSTRUCTIONS
+    types = rules[
+        rules.index('VARIANT TYPE CLASSIFICATION') : rules.index('VARIANT-LEVEL')
+    ]
+    assert '- stop lost\n' in types
+    assert 'the opposite of stop gained' in types
