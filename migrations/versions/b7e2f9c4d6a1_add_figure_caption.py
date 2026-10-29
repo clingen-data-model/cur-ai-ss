@@ -40,7 +40,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column('figure_descriptions', sa.Column('caption', sa.Text(), nullable=True))
+    op.add_column(
+        'figure_descriptions', sa.Column('caption', sa.Text(), nullable=True)
+    )
     op.add_column(
         'figure_descriptions',
         sa.Column(

@@ -32,7 +32,9 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.add_column(
         'tasks',
-        sa.Column('budget_model', sa.Boolean(), nullable=False, server_default='0'),
+        sa.Column(
+            'budget_model', sa.Boolean(), nullable=False, server_default='0'
+        ),
     )
 
 

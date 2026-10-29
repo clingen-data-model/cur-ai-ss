@@ -170,24 +170,6 @@ export function PaperMetadataTab({ paper }: { paper: PaperResp }) {
             {/* Gene-Disease Information */}
             <div className="space-y-3 border-t pt-3">
               <h3 className="font-semibold text-sm">Gene-Disease Information</h3>
-
-              {/* The classifier's verdict: whether the paper has cases for the
-                  gene that extraction can work from, and its basis. Read-only;
-                  a curator who disagrees re-runs the classifier with a note. */}
-              <div className="flex items-center justify-between gap-3 py-1.5 border-b">
-                <span className="text-sm text-muted-foreground w-44">Relevance</span>
-                <div className="flex items-center gap-1 flex-1 justify-end">
-                  <span className="text-sm">
-                    {paper.is_paper_relevant === true
-                      ? 'Extractable cases found'
-                      : paper.is_paper_relevant === false
-                        ? 'No extractable cases'
-                        : 'Not yet classified'}
-                  </span>
-                  <EvidencePopover block={paper.is_paper_relevant_evidence} />
-                </div>
-              </div>
-
               <EditableTextRow
                 label="Disease Name"
                 value={paper.disease_name || ''}

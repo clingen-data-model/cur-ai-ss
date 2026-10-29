@@ -7,8 +7,8 @@ which requirement it failed lived in the task's agent conversation alone.
 The handler now stores the whole block here and the paper page shows it.
 
 A plain nullable ADD COLUMN, which SQLite does in place: no batch operation,
-no foreign-key pragma dance. Rows from before are None and can be filled
-from the conversations by lib.bin.backfill_classifier_basis.
+no foreign-key pragma dance. Rows from before are None until the
+classifier runs again.
 
 Revision ID: d4e8f1a2b3c5
 Revises: c3d9e1f7a2b4
