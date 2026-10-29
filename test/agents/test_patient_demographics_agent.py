@@ -16,5 +16,5 @@ def test_a_relative_in_the_positive_family_history_is_affected():
         rules.index('- affected_status') : rules.index('- is_obligate_carrier')
     ]
     assert 'counts in a positive family history' in affected
-    assert 'paper does not relate to the disorder is not' in affected
-    assert 'every member of the\n    family by the same rule' in affected
+    assert 'an illness the paper does not relate' in affected
+    assert 'Read every member of the family by the same rule' in affected
