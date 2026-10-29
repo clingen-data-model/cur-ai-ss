@@ -765,33 +765,17 @@ state, and never return the unreadable string as your answer. The lookups are
 the check -- a reading that is wrong will not resolve, which is the signal to
 try another one rather than to stop.
 
-Numbering check. The format is not the only thing an older paper does
-differently: its nucleotide positions may not be HGVS c. positions at all.
-Papers written before HGVS commonly count from the first base of a GenBank
-mRNA rather than from the A of the ATG, so every position is too high by the
-length of the 5' UTR, and a transcript field holding a GenBank accession
-(X12345, M98765) instead of an NM_ or ENST one is the paper saying so. So
-whenever both a coding position and a residue are known -- hgvs_c or a
-nucleotide change in the variant string, and hgvs_p or a protein change in
-the variant string -- check them against each other before projecting
-anything. Residue N is encoded by c.(3N-2) to c.3N, so the position must
-fall in that window: "c.598C>T" with "Arg200Ter" does (codon 200 is
-c.598-600); "C810T" with "R200X" does not. A position outside the window
-is not a c. coordinate on any RefSeq transcript, and must not be projected
-as one. A wrong position is not always rejected by VariantValidator: when
-the reference base at the wrong position happens to match, the string
-projects cleanly onto a different residue and comes back as a real allele
-with an rsID. Record what
-you found and follow the numbering rule in State 3. The check needs a
-residue. A position with no residue beside it is projected as written when
-the paper's transcript is a RefSeq or Ensembl one or none is named, but not
-when the transcript is a GenBank accession: the paper has said its numbering
-is against another sequence, the position cannot be checked, and projecting
-it would resolve a different allele just as cleanly ("Del 1 bp (G810)"
-projected as c.810del deletes whatever base sits there, a frameshift at a
-residue the paper never mentions). Such a variant goes to State 4 if it has a protein
-change, and otherwise returns with every normalized field null and an
-unresolved flag that says why.
+Numbering check. Older papers may count nucleotides from the first base of a
+GenBank mRNA rather than from the ATG, so every position runs ahead of HGVS c.
+by the 5' UTR; a GenBank accession (X12345) in transcript is a sign of it. When
+both a coding position and a residue are known, check one against the other:
+residue N is encoded by c.(3N-2) to c.3N, so "c.598C>T" with "Arg200Ter" fits
+and "C810T" with "R200X" does not. A position outside the window is not a c.
+coordinate and is not projected as written -- the reference base can match by
+chance, and the string then resolves cleanly to a different allele; State 3
+says what to project instead. A position with no residue to check against on a
+GenBank-numbered transcript is not projected at all: State 4 if there is a
+protein change, else every normalized field null and an unresolved flag.
 
 Proceed to State 1.
 
@@ -866,16 +850,12 @@ hgvs_c present, or a coding change readable from the variant string (State 0).
 
 Action
 
-    Numbering. If the State 0 check found the paper's position outside the
-    residue's window, the paper's number is not sent anywhere. The candidate
-    c. positions are the three of the window, c.(3N-2), c.(3N-1) and c.3N,
-    each with the paper's reference and alternate bases: "C810T" with
-    "R200X" gives c.598C>T, c.599C>T and c.600C>T. Project them in turn
-    from step 2 (VariantValidator rejects a reference base that does not
-    match, which is part of the check) and keep the first whose registry
-    consequence passes step 5. If none does, proceed to State 4 with the
-    protein change. State the mapping in basis ("the paper's 810 is
-    c.598 on NM_000000.4; its numbering runs 212 ahead").
+    Numbering. When State 0 found the paper's position outside the residue's
+    window, project the window's three positions instead, each with the
+    paper's bases -- "C810T" with "R200X" gives c.598C>T, c.599C>T and
+    c.600C>T -- and keep the first whose consequence passes step 5; if none
+    does, State 4. Say the mapping in basis ("the paper's 810 is c.598; its
+    numbering runs 212 ahead").
 
     1. Resolve a versioned transcript, preserving the paper's transcript when possible:
 
@@ -911,21 +891,16 @@ Action
             - If multiple results returned:
                 - Select the result most compatible with input variant context (hgvs_c, hgvs_p, transcript, genomic coordinates).
 
-        Consequence check. Before returning, read the registry's hgvs_p
-        against what the paper said. It must name the paper's residue
-        number and, for a substitution, the paper's substituted residue
-        ("=" for a silent change, "Ter" for a stop), and it must agree with
-        the paper's variant_type: a Synonymous input that resolved to a
-        missense consequence is not the paper's allele. A base the paper
-        names is part of the check too: "Del 1 bp (G810)" deletes a G, and
-        a resolved allele that deletes a C is not it. A consequence at the
-        paper's residue that differs only in kind -- a splice-driven deletion
-        the registry calls synonymous -- is the same allele; keep it and
-        raise a mismatch flag. A consequence at another residue, or with
-        other amino acids, is a different allele: the projection failed,
-        whatever VariantValidator accepted. Do not return it with a note.
-        Go on with the next numbering candidate if there is one, else to
-        State 4. With no residue to check against, return the result.
+        Consequence check. The registry's hgvs_p must sit at the paper's
+        residue and name the paper's change ("=" for silent, "Ter" for a
+        stop), and agree with variant_type: a Synonymous input that resolved
+        to a missense consequence is not the paper's allele, nor is a
+        deletion of a base other than the one the paper names. A consequence
+        at the same residue differing only in kind is the same allele; keep
+        it with a mismatch flag. Any other is a failed projection, whatever
+        VariantValidator accepted. Do not return it with a note: try the next
+        numbering candidate, else State 4. With no residue to check against,
+        return the result.
 
             RETURN result with all fields populated.
             - NOTE: Even if allele_registry_resolver returns no match (None), still return with

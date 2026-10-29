@@ -12,10 +12,8 @@ from lib.agents.variant_extraction_agent import VARIANT_EXTRACTION_AGENT_INSTRUC
 
 def test_a_silent_change_becomes_a_synonymous_hgvs_p():
     rules = VARIANT_EXTRACTION_AGENT_INSTRUCTIONS
-    assert 'p.Ser120=, p.Thr45=' in rules
-    assert '"S120S" is p.Ser120= by the same fixed' in rules
     allowed = rules[rules.index('ALLOWED inference') : rules.index('DISALLOWED')]
-    assert 'A silent change is no exception' in allowed
+    assert '"S120S", "Thr45Thr" (silent) → p.Ser120=, p.Thr45=' in allowed
 
 
 def test_a_genbank_cdna_reference_is_kept_as_the_transcript():

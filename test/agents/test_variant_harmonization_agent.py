@@ -69,7 +69,7 @@ def test_state_0_checks_the_paper_position_against_the_residue_window():
     HGVS c.; 'C7696T' projected cleanly onto Leu2566 and was stored as a real
     allele. The window check is what catches that before projection."""
     rules = VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS
-    assert 'Residue N is encoded by c.(3N-2) to c.3N' in rules
+    assert 'residue N is encoded by c.(3N-2) to c.3N' in rules
     assert '"C810T" with "R200X" does not' in rules
     assert rules.index('Numbering check') < rules.index('STATE 1')
 
@@ -77,7 +77,7 @@ def test_state_0_checks_the_paper_position_against_the_residue_window():
 def test_state_3_projects_the_window_candidates_and_vetoes_a_wrong_consequence():
     rules = VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS
     state_3 = rules[rules.index('STATE 3') : rules.index('STATE 4')]
-    assert 'c.598C>T, c.599C>T and c.600C>T' in state_3
+    assert 'gives c.598C>T, c.599C>T and' in state_3
     assert 'Consequence check' in state_3
     assert 'a Synonymous input that resolved' in state_3
     assert 'Do not return it with a note' in state_3
@@ -98,5 +98,5 @@ def test_an_uncheckable_position_on_a_genbank_sequence_is_not_projected():
     c.3336del: no residue to check, so the mRNA-start number went through and
     resolved a frameshift the paper never describes."""
     rules = VARIANT_HARMONIZATION_AGENT_INSTRUCTIONS
-    assert 'but not\nwhen the transcript is a GenBank accession' in rules
-    assert 'a resolved allele that deletes a C is not it' in rules
+    assert 'is not projected at all' in rules
+    assert 'other than the one the paper names' in rules
