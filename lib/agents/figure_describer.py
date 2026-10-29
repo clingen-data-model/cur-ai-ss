@@ -27,6 +27,16 @@ figure is asked, since only those get a row; the answer is the row's
 rule can: that five panels are redox titrations and belong to the "Figure 3"
 legend two paragraphs down, or that the legend is drawn in the image.
 
+Both describing prompts are also shown the prose printed around the figure
+(``FigureRef.nearby``, the same blocks ``find_legend`` chooses from). Docling
+often links only a legend's title line to its picture and leaves the body,
+'(A) Pedigrees showing...', as the paragraph under it; on the MAG paper
+(PMID 32629324) that paragraph defined the asterisk, and the model, shown the
+title alone, reported the mark undefined through two curator re-runs. The
+text agents read that paragraph anyway, since it is in the paper text; the
+vision model is the one that had to be shown it, and a model reading what
+is around the figure beats a parser rule for each way a legend comes apart.
+
 A curator's notes (the paper-wide re-run context, or a re-run of this task
 with context) go into every prompt, since the vision model is the only one
 that can act on them.
@@ -58,8 +68,8 @@ class FigureRef:
     # carries it); None with the caption.
     caption_source: CaptionSource | None = None
     # The prose printed around the figure, (label, text) in reading order
-    # (``figure_neighbourhoods``): what ``find_legend`` chooses from when the
-    # caption is None.
+    # (``figure_neighbourhoods``): shown to both describing prompts, and what
+    # ``find_legend`` chooses from when the caption is None.
     nearby: tuple[tuple[str, str], ...] = ()
 
 
@@ -118,7 +128,7 @@ Then describe:
 - Number of generations
 - Any uncertainties due to image resolution or clarity
 
-The caption printed below, when there is one, is the paper's legend for this figure. Read the meaning of marks from it -- an asterisk, a dot, a half-filled symbol, an arrow, a slash -- and say which individuals carry each mark and what the legend says it means. A mark the legend does not define is reported as undefined. The structure of the family comes from the image.
+The caption printed below, when there is one, is the paper's legend for this figure, and the text printed around the figure may continue it. Read the meaning of marks from them -- an asterisk, a dot, a half-filled symbol, an arrow, a slash -- and say which individuals carry each mark and what the legend says it means. A mark the legend does not define is reported as undefined. The structure of the family comes from the image.
 
 IMPORTANT: List every visible individual, even if some details are unclear. Do not infer missing details."""
 
@@ -198,6 +208,17 @@ def _caption_section(caption: str | None) -> str:
     return f'\n\nCaption as printed in the paper:\n{caption}' if caption else ''
 
 
+def _surroundings_section(nearby: tuple[tuple[str, str], ...]) -> str:
+    if not nearby:
+        return ''
+    return (
+        '\n\nText printed around this figure, in reading order. A legend often '
+        'continues here when only its title line was linked as the caption; the '
+        "rest is body text or another figure's legend, so take from it only what "
+        'concerns this figure:\n' + _nearby_section(nearby)
+    )
+
+
 def _notes_section(notes: str | None) -> str:
     if not notes:
         return ''
@@ -242,23 +263,31 @@ def classify_figure(
 
 
 def describe_figure(
-    image_url: str, kinds: list[FigureKind], caption: str | None, notes: str | None
+    image_url: str,
+    kinds: list[FigureKind],
+    caption: str | None,
+    nearby: tuple[tuple[str, str], ...],
+    notes: str | None,
 ) -> str | None:
     """The description for a figure of these kinds, or None when the model
     gave no usable answer for any of them.
 
-    Both prompts are shown the caption. For a pedigree it is the legend
-    that defines the marks (the pedigree prompt used to go without it, and a
-    model reading an asterisk the legend defined reported it as undefined);
-    for the other kinds its panel labels are often the only link from a trace
-    to a person. A figure of both sorts gets both texts, the pedigree first.
+    Both prompts are shown the caption and the prose around the figure. For
+    a pedigree the legend is what defines the marks (the pedigree prompt used
+    to go without it, and a model reading an asterisk the legend defined
+    reported it as undefined; shown the title line alone, it did so again,
+    the definition being in the paragraph under the figure); for the other
+    kinds its panel labels are often the only link from a trace to a person.
+    A figure of both sorts gets both texts, the pedigree first.
     """
+    context = (
+        _caption_section(caption)
+        + _surroundings_section(nearby)
+        + _notes_section(notes)
+    )
     parts: list[str] = []
     if FigureKind.PEDIGREE in kinds:
-        pedigree = vlm_describe(
-            image_url,
-            PEDIGREE_VISION_PROMPT + _caption_section(caption) + _notes_section(notes),
-        )
+        pedigree = vlm_describe(image_url, PEDIGREE_VISION_PROMPT + context)
         # A half-described pedigree stored as authoritative is worse than none,
         # so None stays None; NOT_A_PEDIGREE is the model changing its mind.
         if pedigree is not None and pedigree.strip() != NOT_A_PEDIGREE:
@@ -270,8 +299,7 @@ def describe_figure(
             EVIDENCE_VISION_PROMPT.format(
                 kinds=', '.join(kind.value for kind in evidence_kinds)
             )
-            + _caption_section(caption)
-            + _notes_section(notes),
+            + context,
         )
         if evidence is not None:
             parts.append(f'## Genotyping evidence\n\n{evidence}' if parts else evidence)
@@ -309,7 +337,7 @@ def describe_figures(
                 f'Paper {paper_id} {label}: legend '
                 + (f'{source}: {caption[:60]!r}' if caption else 'not found')
             )
-        description = describe_figure(image_url, kinds, caption, notes)
+        description = describe_figure(image_url, kinds, caption, figure.nearby, notes)
         if description is None:
             logger.warning(f'Paper {paper_id} {label}: no usable description')
             continue
