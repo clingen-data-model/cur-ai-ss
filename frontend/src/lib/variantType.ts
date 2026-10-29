@@ -5,6 +5,7 @@ export const VARIANT_TYPE_OPTIONS = [
   'Missense',
   'Frameshift',
   'Stop Gained',
+  'Stop Lost',
   'Splice Donor',
   'Splice Acceptor',
   'Splice Region',

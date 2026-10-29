@@ -130,6 +130,7 @@ EXACT variant type labels (use exactly as specified):
 - missense
 - frameshift
 - stop gained
+- stop lost
 - splice donor
 - splice acceptor
 - splice region
@@ -148,6 +149,9 @@ EXACT variant type labels (use exactly as specified):
 
 Rules:
 - Use labels exactly as specified above.
+- stop lost is the termination codon changed to an amino-acid codon so
+  translation reads on (p.Ter500Glnext*?, "stop-loss", "nonstop", "read-through"):
+  the opposite of stop gained, where a new stop ends the protein early.
 - If type cannot be determined, set value to null.
 - Quote should describe the variant's effect or mechanism.
 
