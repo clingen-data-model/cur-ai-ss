@@ -39,8 +39,10 @@ Return **exactly** the following for each link:
 - patient_id
 - variant_id
 - zygosity: a single EvidenceBlock[Zygosity]
-- inheritance: a single EvidenceBlock[Inheritance]
-- de_novo: EvidenceBlock[bool] (true if variant is de novo, false otherwise)
+- inheritance: a single EvidenceBlock[Inheritance] -- the inheritance MECHANISM
+  of the disease (dominant, recessive, ...), never which parent the variant came from
+- variant_inheritance: a single EvidenceBlock[VariantInheritance] -- which parent
+  this patient's copy of this variant came from, or de novo
 - testing_methods: a list of EvidenceBlock[TestingMethod] (max 2 items). An
   empty list when the paper does not say how this patient was tested; never
   `Unknown` for that, which is the same statement in a form the curator
@@ -63,15 +65,45 @@ Additionally, provide at the top level:
 
 Note: Compound heterozygous genotype evaluation (determining if two heterozygous variants are in trans) is handled by a separate compound heterozygote evaluation agent.
 
-**Inheritance Definitions:**
+**The inheritance mechanism (`inheritance`) and the variant's inheritance
+(`variant_inheritance`) are two different facts.** The mechanism is the
+pattern by which the disease is transmitted in this family or cohort. The
+variant's inheritance is where this patient's copy of this variant came from.
+Papers use the one word "inheritance" for both: a table row or column headed
+"Inheritance" whose cells read Maternal, Paternal, De novo or Inherited is
+reporting the variant's inheritance, not the mechanism. Write such a cell to
+`variant_inheritance`, and take the mechanism from what the paper says about
+the disease (its abstract, its introduction, the family's pedigree pattern)
+or leave it Unknown. Never derive one from the other: a variant inherited
+from one parent says nothing about dominance (every heterozygous carrier in a
+recessive family inherited their copy from a parent), and a de novo variant is
+not thereby dominant.
 
-- `Dominant`: One mutant copy is sufficient to cause disease. The variant is inherited from an affected parent or occurs de novo.
-- `Recessive`: Two mutant copies (homozygous or compound heterozygous) are required to cause disease. Typically inherited from two unaffected carrier parents.
+**Inheritance mechanism definitions:**
+
+- `Dominant`: One mutant copy is sufficient to cause disease (autosomal dominant).
+- `Recessive`: Two mutant copies (homozygous or compound heterozygous) are required to cause disease (autosomal recessive).
 - `Semi-dominant`: One mutant copy causes disease, but two mutant copies may have different (often more severe) phenotypic consequences.
 - `X-linked`: The variant is on the X chromosome. Males with one mutant copy are affected; females may be affected if homozygous or show variable penetrance due to X-inactivation.
 - `Somatic Mosaicism`: The variant is present only in a subset of the patient's cells (somatic cells), not in the germline.
 - `Mitochondrial`: The variant is in mitochondrial DNA, inherited maternally with variable heteroplasmy levels.
-- `Unknown`: The paper does not clearly specify the inheritance pattern.
+- `Unknown`: The paper does not clearly specify the inheritance mechanism.
+
+**Variant inheritance definitions** (one per patient-variant pair, so a compound
+heterozygote's two variants each have their own):
+
+- `Maternal`: this copy came from the mother ("maternally inherited", a table
+  cell reading "Maternal" or "mat", the mother drawn or genotyped as a carrier
+  of this variant and the father not).
+- `Paternal`: this copy came from the father, likewise.
+- `Both parents`: one copy from each parent -- a homozygous patient whose
+  parents are both carriers, or stated as such.
+- `De novo`: absent from both parents, as the paper states or shows by
+  parental testing.
+- `Inherited (parent not stated)`: the paper says the variant was inherited,
+  or that a parent carries it, without saying which parent.
+- `Unknown`: the paper does not say; the usual value when parents were not
+  tested or not described.
 
 **Linking rules:**
 
@@ -156,11 +188,11 @@ Note: Compound heterozygous genotype evaluation (determining if two heterozygous
 - "low": partially ambiguous textual evidence; never for pure speculation
 
 **Flags** (the rule is in CORE EXTRACTION RULES). Kinds:
-- inferred: a link, zygosity or inheritance that rests on a pedigree carrier
-  symbol with no genotype label, a statement that a variant came from one
-  parent, or the family context rather than on a statement about that
-  patient's genotype; a de novo status the paper asserts without parental
-  testing. Not a zygosity read from a genotype label in the pedigree, from
+- inferred: a link, zygosity or mode of inheritance that rests on a pedigree
+  carrier symbol with no genotype label, a statement that a variant came from
+  one parent, or the family context rather than on a statement about that
+  patient's genotype; an origin (de novo, or a parent) the paper asserts
+  without parental testing. Not a zygosity read from a genotype label in the pedigree, from
   a sentence reporting the tested relatives' results, or from a statement
   about every member of the cohort or family: those are the paper's
   statements. The link is this task's decision, so this is where it is

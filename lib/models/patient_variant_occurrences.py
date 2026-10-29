@@ -47,6 +47,13 @@ class Zygosity(str, Enum):
     unknown = 'Unknown'
 
 
+# The inheritance *mechanism*: the pattern by which the disease is
+# transmitted (an occurrence's ``inheritance`` column, and the paper's
+# ``disease_inheritance_mode``). Not which parent a variant came from -- that
+# is VariantInheritance, below. The two were one field until 2026-10-26, when
+# curators reported the agent reading a table's "Inheritance: Maternal" as a
+# mechanism; the column keeps its old name, the UI labels it "Inheritance
+# mechanism".
 class Inheritance(str, Enum):
     dominant = 'Dominant'
     recessive = 'Recessive'
@@ -55,6 +62,35 @@ class Inheritance(str, Enum):
     somatic_mosaicism = 'Somatic Mosaicism'
     mitochondrial = 'Mitochondrial'
     unknown = 'Unknown'
+
+
+# The variant's inheritance: where one patient's copy (or copies) of one
+# variant came from, an occurrence's ``variant_inheritance``. One value per
+# patient-variant pair, so a compound heterozygote's two variants each carry
+# their own. Replaced the ``de_novo`` boolean (migration a4e7c2d9f1b3), whose
+# True is ``de_novo`` here; the UI exposes it only as the De Novo switch.
+class VariantInheritance(str, Enum):
+    maternal = 'Maternal'
+    paternal = 'Paternal'
+    both_parents = 'Both parents'  # one copy from each: the homozygous case
+    de_novo = 'De novo'
+    inherited_unspecified = 'Inherited (parent not stated)'
+    unknown = 'Unknown'
+
+
+# The variant-inheritance evidence of a row written before the column
+# existed, whether by the migration that added it or by restoring an older
+# snapshot: honest about why it is Unknown, until a re-run of Patient Variant
+# Occurrences fills it.
+def variant_inheritance_not_extracted_evidence() -> dict:
+    return {
+        'value': VariantInheritance.unknown.value,
+        'reasoning': (
+            'Not extracted: this run predates the variant inheritance field. Re-run Patient '
+            'Variant Occurrences to fill it.'
+        ),
+        'citations': [],
+    }
 
 
 class TestingMethod(str, Enum):
@@ -86,7 +122,7 @@ class PatientVariantOccurrence(BaseModel):
     variant_id: int
     zygosity: EvidenceBlock[Zygosity]
     inheritance: EvidenceBlock[Inheritance]
-    de_novo: EvidenceBlock[bool]
+    variant_inheritance: EvidenceBlock[VariantInheritance]
     testing_methods: List[EvidenceBlock[TestingMethod]]
     disease_name: EvidenceBlock[str] | None = None
 
@@ -108,8 +144,8 @@ class PatientVariantOccurrenceUpdateRequest(PatchModel):
     zygosity_human_edit_note: str | None = None
     inheritance: Inheritance | None = None
     inheritance_human_edit_note: str | None = None
-    de_novo: bool | None = None
-    de_novo_human_edit_note: str | None = None
+    variant_inheritance: VariantInheritance | None = None
+    variant_inheritance_human_edit_note: str | None = None
     testing_methods: list[TestingMethod] | None = None
     testing_methods_note: str | None = None
     disease_name: str | None = None
@@ -129,7 +165,7 @@ class PatientVariantOccurrenceCreateRequest(BaseModel):
     variant_id: int
     zygosity: Zygosity = Zygosity.unknown
     inheritance: Inheritance = Inheritance.unknown
-    de_novo: bool = False
+    variant_inheritance: VariantInheritance = VariantInheritance.unknown
     testing_methods: list[TestingMethod] = []
     disease_name: str | None = None
 
@@ -177,16 +213,22 @@ class PatientVariantOccurrenceDB(Base):
         Integer, ForeignKey('variants.id', ondelete='CASCADE'), nullable=False
     )
 
-    # Values (updateable)
+    # Values (updateable). Plain strings holding the enum's value, not SQLEnum.
     zygosity: Mapped[str] = mapped_column(String, nullable=False)
-    inheritance: Mapped[str] = mapped_column(String, nullable=False)
-    de_novo: Mapped[bool] = mapped_column(nullable=False)
+    inheritance: Mapped[str] = mapped_column(String, nullable=False)  # the mode
+    # Defaults so a snapshot from before the column restores (see
+    # lib.misc.snapshots._coerce_row); a row the agent writes always sets both.
+    variant_inheritance: Mapped[str] = mapped_column(
+        String, nullable=False, server_default=VariantInheritance.unknown.value
+    )
     testing_methods: Mapped[list[str]] = mapped_column(JSON, nullable=False)
 
     # Evidence blocks (static, JSON)
     zygosity_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     inheritance_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
-    de_novo_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    variant_inheritance_evidence: Mapped[dict] = mapped_column(
+        JSON, nullable=False, default=variant_inheritance_not_extracted_evidence
+    )
     testing_methods_evidence: Mapped[list] = mapped_column(JSON, nullable=False)
     # A single curator note covering both testing method slots - not per-item
     # attribution like HumanEvidenceBlock, since testing_methods_evidence is a
@@ -287,8 +329,8 @@ class PatientVariantOccurrenceResp(BaseModel):
     zygosity_evidence: HumanEvidenceBlock[Zygosity]
     inheritance: Inheritance
     inheritance_evidence: HumanEvidenceBlock[Inheritance]
-    de_novo: bool
-    de_novo_evidence: HumanEvidenceBlock[bool]
+    variant_inheritance: VariantInheritance
+    variant_inheritance_evidence: HumanEvidenceBlock[VariantInheritance]
     testing_methods: list[TestingMethod]
     testing_methods_evidence: List[AttributedEvidenceBlock[TestingMethod]]
     testing_methods_note: str | None = None

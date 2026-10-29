@@ -1,7 +1,7 @@
 /* The fields editable directly from the Occurrences table: Variant Type (a
  * field of the variant, saved through the variant endpoint), then the
- * occurrence-level Zygosity, Inheritance, De Novo, Testing Methods and
- * Disease Name.
+ * occurrence-level Zygosity, Inheritance mechanism, De Novo, Testing Methods
+ * and Disease Name.
  */
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
@@ -11,7 +11,7 @@ import {
   updateOccurrencePapersPaperIdOccurrencesOccurrenceIdPatch,
   updateVariantPapersPaperIdVariantsVariantIdPatch,
 } from '@/api/generated'
-import { Inheritance, TestingMethod, Zygosity } from '@/api/generated/types.gen'
+import { Inheritance, TestingMethod, VariantInheritance, Zygosity } from '@/api/generated/types.gen'
 import type {
   PatientVariantOccurrenceResp,
   PatientVariantOccurrenceUpdateRequest,
@@ -189,7 +189,7 @@ export function EditableInheritanceCell({
       <HumanEditNoteDialog
         open={pending.isOpen}
         onOpenChange={(open) => !open && pending.cancel()}
-        fieldLabel="Inheritance"
+        fieldLabel="Inheritance mechanism"
         defaultNote={occurrence.inheritance_evidence.human_edit_note}
         isPending={mutation.isPending}
         onConfirm={(note) => pending.confirm(note)}
@@ -200,6 +200,9 @@ export function EditableInheritanceCell({
   )
 }
 
+/** The only UI on the occurrence's variant_inheritance (Maternal, Paternal,
+ * De novo, ...): checked when it is De novo. Switching on writes De novo,
+ * switching off writes Unknown; the evidence popover shows the full value. */
 export function EditableDeNovoCell({
   paperId,
   occurrence,
@@ -209,21 +212,27 @@ export function EditableDeNovoCell({
 }) {
   const mutation = useOccurrenceMutation(paperId, occurrence.id)
   const pending = usePendingEdit<boolean>((value, note) =>
-    mutation.mutate({ de_novo: value, de_novo_human_edit_note: note }),
+    mutation.mutate({
+      variant_inheritance: value ? VariantInheritance.DE_NOVO : VariantInheritance.UNKNOWN,
+      variant_inheritance_human_edit_note: note,
+    }),
   )
+  const isDeNovo = occurrence.variant_inheritance === VariantInheritance.DE_NOVO
   return (
     <div className="flex items-center gap-1">
-      <Switch checked={occurrence.de_novo} onCheckedChange={(v) => pending.propose(v)} />
-      <EvidencePopover block={occurrence.de_novo_evidence} />
+      <Switch checked={isDeNovo} onCheckedChange={(v) => pending.propose(v)} />
+      <EvidencePopover block={occurrence.variant_inheritance_evidence} />
       <HumanEditNoteDialog
         open={pending.isOpen}
         onOpenChange={(open) => !open && pending.cancel()}
         fieldLabel="De Novo"
-        defaultNote={occurrence.de_novo_evidence.human_edit_note}
+        defaultNote={occurrence.variant_inheritance_evidence.human_edit_note}
         isPending={mutation.isPending}
         onConfirm={(note) => pending.confirm(note)}
-        beforeValue={occurrence.de_novo ? 'Yes' : 'No'}
-        afterValue={pending.pendingValue ? 'Yes' : 'No'}
+        beforeValue={occurrence.variant_inheritance}
+        afterValue={
+          pending.pendingValue ? VariantInheritance.DE_NOVO : VariantInheritance.UNKNOWN
+        }
       />
     </div>
   )

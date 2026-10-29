@@ -274,10 +274,12 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
                 variant = link.variant
                 variant_parts = []
 
-                # 1. Zygosity / de novo status (first)
+                # 1. Zygosity / variant inheritance (first)
                 zygosity_info = link.zygosity if link.zygosity != 'Unknown' else ''
-                if link.de_novo:
-                    zygosity_info = f'{zygosity_info} (de novo)'.strip()
+                if link.variant_inheritance and link.variant_inheritance != 'Unknown':
+                    zygosity_info = (
+                        f'{zygosity_info} ({link.variant_inheritance.lower()})'.strip()
+                    )
                 if zygosity_info:
                     variant_parts.append(f'Zygosity: {zygosity_info}')
 

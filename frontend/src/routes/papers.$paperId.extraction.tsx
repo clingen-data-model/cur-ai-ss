@@ -291,7 +291,7 @@ function OccurrencesTab({
       },
       {
         id: 'inheritance',
-        header: 'Inheritance',
+        header: 'Inheritance mechanism',
         cell: ({ row }) => <EditableInheritanceCell paperId={paperId} occurrence={row.original.occurrence} />,
       },
       {
