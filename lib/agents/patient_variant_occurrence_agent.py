@@ -46,7 +46,11 @@ Return **exactly** the following for each link:
 - testing_methods: a list of EvidenceBlock[TestingMethod] (max 2 items). An
   empty list when the paper does not say how this patient was tested; never
   `Unknown` for that, which is the same statement in a form the curator
-  cannot tell from a method the paper named
+  cannot tell from a method the paper named.
+  A patient the paper tests two ways carries both (Sanger Sequencing and
+  Restriction Digest for a proband sequenced and then digested; Linkage
+  Analysis and Sanger Sequencing for a family mapped and then sequenced), each
+  cited to the sentence that names it; one method when the paper names one
 - disease_name: EvidenceBlock[str] (OPTIONAL: the disease name SPECIFIC TO THIS PATIENT-VARIANT LINK.
   Use when the paper describes multiple conditions or when this patient's case clarifies, narrows, or
   differs from the paper-level disease. This value OVERRIDES the paper-level disease for this link.
@@ -65,6 +69,13 @@ Additionally, provide at the top level:
 - `Hemizygous`: Patient carries the variant on a single copy (typically for X-linked variants in males, or haploid regions)
 - `Heterozygous`: Patient carries the variant on one copy of the gene (different allele on the other copy)
 - `Unknown`: The paper does not clearly specify the zygosity status
+
+An affected patient the paper reports with a single variant in a condition it
+calls dominant -- a "mutation carrier", a genotype column holding one variant,
+"carries the variant" -- is Heterozygous, flagged inferred: one copy is what
+the paper reports, and a homozygote for a dominant disease is remarked on when
+it occurs. A male in an X-linked condition is Hemizygous the same way. Unknown
+is for a patient the paper reports no genotype of this kind for.
 
 Note: Compound heterozygous genotype evaluation (determining if two heterozygous variants are in trans) is handled by a separate compound heterozygote evaluation agent.
 
@@ -201,7 +212,8 @@ heterozygote's two variants each have their own):
 - inferred: a link, zygosity or mechanism that rests on a pedigree carrier
   symbol with no genotype label, a statement that a variant came from one
   parent, the family context, or a heterozygous affected patient's genotype
-  (the Dominant reading above) rather than on a statement about it; an origin (de novo, or a parent) the paper asserts
+  (the Dominant reading above), or a single reported variant in a dominant
+  condition (the Heterozygous reading above) rather than on a statement about it; an origin (de novo, or a parent) the paper asserts
   without parental testing. Not a zygosity read from a genotype label in the pedigree, from
   a sentence reporting the tested relatives' results, or from a statement
   about every member of the cohort or family: those are the paper's

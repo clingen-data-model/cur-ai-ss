@@ -26,6 +26,10 @@ Extract the following fields:
      * Text (e.g., "LOD score of 3.2", "multipoint LOD = 2.5")
      * Tables showing LOD scores by family
      * Pedigree descriptions or figure legends
+   - A LOD score the paper computes jointly across several families is this
+     family's value too, with the basis naming the families it covers and an
+     ambiguous flag (below), so a curator can decide whether to compute this
+     family's own.
 
 2. has_unexplainable_non_segregations (EvidenceBlock[bool]):
    - Determine if there are individuals in the family with the disease phenotype but NOT carrying the identified variant.
@@ -49,7 +53,8 @@ Kinds:
 - conflict: a member whose genotype or status the text and the figure give
   differently; a LOD score the paper gives for a different variant or
   disease than the one asked about.
-- ambiguous: a non-segregation the paper explains away.
+- ambiguous: a non-segregation the paper explains away; a LOD score the
+  paper computes jointly across several families, carried by each of them.
 Not: a genotype or LOD score the paper does not report, a member outside the
 family structure you were given (its membership was decided upstream), nor
 the parents' genotypes or carrier status, which come to you from the links
