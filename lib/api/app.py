@@ -185,6 +185,7 @@ from lib.models.patient import (
     AffectedStatus,
     CountryCode,
     Ethnicity,
+    OnsetCategory,
     ProbandStatus,
     Race,
     RelationshipToProband,
@@ -1519,6 +1520,19 @@ def _patient_to_resp(row: PatientDB, session: Session) -> PatientResp:
         age_death=row.age_death,
         age_death_unit=row.age_death_unit,
         age_death_evidence=_from_storage(HumanEvidenceBlock, row.age_death_evidence),
+        age_onset=row.age_onset,
+        age_onset_unit=row.age_onset_unit,
+        age_onset_evidence=_from_storage(HumanEvidenceBlock, row.age_onset_evidence)
+        if row.age_onset_evidence
+        else None,
+        onset_category=OnsetCategory(row.onset_category)
+        if row.onset_category
+        else None,
+        onset_category_evidence=_from_storage(
+            HumanEvidenceBlock, row.onset_category_evidence
+        )
+        if row.onset_category_evidence
+        else None,
         country_of_origin=CountryCode(row.country_of_origin),
         country_of_origin_evidence=_from_storage(
             HumanEvidenceBlock, row.country_of_origin_evidence
@@ -1527,6 +1541,10 @@ def _patient_to_resp(row: PatientDB, session: Session) -> PatientResp:
         race_evidence=_from_storage(HumanEvidenceBlock, row.race_evidence),
         ethnicity=Ethnicity(row.ethnicity),
         ethnicity_evidence=_from_storage(HumanEvidenceBlock, row.ethnicity_evidence),
+        ancestry=row.ancestry,
+        ancestry_evidence=_from_storage(HumanEvidenceBlock, row.ancestry_evidence)
+        if row.ancestry_evidence
+        else None,
         affected_status=AffectedStatus(row.affected_status),
         affected_status_evidence=_from_storage(
             HumanEvidenceBlock, row.affected_status_evidence
@@ -2437,6 +2455,8 @@ def create_patient(
         race_evidence=manual_evidence_block(create_request.race),
         ethnicity=create_request.ethnicity,
         ethnicity_evidence=manual_evidence_block(create_request.ethnicity),
+        ancestry=create_request.ancestry,
+        ancestry_evidence=manual_evidence_block(create_request.ancestry),
         age_diagnosis=create_request.age_diagnosis,
         age_diagnosis_evidence=manual_evidence_block(create_request.age_diagnosis),
         age_diagnosis_unit=create_request.age_diagnosis_unit,
@@ -2446,6 +2466,13 @@ def create_patient(
         age_death=create_request.age_death,
         age_death_evidence=manual_evidence_block(create_request.age_death),
         age_death_unit=create_request.age_death_unit,
+        age_onset=create_request.age_onset,
+        age_onset_evidence=manual_evidence_block(create_request.age_onset),
+        age_onset_unit=create_request.age_onset_unit,
+        onset_category=create_request.onset_category,
+        onset_category_evidence=manual_evidence_block(create_request.onset_category)
+        if create_request.onset_category
+        else None,
         is_obligate_carrier=create_request.is_obligate_carrier,
         relationship_to_proband=create_request.relationship_to_proband,
         twin_type=create_request.twin_type,
@@ -2467,9 +2494,11 @@ def create_patient(
             'country_of_origin',
             'race',
             'ethnicity',
+            'ancestry',
             'age_diagnosis',
             'age_report',
             'age_death',
+            'age_onset',
             'family_assignment',
         ],
         current_user,

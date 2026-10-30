@@ -180,13 +180,20 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
             age_parts.append(
                 f'(†{proband.age_death} {proband.age_death_unit.value.lower()})'
             )
+        if proband.age_onset is not None and proband.age_onset_unit:
+            age_parts.append(
+                f'(onset {proband.age_onset} {proband.age_onset_unit.value.lower()})'
+            )
         age_str = ' '.join(age_parts)
         country_str = (
             f'Country: {proband.country_of_origin}'
             if proband.country_of_origin != 'Unknown'
             else ''
         )
-        demographic = ', '.join(filter(None, [sex_str, age_str, country_str]))
+        ancestry_str = f'Ancestry: {proband.ancestry}' if proband.ancestry else ''
+        demographic = ', '.join(
+            filter(None, [sex_str, age_str, country_str, ancestry_str])
+        )
 
         is_single_patient_family = family_patient_counts.get(family.id, 0) <= 1
         if is_single_patient_family:

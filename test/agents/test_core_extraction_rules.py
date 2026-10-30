@@ -604,3 +604,41 @@ def test_occurrence_prompt_reads_dominant_from_a_heterozygous_affected_carrier()
         in prompt
     )
     assert 'A copy from an\nunaffected parent settles nothing by itself' in prompt
+
+
+def test_a_descent_is_ancestry_and_not_the_country():
+    """A Brazilian family of Italian descent (MODY2, PMID 23085272) got Italy
+    as the country for some members and Brazil for others: the word had no
+    field of its own. ancestry holds it, and the country rule says a descent
+    is not a country."""
+    prompt = PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS
+    assert '- ancestry (EvidenceBlock[str | None]):' in prompt
+    country = prompt[
+        prompt.index('- country_of_origin (') : prompt.index('- ancestry (')
+    ]
+    assert 'A descent is\n    not a country' in country
+    assert 'Brazil here and\n    Italian in ancestry' in country
+    ancestry = prompt[prompt.index('- ancestry (') : prompt.index('- race (')]
+    assert 'a country alone is not a descent' in ancestry
+    assert 'COHORT AND FAMILY DESCRIPTIONS' in ancestry
+
+
+def test_an_onset_age_has_its_own_field_and_is_not_a_diagnosis_age():
+    """Seizures from 0.1 months (ADAM22, PMID 35373813) became a diagnosis age
+    for one sib and nothing for the other; a congenital onset (TBC1D8B, PMID
+    30661770) had no integer to be. age_onset and HPO's onset bucket hold
+    them, and the ages rule tells the four moments apart."""
+    from lib.models.patient import OnsetCategory, PatientDemographics
+
+    prompt = PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS
+    assert '- age_diagnosis, age_report, age_death, age_onset (' in prompt
+    assert 'An onset is not a diagnosis age' in prompt
+    assert 'unless the paper equates the two' in prompt
+    assert '- onset_category (EvidenceBlock[enum: Antenatal, Congenital' in prompt
+    assert 'Neonatal is the first 28 days' in prompt
+    assert [c.value for c in OnsetCategory][:3] == [
+        'Antenatal',
+        'Congenital',
+        'Neonatal',
+    ]
+    assert 'age_onset_unit' in PatientDemographics.model_fields

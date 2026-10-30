@@ -10,6 +10,7 @@ from lib.models.patient import (
     AgeUnit,
     CountryCode,
     Ethnicity,
+    OnsetCategory,
     PatientDemographics,
     PatientIdentity,
     ProbandStatus,
@@ -110,6 +111,11 @@ def test_patient_identity_to_db_sets_identity_and_placeholder_demographics():
     assert row.country_of_origin == 'Unknown'
     assert row.race == 'Unknown'
     assert row.ethnicity == 'Unknown'
+    assert row.ancestry is None
+    assert row.ancestry_evidence['value'] is None
+    assert row.age_onset is None
+    assert row.age_onset_unit is None
+    assert row.onset_category == 'Unknown'
     assert row.affected_status == 'Unknown'
     assert row.age_diagnosis is None
     assert row.age_diagnosis_unit is None
@@ -164,6 +170,20 @@ def test_apply_patient_demographics_overwrites_placeholders():
             reasoning='ethnicity stated',
             citations=[_cite('East Asian descent')],
         ),
+        ancestry=EvidenceBlock(
+            value='East Asian',
+            reasoning='descent stated',
+            citations=[_cite('East Asian descent')],
+        ),
+        age_onset=EvidenceBlock(
+            value=3, reasoning='onset stated', citations=[_cite('onset at 3 months')]
+        ),
+        age_onset_unit=AgeUnit.Months,
+        onset_category=EvidenceBlock(
+            value=OnsetCategory.Infantile,
+            reasoning='3 months is infantile by HPO bounds',
+            citations=[_cite('onset at 3 months')],
+        ),
         affected_status=EvidenceBlock(
             value=AffectedStatus.Affected,
             reasoning='clearly affected',
@@ -186,6 +206,12 @@ def test_apply_patient_demographics_overwrites_placeholders():
     assert row.country_of_origin == 'Japan'
     assert row.race == 'Asian'
     assert row.ethnicity == 'Not Hispanic or Latino'
+    assert row.ancestry == 'East Asian'
+    assert row.ancestry_evidence['value'] == 'East Asian'
+    assert row.age_onset == 3
+    assert row.age_onset_unit == 'Months'
+    assert row.onset_category == 'Infantile'
+    assert row.onset_category_evidence['value'] == 'Infantile'
     assert row.affected_status == 'Affected'
     assert row.sex_evidence['value'] == 'Female'
     assert row.race_evidence['citations'] == [

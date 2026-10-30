@@ -10,6 +10,7 @@ import {
   AgeUnit,
   CountryCode,
   Ethnicity,
+  OnsetCategory,
   ProbandStatus,
   Race,
   RelationshipToProband,
@@ -132,6 +133,29 @@ export function PatientDetailPanel({ paperId, patient }: { paperId: number; pati
           }
           onSaveUnit={(unit) => save({ age_death_unit: unit })}
         />
+        <EditableAgeRow
+          label="Age at Onset"
+          value={patient.age_onset}
+          unit={patient.age_onset_unit ?? null}
+          unitOptions={Object.values(AgeUnit)}
+          evidence={patient.age_onset_evidence}
+          isSaving={mutation.isPending}
+          onSaveValue={(value, note) =>
+            save({ age_onset: value, age_onset_human_edit_note: note })
+          }
+          onSaveUnit={(unit) => save({ age_onset_unit: unit })}
+        />
+        <EditableSelectRow
+          label="Onset"
+          value={patient.onset_category}
+          options={Object.values(OnsetCategory)}
+          allowNone
+          evidence={patient.onset_category_evidence}
+          isSaving={mutation.isPending}
+          onSave={(value, note) =>
+            save({ onset_category: value, onset_category_human_edit_note: note })
+          }
+        />
         <EditableSelectRow
           label="Country of Origin"
           value={patient.country_of_origin}
@@ -158,6 +182,15 @@ export function PatientDetailPanel({ paperId, patient }: { paperId: number; pati
           isSaving={mutation.isPending}
           onSave={(value, note) =>
             save({ ethnicity: value, ethnicity_human_edit_note: note })
+          }
+        />
+        <EditableTextRow
+          label="Ancestry"
+          value={patient.ancestry ?? ''}
+          evidence={patient.ancestry_evidence}
+          isSaving={mutation.isPending}
+          onSave={(value, note) =>
+            save({ ancestry: value.trim() || null, ancestry_human_edit_note: note })
           }
         />
         <EditableSwitchRow

@@ -890,3 +890,105 @@ def test_de_novo_becomes_variant_inheritance(monkeypatch, tmp_path):
             .all()
         )
     assert de_novo == [1, 0]
+
+
+def test_ancestry_reads_back_as_none_for_old_rows(monkeypatch, tmp_path):
+    """b8c3d7e2f4a1 adds the nullable ancestry columns. A patient from before
+    it survives with ancestry None and no evidence, the ORM reads it, and a
+    second upgrade is a clean no-op."""
+    from lib.models import PatientDB
+
+    monkeypatch.setattr(db.env, 'CAA_ROOT', str(tmp_path))
+    monkeypatch.setattr(db.env, 'SQLLITE_DIR', '')
+    monkeypatch.setattr(db, '_engine', None)
+    monkeypatch.setattr(db, '_session_factory', None)
+
+    repo_root = Path(__file__).resolve().parents[2]
+    cfg = Config(str(repo_root / 'alembic.ini'))
+    command.upgrade(cfg, 'a4e7c2d9f1b3')
+
+    engine = db.get_engine()
+    with engine.begin() as connection:
+        gene_id = connection.execute(
+            text("INSERT INTO genes (symbol) VALUES ('TESTGENE') RETURNING id")
+        ).scalar_one()
+        paper_id = connection.execute(
+            text(
+                'INSERT INTO papers (gene_id, content_hash, filename, paper_types) '
+                "VALUES (:gene_id, 'h', 'f.pdf', '[]') RETURNING id"
+            ),
+            {'gene_id': gene_id},
+        ).scalar_one()
+        patient_id = _insert_patient(connection, paper_id, 'P1')
+
+    command.upgrade(cfg, 'head')
+    command.upgrade(cfg, 'head')  # a clean no-op: alembic_version landed
+
+    with Session(engine) as session:
+        row = session.get(PatientDB, patient_id)
+        assert row is not None
+        assert row.identifier == 'P1'
+        assert row.ancestry is None
+        assert row.ancestry_evidence is None
+        row.ancestry = 'Italian'
+        row.ancestry_evidence = {'value': 'Italian', 'reasoning': 'x'}
+        session.commit()
+
+    command.downgrade(cfg, 'a4e7c2d9f1b3')
+    with engine.begin() as connection:
+        columns = {
+            r[1] for r in connection.execute(text('PRAGMA table_info(patients)'))
+        }
+    assert 'ancestry' not in columns and 'ancestry_evidence' not in columns
+
+
+def test_onset_columns_read_back_as_none_for_old_rows(monkeypatch, tmp_path):
+    """c9d4e8f3a5b2 adds the nullable onset columns. A patient from before it
+    survives with every one None, the ORM reads it, and a second upgrade is
+    a clean no-op."""
+    from lib.models import PatientDB
+
+    monkeypatch.setattr(db.env, 'CAA_ROOT', str(tmp_path))
+    monkeypatch.setattr(db.env, 'SQLLITE_DIR', '')
+    monkeypatch.setattr(db, '_engine', None)
+    monkeypatch.setattr(db, '_session_factory', None)
+
+    repo_root = Path(__file__).resolve().parents[2]
+    cfg = Config(str(repo_root / 'alembic.ini'))
+    command.upgrade(cfg, 'b8c3d7e2f4a1')
+
+    engine = db.get_engine()
+    with engine.begin() as connection:
+        gene_id = connection.execute(
+            text("INSERT INTO genes (symbol) VALUES ('TESTGENE') RETURNING id")
+        ).scalar_one()
+        paper_id = connection.execute(
+            text(
+                'INSERT INTO papers (gene_id, content_hash, filename, paper_types) '
+                "VALUES (:gene_id, 'h', 'f.pdf', '[]') RETURNING id"
+            ),
+            {'gene_id': gene_id},
+        ).scalar_one()
+        patient_id = _insert_patient(connection, paper_id, 'P1')
+
+    command.upgrade(cfg, 'head')
+    command.upgrade(cfg, 'head')  # a clean no-op: alembic_version landed
+
+    with Session(engine) as session:
+        row = session.get(PatientDB, patient_id)
+        assert row is not None
+        assert (row.age_onset, row.age_onset_unit, row.onset_category) == (
+            None,
+            None,
+            None,
+        )
+        assert row.age_onset_evidence is None and row.onset_category_evidence is None
+        row.age_onset, row.age_onset_unit, row.onset_category = 7, 'Years', 'Juvenile'
+        session.commit()
+
+    command.downgrade(cfg, 'b8c3d7e2f4a1')
+    with engine.begin() as connection:
+        columns = {
+            r[1] for r in connection.execute(text('PRAGMA table_info(patients)'))
+        }
+    assert not columns & {'age_onset', 'age_onset_unit', 'onset_category'}
