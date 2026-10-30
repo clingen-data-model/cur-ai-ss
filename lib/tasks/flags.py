@@ -7,7 +7,6 @@ module is that, parameterised by the scope and the resolver, so each handler
 contributes only the lookup it alone knows how to do.
 """
 
-from collections import Counter
 from collections.abc import Callable, Iterable, Sequence
 from typing import Any
 
@@ -37,21 +36,21 @@ def match_label(about: str, labels: Iterable[tuple[str | None, int]]) -> int | N
     return None
 
 
-def patient_labels_by_family(
+def patient_label(family: str, identifier: str) -> str:
+    """How a flag's ``about`` names a patient: the family then the identifier
+    ("Family 2 II-1"), since the family is not part of the identifier and two
+    families may each have a "II-1" or a "sister"."""
+    return f'{family} {identifier}'
+
+
+def patient_labels(
     patients: Iterable[tuple[str, str, int]],
 ) -> list[tuple[str, int]]:
-    """Labels an agent may write in ``about`` for each patient, as (label, id):
-    the bare identifier when only one patient in the paper carries it, and
-    always "family / identifier", since the family is not part of the
-    identifier and two families may each have a "II-1" or a "sister"."""
-    rows = list(patients)
-    counts = Counter(_norm(identifier) for _, identifier, _ in rows)
-    labels: list[tuple[str, int]] = []
-    for family, identifier, row_id in rows:
-        if counts[_norm(identifier)] == 1:
-            labels.append((identifier, row_id))
-        labels.append((f'{family} / {identifier}', row_id))
-    return labels
+    """(label, id) for each (family, identifier, id), for ``match_label``."""
+    return [
+        (patient_label(family, identifier), row_id)
+        for family, identifier, row_id in patients
+    ]
 
 
 def flags_of(output: Any) -> list[AnyFlag]:
