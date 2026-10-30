@@ -66,6 +66,21 @@ class AgeUnit(str, Enum):
     Days = 'Days'
 
 
+class OnsetCategory(str, Enum):
+    """HPO's Onset classes (HP:0003674 children), the buckets ClinGen curation
+    uses for when a condition began; a numeric age maps onto one by HPO's
+    bounds and a paper's word ("congenital") lands in one without a number."""
+
+    Antenatal = 'Antenatal'
+    Congenital = 'Congenital'
+    Neonatal = 'Neonatal'
+    Infantile = 'Infantile'
+    Childhood = 'Childhood'
+    Juvenile = 'Juvenile'
+    Adult = 'Adult'
+    Unknown = 'Unknown'
+
+
 class SexAtBirth(str, Enum):
     Male = 'Male'
     Female = 'Female'
@@ -385,6 +400,20 @@ class PatientDemographics(BaseModel):
     age_report_unit: AgeUnit | None = None
     age_death: EvidenceBlock[int | None]
     age_death_unit: AgeUnit | None = None
+    # When the condition began: the age the paper gives for its first sign,
+    # and HPO's onset bucket for it. Distinct from age_diagnosis (the age the
+    # paper calls a diagnosis) and age_report (the age at description).
+    age_onset: EvidenceBlock[int | None] = Field(
+        default_factory=lambda: EvidenceBlock[int | None](
+            value=None, reasoning='Age at onset not stated'
+        )
+    )
+    age_onset_unit: AgeUnit | None = None
+    onset_category: EvidenceBlock[OnsetCategory] = Field(
+        default_factory=lambda: EvidenceBlock(
+            value=OnsetCategory.Unknown, reasoning='Onset not stated'
+        )
+    )
     country_of_origin: EvidenceBlock[CountryCode]
     race: EvidenceBlock[Race]
     ethnicity: EvidenceBlock[Ethnicity]
@@ -421,6 +450,7 @@ class PatientDemographics(BaseModel):
             ('age_diagnosis', 'age_diagnosis_unit'),
             ('age_report', 'age_report_unit'),
             ('age_death', 'age_death_unit'),
+            ('age_onset', 'age_onset_unit'),
         ]
         for age_field, unit_field in age_pairs:
             age_value = getattr(self, age_field).value
@@ -438,7 +468,8 @@ def placeholder_demographics() -> 'PatientDemographics':
     Patient extraction inserts the patient row before demographics are known;
     this fills the required fields with Unknown/None values (which the
     EvidenceBlock validator allows without an evidence source) until the patient
-    demographics agent overwrites them. ``ancestry``, ``is_obligate_carrier``,
+    demographics agent overwrites them. ``age_onset``, ``onset_category``,
+    ``ancestry``, ``is_obligate_carrier``,
     ``relationship_to_proband`` and ``twin_type`` fall back to their field defaults.
     """
     reason = 'Not yet extracted'
@@ -535,6 +566,11 @@ class PatientDB(Base):
     age_death_unit: Mapped[AgeUnit | None] = mapped_column(
         SQLEnum(AgeUnit), nullable=True
     )
+    age_onset: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    age_onset_unit: Mapped[AgeUnit | None] = mapped_column(
+        SQLEnum(AgeUnit), nullable=True
+    )
+    onset_category: Mapped[str | None] = mapped_column(String, nullable=True)
     country_of_origin: Mapped[str] = mapped_column(String, nullable=False)
     race: Mapped[str] = mapped_column(String, nullable=False)
     ethnicity: Mapped[str] = mapped_column(String, nullable=False)
@@ -551,6 +587,8 @@ class PatientDB(Base):
     age_diagnosis_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     age_report_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     age_death_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    age_onset_evidence: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    onset_category_evidence: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     country_of_origin_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     race_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     ethnicity_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
@@ -614,6 +652,9 @@ class PatientResp(BaseModel):
     age_report_unit: AgeUnit | None = None
     age_death: int | None
     age_death_unit: AgeUnit | None = None
+    age_onset: int | None
+    age_onset_unit: AgeUnit | None = None
+    onset_category: OnsetCategory | None
     country_of_origin: CountryCode
     race: Race
     ethnicity: Ethnicity
@@ -635,6 +676,8 @@ class PatientResp(BaseModel):
     age_diagnosis_evidence: HumanEvidenceBlock[int | None]
     age_report_evidence: HumanEvidenceBlock[int | None]
     age_death_evidence: HumanEvidenceBlock[int | None]
+    age_onset_evidence: HumanEvidenceBlock[int | None] | None
+    onset_category_evidence: HumanEvidenceBlock[OnsetCategory] | None
     country_of_origin_evidence: HumanEvidenceBlock[CountryCode]
     race_evidence: HumanEvidenceBlock[Race]
     ethnicity_evidence: HumanEvidenceBlock[Ethnicity]
@@ -666,6 +709,9 @@ class PatientCreateRequest(BaseModel):
     age_report_unit: str | None = None
     age_death: int | None = None
     age_death_unit: str | None = None
+    age_onset: int | None = None
+    age_onset_unit: str | None = None
+    onset_category: str | None = None
     is_obligate_carrier: bool | None = None
     relationship_to_proband: str | None = None
     twin_type: str | None = None
@@ -682,6 +728,9 @@ class PatientUpdateRequest(PatchModel):
     age_report_unit: str | None = None
     age_death: int | None = None
     age_death_unit: str | None = None
+    age_onset: int | None = None
+    age_onset_unit: str | None = None
+    onset_category: str | None = None
     country_of_origin: str | None = None
     race: str | None = None
     ethnicity: str | None = None
@@ -696,6 +745,8 @@ class PatientUpdateRequest(PatchModel):
     age_diagnosis_human_edit_note: str | None = None
     age_report_human_edit_note: str | None = None
     age_death_human_edit_note: str | None = None
+    age_onset_human_edit_note: str | None = None
+    onset_category_human_edit_note: str | None = None
     country_of_origin_human_edit_note: str | None = None
     race_human_edit_note: str | None = None
     ethnicity_human_edit_note: str | None = None

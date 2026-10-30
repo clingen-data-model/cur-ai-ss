@@ -52,18 +52,34 @@ Each field (except the *_unit fields) is an EvidenceBlock containing:
     and no statement. When the text and the figure disagree, take the text
     and raise a conflict flag.
 
-- age_diagnosis, age_report, age_death (EvidenceBlock[int | None]):
+- age_diagnosis, age_report, age_death, age_onset (EvidenceBlock[int | None]):
   - Extract ages as reported in text, tables, or pedigrees
   - Report the numeric value as an integer
   - None if not stated
+  - Four different moments. age_onset is when the condition's first sign
+    appeared ("seizures from 3 months", a table's "onset: 7 y"); age_diagnosis
+    is the age the paper calls a diagnosis; age_report the age at which the
+    paper describes the patient ("a 26-year-old man", age at last follow-up);
+    age_death the age at death. An onset is not a diagnosis age: a patient
+    with onset at 7 years and no stated diagnosis age has age_diagnosis None,
+    the onset named in its basis, unless the paper equates the two.
 
-- age_diagnosis_unit, age_report_unit, age_death_unit (enum: Years, Months, Days):
+- age_diagnosis_unit, age_report_unit, age_death_unit, age_onset_unit (enum: Years, Months, Days):
   - Extract the unit of measurement for the corresponding age field
   - Match the unit as stated in the source text
   - Must be populated if the corresponding age field is populated; must be null if age is null
   - Prefer the unit as explicitly stated; if ambiguous or missing, infer from context (e.g., decimal ages typically indicate years)
   - If the unit is hours, round to the nearest day for the age value and set unit to Days
   - Note that these are not EvidenceBlocks, we only expect the raw enum!
+
+- onset_category (EvidenceBlock[enum: Antenatal, Congenital, Neonatal, Infantile, Childhood, Juvenile, Adult, Unknown]):
+  - HPO's onset classes. From age_onset by HPO's bounds when the paper gives
+    a number: Neonatal is the first 28 days, Infantile to the first birthday,
+    Childhood to the fifth, Juvenile to the sixteenth, Adult from there.
+    Without a number, from the paper's word: "congenital" or "at birth" is
+    Congenital, "prenatal" or "in utero" Antenatal, "infantile-onset"
+    Infantile, "adult-onset" Adult. Unknown when the paper gives neither.
+    Cite the same block as age_onset.
 
 - country_of_origin (EvidenceBlock[enum of valid country names]):
   - Extract from geographic references: a statement about the patient, their

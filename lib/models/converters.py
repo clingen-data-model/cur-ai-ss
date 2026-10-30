@@ -50,6 +50,8 @@ _DEMOGRAPHIC_EVIDENCE_FIELDS = [
     'age_diagnosis',
     'age_report',
     'age_death',
+    'age_onset',
+    'onset_category',
     'country_of_origin',
     'race',
     'ethnicity',
@@ -86,6 +88,7 @@ def apply_patient_demographics(
     patient_db.age_diagnosis_unit = demographics.age_diagnosis_unit
     patient_db.age_report_unit = demographics.age_report_unit
     patient_db.age_death_unit = demographics.age_death_unit
+    patient_db.age_onset_unit = demographics.age_onset_unit
     for field_name in _DEMOGRAPHIC_EVIDENCE_FIELDS:
         block = getattr(demographics, field_name)
         setattr(patient_db, field_name, block.value)

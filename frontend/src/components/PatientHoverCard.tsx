@@ -39,6 +39,9 @@ export function PatientHoverCardContent({ paperId, patient }: { paperId: number;
     formatAge(patient.age_report, patient.age_report_unit) ??
     formatAge(patient.age_diagnosis, patient.age_diagnosis_unit)
   const ageAtDeath = formatAge(patient.age_death, patient.age_death_unit)
+  const onset =
+    formatAge(patient.age_onset, patient.age_onset_unit) ??
+    (patient.onset_category && patient.onset_category !== 'Unknown' ? patient.onset_category : null)
   const country = patient.country_of_origin !== 'Unknown' ? patient.country_of_origin : null
   const race = patient.race !== 'Unknown' ? patient.race : null
   const ethnicity = patient.ethnicity !== 'Unknown' ? patient.ethnicity : null
@@ -66,6 +69,12 @@ export function PatientHoverCardContent({ paperId, patient }: { paperId: number;
           <>
             <dt className="text-muted-foreground">Age at Death</dt>
             <dd className="text-right truncate">{ageAtDeath}</dd>
+          </>
+        )}
+        {onset && (
+          <>
+            <dt className="text-muted-foreground">Onset</dt>
+            <dd className="text-right truncate">{onset}</dd>
           </>
         )}
         {country && (

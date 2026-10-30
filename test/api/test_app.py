@@ -4080,3 +4080,47 @@ def test_patient_ancestry_round_trips_through_create_and_patch(
     )
     assert response.status_code == 200, response.text
     assert response.json()['ancestry'] is None
+
+
+def test_patient_onset_round_trips_through_create_and_patch(
+    client, db_session, seeded_paper
+):
+    """age_onset follows the other ages (value, unit, evidence) and
+    onset_category is HPO's bucket; both nullable for rows that predate them."""
+    family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
+    body = _patient_create_body(family.id, 'P8') | {
+        'age_onset': 3,
+        'age_onset_unit': 'Months',
+        'onset_category': 'Infantile',
+    }
+    response = client.post(f'/papers/{seeded_paper.id}/patients', json=body)
+    assert response.status_code == 200, response.text
+    created = response.json()
+    assert (created['age_onset'], created['age_onset_unit']) == (3, 'Months')
+    assert created['onset_category'] == 'Infantile'
+    assert created['onset_category_evidence']['value'] == 'Infantile'
+    patient_id = created['id']
+
+    response = client.patch(
+        f'/papers/{seeded_paper.id}/patients/{patient_id}',
+        json={
+            'age_onset': 7,
+            'age_onset_unit': 'Years',
+            'age_onset_human_edit_note': 'table 1',
+            'onset_category': 'Juvenile',
+        },
+    )
+    assert response.status_code == 200, response.text
+    patched = response.json()
+    assert (patched['age_onset'], patched['age_onset_unit']) == (7, 'Years')
+    assert patched['age_onset_evidence']['human_edit_note'] == 'table 1'
+    assert patched['onset_category'] == 'Juvenile'
+
+    response = client.post(
+        f'/papers/{seeded_paper.id}/patients',
+        json=_patient_create_body(family.id, 'P7'),
+    )
+    assert response.status_code == 200, response.text
+    bare = response.json()
+    assert bare['age_onset'] is None and bare['onset_category'] is None
+    assert bare['onset_category_evidence'] is None
