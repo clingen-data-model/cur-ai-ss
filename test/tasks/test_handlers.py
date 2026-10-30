@@ -246,7 +246,7 @@ async def test_patient_extraction_persists_flags_and_links_them_to_patients(
             [
                 {
                     'kind': 'excluded',
-                    'about': 'Patient 2',
+                    'about': 'Family 1 Patient 2',  # family then identifier
                     'flag': {
                         'value': 'status implied',
                         'reasoning': 'affected only by pedigree shading',
