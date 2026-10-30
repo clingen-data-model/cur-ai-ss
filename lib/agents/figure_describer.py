@@ -145,6 +145,8 @@ For every panel, lane or trace:
 - That individual's result: wild type, heterozygous, homozygous, hemizygous, deleted, duplicated, mosaic, present or absent, and what in the image shows it (a double peak, an extra band, a ratio)
 - The method the panel evidences, if it can be told (Sanger sequencing, restriction digest, MLPA, array, read alignment, karyotype, FISH)
 
+A heterozygous position in a chromatogram is two peaks at one base, whatever their relative heights: a minor peak a third the height of the major is still a second allele, and one colour partly hidden under another is still two peaks. A secondary peak you cannot decide on is reported as uncertain, not as wild type.
+
 Keep it to what the image shows. Copy labels exactly as printed, do not infer sex or affected status, and say when a label or result cannot be read rather than guessing."""
 
 
