@@ -35,3 +35,14 @@ def test_a_pedigree_member_is_written_position_first_then_label():
     assert "A person no pedigree places is written as the paper's label alone" in rules
     assert "none is written as the paper's label alone" in rules
     assert 'The family is never part of the identifier' in rules
+
+
+def test_a_family_drawn_twice_is_one_family_named_from_the_fuller_drawing():
+    """ALX3 (PMID 19409524) draws each family in full in one figure and again,
+    without the grandparents, above its gel in another. Each description
+    numbers from its own top row, so subject 4 was III-4 in one and II-4 in
+    the other, and nothing joined them. Patient extraction sees both."""
+    rules = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
+    assert 'A paper may draw one family twice' in rules
+    assert 'named from the fuller drawing' in rules
+    assert 'which position in the other figure is theirs' in rules
