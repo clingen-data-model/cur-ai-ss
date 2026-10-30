@@ -72,6 +72,12 @@ class FlagKind(StrEnum):
     UNRESOLVED = 'unresolved'
     # The best available term or record does not fit what the paper says.
     MISMATCH = 'mismatch'
+    # A person linked to the target gene for whom the paper reports another
+    # explanation of their phenotype: a disease-causing finding in a different
+    # gene, or a non-genetic cause. The variant tables are scoped to the target
+    # gene, so this is the only place such a finding can be recorded; it bears
+    # on how much the case says about the target gene.
+    ALTERNATIVE_CAUSE = 'alternative_cause'
 
 
 class FlagEvidenceBlock(EvidenceBlock[str]):
