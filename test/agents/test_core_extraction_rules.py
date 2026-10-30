@@ -569,3 +569,14 @@ def test_occurrence_prompt_gives_one_family_one_disease_name():
     prompt = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
     assert 'get the same disease_name' in prompt
     assert 'not "familial cardiomyopathy" for one sib and' in prompt
+
+
+def test_occurrence_prompt_checks_patient_and_family_facts_agree_across_links():
+    """The mechanism, disease name and methods are filled per link, and sibs
+    with one basis came out with different mechanisms; the final checklist
+    now says which values are the patient's or the family's, not the link's."""
+    prompt = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
+    checklist = prompt[prompt.index('BEFORE RETURNING, CHECK') :]
+    assert "a patient's links carry the same\n  values" in checklist
+    assert "a family's links the same mechanism" in checklist
+    assert 'in one sentence or one table row the same methods' in checklist
