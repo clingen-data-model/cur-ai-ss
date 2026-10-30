@@ -549,7 +549,7 @@ def test_phenotype_prompt_takes_a_whole_cohort_finding_as_stated():
     assert 'a group the paper does not place it in' in FLAG_RULES
 
 
-def test_occurrence_prompt_offers_the_other_gene_kind():
+def test_occurrence_prompt_offers_the_alternative_cause_kind():
     """Two sibs linked to the target gene also carried a pathogenic repeat
     expansion in another ALS gene, the likelier cause of their disease; the
     variant tables are scoped to the target gene, so the finding had no
@@ -557,7 +557,7 @@ def test_occurrence_prompt_offers_the_other_gene_kind():
     re-run with a note."""
     prompt = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
     assert (
-        '- other_gene: a linked patient the paper also reports with a pathogenic'
+        '- alternative_cause: a linked patient for whom the paper reports another'
         in prompt
     )
-    assert 'Not a\n  gene the paper merely screened and found negative' in prompt
+    assert 'gene the paper merely screened and found negative' in prompt

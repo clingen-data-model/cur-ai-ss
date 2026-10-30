@@ -25,9 +25,9 @@ export const FLAG_KIND_LABELS: Record<string, { label: string; hint: string }> =
   inferred: { label: 'Inferred', hint: 'A value taken from somewhere other than a statement about the thing itself' },
   unresolved: { label: 'Unresolved', hint: 'A lookup could not settle it; the output is partial or empty' },
   mismatch: { label: 'Mismatch', hint: 'The best available term or record does not fit what the paper says' },
-  other_gene: {
-    label: 'Other gene',
-    hint: 'The paper also reports a disease-causing finding in another gene for this person',
+  alternative_cause: {
+    label: 'Alternative cause',
+    hint: 'The paper reports another explanation of this person\'s phenotype, such as a finding in a different gene',
   },
 }
 

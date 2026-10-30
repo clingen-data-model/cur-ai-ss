@@ -42,10 +42,9 @@ FLAG_RULES = """FLAGS -- decisions a curator should see:
     find one.
   - mismatch: the best available term or record does not fit what the paper
     says -- a different organ, system, mechanism or consequence.
-  - other_gene: a person linked to the target gene whom the paper also
-    reports carrying a pathogenic or disease-causing finding in another gene
-    that could account for their phenotype. Name the gene and the finding as
-    the paper gives it.
+  - alternative_cause: a person linked to the target gene for whom the paper
+    reports another explanation of their phenotype -- a pathogenic finding in
+    a different gene, or a non-genetic cause. Name it as the paper gives it.
 - Flag only decisions your own output makes. A value you were given as input
   -- a patient's proband status, a family's membership, a variant's
   notation, a link's zygosity or a parent's carrier status -- was decided by
