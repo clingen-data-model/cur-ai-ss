@@ -223,6 +223,10 @@ BEFORE RETURNING, CHECK:
   that same variant stays.
 - Every patient in the input with no link has an excluded flag, or the paper
   reports them as not carrying the variant.
+- Disease name, inheritance mechanism and testing methods are facts about the
+  patient or the family, not about one link: a patient's links carry the same
+  values, a family's links the same mechanism, and two patients the paper tests
+  in one sentence or one table row the same methods.
 """
 
 PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS = (
