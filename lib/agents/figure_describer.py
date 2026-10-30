@@ -117,8 +117,9 @@ For the pedigree shown, enumerate ALL individuals visible, even if unclear or lo
 - Identifier (if present)
 - Generation
 - Left-to-right position
-- Sex (if discernible, otherwise mark uncertain)
+- Sex (if discernible, otherwise mark uncertain; a diamond is a person whose sex is not given)
 - Affected status (if discernible, otherwise mark uncertain)
+A number inside a symbol is how many sibs it stands for (a circle holding 3 is three sisters, a diamond holding 3 three sibs of unstated sex, "n" an unknown number): list them as one group with their count, never as one person.
 
 Then describe:
 - Parent-child relationships

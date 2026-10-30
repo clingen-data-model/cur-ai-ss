@@ -128,6 +128,16 @@ def test_the_prose_around_the_figure_reaches_both_describing_prompts(monkeypatch
     assert 'Text printed around' not in vision.prompts[0]
 
 
+def test_the_pedigree_prompt_reads_a_numbered_symbol_as_a_sibship():
+    """Standard pedigree nomenclature: a diamond is a person of unstated sex
+    and a number inside a symbol is the count of sibs it stands for. A
+    pedigree with two diamonds each holding a 3 lost all six until a curator
+    said what they were."""
+    assert 'a diamond is a person whose sex is not given' in PEDIGREE_VISION_PROMPT
+    assert 'how many sibs it stands for' in PEDIGREE_VISION_PROMPT
+    assert 'never as one person' in PEDIGREE_VISION_PROMPT
+
+
 def test_evidence_kinds_get_the_evidence_prompt_with_the_caption(monkeypatch):
     vision = _Vision('Chromatogram; Gel')
     monkeypatch.setattr(describer, 'vlm_describe', vision)
