@@ -561,3 +561,11 @@ def test_occurrence_prompt_offers_the_alternative_cause_kind():
         in prompt
     )
     assert 'gene the paper merely screened and found negative' in prompt
+
+
+def test_occurrence_prompt_gives_one_family_one_disease_name():
+    """Two sibs with one diagnosis came out as "familial ALS" and "ALS" and
+    so linked to two MONDO terms, until a curator's note asked for one."""
+    prompt = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
+    assert 'get the same disease_name' in prompt
+    assert 'not "familial ALS" for one sib and "ALS" for the other' in prompt
