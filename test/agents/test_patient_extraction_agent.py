@@ -43,6 +43,6 @@ def test_a_family_drawn_twice_is_one_family_named_from_the_fuller_drawing():
     numbers from its own top row, so subject 4 was III-4 in one and II-4 in
     the other, and nothing joined them. Patient extraction sees both."""
     rules = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
-    assert 'A paper may draw one family twice' in rules
-    assert 'named from the fuller drawing' in rules
+    assert 'A family drawn in two figures' in rules
+    assert 'is one family, named from the\nfuller drawing' in rules
     assert 'which position in the other figure is theirs' in rules

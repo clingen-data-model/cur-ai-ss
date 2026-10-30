@@ -676,4 +676,4 @@ def test_a_genotype_from_a_redrawn_pedigree_finds_its_patient():
     patients rather than linking a label nobody carries."""
     prompt = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
     assert 'redraws a family with fewer generations' in prompt
-    assert 'its II-4 is\n    the patient the full pedigree calls III-4' in prompt
+    assert "its II-4 is the full pedigree's III-4" in prompt

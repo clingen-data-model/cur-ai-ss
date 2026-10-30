@@ -294,16 +294,12 @@ description (II1 vs II-1), use the paper's spelling: the description is our
 rendering of the figure, not the paper's words. Every member of one pedigree
 belongs to one family.
 
-A paper may draw one family twice: the full pedigree in one figure and, in
-another, only the members it tested, above a gel or beside chromatograms,
-often without the eldest generation. Each description numbers from its own top
-row, so the same person is III-4 in one and II-4 in the other. The two are one
-family and one set of patients, named from the fuller drawing. Match the
-members of the shorter one through the proband or subject number both print,
-then by structure around them (parents above, sibs in birth order), and say in
-each matched patient's basis which position in the other figure is theirs and
-why the generations differ. A member structure alone cannot place gets an
-ambiguous flag naming both candidates.
+A family drawn in two figures (the full pedigree, and the tested members again
+above a gel without the eldest generation) is one family, named from the
+fuller drawing: each description numbers from its own top row, so match the
+shorter one's members through the subject number both print and then by
+position, say in the basis which position in the other figure is theirs, and
+flag as ambiguous anyone position alone cannot place.
 
 FAMILY GROUPING:
 
