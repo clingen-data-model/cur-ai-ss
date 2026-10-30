@@ -642,3 +642,29 @@ def test_an_onset_age_has_its_own_field_and_is_not_a_diagnosis_age():
         'Neonatal',
     ]
     assert 'age_onset_unit' in PatientDemographics.model_fields
+
+
+def test_curator_feedback_rules_of_2026_10_29():
+    """Five one-line rules from the curators' feedback document, each in the
+    prompt it belongs to: a patient tested two ways carries both methods; a
+    single reported variant in a dominant condition is Heterozygous, inferred;
+    a LOD computed across several families is flagged on each; a phenotype
+    read from a number names its threshold and is inferred when the paper
+    states none; a cohort statement covers the people the paper examined."""
+    occurrence = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
+    assert 'A patient the paper tests two ways carries both' in occurrence
+    assert 'is Heterozygous, flagged inferred' in occurrence
+    assert '(the Heterozygous reading above)' in occurrence
+    segregation = SEGREGATION_EVIDENCE_AGENT_INSTRUCTIONS
+    assert 'computes jointly across several families is this' in segregation
+    assert (
+        'computes jointly across several families, carried by each of them'
+        in segregation
+    )
+    phenotype = PATIENT_PHENOTYPE_LINKING_AGENT_INSTRUCTIONS
+    assert 'A finding read from a number against a normal range' in phenotype
+    assert (
+        'against a threshold the paper does not state, naming the threshold'
+        in phenotype
+    )
+    assert 'not a relative it knows only by report' in phenotype

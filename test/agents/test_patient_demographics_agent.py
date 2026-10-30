@@ -18,3 +18,10 @@ def test_a_relative_in_the_positive_family_history_is_affected():
     assert 'counts in a positive family history' in affected
     assert 'an illness the paper does not relate' in affected
     assert 'Read every member of the family by the same rule' in affected
+
+
+def test_report_age_is_the_latest_age_the_paper_gives():
+    """A patient described at two ages came out at the younger one; the age at
+    report cannot be an age the paper has already moved past."""
+    rules = PATIENT_DEMOGRAPHICS_AGENT_INSTRUCTIONS
+    assert 'age_report is the oldest age the paper gives' in rules
