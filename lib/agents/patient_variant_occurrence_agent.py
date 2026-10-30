@@ -83,9 +83,8 @@ disease is Dominant, flagged inferred, unless the gene is X-linked; a variant
 the paper calls uncertain, or sets beside another explanation of the
 phenotype, leaves the mechanism Unknown. Never derive it from the variant's
 inheritance: a variant inherited from one parent says nothing about dominance
-(every heterozygous carrier in a
-recessive family inherited their copy from a parent), and a de novo variant is
-not thereby dominant.
+(every heterozygous carrier in a recessive family inherited their copy from a
+parent), and a de novo variant is not thereby dominant.
 
 **Inheritance mechanism definitions:**
 
