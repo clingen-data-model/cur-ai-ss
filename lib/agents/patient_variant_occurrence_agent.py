@@ -200,6 +200,11 @@ heterozygote's two variants each have their own):
 - excluded: a patient or variant in the input that nothing in the paper
   connects to anything, or an affected member the paper never genotypes. Not
   a parent named as a variant's origin -- that parent is linked, above.
+- other_gene: a linked patient the paper also reports with a pathogenic
+  variant, repeat expansion or other disease-causing finding in a different
+  gene that could account for their phenotype. One flag per patient, about
+  that patient, naming the gene and the finding as the paper gives it. Not a
+  gene the paper merely screened and found negative.
 Not: a parent or sibling the paper reports as not carrying the variant (no
 link says that), nor a variant's notation (settled by the variant's own
 extraction and harmonization). The output carries a "flags" list. "about" is "patient identifier /
