@@ -181,7 +181,10 @@ For the "functional_evidence" field:
 - value → boolean indicating whether functional validation is present (true/false)
 - citations → the block(s) describing the functional evidence (required if value is true): a
   paragraph with the describing sentence as the quote, a table row, or a figure (no quote)
-- basis → explanation of how functional evidence was determined
+- basis → what the studies found, not only that they were done: each assay or
+  model with its result and the authors' reading of it ("enzyme activity in patient
+  fibroblasts fell to a third of controls; the knockout mouse lost the protein and
+  the phenotype"). Curators read this as the paper's functional summary.
 
 ------------------------------
 MAIN VARIANT FOCUS
