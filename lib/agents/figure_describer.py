@@ -120,6 +120,8 @@ For the pedigree shown, enumerate ALL individuals visible, even if unclear or lo
 - Sex (if discernible, otherwise mark uncertain)
 - Affected status (if discernible, otherwise mark uncertain)
 
+Standard pedigree conventions (NSGC nomenclature) hold wherever the legend does not say otherwise: a square is male, a circle female, a diamond a person whose sex is not given; a number inside a symbol is how many sibs it stands for (a circle holding 3 is three sisters, "n" an unknown number), listed as one unaffected group with its count, never as one person, since affected individuals are not grouped; a diagonal line through a symbol is deceased; an asterisk is a person the authors examined or tested; a central dot or a half-filled symbol is a carrier, and a symbol split into several fills has one condition per fill as the legend defines; a double relationship line is consanguinity; twins branch from one point, a bar between them meaning monozygotic; text below a symbol is age, evaluation or genotype (a mutation or repeat size in parentheses), then the pedigree number; sibs run left to right in birth order, generations in Roman numerals, individuals in Arabic. Papers stray from all of this: the legend wins over convention, a symbol or mark that fits neither is described as drawn and reported as undefined, and a cropped, low-resolution or hand-drawn pedigree is still read as far as it can be, with the uncertain parts named.
+
 Then describe:
 - Parent-child relationships
 - Sibling groups
