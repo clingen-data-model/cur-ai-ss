@@ -144,7 +144,10 @@ heterozygote's two variants each have their own):
     is the paper stating that person's result, exactly as a table cell
     reading "Het" is. The figure description carries these labels; cite
     the figure anchor and write the zygosity the label says;
-  - a genotyping figure read for that person: a Sanger trace described as
+  - a genotyping figure read for that person, under the label that figure
+    gives them (a figure that redraws a family with fewer generations numbers
+    from its own top row, so its II-4 is the full pedigree's III-4: match by
+    shared subject number, then position). A Sanger trace described as
     a double peak at the variant position is the paper reporting
     Heterozygous, a single mutant peak Homozygous (or Hemizygous where the
     paper says so); a restriction digest lane, a copy-number ratio or a read

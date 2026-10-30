@@ -294,6 +294,13 @@ description (II1 vs II-1), use the paper's spelling: the description is our
 rendering of the figure, not the paper's words. Every member of one pedigree
 belongs to one family.
 
+A family drawn in two figures (the full pedigree, and the tested members again
+above a gel without the eldest generation) is one family, named from the
+fuller drawing: each description numbers from its own top row, so match the
+shorter one's members through the subject number both print and then by
+position, say in the basis which position in the other figure is theirs, and
+flag as ambiguous anyone position alone cannot place.
+
 FAMILY GROUPING:
 
 After extracting all patients, group them into biological families based on:
