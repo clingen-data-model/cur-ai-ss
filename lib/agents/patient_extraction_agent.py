@@ -124,7 +124,10 @@ Each field is an EvidenceBlock containing:
        labels them, use the pedigree label (e.g., "II-2"). The figure is a
        source of identifiers exactly as the text is.
     4. A person the paper names only by relationship takes the role, simplified
-       to the role itself ("proband's sister" gives "sister"). Two people the
+       to the role itself ("proband's sister" gives "sister") while the paper
+       has one family. With more than one, the bare role would name a person
+       in each, so it is prefixed with the family identifier assigned below
+       ("Family 2 sister", "Family A father"). Two people the
        text names together by role are two patients ("the parents" gives
        "mother" and "father"); when the role alone would name two people
        ("two paternal aunts"), number them in the order the text gives
