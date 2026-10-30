@@ -3,14 +3,14 @@
 from lib.agents.patient_extraction_agent import PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
 
 
-def test_a_relative_is_named_by_their_family_when_the_paper_has_several():
-    """A two-family paper that named nobody came out as "index patient",
-    "brother", "father", "mother": the bare role, right for a one-proband
-    paper, named a person in each family here."""
+def test_a_role_is_the_identifier_and_the_family_is_its_own_field():
+    """#447 prefixed a role with the family when the paper had several, so
+    "sister" would not name a person in each. The family is a field of its own
+    and the interface shows it, so the identifier carries it no longer."""
     rules = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
-    assert 'while the paper\n       has one family' in rules
-    assert 'prefixed with the family identifier assigned below' in rules
-    assert '"Family 2 sister", "Family A father"' in rules
+    assert 'told apart by family_identifier' in rules
+    assert 'Family 2 sister' not in rules
+    assert 'The family is never part of the identifier' in rules
 
 
 def test_a_numbered_symbol_is_that_many_patients():
@@ -23,16 +23,15 @@ def test_a_numbered_symbol_is_that_many_patients():
     assert 'A symbol holding "n" is one patient' in rules
 
 
-def test_a_pedigree_member_is_written_family_first_then_position_then_label():
+def test_a_pedigree_member_is_written_position_first_then_label():
     """Within one family, patients came out as "II-1", "Subject 4" and
     "brother" side by side. Curators asked for pedigree position first with
     the paper's label in parentheses; the ladder still picks the label, one
-    rule writes it down."""
+    rule writes it down, and the family stays in its own field."""
     rules = PATIENT_EXTRACTION_AGENT_INSTRUCTIONS
     assert 'How the identifier is written, once rules 1-6 have found' in rules
-    assert '"Family 1 II-1 (Subject 1)"' in rules
-    assert (
-        'left off when the position is all the paper gives ("Family 1 II-3")' in rules
-    )
+    assert '"II-1 (Subject 1)", "I-1 (father)", "III-2 (P84)"' in rules
+    assert 'when the position is all the paper gives ("II-3")' in rules
     assert "A person no pedigree places is written as the paper's label alone" in rules
     assert "none is written as the paper's label alone" in rules
+    assert 'The family is never part of the identifier' in rules

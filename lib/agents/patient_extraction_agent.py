@@ -124,14 +124,13 @@ Each field is an EvidenceBlock containing:
        labels them, use the pedigree label (e.g., "II-2"). The figure is a
        source of identifiers exactly as the text is.
     4. A person the paper names only by relationship takes the role, simplified
-       to the role itself ("proband's sister" gives "sister") while the paper
-       has one family. With more than one, the bare role would name a person
-       in each, so it is prefixed with the family identifier assigned below
-       ("Family 2 sister", "Family A father"). Two people the
-       text names together by role are two patients ("the parents" gives
+       to the role itself ("proband's sister" gives "sister"). The family is
+       its own field, so a "sister" in each of two families is two patients
+       under the same identifier, told apart by family_identifier. Two people
+       the text names together by role are two patients ("the parents" gives
        "mother" and "father"); when the role alone would name two people
-       ("two paternal aunts"), number them in the order the text gives
-       ("paternal aunt 1", "paternal aunt 2") and say so in the basis.
+       in one family ("two paternal aunts"), number them in the order the
+       text gives ("paternal aunt 1", "paternal aunt 2") and say so in the basis.
        A pedigree symbol the figure leaves unlabeled is still named by the
        text or legend whenever they refer to that person by role ("the
        proband's father", "an unaffected brother"): match the symbol to the
@@ -160,18 +159,18 @@ Each field is an EvidenceBlock containing:
    4). Only a relative the paper says nothing about is skipped.
 
   How the identifier is written, once rules 1-6 have found the paper's label:
-    - A person a pedigree places is written family first, then position, then
-      the paper's label in parentheses: "Family 1 II-1 (Subject 1)", "Family 1
-      I-1 (father)", "FAM-001 III-2 (P84)". The family identifier is the one
-      assigned below, the position is the figure's label or, for a symbol the
-      paper names nowhere, the description's (rule 5), and the parentheses
-      are left off when the position is all the paper gives ("Family 1 II-3").
-      Every member of a pedigree is written this way, so a family reads in one
-      format and sorts by generation.
+    - A person a pedigree places is written position first, then the paper's
+      label in parentheses: "II-1 (Subject 1)", "I-1 (father)", "III-2 (P84)".
+      The position is the figure's label or, for a symbol the paper names
+      nowhere, the description's (rule 5), and the parentheses are left off
+      when the position is all the paper gives ("II-3"). Every member of a
+      pedigree is written this way, so a family reads in one format and sorts
+      by generation.
     - A person no pedigree places is written as the paper's label alone
-      ("Patient 3", "Subject 3B", "patient"), prefixed with the family
-      identifier when the paper has more than one family (rule 4).
-  The paper's label stays inside the identifier either way, so a curator can
+      ("Patient 3", "Subject 3B", "patient").
+  The family is never part of the identifier: it is the family_identifier
+  field, and the interface shows it beside the name when a paper has several
+  families. The paper's label stays inside the identifier, so a curator can
   still find "P84"; rules 1-6 decide what that label is, this decides its form.
     7. Preserve exact wording when multiple probands or cases are distinguished.
 
@@ -270,8 +269,8 @@ flag for the group saying the paper draws them together; segregation counts
 each of them. A symbol holding "n" is one patient under the position,
 flagged ambiguous with the unknown count in the basis.
 
-Naming follows the identifier rules in order, written family first as the
-identifier rules say ("Family 1 II-2 (P3)"). A labeled symbol takes the
+Naming follows the identifier rules in order, written position first as the
+identifier rules say ("II-2 (P3)"). A labeled symbol takes the
 figure's label (II-2). An unlabeled symbol takes whatever the paper calls that
 person elsewhere -- an identifier in the text or a table, or a role in the text
 or figure legend ("the proband's father"), matched to the symbol through the
@@ -286,7 +285,7 @@ first family's basis when the figure prints no labels, so a curator knows
 every positional identifier in that family is ours.
 
 This holds for every paper with a pedigree, including a single case report: the
-patient takes the figure's label ("Family 1 II-2", not "patient"), and the other symbols
+patient takes the figure's label (II-2, not "patient"), and the other symbols
 are patients too. A relative the text names only by role ("her mother") and
 states a fact about, such as a genotype, is a patient as well.
 
@@ -364,8 +363,9 @@ BEFORE RETURNING, CHECK:
   connected to the target gene.
 - No identifier is a bare number, or a bare number-plus-suffix copied from a
   cell; every member of a numbered series carries the series noun.
-- Every member of a pedigree is written family first, then position, then
-  the paper's label in parentheses; none is written as the paper's label alone.
+- Every member of a pedigree is written position first, then the paper's
+  label in parentheses; none is written as the paper's label alone, and no
+  identifier carries the family, which is family_identifier.
 - Every family the paper reports for the first time has exactly one Proband,
   and no re-reported individual is one.
 - The first family's identifier basis lists every candidate label with
@@ -388,8 +388,9 @@ Output format:
 - The families list is empty only when the patients list is.
 - The union of all patient identifier values across all families must equal the complete set
   of patient identifiers extracted above.
-- Return a "flags" list as CORE EXTRACTION RULES describes; "about" is a patient
-  or family identifier from this output, or null.
+- Return a "flags" list as CORE EXTRACTION RULES describes; "about" is a
+  patient, written as their family identifier then their identifier ("Family 2
+  II-1", "Family A sister"), or a family identifier, or null.
 """
 
 PATIENT_EXTRACTION_AGENT_INSTRUCTIONS = (

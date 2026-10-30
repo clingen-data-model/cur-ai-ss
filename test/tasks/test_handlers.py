@@ -201,6 +201,55 @@ def _flag_output(patients: list[str], flags: list[dict]):
     )
 
 
+def test_two_patients_named_alike_in_one_family_fail_the_output():
+    """Within a family the identifier is all that tells people apart, and a
+    flag names a patient as family then identifier, so a duplicate is caught
+    at the output rather than written as two rows nothing can address."""
+    import pytest as _pytest
+
+    from lib.models.patient import (
+        FamilyEntry,
+        PatientExtractionOutput,
+        PatientIdentity,
+        ProbandStatus,
+    )
+
+    def block(value: object) -> dict:
+        return {
+            'value': value,
+            'reasoning': 't',
+            'citations': [{'anchor': 'paragraph-1', 'quote': 'q'}],
+        }
+
+    def output(pairs: list[tuple[str, str]]) -> PatientExtractionOutput:
+        families = sorted({f for f, _ in pairs})
+        return PatientExtractionOutput(
+            patients=[
+                PatientIdentity(
+                    identifier=block(i),
+                    family_identifier=block(f),
+                    proband_status=block(ProbandStatus.Non_proband),
+                )
+                for f, i in pairs
+            ],
+            families=[
+                FamilyEntry(
+                    family={'identifier': block(f), 'consanguinity': block(False)},
+                    patient_identifiers=[block(i) for ff, i in pairs if ff == f],
+                )
+                for f in families
+            ],
+        )
+
+    # The same identifier in two families is two people.
+    output([('Family 1', 'II-1'), ('Family 2', 'II-1')])
+    # The same identifier twice in one family is not, whatever the case or spacing.
+    with _pytest.raises(ValueError, match='named alike'):
+        output([('Family 1', 'II-1'), ('Family 1', 'ii-1')])
+    with _pytest.raises(ValueError, match='named alike'):
+        output([('Family 1', 'sister'), ('Family 1', 'sister')])
+
+
 @pytest.fixture
 def run_patient_extraction(monkeypatch, db_session, paper):
     """Drive handle_patient_extraction with a canned agent output: the agent
@@ -246,7 +295,7 @@ async def test_patient_extraction_persists_flags_and_links_them_to_patients(
             [
                 {
                     'kind': 'excluded',
-                    'about': 'Patient 2',
+                    'about': 'Family 1 Patient 2',  # family then identifier
                     'flag': {
                         'value': 'status implied',
                         'reasoning': 'affected only by pedigree shading',

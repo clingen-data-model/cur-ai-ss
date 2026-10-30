@@ -16,7 +16,7 @@ import { ManuallyCreatedIndicator } from '@/components/ManuallyCreatedIndicator'
 import { FlagIndicator } from '@/components/FlagIndicator'
 import type { FlagIndex } from '@/hooks/usePaperFlags'
 import type { FlagTarget } from '@/lib/flagTarget'
-import { PatientIdCell } from '@/components/PatientIdCell'
+import { PatientIdCell, hasSeveralFamilies } from '@/components/PatientIdCell'
 import { RowExpander } from '@/components/RowExpander'
 import { PatientDetailPanel } from '@/components/PatientDetailPanel'
 import { PipelineGate } from '@/components/PipelineGate'
@@ -28,12 +28,15 @@ import { apiErrorMessage } from '@/lib/apiError'
 export function UnassociatedPatientsTab({
   paperId,
   patients,
+  allPatients,
   tasks,
   flags,
   focus,
 }: {
   paperId: number
   patients: PatientResp[]
+  /** Every patient of the paper, to tell whether it has several families. */
+  allPatients: PatientResp[]
   tasks: TaskResp[]
   flags: FlagIndex
   /** A patient to open on arrival (from a flag's About chip). */
@@ -59,6 +62,7 @@ export function UnassociatedPatientsTab({
     onError: (error) => toast.error(apiErrorMessage(error, 'Failed to delete patient')),
   })
 
+  const severalFamilies = useMemo(() => hasSeveralFamilies(allPatients), [allPatients])
   const columns: ColumnDef<PatientResp>[] = useMemo(
     () => [
       {
@@ -99,7 +103,12 @@ export function UnassociatedPatientsTab({
         header: 'Patient',
         accessorFn: (row) => row.identifier,
         cell: ({ row }) => (
-          <PatientIdCell paperId={paperId} patient={row.original} onClick={() => row.toggleExpanded()} />
+          <PatientIdCell
+            paperId={paperId}
+            patient={row.original}
+            showFamily={severalFamilies}
+            onClick={() => row.toggleExpanded()}
+          />
         ),
       },
       {
@@ -129,7 +138,7 @@ export function UnassociatedPatientsTab({
         ),
       },
     ],
-    [paperId, deleteMutation, flags],
+    [paperId, deleteMutation, flags, severalFamilies],
   )
 
   return (

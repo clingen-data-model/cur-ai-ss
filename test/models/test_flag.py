@@ -13,7 +13,13 @@ from lib.models.flag import (
 from lib.models.patient import PatientExtractionOutput
 from lib.models.phenotype import PhenotypeExtractionOutput
 from lib.models.variant import VariantExtractionOutput
-from lib.tasks.flags import flags_of, match_label, replace_flags, split_pair
+from lib.tasks.flags import (
+    flags_of,
+    match_label,
+    patient_labels,
+    replace_flags,
+    split_pair,
+)
 
 _CITE = [{'anchor': 'paragraph-3', 'quote': 'her sister was not tested'}]
 
@@ -247,3 +253,17 @@ def test_replace_flags_without_scope_replaces_all_of_that_source(db_session, pap
     db_session.flush()
     rows = db_session.query(FlagDB).filter_by(paper_id=paper_db.id).all()
     assert [r.subject for r in rows] == ['other agent']
+
+
+def test_a_flag_names_a_patient_by_family_then_identifier():
+    """Two families each have a II-1 once the family is out of the identifier,
+    so a flag's about carries both, and the bare identifier resolves to nothing
+    rather than to the wrong person."""
+    labels = patient_labels(
+        [('Family 1', 'II-1', 1), ('Family 2', 'II-1', 2), ('Family 2', 'P4', 3)]
+    )
+    assert match_label('Family 2 II-1', labels) == 2
+    assert match_label('family 1  ii-1', labels) == 1
+    assert match_label('Family 2 P4', labels) == 3
+    assert match_label('II-1', labels) is None
+    assert match_label('P4', labels) is None

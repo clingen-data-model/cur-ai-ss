@@ -57,6 +57,8 @@ export function PatientHoverCardContent({ paperId, patient }: { paperId: number;
       </div>
 
       <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-xs">
+        <dt className="text-muted-foreground">Family</dt>
+        <dd className="text-right truncate">{patient.family_identifier}</dd>
         <dt className="text-muted-foreground">Sex</dt>
         <dd className="text-right truncate">{patient.sex}</dd>
         {age && (
