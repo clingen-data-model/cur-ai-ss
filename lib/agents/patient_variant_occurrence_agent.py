@@ -53,7 +53,8 @@ Return **exactly** the following for each link:
   Extract from case-specific context — case summaries, family diagnoses, or variant-level descriptions.
   Omit if the link's disease is the same as the paper-level disease. Members of one
   family the paper gives the same diagnosis get the same disease_name, in the paper's
-  words for that family's disease: not "familial ALS" for one sib and "ALS" for the other.)
+  words for that family's disease: not "familial cardiomyopathy" for one sib and "dilated
+  cardiomyopathy" for the other.)
 
 Additionally, provide at the top level:
 - disease_name: EvidenceBlock[str] (OPTIONAL: if the case-level data reveals a different or more specific disease name than what was extracted from the paper abstract/introduction, include it here to update the paper-level disease context. Extract from case summaries, case titles, or family diagnoses.)
