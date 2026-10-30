@@ -388,6 +388,14 @@ class PatientDemographics(BaseModel):
     country_of_origin: EvidenceBlock[CountryCode]
     race: EvidenceBlock[Race]
     ethnicity: EvidenceBlock[Ethnicity]
+    # The descent the paper names, in its words ("Italian", "Ashkenazi
+    # Jewish"); race is the census bucket it maps to and country_of_origin
+    # where the paper places the family. None when the paper names none.
+    ancestry: EvidenceBlock[str | None] = Field(
+        default_factory=lambda: EvidenceBlock[str | None](
+            value=None, reasoning='Ancestry not stated'
+        )
+    )
     affected_status: EvidenceBlock[AffectedStatus]
     is_obligate_carrier: EvidenceBlock[bool] = Field(
         default_factory=lambda: EvidenceBlock(
@@ -430,7 +438,7 @@ def placeholder_demographics() -> 'PatientDemographics':
     Patient extraction inserts the patient row before demographics are known;
     this fills the required fields with Unknown/None values (which the
     EvidenceBlock validator allows without an evidence source) until the patient
-    demographics agent overwrites them. ``is_obligate_carrier``,
+    demographics agent overwrites them. ``ancestry``, ``is_obligate_carrier``,
     ``relationship_to_proband`` and ``twin_type`` fall back to their field defaults.
     """
     reason = 'Not yet extracted'
@@ -530,6 +538,7 @@ class PatientDB(Base):
     country_of_origin: Mapped[str] = mapped_column(String, nullable=False)
     race: Mapped[str] = mapped_column(String, nullable=False)
     ethnicity: Mapped[str] = mapped_column(String, nullable=False)
+    ancestry: Mapped[str | None] = mapped_column(String, nullable=True)
     affected_status: Mapped[str] = mapped_column(String, nullable=False)
     is_obligate_carrier: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     relationship_to_proband: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -545,6 +554,7 @@ class PatientDB(Base):
     country_of_origin_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     race_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     ethnicity_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
+    ancestry_evidence: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     affected_status_evidence: Mapped[dict] = mapped_column(JSON, nullable=False)
     is_obligate_carrier_evidence: Mapped[dict | None] = mapped_column(
         JSON, nullable=True
@@ -607,6 +617,7 @@ class PatientResp(BaseModel):
     country_of_origin: CountryCode
     race: Race
     ethnicity: Ethnicity
+    ancestry: str | None
     affected_status: AffectedStatus
     is_obligate_carrier: bool | None
     relationship_to_proband: RelationshipToProband | None
@@ -627,6 +638,7 @@ class PatientResp(BaseModel):
     country_of_origin_evidence: HumanEvidenceBlock[CountryCode]
     race_evidence: HumanEvidenceBlock[Race]
     ethnicity_evidence: HumanEvidenceBlock[Ethnicity]
+    ancestry_evidence: HumanEvidenceBlock[str | None] | None
     affected_status_evidence: HumanEvidenceBlock[AffectedStatus]
     is_obligate_carrier_evidence: HumanEvidenceBlock[bool] | None
     relationship_to_proband_evidence: HumanEvidenceBlock[RelationshipToProband] | None
@@ -647,6 +659,7 @@ class PatientCreateRequest(BaseModel):
     country_of_origin: str
     race: str
     ethnicity: str
+    ancestry: str | None = None
     age_diagnosis: int | None = None
     age_diagnosis_unit: str | None = None
     age_report: int | None = None
@@ -672,6 +685,7 @@ class PatientUpdateRequest(PatchModel):
     country_of_origin: str | None = None
     race: str | None = None
     ethnicity: str | None = None
+    ancestry: str | None = None
     is_obligate_carrier: bool | None = None
     relationship_to_proband: str | None = None
     twin_type: str | None = None
@@ -685,6 +699,7 @@ class PatientUpdateRequest(PatchModel):
     country_of_origin_human_edit_note: str | None = None
     race_human_edit_note: str | None = None
     ethnicity_human_edit_note: str | None = None
+    ancestry_human_edit_note: str | None = None
     affected_status_human_edit_note: str | None = None
     is_obligate_carrier_human_edit_note: str | None = None
     relationship_to_proband_human_edit_note: str | None = None

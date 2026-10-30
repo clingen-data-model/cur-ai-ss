@@ -160,6 +160,15 @@ export function PatientDetailPanel({ paperId, patient }: { paperId: number; pati
             save({ ethnicity: value, ethnicity_human_edit_note: note })
           }
         />
+        <EditableTextRow
+          label="Ancestry"
+          value={patient.ancestry ?? ''}
+          evidence={patient.ancestry_evidence}
+          isSaving={mutation.isPending}
+          onSave={(value, note) =>
+            save({ ancestry: value.trim() || null, ancestry_human_edit_note: note })
+          }
+        />
         <EditableSwitchRow
           label="Is Obligate Carrier"
           value={patient.is_obligate_carrier ?? false}

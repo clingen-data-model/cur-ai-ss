@@ -1527,6 +1527,10 @@ def _patient_to_resp(row: PatientDB, session: Session) -> PatientResp:
         race_evidence=_from_storage(HumanEvidenceBlock, row.race_evidence),
         ethnicity=Ethnicity(row.ethnicity),
         ethnicity_evidence=_from_storage(HumanEvidenceBlock, row.ethnicity_evidence),
+        ancestry=row.ancestry,
+        ancestry_evidence=_from_storage(HumanEvidenceBlock, row.ancestry_evidence)
+        if row.ancestry_evidence
+        else None,
         affected_status=AffectedStatus(row.affected_status),
         affected_status_evidence=_from_storage(
             HumanEvidenceBlock, row.affected_status_evidence
@@ -2437,6 +2441,8 @@ def create_patient(
         race_evidence=manual_evidence_block(create_request.race),
         ethnicity=create_request.ethnicity,
         ethnicity_evidence=manual_evidence_block(create_request.ethnicity),
+        ancestry=create_request.ancestry,
+        ancestry_evidence=manual_evidence_block(create_request.ancestry),
         age_diagnosis=create_request.age_diagnosis,
         age_diagnosis_evidence=manual_evidence_block(create_request.age_diagnosis),
         age_diagnosis_unit=create_request.age_diagnosis_unit,
@@ -2467,6 +2473,7 @@ def create_patient(
             'country_of_origin',
             'race',
             'ethnicity',
+            'ancestry',
             'age_diagnosis',
             'age_report',
             'age_death',

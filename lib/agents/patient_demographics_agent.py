@@ -70,6 +70,17 @@ Each field (except the *_unit fields) is an EvidenceBlock containing:
     family, or the cohort they belong to (see COHORT AND FAMILY DESCRIPTIONS).
     "32 unrelated Finnish families" states Finland for every member of those
     families. A study site, a surname or an identifier prefix states nothing.
+  - The country is where the paper places the patient or family. A descent is
+    not a country: "a Brazilian family of Italian descent" is Brazil here and
+    Italian in ancestry, for every member of the family.
+
+- ancestry (EvidenceBlock[str | None]):
+  - The descent the paper names for the patient, their family or their
+    cohort, in the paper's words ("Italian", "Ashkenazi Jewish", "Han
+    Chinese", "European descent"; see COHORT AND FAMILY DESCRIPTIONS). None
+    when the paper names none: a country alone is not a descent.
+  - Race is the census bucket this maps to and country_of_origin the place;
+    this field keeps the word itself, which neither of them can.
 
 - race (EvidenceBlock[enum: American Indian or Alaska Native, Asian, Black, Native Hawaiian or Other Pacific Islander, White, Mixed, Unknown]):
   - Extract from demographic tables, textual descriptions, or the description

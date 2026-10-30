@@ -42,6 +42,7 @@ export function PatientHoverCardContent({ paperId, patient }: { paperId: number;
   const country = patient.country_of_origin !== 'Unknown' ? patient.country_of_origin : null
   const race = patient.race !== 'Unknown' ? patient.race : null
   const ethnicity = patient.ethnicity !== 'Unknown' ? patient.ethnicity : null
+  const ancestry = patient.ancestry ?? null
 
   return (
     <div className="space-y-1.5">
@@ -83,6 +84,12 @@ export function PatientHoverCardContent({ paperId, patient }: { paperId: number;
           <>
             <dt className="text-muted-foreground">Ethnicity</dt>
             <dd className="text-right truncate">{ethnicity}</dd>
+          </>
+        )}
+        {ancestry && (
+          <>
+            <dt className="text-muted-foreground">Ancestry</dt>
+            <dd className="text-right truncate">{ancestry}</dd>
           </>
         )}
       </dl>

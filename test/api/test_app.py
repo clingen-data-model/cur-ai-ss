@@ -4036,3 +4036,47 @@ def test_get_paper_carries_the_classifier_basis(client, db_session, seeded_paper
         'value': False,
         'reasoning': 'No identifiable cases for the target gene.',
     }
+
+
+def test_patient_ancestry_round_trips_through_create_and_patch(
+    client, db_session, seeded_paper
+):
+    """ancestry is free text the paper gives ("Italian"), separate from the
+    country enum and the race buckets. A created patient carries it with a
+    manual evidence block, a patch with a note annotates that block, and
+    clearing it writes None."""
+    family = db_session.query(FamilyDB).filter_by(paper_id=seeded_paper.id).first()
+    response = client.post(
+        f'/papers/{seeded_paper.id}/patients',
+        json={
+            'family_id': family.id,
+            'identifier': 'P9',
+            'proband_status': 'Unknown',
+            'affected_status': 'Unknown',
+            'sex': 'Unknown',
+            'country_of_origin': 'Brazil',
+            'race': 'White',
+            'ethnicity': 'Unknown',
+            'ancestry': 'Italian',
+        },
+    )
+    assert response.status_code == 200, response.text
+    created = response.json()
+    assert created['ancestry'] == 'Italian'
+    assert created['ancestry_evidence']['value'] == 'Italian'
+    patient_id = created['id']
+
+    response = client.patch(
+        f'/papers/{seeded_paper.id}/patients/{patient_id}',
+        json={'ancestry': 'Ashkenazi Jewish', 'ancestry_human_edit_note': 'per text'},
+    )
+    assert response.status_code == 200, response.text
+    patched = response.json()
+    assert patched['ancestry'] == 'Ashkenazi Jewish'
+    assert patched['ancestry_evidence']['human_edit_note'] == 'per text'
+
+    response = client.patch(
+        f'/papers/{seeded_paper.id}/patients/{patient_id}', json={'ancestry': None}
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()['ancestry'] is None

@@ -24,7 +24,7 @@ and group the patients into biological families.
 
 This agent extracts ONLY patient identity (identifier + proband status) and
 family structure. Per-patient demographic and clinical details (sex, ages,
-country of origin, race, ethnicity, affected status, carrier status,
+country of origin, ancestry, race, ethnicity, affected status, carrier status,
 relationship to proband, twin type) are extracted separately by a downstream
 patient demographics agent -- do NOT extract them here.
 

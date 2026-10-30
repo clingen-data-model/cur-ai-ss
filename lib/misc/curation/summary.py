@@ -186,7 +186,10 @@ def build_curation_row(paper_id: int, session: Session) -> list[CurationSummaryR
             if proband.country_of_origin != 'Unknown'
             else ''
         )
-        demographic = ', '.join(filter(None, [sex_str, age_str, country_str]))
+        ancestry_str = f'Ancestry: {proband.ancestry}' if proband.ancestry else ''
+        demographic = ', '.join(
+            filter(None, [sex_str, age_str, country_str, ancestry_str])
+        )
 
         is_single_patient_family = family_patient_counts.get(family.id, 0) <= 1
         if is_single_patient_family:

@@ -53,6 +53,7 @@ _DEMOGRAPHIC_EVIDENCE_FIELDS = [
     'country_of_origin',
     'race',
     'ethnicity',
+    'ancestry',
     'affected_status',
     'is_obligate_carrier',
     'relationship_to_proband',
