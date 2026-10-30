@@ -51,3 +51,12 @@ def test_a_frameshift_is_labelled_by_its_nucleotide_change():
     rules = VARIANT_EXTRACTION_AGENT_INSTRUCTIONS
     assert 'dup or ins is\n  frameshift insertion, del is frameshift deletion' in rules
     assert 'Plain frameshift only when the paper gives no change' in rules
+
+
+def test_the_functional_evidence_basis_states_results_not_only_methods():
+    """The curation export prints this basis as the paper's functional
+    summary, and a basis asked only how the evidence was determined listed
+    the assays without their outcomes."""
+    rules = VARIANT_EXTRACTION_AGENT_INSTRUCTIONS
+    assert 'what the studies found, not only that they were done' in rules
+    assert "Curators read this as the paper's functional summary" in rules
