@@ -87,7 +87,9 @@ UNDER_THE_UNION_LIMIT_SINCE_SLICE_4 = {
     # +1 each since curator flags: ExtractionFlag.about is nullable.
     'variant_extractor': 14,
     'patient_info_extractor': 1,
-    'patient_demographics_extractor': 8,
+    # +3 since #455 (ancestry and onset): ancestry (str | None), age_onset (int | None)
+    # and age_onset_unit (AgeUnit | None).
+    'patient_demographics_extractor': 11,
     'patient_variant_occurrence': 3,
 }
 
