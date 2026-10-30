@@ -388,9 +388,9 @@ Output format:
 - The families list is empty only when the patients list is.
 - The union of all patient identifier values across all families must equal the complete set
   of patient identifiers extracted above.
-- Return a "flags" list as CORE EXTRACTION RULES describes; "about" is a patient
-  or family identifier from this output, or null; a patient identifier two
-  families share is written "Family 2 / II-1".
+- Return a "flags" list as CORE EXTRACTION RULES describes; "about" is a
+  patient, written as their family identifier then their identifier ("Family 2
+  II-1", "Family A sister"), or a family identifier, or null.
 """
 
 PATIENT_EXTRACTION_AGENT_INSTRUCTIONS = (
