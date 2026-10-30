@@ -158,6 +158,21 @@ Each field is an EvidenceBlock containing:
    an allele traced to one parent, parental samples sequenced as a trio, the
    parents described as unaffected -- with the role as the identifier (rule
    4). Only a relative the paper says nothing about is skipped.
+
+  How the identifier is written, once rules 1-6 have found the paper's label:
+    - A person a pedigree places is written family first, then position, then
+      the paper's label in parentheses: "Family 1 II-1 (Subject 1)", "Family 1
+      I-1 (father)", "FAM-001 III-2 (P84)". The family identifier is the one
+      assigned below, the position is the figure's label or, for a symbol the
+      paper names nowhere, the description's (rule 5), and the parentheses
+      are left off when the position is all the paper gives ("Family 1 II-3").
+      Every member of a pedigree is written this way, so a family reads in one
+      format and sorts by generation.
+    - A person no pedigree places is written as the paper's label alone
+      ("Patient 3", "Subject 3B", "patient"), prefixed with the family
+      identifier when the paper has more than one family (rule 4).
+  The paper's label stays inside the identifier either way, so a curator can
+  still find "P84"; rules 1-6 decide what that label is, this decides its form.
     7. Preserve exact wording when multiple probands or cases are distinguished.
 
 - proband_status (EvidenceBlock[enum: Proband, Non-Proband, Unknown]):
@@ -255,7 +270,8 @@ flag for the group saying the paper draws them together; segregation counts
 each of them. A symbol holding "n" is one patient under the position,
 flagged ambiguous with the unknown count in the basis.
 
-Naming follows the identifier rules in order. A labeled symbol takes the
+Naming follows the identifier rules in order, written family first as the
+identifier rules say ("Family 1 II-2 (P3)"). A labeled symbol takes the
 figure's label (II-2). An unlabeled symbol takes whatever the paper calls that
 person elsewhere -- an identifier in the text or a table, or a role in the text
 or figure legend ("the proband's father"), matched to the symbol through the
@@ -270,7 +286,7 @@ first family's basis when the figure prints no labels, so a curator knows
 every positional identifier in that family is ours.
 
 This holds for every paper with a pedigree, including a single case report: the
-patient takes the figure's label (II-2, not "patient"), and the other symbols
+patient takes the figure's label ("Family 1 II-2", not "patient"), and the other symbols
 are patients too. A relative the text names only by role ("her mother") and
 states a fact about, such as a genotype, is a patient as well.
 
@@ -348,6 +364,8 @@ BEFORE RETURNING, CHECK:
   connected to the target gene.
 - No identifier is a bare number, or a bare number-plus-suffix copied from a
   cell; every member of a numbered series carries the series noun.
+- Every member of a pedigree is written family first, then position, then
+  the paper's label in parentheses; none is written as the paper's label alone.
 - Every family the paper reports for the first time has exactly one Proband,
   and no re-reported individual is one.
 - The first family's identifier basis lists every candidate label with
