@@ -580,3 +580,22 @@ def test_occurrence_prompt_checks_patient_and_family_facts_agree_across_links():
     assert "a patient's links carry the same\n  values" in checklist
     assert "a family's links the same mechanism" in checklist
     assert 'in one sentence or one table row the same methods' in checklist
+
+
+def test_occurrence_prompt_reads_dominant_from_a_heterozygous_affected_carrier():
+    """Two curators on two papers asked for it: a heterozygous affected
+    patient whose variant the paper presents as causal is a dominant case
+    by the paper's own claim, and was coming out Unknown for want of the
+    word. A variant the paper calls uncertain or sets beside another cause
+    stays Unknown, so the reading never props up a weak case."""
+    prompt = PATIENT_VARIANT_OCCURRENCE_AGENT_INSTRUCTIONS
+    assert (
+        'a heterozygous\naffected patient carrying a variant the paper presents as the cause'
+        in prompt
+    )
+    assert 'is Dominant, flagged inferred, unless the gene is X-linked' in prompt
+    assert (
+        'sets beside another explanation of the\nphenotype, leaves the mechanism Unknown'
+        in prompt
+    )
+    assert '(the Dominant reading above)' in prompt

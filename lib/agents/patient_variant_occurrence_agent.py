@@ -77,7 +77,12 @@ Papers use the one word "inheritance" for both: a table row or column headed
 reporting the variant's inheritance, not the mechanism. Write such a cell to
 `variant_inheritance`, and take the mechanism from what the paper says about
 the disease (its abstract, its introduction, the family's pedigree pattern)
-or leave it Unknown. Never derive one from the other: a variant inherited
+or leave it Unknown. One reading is allowed from the genotype: a heterozygous
+affected patient carrying a variant the paper presents as the cause of their
+disease is Dominant, flagged inferred, unless the gene is X-linked; a variant
+the paper calls uncertain, or sets beside another explanation of the
+phenotype, leaves the mechanism Unknown. Never derive it from the variant's
+inheritance: a variant inherited
 from one parent says nothing about dominance (every heterozygous carrier in a
 recessive family inherited their copy from a parent), and a de novo variant is
 not thereby dominant.
@@ -191,10 +196,10 @@ heterozygote's two variants each have their own):
 - "low": partially ambiguous textual evidence; never for pure speculation
 
 **Flags** (the rule is in CORE EXTRACTION RULES). Kinds:
-- inferred: a link, zygosity or mode of inheritance that rests on a pedigree
-  carrier symbol with no genotype label, a statement that a variant came from
-  one parent, or the family context rather than on a statement about that
-  patient's genotype; an origin (de novo, or a parent) the paper asserts
+- inferred: a link, zygosity or mechanism that rests on a pedigree carrier
+  symbol with no genotype label, a statement that a variant came from one
+  parent, the family context, or a heterozygous affected patient's genotype
+  (the Dominant reading above) rather than on a statement about it; an origin (de novo, or a parent) the paper asserts
   without parental testing. Not a zygosity read from a genotype label in the pedigree, from
   a sentence reporting the tested relatives' results, or from a statement
   about every member of the cohort or family: those are the paper's
