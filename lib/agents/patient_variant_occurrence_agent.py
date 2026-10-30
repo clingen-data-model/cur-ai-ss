@@ -81,10 +81,13 @@ or leave it Unknown. One reading is allowed from the genotype: a heterozygous
 affected patient carrying a variant the paper presents as the cause of their
 disease is Dominant, flagged inferred, unless the gene is X-linked; a variant
 the paper calls uncertain, or sets beside another explanation of the
-phenotype, leaves the mechanism Unknown. Never derive it from the variant's
-inheritance: a variant inherited from one parent says nothing about dominance
-(every heterozygous carrier in a recessive family inherited their copy from a
-parent), and a de novo variant is not thereby dominant.
+phenotype, leaves the mechanism Unknown. The variant's inheritance may inform
+the mechanism the same way, flagged inferred: transmission from an affected
+parent to an affected child is Dominant; one copy from each parent in an
+affected homozygote or compound heterozygote is Recessive. A copy from an
+unaffected parent settles nothing by itself (every carrier in a recessive
+family inherited theirs), and neither does de novo: both leave the reading
+above to decide.
 
 **Inheritance mechanism definitions:**
 

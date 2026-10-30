@@ -599,3 +599,8 @@ def test_occurrence_prompt_reads_dominant_from_a_heterozygous_affected_carrier()
         in prompt
     )
     assert '(the Dominant reading above)' in prompt
+    assert (
+        'transmission from an affected\nparent to an affected child is Dominant'
+        in prompt
+    )
+    assert 'A copy from an\nunaffected parent settles nothing by itself' in prompt
