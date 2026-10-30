@@ -149,6 +149,17 @@ def test_the_pedigree_prompt_carries_the_standard_conventions_under_the_legend()
     assert 'described as drawn and reported as undefined' in PEDIGREE_VISION_PROMPT
 
 
+def test_the_evidence_prompt_calls_a_heterozygote_whatever_the_peak_heights():
+    """A curator reviewing eight traces found one het missed where a colour
+    sat under another and one declined because the two peaks were not equal
+    in height; the prompt had not said what a heterozygous position is."""
+    assert (
+        'two peaks at one base, whatever their relative heights'
+        in EVIDENCE_VISION_PROMPT
+    )
+    assert 'reported as uncertain, not as wild type' in EVIDENCE_VISION_PROMPT
+
+
 def test_evidence_kinds_get_the_evidence_prompt_with_the_caption(monkeypatch):
     vision = _Vision('Chromatogram; Gel')
     monkeypatch.setattr(describer, 'vlm_describe', vision)
