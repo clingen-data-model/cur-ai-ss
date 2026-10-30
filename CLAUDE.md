@@ -85,6 +85,8 @@ This is a research paper analysis system that extracts genetic information (pati
 
 Papers flow through this sequence of agents (all triggered by worker):
 
+`docs/extraction-dag.excalidraw` draws this graph for curators (nodes, what each edge carries, what each step writes, scope by colour); it is generated from `TASK_SUCCESSORS` by `uv run python -m lib.bin.extraction_dag_excalidraw > docs/extraction-dag.excalidraw`, and `test/bin/test_extraction_dag_excalidraw.py` fails when the committed file is stale or an edge has no label.
+
 1. **Paper Extraction** → Parses PDF, extracts metadata, markdown content, tables
 2. **Paper Classifier** → Decides whether the paper has identifiable cases for the gene; a paper judged not relevant gets the `FailedPaperRelevancy` tag and no successors. The verdict is stored with its basis (`papers.is_paper_relevant_evidence`, migration `d4e8f1a2b3c5`; until 2026-10-29 only the bool was kept and the basis lived in the task's conversation), and the paper page shows it in a notice above the tabs (`PaperRelevanceNotice.tsx`) with the re-run dialog opened on the classifier; a paper classified before the column shows no basis until the classifier runs again
 3. **Patient Extraction** → Identifies patients, demographics, proband status

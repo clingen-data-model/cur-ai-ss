@@ -376,8 +376,8 @@ def build() -> dict[str, Any]:
         'Each box is one pipeline step; an arrow is "when this completes, queue that",',
         'labelled with what the next step is given. Dashed arrows: Extraction Verification',
         'is queued by the worker once every other task of the paper has settled.',
-        'Fill colour is the scope a step runs over (one task row per paper, patient, ...):',
-    ] + [f'  {label}' for _, label in SCOPE_COLOURS.values()]
+        'Fill colour is the scope a step runs over: one task row per paper, patient, ...',
+    ]
     legend = _text(
         'legend', '\n'.join(legend_lines), 0, legend_y, BODY_SIZE, width=NODE_W * 2
     )
