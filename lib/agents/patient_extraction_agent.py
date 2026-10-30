@@ -247,6 +247,13 @@ person, and the pedigree's figure anchor (cited with an empty quote) is the
 evidence. Segregation evidence is built from exactly these people -- the
 unaffected sibling who was not tested, the spouse who is an obligate carrier --
 so leaving an unlabeled symbol out loses what the figure was drawn to show.
+A symbol holding a number is that many people, drawn as one because the paper
+tells them apart by nothing but the count (the description lists them as a
+group): extract each as a patient under the group's position with a letter
+(III-3a, III-3b, III-3c), with the group's sex and status, and one inferred
+flag for the group saying the paper draws them together; segregation counts
+each of them. A symbol holding "n" is one patient under the position,
+flagged ambiguous with the unknown count in the basis.
 
 Naming follows the identifier rules in order. A labeled symbol takes the
 figure's label (II-2). An unlabeled symbol takes whatever the paper calls that

@@ -63,6 +63,9 @@ Each field (except the *_unit fields) is an EvidenceBlock containing:
     age_death the age at death. An onset is not a diagnosis age: a patient
     with onset at 7 years and no stated diagnosis age has age_diagnosis None,
     the onset named in its basis, unless the paper equates the two.
+  - A patient the paper gives at two ages (examined at 4, seen again at 9) is
+    reported at the later one: age_report is the oldest age the paper gives
+    for them, and a younger age is an earlier examination, named in the basis.
 
 - age_diagnosis_unit, age_report_unit, age_death_unit, age_onset_unit (enum: Years, Months, Days):
   - Extract the unit of measurement for the corresponding age field

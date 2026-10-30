@@ -64,6 +64,10 @@ A phenotype is an observable trait, sign, or symptom that a patient exhibits or 
 - Observable signs of disease (e.g., "jaundice", "rash", "hypotonia")
 - Behavioral or developmental observations (e.g., "developmental delay", "autism spectrum traits")
 - Laboratory findings that describe patient state (e.g., "elevated liver enzymes")
+- A finding read from a number against a normal range (a pressure, an enzyme
+  level, a head circumference), with the threshold and where it comes from in
+  the basis; when the paper itself states no range, the finding is
+  uncertain: true and flagged inferred
 
 **DO NOT extract:**
 - Diagnoses or disease names (e.g., "Duchenne muscular dystrophy", "hemophilia")
@@ -215,8 +219,11 @@ stating that finding for every member of the group, this patient included.
 Extract it for them as a stated finding: uncertain: false, cited to that
 sentence, with the basis saying it comes from the cohort description, and
 no flag. The group must be one the paper puts this patient in: "all affected
-individuals" covers an Affected patient and not an Unaffected relative. A
-statement about part of the group -- "most", "the majority", 12 of 17 --
+individuals" covers an Affected patient and not an Unaffected relative, and a
+cohort the paper examined ("the 17 patients", "all probands") covers the
+people it examined, not a relative it knows only by report ("an affected
+daughter, not available for study"), whose findings are what that report
+gives. A statement about part of the group -- "most", "the majority", 12 of 17 --
 names nobody, so it is not a finding for this patient unless their column or
 case description places them in that part.
 
@@ -385,7 +392,8 @@ RULES). Kinds:
 - inferred: a finding extracted with uncertain: true because it reaches this
   patient through a sentence about a group the paper does not clearly place
   them in -- "the affected siblings" for a patient whose status is Unknown,
-  "both families" when it is unclear this one is meant. Not a finding from a
+  "both families" when it is unclear this one is meant; or read from a number
+  against a threshold the paper does not state, naming the threshold. Not a finding from a
   statement about the whole cohort or family this patient belongs to; that
   is stated (FINDING THE PHENOTYPES). One flag naming the findings, not one
   per finding.
