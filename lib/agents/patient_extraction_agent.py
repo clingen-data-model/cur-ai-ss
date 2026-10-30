@@ -125,9 +125,9 @@ Each field is an EvidenceBlock containing:
        source of identifiers exactly as the text is.
     4. A person the paper names only by relationship takes the role, simplified
        to the role itself ("proband's sister" gives "sister") while the paper
-       has one proband. With more than one, the bare role would name a person
-       in each family, so it is qualified by the proband it belongs to
-       ("sister of Patient 2", "father of the index patient"). Two people the
+       has one family. With more than one, the bare role would name a person
+       in each, so it is prefixed with the family identifier assigned below
+       ("Family 2 sister", "Family A father"). Two people the
        text names together by role are two patients ("the parents" gives
        "mother" and "father"); when the role alone would name two people
        ("two paternal aunts"), number them in the order the text gives
