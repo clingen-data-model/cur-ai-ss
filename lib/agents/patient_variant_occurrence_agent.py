@@ -232,7 +232,9 @@ link says that), nor a variant's notation (settled by the variant's own
 extraction and harmonization). The output carries a "flags" list. "about" is "patient identifier /
 variant quote" for a flag about one link -- always both halves, so the flag
 lands on that link; a patient identifier or variant quote alone for a flag
-about the patient or variant as a whole; null otherwise.
+about the patient or variant as a whole; null otherwise. A patient identifier
+two families share (each has a "II-1") is written with its family in front,
+"Family 2 / II-1", the Patients JSON giving each patient's family.
 
 BEFORE RETURNING, CHECK:
 - Every variant the paper attributes to a patient by name has a link for that

@@ -43,7 +43,7 @@ import { PatientDetailPanel } from '@/components/PatientDetailPanel'
 import { VariantDetailPanel } from '@/components/VariantDetailPanel'
 import { displayProteinChange } from '@/lib/hgvs'
 import { EntityLink } from '@/components/EntityLink'
-import { PatientIdCell } from '@/components/PatientIdCell'
+import { PatientIdCell, hasSeveralFamilies } from '@/components/PatientIdCell'
 import { RowExpander } from '@/components/RowExpander'
 import { VariantHoverCardContent } from '@/components/VariantHoverCard'
 import { UnassociatedPatientsTab } from '@/components/UnassociatedPatientsTab'
@@ -166,6 +166,7 @@ function OccurrencesTab({
   const expanded: ExpandedState = expandedCell ? { [expandedCell.rowId]: true } : {}
 
   const hasPairedVariants = useMemo(() => rows.some((r) => r.pairedVariant), [rows])
+  const severalFamilies = useMemo(() => hasSeveralFamilies(rows.map((r) => r.patient)), [rows])
 
   const columns: ColumnDef<OccurrenceRow>[] = useMemo(() => {
     const cols: ColumnDef<OccurrenceRow>[] = [
@@ -228,6 +229,7 @@ function OccurrencesTab({
             <PatientIdCell
               paperId={paperId}
               patient={patient}
+              showFamily={severalFamilies}
               onClick={() => toggleExpanded(String(row.original.occurrence.id), 'patient')}
             />
           )
@@ -352,7 +354,7 @@ function OccurrencesTab({
     })
 
     return cols
-  }, [rows, hasPairedVariants, paperId, expandedCell?.rowId, deleteMutation, flags])
+  }, [rows, hasPairedVariants, severalFamilies, paperId, expandedCell?.rowId, deleteMutation, flags])
 
   if (rows.length === 0) {
     return (
@@ -618,6 +620,7 @@ export function ExtractionPage() {
             <UnassociatedPatientsTab
               paperId={paperId}
               patients={unassociatedPatients}
+              allPatients={allPatients}
               tasks={tasks}
               flags={flags}
               focus={focus}
