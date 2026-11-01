@@ -38,7 +38,9 @@ provider "google" {
 
 data "google_project" "project" {}
 
-# The VM's service account, which the worker calls the service as.
+# Outputs of the dev stack (infrastructure/terraform/dev). This stack needs
+# one of them, the dev-caa VM's service account: the worker runs as it, so
+# it is what gets to invoke the service and use the exchange bucket below.
 data "terraform_remote_state" "dev" {
   backend = "gcs"
   config = {
