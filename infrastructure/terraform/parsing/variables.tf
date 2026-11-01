@@ -18,8 +18,15 @@ variable "max_instances" {
 
 variable "concurrency" {
   type        = number
-  description = "Conversions one instance runs at once (one GPU each)."
-  default     = 1
+  description = <<-EOT
+    Conversions one instance runs at once, sharing its GPU. Two overlap well:
+    a conversion spends much of its time on CPU phases (page rendering, OCR
+    preprocessing, assembly) with the GPU idle, the models are small next to
+    the L4's 24 GB, and two long documents' page renders fit in 32 GiB. The
+    worker only benefits once its own PDF Parsing cap (TASK_CONCURRENCY in
+    lib/bin/worker.py, 1 while Docling ran on the VM) is raised to match.
+  EOT
+  default     = 2
 }
 
 variable "invokers" {
