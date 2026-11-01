@@ -137,8 +137,8 @@ resource "google_cloud_run_v2_service" "docling" {
         value = tostring(var.concurrency)
       }
       env {
-        # The synchronous endpoints wait this long for a conversion before
-        # answering 504; default 120 s is shorter than a long supplement.
+        # How long a sync request waits for its conversion; the default,
+        # 120 s, is shorter than a long supplement.
         name  = "DOCLING_SERVE_MAX_SYNC_WAIT"
         value = "3600"
       }
