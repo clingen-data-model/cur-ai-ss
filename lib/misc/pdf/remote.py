@@ -33,7 +33,6 @@ operators for testing from a laptop).
 """
 
 import logging
-import os
 import subprocess
 import time
 from io import BytesIO
@@ -45,46 +44,47 @@ from docling.datamodel.base_models import InputFormat
 from docling.datamodel.document import InputDocument
 from docling_core.types.doc import DoclingDocument, ImageRef
 
+from lib.misc.pdf.paths import IMAGE_RESOLUTION_SCALE
+
 logger = logging.getLogger(__name__)
 
 CONVERT_PATH = '/v1/convert/file'
 
+# What ``convert_locally`` configures the pipeline with: pypdfium2 backend,
+# OCR, accurate table structure, figure crops at the scale tables and figures
+# are stored at. Page renders are not sent back (module docstring), and a
+# failed page fails the request, as the in-process converter raises.
+CONVERT_OPTIONS = {
+    'to_formats': 'json',
+    'image_export_mode': 'embedded',
+    'include_images': 'true',
+    'include_page_images': 'false',
+    'images_scale': str(IMAGE_RESOLUTION_SCALE),
+    'pdf_backend': 'pypdfium2',
+    'do_ocr': 'true',
+    'do_table_structure': 'true',
+    'table_mode': 'accurate',
+    'abort_on_error': 'true',
+}
+
+# The service holds a request until the conversion is done, up to its
+# DOCLING_SERVE_MAX_SYNC_WAIT of five minutes (a 32-page paper took 32 s);
+# Cloud Run's request timeout and this one allow a minute more.
+TIMEOUT = httpx.Timeout(360.0, connect=60.0)
+
 # Statuses docling's own ``DocumentConverter.convert`` returns a document for
-# rather than raising (``ConversionStatus``): a partial success is a document
-# with some pages failed, which the errors list names.
+# rather than raising: a partial success has some pages failed, named in the
+# errors list.
 ACCEPTED_STATUSES = ('success', 'partial_success')
 
 
 class RemoteConversionError(RuntimeError):
-    """docling-serve did not return a usable document."""
-
-
-def convert_options(images_scale: float) -> dict[str, str]:
-    """The form fields of a conversion request, as ``convert_locally`` would
-    configure the pipeline: pypdfium2 backend, OCR, accurate table structure,
-    figure crops at ``images_scale``; page renders are not sent back (see the
-    module docstring). ``abort_on_error`` makes a failed page fail the request,
-    as the in-process converter raises."""
-    return {
-        'to_formats': 'json',
-        'image_export_mode': 'embedded',
-        'include_images': 'true',
-        'include_page_images': 'false',
-        'images_scale': str(images_scale),
-        'pdf_backend': 'pypdfium2',
-        'do_ocr': 'true',
-        'do_table_structure': 'true',
-        'table_mode': 'accurate',
-        'abort_on_error': 'true',
-    }
+    """The service did not return a usable document."""
 
 
 def identity_token(audience: str) -> str:
-    """A Google identity token for the service: ``PDF_PARSING_ID_TOKEN`` if
-    set (tests, or a token minted by hand), else the VM's service account from
+    """A Google identity token for the service: the VM's service account from
     the GCE metadata server, else the operator's ``gcloud`` login."""
-    if token := os.environ.get('PDF_PARSING_ID_TOKEN'):
-        return token
     try:
         response = httpx.get(
             'http://metadata.google.internal/computeMetadata/v1/instance/'
@@ -106,9 +106,7 @@ def identity_token(audience: str) -> str:
     return result.stdout.strip()
 
 
-def attach_page_images(
-    document: DoclingDocument, content: bytes, images_scale: float
-) -> None:
+def attach_page_images(document: DoclingDocument, content: bytes) -> None:
     """Render the pages that carry a table, as Docling's pipeline would have,
     so ``TableItem.get_image`` can crop them. Pages without a table are left
     without a render: nothing downstream crops from them."""
@@ -129,8 +127,12 @@ def attach_page_images(
             page = document.pages.get(page_no)
             if page is None:
                 continue
-            rendered = backend.load_page(page_no - 1).get_page_image(scale=images_scale)
-            page.image = ImageRef.from_pil(rendered, dpi=round(72 * images_scale))
+            rendered = backend.load_page(page_no - 1).get_page_image(
+                scale=IMAGE_RESOLUTION_SCALE
+            )
+            page.image = ImageRef.from_pil(
+                rendered, dpi=round(72 * IMAGE_RESOLUTION_SCALE)
+            )
     finally:
         backend.unload()
 
@@ -139,33 +141,23 @@ async def convert_pdf_remote(
     content: bytes,
     *,
     base_url: str,
-    images_scale: float,
-    timeout_s: float = 360.0,
     transport: httpx.AsyncBaseTransport | None = None,
 ) -> DoclingDocument:
-    """The PDF's ``DoclingDocument`` from docling-serve at ``base_url``.
-
-    One synchronous request: the service holds it until the conversion is
-    done, up to its ``DOCLING_SERVE_MAX_SYNC_WAIT`` of five minutes (a
-    32-page paper took 32 s); Cloud Run's request timeout and the client's
-    allow a minute more. Awaiting it keeps the worker's loop free for other
-    tasks, which the in-process converter never did.
-    """
-    url = base_url.rstrip('/') + CONVERT_PATH
+    """The PDF's ``DoclingDocument`` from the service at ``base_url``, in one
+    request. Awaiting it keeps the worker's loop free for other tasks, which
+    the in-process converter never did. ``transport`` is for tests."""
     token = identity_token(base_url)
     started = time.monotonic()
-    async with httpx.AsyncClient(
-        timeout=httpx.Timeout(timeout_s, connect=60.0), transport=transport
-    ) as client:
+    async with httpx.AsyncClient(timeout=TIMEOUT, transport=transport) as client:
         response = await client.post(
-            url,
+            base_url.rstrip('/') + CONVERT_PATH,
             headers={'Authorization': f'Bearer {token}'},
-            data=convert_options(images_scale),
+            data=CONVERT_OPTIONS,
             files={'files': ('content.pdf', content, 'application/pdf')},
         )
     if response.status_code != 200:
         raise RemoteConversionError(
-            f'docling-serve answered {response.status_code}: {response.text[:500]}'
+            f'service answered {response.status_code}: {response.text[:500]}'
         )
     body = response.json()
     status = body.get('status')
@@ -173,16 +165,16 @@ async def convert_pdf_remote(
     if status not in ACCEPTED_STATUSES:
         raise RemoteConversionError(f'conversion status {status!r}: {errors}')
     if errors:
-        logger.warning('docling-serve converted with errors: %s', errors)
+        logger.warning('converted with errors: %s', errors)
     json_content = (body.get('document') or {}).get('json_content')
     if not json_content:
         raise RemoteConversionError('response carries no json_content')
     logger.info(
-        'docling-serve converted %d bytes in %.1fs (server time %s)',
+        'service converted %d bytes in %.1fs (server time %s)',
         len(content),
         time.monotonic() - started,
         body.get('processing_time'),
     )
     document = DoclingDocument.model_validate(json_content)
-    attach_page_images(document, content, images_scale)
+    attach_page_images(document, content)
     return document

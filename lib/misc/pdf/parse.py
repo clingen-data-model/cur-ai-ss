@@ -31,6 +31,7 @@ from lib.core.environment import env
 from lib.misc.pdf import layout
 from lib.misc.pdf.anchors import anchored_from_markdown, build_anchored, write_anchored
 from lib.misc.pdf.paths import (
+    IMAGE_RESOLUTION_SCALE,
     document_image_path,
     document_images_dir,
     document_raw_path,
@@ -43,8 +44,6 @@ from lib.misc.pdf.paths import (
 from lib.misc.pdf.remote import attach_page_images, convert_pdf_remote
 from lib.models import PaperDB
 from lib.models.paper import FileFormat
-
-IMAGE_RESOLUTION_SCALE = 4.0
 
 # A multi-panel figure comes out of Docling whole rather than as its one
 # best-scoring panel (see lib/misc/pdf/layout.py).
@@ -218,11 +217,7 @@ async def convert(
     ``PDF_PARSING_SERVICE_URL`` names one (PDFs only; ``lib.misc.pdf.remote``),
     else from the converter in this process."""
     if supplement_format != FileFormat.DOCX and env.PDF_PARSING_SERVICE_URL:
-        return await convert_pdf_remote(
-            content,
-            base_url=env.PDF_PARSING_SERVICE_URL,
-            images_scale=IMAGE_RESOLUTION_SCALE,
-        )
+        return await convert_pdf_remote(content, base_url=env.PDF_PARSING_SERVICE_URL)
     return convert_locally(content, supplement_format)
 
 

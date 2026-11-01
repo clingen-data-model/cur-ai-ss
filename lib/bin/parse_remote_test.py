@@ -91,11 +91,7 @@ async def run_one(
 ) -> tuple[dict[str, Any], float]:
     """Parse one PDF as paper ``paper_id``: remotely at ``url``, or locally
     when ``url`` is None. Returns the description and the converter's seconds."""
-    from lib.misc.pdf.parse import (
-        IMAGE_RESOLUTION_SCALE,
-        convert_locally,
-        write_parse_outputs,
-    )
+    from lib.misc.pdf.parse import convert_locally, write_parse_outputs
     from lib.misc.pdf.paths import document_raw_path
     from lib.misc.pdf.remote import convert_pdf_remote
 
@@ -106,9 +102,7 @@ async def run_one(
 
     started = time.monotonic()
     if url:
-        document = await convert_pdf_remote(
-            content, base_url=url, images_scale=IMAGE_RESOLUTION_SCALE
-        )
+        document = await convert_pdf_remote(content, base_url=url)
     else:
         document = convert_locally(content)
     elapsed = time.monotonic() - started
