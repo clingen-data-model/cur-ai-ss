@@ -94,7 +94,7 @@ resource "google_cloud_run_v2_service" "docling" {
 
   template {
     service_account                  = google_service_account.docling.email
-    timeout                          = "3600s" # Cloud Run's maximum; a 44-page supplement is minutes on an L4
+    timeout                          = "360s" # the sync wait below, plus upload and response
     max_instance_request_concurrency = var.concurrency
     execution_environment            = "EXECUTION_ENVIRONMENT_GEN2"
     gpu_zonal_redundancy_disabled    = true # best-effort failover is enough for a batch step, at ~half the GPU price
@@ -138,9 +138,9 @@ resource "google_cloud_run_v2_service" "docling" {
       }
       env {
         # How long a sync request waits for its conversion; the default,
-        # 120 s, is shorter than a long supplement.
+        # 120 s, is shorter than a long supplement. A 32-page paper took 32 s.
         name  = "DOCLING_SERVE_MAX_SYNC_WAIT"
-        value = "3600"
+        value = "300"
       }
       env {
         name  = "DOCLING_SERVE_LOAD_MODELS_AT_BOOT"
