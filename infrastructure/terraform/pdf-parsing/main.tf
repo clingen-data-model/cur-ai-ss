@@ -9,11 +9,13 @@
 # correction, anchoring -- stays with the worker; only the converter call
 # moves (lib/misc/pdf/remote.py).
 #
-# The image is docling-serve's own CUDA build, pulled from ghcr.io through
-# an Artifact Registry remote repository because Cloud Run deploys only from
-# Artifact Registry or Docker Hub. The tag is pinned to the release that
-# bundles the docling version pyproject pins, so the server runs the same
-# models as the worker would: see var.image_tag.
+# The image is docling-serve's own CUDA build plus the worker's layout
+# override (infrastructure/pdf-parsing/Dockerfile), built by Cloud Build into
+# this stack's repository from the ghcr.io release pulled through an Artifact
+# Registry remote repository (Cloud Run deploys only from Artifact Registry
+# or Docker Hub). The base release is the one that bundles the docling
+# version pyproject pins, so the server runs the same models as the worker
+# would: see var.image_tag.
 
 terraform {
   required_version = ">= 1.5.0"
@@ -50,12 +52,14 @@ data "terraform_remote_state" "dev" {
 }
 
 locals {
-  region = "us-east4"
-  image  = "${local.region}-docker.pkg.dev/${data.google_project.project.project_id}/${google_artifact_registry_repository.ghcr.repository_id}/docling-project/docling-serve-cu128:${var.image_tag}"
+  region   = "us-east4"
+  registry = "${local.region}-docker.pkg.dev/${data.google_project.project.project_id}"
+  image    = "${local.registry}/${google_artifact_registry_repository.images.repository_id}/server:${var.image_tag}"
 }
 
-# --- Image: ghcr.io, proxied ---------------------------------------------
+# --- Image -----------------------------------------------------------------
 
+# The base image's source: ghcr.io, proxied.
 resource "google_artifact_registry_repository" "ghcr" {
   location      = local.region
   repository_id = "ghcr"
@@ -68,6 +72,48 @@ resource "google_artifact_registry_repository" "ghcr" {
       uri = "https://ghcr.io"
     }
   }
+}
+
+# The service image, built by bin/build-pdf-parsing-image.
+resource "google_artifact_registry_repository" "images" {
+  location      = local.region
+  repository_id = "pdf-parsing"
+  format        = "DOCKER"
+  description   = "The pdf-parsing service image: docling-serve plus the layout override"
+}
+
+# Cloud Build runs as this account: it pulls the base image from the proxy,
+# pushes the result, and writes its logs. Operators run builds with it.
+resource "google_service_account" "builder" {
+  account_id   = "pdf-parsing-builder"
+  display_name = "pdf-parsing image builds (Cloud Build)"
+}
+
+resource "google_artifact_registry_repository_iam_member" "builder_pulls_base" {
+  location   = google_artifact_registry_repository.ghcr.location
+  repository = google_artifact_registry_repository.ghcr.name
+  role       = "roles/artifactregistry.reader"
+  member     = "serviceAccount:${google_service_account.builder.email}"
+}
+
+resource "google_artifact_registry_repository_iam_member" "builder_pushes" {
+  location   = google_artifact_registry_repository.images.location
+  repository = google_artifact_registry_repository.images.name
+  role       = "roles/artifactregistry.writer"
+  member     = "serviceAccount:${google_service_account.builder.email}"
+}
+
+resource "google_project_iam_member" "builder_logs" {
+  project = data.google_project.project.project_id
+  role    = "roles/logging.logWriter"
+  member  = "serviceAccount:${google_service_account.builder.email}"
+}
+
+resource "google_service_account_iam_member" "operators_build" {
+  for_each           = toset(var.invokers)
+  service_account_id = google_service_account.builder.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = each.value
 }
 
 # --- Service -------------------------------------------------------------

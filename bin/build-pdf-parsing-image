@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Build and push the pdf-parsing service image with Cloud Build.
+#
+#   bin/build-pdf-parsing-image <docling-serve tag> <N>
+#
+# produces us-east4-docker.pkg.dev/clingen-caa/pdf-parsing/server:<tag>-caa.<N>
+# from docling-serve-cu128:<tag> (through the ghcr proxy repository) plus the
+# layout override; see infrastructure/pdf-parsing/Dockerfile. Then point
+# infrastructure/terraform/pdf-parsing/variables.tf (image_tag) at the new
+# tag and apply. Takes about ten minutes, most of it pulling the base image.
+set -euo pipefail
+
+base_tag="${1:?docling-serve tag, e.g. v1.23.0}"
+n="${2:?build number, e.g. 1}"
+project=clingen-caa
+region=us-east4
+registry="${region}-docker.pkg.dev/${project}"
+base_image="${registry}/ghcr/docling-project/docling-serve-cu128:${base_tag}"
+image="${registry}/pdf-parsing/server:${base_tag}-caa.${n}"
+
+root="$(cd "$(dirname "$0")/.." && pwd)"
+context="$(mktemp -d)"
+trap 'rm -rf "$context"' EXIT
+cp "$root/infrastructure/pdf-parsing/Dockerfile" \
+   "$root/infrastructure/pdf-parsing/sitecustomize.py" \
+   "$root/infrastructure/pdf-parsing/cloudbuild.yaml" \
+   "$root/lib/misc/pdf/layout.py" \
+   "$context/"
+
+echo "building $image"
+gcloud builds submit "$context" \
+  --project="$project" --region="$region" \
+  --config="$context/cloudbuild.yaml" \
+  --service-account="projects/${project}/serviceAccounts/pdf-parsing-builder@${project}.iam.gserviceaccount.com" \
+  --substitutions="_BASE_IMAGE=${base_image},_IMAGE=${image}"
+echo "built $image"

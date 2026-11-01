@@ -1,13 +1,16 @@
 variable "image_tag" {
   type        = string
   description = <<-EOT
-    docling-serve release tag. Each release bundles one docling version (listed
-    in its GitHub release notes); keep this on the release that bundles the
-    docling pinned in pyproject.toml so the service runs the same models the
-    worker would. v1.23.0 is docling 2.82.0. Only some releases have a cu128
-    image: check the tag exists before bumping.
+    Tag of the service image in this stack's repository, as built by
+    bin/build-pdf-parsing-image: the docling-serve release tag with -caa.N
+    appended. Each docling-serve release bundles one docling version (its
+    GitHub release notes list it); keep the base on the release that bundles
+    the docling pinned in pyproject.toml so the service runs the same models
+    the worker would. v1.23.0 is docling 2.82.0. Only some releases have a
+    cu128 image: check the tag exists before bumping. Build before applying a
+    new tag; the revision fails otherwise.
   EOT
-  default     = "v1.23.0"
+  default     = "v1.23.0-caa.1"
 }
 
 variable "max_instances" {
@@ -31,6 +34,6 @@ variable "concurrency" {
 
 variable "invokers" {
   type        = list(string)
-  description = "IAM members besides the VM allowed to call the service, for testing from a laptop (`gcloud auth print-identity-token`)."
+  description = "IAM members besides the VM allowed to call the service, for testing from a laptop (`gcloud auth print-identity-token`), and to run image builds as the builder account."
   default     = ["user:bblanken@broadinstitute.org"]
 }

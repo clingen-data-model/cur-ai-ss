@@ -88,3 +88,26 @@ def test_the_override_is_installed_on_the_pinned_docling():
         LayoutPostprocessor._select_best_cluster_from_group
         is layout._select_keeping_the_container
     )
+
+
+def test_layout_module_imports_nothing_from_lib():
+    """The pdf-parsing service image copies layout.py in alone
+    (infrastructure/pdf-parsing/Dockerfile) and installs it from a
+    sitecustomize.py, so it has to stand on docling and the standard library."""
+    import ast
+    import inspect
+
+    from lib.misc.pdf import layout
+
+    tree = ast.parse(inspect.getsource(layout))
+    modules = {
+        node.module.split('.')[0]
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.module
+    } | {
+        alias.name.split('.')[0]
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    }
+    assert modules <= {'docling', 'docling_core', 'typing'}, modules

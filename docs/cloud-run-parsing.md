@@ -91,14 +91,17 @@ together. A third would queue at Cloud Run with the lease running.
 
 ## Open before switching the worker
 
-1. **The layout override is not on the server.** `lib/misc/pdf/layout.py`
+1. **The layout override must be on the server.** `lib/misc/pdf/layout.py`
    patches Docling's post-processor so a multi-panel figure survives as one
    picture instead of its best-scoring panel (paper 116, 2026-10-22).
-   docling-serve runs stock Docling. Options: a derived image
-   (`FROM docling-serve-cu128`, plus a `sitecustomize.py` that installs the
-   override, built by Cloud Build since the laptop has no docker) or a
-   docling plugin. Until then a paper whose figures depend on it should be
-   parsed locally; the rehearsal on paper 116 would show the difference.
+   Stock docling-serve lacks it, and it matters: run with and without the
+   override on the 13 local papers (2026-11-01), three differ, each by one
+   figure that stock Docling cuts down to a panel (paper 105 page 8, 135k
+   to 65k points of area; 109 page 11, 236k to 79k; 113 page 2, 131k to
+   20k). Hence the derived image, `infrastructure/pdf-parsing/`: docling-
+   serve's image plus a `sitecustomize.py` that installs the override at
+   interpreter start, built by Cloud Build (no docker on the laptop) into
+   the stack's own repository. The service runs that image.
 2. **OCR parity with the VM**, above.
 3. **Sync or async.** The client holds one request open for the whole
    conversion, up to the server's `DOCLING_SERVE_MAX_SYNC_WAIT` of five
