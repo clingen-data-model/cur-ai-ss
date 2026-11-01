@@ -1,10 +1,10 @@
-# PDF parsing on a GPU: docling-serve on Cloud Run.
+# The PDF parsing service: Docling on a Cloud Run GPU.
 #
 # The worker's PDF Parsing step runs Docling's layout, table-structure and
 # OCR models, which take the CPU-only dev-caa VM up to 15 minutes for a long
-# supplement. This stack stands up docling-serve (the Docling project's own
-# HTTP server around the same converter) on a Cloud Run service with one
-# NVIDIA L4, scaling to zero between papers. Everything else in the parse --
+# supplement. This stack stands up a PDF parsing service on Cloud Run with
+# one NVIDIA L4, scaling to zero between papers: docling-serve, the Docling
+# project's own HTTP server around the same converter. Everything else in the parse --
 # cropping tables and figures, the word layout (docling-parse), table
 # correction, anchoring -- stays with the worker; only the converter call
 # moves (lib/misc/pdf/remote.py).
@@ -13,14 +13,14 @@
 # an Artifact Registry remote repository because Cloud Run deploys only from
 # Artifact Registry or Docker Hub. The tag is pinned to the release that
 # bundles the docling version pyproject pins, so the server runs the same
-# models as the worker would: see var.docling_serve_version.
+# models as the worker would: see var.image_tag.
 
 terraform {
   required_version = ">= 1.5.0"
 
   backend "gcs" {
     bucket = "caa-terraform-state"
-    prefix = "parsing"
+    prefix = "pdf-parsing"
   }
 
   required_providers {
@@ -51,7 +51,7 @@ data "terraform_remote_state" "dev" {
 
 locals {
   region = "us-east4"
-  image  = "${local.region}-docker.pkg.dev/${data.google_project.project.project_id}/${google_artifact_registry_repository.ghcr.repository_id}/docling-project/docling-serve-cu128:${var.docling_serve_version}"
+  image  = "${local.region}-docker.pkg.dev/${data.google_project.project.project_id}/${google_artifact_registry_repository.ghcr.repository_id}/docling-project/docling-serve-cu128:${var.image_tag}"
 }
 
 # --- Image: ghcr.io, proxied ---------------------------------------------
@@ -74,13 +74,13 @@ resource "google_artifact_registry_repository" "ghcr" {
 
 # Runs with no permissions of its own: the service reads the PDF it is sent
 # and answers with the parsed document.
-resource "google_service_account" "docling" {
-  account_id   = "docling-serve"
-  display_name = "docling-serve (Cloud Run)"
+resource "google_service_account" "pdf_parsing" {
+  account_id   = "pdf-parsing"
+  display_name = "pdf-parsing (Cloud Run)"
 }
 
-resource "google_cloud_run_v2_service" "docling" {
-  name                = "docling-serve"
+resource "google_cloud_run_v2_service" "pdf_parsing" {
+  name                = "pdf-parsing"
   location            = local.region
   ingress             = "INGRESS_TRAFFIC_ALL" # reachable from the VM; callers still need run.invoker
   deletion_protection = false
@@ -93,7 +93,7 @@ resource "google_cloud_run_v2_service" "docling" {
   }
 
   template {
-    service_account                  = google_service_account.docling.email
+    service_account                  = google_service_account.pdf_parsing.email
     timeout                          = "360s" # the sync wait below, plus upload and response
     max_instance_request_concurrency = var.concurrency
     execution_environment            = "EXECUTION_ENVIRONMENT_GEN2"
@@ -172,16 +172,16 @@ resource "google_cloud_run_v2_service" "docling" {
 # --- Who may call it -----------------------------------------------------
 
 resource "google_cloud_run_v2_service_iam_member" "worker" {
-  name     = google_cloud_run_v2_service.docling.name
-  location = google_cloud_run_v2_service.docling.location
+  name     = google_cloud_run_v2_service.pdf_parsing.name
+  location = google_cloud_run_v2_service.pdf_parsing.location
   role     = "roles/run.invoker"
   member   = "serviceAccount:${data.terraform_remote_state.dev.outputs.service_account_email}"
 }
 
 resource "google_cloud_run_v2_service_iam_member" "operators" {
   for_each = toset(var.invokers)
-  name     = google_cloud_run_v2_service.docling.name
-  location = google_cloud_run_v2_service.docling.location
+  name     = google_cloud_run_v2_service.pdf_parsing.name
+  location = google_cloud_run_v2_service.pdf_parsing.location
   role     = "roles/run.invoker"
   member   = each.value
 }
@@ -197,7 +197,7 @@ resource "google_cloud_run_v2_service_iam_member" "operators" {
 # copy of record; that stays in the VM's documents/ directory.
 
 resource "google_storage_bucket" "exchange" {
-  name                        = "${data.google_project.project.project_id}-parsing-exchange"
+  name                        = "${data.google_project.project.project_id}-pdf-parsing-exchange"
   location                    = local.region
   storage_class               = "STANDARD"
   uniform_bucket_level_access = true

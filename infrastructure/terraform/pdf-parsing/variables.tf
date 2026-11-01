@@ -1,4 +1,4 @@
-variable "docling_serve_version" {
+variable "image_tag" {
   type        = string
   description = <<-EOT
     docling-serve release tag. Each release bundles one docling version (listed

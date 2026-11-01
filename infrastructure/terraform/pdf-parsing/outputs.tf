@@ -1,6 +1,6 @@
 output "service_url" {
-  description = "Base URL of docling-serve; the worker's DOCLING_SERVE_URL"
-  value       = google_cloud_run_v2_service.docling.uri
+  description = "Base URL of the PDF parsing service; the worker's PDF_PARSING_SERVICE_URL"
+  value       = google_cloud_run_v2_service.pdf_parsing.uri
 }
 
 output "image" {
