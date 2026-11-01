@@ -27,6 +27,7 @@ from pydantic import BaseModel
 from xldown import excel_to_markdown
 
 from lib.agents.table_correction_agent import correct_tables
+from lib.core.environment import env
 from lib.misc.pdf import layout
 from lib.misc.pdf.anchors import anchored_from_markdown, build_anchored, write_anchored
 from lib.misc.pdf.paths import (
@@ -39,6 +40,7 @@ from lib.misc.pdf.paths import (
     document_tables_dir,
     document_words_json_path,
 )
+from lib.misc.pdf.remote import attach_page_images, convert_pdf_remote
 from lib.models import PaperDB
 from lib.models.paper import FileFormat
 
@@ -181,6 +183,74 @@ def write_tables_and_images(
                     image.save(fp, 'PNG')
 
 
+def convert_locally(
+    content: bytes, supplement_format: FileFormat | None = None
+) -> DoclingDocument:
+    """Run Docling's converter in this process on a PDF (or DOCX supplement)."""
+    format_options: dict[InputFormat, FormatOption]
+    if supplement_format == FileFormat.DOCX:
+        format_options = {InputFormat.DOCX: WordFormatOption()}
+    else:
+        format_options = {
+            InputFormat.PDF: PdfFormatOption(
+                backend=PyPdfiumDocumentBackend,
+                pipeline_options=PdfPipelineOptions(
+                    images_scale=IMAGE_RESOLUTION_SCALE,
+                    # Page renders are what the table and picture crops are
+                    # cut from; they are not saved.
+                    generate_page_images=True,
+                    generate_picture_images=True,
+                ),
+            ),
+        }
+
+    doc_converter = DocumentConverter(format_options=format_options)
+
+    return doc_converter.convert(
+        source=DocumentStream(name='content', stream=BytesIO(content)),
+    ).document
+
+
+async def convert(
+    content: bytes, supplement_format: FileFormat | None = None
+) -> DoclingDocument:
+    """The Docling document of the file: from the PDF parsing service when
+    ``PDF_PARSING_SERVICE_URL`` names one (PDFs only; ``lib.misc.pdf.remote``),
+    else from the converter in this process."""
+    if supplement_format != FileFormat.DOCX and env.PDF_PARSING_SERVICE_URL:
+        return await convert_pdf_remote(
+            content,
+            base_url=env.PDF_PARSING_SERVICE_URL,
+            images_scale=IMAGE_RESOLUTION_SCALE,
+        )
+    return convert_locally(content, supplement_format)
+
+
+async def write_parse_outputs(
+    document: DoclingDocument,
+    content: bytes,
+    paper_id: int,
+    *,
+    supplement: bool = False,
+    correct: bool = True,
+) -> None:
+    """Everything the parse leaves on disk, from the converted document:
+    tables/ and images/, words.json, then (after table correction, unless
+    ``correct`` is off) anchored.md, anchors.json and the _SUCCESS marker."""
+    write_tables_and_images(document, paper_id, supplement=supplement)
+
+    words_json = parse_words_json(BytesIO(content))
+    with open(document_words_json_path(paper_id, supplement=supplement), 'w') as fp:
+        json.dump([w.model_dump() for w in words_json], fp, indent=2)
+
+    if correct:
+        await correct_tables(paper_id, supplement=supplement)
+
+    md, anchors = build_anchored(document, paper_id=paper_id, supplement=supplement)
+    write_anchored(paper_id, md, anchors, supplement)
+    document_success_path(paper_id, supplement=supplement).touch()
+
+
 async def parse_content(
     paper_id: int,
     force: bool = False,
@@ -213,37 +283,5 @@ async def parse_content(
         document_success_path(paper_id, supplement=True).touch()
         return
 
-    format_options: dict[InputFormat, FormatOption]
-    if supplement_format == FileFormat.DOCX:
-        format_options = {InputFormat.DOCX: WordFormatOption()}
-    else:
-        format_options = {
-            InputFormat.PDF: PdfFormatOption(
-                backend=PyPdfiumDocumentBackend,
-                pipeline_options=PdfPipelineOptions(
-                    images_scale=IMAGE_RESOLUTION_SCALE,
-                    # Page renders are what the table and picture crops are
-                    # cut from; they are not saved.
-                    generate_page_images=True,
-                    generate_picture_images=True,
-                ),
-            ),
-        }
-
-    doc_converter = DocumentConverter(format_options=format_options)
-
-    document: DoclingDocument = doc_converter.convert(
-        source=DocumentStream(name='content', stream=BytesIO(content)),
-    ).document
-
-    write_tables_and_images(document, paper_id, supplement=supplement)
-
-    words_json = parse_words_json(BytesIO(content))
-    with open(document_words_json_path(paper_id, supplement=supplement), 'w') as fp:
-        json.dump([w.model_dump() for w in words_json], fp, indent=2)
-
-    await correct_tables(paper_id, supplement=supplement)
-
-    md, anchors = build_anchored(document, paper_id=paper_id, supplement=supplement)
-    write_anchored(paper_id, md, anchors, supplement)
-    document_success_path(paper_id, supplement=supplement).touch()
+    document = await convert(content, supplement_format)
+    await write_parse_outputs(document, content, paper_id, supplement=supplement)
