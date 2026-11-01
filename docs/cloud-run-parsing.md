@@ -84,9 +84,10 @@ VM parsed and the files still on disk.
 
 Cold start, from a scaled-to-zero service to the first answered request, is
 about 5 minutes (image pull, then model load; a revision rollout takes the
-same). The service takes two conversions at once on its one instance; the
-worker sends one at a time until `TASK_CONCURRENCY[PDF_PARSING]` in
-`lib/bin/worker.py` is raised, a cap set for Docling on the VM's CPU.
+same). The service takes two conversions at once on its one instance, and
+the worker's PDF Parsing cap (`TASK_CONCURRENCY` in `lib/bin/worker.py`)
+is 2 while the service is configured, 1 otherwise, so two papers parse
+together. A third would queue at Cloud Run with the lease running.
 
 ## Open before switching the worker
 
